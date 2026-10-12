@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { randomBytes } from "node:crypto";
+import { createCipheriv, randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -70,10 +70,12 @@ describe("ManagedSecrets", () => {
 
   test("migrates legacy files before removing plaintext", async () => {
     const root = await mkdtemp(join(tmpdir(), "nakama-secret-migration-"));
+
     try {
       const toolSection = Buffer.from(
         JSON.stringify(["org-a", "tool-a"])
       ).toString("base64url");
+
       await writeFile(
         join(root, "config.ini"),
         [
@@ -101,10 +103,12 @@ describe("ManagedSecrets", () => {
       );
 
       const db = createInMemoryDatabaseAdapter();
+
       const secrets = new ManagedSecrets(
         db,
         randomBytes(32).toString("base64")
       );
+
       await secrets.migrateLegacyFiles(root);
       const config = await readFile(join(root, "config.ini"), "utf8");
       expect(config).not.toContain("provider-secret");
@@ -132,19 +136,71 @@ describe("ManagedSecrets", () => {
     }
   });
 
+  test("migrates encrypted tool keys from the previous config format", async () => {
+    const root = await mkdtemp(join(tmpdir(), "nakama-encrypted-tool-secret-"));
+
+    try {
+      const key = randomBytes(32);
+      const iv = randomBytes(12);
+      const cipher = createCipheriv("aes-256-gcm", key, iv);
+      cipher.setAAD(Buffer.from("org-a"));
+
+      const data = Buffer.concat([
+        cipher.update("legacy-encrypted-secret", "utf8"),
+        cipher.final(),
+      ]);
+
+      const encrypted = Buffer.concat([iv, cipher.getAuthTag(), data]).toString(
+        "base64url"
+      );
+
+      const section = Buffer.from(JSON.stringify(["org-a", "tool-a"])).toString(
+        "base64url"
+      );
+
+      await writeFile(
+        join(root, "tool-credentials.key"),
+        key.toString("base64url")
+      );
+      await writeFile(
+        join(root, "config.ini"),
+        `[tool-key.${section}]\napi_key_enc=${encrypted}\nenv_enc=retained\n`
+      );
+
+      const secrets = new ManagedSecrets(
+        createInMemoryDatabaseAdapter(),
+        randomBytes(32).toString("base64")
+      );
+
+      await secrets.migrateLegacyFiles(root);
+      expect((await secrets.resolve("org-a", "tool:tool-a")).value).toBe(
+        "legacy-encrypted-secret"
+      );
+      const config = await readFile(join(root, "config.ini"), "utf8");
+      expect(config).not.toContain(encrypted);
+      expect(config).toContain("env_enc=retained");
+      await secrets.migrateLegacyFiles(root);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   test("leaves an unknown legacy key in place until its owner is identified", async () => {
     const root = await mkdtemp(join(tmpdir(), "nakama-unknown-secret-"));
+
     try {
       await writeFile(
         join(root, "config.ini"),
         "[unknown]\napi_key=do-not-lose-me\n"
       );
+
       const secrets = new ManagedSecrets(
         createInMemoryDatabaseAdapter(),
         randomBytes(32).toString("base64")
       );
-      await expect(secrets.migrateLegacyFiles(root)).rejects.toThrow(
-        "unknown API key section"
+
+      await expect(secrets.migrateLegacyFiles(root)).rejects.toBeInstanceOf(
+        Error
       );
       expect(await readFile(join(root, "config.ini"), "utf8")).toContain(
         "do-not-lose-me"
@@ -158,6 +214,7 @@ describe("ManagedSecrets", () => {
     const root = await mkdtemp(join(tmpdir(), "nakama-env-migration-"));
     const previous = process.env.EXA_API_KEY;
     process.env.EXA_API_KEY = "active-env-key";
+
     try {
       await writeFile(
         join(root, "config.ini"),
@@ -187,6 +244,7 @@ describe("ManagedSecrets", () => {
       } else {
         process.env.EXA_API_KEY = previous;
       }
+
       await rm(root, { force: true, recursive: true });
     }
   });

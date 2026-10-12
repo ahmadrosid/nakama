@@ -23,6 +23,7 @@ async function createTool() {
   const tool = createAskUserQuestionTools(state).find(
     (entry) => entry.name === "ask_user_question"
   );
+
   return { state, tool: tool! };
 }
 
@@ -91,6 +92,49 @@ test("ask_user_question accepts legacy choice objects", async () => {
     id: "timezone",
     prompt: "What timezone?",
   });
+});
+
+test("ask_user_question rejects invalid questions without storing partial data", async () => {
+  const { tool, state } = await createTool();
+
+  for (const input of [
+    null,
+    { questions: [{ choices: ["One"], prompt: 7 }], title: "Need input" },
+    {
+      questions: [
+        { choices: ["One"], prompt: "Valid?" },
+        { choices: [" "], prompt: "Invalid?" },
+      ],
+      title: "Need input",
+    },
+  ]) {
+    await expect(
+      tool.run(input, { sessionId: "session_test" })
+    ).rejects.toThrow();
+    expect(await state.get("session_test")).toBeNull();
+  }
+
+  await tool.run(
+    {
+      questions: [{ choices: ["One"], prompt: "Valid?" }],
+      title: "Need input",
+    },
+    { sessionId: "session_test" }
+  );
+
+  const stored = await state.get("session_test");
+
+  await expect(
+    tool.run(
+      {
+        questions: [{ choices: [" "], prompt: "Invalid?" }],
+        title: "Need input",
+      },
+      { sessionId: "session_test" }
+    )
+  ).rejects.toThrow();
+
+  expect(await state.get("session_test")).toEqual(stored);
 });
 
 test("ask_user_question schema stays compact", async () => {

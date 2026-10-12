@@ -34,7 +34,7 @@ export function createXaiProvider(options: XaiProviderOptions): ProviderClient {
       }
     );
 
-    return generateOpenAIResponsesChat({
+    const request: Parameters<typeof generateOpenAIResponsesChat>[0] = {
       apiKey: oauth.accessToken,
       baseUrl: XAI_OAUTH_BASE_URL,
       extraHeaders: XAI_OAUTH_HEADERS,
@@ -42,12 +42,17 @@ export function createXaiProvider(options: XaiProviderOptions): ProviderClient {
       label: "Grok",
       model,
       stream: Boolean(handlers),
-      ...(handlers ? { handlers } : {}),
       supportsThinking:
         model.startsWith("grok-4.6") ||
         model.startsWith("grok-4.5") ||
         model.includes("multi-agent"),
-    });
+    };
+
+    if (handlers) {
+      request.handlers = handlers;
+    }
+
+    return generateOpenAIResponsesChat(request);
   }
 
   return {
@@ -56,6 +61,7 @@ export function createXaiProvider(options: XaiProviderOptions): ProviderClient {
     },
     async generateText(input: GenerateTextInput): Promise<GenerateTextResult> {
       const useJson = (input.format ?? "json") === "json";
+
       const system = useJson
         ? `${input.system}\n\nRespond with valid JSON only.`
         : `${input.system}\n\nReturn only the requested text. No JSON, labels, or markdown fences.`;
@@ -64,16 +70,20 @@ export function createXaiProvider(options: XaiProviderOptions): ProviderClient {
         messages: [{ content: input.prompt, role: "user" }],
         system,
       });
+
       const content = result.content.trim();
 
       if (!content) {
         throw new Error("Grok returned an empty response.");
       }
 
-      return {
-        content,
-        ...(result.usage ? { usage: result.usage } : {}),
-      };
+      const textResult: GenerateTextResult = { content };
+
+      if (result.usage) {
+        textResult.usage = result.usage;
+      }
+
+      return textResult;
     },
     name: "xai_oauth",
     streamChat(input, handlers) {

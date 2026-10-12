@@ -8,6 +8,7 @@ import {
   isDiscoveryModelProvider,
   parseProviderName,
   resolveProvider,
+  USER_PROVIDER_NAMES,
 } from "./provider-resolution";
 
 describe("parseProviderName", () => {
@@ -56,6 +57,17 @@ describe("apiKeyEnvVarForProvider", () => {
 });
 
 describe("resolveProvider", () => {
+  test("each registered API key selects its provider when it is the only key", () => {
+    for (const provider of USER_PROVIDER_NAMES) {
+      const envVar = apiKeyEnvVarForProvider(provider);
+
+      if (envVar) {
+        expect(resolveProvider({ env: { [envVar]: "test-key" } })).toBe(
+          provider
+        );
+      }
+    }
+  });
   test("prefers NAKAMA_PROVIDER over env keys", () => {
     const provider = resolveProvider({
       env: {
@@ -150,18 +162,6 @@ describe("resolveProvider deepseek", () => {
   });
 });
 
-describe("resolveProvider together", () => {
-  test("auto-resolves Together when it is the only env API key", () => {
-    const provider = resolveProvider({
-      env: {
-        TOGETHER_API_KEY: "tg-test",
-      },
-    });
-
-    expect(provider).toBe("together");
-  });
-});
-
 describe("resolveProvider qwen", () => {
   test("auto-resolves Qwen intl when it is the only env API key", () => {
     const provider = resolveProvider({
@@ -181,78 +181,6 @@ describe("resolveProvider qwen", () => {
     });
 
     expect(provider).toBe("qwen_cn");
-  });
-});
-
-describe("resolveProvider vercel_ai_gateway", () => {
-  test("auto-resolves Vercel AI Gateway when it is the only env API key", () => {
-    const provider = resolveProvider({
-      env: {
-        VERCEL_AI_GATEWAY_API_KEY: "vgw-test",
-      },
-    });
-
-    expect(provider).toBe("vercel_ai_gateway");
-  });
-});
-
-describe("resolveProvider mistral", () => {
-  test("auto-resolves Mistral when it is the only env API key", () => {
-    const provider = resolveProvider({
-      env: {
-        MISTRAL_API_KEY: "ms-test",
-      },
-    });
-
-    expect(provider).toBe("mistral");
-  });
-});
-
-describe("resolveProvider doubao", () => {
-  test("auto-resolves Doubao when it is the only env API key", () => {
-    const provider = resolveProvider({
-      env: {
-        DOUBAO_API_KEY: "db-test",
-      },
-    });
-
-    expect(provider).toBe("doubao");
-  });
-});
-
-describe("resolveProvider perplexity", () => {
-  test("auto-resolves Perplexity when it is the only env API key", () => {
-    const provider = resolveProvider({
-      env: {
-        PERPLEXITY_API_KEY: "pplx-test",
-      },
-    });
-
-    expect(provider).toBe("perplexity");
-  });
-});
-
-describe("resolveProvider cerebras", () => {
-  test("auto-resolves Cerebras when it is the only env API key", () => {
-    const provider = resolveProvider({
-      env: {
-        CEREBRAS_API_KEY: "sk-test",
-      },
-    });
-
-    expect(provider).toBe("cerebras");
-  });
-});
-
-describe("resolveProvider fireworks", () => {
-  test("auto-resolves Fireworks when it is the only env API key", () => {
-    const provider = resolveProvider({
-      env: {
-        FIREWORKS_API_KEY: "fw-test",
-      },
-    });
-
-    expect(provider).toBe("fireworks");
   });
 });
 
@@ -308,17 +236,5 @@ describe("defaultDiscoveryBaseUrl", () => {
   test("returns null when the family has no fixed default", () => {
     expect(defaultDiscoveryBaseUrl("openai_compatible")).toBeNull();
     expect(defaultDiscoveryBaseUrl("deepseek")).toBeNull();
-  });
-});
-
-describe("resolveProvider xiaomi", () => {
-  test("auto-resolves Xiaomi MiMo when it is the only env API key", () => {
-    const provider = resolveProvider({
-      env: {
-        XIAOMI_API_KEY: "xm-test",
-      },
-    });
-
-    expect(provider).toBe("xiaomi");
   });
 });

@@ -67,6 +67,8 @@ The skill is opt-in. Nakama does not auto-assign it to Super Bot or default prof
 
 If the dashboard **Install** button is not available or fails, install on the host where the Nakama `bash` tool runs:
 
+**Install** checks the release hash before installing; this manual command does not.
+
 ```bash
 npm install -g agent-browser
 agent-browser install
@@ -138,7 +140,6 @@ Across runs, sessions are **fresh** by default. The product does not keep sticky
 - Use credentials that the user supplies in the prompt. You can also use credentials that are already known for that task.
 - Do not expect Nakama to store site passwords for agent-browser in v1.
 - Agents must not echo passwords in summaries. Agents must not take screenshots of password fields.
-- Viewers cannot invoke agents. Viewers cannot start browser runs.
 
 ## Troubleshooting
 

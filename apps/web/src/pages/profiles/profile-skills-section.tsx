@@ -12,6 +12,7 @@ import { formatSessionRelativeTime } from "@/lib/chat-history";
 import type { RemoveAssignmentTarget } from "@/pages/profiles/profiles-page.shared";
 
 const bundledSkillNames = new Set<string>(BUNDLED_SKILL_NAMES);
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const EMPTY_SKILL_USAGE: SkillUsageSummary = {
@@ -45,7 +46,9 @@ function formatSkillUsageHint(skill: SkillSummary): string | null {
   const lastLabel = usage.lastUsedAt
     ? formatSessionRelativeTime(usage.lastUsedAt)
     : "never";
+
   const useLabel = usage.useCount === 1 ? "use" : "uses";
+
   return `Last matched ${lastLabel} · ${usage.useCount} ${useLabel}`;
 }
 
@@ -68,6 +71,7 @@ function isSkillUnused(skill: SkillSummary, staleAfterDays: number): boolean {
 function compareAssignedSkills(a: SkillSummary, b: SkillSummary): number {
   const aBundled = isBundledSkill(a);
   const bBundled = isBundledSkill(b);
+
   if (aBundled !== bBundled) {
     return aBundled ? 1 : -1;
   }
@@ -327,14 +331,17 @@ export function ProfileSkillsSection({
 }) {
   const { activeOrg } = useAuth();
   const staleAfterDays = activeOrg?.skillsCuratorStaleAfterDays ?? 30;
+
   const sortedSkills = useMemo(
     () => detail.skills.toSorted(compareAssignedSkills),
     [detail.skills]
   );
+
   const customSkills = useMemo(
     () => sortedSkills.filter((skill) => !isBundledSkill(skill)),
     [sortedSkills]
   );
+
   const bundledSkills = useMemo(
     () => sortedSkills.filter((skill) => isBundledSkill(skill)),
     [sortedSkills]

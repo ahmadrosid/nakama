@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { z } from "zod";
 import { setupTestConfigDir } from "../test-config-dir";
 import { describeAuditEvent } from "./audit-log";
 import { createMinimalHonoApp } from "./test-app-helpers";
@@ -51,10 +52,12 @@ describe("audit event coverage", () => {
 
   test("covers security mutations registered in the real route table", () => {
     const { app } = createMinimalHonoApp();
+
     const routes = app.routes.map((route) => ({
       method: route.method,
       path: route.path,
     }));
+
     const expected = [
       [
         "POST",
@@ -116,12 +119,14 @@ describe("audit event coverage", () => {
 describe("audit event API", () => {
   test("records actor, organization, outcome, and request", async () => {
     const { app, authService, databaseAdapter } = createMinimalHonoApp();
-    const fetchApp = app as unknown as AppFetch;
+    const fetchApp: AppFetch = app;
+
     const session = await loginPlatformAdminSession(
       fetchApp,
       authService,
       databaseAdapter
     );
+
     const platformUser = await databaseAdapter.getUserByEmail(
       "platform@example.com"
     );
@@ -133,7 +138,10 @@ describe("audit event API", () => {
         method: "POST",
       })
     );
+
     expect(createResponse.status).toBe(201);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const created = (await createResponse.json()) as {
       organization: { id: string };
     };
@@ -148,6 +156,7 @@ describe("audit event API", () => {
         method: "POST",
       })
     );
+
     expect(failedActiveOrg.status).toBe(400);
     expect(
       await databaseAdapter.listAuditEvents({ action: "auth.active_org" })
@@ -168,6 +177,7 @@ describe("audit event API", () => {
         method: "POST",
       })
     );
+
     expect(failedLogin.status).toBe(401);
 
     const listResponse = await app.fetch(
@@ -176,17 +186,24 @@ describe("audit event API", () => {
         { headers: session.headers() }
       )
     );
+
     expect(listResponse.status).toBe(200);
-    const payload = (await listResponse.json()) as {
-      events: Array<{
-        action: string;
-        actorUserId: string | null;
-        metadata: Record<string, unknown>;
-        orgId: string | null;
-        requestId: string | null;
-        resourceId: string | null;
-      }>;
-    };
+
+    const payload = z
+      .object({
+        events: z.array(
+          z.object({
+            action: z.string(),
+            actorUserId: z.string().nullable(),
+            metadata: z.record(z.string(), z.unknown()),
+            orgId: z.string().nullable(),
+            requestId: z.string().nullable(),
+            resourceId: z.string().nullable(),
+          })
+        ),
+      })
+      .parse(await listResponse.json());
+
     expect(payload.events).toEqual([
       expect.objectContaining({
         action: "organization.create",
@@ -201,6 +218,7 @@ describe("audit event API", () => {
     const loginEvents = await databaseAdapter.listAuditEvents({
       action: "auth.login",
     });
+
     expect(loginEvents).toHaveLength(2);
     expect(loginEvents).toEqual(
       expect.arrayContaining([
@@ -215,23 +233,29 @@ describe("audit event API", () => {
   test("records permanent organization deletion and user erasure", async () => {
     const { app, authService, databaseAdapter, orgService } =
       createMinimalHonoApp();
-    const fetchApp = app as unknown as AppFetch;
+
+    const fetchApp: AppFetch = app;
+
     const session = await loginPlatformAdminSession(
       fetchApp,
       authService,
       databaseAdapter
     );
+
     const platformUser = await databaseAdapter.getUserByEmail(
       "platform@example.com"
     );
+
     await orgService.createOrganization({
       name: "Keep Audit Org",
       slug: "keep-audit-org",
     });
+
     const created = await orgService.createOrganization({
       name: "Erase Audit Org",
       slug: "erase-audit-org",
     });
+
     await orgService.archiveOrganization(created.organization.id);
 
     const now = new Date().toISOString();
@@ -244,12 +268,14 @@ describe("audit event API", () => {
     });
 
     const headers = session.headers({ "X-CSRF-Token": session.csrfToken });
+
     const deleteOrgResponse = await app.fetch(
       new Request(
         `http://localhost:4310/v1/platform/orgs/${created.organization.id}/permanent`,
         { headers, method: "DELETE" }
       )
     );
+
     const eraseUserResponse = await app.fetch(
       new Request("http://localhost:4310/v1/platform/users/user_erase_audit", {
         headers,
@@ -285,8 +311,9 @@ describe("audit event API", () => {
 
   test("blocks organization admins from reading the ledger", async () => {
     const { app, databaseAdapter } = createMinimalHonoApp();
-    const fetchApp = app as unknown as AppFetch;
+    const fetchApp: AppFetch = app;
     const member = await seedOrgAdmin(databaseAdapter);
+
     const session = await loginUserSession(
       fetchApp,
       member.email,
@@ -299,6 +326,7 @@ describe("audit event API", () => {
         headers: session.headers(),
       })
     );
+
     expect(response.status).toBe(403);
   });
 });

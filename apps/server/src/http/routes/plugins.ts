@@ -1,19 +1,15 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import {
-  type DeleteRetainedPluginDataRequest,
-  type InstallOrgPluginRequest,
   type InstallPluginPackageResponse,
-  type InvokePluginActionRequest,
   type InvokePluginActionResponse,
   type ListOrgPluginsResponse,
   type ListPluginReleasesResponse,
+  type ListPluginUpdatesResponse,
   NakamaApiError,
   type OrgPluginDetail,
   type PluginContributionChangePreview,
   type PluginExecutionActor,
   type PluginPackagePreviewResponse,
-  type PluginRevisionRequest,
-  type UpdateOrgPluginRequest,
 } from "@nakama/core";
 import type { Context } from "hono";
 import {
@@ -23,33 +19,36 @@ import {
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
-  requireNotViewerFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
+  requireOrgMemberFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
 import { type getRequestAuth, json, readJson } from "../shared";
 import type { AppEnv, HonoApp } from "../types";
 
-const UI_MIME_TYPES: Record<string, string> = {
-  css: "text/css; charset=utf-8",
-  html: "text/html; charset=utf-8",
-  jpeg: "image/jpeg",
-  jpg: "image/jpeg",
-  js: "text/javascript; charset=utf-8",
-  json: "application/json; charset=utf-8",
-  map: "application/json; charset=utf-8",
-  mjs: "text/javascript; charset=utf-8",
-  png: "image/png",
-  svg: "image/svg+xml",
-  woff2: "font/woff2",
-};
+const UI_MIME_TYPES = new Map(
+  Object.entries({
+    css: "text/css; charset=utf-8",
+    html: "text/html; charset=utf-8",
+    jpeg: "image/jpeg",
+    jpg: "image/jpeg",
+    js: "text/javascript; charset=utf-8",
+    json: "application/json; charset=utf-8",
+    map: "application/json; charset=utf-8",
+    mjs: "text/javascript; charset=utf-8",
+    png: "image/png",
+    svg: "image/svg+xml",
+    woff2: "font/woff2",
+  })
+);
 
 export function registerPluginRoutes(
   app: HonoApp,
   options: ServerOptions
 ): void {
   app.get("/v1/plugins/official", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
+
     return json({
       plugins: await requirePluginService(options).listOfficialPlugins(),
     });
@@ -57,31 +56,38 @@ export function registerPluginRoutes(
   app.post("/v1/plugins/official/:pluginId/install", async (c) => {
     const auth = requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
+
     try {
       const install = await requirePluginService(options).installOfficialPlugin(
         orgId,
         c.req.param("pluginId"),
         { id: auth.user.id, role: "admin" }
       );
+
       return json({ install });
     } catch (error) {
       throwPluginHttpError(error);
     }
   });
+
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
+
   const pluginIdParam = z.object({
     pluginId: z.string().openapi({ param: { in: "path", name: "pluginId" } }),
   });
+
   const pluginVersionParams = z.object({
     pluginId: z.string().openapi({ param: { in: "path", name: "pluginId" } }),
     version: z.string().openapi({ param: { in: "path", name: "version" } }),
   });
+
   const pluginActionParams = z.object({
     actionKey: z.string().openapi({ param: { in: "path", name: "actionKey" } }),
     pluginId: z.string().openapi({ param: { in: "path", name: "pluginId" } }),
   });
+
   const packageRequestSchema = z
     .object({
       packageName: z.string().min(1).max(214),
@@ -89,33 +95,41 @@ export function registerPluginRoutes(
     })
     .strict()
     .openapi("PluginPackageRequest");
+
   const installRequestSchema = packageRequestSchema
     .extend({
       expectedDigest: z.string().regex(/^[a-f0-9]{64}$/),
       expectedIntegrity: z.string().regex(/^sha512-[A-Za-z0-9+/]+={0,2}$/),
     })
     .openapi("InstallPluginPackageRequest");
+
   const openapiBag = (name: string) => z.object({}).passthrough().openapi(name);
   const previewResponseSchema = openapiBag("PluginPackagePreviewResponse");
   const installResponseSchema = openapiBag("InstallPluginPackageResponse");
   const listReleasesSchema = openapiBag("ListPluginReleasesResponse");
+  const listUpdatesSchema = openapiBag("ListPluginUpdatesResponse");
   const listOrgPluginsSchema = openapiBag("ListOrgPluginsResponse");
   const orgPluginSchema = openapiBag("OrgPluginDetail");
+
   const revisionRequestSchema = z
     .object({ expectedRevision: z.number() })
     .openapi("PluginRevisionRequest");
+
   const installOrgRequestSchema = z
     .object({ version: z.string().optional() })
     .openapi("InstallOrgPluginRequest");
+
   const updateRequestSchema = z
     .object({
       expectedRevision: z.number(),
       targetVersion: z.string(),
     })
     .openapi("UpdateOrgPluginRequest");
+
   const contributionPreviewSchema = openapiBag(
     "PluginContributionChangePreview"
   );
+
   const deleteRetainedSchema = z
     .object({
       confirm: z.literal(true),
@@ -124,10 +138,13 @@ export function registerPluginRoutes(
       pluginId: z.string(),
     })
     .openapi("DeleteRetainedPluginDataRequest");
+
   const invokeRequestSchema = z
     .object({ input: z.unknown().optional() })
     .openapi("InvokePluginActionRequest");
+
   const invokeResponseSchema = openapiBag("InvokePluginActionResponse");
+
   const errorResponse = {
     content: { "application/json": { schema: errorSchema } },
     description: "Error",
@@ -145,8 +162,8 @@ export function registerPluginRoutes(
     path: string;
     request?: {
       body?: z.ZodTypeAny;
-      params?: z.ZodTypeAny;
-      query?: z.ZodTypeAny;
+      params?: z.ZodObject;
+      query?: z.ZodObject;
     };
     summary: string;
     tags: string[];
@@ -159,31 +176,27 @@ export function registerPluginRoutes(
         path: spec.path,
         request: spec.request
           ? {
-              ...(spec.request.body
+              body: spec.request.body
                 ? {
-                    body: {
-                      content: {
-                        "application/json": { schema: spec.request.body },
-                      },
-                      required: true,
+                    content: {
+                      "application/json": { schema: spec.request.body },
                     },
+                    required: true,
                   }
-                : {}),
-              ...(spec.request.params ? { params: spec.request.params } : {}),
-              ...(spec.request.query ? { query: spec.request.query } : {}),
+                : undefined,
+              params: spec.request.params,
+              query: spec.request.query,
             }
           : undefined,
         responses: {
-          ...(spec.ok
-            ? {
-                [okStatus]: spec.ok.content
-                  ? {
-                      content: spec.ok.content,
-                      description: spec.ok.description,
-                    }
-                  : { description: spec.ok.description },
-              }
-            : {}),
+          [okStatus]: spec.ok
+            ? spec.ok.content
+              ? {
+                  content: spec.ok.content,
+                  description: spec.ok.description,
+                }
+              : { description: spec.ok.description }
+            : undefined,
           ...spec.extra,
         },
         summary: spec.summary,
@@ -197,6 +210,8 @@ export function registerPluginRoutes(
     description,
     status: 200 as const,
   });
+
+  // SAFETY: The validated value satisfies the contract checked by this assertion.
   const platform = ["Platform", "Plugins"] as string[];
   const plugins = ["Plugins"];
 
@@ -217,10 +232,12 @@ export function registerPluginRoutes(
   app.post("/v1/plugins/official/:pluginId/reinstall", async (c) => {
     const auth = requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
-    const body = await readJson<PluginRevisionRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, revisionRequestSchema);
+
     if (!Number.isSafeInteger(body?.expectedRevision)) {
       return json({ error: "expectedRevision is required" }, 400);
     }
+
     try {
       const install = await requirePluginService(options).installOfficialPlugin(
         orgId,
@@ -228,6 +245,7 @@ export function registerPluginRoutes(
         { id: auth.user.id, role: "admin" },
         body
       );
+
       return json({ install });
     } catch (error) {
       throwPluginHttpError(error);
@@ -261,6 +279,15 @@ export function registerPluginRoutes(
     operationId: "listPluginReleases",
     path: "/v1/platform/plugins/releases",
     summary: "List approved plugin releases",
+    tags: platform,
+  });
+  pluginPath({
+    extra: { 403: errorResponse },
+    method: "get",
+    ok: jsonOk(listUpdatesSchema, "Registry versions not approved yet"),
+    operationId: "listPluginUpdates",
+    path: "/v1/platform/plugins/updates",
+    summary: "Check the registry for newer versions of approved plugins",
     tags: platform,
   });
   pluginPath({
@@ -396,15 +423,21 @@ export function registerPluginRoutes(
   app.post("/v1/platform/plugins/releases/preview", async (c) => {
     requirePlatformAdminFromContext(c);
     const plugins = requirePluginService(options);
-    const parsed = packageRequestSchema.safeParse(await readJson(c.req.raw));
+
+    const parsed = packageRequestSchema.safeParse(
+      await readJson(c.req.raw, z.unknown())
+    );
+
     if (!parsed.success) {
       throw new NakamaApiError(
         "Package name and exact version are required.",
         400
       );
     }
+
     try {
       const preview = await plugins.previewPluginPackage(parsed.data);
+
       return json<PluginPackagePreviewResponse>(preview);
     } catch (error) {
       throwPluginHttpError(error);
@@ -414,15 +447,21 @@ export function registerPluginRoutes(
   app.post("/v1/platform/plugins/releases", async (c) => {
     requirePlatformAdminFromContext(c);
     const plugins = requirePluginService(options);
-    const parsed = installRequestSchema.safeParse(await readJson(c.req.raw));
+
+    const parsed = installRequestSchema.safeParse(
+      await readJson(c.req.raw, z.unknown())
+    );
+
     if (!parsed.success) {
       throw new NakamaApiError("Preview approval is required.", 400);
     }
+
     try {
       const installed = await plugins.installPluginPackage(
         parsed.data,
         parsed.data
       );
+
       return json<InstallPluginPackageResponse>({
         createdAt: installed.createdAt,
         digest: installed.digest,
@@ -439,19 +478,31 @@ export function registerPluginRoutes(
   app.get("/v1/platform/plugins/releases", async (c) => {
     requirePlatformAdminFromContext(c);
     const plugins = requirePluginService(options);
+
     return json<ListPluginReleasesResponse>({
       releases: await plugins.listApprovedPluginReleases(),
+    });
+  });
+
+  app.get("/v1/platform/plugins/updates", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const plugins = requirePluginService(options);
+
+    return json<ListPluginUpdatesResponse>({
+      updates: await plugins.listPluginUpdates(),
     });
   });
 
   app.delete("/v1/platform/plugins/releases/:pluginId/:version", async (c) => {
     requirePlatformAdminFromContext(c);
     const plugins = requirePluginService(options);
+
     try {
       await plugins.removePluginRelease(
         decodeURIComponent(c.req.param("pluginId")),
         decodeURIComponent(c.req.param("version"))
       );
+
       return new Response(null, { status: 204 });
     } catch (error) {
       throwPluginHttpError(error);
@@ -459,25 +510,29 @@ export function registerPluginRoutes(
   });
 
   app.get("/v1/plugins", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const plugins = requirePluginService(options);
+
     return json<ListOrgPluginsResponse>({
       plugins: await plugins.listOrgPluginDetails(orgId),
     });
   });
 
   app.get("/v1/plugins/:pluginId", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const plugins = requirePluginService(options);
+
     const detail = await plugins.getOrgPluginDetail(
       orgId,
       decodeURIComponent(c.req.param("pluginId"))
     );
+
     if (!detail) {
       throw new NakamaApiError("Not found", 404);
     }
+
     return json<OrgPluginDetail>(detail);
   });
 
@@ -485,14 +540,17 @@ export function registerPluginRoutes(
     requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const plugins = requirePluginService(options);
-    const body = await readJson<InstallOrgPluginRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, installOrgRequestSchema);
+
     try {
       const install = await plugins.addOrgPlugin(
         orgId,
         decodeURIComponent(c.req.param("pluginId")),
         body.version
       );
+
       const detail = await plugins.getOrgPluginDetail(orgId, install.pluginId);
+
       return json<OrgPluginDetail>(detail!);
     } catch (error) {
       throwPluginHttpError(error);
@@ -503,14 +561,17 @@ export function registerPluginRoutes(
     requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const plugins = requirePluginService(options);
-    const body = await readJson<PluginRevisionRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, revisionRequestSchema);
+
     try {
       const install = await plugins.enableOrgPlugin(
         orgId,
         decodeURIComponent(c.req.param("pluginId")),
         body.expectedRevision
       );
+
       const detail = await plugins.getOrgPluginDetail(orgId, install.pluginId);
+
       return json<OrgPluginDetail>(detail!);
     } catch (error) {
       throwPluginHttpError(error);
@@ -521,14 +582,17 @@ export function registerPluginRoutes(
     requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const plugins = requirePluginService(options);
-    const body = await readJson<PluginRevisionRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, revisionRequestSchema);
+
     try {
       const install = await plugins.disableOrgPlugin(
         orgId,
         decodeURIComponent(c.req.param("pluginId")),
         body.expectedRevision
       );
+
       const detail = await plugins.getOrgPluginDetail(orgId, install.pluginId);
+
       return json<OrgPluginDetail>(detail!);
     } catch (error) {
       throwPluginHttpError(error);
@@ -541,16 +605,20 @@ export function registerPluginRoutes(
     const plugins = requirePluginService(options);
     const pluginId = decodeURIComponent(c.req.param("pluginId"));
     const targetVersion = c.req.query("targetVersion")?.trim();
+
     if (!targetVersion) {
       throw new NakamaApiError("targetVersion is required", 400);
     }
+
     try {
       const install = await plugins.getOrgPluginDetail(orgId, pluginId);
+
       const preview = await plugins.previewPluginContributionChanges(
         orgId,
         pluginId,
         targetVersion
       );
+
       return json<PluginContributionChangePreview>({
         ...preview,
         lastLifecycleError: install?.lastLifecycleError ?? null,
@@ -564,7 +632,8 @@ export function registerPluginRoutes(
     requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const plugins = requirePluginService(options);
-    const body = await readJson<UpdateOrgPluginRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, updateRequestSchema);
+
     try {
       const install = await plugins.updateOrgPlugin(
         orgId,
@@ -572,7 +641,9 @@ export function registerPluginRoutes(
         body.targetVersion,
         body.expectedRevision
       );
+
       const detail = await plugins.getOrgPluginDetail(orgId, install.pluginId);
+
       return json<OrgPluginDetail>(detail!);
     } catch (error) {
       throwPluginHttpError(error);
@@ -583,14 +654,17 @@ export function registerPluginRoutes(
     requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const plugins = requirePluginService(options);
-    const body = await readJson<PluginRevisionRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, revisionRequestSchema);
+
     try {
       const install = await plugins.uninstallOrgPlugin(
         orgId,
         decodeURIComponent(c.req.param("pluginId")),
         body.expectedRevision
       );
+
       const detail = await plugins.getOrgPluginDetail(orgId, install.pluginId);
+
       return json<OrgPluginDetail>(detail!);
     } catch (error) {
       throwPluginHttpError(error);
@@ -602,7 +676,8 @@ export function registerPluginRoutes(
     const orgId = requireActiveOrgIdFromContext(c);
     const plugins = requirePluginService(options);
     const pluginId = decodeURIComponent(c.req.param("pluginId"));
-    const body = await readJson<DeleteRetainedPluginDataRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, deleteRetainedSchema);
+
     if (
       body.confirm !== true ||
       body.orgId !== orgId ||
@@ -610,12 +685,14 @@ export function registerPluginRoutes(
     ) {
       throw new NakamaApiError("Confirmation does not match", 400);
     }
+
     try {
       await plugins.deleteRetainedPluginData(
         orgId,
         pluginId,
         body.expectedRevision
       );
+
       return new Response(null, { status: 204 });
     } catch (error) {
       throwPluginHttpError(error);
@@ -623,10 +700,11 @@ export function registerPluginRoutes(
   });
 
   app.post("/v1/plugins/:pluginId/actions/:actionKey", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const plugins = requirePluginService(options);
-    const body = await readJson<InvokePluginActionRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, invokeRequestSchema);
+
     try {
       const invoked = await plugins.invokePluginAction({
         access: "ui",
@@ -637,6 +715,7 @@ export function registerPluginRoutes(
         orgId,
         pluginId: decodeURIComponent(c.req.param("pluginId")),
       });
+
       return json<InvokePluginActionResponse>(invoked);
     } catch (error) {
       throwPluginHttpError(error);
@@ -652,10 +731,17 @@ export function registerPluginRoutes(
   );
 }
 
-async function servePluginUi(c: Context<AppEnv>, options: ServerOptions) {
-  requireNotViewerFromContext(c);
+async function servePluginUi(
+  c: Context<
+    AppEnv,
+    "/v1/plugins/ui/:orgId/:pluginId" | "/v1/plugins/ui/:orgId/:pluginId/*"
+  >,
+  options: ServerOptions
+) {
+  requireOrgMemberFromContext(c);
   const orgId = requireActiveOrgIdFromContext(c);
   const pathOrgId = decodeURIComponent(c.req.param("orgId"));
+
   if (pathOrgId !== orgId) {
     throw new NakamaApiError("Organization context conflict", 400);
   }
@@ -664,16 +750,19 @@ async function servePluginUi(c: Context<AppEnv>, options: ServerOptions) {
   const pluginId = decodeURIComponent(c.req.param("pluginId"));
   const assetPath = pluginUiAssetPath(c.req.path, orgId, pluginId);
   const asset = await plugins.resolveEnabledUiAsset(orgId, pluginId, assetPath);
+
   if (!asset) {
     throw new NakamaApiError("Not found", 404);
   }
 
   if (assetPath === "" && !c.req.path.endsWith("/")) {
     const url = new URL(c.req.url);
+
     return c.redirect(`${url.pathname}/${url.search}`, 302);
   }
 
   const file = Bun.file(asset.path);
+
   return new Response(file, {
     headers: { "Content-Type": contentTypeFor(asset.path, asset.isDocument) },
   });
@@ -683,6 +772,7 @@ function requirePluginService(options: ServerOptions): PluginService {
   if (!options.pluginService) {
     throw new NakamaApiError("Plugin service not configured", 500);
   }
+
   return options.pluginService;
 }
 
@@ -690,13 +780,12 @@ function pluginActor(
   auth: ReturnType<typeof getRequestAuth>
 ): PluginExecutionActor {
   const role = auth.orgRole;
-  return {
-    id: auth.user.id,
-    role:
-      role === "admin" || role === "member" || role === "viewer"
-        ? role
-        : "viewer",
-  };
+
+  if (role !== "admin" && role !== "member") {
+    throw new NakamaApiError("Forbidden", 403);
+  }
+
+  return { id: auth.user.id, role };
 }
 
 function pluginUiAssetPath(
@@ -705,12 +794,15 @@ function pluginUiAssetPath(
   pluginId: string
 ): string {
   const prefix = `/v1/plugins/ui/${orgId}/${pluginId}`;
+
   if (requestPath === prefix || requestPath === `${prefix}/`) {
     return "";
   }
+
   if (!requestPath.startsWith(`${prefix}/`)) {
     return "";
   }
+
   try {
     return decodeURIComponent(requestPath.slice(prefix.length + 1));
   } catch {
@@ -722,39 +814,44 @@ function contentTypeFor(filePath: string, isDocument: boolean): string {
   if (isDocument) {
     return "text/html; charset=utf-8";
   }
+
   const extension = filePath.split(".").pop()?.toLowerCase() ?? "";
-  return UI_MIME_TYPES[extension] ?? "application/octet-stream";
+
+  return UI_MIME_TYPES.get(extension) ?? "application/octet-stream";
 }
 
-const PLUGIN_ERROR_STATUS: Record<string, number> = {
-  archive_too_large: 413,
-  busy: 429,
-  digest_mismatch: 400,
-  duplicate_entry: 400,
-  expansion_limit: 413,
-  forbidden: 403,
-  interrupted: 503,
-  invalid_archive: 400,
-  invalid_package: 400,
-  invalid_entry: 400,
-  invalid_input: 400,
-  invalid_manifest: 400,
-  missing_manifest: 400,
-  missing_referenced_file: 400,
-  not_found: 404,
-  package_unavailable: 404,
-  unknown_action: 404,
-  unknown_hook: 404,
-  unsafe_path: 400,
-  unsupported_entry: 400,
-};
+const PLUGIN_ERROR_STATUS = new Map(
+  Object.entries({
+    archive_too_large: 413,
+    busy: 429,
+    digest_mismatch: 400,
+    duplicate_entry: 400,
+    expansion_limit: 413,
+    forbidden: 403,
+    interrupted: 503,
+    invalid_archive: 400,
+    invalid_package: 400,
+    invalid_entry: 400,
+    invalid_input: 400,
+    invalid_manifest: 400,
+    missing_manifest: 400,
+    missing_referenced_file: 400,
+    not_found: 404,
+    package_unavailable: 404,
+    unknown_action: 404,
+    unknown_hook: 404,
+    unsafe_path: 400,
+    unsupported_entry: 400,
+  })
+);
 
-function throwPluginHttpError(error: unknown): never {
+function throwPluginHttpError<T>(error: T): never {
   if (error instanceof PluginHostError) {
     throw new NakamaApiError(
       error.code,
-      PLUGIN_ERROR_STATUS[error.code] ?? 409
+      PLUGIN_ERROR_STATUS.get(error.code) ?? 409
     );
   }
+
   throw error;
 }

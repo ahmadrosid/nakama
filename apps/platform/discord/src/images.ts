@@ -115,6 +115,7 @@ function resolveAttachmentMediaType(attachment: Attachment): string {
   }
 
   const inferred = inferArtifactMimeType(attachment.name ?? "");
+
   return ALLOWED_IMAGE_MEDIA_TYPES.has(inferred) ? inferred : "";
 }
 

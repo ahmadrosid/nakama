@@ -78,6 +78,7 @@ export function TranscriptionSettingsCard() {
     }
 
     const timeout = window.setTimeout(() => setSavedHint(null), 2500);
+
     return () => window.clearTimeout(timeout);
   }, [savedHint]);
 

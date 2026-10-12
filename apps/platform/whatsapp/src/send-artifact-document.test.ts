@@ -6,16 +6,24 @@ import {
 } from "./send-artifact-document";
 
 function mockSendMessage(options?: { throwError?: string }) {
+  type MessageContent = Parameters<WASocket["sendMessage"]>[1];
+
   const calls: unknown[] = [];
-  const socket = {
-    sendMessage: async (_jid: string, content: unknown) => {
+
+  const socketFixture = {
+    sendMessage: async (_jid: string, content: MessageContent) => {
       if (options?.throwError) {
         throw new Error(options.throwError);
       }
+
       calls.push(content);
+
       return {};
     },
-  } as unknown as WASocket;
+  };
+
+  // SAFETY: The sender uses only sendMessage from this test socket.
+  const socket = socketFixture as WASocket;
 
   return { calls, socket };
 }
@@ -98,14 +106,20 @@ describe("sendWhatsAppArtifactDocument", () => {
 test("upload deadline reports unknown, settles late rejection, and never retries", async () => {
   let attempts = 0;
   let rejectUpload: (error: Error) => void = () => {};
-  const socket = {
+
+  const socketFixture = {
     sendMessage: () => {
       attempts += 1;
+
       return new Promise((_resolve, reject) => {
         rejectUpload = reject;
       });
     },
-  } as unknown as WASocket;
+  };
+
+  // SAFETY: The sender uses only sendMessage from this test socket.
+  const socket = socketFixture as WASocket;
+
   const result = await sendWhatsAppArtifactDocument(
     socket,
     "1@s.whatsapp.net",
@@ -116,6 +130,7 @@ test("upload deadline reports unknown, settles late rejection, and never retries
     },
     { timeoutMs: 5 }
   );
+
   expect(result.status).toBe("unknown");
   expect(result.ok).toBe(false);
   rejectUpload(new Error("late rejection"));
@@ -126,18 +141,25 @@ test("upload deadline reports unknown, settles late rejection, and never retries
 test("cancellation before upload sends nothing; cancellation in flight has unknown outcome", async () => {
   const controller = new AbortController();
   let attempts = 0;
-  const socket = {
+
+  const socketFixture = {
     sendMessage: () => {
       attempts += 1;
       controller.abort();
+
       return new Promise(() => {});
     },
-  } as unknown as WASocket;
+  };
+
+  // SAFETY: The sender uses only sendMessage from this test socket.
+  const socket = socketFixture as WASocket;
+
   const input = {
     bytes: new Uint8Array([1]),
     filename: "a.csv",
     mimeType: "text/csv",
   };
+
   expect(
     (
       await sendWhatsAppArtifactDocument(socket, "1@s.whatsapp.net", input, {

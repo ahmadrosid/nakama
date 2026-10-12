@@ -26,10 +26,12 @@ export function useArtifactShareControls({
   const userId = user?.id ?? "";
   const orgId = activeOrg?.id ?? "";
   const [copied, setCopied] = useState(false);
+
   const [, refreshStoredShare] = useReducer(
     (revision: number) => revision + 1,
     0
   );
+
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [publishIntent, setPublishIntent] = useState<PublishIntent>("publish");
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
@@ -47,6 +49,7 @@ export function useArtifactShareControls({
     artifactPath,
     orgId
   );
+
   const publishMutation = usePublishArtifactShareMutation();
   const revokeMutation = useRevokeArtifactShareMutation();
 
@@ -54,9 +57,11 @@ export function useArtifactShareControls({
     orgId && userId
       ? readStoredArtifactShare({ artifactPath, orgId, profileId, userId })
       : null;
+
   const shareUrl = stored?.shareUrl ?? null;
   const isShared = Boolean(statusQuery.data?.active || shareUrl);
   const publishDialogSucceeded = publishedUrl !== null;
+
   const busy =
     publishMutation.isPending ||
     revokeMutation.isPending ||
@@ -68,6 +73,7 @@ export function useArtifactShareControls({
     }
 
     const timer = window.setTimeout(() => setCopied(false), 2000);
+
     return () => window.clearTimeout(timer);
   }, [copied]);
 
@@ -86,6 +92,7 @@ export function useArtifactShareControls({
       setPublishedUrl(shareUrl);
       setPublishWarning(null);
       setPublishDialogOpen(true);
+
       return;
     }
 
@@ -94,6 +101,7 @@ export function useArtifactShareControls({
       setPublishedUrl(null);
       setPublishWarning(null);
       setPublishDialogOpen(true);
+
       return;
     }
 
@@ -109,6 +117,7 @@ export function useArtifactShareControls({
   function handleShareClick() {
     if (isShared) {
       openViewShareDialog();
+
       return;
     }
 
@@ -154,6 +163,7 @@ export function useArtifactShareControls({
         path: artifactPath,
         profileId,
       });
+
       let nextUrl: string | null = null;
       let warning: string | null = null;
 
@@ -171,6 +181,7 @@ export function useArtifactShareControls({
       if (nextUrl) {
         setPublishedUrl(nextUrl);
         setPublishWarning(warning);
+
         return;
       }
 
@@ -186,11 +197,13 @@ export function useArtifactShareControls({
   async function handleCopyExisting() {
     if (shareUrl) {
       await copyLink(shareUrl);
+
       return;
     }
 
     if (isShared) {
       openViewShareDialog();
+
       return;
     }
 
@@ -199,6 +212,7 @@ export function useArtifactShareControls({
 
   async function handleRotateLink() {
     const shareId = statusQuery.data?.id ?? stored?.shareId;
+
     if (!(orgId && shareId)) {
       return;
     }
@@ -209,12 +223,14 @@ export function useArtifactShareControls({
         profileId,
         shareId,
       });
+
       clearStoredArtifactShare({ artifactPath, orgId, profileId, userId });
       refreshStoredShare();
 
       if (!revoked) {
         closePublishDialog();
         toast("This share link was already revoked. Open sharing again.");
+
         return;
       }
 
@@ -222,6 +238,7 @@ export function useArtifactShareControls({
         path: artifactPath,
         profileId,
       });
+
       let nextUrl: string | null = null;
       let warning: string | null = null;
 
@@ -238,6 +255,7 @@ export function useArtifactShareControls({
         setPublishIntent("view");
         setPublishedUrl(nextUrl);
         setPublishWarning(warning);
+
         return;
       }
 
@@ -250,6 +268,7 @@ export function useArtifactShareControls({
 
   async function handleRevoke() {
     const shareId = statusQuery.data?.id ?? stored?.shareId;
+
     if (!(orgId && shareId)) {
       return;
     }
@@ -259,6 +278,7 @@ export function useArtifactShareControls({
       profileId,
       shareId,
     });
+
     clearStoredArtifactShare({ artifactPath, orgId, profileId, userId });
     refreshStoredShare();
     toast(

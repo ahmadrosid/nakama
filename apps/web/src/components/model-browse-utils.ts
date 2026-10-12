@@ -12,50 +12,57 @@ export interface CapabilityBrowseRow {
   vision?: boolean;
 }
 
+type CapabilityModelListRow = Pick<
+  CapabilityBrowseRow,
+  "id" | "name" | "inputPerMillionUsd" | "outputPerMillionUsd"
+> & { supportsThinking: boolean; supportsVision: boolean };
+
 export function formatBrowseCapabilities(row: {
   tools?: boolean;
   vision?: boolean;
   reasoning?: boolean;
 }): Array<"tools" | "vision" | "reasoning"> {
   const capabilities: Array<"tools" | "vision" | "reasoning"> = [];
+
   if (row.tools) {
     capabilities.push("tools");
   }
+
   if (row.vision) {
     capabilities.push("vision");
   }
+
   if (row.reasoning) {
     capabilities.push("reasoning");
   }
+
   return capabilities;
 }
 
-export function capabilityBrowseRowToModelListRow(row: CapabilityBrowseRow): {
-  id: string;
-  name: string;
-  supportsThinking: boolean;
-  supportsVision: boolean;
-  inputPerMillionUsd?: number;
-  outputPerMillionUsd?: number;
-} {
-  return {
+export function capabilityBrowseRowToModelListRow(row: CapabilityBrowseRow) {
+  const model: CapabilityModelListRow = {
     id: row.id,
     name: row.name,
     supportsThinking: row.reasoning === true,
     supportsVision: row.vision === true,
-    ...(row.inputPerMillionUsd === undefined
-      ? {}
-      : { inputPerMillionUsd: row.inputPerMillionUsd }),
-    ...(row.outputPerMillionUsd === undefined
-      ? {}
-      : { outputPerMillionUsd: row.outputPerMillionUsd }),
   };
+
+  if (row.inputPerMillionUsd !== undefined) {
+    model.inputPerMillionUsd = row.inputPerMillionUsd;
+  }
+
+  if (row.outputPerMillionUsd !== undefined) {
+    model.outputPerMillionUsd = row.outputPerMillionUsd;
+  }
+
+  return model;
 }
 
 export function filterRowsBySearch<
   T extends { id: string; name: string; description?: string },
 >(rows: T[], search: string): T[] {
   const query = search.trim().toLowerCase();
+
   if (!query) {
     return rows;
   }
@@ -68,10 +75,10 @@ export function filterRowsBySearch<
   );
 }
 
-export function filterCapabilityBrowseRows(
-  rows: CapabilityBrowseRow[],
+export function filterCapabilityBrowseRows<Row extends CapabilityBrowseRow>(
+  rows: Row[],
   options: { search: string; hideDeprecated: boolean }
-): CapabilityBrowseRow[] {
+): Row[] {
   let result = rows;
 
   if (options.hideDeprecated) {
@@ -81,14 +88,7 @@ export function filterCapabilityBrowseRows(
   return filterRowsBySearch(result, options.search);
 }
 
-export function capabilityBrowseRowToDisplayRow(row: CapabilityBrowseRow): {
-  id: string;
-  name: string;
-  description?: string;
-  contextLength?: number;
-  badges: Array<{ label: string; tone: "amber" }>;
-  capabilities: ReturnType<typeof formatBrowseCapabilities>;
-} {
+export function capabilityBrowseRowToDisplayRow(row: CapabilityBrowseRow) {
   return {
     badges: [
       ...(row.preview ? [{ label: "preview", tone: "amber" as const }] : []),

@@ -26,7 +26,8 @@ export function MarkdownA({
   node: _node,
   ...rest
 }: MarkdownAProps) {
-  const videoId = typeof href === "string" ? parseYoutubeVideoId(href) : null;
+  const videoId = href ? parseYoutubeVideoId(href) : null;
+
   if (videoId) {
     return <YoutubeEmbed videoId={videoId} />;
   }
@@ -34,8 +35,10 @@ export function MarkdownA({
   if (href?.startsWith("#file-citation?")) {
     const query = new URLSearchParams(href.slice(href.indexOf("?") + 1));
     const citation = query.get("citation");
+
     if (citation && /^\d+$/.test(citation)) {
       const path = query.get("file") ?? "file";
+
       return (
         <sup className="relative -top-0.5 ml-0.5 inline-flex align-baseline">
           <a
@@ -77,11 +80,15 @@ function SafeMarkdownLink({
       if (!(linkSafety?.enabled && href) || incomplete) {
         return;
       }
+
       event.preventDefault();
+
       if (linkSafety.onLinkCheck && (await linkSafety.onLinkCheck(href))) {
         window.open(href, "_blank", "noopener,noreferrer");
+
         return;
       }
+
       setOpen(true);
     },
     [href, incomplete, linkSafety]
@@ -149,5 +156,6 @@ function renderLinkSafetyModal(
   if (renderModal) {
     return renderModal(props);
   }
+
   return <ExternalLinkSafetyModal {...props} />;
 }

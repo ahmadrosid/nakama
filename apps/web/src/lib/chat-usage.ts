@@ -30,7 +30,9 @@ export function addChatUsage(
     inputTokens: left.inputTokens + right.inputTokens,
     outputTokens: left.outputTokens + right.outputTokens,
     totalTokens: left.totalTokens + right.totalTokens,
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
     ...(left.estimated || right.estimated ? { estimated: true } : {}),
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
     ...(costKnown
       ? { costUsd: (left.costUsd ?? 0) + (right.costUsd ?? 0) }
       : {}),

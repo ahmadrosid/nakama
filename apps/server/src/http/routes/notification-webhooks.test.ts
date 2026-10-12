@@ -7,14 +7,22 @@ import {
   getWhatsAppConfigPath,
   saveTelegramConfig,
 } from "@nakama/core";
+import { asTestFetch } from "../../providers/test-helpers";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import { seedOrgAdmin } from "../test-session-helpers";
 
 describe("notification webhook routes", () => {
   let tempHome = "";
+  const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
   let homedirSpy: ReturnType<typeof spyOn<typeof os, "homedir">> | null = null;
 
   afterEach(async () => {
+    if (previousConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+    }
+
     homedirSpy?.mockRestore();
     homedirSpy = null;
 
@@ -27,6 +35,7 @@ describe("notification webhook routes", () => {
   async function createApp() {
     tempHome = await mkdtemp(path.join(os.tmpdir(), "nakama-notify-webhook-"));
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
+    process.env.NAKAMA_CONFIG_DIR = path.join(tempHome, ".nakama");
     await saveTelegramConfig(
       { orgId: "org_1", profileId: "agent_1" },
       { botToken: "1234567890:TEST" }
@@ -43,14 +52,16 @@ describe("notification webhook routes", () => {
       const originalFetch = globalThis.fetch;
       const calls: Array<{ url: string; body: unknown; headers: Headers }> = [];
       let providerStatus = 200;
-      globalThis.fetch = async (input, init) => {
+      globalThis.fetch = asTestFetch(async (input, init) => {
         calls.push({
           url: String(input),
           body: JSON.parse(String(init?.body)),
           headers: new Headers(init?.headers),
         });
+
         return new Response("ok", { status: providerStatus });
-      };
+      });
+
       try {
         const { app, databaseAdapter, authService } = await createApp();
         await seedOrgAdmin(databaseAdapter, {
@@ -58,10 +69,12 @@ describe("notification webhook routes", () => {
           profileId: "agent_1",
         });
         const owner = { orgId: "org_1", profileId: "agent_1" };
+
         const configPath =
           channel === "discord"
             ? getDiscordConfigPath(owner)
             : getWhatsAppConfigPath(owner);
+
         await mkdir(path.dirname(configPath), { recursive: true });
         await writeFile(
           configPath,
@@ -69,6 +82,7 @@ describe("notification webhook routes", () => {
             ? "bot_token=test_discord_token\nprofile_id=agent_1\n"
             : "profile_id=agent_1\npaired_jid=628123456789@s.whatsapp.net\noutbound_port=4312\noutbound_token=test_worker_token\n"
         );
+
         const configured =
           channel === "discord"
             ? {
@@ -79,6 +93,7 @@ describe("notification webhook routes", () => {
                 },
               }
             : { channel, config: { profileId: "agent_1" } };
+
         await databaseAdapter.upsertNotificationDestination({
           ...configured,
           id: "dest_1",
@@ -88,26 +103,34 @@ describe("notification webhook routes", () => {
           createdAt: "2026-10-03T00:00:00.000Z",
           updatedAt: "2026-10-03T00:00:00.000Z",
         });
+
         const notify = (
           key: string | null,
-          payload: unknown = {
+          payload: { body: string; level?: string; title?: string } = {
             title: "Payment",
             body: "Received",
             level: "success",
           },
           apiKey = "secret_key"
-        ) =>
-          app.fetch(
+        ) => {
+          const headers = new Headers({
+            "Content-Type": "application/json",
+            "X-API-Key": apiKey,
+          });
+
+          if (key) {
+            headers.set("Idempotency-Key", key);
+          }
+
+          return app.fetch(
             new Request("http://localhost:4310/v1/notify/dest_1", {
               method: "POST",
               body: JSON.stringify(payload),
-              headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": apiKey,
-                ...(key ? { "Idempotency-Key": key } : {}),
-              },
+              headers,
             })
           );
+        };
+
         expect((await notify("evt_wrong", undefined, "wrong")).status).toBe(
           401
         );
@@ -115,6 +138,9 @@ describe("notification webhook routes", () => {
         expect((await notify("evt_bad_payload", { body: " " })).status).toBe(
           400
         );
+        expect(
+          (await notify("evt_1", { body: "Received", level: "fatal" })).status
+        ).toBe(400);
         expect(calls).toEqual([]);
         expect((await notify("evt_1")).status).toBe(204);
         expect((await notify("evt_1")).status).toBe(409);
@@ -153,12 +179,19 @@ describe("notification webhook routes", () => {
   }
 
   test("accepts authenticated webhook requests and delivers to telegram topics", async () => {
-    const telegramCalls: Array<Record<string, unknown>> = [];
+    const telegramCalls: Array<{
+      chat_id?: number | string;
+      message_thread_id?: number;
+      parse_mode?: "HTML";
+      text?: string;
+    }> = [];
+
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = asTestFetch(async (_input, init) => {
       telegramCalls.push(JSON.parse(String(init?.body)));
+
       return new Response("ok", { status: 200 });
-    };
+    });
 
     try {
       const { app, databaseAdapter, authService } = await createApp();
@@ -243,6 +276,7 @@ describe("notification webhook routes", () => {
 
   test("does not leak an unexpected internal failure's message", async () => {
     const { app, databaseAdapter } = await createApp();
+
     const lookupSpy = spyOn(
       databaseAdapter,
       "getNotificationDestination"
@@ -277,10 +311,11 @@ describe("notification webhook routes", () => {
   test("rejects a replayed idempotency key without a second telegram send", async () => {
     const telegramCalls: unknown[] = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = asTestFetch(async (_input, init) => {
       telegramCalls.push(init?.body);
+
       return new Response("ok", { status: 200 });
-    };
+    });
 
     try {
       const { app, databaseAdapter, authService } = await createApp();
@@ -319,6 +354,7 @@ describe("notification webhook routes", () => {
       const first = await app.fetch(
         new Request("http://localhost:4310/v1/notify/dest_1", requestInit)
       );
+
       const second = await app.fetch(
         new Request("http://localhost:4310/v1/notify/dest_1", requestInit)
       );
@@ -334,10 +370,11 @@ describe("notification webhook routes", () => {
   test("does not deliver for an archived organization", async () => {
     const telegramCalls: unknown[] = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = asTestFetch(async (_input, init) => {
       telegramCalls.push(init?.body);
+
       return new Response("ok", { status: 200 });
-    };
+    });
 
     try {
       const { app, databaseAdapter, authService } = await createApp();

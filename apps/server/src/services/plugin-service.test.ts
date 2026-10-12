@@ -19,12 +19,15 @@ import {
   closePluginPackageRegistry,
   pluginPackage,
   pluginTarball,
+  publishPluginPackageVersion,
 } from "../testing/plugin-package-fixture";
 import { PluginService } from "./plugin-service";
 
 afterEach(closePluginPackageRegistry);
 
 const SIDE_EFFECT_MARKER = join(tmpdir(), "nakama-plugin-side-effect-marker");
+
+type Json = boolean | Json[] | { [key: string]: Json } | null | number | string;
 
 const identity = {
   author: "Nakama",
@@ -41,7 +44,7 @@ writeFileSync(${JSON.stringify(SIDE_EFFECT_MARKER)}, "ran");
 throw new Error("plugin side-effect executed");
 `;
 
-function notesManifest(overrides: Record<string, unknown> = {}) {
+function notesManifest(overrides: Record<string, Json> = {}) {
   return {
     actions: [
       {
@@ -68,10 +71,11 @@ function notesManifest(overrides: Record<string, unknown> = {}) {
 }
 
 function validBundle(
-  overrides: Record<string, unknown> = {},
+  overrides: Record<string, Json> = {},
   options?: Parameters<typeof pluginPackage>[1]
 ): ReturnType<typeof pluginPackage> {
   const manifest = notesManifest(overrides);
+
   return pluginPackage(
     {
       "actions/list.js": sideEffectJs,
@@ -106,6 +110,7 @@ describe("PluginService", () => {
       join(officialPackagesDir, "supermemory"),
       { recursive: true }
     );
+
     const service = new PluginService(db, configDir, {
       officialPackagesDir,
       async onHostRequest() {
@@ -116,16 +121,20 @@ describe("PluginService", () => {
         async unregisterPluginWorkers() {},
       },
     });
+
     const actor = { id: "admin", role: "admin" as const };
+
     const first = await service.installOfficialPlugin(
       "org-a",
       "supermemory",
       actor
     );
+
     const originalPath = join(
       getPluginReleaseDir("supermemory", first.selectedVersion!, configDir),
       "ui/app.js"
     );
+
     const original = await readFile(originalPath, "utf8");
     await appendFile(
       join(officialPackagesDir, "supermemory/ui/app.js"),
@@ -137,6 +146,7 @@ describe("PluginService", () => {
       "supermemory",
       actor
     );
+
     expect(second.lifecycleState).toBe("enabled");
     expect(second.selectedVersion).not.toBe(first.selectedVersion);
     expect(
@@ -154,11 +164,13 @@ describe("PluginService", () => {
     ).toBe(`${original}\n// rebuilt\n`);
     expect(await readFile(originalPath, "utf8")).toBe(original);
     expect(await db.getOrgPlugin("org-a", "supermemory")).toEqual(first);
+
     const repeated = await service.installOfficialPlugin(
       "org-b",
       "supermemory",
       actor
     );
+
     expect(repeated.selectedVersion).toBe(second.selectedVersion);
   });
 
@@ -182,6 +194,7 @@ describe("PluginService", () => {
     const installed = await service.installPluginPackage(archive, {
       expectedDigest: preview.digest,
     });
+
     expect(installed.digest).toBe(preview.digest);
     expect(installed.releaseDir).toBe(
       getPluginReleaseDir("notes", "1.0.0", configDir)
@@ -302,6 +315,7 @@ describe("PluginService", () => {
       createInMemoryDatabaseAdapter(),
       configDir
     );
+
     for (const packageName of [
       "file:./plugin",
       "https://example.com/a.tgz",
@@ -313,6 +327,7 @@ describe("PluginService", () => {
         service.previewPluginPackage({ packageName, version: "1.0.0" })
       ).rejects.toMatchObject({ code: "invalid_package" });
     }
+
     for (const version of ["latest", "^1.0.0", "1", "*", "1.0.0 || 2.0.0"]) {
       await expect(
         service.previewPluginPackage({ packageName: "notes", version })
@@ -330,10 +345,12 @@ describe("PluginService", () => {
         expectedIntegrity: `sha512-${Buffer.alloc(64).toString("base64")}`,
       })
     ).rejects.toMatchObject({ code: "digest_mismatch" });
+
     const corrupted = validBundle(
       {},
       { integrity: `sha512-${Buffer.alloc(64).toString("base64")}` }
     );
+
     await expect(service.previewPluginPackage(corrupted)).rejects.toMatchObject(
       { code: "package_unavailable" }
     );
@@ -343,18 +360,64 @@ describe("PluginService", () => {
     );
   });
 
+  test("reads a restricted package only with the npm token, and keeps the token on the registry host", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new PluginService(db, configDir);
+    const source = validBundle({}, { token: "npm_fixture_token" });
+
+    await expect(service.previewPluginPackage(source)).rejects.toMatchObject({
+      code: "package_unavailable",
+    });
+
+    process.env.NAKAMA_PLUGIN_NPM_TOKEN = "npm_fixture_token";
+
+    try {
+      const preview = await service.previewPluginPackage(source);
+
+      const installed = await service.installPluginPackage(source, {
+        expectedDigest: preview.digest,
+      });
+
+      expect(installed.digest).toBe(preview.digest);
+      expect(
+        JSON.stringify(await db.getPluginRelease("notes", "1.0.0"))
+      ).not.toContain("npm_fixture_token");
+
+      publishPluginPackageVersion(source.packageName, "1.1.0");
+
+      expect(await service.listPluginUpdates()).toEqual([
+        {
+          packageName: source.packageName,
+          pluginId: "notes",
+          version: "1.1.0",
+        },
+      ]);
+
+      await expect(
+        service.previewPluginPackage(
+          validBundle({}, { tarball: "https://registry.example/notes.tgz" })
+        )
+      ).rejects.toMatchObject({ code: "invalid_package" });
+    } finally {
+      delete process.env.NAKAMA_PLUGIN_NPM_TOKEN;
+    }
+  });
+
   test("requires bundled dependencies and matching package identity", async () => {
     const service = new PluginService(
       createInMemoryDatabaseAdapter(),
       configDir
     );
-    for (const packageJson of [
+
+    const packageJsons: Record<string, Json>[] = [
       { dependencies: { lodash: "1.0.0" } },
       { optionalDependencies: { lodash: "1.0.0" } },
       { peerDependencies: { lodash: "1.0.0" } },
       { name: "another-package" },
       { version: "2.0.0" },
-    ]) {
+    ];
+
+    for (const packageJson of packageJsons) {
       await expect(
         service.previewPluginPackage(validBundle({}, { packageJson }))
       ).rejects.toMatchObject({ code: "invalid_manifest" });
@@ -366,7 +429,9 @@ describe("PluginService", () => {
       createInMemoryDatabaseAdapter(),
       configDir
     );
+
     const command = `bun -e 'require("fs").writeFileSync(${JSON.stringify(SIDE_EFFECT_MARKER)}, "ran")'`;
+
     const source = validBundle(
       {},
       {
@@ -381,11 +446,14 @@ describe("PluginService", () => {
         },
       }
     );
+
     await service.previewPluginPackage(source);
+
     const installed = await service.installPluginPackage(
       source,
       approvedPluginPackage(source)
     );
+
     expect(existsSync(SIDE_EFFECT_MARKER)).toBe(false);
     expect(existsSync(join(installed.releaseDir, "node_modules"))).toBe(false);
   });
@@ -396,6 +464,7 @@ describe("PluginService", () => {
     const first = validBundle();
     await service.installPluginPackage(first);
     const existingDir = getPluginReleaseDir("notes", "1.0.0", configDir);
+
     const existingBytes = await readFile(
       join(existingDir, "nakama.plugin.json"),
       "utf8"
@@ -405,6 +474,7 @@ describe("PluginService", () => {
     failingDb.upsertPluginRelease = async () => {
       throw new Error("metadata write failed");
     };
+
     const failingService = new PluginService(failingDb, configDir);
     const next = validBundle({ version: "1.1.0" });
 
@@ -445,6 +515,7 @@ describe("PluginService", () => {
     const other = validBundle({
       description: "Different bytes under the same version",
     });
+
     await expect(service.installPluginPackage(other)).rejects.toMatchObject({
       code: "version_conflict",
     });
@@ -471,6 +542,7 @@ describe("PluginService", () => {
   test("rejects a missing referenced file during preview", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new PluginService(db, configDir);
+
     const archive = pluginPackage({
       "nakama.plugin.json": JSON.stringify(notesManifest()),
       "skills/notes/SKILL.md": "# Notes\n",
@@ -484,6 +556,7 @@ describe("PluginService", () => {
   test("cleans abandoned staging without executing it", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new PluginService(db, configDir);
+
     const abandoned = join(
       configDir,
       "plugins",
@@ -491,6 +564,7 @@ describe("PluginService", () => {
       "abandoned",
       "side-effect.js"
     );
+
     await mkdir(dirname(abandoned), { recursive: true });
     await writeFile(abandoned, sideEffectJs);
 
@@ -502,6 +576,7 @@ describe("PluginService", () => {
   test("concurrent installs of different plugins keep both releases", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new PluginService(db, configDir);
+
     const [notes, tasks] = await Promise.all([
       service.installPluginPackage(validBundle()),
       service.installPluginPackage(validBundle({ id: "tasks", name: "Tasks" })),

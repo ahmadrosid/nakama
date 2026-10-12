@@ -913,7 +913,7 @@ export const AVAILABLE_MODELS: ProviderModelOption[] = [
 ];
 
 export function validateOpenRouterCustomModels(
-  entries: unknown
+  entries: CustomModelEntry[]
 ): CustomModelEntry[] {
   const models = validateCustomModels(entries);
 
@@ -929,13 +929,13 @@ export function validateOpenRouterCustomModels(
 }
 
 export function validateCerebrasCustomModels(
-  entries: unknown
+  entries: CustomModelEntry[]
 ): CustomModelEntry[] {
   return validateCustomModels(entries);
 }
 
 export function validateFireworksCustomModels(
-  entries: unknown
+  entries: CustomModelEntry[]
 ): CustomModelEntry[] {
   const models = validateCustomModels(entries);
 
@@ -947,7 +947,7 @@ export function validateFireworksCustomModels(
 }
 
 export function validateOllamaCustomModels(
-  entries: unknown
+  entries: CustomModelEntry[]
 ): CustomModelEntry[] {
   const models = validateCustomModels(entries);
 
@@ -963,7 +963,7 @@ function isCloudflareModelId(model: string): boolean {
 }
 
 export function validateCloudflareCustomModels(
-  entries: unknown
+  entries: CustomModelEntry[]
 ): CustomModelEntry[] {
   const models = validateCustomModels(entries);
 
@@ -983,7 +983,7 @@ function isOpenCodeGoModelId(model: string): boolean {
 }
 
 export function validateOpenCodeGoCustomModels(
-  entries: unknown
+  entries: CustomModelEntry[]
 ): CustomModelEntry[] {
   const models = validateCustomModels(entries);
 
@@ -1008,14 +1008,20 @@ export function getModelById(modelId: string): ProviderModelOption | undefined {
  * entry every custom provider would silently compact at the fallback window.
  * Entries that leave the sizes blank keep the catalog value, then the fallback.
  */
+export interface ProviderModelLimits {
+  contextWindow: number;
+  maxOutputTokens: number;
+}
+
 export function resolveModelLimits(
   provider: ProviderName,
   modelId: string,
   customModels?: CustomModelEntry[]
-): { contextWindow: number; maxOutputTokens: number } {
+): ProviderModelLimits {
   const catalog = getModelsForProvider(provider).find(
     (model) => model.id === modelId
   );
+
   const custom = findCustomModel(customModels, modelId);
 
   return {
@@ -1078,6 +1084,7 @@ export function getDefaultModel(
   }
 
   const models = getModelsForProvider(provider);
+
   const fallback =
     provider === "openrouter"
       ? "anthropic/claude-sonnet-4-6"
@@ -1108,6 +1115,7 @@ export function getDefaultModel(
                               : provider === "cloudflare"
                                 ? "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
                                 : "gpt-5.4";
+
   return models.find((model) => model.default)?.id ?? models[0]?.id ?? fallback;
 }
 
@@ -1244,6 +1252,7 @@ export function modelSupportsVision(
     }
 
     const catalog = getModelById(modelId);
+
     return catalog?.supportsVision ?? false;
   }
 
@@ -1313,9 +1322,11 @@ export function isAllowedImageGenerationSelection(
   value: string | null | undefined
 ): boolean {
   const trimmed = value?.trim();
+
   if (trimmed === IMAGE_GENERATION_SELECTION) {
     return true;
   }
+
   // Self-hosted OpenAI-compatible backends carry a baseUrl and reuse the same
   // Images API + model allowlist, selected via `openai_compatible::gpt-image-2`.
   return trimmed === `openai_compatible::${IMAGE_GENERATION_MODEL_ID}`;

@@ -19,6 +19,7 @@ describe("CLI ANSI sanitization", () => {
     console.log = (...args: unknown[]) => {
       calls.push(args);
     };
+
     try {
       printLine("ok\x1b[2J");
       expect(calls).toEqual([["ok"]]);

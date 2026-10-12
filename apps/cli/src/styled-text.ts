@@ -6,7 +6,9 @@ import { getUserConfigDir, readTextOrNull, writeTextFile } from "@nakama/core";
 import { stripAnsi, visibleLength } from "./text-measure";
 
 type NamedColor = "default" | "cyan" | "yellow" | "red" | "green";
+
 type NamedBackgroundColor = "surface";
+
 export type Theme = "dark" | "light";
 
 export interface TextStyle {
@@ -63,7 +65,9 @@ const BACKGROUND_CODES: Record<Theme, Record<NamedBackgroundColor, string>> = {
 const DEFAULTS_TIMEOUT_MS = 500;
 
 let currentTheme: Theme = "dark";
+
 let sessionMacOsTheme: Theme | undefined;
+
 let terminalBackgroundRgb: readonly [number, number, number] | undefined;
 
 export function setTheme(theme: Theme): void {
@@ -79,6 +83,7 @@ function surfaceBackgroundCode(): string {
   const tint = currentTheme === "light" ? 0.04 : 0.12;
   const target = currentTheme === "light" ? 0 : 255;
   const blend = (value: number) => Math.round(value + (target - value) * tint);
+
   return `48;2;${blend(r)};${blend(g)};${blend(b)}`;
 }
 
@@ -111,6 +116,7 @@ function readMacOsThemeFromDefaults(): Theme {
       stdio: ["ignore", "pipe", "ignore"],
       timeout: DEFAULTS_TIMEOUT_MS,
     });
+
     return "dark";
   } catch {
     return "light";
@@ -119,19 +125,37 @@ function readMacOsThemeFromDefaults(): Theme {
 
 async function loadCliState(): Promise<CliState> {
   const raw = await readTextOrNull(getCliStatePath());
+
   if (raw === null) {
     return {};
   }
 
   try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return {};
-    }
-    return parsed as CliState;
+    const parsed: unknown = JSON.parse(raw);
+
+    return isCliState(parsed) ? parsed : {};
   } catch {
     return {};
   }
+}
+
+function isCliState(value: unknown): value is CliState {
+  if (!(value instanceof Object) || Array.isArray(value)) {
+    return false;
+  }
+
+  const validTheme =
+    !("macosTheme" in value) ||
+    value.macosTheme === "dark" ||
+    value.macosTheme === "light";
+
+  const validMtime =
+    !("macosThemePrefsMtimeMs" in value) ||
+    (Object.prototype.toString.call(value.macosThemePrefsMtimeMs) ===
+      "[object Number]" &&
+      Number.isFinite(Number(value.macosThemePrefsMtimeMs)));
+
+  return validTheme && validMtime;
 }
 
 async function saveMacOsThemeCache(
@@ -140,11 +164,13 @@ async function saveMacOsThemeCache(
 ): Promise<void> {
   const state = await loadCliState();
   state.macosTheme = theme;
+
   if (prefsMtimeMs == null) {
     delete state.macosThemePrefsMtimeMs;
   } else {
     state.macosThemePrefsMtimeMs = prefsMtimeMs;
   }
+
   await writeTextFile(getCliStatePath(), `${JSON.stringify(state)}\n`, {
     ensureDir: getUserConfigDir(),
   });
@@ -164,22 +190,26 @@ export async function detectMacOsTheme(
   const prefsMtimeMs = (options.prefsMtimeMs ?? readGlobalPreferencesMtimeMs)();
   const state = await loadCliState();
   const cached = state.macosTheme;
+
   if (
     (cached === "dark" || cached === "light") &&
     prefsMtimeMs != null &&
     state.macosThemePrefsMtimeMs === prefsMtimeMs
   ) {
     sessionMacOsTheme = cached;
+
     return cached;
   }
 
   const theme = (options.readDefaults ?? readMacOsThemeFromDefaults)();
   sessionMacOsTheme = theme;
+
   try {
     await saveMacOsThemeCache(theme, prefsMtimeMs);
   } catch {
     // Cache write is best-effort; theme detection must still succeed.
   }
+
   return theme;
 }
 
@@ -188,15 +218,18 @@ export async function detectTheme(): Promise<Theme | null> {
   if (process.platform === "darwin") {
     const theme = await detectMacOsTheme();
     await probeTerminalBackground();
+
     return theme;
   }
 
   // Many terminals set this: "0;15" = dark bg light fg, "15;0" = light bg dark fg
   const colorFgBg = process.env.COLORFGBG;
+
   if (colorFgBg) {
     const parts = colorFgBg.split(";");
     const fg = Number.parseInt(parts[0] ?? "", 10);
     const bg = Number.parseInt(parts[1] ?? "", 10);
+
     if (!(Number.isNaN(bg) || Number.isNaN(fg))) {
       return bg > fg ? "light" : "dark";
     }
@@ -207,9 +240,11 @@ export async function detectTheme(): Promise<Theme | null> {
   }
 
   const background = await probeTerminalBackground();
+
   if (background) {
     const [r, g, b] = background;
     const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+
     return luminance > 128 ? "light" : "dark";
   }
 
@@ -236,15 +271,19 @@ async function probeTerminalBackground(): Promise<
       if (resolved) {
         return;
       }
+
       resolved = true;
       clearTimeout(timer);
       stdin.off("data", onData);
+
       if (!wasRaw) {
         stdin.setRawMode?.(false);
       }
+
       if (!wasRaw) {
         stdin.pause();
       }
+
       resolve(result);
     };
 
@@ -252,18 +291,23 @@ async function probeTerminalBackground(): Promise<
 
     function onData(chunk: Buffer | string) {
       const response = String(chunk);
+
       const match = response.match(
         /\x1b\]1[01];(?:rgb:)?([0-9a-fA-F]{2,4})\/([0-9a-fA-F]{2,4})\/([0-9a-fA-F]{2,4})/
       );
+
       if (!match) {
         return;
       }
+
       const r = Number.parseInt(match[1].slice(0, 2), 16);
       const g = Number.parseInt(match[2].slice(0, 2), 16);
       const b = Number.parseInt(match[3].slice(0, 2), 16);
+
       if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) {
         return;
       }
+
       terminalBackgroundRgb = [r, g, b];
       finish([r, g, b]);
     }
@@ -292,11 +336,15 @@ export function cloneStyledLine(line: StyledLine): StyledLine {
 }
 
 export function normalizeStyledLine(input: string | StyledLine): StyledLine {
-  if (typeof input === "string") {
+  if (isTextLine(input)) {
     return plainLine(stripAnsi(input));
   }
 
   return cloneStyledLine(input);
+}
+
+function isTextLine(input: string | StyledLine): input is string {
+  return Object.prototype.toString.call(input) === "[object String]";
 }
 
 export function styledLineFromAnsi(input: string): StyledLine {
@@ -316,6 +364,7 @@ export function styledLineFromAnsi(input: string): StyledLine {
 
   for (const match of input.matchAll(pattern)) {
     addSegment(input.slice(start, match.index));
+
     for (const code of (match[1] || "0").split(";").map(Number)) {
       switch (code) {
         case 0:
@@ -365,10 +414,12 @@ export function styledLineFromAnsi(input: string): StyledLine {
           break;
       }
     }
+
     start = (match.index ?? 0) + match[0].length;
   }
 
   addSegment(input.slice(start));
+
   return { segments: segments.length > 0 ? segments : [{ text: "" }] };
 }
 
@@ -391,24 +442,31 @@ export function serializeStyledLine(line: StyledLine): string {
     if (style?.bold) {
       codes.push("1");
     }
+
     if (style?.dim) {
       codes.push("2");
     }
+
     if (style?.italic) {
       codes.push("3");
     }
+
     if (style?.underline) {
       codes.push("4");
     }
+
     if (style?.strikethrough) {
       codes.push("9");
     }
+
     if (style?.blink) {
       codes.push("5");
     }
+
     if (style?.color) {
       codes.push(COLOR_CODES[style.color]);
     }
+
     if (style?.background) {
       codes.push(
         style.background === "surface"

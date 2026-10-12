@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { NakamaApiError } from "@nakama/core";
+import { getProfileSoulDir, NakamaApiError } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { SkillProposalService } from "./skill-proposal-service";
 import { SkillsService } from "./skills-service";
@@ -31,12 +31,107 @@ describe("SkillProposalService", () => {
     delete process.env.NAKAMA_CONFIG_DIR;
   });
 
+  test("shared references reject proposals and approval while preserving pending records and files", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const seeded = await seedOrg(db, { orgSkillsWriteApproval: true });
+    const profile = { ...seeded, isDefault: false };
+    await db.upsertProfile(profile);
+    const storedProfile = await db.getProfileForOrg(profile.id, ORG_ID);
+    const skills = new SkillsService(db);
+    const service = new SkillProposalService(db, skills);
+    await skills.createSkill(ORG_ID, {
+      body: "Run the deploy checklist.",
+      description: "Deployment notes",
+      name: "deploy-notes",
+      profileId: profile.id,
+    });
+
+    const codePath = join(
+      getProfileSoulDir(ORG_ID, profile.id),
+      "skills",
+      "deploy-notes",
+      "tool.js"
+    );
+
+    const code = 'export async function run() { return "local"; }';
+    await writeFile(codePath, code);
+
+    const staged = await service.stageProposal({
+      action: "approve_code",
+      orgId: ORG_ID,
+      profileId: profile.id,
+      relativePath: "tool.js",
+      skillName: "deploy-notes",
+    });
+
+    const proposal = (await db.getSkillProposal(ORG_ID, staged.proposalId!))!;
+    expect(proposal.status).toBe("pending");
+    const now = new Date().toISOString();
+    await db.importSharedAgentReference({
+      createdAt: now,
+      profileId: profile.id,
+      publicationId: "removed-publication",
+      sourceOrgId: "unavailable-parent",
+      sourceProfileId: "unavailable-template",
+      teamOrgId: ORG_ID,
+    });
+
+    for (const action of [
+      "create",
+      "patch",
+      "edit",
+      "delete",
+      "write_file",
+      "remove_file",
+      "approve_code",
+    ] as const) {
+      await expect(
+        service.stageProposal({
+          action,
+          content: sampleSkillMarkdown,
+          orgId: ORG_ID,
+          profileId: profile.id,
+          relativePath: "tool.js",
+          skillName: "deploy-notes",
+        })
+      ).rejects.toMatchObject({ status: 403 });
+    }
+
+    await expect(
+      service.approveProposal(ORG_ID, proposal.id, "admin")
+    ).rejects.toMatchObject({ status: 403 });
+    expect(await db.getSkillProposal(ORG_ID, proposal.id)).toEqual(proposal);
+    expect(
+      (await service.listProposals(ORG_ID, { profileId: profile.id })).proposals
+    ).toHaveLength(1);
+    expect(await readFile(codePath, "utf8")).toBe(code);
+    expect(await db.getProfileForOrg(profile.id, ORG_ID)).toEqual(
+      storedProfile
+    );
+    await expect(
+      service.stageProposal({
+        action: "create",
+        content: sampleSkillMarkdown,
+        orgId: "other",
+        profileId: profile.id,
+      })
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      service.approveProposal("other", proposal.id, "admin")
+    ).rejects.toMatchObject({ status: 404 });
+    expect(
+      (await service.rejectProposal(ORG_ID, proposal.id, "admin")).status
+    ).toBe("rejected");
+  });
+
   test("isWriteApprovalRequired respects org default and profile override (AE7)", async () => {
     const db = createInMemoryDatabaseAdapter();
+
     const profile = await seedOrg(db, {
       orgSkillsWriteApproval: true,
       profileSkillsWriteApproval: false,
     });
+
     const service = new SkillProposalService(db);
 
     expect(await service.isWriteApprovalRequired(ORG_ID, profile.id)).toBe(
@@ -68,6 +163,7 @@ describe("SkillProposalService", () => {
     const { proposals } = await service.listProposals(ORG_ID, {
       profileId: profile.id,
     });
+
     expect(proposals).toHaveLength(1);
     expect(proposals[0]?.status).toBe("pending");
     expect(proposals[0]?.action).toBe("create");
@@ -84,6 +180,7 @@ describe("SkillProposalService", () => {
       orgId: ORG_ID,
       profileId: profile.id,
     });
+
     const second = await service.stageProposal({
       action: "create",
       content: sampleSkillMarkdown,
@@ -98,6 +195,7 @@ describe("SkillProposalService", () => {
     const { proposals } = await service.listProposals(ORG_ID, {
       profileId: profile.id,
     });
+
     expect(proposals).toHaveLength(1);
   });
 
@@ -119,6 +217,7 @@ describe("SkillProposalService", () => {
       staged.proposalId!,
       "admin_user"
     );
+
     expect(approved.status).toBe("approved");
 
     const listed = await skills.listSkills();
@@ -131,6 +230,7 @@ describe("SkillProposalService", () => {
       staged.proposalId!,
       "admin_user"
     );
+
     expect(again.status).toBe("approved");
   });
 
@@ -152,6 +252,7 @@ describe("SkillProposalService", () => {
       staged.proposalId!,
       "admin_user"
     );
+
     expect(rejected.status).toBe("rejected");
 
     const listed = await skills.listSkills();
@@ -235,6 +336,7 @@ describe("SkillProposalService", () => {
       profileId: profile.id,
       skillName: "deploy-notes",
     });
+
     expect(patchStaged.outcome).toBe("created");
 
     const deleteStaged = await service.stageProposal({
@@ -243,6 +345,7 @@ describe("SkillProposalService", () => {
       profileId: profile.id,
       skillName: "deploy-notes",
     });
+
     expect(deleteStaged.outcome).toBe("already_pending");
     expect(deleteStaged.proposalId).toBe(patchStaged.proposalId);
 
@@ -293,6 +396,7 @@ describe("SkillProposalService", () => {
       relativePath: "checklist.md",
       skillName: "deploy-notes",
     });
+
     expect(staged.outcome).toBe("created");
     expect(
       (await service.listProposals(ORG_ID, { profileId: profile.id }))
@@ -309,11 +413,13 @@ describe("SkillProposalService", () => {
       ),
       "utf8"
     );
+
     expect(onDisk).toContain("- staging");
   });
 
   test("approve edit with consolidate losers archives them without delete", async () => {
     const { pathExists } = await import("@nakama/core");
+
     const { getProfileSkillsArchiveDir, getProfileSkillsDir } = await import(
       "@nakama/core"
     );
@@ -330,6 +436,7 @@ description: Deploy checklist helper.
 
 Winner body.
 `;
+
     const loserMarkdown = `---
 name: deploy-assistant
 description: Deploy checklist assistant.
@@ -337,6 +444,7 @@ description: Deploy checklist assistant.
 
 Loser body.
 `;
+
     const mergedMarkdown = `---
 name: deploy-helper
 description: Deploy checklist helper.
@@ -364,11 +472,13 @@ Merged body.
       profileId: profile.id,
       skillName: "deploy-helper",
     });
+
     expect(staged.outcome).toBe("created");
 
     const listed = await service.listProposals(ORG_ID, {
       profileId: profile.id,
     });
+
     expect(listed.proposals[0]?.consolidateLoserSkillNames).toEqual([
       "deploy-assistant",
     ]);

@@ -18,8 +18,11 @@ export {
 } from "@nakama/core/artifact-mime";
 
 const ARTIFACT_META_SUFFIX = ".nakama-meta.json";
+
 const ARTIFACTS_SEGMENT = "/artifacts/";
+
 const ARTIFACTS_PREFIX = "artifacts/";
+
 const ARTIFACT_PATH_IN_TEXT =
   /(?:\bprofiles\/([\w-]+)\/)?\bartifacts\/((?:[\w.-]+\/)*[\w.-]+\.[A-Za-z0-9][A-Za-z0-9._-]*)\b/g;
 
@@ -69,27 +72,35 @@ function getWriteFileResult(message: ChatListItem): WriteFileResult | null {
     return null;
   }
 
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
   if (typeof message.toolResult !== "object" || message.toolResult === null) {
     return null;
   }
 
+  // SAFETY: The enclosing parser checks the value before this conversion.
   return message.toolResult as WriteFileResult;
 }
 
 function isSuccessfulWrite(message: ChatListItem): boolean {
   const result = getWriteFileResult(message);
+
   return (
     result != null &&
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     typeof result.error !== "string" &&
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     typeof result.path === "string"
   );
 }
 
 function resolvedWritePath(message: ChatListItem): string | null {
   const result = getWriteFileResult(message);
+
   if (
     !result ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     typeof result.error === "string" ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     typeof result.path !== "string"
   ) {
     return null;
@@ -100,8 +111,10 @@ function resolvedWritePath(message: ChatListItem): string | null {
 
 function bytesWrittenFromMessage(message: ChatListItem): number {
   const result = getWriteFileResult(message);
+
   if (
     !result ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     typeof result.bytesWritten !== "number" ||
     !Number.isInteger(result.bytesWritten)
   ) {
@@ -141,6 +154,7 @@ export function isArtifactMetaSidecarTool(message: ChatListItem): boolean {
   }
 
   const inputPath =
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     typeof message.toolInput?.path === "string" ? message.toolInput.path : null;
 
   if (
@@ -151,11 +165,14 @@ export function isArtifactMetaSidecarTool(message: ChatListItem): boolean {
     return true;
   }
 
+  // SAFETY: The branch checks that the tool result is a non-null object.
   const result =
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     typeof message.toolResult === "object" && message.toolResult !== null
       ? (message.toolResult as { path?: string })
       : null;
 
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
   if (typeof result?.path === "string") {
     return (
       result.path.includes(".nakama-meta") ||
@@ -168,11 +185,13 @@ export function isArtifactMetaSidecarTool(message: ChatListItem): boolean {
 
 export function toArtifactsRelativePath(resolvedPath: string): string | null {
   const markerIndex = resolvedPath.indexOf(ARTIFACTS_SEGMENT);
+
   if (markerIndex !== -1) {
     return resolvedPath.slice(markerIndex + ARTIFACTS_SEGMENT.length);
   }
 
   const windowsMarker = resolvedPath.toLowerCase().indexOf("\\artifacts\\");
+
   if (windowsMarker !== -1) {
     return resolvedPath
       .slice(windowsMarker + "\\artifacts\\".length)
@@ -195,8 +214,10 @@ function siblingContentPath(metaResolvedPath: string): string | null {
 }
 
 function parseArtifactMeta(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
   content: unknown
 ): Pick<ChatArtifactRef, "mimeType" | "sizeBytes" | "savedAt"> | null {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
   if (typeof content !== "string" || !content.trim()) {
     return null;
   }
@@ -209,19 +230,28 @@ function parseArtifactMeta(
     return null;
   }
 
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
   if (typeof parsed !== "object" || parsed === null) {
     return null;
   }
 
+  // SAFETY: The enclosing parser checks the value before this conversion.
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This dictionary holds external JSON keys until the boundary parser validates each value.
   const record = parsed as Record<string, unknown>;
+
   const mimeType =
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     typeof record.mimeType === "string" ? record.mimeType.trim() : "";
+
   const savedAt =
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     typeof record.savedAt === "string" ? record.savedAt.trim() : "";
+
   const sizeBytes = record.sizeBytes;
 
   if (
     !(mimeType && savedAt) ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     typeof sizeBytes !== "number" ||
     !Number.isInteger(sizeBytes) ||
     sizeBytes < 0
@@ -234,6 +264,8 @@ function parseArtifactMeta(
 
 function metaContentFromSidecarWrite(message: ChatListItem): string | null {
   const input = message.toolInput;
+
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
   if (!input || typeof input.content !== "string") {
     return null;
   }
@@ -243,19 +275,24 @@ function metaContentFromSidecarWrite(message: ChatListItem): string | null {
 
 function relativePathFromWriteMessage(message: ChatListItem): string | null {
   const resolvedPath = resolvedWritePath(message);
+
   if (resolvedPath) {
     const fromResolved = toArtifactsRelativePath(resolvedPath);
+
     if (fromResolved) {
       return fromResolved;
     }
   }
 
   const inputPath = message.toolInput?.path;
+
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
   if (typeof inputPath !== "string") {
     return null;
   }
 
   const normalized = inputPath.replace(/^\.\//, "");
+
   return toArtifactsRelativePath(normalized);
 }
 
@@ -265,9 +302,11 @@ function buildArtifactRef(
   ownerProfileId?: string
 ): ChatArtifactRef {
   const filename = relativePath.split("/").pop() ?? relativePath;
+
   return {
     filename,
     mimeType: meta.mimeType,
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
     ...(ownerProfileId ? { ownerProfileId } : {}),
     path: relativePath,
     savedAt: meta.savedAt,
@@ -282,10 +321,12 @@ function getGenerateImageResult(
     return null;
   }
 
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
   if (typeof message.toolResult !== "object" || message.toolResult === null) {
     return null;
   }
 
+  // SAFETY: The enclosing parser checks the value before this conversion.
   return message.toolResult as GenerateImageResult;
 }
 
@@ -297,21 +338,27 @@ function artifactRefFromGenerateImage(
   }
 
   const result = getGenerateImageResult(message);
+
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
   if (!result || typeof result.error === "string") {
     return null;
   }
 
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
   if (typeof result.path !== "string" || !result.path.trim()) {
     return null;
   }
 
   const mimeType =
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     typeof result.mimeType === "string" ? result.mimeType.trim() : "";
+
   if (!mimeType) {
     return null;
   }
 
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     typeof result.sizeBytes !== "number" ||
     !Number.isInteger(result.sizeBytes) ||
     result.sizeBytes < 0
@@ -320,6 +367,7 @@ function artifactRefFromGenerateImage(
   }
 
   const relativePath = toArtifactsRelativePath(result.path.trim());
+
   if (!relativePath || isArtifactMetaRelativePath(relativePath)) {
     return null;
   }
@@ -336,6 +384,7 @@ function inferredMetaForPath(
   sizeBytes = 0
 ): Pick<ChatArtifactRef, "mimeType" | "sizeBytes" | "savedAt"> {
   const filename = relativePath.split("/").pop() ?? relativePath;
+
   return {
     mimeType: inferArtifactMimeType(filename),
     savedAt: "",
@@ -356,6 +405,7 @@ export function extractArtifactPathsFromText(
   for (const match of content.matchAll(ARTIFACT_PATH_IN_TEXT)) {
     const [, ownerProfileId, relativePath] = match;
     const key = `${ownerProfileId ?? ""}:${relativePath}`;
+
     if (
       !relativePath ||
       isArtifactMetaRelativePath(relativePath) ||
@@ -387,6 +437,7 @@ export function extractTurnArtifacts(
     string,
     { relativePath: string; sizeBytes: number }
   >();
+
   const artifactsByPath = new Map<string, ChatArtifactRef>();
 
   for (const message of messages) {
@@ -395,11 +446,13 @@ export function extractTurnArtifacts(
     }
 
     const resolvedPath = resolvedWritePath(message);
+
     if (!resolvedPath || isArtifactMetaResolvedPath(resolvedPath)) {
       continue;
     }
 
     const relativePath = relativePathFromWriteMessage(message);
+
     if (!relativePath || isArtifactMetaRelativePath(relativePath)) {
       continue;
     }
@@ -416,21 +469,25 @@ export function extractTurnArtifacts(
     }
 
     const resolvedPath = resolvedWritePath(message);
+
     if (!(resolvedPath && isArtifactMetaResolvedPath(resolvedPath))) {
       continue;
     }
 
     const siblingPath = siblingContentPath(resolvedPath);
+
     if (!siblingPath) {
       continue;
     }
 
     const contentWrite = contentWrites.get(siblingPath);
+
     if (!contentWrite) {
       continue;
     }
 
     const meta = parseArtifactMeta(metaContentFromSidecarWrite(message));
+
     if (!meta) {
       continue;
     }
@@ -457,6 +514,7 @@ export function extractTurnArtifacts(
 
   for (const message of messages) {
     const generated = artifactRefFromGenerateImage(message);
+
     if (!generated) {
       continue;
     }
@@ -474,6 +532,7 @@ export function extractTurnArtifacts(
     )) {
       // Same relative path in two profiles is two files.
       const key = ownerProfileId ? `profiles/${ownerProfileId}/${path}` : path;
+
       if (artifactsByPath.has(key)) {
         continue;
       }
@@ -494,6 +553,7 @@ export function buildArtifactContentUrl(
   inline = false
 ): string {
   const query = new URLSearchParams({ path: artifactPath });
+
   if (inline) {
     query.set("inline", "1");
   }

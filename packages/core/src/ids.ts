@@ -7,9 +7,11 @@ const ID_ALPHABET =
 export function nanoid(size = 21): string {
   const bytes = crypto.getRandomValues(new Uint8Array(size));
   let id = "";
+
   for (const byte of bytes) {
     id += ID_ALPHABET[byte % ID_ALPHABET.length];
   }
+
   return id;
 }
 

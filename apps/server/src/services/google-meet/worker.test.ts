@@ -2,6 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { asTestFetch } from "../../providers/test-helpers";
 import { privateJson } from "./actions";
 import { MeetingStore } from "./store";
 import * as transcription from "./transcription";
@@ -12,25 +13,30 @@ test.each([true, false])(
   async (success) => {
     const directory = mkdtempSync(join(tmpdir(), "meet-title-"));
     const store = new MeetingStore(directory, "org");
+
     const request = spyOn(globalThis, "fetch").mockImplementation(
-      async (_url, options) => {
+      asTestFetch(async (_url, options) => {
         const body = JSON.parse(String(options?.body));
         expect(body.messages[1].content).toContain("Plan the September launch");
+
         return success
           ? Response.json({
               choices: [{ message: { content: "September Launch Plan" } }],
             })
           : new Response(null, { status: 503 });
-      }
+      })
     );
+
     try {
       privateJson(join(directory, "settings.json"), { apiKey: "test" });
+
       const meeting = store.create(
         "https://meet.google.com/abc-defg-hij",
         "user",
         undefined,
         1
       );
+
       store.addSegment(meeting.id, {
         id: "one",
         receivedAt: 1,
@@ -62,6 +68,7 @@ test.each([true, false])(
         "Plan the September launch"
       );
       const reopened = new MeetingStore(directory, "org");
+
       try {
         expect(reopened.get(meeting.id)?.title).toBe(
           store.get(meeting.id)?.title
@@ -81,14 +88,17 @@ test("streams PCM frames to OpenAI and persists the final transcript", async () 
   const directory = mkdtempSync(join(tmpdir(), "meet-stream-"));
   const store = new MeetingStore(directory, "org");
   const connect = spyOn(transcription, "connectTranscription");
+
   try {
     privateJson(join(directory, "settings.json"), { apiKey: "test" });
+
     const meeting = store.create(
       "https://meet.google.com/abc-defg-hij",
       "user",
       undefined,
       1
     );
+
     const frames: Uint8Array[] = [];
     connect.mockImplementation(async ({ onSegment }) => ({
       close() {},
@@ -103,12 +113,14 @@ test("streams PCM frames to OpenAI and persists the final transcript", async () 
         frames.push(audio);
       },
     }));
+
     const stream = createStreamMeeting(
       meeting,
       store,
       directory,
       new AbortController().signal
     );
+
     await stream.ready;
     await stream.push(new Uint8Array(4800));
     await stream.close(true);
@@ -130,18 +142,23 @@ test("Stop acknowledges captured audio while final transcription drains and reje
   const store = new MeetingStore(directory, "org");
   const connect = spyOn(transcription, "connectTranscription");
   let release!: () => void;
+
   const pending = new Promise<void>((resolve) => {
     release = resolve;
   });
+
   let finishes = 0;
+
   try {
     privateJson(join(directory, "settings.json"), { apiKey: "test" });
+
     const meeting = store.create(
       "https://meet.google.com/abc-defg-hij",
       "user",
       undefined,
       1
     );
+
     connect.mockImplementation(async ({ onSegment }) => ({
       close() {},
       async finish() {
@@ -156,12 +173,14 @@ test("Stop acknowledges captured audio while final transcription drains and reje
       },
       push() {},
     }));
+
     const stream = createStreamMeeting(
       meeting,
       store,
       directory,
       new AbortController().signal
     );
+
     await stream.ready;
     expect(store.get(meeting.id)?.state).toBe("recording");
     await stream.push(new Uint8Array(256));

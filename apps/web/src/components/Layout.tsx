@@ -69,22 +69,29 @@ function useAppShell() {
   const chatRoute = useMatch("/chat/:profileId/:sessionId");
   const chatProfileId = chatRoute?.params.profileId ?? "";
   const chatSessionId = chatRoute?.params.sessionId ?? null;
+
   const { data: sessions, hasNextPage } =
     useHistorySessionsQuery(chatProfileId);
+
   const listedChat = sessions.find((session) => session.id === chatSessionId);
+
   // An old chat opened by URL can sit on a page the sidebar has not loaded.
   const { data: unlistedChat } = useSessionSummaryQuery(
     chatProfileId,
     listedChat || !hasNextPage ? null : chatSessionId
   );
+
   const chatTitle = (listedChat ?? unlistedChat)?.title?.trim();
 
   const { data: orgPlugins = [] } = useOrgPlugins();
+
   const pluginNav = useMemo(
     () => enabledPluginNavEntries(orgPlugins),
     [orgPlugins]
   );
+
   const activePluginId = pluginIdFromPath(location.pathname);
+
   const activePlugin = pluginNav.find(
     (entry) => entry.pluginId === activePluginId
   );
@@ -116,6 +123,7 @@ function isFlushContentPage(page: PageId, pathname: string): boolean {
 function appShellMainClassName(page: PageId, pathname: string): string {
   const flush = isFlushContentPage(page, pathname);
   const skillDetail = pathname.startsWith(`${PAGE_PATHS.profiles}/skills/`);
+
   return cn(
     "min-h-0 flex-1",
     flush
@@ -135,10 +143,13 @@ function AppShellHeader({
   page: PageId;
 }) {
   const hideTitle = page === "soul";
+
   const showCustomizeBack =
     page !== "notifications" && !SIDEBAR_PAGE_IDS.includes(page);
+
   const backLabel =
     page === "customize" ? "Back to Chat" : "Back to Control center";
+
   const backPath =
     page === "customize" ? PAGE_PATHS.chat : PAGE_PATHS.customize;
 

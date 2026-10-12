@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS profiles (
   skills_write_approval INTEGER,
   skills_post_turn_review INTEGER,
   skills_curator_consolidate_enabled INTEGER,
+  acp_agent TEXT,
+  acp_settings TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE
@@ -124,11 +126,27 @@ CREATE TABLE IF NOT EXISTS automation_runs (
   error TEXT,
   delivery_status TEXT,
   delivery_error TEXT,
+  resume_count INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (automation_id) REFERENCES automations (id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS automation_runs_automation_started
   ON automation_runs (automation_id, started_at DESC);
+
+CREATE TABLE IF NOT EXISTS automation_run_steps (
+  run_id TEXT NOT NULL,
+  tool_call_id TEXT NOT NULL,
+  tool_group_id TEXT,
+  tool_name TEXT NOT NULL,
+  args TEXT NOT NULL,
+  result TEXT,
+  status TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  completed_at TEXT,
+  position INTEGER NOT NULL,
+  PRIMARY KEY (run_id, tool_call_id),
+  FOREIGN KEY (run_id) REFERENCES automation_runs (id) ON DELETE CASCADE
+);
 
 CREATE TABLE IF NOT EXISTS automation_run_read_state (
   user_id TEXT NOT NULL,
@@ -263,6 +281,23 @@ CREATE TABLE IF NOT EXISTS profile_skills (
   FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE
 );
 
+-- SKILL.md snapshots, one row per saved change.
+CREATE TABLE IF NOT EXISTS skill_versions (
+  id TEXT PRIMARY KEY NOT NULL,
+  skill_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  content TEXT NOT NULL,
+  note TEXT,
+  actor_user_id TEXT,
+  source TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_version
+  ON skill_versions (skill_id, version);
+
 CREATE TABLE IF NOT EXISTS llm_usage_stats (
   org_id TEXT NOT NULL,
   id TEXT NOT NULL,
@@ -350,6 +385,7 @@ CREATE TABLE IF NOT EXISTS user_passkey_challenges (
 CREATE TABLE IF NOT EXISTS organizations (
   allowed_invite_domains TEXT NOT NULL DEFAULT '[]',
   id TEXT PRIMARY KEY NOT NULL,
+  parent_org_id TEXT REFERENCES organizations (id) ON DELETE RESTRICT CHECK (parent_org_id <> id),
   name TEXT NOT NULL,
   slug TEXT NOT NULL,
   skills_write_approval INTEGER NOT NULL DEFAULT 0,
@@ -687,4 +723,63 @@ CREATE TABLE IF NOT EXISTS file_pins (
   profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   path TEXT NOT NULL,
   PRIMARY KEY (org_id, user_id, profile_id, path)
+);
+
+-- Source links survive publication removal so shared instances remain managed.
+CREATE TABLE IF NOT EXISTS org_shared_resources (
+  id TEXT PRIMARY KEY NOT NULL,
+  org_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+  resource_kind TEXT NOT NULL CHECK (resource_kind IN ('knowledge', 'skill', 'agent', 'tool', 'model')),
+  resource_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (org_id, resource_kind, resource_id)
+);
+
+CREATE TABLE IF NOT EXISTS shared_agent_instances (
+  profile_id TEXT PRIMARY KEY NOT NULL REFERENCES profiles (id) ON DELETE CASCADE,
+  team_org_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+  source_org_id TEXT NOT NULL,
+  source_profile_id TEXT NOT NULL,
+  publication_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE (team_org_id, source_profile_id)
+);
+
+CREATE TRIGGER IF NOT EXISTS profiles_unpublish_deleted_source
+AFTER DELETE ON profiles
+BEGIN
+  DELETE FROM org_shared_resources WHERE resource_kind = 'agent' AND resource_id = OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS skills_unpublish_deleted_source
+AFTER DELETE ON skills
+BEGIN
+  DELETE FROM org_shared_resources WHERE resource_kind = 'skill' AND resource_id = OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS tools_unpublish_deleted_source
+AFTER DELETE ON tools
+BEGIN
+  DELETE FROM org_shared_resources WHERE resource_kind = 'tool' AND resource_id = OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS profiles_remove_shared_agent_instance
+AFTER DELETE ON profiles
+BEGIN
+  DELETE FROM shared_agent_instances WHERE profile_id = OLD.id;
+END;
+
+-- Completed requests retain their result after team deletion.
+
+CREATE TABLE IF NOT EXISTS org_team_creation_requests (
+  parent_org_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  creator_user_id TEXT NOT NULL,
+  admin_user_id TEXT NOT NULL,
+  team_org_id TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL,
+  completed_at TEXT,
+  PRIMARY KEY (parent_org_id, request_id)
 );

@@ -35,15 +35,18 @@ function describePythonHarnessGap(source: string): string | null {
   // made together: a module written without this contract in mind usually has
   // neither piece.
   const gaps: string[] = [];
+
   if (!/\bdef\s+run\s*\(/.test(source)) {
     gaps.push("defines no run(input, context) function");
   }
+
   // Only the input half is checked. `print(json.dumps(...))` writes to stdout
   // without naming it, so requiring the string `sys.stdout` rejected working
   // scripts, and the runner reports a silent tool accurately on its own.
   const hasHarness =
     /if\s+__name__\s*==\s*["']__main__["']\s*:/.test(source) &&
     source.includes("sys.stdin");
+
   if (!hasHarness) {
     gaps.push("has no __main__ block reading sys.stdin");
   }
@@ -55,6 +58,7 @@ function describePythonHarnessGap(source: string): string | null {
 function pythonDocstring(source: string): string {
   const match = source.match(/^\s*("""|''')([\s\S]*?)(?:\1|$)/u);
   const body = match?.[2] ?? "";
+
   // PEP 257 puts the summary on the opening line for a one line docstring and
   // on the line below it for a multi line one, and formatters leave both
   // alone. Reading only the opening line gave an empty description to every
@@ -166,15 +170,19 @@ function thirdPartyImports(
   localModules: ReadonlySet<string>
 ): string[] {
   const found = new Set<string>();
+
   for (const line of source.split("\n")) {
     const match = line.match(
       /^\s*(?:import\s+([A-Za-z_][\w.]*)|from\s+([A-Za-z_][\w.]*)\s+import\b)/u
     );
+
     const root = (match?.[1] ?? match?.[2] ?? "").split(".")[0];
+
     if (root && !(PYTHON_STDLIB.has(root) || localModules.has(root))) {
       found.add(root);
     }
   }
+
   return [...found].sort();
 }
 
@@ -185,12 +193,15 @@ function toolNameFor(skillName: string, scriptPath: string): string {
   // reject, and the skill looked installed right up to the first call.
   const skill = slugify(skillName);
   const name = stem ? `${skill}_${stem}` : skill;
+
   if (name.length <= TOOL_NAME_LIMIT) {
     return name;
   }
+
   // Trim the skill half, never the file half: the file is what tells two tools
   // of the same skill apart, and cutting it back would collide them.
   const room = TOOL_NAME_LIMIT - stem.length - 1;
+
   return room > 0
     ? `${skill.slice(0, room).replace(/_+$/u, "")}_${stem}`
     : stem.slice(0, TOOL_NAME_LIMIT);
@@ -198,13 +209,17 @@ function toolNameFor(skillName: string, scriptPath: string): string {
 
 async function listSkillScripts(directory: string): Promise<string[]> {
   const found: string[] = [];
+
   const walk = async (dir: string, depth: number): Promise<void> => {
     if (depth > 3) {
       return;
     }
+
     const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
+
       if (entry.isDirectory()) {
         if (entry.name !== "node_modules" && !entry.name.startsWith(".")) {
           await walk(full, depth + 1);
@@ -216,7 +231,9 @@ async function listSkillScripts(directory: string): Promise<string[]> {
       }
     }
   };
+
   await walk(directory, 0);
+
   return found.sort();
 }
 
@@ -234,6 +251,7 @@ export async function resolveSkillScripts(input: {
   const tools: SkillScriptTool[] = [];
   const reachable = new Set<string>(input.toolPath ? [input.toolPath] : []);
   const present = await listSkillScripts(input.directory);
+
   // A skill split across several files imports its own modules by bare name,
   // because Python puts the running script's directory first on sys.path.
   // Without this they read as missing third-party packages.
@@ -245,6 +263,7 @@ export async function resolveSkillScripts(input: {
 
   for (const relative of input.declared) {
     const segments = relative.split(/[/\\]+/u).filter(Boolean);
+
     if (segments.some((segment) => segment === "." || segment === "..")) {
       issues.push({
         path: relative,
@@ -252,11 +271,14 @@ export async function resolveSkillScripts(input: {
       });
       continue;
     }
+
     const full = path.join(input.directory, ...segments);
+
     if (!(await pathExists(full))) {
       issues.push({ path: relative, reason: "declared but not in the skill" });
       continue;
     }
+
     if (!full.endsWith(".py")) {
       issues.push({
         path: relative,
@@ -264,14 +286,18 @@ export async function resolveSkillScripts(input: {
       });
       continue;
     }
+
     const source = await readFile(full, "utf8");
     const gap = describePythonHarnessGap(source);
+
     if (gap) {
       issues.push({ path: relative, reason: gap });
       continue;
     }
+
     reachable.add(full);
     const third = thirdPartyImports(source, localModules);
+
     if (third.length > 0) {
       // Not a failure, a dependency the runtime may not carry. Said here so the
       // author hears it at discovery rather than from inside a tool result on
@@ -281,6 +307,7 @@ export async function resolveSkillScripts(input: {
         reason: `needs ${third.join(", ")} installed in the Python runtime; nothing here checks that it is`,
       });
     }
+
     tools.push({
       description: pythonDocstring(source) || `${input.skillName}: ${relative}`,
       name: toolNameFor(input.skillName, relative),
@@ -292,6 +319,7 @@ export async function resolveSkillScripts(input: {
     if (reachable.has(script)) {
       continue;
     }
+
     issues.push({
       path: path.relative(input.directory, script),
       reason: `not runnable: name it one of ${SKILL_TOOL_FILES.join(", ")} at the skill root, or list it under "scripts:" in ${SKILL_FILE_NAME}`,

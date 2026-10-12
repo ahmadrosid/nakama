@@ -15,19 +15,24 @@ export function registerOrgCuratorRoutes(
   options: ServerOptions
 ): void {
   const { orgService, skillCuratorService } = options;
+
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
+
   const orgIdParam = z.object({
     orgId: z.string().openapi({ param: { in: "path", name: "orgId" } }),
   });
+
   const runRequestSchema = z
     .object({ dryRun: z.boolean().optional() })
     .openapi("RunSkillCuratorRequest");
+
   const runResponseSchema = z
     .object({})
     .passthrough()
     .openapi("SkillCuratorRunResponse");
+
   const latestResponseSchema = z
     .object({})
     .passthrough()
@@ -38,9 +43,11 @@ export function registerOrgCuratorRoutes(
     authOrgId: string
   ): string {
     const orgId = decodeURIComponent(c.req.param("orgId"));
+
     if (authOrgId !== orgId) {
       throw new NakamaApiError("Not found", 404);
     }
+
     return orgId;
   }
 
@@ -48,6 +55,7 @@ export function registerOrgCuratorRoutes(
     if (!skillCuratorService) {
       throw new NakamaApiError("Skill curator service not configured", 500);
     }
+
     return skillCuratorService;
   }
 
@@ -55,6 +63,7 @@ export function registerOrgCuratorRoutes(
     if (!orgService) {
       throw new NakamaApiError("Organization service not configured", 500);
     }
+
     return orgService;
   }
 
@@ -96,9 +105,11 @@ export function registerOrgCuratorRoutes(
   app.post("/v1/orgs/:orgId/curator/run", async (c) => {
     const auth = requireOrgAdminFromContext(c);
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
+
     const body = await readOptionalJson<RunSkillCuratorRequest>(c.req.raw, {
       dryRun: false,
     });
+
     const result = await requireCurator().run(orgId, {
       dryRun: body.dryRun === true,
       trigger: "manual",
@@ -145,6 +156,7 @@ export function registerOrgCuratorRoutes(
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const org = await requireOrgs().getOrganization(orgId);
     const result = await requireCurator().readLatest(orgId);
+
     return json<SkillCuratorLatestResponse>({
       lastRunAt: org?.skillsCuratorLastRunAt ?? result?.finishedAt ?? null,
       result,

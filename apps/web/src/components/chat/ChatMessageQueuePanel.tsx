@@ -30,6 +30,7 @@ export function ChatMessageQueuePanel({
   }
 
   const firstMessage = messages[0];
+
   const headerLabel = expanded
     ? `Queued${messages.length > 1 ? ` (${messages.length})` : ""}`
     : firstMessage?.text ||
@@ -118,6 +119,7 @@ function QueuedRow({
     message.attachmentCount > 0
       ? `${message.attachmentCount} attachment${message.attachmentCount === 1 ? "" : "s"}`
       : null;
+
   const label = message.text
     ? attachmentLabel
       ? `${message.text} · ${attachmentLabel}`

@@ -28,9 +28,11 @@ async function loadDesktopSecretsKey() {
       "Unlock the operating-system credential store before starting Nakama."
     );
   }
+
   const keyDir = app.getPath("userData");
   const keyPath = join(keyDir, "secrets-key.enc");
   await mkdir(keyDir, { mode: 0o700, recursive: true });
+
   try {
     return safeStorage.decryptString(await readFile(keyPath));
   } catch (error) {
@@ -38,23 +40,28 @@ async function loadDesktopSecretsKey() {
       throw new Error("Cannot unlock the saved Nakama secrets key.");
     }
   }
+
   const key = randomBytes(32).toString("base64");
   await writeFile(keyPath, safeStorage.encryptString(key), {
     flag: "wx",
     mode: 0o600,
   });
+
   return key;
 }
 
 async function exportRecoveryKey() {
   const key = await loadDesktopSecretsKey();
+
   const { canceled, filePath } = await dialog.showSaveDialog({
     defaultPath: "nakama-recovery-key.txt",
     title: "Save Nakama recovery key",
   });
+
   if (canceled || !filePath) {
     return;
   }
+
   await writeFile(filePath, `${key}\n`, { flag: "wx", mode: 0o600 });
   await dialog.showMessageBox({
     detail: "Keep this file separate from your Nakama backup.",
@@ -68,19 +75,24 @@ async function importRecoveryKey(runtime, dataDir) {
     properties: ["openFile"],
     title: "Open Nakama recovery key",
   });
+
   if (canceled || !filePaths[0]) {
     return;
   }
+
   const key = (await readFile(filePaths[0], "utf8")).trim();
+
   if (
     Buffer.from(key, "base64").length !== 32 ||
     Buffer.from(key, "base64").toString("base64") !== key
   ) {
     throw new Error("The recovery key file is invalid.");
   }
+
   const env = Object.fromEntries(
     Object.entries(process.env).filter(([name]) => !name.startsWith("NAKAMA_"))
   );
+
   const child = spawn(
     join(runtime, "bin", process.platform === "win32" ? "bun.exe" : "bun"),
     ["run", "apps/server/src/index.ts"],
@@ -100,13 +112,16 @@ async function importRecoveryKey(runtime, dataDir) {
       windowsHide: true,
     }
   );
+
   const code = await new Promise((resolve, reject) => {
     child.once("error", reject);
     child.once("exit", resolve);
   });
+
   if (code !== 0) {
     throw new Error("This recovery key cannot unlock the saved Nakama data.");
   }
+
   const keyPath = join(app.getPath("userData"), "secrets-key.enc");
   const nextPath = `${keyPath}.next`;
   await writeFile(nextPath, safeStorage.encryptString(key), {
@@ -144,6 +159,7 @@ function installDesktopMenu(updateItem = null, recovery = null) {
         },
       ]
     : [];
+
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       ...(process.platform === "darwin"
@@ -194,8 +210,10 @@ export function configureUpdates(
   updater.allowPrerelease = false;
   updater.allowDowngrade = false;
   let installing = false;
+
   const updateFailed = (error) => {
     console.warn("Desktop update failed:", error.message);
+
     if (installing) {
       dialog.showErrorBox(
         "Could not install update",
@@ -204,15 +222,19 @@ export function configureUpdates(
       app.quit();
     }
   };
+
   const check = async (manual = false) => {
     const item =
       Menu.getApplicationMenu()?.getMenuItemById("check-for-updates");
+
     if (manual && item) {
       item.enabled = false;
       item.label = "Checking for Updates…";
     }
+
     try {
       const result = await updater.checkForUpdates();
+
       if (manual) {
         await prompt({
           detail: result?.isUpdateAvailable
@@ -228,6 +250,7 @@ export function configureUpdates(
       }
     } catch (error) {
       console.warn("Update check failed:", error.message);
+
       if (manual) {
         await prompt({
           detail: "Check your internet connection and try again.",
@@ -242,12 +265,15 @@ export function configureUpdates(
       }
     }
   };
+
   const updateItem = {
     click: () => void check(true),
     id: "check-for-updates",
     label: "Check for Updates…",
   };
+
   installDesktopMenu(updateItem, recovery);
+
   updater.on("error", updateFailed);
   updater.on("update-downloaded", async ({ version }) => {
     try {
@@ -260,6 +286,7 @@ export function configureUpdates(
         message: `Nakama ${version} is ready to install`,
         type: "info",
       });
+
       if (response === 0 && (await stopServer())) {
         installing = true;
         updater.quitAndInstall();
@@ -271,6 +298,7 @@ export function configureUpdates(
   check();
   const timer = setInterval(check, 6 * 60 * 60 * 1000);
   timer.unref();
+
   return () => clearInterval(timer);
 }
 
@@ -278,6 +306,7 @@ export async function startLocalServer(runtime, dataDir) {
   await mkdir(dataDir, { mode: 0o700, recursive: true });
   const secretsKey = await loadDesktopSecretsKey();
   const log = await open(join(dataDir, "server.log"), "w", 0o600);
+
   // NAKAMA_PYTHON_BIN survives on Windows so users whose Python is not on PATH
   // can point the server at it; the server still checks it against its allowlist.
   const env = Object.fromEntries(
@@ -287,6 +316,7 @@ export async function startLocalServer(runtime, dataDir) {
         (process.platform === "win32" && key === "NAKAMA_PYTHON_BIN")
     )
   );
+
   const child = spawn(
     join(runtime, "bin", process.platform === "win32" ? "bun.exe" : "bun"),
     ["run", "apps/server/src/index.ts"],
@@ -314,17 +344,21 @@ export async function startLocalServer(runtime, dataDir) {
       windowsHide: true,
     }
   );
+
   void log.close();
+
   const stop = async () => {
     if (!child.pid || child.exitCode !== null || child.signalCode !== null) {
       return;
     }
+
     await new Promise((resolve) => {
       const timeout = setTimeout(() => child.kill("SIGKILL"), 8000);
       child.once("exit", () => {
         clearTimeout(timeout);
         resolve();
       });
+
       // Disconnect lets Bun drain workers on Windows, where SIGTERM kills immediately.
       if (child.connected) {
         child.disconnect();
@@ -333,25 +367,31 @@ export async function startLocalServer(runtime, dataDir) {
       }
     });
   };
+
   try {
     const url = await new Promise((resolve, reject) => {
       const timeout = setTimeout(
         () => finish(new Error("Local server startup timed out")),
         60_000
       );
+
       const onExit = () =>
         finish(new Error("Local server exited during startup"));
+
       const onError = (error) => finish(error);
+
       const onMessage = (message) => {
         if (message?.type === "nakama-ready") {
           finish(null, message.url);
         }
       };
+
       function finish(error, value) {
         clearTimeout(timeout);
         child.off("exit", onExit);
         child.off("error", onError);
         child.off("message", onMessage);
+
         if (error) {
           reject(error);
         } else {
@@ -362,10 +402,12 @@ export async function startLocalServer(runtime, dataDir) {
           }
         }
       }
+
       child.once("exit", onExit);
       child.once("error", onError);
       child.on("message", onMessage);
     });
+
     return { child, stop, url: url.replace(/\/$/, "") };
   } catch (error) {
     await stop();
@@ -375,6 +417,7 @@ export async function startLocalServer(runtime, dataDir) {
 
 export function serverUrl(value = "http://localhost:4310/chat") {
   const url = new URL(value);
+
   if (
     url.username ||
     url.password ||
@@ -388,11 +431,13 @@ export function serverUrl(value = "http://localhost:4310/chat") {
       "Use HTTPS, or HTTP on localhost, without embedded credentials."
     );
   }
+
   return url.href;
 }
 
 function openInBrowser(value) {
   const url = new URL(value);
+
   if (
     ["https:", "http:"].includes(url.protocol) &&
     !url.username &&
@@ -410,6 +455,7 @@ export const windowIcon = app.isPackaged
 
 export async function createWindow(url, { show = true } = {}) {
   const origin = new URL(serverUrl(url)).origin;
+
   const window = new BrowserWindow({
     ...(windowIcon && { icon: windowIcon }),
     backgroundColor: "#09090b",
@@ -426,6 +472,7 @@ export async function createWindow(url, { show = true } = {}) {
     },
     width: 1200,
   });
+
   window.webContents.ipc.on("nakama:theme", (event, theme) => {
     if (
       event.senderFrame === window.webContents.mainFrame &&
@@ -437,14 +484,17 @@ export async function createWindow(url, { show = true } = {}) {
   });
   window.webContents.setWindowOpenHandler(({ url: target }) => {
     openInBrowser(target);
+
     return { action: "deny" };
   });
+
   const guardNavigation = (event, target) => {
     if (new URL(target).origin !== origin) {
       event.preventDefault();
       openInBrowser(target);
     }
   };
+
   window.webContents.on("will-navigate", guardNavigation);
   window.webContents.on("will-redirect", guardNavigation);
   window.webContents.on("will-attach-webview", (event) =>
@@ -456,11 +506,13 @@ export async function createWindow(url, { show = true } = {}) {
         details.requestingUrl &&
         new URL(details.requestingUrl).origin === origin &&
         new URL(contents.getURL()).origin === origin;
+
       callback(
         Boolean(sameServer && permission === "clipboard-sanitized-write")
       );
     }
   );
+
   while (!window.isDestroyed()) {
     try {
       await window.loadURL(url);
@@ -469,6 +521,7 @@ export async function createWindow(url, { show = true } = {}) {
       if (window.isDestroyed()) {
         break;
       }
+
       const { response } = await dialog.showMessageBox(window, {
         buttons: ["Retry", "Close"],
         cancelId: 1,
@@ -477,12 +530,14 @@ export async function createWindow(url, { show = true } = {}) {
         message: "Cannot connect to Nakama",
         type: "error",
       });
+
       if (response !== 0) {
         window.close();
         break;
       }
     }
   }
+
   return window;
 }
 
@@ -495,12 +550,15 @@ if (!process.argv.includes("--smoke-test")) {
     "userData",
     join(app.getPath("appData"), "Nakama Desktop Electron")
   );
+
   if (app.requestSingleInstanceLock()) {
     app.on("second-instance", () => {
       const window = BrowserWindow.getAllWindows()[0];
+
       if (window?.isMinimized()) {
         window.restore();
       }
+
       window?.show();
       window?.focus();
     });
@@ -510,8 +568,10 @@ if (!process.argv.includes("--smoke-test")) {
         if (process.env.NAKAMA_DESKTOP_URL) {
           return createWindow(serverUrl(process.env.NAKAMA_DESKTOP_URL));
         }
+
         const dataDir = join(app.getPath("home"), ".nakama-desktop");
         const legacyDataDir = join(app.getPath("userData"), "server");
+
         try {
           await access(dataDir);
         } catch {
@@ -523,6 +583,7 @@ if (!process.argv.includes("--smoke-test")) {
             }
           }
         }
+
         recovery = {
           dataDir,
           runtime: app.isPackaged
@@ -530,11 +591,14 @@ if (!process.argv.includes("--smoke-test")) {
             : join(app.getAppPath(), "dist/runtime"),
         };
         localServer = await startLocalServer(recovery.runtime, dataDir);
+
         if (quitting) {
           await localServer.stop();
           app.exit();
+
           return;
         }
+
         localServer.child.once("exit", () => {
           if (!quitting) {
             dialog.showErrorBox(
@@ -544,10 +608,12 @@ if (!process.argv.includes("--smoke-test")) {
             app.quit();
           }
         });
+
         return createWindow(`${localServer.url}/chat`);
       })
       .then(async () => {
         installDesktopMenu(null, recovery);
+
         if (app.isPackaged && !process.windowsStore && !quitting) {
           const { autoUpdater } = (await import("electron-updater")).default;
           configureUpdates(
@@ -556,9 +622,11 @@ if (!process.argv.includes("--smoke-test")) {
               if (quitting) {
                 return false;
               }
+
               quitting = true;
               await localServer?.stop();
               localServer = undefined;
+
               return true;
             },
             dialog.showMessageBox,
@@ -573,6 +641,7 @@ if (!process.argv.includes("--smoke-test")) {
     app.on("window-all-closed", () => app.quit());
     app.on("before-quit", (event) => {
       quitting = true;
+
       if (localServer) {
         event.preventDefault();
         void localServer.stop().finally(() => app.exit());

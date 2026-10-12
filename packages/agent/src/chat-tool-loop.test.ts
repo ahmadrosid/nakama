@@ -11,11 +11,13 @@ import type {
 } from "@nakama/core";
 import {
   persistInlineAttachmentsInContent,
+  readFileInputSchema,
   rehydrateMessagesForProvider,
   runReadFile,
   toAnthropicUserContent,
   toOpenAIChatUserContent,
 } from "@nakama/core";
+import { z } from "zod";
 import { createAgentChatSession } from "./index";
 
 function createMockProvider(responses: ChatCompletionResult[]): ProviderClient {
@@ -113,36 +115,154 @@ function delayedTool(
         options.track.active += 1;
         options.track.max = Math.max(options.track.max, options.track.active);
       }
+
       await new Promise((resolve) => setTimeout(resolve, options.delayMs));
+
       if (options.track) {
         options.track.active -= 1;
       }
+
       return input;
     },
   };
 }
 
 describe("agent chat tool loop", () => {
+  test.each([
+    { images: [] },
+    { images: null },
+    { images: [{ data: 123, mediaType: "image/png" }] },
+    { images: [{ data: "aW1hZ2U=" }] },
+    {
+      images: [{ data: "aW1hZ2U=", mediaType: "image/png" }, null],
+    },
+  ])("keeps malformed or empty image results in JSON: %j", async (result) => {
+    const session = createAgentChatSession({
+      provider: createMockProvider([
+        toolTurn([{ arguments: {}, id: "image", name: "sample" }]),
+        textReply("Done"),
+      ]),
+      tools: [{ ...sampleTool, run: async () => result }],
+    });
+
+    expect(await session.send("Inspect")).toBe("Done");
+    const message = session.getHistory().find((item) => item.role === "tool");
+    expect(message?.role).toBe("tool");
+
+    if (message?.role !== "tool") {
+      throw new Error("Missing tool result");
+    }
+
+    expect(JSON.parse(message.content)).toEqual(result);
+    expect(message.attachments).toBeUndefined();
+    expect(session.getHistory().map((item) => item.role)).toEqual([
+      "user",
+      "assistant",
+      "tool",
+      "assistant",
+    ]);
+  });
+
+  test("sets current turn image references and clears them on the next turn", async () => {
+    const contexts: unknown[] = [];
+
+    const responses = [
+      toolTurn([{ arguments: {}, id: "first", name: "sample" }]),
+      textReply("Done"),
+      toolTurn([{ arguments: {}, id: "second", name: "sample" }]),
+      textReply("Done"),
+    ];
+
+    let callIndex = 0;
+
+    const provider: ProviderClient = {
+      generateChat() {
+        return Promise.resolve(responses[callIndex++]!);
+      },
+      generateText() {
+        return Promise.resolve({ content: "unused" });
+      },
+      name: "openai",
+      streamChat(_input, handlers) {
+        const result = responses[callIndex++]!;
+
+        if (result.content) {
+          handlers.onChunk(result.content);
+        }
+
+        return Promise.resolve(result);
+      },
+    };
+
+    const tool: ToolDefinition = {
+      ...sampleTool,
+      async run(_input, context) {
+        contexts.push(context.currentChatImages);
+
+        return { ok: true };
+      },
+    };
+
+    const session = createAgentChatSession(
+      {
+        provider,
+      },
+      {
+        preprocessUserContent: async (content) => {
+          const text = z.string().safeParse(content);
+
+          return text.success
+            ? text.data
+            : [
+                {
+                  attachmentId: "image_1",
+                  mediaType: "image/png",
+                  size: 5,
+                  type: "image_ref",
+                },
+              ];
+        },
+        tools: [tool],
+      }
+    );
+
+    await session.send({
+      images: [{ data: "aW1hZ2U=", mediaType: "image/png" }],
+      message: "Look",
+    });
+    await session.send("Continue");
+
+    expect(contexts).toEqual([
+      [{ attachmentId: "image_1", mediaType: "image/png" }],
+      [],
+    ]);
+  });
+
   test.each([false, true])(
     "delivers read_file images after all tool results (stream: %s)",
     async (stream) => {
       const dir = await mkdtemp(path.join(os.tmpdir(), "nakama-tool-image-"));
+
       const data =
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
       try {
         await writeFile(
           path.join(dir, "shot.png"),
           Buffer.from(data, "base64")
         );
         const calls: GenerateChatInput[] = [];
+
         const toolCalls = ["image1", "image2"].map((id) => ({
           arguments: { path: "shot.png" },
           id,
           name: "read_file",
         }));
+
         const provider: ProviderClient = {
           async generateChat(input) {
             calls.push(structuredClone(input));
+
             return calls.length === 1
               ? toolTurn(toolCalls)
               : textReply("I can see it.");
@@ -154,9 +274,11 @@ describe("agent chat tool loop", () => {
           async streamChat(input, handlers) {
             const result = await this.generateChat(input);
             handlers.onChunk(result.content);
+
             return result;
           },
         };
+
         const session = createAgentChatSession({
           provider,
           tools: [
@@ -166,18 +288,20 @@ describe("agent chat tool loop", () => {
               parallelSafe: stream,
               run: (input) =>
                 runReadFile(
-                  input,
+                  readFileInputSchema.parse(input),
                   { orgId: "org_test", profileId: "profile_test" },
                   { workspaceRoot: dir }
                 ),
             },
           ],
         });
+
         if (stream) {
           await session.sendStream("Read the screenshot", { onChunk() {} });
         } else {
           await session.send("Read the screenshot");
         }
+
         const messages = calls[1]!.messages;
         expect(messages.map((m) => m.role)).toEqual([
           "user",
@@ -238,10 +362,13 @@ describe("agent chat tool loop", () => {
     async ({ name, metadata }) => {
       const data =
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
       const calls: GenerateChatInput[] = [];
+
       const provider: ProviderClient = {
         async generateChat(input) {
           calls.push(structuredClone(input));
+
           return calls.length === 1
             ? toolTurn([
                 {
@@ -259,9 +386,11 @@ describe("agent chat tool loop", () => {
         async streamChat(input, handlers) {
           const result = await this.generateChat(input);
           handlers.onChunk(result.content);
+
           return result;
         },
       };
+
       const session = createAgentChatSession({
         provider,
         tools: [
@@ -292,9 +421,11 @@ describe("agent chat tool loop", () => {
           { data, mediaType: "image/png", type: "image" },
         ])
       );
+
       const persistedTool = session
         .getHistory()
         .find((message) => message.role === "tool");
+
       expect(persistedTool?.content).not.toContain(data);
       expect(
         persistedTool?.role === "tool" && persistedTool.attachments
@@ -316,33 +447,41 @@ describe("agent chat tool loop", () => {
       const calls: GenerateChatInput[] = [];
       const saved = new Map<string, { bytes: Buffer; mediaType: string }>();
       const loaded: string[] = [];
+
       const options: Parameters<typeof createAgentChatSession>[1] = persisted
         ? {
             preprocessUserContent: (content) =>
               persistInlineAttachmentsInContent(content, async (image) => {
                 const attachmentId = `image-${saved.size}`;
                 saved.set(attachmentId, image);
+
                 return { attachmentId, size: image.bytes.length };
               }),
             rehydrateMessagesForProvider: (messages) =>
               rehydrateMessagesForProvider(messages, async (id) => {
                 loaded.push(id);
+
                 return saved.get(id) ?? null;
               }),
           }
         : {};
+
       let fetches = 0;
+
       const provider: ProviderClient = {
         async generateChat(input) {
           calls.push(structuredClone(input));
+
           if (calls.length === 1 || calls.length === 5) {
             return toolTurn([
               { arguments: {}, id: `image-${calls.length}`, name },
             ]);
           }
+
           if (calls.length === 2) {
             return toolTurn([{ arguments: {}, id: "extra", name: "sample" }]);
           }
+
           return textReply("Done");
         },
         async generateText() {
@@ -352,9 +491,11 @@ describe("agent chat tool loop", () => {
         async streamChat(input, handlers) {
           const result = await this.generateChat(input);
           handlers.onChunk(result.content);
+
           return result;
         },
       };
+
       const dependencies = {
         provider,
         tools: [
@@ -364,33 +505,41 @@ describe("agent chat tool loop", () => {
             name,
             async run() {
               fetches++;
+
               return { images: [{ data, mediaType: "image/png" }], imageUrl };
             },
           },
         ],
       };
+
       const uploadedImage = {
         data: "dXBsb2Fk",
         mediaType: "image/png",
         type: "image" as const,
       };
+
       const session = createAgentChatSession(dependencies, {
         ...options,
         initialHistory: [{ content: [uploadedImage], role: "user" }],
       });
+
       const send = (target: typeof session, text: string) =>
         streaming
           ? target.sendStream(text, { onChunk() {} })
           : target.send(text);
+
       await send(session, "Inspect the image, then use the sample tool.");
       await send(session, "Repeat the URL without fetching.");
       const history = JSON.parse(JSON.stringify(session.getHistory()));
+
       const restored = createAgentChatSession(dependencies, {
         ...options,
         initialHistory: history,
       });
+
       await send(restored, "Fetch the image again to inspect it.");
       expect(fetches).toBe(2);
+
       const imageCounts = calls.map(
         (call) =>
           call.messages
@@ -400,27 +549,33 @@ describe("agent chat tool loop", () => {
             .filter((part) => part.type === "image" && part.data === data)
             .length
       );
+
       expect(imageCounts).toEqual(
         name === "web_fetch" ? [0, 1, 1, 0, 0, 1] : [0, 1, 1, 1, 1, 2]
       );
+
       for (const input of calls) {
         expect(input.messages[0]?.content).toEqual([uploadedImage]);
       }
+
       for (const input of calls.slice(1)) {
         const originalTool = input.messages.find(
           (message) =>
             message.role === "tool" && message.toolCallId === "image-1"
         );
+
         expect(JSON.parse(String(originalTool?.content)).imageUrl).toBe(
           imageUrl
         );
       }
+
       const storedTool = restored
         .getHistory()
         .find(
           (message) =>
             message.role === "tool" && message.toolCallId === "image-1"
         );
+
       expect(storedTool?.role === "tool" && storedTool.attachments).toEqual(
         persisted
           ? [
@@ -433,6 +588,7 @@ describe("agent chat tool loop", () => {
             ]
           : [{ data, mediaType: "image/png", type: "image" }]
       );
+
       if (persisted) {
         expect(saved.size).toBe(2);
         expect(loaded).toEqual(
@@ -449,12 +605,14 @@ describe("agent chat tool loop", () => {
     async (parallelSafe) => {
       let now = 1000;
       const clock = spyOn(Date, "now").mockImplementation(() => now);
+
       try {
         const calls = ["t1", "t2"].map((id) => ({
           arguments: {},
           id,
           name: "sample",
         }));
+
         const provider = createMockProvider([
           {
             assistantMessage: {
@@ -471,6 +629,7 @@ describe("agent chat tool loop", () => {
             toolCalls: [],
           },
         ]);
+
         const session = createAgentChatSession({
           provider,
           tools: [
@@ -479,15 +638,19 @@ describe("agent chat tool loop", () => {
               parallelSafe,
               run() {
                 now += 4000;
+
                 return Promise.resolve({ ok: true });
               },
             },
           ],
         });
+
         await session.sendStream("hello", { onChunk() {} });
+
         const tools = session
           .getHistory()
           .filter((message) => message.role === "tool");
+
         expect(tools).toHaveLength(2);
         expect(tools[0]?.toolStartedAt).toBe(1000);
         expect(tools[1]?.toolCompletedAt).toBe(9000);
@@ -502,17 +665,21 @@ describe("agent chat tool loop", () => {
   test("stream stops accumulating large tool results before another provider call and resets the budget next turn", async () => {
     let providerCalls = 0;
     let toolRuns = 0;
+
     const tool: ToolDefinition = {
       ...sampleTool,
       async run() {
         toolRuns += 1;
+
         return "x".repeat(128_000);
       },
     };
+
     const provider: ProviderClient = {
       ...createMockProvider([]),
       async generateChat() {
         providerCalls += 1;
+
         const toolCalls =
           providerCalls <= 8
             ? [
@@ -523,6 +690,7 @@ describe("agent chat tool loop", () => {
                 },
               ]
             : [];
+
         return {
           assistantMessage: {
             content: toolCalls.length ? "" : "ok",
@@ -537,13 +705,16 @@ describe("agent chat tool loop", () => {
         return this.generateChat(input);
       },
     };
+
     const session = createAgentChatSession({ provider }, { tools: [tool] });
     let streamed = "";
+
     const reply = await session.sendStream("Read the files", {
       onChunk: (chunk) => {
         streamed += chunk;
       },
     });
+
     expect(providerCalls).toBe(7);
     expect(toolRuns).toBe(7);
     expect(reply.length).toBeGreaterThan(0);
@@ -568,11 +739,13 @@ describe("agent chat tool loop", () => {
         return "x".repeat(450_000);
       },
     };
+
     const toolCalls = ["first", "second"].map((id) => ({
       arguments: {},
       id,
       name: tool.name,
     }));
+
     const provider = createMockProvider([
       {
         assistantMessage: { content: "", role: "assistant", toolCalls },
@@ -580,6 +753,7 @@ describe("agent chat tool loop", () => {
         toolCalls,
       },
     ]);
+
     const session = createAgentChatSession({ provider }, { tools: [tool] });
     const reply = await session.send("Read both files");
     expect(reply.length).toBeGreaterThan(0);
@@ -599,15 +773,19 @@ describe("agent chat tool loop", () => {
     "%s assistant output consumes the budget before tools execute",
     async (source) => {
       let toolRuns = 0;
+
       const tool: ToolDefinition = {
         ...sampleTool,
         async run() {
           toolRuns += 1;
+
           return {};
         },
       };
+
       const toolCalls = [{ arguments: {}, id: "unexecuted", name: tool.name }];
       const partialReply = "Here is what the analysis found.";
+
       const provider = createMockProvider([
         {
           assistantMessage: {
@@ -624,13 +802,16 @@ describe("agent chat tool loop", () => {
               : undefined,
         },
       ]);
+
       const session = createAgentChatSession({ provider }, { tools: [tool] });
       let streamed = "";
+
       const reply = await session.sendStream("Think first", {
         onChunk: (chunk) => {
           streamed += chunk;
         },
       });
+
       expect(toolRuns).toBe(0);
       expect(reply.startsWith(partialReply)).toBe(true);
       expect(reply.length).toBeGreaterThan(partialReply.length);
@@ -647,33 +828,41 @@ describe("agent chat tool loop", () => {
     async (stream) => {
       let calls = 0;
       let checks = 0;
+
       const provider: ProviderClient = {
         ...createMockProvider([]),
         async generateChat() {
           calls += 1;
+
           return textReply("");
         },
         async streamChat(input) {
           return this.generateChat(input);
         },
       };
+
       const session = createAgentChatSession(
         { provider },
         {
           toolContext: {
             async assertCanStartLlmTurn() {
               checks += 1;
+
               if (checks === 2) {
                 throw new Error("Quota exhausted");
               }
+
+              return () => Promise.resolve();
             },
           },
           tools: [sampleTool],
         }
       );
+
       const reply = stream
         ? session.sendStream("go", { onChunk() {} })
         : session.send("go");
+
       await expect(reply).rejects.toThrow();
       expect(checks).toBe(2);
       expect(calls).toBe(1);
@@ -685,21 +874,26 @@ describe("agent chat tool loop", () => {
     async (stream) => {
       const calls: GenerateChatInput[] = [];
       const data = "aW1hZ2U=";
+
       const provider: ProviderClient = {
         ...createMockProvider([]),
         async generateChat(input) {
           calls.push(input);
+
           if (calls.length === 1) {
             return toolTurn([{ arguments: {}, id: "page", name: "web_fetch" }]);
           }
+
           return textReply(calls.length === 2 ? "" : "Final");
         },
         async streamChat(input, handlers) {
           const result = await this.generateChat(input);
           handlers.onChunk(result.content);
+
           return result;
         },
       };
+
       const session = createAgentChatSession({
         provider,
         tools: [
@@ -712,9 +906,11 @@ describe("agent chat tool loop", () => {
           },
         ],
       });
+
       const reply = stream
         ? await session.sendStream("Describe the page", { onChunk() {} })
         : await session.send("Describe the page");
+
       expect(reply).toBe("Final");
       expect(calls[2]?.tools?.length ?? 0).toBe(0);
       expect(calls[2]?.messages.at(-1)?.content).toEqual(
@@ -728,6 +924,7 @@ describe("agent chat tool loop", () => {
   test("asks once more without tools when the model ends with no text", async () => {
     const seen: { tools: number; last: string }[] = [];
     let call = 0;
+
     const provider: ProviderClient = {
       ...createMockProvider([]),
       generateChat(input: GenerateChatInput) {
@@ -736,6 +933,7 @@ describe("agent chat tool loop", () => {
           last: String(input.messages.at(-1)?.role),
           tools: input.tools?.length ?? 0,
         });
+
         if (call === 1) {
           return Promise.resolve(
             toolTurn([
@@ -743,13 +941,16 @@ describe("agent chat tool loop", () => {
             ])
           );
         }
+
         return Promise.resolve(call === 2 ? textReply("") : textReply("Final"));
       },
     };
+
     const session = createAgentChatSession(
       { provider },
       { tools: [sampleTool] }
     );
+
     const reply = await session.send("go");
     expect(reply).toBe("Final");
     expect(seen[2]?.tools).toBe(0);
@@ -766,17 +967,21 @@ describe("agent chat tool loop", () => {
 
   test("returns non-empty text when the model stays silent", async () => {
     let call = 0;
+
     const provider: ProviderClient = {
       ...createMockProvider([]),
       generateChat() {
         call += 1;
+
         return Promise.resolve(textReply(""));
       },
     };
+
     const session = createAgentChatSession(
       { provider },
       { tools: [sampleTool] }
     );
+
     const reply = await session.send("go");
     expect(call).toBe(2);
     expect(reply.length).toBeGreaterThan(0);
@@ -786,33 +991,101 @@ describe("agent chat tool loop", () => {
     });
   });
 
-  test.each(["", "Working"])(
-    "ends with a final message at the tool round limit (text: %s)",
-    async (content) => {
+  test.each([
+    ["send", ""],
+    ["send", "Working"],
+    ["stream", ""],
+    ["stream", "Working"],
+  ] as const)(
+    "terminates cleanly at the tool iteration cap (%s, text: %s)",
+    async (mode, content) => {
       let call = 0;
+      let toolRuns = 0;
+      let streamed = "";
+
       const provider: ProviderClient = {
         ...createMockProvider([]),
-        generateChat() {
+        generateChat(input) {
           call += 1;
+
+          if (call === 101) {
+            expect(input.messages.at(-1)?.role).toBe("user");
+            expect(input.messages.at(-2)?.role).toBe("assistant");
+            expect(input.messages.at(-2)?.toolCalls?.length ?? 0).toBe(0);
+            expect(
+              input.messages
+                .filter((message) => message.role === "tool")
+                .map((message) => message.toolCallId)
+            ).toEqual(
+              Array.from({ length: 100 }, (_, index) => `c${index + 1}`)
+            );
+
+            return Promise.resolve(textReply("Continued"));
+          }
+
           const result = toolTurn([
             { arguments: { message: "x" }, id: `c${call}`, name: "sample" },
           ]);
+
           return Promise.resolve({
             ...result,
             assistantMessage: { ...result.assistantMessage, content },
             content,
           });
         },
+        async streamChat(input, handlers) {
+          const result = await this.generateChat(input);
+
+          if (result.content) {
+            handlers.onChunk(result.content);
+          }
+
+          return result;
+        },
       };
+
       const session = createAgentChatSession(
         { provider },
-        { tools: [sampleTool] }
+        {
+          tools: [
+            {
+              ...sampleTool,
+              async run(input) {
+                toolRuns += 1;
+
+                return input;
+              },
+            },
+          ],
+        }
       );
-      const reply = await session.send("loop forever");
+
+      const reply =
+        mode === "stream"
+          ? await session.sendStream("loop forever", {
+              onChunk(chunk) {
+                streamed += chunk;
+              },
+            })
+          : await session.send("loop forever");
+
       expect(call).toBe(100);
+      expect(toolRuns).toBe(100);
       expect(reply.length).toBeGreaterThan(0);
       expect(session.getHistory().at(-1)).toEqual({
         content: reply,
+        role: "assistant",
+      });
+
+      if (mode === "stream") {
+        expect(streamed).toBe(content.repeat(100) + reply);
+      }
+
+      expect(await session.send("Continue")).toBe("Continued");
+      expect(call).toBe(101);
+      expect(toolRuns).toBe(100);
+      expect(session.getHistory().at(-1)).toEqual({
+        content: "Continued",
         role: "assistant",
       });
     }
@@ -830,10 +1103,12 @@ describe("agent chat tool loop", () => {
       { provider, tools: [sampleTool] },
       { tools: [sampleTool] }
     );
+
     const reply = await session.send("say hi");
 
     expect(reply).toBe("Done");
 
+    // SAFETY: This test inspects the exact history messages appended by the turn.
     const history = session.getHistory() as ChatMessage[];
     expect(history).toHaveLength(4);
     expect(history[0]).toEqual({ content: "say hi", role: "user" });
@@ -859,6 +1134,7 @@ describe("agent chat tool loop", () => {
       { provider, tools: [sampleTool] },
       { tools: [sampleTool] }
     );
+
     const events: string[] = [];
 
     await session.sendStream("go", {
@@ -872,6 +1148,7 @@ describe("agent chat tool loop", () => {
 
   test("runs parallelSafe tool calls concurrently and preserves history order", async () => {
     const track = { active: 0, max: 0 };
+
     const parallelTool = delayedTool("parallel_sample", {
       delayMs: 20,
       parallelSafe: true,
@@ -890,7 +1167,9 @@ describe("agent chat tool loop", () => {
       { provider, tools: [parallelTool] },
       { tools: [parallelTool] }
     );
+
     const events: string[] = [];
+
     const reply = await session.sendStream("run both", {
       onChunk: (delta) => events.push(`chunk:${delta}`),
       onToolEnd: (event) => events.push(`end:${event.toolCallId}`),
@@ -905,6 +1184,7 @@ describe("agent chat tool loop", () => {
     expect(events.filter((event) => event.startsWith("end:"))).toHaveLength(2);
     expect(events.at(-1)).toBe("chunk:Done");
 
+    // SAFETY: This test inspects the exact history messages appended by the turn.
     const history = session.getHistory() as ChatMessage[];
     expect(history[2]).toMatchObject({
       content: '{"message":"a"}',
@@ -920,11 +1200,13 @@ describe("agent chat tool loop", () => {
 
   test("falls back to sequential execution when any tool is not parallelSafe", async () => {
     const track = { active: 0, max: 0 };
+
     const parallelTool = delayedTool("parallel_sample", {
       delayMs: 10,
       parallelSafe: true,
       track,
     });
+
     const sequentialTool = delayedTool("sequential_sample", {
       delayMs: 10,
       track,
@@ -951,6 +1233,7 @@ describe("agent chat tool loop", () => {
         tools: [parallelTool, sequentialTool],
       }
     );
+
     await session.send("run mixed");
 
     expect(track.max).toBe(1);
@@ -976,9 +1259,11 @@ describe("agent chat tool loop", () => {
 
   test("appends resolvePromptContext to the system prompt each turn", async () => {
     const systems: string[] = [];
+
     const provider: ProviderClient = {
       generateChat(input) {
         systems.push(input.system);
+
         return Promise.resolve(textReply("done"));
       },
       generateText() {
@@ -988,6 +1273,7 @@ describe("agent chat tool loop", () => {
       streamChat(input, handlers) {
         systems.push(input.system);
         handlers.onChunk("done");
+
         return Promise.resolve(textReply("done"));
       },
     };
@@ -1012,16 +1298,20 @@ describe("plugin tool discovery", () => {
     async (mode) => {
       const snapshots: string[][] = [];
       let runs = 0;
+
       const plugin: ToolDefinition = {
         ...sampleTool,
         discoveryGroup: "workflows",
         name: "plugin_workflows__run_workflow",
         async run() {
           runs++;
+
           return { ok: true };
         },
       };
+
       const other = { ...plugin, name: "plugin_workflows__create_workflow" };
+
       const replies = [
         toolTurn([
           {
@@ -1034,10 +1324,13 @@ describe("plugin tool discovery", () => {
         textReply("Done"),
         textReply("Hello"),
       ];
+
       const generate = (input: GenerateChatInput) => {
         snapshots.push(input.tools?.map((tool) => tool.name) ?? []);
+
         return Promise.resolve(replies.shift()!);
       };
+
       const provider: ProviderClient = {
         generateChat: generate,
         generateText: async () => ({ content: "" }),
@@ -1045,18 +1338,22 @@ describe("plugin tool discovery", () => {
         streamChat: async (input, handlers) => {
           const result = await generate(input);
           handlers.onChunk(result.content);
+
           return result;
         },
       };
+
       const session = createAgentChatSession({
         provider,
         tools: [sampleTool, plugin, other],
       });
+
       if (mode === "send") {
         await session.send("Run my workflow");
       } else {
         await session.sendStream("Run my workflow", { onChunk() {} });
       }
+
       await session.send("Hello");
       expect(snapshots[0]).toEqual(["sample", "find_tools"]);
       expect(snapshots[1]).toEqual(["sample", "find_tools", plugin.name]);
@@ -1068,15 +1365,18 @@ describe("plugin tool discovery", () => {
 
   test("undiscovered calls, including the discovery batch, cannot execute", async () => {
     let runs = 0;
+
     const plugin: ToolDefinition = {
       ...sampleTool,
       discoveryGroup: "workflows",
       name: "plugin_workflows__run",
       async run() {
         runs++;
+
         return {};
       },
     };
+
     const session = createAgentChatSession({
       provider: createMockProvider([
         toolTurn([{ arguments: {}, id: "guess", name: plugin.name }]),
@@ -1093,11 +1393,14 @@ describe("plugin tool discovery", () => {
       ]),
       tools: [plugin],
     });
+
     await session.send("Run");
     expect(runs).toBe(1);
+
     const results = session
       .getHistory()
       .filter((message) => message.role === "tool");
+
     expect(results[0]?.content).toContain("Unknown tool");
     expect(results[2]?.content).toContain("Unknown tool");
   });

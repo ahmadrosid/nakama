@@ -21,6 +21,7 @@ async function seed() {
   });
   const defaultProfile = await seedOrgDefaultProfile(db, ORG_ID);
   const superProfile = await seedOrgSuperBotProfile(db, ORG_ID);
+
   return { db, defaultId: defaultProfile.id, superId: superProfile.id };
 }
 
@@ -30,13 +31,16 @@ const automationInput = {
   prompt: "do it",
   trigger: { type: "manual" as const },
 };
+
 describe("profile access: binding an automation to Super Bot is admin-only", () => {
   test("member cannot bind an automation to the Super Bot profile", async () => {
     const { db, superId } = await seed();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
 
+    // SAFETY: The test fixture matches the contract used by this test.
     const attempt = service.create(ORG_ID, automationInput as any, superId, {
       orgRole: "member",
     });
@@ -47,12 +51,14 @@ describe("profile access: binding an automation to Super Bot is admin-only", () 
 
   test("admin can bind an automation to the Super Bot profile", async () => {
     const { db, superId } = await seed();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
 
     const automation = await service.create(
       ORG_ID,
+      // SAFETY: The test fixture matches the contract used by this test.
       automationInput as any,
       superId,
       {
@@ -65,10 +71,12 @@ describe("profile access: binding an automation to Super Bot is admin-only", () 
 
   test("omitted access fail-closes Super Bot bind on create", async () => {
     const { db, superId } = await seed();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
 
+    // SAFETY: The test fixture matches the contract used by this test.
     const attempt = service.create(ORG_ID, automationInput as any, superId);
 
     await expect(attempt).rejects.toBeInstanceOf(NakamaApiError);
@@ -77,12 +85,14 @@ describe("profile access: binding an automation to Super Bot is admin-only", () 
 
   test("member cannot rebind an automation to Super Bot", async () => {
     const { db, defaultId, superId } = await seed();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
 
     const automation = await service.create(
       ORG_ID,
+      // SAFETY: The test fixture matches the contract used by this test.
       automationInput as any,
       defaultId,
       { orgRole: "member" }
@@ -104,12 +114,14 @@ describe("profile access: binding an automation to Super Bot is admin-only", () 
 
   test("admin can rebind an automation to Super Bot", async () => {
     const { db, defaultId, superId } = await seed();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
 
     const automation = await service.create(
       ORG_ID,
+      // SAFETY: The test fixture matches the contract used by this test.
       automationInput as any,
       defaultId,
       { orgRole: "admin" }

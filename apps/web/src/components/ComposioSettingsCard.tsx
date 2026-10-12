@@ -101,7 +101,7 @@ function ComposioSettingsSkeleton({
 
 function composioSettingsError(
   formError: string | null,
-  loadError: unknown
+  loadError: Error | null
 ): string | null {
   if (formError) {
     return formError;
@@ -121,6 +121,7 @@ function useComposioSettingsForm() {
     error: loadError,
     refetch,
   } = useComposioSettings();
+
   const saveMutation = useSaveComposioSettings();
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
@@ -138,9 +139,9 @@ function useComposioSettingsForm() {
     setFormError(null);
 
     try {
-      await saveMutation.mutateAsync({
-        ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
-      });
+      const trimmedApiKey = apiKey.trim();
+      const request = trimmedApiKey ? { apiKey: trimmedApiKey } : {};
+      await saveMutation.mutateAsync(request);
       setApiKey("");
     } catch (error) {
       setFormError(formatError(error));
@@ -149,6 +150,7 @@ function useComposioSettingsForm() {
 
   async function manageKey(action: "clear" | "use-stored") {
     setFormError(null);
+
     try {
       await client.manageSettingSecret("composio", action);
       await refetch();
@@ -235,6 +237,7 @@ function ComposioApiKeySection({
   showApiKey: boolean;
 }) {
   const sectionPadding = embedded ? "pb-1.5" : "p-5";
+
   return (
     <div className={cn("space-y-2", sectionPadding, embedded && "pt-0")}>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -299,6 +302,7 @@ function ComposioApiKeyInput({
   source?: "environment" | "settings" | "missing";
 }) {
   const canSave = source !== "environment" && apiKey.trim().length > 0;
+
   return (
     <div className="flex items-center gap-2">
       <InputGroup className="h-9 min-w-0 flex-1">

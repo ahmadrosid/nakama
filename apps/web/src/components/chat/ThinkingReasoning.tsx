@@ -1,4 +1,5 @@
 import { cn } from "@nakama/ui/utils";
+import { BrainIcon } from "hugeicons-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ThinkingState } from "@/components/chat/ThinkingState";
@@ -8,6 +9,7 @@ import { splitThinkingLines } from "@/lib/thinking-text";
 import styles from "./ThinkingReasoning.module.css";
 
 const MAX_H = 100;
+
 const COLLAPSE_BEAT = 360;
 
 export interface ThinkingReasoningProps {
@@ -36,6 +38,7 @@ function useThinkingElapsed(
           Math.max(1, Math.floor((Date.now() - anchorRef.current) / 1000))
         );
       }
+
       return;
     }
 
@@ -52,6 +55,7 @@ function useThinkingElapsed(
 
     update();
     const intervalId = window.setInterval(update, 1000);
+
     return () => window.clearInterval(intervalId);
   }, [isWorkActive, startedAt]);
 
@@ -72,25 +76,32 @@ function ThinkingReasoningViewport({
   // keeps a fixed key so growing text does not remount / re-fade.
   const items = useMemo(() => {
     let sealedPrefix = "";
+
     return sentences.map((text, index) => {
       const isLiveTail = isWorkActive && index === sentences.length - 1;
+
       if (isLiveTail) {
         return { fresh: true as const, key: "live-tail", text };
       }
+
       sealedPrefix = `${sealedPrefix}\0${text}`;
+
       return { fresh: false as const, key: `sealed:${sealedPrefix}`, text };
     });
   }, [sentences, isWorkActive]);
 
   const updateFade = () => {
     const element = viewportRef.current;
+
     if (!element) {
       return;
     }
 
     const overflows = element.scrollHeight > element.clientHeight + 1;
+
     if (!overflows) {
       setFade({ bottom: false, top: false });
+
       return;
     }
 
@@ -103,6 +114,7 @@ function ThinkingReasoningViewport({
 
   useEffect(() => {
     const element = viewportRef.current;
+
     if (!element) {
       return;
     }
@@ -164,11 +176,18 @@ function useThinkingCollapse(
 ) {
   const [done, setDone] = useState(!isWorkActive && hasBody);
   const [thinkingOpen, setThinkingOpen] = useState(false);
-  const [toolsOpen, setToolsOpen] = useState(true);
+  const [toolsOpen, setToolsOpen] = useState(isWorkActive);
+  const [wasWorkActive, setWasWorkActive] = useState(isWorkActive);
+
+  if (wasWorkActive !== isWorkActive) {
+    setWasWorkActive(isWorkActive);
+    setToolsOpen(isWorkActive);
+  }
 
   useEffect(() => {
     if (isWorkActive) {
       setDone(false);
+
       return;
     }
 
@@ -179,7 +198,9 @@ function useThinkingCollapse(
     const reducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
     ).matches;
+
     const delay = reducedMotion ? 0 : COLLAPSE_BEAT;
+
     const timerId = window.setTimeout(() => {
       setDone(true);
     }, delay);
@@ -190,8 +211,10 @@ function useThinkingCollapse(
   const toggle = () => {
     if (hasTools) {
       setToolsOpen((current) => !current);
+
       return;
     }
+
     setThinkingOpen((current) => !current);
   };
 
@@ -206,6 +229,7 @@ function thinkingLiveLabel(
   if (hasChildren && !isThinkingStreaming) {
     return `Working… · ${formatElapsedSeconds(elapsedSeconds)}`;
   }
+
   return "Thinking…";
 }
 
@@ -230,13 +254,16 @@ function ThinkingReasoningHeader({
 }) {
   const stepLabel = `${stepCount} ${stepCount === 1 ? "step" : "steps"}`;
   const doneLabel = stepCount > 0 ? stepLabel : "Activity";
+
   const durationLabel =
     elapsedSeconds === null
       ? ""
       : ` for ${formatElapsedSeconds(elapsedSeconds)}`;
+
   const liveLabel =
     activityLabel ??
     thinkingLiveLabel(elapsedSeconds ?? 1, hasChildren, isThinkingStreaming);
+
   const liveStepLabel = stepCount > 0 ? ` · ${stepLabel}` : "";
 
   return (
@@ -314,6 +341,9 @@ function ThinkingReasoningBody({
             )}
           >
             {sentences.length > 0 ? (
+              <BrainIcon aria-hidden className={styles.thinkingMarker} />
+            ) : null}
+            {sentences.length > 0 ? (
               <ThinkingReasoningViewport
                 isWorkActive={isWorkActive}
                 sentences={sentences}
@@ -349,13 +379,16 @@ export function ThinkingReasoning({
 }: ThinkingReasoningProps) {
   const displayText = useRafCoalescedValue(text, isThinkingStreaming);
   const trimmed = displayText.trim();
+
   const sentences = useMemo(
     () => splitThinkingLines(displayText),
     [displayText]
   );
+
   const hasBody = sentences.length > 0 || toolCount > 0;
   const stepCount = toolCount + (sentences.length > 0 ? 1 : 0);
   const elapsedSeconds = useThinkingElapsed(isWorkActive, startedAt);
+
   const { done, expanded, toggle } = useThinkingCollapse(
     isWorkActive,
     hasBody,

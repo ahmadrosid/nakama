@@ -3,6 +3,7 @@ import type { OrgPluginDetail } from "@nakama/core";
 import { nextPluginVersions, pluginRowActions } from "./use-plugins";
 
 function plugin(overrides: Partial<OrgPluginDetail>): OrgPluginDetail {
+  // SAFETY: The test controls this fixture or mock and asserts the resulting behavior.
   return {
     availableVersions: ["1.0.0"],
     installed: true,
@@ -34,6 +35,7 @@ describe("plugin updates", () => {
     const actions = pluginRowActions(
       plugin({ availableVersions: ["1.0.0", "1.0.1"] })
     );
+
     expect(actions.update).toBe(true);
   });
 
@@ -46,6 +48,7 @@ describe("plugin updates", () => {
           selectedVersion: "1.0.1",
         })
       );
+
       expect(actions.update).toBe(false);
     }
   });

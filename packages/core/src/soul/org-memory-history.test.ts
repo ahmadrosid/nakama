@@ -23,6 +23,7 @@ describe("org memory history", () => {
       await rm(tempDir, { force: true, recursive: true });
       tempDir = "";
     }
+
     if (originalConfigDir === undefined) {
       delete process.env.NAKAMA_CONFIG_DIR;
     } else {
@@ -35,6 +36,7 @@ describe("org memory history", () => {
       path.join(os.tmpdir(), "nakama-org-memory-history-")
     );
     process.env.NAKAMA_CONFIG_DIR = tempDir;
+
     return orgId;
   }
 
@@ -153,7 +155,8 @@ describe("org memory history", () => {
 
     const warnings: string[] = [];
     const originalWarn = console.warn;
-    console.warn = (message?: unknown) => warnings.push(String(message));
+    console.warn = (message?: string) => warnings.push(String(message));
+
     try {
       await expect(listOrgMemoryHistory(orgId, 1, tempDir)).resolves.toEqual([
         expect.objectContaining({ id: validId }),
@@ -202,10 +205,12 @@ describe("org memory history", () => {
       "2026-07-31T08:00:00.000Z",
       "content"
     );
+
     const contentPath = path.join(
       getOrgMemoryHistoryDir(orgId, tempDir),
       `${id}.md`
     );
+
     await rm(contentPath);
     await mkdir(contentPath);
 
@@ -224,6 +229,7 @@ describe("org memory history", () => {
       "malformed content",
       "{"
     );
+
     for (let index = 0; index < 3; index += 1) {
       await writeHistoryRevision(
         orgId,
@@ -235,6 +241,7 @@ describe("org memory history", () => {
 
     const originalWarn = console.warn;
     console.warn = () => undefined;
+
     try {
       await pruneOrgMemoryHistory(orgId, 2, tempDir);
     } finally {
@@ -276,6 +283,7 @@ describe("org memory history", () => {
     for (let index = 0; index < 3; index += 1) {
       await append(index);
     }
+
     expect(
       (await listOrgMemoryHistoryWithCap(orgId, 100, tempDir)).truncated
     ).toBe(false);

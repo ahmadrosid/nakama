@@ -17,6 +17,7 @@ test("closing the plugin registry isolates cassette replay and allows registry r
 
   const url =
     "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent";
+
   await withMswCassette(
     "gemini-signed-tool-continuation",
     async () => {

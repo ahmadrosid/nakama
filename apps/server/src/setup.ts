@@ -41,6 +41,7 @@ async function bootstrapProviderFromEnv(
 
   const netraModel =
     providerType === "netra" ? readEnvValue(env, "NETRA_MODEL") : null;
+
   if (providerType === "netra" && netraModel !== NETRA_AGENT_MODEL_ID) {
     return null;
   }
@@ -48,12 +49,10 @@ async function bootstrapProviderFromEnv(
   const instance = {
     apiKey: "",
     createdAt: new Date().toISOString(),
+    customModels: netraModel ? [{ default: true, id: netraModel }] : undefined,
     id: createProviderInstanceId(),
     label: defaultProviderLabel(providerType, []),
     type: providerType,
-    ...(netraModel
-      ? { customModels: [{ default: true, id: netraModel }] }
-      : {}),
   };
 
   const config: UserConfig = {
@@ -62,6 +61,7 @@ async function bootstrapProviderFromEnv(
   };
 
   await saveUserConfig(config);
+
   return config;
 }
 
@@ -102,5 +102,6 @@ export async function ensureProviderConfigured(
   }
 
   const provider = createProviderFromActiveConfig(userConfig, process.env);
+
   return { provider, userConfig };
 }

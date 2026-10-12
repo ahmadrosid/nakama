@@ -1,4 +1,14 @@
 import type { JsonSchema, ProviderClient } from "@nakama/core";
+import { z } from "zod";
+
+const JsonObjectSchema = z.record(z.string(), z.json());
+
+type JsonObject = z.infer<typeof JsonObjectSchema>;
+
+const GenerateTextContentSchema = z.union([
+  z.string(),
+  z.object({ content: z.string() }).transform(({ content }) => content),
+]);
 
 export interface SuggestToolParamsInput {
   description: string;
@@ -27,40 +37,33 @@ function buildSuggestParamsUserPrompt(input: SuggestToolParamsInput): string {
   return lines.join("\n");
 }
 
-export function parseSuggestedParams(
-  raw: string
-): Record<string, unknown> | null {
+export function parseSuggestedParams(raw: string): JsonObject | null {
   const trimmed = raw.trim();
+
   const unfenced = trimmed
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/, "")
     .trim();
 
   try {
-    const parsed: unknown = JSON.parse(unfenced);
+    const parsed = JsonObjectSchema.safeParse(JSON.parse(unfenced));
 
-    if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      !Array.isArray(parsed)
-    ) {
-      return parsed as Record<string, unknown>;
-    }
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }
-
-  return null;
 }
 
-function readGenerateTextContent(result: { content: string } | string): string {
-  return typeof result === "string" ? result : result.content;
+function readGenerateTextContent(
+  result: z.input<typeof GenerateTextContentSchema>
+): string {
+  return GenerateTextContentSchema.parse(result);
 }
 
 export async function suggestToolParamsFromPrompt(
   input: SuggestToolParamsInput,
   options: { provider?: ProviderClient }
-): Promise<Record<string, unknown>> {
+): Promise<JsonObject> {
   const prompt = input.prompt.trim();
 
   if (!prompt) {

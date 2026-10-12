@@ -40,6 +40,7 @@ async function sendRichMessage(
   ctx: Context,
   text: string
 ): Promise<TelegramReplyMessage> {
+  // SAFETY: Telegram's reply method returns a message with a numeric message_id.
   return (await ctx.reply(renderTelegramRichText(text), {
     parse_mode: "HTML",
   })) as TelegramReplyMessage;
@@ -64,6 +65,7 @@ async function sendPlainMessage(
   ctx: Context,
   text: string
 ): Promise<TelegramReplyMessage> {
+  // SAFETY: Telegram's reply method returns a message with a numeric message_id.
   return (await ctx.reply(
     prepareTelegramFallbackReply(text)
   )) as TelegramReplyMessage;
@@ -73,6 +75,7 @@ async function sendRawMessage(
   ctx: Context,
   text: string
 ): Promise<TelegramReplyMessage> {
+  // SAFETY: Telegram's reply method returns a message with a numeric message_id.
   return (await ctx.reply(text.trim())) as TelegramReplyMessage;
 }
 

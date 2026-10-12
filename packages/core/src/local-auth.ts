@@ -10,8 +10,11 @@ import {
 } from "./user-config";
 
 export const LOCAL_CLIENT_EMAIL = "local-client@nakama.internal";
+
 export const LOCAL_CLIENT_USER_ID = "user_local_client";
+
 const LOCAL_AUTH_TOKEN_PREFIX = "tc_local_";
+
 const LOCAL_AUTH_TOKEN_FILENAME = "local-auth-token";
 
 export class LocalAuthTokenManagedExternallyError extends Error {
@@ -38,27 +41,37 @@ export function getLocalAuthTokenPath(): string {
 function toPersistedUserConfig(
   config: Awaited<ReturnType<typeof loadUserConfig>>
 ): UserConfig {
-  return {
+  const persisted: UserConfig = {
     defaultProviderId: config?.defaultProviderId ?? null,
     providers: config?.providers ?? [],
-    ...(config?.timezone ? { timezone: config.timezone } : {}),
-    ...(config?.thinkingEnabled === undefined
-      ? {}
-      : { thinkingEnabled: config.thinkingEnabled }),
-    ...(config?.thinkingEffort
-      ? { thinkingEffort: config.thinkingEffort }
-      : {}),
-    ...(config?.localAuthTokenHash
-      ? { localAuthTokenHash: config.localAuthTokenHash }
-      : {}),
-    ...(config?.localAuthToken
-      ? { localAuthToken: config.localAuthToken }
-      : {}),
   };
+
+  if (config?.timezone) {
+    persisted.timezone = config.timezone;
+  }
+
+  if (config?.thinkingEnabled !== undefined) {
+    persisted.thinkingEnabled = config.thinkingEnabled;
+  }
+
+  if (config?.thinkingEffort) {
+    persisted.thinkingEffort = config.thinkingEffort;
+  }
+
+  if (config?.localAuthTokenHash) {
+    persisted.localAuthTokenHash = config.localAuthTokenHash;
+  }
+
+  if (config?.localAuthToken) {
+    persisted.localAuthToken = config.localAuthToken;
+  }
+
+  return persisted;
 }
 
 async function loadStoredLocalAuthToken(): Promise<string | null> {
   const token = await readTextOrNull(getLocalAuthTokenPath());
+
   return token?.trim() || null;
 }
 
@@ -80,6 +93,7 @@ function compareTokenHash(token: string, expectedHashHex: string): boolean {
 
 export async function resolveLocalAuthToken(): Promise<string> {
   const envToken = process.env.NAKAMA_LOCAL_AUTH_TOKEN?.trim();
+
   if (envToken) {
     return envToken;
   }
@@ -96,12 +110,14 @@ export async function resolveLocalAuthToken(): Promise<string> {
   }
 
   const legacyToken = config?.localAuthToken?.trim();
+
   if (legacyToken) {
     await persistLocalAuthToken(legacyToken);
     await saveUserConfig({
       ...toPersistedUserConfig(config),
       localAuthTokenHash: hashLocalAuthToken(legacyToken),
     });
+
     return legacyToken;
   }
 
@@ -112,6 +128,7 @@ export async function resolveLocalAuthToken(): Promise<string> {
     ...newConfig,
     localAuthTokenHash: hashLocalAuthToken(generated),
   });
+
   return generated;
 }
 
@@ -146,6 +163,7 @@ export async function verifyLocalAuthToken(
   }
 
   const envToken = process.env.NAKAMA_LOCAL_AUTH_TOKEN?.trim();
+
   if (envToken) {
     return compareTokenHash(token, hashLocalAuthToken(envToken))
       ? { email: LOCAL_CLIENT_EMAIL }
@@ -154,6 +172,7 @@ export async function verifyLocalAuthToken(
 
   const config = await loadUserConfig();
   const expectedHash = config?.localAuthTokenHash?.trim();
+
   if (expectedHash) {
     return compareTokenHash(token, expectedHash)
       ? { email: LOCAL_CLIENT_EMAIL }
@@ -161,6 +180,7 @@ export async function verifyLocalAuthToken(
   }
 
   const legacyToken = config?.localAuthToken?.trim();
+
   if (legacyToken && compareTokenHash(token, hashLocalAuthToken(legacyToken))) {
     return { email: LOCAL_CLIENT_EMAIL };
   }

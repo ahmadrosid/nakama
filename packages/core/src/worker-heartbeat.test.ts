@@ -13,6 +13,7 @@ describe("worker-heartbeat store", () => {
     const dir = await mkdtemp(join(tmpdir(), "nakama-worker-lock-"));
     const first = createWorkerHeartbeatStore({ getDir: () => dir });
     const second = createWorkerHeartbeatStore({ getDir: () => dir });
+
     try {
       await first.acquire();
       await expect(second.acquire()).rejects.toThrow();
@@ -75,15 +76,20 @@ describe("worker-heartbeat store", () => {
 
 test("a killed worker releases its operating-system connection lock", async () => {
   const dir = await mkdtemp(join(tmpdir(), "nakama-worker-crash-"));
+
   const modulePath = fileURLToPath(
     new URL("./worker-heartbeat.ts", import.meta.url)
   );
+
   const script = `import {createWorkerHeartbeatStore} from ${JSON.stringify(modulePath)}; const store = createWorkerHeartbeatStore({getDir: () => process.argv[1]}); await store.acquire(); console.log("ready"); setInterval(() => {}, 1000);`;
+
   const child = Bun.spawn([process.execPath, "-e", script, dir], {
     stderr: "pipe",
     stdout: "pipe",
   });
+
   const replacement = createWorkerHeartbeatStore({ getDir: () => dir });
+
   try {
     const reader = child.stdout.getReader();
     const ready = await reader.read();

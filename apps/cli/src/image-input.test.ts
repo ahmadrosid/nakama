@@ -15,10 +15,12 @@ const tinyPng = Buffer.from(
 );
 
 const originalCwd = process.cwd();
+
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
 afterEach(() => {
   process.chdir(originalCwd);
+
   if (originalConfigDir === undefined) {
     delete process.env.NAKAMA_CONFIG_DIR;
   } else {

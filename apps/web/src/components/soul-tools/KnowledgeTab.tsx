@@ -50,13 +50,16 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
   const { activeOrg } = useAuth();
   const { data: profiles = [], error: profilesError } = useProfilesQuery();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
   const {
     data: knowledgeBase = null,
     isLoading: knowledgeLoading,
     error: knowledgeError,
   } = useKnowledgeBaseQuery(profileId);
+
   const { data: organizationKnowledgeBase = null } =
     useOrganizationKnowledgeBaseQuery(activeOrg?.id ?? null);
+
   const uploadMutation = useUploadKnowledgeBaseDocumentMutation();
   const importZipMutation = useImportKnowledgeBaseZipMutation();
   const attachSharedMutation = useAttachSharedKnowledgeBaseDocumentMutation();
@@ -64,25 +67,33 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
   const detachSharedMutation = useDetachSharedKnowledgeBaseDocumentMutation();
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+
   const [importResult, setImportResult] =
     useState<ImportKnowledgeBaseZipResponse | null>(null);
+
   const [deleteTarget, setDeleteTarget] =
     useState<KnowledgeBaseDocument | null>(null);
+
   const [duplicatePrompt, setDuplicatePrompt] =
     useState<DuplicatePrompt | null>(null);
 
   const selectedProfile =
     profiles.find((profile) => profile.id === profileId) ?? null;
+
   const documents = knowledgeBase?.documents ?? [];
+
   const readyCount = documents.filter(
     (document) => document.status === "ready"
   ).length;
+
   const loading = knowledgeLoading && !knowledgeBase;
+
   const uploadPending = [
     uploading,
     uploadMutation.isPending,
     importZipMutation.isPending,
   ].some(Boolean);
+
   const busy = [
     uploadPending,
     attachSharedMutation.isPending,
@@ -93,6 +104,7 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
 
   useEffect(() => {
     const queryError = profilesError ?? knowledgeError;
+
     if (queryError) {
       setError(formatError(queryError));
     }
@@ -112,19 +124,24 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
   async function handleZipUpload(file: File, currentProfileId: string) {
     if (file.size > MAX_KNOWLEDGE_ZIP_BYTES) {
       setError(`${file.name} exceeds the 20 MB ZIP limit.`);
+
       return false;
     }
 
     try {
       const zipBase64 = await fileToZipBase64(file);
+
       const result = await importZipMutation.mutateAsync({
         profileId: currentProfileId,
         zipBase64,
       });
+
       setImportResult(result);
+
       return true;
     } catch (err) {
       setError(formatError(err));
+
       return false;
     }
   }
@@ -132,12 +149,15 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
   async function handleDocumentUpload(file: File, currentProfileId: string) {
     if (!isKnowledgeBaseFile(file)) {
       setError(`Unsupported file type: ${file.name}.`);
+
       return true;
     }
 
     const document = await fileToDocumentAttachment(file);
+
     if (!document) {
       setError(`Failed to read file: ${file.name}`);
+
       return true;
     }
 
@@ -146,10 +166,12 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
         document,
         profileId: currentProfileId,
       });
+
       return true;
     } catch (err) {
       if (!(err instanceof NakamaApiError && err.status === 409)) {
         setError(formatError(err));
+
         return false;
       }
     }
@@ -164,9 +186,11 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
         onDuplicate: "replace",
         profileId: currentProfileId,
       });
+
       return true;
     } catch (err) {
       setError(formatError(err));
+
       return false;
     }
   }
@@ -183,18 +207,22 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
     try {
       if (Array.from(files).filter(isKnowledgeBaseZipFile).length > 1) {
         setError("Select one ZIP at a time.");
+
         return;
       }
+
       for (const file of Array.from(files)) {
         const shouldContinue = isKnowledgeBaseZipFile(file)
           ? await handleZipUpload(file, profileId)
           : await handleDocumentUpload(file, profileId);
+
         if (!shouldContinue) {
           break;
         }
       }
     } finally {
       setUploading(false);
+
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -207,6 +235,7 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
     }
 
     setError(null);
+
     try {
       await attachSharedMutation.mutateAsync({ documentId, profileId });
     } catch (err) {
@@ -233,6 +262,7 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
           profileId,
         });
       }
+
       setDeleteTarget(null);
     } catch (err) {
       setError(formatError(err));

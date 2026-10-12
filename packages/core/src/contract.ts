@@ -7,6 +7,14 @@ import type {
 } from "./plugins";
 import type { SkillScriptIssue } from "./skills/script-tools";
 
+export type JsonValue =
+  | boolean
+  | null
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
 export type AutomationTrigger =
   | { type: "manual" }
   | { type: "schedule"; cron: string; timezone?: string }
@@ -14,7 +22,7 @@ export type AutomationTrigger =
 
 export interface AutomationStep {
   id: string;
-  input: Record<string, unknown>;
+  input: Record<string, JsonValue>;
   tool: string;
 }
 
@@ -104,9 +112,7 @@ export type AgentChannel = (typeof AGENT_CHANNELS)[number];
  * value means: `null`, never a silent pass.
  */
 export function parseAgentChannel(value: string): AgentChannel | null {
-  return AGENT_CHANNELS.includes(value as AgentChannel)
-    ? (value as AgentChannel)
-    : null;
+  return AGENT_CHANNELS.find((channel) => channel === value) ?? null;
 }
 
 export const NAKAMA_API_VERSION = 1;
@@ -150,6 +156,7 @@ export interface AutomationWorkerStatus {
 
 export interface WorkerProcessInfo {
   cpuPercent: number | null;
+  error?: string;
   managed: boolean;
   memoryMb: number | null;
   status: "online" | "stopped" | "errored" | null;
@@ -217,13 +224,42 @@ export interface LlmUsageModelStats extends LlmUsageStats {
   modelId: string;
 }
 
+/** One agent's or one user's share of the org ledger. A null `id` is the unattributed group. */
+export interface LlmUsageGroupStats extends LlmUsageStats {
+  id: string | null;
+  name: string | null;
+}
+
+/** One provider's share of one day. A null provider means the call had no provider context. */
+export interface LlmUsageDayProviderStats {
+  estimatedCostUsd: number;
+  provider: string | null;
+  totalTokens: number;
+}
+
+/** One UTC day of the org ledger. Days without calls are present with zeros. */
+export interface LlmUsageDayStats {
+  /** `YYYY-MM-DD`, UTC. */
+  day: string;
+  estimatedCostUsd: number;
+  providers: LlmUsageDayProviderStats[];
+  requestCount: number;
+  totalTokens: number;
+}
+
 export interface LlmUsageStatus extends LlmUsageStats {
+  /** Org admins and platform admins only. */
+  agents?: LlmUsageGroupStats[];
   costEstimated: boolean;
   currentModel: string | null;
+  /** The last 30 UTC days, oldest first. */
+  daily: LlmUsageDayStats[];
   displayName: string | null;
   models: LlmUsageModelStats[];
   provider: ProviderName | null;
   providerConfigured: boolean;
+  /** Org admins and platform admins only. */
+  users?: LlmUsageGroupStats[];
 }
 
 export interface McpStatus {
@@ -413,6 +449,11 @@ export interface ProfilePackMeta {
   model: string | null;
   name: string;
   profileSkillNames: string[];
+  sharedAgent?: {
+    publicationId: string;
+    sourceOrgId: string;
+    sourceProfileId: string;
+  };
   skillsCuratorConsolidateEnabled: boolean | null;
   skillsPostTurnReview: boolean | null;
   skillsWriteApproval: boolean | null;
@@ -515,26 +556,29 @@ export interface MfaTotpVerifyResponse {
   backupCodes: string[];
   enabled: boolean;
 }
+
 export interface MfaBackupCodesResponse {
   backupCodes: string[];
 }
+
 export interface PasskeyVerificationResponse {
   backupCodes: string[];
   enabled: boolean;
 }
+
 export interface PasskeyRegistrationOptionsResponse {
   challenge: string;
-  options: Record<string, unknown>;
+  options: Record<string, JsonValue>;
 }
 
 export interface PasskeyAuthenticationOptionsResponse {
   challenge: string;
-  options: Record<string, unknown>;
+  options: Record<string, JsonValue>;
 }
 
 export interface PasskeyCredentialResponse {
   authenticatorAttachment?: string;
-  clientExtensionResults: Record<string, unknown>;
+  clientExtensionResults: Record<string, JsonValue>;
   id: string;
   rawId: string;
   response: {
@@ -555,7 +599,8 @@ export interface UpdateAuthProfileRequest {
   phone?: string | null;
 }
 
-export type OrgRole = "admin" | "member" | "viewer";
+export type OrgRole = "admin" | "member";
+
 export type ChannelType = "telegram" | "whatsapp" | "discord";
 
 export interface OrganizationSummary {
@@ -567,6 +612,7 @@ export interface OrganizationSummary {
   monthlyLlmTurnLimit?: number;
   monthlyLlmWarningPercent?: number;
   name: string;
+  parentOrgId?: string | null;
   skillsCuratorArchiveAfterDays?: number;
   skillsCuratorConsolidateEnabled?: boolean;
   skillsCuratorEnabled?: boolean;
@@ -586,6 +632,67 @@ export interface CreateOrganizationRequest {
   };
   name: string;
   slug: string;
+}
+
+export interface CreateTeamRequest
+  extends Pick<CreateOrganizationRequest, "name" | "slug"> {
+  adminUserId?: string;
+  requestId: string;
+}
+
+export type OrgSharedResourceKind =
+  | "knowledge"
+  | "skill"
+  | "agent"
+  | "tool"
+  | "model";
+
+export interface PublishOrgSharedResourceRequest {
+  resourceId: string;
+  resourceKind: OrgSharedResourceKind;
+}
+
+export interface OrgSharedResourcePublication
+  extends PublishOrgSharedResourceRequest {
+  createdAt: string;
+  id: string;
+  orgId: string;
+  updatedAt: string;
+}
+
+export interface OrgSharedResourceResponse {
+  publication: OrgSharedResourcePublication;
+}
+
+export interface OrgSharedResourceSummary extends OrgSharedResourcePublication {
+  label: string;
+  readiness: "ready" | "requires_setup" | "unavailable";
+  sourceOrganization: { id: string; name: string };
+}
+
+export interface ListOrgSharedResourcesResponse {
+  resources: OrgSharedResourceSummary[];
+}
+
+export interface OrganizationOverviewResponse {
+  activeOrgId: string;
+  canManageOrganization: boolean;
+  organization: { id: string; name: string };
+  sharedResources: OrgSharedResourceSummary[];
+  teams: Array<{
+    canSwitch: boolean;
+    id: string;
+    isCurrent: boolean;
+    localResourceCounts: {
+      agents: number;
+      knowledge: number;
+      skills: number;
+      tools: number;
+    };
+    memberCount: number;
+    name: string;
+    slug: string;
+  }>;
 }
 
 export interface UpdateOrganizationRequest {
@@ -874,6 +981,7 @@ export interface OrgMemoryProposalResponse {
 }
 
 export type SkillProposalStatus = "pending" | "approved" | "rejected";
+
 export type SkillProposalAction =
   | "create"
   | "patch"
@@ -914,6 +1022,7 @@ export interface SkillProposalResponse {
 }
 
 export type SkillSuggestionStatus = "pending" | "applied";
+
 export type SkillSuggestionAction = "create" | "patch";
 
 export interface SkillSuggestion {
@@ -1195,6 +1304,7 @@ export interface SendMessageRequest {
   images?: ImageAttachment[];
   message: string;
   stream?: boolean;
+  whatsappMessage?: ToolContext["whatsappMessage"];
 }
 
 export interface SendMessageResponse {
@@ -1220,7 +1330,7 @@ export type StreamEvent =
       toolGroupId?: string;
       toolCallId: string;
       tool: string;
-      input: Record<string, unknown>;
+      input: Record<string, JsonValue>;
     }
   | {
       type: "tool_end";
@@ -1306,7 +1416,7 @@ export type WorkflowCompareOp = "eq" | "near" | "contains";
 
 export interface WorkflowToolStep {
   id: string;
-  input: Record<string, unknown>;
+  input: Record<string, JsonValue>;
   kind: "tool";
   tool: string;
 }
@@ -1373,8 +1483,8 @@ export type WorkflowRunStepStatus =
   | "skipped";
 
 export interface WorkflowReceiptBag {
-  input: Record<string, unknown>;
-  steps: Record<string, unknown>;
+  input: Record<string, JsonValue>;
+  steps: Record<string, JsonValue>;
 }
 
 export interface WorkflowRunStepRecord {
@@ -1394,7 +1504,7 @@ export interface WorkflowRunRecord {
   completedAt: string | null;
   error: string | null;
   id: string;
-  input: Record<string, unknown> | null;
+  input: Record<string, JsonValue> | null;
   output: string | null;
   startedAt: string;
   status: WorkflowRunStatus;
@@ -1423,7 +1533,7 @@ export interface UpdateWorkflowRequest {
 }
 
 export interface RunWorkflowRequest {
-  input?: Record<string, unknown>;
+  input?: Record<string, JsonValue>;
 }
 
 export interface RunWorkflowResponse {
@@ -1445,7 +1555,7 @@ export interface WorkflowSqliteTableInfo {
 
 export interface WorkflowSqlitePreview {
   columns: string[];
-  rows: Record<string, unknown>[];
+  rows: Record<string, JsonValue>[];
   table: string;
   total: number;
 }
@@ -1572,12 +1682,23 @@ export interface TelegramSettingsResponse {
   profileId: string;
 }
 
+export interface TelegramAccessRequestsResponse {
+  allowedUsernames: Record<string, string>;
+  botUsername: string | null;
+  requests: Array<{
+    requestedAt: string;
+    userId: number;
+    username: string | null;
+  }>;
+}
+
 export interface UpdateTelegramSettingsRequest {
   allowedUserIds?: string;
   botToken?: string;
   pairedUserIds?: string;
   profileId?: string;
 }
+
 export interface StartTelegramPairingRequest {
   profileId: string;
 }
@@ -1635,18 +1756,22 @@ export interface SlackSettingsResponse {
  * valid IDs and the pieces that are not IDs. Shared by the dashboard input
  * and the server so both accept exactly the same values.
  */
-export function parseSlackMemberIdInput(raw: string): {
+export interface SlackMemberIdInput {
   ids: string[];
   invalid: string[];
-} {
+}
+
+export function parseSlackMemberIdInput(raw: string): SlackMemberIdInput {
   const ids = new Set<string>();
   const invalid: string[] = [];
 
   for (const part of raw.split(/[\s,]+/)) {
     const id = part.trim().toUpperCase();
+
     if (!id) {
       continue;
     }
+
     if (/^[UW][A-Z0-9]{6,}$/.test(id)) {
       ids.add(id);
     } else {
@@ -1678,7 +1803,11 @@ export interface UpdateComposioSettingsRequest {
 
 export interface ErrorTrackingSettingsResponse {
   configured: boolean;
+  dashboardUrl?: string | null;
   dsnMasked: string | null;
+  /** Cleared when the DSN changes. */
+  lastTest: { at: string; delivered: boolean } | null;
+  savedAt: string | null;
 }
 
 export interface UpdateErrorTrackingSettingsRequest {
@@ -1822,7 +1951,13 @@ export type AgentBrowserInstallEvent =
       error: string;
     };
 
+export interface WhatsAppAllowedPhoneDetail {
+  addedAt: string | null;
+  name: string;
+}
+
 export interface WhatsAppSettingsResponse {
+  allowedPhoneDetails: Record<string, WhatsAppAllowedPhoneDetail>;
   allowedPhones: string[];
   allowUnpairedGroupMembers: boolean;
   configured: boolean;
@@ -1834,6 +1969,8 @@ export interface WhatsAppSettingsResponse {
 }
 
 export interface UpdateWhatsAppSettingsRequest {
+  /** Display names keyed by phone; an empty name clears it. */
+  allowedPhoneNames?: Record<string, string>;
   allowedPhones?: string;
   allowUnpairedGroupMembers?: boolean;
   phoneNumber?: string;
@@ -1901,7 +2038,8 @@ export interface ProviderModelOption {
   maxOutputTokens?: number;
   name: string;
   outputPerMillionUsd?: number;
-  provider: ProviderName;
+  /** "acp" for models an ACP agent reports for its chat. */
+  provider: ProviderName | "acp";
   providerId?: string;
   providerLabel?: string;
   supportsThinking?: boolean;
@@ -2014,7 +2152,39 @@ export interface ConfigureProviderResponse {
   provider: ProviderName;
 }
 
+/** A coding agent that runs a profile's chat turns over ACP (stdio). */
+export interface AcpAgentConfig {
+  args: string[];
+  command: string;
+}
+
+/** One setting the ACP agent offers for a chat, such as its model or reasoning effort. */
+export interface AcpSessionSetting {
+  category: string | null;
+  currentValue: string;
+  id: string;
+  name: string;
+  options: Array<{ name: string; value: string }>;
+}
+
+export interface AcpSessionSettingsResponse {
+  settings: AcpSessionSetting[];
+}
+
+/** An agent Nakama ships with, ready to save on a profile. */
+export interface AcpAgentPresetSummary {
+  agent: AcpAgentConfig;
+  id: string;
+  label: string;
+}
+
+export interface AcpAgentPresetsResponse {
+  presets: AcpAgentPresetSummary[];
+}
+
 export interface ProfileSummary {
+  /** Set when chat turns run through an ACP agent. The composer shows the agent's settings. */
+  acpAgent?: AcpAgentConfig | null;
   /** Whether this profile may create and execute automations. */
   automationsEnabled?: boolean;
   createdAt: string;
@@ -2025,6 +2195,12 @@ export interface ProfileSummary {
   mcpServerCount: number;
   model: string | null;
   name: string;
+  sharedAgent?: {
+    available: boolean;
+    publicationId: string;
+    sourceOrgId: string;
+    sourceProfileId: string;
+  };
   /** null = inherit org default; true/false = force consolidate on/off for this profile */
   skillsCuratorConsolidateEnabled?: boolean | null;
   /** null = inherit org default; true/false = force post-turn review on/off for this profile */
@@ -2038,6 +2214,7 @@ export interface ProfileSummary {
 
 export interface ProfileDetail extends ProfileSummary {
   mcpServers: McpServerSummary[];
+  publishedSkills?: PublishedSkillSummary[];
   skills: SkillSummary[];
   systemPrompt: string;
   tools: ToolSummary[];
@@ -2078,11 +2255,34 @@ export interface SkillDetail extends SkillSummary {
 }
 
 export interface ListSkillsResponse {
+  publishedSkills?: PublishedSkillSummary[];
   skills: SkillSummary[];
+}
+
+export interface PublishedSkillSummary
+  extends Pick<
+    SkillSummary,
+    | "createdAt"
+    | "createdBy"
+    | "description"
+    | "disableModelInvocation"
+    | "enabled"
+    | "hasTool"
+    | "id"
+    | "name"
+    | "updatedAt"
+  > {
+  publicationId: string;
+  scope: "parent";
+  sourceOrganization: { id: string; name: string };
 }
 
 export interface SkillResponse {
   skill: SkillDetail;
+}
+
+export interface PublishedSkillResponse {
+  skill: PublishedSkillSummary & { body: string };
 }
 
 export interface SkillFilesResponse {
@@ -2133,6 +2333,8 @@ export interface PatchSkillRequest {
   body?: string;
   description?: string;
   disableModelInvocation?: boolean;
+  /** Optional change note, shown as the version title. */
+  note?: string;
 }
 
 export interface SyncSkillsResponse {
@@ -2147,6 +2349,7 @@ export type McpServerStatus =
   | "error"
   /** Waiting for someone to approve the server's OAuth sign-in in a browser. */
   | "needs_auth";
+
 export type McpTransport = "http" | "stdio";
 
 export interface McpHttpConfig {
@@ -2245,6 +2448,9 @@ export interface ToolDetail extends ToolSummary {
   handlerConfig: unknown;
   /** Resolved JSON Schema for javascript tools (module export or handlerConfig). */
   parameters?: JsonSchema;
+  publicationId?: string;
+  scope?: "parent";
+  sourceOrganization?: { id: string; name: string };
   updatedAt: string;
 }
 
@@ -2281,6 +2487,8 @@ export interface CreateProfileRequest {
 }
 
 export interface UpdateProfileRequest {
+  /** Platform admins only: the agent runs as a process on the server host. */
+  acpAgent?: AcpAgentConfig | null;
   automationsEnabled?: boolean;
   model?: string | null;
   name?: string;
@@ -2331,6 +2539,35 @@ export interface ProfileChangeEvent {
   source: ProfileChangeSource;
 }
 
+export interface SkillVersion {
+  actorName: string | null;
+  content: string;
+  createdAt: string;
+  id: string;
+  /** "original" is the content saved before the first tracked change. */
+  kind: "created" | "original" | "restored" | "updated";
+  note: string | null;
+  source: ProfileChangeSource | null;
+  version: number;
+}
+
+/** A pending skill proposal, shown as the SKILL.md it would produce. */
+export interface PendingSkillVersion {
+  content: string;
+  createdAt: string;
+  id: string;
+  proposedByName: string | null;
+}
+
+export interface ListSkillVersionsResponse {
+  /** SKILL.md on disk; the base for pending diffs. */
+  currentContent: string;
+  /** Newest first. */
+  pending: PendingSkillVersion[];
+  /** Newest first. */
+  versions: SkillVersion[];
+}
+
 export interface ListProfileChangeHistoryResponse {
   events: ProfileChangeEvent[];
 }
@@ -2340,6 +2577,21 @@ export interface CreateToolRequest {
   handlerConfig?: unknown;
   handlerType?: string;
   name: string;
+}
+
+export interface ToolCredentialStatus {
+  configured: boolean;
+  /** Present when the tool declares handlerConfig.env. */
+  env?: {
+    configured: boolean;
+    name: string;
+    secret: boolean;
+    /** Only for non-secret variables. */
+    value?: string;
+  }[];
+  envName: string;
+  savedAvailable: boolean;
+  source: "environment" | "settings" | "missing";
 }
 
 export interface ToolSetupPlan {
@@ -2364,7 +2616,7 @@ export interface AssignToolRequest {
 }
 
 export interface RunToolRequest {
-  parameters: Record<string, unknown>;
+  parameters: Record<string, JsonValue>;
 }
 
 export interface RunToolResponse {
@@ -2378,7 +2630,7 @@ export interface SuggestToolParamsRequest {
 }
 
 export interface SuggestToolParamsResponse {
-  parameters: Record<string, unknown>;
+  parameters: Record<string, JsonValue>;
 }
 
 import type { SoulFileStatus, SoulStackFiles } from "./soul/types";
@@ -2534,9 +2786,20 @@ export interface KnowledgeBaseSource {
   url: string;
 }
 
+export interface PublishedKnowledgeBaseDocument
+  extends Pick<
+    KnowledgeBaseDocument,
+    "id" | "filename" | "mediaType" | "sizeBytes" | "status" | "uploadedAt"
+  > {
+  publicationId: string;
+  scope: "parent";
+  sourceOrganization: { id: string; name: string };
+}
+
 export interface ListKnowledgeBaseResponse {
   documents: KnowledgeBaseDocument[];
   profileId: string;
+  publishedDocuments?: PublishedKnowledgeBaseDocument[];
   sources: KnowledgeBaseSource[];
 }
 
@@ -2678,15 +2941,20 @@ export interface GenerateTextInput {
   system: string;
 }
 
-export interface JsonSchema {
+export type JsonSchema = {
+  $schema?: string;
   additionalProperties?: boolean | JsonSchema;
   description?: string;
   enum?: Array<string | number | boolean>;
+  exclusiveMaximum?: number | boolean;
+  exclusiveMinimum?: number | boolean;
   items?: JsonSchema;
+  maximum?: number;
+  minimum?: number;
   properties?: Record<string, JsonSchema>;
   required?: string[];
-  type?: string;
-}
+  type?: string | string[];
+};
 
 export interface LlmToolDefinition {
   description: string;
@@ -2695,7 +2963,7 @@ export interface LlmToolDefinition {
 }
 
 export interface ToolCall {
-  arguments: Record<string, unknown>;
+  arguments: Record<string, JsonValue>;
   id: string;
   name: string;
 }
@@ -2766,6 +3034,16 @@ export interface ChatTurnUsage {
 
 export interface ChatCompletionResult {
   assistantMessage: Extract<ChatMessage, { role: "assistant" }>;
+  /**
+   * Tool steps the provider already ran and finished. They are saved to history
+   * as tool results and are not run again.
+   */
+  completedToolCalls?: Array<{
+    call: ToolCall;
+    result: unknown;
+    /** Text the agent wrote just before this step. */
+    textBefore?: string;
+  }>;
   content: string;
   toolCalls: ToolCall[];
   usage?: ChatUsage;
@@ -2819,14 +3097,15 @@ export interface StreamChatHandlers {
   onToolStart?: (event: {
     toolCallId: string;
     tool: string;
-    input: Record<string, unknown>;
+    input: Record<string, JsonValue>;
   }) => void;
 }
 
 export interface ProviderClient {
   generateChat(input: GenerateChatInput): Promise<ChatCompletionResult>;
   generateText(input: GenerateTextInput): Promise<GenerateTextResult>;
-  name: ProviderName;
+  /** "acp" for chat turns run by an ACP agent (see providers/acp). */
+  name: ProviderName | "acp";
   streamChat(
     input: GenerateChatInput,
     handlers: StreamChatHandlers
@@ -2836,8 +3115,13 @@ export interface ProviderClient {
 export interface ToolContext {
   /** Nesting depth for sub-agent execution (0 = parent, 1 = child). */
   agentDepth?: number;
-  /** Atomically reserves quota before a new LLM invocation. */
-  assertCanStartLlmTurn?: (reservedTokens: number) => Promise<void>;
+  /**
+   * Atomically reserves quota before a new LLM invocation. The reservation is
+   * a hold, not a charge: call the returned function once the call settles.
+   */
+  assertCanStartLlmTurn?: (
+    reservedTokens: number
+  ) => Promise<() => Promise<void>>;
   automationId?: string;
   automationRunId?: string;
   /** Session channel when known (used for interactive-only tool gates). */
@@ -2846,6 +3130,13 @@ export interface ToolContext {
   clientOrigin?: string;
   /** Local CLI launch directory for shell commands, including coding agents. */
   codingWorkspaceRoot?: string;
+  /** Images attached to the current user message, as scoped stored references. */
+  currentChatImages?: Array<
+    Pick<
+      Extract<MessageContentPart, { type: "image_ref" }>,
+      "attachmentId" | "mediaType"
+    >
+  >;
   /** Emits concise live status lines while a sub-agent child loop runs (parent web UI). */
   emitSubAgentActivity?: (label: string) => void;
   /**
@@ -2861,6 +3152,9 @@ export interface ToolContext {
   forbidProfileSkillMarkdownWrites?: boolean;
   /** Platform admin flag for Super Bot bind checks (same as HTTP ProfileAccess). */
   isPlatformAdmin?: boolean;
+  listPublishedKnowledgeDocuments?: () => Promise<
+    PublishedKnowledgeBaseDocument[]
+  >;
   /** Loads a provider-neutral document/image reference scoped to this execution. */
   loadAttachment?: LoadAttachmentBytes;
   /** Host-owned memory storage; file guards run before these callbacks. */
@@ -2875,6 +3169,12 @@ export interface ToolContext {
   /** Org role of the invoking user. Org-memory tools gate on this; undefined means deny-by-default. */
   orgRole?: OrgRole;
   profileId?: string;
+  /** Reads assigned parent skill files after live server publication checks. */
+  readPublishedSkillFile?: (
+    publicationId: string,
+    filePath: string,
+    maxBytes: number
+  ) => Promise<Uint8Array>;
   /**
    * Records bytes an optimiser removed from a tool result before insertion.
    * Passed in rather than imported because the database lives in the server and
@@ -2922,6 +3222,14 @@ export interface ToolContext {
    */
   trackEphemeralAttachment?: (attachmentId: string) => void;
   userId?: string;
+  /** Verified WhatsApp identity for the current inbound message. */
+  whatsappMessage?: {
+    chatJid: string;
+    fromMe: boolean;
+    isGroup: boolean;
+    senderJid: string;
+    senderJids: string[];
+  };
   workflowId?: string;
   workflowRunId?: string;
   /** Profile workspace root (~/.nakama/orgs/{orgId}/profiles/{profileId}/). */
@@ -2961,7 +3269,7 @@ export type ComposioToolErrorCode =
 
 export interface ComposioCachedToolSummary {
   description: string;
-  inputSchema: Record<string, unknown>;
+  inputSchema: Record<string, JsonValue>;
   name: string;
   slug: string;
 }
@@ -3091,6 +3399,17 @@ export interface ListPluginReleasesResponse {
   releases: PluginReleaseSummary[];
 }
 
+/** A registry version newer than anything approved for this plugin. */
+export interface PluginUpdateSummary {
+  packageName: string;
+  pluginId: string;
+  version: string;
+}
+
+export interface ListPluginUpdatesResponse {
+  updates: PluginUpdateSummary[];
+}
+
 export interface PluginPackageRequest {
   packageName: string;
   version: string;
@@ -3167,7 +3486,9 @@ export interface XaiOAuthCredentials {
 }
 
 export type XaiOAuthDeviceStartResponse = ChatgptOAuthDeviceStartResponse;
+
 export type XaiOAuthDeviceCompleteRequest = ChatgptOAuthDeviceCompleteRequest;
+
 export interface XaiOAuthDeviceCompleteResponse {
   models?: CustomModelEntry[];
   xaiOAuth: XaiOAuthCredentials;

@@ -16,11 +16,13 @@ export async function loadConfig(
 ): Promise<DiscordBridgeConfig> {
   const owner = channelOwnerFromEnv(env);
   const config = await loadDiscordConfigFile(owner);
+
   if (!config) {
     throw new Error(
       "Configure this agent's Discord connection before starting its worker."
     );
   }
+
   return {
     botToken: config.botToken,
     orgId: owner.orgId,

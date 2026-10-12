@@ -9,6 +9,7 @@ export function composeSoulSystemPrompt(
   options: ComposeSoulPromptOptions = {}
 ): string {
   const profilePrompt = options.profilePrompt?.trim();
+
   const sections: string[] = [
     "You embody the identity defined below. This is who you are — not a description of someone else.",
     "Stay in character. Extrapolate from worldview and voice when topics aren't explicitly covered.",

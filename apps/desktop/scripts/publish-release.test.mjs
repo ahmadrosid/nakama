@@ -14,6 +14,7 @@ describe("desktop release metadata", () => {
     sha512: "checksum",
     version: "0.2.0",
   };
+
   test("pins downloads to immutable version assets while preserving integrity fields", () => {
     const output = updateManifest(manifest, "desktop-v0.2.0");
     expect(output.files[0]).toEqual({
@@ -30,6 +31,7 @@ describe("desktop release metadata", () => {
       ...manifest.files,
       { sha512: "dmg-checksum", url: "Nakama-0.2.0-arm64.dmg" },
     ];
+
     expect(
       updateManifest({ ...manifest, files }, "desktop-v0.2.0").files[1]
     ).toEqual({
@@ -66,9 +68,11 @@ test("Windows metadata accepts only the exact versioned installer", () => {
     sha512: "checksum",
     version: "0.2.0",
   };
+
   expect(updateManifest(manifest, "desktop-v0.2.0", "windows").path).toEndWith(
     "/Nakama-0.2.0-x64-Setup.exe"
   );
+
   for (const path of [
     "../payload.exe",
     "..\\payload.exe",
@@ -85,6 +89,7 @@ test("Windows metadata accepts only the exact versioned installer", () => {
       )
     ).toThrow();
   }
+
   expect(() =>
     updateManifest(
       { ...manifest, files: [...manifest.files, ...manifest.files] },
@@ -95,6 +100,7 @@ test("Windows metadata accepts only the exact versioned installer", () => {
 });
 
 const temporary = [];
+
 afterEach(async () => {
   await Promise.all(
     temporary
@@ -108,11 +114,13 @@ async function releaseFixture() {
   temporary.push(output);
   const version = "0.2.0";
   const tag = `desktop-v${version}`;
+
   for (const [platform, name, suffixes] of [
     ["mac", "latest-mac.yml", ["arm64-mac.zip", "arm64.dmg"]],
     ["windows", "latest.yml", ["x64-Setup.exe"]],
   ]) {
     const files = [];
+
     for (const suffix of suffixes) {
       const filename = `Nakama-${version}-${suffix}`;
       const content = Buffer.from(filename);
@@ -127,6 +135,7 @@ async function releaseFixture() {
         url: filename,
       });
     }
+
     await Bun.write(
       join(output, platform, name),
       Bun.YAML.stringify({
@@ -137,20 +146,26 @@ async function releaseFixture() {
       })
     );
   }
+
   const releases = new Map();
   const events = [];
   let fail;
+
   const run = async (_command, args) => {
     const [kind, action, name] = args;
     events.push(args);
+
     if (fail?.(args)) {
       throw new Error("Simulated GitHub failure");
     }
+
     if (kind === "api") {
       const release = releases.get(action.split("/").at(-1));
+
       if (!release) {
         throw Object.assign(new Error("Not found"), { stderr: "HTTP 404" });
       }
+
       return {
         stdout: JSON.stringify({
           assets: [...release.assets].map(([filename, content]) => ({
@@ -162,6 +177,7 @@ async function releaseFixture() {
         }),
       };
     }
+
     if (action === "create") {
       releases.set(name, {
         assets: new Map(),
@@ -169,6 +185,7 @@ async function releaseFixture() {
       });
     } else {
       const release = releases.get(name);
+
       if (action === "upload") {
         for (const path of args.slice(3, args.indexOf("--clobber"))) {
           release.assets.set(
@@ -178,13 +195,16 @@ async function releaseFixture() {
         }
       } else if (action === "download") {
         const dir = args[args.indexOf("--dir") + 1];
+
         for (const [i, arg] of args.entries()) {
           if (arg === "--pattern") {
             const filename = args[i + 1];
             const content = release.assets.get(filename);
+
             if (!content) {
               throw new Error("Missing download");
             }
+
             await Bun.write(join(dir, filename), content);
           }
         }
@@ -196,8 +216,10 @@ async function releaseFixture() {
         throw new Error(`Unexpected operation: ${args}`);
       }
     }
+
     return { stdout: "" };
   };
+
   return {
     events,
     output,
@@ -220,9 +242,11 @@ test("publishes all installers before independently promoting both feeds", async
     "latest.yml",
   ]);
   const published = f.events.findIndex((args) => args[1] === "edit");
+
   const promoted = f.events.findIndex(
     (args) => args[1] === "upload" && args[2] === "desktop-updates"
   );
+
   expect(published).toBeLessThan(promoted);
 });
 
@@ -230,11 +254,13 @@ for (const change of ["missing", "checksum"]) {
   test(`rejects ${change} Windows artifact without creating a release`, async () => {
     const f = await releaseFixture();
     const path = join(f.output, "windows/Nakama-0.2.0-x64-Setup.exe");
+
     if (change === "missing") {
       await rm(path);
     } else {
       await Bun.write(path, "corrupt");
     }
+
     await expect(f.publish()).rejects.toThrow();
     expect(f.releases.size).toBe(0);
   });
@@ -284,6 +310,7 @@ test("a newer macOS channel does not block an older Windows channel", async () =
   const f = await releaseFixture();
   await f.publish();
   const assets = f.releases.get("desktop-updates").assets;
+
   const current = (name, version) =>
     Buffer.from(
       Bun.YAML.stringify({
@@ -291,6 +318,7 @@ test("a newer macOS channel does not block an older Windows channel", async () =
         version,
       })
     );
+
   assets.set("latest-mac.yml", current("latest-mac.yml", "0.3.0"));
   assets.set("latest.yml", current("latest.yml", "0.1.0"));
   await f.publish();
@@ -320,12 +348,14 @@ test("uploaded bytes must match before a draft becomes public", async () => {
   const f = await releaseFixture();
   f.setFailure((args) => {
     const release = f.releases.get(f.tag);
+
     if (args[0] === "api" && release?.assets.size === 8) {
       release.assets.set(
         "Nakama-0.2.0-x64-Setup.exe",
         Buffer.from("damaged upload")
       );
     }
+
     return false;
   });
   await expect(f.publish()).rejects.toThrow();

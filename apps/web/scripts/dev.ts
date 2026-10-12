@@ -8,6 +8,7 @@ import {
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 let spawnedServer: Bun.Subprocess | null = null;
+
 let viteProcess: Bun.Subprocess | null = null;
 
 registerCleanupHandlers(() => {

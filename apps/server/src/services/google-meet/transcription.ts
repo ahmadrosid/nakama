@@ -15,14 +15,18 @@ export interface TranscriptionSession {
   push(audio: Uint8Array): void;
 }
 
-export function transcriptionConfig(value: unknown) {
-  return z
-    .object({ apiKey: z.string().trim().min(1).max(4096) })
-    .strict()
-    .parse(value);
+const transcriptionConfigSchema = z
+  .object({ apiKey: z.string().trim().min(1).max(4096) })
+  .strict();
+
+export function transcriptionConfig(
+  value: z.input<typeof transcriptionConfigSchema>
+) {
+  return transcriptionConfigSchema.parse(value);
 }
 
 const BYTES_PER_SECOND = 48_000;
+
 const CHUNK_BYTES = 15 * BYTES_PER_SECOND;
 
 function wav(pcm: Uint8Array) {
@@ -39,6 +43,7 @@ function wav(pcm: Uint8Array) {
   header.writeUInt16LE(16, 34);
   header.write("data", 36);
   header.writeUInt32LE(pcm.length, 40);
+
   return Buffer.concat([header, pcm]);
 }
 
@@ -48,28 +53,39 @@ interface Turn {
   start: number;
   text: string;
 }
-function parseTurns(value: unknown, duration: number): Turn[] {
-  const segments = (value as { segments?: unknown })?.segments;
-  if (!Array.isArray(segments) || segments.length > 2000) {
-    throw new Error("Invalid transcription segments");
-  }
+
+const transcriptionResponseSchema = z
+  .object({
+    segments: z
+      .array(
+        z.object({
+          end: z.number().finite(),
+          speaker: z.string().max(128).nullable().optional(),
+          start: z.number().finite(),
+          text: z.string().max(32_000),
+        })
+      )
+      .max(2000),
+  })
+  .passthrough();
+
+function parseTurns(
+  value: z.infer<typeof transcriptionResponseSchema>,
+  duration: number
+): Turn[] {
+  const segments = value.segments;
+
   return segments
     .map((segment) => {
       if (
-        !segment ||
-        typeof segment.text !== "string" ||
-        segment.text.length > 32_000 ||
-        !Number.isFinite(segment.start) ||
-        !Number.isFinite(segment.end) ||
         segment.start < 0 ||
         segment.end < segment.start ||
         segment.start > duration ||
-        segment.end > duration + 0.1 ||
-        (segment.speaker != null &&
-          (typeof segment.speaker !== "string" || segment.speaker.length > 128))
+        segment.end > duration + 0.1
       ) {
         throw new Error("Invalid transcription segment");
       }
+
       return {
         end: Math.min(segment.end, duration),
         speaker: segment.speaker || null,
@@ -111,13 +127,14 @@ export async function connectTranscription({
   let finished = false;
   let closed = false;
   const path = () => join(directory, `${chunkIndex}.pcm`);
-  const fail = (error: unknown) => {
+
+  const fail = (error: Error) => {
     if (!failure) {
-      failure =
-        error instanceof Error ? error : new Error("Transcription failed");
+      failure = error;
       onError(failure);
     }
   };
+
   async function transcribe(
     file: string,
     index: number,
@@ -131,13 +148,17 @@ export async function connectTranscription({
     form.set("model", "gpt-4o-transcribe-diarize");
     form.set("response_format", "diarized_json");
     form.set("chunking_strategy", "auto");
+
     for (const [name, reference] of refs) {
       form.append("known_speaker_names[]", name);
       form.append("known_speaker_references[]", reference);
     }
+
     let turns: Turn[] | undefined;
+
     for (let attempt = 0; attempt < 3; attempt++) {
       let response: Response;
+
       try {
         response = await fetch(
           "https://api.openai.com/v1/audio/transcriptions",
@@ -152,28 +173,39 @@ export async function connectTranscription({
         if (combined.aborted || attempt === 2) {
           throw error;
         }
+
         await Bun.sleep(250 * (attempt + 1));
         continue;
       }
+
       if (response.ok) {
-        turns = parseTurns(await response.json(), length / BYTES_PER_SECOND);
+        turns = parseTurns(
+          transcriptionResponseSchema.parse(await response.json()),
+          length / BYTES_PER_SECOND
+        );
         break;
       }
+
       await response.body?.cancel();
+
       if (response.status !== 429 && response.status < 500) {
         throw new Error(`Transcription request failed (${response.status})`);
       }
+
       if (attempt < 2) {
         await Bun.sleep(250 * (attempt + 1));
       }
     }
+
     if (!turns) {
       throw new Error(
         "Transcription temporarily unavailable; partial transcript saved"
       );
     }
+
     combined.throwIfAborted();
     const names = new Map<string, string>();
+
     for (const turn of turns) {
       if (turn.speaker && !names.has(turn.speaker)) {
         names.set(
@@ -182,10 +214,12 @@ export async function connectTranscription({
         );
       }
     }
+
     for (const [label, id] of names) {
       if (refs.size >= 4 || refs.has(id)) {
         continue;
       }
+
       const sample = turns
         .filter(
           (turn) =>
@@ -199,20 +233,25 @@ export async function connectTranscription({
             )
         )
         .sort((a, b) => b.end - b.start - (a.end - a.start))[0];
+
       if (sample) {
         const begin = Math.floor(sample.start * 24_000) * 2;
+
         const end =
           Math.floor(Math.min(sample.end, sample.start + 8) * 24_000) * 2;
+
         refs.set(
           id,
           `data:audio/wav;base64,${wav(pcm.subarray(begin, end)).toString("base64")}`
         );
       }
     }
+
     for (const [i, turn] of turns.entries()) {
       if (!turn.text.trim()) {
         continue;
       }
+
       const id = turn.speaker ? names.get(turn.speaker)! : null;
       onSegment({
         endMs: Math.round(start / 48 + turn.end * 1000),
@@ -225,10 +264,12 @@ export async function connectTranscription({
       });
     }
   }
+
   function flush() {
     if (!bytes) {
       return;
     }
+
     const file = path();
     const index = chunkIndex++;
     const length = bytes;
@@ -240,10 +281,13 @@ export async function connectTranscription({
       if (failure || closed) {
         return;
       }
+
       try {
         await transcribe(file, index, start, length);
       } catch (error) {
-        fail(error);
+        fail(
+          error instanceof Error ? error : new Error("Transcription failed")
+        );
       } finally {
         pendingBytes -= length;
         onProgress?.(Math.ceil(pendingBytes / BYTES_PER_SECOND));
@@ -251,6 +295,7 @@ export async function connectTranscription({
       }
     });
   }
+
   return {
     async close() {
       closed = true;
@@ -265,36 +310,48 @@ export async function connectTranscription({
         finished = true;
         flush();
       }
+
       await queue;
+
       if (failure) {
         throw failure;
       }
+
       combined.throwIfAborted();
     },
     push(audio) {
       if (failure) {
         throw failure;
       }
+
       combined.throwIfAborted();
+
       if (finished || closed) {
         throw new Error("Recording has stopped");
       }
+
       if (audio.length % 2) {
         throw new Error("Invalid PCM frame");
       }
+
       if (pendingBytes + audio.length > 300 * BYTES_PER_SECOND) {
         throw new Error("Transcription cannot keep up; recording ended early");
       }
+
       let position = 0;
+
       while (position < audio.length) {
         const count = Math.min(CHUNK_BYTES - bytes, audio.length - position);
+
         if (!bytes) {
           writeFileSync(path(), new Uint8Array(), { mode: 0o600 });
         }
+
         appendFileSync(path(), audio.subarray(position, position + count));
         bytes += count;
         pendingBytes += count;
         position += count;
+
         if (bytes === CHUNK_BYTES) {
           flush();
         }

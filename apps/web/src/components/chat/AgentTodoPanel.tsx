@@ -18,8 +18,11 @@ interface AgentTodoPanelProps {
 }
 
 const TODO_MATRIX_ROWS = 3;
+
 const TODO_MATRIX_COLS = 2;
+
 const TODO_MATRIX_SIZE = 3;
+
 const TODO_MATRIX_GAP = 1;
 
 const pendingPattern: Frame = [
@@ -63,9 +66,11 @@ export function AgentTodoPanel({
   const completedCount = todos.filter(
     (todo) => todo.status === "completed"
   ).length;
+
   const runningTodo =
     todos.find((todo) => todo.status === "in_progress") ??
     todos.find((todo) => todo.status === "pending");
+
   const headerLabel = expanded
     ? `Tasks ${completedCount}/${todos.length}`
     : (runningTodo?.content ?? `Tasks ${completedCount}/${todos.length}`);

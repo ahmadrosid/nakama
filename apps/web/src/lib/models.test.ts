@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import type { ProviderName } from "@nakama/core";
 import { USER_PROVIDER_NAMES } from "@nakama/core/provider-resolution";
 import {
   appendOpenRouterModelRow,
   buildCreateProviderRequest,
+  effectiveProfileModelSelection,
   encodeModelSelection,
   filterVisionCapableProviderGroups,
   firstAvailableProviderOption,
@@ -18,12 +20,57 @@ import {
 } from "./models";
 
 describe("buildCreateProviderRequest", () => {
+  test("keeps custom models only for providers that accept a shortlist", () => {
+    const shortlistProviders: readonly ProviderName[] = [
+      "openai_compatible",
+      "netra",
+      "openrouter",
+      "xai_oauth",
+      "chatgpt",
+      "cerebras",
+      "fireworks",
+      "ollama",
+      "opencode_go",
+    ];
+
+    for (const provider of USER_PROVIDER_NAMES) {
+      expect(buildCreateProviderRequest({ apiKey: "key", provider })).toEqual({
+        apiKey: "key",
+        type: provider,
+      });
+
+      const empty = buildCreateProviderRequest({
+        apiKey: "key",
+        customModels: [],
+        provider,
+      });
+
+      const populated = buildCreateProviderRequest({
+        apiKey: "key",
+        customModels: [{ id: "private-model" }],
+        provider,
+      });
+
+      if (provider === "openai_compatible" || provider === "netra") {
+        expect(empty.customModels).toEqual([]);
+      } else {
+        expect(empty).not.toHaveProperty("customModels");
+      }
+
+      if (shortlistProviders.includes(provider)) {
+        expect(populated.customModels).toEqual([{ id: "private-model" }]);
+      } else {
+        expect(populated).not.toHaveProperty("customModels");
+      }
+    }
+  });
   test("includes routing only for OpenRouter", () => {
     const openRouterRouting = {
       dataCollection: "deny",
       requireParameters: true,
       zdr: false,
     } as const;
+
     expect(
       buildCreateProviderRequest({
         apiKey: "key",
@@ -50,36 +97,6 @@ describe("buildCreateProviderRequest", () => {
     ).not.toHaveProperty("openRouterRouting");
   });
 
-  test.each([
-    ["openai_compatible", true, true],
-    ["openrouter", true, false],
-    ["xai_oauth", true, false],
-    ["chatgpt", true, false],
-    ["cerebras", true, false],
-    ["fireworks", true, false],
-    ["ollama", true, false],
-    ["opencode_go", true, false],
-    ["openai", false, false],
-  ] as const)(
-    "preserves custom-model handling for %s",
-    (provider, populated, empty) => {
-      for (const customModels of [undefined, [], [{ id: "custom-model" }]]) {
-        const request = buildCreateProviderRequest({
-          apiKey: "key",
-          customModels,
-          provider,
-        });
-        const include =
-          customModels && (customModels.length ? populated : empty);
-        expect(request).toEqual({
-          apiKey: "key",
-          type: provider,
-          ...(include ? { customModels } : {}),
-        });
-      }
-    }
-  );
-
   test("keeps normalized connection fields and model selection", () => {
     expect(
       buildCreateProviderRequest({
@@ -105,22 +122,7 @@ describe("buildCreateProviderRequest", () => {
 
 function group(
   providerId: string,
-  provider:
-    | "openai_compatible"
-    | "openai"
-    | "opencode_go"
-    | "openrouter"
-    | "deepseek"
-    | "doubao"
-    | "xiaomi"
-    | "together"
-    | "vercel_ai_gateway"
-    | "mistral"
-    | "qwen"
-    | "qwen_cn"
-    | "perplexity"
-    | "cerebras"
-    | "fireworks",
+  provider: ProviderName,
   flags?: {
     supportsThinking?: boolean;
     supportsVision?: boolean;
@@ -134,12 +136,15 @@ function group(
           id: "model-1",
           name: "Model 1",
           provider,
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
           ...(flags?.supportsThinking === undefined
             ? {}
             : { supportsThinking: flags.supportsThinking }),
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
           ...(flags?.supportsVision === undefined
             ? {}
             : { supportsVision: flags.supportsVision }),
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
           ...(flags?.contextWindow === undefined
             ? {}
             : { contextWindow: flags.contextWindow }),
@@ -152,31 +157,43 @@ function group(
 }
 
 describe("resolveModelThinkingSupport", () => {
-  test.each([
-    "xiaomi",
-    "openai_compatible",
-    "openrouter",
-    "deepseek",
-    "together",
-    "vercel_ai_gateway",
-    "mistral",
-    "qwen",
-    "qwen_cn",
-    "doubao",
-    "perplexity",
-    "cerebras",
-    "fireworks",
-  ] as const)("%s requires an explicit thinking flag", (provider) => {
-    const selected = encodeModelSelection(provider, "model-1");
-    expect(
-      resolveModelThinkingSupport(selected, group(provider, provider))
-    ).toBe(false);
-    expect(
-      resolveModelThinkingSupport(
-        selected,
-        group(provider, provider, { supportsThinking: true })
-      )
-    ).toBe(true);
+  test("explicit flags control thinking for every registered provider", () => {
+    const explicitProviders: readonly ProviderName[] = [
+      "xiaomi",
+      "openai_compatible",
+      "openrouter",
+      "deepseek",
+      "together",
+      "vercel_ai_gateway",
+      "mistral",
+      "qwen",
+      "qwen_cn",
+      "doubao",
+      "perplexity",
+      "cerebras",
+      "fireworks",
+      "ollama",
+    ];
+
+    for (const provider of USER_PROVIDER_NAMES) {
+      if (explicitProviders.includes(provider)) {
+        expect(
+          resolveModelThinkingSupport(
+            encodeModelSelection("instance-one", "model-1"),
+            group("instance-one", provider)
+          )
+        ).toBe(false);
+      }
+
+      for (const supportsThinking of [false, true]) {
+        expect(
+          resolveModelThinkingSupport(
+            encodeModelSelection("instance-one", "model-1"),
+            group("instance-one", provider, { supportsThinking })
+          )
+        ).toBe(supportsThinking);
+      }
+    }
   });
 
   test("preserves existing non-compatible behavior", () => {
@@ -197,28 +214,44 @@ describe("resolveModelThinkingSupport", () => {
 });
 
 describe("resolveModelVisionSupport", () => {
-  test.each([
-    "xiaomi",
-    "openai_compatible",
-    "opencode_go",
-    "doubao",
-    "cerebras",
-    "together",
-    "qwen",
-    "vercel_ai_gateway",
-    "fireworks",
-    "openrouter",
-  ] as const)("%s requires an explicit vision flag", (provider) => {
-    const selected = encodeModelSelection(provider, "model-1");
-    expect(resolveModelVisionSupport(selected, group(provider, provider))).toBe(
-      false
-    );
-    expect(
-      resolveModelVisionSupport(
-        selected,
-        group(provider, provider, { supportsVision: true })
-      )
-    ).toBe(true);
+  test("explicit flags control vision for every registered provider", () => {
+    const explicitProviders: readonly ProviderName[] = [
+      "xiaomi",
+      "openai_compatible",
+      "opencode_go",
+      "deepseek",
+      "doubao",
+      "cerebras",
+      "together",
+      "qwen",
+      "qwen_cn",
+      "perplexity",
+      "vercel_ai_gateway",
+      "fireworks",
+      "openrouter",
+      "mistral",
+      "ollama",
+    ];
+
+    for (const provider of USER_PROVIDER_NAMES) {
+      if (explicitProviders.includes(provider)) {
+        expect(
+          resolveModelVisionSupport(
+            encodeModelSelection("instance-one", "model-1"),
+            group("instance-one", provider)
+          )
+        ).toBe(false);
+      }
+
+      for (const supportsVision of [false, true]) {
+        expect(
+          resolveModelVisionSupport(
+            encodeModelSelection("instance-one", "model-1"),
+            group("instance-one", provider, { supportsVision })
+          )
+        ).toBe(supportsVision);
+      }
+    }
   });
 
   test("defaults first-party models to vision-capable", () => {
@@ -358,6 +391,34 @@ describe("profileModelSelectionValue", () => {
     expect(profileModelSelectionValue("openai-1::gpt-5.6-luna", groups)).toBe(
       "openai-1::gpt-5.6-luna"
     );
+  });
+});
+
+describe("effectiveProfileModelSelection", () => {
+  test("uses the active provider's default when the profile has no model", () => {
+    const groups = [
+      ...group("openai-1", "openai"),
+      {
+        models: [
+          {
+            default: true,
+            id: "deepseek/deepseek-v4-flash-0731",
+            name: "DeepSeek V4 Flash 0731",
+            provider: "netra" as const,
+          },
+        ],
+        providerId: "netra-1",
+        providerLabel: "Netra Runtime",
+      },
+    ];
+
+    expect(effectiveProfileModelSelection(null, groups, "netra-1")).toBe(
+      "netra-1::deepseek/deepseek-v4-flash-0731"
+    );
+    expect(effectiveProfileModelSelection(null, groups, null)).toBeNull();
+    expect(
+      effectiveProfileModelSelection("openai-1::model-1", groups, "netra-1")
+    ).toBe("openai-1::model-1");
   });
 });
 

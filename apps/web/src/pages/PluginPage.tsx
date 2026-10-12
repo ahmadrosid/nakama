@@ -20,20 +20,25 @@ export function PluginPage() {
   const { user, activeOrg } = useAuth();
   const { resolvedTheme } = useTheme();
   const query = useOrgPlugin(pluginId);
+
   const canManage = canAccessSystemPage(
     user?.isPlatformAdmin === true,
     activeOrg?.role
   );
+
   const view = resolvePluginPageView({
     errorStatus: apiErrorStatus(query.error),
     orgRole: activeOrg?.role,
     plugin: query.data,
     queryStatus: query.status,
   });
+
   if (view !== "page" || !activeOrg || !query.data) {
     return <PluginPageState canManage={canManage} kind={view} />;
   }
+
   const key = `${activeOrg.id}:${pluginId}:${query.data.selectedVersion}:${query.data.revision}:${resolvedTheme}`;
+
   return (
     <RouteBoundary resetKey={key}>
       <PluginSurface

@@ -12,13 +12,16 @@ function createMockClient(
     listSkillCuratorOrgs: () => Promise<{ orgs: [] }>;
   }> = {}
 ): NakamaClient {
-  return {
+  const mockClient = {
     getTimezone: async () => "UTC",
     listAutomationSchedules: async () => [],
     listSkillCuratorOrgs: async () => ({ orgs: [] }),
     runAutomationInternal: async () => {},
     ...overrides,
-  } as unknown as NakamaClient;
+  };
+
+  // SAFETY: The scheduler calls only the methods supplied by this mock.
+  return mockClient as NakamaClient;
 }
 
 describe("AutomationWorkerScheduler", () => {
@@ -32,6 +35,7 @@ describe("AutomationWorkerScheduler", () => {
         timezone: "UTC",
       },
     ];
+
     const client = createMockClient({
       listAutomationSchedules: async () => schedules,
     });
@@ -48,14 +52,18 @@ describe("AutomationWorkerScheduler", () => {
     const intervals: number[] = [];
     const originalSetInterval = globalThis.setInterval;
     const originalClearInterval = globalThis.clearInterval;
+    // SAFETY: The mock uses a numeric sentinel only as an opaque timer handle.
     globalThis.setInterval = ((
       callback: () => Promise<void>,
       interval: number
     ) => {
       callbacks.push(callback);
       intervals.push(interval);
+
+      // SAFETY: The scheduler stores and clears this opaque mocked timer handle.
       return 1 as ReturnType<typeof setInterval>;
     }) as typeof setInterval;
+    // SAFETY: The mock accepts and ignores the opaque timer handle.
     globalThis.clearInterval = (() => undefined) as typeof clearInterval;
 
     try {
@@ -66,6 +74,7 @@ describe("AutomationWorkerScheduler", () => {
           }),
         })
       );
+
       scheduler.beginPolling(5 * 60 * 1000);
       await callbacks[0]!();
 
@@ -79,6 +88,7 @@ describe("AutomationWorkerScheduler", () => {
 
   test("passes the automation orgId to the internal run endpoint", async () => {
     const calls: Array<[string, string]> = [];
+
     const client = createMockClient({
       listAutomationSchedules: async () => [
         {

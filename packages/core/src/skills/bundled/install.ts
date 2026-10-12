@@ -35,6 +35,7 @@ async function migrateRenamedBundledSkillDirectories(): Promise<string[]> {
     }
 
     let newExists = false;
+
     try {
       await access(newDir);
       newExists = true;

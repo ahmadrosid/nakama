@@ -85,6 +85,7 @@ export async function run() {
 function baseManifest(
   id: string,
   version: string,
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This test fixture stores varied values to exercise service boundary handling.
   extras: Record<string, unknown> = {}
 ) {
   return {
@@ -139,7 +140,9 @@ function v2Bundle(options: {
 }): ReturnType<typeof pluginPackage> {
   const id = options.id ?? "notes";
   const version = options.version ?? "1.1.0";
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This test fixture stores varied values to exercise service boundary handling.
   const extras: Record<string, unknown> = {};
+
   if (options.extraAction) {
     extras.actions = [
       ...baseManifest(id, version).actions,
@@ -154,6 +157,7 @@ function v2Bundle(options: {
       },
     ];
   }
+
   extras.database = {
     migrations: [
       { id: "001_items", path: "migrations/001_items.sql" },
@@ -161,6 +165,7 @@ function v2Bundle(options: {
     ],
   };
   const manifest = baseManifest(id, version, extras);
+
   return pluginPackage({
     "actions/extra.js": extraJs,
     "actions/write.js": writeJs,
@@ -191,6 +196,7 @@ function commitThenFailBundle(id = "notes"): ReturnType<typeof pluginPackage> {
       ],
     },
   };
+
   return pluginPackage({
     "actions/write.js": writeJs,
     "migrations/001_items.sql": MIGRATION_001,
@@ -202,6 +208,7 @@ function commitThenFailBundle(id = "notes"): ReturnType<typeof pluginPackage> {
 
 function hangActionBundle(id = "notes"): ReturnType<typeof pluginPackage> {
   const manifest = baseManifest(id, "1.0.0");
+
   return pluginPackage({
     "actions/write.js": hangActionJs,
     "migrations/001_items.sql": MIGRATION_001,
@@ -252,6 +259,7 @@ describe("plugin lifecycle", () => {
       orgId: "org_a",
       pluginId: "notes",
     });
+
     const fromB = await service.invokePluginAction({
       access: "ui",
       actionKey: "write",
@@ -261,6 +269,7 @@ describe("plugin lifecycle", () => {
       pluginId: "notes",
     });
 
+    // SAFETY: This test double supplies only the fields exercised by this test.
     const resultB = fromB.result as { dataDir: string; rows: unknown[] };
     expect(resultB.rows).toEqual([{ body: "beta", id: "n1" }]);
     expect(resultB.dataDir).toBe(
@@ -275,6 +284,7 @@ describe("plugin lifecycle", () => {
         configDir
       )
     );
+
     expect(dbA.query("SELECT id, body FROM items").all()).toEqual([
       { body: "alpha", id: "n1" },
     ]);
@@ -292,16 +302,19 @@ describe("plugin lifecycle", () => {
     const service = new PluginService(db, configDir);
     await service.installPluginPackage(v1Bundle());
     const addedRow = await added(service, "org_a", "notes");
+
     const enabled = await service.enableOrgPlugin(
       "org_a",
       "notes",
       addedRow.revision
     );
+
     const disabled = await service.disableOrgPlugin(
       "org_a",
       "notes",
       enabled.revision
     );
+
     await service.installPluginPackage(
       v2Bundle({ extraAction: true, failSecondMigration: true })
     );
@@ -318,13 +331,17 @@ describe("plugin lifecycle", () => {
       lifecycleState: "disabled",
       selectedVersion: selectedBefore,
     });
+
     const tools = (await db.listTools()).filter(
       (tool) => tool.orgId === "org_a" && tool.pluginId === "notes"
     );
+
     expect(tools.map((tool) => tool.pluginKey).sort()).toEqual(["write"]);
+
     const gens = await readdir(
       join(getOrgPluginDataDir("org_a", "notes", configDir), "db")
     );
+
     expect(gens).toEqual([`${generationBefore}.sqlite`]);
   });
 
@@ -338,22 +355,26 @@ describe("plugin lifecycle", () => {
         if (!armInterrupt) {
           return;
         }
+
         interrupted = true;
         throw new PluginHostError("interrupted");
       },
     });
     await service.installPluginPackage(v1Bundle());
     const addedRow = await added(service, "org_a", "notes");
+
     const enabled = await service.enableOrgPlugin(
       "org_a",
       "notes",
       addedRow.revision
     );
+
     const disabled = await service.disableOrgPlugin(
       "org_a",
       "notes",
       enabled.revision
     );
+
     await service.installPluginPackage(v2Bundle({ extraAction: true }));
     armInterrupt = true;
     await expect(
@@ -374,9 +395,11 @@ describe("plugin lifecycle", () => {
       lifecycleState: "disabled",
       selectedVersion: "1.0.0",
     });
+
     const gens = await readdir(
       join(getOrgPluginDataDir("org_a", "notes", configDir), "db")
     );
+
     expect(gens).toEqual([`${disabled.databaseGeneration}.sqlite`]);
   });
 
@@ -409,12 +432,14 @@ describe("plugin lifecycle", () => {
 
     const disabled = afterPublish!;
     await service.installPluginPackage(codeOnlyBundle());
+
     const updated = await new PluginService(db, configDir).updateOrgPlugin(
       "org_a",
       "notes",
       "1.0.1",
       disabled.revision
     );
+
     expect(updated.databaseGeneration).toBe(disabled.databaseGeneration);
     expect(updated.selectedVersion).toBe("1.0.1");
     expect(updated.lifecycleState).toBe("disabled");
@@ -449,16 +474,19 @@ describe("plugin lifecycle", () => {
     await service.installPluginPackage(v1Bundle());
     const orgA = await added(service, "org_a", "notes");
     const orgB = await added(service, "org_b", "notes");
+
     const enabledA = await service.enableOrgPlugin(
       "org_a",
       "notes",
       orgA.revision
     );
+
     const enabledB = await service.enableOrgPlugin(
       "org_b",
       "notes",
       orgB.revision
     );
+
     await service.invokePluginAction({
       access: "ui",
       actionKey: "write",
@@ -467,16 +495,19 @@ describe("plugin lifecycle", () => {
       orgId: "org_a",
       pluginId: "notes",
     });
+
     const disabledA = await service.disableOrgPlugin(
       "org_a",
       "notes",
       enabledA.revision
     );
+
     const retained = await service.uninstallOrgPlugin(
       "org_a",
       "notes",
       disabledA.revision
     );
+
     expect(retained.lifecycleState).toBe("retained");
     expect(
       existsSync(
@@ -495,6 +526,7 @@ describe("plugin lifecycle", () => {
       lifecycleState: "disabled",
     });
     const reinstalled = await db.getOrgPlugin("org_a", "notes");
+
     const dbA = new Database(
       getOrgPluginDatabasePath(
         "org_a",
@@ -503,6 +535,7 @@ describe("plugin lifecycle", () => {
         configDir
       )
     );
+
     expect(dbA.query("SELECT body FROM items").all()).toEqual([
       { body: "keep-me" },
     ]);
@@ -513,6 +546,7 @@ describe("plugin lifecycle", () => {
       "notes",
       (reinstalled?.revision ?? 0) + 9
     );
+
     await expect(stalePurge).rejects.toBeInstanceOf(PluginHostError);
     expect(await db.getOrgPlugin("org_a", "notes")).not.toBeNull();
 
@@ -521,6 +555,7 @@ describe("plugin lifecycle", () => {
       "notes",
       reinstalled?.revision ?? 0
     );
+
     await service.deleteRetainedPluginData(
       "org_a",
       "notes",
@@ -545,6 +580,7 @@ describe("plugin lifecycle", () => {
     await service.installPluginPackage(hangActionBundle());
     await service.installPluginPackage(v2Bundle({ extraAction: true }));
     const addedRow = await added(service, "org_a", "notes", "1.0.0");
+
     const enabled = await service.enableOrgPlugin(
       "org_a",
       "notes",
@@ -559,6 +595,7 @@ describe("plugin lifecycle", () => {
       orgId: "org_a",
       pluginId: "notes",
     });
+
     hanging.catch(() => undefined);
     await Bun.sleep(30);
 
@@ -567,11 +604,15 @@ describe("plugin lifecycle", () => {
       service.disableOrgPlugin("org_a", "notes", enabled.revision),
       service.updateOrgPlugin("org_a", "notes", "1.1.0", enabled.revision),
     ]);
+
     const fulfilled = results.filter((result) => result.status === "fulfilled");
     expect(fulfilled).toHaveLength(1);
+
+    // SAFETY: This test double supplies only the fields exercised by this test.
     const winner = fulfilled[0] as PromiseFulfilledResult<{
       lifecycleState: string;
     }>;
+
     expect(winner.value.lifecycleState).toBe("disabled");
 
     await expect(hanging).rejects.toBeInstanceOf(Error);
@@ -589,6 +630,7 @@ describe("plugin lifecycle", () => {
     const tools = (await db.listTools()).filter(
       (tool) => tool.orgId === "org_a" && tool.pluginId === "notes"
     );
+
     expect(tools.map((tool) => tool.pluginKey).sort()).toEqual(["write"]);
   });
 
@@ -597,16 +639,19 @@ describe("plugin lifecycle", () => {
     const service = new PluginService(db, configDir);
     await service.installPluginPackage(v1Bundle());
     const addedRow = await added(service, "org_a", "notes");
+
     const enabled = await service.enableOrgPlugin(
       "org_a",
       "notes",
       addedRow.revision
     );
+
     const disabled = await service.disableOrgPlugin(
       "org_a",
       "notes",
       enabled.revision
     );
+
     await service.installPluginPackage(commitThenFailBundle());
 
     await expect(
@@ -614,6 +659,7 @@ describe("plugin lifecycle", () => {
     ).rejects.toBeInstanceOf(PluginHostError);
 
     const install = await db.getOrgPlugin("org_a", "notes");
+
     const selected = new Database(
       getOrgPluginDatabasePath(
         "org_a",
@@ -622,6 +668,7 @@ describe("plugin lifecycle", () => {
         configDir
       )
     );
+
     expect(
       selected
         .query(
@@ -644,17 +691,21 @@ describe("plugin lifecycle", () => {
     const service = new PluginService(db, configDir);
     await service.installPluginPackage(v1Bundle());
     const addedRow = await added(service, "org_a", "notes");
+
     const enabled = await service.enableOrgPlugin(
       "org_a",
       "notes",
       addedRow.revision
     );
+
     const tools = (await db.listTools()).filter(
       (tool) => tool.orgId === "org_a" && tool.pluginId === "notes"
     );
+
     const skills = (await db.listSkills()).filter(
       (skill) => skill.orgId === "org_a" && skill.pluginId === "notes"
     );
+
     expect(tools.map((tool) => tool.name)).toEqual(["plugin_notes__write"]);
     expect(skills.map((skill) => skill.pluginKey)).toEqual(["notes"]);
     const toolId = tools[0]?.id;
@@ -668,6 +719,7 @@ describe("plugin lifecycle", () => {
       systemPrompt: "",
       updatedAt: new Date().toISOString(),
     });
+
     if (toolId) {
       await db.assignToolToProfile("profile_1", toolId);
     }
@@ -677,18 +729,22 @@ describe("plugin lifecycle", () => {
       "notes",
       enabled.revision
     );
+
     expect(await db.listToolsForProfile("profile_1")).toHaveLength(1);
 
     await service.installPluginPackage(v2Bundle({ extraAction: true }));
+
     const updated = await service.updateOrgPlugin(
       "org_a",
       "notes",
       "1.1.0",
       disabled.revision
     );
+
     const afterTools = (await db.listTools()).filter(
       (tool) => tool.orgId === "org_a" && tool.pluginId === "notes"
     );
+
     expect(afterTools.map((tool) => tool.pluginKey).sort()).toEqual([
       "extra",
       "write",
@@ -705,11 +761,13 @@ describe("plugin lifecycle", () => {
     const service = new PluginService(db, configDir);
     await service.installPluginPackage(v1Bundle());
     const installed = await added(service, "org_a", "notes");
+
     const retained = await service.uninstallOrgPlugin(
       "org_a",
       "notes",
       installed.revision
     );
+
     const deleted = Promise.withResolvers<void>();
     const resume = Promise.withResolvers<void>();
     const deleteOrgPlugin = db.deleteOrgPlugin.bind(db);
@@ -717,6 +775,7 @@ describe("plugin lifecycle", () => {
       const result = await deleteOrgPlugin(...args);
       deleted.resolve();
       await resume.promise;
+
       return result;
     };
 
@@ -725,11 +784,14 @@ describe("plugin lifecycle", () => {
       "notes",
       retained.revision
     );
+
     await deleted.promise;
+
     const reinstalling = new PluginService(db, configDir).addOrgPlugin(
       "org_a",
       "notes"
     );
+
     try {
       // Other organizations can install while org_a's cleanup is paused.
       await added(service, "org_b", "notes");
@@ -741,6 +803,7 @@ describe("plugin lifecycle", () => {
 
     const fresh = await reinstalling;
     await service.enableOrgPlugin("org_a", "notes", fresh.revision);
+
     const written = await service.invokePluginAction({
       access: "ui",
       actionKey: "write",
@@ -749,6 +812,7 @@ describe("plugin lifecycle", () => {
       orgId: "org_a",
       pluginId: "notes",
     });
+
     expect(written.result).toMatchObject({
       rows: [{ body: "after reinstall", id: "new" }],
     });
@@ -760,16 +824,19 @@ describe("plugin lifecycle", () => {
     await service.installPluginPackage(v1Bundle());
     await service.installPluginPackage(v2Bundle({ extraAction: true }));
     const addedRow = await added(service, "org_a", "notes", "1.1.0");
+
     const enabled = await service.enableOrgPlugin(
       "org_a",
       "notes",
       addedRow.revision
     );
+
     const disabled = await service.disableOrgPlugin(
       "org_a",
       "notes",
       enabled.revision
     );
+
     await service.uninstallOrgPlugin("org_a", "notes", disabled.revision);
 
     await expect(
@@ -779,17 +846,25 @@ describe("plugin lifecycle", () => {
   test("plugin workers run bundled code per org and stop before disable completes", async () => {
     const db = createInMemoryDatabaseAdapter();
     const processes = new Map<string, ReturnType<typeof Bun.spawn>>();
+
+    // SAFETY: This test double supplies only the fields exercised by this test.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- This test fixture uses a narrow compatibility cast for its mock.
     const pm2 = {
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The test callback ignores framework inputs that this case does not inspect.
       connect: (cb: (error: Error | null, value?: unknown) => void) => cb(null),
       delete: (
         name: string,
+        // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The test callback ignores framework inputs that this case does not inspect.
         cb: (error: Error | null, value?: unknown) => void
       ) => {
         const child = processes.get(name);
+
         if (!child) {
           cb(null);
+
           return;
         }
+
         child.kill();
         void child.exited.then(() => {
           processes.delete(name);
@@ -798,9 +873,11 @@ describe("plugin lifecycle", () => {
       },
       describe: (
         name: string,
+        // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The test callback ignores framework inputs that this case does not inspect.
         cb: (error: Error | null, value?: unknown) => void
       ) => cb(null, processes.has(name) ? [{ name }] : []),
       disconnect() {},
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The test callback ignores framework inputs that this case does not inspect.
       list: (cb: (error: Error | null, value?: unknown) => void) =>
         cb(
           null,
@@ -817,6 +894,7 @@ describe("plugin lifecycle", () => {
           cwd: string;
           env: Record<string, string>;
         },
+        // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The test callback ignores framework inputs that this case does not inspect.
         cb: (error: Error | null, value?: unknown) => void
       ) => {
         const child = Bun.spawn([options.script, ...options.args], {
@@ -825,24 +903,31 @@ describe("plugin lifecycle", () => {
           stderr: "ignore",
           stdout: "ignore",
         });
+
         processes.set(options.name, child);
         cb(null);
       },
       stop: (
         name: string,
+        // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The test callback ignores framework inputs that this case does not inspect.
         cb: (error: Error | null, value?: unknown) => void
       ) => {
         const child = processes.get(name);
+
         if (!child) {
           cb(null);
+
           return;
         }
+
         child.kill();
         void child.exited.then(() => cb(null));
       },
     } as unknown as typeof import("pm2");
+
     const workerManager = new WorkerManagerService(configDir, pm2);
     const service = new PluginService(db, configDir, { workerManager });
+
     const source = pluginPackage({
       "nakama.plugin.json": JSON.stringify(
         baseManifest("notes", "1.0.0", {
@@ -854,26 +939,33 @@ describe("plugin lifecycle", () => {
       ),
       "worker.js": `await Bun.write(process.env.NAKAMA_PLUGIN_DATA_DIR + "/started", process.env.NAKAMA_ORG_ID); setInterval(() => {}, 1000);`,
     });
+
     try {
       await service.installPluginPackage(source);
       const a = await added(service, "org-a", "notes");
       const b = await added(service, "org-b", "notes");
+
       const enabled = await service.enableOrgPlugin(
         "org-a",
         "notes",
         a.revision
       );
+
       await service.enableOrgPlugin("org-b", "notes", b.revision);
+
       const marker = join(
         getOrgPluginDataDir("org-a", "notes", configDir),
         "started"
       );
+
       for (let i = 0; i < 300; i++) {
         if (existsSync(marker) && (await Bun.file(marker).text())) {
           break;
         }
+
         await Bun.sleep(10);
       }
+
       expect(await Bun.file(marker).text()).toBe("org-a");
       expect(processes.size).toBe(2);
       await runWithPluginExportBarrier(async () => {
@@ -901,6 +993,7 @@ describe("plugin lifecycle", () => {
     } finally {
       await workerManager.unregisterPluginWorkers("org-a", "notes");
       await workerManager.unregisterPluginWorkers("org-b", "notes");
+
       for (const child of processes.values()) {
         child.kill();
       }
@@ -910,6 +1003,7 @@ describe("plugin lifecycle", () => {
   test("a worker start failure leaves the plugin disabled and retryable", async () => {
     const db = createInMemoryDatabaseAdapter();
     let fail = true;
+
     const service = new PluginService(db, configDir, {
       workerManager: {
         registerPluginWorkers: async () => {
@@ -920,6 +1014,7 @@ describe("plugin lifecycle", () => {
         unregisterPluginWorkers: async () => {},
       },
     });
+
     const source = pluginPackage({
       "nakama.plugin.json": JSON.stringify(
         baseManifest("notes", "1.0.0", {
@@ -931,6 +1026,7 @@ describe("plugin lifecycle", () => {
       ),
       "worker.js": "setInterval(() => {}, 1000)",
     });
+
     await service.installPluginPackage(source);
     const install = await added(service, "org-a", "notes");
     await expect(

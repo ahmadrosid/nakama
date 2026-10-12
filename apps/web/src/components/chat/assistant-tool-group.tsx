@@ -2,6 +2,7 @@ import { Button } from "@nakama/ui/button";
 import { cn } from "@nakama/ui/utils";
 import { useQuery } from "@tanstack/react-query";
 import {
+  AiBrain01Icon,
   ArrowDown01Icon,
   ArrowRight01Icon,
   Audit02Icon,
@@ -11,7 +12,6 @@ import {
   PropertySearchIcon,
   Rotate02Icon,
   TaskEdit01Icon,
-  Wrench01Icon,
 } from "hugeicons-react";
 import type { MouseEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -33,7 +33,9 @@ import thinkingStyles from "@/components/chat/ThinkingReasoning.module.css";
 import { WebFetchToolRow } from "@/components/chat/WebFetchToolRow";
 import { WebSearchToolRow } from "@/components/chat/WebSearchToolRow";
 import { WorkflowRunToolRow } from "@/components/chat/WorkflowRunToolRow";
+import { readString } from "@/components/chat/web-search.shared";
 import { WorkspaceFilePreview } from "@/components/chat/workspace-file-preview";
+import { CodingAgentCommandLogo } from "@/components/coding-agent-logos";
 import { PluginSurface } from "@/components/PluginSurface";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useAuth } from "@/context/use-auth";
@@ -70,6 +72,7 @@ import { client, formatError } from "@/lib/client";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
 import { findPluginTool } from "@/lib/plugin-runtime";
 import { splitStreamingMarkdown } from "@/lib/streaming-markdown-seal";
+
 export function AssistantTurnSegmentView({
   segment,
   showThinking = true,
@@ -153,6 +156,7 @@ function AssistantTextContent({
   const { user } = useAuth();
   const streaming = Boolean(message.streaming && !message.thinkingStreaming);
   const content = useRafCoalescedValue(message.content, streaming);
+
   const citedProfileId =
     user?.isPlatformAdmin && onOpenFileCitation ? profileId : null;
 
@@ -161,16 +165,21 @@ function AssistantTextContent({
       event.target instanceof Element
         ? event.target.closest('a[href^="#file-citation?"]')
         : null;
+
     if (!(link && event.currentTarget.contains(link))) {
       return;
     }
+
     const query = new URLSearchParams(
       link.getAttribute("href")?.split("?")[1] ?? ""
     );
+
     const path = query.get("file");
+
     if (!path || query.get("profile") !== citedProfileId) {
       return;
     }
+
     event.preventDefault();
     onOpenFileCitation?.(path);
   }
@@ -210,6 +219,7 @@ function AssistantTextContent({
       content,
       citedProfileId
     );
+
     return (
       <div
         className="flex w-full min-w-0 flex-col gap-0"
@@ -248,13 +258,16 @@ export function LocalCitationPreview({
 }) {
   const { activeOrg } = useAuth();
   const folder = path.slice(0, path.lastIndexOf("/"));
+
   const { data, error } = useQuery({
     queryFn: () => client.listProfileWorkspaceFiles(profileId, folder),
     queryKey: ["citation-file", activeOrg?.id, profileId, folder],
   });
+
   const entry = data?.entries.find(
     (candidate) => candidate.kind === "file" && candidate.path === path
   );
+
   if (entry) {
     return (
       <WorkspaceFilePreview
@@ -265,6 +278,7 @@ export function LocalCitationPreview({
       />
     );
   }
+
   if (error || data) {
     return (
       <p className="text-destructive text-sm" role="alert">
@@ -272,6 +286,7 @@ export function LocalCitationPreview({
       </p>
     );
   }
+
   return null;
 }
 
@@ -283,6 +298,7 @@ function LocalCitationFooter({
   if (citations.length === 0) {
     return null;
   }
+
   return (
     <div
       aria-label="Sources"
@@ -312,14 +328,14 @@ function PluginToolRow({ message }: { message: ChatListItem }) {
   const { resolvedTheme } = useTheme();
   const plugin = match?.plugin;
   const fallback = <ToolTimelineItem message={message} />;
+
   if (
-    !(match && activeOrg) ||
-    activeOrg.role === "viewer" ||
-    !plugin?.ui ||
+    !(match && activeOrg && plugin?.ui) ||
     plugin.lifecycleState !== "enabled"
   ) {
     return fallback;
   }
+
   return (
     <PluginSurface
       fallback={fallback}
@@ -454,8 +470,14 @@ function ToolOnlyWorkGroup({
   modelLabel?: string | null;
   profileId?: string | null;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(isWorkActive);
+  const [wasWorkActive, setWasWorkActive] = useState(isWorkActive);
   const elapsedSeconds = useWorkDuration(isWorkActive, tools);
+
+  if (wasWorkActive !== isWorkActive) {
+    setWasWorkActive(isWorkActive);
+    setOpen(isWorkActive);
+  }
 
   const done = !isWorkActive;
   const expanded = open;
@@ -596,10 +618,13 @@ function useWorkDuration(
     if (!active) {
       return;
     }
+
     setNow(Date.now());
     const intervalId = window.setInterval(() => setNow(Date.now()), 1000);
+
     return () => window.clearInterval(intervalId);
   }, [active]);
+
   return toolGroupElapsedSeconds(tools, now, active);
 }
 
@@ -685,9 +710,11 @@ function subAgentStatusTone(status: string | undefined): string {
   if (status === "fail") {
     return "text-red-600 dark:text-red-400";
   }
+
   if (status === "timeout") {
     return "text-amber-700 dark:text-amber-400";
   }
+
   return "text-muted-foreground";
 }
 
@@ -816,14 +843,17 @@ function SubAgentToolRow({
 }) {
   const isRunning = message.toolStatus === "running";
   const elapsedSeconds = useElapsedSeconds(isRunning, message.createdAt);
+
   const parsed =
     message.toolStatus === "done"
       ? parseSubAgentResult(message.toolResult)
       : null;
+
   const output =
     message.toolStatus === "done"
       ? formatSubAgentToolResult(message.toolResult)
       : null;
+
   const [open, setOpen] = useState(false);
 
   return (
@@ -997,21 +1027,24 @@ function ToolTimelineDetails({
 
 function ToolTimelineItem({ message }: { message: ChatListItem }) {
   const isRunning = message.toolStatus === "running";
+
   const command =
     message.tool === "bash"
       ? formatToolCommand(message.tool, message.toolInput)
       : null;
+
   const output =
     message.toolStatus === "done"
       ? formatToolResult(message.tool, message.toolResult)
       : null;
-  const query =
-    typeof message.toolInput?.query === "string"
-      ? message.toolInput.query.trim() || null
-      : null;
+
+  const queryValue = message.toolInput?.query;
+  const query = readString(queryValue);
+
   const isError =
     message.toolStatus === "done" &&
     isToolResultError(message.toolResult, output);
+
   const hasDetails = Boolean(isRunning || command || query || output);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
@@ -1019,6 +1052,7 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
     <div>
       <CollapsibleTrigger
         className="pl-0"
+        command={command}
         disabled={!hasDetails}
         label={formatToolActionLabel(message.tool, message.toolInput)}
         labelClassName={isError ? "text-red-600 dark:text-red-400" : undefined}
@@ -1043,13 +1077,13 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
   );
 }
 
-const TOOL_ICONS: Record<string, typeof Wrench01Icon> = {
-  bash: ComputerTerminal01Icon,
-  edit_file: TaskEdit01Icon,
-  knowledge_base_search: PropertySearchIcon,
-  read_file: BookOpen01Icon,
-  search_files: Audit02Icon,
-};
+const TOOL_ICONS = new Map<string, typeof AiBrain01Icon>([
+  ["bash", ComputerTerminal01Icon],
+  ["edit_file", TaskEdit01Icon],
+  ["knowledge_base_search", PropertySearchIcon],
+  ["read_file", BookOpen01Icon],
+  ["search_files", Audit02Icon],
+]);
 
 function CollapsibleTrigger({
   open,
@@ -1058,8 +1092,10 @@ function CollapsibleTrigger({
   labelClassName,
   disabled = false,
   className,
+  command,
   tool,
 }: {
+  command?: string | null;
   open: boolean;
   onToggle: () => void;
   label: string;
@@ -1072,9 +1108,10 @@ function CollapsibleTrigger({
     tool?.includes("__") &&
     !tool.startsWith("plugin_") &&
     !tool.startsWith("composio__");
+
   const ToolIcon =
-    (tool ? TOOL_ICONS[tool] : undefined) ??
-    (isMcpTool ? McpServerIcon : Wrench01Icon);
+    (tool ? TOOL_ICONS.get(tool) : undefined) ??
+    (isMcpTool ? McpServerIcon : AiBrain01Icon);
 
   return (
     <button
@@ -1091,7 +1128,13 @@ function CollapsibleTrigger({
         aria-hidden="true"
         className="relative z-10 flex h-5 w-3.5 shrink-0 items-center justify-center bg-background"
       >
-        <ToolIcon className="size-3.5 text-muted-foreground opacity-50" />
+        <CodingAgentCommandLogo
+          className="size-3.5 text-foreground"
+          command={command ?? ""}
+          fallback={
+            <ToolIcon className="size-3.5 text-muted-foreground opacity-50" />
+          }
+        />
       </span>
       <span className={cn("min-w-0 flex-1 truncate", labelClassName)}>
         {label}

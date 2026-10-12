@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { z } from "zod";
 import {
   type ChannelConfigScope,
   getChannelConfigDir,
@@ -30,6 +31,8 @@ const DEFAULT_STATE: WorkerDesiredState = {
   whatsapp: false,
 };
 
+const JsonObjectSchema = z.record(z.string(), z.json());
+
 function getWorkerDesiredStatePath(orgId: string | null = null): string {
   return join(
     orgId ? getOrgConfigDir(orgId) : getUserConfigDir(),
@@ -40,13 +43,13 @@ function getWorkerDesiredStatePath(orgId: string | null = null): string {
 
 export function parseWorkerDesiredState(raw: string): WorkerDesiredState {
   try {
-    const parsed = JSON.parse(raw) as unknown;
+    const parsed = JsonObjectSchema.safeParse(JSON.parse(raw));
 
-    if (typeof parsed !== "object" || parsed === null) {
+    if (!parsed.success) {
       return { ...DEFAULT_STATE };
     }
 
-    const record = parsed as Partial<WorkerDesiredState>;
+    const record = parsed.data;
 
     return {
       automation:
@@ -66,6 +69,7 @@ export async function readWorkerDesiredState(
 ): Promise<WorkerDesiredState> {
   if (isChannelOwner(orgId)) {
     const state = { ...DEFAULT_STATE, automation: false };
+
     for (const platform of [
       "telegram",
       "discord",
@@ -79,8 +83,10 @@ export async function readWorkerDesiredState(
           )
         )?.trim() === "true";
     }
+
     return state;
   }
+
   const raw = await readTextOrNull(getWorkerDesiredStatePath(orgId));
 
   if (raw === null) {
@@ -99,12 +105,15 @@ export async function setWorkerDesiredRunning(
     if (name === "automation") {
       throw new Error("Automation has no channel owner");
     }
+
     await writeTextFile(
       join(getChannelConfigDir(name, orgId), "desired.json"),
       JSON.stringify(running)
     );
+
     return;
   }
+
   const state = await readWorkerDesiredState(orgId);
   state[name] = running;
 

@@ -32,12 +32,15 @@ const DEFAULT_PRICING: ModelPricing = {
  * gpt-image-2: text input $5/MTok, image output $30/MTok (OpenAI list pricing).
  * Image-input rates are unused for v1 generate-only calls.
  */
-const IMAGE_GENERATION_PRICING: Record<string, ModelPricing> = {
-  [IMAGE_GENERATION_MODEL_ID]: {
-    inputPerMillionUsd: 5,
-    outputPerMillionUsd: 30,
-  },
-};
+const IMAGE_GENERATION_PRICING = new Map<string, ModelPricing>([
+  [
+    IMAGE_GENERATION_MODEL_ID,
+    {
+      inputPerMillionUsd: 5,
+      outputPerMillionUsd: 30,
+    },
+  ],
+]);
 
 export interface PricingContext {
   provider?: ProviderName | null;
@@ -57,13 +60,16 @@ function getCustomModelPricing(
     entry?.inputPerMillionUsd !== undefined &&
     entry.outputPerMillionUsd !== undefined
   ) {
-    return {
-      ...(entry.cachedInputPerMillionUsd === undefined
-        ? {}
-        : { cachedInputPerMillionUsd: entry.cachedInputPerMillionUsd }),
+    const pricing: ModelPricing = {
       inputPerMillionUsd: entry.inputPerMillionUsd,
       outputPerMillionUsd: entry.outputPerMillionUsd,
     };
+
+    if (entry.cachedInputPerMillionUsd !== undefined) {
+      pricing.cachedInputPerMillionUsd = entry.cachedInputPerMillionUsd;
+    }
+
+    return pricing;
   }
 
   return null;
@@ -86,6 +92,7 @@ const USER_PRICED_PROVIDERS = new Set<ProviderName>([
 
 function isUserPriced(context: PricingContext): boolean {
   const provider = context.provider ?? context.providerInstance?.type ?? null;
+
   return provider !== null && USER_PRICED_PROVIDERS.has(provider);
 }
 
@@ -99,7 +106,7 @@ export function getExplicitModelPricing(
   modelId: string,
   context: PricingContext = {}
 ): ModelPricing | null {
-  const imagePricing = IMAGE_GENERATION_PRICING[modelId] ?? null;
+  const imagePricing = IMAGE_GENERATION_PRICING.get(modelId) ?? null;
 
   if (isUserPriced(context)) {
     // A gateway serving gpt-image-2 under that exact id bills its own rates,
@@ -112,6 +119,7 @@ export function getExplicitModelPricing(
   }
 
   const provider = context.provider ?? context.providerInstance?.type;
+
   const catalog = provider
     ? getModelsForProvider(provider).find((model) => model.id === modelId)
     : getModelById(modelId);
@@ -159,12 +167,14 @@ export function estimateUsageCostUsd(
   // the remainder negatively.
   const cached = Math.min(Math.max(cachedInputTokens, 0), inputTokens);
   const fresh = inputTokens - cached;
+
   const cachedRate =
     pricing.cachedInputPerMillionUsd ?? pricing.inputPerMillionUsd;
 
   const inputCost = (fresh / 1_000_000) * pricing.inputPerMillionUsd;
   const cachedCost = (cached / 1_000_000) * cachedRate;
   const outputCost = (outputTokens / 1_000_000) * pricing.outputPerMillionUsd;
+
   return inputCost + cachedCost + outputCost;
 }
 

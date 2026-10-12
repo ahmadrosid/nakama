@@ -22,6 +22,7 @@ describe("chatMessagesToListItems", () => {
     let items: ChatListItem[] = [];
     appendOutgoingMessages(
       (next) => {
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This test updater supports both direct values and React state updater functions.
         items = typeof next === "function" ? next(items) : next;
       },
       "Describe this",
@@ -33,6 +34,7 @@ describe("chatMessagesToListItems", () => {
       ]
     );
     expect(items[0]?.images).toHaveLength(1);
+
     const content = await persistInlineAttachmentsInContent(
       [
         { text: "Describe this", type: "text" },
@@ -40,6 +42,7 @@ describe("chatMessagesToListItems", () => {
       ],
       async ({ bytes }) => ({ attachmentId: "att_image", size: bytes.length })
     );
+
     items = chatMessagesToListItems(
       structuredClone([
         { content, role: "user" },
@@ -58,6 +61,7 @@ describe("chatMessagesToListItems", () => {
     const messages = JSON.parse(
       '[{"role":"tool","name":"sample","toolCallId":"t1","content":"{}","toolStartedAt":1000,"toolCompletedAt":9000}]'
     );
+
     expect(chatMessagesToListItems(messages)[0]).toMatchObject({
       toolCompletedAt: 9000,
       toolStartedAt: 1000,
@@ -72,6 +76,7 @@ describe("chatMessagesToListItems", () => {
         thinkingDurationMs: 8000,
       },
     ];
+
     expect(chatMessagesToListItems(messages)[0]).toMatchObject({
       thinking: "Let me think",
       thinkingDurationMs: 8000,
@@ -135,6 +140,7 @@ describe("chatMessagesToListItems", () => {
       },
       { content: "Done", role: "assistant" },
     ];
+
     const messageMeta: SessionMessageMeta[] = [
       { createdAt: "2026-06-14T10:00:00.000Z", id: "msg_1", seq: 0 },
       { createdAt: "2026-06-14T10:00:01.000Z", id: "msg_2", seq: 1 },
@@ -225,11 +231,13 @@ describe("chatMessagesToListItems", () => {
   test("derives artifact refs from persisted write_file tool messages after hydration", () => {
     const artifactsRoot =
       "/Users/test/.nakama/orgs/org_1/profiles/profile_1/artifacts";
+
     const metaJson = JSON.stringify({
       mimeType: "text/markdown",
       savedAt: "2026-07-13T10:00:00.000Z",
       sizeBytes: 12,
     });
+
     const messages: ChatMessage[] = [
       {
         content: "",
@@ -441,6 +449,7 @@ describe("chatMessagesToListItems", () => {
       status: 200,
       url: "https://example.com/start",
     };
+
     const messages: ChatMessage[] = [
       { content: "Fetch the docs page", role: "user" },
       {
@@ -477,6 +486,7 @@ describe("chatMessagesToListItems", () => {
     const exaResult = {
       text: "Title: JWT Guide\nURL: https://example.com/jwt\nPublished: N/A\nAuthor: N/A",
     };
+
     const messages: ChatMessage[] = [
       { content: "Search for JWT security", role: "user" },
       {

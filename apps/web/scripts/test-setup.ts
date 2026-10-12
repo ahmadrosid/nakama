@@ -3,6 +3,7 @@ import { Window } from "happy-dom";
 
 // Base UI chooses its layout hook at import time, before individual tests run.
 const dom = new Window({ url: "http://localhost" });
+
 const globals = {
   cancelAnimationFrame: dom.cancelAnimationFrame.bind(dom),
   DocumentFragment: dom.DocumentFragment,
@@ -19,12 +20,14 @@ const globals = {
   requestAnimationFrame: dom.requestAnimationFrame.bind(dom),
   window: dom,
 };
+
 const originals = new Map(
   Object.keys(globals).map((key) => [
     key,
     Object.getOwnPropertyDescriptor(globalThis, key),
   ])
 );
+
 for (const [key, value] of Object.entries(globals)) {
   Object.defineProperty(globalThis, key, {
     configurable: true,
@@ -35,6 +38,7 @@ for (const [key, value] of Object.entries(globals)) {
 
 afterAll(() => {
   dom.happyDOM.abort();
+
   for (const [key, descriptor] of originals) {
     if (descriptor) {
       Object.defineProperty(globalThis, key, descriptor);

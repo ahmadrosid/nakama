@@ -22,6 +22,7 @@ describe("sqlite tool", () => {
   test("returns columns and rows for SELECT", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nakama-sqlite-"));
     const databasePath = join(dir, "workflow-data.sqlite");
+
     try {
       await runSqliteTool(
         { sql: "CREATE TABLE items (name TEXT)" },
@@ -33,11 +34,13 @@ describe("sqlite tool", () => {
         { orgId: "org_test" },
         { databasePath }
       );
+
       const selected = await runSqliteTool(
         { sql: "SELECT name FROM items" },
         { orgId: "org_test" },
         { databasePath }
       );
+
       expect(selected).toEqual({
         columns: ["name"],
         rows: [{ name: "alpha" }],
@@ -74,6 +77,7 @@ describe("sqlite tool", () => {
   test("inspects tables and preview rows", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nakama-sqlite-inspect-"));
     const databasePath = join(dir, "workflow-data.sqlite");
+
     try {
       await runSqliteTool(
         { sql: "CREATE TABLE items (name TEXT)" },
@@ -90,10 +94,12 @@ describe("sqlite tool", () => {
         preview: null,
         tables: [{ name: "items", rowCount: 1 }],
       });
+
       const previewed = await inspectWorkflowSqlite("org_test", {
         databasePath,
         table: "items",
       });
+
       expect(previewed.preview).toEqual({
         columns: ["name"],
         rows: [{ name: "alpha" }],
@@ -108,6 +114,7 @@ describe("sqlite tool", () => {
   test("inspects a missing file as empty and rejects unknown tables", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nakama-sqlite-missing-"));
     const databasePath = join(dir, "workflow-data.sqlite");
+
     try {
       await expect(
         inspectWorkflowSqlite("org_test", { databasePath })

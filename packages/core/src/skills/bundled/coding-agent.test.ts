@@ -11,6 +11,7 @@ describe("bundled coding-agent skill", () => {
   test("description matches code-change requests but not plain explainers", async () => {
     const content = await readBundledSkillMarkdown("coding-agent");
     const parsed = parseSkillMarkdown(content, "coding-agent/SKILL.md");
+
     const discovered = {
       body: parsed.body,
       description: parsed.frontmatter.description,
@@ -62,6 +63,7 @@ describe("ensureBundledSkillFiles for coding agent", () => {
       "coding-agent",
       "SKILL.md"
     );
+
     const cursorPath = join(
       configDir,
       "agent",
@@ -69,6 +71,7 @@ describe("ensureBundledSkillFiles for coding agent", () => {
       "coding-backend-cursor",
       "SKILL.md"
     );
+
     const codexPath = join(
       configDir,
       "agent",
@@ -76,6 +79,7 @@ describe("ensureBundledSkillFiles for coding agent", () => {
       "coding-backend-codex",
       "SKILL.md"
     );
+
     await mkdir(join(configDir, "agent", "skills", "coding-agent"), {
       recursive: true,
     });

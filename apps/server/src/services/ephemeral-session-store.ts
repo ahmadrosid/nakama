@@ -16,6 +16,7 @@ export interface EphemeralSession {
   /** Synthetic; shaped like a row so session paths can treat it as one. */
   record: StoredSessionRecord;
   session: AgentChatSession;
+  sharedCapabilityRevision?: string;
 }
 
 /** A tab closed without toggling cognito off leaves an entry behind. */
@@ -69,6 +70,7 @@ export class EphemeralSessionStore {
 
     this.entries.delete(sessionId);
     await this.onEvict(entry);
+
     return true;
   }
 

@@ -156,7 +156,7 @@ function ConfirmDialog({
   title: string;
   description: React.ReactNode;
   confirmLabel?: string;
-  onConfirm: () => Promise<unknown>;
+  onConfirm: () => Promise<void | object | string | number | boolean | null>;
   onClose: () => void;
 }) {
   const running = useRef(false);
@@ -167,9 +167,11 @@ function ConfirmDialog({
     if (running.current) {
       return;
     }
+
     running.current = true;
     setPending(true);
     setError(null);
+
     try {
       await onConfirm();
       onClose();

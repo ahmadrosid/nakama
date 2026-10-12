@@ -839,16 +839,10 @@
   }
 
   .chat-markdown {
-    max-width: 68ch;
     font-family: var(--font-sans);
     font-size: 0.875rem;
     line-height: 1.55;
     letter-spacing: 0.01em;
-  }
-
-  .artifact-share-page .chat-markdown,
-  .artifact-preview-panel .chat-markdown {
-    max-width: none;
   }
 
   /* Streamdown code fences in chat — single compact block, no 200px placeholder */

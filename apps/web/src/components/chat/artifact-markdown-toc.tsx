@@ -7,11 +7,11 @@ import {
   type MarkdownHeading,
 } from "@/lib/markdown-toc";
 
-const LEVEL_INDENT: Record<number, string> = {
-  1: "pl-0",
-  2: "pl-3",
-  3: "pl-6",
-};
+const LEVEL_INDENT = new Map([
+  [1, "pl-0"],
+  [2, "pl-3"],
+  [3, "pl-6"],
+]);
 
 export function ArtifactMarkdownToc({
   contentRef,
@@ -37,7 +37,7 @@ export function ArtifactMarkdownToc({
         <ul className="space-y-0.5">
           {headings.map((heading) => (
             <li
-              className={LEVEL_INDENT[heading.level]}
+              className={LEVEL_INDENT.get(heading.level)}
               key={`${heading.level}-${heading.occurrence}-${heading.text}`}
             >
               <button

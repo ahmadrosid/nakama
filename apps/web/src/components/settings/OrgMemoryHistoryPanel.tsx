@@ -38,10 +38,13 @@ function resolveActorLabel(
   if (!userId) {
     return null;
   }
+
   const member = members.find((entry) => entry.userId === userId);
+
   if (!member) {
     return shortenId(userId);
   }
+
   return member.name?.trim() || member.email;
 }
 
@@ -83,6 +86,7 @@ function HistoryRevisionDialog({
     orgId,
     open ? change.id : null
   );
+
   const absoluteTime = formatSessionTimestamp(change.createdAt);
 
   return (
@@ -269,17 +273,21 @@ export function OrgMemoryHistoryPanel({ orgId }: { orgId: string }) {
   const changes = data?.changes ?? [];
   const maxEntries = data?.maxEntries ?? 50;
   const truncated = data?.truncated === true;
+
   const { data: latestRevision } = useOrgMemoryHistoryRevision(
     orgId,
     changes[0]?.id ?? null
   );
+
   const members = membersData?.members ?? [];
   const liveContent = memoryData?.content;
   const latestRevisionContent = latestRevision?.content;
+
   const latestRevisionIsCurrent =
     liveContent !== undefined &&
     latestRevisionContent !== undefined &&
     liveContent.trim() === latestRevisionContent.trim();
+
   const canUndo =
     liveContent !== undefined &&
     latestRevisionContent !== undefined &&

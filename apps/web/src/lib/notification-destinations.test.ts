@@ -23,6 +23,7 @@ test("labels every channel's target", () => {
     updatedAt: "",
     webhookPath: "/v1/notify/dest",
   };
+
   expect(
     formatNotificationDestinationLabel({
       ...common,

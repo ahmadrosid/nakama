@@ -29,6 +29,7 @@ export const useActiveChatProfileStore = create<ActiveChatProfileState>(
       const current = get();
       const orgChanged = current.orgId !== orgId;
       const stored = readStoredActiveChatProfileId(orgId);
+
       const resolved =
         pickKnownProfileId(
           profiles,
@@ -46,6 +47,7 @@ export const useActiveChatProfileStore = create<ActiveChatProfileState>(
       }
 
       set({ orgId, profileId: resolved });
+
       return resolved;
     },
   })

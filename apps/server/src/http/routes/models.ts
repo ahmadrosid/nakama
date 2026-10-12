@@ -1,19 +1,14 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import {
   type AgentBrowserStatusResponse,
-  type ApplyTelegramPairingRequest,
   type ComposioSettingsResponse,
-  type ConfigureProviderRequest,
   type ConfigureProviderResponse,
-  type CreateProviderRequest,
   type CreateProviderResponse,
   type DeleteProviderResponse,
   type DiscordSettingsResponse,
-  type DiscoverModelsRequest,
   type EmailSettingsResponse,
   type ErrorTrackingSettingsResponse,
   formatServerError,
-  type GenerateImageRequest,
   type GenerateImageResponse,
   type ImageGenerationSettingsResponse,
   type ListProvidersResponse,
@@ -26,34 +21,21 @@ import {
   type SendEmailTestResponse,
   type SendErrorTrackingTestResponse,
   type SlackSettingsResponse,
-  type StartTelegramPairingRequest,
+  type TelegramAccessRequestsResponse,
   type TelegramPairingStartResponse,
   type TelegramPairingStatusResponse,
   type TelegramSettingsResponse,
   type ThinkingSettingsResponse,
   type TimezoneSettingsResponse,
-  type TranscribeAudioRequest,
   type TranscribeAudioResponse,
   type TranscriptionSettingsResponse,
-  type UpdateComposioSettingsRequest,
-  type UpdateDiscordSettingsRequest,
-  type UpdateEmailSettingsRequest,
-  type UpdateErrorTrackingSettingsRequest,
-  type UpdateImageGenerationRequest,
-  type UpdateProviderRequest,
   type UpdateProviderResponse,
   type UpdateSlackSettingsRequest,
-  type UpdateTelegramSettingsRequest,
-  type UpdateThinkingRequest,
-  type UpdateTimezoneRequest,
-  type UpdateTranscriptionRequest,
-  type UpdateVisionRequest,
-  type UpdateWebSearchSettingsRequest,
-  type UpdateWhatsAppSettingsRequest,
   type VisionSettingsResponse,
   type WebSearchSettingsResponse,
   type WhatsAppSettingsResponse,
 } from "@nakama/core";
+import { USER_PROVIDER_NAMES } from "@nakama/core/provider-resolution";
 import {
   checkSlackTokensMatch,
   checkSlackWorkspaceAccess,
@@ -84,9 +66,9 @@ import { streamAgentBrowserInstall } from "../coding-harness-install-stream";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
-  requireNotViewerFromContext,
   requireOrgAdminFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
+  requireOrgMemberFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
 import {
@@ -103,14 +85,17 @@ export function registerModelRoutes(
   options: ServerOptions
 ): void {
   const { agent, workerManager } = options;
+
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
+
   const xaiOAuthSchema = z.object({
     accessToken: z.string(),
     refreshToken: z.string(),
     expiresAt: z.string(),
   });
+
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
@@ -175,99 +160,128 @@ export function registerModelRoutes(
       },
     })
   );
+
   const providerIdParam = z.object({
     providerId: z
       .string()
       .openapi({ param: { in: "path", name: "providerId" } }),
   });
+
   const modelsResponseSchema = z
     .object({ models: z.array(z.object({}).passthrough()) })
     .passthrough()
     .openapi("ModelsResponse");
+
   const providersResponseSchema = z
     .object({ providers: z.array(z.object({}).passthrough()) })
     .passthrough()
     .openapi("ListProvidersResponse");
+
   const createProviderResponseSchema = z
     .object({})
     .passthrough()
     .openapi("CreateProviderResponse");
+
   const updateProviderResponseSchema = z
     .object({})
     .passthrough()
     .openapi("UpdateProviderResponse");
+
   const deleteProviderResponseSchema = z
     .object({})
     .passthrough()
     .openapi("DeleteProviderResponse");
+
   const configureProviderResponseSchema = z
     .object({})
     .passthrough()
     .openapi("ConfigureProviderResponse");
+
   const timezonesResponseSchema = z
     .object({ timezones: z.array(z.object({}).passthrough()) })
     .passthrough()
     .openapi("ListTimezonesResponse");
+
   const timezoneSettingsSchema = z
     .object({ timezone: z.string() })
     .openapi("TimezoneSettingsResponse");
+
   const thinkingSettingsSchema = z
     .object({})
     .passthrough()
     .openapi("ThinkingSettingsResponse");
+
   const visionSettingsSchema = z
     .object({})
     .passthrough()
     .openapi("VisionSettingsResponse");
+
   const transcriptionSettingsSchema = z
     .object({})
     .passthrough()
     .openapi("TranscriptionSettingsResponse");
+
   const imageGenerationSettingsSchema = z
     .object({})
     .passthrough()
     .openapi("ImageGenerationSettingsResponse");
+
   const generateImageRequestSchema = z
-    .object({})
+    .object({ prompt: z.string(), size: z.string().optional() })
     .passthrough()
     .openapi("GenerateImageRequest");
+
   const generateImageResponseSchema = z
     .object({})
     .passthrough()
     .openapi("GenerateImageResponse");
+
   const transcribeAudioRequestSchema = z
-    .object({})
+    .object({
+      data: z.string(),
+      filename: z.string().optional(),
+      mediaType: z.string(),
+    })
     .passthrough()
     .openapi("TranscribeAudioRequest");
+
   const transcribeAudioResponseSchema = z
     .object({})
     .passthrough()
     .openapi("TranscribeAudioResponse");
+
   const telegramSettingsSchema = z
     .object({})
     .passthrough()
     .openapi("TelegramSettingsResponse");
+
   const telegramPairingStartSchema = z
     .object({})
     .passthrough()
     .openapi("TelegramPairingStartResponse");
+
   const telegramPairingStatusSchema = z
     .object({})
     .passthrough()
     .openapi("TelegramPairingStatusResponse");
+
   const startTelegramPairingSchema = z
     .object({ profileId: z.string() })
     .openapi("StartTelegramPairingRequest");
+
   const applyTelegramPairingSchema = z
     .object({ profileId: z.string() })
     .openapi("ApplyTelegramPairingRequest");
+
   const discordSettingsSchema = z
     .object({})
     .passthrough()
     .openapi("DiscordSettingsResponse");
+
   const slackMemberIds = z
     .array(z.string())
     .openapi({ example: ["U01ABCDEF"] });
+
   const slackSettingsSchema = z
     .object({
       allowedUserIds: slackMemberIds.describe(
@@ -297,6 +311,7 @@ export function registerModelRoutes(
       profileId: z.string().describe("Agent this connection belongs to."),
     })
     .openapi("SlackSettingsResponse");
+
   const updateSlackRequestSchema = z
     .object({
       allowedUserIds: z
@@ -317,30 +332,37 @@ export function registerModelRoutes(
         .describe("Bot User OAuth Token. Omit to keep the saved one."),
     })
     .openapi("UpdateSlackSettingsRequest");
+
   const composioSettingsSchema = z
     .object({})
     .passthrough()
     .openapi("ComposioSettingsResponse");
+
   const errorTrackingSettingsSchema = z
     .object({})
     .passthrough()
     .openapi("ErrorTrackingSettingsResponse");
+
   const updateErrorTrackingRequestSchema = z
-    .object({})
+    .object({ dsn: z.string().optional() })
     .passthrough()
     .openapi("UpdateErrorTrackingSettingsRequest");
+
   const sendErrorTrackingTestSchema = z
     .object({})
     .passthrough()
     .openapi("SendErrorTrackingTestResponse");
+
   const emailSettingsSchema = z
     .object({})
     .passthrough()
     .openapi("EmailSettingsResponse");
+
   const webSearchSettingsSchema = z
     .object({})
     .passthrough()
     .openapi("WebSearchSettingsResponse");
+
   const updateWebSearchRequestSchema = z
     .object({
       apiKey: z.string().optional(),
@@ -348,28 +370,35 @@ export function registerModelRoutes(
       provider: z.enum(["exa", "firecrawl"]).nullable().optional(),
     })
     .openapi("UpdateWebSearchSettingsRequest");
+
   const agentBrowserStatusSchema = z
     .object({})
     .passthrough()
     .openapi("AgentBrowserStatusResponse");
+
   const agentBrowserInstallEventSchema = z
     .object({})
     .passthrough()
     .openapi("AgentBrowserInstallEvent");
+
   const sendEmailTestRequestSchema = z
     .object({ to: z.string().optional() })
     .openapi("SendEmailTestRequest");
+
   const sendEmailTestResponseSchema = z
     .object({ messageId: z.string(), ok: z.literal(true), to: z.string() })
     .openapi("SendEmailTestResponse");
+
   const updateEmailRequestSchema = z
     .object({})
     .passthrough()
     .openapi("UpdateEmailSettingsRequest");
+
   const whatsappSettingsSchema = z
     .object({})
     .passthrough()
     .openapi("WhatsAppSettingsResponse");
+
   const discoverModelsRequestSchema = z
     .object({
       apiKey: z.string().optional(),
@@ -377,50 +406,72 @@ export function registerModelRoutes(
       providerId: z.string().optional(),
     })
     .openapi("DiscoverModelsRequest");
+
   const createProviderRequestSchema = z
-    .object({})
+    .object({
+      apiKey: z.string().default(""),
+      type: z.enum(USER_PROVIDER_NAMES),
+    })
     .passthrough()
     .openapi("CreateProviderRequest");
+
   const updateProviderRequestSchema = z
     .object({})
     .passthrough()
     .openapi("UpdateProviderRequest");
+
   const configureProviderRequestSchema = z
-    .object({})
+    .object({
+      apiKey: z.string().default(""),
+      provider: z.enum(USER_PROVIDER_NAMES),
+    })
     .passthrough()
     .openapi("ConfigureProviderRequest");
+
   const updateTimezoneRequestSchema = z
     .object({ timezone: z.string() })
     .openapi("UpdateTimezoneRequest");
+
   const updateThinkingRequestSchema = z
-    .object({})
+    .object({
+      enabled: z.boolean(),
+      effort: z.enum(["low", "medium", "high"]).optional(),
+    })
     .passthrough()
     .openapi("UpdateThinkingRequest");
+
   const updateVisionRequestSchema = z
     .object({ model: z.string().nullable() })
     .openapi("UpdateVisionRequest");
+
   const updateTelegramRequestSchema = z
     .object({})
     .passthrough()
     .openapi("UpdateTelegramSettingsRequest");
+
   const updateDiscordRequestSchema = z
     .object({})
     .passthrough()
     .openapi("UpdateDiscordSettingsRequest");
+
   const updateComposioRequestSchema = z
     .object({})
     .passthrough()
     .openapi("UpdateComposioSettingsRequest");
+
   const updateWhatsappRequestSchema = z
     .object({})
     .passthrough()
     .openapi("UpdateWhatsAppSettingsRequest");
+
   const modelQuerySchema = z.object({
     source: z.enum(["catalog", "remote"]).optional(),
   });
+
   const externalModelCatalogParam = z.object({
     catalogId: z.string().openapi({ param: { in: "path", name: "catalogId" } }),
   });
+
   const externalModelCatalogResponseSchema = z
     .object({})
     .passthrough()
@@ -613,6 +664,7 @@ export function registerModelRoutes(
       tags: ["Models"],
     })
   );
+
   for (const [method, suffix, operationId] of [
     ["delete", "", "clearProviderSecret"],
     ["post", "/use-stored", "useStoredProviderSecret"],
@@ -635,6 +687,7 @@ export function registerModelRoutes(
       })
     );
   }
+
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "put",
@@ -809,9 +862,11 @@ export function registerModelRoutes(
       tags: ["Models"],
     })
   );
+
   const updateTranscriptionRequestSchema = z
     .object({ model: z.string().nullable() })
     .openapi("UpdateTranscriptionRequest");
+
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "get",
@@ -891,9 +946,11 @@ export function registerModelRoutes(
       tags: ["Models"],
     })
   );
+
   const updateImageGenerationRequestSchema = z
     .object({ model: z.string().nullable() })
     .openapi("UpdateImageGenerationRequest");
+
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "get",
@@ -1200,6 +1257,7 @@ export function registerModelRoutes(
       tags: ["Models"],
     })
   );
+
   const slackResponses = {
     200: {
       content: { "application/json": { schema: slackSettingsSchema } },
@@ -1210,6 +1268,7 @@ export function registerModelRoutes(
       description: "Invalid token, member ID, or Slack error",
     },
   };
+
   app.openAPIRegistry.registerPath(
     createRoute({
       description:
@@ -1355,6 +1414,7 @@ export function registerModelRoutes(
       tags: ["Models"],
     })
   );
+
   for (const [kind, requestSchema, responseSchema] of [
     ["email", z.object({ password: z.string() }), emailSettingsSchema],
     [
@@ -1385,6 +1445,7 @@ export function registerModelRoutes(
       })
     );
   }
+
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "get",
@@ -1657,6 +1718,7 @@ export function registerModelRoutes(
       return json(await getExternalModelCatalog(catalogId));
     } catch (error) {
       void reportError(error, { kind: "http", source: "server" });
+
       return errorResponse(formatServerError(error), 502);
     }
   });
@@ -1664,8 +1726,10 @@ export function registerModelRoutes(
   app.get("/v1/models", async (c) => {
     getRequestAuth(c);
     const source = c.req.query("source");
+
     const modelsSource =
       source === "remote" ? ("remote" as const) : ("catalog" as const);
+
     return json<ModelsResponse>(
       await agent.getModels({ source: modelsSource })
     );
@@ -1673,19 +1737,21 @@ export function registerModelRoutes(
 
   app.post("/v1/models/discover", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
-    const body = await readJson<DiscoverModelsRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, discoverModelsRequestSchema);
     const result = await agent.discoverModels(body);
+
     return json<ModelsResponse>(result);
   });
 
   app.get("/v1/providers", async (c) => {
     getRequestAuth(c);
+
     return json<ListProvidersResponse>(await agent.listProviders());
   });
 
   app.post("/v1/providers", async (c) => {
     requirePlatformAdminFromContext(c);
-    const body = await readJson<CreateProviderRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, createProviderRequestSchema);
 
     try {
       return json<CreateProviderResponse>(await agent.createProvider(body));
@@ -1695,13 +1761,14 @@ export function registerModelRoutes(
       }
 
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.patch("/v1/providers/:providerId", async (c) => {
     requirePlatformAdminFromContext(c);
-    const body = await readJson<UpdateProviderRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, updateProviderRequestSchema);
 
     try {
       return json<UpdateProviderResponse>(
@@ -1716,12 +1783,14 @@ export function registerModelRoutes(
       }
 
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.delete("/v1/providers/:providerId", async (c) => {
     requirePlatformAdminFromContext(c);
+
     return json<DeleteProviderResponse>(
       await agent.deleteProvider(decodeURIComponent(c.req.param("providerId")))
     );
@@ -1730,6 +1799,7 @@ export function registerModelRoutes(
   app.put("/v1/providers/:providerId/secret", async (c) => {
     requirePlatformAdminFromContext(c);
     const body = await readJson<{ apiKey: string }>(c.req.raw);
+
     try {
       return json<UpdateProviderResponse>(
         await agent.setProviderSecret(
@@ -1741,18 +1811,21 @@ export function registerModelRoutes(
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
+
       return errorResponse(
         error instanceof Error ? error.message : String(error),
         400
       );
     }
   });
+
   for (const [method, suffix, action] of [
     ["delete", "", "clear"],
     ["post", "/use-stored", "use-stored"],
   ] as const) {
     app[method](`/v1/providers/:providerId/secret${suffix}`, async (c) => {
       requirePlatformAdminFromContext(c);
+
       return json<UpdateProviderResponse>(
         await agent.manageProviderSecret(c.req.param("providerId"), action)
       );
@@ -1771,6 +1844,7 @@ export function registerModelRoutes(
       }
 
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
@@ -1778,9 +1852,13 @@ export function registerModelRoutes(
   app.post("/v1/xai-oauth/device/complete", async (c) => {
     const auth = requirePlatformAdminFromContext(c);
     const owner = JSON.stringify([auth.user.id, auth.activeOrgId]);
-    const body = await readJson<{ sessionId?: string }>(c.req.raw);
-    const sessionId =
-      typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+
+    const body = await readJson(
+      c.req.raw,
+      z.object({ sessionId: z.string().optional() })
+    );
+
+    const sessionId = body.sessionId?.trim() ?? "";
 
     if (!sessionId) {
       return errorResponse("sessionId is required.", 400);
@@ -1792,7 +1870,9 @@ export function registerModelRoutes(
         owner,
         c.req.raw.signal
       );
+
       const models = await fetchXaiOAuthModels(xaiOAuth).catch(() => []);
+
       return json(
         { xaiOAuth, models },
         200,
@@ -1804,6 +1884,7 @@ export function registerModelRoutes(
       }
 
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
@@ -1819,13 +1900,19 @@ export function registerModelRoutes(
       }
 
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.post("/v1/chatgpt-oauth/device/complete", async (c) => {
     requirePlatformAdminFromContext(c);
-    const body = await readJson<{ sessionId?: string }>(c.req.raw);
+
+    const body = await readJson(
+      c.req.raw,
+      z.object({ sessionId: z.string().optional() })
+    );
+
     const sessionId = body.sessionId?.trim();
 
     if (!sessionId) {
@@ -1834,9 +1921,11 @@ export function registerModelRoutes(
 
     try {
       const chatgptOAuth = await completeChatgptOAuthDeviceSession(sessionId);
+
       const models = await fetchChatgptCodexModels(chatgptOAuth).catch(
         () => []
       );
+
       return json({ chatgptOAuth, models });
     } catch (error) {
       if (error instanceof NakamaApiError) {
@@ -1844,13 +1933,14 @@ export function registerModelRoutes(
       }
 
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.put("/v1/settings/provider", async (c) => {
     requirePlatformAdminFromContext(c);
-    const body = await readJson<ConfigureProviderRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, configureProviderRequestSchema);
 
     try {
       return json<ConfigureProviderResponse>(
@@ -1862,17 +1952,20 @@ export function registerModelRoutes(
       }
 
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.get("/v1/timezones", async (c) => {
     getRequestAuth(c);
+
     return json<ListTimezonesResponse>(await getTimezoneCatalog());
   });
 
   app.get("/v1/settings/timezone", async (c) => {
     getRequestAuth(c);
+
     return json<TimezoneSettingsResponse>({
       timezone: await agent.getUserTimezone(),
     });
@@ -1880,19 +1973,22 @@ export function registerModelRoutes(
 
   app.put("/v1/settings/timezone", async (c) => {
     requirePlatformAdminFromContext(c);
-    const body = await readJson<UpdateTimezoneRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, updateTimezoneRequestSchema);
     const timezone = await agent.setUserTimezone(body.timezone);
+
     return json<TimezoneSettingsResponse>({ timezone });
   });
 
   app.get("/v1/settings/thinking", async (c) => {
     getRequestAuth(c);
+
     return json<ThinkingSettingsResponse>(await agent.getThinkingSettings());
   });
 
   app.put("/v1/settings/thinking", async (c) => {
     requirePlatformAdminFromContext(c);
-    const body = await readJson<UpdateThinkingRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, updateThinkingRequestSchema);
+
     return json<ThinkingSettingsResponse>(
       await agent.setThinkingSettings(body)
     );
@@ -1900,12 +1996,13 @@ export function registerModelRoutes(
 
   app.get("/v1/settings/vision", async (c) => {
     getRequestAuth(c);
+
     return json<VisionSettingsResponse>(await agent.getVisionSettings());
   });
 
   app.put("/v1/settings/vision", async (c) => {
     requirePlatformAdminFromContext(c);
-    const body = await readJson<UpdateVisionRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, updateVisionRequestSchema);
 
     try {
       return json<VisionSettingsResponse>(await agent.setVisionSettings(body));
@@ -1915,12 +2012,14 @@ export function registerModelRoutes(
       }
 
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.get("/v1/settings/transcription", async (c) => {
     getRequestAuth(c);
+
     return json<TranscriptionSettingsResponse>(
       await agent.getTranscriptionSettings()
     );
@@ -1928,7 +2027,7 @@ export function registerModelRoutes(
 
   app.put("/v1/settings/transcription", async (c) => {
     requirePlatformAdminFromContext(c);
-    const body = await readJson<UpdateTranscriptionRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, updateTranscriptionRequestSchema);
 
     try {
       return json<TranscriptionSettingsResponse>(
@@ -1940,13 +2039,14 @@ export function registerModelRoutes(
       }
 
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.post("/v1/audio/transcribe", async (c) => {
-    requireNotViewerFromContext(c);
-    const body = await readJson<TranscribeAudioRequest>(c.req.raw);
+    requireOrgMemberFromContext(c);
+    const body = await readJson(c.req.raw, transcribeAudioRequestSchema);
 
     try {
       return json<TranscribeAudioResponse>(await agent.transcribeAudio(body));
@@ -1955,16 +2055,19 @@ export function registerModelRoutes(
         if (error.status >= 500) {
           void reportError(error, { kind: "http", source: "server" });
         }
+
         return errorResponse(error.message, error.status);
       }
 
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.get("/v1/settings/image-generation", async (c) => {
     getRequestAuth(c);
+
     return json<ImageGenerationSettingsResponse>(
       await agent.getImageGenerationSettings()
     );
@@ -1972,7 +2075,7 @@ export function registerModelRoutes(
 
   app.put("/v1/settings/image-generation", async (c) => {
     requirePlatformAdminFromContext(c);
-    const body = await readJson<UpdateImageGenerationRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, updateImageGenerationRequestSchema);
 
     try {
       return json<ImageGenerationSettingsResponse>(
@@ -1984,39 +2087,45 @@ export function registerModelRoutes(
       }
 
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.post("/v1/images/generate", async (c) => {
-    requireNotViewerFromContext(c);
-    const body = await readJson<GenerateImageRequest>(c.req.raw);
+    requireOrgMemberFromContext(c);
+    const body = await readJson(c.req.raw, generateImageRequestSchema);
+
+    const auth = getRequestAuth(c);
 
     try {
       return json<GenerateImageResponse>(
-        await agent.generateImage(body, getRequestAuth(c).activeOrgId ?? null)
+        await agent.generateImage(body, auth.activeOrgId ?? null, auth.user.id)
       );
     } catch (error) {
       if (error instanceof NakamaApiError) {
         if (error.status >= 500) {
           void reportError(error, { kind: "http", source: "server" });
         }
+
         return errorResponse(error.message, error.status);
       }
 
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.get("/v1/settings/email", async (c) => {
     requireOrgAdminFromContext(c);
+
     return json<EmailSettingsResponse>(await agent.getEmailSettings());
   });
 
   app.put("/v1/settings/email", async (c) => {
     requirePlatformAdminFromContext(c);
-    const body = await readJson<UpdateEmailSettingsRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, updateEmailRequestSchema);
 
     try {
       return json<EmailSettingsResponse>(await agent.setEmailSettings(body));
@@ -2024,7 +2133,9 @@ export function registerModelRoutes(
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
+
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
@@ -2032,6 +2143,7 @@ export function registerModelRoutes(
   app.put("/v1/settings/email/secret", async (c) => {
     requirePlatformAdminFromContext(c);
     const body = await readJson<{ password: string }>(c.req.raw);
+
     try {
       return json<EmailSettingsResponse>(
         await agent.setEmailSecret(body.password)
@@ -2040,6 +2152,7 @@ export function registerModelRoutes(
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
+
       return errorResponse(
         error instanceof Error ? error.message : String(error),
         400
@@ -2059,19 +2172,22 @@ export function registerModelRoutes(
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
+
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.get("/v1/settings/web-search", async (c) => {
     requirePlatformAdminFromContext(c);
+
     return json<WebSearchSettingsResponse>(await agent.getWebSearchSettings());
   });
 
   app.put("/v1/settings/web-search", async (c) => {
     requirePlatformAdminFromContext(c);
-    const body = await readJson<UpdateWebSearchSettingsRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, updateWebSearchRequestSchema);
 
     try {
       return json<WebSearchSettingsResponse>(
@@ -2081,17 +2197,21 @@ export function registerModelRoutes(
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
+
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.put("/v1/settings/web-search/secret", async (c) => {
     requirePlatformAdminFromContext(c);
+
     const body = await readJson<{
       provider: "exa" | "firecrawl";
       apiKey: string;
     }>(c.req.raw);
+
     try {
       return json<WebSearchSettingsResponse>(
         await agent.setWebSearchSecret(body.provider, body.apiKey)
@@ -2100,6 +2220,7 @@ export function registerModelRoutes(
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
+
       return errorResponse(
         error instanceof Error ? error.message : String(error),
         400
@@ -2109,6 +2230,7 @@ export function registerModelRoutes(
 
   app.get("/v1/settings/agent-browser", async (c) => {
     requireOrgAdminFromContext(c);
+
     return json<AgentBrowserStatusResponse>(
       await agent.getAgentBrowserStatus()
     );
@@ -2196,6 +2318,7 @@ export function registerModelRoutes(
   );
   app.get("/v1/settings/channel-legacy", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
+
     return json(
       await workerManager.legacyChannels(
         requireActiveOrgIdFromContext(c),
@@ -2205,24 +2328,37 @@ export function registerModelRoutes(
   });
   app.post("/v1/settings/channel-legacy/claim", async (c) => {
     const owner = await channelOwner(c);
-    const body = await readJson<{ platform: string; global?: boolean }>(
-      c.req.raw
+
+    const body = await readJson(
+      c.req.raw,
+      z
+        .object({
+          platform: z.enum(["telegram", "discord", "whatsapp"]),
+          global: z.boolean().optional(),
+        })
+        .strict()
     );
+
     if (!["telegram", "discord", "whatsapp"].includes(body.platform)) {
       throw new NakamaApiError("Unknown channel", 400);
     }
+
     if (body.global) {
       requirePlatformAdminFromContext(c);
     }
+
     if (!options.databaseAdapter) {
       throw new NakamaApiError("Database unavailable", 503);
     }
+
     await workerManager.claimLegacyChannel(
+      // SAFETY: The validated value satisfies the contract checked by this assertion.
       body.platform as "telegram" | "discord" | "whatsapp",
       body.global ? null : owner.orgId,
       owner,
       options.databaseAdapter
     );
+
     return json({ ok: true });
   });
 
@@ -2230,13 +2366,16 @@ export function registerModelRoutes(
     requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = c.req.query("profileId")?.trim();
+
     if (!profileId) {
       throw new NakamaApiError(
         "Choose an agent to manage this connection.",
         400
       );
     }
+
     const { profile } = await agent.getProfile(orgId, profileId);
+
     // A channel worker talks to the server as the local client, and the server
     // refuses that client for Super Bot, so such a bridge can never answer.
     if (profile.isSuper) {
@@ -2245,6 +2384,7 @@ export function registerModelRoutes(
         400
       );
     }
+
     return { orgId, profileId };
   }
 
@@ -2257,7 +2397,7 @@ export function registerModelRoutes(
   app.put("/v1/settings/telegram", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = await channelOwner(c);
-    const body = await readJson<UpdateTelegramSettingsRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, updateTelegramRequestSchema);
 
     try {
       return json<TelegramSettingsResponse>(
@@ -2267,7 +2407,9 @@ export function registerModelRoutes(
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
+
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
@@ -2275,20 +2417,63 @@ export function registerModelRoutes(
   app.post("/v1/settings/telegram/handshake", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = await channelOwner(c);
+
     try {
       return json<TelegramSettingsResponse>(
         await agent.regenerateTelegramHandshake(orgId)
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
+  app.get("/v1/settings/telegram/requests", async (c) => {
+    requireOrgAdminOrPlatformAdminFromContext(c);
+
+    return json<TelegramAccessRequestsResponse>(
+      await agent.getTelegramAccessRequests(await channelOwner(c))
+    );
+  });
+
+  app.post("/v1/settings/telegram/requests/:userId/approve", async (c) => {
+    requireOrgAdminOrPlatformAdminFromContext(c);
+    const userId = Number(c.req.param("userId"));
+
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return errorResponse("Invalid Telegram user ID.", 400);
+    }
+
+    try {
+      return json<TelegramSettingsResponse>(
+        await agent.approveTelegramAccessRequest(await channelOwner(c), userId)
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      return errorResponse(message, 400);
+    }
+  });
+
+  app.post("/v1/settings/telegram/requests/:userId/deny", async (c) => {
+    requireOrgAdminOrPlatformAdminFromContext(c);
+    const userId = Number(c.req.param("userId"));
+
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return errorResponse("Invalid Telegram user ID.", 400);
+    }
+
+    return json<TelegramAccessRequestsResponse>(
+      await agent.denyTelegramAccessRequest(await channelOwner(c), userId)
+    );
+  });
+
   app.post("/v1/settings/telegram/pairing", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
     const owner = await channelOwner(c);
     const orgId = owner.orgId;
-    const body = await readJson<StartTelegramPairingRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, startTelegramPairingSchema);
+
     try {
       return json<TelegramPairingStartResponse>(
         await agent.startTelegramPairing(orgId, getRequestAuth(c).user.id, {
@@ -2298,12 +2483,14 @@ export function registerModelRoutes(
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.get("/v1/settings/telegram/pairing/:pairingId", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
+
     try {
       return json<TelegramPairingStatusResponse>(
         await agent.getTelegramPairingStatus(
@@ -2315,12 +2502,14 @@ export function registerModelRoutes(
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.post("/v1/settings/telegram/pairing/:pairingId/cancel", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
+
     try {
       return json<TelegramPairingStatusResponse>(
         await agent.cancelTelegramPairing(
@@ -2332,13 +2521,15 @@ export function registerModelRoutes(
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.post("/v1/settings/telegram/pairing/:pairingId/apply", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
-    const body = await readJson<ApplyTelegramPairingRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, applyTelegramPairingSchema);
+
     try {
       return json<TelegramPairingStatusResponse>(
         await agent.applyTelegramPairing(
@@ -2350,12 +2541,14 @@ export function registerModelRoutes(
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.get("/v1/settings/discord", async (c) => {
     getRequestAuth(c);
+
     return json<DiscordSettingsResponse>(
       await agent.getDiscordSettings(await channelOwner(c))
     );
@@ -2363,7 +2556,7 @@ export function registerModelRoutes(
 
   app.put("/v1/settings/discord", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
-    const body = await readJson<UpdateDiscordSettingsRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, updateDiscordRequestSchema);
 
     try {
       return json<DiscordSettingsResponse>(
@@ -2373,19 +2566,23 @@ export function registerModelRoutes(
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
+
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.post("/v1/settings/discord/handshake", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
+
     try {
       return json<DiscordSettingsResponse>(
         await agent.regenerateDiscordHandshake(await channelOwner(c))
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
@@ -2399,13 +2596,16 @@ export function registerModelRoutes(
 
   app.put("/v1/settings/slack", async (c) => {
     const owner = await channelOwner(c);
+
     // Typed at the boundary: a string "false" must never read as a yes.
     const parsed = updateSlackRequestSchema.safeParse(
-      await readJson<unknown>(c.req.raw)
+      await readJson(c.req.raw, z.unknown())
     );
+
     if (!parsed.success) {
       return errorResponse("Invalid Slack settings.", 400);
     }
+
     const body: UpdateSlackSettingsRequest = parsed.data;
     const botToken = body.botToken?.trim() || undefined;
     const appToken = body.appToken?.trim() || undefined;
@@ -2413,46 +2613,54 @@ export function registerModelRoutes(
     try {
       await validateSlackTokens({ appToken, botToken });
       const saved = await loadSlackConfigFile(owner);
+
       const pair = {
         appToken: appToken ?? saved?.appToken,
         botToken: botToken ?? saved?.botToken,
       };
+
       if ((appToken || botToken) && pair.appToken && pair.botToken) {
         await checkSlackTokensMatch({
           appToken: pair.appToken,
           botToken: pair.botToken,
         });
       }
+
       if (body.allowWorkspace === true && pair.botToken) {
         await checkSlackWorkspaceAccess(pair.botToken);
       }
+
       return json<SlackSettingsResponse>(
         await saveSlackConfig(owner, { ...body, appToken, botToken })
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.post("/v1/settings/slack/handshake", async (c) => {
     const owner = await channelOwner(c);
+
     try {
       return json<SlackSettingsResponse>(await regenerateSlackHandshake(owner));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.get("/v1/settings/composio", async (c) => {
     getRequestAuth(c);
+
     return json<ComposioSettingsResponse>(await agent.getComposioSettings());
   });
 
   app.put("/v1/settings/composio", async (c) => {
     requirePlatformAdminFromContext(c);
-    const body = await readJson<UpdateComposioSettingsRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, updateComposioRequestSchema);
 
     try {
       return json<ComposioSettingsResponse>(
@@ -2462,13 +2670,16 @@ export function registerModelRoutes(
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
+
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
   app.put("/v1/settings/composio/secret", async (c) => {
     requirePlatformAdminFromContext(c);
     const body = await readJson<{ apiKey: string }>(c.req.raw);
+
     try {
       return json<ComposioSettingsResponse>(
         await agent.setComposioSecret(body.apiKey)
@@ -2477,12 +2688,14 @@ export function registerModelRoutes(
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
+
       return errorResponse(
         error instanceof Error ? error.message : String(error),
         400
       );
     }
   });
+
   for (const kind of ["email", "web-search", "composio"] as const) {
     for (const [method, suffix, action] of [
       ["delete", "", "clear"],
@@ -2499,12 +2712,15 @@ export function registerModelRoutes(
       );
       app[method](`/v1/settings/${kind}/secret${suffix}`, async (c) => {
         requirePlatformAdminFromContext(c);
+
         return json(await agent.manageSettingSecret(kind, action));
       });
     }
   }
+
   app.get("/v1/settings/error-tracking", async (c) => {
     getRequestAuth(c);
+
     return json<ErrorTrackingSettingsResponse>(
       await agent.getErrorTrackingSettings()
     );
@@ -2512,9 +2728,9 @@ export function registerModelRoutes(
 
   app.put("/v1/settings/error-tracking", async (c) => {
     // Workspace-global config, so there is no org to scope it to and a role guard is
-    // the only thing standing between a viewer and the whole install's error routing.
+    // the only thing standing between an org member and the whole install's error routing.
     requirePlatformAdminFromContext(c);
-    const body = await readJson<UpdateErrorTrackingSettingsRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, updateErrorTrackingRequestSchema);
 
     try {
       return json<ErrorTrackingSettingsResponse>(
@@ -2524,7 +2740,9 @@ export function registerModelRoutes(
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
+
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
@@ -2540,13 +2758,16 @@ export function registerModelRoutes(
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
+
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.get("/v1/settings/whatsapp", async (c) => {
     getRequestAuth(c);
+
     return json<WhatsAppSettingsResponse>(
       await agent.getWhatsAppSettings(await channelOwner(c))
     );
@@ -2554,7 +2775,7 @@ export function registerModelRoutes(
 
   app.put("/v1/settings/whatsapp", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
-    const body = await readJson<UpdateWhatsAppSettingsRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, updateWhatsappRequestSchema);
 
     try {
       return json<WhatsAppSettingsResponse>(
@@ -2566,26 +2787,31 @@ export function registerModelRoutes(
       }
 
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.post("/v1/settings/whatsapp/pairing-code", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
+
     try {
       return json<WhatsAppSettingsResponse>(
         await agent.regenerateWhatsAppPairingCode(await channelOwner(c))
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });
 
   app.post("/v1/settings/whatsapp/reconnect", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
+
     try {
       const orgId = await channelOwner(c);
+
       const settings = await workerManager.saveChannelConfig(
         "whatsapp",
         orgId,
@@ -2596,6 +2822,7 @@ export function registerModelRoutes(
       return json<WhatsAppSettingsResponse>(settings);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+
       return errorResponse(message, 400);
     }
   });

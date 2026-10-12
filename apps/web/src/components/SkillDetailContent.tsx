@@ -6,6 +6,7 @@ import type {
 import { BUNDLED_SKILL_NAMES } from "@nakama/core/skills/bundled-names";
 import { Button } from "@nakama/ui/button";
 import { CodeBlock } from "@nakama/ui/code-block";
+import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
 import { Textarea } from "@nakama/ui/textarea";
 import { cn } from "@nakama/ui/utils";
@@ -81,6 +82,7 @@ function formatInlineMetaLine({
     } else {
       const matchLabel = usageSummary.useCount === 1 ? "match" : "matches";
       parts.push(`${usageSummary.useCount} ${matchLabel}`);
+
       if (usageSummary.lastUsedAt) {
         parts.push(
           `last matched ${formatUsageTimestamp(usageSummary.lastUsedAt)}`
@@ -106,6 +108,8 @@ export function SkillDetailContent({
   editing = false,
   editBody = "",
   onEditBodyChange,
+  editNote = "",
+  onEditNoteChange,
   onStartEdit,
   onCancelEdit,
   onSaveEdit,
@@ -119,6 +123,8 @@ export function SkillDetailContent({
   editing?: boolean;
   editBody?: string;
   onEditBodyChange?: (body: string) => void;
+  editNote?: string;
+  onEditNoteChange?: (note: string) => void;
   onStartEdit?: () => void;
   onCancelEdit?: () => void;
   onSaveEdit?: () => void;
@@ -206,6 +212,16 @@ export function SkillDetailContent({
             onChange={(event) => onEditBodyChange?.(event.target.value)}
             value={editBody}
           />
+          <div className="border-border border-t p-2">
+            <Input
+              aria-label="Change note"
+              disabled={saveBusy}
+              maxLength={200}
+              onChange={(event) => onEditNoteChange?.(event.target.value)}
+              placeholder="Change note (optional)"
+              value={editNote}
+            />
+          </div>
         </div>
       ) : body ? (
         <CodeBlock

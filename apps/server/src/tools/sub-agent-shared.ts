@@ -1,9 +1,13 @@
 import type { OrgRole } from "@nakama/core";
 
 export const DEFAULT_SUB_AGENT_TIMEOUT_MS = 300_000;
+
 export const MAX_SUB_AGENT_TIMEOUT_MS = 600_000;
+
 const MAX_SUB_AGENT_OUTPUT_CHARS = 32_000;
+
 const MAX_SUB_AGENT_SUMMARY_CHARS = 2000;
+
 const TRUNCATION_MARKER = "\n...[truncated]";
 
 export interface SubAgentRunInput {
@@ -35,12 +39,17 @@ export function buildSubAgentResult(
   const output = truncateField(text, MAX_SUB_AGENT_OUTPUT_CHARS);
   const summary = truncateField(text, MAX_SUB_AGENT_SUMMARY_CHARS);
 
-  return {
+  const result: SubAgentRunResult = {
     output,
     status,
     summary,
-    ...(error ? { error } : {}),
   };
+
+  if (error) {
+    result.error = error;
+  }
+
+  return result;
 }
 
 export function failSubAgentResult(error: string): SubAgentRunResult {
@@ -68,5 +77,6 @@ function truncateField(value: string, maxChars: number): string {
   }
 
   const keep = Math.max(0, maxChars - TRUNCATION_MARKER.length);
+
   return `${value.slice(0, keep)}${TRUNCATION_MARKER}`;
 }

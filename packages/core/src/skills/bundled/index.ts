@@ -7,6 +7,7 @@ import { parseSkillMarkdown } from "../parse";
 export { BUNDLED_SKILL_NAMES, type BundledSkillName };
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+
 const bundledDir =
   path.basename(moduleDir) === "dist"
     ? path.resolve(moduleDir, "../../../packages/core/src/skills/bundled")
@@ -22,6 +23,7 @@ export async function readBundledSkillBody(
   name: BundledSkillName
 ): Promise<string> {
   const sourcePath = path.join(bundledDir, name, "SKILL.md");
+
   return parseSkillMarkdown(await readBundledSkillMarkdown(name), sourcePath)
     .body;
 }

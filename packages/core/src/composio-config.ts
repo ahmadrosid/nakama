@@ -56,6 +56,7 @@ export async function loadComposioConfigFile(): Promise<ComposioConfigFile | nul
   const apiKey = await resolveManagedSecret("global", "composio", [
     "COMPOSIO_API_KEY",
   ]);
+
   return apiKey ? { apiKey } : null;
 }
 

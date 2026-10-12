@@ -1,9 +1,21 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { z } from "zod";
+
+const JsonValueSchema = z.json();
+
+const JsonObjectSchema = z.record(z.string(), JsonValueSchema);
+
+type JsonValue = z.infer<typeof JsonValueSchema>;
+
+type JsonObject = z.infer<typeof JsonObjectSchema>;
 
 export const DEFAULT_MAX_RESULTS = 50;
+
 export const MAX_RESULTS_LIMIT = 200;
+
 export const DEFAULT_TIMEOUT_MS = 15_000;
+
 export const MAX_OUTPUT_CHARS = 32_000;
 
 export interface RipgrepMatch {
@@ -49,6 +61,7 @@ export function buildRipgrepArgs(options: {
   }
 
   args.push("--", options.query, options.searchRoot);
+
   return args;
 }
 
@@ -61,6 +74,7 @@ export async function runRipgrep(
       "workspaceRoot must be an absolute path; relative roots resolve against process.cwd() and break profile isolation."
     );
   }
+
   if (!path.isAbsolute(options.searchRoot)) {
     throw new Error(
       "searchRoot must be an absolute path; relative roots resolve against process.cwd() and break profile isolation."
@@ -120,6 +134,7 @@ export async function runRipgrep(
           options.workspaceRoot,
           options.searchRoot
         );
+
         if (!parsed.match) {
           continue;
         }
@@ -142,6 +157,7 @@ export async function runRipgrep(
 
     child.stderr.on("data", (chunk: Buffer | string) => {
       stderr += String(chunk);
+
       if (stderr.length > MAX_OUTPUT_CHARS) {
         stderr = stderr.slice(0, MAX_OUTPUT_CHARS);
       }
@@ -149,14 +165,17 @@ export async function runRipgrep(
 
     child.on("error", (error) => {
       clearTimeout(timeoutId);
+
       if ("code" in error && error.code === "ENOENT") {
         reject(
           new Error(
             'ripgrep binary not found. Install the optional "@vscode/ripgrep" package for this platform or make `rg` available on PATH.'
           )
         );
+
         return;
       }
+
       reject(error);
     });
 
@@ -167,6 +186,7 @@ export async function runRipgrep(
         reject(
           new Error(`ripgrep search timed out after ${DEFAULT_TIMEOUT_MS}ms.`)
         );
+
         return;
       }
 
@@ -176,6 +196,7 @@ export async function runRipgrep(
           options.workspaceRoot,
           options.searchRoot
         );
+
         if (
           parsed.match &&
           matches.length < options.maxResults &&
@@ -190,6 +211,7 @@ export async function runRipgrep(
 
       if (code === 0 || code === 1 || (truncated && code === null)) {
         resolve({ matches, truncated });
+
         return;
       }
 
@@ -216,8 +238,11 @@ async function resolveRipgrepCommand(): Promise<string> {
 async function loadRipgrepCommand(): Promise<string> {
   try {
     const ripgrep = await import("@vscode/ripgrep");
-    if (typeof ripgrep.rgPath === "string" && ripgrep.rgPath.trim()) {
-      return ripgrep.rgPath;
+
+    const rgPath = z.string().trim().min(1).safeParse(ripgrep.rgPath);
+
+    if (rgPath.success) {
+      return rgPath.data;
     }
   } catch {
     // Fall back to PATH lookup so runtimes that never use search tools do not crash on import.
@@ -232,11 +257,13 @@ function parseMatchLine(
   searchRoot: string
 ): MatchParseResult {
   const payload = parseJsonRecord(line);
+
   if (!payload || payload.type !== "match") {
     return { chars: 0, match: null };
   }
 
   const data = readRecord(payload, "data");
+
   if (!data) {
     return { chars: 0, match: null };
   }
@@ -252,8 +279,10 @@ function parseMatchLine(
   const absolutePath = path.isAbsolute(rawPath)
     ? rawPath
     : path.resolve(searchRoot, rawPath);
+
   const relativePath = path.relative(workspaceRoot, absolutePath) || ".";
   const trimmedText = rawText.trim();
+
   const match = {
     file: relativePath,
     line: lineNumber,
@@ -266,43 +295,54 @@ function parseMatchLine(
   };
 }
 
-function parseJsonRecord(line: string): Record<string, unknown> | null {
+function parseJsonRecord(line: string): JsonObject | null {
   try {
-    const parsed: unknown = JSON.parse(line);
-    return readRecord({ value: parsed }, "value");
+    const parsed = JsonValueSchema.safeParse(JSON.parse(line));
+
+    return parsed.success ? readRecord(parsed.data) : null;
   } catch {
     return null;
   }
 }
 
-function readRecord(
-  input: Record<string, unknown>,
-  key: string
-): Record<string, unknown> | null {
-  const value = input[key];
-  if (typeof value !== "object" || value === null) {
+function readRecord(input: JsonValue, key?: string): JsonObject | null {
+  const source = JsonObjectSchema.safeParse(input);
+
+  if (!source.success) {
     return null;
   }
-  return value as Record<string, unknown>;
+
+  const parsed = JsonObjectSchema.safeParse(key ? source.data[key] : input);
+
+  return parsed.success ? parsed.data : null;
 }
 
 function readNestedString(
-  input: Record<string, unknown>,
+  input: JsonValue,
   parentKey: string,
   childKey: string
 ): string | null {
   const parent = readRecord(input, parentKey);
+
   if (!parent) {
     return null;
   }
-  const value = parent[childKey];
-  return typeof value === "string" ? value : null;
+
+  const value = z.string().safeParse(parent[childKey]);
+
+  return value.success ? value.data : null;
 }
 
-function readNumber(
-  input: Record<string, unknown>,
-  key: string
-): number | null {
-  const value = input[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+function readNumber(input: JsonValue, key: string): number | null {
+  const record = readRecord(input);
+
+  if (!record) {
+    return null;
+  }
+
+  const value = record[key];
+
+  const parsed = z.number().finite().safeParse(value);
+
+  return parsed.success ? parsed.data : null;
 }

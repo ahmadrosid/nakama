@@ -22,10 +22,12 @@ Run the deploy checklist before shipping.
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const skillsService = new SkillsService(databaseAdapter);
+
   const skillProposalService = new SkillProposalService(
     databaseAdapter,
     skillsService
   );
+
   return {
     ...createMinimalHonoApp({ databaseAdapter, skillProposalService }),
     skillProposalService,
@@ -38,11 +40,13 @@ const BASE = "http://localhost:4310";
 describe("skill proposal routes (v1)", () => {
   test("rejects an unknown status filter", async () => {
     const { app, databaseAdapter } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "status-admin@org.com"
     );
+
     const orgId = adminSession.orgId!;
 
     const response = await app.fetch(
@@ -57,11 +61,13 @@ describe("skill proposal routes (v1)", () => {
   test("admin can list, approve, and reject proposals; member needs sessionId to list", async () => {
     const { app, authService, databaseAdapter, skillProposalService } =
       createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin@org.com"
     );
+
     const orgId = adminSession.orgId!;
     const profiles = await databaseAdapter.listProfilesForOrg(orgId);
     const profileId = profiles[0]!.id;
@@ -74,6 +80,7 @@ describe("skill proposal routes (v1)", () => {
       profileId,
       sessionId,
     });
+
     expect(staged.outcome).toBe("created");
 
     const listResp = await app.fetch(
@@ -84,11 +91,15 @@ describe("skill proposal routes (v1)", () => {
         }
       )
     );
+
     expect(listResp.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const listBody = (await listResp.json()) as {
       proposals: { id: string; skillName: string }[];
       pendingCount: number;
     };
+
     expect(listBody.pendingCount).toBe(1);
     expect(listBody.proposals[0]?.skillName).toBe("deploy-notes");
 
@@ -104,10 +115,14 @@ describe("skill proposal routes (v1)", () => {
         }
       )
     );
+
     expect(approveResp.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const approveBody = (await approveResp.json()) as {
       proposal: { status: string };
     };
+
     expect(approveBody.proposal.status).toBe("approved");
 
     const memberResp = await app.fetch(
@@ -124,20 +139,25 @@ describe("skill proposal routes (v1)", () => {
         method: "POST",
       })
     );
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const memberProvisioned = (await memberResp.json()) as {
       temporaryPassword: string;
     };
+
     const memberSession = await loginUserSession(
       app,
       "member@org.com",
       memberProvisioned.temporaryPassword,
       orgId
     );
+
     const memberListResp = await app.fetch(
       new Request(`${BASE}/v1/orgs/${orgId}/skill-proposals`, {
         headers: memberSession.headers({}, orgId),
       })
     );
+
     expect(memberListResp.status).toBe(403);
 
     const otherStaged = await skillProposalService.stageProposal({
@@ -149,6 +169,7 @@ describe("skill proposal routes (v1)", () => {
       profileId,
       sessionId,
     });
+
     expect(otherStaged.outcome).toBe("created");
 
     const memberSessionListResp = await app.fetch(
@@ -159,11 +180,15 @@ describe("skill proposal routes (v1)", () => {
         }
       )
     );
+
     expect(memberSessionListResp.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const memberSessionBody = (await memberSessionListResp.json()) as {
       proposals: { skillName: string; sessionId: string | null }[];
       pendingCount: number;
     };
+
     expect(memberSessionBody.pendingCount).toBe(1);
     expect(memberSessionBody.proposals).toHaveLength(1);
     expect(memberSessionBody.proposals[0]?.skillName).toBe("rollback-notes");
@@ -172,11 +197,13 @@ describe("skill proposal routes (v1)", () => {
 
   test("admin can reject a pending proposal", async () => {
     const { app, databaseAdapter, skillProposalService } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin2@org.com"
     );
+
     const orgId = adminSession.orgId!;
     const profileId = (await databaseAdapter.listProfilesForOrg(orgId))[0]!.id;
 
@@ -199,20 +226,26 @@ describe("skill proposal routes (v1)", () => {
         }
       )
     );
+
     expect(rejectResp.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const rejectBody = (await rejectResp.json()) as {
       proposal: { status: string };
     };
+
     expect(rejectBody.proposal.status).toBe("rejected");
   });
 
   test("approve proposal from wrong org returns 404 (AE6)", async () => {
     const { app, databaseAdapter, skillProposalService } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin3@org.com"
     );
+
     const orgId = adminSession.orgId!;
     const profileId = (await databaseAdapter.listProfilesForOrg(orgId))[0]!.id;
 
@@ -235,6 +268,7 @@ describe("skill proposal routes (v1)", () => {
         }
       )
     );
+
     expect(otherOrgResp.status).toBe(404);
   });
 });

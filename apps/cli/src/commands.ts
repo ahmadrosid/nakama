@@ -6,10 +6,7 @@ import type {
   ProviderModelOption,
 } from "@nakama/core";
 
-export function parseModelCommandArg(raw: string): {
-  providerId: string | null;
-  modelId: string;
-} {
+export function parseModelCommandArg(raw: string) {
   const trimmed = raw.trim();
   const separator = trimmed.indexOf("::");
 
@@ -82,7 +79,7 @@ export function resolveModelSwitchTarget(
 export function effectiveModelState(
   profile: ProfileSummary,
   models: ModelsResponse | null
-): { modelId: string | null; providerId: string | null } {
+) {
   if (!profile.model?.trim()) {
     return { modelId: null, providerId: models?.currentProviderId ?? null };
   }
@@ -210,8 +207,10 @@ export function resolveSuggestions(
   }
 
   const orgMatch = input.match(/^\/org(?:\s+(.*))?$/);
+
   if (orgMatch) {
     const query = (orgMatch[1] ?? "").trim().toLowerCase();
+
     return orgs
       .filter((org) =>
         [org.id, org.slug, org.name].some((value) =>
@@ -277,6 +276,7 @@ export function resolveSuggestions(
       })
       .map((model) => {
         const active = { modelId: currentModel, providerId: currentProviderId };
+
         const markers = [
           isActiveModelOption(model, active) ? "current" : null,
           model.default ? "default" : null,
@@ -297,6 +297,7 @@ export function resolveSuggestions(
 
   if (soulMatch) {
     const query = (soulMatch[1] ?? "").trim().toLowerCase();
+
     const subcommands = [
       {
         description: "scaffold soul templates for current profile",
@@ -304,30 +305,39 @@ export function resolveSuggestions(
       },
     ];
 
-    return subcommands
-      .filter((command) => !query || command.name.startsWith(query))
-      .map((command) => ({
-        description: command.description,
-        insertValue: `/soul ${command.name}`,
-        label: command.name,
-      }));
+    return subcommands.flatMap((command) =>
+      !query || command.name.startsWith(query)
+        ? [
+            {
+              description: command.description,
+              insertValue: `/soul ${command.name}`,
+              label: command.name,
+            },
+          ]
+        : []
+    );
   }
 
   const userMatch = input.match(/^\/user(?:\s+(.*))?$/);
 
   if (userMatch) {
     const query = (userMatch[1] ?? "").trim().toLowerCase();
+
     const subcommands = [
       { description: "scaffold USER.md template", name: "init" },
     ];
 
-    return subcommands
-      .filter((command) => !query || command.name.startsWith(query))
-      .map((command) => ({
-        description: command.description,
-        insertValue: `/user ${command.name}`,
-        label: command.name,
-      }));
+    return subcommands.flatMap((command) =>
+      !query || command.name.startsWith(query)
+        ? [
+            {
+              description: command.description,
+              insertValue: `/user ${command.name}`,
+              label: command.name,
+            },
+          ]
+        : []
+    );
   }
 
   if (input.includes(" ")) {
@@ -338,14 +348,17 @@ export function resolveSuggestions(
 
   if (input !== "/") {
     const needle = input.slice(1).toLowerCase().replace(/[-_]/g, "");
+
     const [indices, info, order] = commandSearch.search(
       SLASH_COMMANDS.map((command) =>
         command.name.slice(1).toLowerCase().replace(/[-_]/g, "")
       ),
       needle
     );
+
     const matches =
       info && order ? order.map((index) => info.idx[index]) : indices;
+
     commands = (matches ?? []).map((index) => SLASH_COMMANDS[index]);
   }
 

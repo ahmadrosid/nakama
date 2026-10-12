@@ -57,14 +57,17 @@ export function FilesPage() {
   const pins = useFilePins(profileId, canViewFiles);
   const [searchParams, setSearchParams] = useSearchParams();
   const view = searchParams.get("view") ?? "workspace";
+
   function navigate(view: string, folder = "") {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
       next.set("view", view);
       next.delete("folder");
+
       if (folder) {
         next.set("folder", folder);
       }
+
       return next;
     });
   }
@@ -76,6 +79,7 @@ export function FilesPage() {
         const folder = searchParams.get("folder") ?? "";
         const prefix = view === "artifacts" ? "artifacts/" : "";
         const currentPath = `${prefix}${folder}`.replace(/\/$/, "");
+
         if (currentPath === oldPath || currentPath.startsWith(`${oldPath}/`)) {
           navigate(
             view,
@@ -163,9 +167,11 @@ function PinnedFilesSection({
 }) {
   const [selected, setSelected] = useState<WorkspaceEntry | null>(null);
   const closePreview = useCallback(() => setSelected(null), []);
+
   if (!profileId) {
     return null;
   }
+
   return (
     <>
       {error ? (
@@ -184,6 +190,7 @@ function PinnedFilesSection({
                 key={entry.path}
                 onOpen={() => {
                   setSelected(null);
+
                   if (entry.kind === "directory") {
                     onOpenFolder(entry.path);
                   } else {
@@ -212,6 +219,7 @@ function PinnedFilesSection({
 
 function FilesArtifactsPage({ profileId }: { profileId: string | null }) {
   const [searchParams, setSearchParams] = useSearchParams();
+
   const folderPrefix = normalizeArtifactFolderPrefix(
     searchParams.get("folder") ?? ""
   );
@@ -219,20 +227,25 @@ function FilesArtifactsPage({ profileId }: { profileId: string | null }) {
   const [deleteTarget, setDeleteTarget] = useState<ArtifactFile | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<ArtifactTypeFilter>("all");
+
   const [viewMode, setViewMode] = useState<FilesViewMode>(() =>
     getStoredFilesViewMode()
   );
+
   const { data, isLoading, isFetching, error, refetch } = useArtifactsQuery(
     profileId,
     searchQuery.trim() ? "" : folderPrefix
   );
+
   const deleteMutation = useDeleteArtifactMutation();
   const artifacts = data?.artifacts ?? EMPTY_ARTIFACTS;
   const totalCount = artifacts.length;
+
   const typeOptions = useMemo(
     () => availableArtifactTypeFilters(artifacts),
     [artifacts]
   );
+
   const effectiveTypeFilter: ArtifactTypeFilter = typeOptions.includes(
     typeFilter
   )
@@ -253,10 +266,13 @@ function FilesArtifactsPage({ profileId }: { profileId: string | null }) {
 
       const haystack =
         `${artifact.filename} ${artifact.mimeType}`.toLowerCase();
+
       return haystack.includes(trimmed);
     });
   }, [artifacts, searchQuery, effectiveTypeFilter]);
+
   const isSearching = searchQuery.trim().length > 0;
+
   const listing = useMemo(() => {
     if (isSearching) {
       return { files: filteredArtifacts, folders: [] };
@@ -264,16 +280,19 @@ function FilesArtifactsPage({ profileId }: { profileId: string | null }) {
 
     return listArtifactsInFolder(filteredArtifacts, folderPrefix);
   }, [filteredArtifacts, folderPrefix, isSearching]);
+
   const handleFolderChange = useCallback(
     (prefix: string) => {
       setSearchParams((current) => {
         const next = new URLSearchParams(current);
         const normalized = normalizeArtifactFolderPrefix(prefix);
+
         if (normalized) {
           next.set("folder", normalized);
         } else {
           next.delete("folder");
         }
+
         return next;
       });
     },
@@ -309,21 +328,27 @@ function FilesArtifactsPage({ profileId }: { profileId: string | null }) {
 
   const emptyFilterMessage = (() => {
     const parts: string[] = [];
+
     if (effectiveTypeFilter !== "all") {
       parts.push(
         ARTIFACT_TYPE_FILTER_LABELS[effectiveTypeFilter].toLowerCase()
       );
     }
+
     const trimmed = searchQuery.trim();
+
     if (trimmed) {
       parts.push(`“${trimmed}”`);
     }
+
     if (parts.length === 0) {
       if (folderPrefix && !isSearching) {
         return "This folder is empty.";
       }
+
       return "No artifacts match.";
     }
+
     return `No artifacts match ${parts.join(" · ")}.`;
   })();
 
@@ -396,17 +421,21 @@ function WorkspaceFilesPage({
   const [typeFilter, setTypeFilter] = useState<ArtifactTypeFilter>("all");
   const [selected, setSelected] = useState<WorkspaceEntry | null>(null);
   const closePreview = useCallback(() => setSelected(null), []);
+
   const [viewMode, setViewMode] = useState<FilesViewMode>(
     getStoredFilesViewMode
   );
+
   const { data, isLoading, isFetching, error, refetch } = useQuery({
     enabled: Boolean(profileId),
     queryFn: () => client.listProfileWorkspaceFiles(profileId!, folder),
     queryKey: ["workspace-files", activeOrg?.id, profileId, folder],
   });
+
   const typeOptions = availableArtifactTypeFilters(
     (data?.entries ?? []).filter((entry) => entry.kind !== "directory")
   );
+
   const entries = (data?.entries ?? []).filter(
     (entry) =>
       artifactBasename(entry.filename)
@@ -415,16 +444,19 @@ function WorkspaceFilesPage({
       (entry.kind === "directory" ||
         artifactMatchesTypeFilter(entry, typeFilter))
   );
+
   function openFolder(next: string) {
     setSearch("");
     setSelected(null);
     onNavigate(next);
   }
+
   if (!profileId) {
     return (
       <p className="text-muted-foreground text-sm">No profiles available.</p>
     );
   }
+
   return (
     <div className="space-y-4">
       <FilesToolbar
@@ -492,6 +524,7 @@ function WorkspaceEntryRow({
   onSelect: (entry: WorkspaceEntry) => void;
 }) {
   const directory = entry.kind === "directory";
+
   return (
     <FileEntry
       {...entry}

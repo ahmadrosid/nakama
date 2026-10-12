@@ -10,6 +10,7 @@ function ollamaTagsUrl(baseUrl: string): string {
 
   try {
     const url = new URL(normalized);
+
     return `${url.origin}/api/tags`;
   } catch {
     return `${normalized.replace(/\/v1\/?$/, "")}/api/tags`;
@@ -20,12 +21,13 @@ async function fetchOllamaTagsModels(
   baseUrl: string,
   apiKey: string
 ): Promise<CustomModelEntry[]> {
-  const response = await fetch(ollamaTagsUrl(baseUrl), {
-    headers: {
-      ...(apiKey.trim() ? { Authorization: `Bearer ${apiKey.trim()}` } : {}),
-      Accept: "application/json",
-    },
-  });
+  const headers = new Headers({ Accept: "application/json" });
+
+  if (apiKey.trim()) {
+    headers.set("Authorization", `Bearer ${apiKey.trim()}`);
+  }
+
+  const response = await fetch(ollamaTagsUrl(baseUrl), { headers });
 
   if (!response.ok) {
     throw new Error(
@@ -33,7 +35,9 @@ async function fetchOllamaTagsModels(
     );
   }
 
+  // SAFETY: The upstream payload is validated or constructed by the provider adapter before this conversion.
   const payload = (await response.json()) as OllamaTagsResponse;
+
   const ids = (payload.models ?? [])
     .map((entry) => entry.name?.trim() || entry.model?.trim())
     .filter((id): id is string => Boolean(id));

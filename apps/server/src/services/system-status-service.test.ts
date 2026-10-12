@@ -8,7 +8,7 @@ import {
   writeAutomationWorkerHeartbeat,
 } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import type { AgentService } from "./agent-service";
+import { AgentService } from "./agent-service";
 import { LlmUsageTracker } from "./llm-usage-tracker";
 import { SystemStatusService } from "./system-status-service";
 
@@ -41,9 +41,9 @@ function createService(
   const usageTracker = extras?.llmUsageTracker;
 
   return new SystemStatusService(
-    // The service only reads these members; the rest of AgentService is not
-    // part of what a status response depends on.
     {
+      getLlmUsageDailyStats: async (orgId: string | null) =>
+        (orgId ? await usageTracker?.getDailyStats(orgId) : null) ?? [],
       getLlmUsageStats: async (orgId: string | null) =>
         (orgId ? await usageTracker?.getStats(orgId) : null) ?? {
           estimatedCostUsd: 0,
@@ -53,17 +53,28 @@ function createService(
           totalTokens: 0,
           trackedSince: new Date().toISOString(),
         },
+      getLlmUsageStatsByActor: async () => {
+        throw new Error("Unexpected actor usage lookup");
+      },
       getLlmUsageStatsByModel: async (orgId: string | null) =>
         (orgId ? await usageTracker?.getStatsByModel(orgId) : null) ?? [],
-      getModels: async () => ({ models: [], provider: "openai" }),
+      getModels: async () => ({
+        currentProviderId: null,
+        displayName: "OpenAI",
+        models: [],
+        provider: "openai",
+        providers: [],
+      }),
       getUsageStatusFields: () => ({
         costEstimated: false,
         currentModel: "gpt-4o",
         displayName: "OpenAI",
       }),
       providerConfigured: true,
-    } as unknown as AgentService,
+    },
+    // SAFETY: The test fixture matches the contract used by this test.
     { getActiveRunCount: () => 2 } as any,
+    // SAFETY: The test fixture matches the contract used by this test.
     {
       getAllWorkerStatuses: async () => ({
         automation: automationProcess,
@@ -72,11 +83,102 @@ function createService(
       }),
     } as any,
     null,
+    // SAFETY: The test fixture matches the contract used by this test.
     extras?.composioService as any
   );
 }
 
 describe("SystemStatusService", () => {
+  test("organization status hides channel details and supplies an empty QR code", async () => {
+    await withConfigDir();
+    const service = createService(null);
+    const status = await service.getStatus("org_a");
+
+    for (const worker of [
+      status.telegramWorker,
+      status.discordWorker,
+      status.whatsappWorker,
+    ]) {
+      expect(worker).toMatchObject({
+        configured: false,
+        ok: true,
+        paired: false,
+        running: false,
+      });
+      expect(worker).not.toHaveProperty("process");
+    }
+
+    expect(status.discordWorker.connected).toBe(false);
+    expect(status.whatsappWorker.connected).toBe(false);
+    expect(status.whatsappWorker.qrCode).toBeNull();
+  });
+
+  test("adds named usage per agent and per user only when asked", async () => {
+    await withConfigDir();
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+    await db.upsertOrganization({
+      createdAt: now,
+      id: "org_a",
+      name: "Org A",
+      slug: "org-a",
+      updatedAt: now,
+    });
+    await db.upsertProfile({
+      createdAt: now,
+      id: "agent_1",
+      isSuper: false,
+      model: null,
+      name: "Researcher",
+      orgId: "org_a",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+    await db.createUser({
+      createdAt: now,
+      email: "ana@example.com",
+      id: "user_1",
+      name: "Ana",
+      passwordHash: "x",
+      updatedAt: now,
+    });
+    const tracker = new LlmUsageTracker(db);
+    tracker.record("gpt-4o", 100, 10, {
+      orgId: "org_a",
+      profileId: "agent_1",
+      userId: "user_1",
+    });
+    tracker.record("gpt-4o", 50, 5, { orgId: "org_a" });
+    const agent = new AgentService(null, null, db, tracker);
+
+    const service = new SystemStatusService(
+      Object.assign(agent, {
+        getModels: async () => ({ models: [], provider: "openai" }),
+      }),
+      // SAFETY: The test fixture matches the contract used by this test.
+      { getActiveRunCount: () => 0 } as any,
+      // SAFETY: The test fixture matches the contract used by this test.
+      { getAllWorkerStatuses: async () => ({}) } as any
+    );
+
+    const plain = await service.getStatus("org_a");
+    expect(plain.llmUsage.agents).toBeUndefined();
+    expect(plain.llmUsage.users).toBeUndefined();
+
+    const { llmUsage } = await service.getStatus("org_a", {
+      includeUsageByActor: true,
+    });
+
+    expect(llmUsage.agents).toMatchObject([
+      { id: "agent_1", name: "Researcher", requestCount: 1 },
+      { id: null, name: null, requestCount: 1 },
+    ]);
+    expect(llmUsage.users).toMatchObject([
+      { id: "user_1", name: "Ana", requestCount: 1 },
+      { id: null, name: null, requestCount: 1 },
+    ]);
+  });
+
   test("reports automation worker from PM2 status plus fresh heartbeat", async () => {
     await withConfigDir();
     await writeAutomationWorkerHeartbeat(true, 5, process.pid);
@@ -153,10 +255,12 @@ describe("SystemStatusService", () => {
     process.env.COMPOSIO_API_KEY = "test-key";
 
     let reachabilityCalls = 0;
+
     const service = createService(null, {
       composioService: {
         isReachable: async () => {
           reachabilityCalls += 1;
+
           return true;
         },
       },
@@ -183,6 +287,11 @@ describe("SystemStatusService", () => {
     const orgA = await service.getStatus("org_a");
     const orgB = await service.getStatus("org_b");
 
+    const profileA = await service.getStatus({
+      orgId: "org_a",
+      profileId: "profile_a",
+    });
+
     expect(orgA.llmUsage).toMatchObject({
       inputTokens: 100,
       outputTokens: 50,
@@ -192,6 +301,12 @@ describe("SystemStatusService", () => {
     expect(orgA.llmUsage.models).toMatchObject([
       { inputTokens: 100, modelId: "gpt-4o", requestCount: 1 },
     ]);
+    expect(profileA.llmUsage).toMatchObject({
+      inputTokens: 100,
+      outputTokens: 50,
+      requestCount: 1,
+      totalTokens: 150,
+    });
     expect(orgB.llmUsage).toMatchObject({
       inputTokens: 900_000,
       outputTokens: 400_000,

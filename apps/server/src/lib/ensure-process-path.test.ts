@@ -10,6 +10,7 @@ const saved = {
 
 function restore(key: keyof typeof saved): void {
   const value = saved[key];
+
   if (value === undefined) {
     delete process.env[key];
   } else {
@@ -74,6 +75,7 @@ test("does not pass the master key to child processes", () => {
   const previousProvider = process.env.OPENAI_API_KEY;
   process.env.NAKAMA_SECRETS_KEY = "private";
   process.env.OPENAI_API_KEY = "provider-private";
+
   try {
     expect(getToolExecutionEnv().NAKAMA_SECRETS_KEY).toBeUndefined();
     expect(getToolExecutionEnv().OPENAI_API_KEY).toBeUndefined();
@@ -83,6 +85,7 @@ test("does not pass the master key to child processes", () => {
     } else {
       process.env.NAKAMA_SECRETS_KEY = previous;
     }
+
     if (previousProvider === undefined) {
       delete process.env.OPENAI_API_KEY;
     } else {

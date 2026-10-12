@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  type DeliverableChannelArtifact,
   deliverTurnArtifactShares,
   formatArtifactShareFooter,
   isAttachIntent,
@@ -115,9 +116,9 @@ describe("resolveShareUrlForPublish", () => {
   });
 
   test("reuses cached URL on refresh", () => {
-    const cache: Record<string, string> = {
+    const cache = {
       "report.md": "https://app.example/s/tok_1",
-    };
+    } satisfies Parameters<typeof resolveShareUrlForPublish>[1];
 
     const resolved = resolveShareUrlForPublish(
       {
@@ -197,6 +198,7 @@ describe("pushDeliverableArtifact", () => {
       { ...base, filename: "a.md", path: "a.md" },
       2
     );
+
     registry = pushDeliverableArtifact(
       registry,
       { ...base, filename: "b.md", path: "b.md" },
@@ -216,16 +218,19 @@ describe("deliverTurnArtifactShares", () => {
   test("mints shares, updates session store, and sends footer", async () => {
     const artifactsRoot =
       "/Users/test/.nakama/orgs/org_1/profiles/profile_1/artifacts";
+
     const metaJson = JSON.stringify({
       mimeType: "text/markdown",
       savedAt: "2026-07-13T10:00:00.000Z",
       sizeBytes: 42,
     });
+
     const scratchMeta = JSON.stringify({
       mimeType: "application/json",
       savedAt: "2026-07-13T10:00:01.000Z",
       sizeBytes: 2,
     });
+
     const messages: ChatMessage[] = [
       { content: "save report", role: "user" },
       {
@@ -300,15 +305,9 @@ describe("deliverTurnArtifactShares", () => {
     ];
 
     const shareUrls: Record<string, string> = {};
-    let registry: Array<{
-      filename: string;
-      mimeType: string;
-      path: string;
-      savedAt: string;
-      sharePath: string;
-      shareUrl: string | null;
-      sizeBytes: number;
-    }> = [];
+
+    let registry: DeliverableChannelArtifact[] = [];
+
     let saved = false;
     const footers: string[] = [];
     const published: string[] = [];
@@ -317,6 +316,7 @@ describe("deliverTurnArtifactShares", () => {
       conversationKey: "chat:1",
       publish: async (path) => {
         published.push(path);
+
         return {
           refreshed: false,
           sharePath: "/s/tok_1",
@@ -340,6 +340,7 @@ describe("deliverTurnArtifactShares", () => {
           if (update.artifactShareUrls) {
             Object.assign(shareUrls, update.artifactShareUrls);
           }
+
           if (update.deliverableArtifacts) {
             registry = update.deliverableArtifacts;
           }

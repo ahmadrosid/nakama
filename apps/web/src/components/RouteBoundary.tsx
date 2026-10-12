@@ -39,6 +39,7 @@ class RouteErrorBoundary extends Component<
       error?.message,
       errorInfo?.componentStack
     );
+
     if (shouldReloadAfterRouteError(error?.message, sessionStorage)) {
       window.location.reload();
     }

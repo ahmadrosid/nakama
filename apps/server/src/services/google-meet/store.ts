@@ -42,6 +42,7 @@ export class MeetingStore {
         id TEXT NOT NULL, text TEXT NOT NULL, receivedAt INTEGER NOT NULL,
         speakerId TEXT, speakerName TEXT, startMs INTEGER, endMs INTEGER, UNIQUE(meetingId,id));`);
     this.db.query("INSERT OR IGNORE INTO tenant VALUES (1, ?)").run(orgId);
+
     if (
       this.db
         .query<{ orgId: string }, []>("SELECT orgId FROM tenant WHERE id=1")
@@ -50,6 +51,7 @@ export class MeetingStore {
       this.db.close();
       throw new Error("Meeting data belongs to another organization");
     }
+
     try {
       this.restoreTranscripts(false);
     } catch (error) {
@@ -71,6 +73,7 @@ export class MeetingStore {
         "Use a Google Meet link such as https://meet.google.com/abc-defg-hij"
       );
     }
+
     if (
       !Number.isInteger(durationMinutes) ||
       durationMinutes < 1 ||
@@ -78,7 +81,9 @@ export class MeetingStore {
     ) {
       throw new Error("Meeting duration must be between 1 and 120 minutes");
     }
+
     const id = randomUUID();
+
     try {
       this.db
         .query(
@@ -96,6 +101,7 @@ export class MeetingStore {
     } catch {
       throw new Error("An active meeting already exists in this organization");
     }
+
     return this.get(id)!;
   }
 
@@ -111,6 +117,7 @@ export class MeetingStore {
     profileId?: string
   ) {
     const id = randomUUID();
+
     try {
       this.db
         .transaction(() => {
@@ -127,17 +134,21 @@ export class MeetingStore {
               Date.now(),
               filename
             );
+
           const insert = this.db.query(
             "INSERT INTO segments (meetingId,id,text,receivedAt) VALUES (?,?,?,?)"
           );
+
           for (let offset = 0; offset < content.length; ) {
             let end = Math.min(offset + 32_000, content.length);
+
             if (
               end < content.length &&
               /[\uD800-\uDBFF]/.test(content[end - 1]!)
             ) {
               end--;
             }
+
             insert.run(
               id,
               `upload-${offset}`,
@@ -146,6 +157,7 @@ export class MeetingStore {
             );
             offset = end;
           }
+
           this.saveTranscript(id);
         })
         .immediate();
@@ -153,6 +165,7 @@ export class MeetingStore {
       rmSync(this.transcriptPath(id), { force: true });
       throw error;
     }
+
     return this.get(id)!;
   }
   list(actorId: string | null = null, profileId: string | null = null) {
@@ -211,9 +224,11 @@ export class MeetingStore {
     this.db
       .transaction(() => {
         const meeting = this.get(id);
+
         if (!(meeting && ["finished", "failed"].includes(meeting.state))) {
           throw new Error("Stop transcription before deleting this meeting");
         }
+
         rmSync(this.transcriptPath(id), { force: true });
         this.db.query("DELETE FROM segments WHERE meetingId=?").run(id);
         this.db.query("DELETE FROM meetings WHERE id=?").run(id);
@@ -224,6 +239,7 @@ export class MeetingStore {
     if (!this.get(meetingId)) {
       throw new Error("Meeting not found");
     }
+
     this.db
       .query(
         "INSERT OR IGNORE INTO segments (meetingId,id,text,receivedAt,speakerId,speakerName,startMs,endMs) VALUES (?,?,?,?,?,?,?,?)"
@@ -249,6 +265,7 @@ export class MeetingStore {
         "SELECT id FROM meetings WHERE EXISTS (SELECT 1 FROM segments WHERE meetingId=meetings.id)"
       )
       .all();
+
     for (const meeting of meetings) {
       if (overwrite || !existsSync(this.transcriptPath(meeting.id))) {
         this.saveTranscript(meeting.id);
@@ -265,6 +282,7 @@ export class MeetingStore {
             "SELECT * FROM segments WHERE meetingId=? ORDER BY sequence"
           )
           .all(id);
+
         mkdirSync(join(this.directory, "transcripts"), {
           mode: 0o700,
           recursive: true,
@@ -272,6 +290,7 @@ export class MeetingStore {
         const path = this.transcriptPath(id);
         const imported = Boolean(this.get(id)?.sourceName);
         const temporary = `${path}.${randomUUID()}.tmp`;
+
         try {
           writeFileSync(temporary, formatTranscript(rows, imported), {
             mode: 0o600,
@@ -289,12 +308,16 @@ export class MeetingStore {
         "SELECT sequence,id,text,receivedAt,speakerId,speakerName,startMs,endMs FROM segments WHERE meetingId=? AND sequence>? ORDER BY sequence LIMIT 2000"
       )
       .all(id, after);
+
     let size = 0;
+
     // Bound transcript pages for HTTP responses and agent context.
     const end = rows.findIndex((row) => {
       size += JSON.stringify(row).length;
+
       return size > 500_000;
     });
+
     return end > 0 ? rows.slice(0, end) : rows;
   }
   close() {

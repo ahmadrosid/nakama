@@ -50,6 +50,7 @@ describe("cli-config", () => {
       } finally {
         setCliConfigScope();
       }
+
       expect(await loadSavedCliProfileId()).toBe("local");
     });
   });

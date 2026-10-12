@@ -134,10 +134,12 @@ describe("bash microsandbox path with fake runtime", () => {
 
   afterEach(async () => {
     resetBashSandboxManagerForTests();
+
     if (workspaceRoot) {
       await rm(workspaceRoot, { force: true, recursive: true });
       workspaceRoot = "";
     }
+
     if (workspaceB) {
       await rm(workspaceB, { force: true, recursive: true });
       workspaceB = "";
@@ -153,6 +155,7 @@ describe("bash microsandbox path with fake runtime", () => {
   } {
     const ensures: BashSandboxEnsureArgs[] = [];
     const execs: BashSandboxExecArgs[] = [];
+
     return {
       async ensure(args) {
         if (options?.failProbe) {
@@ -160,11 +163,13 @@ describe("bash microsandbox path with fake runtime", () => {
             "MicroSandbox backend unavailable: runtime is not installed. No host fallback."
           );
         }
+
         ensures.push(args);
       },
       ensures,
       async exec(args) {
         execs.push(args);
+
         if (options?.timeout) {
           return {
             exitCode: null,
@@ -173,9 +178,11 @@ describe("bash microsandbox path with fake runtime", () => {
             timedOut: true,
           };
         }
+
         if (args.signal?.aborted) {
           throw new Error("The operation was aborted");
         }
+
         return {
           exitCode: 0,
           stderr: "",
@@ -265,6 +272,7 @@ describe("bash microsandbox path with fake runtime", () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-msb-"));
     let failNextExec = true;
     const ensures: BashSandboxEnsureArgs[] = [];
+
     const fake: BashSandboxRuntime & { ensures: BashSandboxEnsureArgs[] } = {
       async ensure(args) {
         ensures.push(args);
@@ -277,6 +285,7 @@ describe("bash microsandbox path with fake runtime", () => {
             "MicroSandbox backend unavailable: sandbox connect failed. No host fallback."
           );
         }
+
         return {
           exitCode: 0,
           stderr: "",
@@ -285,8 +294,10 @@ describe("bash microsandbox path with fake runtime", () => {
         };
       },
     };
+
     const manager = new ProfileSandboxManager(fake);
     const ctx = { orgId: "org_test", profileId: "profile_a" };
+
     const opts = {
       backend: "microsandbox" as const,
       sandboxManager: manager,
@@ -446,9 +457,11 @@ describe("profile sandbox concurrency and output bounds", () => {
   test("two overlapping first runs for one profile ensure once", async () => {
     let ensures = 0;
     let release!: () => void;
+
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
+
     const runtime: BashSandboxRuntime = {
       async ensure() {
         ensures += 1;
@@ -463,12 +476,14 @@ describe("profile sandbox concurrency and output bounds", () => {
         });
       },
     };
+
     const manager = new ProfileSandboxManager(runtime);
 
     const both = Promise.all([
       manager.run(runArgs),
       manager.run({ ...runArgs, command: "echo two" }),
     ]);
+
     release();
     const results = await both;
 
@@ -480,9 +495,11 @@ describe("profile sandbox concurrency and output bounds", () => {
 
   test("a rejected ensure is not cached, so the next call retries", async () => {
     let ensures = 0;
+
     const runtime: BashSandboxRuntime = {
       ensure() {
         ensures += 1;
+
         return ensures === 1
           ? Promise.reject(new Error("msb unavailable"))
           : Promise.resolve();
@@ -496,6 +513,7 @@ describe("profile sandbox concurrency and output bounds", () => {
         });
       },
     };
+
     const manager = new ProfileSandboxManager(runtime);
 
     await expect(manager.run(runArgs)).rejects.toThrow("msb unavailable");

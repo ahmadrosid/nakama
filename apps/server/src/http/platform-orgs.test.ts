@@ -17,6 +17,7 @@ function createPlatformApp() {
 describe("platform org routes", () => {
   test("platform admin can create and list organizations", async () => {
     const { app, authService, databaseAdapter } = createPlatformApp();
+
     const session = await loginPlatformAdminSession(
       app,
       authService,
@@ -53,6 +54,7 @@ describe("platform org routes", () => {
         id: expect.stringMatching(/^org_/),
         monthlyLlmTurnLimit: 0,
         name: "Acme Corp",
+        parentOrgId: null,
         skillsCuratorArchiveAfterDays: 90,
         skillsCuratorConsolidateEnabled: false,
         skillsCuratorEnabled: false,
@@ -72,15 +74,19 @@ describe("platform org routes", () => {
     );
 
     expect(listResponse.status).toBe(200);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const payload = (await listResponse.json()) as {
       organizations: Array<{ slug: string }>;
     };
+
     expect(payload.organizations).toHaveLength(1);
     expect(payload.organizations[0]?.slug).toBe("acme-corp");
   });
 
   test("non-platform users cannot manage organizations", async () => {
     const { app, authService, databaseAdapter } = createPlatformApp();
+
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
@@ -104,7 +110,10 @@ describe("platform org routes", () => {
         method: "POST",
       })
     );
+
     expect(createResponse.status).toBe(201);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const created = (await createResponse.json()) as {
       organization: { id: string };
       adminMember: { temporaryPassword: string };
@@ -120,7 +129,9 @@ describe("platform org routes", () => {
         method: "POST",
       })
     );
+
     expect(orgAdminLogin.status).toBe(200);
+
     const orgAdminSession = browserSessionFromResponse(
       orgAdminLogin,
       created.organization.id
@@ -142,11 +153,13 @@ describe("platform org routes", () => {
 
   test("returns 409 for duplicate organization slugs", async () => {
     const { app, authService, databaseAdapter } = createPlatformApp();
+
     const session = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     const headers = session.headers({
       "X-CSRF-Token": session.csrfToken,
     });
@@ -158,6 +171,7 @@ describe("platform org routes", () => {
         method: "POST",
       })
     );
+
     expect(first.status).toBe(201);
 
     const second = await app.fetch(
@@ -176,11 +190,13 @@ describe("platform org routes", () => {
 
   test("platform admin can archive and permanently delete an organization", async () => {
     const { app, authService, databaseAdapter } = createPlatformApp();
+
     const session = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     const headers = session.headers({
       "X-CSRF-Token": session.csrfToken,
     });
@@ -192,7 +208,9 @@ describe("platform org routes", () => {
         method: "POST",
       })
     );
+
     expect(first.status).toBe(201);
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const created = (await first.json()) as { organization: { id: string } };
 
     const second = await app.fetch(
@@ -202,6 +220,7 @@ describe("platform org routes", () => {
         method: "POST",
       })
     );
+
     expect(second.status).toBe(201);
 
     await databaseAdapter.putManagedSecret({
@@ -220,10 +239,14 @@ describe("platform org routes", () => {
         }
       )
     );
+
     expect(archived.status).toBe(200);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const payload = (await archived.json()) as {
       organization: { archivedAt: string | null; id: string };
     };
+
     expect(payload.organization.id).toBe(created.organization.id);
     expect(payload.organization.archivedAt).toBeTruthy();
 
@@ -236,6 +259,7 @@ describe("platform org routes", () => {
         }
       )
     );
+
     expect(deleted.status).toBe(204);
     expect(
       await databaseAdapter.getOrganizationById(created.organization.id)
@@ -248,8 +272,56 @@ describe("platform org routes", () => {
     ).toBeNull();
   });
 
+  test("platform admin can update org skill settings", async () => {
+    const { app, authService, databaseAdapter } = createPlatformApp();
+
+    const session = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+
+    const headers = session.headers({
+      "X-CSRF-Token": session.csrfToken,
+    });
+
+    const created = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/orgs", {
+        body: JSON.stringify({ name: "Acme", slug: "acme-skills" }),
+        headers,
+        method: "POST",
+      })
+    );
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
+    const { organization } = (await created.json()) as {
+      organization: { id: string };
+    };
+
+    const updated = await app.fetch(
+      new Request(`http://localhost:4310/v1/platform/orgs/${organization.id}`, {
+        body: JSON.stringify({
+          skillsCuratorEnabled: true,
+          skillsPostTurnReview: true,
+          skillsWriteApproval: true,
+        }),
+        headers,
+        method: "PATCH",
+      })
+    );
+
+    expect(updated.status).toBe(200);
+
+    const stored = await databaseAdapter.getOrganizationById(organization.id);
+
+    expect(stored?.skillsCuratorEnabled).toBe(true);
+    expect(stored?.skillsPostTurnReview).toBe(true);
+    expect(stored?.skillsWriteApproval).toBe(true);
+  });
+
   test("org admin cannot archive via platform delete", async () => {
     const { app, authService, databaseAdapter } = createPlatformApp();
+
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
@@ -273,7 +345,10 @@ describe("platform org routes", () => {
         method: "POST",
       })
     );
+
     expect(createResponse.status).toBe(201);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const created = (await createResponse.json()) as {
       organization: { id: string };
       adminMember: { temporaryPassword: string };
@@ -289,7 +364,9 @@ describe("platform org routes", () => {
         method: "POST",
       })
     );
+
     expect(orgAdminLogin.status).toBe(200);
+
     const orgAdminSession = browserSessionFromResponse(
       orgAdminLogin,
       created.organization.id
@@ -320,16 +397,19 @@ describe("platform org routes", () => {
         }
       )
     );
+
     expect(permanentResponse.status).toBe(403);
   });
 
   test("refuses to archive the last active organization", async () => {
     const { app, authService, databaseAdapter } = createPlatformApp();
+
     const session = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     const headers = session.headers({
       "X-CSRF-Token": session.csrfToken,
     });
@@ -341,7 +421,9 @@ describe("platform org routes", () => {
         method: "POST",
       })
     );
+
     expect(created.status).toBe(201);
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const payload = (await created.json()) as { organization: { id: string } };
 
     const response = await app.fetch(
@@ -353,16 +435,19 @@ describe("platform org routes", () => {
         }
       )
     );
+
     expect(response.status).toBe(409);
   });
 
   test("archived org context is not found", async () => {
     const { app, authService, databaseAdapter } = createPlatformApp();
+
     const session = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     const headers = session.headers({
       "X-CSRF-Token": session.csrfToken,
     });
@@ -374,7 +459,9 @@ describe("platform org routes", () => {
         method: "POST",
       })
     );
+
     expect(first.status).toBe(201);
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const created = (await first.json()) as { organization: { id: string } };
 
     const second = await app.fetch(
@@ -384,6 +471,7 @@ describe("platform org routes", () => {
         method: "POST",
       })
     );
+
     expect(second.status).toBe(201);
 
     const archived = await app.fetch(
@@ -395,6 +483,7 @@ describe("platform org routes", () => {
         }
       )
     );
+
     expect(archived.status).toBe(200);
 
     const members = await app.fetch(
@@ -407,11 +496,13 @@ describe("platform org routes", () => {
         }
       )
     );
+
     expect(members.status).toBe(404);
   });
 
   test("platform admin can disable and re-enable a member; org admin cannot", async () => {
     const { app, authService, databaseAdapter } = createPlatformApp();
+
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
@@ -435,11 +526,15 @@ describe("platform org routes", () => {
         method: "POST",
       })
     );
+
     expect(createResponse.status).toBe(201);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const created = (await createResponse.json()) as {
       organization: { id: string };
       adminMember: { temporaryPassword: string };
     };
+
     const orgId = created.organization.id;
 
     const adminSession = await loginUserSession(
@@ -463,11 +558,15 @@ describe("platform org routes", () => {
         method: "POST",
       })
     );
+
     expect(addMemberResponse.status).toBe(201);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const added = (await addMemberResponse.json()) as {
       member: { userId: string };
       temporaryPassword: string;
     };
+
     const memberSession = await loginUserSession(
       app,
       "member-disable@acme.com",
@@ -487,6 +586,7 @@ describe("platform org routes", () => {
         }
       )
     );
+
     expect(orgAdminAttempt.status).toBe(403);
 
     const disableResponse = await app.fetch(
@@ -500,6 +600,7 @@ describe("platform org routes", () => {
         }
       )
     );
+
     expect(disableResponse.status).toBe(204);
 
     // The disabled member's existing session dies immediately, not just at next login.
@@ -508,6 +609,7 @@ describe("platform org routes", () => {
         headers: memberSession.headers({}, orgId),
       })
     );
+
     expect(staleSessionResponse.status).toBe(401);
 
     const loginAttempt = await app.fetch(
@@ -520,6 +622,7 @@ describe("platform org routes", () => {
         method: "POST",
       })
     );
+
     expect(loginAttempt.status).toBe(403);
     await expect(loginAttempt.json()).resolves.toEqual({
       error: "Account disabled",
@@ -536,6 +639,7 @@ describe("platform org routes", () => {
         }
       )
     );
+
     expect(enableResponse.status).toBe(204);
 
     const loginAfterEnable = await app.fetch(
@@ -548,11 +652,13 @@ describe("platform org routes", () => {
         method: "POST",
       })
     );
+
     expect(loginAfterEnable.status).toBe(200);
   });
 
   test("disabling the last org admin is blocked", async () => {
     const { app, authService, databaseAdapter } = createPlatformApp();
+
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
@@ -576,11 +682,15 @@ describe("platform org routes", () => {
         method: "POST",
       })
     );
+
     expect(createResponse.status).toBe(201);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const created = (await createResponse.json()) as {
       organization: { id: string };
       adminMember: { member: { userId: string } };
     };
+
     const orgId = created.organization.id;
 
     // Every new org also seats the local-client account as admin, so the human
@@ -596,6 +706,7 @@ describe("platform org routes", () => {
         }
       )
     );
+
     expect(disableHumanAdmin.status).toBe(204);
 
     const disableLastAdmin = await app.fetch(
@@ -609,11 +720,13 @@ describe("platform org routes", () => {
         }
       )
     );
+
     expect(disableLastAdmin.status).toBe(409);
   });
 
   test("disabling a user via one org is blocked if it would leave another org with no usable admin", async () => {
     const { app, authService, databaseAdapter } = createPlatformApp();
+
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
@@ -637,7 +750,10 @@ describe("platform org routes", () => {
         method: "POST",
       })
     );
+
     expect(createOrgA.status).toBe(201);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const orgA = (await createOrgA.json()) as {
       organization: { id: string };
       adminMember: { member: { userId: string } };
@@ -660,7 +776,9 @@ describe("platform org routes", () => {
         method: "POST",
       })
     );
+
     expect(createOrgB.status).toBe(201);
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const orgB = (await createOrgB.json()) as { organization: { id: string } };
 
     // org A's human admin also joins org B as a plain member.
@@ -685,6 +803,7 @@ describe("platform org routes", () => {
         }
       )
     );
+
     expect(disableLocalClientInOrgA.status).toBe(204);
 
     // Disabling the human through org B, where they are only a member, must
@@ -701,19 +820,23 @@ describe("platform org routes", () => {
         }
       )
     );
+
     expect(disableThroughOrgB.status).toBe(409);
   });
 
   test("disabling the install's only platform admin is blocked even when they are just a plain org member", async () => {
     const { app, authService, databaseAdapter } = createPlatformApp();
+
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     const platformAdminUser = await databaseAdapter.getUserByEmail(
       "platform@example.com"
     );
+
     if (!platformAdminUser) {
       throw new Error("platform admin user not found");
     }
@@ -735,7 +858,10 @@ describe("platform org routes", () => {
         method: "POST",
       })
     );
+
     expect(createOrgResponse.status).toBe(201);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const created = (await createOrgResponse.json()) as {
       organization: { id: string };
     };
@@ -760,32 +886,40 @@ describe("platform org routes", () => {
         }
       )
     );
+
     expect(disableResponse.status).toBe(409);
   });
 
   test("platform admin erases user access but preserves anonymized chat history across organizations", async () => {
     const { app, authService, databaseAdapter, orgService } =
       createPlatformApp();
+
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     const created = await orgService.createOrganization({
       name: "Erasure Test",
       slug: "erasure-test",
     });
+
     const orgId = created.organization.id;
     const profile = (await databaseAdapter.listProfilesForOrg(orgId))[0];
     expect(profile).toBeDefined();
+
     const secondCreated = await orgService.createOrganization({
       name: "Second Erasure Test",
       slug: "second-erasure-test",
     });
+
     const secondOrgId = secondCreated.organization.id;
+
     const secondProfile = (
       await databaseAdapter.listProfilesForOrg(secondOrgId)
     )[0];
+
     expect(secondProfile).toBeDefined();
 
     const now = new Date().toISOString();
@@ -916,14 +1050,17 @@ describe("platform org routes", () => {
 
   test("platform admin cannot erase their current account", async () => {
     const { app, authService, databaseAdapter } = createPlatformApp();
+
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     const platformAdmin = await databaseAdapter.getUserByEmail(
       "platform@example.com"
     );
+
     expect(platformAdmin).toBeDefined();
 
     const response = await app.fetch(

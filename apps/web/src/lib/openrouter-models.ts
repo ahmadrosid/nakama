@@ -1,4 +1,4 @@
-export interface OpenRouterApiPricing {
+interface OpenRouterApiPricing {
   completion?: string;
   image?: string;
   input_cache_read?: string;
@@ -41,7 +41,7 @@ export interface OpenRouterModelRow {
 }
 
 /** OpenRouter API prices are USD per token; convert to USD per 1M tokens. */
-export function openRouterPricingPerMillion(
+function openRouterPricingPerMillion(
   pricing: OpenRouterApiPricing | undefined
 ):
   | Pick<OpenRouterModelRow, "inputPerMillionUsd" | "outputPerMillionUsd">
@@ -65,7 +65,7 @@ export function openRouterPricingPerMillion(
   return { inputPerMillionUsd, outputPerMillionUsd };
 }
 
-export function isOpenRouterModelFree(
+function isOpenRouterModelFree(
   pricing: OpenRouterApiPricing | undefined
 ): boolean {
   if (!pricing) {
@@ -74,13 +74,14 @@ export function isOpenRouterModelFree(
 
   const prompt = Number.parseFloat(pricing.prompt ?? "1");
   const completion = Number.parseFloat(pricing.completion ?? "1");
+
   return prompt === 0 && completion === 0;
 }
 
 /** OpenRouter uses 2098-12-31 as a placeholder on live stealth/preview models. */
 const OPENROUTER_SENTINEL_EXPIRATION_YEAR = 2090;
 
-export function isOpenRouterModelDeprecated(
+function isOpenRouterModelDeprecated(
   expirationDate: string | null | undefined
 ): boolean {
   if (!expirationDate) {
@@ -88,6 +89,7 @@ export function isOpenRouterModelDeprecated(
   }
 
   const year = Number.parseInt(expirationDate.slice(0, 4), 10);
+
   return Number.isFinite(year) && year < OPENROUTER_SENTINEL_EXPIRATION_YEAR;
 }
 
@@ -118,6 +120,7 @@ export function normalizeOpenRouterModels(
   apiJson: OpenRouterModelsApiResponse
 ): OpenRouterModelRow[] {
   const data = apiJson.data ?? [];
+
   return data.map(normalizeOpenRouterModel).sort(compareOpenRouterModelRows);
 }
 
@@ -134,6 +137,7 @@ function compareOpenRouterModelRows(
 
 function truncateDescription(text: string, maxLength = 120): string {
   const trimmed = text.trim();
+
   if (trimmed.length <= maxLength) {
     return trimmed;
   }

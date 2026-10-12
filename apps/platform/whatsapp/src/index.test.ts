@@ -28,6 +28,7 @@ test("uncaught exception exits nonzero after cleanup", async () => {
         throw new Error("fatal worker failure");
       });
     `;
+
     const child = Bun.spawn({
       cmd: [process.execPath, "--no-install", "-e", script],
       stderr: "ignore",

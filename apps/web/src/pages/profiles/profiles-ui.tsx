@@ -102,7 +102,9 @@ export function EditableProfileAvatar({
   onPick,
   onRemove,
   size = "md",
+  avatarClassName,
 }: {
+  avatarClassName?: string;
   profile: ProfileSummary;
   disabled: boolean;
   uploading: boolean;
@@ -111,6 +113,7 @@ export function EditableProfileAvatar({
   size?: "xs" | "sm" | "md" | "ml" | "lg";
 }) {
   const [removeOpen, setRemoveOpen] = useState(false);
+
   const triggerClassName =
     "group relative shrink-0 rounded-full transition-transform duration-150 ease-out active:not-disabled:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
 
@@ -128,7 +131,11 @@ export function EditableProfileAvatar({
               />
             }
           >
-            <ProfileAvatar profile={profile} size={size} />
+            <ProfileAvatar
+              className={avatarClassName}
+              profile={profile}
+              size={size}
+            />
             <ProfileAvatarOverlay size={size} uploading={uploading} />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="min-w-40">
@@ -167,7 +174,11 @@ export function EditableProfileAvatar({
       onClick={onPick}
       type="button"
     >
-      <ProfileAvatar profile={profile} size={size} />
+      <ProfileAvatar
+        className={avatarClassName}
+        profile={profile}
+        size={size}
+      />
       <ProfileAvatarOverlay size={size} uploading={uploading} />
     </button>
   );
@@ -302,27 +313,6 @@ export function PageState({
     >
       <Spinner className="size-5" />
       {message}
-    </div>
-  );
-}
-
-export function Field({
-  label,
-  htmlFor,
-  children,
-  className,
-}: {
-  label: string;
-  htmlFor?: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={cn("flex flex-col gap-1.5", className)}>
-      <label className="text-muted-foreground text-xs" htmlFor={htmlFor}>
-        {label}
-      </label>
-      {children}
     </div>
   );
 }

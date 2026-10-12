@@ -87,10 +87,14 @@ export const readFileInputSchema = z
   .strict();
 
 export type WriteFileInput = z.infer<typeof writeFileInputSchema>;
+
 export type WriteDocxInput = z.infer<typeof writeDocxInputSchema>;
+
 export type DeleteFileInput = z.infer<typeof deleteFileInputSchema>;
+
 export type EditFileInput = z.infer<typeof editFileInputSchema>;
-export type ReadFileInput = z.infer<typeof readFileInputSchema>;
+
+export type ReadFileInput = z.input<typeof readFileInputSchema>;
 
 export interface WriteFileOutput {
   bytesWritten: number;
@@ -127,7 +131,9 @@ interface FileToolRunOptions {
 let defaultGuardOptions: PathGuardOptions = {};
 
 const BLOCKED_READ_BASENAMES = ["config.ini"];
+
 const ARTIFACT_META_SUFFIX = ".nakama-meta.json";
+
 const artifactRemap = new Map<string, string>();
 
 function normalizeArtifactPath(relativePath: string): string {
@@ -136,6 +142,7 @@ function normalizeArtifactPath(relativePath: string): string {
 
 function isArtifactPath(relativePath: string): boolean {
   const normalized = normalizeArtifactPath(relativePath);
+
   return (
     normalized.startsWith("artifacts/") &&
     !normalized.endsWith(ARTIFACT_META_SUFFIX)
@@ -159,6 +166,7 @@ async function uniqueArtifactPath(filePath: string): Promise<string> {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const suffix = attempt === 0 ? date : `${date}-${attempt + 1}`;
     const candidate = path.join(directory, `${baseName}-${suffix}${extension}`);
+
     if (!(await pathExists(candidate))) {
       return candidate;
     }
@@ -171,10 +179,12 @@ export function setDefaultFileGuardOptions(options: PathGuardOptions): void {
   defaultGuardOptions = { ...options };
 }
 
-function requireProfileScope(context: ToolContext): {
+interface ProfileScope {
   orgId: string;
   profileId: string;
-} {
+}
+
+function requireProfileScope(context: ToolContext): ProfileScope {
   const orgId = context.orgId?.trim();
   const profileId = context.profileId?.trim();
 
@@ -204,12 +214,14 @@ export function refuseProfileSkillMarkdownWrite(
 
   const normalized = resolvedPath.replace(/\\/g, "/");
   const match = normalized.match(/(?:^|\/)skills\/([^/]+)\/(.+)$/i);
+
   if (!match) {
     return;
   }
 
   const skillName = match[1];
   const rest = match[2];
+
   if (!skillName || skillName === "." || skillName === ".." || !rest) {
     return;
   }
@@ -246,6 +258,7 @@ export function refuseMemoryFileWrite(
   const name = path
     .relative(resolveWithRealpath(workspaceRoot), resolvedPath)
     .replace(/\\/g, "/");
+
   // NTFS opens `memory.md` as MEMORY.md, and a file that does not exist yet
   // keeps the caller's casing through the path guard. The archive pattern is
   // all lowercase, so the folded name matches it case-insensitively too.
@@ -270,17 +283,20 @@ export function refuseMemoryFileWrite(
 export function refuseSkillLocalToolFileWrite(resolvedPath: string): void {
   const normalized = resolvedPath.replace(/\\/g, "/");
   const match = normalized.match(/(?:^|\/)skills\/([^/]+)\/([^/]+)$/i);
+
   if (!match) {
     return;
   }
 
   const skillName = match[1];
   const fileName = match[2];
+
   if (!skillName || skillName === "." || skillName === ".." || !fileName) {
     return;
   }
 
   const lower = fileName.toLowerCase();
+
   if (lower !== "tool.ts" && lower !== "tool.js") {
     return;
   }
@@ -300,8 +316,10 @@ function fileToolWorkspaceRoot(
   options: FileToolRunOptions = {}
 ): string {
   const { orgId, profileId } = requireProfileScope(context);
+
   const workspaceRoot =
     options.workspaceRoot ?? getProfileSoulDir(orgId, profileId);
+
   assertAbsoluteWorkspaceRoot(workspaceRoot);
 
   return workspaceRoot;
@@ -312,9 +330,11 @@ function buildFileGuardOptions(
   options: FileToolRunOptions = {}
 ): PathGuardOptions {
   const workspaceRoot = fileToolWorkspaceRoot(context, options);
+  const { orgId } = requireProfileScope(context);
+
   return {
     ...defaultGuardOptions,
-    allowedDirs: [workspaceRoot, getCustomToolsDir()],
+    allowedDirs: [workspaceRoot, getCustomToolsDir(orgId)],
     cwd: workspaceRoot,
   };
 }
@@ -359,7 +379,7 @@ function refuseWordExtension(targetPath: string): void {
 }
 
 export async function runWriteFile(
-  input: unknown,
+  input: WriteFileInput,
   context: ToolContext,
   options: FileToolRunOptions = {}
 ): Promise<WriteFileOutput> {
@@ -375,6 +395,7 @@ export async function runWriteFile(
     contentBytes,
     { ...guardOptions, cwd: artifactRoot }
   );
+
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseMemoryFileWrite(
     context,
@@ -396,6 +417,7 @@ export async function runWriteFile(
         normalizedPath.slice(0, -ARTIFACT_META_SUFFIX.length)
       )
     );
+
     if (remapped) {
       filePath = path.resolve(
         workspaceRoot,
@@ -404,6 +426,7 @@ export async function runWriteFile(
     }
   } else if (isArtifactPath(parsed.path)) {
     const uniquePath = await uniqueArtifactPath(filePath);
+
     if (uniquePath !== filePath) {
       artifactRemap.set(
         artifactRemapKey(context, parsed.path),
@@ -431,7 +454,7 @@ export const writeDocxTool: ToolDefinition<WriteDocxInput, WriteFileOutput> = {
 };
 
 export async function runWriteDocx(
-  input: unknown,
+  input: WriteDocxInput,
   context: ToolContext,
   options: FileToolRunOptions = {}
 ): Promise<WriteFileOutput> {
@@ -443,6 +466,7 @@ export async function runWriteDocx(
 
   const bytes = await markdownToDocx(parsed.markdown);
   const guardOptions = buildFileGuardOptions(context, options);
+
   const guarded = await guardFilePath(
     parsed.path,
     parsed.cwd ?? null,
@@ -452,6 +476,7 @@ export async function runWriteDocx(
       cwd: fileToolWorkspaceRoot(context, options),
     }
   );
+
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseMemoryFileWrite(
     context,
@@ -459,6 +484,7 @@ export async function runWriteDocx(
     fileToolWorkspaceRoot(context, options)
   );
   refuseSkillLocalToolFileWrite(guarded.resolved);
+
   // Same rule as write_file: never silently overwrite an existing artifact.
   const filePath = isArtifactPath(parsed.path)
     ? await uniqueArtifactPath(guarded.resolved)
@@ -482,7 +508,7 @@ export const deleteFileTool: ToolDefinition<DeleteFileInput, DeleteFileOutput> =
   };
 
 export async function runDeleteFile(
-  input: unknown,
+  input: DeleteFileInput,
   context: ToolContext,
   options: FileToolRunOptions = {}
 ): Promise<DeleteFileOutput> {
@@ -495,6 +521,7 @@ export async function runDeleteFile(
     undefined,
     guardOptions
   );
+
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseMemoryFileWrite(
     context,
@@ -519,7 +546,7 @@ export const editFileTool: ToolDefinition<EditFileInput, EditFileOutput> = {
 };
 
 export async function runEditFile(
-  input: unknown,
+  input: EditFileInput,
   context: ToolContext,
   options: FileToolRunOptions = {}
 ): Promise<EditFileOutput> {
@@ -529,12 +556,14 @@ export async function runEditFile(
 
   const guardOptions = buildFileGuardOptions(context, options);
   const maxBytes = guardOptions.maxFileBytes ?? 10 * 1024 * 1024;
+
   const guarded = await guardFilePath(
     parsed.path,
     parsed.cwd ?? null,
     undefined,
     guardOptions
   );
+
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseMemoryFileWrite(
     context,
@@ -552,6 +581,7 @@ export async function runEditFile(
   }
 
   let fileStat;
+
   try {
     fileStat = await stat(filePath);
   } catch {
@@ -570,21 +600,26 @@ export async function runEditFile(
   }
 
   let rawBuffer = await readFile(filePath);
+
   if (context.memoryFiles) {
     rawBuffer = Buffer.from(
       await context.memoryFiles.read(filePath, rawBuffer.toString("utf8"))
     );
   }
+
   const hasBom =
     rawBuffer.length >= 3 &&
     rawBuffer.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]));
+
   const content = rawBuffer.toString("utf8", hasBom ? 3 : 0);
   const lineEnding = detectLineEnding(content);
   const normalizedContent = normalizeToLF(content);
+
   const edits = parsed.edits.map((edit) => ({
     newText: normalizeToLF(edit.newText),
     oldText: normalizeToLF(edit.oldText),
   }));
+
   const fuzzyMatches = edits.filter(
     (edit) =>
       !normalizedContent.includes(edit.oldText) &&
@@ -592,26 +627,32 @@ export async function runEditFile(
         normalizeForEditMatch(edit.oldText)
       )
   ).length;
+
   const base =
     fuzzyMatches > 0
       ? normalizeForEditMatch(normalizedContent)
       : normalizedContent;
+
   const plans = edits
     .map((edit, index) => planEdit(base, edit, index))
     .sort((a, b) => a.start - b.start);
+
   assertNoOverlappingEdits(plans);
 
   const nextContent =
     fuzzyMatches > 0
       ? applyEditsPreservingLines(normalizedContent, base, plans)
       : applyEditPlans(base, plans);
+
   if (nextContent === normalizedContent) {
     throw new Error(
       "No changes made: replacements produced identical content."
     );
   }
+
   const restored =
     lineEnding === "\r\n" ? nextContent.replace(/\n/g, "\r\n") : nextContent;
+
   const outputContent = hasBom ? `\uFEFF${restored}` : restored;
   const bytesWritten = Buffer.byteLength(outputContent, "utf8");
 
@@ -649,15 +690,19 @@ function planEdit(
   const normalizedSearch = normalizeForEditMatch(edit.oldText);
   const normalizedContent = normalizeForEditMatch(content);
   const fuzzyStart = normalizedContent.indexOf(normalizedSearch);
+
   if (exactStart === -1 && (fuzzyStart === -1 || !normalizedSearch)) {
     throw new Error(`Edit ${index + 1} oldText not found in file.`);
   }
+
   if (normalizedContent.split(normalizedSearch).length - 1 > 1) {
     throw new Error(
       `Edit ${index + 1} is ambiguous after normalized matching.`
     );
   }
+
   const start = exactStart === -1 ? fuzzyStart : exactStart;
+
   return {
     end:
       start +
@@ -671,6 +716,7 @@ function planEdit(
 function detectLineEnding(content: string): string {
   const lf = content.indexOf("\n");
   const crlf = content.indexOf("\r\n");
+
   return lf !== -1 && crlf !== -1 && crlf < lf ? "\r\n" : "\n";
 }
 
@@ -697,28 +743,38 @@ function applyEditsPreservingLines(
 ): string {
   const originalLines = original.match(/[^\n]*\n|[^\n]+/g) ?? [];
   const baseLines = base.match(/[^\n]*\n|[^\n]+/g) ?? [];
+
   if (originalLines.length !== baseLines.length) {
     throw new Error(
       "Cannot preserve unchanged lines: normalization changed the line count."
     );
   }
+
   // Widen replacements to touched lines, copying every other line from the original.
   let offset = 0;
+
   const spans = baseLines.map((line) => {
     const start = offset;
     offset += line.length;
+
     return { end: offset, start };
   });
+
   const groups: { first: number; last: number; plans: PlannedEdit[] }[] = [];
+
   for (const plan of plans) {
     const first = spans.findIndex(
       (span) => plan.start >= span.start && plan.start < span.end
     );
+
     const last = spans.findIndex((span) => plan.end <= span.end);
+
     if (first === -1 || last < first) {
       throw new Error("Replacement range is outside the file.");
     }
+
     const previous = groups.at(-1);
+
     if (previous && first <= previous.last) {
       previous.last = Math.max(previous.last, last);
       previous.plans.push(plan);
@@ -726,8 +782,10 @@ function applyEditsPreservingLines(
       groups.push({ first, last, plans: [plan] });
     }
   }
+
   let cursor = 0;
   let result = "";
+
   for (const group of groups) {
     result += originalLines.slice(cursor, group.first).join("");
     const start = spans[group.first].start;
@@ -741,18 +799,21 @@ function applyEditsPreservingLines(
     );
     cursor = group.last + 1;
   }
+
   return result + originalLines.slice(cursor).join("");
 }
 
 function assertNoOverlappingEdits(plans: PlannedEdit[]): void {
   // Caller sorts by start before invoking; only overlap is still possible.
   let previous: PlannedEdit | undefined;
+
   for (const current of plans) {
     if (previous !== undefined && current.start < previous.end) {
       throw new Error(
         `Edit ${current.index + 1} overlaps with edit ${previous.index + 1}.`
       );
     }
+
     previous = current;
   }
 }
@@ -768,6 +829,7 @@ function applyEditPlans(content: string, plans: PlannedEdit[]): string {
   }
 
   nextContent += content.slice(cursor);
+
   return nextContent;
 }
 
@@ -795,13 +857,17 @@ function detectImageMediaType(bytes: Buffer): string | undefined {
   if (bytes.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex"))) {
     return "image/png";
   }
+
   if (bytes.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) {
     return "image/jpeg";
   }
+
   const header = bytes.toString("latin1", 0, 12);
+
   if (header.startsWith("GIF87a") || header.startsWith("GIF89a")) {
     return "image/gif";
   }
+
   if (header.startsWith("RIFF") && header.slice(8, 12) === "WEBP") {
     return "image/webp";
   }
@@ -819,7 +885,7 @@ export const readFileTool: ToolDefinition<ReadFileInput, ReadFileOutput> = {
 };
 
 export async function runReadFile(
-  input: unknown,
+  input: ReadFileInput,
   context: ToolContext,
   options: FileToolRunOptions = {}
 ): Promise<ReadFileOutput> {
@@ -828,48 +894,101 @@ export async function runReadFile(
   guardOptions.allowedDirs!.push(getGlobalSkillsDir());
   const maxBytes = guardOptions.maxFileBytes ?? 10 * 1024 * 1024;
 
-  const guarded = await guardFilePath(
-    parsed.path,
-    parsed.cwd ?? null,
-    undefined,
-    guardOptions
-  );
-  const filePath = guarded.resolved;
+  let filePath: string;
+  let contentPath: string;
+  let bytes: Buffer;
+  const shared = parsed.path.startsWith("published-skill://");
 
-  if (BLOCKED_READ_BASENAMES.includes(path.basename(filePath).toLowerCase())) {
-    throw new PathGuardError(
-      `Reading ${path.basename(filePath)} is not allowed`,
-      "SPECIAL_FILE"
-    );
-  }
+  if (shared) {
+    if (
+      !(context.orgId && context.profileId && context.readPublishedSkillFile) ||
+      parsed.cwd
+    ) {
+      throw new Error(
+        "Published skill reads require profile context and no cwd."
+      );
+    }
 
-  let fileStat;
-  try {
-    fileStat = await stat(filePath);
-  } catch {
-    throw new Error(`File not found: ${filePath}`);
-  }
+    const reference = /^published-skill:\/\/([^/]+)\/(.+)$/.exec(parsed.path);
 
-  if (!fileStat.isFile()) {
-    throw new Error(`Path is not a file: ${filePath}`);
-  }
+    if (!reference) {
+      throw new Error("Invalid published skill reference.");
+    }
 
-  if (fileStat.size > maxBytes) {
-    throw new PathGuardError(
-      `File content exceeds max ${maxBytes} bytes (got ${fileStat.size})`,
-      "TOO_LARGE"
-    );
-  }
+    const publicationId = decodeURIComponent(reference[1]!);
+    const relativePath = decodeURIComponent(reference[2]!);
 
-  const bytes = await readFile(filePath);
-  const mediaType = detectImageMediaType(bytes);
-  if (mediaType) {
-    if (bytes.length > MAX_IMAGE_BYTES) {
+    if (
+      BLOCKED_READ_BASENAMES.includes(path.basename(relativePath).toLowerCase())
+    ) {
       throw new PathGuardError(
-        `Image exceeds max ${MAX_IMAGE_BYTES} bytes (got ${bytes.length})`,
+        "Reading this file is not allowed",
+        "SPECIAL_FILE"
+      );
+    }
+
+    bytes = Buffer.from(
+      await context.readPublishedSkillFile(
+        publicationId,
+        relativePath,
+        maxBytes
+      )
+    );
+    filePath = parsed.path;
+    contentPath = relativePath;
+  } else {
+    const guarded = await guardFilePath(
+      parsed.path,
+      parsed.cwd ?? null,
+      undefined,
+      guardOptions
+    );
+
+    filePath = guarded.resolved;
+
+    if (
+      BLOCKED_READ_BASENAMES.includes(path.basename(filePath).toLowerCase())
+    ) {
+      throw new PathGuardError(
+        `Reading ${path.basename(filePath)} is not allowed`,
+        "SPECIAL_FILE"
+      );
+    }
+
+    let fileStat;
+
+    try {
+      fileStat = await stat(filePath);
+    } catch {
+      throw new Error(`File not found: ${filePath}`);
+    }
+
+    if (!fileStat.isFile()) {
+      throw new Error(`Path is not a file: ${filePath}`);
+    }
+
+    if (fileStat.size > maxBytes) {
+      throw new PathGuardError(
+        `File content exceeds max ${maxBytes} bytes (got ${fileStat.size})`,
         "TOO_LARGE"
       );
     }
+
+    bytes = await readFile(filePath);
+    contentPath = filePath;
+  }
+
+  if (bytes.length > maxBytes) {
+    throw new PathGuardError("File exceeds the size limit", "TOO_LARGE");
+  }
+
+  const mediaType = detectImageMediaType(bytes);
+
+  if (mediaType) {
+    if (bytes.length > MAX_IMAGE_BYTES) {
+      throw new PathGuardError("Image exceeds the size limit", "TOO_LARGE");
+    }
+
     return {
       bytesRead: bytes.length,
       content: `Read image file [${mediaType}]`,
@@ -881,23 +1000,32 @@ export async function runReadFile(
       truncated: false,
     };
   }
-  const localContent = await readFileAsText(filePath, bytes);
-  const rawContent = context.memoryFiles
-    ? await context.memoryFiles.read(filePath, localContent)
-    : localContent;
+
+  const localContent = await readFileAsText(contentPath, bytes);
+
+  const rawContent =
+    !shared && context.memoryFiles
+      ? await context.memoryFiles.read(filePath, localContent)
+      : localContent;
+
   const lines = rawContent.length === 0 ? [] : rawContent.split("\n");
   const totalLines = lines.length;
+
   const startLine = Math.min(
     Math.max(1, parsed.offset),
     totalLines === 0 ? 1 : totalLines + 1
   );
+
   const startIndex = startLine - 1;
+
   const endIndex =
     parsed.limit == null
       ? totalLines
       : Math.min(startIndex + parsed.limit, totalLines);
+
   const slice = lines.slice(startIndex, endIndex);
   const content = slice.join("\n");
+
   const endLine =
     slice.length > 0
       ? startLine + slice.length - 1

@@ -38,10 +38,12 @@ export function parseMemoryContent(content: string): ParsedMemory {
 
   for (const line of lines) {
     const dateMatch = line.match(/^## (\d{4}-\d{2}-\d{2})$/);
+
     if (dateMatch) {
       if (currentDate) {
         sections.push({ bullets: currentBullets, date: currentDate });
       }
+
       phase = "sections";
       currentDate = dateMatch[1];
       currentBullets = [];
@@ -77,25 +79,36 @@ export function rebuildMemoryContent(parsed: ParsedMemory): string {
     }
 
     parts.push("", `## ${section.date}`, "");
+
     for (const bullet of section.bullets) {
       parts.push(`- ${bullet}`);
     }
   }
 
   const content = parts.join("\n").replace(/\n+$/, "");
+
   return content.length > 0 ? `${content}\n` : content;
+}
+
+export interface PartitionedMemoryEntries {
+  active: ParsedMemory;
+  archivedCount: number;
+  archivedSections: MemorySection[];
+  unmatched: string[];
 }
 
 export function partitionMemoryEntries(
   parsed: ParsedMemory,
   entries: string[]
-): {
-  active: ParsedMemory;
-  archivedSections: MemorySection[];
-  archivedCount: number;
-  unmatched: string[];
-} {
-  const targets = new Set(entries.map((entry) => entry.trim()).filter(Boolean));
+): PartitionedMemoryEntries {
+  const targets = new Set(
+    entries.flatMap((entry) => {
+      const trimmed = entry.trim();
+
+      return trimmed ? [trimmed] : [];
+    })
+  );
+
   const unmatched = new Set(targets);
   const archivedByDate = new Map<string, string[]>();
   const activeSections: MemorySection[] = [];
@@ -106,6 +119,7 @@ export function partitionMemoryEntries(
 
     for (const bullet of section.bullets) {
       const trimmed = bullet.trim();
+
       if (targets.has(trimmed)) {
         unmatched.delete(trimmed);
         archivedCount += 1;
@@ -148,6 +162,7 @@ export function formatArchiveAppend(
 
   for (const section of sections) {
     lines.push("", `## ${section.date}`, "");
+
     for (const bullet of section.bullets) {
       lines.push(`- ${bullet}`);
     }
@@ -181,6 +196,7 @@ export async function archiveProfileMemoryBullets(
   const memoryPath = join(soulDir, "MEMORY.md");
   await migrateLegacyMemoryArchiveDir(orgId, profileId);
   const archiveDir = getMemoryArchiveDir(orgId, profileId);
+
   return archiveMemoryBullets(memoryPath, archiveDir, entries, options);
 }
 
@@ -203,6 +219,7 @@ export async function archiveMemoryBullets(
   }
 
   const parsed = parseMemoryContent(existing);
+
   const { active, archivedSections, archivedCount, unmatched } =
     partitionMemoryEntries(parsed, entries);
 
@@ -219,12 +236,15 @@ export async function archiveMemoryBullets(
   // untrusted inputs (getMemoryArchiveFilePath / getOrgMemoryArchiveFilePath).
   const yearMonth = formatMemoryArchiveYearMonth(archivedAt);
   const archivePath = join(archiveDir, `${yearMonth}.md`);
+
   const archiveAppend = formatArchiveAppend(
     archivedAt,
     archivedSections,
     options.reason
   );
+
   const archiveExists = await pathExists(archivePath);
+
   const archiveContent = archiveExists
     ? `${(await readText(archivePath)).replace(/\n+$/, "")}\n\n${archiveAppend}`
     : `${MEMORY_ARCHIVE_TEMPLATE}\n${archiveAppend}`;

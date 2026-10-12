@@ -1,7 +1,9 @@
 import type { StreamEvent } from "@nakama/core";
 
 const MAX_BUFFER_EVENTS = 10_000;
+
 const MAX_BUFFER_BYTES = 4 * 1024 * 1024;
+
 const MAX_SUBSCRIBERS_PER_SESSION = 3;
 
 export interface BeginTurnResult {
@@ -56,8 +58,10 @@ function snapshotKey(event: StreamEvent): string | null {
 
 function rebuildSnapshotIndexes(turn: ActiveTurn): void {
   turn.snapshotIndexes.clear();
+
   for (let index = 0; index < turn.events.length; index += 1) {
     const key = snapshotKey(turn.events[index]!);
+
     if (key) {
       turn.snapshotIndexes.set(key, index);
     }
@@ -66,6 +70,7 @@ function rebuildSnapshotIndexes(turn: ActiveTurn): void {
 
 function removeEventAt(turn: ActiveTurn, index: number): StreamEvent {
   const removed = turn.events[index];
+
   if (!removed) {
     throw new Error("Snapshot index must reference a buffered event.");
   }
@@ -73,6 +78,7 @@ function removeEventAt(turn: ActiveTurn, index: number): StreamEvent {
   turn.events.splice(index, 1);
 
   const removedKey = snapshotKey(removed);
+
   if (removedKey) {
     turn.snapshotIndexes.delete(removedKey);
   }
@@ -88,6 +94,7 @@ function removeEventAt(turn: ActiveTurn, index: number): StreamEvent {
 
 function onShiftFront(turn: ActiveTurn, removed: StreamEvent): void {
   const removedKey = snapshotKey(removed);
+
   if (removedKey) {
     turn.snapshotIndexes.delete(removedKey);
   }
@@ -111,6 +118,7 @@ function publishSnapshotKey(event: StreamEvent): string | null {
   if (!shouldReplaceOnPublish(event)) {
     return null;
   }
+
   return snapshotKey(event);
 }
 
@@ -119,12 +127,14 @@ function compactBuffer(events: StreamEvent[]): StreamEvent[] {
 
   for (let index = 0; index < events.length; index += 1) {
     const key = snapshotKey(events[index]!);
+
     if (key) {
       snapshotIndexes.set(key, index);
     }
   }
 
   const keep = new Set<number>();
+
   for (const index of snapshotIndexes.values()) {
     keep.add(index);
   }
@@ -160,6 +170,7 @@ function trimBuffer(turn: ActiveTurn): void {
 
     if (turn.events.length > MAX_BUFFER_EVENTS) {
       const removed = turn.events.shift();
+
       if (removed) {
         turn.bufferBytes -= estimateEventBytes(removed);
         onShiftFront(turn, removed);
@@ -193,6 +204,7 @@ export class SessionTurnRegistry {
 
   getStatus(sessionId: string): TurnStatus {
     const turn = this.turns.get(sessionId);
+
     if (!turn) {
       return { active: false };
     }
@@ -206,6 +218,7 @@ export class SessionTurnRegistry {
 
   cancelTurn(sessionId: string): void {
     const turn = this.turns.get(sessionId);
+
     if (!turn) {
       return;
     }
@@ -219,13 +232,16 @@ export class SessionTurnRegistry {
 
   publish(sessionId: string, event: StreamEvent): void {
     const turn = this.turns.get(sessionId);
+
     if (!turn) {
       return;
     }
 
     const key = publishSnapshotKey(event);
+
     if (key) {
       const existingIndex = turn.snapshotIndexes.get(key);
+
       if (existingIndex !== undefined) {
         const removed = removeEventAt(turn, existingIndex);
         turn.bufferBytes -= estimateEventBytes(removed);
@@ -234,9 +250,11 @@ export class SessionTurnRegistry {
 
     turn.events.push(event);
     turn.bufferBytes += estimateEventBytes(event);
+
     if (key) {
       turn.snapshotIndexes.set(key, turn.events.length - 1);
     }
+
     trimBuffer(turn);
 
     for (const subscriber of turn.subscribers) {
@@ -249,6 +267,7 @@ export class SessionTurnRegistry {
     onEvent: (event: StreamEvent) => void
   ): { unsubscribe: () => void } | null {
     const turn = this.turns.get(sessionId);
+
     if (!turn) {
       return null;
     }
@@ -275,6 +294,7 @@ export class SessionTurnRegistry {
 
   endTurn(sessionId: string, terminal: StreamEvent): void {
     const turn = this.turns.get(sessionId);
+
     if (!turn) {
       return;
     }
@@ -283,6 +303,7 @@ export class SessionTurnRegistry {
       this.publish(sessionId, terminal);
     } else if (!turn.events.some(isTerminalEvent)) {
       turn.events.push(terminal);
+
       for (const subscriber of turn.subscribers) {
         subscriber.push(terminal);
       }

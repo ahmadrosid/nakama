@@ -87,10 +87,12 @@ function LatestSecret({
   const apiKey = latestSecret.apiKey;
   const displayApiKey = revealed ? apiKey : maskWebhookApiKey(apiKey);
   const origin = typeof window === "undefined" ? "" : window.location.origin;
+
   const webhookUrl = buildNotificationWebhookUrl(
     origin,
     latestSecret.destination.webhookPath
   );
+
   const curlExample = [
     `curl -X POST '${webhookUrl}' \\`,
     `  -H 'Content-Type: application/json' \\`,
@@ -205,6 +207,12 @@ const CHANNEL_LABELS: Record<NotificationDestinationChannel, string> = {
   whatsapp: "WhatsApp",
 };
 
+const CHANNELS: NotificationDestinationChannel[] = [
+  "discord",
+  "telegram",
+  "whatsapp",
+];
+
 function AgentSelect({
   profiles,
   value,
@@ -215,11 +223,9 @@ function AgentSelect({
   onChange: (profileId: string) => void;
 }) {
   const selected = profiles.find((profile) => profile.id === value);
+
   return (
-    <Select
-      onValueChange={(next) => onChange(typeof next === "string" ? next : "")}
-      value={value}
-    >
+    <Select onValueChange={(next) => onChange(next ?? "")} value={value}>
       <SelectTrigger className="w-full">
         <SelectValue>{selected?.name ?? "Choose an agent"}</SelectValue>
       </SelectTrigger>
@@ -240,9 +246,10 @@ function isWhatsAppRecipientReady(
   return !!settings.data?.pairedJid && !settings.isLoading && !settings.error;
 }
 
-function isDestinationRequestValid(value: unknown): boolean {
+function isDestinationRequestValid<Value>(value: Value) {
   try {
     normalizeCreateNotificationDestinationRequest(value);
+
     return true;
   } catch {
     return false;
@@ -259,37 +266,47 @@ export function NotificationDestinationsCard() {
 function NotificationDestinationsCardForOrg({ orgId }: { orgId: string }) {
   const { data: profiles = [] } = useProfilesQuery();
   const [profileId, setProfileId] = useState("");
+
   const [channel, setChannel] =
     useState<NotificationDestinationChannel>("telegram");
+
   const [target, setTarget] = useState("");
+
   const whatsapp = useNotificationWhatsAppSettings(
     profileId,
     channel === "whatsapp"
   );
+
   const whatsappReady = isWhatsAppRecipientReady(whatsapp);
   const { data, isLoading, error } = useNotificationDestinations(orgId);
   const createMutation = useCreateNotificationDestination(orgId);
   const rotateMutation = useRegenerateNotificationDestinationKey(orgId);
   const deleteMutation = useDeleteNotificationDestination(orgId);
+
   const [deleteTarget, setDeleteTarget] =
     useState<NotificationDestinationSummary | null>(null);
 
   const [name, setName] = useState("");
+
   const [latestSecret, setLatestSecret] =
     useState<NotificationDestinationWithSecret | null>(null);
+
   const [formError, setFormError] = useState<string | null>(null);
 
   const destinations = data?.destinations ?? [];
+
   const configs = {
     discord: { channelId: target, profileId },
     telegram: { ...parseTelegramTopicLink(target), profileId },
     whatsapp: { profileId },
   };
+
   const defaultNames = {
     discord: `Discord channel ${target.trim()}`,
     telegram: `Telegram topic ${configs.telegram.topicId ?? ""}`,
     whatsapp: "WhatsApp notifications",
   };
+
   const requestInput = {
     channel,
     name: name.trim() || defaultNames[channel],
@@ -317,15 +334,20 @@ function NotificationDestinationsCardForOrg({ orgId }: { orgId: string }) {
 
   function handleCreate() {
     setFormError(null);
+
     if (channel === "whatsapp" && !whatsappReady) {
       setFormError("Pair this agent's WhatsApp connection first.");
+
       return;
     }
+
     let request: CreateNotificationDestinationRequest;
+
     try {
       request = normalizeCreateNotificationDestinationRequest(requestInput);
     } catch (error) {
       setFormError(formatError(error));
+
       return;
     }
 
@@ -356,6 +378,7 @@ function NotificationDestinationsCardForOrg({ orgId }: { orgId: string }) {
   async function handleDelete(destinationId: string) {
     setFormError(null);
     await deleteMutation.mutateAsync(destinationId);
+
     if (latestSecret?.destination.id === destinationId) {
       setLatestSecret(null);
     }
@@ -381,7 +404,13 @@ function NotificationDestinationsCardForOrg({ orgId }: { orgId: string }) {
           </span>
           <Select
             onValueChange={(value) => {
-              setChannel(value as NotificationDestinationChannel);
+              const nextChannel = CHANNELS.find((channel) => channel === value);
+
+              if (!nextChannel) {
+                return;
+              }
+
+              setChannel(nextChannel);
               setTarget("");
               setFormError(null);
             }}
@@ -508,11 +537,14 @@ function NotificationTargetFields({
       </div>
     );
   }
+
   const isTopicLink = channel === "telegram" && topicId === undefined;
+
   const labels = {
     discord: "Discord channel ID",
     telegram: isTopicLink ? "Telegram topic link" : "Telegram chat ID",
   };
+
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <label className="flex flex-col gap-1.5 text-sm">
@@ -559,27 +591,33 @@ function NotificationDestinationItem({
   onDelete: () => void;
 }) {
   const updateMutation = useUpdateNotificationDestination(orgId);
+
   const [draft, setDraft] = useState<{
     name: string;
     profileId: string;
     target: string;
     topicId: string;
   } | null>(null);
+
   const [editingError, setEditingError] = useState<string | null>(null);
+
   const whatsapp = useNotificationWhatsAppSettings(
     draft?.profileId ?? "",
     destination.channel === "whatsapp" && !!draft
   );
+
   const whatsappReady = isWhatsAppRecipientReady(whatsapp);
 
   function startEditing() {
     setEditingError(null);
+
     const config =
       destination.channel === "telegram"
         ? destination.telegram
         : destination.channel === "discord"
           ? destination.discord
           : destination.whatsapp;
+
     setDraft({
       name: destination.name,
       profileId: config.profileId ?? "",
@@ -605,6 +643,7 @@ function NotificationDestinationItem({
     },
     whatsapp: { profileId: draft?.profileId },
   };
+
   const requestInput = {
     channel: destination.channel,
     name: draft?.name,
@@ -615,18 +654,24 @@ function NotificationDestinationItem({
     if (!draft) {
       return;
     }
+
     setEditingError(null);
     let request: CreateNotificationDestinationRequest;
+
     if (destination.channel === "whatsapp" && !whatsappReady) {
       setEditingError("Pair this agent's WhatsApp connection first.");
+
       return;
     }
+
     try {
       request = normalizeCreateNotificationDestinationRequest(requestInput);
     } catch (error) {
       setEditingError(formatError(error));
+
       return;
     }
+
     updateMutation.mutate(
       { destinationId: destination.id, request },
       {

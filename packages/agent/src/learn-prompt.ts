@@ -89,20 +89,21 @@ export function tryParseLearnCommand(text: string): { source: string } | null {
 function learnCommandText(
   content: string | MessageContentPart[]
 ): string | null {
-  if (typeof content === "string") {
+  if (!Array.isArray(content)) {
     return content;
   }
 
   const textPart = content.find((part) => part.type === "text");
+
   return textPart?.type === "text" ? textPart.text : null;
 }
 
-function replaceLearnContentText<T extends string | MessageContentPart[]>(
-  content: T,
+function replaceLearnContentText(
+  content: string | MessageContentPart[],
   nextText: string
-): T {
-  if (typeof content === "string") {
-    return nextText as T;
+): string | MessageContentPart[] {
+  if (!Array.isArray(content)) {
+    return nextText;
   }
 
   const textIndex = content.findIndex((part) => part.type === "text");
@@ -112,13 +113,15 @@ function replaceLearnContentText<T extends string | MessageContentPart[]>(
   }
 
   const textPart = content[textIndex];
+
   if (!textPart || textPart.type !== "text") {
     return content;
   }
 
   const next = [...content];
   next[textIndex] = { ...textPart, text: nextText };
-  return next as T;
+
+  return next;
 }
 
 function buildLearnPrompt(userRequest: string): string {
@@ -181,11 +184,13 @@ export function expandLearnInLastUserMessage<T extends ProviderChatMessage>(
 
   const lastUser = messages[lastUserIndex]!;
   const text = learnCommandText(lastUser.content);
+
   if (text === null) {
     return [...messages];
   }
 
   const parsed = tryParseLearnCommand(text);
+
   if (!parsed) {
     return [...messages];
   }
@@ -205,6 +210,7 @@ export function expandLearnInLastUserMessage<T extends ProviderChatMessage>(
         LEARN_NEED_SOURCE_PROMPT
       ),
     };
+
     return next;
   }
 
@@ -213,6 +219,7 @@ export function expandLearnInLastUserMessage<T extends ProviderChatMessage>(
     (hasAttachedSource
       ? "the file(s) or image(s) attached to this message"
       : "");
+
   const expandedText = buildLearnPrompt(request);
 
   if (expandedText === text) {
@@ -224,5 +231,6 @@ export function expandLearnInLastUserMessage<T extends ProviderChatMessage>(
     ...lastUser,
     content: replaceLearnContentText(lastUser.content, expandedText),
   };
+
   return next;
 }

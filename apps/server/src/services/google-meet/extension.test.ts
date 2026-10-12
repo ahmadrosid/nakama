@@ -1,20 +1,62 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
+import { z } from "zod";
+
+interface ExtensionConnection {
+  tabId: number;
+  url: string;
+}
+
+interface ExtensionCaptureSession {
+  captureUrl: string;
+  connection: ExtensionConnection;
+  error?: string;
+  meetingId: string;
+  startedAt: number;
+  status: string;
+  tabId: number;
+  tabUrl: string;
+}
+
+interface ExtensionState {
+  captureSession?: ExtensionCaptureSession;
+  connection?: ExtensionConnection;
+}
+
+interface PageMessageEvent {
+  data: { type: string };
+  origin: string;
+  source: object;
+}
+
+interface StorageChanges {
+  connection?: { newValue?: ExtensionConnection };
+}
+
+interface BridgeMessage {
+  connected: boolean;
+  type: "NAKAMA_MEET_EXTENSION";
+}
 
 function extension() {
-  const listeners: Array<(message: any, sender: any, reply: any) => unknown> =
-    [];
-  const state: Record<string, any> = {};
+  const listeners: Array<
+    (message: any, sender: any, reply: any) => boolean | void
+  > = [];
+
+  const state: ExtensionState = {};
   const calls: Array<{ action: string; input: unknown }> = [];
+
   const tabs = new Map([
-    [1, { id: 1, url: "https://nakama.example/plugins/google-meet" }],
+    [1, { id: 1, url: "https://nakama.example/google-meet" }],
     [2, { id: 2, url: "https://meet.google.com/abc-defg-hij?authuser=0" }],
   ]);
+
   let active = 1;
   let failCapture = false;
   const openedTabs: string[] = [];
   let badge = "";
+
   const chrome = {
     action: {
       async setBadgeBackgroundColor() {},
@@ -30,14 +72,20 @@ function extension() {
       getURL: (file: string) => `chrome-extension://test-extension/${file}`,
       id: "test-extension",
       onMessage: {
-        addListener(fn: (message: any, sender: any, reply: any) => unknown) {
+        addListener(
+          fn: (message: any, sender: any, reply: any) => boolean | void
+        ) {
           listeners.push(fn);
         },
       },
       async sendMessage(message: any) {
         if (message.type === "START_CAPTURE") {
-          expect(message.captureUrl).toBe(state.captureSession.captureUrl);
+          expect(message.captureUrl).toBe(
+            z.object({ captureUrl: z.string() }).parse(state.captureSession)
+              .captureUrl
+          );
         }
+
         return failCapture
           ? { error: "Capture denied", needsMicrophone: true }
           : { ok: true };
@@ -45,7 +93,7 @@ function extension() {
     },
     storage: {
       session: {
-        async get(keys: string | string[]) {
+        async get(keys: keyof ExtensionState | (keyof ExtensionState)[]) {
           return Object.fromEntries(
             (Array.isArray(keys) ? keys : [keys]).map((key) => [
               key,
@@ -53,10 +101,10 @@ function extension() {
             ])
           );
         },
-        async remove(key: string) {
+        async remove(key: keyof ExtensionState) {
           delete state[key];
         },
-        async set(value: Record<string, unknown>) {
+        async set(value: ExtensionState) {
           Object.assign(state, value);
         },
       },
@@ -79,6 +127,7 @@ function extension() {
       },
       async sendMessage(_id: number, message: any) {
         calls.push(message);
+
         return {
           result:
             message.action === "start-capture"
@@ -91,6 +140,7 @@ function extension() {
       },
     },
   };
+
   runInNewContext(
     readFileSync(
       new URL(
@@ -101,10 +151,12 @@ function extension() {
     ),
     { chrome, URL }
   );
+
   const sender = {
     id: chrome.runtime.id,
     url: chrome.runtime.getURL("popup.html"),
   };
+
   return {
     activate(id: number) {
       active = id;
@@ -150,7 +202,7 @@ test("extension connects once, starts the active Meet tab and rejects duplicate 
   expect(
     ext.calls.find((call) => call.action === "start-capture")?.input
   ).toEqual({ url: "https://meet.google.com/abc-defg-hij" });
-  expect(ext.state.captureSession.tabId).toBe(2);
+  expect(ext.state.captureSession?.tabId).toBe(2);
   expect((await ext.dispatch("START")).error).toBeDefined();
   expect(
     ext.calls.filter((call) => call.action === "start-capture")
@@ -158,9 +210,9 @@ test("extension connects once, starts the active Meet tab and rejects duplicate 
   expect(ext.fromPage("START")).toBeUndefined();
   expect(ext.fromPage("CONNECT")).toBeUndefined();
   await ext.captureEvent("CAPTURE_STARTED");
-  expect(ext.state.captureSession.status).toBe("recording");
+  expect(ext.state.captureSession?.status).toBe("recording");
   await ext.captureEvent("CAPTURE_STOPPED");
-  expect(ext.state.captureSession.status).toBe("stopped");
+  expect(ext.state.captureSession?.status).toBe("stopped");
   expect(ext.calls.at(-1)).toMatchObject({
     action: "leave",
     input: { meetingId: "meeting" },
@@ -190,11 +242,11 @@ test("extension requires a connected Nakama tab and cancels sessions when captur
     status: "error",
   });
   expect(ext.badge()).toBe("!");
-  ext.tabs.get(1)!.url = "https://other.example/plugins/google-meet";
+  ext.tabs.get(1)!.url = "https://other.example/google-meet";
   const count = ext.calls.length;
   expect((await ext.dispatch("START")).error).toBeDefined();
   expect(ext.calls).toHaveLength(count);
-  ext.tabs.get(1)!.url = "https://nakama.example/plugins/google-meet";
+  ext.tabs.get(1)!.url = "https://nakama.example/google-meet";
   ext.failCapture(false);
   expect(await ext.dispatch("START")).toEqual({ ok: true });
   await ext.captureEvent("CAPTURE_STARTED");
@@ -203,7 +255,7 @@ test("extension requires a connected Nakama tab and cancels sessions when captur
 });
 
 test("audio worklet encodes every mono sample as PCM16 and tolerates empty input", () => {
-  const messages: ArrayBuffer[] = [];
+  const messages: (number[] | string)[] = [];
   let Processor: any;
   runInNewContext(
     readFileSync(
@@ -216,8 +268,10 @@ test("audio worklet encodes every mono sample as PCM16 and tolerates empty input
     {
       AudioWorkletProcessor: class {
         port = {
-          postMessage(buffer: ArrayBuffer) {
-            messages.push(buffer);
+          postMessage(buffer: ArrayBuffer | "flushed") {
+            messages.push(
+              buffer === "flushed" ? buffer : Array.from(new Int16Array(buffer))
+            );
           },
         };
       },
@@ -232,11 +286,11 @@ test("audio worklet encodes every mono sample as PCM16 and tolerates empty input
   expect(
     processor.process([[new Float32Array([-2, -1, -0.5, 0, 0.5, 1, 2])]])
   ).toBe(true);
-  expect(Array.from(new Int16Array(messages[0]!))).toEqual([
+  expect(messages[0]).toEqual([
     -32_768, -32_768, -16_384, 0, 16_383, 32_767, 32_767,
   ]);
   processor.process([[new Float32Array([0.25])]]);
-  expect(Array.from(new Int16Array(messages[1]!))).toEqual([8191]);
+  expect(messages[1]).toEqual([8191]);
   processor.port.onmessage({ data: "flush" });
   expect(messages.at(-1)).toBe("flushed");
   expect(processor.process([[new Float32Array([1])]])).toBe(false);
@@ -246,22 +300,25 @@ test("audio worklet encodes every mono sample as PCM16 and tolerates empty input
 test.each(["connected", "throw", "reject", "invalidated"])(
   "content bridge handles runtime state: %s",
   async (state) => {
-    let receive!: (event: unknown) => Promise<void>;
+    let receive!: (event: PageMessageEvent) => Promise<void>;
     let sends = 0;
     const messages: unknown[] = [];
+
     const page = {
       addEventListener(_name: string, listener: typeof receive) {
         receive = listener;
       },
-      postMessage(message: unknown) {
+      postMessage(message: BridgeMessage) {
         messages.push(message);
       },
     };
+
     const location = {
       hostname: "localhost",
       origin: "http://localhost:3003",
       pathname: "/customize",
     };
+
     runInNewContext(
       readFileSync(
         new URL(
@@ -277,9 +334,11 @@ test.each(["connected", "throw", "reject", "invalidated"])(
             onMessage: { addListener() {} },
             sendMessage() {
               sends++;
+
               if (state === "throw") {
                 throw new Error("Extension context invalidated.");
               }
+
               return state === "reject"
                 ? Promise.reject(new Error("Extension context invalidated."))
                 : Promise.resolve({ connected: true });
@@ -290,7 +349,7 @@ test.each(["connected", "throw", "reject", "invalidated"])(
         window: page,
       }
     );
-    location.pathname = "/plugins/google-meet";
+    location.pathname = "/google-meet";
     await receive({
       data: { type: "NAKAMA_MEET_PING" },
       origin: "http://localhost:3003",
@@ -311,12 +370,15 @@ test("popup shows setup progress and only the available capture action", async (
     [true, true, true],
   ]) {
     const elements = new Map<string, any>();
+
     const element = (selector: string) => {
       if (!elements.has(selector)) {
         elements.set(selector, { dataset: {} });
       }
+
       return elements.get(selector);
     };
+
     await runInNewContext(
       readFileSync(
         new URL(
@@ -342,7 +404,7 @@ test("popup shows setup progress and only the available capture action", async (
                 {
                   url: onMeet
                     ? "https://meet.google.com/abc-defg-hij"
-                    : "https://nakama.example/plugins/google-meet",
+                    : "https://nakama.example/google-meet",
                 },
               ];
             },
@@ -373,7 +435,7 @@ test("extension clears a connection when its Nakama tab closes or navigates away
   ext.tabs.get(1)!.url = "https://other.example/";
   expect((await ext.dispatch("STATE")).connection).toBeUndefined();
   expect(ext.state.connection).toBeUndefined();
-  ext.tabs.get(1)!.url = "https://nakama.example/plugins/google-meet";
+  ext.tabs.get(1)!.url = "https://nakama.example/google-meet";
   await ext.dispatch("CONNECT");
   ext.tabs.delete(1);
   expect((await ext.dispatch("STATE")).connection).toBeUndefined();
@@ -387,12 +449,14 @@ test.each([false, true])(
     let processor: any;
     let stopped = 0;
     const events: string[] = [];
-    const frames: unknown[] = [];
+    const frames: (string | Uint8Array | ArrayBuffer)[] = [];
+
     const track = {
       stop() {
         stopped++;
       },
     };
+
     const captureUrl = "wss://capture.example/capture?token=test";
     runInNewContext(
       readFileSync(
@@ -417,7 +481,7 @@ test.each([false, true])(
         },
         AudioWorkletNode: class {
           port = {
-            onmessage: null as any,
+            onmessage: (_event: { data: string }) => {},
             postMessage: () =>
               queueMicrotask(() => this.port.onmessage({ data: "flushed" })),
           };
@@ -447,6 +511,7 @@ test.each([false, true])(
               if (denied && options.audio.echoCancellation) {
                 throw new Error("Permission denied");
               }
+
               return {
                 getAudioTracks: () => [track],
                 getTracks: () => [track],
@@ -463,9 +528,12 @@ test.each([false, true])(
             socket = this;
             queueMicrotask(() => this.onopen?.());
           }
-          send(frame: unknown) {
+          send(frame: string | Uint8Array | ArrayBuffer) {
             frames.push(frame);
-            if (typeof frame === "string") {
+
+            const text = z.string().safeParse(frame);
+
+            if (text.success) {
               queueMicrotask(() =>
                 socket.onmessage({
                   data: JSON.stringify({ type: "capture-finalized" }),
@@ -480,6 +548,7 @@ test.each([false, true])(
       }
     );
     const sender = { id: "test" };
+
     const result = await new Promise((resolve) =>
       listener(
         { captureUrl, streamId: "stream", type: "START_CAPTURE" },
@@ -487,13 +556,16 @@ test.each([false, true])(
         resolve
       )
     );
+
     if (denied) {
       expect(result).toMatchObject({ needsMicrophone: true });
       expect(events).toEqual(["CAPTURE_ERROR"]);
       expect(socket).toBeUndefined();
       expect(stopped).toBe(1);
+
       return;
     }
+
     expect(result).toEqual({ ok: true });
     expect(socket.url).toBe(captureUrl);
     const frame = new ArrayBuffer(256);
@@ -529,6 +601,7 @@ test("popup transcript access is bound to its captured meeting and unavailable t
 
 test("popup renders live turns safely, restores on reopen and stops polling on close", async () => {
   let recording = true;
+
   const replies = [
     {
       id: "one",
@@ -537,11 +610,14 @@ test("popup renders live turns safely, restores on reopen and stops polling on c
       text: "<script>hello</script>",
     },
   ];
+
   let transcriptRequests = 0;
+
   function popup() {
     let interval!: () => void;
     let close!: () => void;
-    let storageChanged!: (changes: unknown, area: string) => void;
+    let storageChanged!: (changes: StorageChanges, area: string) => void;
+
     class Element {
       dataset: Record<string, string> = {};
       children: Element[] = [];
@@ -569,13 +645,17 @@ test("popup renders live turns safely, restores on reopen and stops polling on c
         );
       }
     }
+
     const elements = new Map<string, Element>();
+
     const element = (selector: string) => {
       if (!elements.has(selector)) {
         elements.set(selector, new Element());
       }
+
       return elements.get(selector)!;
     };
+
     runInNewContext(
       readFileSync(
         new URL(
@@ -590,6 +670,7 @@ test("popup renders live turns safely, restores on reopen and stops polling on c
             async sendMessage(message: { type: string; after: number }) {
               if (message.type === "TRANSCRIPT") {
                 transcriptRequests++;
+
                 return {
                   meeting: {
                     id: "meeting",
@@ -599,6 +680,7 @@ test("popup renders live turns safely, restores on reopen and stops polling on c
                   segments: message.after ? [] : replies,
                 };
               }
+
               return {
                 captureSession: { status: recording ? "recording" : "stopped" },
                 connection: { tabId: 1 },
@@ -624,12 +706,14 @@ test("popup renders live turns safely, restores on reopen and stops polling on c
           createTextNode(text: string) {
             const node = new Element();
             node.textContent = text;
+
             return node;
           },
           querySelector: element,
         },
         setInterval(callback: () => void) {
           interval = callback;
+
           return 1;
         },
         setTimeout() {},
@@ -641,6 +725,7 @@ test("popup renders live turns safely, restores on reopen and stops polling on c
         },
       }
     );
+
     return {
       close: () => close(),
       element,
@@ -648,6 +733,7 @@ test("popup renders live turns safely, restores on reopen and stops polling on c
       reset: () => storageChanged({ connection: {} }, "session"),
     };
   }
+
   const first = popup();
   await Bun.sleep(0);
   const turn = first.element("#transcript").children[0]!;

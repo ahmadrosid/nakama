@@ -10,29 +10,37 @@ import {
 import { useSystemStatusQuery } from "@/hooks/use-system-status";
 import { useStartWorker } from "@/hooks/use-worker-actions";
 import { formatError } from "@/lib/client";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
+
+const NO_PHONE_DETAILS = {};
 
 function formatAllowedPhoneSummary(count: number): string {
   if (count === 0) {
     return "None";
   }
+
   return `${count} number${count === 1 ? "" : "s"}`;
 }
 
 function resolveWhatsAppStatusLine(
   hint: string | null,
   formError: string | null,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Error causes may come from browser or network code and are narrowed by this handler.
   loadError: unknown
 ): string | null {
   if (hint) {
     return hint;
   }
+
   if (formError) {
     return formError;
   }
+
   if (loadError) {
     return formatError(loadError);
   }
+
   return null;
 }
 
@@ -59,6 +67,7 @@ function resolveWhatsAppLinkingState({
 }) {
   const useQrLinking = !pairingCode;
   const showQr = configured && running && Boolean(qrCode) && useQrLinking;
+
   const awaitingQr =
     configured &&
     !paired &&
@@ -67,8 +76,10 @@ function resolveWhatsAppLinkingState({
     !qrCode &&
     !qrWasVisible &&
     useQrLinking;
+
   const bridgeStarting =
     configured && !paired && running && !connected && Boolean(pairingCode);
+
   const linkingAfterScan =
     configured &&
     !paired &&
@@ -94,87 +105,16 @@ function hintForSavedSettings(
   if (saved.pairedJid) {
     return "Saved.";
   }
+
   if (saved.pairingCode) {
     return "Saved. Use the pairing code in WhatsApp.";
   }
+
   if (configured) {
     return "Saved.";
   }
+
   return "WhatsApp enabled. Preparing the QR code.";
-}
-
-function resolveWhatsAppStatusCopy(input: {
-  awaitingQr: boolean;
-  bridgeStarting: boolean;
-  connected: boolean;
-  configured: boolean;
-  linkingAfterScan: boolean;
-  paired: boolean;
-  pairingCode: string | null;
-  running: boolean;
-  showQr: boolean;
-}): { headerSubtitle: string; statusBadge: string } {
-  if (!input.configured) {
-    return {
-      headerSubtitle: "Connect WhatsApp to let this agent receive messages",
-      statusBadge: "Not set up",
-    };
-  }
-
-  if (input.paired && input.running && input.connected && !input.showQr) {
-    return {
-      headerSubtitle: "Connected",
-      statusBadge: "Connected",
-    };
-  }
-
-  if (input.paired && !(input.running && input.connected)) {
-    return {
-      headerSubtitle:
-        "WhatsApp is offline. Use the connection controls to reconnect.",
-      statusBadge: "Offline",
-    };
-  }
-
-  if (input.showQr) {
-    return {
-      headerSubtitle: "Scan the QR code with WhatsApp to link your device",
-      statusBadge: "Awaiting scan",
-    };
-  }
-
-  if (input.linkingAfterScan) {
-    return {
-      headerSubtitle: "Linking your WhatsApp account…",
-      statusBadge: "Linking",
-    };
-  }
-
-  if (input.bridgeStarting) {
-    return {
-      headerSubtitle: "Connecting — enter the code in WhatsApp",
-      statusBadge: "Starting…",
-    };
-  }
-
-  if (input.awaitingQr) {
-    return {
-      headerSubtitle: "Preparing QR code…",
-      statusBadge: "Starting…",
-    };
-  }
-
-  if (input.pairingCode) {
-    return {
-      headerSubtitle: "Enter the pairing code in WhatsApp",
-      statusBadge: "Awaiting link",
-    };
-  }
-
-  return {
-    headerSubtitle: "Scan the QR code, or generate a pairing code",
-    statusBadge: "Not linked",
-  };
 }
 
 export function useWhatsAppSettingsCard({
@@ -202,6 +142,7 @@ export function useWhatsAppSettingsCard({
   const [allowedPhones, setAllowedPhones] = useState<string[]>([]);
   const [allowedPhonesOpen, setAllowedPhonesOpen] = useState(false);
   const [requireGroupMention, setRequireGroupMention] = useState(true);
+
   const [allowUnpairedGroupMembers, setAllowUnpairedGroupMembers] =
     useState(false);
 
@@ -247,6 +188,7 @@ export function useWhatsAppSettingsCard({
     if (qrCode) {
       setQrWasVisible(true);
     }
+
     if (paired) {
       setQrWasVisible(false);
     }
@@ -254,16 +196,13 @@ export function useWhatsAppSettingsCard({
 
   useEffect(() => {
     if (worker?.paired && !settings?.pairedJid) {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.whatsapp.settings,
-      });
+      void invalidateQueries(queryClient, queryKeys.whatsapp.settings);
+
       return;
     }
 
     if (worker?.connected && !paired) {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.whatsapp.settings,
-      });
+      void invalidateQueries(queryClient, queryKeys.whatsapp.settings);
     }
   }, [
     worker?.paired,
@@ -293,17 +232,6 @@ export function useWhatsAppSettingsCard({
     running,
     settingsProfileId,
   });
-  const { headerSubtitle, statusBadge } = resolveWhatsAppStatusCopy({
-    awaitingQr: linking.awaitingQr,
-    bridgeStarting: linking.bridgeStarting,
-    configured,
-    connected,
-    linkingAfterScan: linking.linkingAfterScan,
-    paired,
-    pairingCode,
-    running,
-    showQr: linking.showQr,
-  });
 
   async function copyPairingCode() {
     if (!pairingCode) {
@@ -313,9 +241,11 @@ export function useWhatsAppSettingsCard({
     try {
       await navigator.clipboard.writeText(pairingCode);
       setCopiedCode(pairingCode);
+
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current);
       }
+
       copyTimeoutRef.current = setTimeout(() => {
         setCopiedCode(null);
         copyTimeoutRef.current = null;
@@ -342,6 +272,7 @@ export function useWhatsAppSettingsCard({
           if (configured || running) {
             setHint(hintForSavedSettings(saved, configured));
             onSaveSuccess?.();
+
             return;
           }
 
@@ -436,6 +367,7 @@ export function useWhatsAppSettingsCard({
   return {
     actionLabel:
       submitLabel ?? (configured ? "Save changes" : "Connect WhatsApp"),
+    allowedPhoneDetails: settings?.allowedPhoneDetails ?? NO_PHONE_DETAILS,
     allowedPhoneSummary: formatAllowedPhoneSummary(allowedPhones.length),
     allowedPhones,
     allowedPhonesOpen,
@@ -444,9 +376,9 @@ export function useWhatsAppSettingsCard({
     bridgeStarting: linking.bridgeStarting,
     canSave: linking.canSave,
     configured,
+    connected,
     copied,
     formError,
-    headerSubtitle,
     isLoading,
     linkedNumber: settings?.phoneNumberMasked ?? null,
     linkingAfterScan: linking.linkingAfterScan,
@@ -478,7 +410,6 @@ export function useWhatsAppSettingsCard({
     savePending: saveMutation.isPending || startWorkerMutation.isPending,
     showQr: linking.showQr,
     showReconnect: linking.showReconnect,
-    statusBadge,
     statusLine: resolveWhatsAppStatusLine(hint, formError, loadError),
     worker,
   };

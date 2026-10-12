@@ -26,11 +26,13 @@ import { createContext, useCallback, useContext, useEffect } from "react";
 import { useAuth } from "@/context/use-auth";
 import { prefetchTimezoneData } from "@/hooks/use-timezones";
 import { client } from "@/lib/client";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
 export const ChannelProfileContext = createContext<string | undefined>(
   undefined
 );
+
 export function useChannelProfileId() {
   return useContext(ChannelProfileContext);
 }
@@ -59,6 +61,7 @@ function createSettingsHooks<TData, TRequest>(config: {
 
   function useSave() {
     const queryClient = useQueryClient();
+
     return useMutation({
       mutationFn: config.mutationFn,
       onError: config.onSaveError
@@ -69,8 +72,10 @@ function createSettingsHooks<TData, TRequest>(config: {
       onSuccess: async (saved) => {
         if (config.onSaveSuccess) {
           await config.onSaveSuccess(queryClient, saved);
+
           return;
         }
+
         queryClient.setQueryData(config.queryKey, saved);
       },
     });
@@ -80,13 +85,16 @@ function createSettingsHooks<TData, TRequest>(config: {
     mutationFn: (variables: TVariables) => Promise<TData>
   ) {
     const queryClient = useQueryClient();
+
     return useMutation({
       mutationFn,
       onSuccess: async (saved) => {
         if (config.onSaveSuccess) {
           await config.onSaveSuccess(queryClient, saved);
+
           return;
         }
+
         queryClient.setQueryData(config.queryKey, saved);
       },
     });
@@ -103,20 +111,26 @@ function createSettingsHooks<TData, TRequest>(config: {
 const webSearchSettings = createSettingsHooks({
   mutationFn: async (request: UpdateWebSearchSettingsRequest) => {
     const { apiKey, ...settings } = request;
+
     if (apiKey?.trim()) {
       const provider =
         settings.provider ?? (await client.getWebSearchSettings()).provider;
+
       if (!provider) {
         throw new Error("Select a web search provider.");
       }
+
       await client.setWebSearchSecret(provider, apiKey);
     }
+
     return client.setWebSearchSettings(settings);
   },
   queryFn: () => client.getWebSearchSettings(),
   queryKey: queryKeys.webSearchSettings,
 });
+
 export const useWebSearchSettings = webSearchSettings.useSettings;
+
 export const useSaveWebSearchSettings = webSearchSettings.useSave;
 
 const visionSettings = createSettingsHooks({
@@ -124,7 +138,9 @@ const visionSettings = createSettingsHooks({
   queryFn: () => client.getVisionSettings(),
   queryKey: queryKeys.visionSettings,
 });
+
 export const useVisionSettings = visionSettings.useSettings;
+
 export const useSaveVisionSettings = visionSettings.useSave;
 
 const imageGenerationSettings = createSettingsHooks({
@@ -133,7 +149,9 @@ const imageGenerationSettings = createSettingsHooks({
   queryFn: () => client.getImageGenerationSettings(),
   queryKey: queryKeys.imageGenerationSettings,
 });
+
 export const useImageGenerationSettings = imageGenerationSettings.useSettings;
+
 export const useSaveImageGenerationSettings = imageGenerationSettings.useSave;
 
 const transcriptionSettings = createSettingsHooks({
@@ -141,13 +159,16 @@ const transcriptionSettings = createSettingsHooks({
   queryFn: () => client.getTranscriptionSettings(),
   queryKey: queryKeys.transcriptionSettings,
 });
+
 export const useTranscriptionSettings = transcriptionSettings.useSettings;
+
 export const useSaveTranscriptionSettings = transcriptionSettings.useSave;
 
 function useTelegramSettingsHooks() {
   const profileId = useChannelProfileId();
   const { activeOrg } = useAuth();
   const api = client.forOrg(activeOrg?.id ?? null);
+
   return createSettingsHooks({
     mutationFn: (request: UpdateTelegramSettingsRequest) =>
       api.setTelegramSettings(
@@ -158,16 +179,67 @@ function useTelegramSettingsHooks() {
     queryKey: [...queryKeys.telegram.settings, activeOrg?.id, profileId],
   });
 }
+
 export function useTelegramSettings() {
   return useTelegramSettingsHooks().useSettings();
 }
+
 export function useSaveTelegramSettings() {
   return useTelegramSettingsHooks().useSave();
 }
+
+export function useTelegramAccessRequests() {
+  const profileId = useChannelProfileId();
+  const { activeOrg } = useAuth();
+  const api = client.forOrg(activeOrg?.id ?? null);
+
+  return useQuery({
+    queryFn: () => api.getTelegramAccessRequests(profileId),
+    queryKey: [...queryKeys.telegram.requests, activeOrg?.id, profileId],
+    refetchInterval: 5000,
+  });
+}
+
+export function useResolveTelegramAccessRequest() {
+  const profileId = useChannelProfileId();
+  const queryClient = useQueryClient();
+  const { activeOrg } = useAuth();
+  const api = client.forOrg(activeOrg?.id ?? null);
+
+  return useMutation({
+    mutationFn: async ({
+      decision,
+      userId,
+    }: {
+      decision: "approve" | "deny";
+      userId: number;
+    }) => {
+      if (decision === "approve") {
+        await api.approveTelegramAccessRequest(userId, profileId);
+
+        return;
+      }
+
+      await api.denyTelegramAccessRequest(userId, profileId);
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.telegram.requests,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.telegram.settings,
+        }),
+      ]);
+    },
+  });
+}
+
 export function useRegenerateTelegramHandshake() {
   const profileId = useChannelProfileId();
   const { activeOrg } = useAuth();
   const api = client.forOrg(activeOrg?.id ?? null);
+
   return useTelegramSettingsHooks().useSetQueryDataMutation(() =>
     api.regenerateTelegramHandshake(profileId)
   );
@@ -177,6 +249,7 @@ export function useStartTelegramPairing() {
   const ownerProfileId = useChannelProfileId();
   const { activeOrg } = useAuth();
   const api = client.forOrg(activeOrg?.id ?? null);
+
   return useMutation<
     TelegramPairingStartResponse,
     Error,
@@ -194,6 +267,7 @@ export function useTelegramPairingStatus(pairingId: string | null) {
   const ownerProfileId = useChannelProfileId();
   const { activeOrg } = useAuth();
   const api = client.forOrg(activeOrg?.id ?? null);
+
   return useQuery<TelegramPairingStatusResponse>({
     enabled: pairingId !== null,
     queryFn: () => api.getTelegramPairingStatus(pairingId!, ownerProfileId),
@@ -207,6 +281,7 @@ export function useCancelTelegramPairing() {
   const ownerProfileId = useChannelProfileId();
   const { activeOrg } = useAuth();
   const api = client.forOrg(activeOrg?.id ?? null);
+
   return useMutation({
     mutationFn: (pairingId: string) =>
       api.cancelTelegramPairing(pairingId, ownerProfileId),
@@ -218,6 +293,7 @@ export function useApplyTelegramPairing() {
   const { activeOrg } = useAuth();
   const api = client.forOrg(activeOrg?.id ?? null);
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: ({
       pairingId,
@@ -227,9 +303,7 @@ export function useApplyTelegramPairing() {
       profileId: string;
     }) => api.applyTelegramPairing(pairingId, ownerProfileId ?? profileId),
     onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.telegram.settings,
-      });
+      void invalidateQueries(queryClient, queryKeys.telegram.settings);
     },
   });
 }
@@ -238,6 +312,7 @@ function useDiscordSettingsHooks() {
   const profileId = useChannelProfileId();
   const { activeOrg } = useAuth();
   const api = client.forOrg(activeOrg?.id ?? null);
+
   return createSettingsHooks({
     mutationFn: (request: UpdateDiscordSettingsRequest) =>
       api.setDiscordSettings(
@@ -248,16 +323,20 @@ function useDiscordSettingsHooks() {
     queryKey: [...queryKeys.discord.settings, activeOrg?.id, profileId],
   });
 }
+
 export function useDiscordSettings() {
   return useDiscordSettingsHooks().useSettings();
 }
+
 export function useSaveDiscordSettings() {
   return useDiscordSettingsHooks().useSave();
 }
+
 export function useRegenerateDiscordHandshake() {
   const profileId = useChannelProfileId();
   const { activeOrg } = useAuth();
   const api = client.forOrg(activeOrg?.id ?? null);
+
   return useDiscordSettingsHooks().useSetQueryDataMutation(() =>
     api.regenerateDiscordHandshake(profileId)
   );
@@ -267,6 +346,7 @@ function useSlackSettingsHooks() {
   const profileId = useChannelProfileId();
   const { activeOrg } = useAuth();
   const api = client.forOrg(activeOrg?.id ?? null);
+
   return createSettingsHooks({
     mutationFn: (request: UpdateSlackSettingsRequest) =>
       api.setSlackSettings(request, profileId),
@@ -274,16 +354,20 @@ function useSlackSettingsHooks() {
     queryKey: [...queryKeys.slack.settings, activeOrg?.id, profileId],
   });
 }
+
 export function useSlackSettings() {
   return useSlackSettingsHooks().useSettings();
 }
+
 export function useSaveSlackSettings() {
   return useSlackSettingsHooks().useSave();
 }
+
 export function useRegenerateSlackHandshake() {
   const profileId = useChannelProfileId();
   const { activeOrg } = useAuth();
   const api = client.forOrg(activeOrg?.id ?? null);
+
   return useSlackSettingsHooks().useSetQueryDataMutation(() =>
     api.regenerateSlackHandshake(profileId)
   );
@@ -293,6 +377,7 @@ const emailSettings = createSettingsHooks({
   mutationFn: async (request: UpdateEmailSettingsRequest) => {
     const { password, ...settings } = request;
     await client.setEmailSettings(settings);
+
     return password?.trim()
       ? client.setEmailSecret(password)
       : client.getEmailSettings();
@@ -300,8 +385,11 @@ const emailSettings = createSettingsHooks({
   queryFn: () => client.getEmailSettings(),
   queryKey: queryKeys.email.settings,
 });
+
 export const emailSettingsQueryOptions = emailSettings.queryOptions;
+
 export const useSaveEmailSettings = emailSettings.useSave;
+
 export function useSendEmailTest() {
   return useMutation({
     mutationFn: (request: SendEmailTestRequest = {}) =>
@@ -315,6 +403,7 @@ function useWhatsAppSettingsHooks() {
   const orgId = activeOrg?.id ?? null;
   const api = client.forOrg(orgId);
   const queryKey = [...queryKeys.whatsapp.settings, orgId, profileId];
+
   return createSettingsHooks({
     mutationFn: (request: UpdateWhatsAppSettingsRequest) =>
       api.setWhatsAppSettings(
@@ -323,30 +412,36 @@ function useWhatsAppSettingsHooks() {
       ),
     onSaveSuccess: async (queryClient, saved) => {
       queryClient.setQueryData(queryKey, saved);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.systemStatus });
+      await invalidateQueries(queryClient, queryKeys.systemStatus);
     },
     queryFn: () => api.getWhatsAppSettings(profileId),
     queryKey,
   });
 }
+
 export function useWhatsAppSettings() {
   return useWhatsAppSettingsHooks().useSettings();
 }
+
 export function useSaveWhatsAppSettings() {
   return useWhatsAppSettingsHooks().useSave();
 }
+
 export function useRegenerateWhatsAppPairingCode() {
   const profileId = useChannelProfileId();
   const { activeOrg } = useAuth();
   const api = client.forOrg(activeOrg?.id ?? null);
+
   return useWhatsAppSettingsHooks().useSetQueryDataMutation(() =>
     api.regenerateWhatsAppPairingCode(profileId)
   );
 }
+
 export function useReconnectWhatsApp() {
   const profileId = useChannelProfileId();
   const { activeOrg } = useAuth();
   const api = client.forOrg(activeOrg?.id ?? null);
+
   return useWhatsAppSettingsHooks().useSetQueryDataMutation(() =>
     api.reconnectWhatsApp(profileId)
   );
@@ -356,16 +451,18 @@ const thinkingSettings = createSettingsHooks({
   mutationFn: (settings: UpdateThinkingRequest) =>
     client.setThinkingSettings(settings),
   onSaveError: (queryClient) => {
-    void queryClient.invalidateQueries({
-      queryKey: queryKeys.thinkingSettings,
-    });
+    void invalidateQueries(queryClient, queryKeys.thinkingSettings);
   },
   queryFn: () => client.getThinkingSettings(),
   queryKey: queryKeys.thinkingSettings,
 });
+
 const thinkingSettingsQueryOptions = thinkingSettings.queryOptions;
+
 export const useThinkingSettings = thinkingSettings.useSettings;
+
 export const useSaveThinkingSettings = thinkingSettings.useSave;
+
 export function buildThinkingSettingsPayload(
   effort: ThinkingEffort
 ): UpdateThinkingRequest {
@@ -381,15 +478,18 @@ const webPublicUrlSettings = createSettingsHooks<
 >({
   mutationFn: async (webPublicUrl: string) => {
     const saved = await client.updateWebPublicUrl(webPublicUrl);
+
     return { envOverride: null, webPublicUrl: saved.webPublicUrl };
   },
   onSaveSuccess: (queryClient) => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.webPublicUrl });
+    void invalidateQueries(queryClient, queryKeys.webPublicUrl);
   },
   queryFn: () => client.getWebPublicUrl(),
   queryKey: queryKeys.webPublicUrl,
 });
+
 export const useWebPublicUrlSettings = webPublicUrlSettings.useSettings;
+
 export const useSaveWebPublicUrl = webPublicUrlSettings.useSave;
 
 const errorTrackingSettings = createSettingsHooks({
@@ -398,10 +498,20 @@ const errorTrackingSettings = createSettingsHooks({
   queryFn: () => client.getErrorTrackingSettings(),
   queryKey: queryKeys.errorTracking.settings,
 });
+
 export const useErrorTrackingSettings = errorTrackingSettings.useSettings;
+
 export const useSaveErrorTrackingSettings = errorTrackingSettings.useSave;
+
 export function useSendErrorTrackingTest() {
-  return useMutation({ mutationFn: () => client.sendErrorTrackingTest() });
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => client.sendErrorTrackingTest(),
+    // The server stores the result, so the settings carry it from here on.
+    onSettled: () =>
+      invalidateQueries(queryClient, queryKeys.errorTracking.settings),
+  });
 }
 
 const healthQueryOptions = queryOptions({
@@ -467,6 +577,7 @@ export function prefetchAppData(
   void queryClient.prefetchQuery(modelsQueryOptions);
   void queryClient.prefetchQuery(profilesQueryOptions);
   void queryClient.prefetchQuery(automationsQueryOptions);
+
   if (options?.isPlatformAdmin) {
     void queryClient.prefetchQuery(toolsQueryOptions);
     void queryClient.prefetchQuery(skillsQueryOptions);
@@ -516,6 +627,16 @@ export function useProfileQuery(profileId: string | null) {
     ...profileQueryOptions(profileId ?? ""),
     enabled: Boolean(profileId),
   });
+}
+
+const acpAgentPresetsQueryOptions = queryOptions({
+  queryFn: async () => (await client.getAcpAgentPresets()).presets,
+  queryKey: queryKeys.acpAgentPresets,
+  staleTime: defaultStaleTime,
+});
+
+export function useAcpAgentPresetsQuery() {
+  return useQuery(acpAgentPresetsQueryOptions);
 }
 
 export function useToolsQuery() {
@@ -596,11 +717,14 @@ export function useProvidersQuery(options?: { enabled?: boolean }) {
 }
 
 async function invalidateProviderQueries(queryClient: QueryClient) {
-  await Promise.all([
-    queryClient.invalidateQueries({ queryKey: queryKeys.health }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.models }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.providers }),
-  ]);
+  await invalidateQueries(
+    queryClient,
+    queryKeys.health,
+    queryKeys.models,
+    queryKeys.providers,
+    ["organizationOverview"],
+    ["organizationPublicationCatalog"]
+  );
 }
 
 export function useCreateProviderMutation() {
@@ -612,13 +736,16 @@ export function useCreateProviderMutation() {
     ) => {
       const { apiKey, ...settings } = request;
       const created = await client.createProvider(settings);
+
       if (!apiKey?.trim()) {
         return created;
       }
+
       const updated = await client.setProviderSecret(
         created.provider.id,
         apiKey
       );
+
       return { ...created, provider: updated.provider };
     },
     onSuccess: async () => {
@@ -640,6 +767,7 @@ export function useUpdateProviderMutation() {
     }) => {
       const { apiKey, ...settings } = request;
       const hasSettings = Object.keys(settings).length > 0;
+
       return hasSettings
         ? client
             .updateProvider(providerId, settings)

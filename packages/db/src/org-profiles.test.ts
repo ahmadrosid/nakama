@@ -81,6 +81,7 @@ describe("seedOrgDefaultProfile", () => {
     await upsertSkill(db, "create-profile");
 
     const profile = await seedOrgDefaultProfile(db, "org_a");
+
     const skillNames = (await db.listSkillsForProfile(profile.id)).map(
       (skill) => skill.name
     );
@@ -117,12 +118,16 @@ describe("seedOrgSuperBotProfile", () => {
     const db = createInMemoryDatabaseAdapter();
     await ensureBuiltinToolDefinitions(db);
     const profile = await seedOrgSuperBotProfile(db, "org_a");
+
     const toolIds = (await db.listToolsForProfile(profile.id)).map(
       (tool) => tool.id
     );
 
     for (const toolId of Object.values(BUILTIN_TOOL_IDS)) {
-      if (toolId !== BUILTIN_TOOL_IDS.delete_file) {
+      if (
+        toolId !== BUILTIN_TOOL_IDS.delete_file &&
+        toolId !== BUILTIN_TOOL_IDS.email
+      ) {
         expect(toolIds).toContain(toolId);
       }
     }
@@ -130,6 +135,29 @@ describe("seedOrgSuperBotProfile", () => {
     expect(toolIds).toContain(BASH_TOOL_ID);
     expect(toolIds).not.toContain(BUILTIN_TOOL_IDS.delete_file);
     expect(toolIds).not.toContain(GENERATE_IMAGE_TOOL_ID);
+  });
+
+  test("the shared mailbox tool is never assigned by default, on create or on a later boot", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await ensureBuiltinToolDefinitions(db);
+    const superBot = await seedOrgSuperBotProfile(db, "org_a");
+    const defaultBot = await seedOrgDefaultProfile(db, "org_a");
+
+    const toolIdsOf = async (profileId: string) =>
+      (await db.listToolsForProfile(profileId)).map((tool) => tool.id);
+
+    expect(await toolIdsOf(superBot.id)).not.toContain(BUILTIN_TOOL_IDS.email);
+    expect(await toolIdsOf(defaultBot.id)).not.toContain(
+      BUILTIN_TOOL_IDS.email
+    );
+
+    // An admin's explicit choice survives the seed that runs on every boot.
+    await db.assignToolToProfile(defaultBot.id, BUILTIN_TOOL_IDS.email);
+    await seedOrgSuperBotProfile(db, "org_a");
+    await seedOrgDefaultProfile(db, "org_a");
+
+    expect(await toolIdsOf(superBot.id)).not.toContain(BUILTIN_TOOL_IDS.email);
+    expect(await toolIdsOf(defaultBot.id)).toContain(BUILTIN_TOOL_IDS.email);
   });
 
   test("unassigns delete_file from an existing super bot", async () => {
@@ -157,6 +185,7 @@ describe("seedOrgSuperBotProfile", () => {
     await upsertSkill(db, "agent-browser");
 
     const profile = await seedOrgSuperBotProfile(db, "org_a");
+
     const skillNames = (await db.listSkillsForProfile(profile.id)).map(
       (skill) => skill.name
     );
@@ -189,6 +218,7 @@ describe("seedOrgSuperBotProfile", () => {
     const skillNames = (await db.listSkillsForProfile(profile.id)).map(
       (skill) => skill.name
     );
+
     expect(skillNames).toContain("update-profile-memory");
     expect(skillNames).toContain("archive-profile-memory");
     expect(skillNames).toContain("save-artifact");
@@ -205,6 +235,7 @@ describe("seedOrgSuperBotProfile", () => {
     const skillNames = (await db.listSkillsForProfile(profile.id)).map(
       (skill) => skill.name
     );
+
     expect(skillNames).toContain("create-profile");
   });
 });
@@ -223,6 +254,7 @@ describe("ensureBundledSkillsAssigned", () => {
     const skillNames = (await db.listSkillsForProfile(profile.id)).map(
       (skill) => skill.name
     );
+
     expect(skillNames).toContain("create-automation");
     expect(skillNames).not.toContain("create-profile");
     expect(skillNames).not.toContain("agent-browser");
@@ -263,6 +295,7 @@ test("shared listing is seeded and assigned to fresh profiles, without restoring
   expect((await db.getTool(BUILTIN_TOOL_IDS.list_artifacts))?.handlerType).toBe(
     "builtin"
   );
+
   for (const seed of [seedOrgDefaultProfile, seedOrgSuperBotProfile]) {
     const profile = await seed(db, "org_listing");
     expect(
@@ -288,4 +321,51 @@ test("shared listing is seeded and assigned to fresh profiles, without restoring
       )
     ).toBe(true);
   }
+});
+
+describe("profile ACP agent", () => {
+  test("keeps the ACP agent command across a save and read", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+
+    await db.upsertProfile({
+      acpAgent: {
+        args: ["-y", "@agentclientprotocol/claude-agent-acp@0.88.0"],
+        command: "npx",
+      },
+      createdAt: now,
+      id: "profile_acp",
+      isSuper: false,
+      model: null,
+      name: "ACP",
+      orgId: "org_a",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+
+    const saved = await db.getProfileForOrg("profile_acp", "org_a");
+    expect(saved?.acpAgent).toEqual({
+      args: ["-y", "@agentclientprotocol/claude-agent-acp@0.88.0"],
+      command: "npx",
+    });
+  });
+
+  test("reads a profile without an ACP agent as null", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+
+    await db.upsertProfile({
+      createdAt: now,
+      id: "profile_plain",
+      isSuper: false,
+      model: null,
+      name: "Plain",
+      orgId: "org_a",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+
+    const saved = await db.getProfileForOrg("profile_plain", "org_a");
+    expect(saved?.acpAgent).toBeNull();
+  });
 });

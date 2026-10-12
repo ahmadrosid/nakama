@@ -6,6 +6,7 @@ import {
   filterReservedSlashCommands,
   filterSkillsForSlashQuery,
   findActiveSkillSlashRange,
+  getLeadingCommand,
   getMentionTokenRanges,
   getReservedCommandTokenRanges,
   getSkillTokenRanges,
@@ -126,6 +127,7 @@ describe("filterComposerSlashSuggestions", () => {
     const commands = filterComposerSlashSuggestions([], query, {
       enableAddCommands: true,
     }).filter((item) => item.kind === "command");
+
     expect(commands.map((item) => item.command.name)).toEqual([name]);
     expect(filterComposerSlashSuggestions([], query)).toEqual([]);
   });
@@ -141,6 +143,7 @@ describe("filterComposerSlashSuggestions", () => {
       description: "",
       name,
     }));
+
     expect(
       filterReservedSlashCommands("atl", commands).map((c) => c.name)
     ).toEqual(["atlas", "add-tool"]);
@@ -170,6 +173,7 @@ describe("filterComposerSlashSuggestions", () => {
       [manageSkillsSkill, weatherSkill, deploySkill],
       "lea"
     );
+
     expect(
       suggestions.map((item) => item.kind === "command" && item.command.name)
     ).toEqual(["learn", "enable-learning-loop"]);
@@ -347,5 +351,56 @@ describe("@ mentions", () => {
       { end: 25, name: "image", start: 19 },
     ]);
     expect(getMentionTokenRanges("me@image.dev @images")).toEqual([]);
+  });
+});
+
+describe("getLeadingCommand", () => {
+  test("finds a leading reserved command", () => {
+    const found = getLeadingCommand("/enable-learning-loop now", [
+      manageSkillsSkill,
+    ]);
+
+    expect(found?.range).toEqual({
+      end: 21,
+      name: "enable-learning-loop",
+      start: 0,
+    });
+  });
+
+  test("finds a leading skill token", () => {
+    const found = getLeadingCommand("/skill weather rain?", [weatherSkill]);
+
+    expect(found?.range.name).toBe("weather");
+    expect(found?.description).toBe(weatherSkill.description.trim());
+  });
+
+  test("keeps the first matching skill when names repeat", () => {
+    const duplicate = { ...weatherSkill, description: "Second skill" };
+
+    const found = getLeadingCommand("/skill weather", [
+      weatherSkill,
+      duplicate,
+    ]);
+
+    expect(found?.description).toBe(weatherSkill.description.trim());
+  });
+
+  test("ignores later skills when the leading skill is unavailable", () => {
+    expect(
+      getLeadingCommand("/skill missing /skill weather", [weatherSkill])
+    ).toBeNull();
+  });
+
+  test("finds a leading skill after whitespace and ignores later tokens", () => {
+    const found = getLeadingCommand("  /skill weather /skill missing", [
+      weatherSkill,
+    ]);
+
+    expect(found?.range).toEqual({ end: 16, name: "weather", start: 2 });
+    expect(found?.description).toBe(weatherSkill.description.trim());
+  });
+
+  test("ignores a command mid-sentence", () => {
+    expect(getLeadingCommand("run /skill weather", [weatherSkill])).toBeNull();
   });
 });

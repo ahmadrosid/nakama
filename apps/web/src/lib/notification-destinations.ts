@@ -5,9 +5,11 @@ import type {
 
 export function maskWebhookApiKey(apiKey: string): string {
   const trimmed = apiKey.trim();
+
   if (trimmed.length <= 4) {
     return "••••";
   }
+
   return `••••${trimmed.slice(-4)}`;
 }
 
@@ -16,6 +18,7 @@ export function buildNotificationWebhookUrl(
   webhookPath: string
 ): string {
   const base = origin.replace(/\/$/, "");
+
   return `${base}${webhookPath}`;
 }
 

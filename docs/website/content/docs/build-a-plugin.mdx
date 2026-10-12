@@ -78,7 +78,7 @@ Add `nakama.plugin.json`:
 
 The two package versions must match. Keep `id` stable across updates. Set `minNakamaVersion` to the oldest release you actually support; the value above is the current development baseline, not a guarantee that every build of that version supports tool renderers.
 
-`access` controls who can invoke the action: `member` allows members and admins; `admin` requires an org admin. Viewers cannot invoke plugin actions. Use `effect: "write"` for actions that change data. Setting `exposeAsTool` creates the agent tool `plugin_greeting__greet`; assignment to a profile is still required.
+`access` controls who can invoke the action: `member` allows members and admins; `admin` requires an org admin. Use `effect: "write"` for actions that change data. Setting `exposeAsTool` creates the agent tool `plugin_greeting__greet`; assignment to a profile is still required.
 
 ## 3. Implement the action
 
@@ -224,7 +224,7 @@ npm publish --access public
 
 Assigned plugin tools are discovered through the agent's `find_tools` capability. Installing a package alone does not assign its tools to every profile.
 
-Custom packages currently install from the public npm registry using exact versions. Local paths, Git URLs, private registries, and uploaded archives are not supported. For your own plugin, test the action and bundle locally, then publish a new version to test installation. The **Official plugins → Reinstall** shortcut applies only to plugins bundled with Nakama, such as Workflows.
+Custom packages currently install from the npm registry using exact versions. Local paths, Git URLs, other registries, and uploaded archives are not supported. To install a package that is not public, the operator sets `NAKAMA_PLUGIN_NPM_TOKEN` on the server to a read-only npm token that can read it. For your own plugin, test the action and bundle locally, then publish a new version to test installation. The **Official plugins → Reinstall** shortcut applies only to plugins bundled with Nakama, such as Workflows.
 
 ## Add persistent data
 

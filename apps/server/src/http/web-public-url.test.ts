@@ -5,6 +5,7 @@ import { setupTestConfigDir, withTestEnv } from "../test-config-dir";
 import { createMinimalHonoApp } from "./test-app-helpers";
 import { buildSetupAuthBody } from "./test-org-helpers";
 import {
+  type AppFetch,
   loginPlatformAdminSession,
   loginUserSession,
   seedOrgAdmin,
@@ -18,7 +19,7 @@ const API_URL = "http://localhost:4310/v1/system/web-public-url";
 
 function putRequest(
   session: TestBrowserSession,
-  body: unknown,
+  body: { webPublicUrl?: string },
   orgId?: string,
   extraHeaders: Record<string, string> = {}
 ): Request {
@@ -36,18 +37,20 @@ function putRequest(
   });
 }
 
-function readSavedBaseUrl(
-  app: { fetch: typeof fetch },
+async function readSavedBaseUrl(
+  app: AppFetch,
   session: TestBrowserSession,
   orgId?: string
 ): Promise<string | null> {
-  return app
-    .fetch(new Request(API_URL, { headers: session.headers({}, orgId) }))
-    .then(async (response) => {
-      expect(response.status).toBe(200);
-      return ((await response.json()) as { webPublicUrl: string | null })
-        .webPublicUrl;
-    });
+  const response = await app.fetch(
+    new Request(API_URL, { headers: session.headers({}, orgId) })
+  );
+
+  expect(response.status).toBe(200);
+
+  // SAFETY: The test checks this response against the endpoint contract asserted below.
+  return ((await response.json()) as { webPublicUrl: string | null })
+    .webPublicUrl;
 }
 
 describe("web public url settings", () => {
@@ -64,7 +67,9 @@ describe("web public url settings", () => {
         session.orgId
       )
     );
+
     expect(putResponse.status).toBe(200);
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const saved = (await putResponse.json()) as { webPublicUrl: string };
     expect(saved.webPublicUrl).toBe("http://localhost:4310");
     expect(await readSavedBaseUrl(app, session)).toBe("http://localhost:4310");
@@ -72,6 +77,7 @@ describe("web public url settings", () => {
     const headerAttempt = await app.fetch(
       putRequest(session, {}, session.orgId, { Origin: "https://evil.example" })
     );
+
     expect(headerAttempt.status).toBe(400);
     expect(await readSavedBaseUrl(app, session)).toBe("http://localhost:4310");
   });
@@ -87,6 +93,7 @@ describe("web public url settings", () => {
         session.orgId
       )
     );
+
     expect(foreign.status).toBe(400);
     expect(await readSavedBaseUrl(app, session)).toBeNull();
 
@@ -102,6 +109,7 @@ describe("web public url settings", () => {
         { "X-Forwarded-Host": "nakama.example.com" }
       )
     );
+
     expect(forwarded.status).toBe(200);
     expect(await readSavedBaseUrl(app, session)).toBe(
       "https://nakama.example.com"
@@ -116,6 +124,7 @@ describe("web public url settings", () => {
       orgId: "org_acme",
       userId: "user_acme_admin",
     });
+
     const adminSession = await loginUserSession(
       app,
       "acme-admin@example.com",
@@ -130,6 +139,7 @@ describe("web public url settings", () => {
         "org_acme"
       )
     );
+
     expect(toAttacker.status).toBe(403);
 
     // The origin allowlist is not the boundary: a value the deployment would
@@ -141,6 +151,7 @@ describe("web public url settings", () => {
         "org_acme"
       )
     );
+
     expect(toOwnOrigin.status).toBe(403);
 
     // The base an OAuth callback is built from still points at the deployment
@@ -156,6 +167,7 @@ describe("web public url settings", () => {
       authService,
       databaseAdapter
     );
+
     expect(await readSavedBaseUrl(app, platformSession, "org_acme")).toBeNull();
     expect(
       (
@@ -174,6 +186,7 @@ describe("web public url settings", () => {
       async () => {
         await saveUserWebPublicUrl("https://nakama.example.com");
         const { app } = createMinimalHonoApp();
+
         const setup = (webPublicUrl: string) =>
           app.fetch(
             new Request("http://nakama-internal:4310/v1/auth/setup", {

@@ -20,6 +20,7 @@ export function isValidCronExpression(cron: string): boolean {
 
 export function isValidRunAt(at: string): boolean {
   const trimmed = at.trim();
+
   if (!trimmed) {
     return false;
   }
@@ -57,6 +58,7 @@ export function computeAutomationNextRunAt(
 ): string | null {
   if (trigger.type === "runAt") {
     const at = Date.parse(trigger.at);
+
     return Number.isFinite(at) && at > Date.now()
       ? new Date(at).toISOString()
       : null;
@@ -67,6 +69,7 @@ export function computeAutomationNextRunAt(
   }
 
   const timezone = trigger.timezone ?? userTimezone;
+
   const next = new Cron(trigger.cron, {
     paused: true,
     timezone,

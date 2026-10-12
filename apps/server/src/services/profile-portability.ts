@@ -36,6 +36,7 @@ import {
 } from "@nakama/core";
 import type {
   DatabaseAdapter,
+  StoredMcpServerRecord,
   StoredProfileComposioToolkitRecord,
   StoredProfileRecord,
   StoredSkillRecord,
@@ -45,17 +46,59 @@ import { unzipSync, zipSync } from "fflate";
 import { getCustomToolHandler, isCustomToolType } from "./custom-tool-handlers";
 import { readHandlerModulePath } from "./custom-tool-shared";
 import {
+  isDirectExportPath,
   MAX_IMPORT_ENTRY_BYTES,
   MAX_IMPORT_UNCOMPRESSED_BYTES,
 } from "./data-portability";
 import { recordProfileChangeEvent } from "./profile-change-history";
 
+interface McpServerResolutionOptions {
+  /**
+   * Platform admins own every install-wide MCP server and may attach one to
+   * any profile, which is what `POST /v1/profiles/:profileId/mcp-servers`
+   * already does. Pack import applies the identical policy.
+   */
+  isPlatformAdmin?: boolean;
+}
+
+/**
+ * MCP servers are install-wide: only a platform admin can create one, and the
+ * only other route that reaches a server is the platform-admin-only profile
+ * assignment endpoint. So "already assigned to a profile in this org" is the
+ * platform admin's explicit grant to that organization.
+ *
+ * Anything running with org-admin rights — profile-pack import above all — must
+ * resolve MCP names through this policy instead of the unscoped name lookup,
+ * otherwise a pack can name any install-wide server and hand the importing org
+ * its headers, OAuth grant, stdio command, and cached tools.
+ */
+async function findMcpServerForOrg(
+  db: DatabaseAdapter,
+  orgId: string,
+  name: string,
+  options: McpServerResolutionOptions = {}
+): Promise<StoredMcpServerRecord | null> {
+  const server = await db.getMcpServerByName(name);
+
+  if (!server || options.isPlatformAdmin) {
+    return server;
+  }
+
+  const profiles = await db.listProfilesForMcpServer(server.id);
+
+  return profiles.some((profile) => profile.orgId === orgId) ? server : null;
+}
+
 export const PROFILE_PACK_KIND = "nakama-profile-export" as const;
+
 const PROFILE_PACK_MANIFEST_FILENAME = "nakama-profile-export.json";
+
 const PROFILE_PACK_FORMAT_VERSION = 1;
+
 const CUSTOM_TOOLS_ARCHIVE_DIR = "custom-tools";
 
 export const MAX_PROFILE_PACK_ENTRY_COUNT = 10_000;
+
 /** Only these workspace paths ever leave (export) or enter (import) a pack. */
 const ROOT_ALLOWED_FILES = new Set([
   "SOUL.md",
@@ -63,8 +106,11 @@ const ROOT_ALLOWED_FILES = new Set([
   "INSTRUCTIONS.md",
   "MEMORY.md",
 ]);
+
 const ALLOWED_ROOT_SUBDIRS = new Set(["examples", "knowledge-base", "skills"]);
+
 const AVATAR_BASENAME_PATTERN = /^avatar\.[a-z0-9]+$/i;
+
 /**
  * A skill-local `tool.js`/`tool.ts` is `import()`ed straight into the
  * long-lived server process, so a pack carrying one turns a profile import
@@ -82,18 +128,21 @@ const IN_PROCESS_SKILL_SOURCE_EXTENSIONS = new Set([
   ".ts",
   ".tsx",
 ]);
+
 const IN_PROCESS_SKILL_SOURCE_REASON =
   "Executable JavaScript/TypeScript skill sources run inside the Nakama server process and are never installed from a profile pack.";
 
-const AVATAR_EXTENSION_MEDIA_TYPES: Record<string, string> = {
-  gif: "image/gif",
-  jpeg: "image/jpeg",
-  jpg: "image/jpeg",
-  png: "image/png",
-  webp: "image/webp",
-};
+const AVATAR_EXTENSION_MEDIA_TYPES = new Map([
+  ["gif", "image/gif"],
+  ["jpeg", "image/jpeg"],
+  ["jpg", "image/jpeg"],
+  ["png", "image/png"],
+  ["webp", "image/webp"],
+]);
+
 const NOT_ALLOWLISTED_REASON =
   "Not part of the profile pack allowlist (secrets and generated data are excluded).";
+
 const PROFILE_ID_ATTEMPTS = 50;
 
 interface ProfilePackFile {
@@ -114,9 +163,17 @@ interface CreatedCustomTool {
 interface ValidPackedCustomTool {
   absolutePath: string;
   definition: ProfilePackCustomTool;
-  handlerConfig: Record<string, unknown>;
+  handlerConfig: ProfilePackCustomTool["handlerConfig"];
   sourcePath: string;
 }
+
+type ProfilePackJsonValue =
+  | boolean
+  | null
+  | number
+  | string
+  | ProfilePackJsonValue[]
+  | { [key: string]: ProfilePackJsonValue };
 
 type ToolAssignmentResolution =
   | { kind: "create"; packed: ValidPackedCustomTool; source: Buffer }
@@ -128,6 +185,7 @@ export interface CreateProfilePackOptions {
 }
 
 export interface PreviewProfilePackImportOptions {
+  isPlatformAdmin?: boolean;
   restoreCustomTools?: boolean;
 }
 
@@ -140,6 +198,7 @@ export interface CreateProfilePackResult {
 export interface ImportProfilePackOptions {
   actorUserId?: string | null;
   confirm: boolean;
+  isPlatformAdmin?: boolean;
   name?: string;
   now?: Date;
   restoreCustomTools?: boolean;
@@ -168,8 +227,26 @@ export async function createProfilePackExport(
   }
 
   const soulDir = getProfileSoulDir(orgId, profileId);
+
+  if ((await pathExists(soulDir)) && !(await isDirectExportPath(soulDir))) {
+    throw new NakamaApiError(
+      "Linked profile workspaces cannot be exported.",
+      400
+    );
+  }
+
   const { files, skipped } = await inventoryProfileSoulDir(soulDir);
   const meta = await buildProfilePackMeta(db, profileId, profile);
+  const shared = await db.getSharedAgentInstance(orgId, profileId);
+
+  if (shared) {
+    meta.sharedAgent = {
+      publicationId: shared.publicationId,
+      sourceOrgId: shared.sourceOrgId,
+      sourceProfileId: shared.sourceProfileId,
+    };
+  }
+
   const createdAt = (options.now ?? new Date()).toISOString();
 
   const entries: Record<string, Uint8Array> = {};
@@ -179,7 +256,7 @@ export async function createProfilePackExport(
   }
 
   if (options.includeCustomTools ?? true) {
-    const packedTools = await collectPackedCustomTools(db, profileId);
+    const packedTools = await collectPackedCustomTools(db, orgId, profileId);
     meta.customTools = packedTools.tools;
     skipped.push(...packedTools.skipped);
     Object.assign(entries, packedTools.entries);
@@ -188,10 +265,16 @@ export async function createProfilePackExport(
   if (await hasProfileAvatar(orgId, profileId)) {
     const avatar = await readProfileAvatar(orgId, profileId);
 
-    if (avatar) {
+    if (
+      avatar &&
+      (await isDirectExportPath(
+        getProfileAvatarPath(orgId, profileId, avatar.mediaType)
+      ))
+    ) {
       const avatarRelative = basename(
         getProfileAvatarPath(orgId, profileId, avatar.mediaType)
       );
+
       entries[avatarRelative] = avatar.bytes;
     }
   }
@@ -235,53 +318,61 @@ export async function previewProfilePackImport(
   const manifest = readProfilePackManifest(entries);
 
   const skippedAssignments: ProfilePackSkippedItem[] = [];
-  await previewToolAssignments(
-    db,
-    manifest,
-    entries,
-    options.restoreCustomTools === true,
-    skippedAssignments
-  );
-  await eachNamedOrSkip(
-    manifest.meta.mcpServerNames,
-    (name) => db.getMcpServerByName(name),
-    skippedAssignments,
-    (name) => ({
-      path: `MCP server:${name}`,
-      reason: `MCP server "${name}" was not found in the destination and will be skipped.`,
-    })
-  );
-  await eachNamedOrSkip(
-    manifest.meta.composioToolkitSlugs,
-    (slug) => db.getComposioToolkitBySlug(orgId, slug),
-    skippedAssignments,
-    (slug) => ({
-      path: `Composio toolkit:${slug}`,
-      reason: `Composio toolkit "${slug}" was not found in the destination and will be skipped.`,
-    })
-  );
-  await eachNamedOrSkip(
-    manifest.meta.bundledSkillNames,
-    (name) => db.getSkillByName(name, orgId),
-    skippedAssignments,
-    (name) => ({
-      path: `bundled skill:${name}`,
-      reason: `Bundled skill "${name}" was not found in the destination and will be skipped.`,
-    })
-  );
 
-  for (const skill of readSkillNamesFromZip(entries)) {
-    if (await db.getSkillByName(skill.name, orgId)) {
-      skippedAssignments.push({
-        path: `skills/${skill.folder}`,
-        reason: `Skill "${skill.name}" already exists at a different location and will be skipped.`,
-      });
+  if (!manifest.meta.sharedAgent) {
+    await previewToolAssignments(
+      db,
+      orgId,
+      manifest,
+      entries,
+      options.restoreCustomTools === true,
+      skippedAssignments
+    );
+    await eachNamedOrSkip(
+      manifest.meta.mcpServerNames,
+      (name) =>
+        findMcpServerForOrg(db, orgId, name, {
+          isPlatformAdmin: options.isPlatformAdmin,
+        }),
+      skippedAssignments,
+      (name) => ({
+        path: `MCP server:${name}`,
+        reason: `MCP server "${name}" is not available to this organization and will be skipped.`,
+      })
+    );
+    await eachNamedOrSkip(
+      manifest.meta.composioToolkitSlugs,
+      (slug) => db.getComposioToolkitBySlug(orgId, slug),
+      skippedAssignments,
+      (slug) => ({
+        path: `Composio toolkit:${slug}`,
+        reason: `Composio toolkit "${slug}" was not found in the destination and will be skipped.`,
+      })
+    );
+    await eachNamedOrSkip(
+      manifest.meta.bundledSkillNames,
+      (name) => db.getSkillByName(name, orgId),
+      skippedAssignments,
+      (name) => ({
+        path: `bundled skill:${name}`,
+        reason: `Bundled skill "${name}" was not found in the destination and will be skipped.`,
+      })
+    );
+
+    for (const skill of readSkillNamesFromZip(entries)) {
+      if (await db.getSkillByName(skill.name, orgId)) {
+        skippedAssignments.push({
+          path: `skills/${skill.folder}`,
+          reason: `Skill "${skill.name}" already exists at a different location and will be skipped.`,
+        });
+      }
     }
   }
 
   const restorableEntries = entries.filter(
     (entry) => entry.name !== PROFILE_PACK_MANIFEST_FILENAME
   );
+
   const topLevelPaths = Array.from(
     new Set(restorableEntries.map((entry) => entry.name.split("/")[0] ?? ""))
   )
@@ -337,6 +428,16 @@ export async function importProfilePack(
 
   try {
     const skippedAssignments: ProfilePackSkippedItem[] = [];
+
+    if (manifest.meta.sharedAgent) {
+      await db.importSharedAgentReference({
+        ...manifest.meta.sharedAgent,
+        createdAt: now,
+        profileId,
+        teamOrgId: orgId,
+      });
+    }
+
     const soulDir = getProfileSoulDir(orgId, profileId);
     await initSoulDirectory(soulDir);
     await writePackedWorkspaceFiles(
@@ -345,52 +446,59 @@ export async function importProfilePack(
       entries,
       skippedAssignments
     );
-    createdSkillIds = await recreatePackedSkills(
-      db,
-      orgId,
-      profileId,
-      skippedAssignments
-    );
-    await restoreToolAssignments(
-      db,
-      profileId,
-      manifest,
-      entries,
-      options.restoreCustomTools === true,
-      skippedAssignments,
-      createdCustomTools
-    );
-    await eachNamedOrSkip(
-      manifest.meta.mcpServerNames,
-      (serverName) => db.getMcpServerByName(serverName),
-      skippedAssignments,
-      (name) => ({
-        path: `MCP server:${name}`,
-        reason: `MCP server "${name}" was not found in the destination and was skipped.`,
-      }),
-      async (server) => {
-        await db.assignMcpServerToProfile(profileId, server.id);
-      }
-    );
-    await eachNamedOrSkip(
-      manifest.meta.bundledSkillNames,
-      (skillName) => db.getSkillByName(skillName, orgId),
-      skippedAssignments,
-      (name) => ({
-        path: `bundled skill:${name}`,
-        reason: `Bundled skill "${name}" was not found in the destination and was skipped.`,
-      }),
-      async (skill) => {
-        await db.assignSkillToProfile(profileId, skill.id);
-      }
-    );
-    await assignComposioToolkitsBySlug(
-      db,
-      orgId,
-      profileId,
-      manifest.meta.composioToolkitSlugs,
-      skippedAssignments
-    );
+
+    if (!manifest.meta.sharedAgent) {
+      createdSkillIds = await recreatePackedSkills(
+        db,
+        orgId,
+        profileId,
+        skippedAssignments
+      );
+      await restoreToolAssignments(
+        db,
+        profileId,
+        orgId,
+        manifest,
+        entries,
+        options.restoreCustomTools === true,
+        skippedAssignments,
+        createdCustomTools
+      );
+      await eachNamedOrSkip(
+        manifest.meta.mcpServerNames,
+        (serverName) =>
+          findMcpServerForOrg(db, orgId, serverName, {
+            isPlatformAdmin: options.isPlatformAdmin,
+          }),
+        skippedAssignments,
+        (name) => ({
+          path: `MCP server:${name}`,
+          reason: `MCP server "${name}" is not available to this organization and was skipped.`,
+        }),
+        async (server) => {
+          await db.assignMcpServerToProfile(profileId, server.id);
+        }
+      );
+      await eachNamedOrSkip(
+        manifest.meta.bundledSkillNames,
+        (skillName) => db.getSkillByName(skillName, orgId),
+        skippedAssignments,
+        (name) => ({
+          path: `bundled skill:${name}`,
+          reason: `Bundled skill "${name}" was not found in the destination and was skipped.`,
+        }),
+        async (skill) => {
+          await db.assignSkillToProfile(profileId, skill.id);
+        }
+      );
+      await assignComposioToolkitsBySlug(
+        db,
+        orgId,
+        profileId,
+        manifest.meta.composioToolkitSlugs,
+        skippedAssignments
+      );
+    }
 
     await recordProfileChangeEvent(db, {
       actorUserId: options.actorUserId,
@@ -444,6 +552,7 @@ async function inventoryProfileSoulDir(soulDir: string): Promise<{
       } else {
         skipped.push({ path: relativePath, reason: NOT_ALLOWLISTED_REASON });
       }
+
       continue;
     }
 
@@ -466,6 +575,7 @@ async function inventoryProfileSoulDir(soulDir: string): Promise<{
   }
 
   files.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+
   return { files, skipped };
 }
 
@@ -551,9 +661,10 @@ async function buildProfilePackMeta(
   const profileSkillNames: string[] = [];
 
   for (const skill of skills) {
-    if (skill.pluginId) {
+    if (skill.pluginId || (skill.orgId && skill.orgId !== profile.orgId)) {
       continue;
     }
+
     if (isGlobalSkillSourcePath(skill.sourcePath)) {
       bundledSkillNames.push(skill.name);
     } else {
@@ -586,7 +697,10 @@ async function buildProfilePackMeta(
     thinkingEffort: profile.thinkingEffort ?? null,
     thinkingEnabled: profile.thinkingEnabled ?? null,
     toolNames: tools
-      .filter((tool) => !tool.pluginId)
+      .filter(
+        (tool) =>
+          !tool.pluginId && (!tool.orgId || tool.orgId === profile.orgId)
+      )
       .map((tool) => tool.name)
       .sort(),
   };
@@ -594,6 +708,7 @@ async function buildProfilePackMeta(
 
 async function collectPackedCustomTools(
   db: DatabaseAdapter,
+  orgId: string,
   profileId: string
 ): Promise<{
   entries: Record<string, Uint8Array>;
@@ -606,9 +721,17 @@ async function collectPackedCustomTools(
   const tools = await db.listToolsForProfile(profileId);
 
   for (const tool of tools) {
-    if (tool.pluginId) {
+    if (tool.pluginId || !isCustomToolType(tool.handlerType)) {
       continue;
     }
+
+    if (tool.orgId && tool.orgId !== orgId) {
+      skipped.push(
+        customToolSkip(tool.name, "Tool belongs to another organization.")
+      );
+      continue;
+    }
+
     const handler = getCustomToolHandler(tool.handlerType);
 
     if (!handler) {
@@ -625,13 +748,13 @@ async function collectPackedCustomTools(
     let absolutePath: string;
 
     try {
-      absolutePath = handler.resolveModulePath(storedModulePath);
+      absolutePath = handler.resolveModulePath(storedModulePath, orgId);
     } catch {
       skipped.push(customToolSkip(tool.name, "has an invalid module path"));
       continue;
     }
 
-    const modulePath = portableCustomToolModulePath(absolutePath);
+    const modulePath = portableCustomToolModulePath(absolutePath, orgId);
 
     if (!(modulePath && modulePath.endsWith(handler.extension))) {
       skipped.push(customToolSkip(tool.name, "has an invalid module path"));
@@ -664,7 +787,7 @@ async function collectPackedCustomTools(
     packedTools.push({
       description: tool.description,
       handlerConfig,
-      handlerType: tool.handlerType as ProfilePackCustomTool["handlerType"],
+      handlerType: tool.handlerType,
       name: tool.name,
     });
   }
@@ -680,6 +803,7 @@ async function collectPackedCustomTools(
 
 async function previewToolAssignments(
   db: DatabaseAdapter,
+  orgId: string,
   manifest: ProfilePackManifest,
   entries: ProfilePackZipEntry[],
   restoreCustomTools: boolean,
@@ -688,6 +812,7 @@ async function previewToolAssignments(
   for (const name of manifest.meta.toolNames) {
     await resolveToolAssignment(
       db,
+      orgId,
       manifest,
       entries,
       name,
@@ -700,6 +825,7 @@ async function previewToolAssignments(
 async function restoreToolAssignments(
   db: DatabaseAdapter,
   profileId: string,
+  orgId: string,
   manifest: ProfilePackManifest,
   entries: ProfilePackZipEntry[],
   restoreCustomTools: boolean,
@@ -709,6 +835,7 @@ async function restoreToolAssignments(
   for (const name of manifest.meta.toolNames) {
     const resolution = await resolveToolAssignment(
       db,
+      orgId,
       manifest,
       entries,
       name,
@@ -727,6 +854,7 @@ async function restoreToolAssignments(
 
     const { packed, source } = resolution;
     const now = new Date().toISOString();
+
     const record: StoredToolRecord = {
       createdAt: now,
       description: packed.definition.description,
@@ -734,6 +862,7 @@ async function restoreToolAssignments(
       handlerType: packed.definition.handlerType,
       id: createId("tool"),
       name,
+      orgId,
       updatedAt: now,
     };
 
@@ -749,7 +878,7 @@ async function restoreToolAssignments(
     }
 
     try {
-      await handler.validateModule(modulePath);
+      await handler.validateModule(modulePath, orgId);
     } catch (error) {
       await rm(packed.absolutePath, { force: true });
       skipped.push(
@@ -777,18 +906,22 @@ async function restoreToolAssignments(
 
 async function resolveToolAssignment(
   db: DatabaseAdapter,
+  orgId: string,
   manifest: ProfilePackManifest,
   entries: ProfilePackZipEntry[],
   name: string,
   restoreCustomTools: boolean,
   skipped: ProfilePackSkippedItem[]
 ): Promise<ToolAssignmentResolution | null> {
-  const existing = await db.getToolByName(name);
-  const packed = findPackedCustomTool(manifest, name);
+  // Never resolve tools another organization owns: an unscoped name lookup
+  // would let a pack attach a foreign tenant's tool to this profile.
+  const existing = await db.getToolByNameForOrg(orgId, name);
+  const packed = findPackedCustomTool(manifest, name, orgId);
 
   if (!packed) {
     if (hasPackedCustomToolNamed(manifest, name)) {
       skipped.push(customToolSkip(name, "has invalid metadata"));
+
       return null;
     }
 
@@ -797,6 +930,7 @@ async function resolveToolAssignment(
     }
 
     skipped.push(missingToolSkip(name));
+
     return null;
   }
 
@@ -804,6 +938,7 @@ async function resolveToolAssignment(
 
   if (!sourceEntry) {
     skipped.push(customToolSkip(name, "is missing its packed source file"));
+
     return null;
   }
 
@@ -815,6 +950,7 @@ async function resolveToolAssignment(
     skipped.push(
       customToolSkip(name, "conflicts with an existing tool or module")
     );
+
     return null;
   }
 
@@ -822,11 +958,13 @@ async function resolveToolAssignment(
     skipped.push(
       customToolSkip(name, "requires a platform admin to restore its source")
     );
+
     return null;
   }
 
   if (await pathExists(packed.absolutePath)) {
     skipped.push(customToolSkip(name, "cannot replace an existing module"));
+
     return null;
   }
 
@@ -855,14 +993,14 @@ async function existingToolMatchesPack(
   let absolutePath: string;
 
   try {
-    absolutePath = handler.resolveModulePath(modulePath);
+    absolutePath = handler.resolveModulePath(modulePath, existing.orgId);
   } catch {
     return false;
   }
 
   const normalizedConfig = {
     ...existing.handlerConfig,
-    modulePath: portableCustomToolModulePath(absolutePath),
+    modulePath: portableCustomToolModulePath(absolutePath, existing.orgId),
   };
 
   if (
@@ -884,6 +1022,7 @@ function hasPackedCustomToolNamed(
   name: string
 ): boolean {
   const definitions: unknown = manifest.meta.customTools;
+
   return (
     Array.isArray(definitions) &&
     definitions.some((entry) => isPlainRecord(entry) && entry.name === name)
@@ -892,7 +1031,8 @@ function hasPackedCustomToolNamed(
 
 function findPackedCustomTool(
   manifest: ProfilePackManifest,
-  name: string
+  name: string,
+  orgId: string
 ): ValidPackedCustomTool | null {
   const definitions: unknown = manifest.meta.customTools;
 
@@ -905,11 +1045,13 @@ function findPackedCustomTool(
   );
 
   if (
-    !isPlainRecord(value) ||
-    typeof value.description !== "string" ||
-    typeof value.handlerType !== "string" ||
-    !isCustomToolType(value.handlerType) ||
-    !isPlainRecord(value.handlerConfig)
+    !(
+      isPlainRecord(value) &&
+      isString(value.description) &&
+      isString(value.handlerType) &&
+      isCustomToolType(value.handlerType) &&
+      isPlainRecord(value.handlerConfig)
+    )
   ) {
     return null;
   }
@@ -924,12 +1066,12 @@ function findPackedCustomTool(
   let absolutePath: string;
 
   try {
-    absolutePath = handler.resolveModulePath(modulePath);
+    absolutePath = handler.resolveModulePath(modulePath, orgId);
   } catch {
     return null;
   }
 
-  const portableModulePath = portableCustomToolModulePath(absolutePath);
+  const portableModulePath = portableCustomToolModulePath(absolutePath, orgId);
   const sourcePath = `${CUSTOM_TOOLS_ARCHIVE_DIR}/${portableModulePath}`;
 
   if (!portableModulePath) {
@@ -949,8 +1091,13 @@ function findPackedCustomTool(
   };
 }
 
-function portableCustomToolModulePath(absolutePath: string): string | null {
-  const modulePath = toZipPath(relative(getCustomToolsDir(), absolutePath));
+function portableCustomToolModulePath(
+  absolutePath: string,
+  orgId?: string | null
+): string | null {
+  const modulePath = toZipPath(
+    relative(getCustomToolsDir(orgId ?? undefined), absolutePath)
+  );
 
   if (
     !modulePath ||
@@ -978,8 +1125,134 @@ function missingToolSkip(name: string): ProfilePackSkippedItem {
   };
 }
 
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function isPlainRecord<T>(
+  value: T
+): value is T & Record<string, ProfilePackJsonValue> {
+  if (!(value instanceof Object) || Array.isArray(value)) {
+    return false;
+  }
+
+  return Object.values(value).every(isProfilePackJsonValue);
+}
+
+function isProfilePackManifest<T>(value: T): value is T & ProfilePackManifest {
+  const manifest = readStringKeyedRecord(value);
+  const meta = readStringKeyedRecord(manifest?.get("meta"));
+  const skipped = manifest?.get("skipped");
+  const customTools = meta?.get("customTools");
+  const sharedAgent = meta?.get("sharedAgent");
+  const sharedReference = readStringKeyedRecord(sharedAgent);
+
+  return Boolean(
+    manifest &&
+      meta &&
+      (sharedAgent === undefined ||
+        (sharedReference &&
+          ["publicationId", "sourceOrgId", "sourceProfileId"].every((key) => {
+            const id = sharedReference.get(key);
+
+            return isString(id) && id.trim().length > 0 && id.length <= 256;
+          }))) &&
+      manifest.get("apiVersion") === NAKAMA_API_VERSION &&
+      isString(manifest.get("createdAt")) &&
+      manifest.get("kind") === PROFILE_PACK_KIND &&
+      isString(manifest.get("sourceProfileId")) &&
+      isStringArray(manifest.get("topLevelPaths")) &&
+      isNumber(manifest.get("version")) &&
+      Array.isArray(skipped) &&
+      skipped.every(isProfilePackSkippedItem) &&
+      isStringArray(meta.get("bundledSkillNames")) &&
+      isStringArray(meta.get("composioToolkitSlugs")) &&
+      isStringArray(meta.get("mcpServerNames")) &&
+      isNullableString(meta.get("model")) &&
+      isString(meta.get("name")) &&
+      isStringArray(meta.get("profileSkillNames")) &&
+      isNullableBoolean(meta.get("skillsCuratorConsolidateEnabled")) &&
+      isNullableBoolean(meta.get("skillsPostTurnReview")) &&
+      isNullableBoolean(meta.get("skillsWriteApproval")) &&
+      isString(meta.get("systemPrompt")) &&
+      isNullableString(meta.get("thinkingEffort")) &&
+      isNullableBoolean(meta.get("thinkingEnabled")) &&
+      isStringArray(meta.get("toolNames")) &&
+      (customTools === undefined ||
+        (Array.isArray(customTools) &&
+          customTools.every(isProfilePackCustomTool)))
+  );
+}
+
+function isProfilePackSkippedItem<T>(value: T): boolean {
+  const item = readStringKeyedRecord(value);
+
+  return Boolean(
+    item && isString(item.get("path")) && isString(item.get("reason"))
+  );
+}
+
+function isProfilePackCustomTool<T>(value: T): boolean {
+  const tool = readStringKeyedRecord(value);
+  const handlerType = tool?.get("handlerType");
+
+  return Boolean(
+    tool &&
+      isString(tool.get("description")) &&
+      isProfilePackJsonValue(tool.get("handlerConfig")) &&
+      isString(handlerType) &&
+      isCustomToolType(handlerType) &&
+      isString(tool.get("name"))
+  );
+}
+
+function readStringKeyedRecord<T>(
+  value: T
+): Map<string, ProfilePackJsonValue> | undefined {
+  if (!isPlainRecord(value)) {
+    return;
+  }
+
+  return new Map(Object.entries(value));
+}
+
+function isNullableString<T>(value: T): boolean {
+  return value === null || isString(value);
+}
+
+function isNullableBoolean<T>(value: T): boolean {
+  return (
+    value === null ||
+    Object.prototype.toString.call(value) === "[object Boolean]"
+  );
+}
+
+function isNumber<T>(value: T): boolean {
+  return (
+    Object.prototype.toString.call(value) === "[object Number]" &&
+    Number.isFinite(value)
+  );
+}
+
+function isStringArray<T>(value: T): boolean {
+  return Array.isArray(value) && value.every(isString);
+}
+
+function isProfilePackJsonValue<T>(
+  value: T
+): value is T & ProfilePackJsonValue {
+  const tag = Object.prototype.toString.call(value);
+
+  if (
+    value === null ||
+    tag === "[object String]" ||
+    tag === "[object Number]" ||
+    tag === "[object Boolean]"
+  ) {
+    return true;
+  }
+
+  if (Array.isArray(value)) {
+    return value.every(isProfilePackJsonValue);
+  }
+
+  return value instanceof Object && isPlainRecord(value);
 }
 
 async function writePackedWorkspaceFiles(
@@ -1022,7 +1295,8 @@ async function writePackedAvatar(
   const extension = entry.name
     .slice(entry.name.lastIndexOf(".") + 1)
     .toLowerCase();
-  const mediaType = AVATAR_EXTENSION_MEDIA_TYPES[extension];
+
+  const mediaType = AVATAR_EXTENSION_MEDIA_TYPES.get(extension);
 
   if (!mediaType) {
     return;
@@ -1079,6 +1353,7 @@ async function recreatePackedSkills(
     }
 
     const now = new Date().toISOString();
+
     const record: StoredSkillRecord = {
       createdAt: now,
       createdBy: "human",
@@ -1170,8 +1445,10 @@ function readSkillNamesFromZip(
         entry.data.toString("utf8"),
         entry.name
       );
+
       results.push({
-        folder: match[1] as string,
+        // SAFETY: The preceding regular expression requires this folder capture.
+        folder: match[1]!,
         name: parsed.frontmatter.name,
       });
     } catch {
@@ -1295,6 +1572,7 @@ function readProfilePackZip(
   // or inflating the entry, so these checks reject bombs from their declarations.
   const admitEntry = (name: string, size: number): boolean => {
     entryCount += 1;
+
     if (entryCount > MAX_PROFILE_PACK_ENTRY_COUNT) {
       throw new NakamaApiError(
         `Profile pack exceeds the ${MAX_PROFILE_PACK_ENTRY_COUNT} entry limit.`,
@@ -1310,6 +1588,7 @@ function readProfilePackZip(
     }
 
     uncompressedTotal += size;
+
     if (uncompressedTotal > MAX_IMPORT_UNCOMPRESSED_BYTES) {
       throw new NakamaApiError(
         `Profile pack exceeds the ${MAX_IMPORT_UNCOMPRESSED_BYTES / (1024 * 1024)} MB uncompressed limit.`,
@@ -1343,12 +1622,15 @@ function readProfilePackZip(
     if (error instanceof NakamaApiError) {
       throw error;
     }
+
     if (error instanceof Error) {
       if (error.message === "invalid zip data") {
         throw new NakamaApiError("Invalid ZIP archive.", 400);
       }
+
       throw error;
     }
+
     throw new NakamaApiError("Invalid ZIP archive.", 400);
   }
 }
@@ -1367,9 +1649,13 @@ function readProfilePackManifest(
   let manifest: ProfilePackManifest;
 
   try {
-    manifest = JSON.parse(
-      manifestEntry.data.toString("utf8")
-    ) as ProfilePackManifest;
+    const parsed: unknown = JSON.parse(manifestEntry.data.toString("utf8"));
+
+    if (!isProfilePackManifest(parsed)) {
+      throw new Error("Invalid profile pack manifest shape.");
+    }
+
+    manifest = parsed;
   } catch {
     throw new Error("Nakama profile pack manifest is not valid JSON.");
   }
@@ -1432,4 +1718,8 @@ function toBuffer(value: Buffer | Uint8Array | ArrayBuffer): Buffer {
   }
 
   return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+}
+
+function isString<T>(value: T): value is T & string {
+  return Object.prototype.toString.call(value) === "[object String]";
 }

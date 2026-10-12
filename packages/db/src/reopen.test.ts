@@ -44,6 +44,7 @@ describe("database reopen after restore", () => {
     const staged = await createDatabase(
       `file:${join(stagedSqliteDir, "nakama.sqlite")}`
     );
+
     await staged.adapter.createUser({
       createdAt: now,
       email: "restored@example.com",
@@ -78,9 +79,11 @@ describe("database reopen after restore", () => {
 
   test("release frees the sqlite file so its directory can move, then reopen recovers", async () => {
     rootDir = await mkdtemp(join(tmpdir(), "nakama-db-release-"));
+
     const database = await createDatabase(
       `file:${join(rootDir, "sqlite", "nakama.sqlite")}`
     );
+
     expect(await database.adapter.countHumanUsers()).toBe(0);
 
     database.release();

@@ -191,6 +191,7 @@ function ProviderCredentialField({
       />
     );
   }
+
   if (providerType === "chatgpt") {
     return (
       <ChatgptSignInPanel
@@ -200,6 +201,7 @@ function ProviderCredentialField({
       />
     );
   }
+
   return (
     <InputGroup>
       <InputGroupInput

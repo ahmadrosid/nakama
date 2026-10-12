@@ -19,6 +19,7 @@ export function ProfileSkillsSettingsSection({
 }) {
   const { activeOrg } = useAuth();
   const updateMutation = useUpdateProfileMutation();
+  const readOnly = disabled || Boolean(profile.sharedAgent);
 
   if (!activeOrg || activeOrg.role !== "admin") {
     return null;
@@ -48,9 +49,13 @@ export function ProfileSkillsSettingsSection({
               aria-describedby="profile-automations-enabled-description"
               aria-label="Automations"
               checked={profile.automationsEnabled !== false}
-              disabled={disabled || updateMutation.isPending}
+              disabled={readOnly || updateMutation.isPending}
               id="profile-automations-enabled"
               onCheckedChange={(automationsEnabled) => {
+                if (readOnly) {
+                  return;
+                }
+
                 void updateMutation
                   .mutateAsync({
                     input: { automationsEnabled },
@@ -65,19 +70,19 @@ export function ProfileSkillsSettingsSection({
         </div>
         <div className="p-3 sm:px-4 sm:py-3">
           <ProfileSkillsWriteApprovalField
-            disabled={disabled}
+            disabled={readOnly}
             profile={profile}
           />
         </div>
         <div className="p-3 sm:px-4 sm:py-3">
           <ProfileSkillsPostTurnReviewField
-            disabled={disabled}
+            disabled={readOnly}
             profile={profile}
           />
         </div>
         <div className="p-3 sm:px-4 sm:py-3">
           <ProfileSkillsCuratorConsolidateField
-            disabled={disabled}
+            disabled={readOnly}
             profile={profile}
           />
         </div>

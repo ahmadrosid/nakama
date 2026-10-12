@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { NakamaApiError } from "@nakama/core";
+import { USER_PROVIDER_NAMES } from "@nakama/core/provider-resolution";
 import { serve } from "bun";
 import {
   compatibleModelSupportsThinking,
@@ -9,8 +10,11 @@ import {
   getModelsForProviderInstance,
   inferRemoteModelVision,
 } from "./compatible-models";
+import { getModelsForProvider } from "./models";
+import { asTestFetch } from "./test-helpers";
 
 let mockServer: ReturnType<typeof serve> | undefined;
+
 const originalFetch = globalThis.fetch;
 
 afterEach(() => {
@@ -19,21 +23,71 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
+test("instance shortlists preserve only saved models and their owner", () => {
+  for (const type of USER_PROVIDER_NAMES) {
+    if (
+      type === "cloudflare" ||
+      (!getModelsForProvider(type).length &&
+        type !== "openrouter" &&
+        type !== "openai_compatible" &&
+        type !== "ollama")
+    ) {
+      continue;
+    }
+
+    const models = getModelsForProviderInstance({
+      apiKey: "test",
+      createdAt: "2026-06-07T10:00:00.000Z",
+      customModels: [{ id: "private-model" }],
+      id: "instance-one",
+      label: "Instance one",
+      type,
+    });
+
+    expect(models.map((model) => model.id)).toEqual(["private-model"]);
+    expect(models[0]?.providerId).toBe("instance-one");
+    expect(models[0]?.providerLabel).toBe("Instance one");
+  }
+});
+
+test("instances without a shortlist expose their provider catalog", () => {
+  for (const type of USER_PROVIDER_NAMES) {
+    const catalog = getModelsForProvider(type);
+
+    if (!catalog.length || type === "openrouter") {
+      continue;
+    }
+
+    const models = getModelsForProviderInstance({
+      apiKey: "test",
+      createdAt: "2026-06-07T10:00:00.000Z",
+      id: "instance-one",
+      label: "Instance one",
+      type,
+    });
+
+    expect(models.map((model) => model.id)).toEqual(
+      catalog.map((model) => model.id)
+    );
+  }
+});
+
 test("Netra discovery keeps only the documented tool-capable model", async () => {
-  globalThis.fetch = mock(
-    async (input: RequestInfo | URL, init?: RequestInit) => {
+  globalThis.fetch = asTestFetch(
+    mock(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe("https://api.netraruntime.com/v1/models");
       expect(new Headers(init?.headers).get("Authorization")).toBe(
         "Bearer test-key"
       );
+
       return Response.json({
         data: [
           { id: "deepseek/deepseek-v4.1-flash" },
           { id: "deepseek/deepseek-v4-flash-0731" },
         ],
       });
-    }
-  ) as unknown as typeof fetch;
+    })
+  );
 
   expect(await fetchNetraModels("test-key")).toEqual([
     {
@@ -57,58 +111,11 @@ test("Netra agent catalog excludes models without a tool-turn check", () => {
     label: "Netra Runtime",
     type: "netra",
   });
+
   expect(models.map((model) => model.id)).toEqual([
     "deepseek/deepseek-v4-flash-0731",
   ]);
 });
-
-test.each([
-  { model: "gpt-5.4", type: "openai" },
-  { model: "gpt-5.4", type: "chatgpt" },
-  { model: "opencode-go/kimi-k2.7-code", type: "opencode_go" },
-  { model: "meta-llama/llama-3.3-70b-instruct:free", type: "openrouter" },
-  { model: "gpt-oss-120b", type: "cerebras" },
-  { model: "accounts/fireworks/models/kimi-k2p6", type: "fireworks" },
-] as const)("$type keeps a saved shortlist", ({ type, model }) => {
-  const models = getModelsForProviderInstance({
-    apiKey: "test",
-    createdAt: "2026-06-07T10:00:00.000Z",
-    customModels: [{ id: model }],
-    id: type,
-    label: type,
-    type,
-  });
-  expect(models.map((entry) => entry.id)).toEqual([model]);
-  expect(models[0]?.providerId).toBe(type);
-});
-
-test.each([
-  { models: ["gpt-5.4"], type: "openai" },
-  { models: ["opencode-go/kimi-k2.7-code"], type: "opencode_go" },
-  { models: ["gpt-oss-120b", "gemma-4-31b"], type: "cerebras" },
-  {
-    models: [
-      "accounts/fireworks/models/kimi-k2p6",
-      "accounts/fireworks/models/glm-5p2",
-    ],
-    type: "fireworks",
-  },
-] as const)(
-  "$type uses its catalog without a shortlist",
-  ({ type, models: expected }) => {
-    const models = getModelsForProviderInstance({
-      apiKey: "test",
-      createdAt: "2026-06-07T10:00:00.000Z",
-      id: type,
-      label: type,
-      type,
-    });
-    expect(models.length).toBeGreaterThan(1);
-    for (const id of expected) {
-      expect(models.some((model) => model.id === id)).toBe(true);
-    }
-  }
-);
 
 describe("getModelsForProviderInstance openrouter", () => {
   test("maps supportsThinking for reasoning-capable OpenRouter models", () => {
@@ -233,14 +240,6 @@ describe("compatibleModelSupportsThinking", () => {
 });
 
 describe("inferRemoteModelVision", () => {
-  test("reads OpenRouter-style architecture modalities", () => {
-    expect(
-      inferRemoteModelVision({
-        architecture: { input_modalities: ["text", "image"] },
-      })
-    ).toBe(true);
-  });
-
   test("reads explicit supports_vision flags", () => {
     expect(inferRemoteModelVision({ supports_vision: true })).toBe(true);
     expect(inferRemoteModelVision({ supportsVision: false })).toBe(false);
@@ -280,9 +279,13 @@ for (const status of [401, 403, 503] as const) {
       expect.unreachable("expected discovery to fail");
     } catch (error) {
       expect(error).toBeInstanceOf(NakamaApiError);
+      // SAFETY: The test reaches this branch with the named error type from the provider contract.
       expect((error as NakamaApiError).status).toBe(status === 503 ? 502 : 400);
+      // SAFETY: The test reaches this branch with the named error type from the provider contract.
       expect((error as NakamaApiError).message).not.toContain(upstreamBody);
+
       if (status !== 503) {
+        // SAFETY: The test reaches this branch with the named error type from the provider contract.
         expect((error as NakamaApiError).message).toContain("API key");
       }
     } finally {

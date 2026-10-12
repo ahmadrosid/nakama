@@ -9,10 +9,12 @@ import { AgentService } from "../services/agent-service";
 import { createSessionTools } from "./session-tools";
 
 const ORG_A = "org_a";
+
 const ORG_B = "org_b";
 
 function profile(id: string, orgId: string): StoredProfileRecord {
   const now = new Date().toISOString();
+
   return {
     createdAt: now,
     id,
@@ -33,6 +35,7 @@ function context(orgId?: string): ToolContext {
 async function captureError(promise: Promise<unknown>): Promise<Error | null> {
   try {
     await promise;
+
     return null;
   } catch (error) {
     return error instanceof Error ? error : new Error(String(error));
@@ -68,6 +71,7 @@ async function setUp(db: DatabaseAdapter) {
   // Real SQLite enforces the profiles -> organizations foreign key, so the org
   // rows have to exist first. The in-memory adapter does not care either way.
   const now = new Date().toISOString();
+
   for (const orgId of [ORG_A, ORG_B]) {
     await db.upsertOrganization({
       createdAt: now,
@@ -84,16 +88,19 @@ async function setUp(db: DatabaseAdapter) {
 
   const service = new AgentService(null, null, db);
   const [listTool, readTool] = createSessionTools(service);
+
   const webSessionId = await seedSession(db, service, {
     channel: "web",
     orgId: ORG_A,
     profileId: "profile_target",
   });
+
   const cliSessionId = await seedSession(db, service, {
     channel: "cli",
     orgId: ORG_A,
     profileId: "profile_target",
   });
+
   const foreignSessionId = await seedSession(db, service, {
     channel: "web",
     orgId: ORG_B,
@@ -109,6 +116,7 @@ describe("session reader tools", () => {
       createInMemoryDatabaseAdapter()
     );
 
+    // SAFETY: The tool result is the documented session-list or transcript shape asserted below.
     const result = (await listTool.run(
       { profileId: "profile_target" },
       context(ORG_A)
@@ -125,6 +133,7 @@ describe("session reader tools", () => {
       createInMemoryDatabaseAdapter()
     );
 
+    // SAFETY: The tool result is the documented session-list or transcript shape asserted below.
     const cli = (await listTool.run(
       { channel: "cli", profileId: "profile_target" },
       context(ORG_A)
@@ -147,6 +156,7 @@ describe("session reader tools", () => {
 
     // Positive control: a known channel still lists, so the refusal above is
     // the channel check and not a tool that fails on everything.
+    // SAFETY: The tool result is the documented session-list or transcript shape asserted below.
     const allowed = (await listTool.run(
       { channel: "web", profileId: "profile_target" },
       context(ORG_A)
@@ -162,6 +172,8 @@ describe("session reader tools", () => {
       createInMemoryDatabaseAdapter()
     );
 
+    // SAFETY: The tool result is the documented session-list or transcript shape asserted below.
+    // SAFETY: The tool result is the documented session-list or transcript shape asserted below.
     const result = (await readTool.run(
       { sessionId: webSessionId },
       context(ORG_A)
@@ -208,6 +220,7 @@ describe("session reader tools", () => {
       },
     ]);
 
+    // SAFETY: The tool result is the documented session-list or transcript shape asserted below.
     const read = async (profileId: string) =>
       (
         (await readTool.run(
@@ -240,6 +253,8 @@ describe("session reader tools", () => {
       createInMemoryDatabaseAdapter()
     );
 
+    // SAFETY: The tool result is the documented session-list or transcript shape asserted below.
+    // SAFETY: The tool result is the documented session-list or transcript shape asserted below.
     const result = (await readTool.run(
       { limit: 1, offset: 1, sessionId: webSessionId },
       context(ORG_A)
@@ -264,6 +279,7 @@ describe("session reader tools", () => {
     const foreign = await captureError(
       listTool.run({ profileId: "profile_other_org" }, context(ORG_A))
     );
+
     const unknown = await captureError(
       listTool.run({ profileId: "profile_does_not_exist" }, context(ORG_A))
     );
@@ -274,6 +290,7 @@ describe("session reader tools", () => {
 
     // Positive control: the same call still works inside the org, so the two
     // refusals above are the org boundary and not a broken tool.
+    // SAFETY: The tool result is the documented session-list or transcript shape asserted below.
     const allowed = (await listTool.run(
       { profileId: "profile_target" },
       context(ORG_A)
@@ -292,6 +309,7 @@ describe("session reader tools", () => {
     const foreign = await captureError(
       readTool.run({ sessionId: foreignSessionId }, context(ORG_A))
     );
+
     const unknown = await captureError(
       readTool.run({ sessionId: "session_does_not_exist" }, context(ORG_A))
     );
@@ -301,6 +319,7 @@ describe("session reader tools", () => {
     expect(foreign?.message).toBe(unknown?.message);
 
     // Positive control, as above.
+    // SAFETY: The tool result is the documented session-list or transcript shape asserted below.
     const allowed = (await readTool.run(
       { sessionId: webSessionId },
       context(ORG_A)
@@ -322,6 +341,7 @@ describe("session reader tools", () => {
       const foreign = await captureError(
         readTool.run({ sessionId: foreignSessionId }, context(ORG_A))
       );
+
       const unknown = await captureError(
         readTool.run({ sessionId: "session_does_not_exist" }, context(ORG_A))
       );
@@ -330,6 +350,7 @@ describe("session reader tools", () => {
       expect(unknown).not.toBeNull();
       expect(foreign?.message).toBe(unknown?.message);
 
+      // SAFETY: The tool result is the documented session-list or transcript shape asserted below.
       const allowed = (await readTool.run(
         { sessionId: webSessionId },
         context(ORG_A)

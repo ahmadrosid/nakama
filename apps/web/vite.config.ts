@@ -5,6 +5,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
+
 const serverUrl = process.env.NAKAMA_SERVER_URL ?? "http://127.0.0.1:4310";
 
 export default defineConfig({

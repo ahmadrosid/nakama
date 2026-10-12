@@ -60,6 +60,7 @@ describe("email attachment references", () => {
       orgId: "org_test",
       profileId: "profile_test",
     };
+
     const reference = createAttachmentReference(automationContext, {
       attachmentId: "1",
       folder: "INBOX",

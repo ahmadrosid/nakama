@@ -1,16 +1,59 @@
 import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import {
+  StreamableHTTPClientTransport,
+  StreamableHTTPError,
+} from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type {
   CachedMcpToolSummary,
   McpHttpConfig,
+  McpServerConfig,
   McpStdioConfig,
   McpTransport,
 } from "@nakama/core";
 import { getProfileSoulDir } from "@nakama/core";
 import type { CachedMcpTool, StoredMcpServerRecord } from "@nakama/db";
+import { z } from "zod";
+
+/** A server that does not answer `initialize` must not hold a connect open. */
+const CONNECT_TIMEOUT_MS = 30_000;
+
+/**
+ * Long tools stay alive while they report progress. The SDK sends a progress
+ * token only when `onprogress` is set.
+ */
+const CALL_TOOL_OPTIONS: RequestOptions = {
+  onprogress: () => {},
+  resetTimeoutOnProgress: true,
+};
+
+export type JsonValue =
+  | boolean
+  | null
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+export type McpToolArguments = { [key: string]: JsonValue };
+
+/** Thrown before a request is sent, so the caller can reconnect and retry. */
+class McpNotConnectedError extends Error {}
+
+/**
+ * True when the server did not run the request: no client was connected, or
+ * the server no longer knows the session (restart, deploy). A retry on a new
+ * connection is safe. A tool call that failed any other way may have run.
+ */
+export function isMcpReconnectableError(cause: unknown): boolean {
+  return (
+    cause instanceof McpNotConnectedError ||
+    (cause instanceof StreamableHTTPError && cause.code === 404)
+  );
+}
 
 interface ConnectedMcpClient {
   client: Client;
@@ -55,8 +98,10 @@ export class McpClientManager {
     }
 
     const pending = this.inflight.get(key);
+
     if (pending) {
       await pending;
+
       // Disconnect may have run after the shared connect settled.
       if (this.connections.has(key)) {
         return;
@@ -78,17 +123,21 @@ export class McpClientManager {
     );
 
     const pending = this.inflight.get(key);
+
     if (pending) {
       return pending;
     }
 
     const run = this.establishConnection(server, options, key);
+
     const tracked = run.finally(() => {
       if (this.inflight.get(key) === tracked) {
         this.inflight.delete(key);
       }
     });
+
     this.inflight.set(key, tracked);
+
     return tracked;
   }
 
@@ -100,6 +149,7 @@ export class McpClientManager {
     await this.disconnectKey(key);
 
     const transport = createTransport(server.transport, server.config, options);
+
     const client = new Client({
       name: "nakama",
       version: "1.0.0",
@@ -108,11 +158,15 @@ export class McpClientManager {
     let connectionStored = false;
 
     try {
-      await client.connect(transport);
-      const result = await client.listTools();
+      await client.connect(transport, { timeout: CONNECT_TIMEOUT_MS });
+
+      const result = await client.listTools(undefined, {
+        timeout: CONNECT_TIMEOUT_MS,
+      });
+
       const tools = normalizeListedTools(result.tools);
 
-      this.connections.set(key, { client, transport });
+      this.store(key, client, transport);
       connectionStored = true;
 
       return tools;
@@ -125,6 +179,32 @@ export class McpClientManager {
         }
       }
     }
+  }
+
+  /**
+   * Keeps a connection and forgets it when its transport closes (stdio process
+   * exit, dropped stream), so the next call reconnects instead of failing on a
+   * dead client.
+   */
+  private store(key: string, client: Client, transport: Transport): void {
+    this.connections.set(key, { client, transport });
+    client.onclose = () => {
+      if (this.connections.get(key)?.client === client) {
+        this.connections.delete(key);
+      }
+    };
+  }
+
+  /** Forgets a connection the server no longer accepts, so it reconnects. */
+  async dropConnection(
+    serverId: string,
+    transport: McpTransport,
+    profileId?: string,
+    orgId?: string
+  ): Promise<void> {
+    await this.disconnectKey(
+      connectionKey(serverId, transport, profileId, orgId)
+    );
   }
 
   async disconnect(serverId: string): Promise<void> {
@@ -152,6 +232,7 @@ export class McpClientManager {
   ): Promise<CachedMcpTool[]> {
     const client = this.requireClient(serverId, transport, profileId);
     const result = await client.listTools();
+
     return normalizeListedTools(result.tools);
   }
 
@@ -159,18 +240,23 @@ export class McpClientManager {
     serverId: string,
     transport: McpTransport,
     toolName: string,
-    input: unknown,
+    input: McpToolArguments,
     profileId?: string,
     orgId?: string
-  ): Promise<unknown> {
+  ): Promise<JsonValue> {
     const client = this.requireClient(serverId, transport, profileId, orgId);
-    const result = await client.callTool({
-      arguments: asToolArguments(input),
-      name: toolName,
-    });
+
+    const result = await client.callTool(
+      {
+        arguments: input,
+        name: toolName,
+      },
+      undefined,
+      CALL_TOOL_OPTIONS
+    );
 
     if ("toolResult" in result) {
-      return result.toolResult;
+      return parseJsonValue(result.toolResult);
     }
 
     if (result.isError) {
@@ -180,28 +266,33 @@ export class McpClientManager {
     }
 
     if (result.structuredContent !== undefined) {
-      return result.structuredContent;
+      return parseJsonValue(result.structuredContent);
     }
 
     return {
-      content: result.content,
+      content: parseJsonValue(result.content),
       text: formatToolContent(result.content),
     };
   }
 
   async testConnection(
     transport: McpTransport,
-    config: unknown
+    config: McpServerConfig
   ): Promise<CachedMcpTool[]> {
     const mcpTransport = createTransport(transport, config);
+
     const client = new Client({
       name: "nakama",
       version: "1.0.0",
     });
 
     try {
-      await client.connect(mcpTransport);
-      const result = await client.listTools();
+      await client.connect(mcpTransport, { timeout: CONNECT_TIMEOUT_MS });
+
+      const result = await client.listTools(undefined, {
+        timeout: CONNECT_TIMEOUT_MS,
+      });
+
       return normalizeListedTools(result.tools);
     } finally {
       try {
@@ -224,6 +315,7 @@ export class McpClientManager {
         headers,
       },
     });
+
     const client = new Client({
       name: "nakama",
       version: "1.0.0",
@@ -232,11 +324,16 @@ export class McpClientManager {
     let connectionStored = false;
 
     try {
-      await client.connect(transport);
-      const result = await client.listTools();
+      await client.connect(transport, { timeout: CONNECT_TIMEOUT_MS });
+
+      const result = await client.listTools(undefined, {
+        timeout: CONNECT_TIMEOUT_MS,
+      });
+
       const tools = normalizeListedTools(result.tools);
-      this.connections.set(connectionKey, { client, transport });
+      this.store(connectionKey, client, transport);
       connectionStored = true;
+
       return tools;
     } finally {
       if (!connectionStored) {
@@ -256,16 +353,21 @@ export class McpClientManager {
   async callHttpEndpointTool(
     connectionKey: string,
     toolName: string,
-    input: unknown
-  ): Promise<unknown> {
+    input: McpToolArguments
+  ): Promise<JsonValue> {
     const client = this.requireClientByKey(connectionKey);
-    const result = await client.callTool({
-      arguments: asToolArguments(input),
-      name: toolName,
-    });
+
+    const result = await client.callTool(
+      {
+        arguments: input,
+        name: toolName,
+      },
+      undefined,
+      CALL_TOOL_OPTIONS
+    );
 
     if ("toolResult" in result) {
-      return result.toolResult;
+      return parseJsonValue(result.toolResult);
     }
 
     if (result.isError) {
@@ -275,11 +377,11 @@ export class McpClientManager {
     }
 
     if (result.structuredContent !== undefined) {
-      return result.structuredContent;
+      return parseJsonValue(result.structuredContent);
     }
 
     return {
-      content: result.content,
+      content: parseJsonValue(result.content),
       text: formatToolContent(result.content),
     };
   }
@@ -292,7 +394,9 @@ export class McpClientManager {
     const connection = this.connections.get(connectionKey);
 
     if (!connection) {
-      throw new Error(`HTTP MCP endpoint "${connectionKey}" is not connected.`);
+      throw new McpNotConnectedError(
+        `HTTP MCP endpoint "${connectionKey}" is not connected.`
+      );
     }
 
     return connection.client;
@@ -309,7 +413,9 @@ export class McpClientManager {
     );
 
     if (!connection) {
-      throw new Error(`MCP server "${serverId}" is not connected.`);
+      throw new McpNotConnectedError(
+        `MCP server "${serverId}" is not connected.`
+      );
     }
 
     return connection.client;
@@ -347,84 +453,75 @@ function connectionKey(
 
 function createTransport(
   transport: McpTransport,
-  config: unknown,
+  config: StoredMcpServerRecord["config"],
   options?: ConnectOptions
 ): Transport {
   if (transport === "http") {
     const http = readHttpConfig(config);
 
-    return new StreamableHTTPClientTransport(new URL(http.url), {
-      ...(options?.authProvider ? { authProvider: options.authProvider } : {}),
-      requestInit: {
-        headers: http.headers,
-      },
-    });
+    const requestInit = { headers: http.headers };
+
+    return new StreamableHTTPClientTransport(
+      new URL(http.url),
+      options?.authProvider
+        ? { authProvider: options.authProvider, requestInit }
+        : { requestInit }
+    );
   }
 
   if (transport === "stdio") {
     const stdio = readStdioConfig(config);
+
     const cwd =
       options?.orgId && options?.profileId
         ? getProfileSoulDir(options.orgId, options.profileId)
         : undefined;
 
-    return new StdioClientTransport({
-      ...stdio,
-      ...(cwd ? { cwd } : {}),
-    });
+    return new StdioClientTransport({ ...stdio, cwd });
   }
 
   throw new Error(`Unsupported MCP transport: ${transport}`);
 }
 
-function readStdioConfig(config: unknown): McpStdioConfig {
-  if (typeof config !== "object" || config === null) {
-    throw new Error("stdio MCP servers require config.command.");
-  }
+function readStdioConfig(
+  value: StoredMcpServerRecord["config"]
+): McpStdioConfig {
+  const config = z
+    .object({
+      args: z.array(z.string()).optional(),
+      command: z.string(),
+      env: z.record(z.string(), z.string()).optional(),
+    })
+    .parse(value);
 
-  const record = config as Record<string, unknown>;
-  const command =
-    typeof record.command === "string" && record.command.trim()
-      ? record.command.trim()
-      : null;
+  const command = config.command.trim();
 
   if (!command) {
     throw new Error("stdio MCP servers require config.command.");
   }
 
-  const args = readStringArray(record.args);
-  const env = readStringRecord(record.env);
+  const result: McpStdioConfig = { command };
 
-  return {
-    command,
-    ...(args ? { args } : {}),
-    ...(env ? { env } : {}),
-  };
-}
-
-function readStringArray(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) {
-    return;
+  if (config.args) {
+    result.args = config.args;
   }
 
-  const items = value
-    .filter((entry): entry is string => typeof entry === "string")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-
-  return items.length > 0 ? items : undefined;
-}
-
-function readHttpConfig(config: unknown): McpHttpConfig {
-  if (typeof config !== "object" || config === null) {
-    throw new Error("HTTP MCP servers require config.url.");
+  if (config.env) {
+    result.env = config.env;
   }
 
-  const record = config as Record<string, unknown>;
-  const url =
-    typeof record.url === "string" && record.url.trim()
-      ? record.url.trim()
-      : null;
+  return result;
+}
+
+function readHttpConfig(value: StoredMcpServerRecord["config"]): McpHttpConfig {
+  const config = z
+    .object({
+      headers: z.record(z.string(), z.string()).optional(),
+      url: z.string(),
+    })
+    .parse(value);
+
+  const url = config.url.trim();
 
   if (!url) {
     throw new Error("HTTP MCP servers require config.url.");
@@ -437,25 +534,9 @@ function readHttpConfig(config: unknown): McpHttpConfig {
   }
 
   return {
-    headers: readStringRecord(record.headers),
+    headers: config.headers,
     url,
   };
-}
-
-function readStringRecord(value: unknown): Record<string, string> | undefined {
-  if (typeof value !== "object" || value === null) {
-    return;
-  }
-
-  const record: Record<string, string> = {};
-
-  for (const [key, entry] of Object.entries(value)) {
-    if (typeof entry === "string") {
-      record[key] = entry;
-    }
-  }
-
-  return Object.keys(record).length > 0 ? record : undefined;
 }
 
 function normalizeListedTools(
@@ -472,12 +553,74 @@ function normalizeListedTools(
   }));
 }
 
-function asToolArguments(input: unknown): Record<string, unknown> {
-  if (typeof input === "object" && input !== null && !Array.isArray(input)) {
-    return input as Record<string, unknown>;
+export function parseMcpToolArguments<T>(input: T) {
+  if (!(input instanceof Object) || Array.isArray(input)) {
+    return {};
   }
 
-  return {};
+  const entries: Array<[string, JsonValue]> = [];
+
+  for (const [key, value] of Object.entries(input)) {
+    if (!isJsonValue(value)) {
+      throw new Error("MCP tool arguments must contain JSON values.");
+    }
+
+    entries.push([key, value]);
+  }
+
+  return Object.fromEntries(entries);
+}
+
+function parseJsonValue<T>(value: T): JsonValue {
+  if (!isJsonValue(value)) {
+    throw new Error("MCP tool result is not a JSON value.");
+  }
+
+  return value;
+}
+
+function isJsonValue<T>(
+  value: T,
+  seen = new WeakSet<object>()
+): value is T & JsonValue {
+  if (value === null || value === true || value === false || isString(value)) {
+    return true;
+  }
+
+  if (
+    Object.prototype.toString.call(value) === "[object Number]" &&
+    !(value instanceof Number)
+  ) {
+    return Number.isFinite(value);
+  }
+
+  if (Array.isArray(value)) {
+    if (seen.has(value)) {
+      return false;
+    }
+
+    seen.add(value);
+    const valid = value.every((entry) => isJsonValue(entry, seen));
+    seen.delete(value);
+
+    return valid;
+  }
+
+  if (!(value instanceof Object) || seen.has(value)) {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+
+  if (prototype !== Object.prototype && prototype !== null) {
+    return false;
+  }
+
+  seen.add(value);
+  const valid = Object.values(value).every((entry) => isJsonValue(entry, seen));
+  seen.delete(value);
+
+  return valid;
 }
 
 function formatToolContent(
@@ -489,7 +632,7 @@ function formatToolContent(
 
   return content
     .map((part) => {
-      if (part.type === "text" && typeof part.text === "string") {
+      if (part.type === "text" && isString(part.text)) {
         return part.text;
       }
 
@@ -506,4 +649,8 @@ export function toCachedMcpToolSummaries(
     inputSchema: tool.inputSchema,
     name: tool.name,
   }));
+}
+
+function isString<T>(value: T): value is T & string {
+  return Object.prototype.toString.call(value) === "[object String]";
 }

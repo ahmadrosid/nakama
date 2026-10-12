@@ -1,6 +1,6 @@
+import { z } from "@hono/zod-openapi";
 import type {
   ListSkillCuratorOrgsResponse,
-  RunSkillCuratorInternalRequest,
   SkillCuratorRunResponse,
 } from "@nakama/core/contract";
 import type { ServerOptions } from "../context";
@@ -15,6 +15,7 @@ export function registerInternalCuratorRoutes(
 
   app.get("/v1/internal/curator/orgs", async (c) => {
     const auth = c.get("auth");
+
     if (!auth || auth.mode !== "local-token") {
       return errorResponse("Authentication required", 401);
     }
@@ -24,11 +25,13 @@ export function registerInternalCuratorRoutes(
     }
 
     const orgs = await orgService.listSkillCuratorOrgs();
+
     return json<ListSkillCuratorOrgsResponse>({ orgs });
   });
 
   app.post("/v1/internal/curator/orgs/:orgId/run", async (c) => {
     const auth = c.get("auth");
+
     if (!auth || auth.mode !== "local-token") {
       return errorResponse("Authentication required", 401);
     }
@@ -39,11 +42,16 @@ export function registerInternalCuratorRoutes(
 
     const orgId = decodeURIComponent(c.req.param("orgId"));
     const organization = await orgService.getOrganization(orgId);
+
     if (!organization || organization.archivedAt) {
       return errorResponse("Not found", 404);
     }
 
-    const body = await readJson<RunSkillCuratorInternalRequest>(c.req.raw);
+    const body = await readJson(
+      c.req.raw,
+      z.object({ trigger: z.enum(["seed", "schedule"]) }).strict()
+    );
+
     const trigger = body.trigger === "seed" ? "seed" : "schedule";
     const result = await skillCuratorService.run(orgId, { trigger });
 

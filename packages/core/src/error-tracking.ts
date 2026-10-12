@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { z } from "zod";
 import { NAKAMA_API_VERSION } from "./contract";
 import { isErrorTrackingEnabled } from "./error-tracking-config";
 import {
@@ -47,6 +48,7 @@ let enabled = false;
  */
 export async function refreshErrorTrackingEnabled(): Promise<boolean> {
   enabled = await isErrorTrackingEnabled();
+
   return enabled;
 }
 
@@ -106,27 +108,38 @@ export function fingerprintError(
   stack: string | undefined
 ): string {
   const parts = [name, normalizeMessage(message), topApplicationFrame(stack)];
+
   return createHash("sha256")
     .update(parts.join("|"))
     .digest("hex")
     .slice(0, 16);
 }
 
-function errorToParts(error: unknown): {
-  name: string;
+interface ErrorParts {
   message: string;
+  name: string;
   stack?: string;
-} {
+}
+
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- JavaScript throws can hold any value; this boundary normalizes them.
+function errorToParts(error: unknown): ErrorParts {
   if (error instanceof Error) {
-    return {
+    const parts: ErrorParts = {
       message: error.message || String(error),
       name: error.name || "Error",
-      ...(error.stack ? { stack: error.stack } : {}),
     };
+
+    if (error.stack) {
+      parts.stack = error.stack;
+    }
+
+    return parts;
   }
 
-  if (typeof error === "string") {
-    return { message: error, name: "NonError" };
+  const stringError = z.string().safeParse(error);
+
+  if (stringError.success) {
+    return { message: stringError.data, name: "NonError" };
   }
 
   try {
@@ -148,20 +161,20 @@ export interface ReportErrorOptions {
 }
 
 export function buildErrorReport(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Thrown values are untrusted and normalized by errorToParts.
   error: unknown,
   options: ReportErrorOptions = {}
 ): ErrorReport {
   const parts = errorToParts(error);
   const stack = parts.stack ? scrubText(parts.stack) : undefined;
 
-  return {
+  const report: ErrorReport = {
+    at: new Date().toISOString(),
     fingerprint: fingerprintError(parts.name, parts.message, parts.stack),
     id: randomUUID(),
     kind: options.kind ?? "crash",
     message: scrubText(parts.message),
     name: parts.name,
-    ...(stack ? { stack } : {}),
-    at: new Date().toISOString(),
     runtime: {
       apiVersion: NAKAMA_API_VERSION,
       arch: process.arch,
@@ -170,6 +183,12 @@ export function buildErrorReport(
     },
     source: options.source ?? "unknown",
   };
+
+  if (stack) {
+    report.stack = stack;
+  }
+
+  return report;
 }
 
 let sink: ErrorSink | null = null;
@@ -185,6 +204,7 @@ export function setErrorSink(next: ErrorSink | null): void {
  * await still leaves the report somewhere recoverable.
  */
 export async function reportError(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Thrown values are untrusted and normalized by buildErrorReport.
   error: unknown,
   options: ReportErrorOptions = {}
 ): Promise<ErrorReport> {
@@ -260,10 +280,12 @@ export async function flushPendingErrorReports(): Promise<number> {
  * default exit(1), so the exit is re-applied by hand below.
  */
 export function installErrorHandlers(source: string): () => void {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Process errors are untrusted and normalized by reportError.
   const onUncaught = (error: unknown) => {
     void reportError(error, { source });
   };
 
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Promise rejections can hold any value; reportError normalizes them.
   const onRejection = (reason: unknown) => {
     void reportError(reason, { source }).finally(() => {
       process.exit(1);

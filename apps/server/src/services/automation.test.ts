@@ -27,6 +27,7 @@ import {
 async function assignComposeioGmailSender(
   db: ReturnType<typeof createInMemoryDatabaseAdapter>,
   profileId: string,
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This test fixture stores varied values to exercise service boundary handling.
   inputSchema?: Record<string, unknown>
 ) {
   const now = new Date().toISOString();
@@ -64,9 +65,11 @@ async function assignComposeioGmailSender(
 describe("AutomationService", () => {
   test("does not create or schedule automations for a disabled profile", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
     const profile = (await db.getProfile(PROFILE_ID))!;
     await db.upsertProfile({ ...profile, automationsEnabled: false });
 
@@ -130,6 +133,7 @@ describe("AutomationService", () => {
 
   test("falls back to the prompt when description is omitted", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
@@ -138,6 +142,7 @@ describe("AutomationService", () => {
     // create() as undefined however the type is declared.
     const automation = await service.create(
       ORG_ID,
+      // SAFETY: This test double supplies only the fields exercised by this test.
       {
         name: "Nightly pull",
         prompt: "run the tool",
@@ -187,6 +192,7 @@ describe("AutomationService", () => {
       { profileId: otherId },
       { orgRole: "member" }
     );
+
     expect(rebound.profileId).toBe(otherId);
 
     const unchanged = await service.update(
@@ -195,12 +201,14 @@ describe("AutomationService", () => {
       { name: "Digest 2" },
       { orgRole: "member" }
     );
+
     expect(unchanged.profileId).toBe(otherId);
     expect(unchanged.name).toBe("Digest 2");
   });
 
   test("rejects blank profileId on update", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
@@ -284,6 +292,7 @@ describe("AutomationService", () => {
 
   test("defaults schedule timezone from user config", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "Asia/Jakarta",
     });
@@ -311,9 +320,11 @@ describe("AutomationService", () => {
 
   test("computes nextRunAt for future runAt triggers", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "Asia/Jakarta",
     });
+
     const at = new Date(Date.now() + 60_000).toISOString();
 
     const automation = await service.create(
@@ -333,9 +344,11 @@ describe("AutomationService", () => {
 
   test("lists automations only for the active org", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
     const now = new Date().toISOString();
     const otherOrgId = "org_other";
     const otherProfileId = "profile_other";
@@ -393,9 +406,11 @@ describe("AutomationService", () => {
 
   test("tracks unread runs per user and marks them read", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
     const userId = "user_test";
 
     const automation = await service.create(
@@ -429,6 +444,7 @@ describe("AutomationService", () => {
       20,
       userId
     );
+
     expect(runsBeforeRead[0]?.read).toBe(false);
 
     await service.markRunsRead(automation.id, ORG_ID, userId);
@@ -442,62 +458,17 @@ describe("AutomationService", () => {
       20,
       userId
     );
+
     expect(runsAfterRead[0]?.read).toBe(true);
-  });
-
-  test("deletes a run history item", async () => {
-    const db = await createTestDb();
-    const service = new AutomationService(db, {
-      getUserTimezone: async () => "UTC",
-    });
-
-    const automation = await service.create(
-      ORG_ID,
-      {
-        description: "Daily digest",
-        name: "Digest",
-        prompt: "Summarize news",
-        trigger: { type: "manual" },
-      },
-      PROFILE_ID
-    );
-
-    await db.insertAutomationRun({
-      automationId: automation.id,
-      completedAt: "2026-06-29T10:01:00.000Z",
-      error: null,
-      id: "run_delete_me",
-      output: "Summary",
-      startedAt: "2026-06-29T10:00:00.000Z",
-      status: "completed",
-    });
-
-    await db.insertAutomationRun({
-      automationId: automation.id,
-      completedAt: "2026-06-29T11:01:00.000Z",
-      error: null,
-      id: "run_keep_me",
-      output: "Another summary",
-      startedAt: "2026-06-29T11:00:00.000Z",
-      status: "completed",
-    });
-
-    await expect(
-      service.deleteRun(automation.id, "run_delete_me", ORG_ID)
-    ).resolves.toBe(true);
-    await expect(
-      service.deleteRun(automation.id, "run_missing", ORG_ID)
-    ).resolves.toBe(false);
-
-    const runs = await service.listRuns(automation.id, ORG_ID);
-    expect(runs.map((run) => run.id)).toEqual(["run_keep_me"]);
   });
 
   test("completes the exact claimed automation run", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
     const automation = await service.create(
       ORG_ID,
       {
@@ -508,6 +479,7 @@ describe("AutomationService", () => {
       },
       PROFILE_ID
     );
+
     const firstRun = await service.createRun(automation.id);
     const secondRun = await service.createRun(automation.id);
 
@@ -521,11 +493,41 @@ describe("AutomationService", () => {
     expect((await service.getActiveRun(automation.id))?.id).toBe(secondRun.id);
   });
 
-  test("refuses a member automation that targets a foreign destination", async () => {
+  test("rejects invalid stored delivery status without changing the run", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
+    const automation = await service.create(
+      ORG_ID,
+      {
+        description: "Status check",
+        name: "Status check",
+        prompt: "Say hello",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID
+    );
+
+    const run = await service.createRun(automation.id);
+    await db.updateAutomationRun({ ...run, deliveryStatus: "invalid" });
+
+    await expect(service.listRuns(automation.id)).rejects.toThrow();
+    expect((await db.listAutomationRuns(automation.id))[0]).toMatchObject({
+      deliveryStatus: "invalid",
+      id: run.id,
+    });
+  });
+
+  test("refuses a member automation that targets a foreign destination", async () => {
+    const db = await createTestDb();
+
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+
     const owner = { orgId: ORG_ID, profileId: PROFILE_ID };
     const configDir = await mkdtemp(join(tmpdir(), "nakama-automation-dest-"));
     const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
@@ -564,10 +566,12 @@ describe("AutomationService", () => {
           )
           .then(
             () => null,
+            // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The test callback ignores framework inputs that this case does not inspect.
             (thrown: unknown) => thrown
           );
 
         expect(error).toBeInstanceOf(NakamaApiError);
+        // SAFETY: This test double supplies only the fields exercised by this test.
         expect((error as NakamaApiError).status).toBe(403);
       }
 
@@ -592,6 +596,7 @@ describe("AutomationService", () => {
       } else {
         process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
       }
+
       await rm(configDir, { force: true, recursive: true });
     }
   });
@@ -610,9 +615,11 @@ describe("AutomationService", () => {
         "bot_token=test-token\npaired_user_ids=123456789012345678\n",
         "utf8"
       );
+
       const service = new AutomationService(db, {
         getUserTimezone: async () => "UTC",
       });
+
       const now = new Date().toISOString();
       await db.upsertAutomation({
         createdAt: now,
@@ -646,10 +653,12 @@ describe("AutomationService", () => {
         )
         .then(
           () => null,
+          // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The test callback ignores framework inputs that this case does not inspect.
           (thrown: unknown) => thrown
         );
 
       expect(error).toBeInstanceOf(NakamaApiError);
+      // SAFETY: This test double supplies only the fields exercised by this test.
       expect((error as NakamaApiError).status).toBe(403);
     } finally {
       if (previousConfigDir === undefined) {
@@ -657,6 +666,7 @@ describe("AutomationService", () => {
       } else {
         process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
       }
+
       await rm(configDir, { force: true, recursive: true });
     }
   });
@@ -664,9 +674,11 @@ describe("AutomationService", () => {
 
 test("automation list reflects a run starting and finishing", async () => {
   const db = await createTestDb();
+
   const service = new AutomationService(db, {
     getUserTimezone: async () => "UTC",
   });
+
   const automation = await service.create(
     ORG_ID,
     {
@@ -678,6 +690,7 @@ test("automation list reflects a run starting and finishing", async () => {
     PROFILE_ID,
     { orgRole: "member" }
   );
+
   expect(
     (await service.listForOrg(ORG_ID)).automations[0]?.lastRunStatus
   ).toBeNull();
@@ -699,9 +712,11 @@ describe("AutomationRunner", () => {
     "exposes progress before completion (fails: %s)",
     async (fails) => {
       const db = await createTestDb();
+
       const service = new AutomationService(db, {
         getUserTimezone: async () => "UTC",
       });
+
       const automation = await service.create(
         ORG_ID,
         {
@@ -712,8 +727,11 @@ describe("AutomationRunner", () => {
         },
         PROFILE_ID
       );
+
       const started = Promise.withResolvers<void>();
       const finish = Promise.withResolvers<void>();
+
+      // SAFETY: This test double supplies only the fields exercised by this test.
       const runner = new AutomationRunner(service, {
         runAutomationPrompt: async (
           _orgId: string,
@@ -742,14 +760,18 @@ describe("AutomationRunner", () => {
           });
           started.resolve();
           await finish.promise;
+
           if (fails) {
             throw new Error("Provider disconnected");
           }
+
           return "News summary";
         },
       } as never);
+
       const pending = runner.run(automation.id);
       await started.promise;
+
       try {
         const runs = await service.listRuns(automation.id, ORG_ID);
         expect(runs[0]).toMatchObject({
@@ -790,43 +812,50 @@ describe("AutomationRunner", () => {
         finish.resolve();
         await pending;
       }
+
       const runs = await service.listRuns(automation.id, ORG_ID);
       expect(runs[0]).toMatchObject({
         output: fails ? "Searching news" : "News summary",
         status: fails ? "failed" : "completed",
       });
       expect(runner.getActiveRunCount()).toBe(0);
+
       const reloadedService = new AutomationService(db, {
         getUserTimezone: async () => "UTC",
       });
+
       const reloaded = (
         await reloadedService.listRuns(automation.id, ORG_ID)
       )[0]!;
+
       expect(reloaded.progress).toEqual(runs[0]?.progress);
       expect(reloaded.progress?.[0]).toMatchObject({
         content: "Find news",
         role: "user",
       });
+
       const unfinished = reloaded.progress?.find(
         (item) => item.role === "tool" && item.toolCallId === "call-1"
       );
+
       expect(unfinished).toMatchObject({ toolCompletedAt: expect.any(Number) });
+
       if (unfinished?.role === "tool") {
         expect(JSON.parse(unfinished.content).error).toBeDefined();
       }
+
       if (!fails) {
         expect(reloaded.progress?.at(-1)).toMatchObject({
           content: "News summary",
           role: "assistant",
         });
       }
-      await reloadedService.deleteRun(automation.id, reloaded.id, ORG_ID);
-      expect(await db.getAutomationRun(automation.id, reloaded.id)).toBeNull();
     }
   );
 
   test("writes completed run records", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
@@ -846,6 +875,7 @@ describe("AutomationRunner", () => {
       runAutomationPrompt: async () => "Hello from automation",
     };
 
+    // SAFETY: This test double supplies only the fields exercised by this test.
     const runner = new AutomationRunner(service, agentService as never);
     const result = await runner.run(automation.id);
 
@@ -857,11 +887,63 @@ describe("AutomationRunner", () => {
     expect(runs[0]?.output).toBe("Hello from automation");
   });
 
-  test("concurrent automation runs execute once", async () => {
+  test("resumes an interrupted run instead of failing it", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
+    const automation = await service.create(
+      ORG_ID,
+      {
+        description: "Resume task",
+        name: "Resume task",
+        prompt: "Say hello",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID
+    );
+
+    const interrupted = await service.createRun(automation.id);
+    const resumeFlags: boolean[] = [];
+
+    // SAFETY: This test double supplies only the fields exercised by this test.
+    const runner = new AutomationRunner(service, {
+      runAutomationPrompt: async (
+        _orgId: string,
+        _profileId: string,
+        _prompt: string,
+        _automationId: string,
+        runId: string,
+        // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The test callback ignores framework inputs that this case does not inspect.
+        _handlers: unknown,
+        resume: boolean
+      ) => {
+        resumeFlags.push(resume);
+        expect(runId).toBe(interrupted.id);
+
+        return "Finished after restart";
+      },
+    } as never);
+
+    const claimed = await db.claimInterruptedAutomationRuns(2);
+    await runner.resumeInterrupted(claimed);
+
+    expect(resumeFlags).toEqual([true]);
+    const runs = await service.listRuns(automation.id);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.status).toBe("completed");
+    expect(runs[0]?.output).toBe("Finished after restart");
+  });
+
+  test("concurrent automation runs execute once", async () => {
+    const db = await createTestDb();
+
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+
     const automation = await service.create(
       ORG_ID,
       {
@@ -872,10 +954,13 @@ describe("AutomationRunner", () => {
       },
       PROFILE_ID
     );
+
     const agentStarted = Promise.withResolvers<void>();
     const releaseAgent = Promise.withResolvers<void>();
     let agentCalls = 0;
     let claimedRunId: string | undefined;
+
+    // SAFETY: This test double supplies only the fields exercised by this test.
     const runner = new AutomationRunner(service, {
       runAutomationPrompt: async (
         _orgId: string,
@@ -888,6 +973,7 @@ describe("AutomationRunner", () => {
         claimedRunId = automationRunId;
         agentStarted.resolve();
         await releaseAgent.promise;
+
         return "Hello from automation";
       },
     } as never);
@@ -896,6 +982,7 @@ describe("AutomationRunner", () => {
     const secondRun = runner.run(automation.id);
     await agentStarted.promise;
     releaseAgent.resolve();
+
     const [firstResult, secondResult] = await Promise.all([
       firstRun,
       secondRun,
@@ -906,15 +993,17 @@ describe("AutomationRunner", () => {
     expect(agentCalls).toBe(1);
     const runs = await service.listRuns(automation.id);
     expect(runs).toHaveLength(1);
-    expect(runs[0]?.id).toBe(claimedRunId);
+    expect(runs[0]).toMatchObject({ id: claimedRunId });
     expect(runs[0]?.status).toBe("completed");
   });
 
   test("releases the run guard when run creation fails", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
     const automation = await service.create(
       ORG_ID,
       {
@@ -925,15 +1014,20 @@ describe("AutomationRunner", () => {
       },
       PROFILE_ID
     );
+
     const createRun = service.createRun.bind(service);
     let createAttempts = 0;
     service.createRun = async (automationId) => {
       createAttempts += 1;
+
       if (createAttempts === 1) {
         throw new Error("Database unavailable");
       }
+
       return createRun(automationId);
     };
+
+    // SAFETY: This test double supplies only the fields exercised by this test.
     const runner = new AutomationRunner(service, {
       runAutomationPrompt: async () => "Hello from automation",
     } as never);
@@ -955,6 +1049,7 @@ describe("AutomationRunner", () => {
 
   test("passes automation scope to the agent prompt", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
@@ -989,10 +1084,12 @@ describe("AutomationRunner", () => {
         automationRunId?: string
       ) => {
         received = { automationId, automationRunId, orgId, profileId, prompt };
+
         return "Hello from automation";
       },
     };
 
+    // SAFETY: This test double supplies only the fields exercised by this test.
     const runner = new AutomationRunner(service, agentService as never);
     await runner.run(automation.id);
 
@@ -1008,6 +1105,7 @@ describe("AutomationRunner", () => {
 
   test("writes failed run records", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
@@ -1029,6 +1127,7 @@ describe("AutomationRunner", () => {
       },
     };
 
+    // SAFETY: This test double supplies only the fields exercised by this test.
     const runner = new AutomationRunner(service, agentService as never);
     const result = await runner.run(automation.id);
 
@@ -1041,6 +1140,7 @@ describe("AutomationRunner", () => {
 
   test("maps Bun fetch disconnects to a readable run error", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
@@ -1064,6 +1164,7 @@ describe("AutomationRunner", () => {
       },
     };
 
+    // SAFETY: This test double supplies only the fields exercised by this test.
     const runner = new AutomationRunner(service, agentService as never);
     const result = await runner.run(automation.id);
 
@@ -1075,14 +1176,16 @@ describe("AutomationRunner", () => {
 
     const runs = await service.listRuns(automation.id);
     expect(runs[0]?.status).toBe("failed");
-    expect(runs[0]?.error).toBe(result.error);
+    expect(runs[0]).toMatchObject({ error: result.error });
   });
 
   test("disables runAt automations before executing", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
     const at = new Date(Date.now() + 60_000).toISOString();
 
     const automation = await service.create(
@@ -1100,6 +1203,7 @@ describe("AutomationRunner", () => {
       runAutomationPrompt: async () => "Reminder sent",
     };
 
+    // SAFETY: This test double supplies only the fields exercised by this test.
     const runner = new AutomationRunner(service, agentService as never);
     const result = await runner.run(automation.id);
 
@@ -1112,6 +1216,7 @@ describe("AutomationRunner", () => {
 
   test("records delivery status after successful runs", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
@@ -1148,9 +1253,11 @@ describe("AutomationRunner", () => {
 
     const runner = new AutomationRunner(
       service,
+      // SAFETY: This test double supplies only the fields exercised by this test.
       agentService as never,
       deliveryService
     );
+
     await runner.run("automation_delivery_test");
 
     const runs = await service.listRuns("automation_delivery_test");
@@ -1159,9 +1266,11 @@ describe("AutomationRunner", () => {
 
   test("records discord delivery status after successful runs", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
     const now = new Date().toISOString();
     const sent: Array<{ channelId?: string; text: string }> = [];
 
@@ -1188,6 +1297,7 @@ describe("AutomationRunner", () => {
       discord: {
         send: async (input) => {
           sent.push(input);
+
           return { ok: true };
         },
       },
@@ -1195,9 +1305,11 @@ describe("AutomationRunner", () => {
 
     const runner = new AutomationRunner(
       service,
+      // SAFETY: This test double supplies only the fields exercised by this test.
       { runAutomationPrompt: async () => "News summary" } as never,
       deliveryService
     );
+
     await runner.run("automation_discord_delivery_test");
 
     expect(sent).toHaveLength(1);
@@ -1209,9 +1321,11 @@ describe("AutomationRunner", () => {
 
   test("skips discord delivery when notifyOn is failure and the run succeeds", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
     const now = new Date().toISOString();
     let called = false;
 
@@ -1238,6 +1352,7 @@ describe("AutomationRunner", () => {
       discord: {
         send: async () => {
           called = true;
+
           return { ok: true };
         },
       },
@@ -1245,9 +1360,11 @@ describe("AutomationRunner", () => {
 
     const runner = new AutomationRunner(
       service,
+      // SAFETY: This test double supplies only the fields exercised by this test.
       { runAutomationPrompt: async () => "News summary" } as never,
       deliveryService
     );
+
     await runner.run("automation_discord_skip_test");
 
     expect(called).toBe(false);
@@ -1257,9 +1374,11 @@ describe("AutomationRunner", () => {
 
   test("records discord delivery failure from the adapter", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
     const now = new Date().toISOString();
 
     await db.upsertAutomation({
@@ -1292,9 +1411,11 @@ describe("AutomationRunner", () => {
 
     const runner = new AutomationRunner(
       service,
+      // SAFETY: This test double supplies only the fields exercised by this test.
       { runAutomationPrompt: async () => "News summary" } as never,
       deliveryService
     );
+
     await runner.run("automation_discord_fail_test");
 
     const runs = await service.listRuns("automation_discord_fail_test");
@@ -1309,7 +1430,9 @@ describe("AutomationRunner", () => {
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
     const now = new Date().toISOString();
+    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This test fixture stores varied values to exercise service boundary handling.
     const sent: Record<string, unknown>[] = [];
 
     await db.upsertAutomation({
@@ -1331,23 +1454,20 @@ describe("AutomationRunner", () => {
       version: 1,
     });
 
-    const manager = {
-      callTool: async (
-        _serverId: string,
-        _transport: string,
-        _toolName: string,
-        input: unknown
-      ) => {
+    const mcpService = {
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The test callback ignores framework inputs that this case does not inspect.
+      callTool: async (_server: unknown, _toolName: string, input: unknown) => {
+        // SAFETY: This test double supplies only the fields exercised by this test.
+        // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This test fixture stores varied values to exercise service boundary handling.
         sent.push(input as Record<string, unknown>);
+
         return { ok: true };
       },
-      connect: async () => [],
-      ensureConnected: async () => undefined,
-      isConnected: () => true,
     };
 
     const deliveryService = new AutomationDeliveryService(service, {
-      email: createMcpAwareEmailOutboundAdapter(db, manager as never, {
+      // SAFETY: This test double supplies only the fields exercised by this test.
+      email: createMcpAwareEmailOutboundAdapter(db, mcpService as never, {
         loadConfig: async () => null,
       }),
     });
@@ -1358,9 +1478,11 @@ describe("AutomationRunner", () => {
 
     const runner = new AutomationRunner(
       service,
+      // SAFETY: This test double supplies only the fields exercised by this test.
       agentService as never,
       deliveryService
     );
+
     await runner.run("automation_email_delivery_test");
 
     expect(sent).toHaveLength(1);
@@ -1385,23 +1507,26 @@ describe("AutomationRunner", () => {
       type: "object",
     });
 
+    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This test fixture stores varied values to exercise service boundary handling.
     const sent: Record<string, unknown>[] = [];
+
     const adapter = createMcpAwareEmailOutboundAdapter(
       db,
       {
         callTool: async (
-          _serverId: string,
-          _transport: string,
+          // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The test callback ignores framework inputs that this case does not inspect.
+          _server: unknown,
           _toolName: string,
+          // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The test callback ignores framework inputs that this case does not inspect.
           input: unknown
         ) => {
+          // SAFETY: This test double supplies only the fields exercised by this test.
+          // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This test fixture stores varied values to exercise service boundary handling.
           sent.push(input as Record<string, unknown>);
+
           return { ok: true };
         },
-        connect: async () => [],
-        ensureConnected: async () => undefined,
-        isConnected: () => true,
-      } as never,
+      },
       { loadConfig: async () => null }
     );
 

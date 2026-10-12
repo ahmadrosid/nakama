@@ -78,17 +78,19 @@ async function seedProfileArtifact(params: {
   const artifactsDir = getProfileArtifactsDir(params.orgId, params.profileId);
   await mkdir(artifactsDir, { recursive: true });
   await writeFile(join(artifactsDir, params.filename), params.content);
+
   if (params.meta !== undefined) {
     await writeFile(
       join(artifactsDir, `${params.filename}.nakama-meta.json`),
       params.meta
     );
   }
+
   return now;
 }
 
 function publishArtifactShareRequest(params: {
-  body: Record<string, unknown>;
+  body: core.PublishArtifactShareRequest;
   host?: string;
   orgId: string;
   profileId: string;
@@ -145,10 +147,13 @@ describe("artifact share routes", () => {
     );
 
     expect(publishResponse.status).toBe(201);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const published = (await publishResponse.json()) as {
       id: string;
       token: string;
     };
+
     expect(published.token.length).toBeGreaterThan(20);
 
     const publicResponse = await app.fetch(
@@ -182,6 +187,7 @@ describe("artifact share routes", () => {
         `http://localhost:4310/v1/public/artifact-shares/${encodeURIComponent(published.token)}`
       )
     );
+
     expect(afterRevoke.status).toBe(404);
     void authService;
   });
@@ -218,6 +224,7 @@ describe("artifact share routes", () => {
     );
 
     expect(publishResponse.status).toBe(201);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const published = (await publishResponse.json()) as { token: string };
 
     const metaResponse = await app.fetch(
@@ -225,12 +232,16 @@ describe("artifact share routes", () => {
         `http://localhost:4310/v1/public/artifact-shares/${encodeURIComponent(published.token)}?meta=1`
       )
     );
+
     expect(metaResponse.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const meta = (await metaResponse.json()) as {
       mimeType: string;
       inlineAllowed: boolean;
       filename: string;
     };
+
     expect(meta.filename).toBe("clip.mp4");
     expect(meta.mimeType).toBe("video/mp4");
     expect(meta.inlineAllowed).toBe(true);
@@ -240,10 +251,14 @@ describe("artifact share routes", () => {
         `http://localhost:4310/v1/public/artifact-shares/${encodeURIComponent(published.token)}`
       )
     );
+
     expect(publicResponse.status).toBe(200);
     expect(publicResponse.headers.get("Content-Type")).toBe("video/mp4");
     expect(publicResponse.headers.get("Content-Disposition")).toContain(
       "inline"
+    );
+    expect(new Uint8Array(await publicResponse.arrayBuffer())).toEqual(
+      new TextEncoder().encode("fake-mp4-bytes")
     );
   });
 
@@ -312,10 +327,13 @@ describe("artifact share routes", () => {
         );
 
         expect(publishResponse.status).toBe(201);
+
+        // SAFETY: This test controls the fixture shape at this boundary.
         const published = (await publishResponse.json()) as {
           shareUrl: string | null;
           webPublicUrlConfigured: boolean;
         };
+
         expect(published.shareUrl).toMatch(
           /^https:\/\/deployed\.example\.com\/s\//
         );
@@ -347,7 +365,9 @@ describe("artifact share routes", () => {
         session,
       })
     );
+
     expect(publishResponse.status).toBe(201);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const { token } = (await publishResponse.json()) as { token: string };
 
     const saveResponse = await app.fetch(
@@ -359,6 +379,7 @@ describe("artifact share routes", () => {
         session,
       })
     );
+
     expect(saveResponse.status).toBe(200);
 
     const shareResponse = await app.fetch(
@@ -366,6 +387,7 @@ describe("artifact share routes", () => {
         `http://localhost:4310/v1/public/artifact-shares/${encodeURIComponent(token)}`
       )
     );
+
     expect(await shareResponse.text()).toBe("# Draft\n\nEdited by hand.\n");
   });
 
@@ -392,6 +414,8 @@ describe("artifact share routes", () => {
         session,
       })
     );
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const { token } = (await publishResponse.json()) as { token: string };
 
     // The artifacts list hands the dashboard absolute paths, so a save arrives
@@ -405,6 +429,7 @@ describe("artifact share routes", () => {
         session,
       })
     );
+
     expect(saveResponse.status).toBe(200);
 
     const shareResponse = await app.fetch(
@@ -412,6 +437,7 @@ describe("artifact share routes", () => {
         `http://localhost:4310/v1/public/artifact-shares/${encodeURIComponent(token)}`
       )
     );
+
     expect(await shareResponse.text()).toBe(
       "# Draft\n\nSaved from the dashboard.\n"
     );
@@ -440,7 +466,9 @@ describe("artifact share routes", () => {
         session,
       })
     );
+
     expect(publishResponse.status).toBe(201);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const { token } = (await publishResponse.json()) as { token: string };
 
     const writeSpy = spyOn(
@@ -463,6 +491,7 @@ describe("artifact share routes", () => {
           session,
         })
       );
+
       expect(saveResponse.status).toBeGreaterThanOrEqual(500);
 
       const shareResponse = await app.fetch(
@@ -470,6 +499,7 @@ describe("artifact share routes", () => {
           `http://localhost:4310/v1/public/artifact-shares/${encodeURIComponent(token)}`
         )
       );
+
       expect(shareResponse.status).toBe(200);
       expect(await shareResponse.text()).toBe("# Original share\n");
     } finally {

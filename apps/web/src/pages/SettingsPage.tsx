@@ -1,3 +1,4 @@
+import { DEMO_LOGIN_HOST } from "@nakama/core/demo-login";
 import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
 import {
@@ -31,8 +32,15 @@ import { useAuth } from "@/context/use-auth";
 import { useChatUsageVisible } from "@/hooks/use-chat-usage-visible";
 import { useSaveUserTimezone, useUserTimezone } from "@/hooks/use-timezones";
 import { formatError } from "@/lib/client";
-import { isDemoLoginHost } from "@/lib/demo-login";
 import { getBrowserTimezone } from "@/lib/timezones";
+
+function isDemoLoginHost(
+  hostname: string = typeof window === "undefined"
+    ? ""
+    : window.location.hostname
+): boolean {
+  return hostname.trim().toLowerCase() === DEMO_LOGIN_HOST;
+}
 
 export function SettingsPage() {
   const location = useLocation();
@@ -42,9 +50,11 @@ export function SettingsPage() {
   const isDemo = isDemoLoginHost();
   const isPlatformAdmin = user?.isPlatformAdmin === true;
   const isOrgAdmin = activeOrg?.role === "admin";
+
   const [mfaRequiredNotice, setMfaRequiredNotice] = useState(
     () => new URLSearchParams(location.search).get("mfa") === "required"
   );
+
   const [formError, setFormError] = useState<string | null>(null);
   const [timezone, setTimezone] = useState(() => getBrowserTimezone());
   const [timezoneHint, setTimezoneHint] = useState<string | null>(null);
@@ -229,6 +239,7 @@ export function SettingsPage() {
 
 export function LlmProvidersPage() {
   const [formError, setFormError] = useState<string | null>(null);
+
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <ProviderSettingsCard formError={formError} onFormError={setFormError} />

@@ -16,11 +16,13 @@ async function loadConfig(
 ): Promise<TelegramBridgeConfig> {
   const owner = channelOwnerFromEnv(env);
   const config = await loadTelegramConfigFile(owner);
+
   if (!config) {
     throw new Error(
       "Configure this agent's Telegram connection before starting its worker."
     );
   }
+
   return {
     botToken: config.botToken,
     orgId: owner.orgId,

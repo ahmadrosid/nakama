@@ -28,6 +28,7 @@ const ORG_A_SKILL = markdown(
   "Deploy notes for org A. Use when deploying.",
   "Org A steps."
 );
+
 const ORG_B_SKILL = markdown(
   "deploy-notes",
   "Deploy notes for org B. Use when deploying.",
@@ -241,6 +242,7 @@ describe("skills are scoped per org", () => {
     const orgA = await service.getSkill(
       (await db.getSkillByName("deploy-notes", "org_a"))?.id ?? ""
     );
+
     const orgB = await service.getSkill(
       (await db.getSkillByName("deploy-notes", "org_b"))?.id ?? ""
     );
@@ -308,6 +310,7 @@ describe("skills are scoped per org", () => {
     const orgB = await service.getSkill(
       (await db.getSkillByName("deploy-notes", "org_b"))?.id ?? ""
     );
+
     const orgA = await service.getSkill(
       (await db.getSkillByName("deploy-notes", "org_a"))?.id ?? ""
     );

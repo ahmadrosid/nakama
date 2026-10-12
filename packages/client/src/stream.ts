@@ -6,15 +6,21 @@ import type {
   StreamEvent,
 } from "@nakama/core/contract";
 import { readBrowserOrigin } from "./browser";
-import type { SendMessageArg, StreamHandler, StreamHandlers } from "./types";
+import type {
+  JsonValue,
+  SendMessageArg,
+  StreamHandler,
+  StreamHandlers,
+} from "./types";
 
 const DEFAULT_STREAM_IDLE_MS = DEFAULT_CHAT_STREAM_TIMEOUT_MS;
 
 /** How long a 409 is treated as a turn that is still stopping rather than a real conflict. */
 const TURN_CONFLICT_RETRY_MS = 3000;
+
 const TURN_CONFLICT_POLL_MS = 150;
 
-export function isActiveTurnConflict(error: unknown): boolean {
+export function isActiveTurnConflict(error: Error | string): boolean {
   return (
     error instanceof Error && error.message.includes("already in progress")
   );
@@ -48,9 +54,11 @@ export async function retryWhileTurnIsStopping<T>(
   } = {}
 ): Promise<T> {
   const now = options.now ?? (() => Date.now());
+
   const sleep =
     options.sleep ??
     ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+
   const deadline = now() + TURN_CONFLICT_RETRY_MS;
 
   for (;;) {
@@ -59,7 +67,7 @@ export async function retryWhileTurnIsStopping<T>(
     } catch (error) {
       if (
         options.signal?.aborted ||
-        !isActiveTurnConflict(error) ||
+        !(error instanceof Error && isActiveTurnConflict(error)) ||
         now() >= deadline
       ) {
         throw error;
@@ -104,7 +112,8 @@ export async function readStreamEvents(
 
       if (payload.type === "tool_start") {
         handlers.onToolStart?.({
-          input: payload.input,
+          // SAFETY: JSON.parse created this object and guarantees JSON-compatible nested values.
+          input: payload.input as Record<string, JsonValue>,
           tool: payload.tool,
           toolCallId: payload.toolCallId,
           toolGroupId: payload.toolGroupId,
@@ -143,9 +152,11 @@ export async function readStreamEvents(
         sawDoneEvent = true;
         handlers.onDone?.();
         throwIfAborted(signal);
+
         if (payload.contextUsage) {
           handlers.onContextUsage?.(payload.contextUsage);
         }
+
         return payload.reply;
       }
 
@@ -202,6 +213,7 @@ export async function readAgentBrowserInstallStream(
       if (payload.type === "done") {
         status = payload.status;
         handlers.onDone?.(payload.status);
+
         return payload.status;
       }
 
@@ -244,6 +256,7 @@ async function consumeSseEvents<TEvent extends { type: string }, TResult>(
   };
 
   signal?.addEventListener("abort", abortReader, { once: true });
+
   if (signal?.aborted) {
     abortReader();
   }
@@ -262,6 +275,7 @@ async function consumeSseEvents<TEvent extends { type: string }, TResult>(
         Awaited<ReturnType<typeof reader.read>>
       >((resolve, reject) => {
         const remainingIdleMs = Math.max(0, idleMs - (Date.now() - lastDataAt));
+
         const idleTimeout = setTimeout(() => {
           void reader.cancel();
           reject(
@@ -300,6 +314,7 @@ async function consumeSseEvents<TEvent extends { type: string }, TResult>(
 
         for (const line of eventBlock.split("\n")) {
           throwIfAborted(signal);
+
           if (line.startsWith(":") || !line.startsWith("data: ")) {
             continue;
           }
@@ -307,6 +322,7 @@ async function consumeSseEvents<TEvent extends { type: string }, TResult>(
           onDataEvent?.();
           lastDataAt = Date.now();
 
+          // SAFETY: The caller provides the event type for this SSE endpoint.
           const payload = JSON.parse(line.slice(6)) as TEvent;
           const result = await onEvent(payload);
           throwIfAborted(signal);
@@ -330,17 +346,18 @@ async function consumeSseEvents<TEvent extends { type: string }, TResult>(
 export function normalizeStreamHandlers(
   handler: StreamHandler | StreamHandlers
 ): StreamHandlers {
-  if (typeof handler === "function") {
-    return { onChunk: handler };
+  if ("onChunk" in handler) {
+    return handler;
   }
 
-  return handler;
+  return { onChunk: handler };
 }
 
 export function resolveSendMessageBody(
   input: SendMessageArg,
   defaultClientOrigin?: string
 ): SendMessageInput {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This parameter is already the declared string-or-message input union.
   const body = typeof input === "string" ? { message: input } : input;
 
   if (body.clientOrigin?.trim()) {
@@ -348,6 +365,7 @@ export function resolveSendMessageBody(
   }
 
   const origin = readBrowserOrigin();
+
   if (origin) {
     return { ...body, clientOrigin: origin };
   }

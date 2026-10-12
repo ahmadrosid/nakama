@@ -1,4 +1,9 @@
+import { z } from "zod";
 import type { CustomModelEntry, WireApi } from "./contract";
+
+const JsonValueSchema = z.json();
+
+const JsonObjectSchema = z.record(z.string(), JsonValueSchema);
 
 export const DISPLAY_NAME_MAX_LENGTH = 64;
 
@@ -8,10 +13,10 @@ export const DISPLAY_NAME_MAX_LENGTH = 64;
  * Anything unrecognised stays on chat, so a bad value cannot take an endpoint
  * offline.
  */
-export function parseWireApi(value: unknown): WireApi | undefined {
-  return typeof value === "string" && value.trim() === "responses"
-    ? "responses"
-    : undefined;
+export function parseWireApi<Value>(value: Value): WireApi | undefined {
+  const parsed = z.literal("responses").safeParse(value);
+
+  return parsed.success ? parsed.data : undefined;
 }
 
 export function normalizeBaseUrl(baseUrl: string): string {
@@ -21,6 +26,7 @@ export function normalizeBaseUrl(baseUrl: string): string {
 export function isValidBaseUrl(baseUrl: string): boolean {
   try {
     const parsed = new URL(baseUrl.trim());
+
     return parsed.protocol === "http:" || parsed.protocol === "https:";
   } catch {
     return false;
@@ -54,70 +60,57 @@ export function parseCustomModelsJson(
     return;
   }
 
-  let parsed: unknown;
+  let parsed: z.infer<typeof JsonValueSchema>;
 
   try {
-    parsed = JSON.parse(raw);
+    parsed = JsonValueSchema.parse(JSON.parse(raw));
   } catch {
     throw new Error("Invalid models_json in config.");
   }
 
-  if (!Array.isArray(parsed)) {
+  const entries = z.array(JsonObjectSchema).safeParse(parsed);
+
+  if (!entries.success) {
     throw new Error("models_json must be a JSON array.");
   }
 
-  return validateCustomModels(parsed);
+  return validateCustomModels(entries.data);
 }
 
-export function validateCustomModels(entries: unknown): CustomModelEntry[] {
-  if (!Array.isArray(entries) || entries.length === 0) {
+export function validateCustomModels<Entries>(
+  entries: Entries
+): CustomModelEntry[] {
+  const parsedEntries = z.array(JsonObjectSchema).safeParse(entries);
+
+  if (!parsedEntries.success || parsedEntries.data.length === 0) {
     throw new Error("At least one model is required.");
   }
 
   const result: CustomModelEntry[] = [];
   let defaultCount = 0;
 
-  for (const entry of entries) {
-    if (!entry || typeof entry !== "object") {
-      throw new Error("Each model entry must be an object.");
-    }
-
-    const record = entry as Record<string, unknown>;
-    const id = typeof record.id === "string" ? record.id.trim() : "";
+  for (const record of parsedEntries.data) {
+    const id = z.string().safeParse(record.id).data?.trim() ?? "";
 
     if (!id) {
       throw new Error("Each model must have a non-empty id.");
     }
 
-    const name =
-      typeof record.name === "string" && record.name.trim()
-        ? record.name.trim()
-        : undefined;
+    const name = z.string().safeParse(record.name).data?.trim() || undefined;
+
     const isDefault = record.default === true;
-    const supportsThinking =
-      record.supportsThinking === undefined
-        ? undefined
-        : record.supportsThinking === true
-          ? true
-          : record.supportsThinking === false
-            ? false
-            : (() => {
-                throw new Error(
-                  `Model "${id}" has invalid supportsThinking flag.`
-                );
-              })();
-    const supportsVision =
-      record.supportsVision === undefined
-        ? undefined
-        : record.supportsVision === true
-          ? true
-          : record.supportsVision === false
-            ? false
-            : (() => {
-                throw new Error(
-                  `Model "${id}" has invalid supportsVision flag.`
-                );
-              })();
+
+    const supportsThinking = parseOptionalBoolean(
+      record.supportsThinking,
+      id,
+      "supportsThinking"
+    );
+
+    const supportsVision = parseOptionalBoolean(
+      record.supportsVision,
+      id,
+      "supportsVision"
+    );
 
     if (isDefault) {
       defaultCount += 1;
@@ -126,7 +119,9 @@ export function validateCustomModels(entries: unknown): CustomModelEntry[] {
     const cachedInputPerMillionUsd = parseOptionalUsdRate(
       record.cachedInputPerMillionUsd
     );
+
     const inputPerMillionUsd = parseOptionalUsdRate(record.inputPerMillionUsd);
+
     const outputPerMillionUsd = parseOptionalUsdRate(
       record.outputPerMillionUsd
     );
@@ -145,26 +140,52 @@ export function validateCustomModels(entries: unknown): CustomModelEntry[] {
       id,
       "contextWindow"
     );
+
     const maxOutputTokens = parseOptionalTokenCount(
       record.maxOutputTokens,
       id,
       "maxOutputTokens"
     );
 
-    result.push({
-      id,
-      ...(name ? { name } : {}),
-      ...(contextWindow === undefined ? {} : { contextWindow }),
-      ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
-      ...(isDefault ? { default: true } : {}),
-      ...(supportsThinking === undefined ? {} : { supportsThinking }),
-      ...(supportsVision === undefined ? {} : { supportsVision }),
-      ...(cachedInputPerMillionUsd === undefined
-        ? {}
-        : { cachedInputPerMillionUsd }),
-      ...(inputPerMillionUsd === undefined ? {} : { inputPerMillionUsd }),
-      ...(outputPerMillionUsd === undefined ? {} : { outputPerMillionUsd }),
-    });
+    const model: CustomModelEntry = { id };
+
+    if (name) {
+      model.name = name;
+    }
+
+    if (contextWindow !== undefined) {
+      model.contextWindow = contextWindow;
+    }
+
+    if (maxOutputTokens !== undefined) {
+      model.maxOutputTokens = maxOutputTokens;
+    }
+
+    if (isDefault) {
+      model.default = true;
+    }
+
+    if (supportsThinking !== undefined) {
+      model.supportsThinking = supportsThinking;
+    }
+
+    if (supportsVision !== undefined) {
+      model.supportsVision = supportsVision;
+    }
+
+    if (cachedInputPerMillionUsd !== undefined) {
+      model.cachedInputPerMillionUsd = cachedInputPerMillionUsd;
+    }
+
+    if (inputPerMillionUsd !== undefined) {
+      model.inputPerMillionUsd = inputPerMillionUsd;
+    }
+
+    if (outputPerMillionUsd !== undefined) {
+      model.outputPerMillionUsd = outputPerMillionUsd;
+    }
+
+    result.push(model);
   }
 
   if (defaultCount > 1) {
@@ -174,8 +195,8 @@ export function validateCustomModels(entries: unknown): CustomModelEntry[] {
   return result;
 }
 
-function parseOptionalTokenCount(
-  value: unknown,
+function parseOptionalTokenCount<Value>(
+  value: Value,
   modelId: string,
   field: string
 ): number | undefined {
@@ -183,7 +204,8 @@ function parseOptionalTokenCount(
     return;
   }
 
-  const numeric = typeof value === "number" ? value : Number(value);
+  const parsed = z.union([z.number(), z.string()]).safeParse(value);
+  const numeric = parsed.success ? Number(parsed.data) : Number.NaN;
 
   if (!Number.isInteger(numeric) || numeric <= 0) {
     throw new Error(
@@ -194,18 +216,37 @@ function parseOptionalTokenCount(
   return numeric;
 }
 
-function parseOptionalUsdRate(value: unknown): number | undefined {
+function parseOptionalUsdRate<Value>(value: Value): number | undefined {
   if (value === undefined || value === null || value === "") {
     return;
   }
 
-  const numeric = typeof value === "number" ? value : Number(value);
+  const parsed = z.union([z.number(), z.string()]).safeParse(value);
+  const numeric = parsed.success ? Number(parsed.data) : Number.NaN;
 
   if (!Number.isFinite(numeric) || numeric < 0) {
     throw new Error("Pricing rates must be non-negative numbers.");
   }
 
   return numeric;
+}
+
+function parseOptionalBoolean<Value>(
+  value: Value,
+  modelId: string,
+  field: string
+): boolean | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const parsed = z.boolean().safeParse(value);
+
+  if (!parsed.success) {
+    throw new Error(`Model "${modelId}" has invalid ${field} flag.`);
+  }
+
+  return parsed.data;
 }
 
 export function serializeCustomModels(models: CustomModelEntry[]): string {

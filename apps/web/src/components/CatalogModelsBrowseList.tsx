@@ -64,7 +64,7 @@ function resolveCatalogStatus<T extends { id: string; name: string }>(
   canFetch: boolean,
   idleMessage?: string
 ): ReactNode {
-  if (typeof status === "function") {
+  if (status instanceof Function) {
     return status({ filteredCount: filtered.length, filteredRows: filtered });
   }
 
@@ -216,6 +216,7 @@ export function CatalogModelsBrowseList<
     onRefresh,
     refreshDisabled = false,
   } = query ?? {};
+
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const [hideDeprecated, setHideDeprecated] = useState(true);
@@ -226,7 +227,9 @@ export function CatalogModelsBrowseList<
     if (!multiSelect) {
       return new Set<string>();
     }
+
     const rowIds = new Set(rows.map((row) => row.id));
+
     return new Set([...selectedIds].filter((id) => rowIds.has(id)));
   }, [multiSelect, rows, selectedIds]);
 
@@ -256,26 +259,31 @@ export function CatalogModelsBrowseList<
     canFetch,
     idleMessage
   );
+
   const resolvedEmptyMessage = resolveCatalogEmptyMessage(
     emptyMessage,
     canFetch,
     idleMessage
   );
+
   const toolbarDisabled = !canFetch;
 
   const handleRowSelect = (row: T) => {
     if (!multiSelect) {
       onSelect(row);
+
       return;
     }
 
     setSelectedIds((current) => {
       const next = new Set(current);
+
       if (next.has(row.id)) {
         next.delete(row.id);
       } else {
         next.add(row.id);
       }
+
       return next;
     });
   };

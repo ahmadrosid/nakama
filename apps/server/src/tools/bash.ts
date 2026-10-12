@@ -35,11 +35,16 @@ import {
 } from "./profile-sandbox-manager";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
+
 const MAX_TIMEOUT_MS = 30 * 60_000;
+
 const MAX_OUTPUT_CHARS = 32_000;
+
 const EXIT_STDIO_GRACE_MS = 100;
+
 /** In-memory capture for coding-agent runs before summarize / keep-tail. */
 const CODING_AGENT_MAX_CAPTURE_CHARS = 5_000_000;
+
 /** Keep the newest N coding-agent logs; prune the rest after each write. */
 const CODING_AGENT_LOG_RETENTION = 10;
 
@@ -82,9 +87,11 @@ async function getSandboxManager(): Promise<ProfileSandboxManager> {
   const { MicrosandboxBashRuntime } = await import(
     "./bash-microsandbox-runtime"
   );
+
   sharedSandboxManager = new ProfileSandboxManager(
     new MicrosandboxBashRuntime()
   );
+
   return sharedSandboxManager;
 }
 
@@ -104,6 +111,7 @@ function bashToolDescription(): string {
   } catch {
     // Invalid backend config — keep the host description.
   }
+
   return `${BASH_TOOL_DESCRIPTION_BASE} Host execution is unrestricted by Nakama and uses the server process's OS permissions. Commands can access files outside the profile workspace, including other profiles' files when OS permissions allow. Assign host bash only to trusted profiles.`;
 }
 
@@ -145,38 +153,44 @@ export const bashTool: ToolDefinition<BashInput, BashOutput> = {
 };
 
 export async function runBash(
-  input: unknown,
+  input: BashInput,
   context: ToolContext,
   options: BashRunOptions = {}
 ): Promise<BashOutput> {
   const profileId = context.profileId?.trim();
   const orgId = context.orgId?.trim();
+
   if (!profileId) {
     throw new Error("profileId is required.");
   }
+
   if (!orgId) {
     throw new Error("orgId is required.");
   }
 
-  const command = readString(input, "command");
+  const command = input.command.trim();
+
   if (!command) {
     throw new Error("command is required.");
   }
 
   const codingAgentMode =
-    readOptionalBoolean(input, "codingAgent") === true ||
-    commandLooksLikeCursorAgent(command);
+    input.codingAgent === true || commandLooksLikeCursorAgent(command);
+
   const codingWorkspace =
     context.channel === "cli" || codingAgentMode
       ? context.codingWorkspaceRoot
       : undefined;
+
   const workspaceRoot = await resolveWorkspaceRoot(
     options.workspaceRoot ??
       codingWorkspace ??
       context.workspaceRoot ??
       getProfileSoulDir(orgId, profileId)
   );
-  const rawCwd = readString(input, "cwd");
+
+  const rawCwd = input.cwd?.trim() ?? "";
+
   const cwd = rawCwd
     ? (
         await guardFilePath(rawCwd, workspaceRoot, undefined, {
@@ -185,8 +199,9 @@ export async function runBash(
         })
       ).resolved
     : workspaceRoot;
-  const timeoutMs = readTimeout(readOptionalNumber(input, "timeoutMs"));
-  const env = readStringRecord(readOptionalRecord(input, "env"));
+
+  const timeoutMs = readTimeout(input.timeoutMs);
+  const env = input.env ?? {};
 
   const backend = options.backend ?? resolveBashBackend();
 
@@ -198,6 +213,7 @@ export async function runBash(
 
   if (backend === "microsandbox") {
     const manager = options.sandboxManager ?? (await getSandboxManager());
+
     return manager.run({
       command,
       env: buildBashSandboxEnv({
@@ -230,9 +246,11 @@ export function resolveHostBash(
 ): string {
   if (platform !== "win32") {
     const shell = exists("/bin/bash") ? "/bin/bash" : which("bash");
+
     if (shell) {
       return shell;
     }
+
     throw new Error("No Bash shell found. Install Bash and add it to PATH.");
   }
 
@@ -240,6 +258,7 @@ export function resolveHostBash(
     if (root) {
       // Use Bash itself, rather than Git's launcher, so its PID owns the tree.
       const shell = path.win32.join(root, "Git", "usr", "bin", "bash.exe");
+
       if (exists(shell)) {
         return shell;
       }
@@ -247,6 +266,7 @@ export function resolveHostBash(
   }
 
   const shell = which("bash.exe");
+
   // The WSL launcher uses a different filesystem and toolchain from the host.
   if (
     shell &&
@@ -256,6 +276,7 @@ export function resolveHostBash(
   ) {
     return shell;
   }
+
   throw new Error(
     "No native Bash shell found. Install Git for Windows (https://git-scm.com/download/win) or add a native Bash executable to PATH."
   );
@@ -271,6 +292,7 @@ function runShellCommand(
   return new Promise((resolve, reject) => {
     options.signal?.throwIfAborted();
     const env = mergeCodingAgentSpawnEnv(getToolExecutionEnv(), envOverrides);
+
     // A login shell may rebuild PATH from /etc/profile, as Debian in the Docker
     // image does. Put back the dirs the harness probe finds CLIs in, after the
     // profile's own so nothing that resolved before changes.
@@ -278,6 +300,7 @@ function runShellCommand(
       process.platform !== "win32" && env.PATH
         ? 'PATH="$PATH:$NAKAMA_TOOL_PATH"; unset NAKAMA_TOOL_PATH; '
         : "";
+
     const child = spawn(resolveHostBash(), ["-lc", restorePath + command], {
       cwd,
       detached: process.platform !== "win32",
@@ -305,11 +328,13 @@ function runShellCommand(
       if (abortHandled) {
         return;
       }
+
       abortHandled = true;
       killCommand();
     };
 
     options.signal?.addEventListener("abort", onAbort, { once: true });
+
     if (options.signal?.aborted) {
       onAbort();
     }
@@ -333,10 +358,12 @@ function runShellCommand(
 
     child.stdout?.on("data", (chunk: Buffer | string) => {
       armExitTimer();
+
       if (options.codingAgentMode) {
         const next = appendCodingAgentCapture(stdout, String(chunk));
         stdout = next.value;
         stdoutOverflow = stdoutOverflow || next.overflowed;
+
         return;
       }
 
@@ -345,10 +372,12 @@ function runShellCommand(
 
     child.stderr?.on("data", (chunk: Buffer | string) => {
       armExitTimer();
+
       if (options.codingAgentMode) {
         const next = appendCodingAgentCapture(stderr, String(chunk));
         stderr = next.value;
         stderrOverflow = stderrOverflow || next.overflowed;
+
         return;
       }
 
@@ -359,6 +388,7 @@ function runShellCommand(
       if (settled) {
         return;
       }
+
       settled = true;
       clearTimeout(timeoutId);
       clearTimeout(exitTimer);
@@ -367,10 +397,12 @@ function runShellCommand(
       child.stderr?.destroy();
       // The shell can exit before taskkill finishes terminating descendants.
       await treeKilled;
+
       if (error || abortHandled) {
         reject(
           error ?? new DOMException("The operation was aborted", "AbortError")
         );
+
         return;
       }
 
@@ -421,15 +453,18 @@ async function finalizeCodingAgentOutput(args: {
     args.stdout,
     args.stderr
   );
+
   let stdout = formatCodingAgentBashStdout(args.stdout, {
     exitCode: args.exitCode,
     logPath,
   });
+
   if (args.stdoutOverflow) {
     stdout = `${stdout}\n\n(stdout capture hit ${CODING_AGENT_MAX_CAPTURE_CHARS} char limit; see full log)`;
   }
 
   let stderr = keepTail(args.stderr, MAX_OUTPUT_CHARS);
+
   if (args.stderrOverflow) {
     stderr = `${stderr}\n\n(stderr capture hit ${CODING_AGENT_MAX_CAPTURE_CHARS} char limit; see full log)`;
   }
@@ -452,12 +487,14 @@ async function writeCodingAgentLog(
       "workspaceRoot must be an absolute path; relative roots resolve against process.cwd() and break profile isolation."
     );
   }
+
   try {
     const dir = path.join(workspaceRoot, "artifacts", "coding-agent-runs");
     await mkdir(dir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const fileName = `${stamp}-${Math.random().toString(36).slice(2, 8)}.log`;
     const absolutePath = path.join(dir, fileName);
+
     const body = [
       "=== stdout ===",
       stdout,
@@ -466,8 +503,10 @@ async function writeCodingAgentLog(
       stderr,
       "",
     ].join("\n");
+
     await writeFile(absolutePath, body, "utf8");
     await pruneCodingAgentLogs(dir);
+
     return path.join("artifacts", "coding-agent-runs", fileName);
   } catch {
     return null;
@@ -477,6 +516,7 @@ async function writeCodingAgentLog(
 async function pruneCodingAgentLogs(dir: string): Promise<void> {
   const names = await readdir(dir);
   const logs = names.filter((name) => name.endsWith(".log"));
+
   if (logs.length <= CODING_AGENT_LOG_RETENTION) {
     return;
   }
@@ -485,12 +525,14 @@ async function pruneCodingAgentLogs(dir: string): Promise<void> {
     logs.map(async (name) => {
       try {
         const info = await stat(path.join(dir, name));
+
         return { mtimeMs: info.mtimeMs, name };
       } catch {
         return { mtimeMs: 0, name };
       }
     })
   );
+
   ranked.sort((a, b) => b.mtimeMs - a.mtimeMs || (a.name < b.name ? 1 : -1));
 
   for (const stale of ranked.slice(CODING_AGENT_LOG_RETENTION)) {
@@ -508,15 +550,21 @@ function appendOutput(current: string, chunk: string): string {
   return combined.slice(0, MAX_OUTPUT_CHARS) + "\n...[truncated]";
 }
 
+interface CodingAgentCapture {
+  overflowed: boolean;
+  value: string;
+}
+
 function appendCodingAgentCapture(
   current: string,
   chunk: string
-): { value: string; overflowed: boolean } {
+): CodingAgentCapture {
   if (current.length >= CODING_AGENT_MAX_CAPTURE_CHARS) {
     return { overflowed: true, value: current };
   }
 
   const remaining = CODING_AGENT_MAX_CAPTURE_CHARS - current.length;
+
   if (chunk.length <= remaining) {
     return { overflowed: false, value: current + chunk };
   }
@@ -541,6 +589,7 @@ async function resolveWorkspaceRoot(rawWorkspaceRoot: string): Promise<string> {
       "workspaceRoot must be an absolute path; relative roots resolve against process.cwd() and break profile isolation."
     );
   }
+
   try {
     return await realpath(rawWorkspaceRoot);
   } catch {
@@ -548,66 +597,10 @@ async function resolveWorkspaceRoot(rawWorkspaceRoot: string): Promise<string> {
   }
 }
 
-function readTimeout(value: unknown): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+function readTimeout(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value) || value <= 0) {
     return DEFAULT_TIMEOUT_MS;
   }
 
   return Math.min(value, MAX_TIMEOUT_MS);
-}
-
-function readOptionalNumber(input: unknown, key: string): unknown {
-  if (typeof input !== "object" || input === null || !(key in input)) {
-    return;
-  }
-
-  return (input as Record<string, unknown>)[key];
-}
-
-function readOptionalBoolean(input: unknown, key: string): unknown {
-  if (typeof input !== "object" || input === null || !(key in input)) {
-    return;
-  }
-
-  return (input as Record<string, unknown>)[key];
-}
-
-function readString(input: unknown, key: string): string | null {
-  if (typeof input !== "object" || input === null || !(key in input)) {
-    return null;
-  }
-
-  const value = (input as Record<string, unknown>)[key];
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function readOptionalRecord(
-  input: unknown,
-  key: string
-): Record<string, unknown> | null {
-  if (typeof input !== "object" || input === null || !(key in input)) {
-    return null;
-  }
-
-  const value = (input as Record<string, unknown>)[key];
-
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return null;
-  }
-
-  return value as Record<string, unknown>;
-}
-
-function readStringRecord(
-  record: Record<string, unknown> | null
-): Record<string, string> {
-  if (!record) {
-    return {};
-  }
-
-  return Object.fromEntries(
-    Object.entries(record).flatMap(([key, value]) =>
-      typeof value === "string" ? [[key, value] as const] : []
-    )
-  );
 }

@@ -1,4 +1,4 @@
-import type { Database } from "bun:sqlite";
+import type { Database, SQLQueryBindings } from "bun:sqlite";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,6 +43,9 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateOrgLlmMonthlyQuotaTable);
   atomic(migrateSkillsCuratorConsolidateColumns);
   atomic(migrateOrganizationArchivedAt);
+  atomic(migrateOrganizationParent);
+  atomic(migrateOrgSharedResources);
+  atomic(migrateOrgTeamCreationRequests);
   atomic(migrateSkillUsageTables);
   atomic(migrateTenantOrgScope);
   atomic(migrateSkillOrgIds);
@@ -55,6 +58,8 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateLlmUsageOrgScope);
   atomic(migrateToolOutputSavingsTable);
   atomic(migrateLlmTurnUsageTable);
+  atomic(migrateLlmUsageActorStatsTable);
+  atomic(migrateLlmUsageDailyStatsTable);
   atomic(migrateAttachmentsTable);
   atomic(migrateAutomationRunsTable);
   atomic(migrateAutomationRunReadStateTable);
@@ -63,11 +68,83 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateComposioUserConnections);
   atomic(migrateAuditEventsTable);
   atomic(migrateProfileChangeEventsTable);
+  atomic(migrateSkillVersionsTable);
   atomic(migratePluginTables);
   atomic(migrateRemoveGoogleMeetPlugin);
   atomic(migrateFilePinsTable);
   atomic(migrateNotificationWebhookDeliveriesTable);
   atomic(migrateManagedSecretsTable);
+  atomic((database) =>
+    addNullableTextColumnIfMissing(database, "profiles", "acp_agent")
+  );
+  atomic((database) =>
+    addNullableTextColumnIfMissing(database, "profiles", "acp_settings")
+  );
+}
+
+function migrateOrgTeamCreationRequests(db: Database): void {
+  db.exec(`
+CREATE TABLE IF NOT EXISTS org_team_creation_requests (
+  parent_org_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  creator_user_id TEXT NOT NULL,
+  admin_user_id TEXT NOT NULL,
+  team_org_id TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL,
+  completed_at TEXT,
+  PRIMARY KEY (parent_org_id, request_id)
+);
+  `);
+}
+
+function migrateOrgSharedResources(db: Database): void {
+  // Retain source links after revocation; a missing publication blocks use.
+  db.exec(`
+CREATE TABLE IF NOT EXISTS org_shared_resources (
+  id TEXT PRIMARY KEY NOT NULL,
+  org_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+  resource_kind TEXT NOT NULL CHECK (resource_kind IN ('knowledge', 'skill', 'agent', 'tool', 'model')),
+  resource_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (org_id, resource_kind, resource_id)
+);
+
+CREATE TABLE IF NOT EXISTS shared_agent_instances (
+  profile_id TEXT PRIMARY KEY NOT NULL REFERENCES profiles (id) ON DELETE CASCADE,
+  team_org_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+  source_org_id TEXT NOT NULL,
+  source_profile_id TEXT NOT NULL,
+  publication_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE (team_org_id, source_profile_id)
+);
+
+CREATE TRIGGER IF NOT EXISTS profiles_unpublish_deleted_source
+AFTER DELETE ON profiles
+BEGIN
+  DELETE FROM org_shared_resources WHERE resource_kind = 'agent' AND resource_id = OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS skills_unpublish_deleted_source
+AFTER DELETE ON skills
+BEGIN
+  DELETE FROM org_shared_resources WHERE resource_kind = 'skill' AND resource_id = OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS tools_unpublish_deleted_source
+AFTER DELETE ON tools
+BEGIN
+  DELETE FROM org_shared_resources WHERE resource_kind = 'tool' AND resource_id = OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS profiles_remove_shared_agent_instance
+AFTER DELETE ON profiles
+BEGIN
+  DELETE FROM shared_agent_instances WHERE profile_id = OLD.id;
+END;
+  `);
 }
 
 function migrateManagedSecretsTable(db: Database): void {
@@ -80,16 +157,24 @@ function migrateManagedSecretsTable(db: Database): void {
       version INTEGER NOT NULL DEFAULT 1,
       PRIMARY KEY (scope, name)
     );
+
   `);
 }
 
 function migrateSessionAppUserId(db: Database): void {
-  const columns = db.prepare("PRAGMA table_info(sessions)").all() as Array<{
-    name: string;
-  }>;
+  const columns = db
+    .prepare<
+      {
+        name: string;
+      },
+      SQLQueryBindings[]
+    >("PRAGMA table_info(sessions)")
+    .all();
+
   if (!columns.some((column) => column.name === "app_user_id")) {
     db.exec("ALTER TABLE sessions ADD COLUMN app_user_id TEXT;");
   }
+
   db.exec(
     "CREATE INDEX IF NOT EXISTS sessions_app_user_id ON sessions (profile_id, channel, app_user_id)"
   );
@@ -140,9 +225,12 @@ function applyBootstrapSchema(db: Database): void {
   `);
 
   const current = db
-    .prepare("SELECT MAX(version) AS version FROM schema_version")
-    .get() as { version: number | null };
-  if ((current.version ?? 0) >= BOOTSTRAP_SCHEMA_VERSION) {
+    .prepare<{ version: number | null }, SQLQueryBindings[]>(
+      "SELECT MAX(version) AS version FROM schema_version"
+    )
+    .get();
+
+  if ((current?.version ?? 0) >= BOOTSTRAP_SCHEMA_VERSION) {
     return;
   }
 
@@ -161,7 +249,9 @@ export function resolveSchemaPath(
 ): string {
   const moduleDir =
     options.moduleDir ?? dirname(fileURLToPath(import.meta.url));
+
   const cwd = options.cwd ?? process.cwd();
+
   const candidates = [
     join(moduleDir, "../sql/schema.sql"),
     resolve(cwd, "packages/db/sql/schema.sql"),
@@ -178,9 +268,15 @@ export function resolveSchemaPath(
 }
 
 function migrateProfilesTable(db: Database): void {
-  const columns = db.prepare("PRAGMA table_info(profiles)").all() as Array<{
-    name: string;
-  }>;
+  const columns = db
+    .prepare<
+      {
+        name: string;
+      },
+      SQLQueryBindings[]
+    >("PRAGMA table_info(profiles)")
+    .all();
+
   const columnNames = new Set(columns.map((column) => column.name));
 
   if (!columnNames.has("thinking_enabled")) {
@@ -253,10 +349,16 @@ function migrateSkillsTables(db: Database): void {
 }
 
 function migrateAutomationsTable(db: Database): void {
-  const columns = db.prepare("PRAGMA table_info(automations)").all() as Array<{
-    name: string;
-    dflt_value: string | null;
-  }>;
+  const columns = db
+    .prepare<
+      {
+        name: string;
+        dflt_value: string | null;
+      },
+      SQLQueryBindings[]
+    >("PRAGMA table_info(automations)")
+    .all();
+
   const columnNames = new Set(columns.map((column) => column.name));
 
   if (!columnNames.has("profile_id")) {
@@ -272,8 +374,11 @@ function migrateAutomationsTable(db: Database): void {
   }
 
   const refreshedColumns = db
-    .prepare("PRAGMA table_info(automations)")
-    .all() as Array<{ name: string; dflt_value: string | null }>;
+    .prepare<{ name: string; dflt_value: string | null }, SQLQueryBindings[]>(
+      "PRAGMA table_info(automations)"
+    )
+    .all();
+
   const profileIdColumn = refreshedColumns.find(
     (column) => column.name === "profile_id"
   );
@@ -359,9 +464,15 @@ function migrateUsersTable(db: Database): void {
     CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users (email);
   `);
 
-  const columns = db.prepare("PRAGMA table_info(users)").all() as Array<{
-    name: string;
-  }>;
+  const columns = db
+    .prepare<
+      {
+        name: string;
+      },
+      SQLQueryBindings[]
+    >("PRAGMA table_info(users)")
+    .all();
+
   const columnNames = new Set(columns.map((column) => column.name));
 
   if (!columnNames.has("is_platform_admin")) {
@@ -448,8 +559,11 @@ function migratePasskeyTables(db: Database): void {
   `);
 
   const columns = db
-    .prepare("PRAGMA table_info(user_passkey_challenges)")
-    .all() as Array<{ name: string; notnull: number }>;
+    .prepare<{ name: string; notnull: number }, SQLQueryBindings[]>(
+      "PRAGMA table_info(user_passkey_challenges)"
+    )
+    .all();
+
   if (columns.find((column) => column.name === "user_id")?.notnull) {
     db.exec(`
       ALTER TABLE user_passkey_challenges
@@ -493,10 +607,16 @@ function migrateLlmUsageOrgScope(db: Database): void {
       ["llm_usage_model_stats", "model_id"],
     ] as const
   ).filter(([table]) => {
-    const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{
-      name: string;
-      pk: number;
-    }>;
+    const columns = db
+      .prepare<
+        {
+          name: string;
+          pk: number;
+        },
+        SQLQueryBindings[]
+      >(`PRAGMA table_info(${table})`)
+      .all();
+
     return (
       columns.length > 0 &&
       !columns.some((column) => column.name === "org_id" && column.pk > 0)
@@ -534,10 +654,13 @@ function migrateLlmUsageOrgScope(db: Database): void {
 
   // Archived organizations count: one of them may be who ran up the old total.
   const orgs = db
-    .prepare("SELECT id FROM organizations LIMIT 2")
-    .all() as Array<{
-    id: string;
-  }>;
+    .prepare<
+      {
+        id: string;
+      },
+      SQLQueryBindings[]
+    >("SELECT id FROM organizations LIMIT 2")
+    .all();
 
   for (const [table, key] of unscoped) {
     if (orgs.length === 1) {
@@ -551,6 +674,7 @@ function migrateLlmUsageOrgScope(db: Database): void {
         FROM ${table}_unscoped
       `).run(orgs[0].id);
     }
+
     db.exec(`DROP TABLE ${table}_unscoped;`);
   }
 }
@@ -598,13 +722,81 @@ function migrateLlmTurnUsageTable(db: Database): void {
   `);
 }
 
+/**
+ * LLM usage per org, per agent (profile), per user (#1626). An empty
+ * `profile_id` or `user_id` is the unattributed group.
+ *
+ * Totals recorded before this table existed carry no agent or user, so they
+ * move in as one unattributed row per org. That keeps the groups summing to the
+ * org total without guessing who ran up the old spend. The copy happens only
+ * when the table is created, so it is not repeated on later opens.
+ */
+function migrateLlmUsageActorStatsTable(db: Database): void {
+  const exists = db
+    .prepare(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'llm_usage_actor_stats'"
+    )
+    .get();
+
+  if (exists) {
+    return;
+  }
+
+  db.exec(`
+    CREATE TABLE llm_usage_actor_stats (
+      org_id TEXT NOT NULL,
+      profile_id TEXT NOT NULL DEFAULT '',
+      user_id TEXT NOT NULL DEFAULT '',
+      request_count INTEGER NOT NULL DEFAULT 0,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      estimated_cost_usd REAL NOT NULL DEFAULT 0,
+      tracked_since TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (org_id, profile_id, user_id)
+    );
+    INSERT INTO llm_usage_actor_stats (
+      org_id, profile_id, user_id, request_count, input_tokens, output_tokens,
+      estimated_cost_usd, tracked_since, updated_at
+    )
+    SELECT org_id, '', '', request_count, input_tokens, output_tokens,
+      estimated_cost_usd, tracked_since, updated_at
+    FROM llm_usage_stats
+    WHERE id = 'default';
+  `);
+}
+
+/**
+ * LLM usage per org, per UTC day, per model, per provider, for the usage
+ * charts. Running totals carry no dates, so this table starts empty: it cannot
+ * say on which day old spend happened.
+ */
+function migrateLlmUsageDailyStatsTable(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS llm_usage_daily_stats (
+      org_id TEXT NOT NULL,
+      day TEXT NOT NULL,
+      model_id TEXT NOT NULL,
+      provider TEXT NOT NULL DEFAULT '',
+      request_count INTEGER NOT NULL DEFAULT 0,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      estimated_cost_usd REAL NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (org_id, day, model_id, provider)
+    );
+  `);
+}
+
 function migrateToolOutputSavingsTable(db: Database): void {
   // The first cut of this table had no `bucket`, and CREATE TABLE IF NOT EXISTS
   // will not add one. It is a counter with no history worth keeping and it has
   // never shipped, so recreating is cheaper and clearer than an ALTER dance.
   const columns = db
-    .prepare("PRAGMA table_info(tool_output_savings)")
-    .all() as Array<{ name: string }>;
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(tool_output_savings)"
+    )
+    .all();
 
   if (
     columns.length > 0 &&
@@ -670,9 +862,15 @@ function migrateOrgTables(db: Database): void {
     CREATE UNIQUE INDEX IF NOT EXISTS org_invites_token_hash_unique ON org_invites (token_hash);
   `);
 
-  const columns = db.prepare("PRAGMA table_info(org_members)").all() as Array<{
-    name: string;
-  }>;
+  const columns = db
+    .prepare<
+      {
+        name: string;
+      },
+      SQLQueryBindings[]
+    >("PRAGMA table_info(org_members)")
+    .all();
+
   const columnNames = new Set(columns.map((column) => column.name));
 
   if (!columnNames.has("user_context")) {
@@ -686,12 +884,21 @@ function migrateOrgTables(db: Database): void {
  * still lack per-org context so getUserContext can stop reading users.
  */
 function migrateLegacyUserContextToOrgMembers(db: Database): void {
-  const usersColumns = db.prepare("PRAGMA table_info(users)").all() as Array<{
-    name: string;
-  }>;
+  const usersColumns = db
+    .prepare<
+      {
+        name: string;
+      },
+      SQLQueryBindings[]
+    >("PRAGMA table_info(users)")
+    .all();
+
   const membersColumns = db
-    .prepare("PRAGMA table_info(org_members)")
-    .all() as Array<{ name: string }>;
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(org_members)"
+    )
+    .all();
+
   const userNames = new Set(usersColumns.map((column) => column.name));
   const memberNames = new Set(membersColumns.map((column) => column.name));
 
@@ -733,9 +940,13 @@ function migrateOrgMemoryProposalsTable(db: Database): void {
   `);
 
   const columns = db
-    .prepare("PRAGMA table_info(org_memory_proposals)")
-    .all() as Array<{ name: string }>;
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(org_memory_proposals)"
+    )
+    .all();
+
   const names = new Set(columns.map((column) => column.name));
+
   if (!names.has("source_document_ids")) {
     db.exec(
       "ALTER TABLE org_memory_proposals ADD COLUMN source_document_ids TEXT;"
@@ -768,15 +979,21 @@ function migrateSkillProposalsTable(db: Database): void {
   `);
 
   const columns = db
-    .prepare("PRAGMA table_info(skill_proposals)")
-    .all() as Array<{ name: string }>;
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(skill_proposals)"
+    )
+    .all();
+
   const names = new Set(columns.map((column) => column.name));
+
   if (!names.has("relative_path")) {
     db.exec("ALTER TABLE skill_proposals ADD COLUMN relative_path TEXT;");
   }
+
   if (!names.has("supporting_files")) {
     db.exec("ALTER TABLE skill_proposals ADD COLUMN supporting_files TEXT;");
   }
+
   if (!names.has("consolidate_loser_skill_names")) {
     db.exec(
       "ALTER TABLE skill_proposals ADD COLUMN consolidate_loser_skill_names TEXT;"
@@ -812,8 +1029,11 @@ function migrateSkillSuggestionsTable(db: Database): void {
 
 function migrateSkillsWriteApprovalColumns(db: Database): void {
   const orgColumns = db
-    .prepare("PRAGMA table_info(organizations)")
-    .all() as Array<{ name: string }>;
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(organizations)"
+    )
+    .all();
+
   if (
     !new Set(orgColumns.map((column) => column.name)).has(
       "skills_write_approval"
@@ -825,8 +1045,11 @@ function migrateSkillsWriteApprovalColumns(db: Database): void {
   }
 
   const profileColumns = db
-    .prepare("PRAGMA table_info(profiles)")
-    .all() as Array<{ name: string }>;
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(profiles)"
+    )
+    .all();
+
   if (
     !new Set(profileColumns.map((column) => column.name)).has(
       "skills_write_approval"
@@ -838,8 +1061,11 @@ function migrateSkillsWriteApprovalColumns(db: Database): void {
 
 function migrateOrganizationAllowedInviteDomains(db: Database): void {
   const columns = db
-    .prepare("PRAGMA table_info(organizations)")
-    .all() as Array<{ name: string }>;
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(organizations)"
+    )
+    .all();
+
   if (!columns.some((column) => column.name === "allowed_invite_domains")) {
     db.exec(
       "ALTER TABLE organizations ADD COLUMN allowed_invite_domains TEXT NOT NULL DEFAULT '[]';"
@@ -848,9 +1074,15 @@ function migrateOrganizationAllowedInviteDomains(db: Database): void {
 }
 
 function migrateAutomationsEnabledColumn(db: Database): void {
-  const columns = db.prepare("PRAGMA table_info(profiles)").all() as Array<{
-    name: string;
-  }>;
+  const columns = db
+    .prepare<
+      {
+        name: string;
+      },
+      SQLQueryBindings[]
+    >("PRAGMA table_info(profiles)")
+    .all();
+
   if (
     !new Set(columns.map((column) => column.name)).has("automations_enabled")
   ) {
@@ -862,8 +1094,11 @@ function migrateAutomationsEnabledColumn(db: Database): void {
 
 function migrateSkillsPostTurnReviewColumns(db: Database): void {
   const orgColumns = db
-    .prepare("PRAGMA table_info(organizations)")
-    .all() as Array<{ name: string }>;
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(organizations)"
+    )
+    .all();
+
   if (
     !new Set(orgColumns.map((column) => column.name)).has(
       "skills_post_turn_review"
@@ -875,8 +1110,11 @@ function migrateSkillsPostTurnReviewColumns(db: Database): void {
   }
 
   const profileColumns = db
-    .prepare("PRAGMA table_info(profiles)")
-    .all() as Array<{ name: string }>;
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(profiles)"
+    )
+    .all();
+
   if (
     !new Set(profileColumns.map((column) => column.name)).has(
       "skills_post_turn_review"
@@ -888,8 +1126,11 @@ function migrateSkillsPostTurnReviewColumns(db: Database): void {
 
 function migrateSkillsCuratorColumns(db: Database): void {
   const orgColumns = db
-    .prepare("PRAGMA table_info(organizations)")
-    .all() as Array<{ name: string }>;
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(organizations)"
+    )
+    .all();
+
   const names = new Set(orgColumns.map((column) => column.name));
 
   if (!names.has("skills_curator_enabled")) {
@@ -919,8 +1160,11 @@ function migrateSkillsCuratorColumns(db: Database): void {
 
 function migrateSkillsCuratorConsolidateColumns(db: Database): void {
   const orgColumns = db
-    .prepare("PRAGMA table_info(organizations)")
-    .all() as Array<{ name: string }>;
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(organizations)"
+    )
+    .all();
+
   if (
     !new Set(orgColumns.map((column) => column.name)).has(
       "skills_curator_consolidate_enabled"
@@ -932,8 +1176,11 @@ function migrateSkillsCuratorConsolidateColumns(db: Database): void {
   }
 
   const profileColumns = db
-    .prepare("PRAGMA table_info(profiles)")
-    .all() as Array<{ name: string }>;
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(profiles)"
+    )
+    .all();
+
   if (
     !new Set(profileColumns.map((column) => column.name)).has(
       "skills_curator_consolidate_enabled"
@@ -947,19 +1194,25 @@ function migrateSkillsCuratorConsolidateColumns(db: Database): void {
 
 function migrateLlmUsageQuotaColumns(db: Database): void {
   const columns = db
-    .prepare("PRAGMA table_info(organizations)")
-    .all() as Array<{ name: string }>;
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(organizations)"
+    )
+    .all();
+
   const names = new Set(columns.map((column) => column.name));
+
   if (!names.has("monthly_llm_turn_limit")) {
     db.exec(
       "ALTER TABLE organizations ADD COLUMN monthly_llm_turn_limit INTEGER NOT NULL DEFAULT 0;"
     );
   }
+
   if (!names.has("monthly_llm_token_limit")) {
     db.exec(
       "ALTER TABLE organizations ADD COLUMN monthly_llm_token_limit INTEGER;"
     );
   }
+
   if (!names.has("monthly_llm_warning_percent")) {
     db.exec(
       "ALTER TABLE organizations ADD COLUMN monthly_llm_warning_percent INTEGER NOT NULL DEFAULT 80;"
@@ -969,22 +1222,46 @@ function migrateLlmUsageQuotaColumns(db: Database): void {
 
 function migrateOrgLlmMonthlyQuotaTable(db: Database): void {
   db.exec(`
-    CREATE TABLE IF NOT EXISTS org_llm_monthly_quota (
+    -- Its counters only ever grew, so every row in it is a false exhaustion.
+    DROP TABLE IF EXISTS org_llm_monthly_quota;
+    CREATE TABLE IF NOT EXISTS org_llm_quota_reservations (
+      id TEXT PRIMARY KEY,
       org_id TEXT NOT NULL,
-      month TEXT NOT NULL,
-      reserved_turns INTEGER NOT NULL DEFAULT 0,
-      reserved_tokens INTEGER NOT NULL DEFAULT 0,
-      updated_at TEXT NOT NULL,
-      PRIMARY KEY (org_id, month),
+      reserved_tokens INTEGER NOT NULL CHECK (reserved_tokens >= 0),
+      created_at TEXT NOT NULL,
       FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE
     );
+    CREATE INDEX IF NOT EXISTS idx_org_llm_quota_reservations_org
+      ON org_llm_quota_reservations(org_id);
+  `);
+}
+
+function migrateOrganizationParent(db: Database): void {
+  const columns = db
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(organizations)"
+    )
+    .all();
+
+  if (!columns.some((column) => column.name === "parent_org_id")) {
+    db.exec(`
+      ALTER TABLE organizations ADD COLUMN parent_org_id TEXT
+        REFERENCES organizations (id) ON DELETE RESTRICT CHECK (parent_org_id <> id);
+    `);
+  }
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS organizations_parent_org_id ON organizations (parent_org_id);
   `);
 }
 
 function migrateOrganizationArchivedAt(db: Database): void {
   const orgColumns = db
-    .prepare("PRAGMA table_info(organizations)")
-    .all() as Array<{ name: string }>;
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(organizations)"
+    )
+    .all();
+
   const names = new Set(orgColumns.map((column) => column.name));
 
   if (!names.has("archived_at")) {
@@ -993,9 +1270,15 @@ function migrateOrganizationArchivedAt(db: Database): void {
 }
 
 function migrateSkillUsageTables(db: Database): void {
-  const skillColumns = db.prepare("PRAGMA table_info(skills)").all() as Array<{
-    name: string;
-  }>;
+  const skillColumns = db
+    .prepare<
+      {
+        name: string;
+      },
+      SQLQueryBindings[]
+    >("PRAGMA table_info(skills)")
+    .all();
+
   if (!new Set(skillColumns.map((column) => column.name)).has("created_by")) {
     db.exec(
       `ALTER TABLE skills ADD COLUMN created_by TEXT NOT NULL DEFAULT 'bundled';`
@@ -1067,10 +1350,11 @@ function assertProfileJoinTarget(
   tableName: string,
   relatedColumn: string
 ): asserts tableName is ProfileJoinTable & string {
-  if (
-    !(tableName in PROFILE_JOIN_TABLE_COLUMNS) ||
-    PROFILE_JOIN_TABLE_COLUMNS[tableName as ProfileJoinTable] !== relatedColumn
-  ) {
+  const expectedColumn = Object.entries(PROFILE_JOIN_TABLE_COLUMNS).find(
+    ([table]) => table === tableName
+  )?.[1];
+
+  if (expectedColumn !== relatedColumn) {
     throw new Error(
       `Unsupported profile join target: ${tableName}.${relatedColumn}`
     );
@@ -1136,8 +1420,11 @@ function restoreGlobalNameUniqueness(db: Database): void {
  */
 function migrateSkillOrgIds(db: Database): void {
   const rows = db
-    .prepare("SELECT id, source_path FROM skills WHERE org_id IS NULL")
-    .all() as { id: string; source_path: string }[];
+    .prepare<{ id: string; source_path: string }, SQLQueryBindings[]>(
+      "SELECT id, source_path FROM skills WHERE org_id IS NULL"
+    )
+    .all();
+
   const update = db.prepare("UPDATE skills SET org_id = ? WHERE id = ?");
 
   for (const row of rows) {
@@ -1173,8 +1460,10 @@ function migrateProfileOrgColumns(db: Database): void {
     migrateProfilesTable(db);
 
     const firstOrg = db
-      .prepare("SELECT id FROM organizations ORDER BY id ASC LIMIT 1")
-      .get() as { id: string } | null;
+      .prepare<{ id: string }, SQLQueryBindings[]>(
+        "SELECT id FROM organizations ORDER BY id ASC LIMIT 1"
+      )
+      .get();
 
     if (firstOrg) {
       db.prepare(`
@@ -1190,12 +1479,12 @@ function migrateProfileOrgColumns(db: Database): void {
     `).run(firstOrg.id);
 
       const defaultProfile = db
-        .prepare(`
+        .prepare<{ id: string }, SQLQueryBindings[]>(`
         SELECT id FROM profiles
         WHERE org_id = ? AND id = 'default'
         LIMIT 1
       `)
-        .get(firstOrg.id) as { id: string } | null;
+        .get(firstOrg.id);
 
       if (defaultProfile) {
         db.prepare(`
@@ -1203,10 +1492,10 @@ function migrateProfileOrgColumns(db: Database): void {
       `).run(defaultProfile.id);
       } else {
         const anyProfile = db
-          .prepare(`
+          .prepare<{ id: string }, SQLQueryBindings[]>(`
           SELECT id FROM profiles WHERE org_id = ? ORDER BY created_at ASC LIMIT 1
         `)
-          .get(firstOrg.id) as { id: string } | null;
+          .get(firstOrg.id);
 
         if (anyProfile) {
           db.prepare(`
@@ -1233,9 +1522,12 @@ function migrateProfileOrgColumns(db: Database): void {
 export function addOrgIdColumnIfMissing(db: Database, tableName: string): void {
   assertTenantOrgIdTable(tableName);
   const quotedTableName = quoteSqliteIdentifier(tableName);
+
   const columns = db
-    .prepare(`PRAGMA table_info(${quotedTableName})`)
-    .all() as Array<{ name: string }>;
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      `PRAGMA table_info(${quotedTableName})`
+    )
+    .all();
 
   if (columns.length === 0) {
     return;
@@ -1268,8 +1560,11 @@ function migrateBrowserSessionsTable(db: Database): void {
   `);
 
   const columns = db
-    .prepare("PRAGMA table_info(browser_sessions)")
-    .all() as Array<{ name: string }>;
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(browser_sessions)"
+    )
+    .all();
+
   const columnNames = new Set(columns.map((column) => column.name));
 
   if (!columnNames.has("active_org_id")) {
@@ -1299,10 +1594,17 @@ const LEGACY_PROFILE_ID_MAP = [
 ] as const;
 
 function migrateLegacyProfileIds(db: Database): void {
-  const rows = db.prepare("SELECT id FROM profiles").all() as Array<{
-    id: string;
-  }>;
+  const rows = db
+    .prepare<
+      {
+        id: string;
+      },
+      SQLQueryBindings[]
+    >("SELECT id FROM profiles")
+    .all();
+
   const existingIds = new Set(rows.map((row) => row.id));
+
   const pending = LEGACY_PROFILE_ID_MAP.filter(([legacyId]) =>
     existingIds.has(legacyId)
   );
@@ -1322,8 +1624,8 @@ function migrateLegacyProfileIds(db: Database): void {
     }
 
     const violations = db
-      .prepare("PRAGMA foreign_key_check")
-      .all() as Array<unknown>;
+      .prepare<unknown, SQLQueryBindings[]>("PRAGMA foreign_key_check")
+      .all();
 
     if (violations.length > 0) {
       throw new Error(
@@ -1342,16 +1644,20 @@ function migrateLegacyProfileIds(db: Database): void {
 
 export function migrateCodingDelegationSkillName(db: Database): void {
   const legacyRows = db
-    .prepare("SELECT id, source_path FROM skills WHERE name = ?")
-    .all("coding-delegation") as Array<{ id: string; source_path: string }>;
+    .prepare<{ id: string; source_path: string }, SQLQueryBindings[]>(
+      "SELECT id, source_path FROM skills WHERE name = ?"
+    )
+    .all("coding-delegation");
 
   if (legacyRows.length === 0) {
     return;
   }
 
   const canonical = db
-    .prepare("SELECT id FROM skills WHERE name = ?")
-    .get("coding-agent") as { id: string } | null;
+    .prepare<{ id: string }, SQLQueryBindings[]>(
+      "SELECT id FROM skills WHERE name = ?"
+    )
+    .get("coding-agent");
 
   if (canonical) {
     const reassignProfileSkill = db.prepare(`
@@ -1365,9 +1671,11 @@ export function migrateCodingDelegationSkillName(db: Database): void {
             AND existing.skill_id = ?
         )
     `);
+
     const deleteProfileSkill = db.prepare(
       "DELETE FROM profile_skills WHERE skill_id = ?"
     );
+
     const deleteSkill = db.prepare("DELETE FROM skills WHERE id = ?");
 
     for (const row of legacyRows) {
@@ -1380,6 +1688,7 @@ export function migrateCodingDelegationSkillName(db: Database): void {
   }
 
   const now = new Date().toISOString();
+
   const update = db.prepare(`
     UPDATE skills
     SET name = ?, source_path = ?, updated_at = ?
@@ -1467,8 +1776,8 @@ function moveProfileReferences(
 
 export function moveProfileJoinReferences(
   db: Database,
-  tableName: "profile_tools" | "profile_mcp_servers" | "profile_skills",
-  relatedColumn: "tool_id" | "server_id" | "skill_id",
+  tableName: string,
+  relatedColumn: string,
   legacyId: string,
   canonicalId: string
 ): void {
@@ -1488,9 +1797,15 @@ export function moveProfileJoinReferences(
 }
 
 function migrateSessionsTable(db: Database): void {
-  const columns = db.prepare("PRAGMA table_info(sessions)").all() as Array<{
-    name: string;
-  }>;
+  const columns = db
+    .prepare<
+      {
+        name: string;
+      },
+      SQLQueryBindings[]
+    >("PRAGMA table_info(sessions)")
+    .all();
+
   const columnNames = new Set(columns.map((column) => column.name));
 
   if (!columnNames.has("title")) {
@@ -1540,6 +1855,7 @@ function migrateSessionsTable(db: Database): void {
       WHERE updated_at IS NULL;
     `);
   }
+
   if (!columnNames.has("pinned")) {
     db.exec(`
       ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
@@ -1561,8 +1877,11 @@ function migrateWorkspaceSettingsTable(db: Database): void {
   `);
 
   const columns = db
-    .prepare("PRAGMA table_info(workspace_settings)")
-    .all() as Array<{ name: string }>;
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(workspace_settings)"
+    )
+    .all();
+
   const columnNames = new Set(columns.map((column) => column.name));
 
   if (!columnNames.has("transcription_model")) {
@@ -1613,8 +1932,11 @@ function migrateWorkspaceSettingsTable(db: Database): void {
 
 function migrateAutomationRunsTable(db: Database): void {
   const columns = db
-    .prepare("PRAGMA table_info(automation_runs)")
-    .all() as Array<{ name: string }>;
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(automation_runs)"
+    )
+    .all();
+
   const columnNames = new Set(columns.map((column) => column.name));
 
   if (!columnNames.has("progress")) {
@@ -1632,6 +1954,29 @@ function migrateAutomationRunsTable(db: Database): void {
       ALTER TABLE automation_runs ADD COLUMN delivery_error TEXT;
     `);
   }
+
+  if (!columnNames.has("resume_count")) {
+    db.exec(`
+      ALTER TABLE automation_runs ADD COLUMN resume_count INTEGER NOT NULL DEFAULT 0;
+    `);
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_run_steps (
+      run_id TEXT NOT NULL,
+      tool_call_id TEXT NOT NULL,
+      tool_group_id TEXT,
+      tool_name TEXT NOT NULL,
+      args TEXT NOT NULL,
+      result TEXT,
+      status TEXT NOT NULL,
+      started_at TEXT NOT NULL,
+      completed_at TEXT,
+      position INTEGER NOT NULL,
+      PRIMARY KEY (run_id, tool_call_id),
+      FOREIGN KEY (run_id) REFERENCES automation_runs (id) ON DELETE CASCADE
+    );
+  `);
 }
 
 function migrateAutomationRunReadStateTable(db: Database): void {
@@ -1721,9 +2066,14 @@ function migrateAttachmentsTable(db: Database): void {
     );
   `);
 
-  const columns = db.prepare("PRAGMA table_info(attachments)").all() as Array<{
-    name: string;
-  }>;
+  const columns = db
+    .prepare<
+      {
+        name: string;
+      },
+      SQLQueryBindings[]
+    >("PRAGMA table_info(attachments)")
+    .all();
 
   // A cognito session has no `sessions` row to hang the foreign key on, so its
   // attachments carry a null session_id. This column is what a restart sweep
@@ -1766,7 +2116,20 @@ function migrateComposioUserConnections(db: Database): void {
   `);
 
   const legacyToolkits = db
-    .prepare(
+    .prepare<
+      {
+        id: string;
+        org_id: string;
+        status: string;
+        connected_account_id: string | null;
+        session_id_enc: string | null;
+        oauth_state_hash: string | null;
+        last_error: string | null;
+        created_at: string;
+        updated_at: string;
+      },
+      SQLQueryBindings[]
+    >(
       `
       SELECT
         id,
@@ -1785,28 +2148,25 @@ function migrateComposioUserConnections(db: Database): void {
          OR session_id_enc IS NOT NULL
     `
     )
-    .all() as Array<{
-    id: string;
-    org_id: string;
-    status: string;
-    connected_account_id: string | null;
-    session_id_enc: string | null;
-    oauth_state_hash: string | null;
-    last_error: string | null;
-    created_at: string;
-    updated_at: string;
-  }>;
+    .all();
 
-  const findAdminStmt = db.prepare(`
+  const findAdminStmt = db.prepare<
+    {
+      user_id: string;
+    },
+    SQLQueryBindings[]
+  >(`
     SELECT user_id
     FROM org_members
     WHERE org_id = ? AND role = 'admin'
     ORDER BY created_at ASC
     LIMIT 1
   `);
+
   const existingConnectionStmt = db.prepare(`
     SELECT id FROM composio_user_connections WHERE toolkit_id = ? LIMIT 1
   `);
+
   const insertConnectionStmt = db.prepare(`
     INSERT INTO composio_user_connections (
       id,
@@ -1822,6 +2182,7 @@ function migrateComposioUserConnections(db: Database): void {
       updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
+
   const normalizeToolkitStmt = db.prepare(`
     UPDATE composio_toolkits
     SET
@@ -1841,9 +2202,8 @@ function migrateComposioUserConnections(db: Database): void {
       continue;
     }
 
-    const adminRow = findAdminStmt.get(toolkit.org_id) as {
-      user_id: string;
-    } | null;
+    const adminRow = findAdminStmt.get(toolkit.org_id);
+
     if (!adminRow?.user_id) {
       normalizeToolkitStmt.run(now, toolkit.id);
       continue;
@@ -1892,6 +2252,26 @@ function migrateProfileChangeEventsTable(db: Database): void {
 
     CREATE INDEX IF NOT EXISTS profile_change_events_profile_created
       ON profile_change_events (profile_id, created_at DESC);
+  `);
+}
+
+function migrateSkillVersionsTable(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS skill_versions (
+      id TEXT PRIMARY KEY NOT NULL,
+      skill_id TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      content TEXT NOT NULL,
+      note TEXT,
+      actor_user_id TEXT,
+      source TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_version
+      ON skill_versions (skill_id, version);
   `);
 }
 
@@ -1956,8 +2336,10 @@ function addNullableTextColumnIfMissing(
   columnName: string
 ): void {
   const columns = db
-    .prepare(`PRAGMA table_info(${quoteSqliteIdentifier(tableName)})`)
-    .all() as Array<{ name: string }>;
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      `PRAGMA table_info(${quoteSqliteIdentifier(tableName)})`
+    )
+    .all();
 
   if (columns.length === 0) {
     return;

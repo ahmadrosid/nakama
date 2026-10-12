@@ -22,6 +22,7 @@ export async function maybeSendRequestedTelegramArtifactAttachment(input: {
   const artifact = getMostRecentDeliverableArtifact(
     input.sessionStore.getDeliverableArtifacts(input.conversationKey)
   );
+
   if (!artifact) {
     return;
   }
@@ -30,6 +31,7 @@ export async function maybeSendRequestedTelegramArtifactAttachment(input: {
     input.profileId,
     artifact.path
   );
+
   const result = await sendTelegramArtifactDocument(input.ctx, {
     bytes: new Uint8Array(data),
     filename: artifact.filename,

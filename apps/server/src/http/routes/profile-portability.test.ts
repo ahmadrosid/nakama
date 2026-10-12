@@ -18,6 +18,7 @@ import { createMinimalHonoApp } from "../test-app-helpers";
 import {
   createOrgAdminSession,
   loginUserSession,
+  type TestBrowserSession,
 } from "../test-session-helpers";
 
 setupTestConfigDir("nakama-profile-pack-routes-");
@@ -27,14 +28,14 @@ const BASE = "http://localhost:4310";
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const profileService = new ProfileService(databaseAdapter);
+
   return {
     ...createMinimalHonoApp({
       agent: {
-        createProfile: (orgId: string, request: unknown) =>
-          profileService.createProfile(
-            orgId,
-            request as { name: string; isSuper?: boolean }
-          ),
+        createProfile: (
+          orgId: string,
+          request: Parameters<ProfileService["createProfile"]>[1]
+        ) => profileService.createProfile(orgId, request),
         listProfiles: async (orgId: string) => ({
           profiles: await databaseAdapter.listProfilesForOrg(orgId),
         }),
@@ -47,10 +48,7 @@ function createApp() {
 }
 
 function jsonHeaders(
-  session: {
-    headers: (extra?: Record<string, string>, orgId?: string) => Headers;
-    csrfToken: string;
-  },
+  session: Pick<TestBrowserSession, "headers" | "csrfToken">,
   orgId: string
 ) {
   return session.headers(
@@ -65,6 +63,7 @@ function jsonHeaders(
 describe("profile pack routes", () => {
   test("org admin can export, preview, and import", async () => {
     const { app, authService, databaseAdapter, profileService } = createApp();
+
     const { orgId, adminSession } = await createOrgAdminSession(
       app,
       authService,
@@ -72,10 +71,12 @@ describe("profile pack routes", () => {
       "pack-export",
       "pack-admin@example.com"
     );
+
     const created = await profileService.createProfile(orgId, {
       name: "Packable Bot",
       systemPrompt: "help",
     });
+
     await databaseAdapter.upsertTool({
       createdAt: new Date().toISOString(),
       description: "Private custom tool",
@@ -95,8 +96,10 @@ describe("profile pack routes", () => {
         headers: adminSession.headers({}, orgId),
       })
     );
+
     expect(exportResponse.status).toBe(200);
     expect(exportResponse.headers.get("content-type")).toBe("application/zip");
+
     const data = Buffer.from(await exportResponse.arrayBuffer()).toString(
       "base64"
     );
@@ -108,13 +111,18 @@ describe("profile pack routes", () => {
         method: "POST",
       })
     );
+
     expect(previewResponse.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const preview = (await previewResponse.json()) as {
       plannedName: string;
     };
+
     expect(preview.plannedName).toBe("Packable Bot");
 
     const before = (await databaseAdapter.listProfilesForOrg(orgId)).length;
+
     const importResponse = await app.fetch(
       new Request(`${BASE}/v1/profiles/pack/import`, {
         body: JSON.stringify({
@@ -126,10 +134,148 @@ describe("profile pack routes", () => {
         method: "POST",
       })
     );
+
     expect(importResponse.status).toBe(200);
     expect(await databaseAdapter.listProfilesForOrg(orgId)).toHaveLength(
       before + 1
     );
+  }, 30_000);
+
+  test("org admin import does not grant another org's MCP server", async () => {
+    const { app, authService, databaseAdapter, profileService } = createApp();
+
+    const owner = await createOrgAdminSession(
+      app,
+      authService,
+      databaseAdapter,
+      "pack-mcp-owner",
+      "pack-mcp-owner@example.com"
+    );
+
+    const createSecondOrg = await app.fetch(
+      new Request(`${BASE}/v1/platform/orgs`, {
+        body: JSON.stringify({
+          admin: {
+            email: "pack-mcp-attacker@example.com",
+            name: "Mallory Admin",
+            phone: "+628123456780",
+          },
+          name: "Mallory",
+          slug: "pack-mcp-attacker",
+        }),
+        headers: owner.platformSession.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": owner.platformSession.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    expect(createSecondOrg.status).toBe(201);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
+    const secondOrg = (await createSecondOrg.json()) as {
+      adminMember: { temporaryPassword: string };
+      organization: { id: string };
+    };
+
+    const attacker = {
+      adminSession: await loginUserSession(
+        app,
+        "pack-mcp-attacker@example.com",
+        secondOrg.adminMember.temporaryPassword,
+        secondOrg.organization.id
+      ),
+      orgId: secondOrg.organization.id,
+    };
+
+    const host = await profileService.createProfile(owner.orgId, {
+      name: "Ops Bot",
+    });
+
+    await databaseAdapter.upsertMcpServer({
+      cachedTools: [{ description: "wipe", inputSchema: {}, name: "wipe" }],
+      config: { headers: { authorization: "Bearer prod" } },
+      createdAt: new Date().toISOString(),
+      enabled: true,
+      id: "mcp_prod_admin",
+      lastError: null,
+      name: "Production Admin MCP",
+      status: "connected",
+      transport: "http",
+      updatedAt: new Date().toISOString(),
+    });
+    await databaseAdapter.assignMcpServerToProfile(
+      host.profile.id,
+      "mcp_prod_admin"
+    );
+
+    const exportResponse = await app.fetch(
+      new Request(`${BASE}/v1/profiles/${host.profile.id}/pack/export`, {
+        headers: owner.adminSession.headers({}, owner.orgId),
+      })
+    );
+
+    expect(exportResponse.status).toBe(200);
+
+    const data = Buffer.from(await exportResponse.arrayBuffer()).toString(
+      "base64"
+    );
+
+    const previewResponse = await app.fetch(
+      new Request(`${BASE}/v1/profiles/pack/import/preview`, {
+        body: JSON.stringify({ data }),
+        headers: attacker.adminSession.headers(
+          {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": attacker.adminSession.csrfToken,
+          },
+          attacker.orgId
+        ),
+        method: "POST",
+      })
+    );
+
+    expect(previewResponse.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
+    const preview = (await previewResponse.json()) as {
+      skippedAssignments: Array<{ path: string; reason: string }>;
+    };
+
+    expect(preview.skippedAssignments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "MCP server:Production Admin MCP",
+          reason: expect.stringContaining("not available to this organization"),
+        }),
+      ])
+    );
+
+    const importResponse = await app.fetch(
+      new Request(`${BASE}/v1/profiles/pack/import`, {
+        body: JSON.stringify({
+          confirm: true,
+          data,
+          name: "Stolen MCP Bot",
+        }),
+        headers: attacker.adminSession.headers(
+          {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": attacker.adminSession.csrfToken,
+          },
+          attacker.orgId
+        ),
+        method: "POST",
+      })
+    );
+
+    expect(importResponse.status).toBe(200);
+    // SAFETY: This test controls the fixture shape at this boundary.
+    const imported = (await importResponse.json()) as { profileId: string };
+    expect(
+      await databaseAdapter.listMcpServersForProfile(imported.profileId)
+    ).toEqual([]);
   }, 30_000);
 
   test.each([
@@ -137,6 +283,7 @@ describe("profile pack routes", () => {
     ["import", "/v1/profiles/pack/import"],
   ])("rejects expansion bombs during %s", async (_operation, path) => {
     const { app, authService, databaseAdapter } = createApp();
+
     const { orgId, adminSession } = await createOrgAdminSession(
       app,
       authService,
@@ -144,8 +291,10 @@ describe("profile pack routes", () => {
       "pack-limits",
       "pack-limits@example.com"
     );
+
     const totalEntryCount =
       Math.ceil(MAX_IMPORT_UNCOMPRESSED_BYTES / MAX_IMPORT_ENTRY_BYTES) + 1;
+
     const cases = [
       {
         archive: buildZipWithEntries([
@@ -192,6 +341,8 @@ describe("profile pack routes", () => {
           method: "POST",
         })
       );
+
+      // SAFETY: This test controls the fixture shape at this boundary.
       const body = (await response.json()) as { error: string };
 
       expect({ limit, status: response.status }).toEqual({
@@ -209,6 +360,7 @@ describe("profile pack routes", () => {
     "rejects a pack carrying a skill-local tool.js during %s",
     async (_operation, endpoint) => {
       const { app, authService, databaseAdapter, profileService } = createApp();
+
       const { orgId, adminSession } = await createOrgAdminSession(
         app,
         authService,
@@ -216,14 +368,17 @@ describe("profile pack routes", () => {
         "pack-skill-tool",
         "pack-skill-tool@example.com"
       );
+
       const created = await profileService.createProfile(orgId, {
         name: "Crafted Bot",
       });
+
       const skillDir = path.join(
         getProfileSoulDir(orgId, created.profile.id),
         "skills",
         "pwn"
       );
+
       await mkdir(skillDir, { recursive: true });
       await writeFile(
         path.join(skillDir, "SKILL.md"),
@@ -236,6 +391,7 @@ describe("profile pack routes", () => {
         orgId,
         created.profile.id
       );
+
       const entries = unzipSync(new Uint8Array(exported.data));
       entries["skills/pwn/tool.js"] = new Uint8Array(
         Buffer.from(
@@ -246,6 +402,7 @@ describe("profile pack routes", () => {
       const archive = Buffer.from(zipSync(entries)).toString("base64");
 
       const before = (await databaseAdapter.listProfilesForOrg(orgId)).length;
+
       const response = await app.fetch(
         new Request(`${BASE}${endpoint}`, {
           body: JSON.stringify({ confirm: true, data: archive }),
@@ -253,6 +410,8 @@ describe("profile pack routes", () => {
           method: "POST",
         })
       );
+
+      // SAFETY: This test controls the fixture shape at this boundary.
       const body = (await response.json()) as { error: string };
 
       expect(response.status).toBe(400);
@@ -269,6 +428,7 @@ describe("profile pack routes", () => {
 
   test("member is forbidden; platform admin who is an org member can export", async () => {
     const { app, authService, databaseAdapter, profileService } = createApp();
+
     const { orgId, platformSession } = await createOrgAdminSession(
       app,
       authService,
@@ -276,6 +436,7 @@ describe("profile pack routes", () => {
       "pack-auth",
       "pack-owner@example.com"
     );
+
     const created = await profileService.createProfile(orgId, {
       name: "Auth Bot",
     });
@@ -294,6 +455,7 @@ describe("profile pack routes", () => {
       role: "member",
       userId: "user_pack_member",
     });
+
     const member = await loginUserSession(
       app,
       "pack-member@example.com",
@@ -325,6 +487,7 @@ describe("profile pack routes", () => {
     const platformUser = await databaseAdapter.getUserByEmail(
       "platform@example.com"
     );
+
     await databaseAdapter.upsertOrgMember({
       createdAt: now,
       orgId,
@@ -351,11 +514,13 @@ describe("profile pack routes", () => {
       created.profile.id,
       "tool_platform_portable"
     );
+
     const platformExport = await app.fetch(
       new Request(`${BASE}/v1/profiles/${created.profile.id}/pack/export`, {
         headers: platformSession.headers({}, orgId),
       })
     );
+
     expect(platformExport.status).toBe(200);
     expect(platformExport.headers.get("content-type")).toBe("application/zip");
   }, 30_000);

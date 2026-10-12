@@ -25,9 +25,11 @@ function toStoredOverride(value: boolean | null | undefined): boolean | null {
   if (value === true) {
     return true;
   }
+
   if (value === false) {
     return false;
   }
+
   return null;
 }
 
@@ -173,17 +175,24 @@ function useProfileBooleanOverride(
 ) {
   const { activeOrg } = useAuth();
   const updateMutation = useUpdateProfileMutation();
+
   const [override, setOverride] = useState<boolean | null>(() =>
     toStoredOverride(profile[field])
   );
+
   const busy = updateMutation.isPending;
   const orgOn = activeOrg?.[field] === true;
   const checked = resolveProfileOrgBooleanOverride(override, orgOn);
   const overridden = override !== null;
 
   async function persist(next: boolean | null) {
+    if (profile.sharedAgent || activeOrg?.role !== "admin") {
+      return;
+    }
+
     const previous = override;
     setOverride(next);
+
     try {
       await updateMutation.mutateAsync({
         input: { [field]: next },
@@ -201,6 +210,7 @@ function useProfileBooleanOverride(
     checked,
     overridden,
     persist,
+    readOnly: Boolean(profile.sharedAgent),
     role: activeOrg?.role,
   };
 }
@@ -225,7 +235,7 @@ function OrgSettingsProfileOverrideSwitch({
       }
       busy={state.busy}
       checked={state.checked}
-      disabled={disabled}
+      disabled={disabled || state.readOnly}
       label={profile.name}
       onCheckedChange={(next) => {
         void state.persist(next);
@@ -267,7 +277,7 @@ function ProfileOrgBooleanOverrideFieldBody({
       busy={state.busy}
       checked={state.checked}
       description={description}
-      disabled={disabled}
+      disabled={disabled || state.readOnly}
       id={id}
       label={label}
       onCheckedChange={(next) => {

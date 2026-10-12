@@ -83,6 +83,7 @@ function emailSettingsReducer(
       const { settings, userEmail } = action;
       const fallbackEmail = userEmail?.trim() || "";
       const username = settings.username ?? fallbackEmail;
+
       return {
         ...state,
         from: settings.from ?? username,
@@ -97,6 +98,7 @@ function emailSettingsReducer(
         username,
       };
     }
+
     case "patch":
       return { ...state, ...action.values };
     case "toggle-show-password":
@@ -114,6 +116,7 @@ export function EmailSettingsDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const { user } = useAuth();
+
   const {
     data: settings,
     isLoading,
@@ -123,8 +126,10 @@ export function EmailSettingsDialog({
     ...emailSettingsQueryOptions,
     enabled: open,
   });
+
   const saveMutation = useSaveEmailSettings();
   const testMutation = useSendEmailTest();
+
   const [state, dispatch] = useReducer(
     emailSettingsReducer,
     initialEmailSettingsState
@@ -139,6 +144,7 @@ export function EmailSettingsDialog({
   useEffect(() => {
     if (!open) {
       dispatch({ type: "clear-on-close" });
+
       return;
     }
 
@@ -166,8 +172,13 @@ export function EmailSettingsDialog({
       smtpPort: Number(state.smtpPort),
       smtpSecure: state.smtpSecure,
       username: state.username.trim(),
-      ...(state.password.trim() ? { password: state.password.trim() } : {}),
     };
+
+    const password = state.password.trim();
+
+    if (password) {
+      request.password = password;
+    }
 
     saveMutation.mutate(request, {
       onError: (err) => {
@@ -334,6 +345,7 @@ function EmailSettingsSecretAction({
   if (source !== "settings" && !(source === "missing" && savedAvailable)) {
     return null;
   }
+
   return (
     <div className="px-4 pb-4">
       <Button

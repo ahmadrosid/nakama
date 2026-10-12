@@ -48,16 +48,19 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
   const { navigateToNewChat } = useAppNavigation();
   const { user, activeOrg } = useAuth();
   const canConfigureEmail = user?.isPlatformAdmin === true;
+
   const canUsePlayground = canUseToolPlayground(
     user?.isPlatformAdmin === true,
     activeOrg?.role
   );
+
   const { data: tools = [], isLoading, error } = useToolsQuery();
   const { data: profiles = [] } = useProfilesQuery();
   const superBotProfile = findSuperBotProfile(profiles);
   const deleteToolMutation = useDeleteToolMutation();
   const [actionError, setActionError] = useState<string | null>(null);
   const [emailConfigOpen, setEmailConfigOpen] = useState(false);
+
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string;
     name: string;
@@ -72,6 +75,7 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
   function goToCreateTool() {
     if (!superBotProfile) {
       setActionError("No super bot profile exists in this organization.");
+
       return;
     }
 
@@ -250,6 +254,7 @@ function ToolListSection({
 
   const filteredTools = useMemo(() => {
     const needle = trimmedQuery.toLowerCase();
+
     if (!needle) {
       return tools;
     }
@@ -257,12 +262,14 @@ function ToolListSection({
     return tools.filter((tool) => {
       const haystack =
         `${tool.id} ${tool.name} ${tool.description}`.toLowerCase();
+
       return haystack.includes(needle);
     });
   }, [tools, trimmedQuery]);
 
   const pluginGroups = new Map<string, ToolDetail[]>();
   const standaloneTools: ToolDetail[] = [];
+
   for (const tool of filteredTools) {
     if (tool.pluginId) {
       const group = pluginGroups.get(tool.pluginId) ?? [];
@@ -385,6 +392,7 @@ function PluginToolGroup({
 }) {
   const Icon = pluginIcon(pluginId);
   const label = pluginId === "supermemory" ? "Supermemory" : pluginId;
+
   return (
     <li>
       <details open={searching}>

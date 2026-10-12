@@ -11,6 +11,7 @@ describe("createChatLock", () => {
       await Bun.sleep(30);
       order.push(2);
     });
+
     const second = lock.withLock("chat:a", async () => {
       order.push(3);
     });
@@ -22,9 +23,11 @@ describe("createChatLock", () => {
   test("rejected predecessor does not block or cause unhandledRejection", async () => {
     const lock = createChatLock();
     const rejections: unknown[] = [];
-    const onUnhandled = (reason: unknown) => {
+
+    const onUnhandled = (reason: Error) => {
       rejections.push(reason);
     };
+
     process.on("unhandledRejection", onUnhandled);
 
     try {
@@ -48,12 +51,15 @@ describe("createChatLock", () => {
   test("waitMs timeout proceeds concurrent with wedged predecessor", async () => {
     const lock = createChatLock({ waitMs: 25 });
     let releaseWedge!: () => void;
+
     const wedge = new Promise<void>((resolve) => {
       releaseWedge = resolve;
     });
+
     lock.seedForTests("chat:wedge", wedge);
 
     const started: number[] = [];
+
     const running = lock.withLock("chat:wedge", async () => {
       started.push(Date.now());
       await Bun.sleep(10);

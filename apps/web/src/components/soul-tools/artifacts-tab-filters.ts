@@ -85,6 +85,7 @@ export function availableArtifactTypeFilters(
   artifacts: ArtifactFile[]
 ): ArtifactTypeFilter[] {
   const present = new Set(artifacts.map(classifyArtifactType));
+
   return ARTIFACT_TYPE_FILTERS.filter(
     (filter) => filter === "all" || present.has(filter)
   );

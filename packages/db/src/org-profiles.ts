@@ -13,7 +13,11 @@ import {
 import { SUPER_BOT_SYSTEM_PROMPT } from "./constants";
 import type { DatabaseAdapter, StoredProfileRecord } from "./types";
 
-const DEFAULT_BUILTIN_TOOL_IDS = Object.values(BUILTIN_TOOL_IDS);
+// The mailbox is one config for the whole install, so email is opt-in. This
+// list is re-applied on every boot and would hand it back after an unassign.
+const DEFAULT_BUILTIN_TOOL_IDS = Object.values(BUILTIN_TOOL_IDS).filter(
+  (toolId) => toolId !== BUILTIN_TOOL_IDS.email
+);
 
 export async function ensureProfileDefaultBuiltinTools(
   db: DatabaseAdapter,
@@ -24,6 +28,7 @@ export async function ensureProfileDefaultBuiltinTools(
     if (existingProfile && toolId === BUILTIN_TOOL_IDS.list_artifacts) {
       continue;
     }
+
     await db.assignToolToProfile(profileId, toolId);
   }
 }
@@ -73,10 +78,12 @@ export async function seedOrgDefaultProfile(
   if (existing) {
     await ensureProfileDefaultBuiltinTools(db, existing.id, true);
     await ensureProfileDefaultBundledSkills(db, existing.id);
+
     return existing;
   }
 
   const now = new Date().toISOString();
+
   const profile: StoredProfileRecord = {
     createdAt: now,
     id: nanoid(),
@@ -115,10 +122,12 @@ export async function seedOrgSuperBotProfile(
     await ensureProfileSuperBotBundledSkills(db, existing.id);
     await ensureSuperBotBashTool(db, existing.id);
     await ensureSuperBotSessionTools(db, existing.id);
+
     return existing;
   }
 
   const now = new Date().toISOString();
+
   const profile: StoredProfileRecord = {
     createdAt: now,
     id: nanoid(),
@@ -198,6 +207,7 @@ export async function ensureSessionToolDefinitions(
   db: DatabaseAdapter
 ): Promise<void> {
   const now = new Date().toISOString();
+
   const definitions = [
     {
       description:

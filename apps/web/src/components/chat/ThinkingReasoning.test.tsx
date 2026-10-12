@@ -1,11 +1,13 @@
 import { expect, test } from "bun:test";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { AssistantTurnSegmentView } from "./assistant-tool-group";
 import { ThinkingReasoning } from "./ThinkingReasoning";
 
 test("activity opens when tools arrive and keeps the user's later choice", async () => {
   const container = document.createElement("div");
   const root = createRoot(container);
+
   const render = (toolCount: number) => (
     <ThinkingReasoning
       isThinkingStreaming={false}
@@ -19,9 +21,11 @@ test("activity opens when tools arrive and keeps the user's later choice", async
 
   try {
     await act(async () => root.render(render(0)));
+
     const toggle = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Toggle activity"]'
     );
+
     expect(toggle?.getAttribute("aria-expanded")).toBe("false");
 
     await act(async () => toggle?.click());
@@ -40,3 +44,65 @@ test("activity opens when tools arrive and keeps the user's later choice", async
     await act(async () => root.unmount());
   }
 });
+
+for (const withThinking of [false, true]) {
+  test(`tool activity follows streaming with reasoning ${withThinking}`, async () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    const render = (active: boolean) => (
+      <AssistantTurnSegmentView
+        segment={{
+          active,
+          kind: "work",
+          thinking: withThinking
+            ? {
+                content: "",
+                id: "thinking",
+                role: "assistant",
+                thinking: "Planning the work",
+              }
+            : undefined,
+          tools: [
+            {
+              content: "",
+              id: "tool",
+              role: "tool",
+              tool: "read_file",
+              toolStatus: active ? "running" : "done",
+            },
+          ],
+        }}
+      />
+    );
+
+    const toggle = () =>
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Toggle activity"]'
+      );
+
+    try {
+      await act(async () => root.render(render(false)));
+      expect(toggle()?.getAttribute("aria-expanded")).toBe("false");
+
+      await act(async () => root.render(render(true)));
+      expect(toggle()?.getAttribute("aria-expanded")).toBe("true");
+
+      await act(async () => toggle()?.click());
+      await act(async () => root.render(render(true)));
+      expect(toggle()?.getAttribute("aria-expanded")).toBe("false");
+
+      await act(async () => toggle()?.click());
+      expect(toggle()?.getAttribute("aria-expanded")).toBe("true");
+
+      await act(async () => root.render(render(false)));
+      expect(toggle()?.getAttribute("aria-expanded")).toBe("false");
+
+      await act(async () => toggle()?.click());
+      await act(async () => root.render(render(false)));
+      expect(toggle()?.getAttribute("aria-expanded")).toBe("true");
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+}

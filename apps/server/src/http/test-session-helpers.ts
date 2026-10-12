@@ -7,13 +7,16 @@ import {
   createPlatformAdminUser,
   withOrgId,
 } from "./test-org-helpers";
+import type { HonoApp } from "./types";
 
-export type AppFetch = { fetch: typeof fetch };
+export type AppFetch = Pick<HonoApp, "fetch">;
 
 export function extractSetCookies(response: Response): string[] {
+  // SAFETY: Bun Headers provides getSetCookie; the fallback supports older runtimes.
   const headers = response.headers as Headers & {
     getSetCookie?: () => string[];
   };
+
   return (
     headers.getSetCookie?.() ??
     (response.headers.get("set-cookie")
@@ -24,6 +27,7 @@ export function extractSetCookies(response: Response): string[] {
 
 export function cookieValue(setCookies: string[], name: string): string {
   const cookie = setCookies.find((entry) => entry.startsWith(`${name}=`));
+
   if (!cookie) {
     throw new Error(`Missing cookie: ${name}`);
   }
@@ -52,6 +56,14 @@ export type TestBrowserSession = {
 
 export function browserSessionFromResponse(
   response: Response,
+  orgId: string
+): TestBrowserSession & { orgId: string };
+export function browserSessionFromResponse(
+  response: Response,
+  orgId?: string
+): TestBrowserSession;
+export function browserSessionFromResponse(
+  response: Response,
   orgId?: string
 ): TestBrowserSession {
   const setCookies = extractSetCookies(response);
@@ -64,6 +76,7 @@ export function browserSessionFromResponse(
     headers(extra = {}, orgIdOverride?: string) {
       const base = { Cookie: cookieHeader, ...extra };
       const resolvedOrgId = orgIdOverride ?? orgId;
+
       return resolvedOrgId ? withOrgId(base, resolvedOrgId) : base;
     },
     orgId,
@@ -77,7 +90,7 @@ export async function setupFreshInstallSession(
   databaseAdapter: DatabaseAdapter,
   email = "admin@example.com",
   role: OrgRole = "admin"
-): Promise<TestBrowserSession> {
+): Promise<TestBrowserSession & { orgId: string }> {
   const response = await app.fetch(
     new Request("http://localhost:4310/v1/auth/setup", {
       body: JSON.stringify(buildSetupAuthBody(email)),
@@ -90,11 +103,13 @@ export async function setupFreshInstallSession(
     throw new Error(`Failed to create browser session: ${response.status}`);
   }
 
+  // SAFETY: The successful setup response includes the active organization id.
   const setupBody = (await response.json()) as { activeOrgId: string };
   const orgId = setupBody.activeOrgId;
 
   if (role !== "admin") {
     const user = await databaseAdapter.getUserByEmail(email);
+
     if (!user) {
       throw new Error(`User not found: ${email}`);
     }
@@ -128,6 +143,7 @@ export async function loginPlatformAdminSession(
   );
 
   expect(response.status).toBe(200);
+
   return browserSessionFromResponse(response);
 }
 
@@ -146,6 +162,7 @@ export async function loginUserSession(
   );
 
   expect(response.status).toBe(200);
+
   return browserSessionFromResponse(response, orgId);
 }
 
@@ -232,6 +249,7 @@ export async function createOrgAdminSession(
     authService,
     databaseAdapter
   );
+
   const createResponse = await app.fetch(
     new Request("http://localhost:4310/v1/platform/orgs", {
       body: JSON.stringify({
@@ -252,6 +270,8 @@ export async function createOrgAdminSession(
   );
 
   expect(createResponse.status).toBe(201);
+
+  // SAFETY: The successful create response includes its organization and admin member.
   const created = (await createResponse.json()) as {
     organization: { id: string };
     adminMember: { temporaryPassword: string };

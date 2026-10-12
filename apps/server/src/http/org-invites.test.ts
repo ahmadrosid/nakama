@@ -22,7 +22,9 @@ describe("direct org member provisioning", () => {
         method: "PATCH",
       })
     );
+
     expect(update.status).toBe(200);
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     expect(
       (
         (await update.json()) as {
@@ -36,7 +38,9 @@ describe("direct org member provisioning", () => {
         headers: session.headers(),
       })
     );
+
     expect(list.status).toBe(200);
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     expect(
       (
         (await list.json()) as {
@@ -52,6 +56,7 @@ describe("direct org member provisioning", () => {
         method: "POST",
       })
     );
+
     expect(invite.status).toBe(400);
 
     const directAdd = await app.fetch(
@@ -65,11 +70,13 @@ describe("direct org member provisioning", () => {
         method: "POST",
       })
     );
+
     expect(directAdd.status).toBe(201);
   });
 
   test("platform admin can manage an org without becoming a member", async () => {
     const { app, authService, databaseAdapter } = createMinimalHonoApp();
+
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
@@ -95,6 +102,8 @@ describe("direct org member provisioning", () => {
     );
 
     expect(createResponse.status).toBe(201);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const created = (await createResponse.json()) as {
       organization: { id: string };
       adminMember: { temporaryPassword: string };
@@ -103,6 +112,7 @@ describe("direct org member provisioning", () => {
     const platformUser = await databaseAdapter.getUserByEmail(
       "platform@example.com"
     );
+
     expect(platformUser).toBeDefined();
     expect(
       await databaseAdapter.getOrgMember(
@@ -150,6 +160,7 @@ describe("direct org member provisioning", () => {
     );
 
     expect(loginResponse.status).toBe(200);
+
     const orgAdminSession = browserSessionFromResponse(
       loginResponse,
       created.organization.id
@@ -166,6 +177,7 @@ describe("direct org member provisioning", () => {
 
   test("org admin can add a member and the member can change password", async () => {
     const { app, authService, databaseAdapter } = createMinimalHonoApp();
+
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
@@ -189,6 +201,8 @@ describe("direct org member provisioning", () => {
         method: "POST",
       })
     );
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const created = (await createResponse.json()) as {
       organization: { id: string };
       adminMember: { temporaryPassword: string };
@@ -204,6 +218,7 @@ describe("direct org member provisioning", () => {
         method: "POST",
       })
     );
+
     const adminSession = browserSessionFromResponse(
       adminLogin,
       created.organization.id
@@ -228,10 +243,13 @@ describe("direct org member provisioning", () => {
     );
 
     expect(addMemberResponse.status).toBe(201);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const added = (await addMemberResponse.json()) as {
       member: { email: string; name: string; phone: string };
       temporaryPassword: string;
     };
+
     expect(added.member.name).toBe("Member One");
     expect(added.temporaryPassword).toHaveLength(12);
 
@@ -245,6 +263,7 @@ describe("direct org member provisioning", () => {
         method: "POST",
       })
     );
+
     const memberSession = browserSessionFromResponse(memberLogin);
 
     const changePasswordResponse = await app.fetch(
@@ -267,6 +286,7 @@ describe("direct org member provisioning", () => {
         headers: memberSession.headers(),
       })
     );
+
     expect(staleMe.status).toBe(401);
 
     const relogin = await app.fetch(
@@ -305,6 +325,7 @@ describe("direct org member provisioning", () => {
         method: "POST",
       })
     );
+
     const session = browserSessionFromResponse(loginResponse);
 
     const publicRequestResponse = await app.fetch(
@@ -314,6 +335,7 @@ describe("direct org member provisioning", () => {
         method: "POST",
       })
     );
+
     expect(publicRequestResponse.status).toBe(200);
     expect(await publicRequestResponse.json()).toEqual({
       delivered: true,
@@ -327,6 +349,7 @@ describe("direct org member provisioning", () => {
         method: "POST",
       })
     );
+
     expect(missingCsrfResponse.status).toBe(403);
 
     const requestResponse = await app.fetch(
@@ -336,11 +359,15 @@ describe("direct org member provisioning", () => {
         method: "POST",
       })
     );
+
     expect(requestResponse.status).toBe(200);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const requested = (await requestResponse.json()) as {
       delivered: boolean;
       token: string | null;
     };
+
     expect(requested.delivered).toBe(false);
     expect(requested.token).toStartWith("tc_reset_");
 
@@ -354,6 +381,7 @@ describe("direct org member provisioning", () => {
         method: "POST",
       })
     );
+
     expect(completeResponse.status).toBe(200);
 
     const staleMe = await app.fetch(
@@ -361,6 +389,7 @@ describe("direct org member provisioning", () => {
         headers: session.headers(),
       })
     );
+
     expect(staleMe.status).toBe(401);
 
     const reuseResponse = await app.fetch(
@@ -373,6 +402,7 @@ describe("direct org member provisioning", () => {
         method: "POST",
       })
     );
+
     expect(reuseResponse.status).toBe(400);
 
     const relogin = await app.fetch(
@@ -385,6 +415,7 @@ describe("direct org member provisioning", () => {
         method: "POST",
       })
     );
+
     expect(relogin.status).toBe(200);
   });
 });

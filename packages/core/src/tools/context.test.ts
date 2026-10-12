@@ -1,17 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { getProfileSoulDir } from "../soul/resolve";
-import { buildToolExecutionContext, requireToolNotViewer } from "./context";
+import { buildToolExecutionContext, requireToolOrgMember } from "./context";
 
-describe("requireToolNotViewer", () => {
+describe("requireToolOrgMember", () => {
   for (const orgRole of ["admin", "member"] as const) {
     test(`allows ${orgRole}`, () => {
-      expect(() => requireToolNotViewer({ orgRole })).not.toThrow();
+      expect(() => requireToolOrgMember({ orgRole })).not.toThrow();
     });
   }
 
-  for (const orgRole of ["viewer", undefined] as const) {
+  for (const orgRole of [undefined] as const) {
     test(`denies ${orgRole ?? "missing role"}`, () => {
-      expect(() => requireToolNotViewer({ orgRole })).toThrow(
+      expect(() => requireToolOrgMember({ orgRole })).toThrow(
         expect.objectContaining({ status: 403 })
       );
     });

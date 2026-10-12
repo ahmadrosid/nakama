@@ -17,7 +17,33 @@ import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
 const ORG_A = "org-a";
+
 const ORG_B = "org-b";
+
+function authContextForTest(
+  activeOrg: AuthContextValue["activeOrg"]
+): AuthContextValue {
+  return {
+    activeOrg,
+    archiveOrg: async () => undefined,
+    createOrg: async () => undefined,
+    isAuthenticated: true,
+    isLoading: false,
+    login: async () => {
+      throw new Error("Login is not used in this test.");
+    },
+    logout: async () => undefined,
+    orgs: [],
+    platformOrgs: [],
+    platformOrgsError: false,
+    refreshPlatformOrgs: async () => undefined,
+    refreshSession: async () => undefined,
+    setup: async () => undefined,
+    switchOrg: async () => undefined,
+    updateOrg: async () => undefined,
+    user: null,
+  };
+}
 
 const destinationA: NotificationDestinationSummary = {
   channel: "telegram",
@@ -53,6 +79,7 @@ function org(id: string, name: string): UserOrgSummary {
 }
 
 const cleanups: Array<() => void> = [];
+
 afterEach(() => {
   for (const cleanup of cleanups.splice(0)) {
     cleanup();
@@ -62,6 +89,7 @@ afterEach(() => {
 const settle = () => {
   const { promise, resolve } = Promise.withResolvers<void>();
   setTimeout(resolve, 20);
+
   return promise;
 };
 
@@ -71,6 +99,7 @@ test("clears a one-time secret while the next organization's destinations load",
       queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
     },
   });
+
   queryClient.setQueryData(queryKeys.profiles.all, []);
   queryClient.setQueryData(queryKeys.notificationDestinations(ORG_A), {
     destinations: [destinationA],
@@ -78,21 +107,26 @@ test("clears a one-time secret while the next organization's destinations load",
 
   const clientA = client.forOrg(ORG_A);
   const clientB = client.forOrg(ORG_B);
+
   const nextOrgDestinations =
     Promise.withResolvers<ListNotificationDestinationsResponse>();
+
   const listA = spyOn(
     clientA,
     "listNotificationDestinations"
   ).mockResolvedValue({
     destinations: [destinationA],
   });
+
   const listB = spyOn(clientB, "listNotificationDestinations").mockReturnValue(
     nextOrgDestinations.promise
   );
+
   const rotate = spyOn(
     clientA,
     "regenerateNotificationDestinationKey"
   ).mockResolvedValue(secretA);
+
   const forOrg = spyOn(client, "forOrg").mockImplementation((orgId) =>
     orgId === ORG_A ? clientA : clientB
   );
@@ -115,9 +149,7 @@ test("clears a one-time secret while the next organization's destinations load",
     await act(async () => {
       root.render(
         <QueryClientProvider client={queryClient}>
-          <AuthContext.Provider
-            value={{ activeOrg } as unknown as AuthContextValue}
-          >
+          <AuthContext.Provider value={authContextForTest(activeOrg)}>
             <NotificationDestinationsCard />
           </AuthContext.Provider>
         </QueryClientProvider>
@@ -128,6 +160,7 @@ test("clears a one-time secret while the next organization's destinations load",
     const rotateButton = [...container.querySelectorAll("button")].find(
       (button) => button.textContent?.includes("Rotate key")
     );
+
     expect(rotateButton).toBeDefined();
     await act(async () => {
       rotateButton?.click();
@@ -140,9 +173,7 @@ test("clears a one-time secret while the next organization's destinations load",
     await act(async () => {
       root.render(
         <QueryClientProvider client={queryClient}>
-          <AuthContext.Provider
-            value={{ activeOrg } as unknown as AuthContextValue}
-          >
+          <AuthContext.Provider value={authContextForTest(activeOrg)}>
             <NotificationDestinationsCard />
           </AuthContext.Provider>
         </QueryClientProvider>

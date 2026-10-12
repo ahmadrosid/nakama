@@ -1,7 +1,9 @@
 import type {
+  AcpAgentConfig,
   AgentQuestionnaire,
   AgentTodo,
   ChatMessage,
+  JsonSchema,
   OrgPluginLifecycleState,
   OrgPluginSummary,
   OrgRole,
@@ -10,6 +12,7 @@ import type {
 } from "@nakama/core";
 
 export type { OrgRole } from "@nakama/core";
+
 export type ChannelType = "telegram" | "whatsapp";
 
 export type AutomationRunStatus = "running" | "completed" | "failed";
@@ -67,6 +70,19 @@ export interface StoredWorkflowRunRecord {
   workflowId: string;
 }
 
+export interface StoredAutomationRunStepRecord {
+  args: string;
+  completedAt: string | null;
+  position: number;
+  result: string | null;
+  runId: string;
+  startedAt: string;
+  status: "running" | "completed";
+  toolCallId: string;
+  toolGroupId: string | null;
+  toolName: string;
+}
+
 export interface StoredWorkflowRunStepRecord {
   completedAt: string | null;
   error: string | null;
@@ -82,6 +98,10 @@ export interface StoredWorkflowRunStepRecord {
 }
 
 export interface StoredProfileRecord {
+  /** Set when chat turns run through an ACP agent instead of the built-in loop. */
+  acpAgent?: AcpAgentConfig | null;
+  /** The agent settings new chats start with, keyed by config id (for example model or effort). */
+  acpSettings?: Record<string, string> | null;
   /** Defaults to enabled when absent for legacy in-memory records. */
   automationsEnabled?: boolean;
   createdAt: string;
@@ -197,6 +217,33 @@ export interface StoredLlmUsageModelStatsRecord {
   updatedAt: string;
 }
 
+/** One org's ledger for one agent and user pair. Null means the call had no such context. */
+export interface StoredLlmUsageActorStatsRecord {
+  estimatedCostUsd: number;
+  inputTokens: number;
+  orgId: string;
+  outputTokens: number;
+  profileId: string | null;
+  requestCount: number;
+  trackedSince: string;
+  updatedAt: string;
+  userId: string | null;
+}
+
+/** One org's ledger for one UTC day, model, and provider. */
+export interface StoredLlmUsageDailyStatsRecord {
+  /** `YYYY-MM-DD`, UTC. */
+  day: string;
+  estimatedCostUsd: number;
+  inputTokens: number;
+  modelId: string;
+  orgId: string;
+  outputTokens: number;
+  /** Empty when the call had no provider context. */
+  provider: string;
+  requestCount: number;
+}
+
 export interface StoredWorkspaceSettingsRecord {
   /** Workspace-global interval for refreshing automation schedules and curator work. */
   automationWorkerPollIntervalMs: number;
@@ -264,7 +311,7 @@ export interface StoredComposioToolkitRecord {
     slug: string;
     name: string;
     description: string;
-    inputSchema: Record<string, unknown>;
+    inputSchema: JsonSchema;
   }>;
   createdAt: string;
   displayName: string;
@@ -299,6 +346,12 @@ export interface StoredProfileComposioToolkitRecord {
   allowedActions: string[] | null;
   profileId: string;
   toolkitId: string;
+}
+
+/** Who caused an LLM call. A missing ID puts the call in the unattributed group. */
+export interface LlmUsageActor {
+  profileId?: string | null;
+  userId?: string | null;
 }
 
 export interface LlmUsageStatsDelta {
@@ -349,7 +402,12 @@ export interface StoredToolOutputSavingsRecord {
   updatedAt: string;
 }
 
-export type McpServerStatus = "connected" | "disconnected" | "error";
+export type McpServerStatus =
+  | "connected"
+  | "disconnected"
+  | "error"
+  | "needs_auth";
+
 export type McpTransport = "http" | "stdio";
 
 export interface CachedMcpTool {
@@ -497,6 +555,43 @@ export interface PublishOrgPluginReleaseInput {
   selectedVersion: string;
 }
 
+export interface StoredOrgTeamCreationRecord {
+  adminUserId: string;
+  completedAt: string | null;
+  createdAt: string;
+  creatorUserId: string;
+  parentOrgId: string;
+  requestHash: string;
+  requestId: string;
+  teamOrgId: string;
+}
+
+export interface BeginOrgTeamCreationInput {
+  adminUserId: string;
+  creatorUserId: string;
+  organization: StoredOrganizationRecord & { parentOrgId: string };
+  requestHash: string;
+  requestId: string;
+}
+
+export interface StoredSharedAgentInstanceRecord {
+  createdAt: string;
+  profileId: string;
+  publicationId: string;
+  sourceOrgId: string;
+  sourceProfileId: string;
+  teamOrgId: string;
+}
+
+export interface StoredOrgSharedResourceRecord {
+  createdAt: string;
+  id: string;
+  orgId: string;
+  resourceId: string;
+  resourceKind: "knowledge" | "skill" | "agent" | "tool" | "model";
+  updatedAt: string;
+}
+
 export interface StoredOrganizationRecord {
   allowedInviteDomains?: string[];
   archivedAt?: string | null;
@@ -506,6 +601,8 @@ export interface StoredOrganizationRecord {
   monthlyLlmTurnLimit?: number;
   monthlyLlmWarningPercent?: number;
   name: string;
+  parentOrgId?: string | null;
+  setupPending?: boolean;
   skillsCuratorArchiveAfterDays?: number;
   skillsCuratorConsolidateEnabled?: boolean;
   skillsCuratorEnabled?: boolean;
@@ -584,6 +681,20 @@ export interface StoredProfileChangeEvent {
   source: ProfileChangeSource;
 }
 
+export type SkillVersionKind = "created" | "original" | "restored" | "updated";
+
+export interface StoredSkillVersion {
+  actorUserId: string | null;
+  content: string;
+  createdAt: string;
+  id: string;
+  kind: SkillVersionKind;
+  note: string | null;
+  skillId: string;
+  source: ProfileChangeSource | null;
+  version: number;
+}
+
 export interface StoredOrgMemoryProposal {
   bullet: string;
   createdAt: string;
@@ -601,6 +712,7 @@ export interface StoredOrgMemoryProposal {
 }
 
 export type SkillProposalStatus = "pending" | "approved" | "rejected";
+
 export type SkillProposalAction =
   | "create"
   | "patch"
@@ -631,6 +743,7 @@ export interface StoredSkillProposal {
 }
 
 export type SkillSuggestionStatus = "pending" | "applied";
+
 export type SkillSuggestionAction = "create" | "patch";
 
 export interface StoredSkillSuggestion {
@@ -699,6 +812,12 @@ export interface StoredManagedSecret {
 }
 
 export interface DatabaseAdapter {
+  abortOrgTeamCreation(
+    parentOrgId: string,
+    requestId: string,
+    teamOrgId: string
+  ): Promise<boolean>;
+
   activateUserMfa(
     id: string,
     totpSecretEnc: string,
@@ -712,6 +831,9 @@ export interface DatabaseAdapter {
   assignMcpServerToProfile(profileId: string, serverId: string): Promise<void>;
   assignSkillToProfile(profileId: string, skillId: string): Promise<void>;
   assignToolToProfile(profileId: string, toolId: string): Promise<void>;
+  beginOrgTeamCreation(
+    input: BeginOrgTeamCreationInput
+  ): Promise<StoredOrgTeamCreationRecord>;
   /**
    * First-admin claim. Writes the org, the admin and the membership in one
    * transaction, and returns false without writing anything when a human user
@@ -725,6 +847,14 @@ export interface DatabaseAdapter {
   /** Verify the live connection can read the migrated schema. */
   checkHealth(): Promise<void>;
   /**
+   * Automation runs left `running` by a dead process: those already resumed
+   * `maxResumes` times are failed, the rest have their resume count raised and
+   * are returned for the caller to continue.
+   */
+  claimInterruptedAutomationRuns(
+    maxResumes: number
+  ): Promise<Array<{ automationId: string; id: string }>>;
+  /**
    * Atomically claims an idempotency key for a notification webhook delivery.
    * Prunes rows older than the replay window, then returns true on first claim
    * and false on replay within that window.
@@ -737,6 +867,18 @@ export interface DatabaseAdapter {
   compareAndSetOrgPluginState(
     input: CompareAndSetOrgPluginStateInput
   ): Promise<PluginPublishResult>;
+  completeAutomationRunStep(
+    runId: string,
+    toolCallId: string,
+    result: string,
+    completedAt: string
+  ): Promise<void>;
+  completeOrgTeamCreation(
+    parentOrgId: string,
+    requestId: string,
+    teamOrgId: string,
+    completedAt: string
+  ): Promise<boolean>;
   consumeMfaBackupCode(
     userId: string,
     codeHash: string,
@@ -791,14 +933,24 @@ export interface DatabaseAdapter {
 
   /** Append-only insert. Adapters must not expose update/delete for this table. */
   createProfileChangeEvent(record: StoredProfileChangeEvent): Promise<void>;
+  createSharedAgentInstance(
+    teamOrgId: string,
+    publicationId: string,
+    profileId: string,
+    createdAt: string
+  ): Promise<StoredProfileRecord>;
 
   createSkillProposal(record: StoredSkillProposal): Promise<void>;
 
   createSkillSuggestion(record: StoredSkillSuggestion): Promise<void>;
+
+  /** Appends a snapshot; the adapter assigns the next version number. */
+  createSkillVersion(
+    record: Omit<StoredSkillVersion, "version">
+  ): Promise<StoredSkillVersion>;
   createUser(record: StoredUserRecord): Promise<void>;
   deleteAttachment(id: string): Promise<boolean>;
   deleteAutomation(id: string): Promise<boolean>;
-  deleteAutomationRun(automationId: string, runId: string): Promise<boolean>;
   deleteComposioToolkit(id: string): Promise<boolean>;
   deleteComposioUserConnection(id: string): Promise<boolean>;
   deleteManagedSecret(scope: string, name: string): Promise<void>;
@@ -813,6 +965,7 @@ export interface DatabaseAdapter {
     pluginId: string,
     expectedRevision: number
   ): Promise<boolean>;
+  deleteOrgSharedResource(orgId: string, id: string): Promise<boolean>;
   deletePasskeys(userId: string): Promise<void>;
   deletePluginRelease(pluginId: string, version: string): Promise<boolean>;
   deleteProfile(id: string): Promise<boolean>;
@@ -836,6 +989,7 @@ export interface DatabaseAdapter {
    *
    * Returns the number of automation and workflow runs settled.
    */
+  /** Settles workflow runs a dead process left `running`. Automation runs are handled by `claimInterruptedAutomationRuns`. */
   failInterruptedRuns(): Promise<number>;
   getActiveArtifactShareByPath(
     orgId: string,
@@ -894,6 +1048,12 @@ export interface DatabaseAdapter {
   ): Promise<StoredNotificationDestinationRecord | null>;
   getOrganizationById(id: string): Promise<StoredOrganizationRecord | null>;
   getOrganizationBySlug(slug: string): Promise<StoredOrganizationRecord | null>;
+  getOrganizationResourceCounts(orgId: string): Promise<{
+    agents: number;
+    members: number;
+    skills: number;
+    tools: number;
+  } | null>;
   getOrgInviteByTokenHash(
     tokenHash: string
   ): Promise<StoredOrgInviteRecord | null>;
@@ -909,6 +1069,14 @@ export interface DatabaseAdapter {
     orgId: string,
     pluginId: string
   ): Promise<StoredOrgPluginRecord | null>;
+  getOrgSharedResource(
+    orgId: string,
+    id: string
+  ): Promise<StoredOrgSharedResourceRecord | null>;
+  getOrgTeamCreation(
+    parentOrgId: string,
+    requestId: string
+  ): Promise<StoredOrgTeamCreationRecord | null>;
   getPasskey(
     userId: string,
     credentialId: string
@@ -955,6 +1123,10 @@ export interface DatabaseAdapter {
     sessionId: string
   ): Promise<AgentQuestionnaire | null>;
   getSessionTodos(sessionId: string): Promise<AgentTodo[]>;
+  getSharedAgentInstance(
+    teamOrgId: string,
+    profileId: string
+  ): Promise<StoredSharedAgentInstanceRecord | null>;
   getSkill(id: string): Promise<StoredSkillRecord | null>;
   /**
    * Resolve a skill by name within `orgId`, falling back to a global (bundled)
@@ -977,8 +1149,16 @@ export interface DatabaseAdapter {
     profileId: string,
     skillId: string
   ): Promise<StoredSkillUsageRecord | null>;
+  getSkillVersion(
+    skillId: string,
+    versionId: string
+  ): Promise<StoredSkillVersion | null>;
   getTool(id: string): Promise<StoredToolRecord | null>;
   getToolByName(name: string): Promise<StoredToolRecord | null>;
+  getToolByNameForOrg(
+    orgId: string,
+    name: string
+  ): Promise<StoredToolRecord | null>;
   getUserByEmail(email: string): Promise<StoredUserRecord | null>;
   getUserById(id: string): Promise<StoredUserRecord | null>;
   getUserContext(orgId: string, userId: string): Promise<string | null>;
@@ -989,9 +1169,30 @@ export interface DatabaseAdapter {
   ): Promise<StoredWorkflowRunRecord | null>;
 
   getWorkspaceSettings(): Promise<StoredWorkspaceSettingsRecord | null>;
+  /**
+   * Moves each attachment of this session that another session in the org
+   * still names over to that session. Call it before deleting a session's
+   * attachments, or a branch loses the files it copied references to.
+   */
+  handOverSharedAttachments(sessionId: string, orgId: string): Promise<void>;
+
+  importSharedAgentReference(
+    record: StoredSharedAgentInstanceRecord
+  ): Promise<void>;
   incrementLlmTurnUsage(orgId: string, delta: LlmTurnUsageDelta): Promise<void>;
+  incrementLlmUsageDailyStats(
+    orgId: string,
+    key: { day: string; modelId: string; provider: string },
+    delta: LlmUsageStatsDelta
+  ): Promise<void>;
   incrementLlmUsageStats(
     orgId: string,
+    delta: LlmUsageStatsDelta,
+    trackedSince: string
+  ): Promise<void>;
+  incrementLlmUsageStatsByActor(
+    orgId: string,
+    actor: LlmUsageActor,
     delta: LlmUsageStatsDelta,
     trackedSince: string
   ): Promise<void>;
@@ -1020,6 +1221,7 @@ export interface DatabaseAdapter {
 
   insertAttachment(record: StoredAttachmentRecord): Promise<void>;
   insertAutomationRun(record: StoredAutomationRunRecord): Promise<void>;
+  insertAutomationRunStep(step: StoredAutomationRunStepRecord): Promise<void>;
   insertWorkflowRun(record: StoredWorkflowRunRecord): Promise<void>;
   insertWorkflowRunStep(record: StoredWorkflowRunStepRecord): Promise<void>;
 
@@ -1038,6 +1240,9 @@ export interface DatabaseAdapter {
     offset?: number;
     orgId?: string;
   }): Promise<StoredAuditEvent[]>;
+  listAutomationRunSteps(
+    runId: string
+  ): Promise<StoredAutomationRunStepRecord[]>;
 
   listAutomationRuns(
     automationId: string,
@@ -1067,6 +1272,14 @@ export interface DatabaseAdapter {
     profileId: string
   ): Promise<string[]>;
   listLlmTurnUsage(orgId: string): Promise<StoredLlmTurnUsageRecord[]>;
+  /** Rows from `sinceDay` (inclusive, `YYYY-MM-DD`) onward. */
+  listLlmUsageDailyStats(
+    orgId: string,
+    sinceDay: string
+  ): Promise<StoredLlmUsageDailyStatsRecord[]>;
+  listLlmUsageStatsByActor(
+    orgId: string
+  ): Promise<StoredLlmUsageActorStatsRecord[]>;
   listLlmUsageStatsByModel(
     orgId: string
   ): Promise<StoredLlmUsageModelStatsRecord[]>;
@@ -1091,6 +1304,9 @@ export interface DatabaseAdapter {
     status?: OrgMemoryProposalStatus
   ): Promise<StoredOrgMemoryProposal[]>;
   listOrgPlugins(orgId?: string): Promise<StoredOrgPluginRecord[]>;
+  listOrgSharedResources(
+    orgId: string
+  ): Promise<StoredOrgSharedResourceRecord[]>;
   listPasskeys(userId: string): Promise<StoredPasskeyRecord[]>;
 
   listPlatformAdminUsers(): Promise<StoredUserRecord[]>;
@@ -1130,6 +1346,7 @@ export interface DatabaseAdapter {
 
   listSessions(): Promise<StoredSessionRecord[]>;
   listSessionsForUser(userId: string): Promise<StoredSessionRecord[]>;
+
   listSkillProposals(
     orgId: string,
     options?: {
@@ -1154,6 +1371,12 @@ export interface DatabaseAdapter {
   listSkillUsageForProfile(
     profileId: string
   ): Promise<StoredSkillUsageRecord[]>;
+
+  /** Newest first. */
+  listSkillVersions(
+    skillId: string,
+    options?: { limit?: number }
+  ): Promise<StoredSkillVersion[]>;
 
   listToolOutputSavings(
     orgId: string
@@ -1187,7 +1410,13 @@ export interface DatabaseAdapter {
   publishOrgPluginRelease(
     input: PublishOrgPluginReleaseInput
   ): Promise<PluginPublishResult>;
+  publishOrgSharedResource(
+    record: StoredOrgSharedResourceRecord
+  ): Promise<StoredOrgSharedResourceRecord>;
   putManagedSecret(secret: Omit<StoredManagedSecret, "version">): Promise<void>;
+  /** Gives back one hold taken by tryReserveMonthlyLlmQuota, at most once. */
+  releaseMonthlyLlmQuota(orgId: string, reservationId: string): Promise<void>;
+
   renameFilePins(
     orgId: string,
     profileId: string,
@@ -1227,6 +1456,15 @@ export interface DatabaseAdapter {
     userId: string,
     revokedAt: string
   ): Promise<number>;
+  /**
+   * Every active browser session except the caller's current session. A null
+   * session id revokes all of them for non-browser authentication modes.
+   */
+  revokeBrowserSessionsForUserExcept(
+    userId: string,
+    sessionId: string | null,
+    revokedAt: string
+  ): Promise<number>;
   setFilePinned(
     orgId: string,
     userId: string,
@@ -1251,12 +1489,12 @@ export interface DatabaseAdapter {
     archivedAt: string
   ): Promise<boolean>;
   tryReserveMonthlyLlmQuota(input: {
+    createdAt: string;
     existingTokens: number;
     existingTurns: number;
-    month: string;
     orgId: string;
+    reservationId: string;
     reservedTokens: number;
-    updatedAt: string;
   }): Promise<boolean>;
   unassignMcpServerFromProfile(
     profileId: string,

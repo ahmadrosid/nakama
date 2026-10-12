@@ -1,5 +1,6 @@
 import { resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
+import { z } from "zod";
 import type { JsonSchema, ToolContext, ToolDefinition } from "../contract";
 import { getPluginsRootDir } from "../plugins";
 import { permissiveObjectSchema } from "../tools/schema";
@@ -7,11 +8,32 @@ import type { DiscoveredSkill } from "./types";
 
 const moduleCache = new Map<string, SkillToolModule>();
 
+const JsonValueSchema = z.json();
+
+const SkillToolModuleSchema = z.object({
+  description: z.string().optional(),
+  name: z.string().optional(),
+  parameters: z.record(z.string(), JsonValueSchema).optional(),
+  run: z
+    .function()
+    .input([JsonValueSchema, z.custom<ToolContext>()])
+    .output(z.promise(z.union([JsonValueSchema, z.undefined()]))),
+});
+
+const ImportedSkillModuleSchema = z
+  .object({ default: z.unknown().optional() })
+  .passthrough();
+
+type JsonValue = z.infer<typeof JsonValueSchema>;
+
 interface SkillToolModule {
   description?: string;
   name?: string;
   parameters?: JsonSchema;
-  run: (input: unknown, context: ToolContext) => Promise<unknown>;
+  run: (
+    input: JsonValue,
+    context: ToolContext
+  ) => Promise<JsonValue | undefined>;
 }
 
 export async function loadSkillTool(
@@ -45,7 +67,7 @@ export async function loadSkillTool(
       name: module.name?.trim() || skill.name,
       parameters: module.parameters ?? permissiveObjectSchema(),
       async run(input, context) {
-        return module.run(input, context);
+        return module.run(JsonValueSchema.parse(input), context);
       },
     };
   } catch (error) {
@@ -94,43 +116,47 @@ async function importSkillToolModule(
   const imported = await import(pathToFileURL(modulePath).href);
   const module = normalizeSkillToolModule(imported);
   moduleCache.set(modulePath, module);
+
   return module;
 }
 
-function normalizeSkillToolModule(imported: unknown): SkillToolModule {
-  if (typeof imported !== "object" || imported === null) {
+function normalizeSkillToolModule<Imported>(
+  imported: Imported
+): SkillToolModule {
+  const record = ImportedSkillModuleSchema.safeParse(imported);
+
+  if (!record.success) {
     throw new Error("Skill tool module must export a run function.");
   }
 
-  const record = imported as Record<string, unknown>;
-  const defaultExport =
-    typeof record.default === "object" && record.default !== null
-      ? (record.default as Record<string, unknown>)
-      : null;
-  const source = defaultExport ?? record;
-  const run = source.run;
+  const defaultModule = SkillToolModuleSchema.safeParse(record.data.default);
 
-  if (typeof run !== "function") {
-    throw new Error("Skill tool module must export a run function.");
+  const module = defaultModule.success
+    ? defaultModule
+    : SkillToolModuleSchema.safeParse(record.data);
+
+  if (!module.success) {
+    throw new Error(
+      "Skill tool module must export a run function with JSON results."
+    );
   }
+
+  const parameters = module.data.parameters;
 
   return {
-    description:
-      typeof source.description === "string" ? source.description : undefined,
-    name: typeof source.name === "string" ? source.name : undefined,
-    parameters: isJsonSchema(source.parameters) ? source.parameters : undefined,
-    run: (input, context) => Promise.resolve(run(input, context)),
+    description: module.data.description,
+    name: module.data.name,
+    // SAFETY: This schema parse confirms parameters are a JSON object before exposing them as JSON Schema.
+    parameters: parameters as JsonSchema | undefined,
+    run: (input, context) => module.data.run(input, context),
   };
-}
-
-function isJsonSchema(value: unknown): value is JsonSchema {
-  return typeof value === "object" && value !== null;
 }
 
 function isPluginSkillToolPath(filePath: string): boolean {
   try {
     const root = resolve(getPluginsRootDir());
     const resolved = resolve(filePath);
+
     return resolved === root || resolved.startsWith(`${root}${sep}`);
   } catch {
     return false;

@@ -4,9 +4,17 @@
 
 import type { ReactNode } from "react";
 import { createCollection } from "./ui-collection";
-import { type Context, errorText, type Profile } from "./ui-context";
+import {
+  asJsonRecord,
+  type Context,
+  errorText,
+  type Profile,
+  readJsonString,
+} from "./ui-context";
+
 export function createBrowser(ctx: Context) {
   const React = ctx.React;
+
   const {
     Button,
     Select,
@@ -15,7 +23,9 @@ export function createBrowser(ctx: Context) {
     SelectContent,
     SelectItem,
   } = ctx.ui;
+
   const Collection = createCollection(ctx);
+
   function DocumentPage({
     agentId,
     documentId,
@@ -28,6 +38,7 @@ export function createBrowser(ctx: Context) {
       content: string | null;
       source: string;
     } | null>(null);
+
     const [error, setError] = React.useState("");
     React.useEffect(() => {
       let active = true;
@@ -35,24 +46,32 @@ export function createBrowser(ctx: Context) {
         .call("get_document", { agentId, id: documentId })
         .then((result) => {
           if (active) {
-            setDocument(
-              result as {
-                title: string;
-                content: string | null;
-                source: string;
-              }
-            );
+            const document = asJsonRecord(result);
+            const title = document && readJsonString(document.title);
+            const source = document && readJsonString(document.source);
+
+            if (document && title && source) {
+              setDocument({
+                content: readJsonString(document.content),
+                source,
+                title,
+              });
+            }
           }
         })
         .catch((reason) => {
           if (active) {
-            setError(errorText(reason));
+            setError(
+              errorText(reason instanceof Error ? reason : "Request failed")
+            );
           }
         });
+
       return () => {
         active = false;
       };
     }, [agentId, documentId]);
+
     return (
       <article className="sm-stack">
         <div>
@@ -98,6 +117,7 @@ export function createBrowser(ctx: Context) {
       </article>
     );
   }
+
   return function Browser({
     profiles,
     controls,
@@ -108,16 +128,20 @@ export function createBrowser(ctx: Context) {
     const params = new URLSearchParams(
       typeof window === "undefined" ? "" : window.location.search
     );
+
     const requestedAgent = params.get("agent");
     const documentId = params.get("document");
+
     const [agentId, setAgentId] = React.useState(
       profiles.find((profile) => profile.id === requestedAgent)?.id ??
         profiles[0]?.id ??
         ""
     );
+
     const [kind, setKind] = React.useState<"memory" | "knowledge">(
       params.get("tab") === "knowledge" ? "knowledge" : "memory"
     );
+
     if (documentId) {
       return (
         <DocumentPage
@@ -127,6 +151,7 @@ export function createBrowser(ctx: Context) {
         />
       );
     }
+
     const selector = (
       <Select
         onValueChange={(value) => setAgentId(value ?? "")}
@@ -146,6 +171,7 @@ export function createBrowser(ctx: Context) {
         </SelectContent>
       </Select>
     );
+
     const tabs = (
       <div aria-label="Collection" className="sm-tabs" role="group">
         <Button
@@ -166,6 +192,7 @@ export function createBrowser(ctx: Context) {
         </Button>
       </div>
     );
+
     return (
       <>
         {agentId ? (

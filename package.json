@@ -1,6 +1,6 @@
 {
   "name": "nakama",
-  "version": "0.4.38",
+  "version": "0.4.47",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -14,7 +14,9 @@
     "agent:ui:stop": "bash scripts/agent-ui-harness.sh stop",
     "build": "bun run --workspaces --if-present build",
     "build:docs": "bun run --cwd docs/website build",
-    "check": "ultracite check",
+    "check": "ultracite check && bun run check:anti-slop",
+    "check:acp": "bun run scripts/check-acp.ts",
+    "check:anti-slop": "oxlint",
     "cli": "bun run apps/cli/src/index.ts",
     "desktop": "bun run --cwd apps/desktop dev",
     "dev": "bun run dev:web",
@@ -29,13 +31,13 @@
     "docs:install": "bun install --cwd docs/website --frozen-lockfile --ignore-scripts",
     "doctor": "bun x react-doctor",
     "dupes": "bun x jscpd --format typescript,tsx .",
-    "fix": "ultracite fix",
+    "fix": "ultracite fix && oxlint --fix",
     "postinstall": "bun run docs:install",
     "knip": "knip",
     "prepare": "husky",
     "preview:docs": "bun run --cwd docs/website preview",
     "start": "bun run apps/server/dist/index.js",
-    "test": "bun run --workspaces --if-present test",
+    "test": "bun test --path-ignore-patterns '**/apps/web/**' && bun run --cwd apps/web test",
     "view:cassettes": "bun run apps/server/src/testing/cassettes/serve.ts"
   },
   "overrides": {
@@ -47,10 +49,12 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
+    "@oxlint/plugins": "1.87.0",
     "@types/bun": "^1.4.2",
     "husky": "^9.1.7",
     "jscpd": "4.3.0",
     "knip": "6.38.0",
+    "oxlint": "1.87.0",
     "react-doctor": "0.9.14",
     "ultracite": "7.11.0"
   },

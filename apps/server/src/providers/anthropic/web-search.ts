@@ -19,6 +19,7 @@ import type {
   ToolCall,
 } from "@nakama/core";
 import { toAnthropicUserContent, WEB_SEARCH_TOOL_NAME } from "@nakama/core";
+import { z } from "zod";
 import {
   buildTokenUsage,
   normalizeThinkingEffort,
@@ -28,13 +29,22 @@ import {
 } from "../shared";
 
 const MAX_PAUSE_CONTINUATIONS = 5;
+
 const WEB_SEARCH_MAX_USES = 5;
+
+type AnthropicReplay = {
+  model: string;
+  system: string;
+  thinking: Pick<MessageCreateParams, "thinking" | "output_config">;
+  tools?: ToolUnion[];
+};
 
 function buildAnthropicTools(
   tools: LlmToolDefinition[] | undefined,
   webSearch: boolean
 ): ToolUnion[] | undefined {
   const customTools = tools?.length ? tools.map(toAnthropicCustomTool) : [];
+
   const hostedTools: ToolUnion[] = webSearch
     ? [
         {
@@ -65,6 +75,7 @@ export async function toAnthropicMessages(
   for (const message of messages) {
     if (message.role === "user") {
       result.push({
+        // SAFETY: The core converter maps each user part to the Anthropic wire shape.
         content: (await toAnthropicUserContent(
           message.content,
           provider
@@ -78,13 +89,15 @@ export async function toAnthropicMessages(
       if (
         message.providerContent?.length &&
         message.providerContent.every(
-          (part) => typeof readRecord(part).type === "string"
+          (part) => z.string().safeParse(readRecord(part).type).success
         )
       ) {
         const content: ContentBlockParam[] = [];
+
         for (const part of message.providerContent) {
           const block = readRecord(part);
           const { _nakamaPrefixHash, ...wireBlock } = block;
+
           if (
             replay?.model === "claude-sonnet-5-5" &&
             readRecord(replay.thinking.thinking).type === "between_tools" &&
@@ -94,11 +107,16 @@ export async function toAnthropicMessages(
           ) {
             continue;
           }
-          content.push(wireBlock as unknown as ContentBlockParam);
+
+          const storedBlock: unknown = wireBlock;
+          // SAFETY: Stored provider blocks came from Anthropic responses; only internal metadata was removed.
+          content.push(storedBlock as ContentBlockParam);
         }
+
         if (content.length) {
           result.push({ content, role: "assistant" });
         }
+
         continue;
       }
 
@@ -125,6 +143,7 @@ export async function toAnthropicMessages(
     }
 
     const last = result[result.length - 1];
+
     const toolResult: ToolResultBlockParam = {
       content: message.content,
       tool_use_id: message.toolCallId,
@@ -176,14 +195,25 @@ export function parseAnthropicContent(
   const thinkingText = thinkingParts.join("").trim();
   const providerContent = content?.length ? content : undefined;
 
+  const assistantMessage: Extract<ChatMessage, { role: "assistant" }> = {
+    content: contentText,
+    role: "assistant",
+  };
+
+  if (thinkingText) {
+    assistantMessage.thinking = thinkingText;
+  }
+
+  if (toolCalls.length > 0) {
+    assistantMessage.toolCalls = toolCalls;
+  }
+
+  if (providerContent) {
+    assistantMessage.providerContent = providerContent;
+  }
+
   return {
-    assistantMessage: {
-      content: contentText,
-      role: "assistant",
-      ...(thinkingText ? { thinking: thinkingText } : {}),
-      ...(toolCalls.length > 0 ? { toolCalls } : {}),
-      ...(providerContent ? { providerContent } : {}),
-    },
+    assistantMessage,
     content: contentText,
     toolCalls,
   };
@@ -211,44 +241,69 @@ export async function continueAnthropicUntilDone(
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   const tools = buildAnthropicTools(options.tools, options.webSearch);
+
   const thinkingRequest = buildAnthropicThinkingRequest(
     options.thinking,
     options.model
   );
-  const replay = {
+
+  const replay: AnthropicReplay = {
     model: options.model,
     system: options.system,
     thinking: thinkingRequest,
-    ...(tools ? { tools } : {}),
   };
+
+  if (tools) {
+    replay.tools = tools;
+  }
+
   const initialMessages = await toAnthropicMessages(
     options.messages,
     options.provider,
     replay
   );
+
   let apiMessages = initialMessages;
+
   const thinkingReplay =
     options.model === "claude-sonnet-5-5"
       ? { messages: initialMessages, replay }
       : undefined;
-  const requestOptions = {
+
+  const requestOptions: NonNullable<
+    Parameters<Anthropic["messages"]["create"]>[1]
+  > = {
     signal: options.signal,
-    ...(options.model === "claude-opus-5-5" ||
+  };
+
+  if (
+    options.model === "claude-opus-5-5" ||
     (options.model === "claude-sonnet-5-5" &&
       options.thinking?.thinking?.enabled)
-      ? {
-          headers: { "anthropic-beta": "thinking-binding-controls-2026-08-01" },
-        }
-      : {}),
-  };
-  const requestBase = {
+  ) {
+    requestOptions.headers = {
+      "anthropic-beta": "thinking-binding-controls-2026-08-01",
+    };
+  }
+
+  const requestBase: Omit<MessageCreateParams, "stream"> = {
     max_tokens: 4096,
     messages: apiMessages,
     model: options.model,
     system: options.system,
-    ...(tools ? { tools } : {}),
-    ...thinkingRequest,
   };
+
+  if (tools) {
+    requestBase.tools = tools;
+  }
+
+  if (thinkingRequest.thinking) {
+    requestBase.thinking = thinkingRequest.thinking;
+  }
+
+  if (thinkingRequest.output_config) {
+    requestBase.output_config = thinkingRequest.output_config;
+  }
 
   for (let attempt = 0; attempt < MAX_PAUSE_CONTINUATIONS; attempt += 1) {
     if (options.stream) {
@@ -295,6 +350,7 @@ export async function continueAnthropicUntilDone(
       },
       requestOptions
     );
+
     totalInputTokens +=
       (payload.usage?.input_tokens ?? 0) +
       (payload.usage?.cache_read_input_tokens ?? 0) +
@@ -349,10 +405,12 @@ async function readAnthropicStream(
   let inputTokens: number | undefined;
   let outputTokens: number | undefined;
   let cachedInputTokens: number | undefined;
+
   const pending = new Map<
     number,
     { id: string; name: string; inputJson: string }
   >();
+
   const providerContent: ContentBlock[] = [];
   const contentBlocks = new Map<number, ContentBlock>();
 
@@ -381,7 +439,7 @@ async function readAnthropicStream(
           (event.usage.cache_creation_input_tokens ?? 0);
       }
 
-      if (typeof event.usage.output_tokens === "number") {
+      if (event.usage.output_tokens != null) {
         outputTokens = event.usage.output_tokens;
       }
     }
@@ -418,10 +476,12 @@ async function readAnthropicStream(
         handlers?.onThinking?.(delta.thinking);
 
         const prev = contentBlocks.get(index);
+
         const block: ContentBlock =
           prev?.type === "thinking"
             ? { ...prev, thinking: `${prev.thinking}${delta.thinking}` }
             : { signature: "", thinking: delta.thinking, type: "thinking" };
+
         contentBlocks.set(index, block);
         providerContent[index] = block;
       }
@@ -441,10 +501,12 @@ async function readAnthropicStream(
         handlers?.onChunk(delta.text);
 
         const prev = contentBlocks.get(index);
+
         const block: ContentBlock =
           prev?.type === "text"
             ? { ...prev, text: `${prev.text}${delta.text}` }
             : { citations: null, text: delta.text, type: "text" };
+
         contentBlocks.set(index, block);
         providerContent[index] = block;
       }
@@ -455,6 +517,7 @@ async function readAnthropicStream(
           inputJson: "",
           name: "",
         };
+
         const partial = delta.partial_json;
         current.inputJson += partial;
         pending.set(index, current);
@@ -475,6 +538,7 @@ async function readAnthropicStream(
       const block = providerContent[index];
 
       const streamedInput = pending.get(index)?.inputJson;
+
       if (
         streamedInput &&
         (block?.type === "tool_use" || block?.type === "server_tool_use")
@@ -521,10 +585,8 @@ export function buildAnthropicThinkingRequest(
       // effort setting. between_tools forbids per-turn effort changes and
       // accepts no display/binding/budget fields.
       return {
-        // The installed SDK does not yet type this documented mode.
-        thinking: {
-          type: "between_tools",
-        } as unknown as MessageCreateParams["thinking"],
+        // @ts-expect-error Anthropic documents between_tools, but this SDK version omits it.
+        thinking: { type: "between_tools" },
       };
     }
 
@@ -532,6 +594,7 @@ export function buildAnthropicThinkingRequest(
       output_config: {
         effort: normalizeThinkingEffort(providerOptions.thinking.effort),
       },
+      // SAFETY: The SDK type omits documented adaptive binding fields for these models.
       thinking: {
         block_binding: { prefix_mismatch_behavior: "drop_block" },
         display: "summarized",
@@ -541,10 +604,12 @@ export function buildAnthropicThinkingRequest(
   }
 
   if (model === "claude-opus-5-5") {
+    // SAFETY: The SDK type omits documented adaptive binding fields for this model.
     const thinking = {
       block_binding: { prefix_mismatch_behavior: "drop_block" },
       type: "adaptive",
     } as MessageCreateParams["thinking"];
+
     return providerOptions?.thinking?.enabled
       ? {
           output_config: {
@@ -557,6 +622,7 @@ export function buildAnthropicThinkingRequest(
 
   const thinkingByDefault =
     model === "claude-sonnet-5" || model === "claude-opus-5";
+
   if (!providerOptions?.thinking?.enabled) {
     return thinkingByDefault ? { thinking: { type: "disabled" } } : {};
   }
@@ -607,6 +673,7 @@ function emitHostedToolEvents(
 function toAnthropicCustomTool(tool: LlmToolDefinition): ToolUnion {
   return {
     description: tool.description,
+    // SAFETY: Core tool definitions use JSON Schema; the SDK input_schema type is narrower.
     input_schema: tool.parameters as never,
     name: tool.name,
   };
@@ -616,7 +683,7 @@ function appendAnthropicAssistantMessage(
   messages: MessageParam[],
   content: ContentBlock[]
 ): MessageParam[] {
-  // Response ContentBlock values are echoed back on pause_turn continuations.
+  // SAFETY: Anthropic requires prior response blocks unchanged on pause_turn continuations.
   return [
     ...messages,
     { content: content as ContentBlockParam[], role: "assistant" },
@@ -658,6 +725,7 @@ function finalizeAnthropicResult(options: {
   const toolCalls = options.toolCalls ?? options.parsed.toolCalls;
   const blocks = options.parsed.assistantMessage.providerContent;
   const replay = options.thinkingReplay;
+
   const providerContent = replay
     ? blocks?.map((block, index) =>
         readRecord(block).type === "thinking" ||
@@ -680,18 +748,29 @@ function finalizeAnthropicResult(options: {
     throw new Error("Anthropic returned an empty response.");
   }
 
-  return {
+  const result: ChatCompletionResult = {
     ...options.parsed,
-    content,
-    toolCalls,
-    ...(options.usage ? { usage: options.usage } : {}),
     assistantMessage: {
       ...options.parsed.assistantMessage,
       content,
-      ...(toolCalls.length > 0 ? { toolCalls } : {}),
-      ...(providerContent?.length ? { providerContent } : {}),
     },
+    content,
+    toolCalls,
   };
+
+  if (options.usage) {
+    result.usage = options.usage;
+  }
+
+  if (toolCalls.length > 0) {
+    result.assistantMessage.toolCalls = toolCalls;
+  }
+
+  if (providerContent?.length) {
+    result.assistantMessage.providerContent = providerContent;
+  }
+
+  return result;
 }
 
 function anthropicPrefixHash(
@@ -701,22 +780,21 @@ function anthropicPrefixHash(
 ): string {
   return createHash("sha256")
     .update(
-      JSON.stringify(
-        { ...replay, content, messages },
-        (_key, value: unknown) => {
-          // JSON object key order is not part of Anthropic's prefix binding.
-          // Keep array order and primitive values unchanged.
-          if (!value || typeof value !== "object" || Array.isArray(value)) {
-            return value;
-          }
-          const record = readRecord(value);
-          return Object.fromEntries(
-            Object.keys(record)
-              .sort()
-              .map((key) => [key, record[key]])
-          );
+      JSON.stringify({ ...replay, content, messages }, (_key, value) => {
+        // JSON object key order is not part of Anthropic's prefix binding.
+        // Keep array order and primitive values unchanged.
+        if (!(value instanceof Object) || Array.isArray(value)) {
+          return value;
         }
-      )
+
+        const record = readRecord(value);
+
+        return Object.fromEntries(
+          Object.keys(record)
+            .sort()
+            .map((key) => [key, record[key]])
+        );
+      })
     )
     .digest("hex");
 }

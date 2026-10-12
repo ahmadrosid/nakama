@@ -14,6 +14,7 @@ export class WhatsAppAuthStore {
 
   async reload(): Promise<WhatsAppConfigFile | null> {
     this.config = await loadWhatsAppConfigFile(this.orgId);
+
     return this.config;
   }
 
@@ -43,7 +44,9 @@ export class WhatsAppAuthStore {
       jid,
       this.orgId
     );
+
     await this.reload();
+
     return result;
   }
 }

@@ -41,6 +41,7 @@ function useSavedHint() {
     }
 
     const timeout = window.setTimeout(() => setSavedHint(null), 2500);
+
     return () => window.clearTimeout(timeout);
   }, [savedHint]);
 
@@ -50,18 +51,22 @@ function useSavedHint() {
 function useWebSearchSettingsForm() {
   const { data: settings, refetch } = useWebSearchSettings();
   const saveMutation = useSaveWebSearchSettings();
+
   // undefined follows the server; null is an explicit built-in selection.
   const [providerDraft, setProvider] = useState<
     WebSearchProvider | null | undefined
   >(undefined);
+
   const provider =
     providerDraft === undefined ? (settings?.provider ?? null) : providerDraft;
+
   const [apiKey, setApiKey] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [savedHint, setSavedHint] = useSavedHint();
 
   const keyAlreadySaved =
     settings?.provider === provider && settings?.configured === true;
+
   const managedByEnvironment =
     settings?.provider === provider && settings?.source === "environment";
 
@@ -91,10 +96,19 @@ function useWebSearchSettingsForm() {
           },
         }
       );
+
       return;
     }
 
-    setProvider(value as WebSearchProvider);
+    const preset = PROVIDER_PRESETS.find(
+      (candidate) => candidate.value === value
+    );
+
+    if (!preset) {
+      return;
+    }
+
+    setProvider(preset.value);
     setApiKey("");
   }
 
@@ -104,24 +118,26 @@ function useWebSearchSettingsForm() {
     }
 
     resetMessages();
-    saveMutation.mutate(
-      {
-        provider,
-        ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+    const request: Parameters<typeof saveMutation.mutate>[0] = { provider };
+    const trimmedApiKey = apiKey.trim();
+
+    if (trimmedApiKey) {
+      request.apiKey = trimmedApiKey;
+    }
+
+    saveMutation.mutate(request, {
+      onError: (error) => setFormError(formatError(error)),
+      onSuccess: () => {
+        setProvider(undefined);
+        setApiKey("");
+        setSavedHint("Saved");
       },
-      {
-        onError: (error) => setFormError(formatError(error)),
-        onSuccess: () => {
-          setProvider(undefined);
-          setApiKey("");
-          setSavedHint("Saved");
-        },
-      }
-    );
+    });
   }
 
   async function manageKey(action: "clear" | "use-stored") {
     resetMessages();
+
     try {
       await client.manageSettingSecret("web-search", action);
       await refetch();

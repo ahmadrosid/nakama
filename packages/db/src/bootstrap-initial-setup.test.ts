@@ -33,6 +33,7 @@ function setupInput(email: string) {
 describe("bootstrapInitialSetup", () => {
   test("rolls the organization back when the admin insert fails", async () => {
     const database = await createSqliteDatabase(":memory:");
+
     try {
       // The CLI bearer identity is not a human user, so the claim check passes
       // and the admin insert is what trips the unique email index.
@@ -56,6 +57,7 @@ describe("bootstrapInitialSetup", () => {
 
   test("refuses to claim once a human user exists", async () => {
     const database = await createSqliteDatabase(":memory:");
+
     try {
       expect(
         await database.adapter.bootstrapInitialSetup(
