@@ -71,7 +71,7 @@ not assign these three from the dashboard like other builtins.
 | `org_memory_search` | Search pinned, recent-log, and archived bullets |
 | `org_memory_list` | Return the current live org memory content |
 | `propose_org_memory` | Propose an org-wide fact for admin approval (member+) |
-
+Automations and sub-agents run with member-level org context when the profile has tools available.
 
 Agents propose durable org facts via `propose_org_memory`; proposals land in a staging queue until an admin approves or rejects them in **Control center → Workspace → Organization → Org Memory → Proposals**. Admins can still add facts directly from the UI (bypasses the queue). Do not propose secrets, credentials, or PII.
 
