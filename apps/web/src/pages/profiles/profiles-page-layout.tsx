@@ -1,6 +1,6 @@
 import { NakamaApiError } from "@nakama/core/api-error";
 import { Button } from "@nakama/ui/button";
-import { LockIcon } from "hugeicons-react";
+import { SquareLock02Icon } from "hugeicons-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/context/use-auth";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
@@ -62,7 +62,7 @@ function ProfilesPageError({
   );
 }
 
-function isForbiddenError(error: unknown): boolean {
+function isForbiddenError(error: Error | null): boolean {
   return error instanceof NakamaApiError && error.status === 403;
 }
 
@@ -77,7 +77,10 @@ function ProfileForbiddenState() {
       role="status"
     >
       <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl border border-border bg-muted/40">
-        <LockIcon aria-hidden className="size-6 text-muted-foreground" />
+        <SquareLock02Icon
+          aria-hidden
+          className="size-6 text-muted-foreground"
+        />
       </div>
 
       <div className="max-w-sm space-y-1.5">
