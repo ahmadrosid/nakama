@@ -1,6 +1,5 @@
 import { Button } from "@nakama/ui/button";
 import { ConfirmDialog } from "@nakama/ui/dialog";
-import { toast } from "@nakama/ui/toast";
 import { cn } from "@nakama/ui/utils";
 import {
   Loading03Icon,
@@ -106,7 +105,10 @@ function Pm2Unavailable({
 }) {
   return (
     <span
-      className={cn("text-muted-foreground text-xs", className)}
+      className={cn(
+        "max-w-xs truncate text-muted-foreground text-xs",
+        className
+      )}
       title={error}
     >
       {error ? `PM2 not available: ${error}` : "PM2 not available"}
@@ -192,7 +194,7 @@ function StartAction({
 function ViewLogsButton({ onClick }: { onClick: () => void }) {
   return (
     <Button
-      className="ml-auto"
+      className="ml-auto text-muted-foreground"
       onClick={onClick}
       size="sm"
       type="button"
@@ -223,6 +225,7 @@ export function WorkerActionBar({
 }) {
   const [logDrawerOpen, setLogDrawerOpen] = useState(false);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [confirmStop, setConfirmStop] = useState(false);
   const ownerProfileId = useChannelProfileId();
   const disconnect = useDisconnectChannel();
   const startWorker = useStartWorker();
@@ -235,11 +238,6 @@ export function WorkerActionBar({
   const isBusy = starting || stopping || restarting || disconnect.isPending;
 
   const channelName = workerName.charAt(0).toUpperCase() + workerName.slice(1);
-
-  const disconnectWorker = () =>
-    disconnect.mutate(workerName, {
-      onError: (error) => toast(error.message),
-    });
 
   if (!pm2Managed) {
     return <Pm2Unavailable className={className} error={pm2Error} />;
@@ -259,11 +257,7 @@ export function WorkerActionBar({
         <StartAction
           compact
           disabled={isBusy}
-          onStart={() =>
-            startWorker.mutate(workerName, {
-              onError: (error) => toast(error.message),
-            })
-          }
+          onStart={() => startWorker.mutate(workerName)}
           starting={starting}
         />
       )}
@@ -297,7 +291,7 @@ export function WorkerActionBar({
             <RunningActions
               disabled={isBusy}
               onRestart={() => restartWorker.mutate(workerName)}
-              onStop={() => stopWorker.mutate(workerName)}
+              onStop={() => setConfirmStop(true)}
               restarting={restarting}
               stopping={stopping}
             />
@@ -305,18 +299,14 @@ export function WorkerActionBar({
             <StartAction
               compact={false}
               disabled={isBusy}
-              onStart={() =>
-                startWorker.mutate(workerName, {
-                  onError: (error) => toast(error.message),
-                })
-              }
+              onStart={() => startWorker.mutate(workerName)}
               starting={starting}
             />
           )}
           {ownerProfileId ? (
             <Button
               disabled={isBusy}
-              onClick={disconnectWorker}
+              onClick={() => setConfirmDisconnect(true)}
               size="sm"
               variant="ghost"
             >
@@ -333,6 +323,15 @@ export function WorkerActionBar({
           onOpenChange={setLogDrawerOpen}
           open={logDrawerOpen}
           workerName={workerName}
+        />
+      ) : null}
+      {confirmStop ? (
+        <ConfirmDialog
+          confirmLabel="Stop"
+          description="It stays offline until you start it again."
+          onClose={() => setConfirmStop(false)}
+          onConfirm={() => stopWorker.mutateAsync(workerName)}
+          title={`Stop ${channelName}?`}
         />
       ) : null}
       {confirmDisconnect ? (

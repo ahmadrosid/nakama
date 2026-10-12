@@ -1,3 +1,4 @@
+import { toast } from "@nakama/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/use-auth";
 import { useChannelProfileId } from "@/hooks/use-app-queries";
@@ -12,6 +13,7 @@ function useWorkerMutation(
 
   return useMutation({
     mutationFn,
+    onError: (error) => toast(error.message),
     onSuccess: () =>
       invalidateQueries(queryClient, queryKeys.systemStatus, [
         "plugin-workers",

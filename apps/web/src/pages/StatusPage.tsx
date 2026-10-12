@@ -68,15 +68,29 @@ export function StatusPage() {
 }
 
 function PluginWorkersSection() {
-  const { data = [], error } = usePluginWorkers();
+  const { data = [], error, refetch } = usePluginWorkers();
   const { user, activeOrg } = useAuth();
   const canManage = user?.isPlatformAdmin || activeOrg?.role === "admin";
 
   if (error) {
     return (
-      <p className="text-destructive text-sm" role="alert">
-        {formatError(error)}
-      </p>
+      <div
+        className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3"
+        role="alert"
+      >
+        <p className="min-w-0 flex-1 text-destructive text-sm">
+          Could not load plugin workers: {formatError(error)}
+        </p>
+        <Button
+          className="shrink-0 border-destructive/30 bg-background text-destructive hover:bg-destructive/10"
+          onClick={() => void refetch()}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          Try again
+        </Button>
+      </div>
     );
   }
 
@@ -97,20 +111,17 @@ function PluginWorkersSection() {
               online: "Online",
               stopped: "Offline",
             };
+            const status = worker.process.status;
 
             return (
               <WorkerServiceRow
                 canManage={Boolean(canManage)}
                 icon={pluginIcon(worker.pluginId)}
                 key={worker.name}
-                status={
-                  worker.process.status
-                    ? labels[worker.process.status]
-                    : "Unavailable"
-                }
+                status={status ? labels[status] : "PM2 unavailable"}
                 title={worker.label}
                 titleHref={`/plugins/${encodeURIComponent(worker.pluginId)}`}
-                tone={running ? "ok" : worker.process.status ? "bad" : "warn"}
+                tone={running ? "ok" : status ? "bad" : "warn"}
                 worker={{ process: worker.process, running }}
                 workerName={worker.name}
               />
@@ -177,19 +188,22 @@ function StatusDashboard({
 
   return (
     <div className="space-y-8">
-      <Card className="w-full overflow-hidden shadow-none">
-        <CardContent className="divide-y divide-border p-0">
-          <QuickStat
-            label="Scheduled jobs"
-            value={automationWorker.scheduledJobs}
-          />
-          <QuickStat
-            active={automationWorker.activeRuns > 0}
-            label="Automation runs"
-            value={automationWorker.activeRuns}
-          />
-        </CardContent>
-      </Card>
+      <section aria-label="Automation activity" className="space-y-3">
+        <h2 className="type-section-title">Automation activity</h2>
+        <Card className="w-full overflow-hidden shadow-none">
+          <CardContent className="divide-y divide-border p-0">
+            <QuickStat
+              label="Scheduled jobs"
+              value={automationWorker.scheduledJobs}
+            />
+            <QuickStat
+              active={automationWorker.activeRuns > 0}
+              label="Running now"
+              value={automationWorker.activeRuns}
+            />
+          </CardContent>
+        </Card>
+      </section>
       <section aria-label="Services" className="space-y-3">
         <h2 className="type-section-title">Services</h2>
         <Card className="w-full overflow-hidden shadow-none">
@@ -989,7 +1003,7 @@ function WorkerServiceRow({
   const pm2Managed = worker.process?.managed ?? false;
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+    <div className="flex flex-col gap-2 px-4 py-3 sm:min-h-14 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
       <div className="flex min-w-0 flex-wrap items-center gap-3">
         <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
         {titleHref ? (
@@ -1012,7 +1026,7 @@ function WorkerServiceRow({
           </Link>
         )}
       </div>
-      {canManage && (
+      {canManage ? (
         <div className="flex flex-wrap items-center gap-2">
           <WorkerActionBar
             className="w-fit"
@@ -1023,6 +1037,8 @@ function WorkerServiceRow({
           />
           {pm2Managed && <WorkerViewLogsButton workerName={workerName} />}
         </div>
+      ) : (
+        <span className="text-muted-foreground text-xs">View only</span>
       )}
     </div>
   );
@@ -1033,8 +1049,11 @@ function StatusSkeleton() {
     <div
       aria-busy="true"
       aria-label="Loading system status"
-      className="h-80 animate-pulse rounded-md border border-border bg-muted/40"
-    />
+      className="space-y-8"
+    >
+      <div className="h-24 animate-pulse rounded-md border border-border bg-muted/40" />
+      <div className="h-72 animate-pulse rounded-md border border-border bg-muted/40" />
+    </div>
   );
 }
 
