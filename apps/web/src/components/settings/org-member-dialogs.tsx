@@ -15,7 +15,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { useQuery } from "@tanstack/react-query";
 import { Copy01Icon, Mail01Icon } from "hugeicons-react";
 import { Link } from "react-router-dom";
-import { OrgMemberRoleSelect } from "@/components/settings/org-member-role-select";
+import {
+  OrgMemberRoleCards,
+  OrgMemberRoleSelect,
+} from "@/components/settings/org-member-role-select";
 import { emailSettingsQueryOptions } from "@/hooks/use-app-queries";
 
 export type OrgMemberAddCredentials = {
@@ -246,7 +249,7 @@ export function OrgMemberAddDialog({
 }) {
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-lg">
         {credentials ? (
           <>
             <DialogHeader>
@@ -285,29 +288,51 @@ export function OrgMemberAddDialog({
               <DialogTitle>Add member</DialogTitle>
             </DialogHeader>
             <form className="space-y-4" onSubmit={onSubmit}>
-              <div>
-                <label
-                  className="mb-1 block font-medium text-sm"
-                  htmlFor="add-name"
-                >
-                  Name
-                </label>
-                <Input
-                  id="add-name"
-                  onChange={(event) => onAddNameChange(event.target.value)}
-                  placeholder="Jane Doe"
-                  required
-                  value={addName}
-                />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label
+                    className="mb-1.5 block font-medium text-sm"
+                    htmlFor="add-name"
+                  >
+                    Name
+                  </label>
+                  <Input
+                    className="h-10 rounded-xl"
+                    id="add-name"
+                    onChange={(event) => onAddNameChange(event.target.value)}
+                    placeholder="Jane Doe"
+                    required
+                    value={addName}
+                  />
+                </div>
+                <div>
+                  <label
+                    className="mb-1.5 block font-medium text-sm"
+                    htmlFor="add-phone"
+                  >
+                    Phone{" "}
+                    <span className="font-normal text-muted-foreground">
+                      (optional)
+                    </span>
+                  </label>
+                  <Input
+                    className="h-10 rounded-xl"
+                    id="add-phone"
+                    onChange={(event) => onAddPhoneChange(event.target.value)}
+                    placeholder="+1234567890"
+                    value={addPhone}
+                  />
+                </div>
               </div>
               <div>
                 <label
-                  className="mb-1 block font-medium text-sm"
+                  className="mb-1.5 block font-medium text-sm"
                   htmlFor="add-email"
                 >
                   Email
                 </label>
                 <Input
+                  className="h-10 rounded-xl"
                   id="add-email"
                   onChange={(event) => onAddEmailChange(event.target.value)}
                   placeholder="jane@example.com"
@@ -317,30 +342,8 @@ export function OrgMemberAddDialog({
                 />
               </div>
               <div>
-                <label
-                  className="mb-1 block font-medium text-sm"
-                  htmlFor="add-phone"
-                >
-                  Phone{" "}
-                  <span className="font-normal text-muted-foreground">
-                    (optional)
-                  </span>
-                </label>
-                <Input
-                  id="add-phone"
-                  onChange={(event) => onAddPhoneChange(event.target.value)}
-                  placeholder="+1234567890"
-                  value={addPhone}
-                />
-              </div>
-              <div>
-                <label
-                  className="mb-1 block font-medium text-sm"
-                  htmlFor="add-role"
-                >
-                  Role
-                </label>
-                <OrgMemberRoleSelect
+                <p className="mb-1.5 font-medium text-sm">Role</p>
+                <OrgMemberRoleCards
                   onChange={onAddRoleChange}
                   value={addRole}
                 />
@@ -349,6 +352,13 @@ export function OrgMemberAddDialog({
                 <p className="text-destructive text-sm">{formError}</p>
               ) : null}
               <DialogFooter>
+                <Button
+                  onClick={() => onOpenChange(false)}
+                  type="button"
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
                 <Button disabled={pending} type="submit">
                   {pending ? "Adding…" : "Add member"}
                 </Button>

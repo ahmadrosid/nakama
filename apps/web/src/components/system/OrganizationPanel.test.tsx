@@ -403,20 +403,28 @@ test.each(["team", "parent", "standalone"] as const)(
     expect(write).toHaveBeenCalledWith(org.id);
     await openTab("Members");
 
+    const menu = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Actions for Writer"]'
+    )!;
+
+    expect(menu).not.toBeNull();
+    await act(async () => {
+      menu.click();
+      await settle();
+    });
+
     for (const name of [
       "Invite by email",
       "Add member",
       "Edit Writer",
       "Remove Writer",
     ]) {
-      const action = container.querySelector<HTMLButtonElement>(
-        `button[aria-label="${name}"]`
+      const action = document.querySelector<HTMLElement>(
+        `[aria-label="${name}"]`
       )!;
 
       expect(action).not.toBeNull();
-      expect(action.disabled).toBe(false);
-      await act(async () => action.focus());
-      expect(document.activeElement).toBe(action);
+      expect(action.getAttribute("aria-disabled")).not.toBe("true");
     }
 
     const next = { ...org, id: `${org.id}-next` };
