@@ -10,6 +10,7 @@ import {
   requireActiveOrgIdFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
   requireOrgMemberFromContext,
+  requirePlatformAdminFromContext,
 } from "../org-guards";
 import { errorResponse, json } from "../shared";
 import type { AppEnv, HonoApp } from "../types";
@@ -35,7 +36,12 @@ function requireWorkerAuthorization(
     return;
   }
 
-  requireOrgMemberFromContext(c);
+  // Everything left is install-wide. `automation` is the only one today, and it
+  // schedules every organization's automations plus the per-org skill curator,
+  // so stopping it reaches tenants the caller is not a member of. The workers
+  // page already gates these controls on `isPlatformAdmin`, and so does the
+  // same worker's settings write.
+  requirePlatformAdminFromContext(c);
 }
 
 export function registerWorkerRoutes(

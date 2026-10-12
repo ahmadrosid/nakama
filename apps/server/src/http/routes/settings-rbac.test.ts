@@ -246,6 +246,19 @@ const INSTALL_WRITES: { body?: unknown; method: string; path: string }[] = [
     path: "/v1/settings/error-tracking",
   },
   { method: "POST", path: "/v1/settings/error-tracking/test" },
+  // The automation worker schedules every organization's automations, so
+  // starting, stopping or restarting it is an install-wide write. A stop also
+  // records the worker as intentionally off, which survives a restart.
+  { method: "POST", path: "/v1/workers/automation/start" },
+  { method: "POST", path: "/v1/workers/automation/stop" },
+  { method: "POST", path: "/v1/workers/automation/restart" },
+  { method: "GET", path: "/v1/workers/automation/logs" },
+  { method: "POST", path: "/v1/workers/automation/clear-logs" },
+  {
+    body: { pollSeconds: 60 },
+    method: "PUT",
+    path: "/v1/settings/automation-worker",
+  },
 ];
 
 for (const role of ["member"] as const) {
@@ -312,6 +325,12 @@ function createApp(systemStatus?: SystemStatusStub) {
     },
     databaseAdapter,
     workerManager: {
+      clearWorkerLogs: record("clearWorkerLogs"),
+      getWorkerLogs: record("getWorkerLogs"),
+      // The route authorizes before it checks the worker name, so this has to
+      // pass for a rejection to prove the guard and not an unknown-worker 400.
+      isValidWorker: () => true,
+      restartWorker: record("restartWorker"),
       startWorker: record("startWorker"),
       stopWorker: record("stopWorker"),
     },
