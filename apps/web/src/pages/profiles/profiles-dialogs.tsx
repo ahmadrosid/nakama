@@ -224,7 +224,7 @@ function RemoveAssignmentDialog({
   );
 }
 
-export function ProfilesDialogs(state: ProfilesPageState) {
+function ProfileSkillDialogs(state: ProfilesPageState) {
   const { activeOrg } = useAuth();
 
   const {
@@ -235,13 +235,6 @@ export function ProfilesDialogs(state: ProfilesPageState) {
     handleAssignSkill,
     handleAssignBash,
     handleDeleteSkill,
-    allTools,
-    createOpen,
-    handleCreateOpenChange,
-    setSelectedId,
-    importOpen,
-    setImportOpen,
-    handleProfileImported,
     skillCreateOpen,
     setSkillCreateOpen,
     skillInstallOpen,
@@ -252,6 +245,54 @@ export function ProfilesDialogs(state: ProfilesPageState) {
     selectedId,
     handleCreateSkill,
     handleInstallSkill,
+    canManageProfile,
+  } = state;
+
+  return (
+    <>
+      <SkillCreateDialog
+        busy={createSkillMutation.isPending || assignSkillMutation.isPending}
+        onOpenChange={setSkillCreateOpen}
+        onSubmit={handleCreateSkill}
+        open={skillCreateOpen && canManageProfile}
+        profileId={selectedId}
+      />
+
+      <AddSkillDialog
+        assignedSkillIds={
+          new Set(detail?.skills.map((skill) => skill.id) ?? [])
+        }
+        bashAssigned={
+          detail?.tools.some((tool) => tool.id === BASH_TOOL_ID) ?? false
+        }
+        busy={installSkillMutation.isPending || assignSkillMutation.isPending}
+        onAssign={handleAssignSkill}
+        onAssignBash={handleAssignBash}
+        onDelete={handleDeleteSkill}
+        onInstall={handleInstallSkill}
+        onOpenChange={setSkillInstallOpen}
+        open={skillInstallOpen && canManageProfile}
+        orgId={activeOrg?.id ?? null}
+        profileId={selectedId}
+        skills={allSkills.filter((skill) => !skill.pluginId)}
+        skillsError={skillsError}
+        skillsLoading={skillsLoading}
+      />
+    </>
+  );
+}
+
+export function ProfilesDialogs(state: ProfilesPageState) {
+  const { user } = useAuth();
+
+  const {
+    allTools,
+    createOpen,
+    handleCreateOpenChange,
+    setSelectedId,
+    importOpen,
+    setImportOpen,
+    handleProfileImported,
     busy,
     setRemoveConfirm,
     mcpCreateOpen,
@@ -279,6 +320,7 @@ export function ProfilesDialogs(state: ProfilesPageState) {
     handleRemoveAssignmentConfirm,
     profiles,
     acpAgentPresets,
+    canManageProfile,
   } = state;
 
   const { navigateToNewChat } = useAppNavigation();
@@ -305,34 +347,7 @@ export function ProfilesDialogs(state: ProfilesPageState) {
         open={importOpen}
       />
 
-      <SkillCreateDialog
-        busy={createSkillMutation.isPending || assignSkillMutation.isPending}
-        onOpenChange={setSkillCreateOpen}
-        onSubmit={handleCreateSkill}
-        open={skillCreateOpen}
-        profileId={selectedId}
-      />
-
-      <AddSkillDialog
-        assignedSkillIds={
-          new Set(detail?.skills.map((skill) => skill.id) ?? [])
-        }
-        bashAssigned={
-          detail?.tools.some((tool) => tool.id === BASH_TOOL_ID) ?? false
-        }
-        busy={installSkillMutation.isPending || assignSkillMutation.isPending}
-        onAssign={handleAssignSkill}
-        onAssignBash={handleAssignBash}
-        onDelete={handleDeleteSkill}
-        onInstall={handleInstallSkill}
-        onOpenChange={setSkillInstallOpen}
-        open={skillInstallOpen}
-        orgId={activeOrg?.id ?? null}
-        profileId={selectedId}
-        skills={allSkills.filter((skill) => !skill.pluginId)}
-        skillsError={skillsError}
-        skillsLoading={skillsLoading}
-      />
+      <ProfileSkillDialogs {...state} />
 
       <McpServerDialog
         availableServers={availableMcpServers}
@@ -342,12 +357,18 @@ export function ProfilesDialogs(state: ProfilesPageState) {
           setMcpCreateOpen(open);
         }}
         onSubmit={handleCreateMcpServer}
-        open={mcpCreateOpen}
+        open={mcpCreateOpen && canManageProfile}
       />
 
       <CloneProfileDialog
         busy={busy}
-        cloneTargetId={cloneTargetId}
+        cloneTargetId={
+          user?.isPlatformAdmin === true &&
+          cloneTarget &&
+          !cloneTarget.sharedAgent
+            ? cloneTargetId
+            : null
+        }
         cloneTargetName={cloneTarget?.name}
         isPending={cloneProfileMutation.isPending}
         onConfirm={() => void handleCloneConfirm()}
@@ -374,7 +395,7 @@ export function ProfilesDialogs(state: ProfilesPageState) {
         }
         onCancel={() => setRemoveConfirm(null)}
         onConfirm={() => void handleRemoveAssignmentConfirm()}
-        removeConfirm={removeConfirm}
+        removeConfirm={canManageProfile ? removeConfirm : null}
       />
     </>
   );

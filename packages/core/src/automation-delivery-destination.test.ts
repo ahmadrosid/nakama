@@ -8,6 +8,7 @@ import {
   canApproveAutomationDeliveryDestination,
   isTelegramDeliveryChatAuthorized,
 } from "./automation-delivery-destination";
+import { asTestFetch } from "./channel-test-helpers";
 import type { JsonValue } from "./contract";
 import { getDiscordConfigDir, getDiscordConfigPath } from "./discord-config";
 import { getTelegramConfigDir, getTelegramConfigPath } from "./telegram-config";
@@ -29,12 +30,12 @@ interface RecordingFetch {
 function recordingFetch(handler: (url: string) => Response): RecordingFetch {
   const calls: string[] = [];
 
-  const fetchImpl: typeof fetch = async (input, init) => {
+  const fetchImpl: typeof fetch = asTestFetch(async (input, init) => {
     const url = new Request(input, init).url;
     calls.push(url);
 
     return handler(url);
-  };
+  });
 
   return { calls, fetchImpl };
 }
@@ -346,9 +347,9 @@ describe("cross-destination authorization for automation delivery", () => {
 
   test("only admins may approve a destination", () => {
     expect(canApproveAutomationDeliveryDestination(undefined)).toBe(false);
-    expect(canApproveAutomationDeliveryDestination({ orgRole: "viewer" })).toBe(
-      false
-    );
+    expect(
+      canApproveAutomationDeliveryDestination({ orgRole: undefined })
+    ).toBe(false);
     expect(canApproveAutomationDeliveryDestination({ orgRole: "admin" })).toBe(
       true
     );

@@ -56,6 +56,14 @@ export type TestBrowserSession = {
 
 export function browserSessionFromResponse(
   response: Response,
+  orgId: string
+): TestBrowserSession & { orgId: string };
+export function browserSessionFromResponse(
+  response: Response,
+  orgId?: string
+): TestBrowserSession;
+export function browserSessionFromResponse(
+  response: Response,
   orgId?: string
 ): TestBrowserSession {
   const setCookies = extractSetCookies(response);
@@ -82,7 +90,7 @@ export async function setupFreshInstallSession(
   databaseAdapter: DatabaseAdapter,
   email = "admin@example.com",
   role: OrgRole = "admin"
-): Promise<TestBrowserSession> {
+): Promise<TestBrowserSession & { orgId: string }> {
   const response = await app.fetch(
     new Request("http://localhost:4310/v1/auth/setup", {
       body: JSON.stringify(buildSetupAuthBody(email)),

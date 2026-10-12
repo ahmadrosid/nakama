@@ -7,6 +7,7 @@ function tool(name: string): ToolDefinition {
     description: name,
     name,
     parameters: { properties: {}, type: "object" },
+    run: async () => ({}),
   };
 }
 

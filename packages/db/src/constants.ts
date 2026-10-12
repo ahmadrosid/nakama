@@ -4,7 +4,7 @@ export const LLM_USAGE_STATS_ID = "default";
 
 export const WORKSPACE_SETTINGS_ID = "default";
 
-export const ORG_ROLES = ["admin", "member", "viewer"] as const;
+export const ORG_ROLES = ["admin", "member"] as const;
 
 export const ORG_INVITE_EXPIRY_DAYS = 7;
 

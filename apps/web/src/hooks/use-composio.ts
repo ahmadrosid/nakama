@@ -160,7 +160,10 @@ export function useUpdateProfileComposioToolkitsMutation() {
     onSuccess: (_data, variables) =>
       invalidateQueries(
         queryClient,
-        queryKeys.composio.profileToolkits(variables.profileId)
+        queryKeys.composio.profileToolkits(variables.profileId),
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
       ),
   });
 }

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { canRunToolCallsInParallel } from "@nakama/agent";
 import type { AgentService } from "../services/agent-service";
+import { formatToolActivityLabel } from "./sub-agent-activity";
 import type { SubAgentRunResult } from "./sub-agent-shared";
 import { createSubAgentTool, runSubAgentTool } from "./sub-agent-tool";
 
@@ -36,8 +37,7 @@ describe("sub_agent tool", () => {
       TOOL_CONTEXT
     );
 
-    expect(result.status).toBe("success");
-    expect(result.summary).toBe("Done");
+    expect(result).toMatchObject({ status: "success", summary: "Done" });
   });
 
   test("rejects nested sub-agent calls", async () => {
@@ -54,8 +54,10 @@ describe("sub_agent tool", () => {
       { ...TOOL_CONTEXT, agentDepth: 1 }
     );
 
-    expect(result.status).toBe("fail");
-    expect(result.error).toContain("Nested sub-agent");
+    expect(result).toMatchObject({
+      error: expect.stringContaining("Nested sub-agent"),
+      status: "fail",
+    });
   });
 
   test("rejects whitespace-only task", async () => {
@@ -88,7 +90,7 @@ describe("sub_agent tool", () => {
   });
 
   test("inherits the trusted parent role, not a role supplied in tool arguments", async () => {
-    for (const orgRole of ["admin", "member", "viewer", undefined] as const) {
+    for (const orgRole of ["admin", "member", undefined] as const) {
       let captured: unknown;
 
       const agent = createMockAgentService(async (input) => {
@@ -97,11 +99,8 @@ describe("sub_agent tool", () => {
         return { output: "ok", status: "success", summary: "ok" };
       });
 
-      await runSubAgentTool(
-        { orgRole: "admin", task: "delegated" },
-        { ...TOOL_CONTEXT, orgRole },
-        agent
-      );
+      const input = { orgRole: "admin", task: "delegated" };
+      await runSubAgentTool(input, { ...TOOL_CONTEXT, orgRole }, agent);
 
       expect(captured).toMatchObject({ orgRole });
     }
@@ -127,4 +126,26 @@ describe("sub_agent tool", () => {
       )
     ).toBe(true);
   });
+});
+
+test("tool activity accepts missing details for every tool branch", () => {
+  for (const tool of [
+    "read_file",
+    "search_files",
+    "knowledge_base_search",
+    "web_fetch",
+    "web_search",
+    "bash",
+    "write_file",
+    "write_docx",
+    "edit_file",
+    "delete_file",
+    "custom_tool",
+  ]) {
+    expect(formatToolActivityLabel(tool)).toEqual(expect.any(String));
+  }
+
+  expect(
+    formatToolActivityLabel("write_file", { path: "/tmp/report.md" })
+  ).toBe("Writing report.md");
 });

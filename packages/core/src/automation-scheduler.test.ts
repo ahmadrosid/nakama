@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
-  type AutomationSchedule,
   AutomationScheduler,
   type AutomationSchedulerDelegate,
 } from "./automation-scheduler";
+import type { AutomationSchedule } from "./contract";
 
 function createDelegate(
   overrides: Partial<AutomationSchedulerDelegate> = {}

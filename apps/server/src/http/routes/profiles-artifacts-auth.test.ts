@@ -10,6 +10,7 @@ import {
   loginPlatformAdminSession,
   loginUserSession,
   setupFreshInstallSession,
+  type TestBrowserSession,
 } from "../test-session-helpers";
 
 setupTestConfigDir("nakama-profiles-artifacts-auth-test-");
@@ -117,7 +118,7 @@ test("workspace rename requires platform admin access and updates pins for every
 
   const request = (
     body: { newName: string; path: string },
-    session = owner,
+    session: TestBrowserSession = owner,
     profile = "rename-profile"
   ) =>
     app.fetch(
@@ -381,21 +382,24 @@ describe("profile artifact content auth", () => {
     );
   });
 
-  test("org viewer can read artifact content", async () => {
+  test("org member can read artifact content", async () => {
     const { app, databaseAdapter } = createApp();
 
-    const viewerSession = await setupFreshInstallSession(
+    const secondaryMemberSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
-      "viewer@example.com",
-      "viewer"
+      "member@example.com",
+      "member"
     );
 
     const response = await app.fetch(
       new Request(
         "http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=report.md",
         {
-          headers: viewerSession.headers({}, viewerSession.orgId),
+          headers: secondaryMemberSession.headers(
+            {},
+            secondaryMemberSession.orgId
+          ),
         }
       )
     );
@@ -404,14 +408,14 @@ describe("profile artifact content auth", () => {
     expect(response.headers.get("Content-Disposition")).toContain("attachment");
   });
 
-  test("org viewer can check with HEAD whether an artifact still exists", async () => {
+  test("org member can check with HEAD whether an artifact still exists", async () => {
     const { app, databaseAdapter, readCalls } = createApp();
 
-    const viewerSession = await setupFreshInstallSession(
+    const secondaryMemberSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
-      "viewer-head@example.com",
-      "viewer"
+      "member-head@example.com",
+      "member"
     );
 
     const head = (path: string) =>
@@ -419,7 +423,10 @@ describe("profile artifact content auth", () => {
         new Request(
           `http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=${path}`,
           {
-            headers: viewerSession.headers({}, viewerSession.orgId),
+            headers: secondaryMemberSession.headers(
+              {},
+              secondaryMemberSession.orgId
+            ),
             method: "HEAD",
           }
         )
@@ -592,37 +599,6 @@ describe("profile artifact write auth", () => {
     });
   });
 
-  test("org viewer cannot save artifact content", async () => {
-    const { app, databaseAdapter, writeCalls } = createApp();
-
-    const viewerSession = await setupFreshInstallSession(
-      app,
-      databaseAdapter,
-      "viewer-write@example.com",
-      "viewer"
-    );
-
-    const response = await app.fetch(
-      new Request(
-        "http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=report.md",
-        {
-          body: JSON.stringify({ content: "# Overwritten\n" }),
-          headers: viewerSession.headers(
-            {
-              "Content-Type": "application/json",
-              "X-CSRF-Token": viewerSession.csrfToken,
-            },
-            viewerSession.orgId
-          ),
-          method: "PUT",
-        }
-      )
-    );
-
-    expect(response.status).toBe(403);
-    expect(writeCalls).toHaveLength(0);
-  });
-
   test("rejects a save with no path", async () => {
     const { app, databaseAdapter, writeCalls } = createApp();
 
@@ -761,8 +737,8 @@ test("personal file pins persist and enforce user, org, profile and path boundar
   await symlink(outside, path.join(root, "outside"));
 
   const request = (
-    session = owner,
-    body?: { path: string; pinned: boolean },
+    session: TestBrowserSession = owner,
+    body?: { path: string; pinned: unknown },
     profile = "pins-profile",
     orgId = owner.orgId
   ) =>

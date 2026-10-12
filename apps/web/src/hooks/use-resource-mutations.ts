@@ -56,7 +56,10 @@ export function useDeleteToolMutation() {
         queryClient,
         queryKeys.tools.all,
         queryKeys.tools.detail(toolId),
-        queryKeys.tools.source(toolId)
+        queryKeys.tools.source(toolId),
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
       ),
   });
 }
@@ -70,6 +73,8 @@ export function useCreateProfileMutation() {
       invalidateQueries(
         queryClient,
         queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"],
         queryKeys.soul.profile(data.profile.id)
       ),
   });
@@ -126,6 +131,8 @@ export function useCloneProfileMutation() {
       invalidateQueries(
         queryClient,
         queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"],
         queryKeys.soul.profile(data.profile.id)
       ),
   });
@@ -136,7 +143,8 @@ export function useDeleteProfileMutation() {
 
   return useMutation({
     mutationFn: (profileId: string) => client.deleteProfile(profileId),
-    onSuccess: () => invalidateQueries(queryClient, queryKeys.profiles.all),
+    onSuccess: (_data, profileId) =>
+      invalidateProfileQueries(queryClient, profileId),
   });
 }
 
@@ -147,7 +155,9 @@ async function invalidateProfileQueries(
   await invalidateQueries(
     queryClient,
     queryKeys.profiles.all,
-    queryKeys.profiles.detail(profileId)
+    queryKeys.profiles.detail(profileId),
+    ["organizationOverview"],
+    ["organizationPublicationCatalog"]
   );
 }
 
@@ -244,7 +254,13 @@ export function useCreateMcpServerMutation() {
         queryKeys.mcp.detail(data.server.id),
         data.server
       );
-      await invalidateQueries(queryClient, queryKeys.mcp.all);
+      await invalidateQueries(
+        queryClient,
+        queryKeys.mcp.all,
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
+      );
     },
   });
 }
@@ -262,7 +278,13 @@ export function useUpdateMcpServerMutation() {
     }) => client.updateMcpServer(serverId, request),
     onSuccess: async (data, { serverId }) => {
       queryClient.setQueryData(queryKeys.mcp.detail(serverId), data.server);
-      await invalidateQueries(queryClient, queryKeys.mcp.all);
+      await invalidateQueries(
+        queryClient,
+        queryKeys.mcp.all,
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
+      );
     },
   });
 }
@@ -278,7 +300,9 @@ export function useDeleteMcpServerMutation() {
         queryClient,
         queryKeys.mcp.all,
         queryKeys.mcp.detail(serverId),
-        queryKeys.profiles.all
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
       ),
   });
 }
@@ -290,7 +314,13 @@ export function useConnectMcpServerMutation() {
     mutationFn: (serverId: string) => client.connectMcpServer(serverId),
     onSuccess: async (data, serverId) => {
       queryClient.setQueryData(queryKeys.mcp.detail(serverId), data.server);
-      await invalidateQueries(queryClient, queryKeys.mcp.all);
+      await invalidateQueries(
+        queryClient,
+        queryKeys.mcp.all,
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
+      );
     },
   });
 }
@@ -302,7 +332,13 @@ export function useSyncMcpServerMutation() {
     mutationFn: (serverId: string) => client.syncMcpServer(serverId),
     onSuccess: async (data, serverId) => {
       queryClient.setQueryData(queryKeys.mcp.detail(serverId), data.server);
-      await invalidateQueries(queryClient, queryKeys.mcp.all);
+      await invalidateQueries(
+        queryClient,
+        queryKeys.mcp.all,
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
+      );
     },
   });
 }
@@ -345,7 +381,13 @@ export function useCreateSkillMutation() {
   return useMutation({
     mutationFn: (input: Parameters<typeof client.createSkill>[0]) =>
       client.createSkill(input),
-    onSuccess: () => invalidateQueries(queryClient, queryKeys.skills.all),
+    onSuccess: () =>
+      invalidateQueries(
+        queryClient,
+        queryKeys.skills.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
+      ),
   });
 }
 
@@ -360,7 +402,9 @@ export function useInstallSkillMutation() {
         queryClient,
         queryKeys.skills.all,
         queryKeys.profiles.all,
-        queryKeys.profiles.detail(variables.profileId)
+        queryKeys.profiles.detail(variables.profileId),
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
       ),
   });
 }
@@ -381,6 +425,11 @@ export function usePatchSkillMutation() {
       client.patchSkill(skillId, input, profileId ? { profileId } : undefined),
     onSuccess: async (data, variables) => {
       await Promise.all([
+        invalidateQueries(
+          queryClient,
+          ["organizationOverview"],
+          ["organizationPublicationCatalog"]
+        ),
         invalidateQueries(queryClient, queryKeys.skills.all),
         invalidateQueries(
           queryClient,
@@ -413,7 +462,9 @@ export function useDeleteSkillMutation() {
       invalidateQueries(
         queryClient,
         queryKeys.skills.all,
-        queryKeys.profiles.all
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
       ),
   });
 }

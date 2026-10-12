@@ -9,8 +9,8 @@ export function requireOrgAdmin(auth: RequestAuthContext): void {
   }
 }
 
-export function requireNotViewer(auth: RequestAuthContext): void {
-  if (!auth.orgRole || auth.orgRole === "viewer") {
+export function requireOrgMember(auth: RequestAuthContext): void {
+  if (auth.orgRole !== "admin" && auth.orgRole !== "member") {
     throw new NakamaApiError("Forbidden", 403);
   }
 }
@@ -47,11 +47,11 @@ export function requireOrgAdminOrPlatformAdminFromContext(
   return auth;
 }
 
-export function requireNotViewerFromContext(
+export function requireOrgMemberFromContext(
   c: Context<AppEnv>
 ): RequestAuthContext {
   const auth = getRequestAuth(c);
-  requireNotViewer(auth);
+  requireOrgMember(auth);
 
   return auth;
 }

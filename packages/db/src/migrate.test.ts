@@ -20,6 +20,234 @@ interface PluginCleanupRow {
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
+test.each(["fresh", "upgrade"])(
+  "organization parent migration preserves tenants and enforces references: %s",
+  (scenario) => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      if (scenario === "upgrade") {
+        db.exec(`
+          DROP INDEX organizations_parent_org_id;
+          ALTER TABLE organizations DROP COLUMN parent_org_id;
+        `);
+      }
+
+      db.exec(`
+        INSERT INTO organizations (id, name, slug, created_at, updated_at)
+          VALUES ('parent', 'Parent', 'parent', 'now', 'now'),
+                 ('team', 'Team', 'team', 'now', 'now');
+        INSERT INTO profiles (id, name, org_id, created_at, updated_at)
+          VALUES ('team-profile', 'Team agent', 'team', 'now', 'now');
+        INSERT INTO users (id, email, name, created_at, updated_at)
+          VALUES ('team-user', 'team@example.com', 'Team user', 'now', 'now');
+        INSERT INTO org_members (org_id, user_id, role, created_at)
+          VALUES ('team', 'team-user', 'admin', 'now');
+      `);
+      const profiles = db.query("SELECT * FROM profiles").all();
+      const memberships = db.query("SELECT * FROM org_members").all();
+
+      migrateDatabase(db);
+      migrateDatabase(db);
+
+      expect(
+        db
+          .query("SELECT id, parent_org_id FROM organizations ORDER BY id")
+          .all()
+      ).toEqual([
+        { id: "parent", parent_org_id: null },
+        { id: "team", parent_org_id: null },
+      ]);
+      expect(db.query("SELECT * FROM profiles").all()).toEqual(profiles);
+      expect(db.query("SELECT * FROM org_members").all()).toEqual(memberships);
+      expect(() =>
+        db.exec(
+          "UPDATE organizations SET parent_org_id = 'missing' WHERE id = 'team'"
+        )
+      ).toThrow();
+      expect(() =>
+        db.exec("UPDATE organizations SET parent_org_id = id WHERE id = 'team'")
+      ).toThrow();
+
+      db.exec(
+        "UPDATE organizations SET parent_org_id = 'parent' WHERE id = 'team'"
+      );
+      migrateDatabase(db);
+      expect(
+        db
+          .query("SELECT parent_org_id FROM organizations WHERE id = 'team'")
+          .get()
+      ).toEqual({ parent_org_id: "parent" });
+      expect(() =>
+        db.exec("DELETE FROM organizations WHERE id = 'parent'")
+      ).toThrow();
+      expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
+      db.exec("DELETE FROM organizations WHERE id = 'team'");
+      db.exec("DELETE FROM organizations WHERE id = 'parent'");
+      expect(db.query("SELECT id FROM organizations").all()).toEqual([]);
+    } finally {
+      db.close();
+    }
+  }
+);
+
+test.each(["fresh", "upgrade"])(
+  "shared resource migration preserves explicit publications and source links: %s",
+  (scenario) => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      if (scenario === "upgrade") {
+        db.exec(
+          "DROP TABLE shared_agent_instances; DROP TABLE org_shared_resources;"
+        );
+      }
+
+      db.exec(`
+        INSERT INTO organizations (id, name, slug, created_at, updated_at)
+          VALUES ('parent', 'Parent', 'parent', 'now', 'now'), ('team', 'Team', 'team', 'now', 'now');
+        UPDATE organizations SET parent_org_id = 'parent' WHERE id = 'team';
+        INSERT INTO profiles (id, name, org_id, is_default, created_at, updated_at)
+          VALUES ('source', 'Source', 'parent', 1, 'now', 'now'), ('instance', 'Instance', 'team', 1, 'now', 'now'), ('duplicate', 'Duplicate', 'team', 0, 'now', 'now');
+      `);
+      const profiles = db.query("SELECT * FROM profiles ORDER BY id").all();
+      migrateDatabase(db);
+      migrateDatabase(db);
+      expect(db.query("SELECT * FROM org_shared_resources").all()).toEqual([]);
+      expect(db.query("SELECT * FROM shared_agent_instances").all()).toEqual(
+        []
+      );
+      expect(db.query("SELECT * FROM profiles ORDER BY id").all()).toEqual(
+        profiles
+      );
+
+      const publish = db.query(
+        "INSERT INTO org_shared_resources (id, org_id, resource_kind, resource_id, created_at, updated_at) VALUES (?, ?, ?, ?, 'now', 'now')"
+      );
+
+      for (const kind of ["knowledge", "skill", "agent", "tool", "model"]) {
+        publish.run(
+          kind,
+          "parent",
+          kind,
+          kind === "agent" ? "source" : "resource"
+        );
+      }
+
+      expect(() =>
+        publish.run("duplicate", "parent", "agent", "source")
+      ).toThrow();
+      expect(() =>
+        publish.run("invalid", "parent", "secret", "resource")
+      ).toThrow();
+      expect(() =>
+        publish.run("missing", "missing", "agent", "source")
+      ).toThrow();
+
+      const instance = db.query(
+        "INSERT INTO shared_agent_instances (profile_id, team_org_id, source_org_id, source_profile_id, publication_id, created_at) VALUES (?, ?, 'parent', 'source', 'agent', 'now')"
+      );
+
+      instance.run("instance", "team");
+      expect(() => instance.run("duplicate", "team")).toThrow();
+      expect(() => instance.run("missing", "team")).toThrow();
+      expect(() => instance.run("duplicate", "missing")).toThrow();
+
+      const publications = db
+        .query("SELECT * FROM org_shared_resources ORDER BY id")
+        .all();
+
+      const instances = db.query("SELECT * FROM shared_agent_instances").all();
+      migrateDatabase(db);
+      migrateDatabase(db);
+      expect(
+        db.query("SELECT * FROM org_shared_resources ORDER BY id").all()
+      ).toEqual(publications);
+      expect(db.query("SELECT * FROM shared_agent_instances").all()).toEqual(
+        instances
+      );
+      db.exec(
+        "DELETE FROM org_shared_resources WHERE id = 'agent'; DELETE FROM profiles WHERE id = 'source';"
+      );
+      expect(db.query("SELECT * FROM shared_agent_instances").all()).toEqual(
+        instances
+      );
+      expect(
+        db.query("SELECT id FROM profiles WHERE id = 'instance'").get()
+      ).toEqual({ id: "instance" });
+      db.exec("DELETE FROM profiles WHERE id = 'instance';");
+      expect(db.query("SELECT * FROM shared_agent_instances").all()).toEqual(
+        []
+      );
+      db.exec(
+        "DELETE FROM organizations WHERE id = 'team'; DELETE FROM organizations WHERE id = 'parent';"
+      );
+      expect(db.query("SELECT * FROM org_shared_resources").all()).toEqual([]);
+      expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
+    } finally {
+      db.close();
+    }
+  }
+);
+
+test.each(["fresh", "upgrade"])(
+  "team request migration retains recovery records: %s",
+  (scenario) => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      if (scenario === "upgrade") {
+        db.exec("DROP TABLE org_team_creation_requests;");
+      }
+
+      db.exec(
+        "INSERT INTO organizations (id, name, slug, created_at, updated_at) VALUES ('parent', 'Parent', 'parent', 'now', 'now'), ('team', 'Team', 'team', 'now', 'now');"
+      );
+      migrateDatabase(db);
+      migrateDatabase(db);
+      expect(
+        db.query("SELECT * FROM org_team_creation_requests").all()
+      ).toEqual([]);
+      db.exec(
+        "INSERT INTO org_team_creation_requests (parent_org_id, request_id, request_hash, creator_user_id, admin_user_id, team_org_id, created_at) VALUES ('parent', 'request', 'hash', 'creator', 'admin', 'team', 'now');"
+      );
+
+      const requests = db
+        .query("SELECT * FROM org_team_creation_requests")
+        .all();
+
+      migrateDatabase(db);
+      migrateDatabase(db);
+      expect(
+        db.query("SELECT * FROM org_team_creation_requests").all()
+      ).toEqual(requests);
+      db.exec(
+        "UPDATE org_team_creation_requests SET completed_at = 'done'; DELETE FROM organizations WHERE id = 'team';"
+      );
+      migrateDatabase(db);
+      expect(
+        db
+          .query(
+            "SELECT team_org_id, completed_at FROM org_team_creation_requests"
+          )
+          .get()
+      ).toEqual({ completed_at: "done", team_org_id: "team" });
+      db.exec("DELETE FROM organizations WHERE id = 'parent';");
+      expect(
+        db.query("SELECT * FROM org_team_creation_requests").all()
+      ).toEqual([]);
+    } finally {
+      db.close();
+    }
+  }
+);
+
 function closeDatabase(db: Database): void {
   try {
     db.close(true);
@@ -393,8 +621,8 @@ describe("coding-delegation skill rename migration", () => {
         )
         .get("skill_coding");
 
-      expect(skill.name).toBe("coding-agent");
-      expect(skill.source_path).toBe(
+      expect(skill?.name).toBe("coding-agent");
+      expect(skill?.source_path).toBe(
         "/tmp/.nakama/agent/skills/coding-agent/SKILL.md"
       );
     } finally {
@@ -465,7 +693,7 @@ describe("coding-delegation skill rename migration", () => {
         .get("super_bot");
 
       expect(skills).toEqual([{ id: "skill_canonical", name: "coding-agent" }]);
-      expect(assignment.skill_id).toBe("skill_canonical");
+      expect(assignment?.skill_id).toBe("skill_canonical");
     } finally {
       db.close();
     }
@@ -704,8 +932,8 @@ describe("schema bootstrap version", () => {
         >("PRAGMA foreign_keys")
         .get();
 
-      expect(schemaVersion.version).toBe(1);
-      expect(foreignKeys.foreign_keys).toBe(1);
+      expect(schemaVersion?.version).toBe(1);
+      expect(foreignKeys?.foreign_keys).toBe(1);
     } finally {
       db.close();
     }
@@ -872,8 +1100,8 @@ describe("organization schema migration", () => {
         )
         .get("org_acme", "user_admin");
 
-      expect(member.role).toBe("admin");
-      expect(member.user_context).toBeNull();
+      expect(member?.role).toBe("admin");
+      expect(member?.user_context).toBeNull();
     } finally {
       db.close();
     }
@@ -915,7 +1143,7 @@ describe("organization schema migration", () => {
         )
         .get("org_acme", "user_legacy");
 
-      expect(member.user_context).toBe("# From users table");
+      expect(member?.user_context).toBe("# From users table");
     } finally {
       db.close();
     }
@@ -1118,13 +1346,13 @@ describe("organization schema migration", () => {
         )
         .get("org_legacy");
 
-      expect(row.archived_at).toBeNull();
+      expect(row?.archived_at).toBeNull();
       expect(
         db
           .prepare<{ allowed_invite_domains: string }, SQLQueryBindings[]>(
             "SELECT allowed_invite_domains FROM organizations WHERE id = ?"
           )
-          .get("org_legacy").allowed_invite_domains
+          .get("org_legacy")?.allowed_invite_domains
       ).toBe("[]");
     } finally {
       db.close();
@@ -1506,7 +1734,7 @@ describe("ephemeral attachment marking", () => {
         )
         .get();
 
-      expect(existing.ephemeral).toBe(0);
+      expect(existing?.ephemeral).toBe(0);
     } finally {
       db.close();
     }

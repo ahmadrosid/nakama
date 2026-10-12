@@ -19,33 +19,35 @@ import {
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
-  requireNotViewerFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
+  requireOrgMemberFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
 import { type getRequestAuth, json, readJson } from "../shared";
 import type { AppEnv, HonoApp } from "../types";
 
-const UI_MIME_TYPES = {
-  css: "text/css; charset=utf-8",
-  html: "text/html; charset=utf-8",
-  jpeg: "image/jpeg",
-  jpg: "image/jpeg",
-  js: "text/javascript; charset=utf-8",
-  json: "application/json; charset=utf-8",
-  map: "application/json; charset=utf-8",
-  mjs: "text/javascript; charset=utf-8",
-  png: "image/png",
-  svg: "image/svg+xml",
-  woff2: "font/woff2",
-} satisfies Record<string, string>;
+const UI_MIME_TYPES = new Map(
+  Object.entries({
+    css: "text/css; charset=utf-8",
+    html: "text/html; charset=utf-8",
+    jpeg: "image/jpeg",
+    jpg: "image/jpeg",
+    js: "text/javascript; charset=utf-8",
+    json: "application/json; charset=utf-8",
+    map: "application/json; charset=utf-8",
+    mjs: "text/javascript; charset=utf-8",
+    png: "image/png",
+    svg: "image/svg+xml",
+    woff2: "font/woff2",
+  })
+);
 
 export function registerPluginRoutes(
   app: HonoApp,
   options: ServerOptions
 ): void {
   app.get("/v1/plugins/official", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
 
     return json({
       plugins: await requirePluginService(options).listOfficialPlugins(),
@@ -160,8 +162,8 @@ export function registerPluginRoutes(
     path: string;
     request?: {
       body?: z.ZodTypeAny;
-      params?: z.ZodTypeAny;
-      query?: z.ZodTypeAny;
+      params?: z.ZodObject;
+      query?: z.ZodObject;
     };
     summary: string;
     tags: string[];
@@ -508,7 +510,7 @@ export function registerPluginRoutes(
   });
 
   app.get("/v1/plugins", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const plugins = requirePluginService(options);
 
@@ -518,7 +520,7 @@ export function registerPluginRoutes(
   });
 
   app.get("/v1/plugins/:pluginId", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const plugins = requirePluginService(options);
 
@@ -698,7 +700,7 @@ export function registerPluginRoutes(
   });
 
   app.post("/v1/plugins/:pluginId/actions/:actionKey", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const plugins = requirePluginService(options);
     const body = await readJson(c.req.raw, invokeRequestSchema);
@@ -729,8 +731,14 @@ export function registerPluginRoutes(
   );
 }
 
-async function servePluginUi(c: Context<AppEnv>, options: ServerOptions) {
-  requireNotViewerFromContext(c);
+async function servePluginUi(
+  c: Context<
+    AppEnv,
+    "/v1/plugins/ui/:orgId/:pluginId" | "/v1/plugins/ui/:orgId/:pluginId/*"
+  >,
+  options: ServerOptions
+) {
+  requireOrgMemberFromContext(c);
   const orgId = requireActiveOrgIdFromContext(c);
   const pathOrgId = decodeURIComponent(c.req.param("orgId"));
 
@@ -773,13 +781,11 @@ function pluginActor(
 ): PluginExecutionActor {
   const role = auth.orgRole;
 
-  return {
-    id: auth.user.id,
-    role:
-      role === "admin" || role === "member" || role === "viewer"
-        ? role
-        : "viewer",
-  };
+  if (role !== "admin" && role !== "member") {
+    throw new NakamaApiError("Forbidden", 403);
+  }
+
+  return { id: auth.user.id, role };
 }
 
 function pluginUiAssetPath(
@@ -811,37 +817,39 @@ function contentTypeFor(filePath: string, isDocument: boolean): string {
 
   const extension = filePath.split(".").pop()?.toLowerCase() ?? "";
 
-  return UI_MIME_TYPES[extension] ?? "application/octet-stream";
+  return UI_MIME_TYPES.get(extension) ?? "application/octet-stream";
 }
 
-const PLUGIN_ERROR_STATUS = {
-  archive_too_large: 413,
-  busy: 429,
-  digest_mismatch: 400,
-  duplicate_entry: 400,
-  expansion_limit: 413,
-  forbidden: 403,
-  interrupted: 503,
-  invalid_archive: 400,
-  invalid_package: 400,
-  invalid_entry: 400,
-  invalid_input: 400,
-  invalid_manifest: 400,
-  missing_manifest: 400,
-  missing_referenced_file: 400,
-  not_found: 404,
-  package_unavailable: 404,
-  unknown_action: 404,
-  unknown_hook: 404,
-  unsafe_path: 400,
-  unsupported_entry: 400,
-} satisfies Record<string, number>;
+const PLUGIN_ERROR_STATUS = new Map(
+  Object.entries({
+    archive_too_large: 413,
+    busy: 429,
+    digest_mismatch: 400,
+    duplicate_entry: 400,
+    expansion_limit: 413,
+    forbidden: 403,
+    interrupted: 503,
+    invalid_archive: 400,
+    invalid_package: 400,
+    invalid_entry: 400,
+    invalid_input: 400,
+    invalid_manifest: 400,
+    missing_manifest: 400,
+    missing_referenced_file: 400,
+    not_found: 404,
+    package_unavailable: 404,
+    unknown_action: 404,
+    unknown_hook: 404,
+    unsafe_path: 400,
+    unsupported_entry: 400,
+  })
+);
 
 function throwPluginHttpError<T>(error: T): never {
   if (error instanceof PluginHostError) {
     throw new NakamaApiError(
       error.code,
-      PLUGIN_ERROR_STATUS[error.code] ?? 409
+      PLUGIN_ERROR_STATUS.get(error.code) ?? 409
     );
   }
 

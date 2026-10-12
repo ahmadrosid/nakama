@@ -4,15 +4,17 @@ import {
   type ListSkillVersionsResponse,
   NakamaApiError,
   type ProfileResponse,
+  type PublishedSkillResponse,
   type SkillResponse,
   type SyncSkillsResponse,
 } from "@nakama/core";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
+  requireOrgAdminOrPlatformAdminFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
-import { json, readJson } from "../shared";
+import { getRequestAuth, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
 export function registerSkillRoutes(
@@ -38,10 +40,178 @@ export function registerSkillRoutes(
     skillId: z.string().openapi({ param: { in: "path", name: "skillId" } }),
   });
 
+  const publishedSkillSchema = z.object({
+    createdAt: z.string(),
+    createdBy: z.enum(["agent", "human", "bundled"]),
+    description: z.string(),
+    disableModelInvocation: z.boolean(),
+    enabled: z.boolean(),
+    hasTool: z.boolean(),
+    id: z.string(),
+    name: z.string(),
+    updatedAt: z.string(),
+    publicationId: z.string(),
+    scope: z.literal("parent"),
+    sourceOrganization: z.object({ id: z.string(), name: z.string() }),
+  });
+
   const listSkillsSchema = z
-    .object({})
+    .object({ publishedSkills: z.array(publishedSkillSchema).optional() })
     .passthrough()
     .openapi("ListSkillsResponse");
+
+  const publishedSkillResponseSchema = z
+    .object({ skill: publishedSkillSchema.extend({ body: z.string() }) })
+    .openapi("PublishedSkillResponse");
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "getPublishedSkill",
+      path: "/v1/orgs/{orgId}/shared-resources/{publicationId}/skill",
+      request: {
+        params: z.object({ orgId: z.string(), publicationId: z.string() }),
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: publishedSkillResponseSchema },
+          },
+          description: "Published skill detail",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Read a published skill through the active organization",
+      tags: ["Skills"],
+    })
+  );
+  app.get(
+    "/v1/orgs/:orgId/shared-resources/:publicationId/skill",
+    async (c) => {
+      const auth = getRequestAuth(c);
+      const orgId = decodeURIComponent(c.req.param("orgId"));
+
+      if (auth.activeOrgId !== orgId) {
+        throw new NakamaApiError("Not found", 404);
+      }
+
+      const organization =
+        await options.databaseAdapter?.getOrganizationById(orgId);
+
+      if (
+        !organization?.parentOrgId &&
+        auth.orgRole !== "admin" &&
+        !auth.isPlatformAdmin
+      ) {
+        throw new NakamaApiError("Not found", 404);
+      }
+
+      return json<PublishedSkillResponse>(
+        await agent.getPublishedSkill(
+          orgId,
+          decodeURIComponent(c.req.param("publicationId"))
+        )
+      );
+    }
+  );
+
+  const skillFilesSchema = z
+    .object({
+      files: z.array(
+        z.object({ path: z.string(), type: z.enum(["file", "directory"]) })
+      ),
+      truncated: z.boolean(),
+    })
+    .openapi("SkillFilesResponse");
+
+  const skillFileSchema = z
+    .object({
+      content: z.string().nullable(),
+      image: z
+        .object({ mediaType: z.string(), dataBase64: z.string() })
+        .optional(),
+      path: z.string(),
+      unavailableReason: z.string().optional(),
+    })
+    .openapi("SkillFileResponse");
+
+  for (const [suffix, operationId, summary] of [
+    ["files", "listPublishedSkillFiles", "List published skill files"],
+    ["file", "readPublishedSkillFile", "Read a published skill file"],
+  ] as const) {
+    app.openAPIRegistry.registerPath(
+      createRoute({
+        method: "get",
+        operationId,
+        path: `/v1/orgs/{orgId}/shared-resources/{publicationId}/skill/${suffix}`,
+        request: {
+          params: z.object({ orgId: z.string(), publicationId: z.string() }),
+          query: suffix === "file" ? z.object({ path: z.string() }) : undefined,
+        },
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: suffix === "file" ? skillFileSchema : skillFilesSchema,
+              },
+            },
+            description: summary,
+          },
+          400: {
+            content: { "application/json": { schema: errorSchema } },
+            description: "Invalid file path",
+          },
+          403: {
+            content: { "application/json": { schema: errorSchema } },
+            description: "File access denied",
+          },
+          404: {
+            content: { "application/json": { schema: errorSchema } },
+            description: "Unavailable skill or file",
+          },
+        },
+        summary,
+        tags: ["Skills"],
+      })
+    );
+    app.get(
+      `/v1/orgs/:orgId/shared-resources/:publicationId/skill/${suffix}`,
+      async (c) => {
+        const auth = getRequestAuth(c);
+        const orgId = decodeURIComponent(c.req.param("orgId"));
+
+        if (auth.activeOrgId !== orgId) {
+          throw new NakamaApiError("Not found", 404);
+        }
+
+        const organization =
+          await options.databaseAdapter?.getOrganizationById(orgId);
+
+        if (
+          !organization?.parentOrgId &&
+          auth.orgRole !== "admin" &&
+          !auth.isPlatformAdmin
+        ) {
+          throw new NakamaApiError("Not found", 404);
+        }
+
+        const publicationId = decodeURIComponent(c.req.param("publicationId"));
+
+        return json(
+          suffix === "files"
+            ? await agent.listPublishedSkillFiles(orgId, publicationId)
+            : await agent.readPublishedSkillFile(
+                orgId,
+                publicationId,
+                c.req.query("path") ?? ""
+              )
+        );
+      }
+    );
+  }
 
   const skillSchema = z.object({}).passthrough().openapi("SkillResponse");
 
@@ -286,7 +456,7 @@ export function registerSkillRoutes(
   );
 
   app.get("/v1/skills", async (c) => {
-    requirePlatformAdminFromContext(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
 
     return json<ListSkillsResponse>(
       await agent.listSkills(requireActiveOrgIdFromContext(c))
@@ -474,7 +644,7 @@ export function registerSkillRoutes(
   });
 
   app.post("/v1/profiles/:profileId/skills", async (c) => {
-    const auth = requirePlatformAdminFromContext(c);
+    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const body = await readJson(c.req.raw, assignSkillSchema);
 
@@ -489,7 +659,7 @@ export function registerSkillRoutes(
   });
 
   app.delete("/v1/profiles/:profileId/skills/:skillId", async (c) => {
-    const auth = requirePlatformAdminFromContext(c);
+    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
 
     return json<ProfileResponse>(

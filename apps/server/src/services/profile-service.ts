@@ -1,5 +1,5 @@
 import { existsSync, lstatSync, mkdirSync, renameSync } from "node:fs";
-import { cp, rm } from "node:fs/promises";
+import { cp, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type {
   AcpAgentConfig,
@@ -24,6 +24,8 @@ import type {
   MoveProfileRequest,
   ProfileResponse,
   ProfileSummary,
+  PublishedKnowledgeBaseDocument,
+  PublishedSkillSummary,
   ToolDetail,
   ToolResponse,
   ToolSourceResponse,
@@ -38,8 +40,14 @@ import {
   deleteProfileAvatar,
   ensureKnowledgeBaseDirs,
   getKnowledgeBaseDir,
+  getKnowledgeBaseExtractedPath,
+  getKnowledgeBaseManifestPath,
+  getKnowledgeBaseStoredDocumentPath,
+  getOrgConfigDir,
+  getOrgKnowledgeBaseDir,
   getProfileSharedDocumentIds,
   getProfileSoulDir,
+  guardFilePath,
   hasProfileAvatar,
   initSoulDirectory,
   KnowledgeBaseDocumentInUseError,
@@ -89,7 +97,10 @@ import {
   getCustomToolHandler,
   isCustomToolType,
 } from "./custom-tool-handlers";
-import { parseToolEnvDeclarations } from "./custom-tool-shared";
+import {
+  parseToolEnvDeclarations,
+  readToolEnvDeclarations,
+} from "./custom-tool-shared";
 import { toMcpServerSummaries } from "./mcp-service";
 import { MemoryBackendService } from "./memory-backend-service";
 import {
@@ -104,7 +115,7 @@ import {
   sessionHistoryArchivePath,
 } from "./session-persistence";
 import { sessionTurnRegistry } from "./session-turn-registry";
-import { toSkillSummaries } from "./skills-service";
+import { SkillsService, toSkillSummaries } from "./skills-service";
 import { readToolSource } from "./tool-source";
 
 const PROFILE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
@@ -258,13 +269,20 @@ async function copyKnowledgeBaseTo(
 }
 
 export class ProfileService {
+  private orgService?: import("./org-service").OrgService;
+
+  setOrgService(service: import("./org-service").OrgService): void {
+    this.orgService = service;
+  }
   beforeChannelOwnerDelete?: (
     orgId: string,
     profileId: string
   ) => Promise<void>;
   private readonly memoryBackend: MemoryBackendService;
+  private readonly skillsService: SkillsService;
   constructor(private readonly db: DatabaseAdapter) {
     this.memoryBackend = new MemoryBackendService(db);
+    this.skillsService = new SkillsService(db);
   }
 
   async listProfiles(orgId: string): Promise<ListProfilesResponse> {
@@ -278,17 +296,55 @@ export class ProfileService {
   }
 
   async getProfile(orgId: string, profileId: string): Promise<ProfileResponse> {
-    const profile = await this.requireProfile(orgId, profileId);
-    const tools = await this.db.listToolsForProfile(profileId);
-    const mcpServers = await this.db.listMcpServersForProfile(profileId);
-    const skills = await this.db.listSkillsForProfile(profileId);
+    const view = await this.resolveProfileView(
+      await this.requireProfile(orgId, profileId)
+    );
+
+    const profile = view.profile;
+
+    const tools =
+      view.shared?.assignedTools ??
+      (await this.db.listToolsForProfile(profileId));
+
+    const mcpServers =
+      view.shared?.assignedMcpServers ??
+      (await this.db.listMcpServersForProfile(profileId));
+
+    const skills = await this.db.listSkillsForProfile(
+      view.shared ? view.instance!.sourceProfileId : profileId
+    );
+
     const skillUsage = await this.db.listSkillUsageForProfile(profileId);
+    const publishedSkills: PublishedSkillSummary[] = [];
+
+    for (const skill of skills) {
+      if (!skill.orgId || skill.orgId === orgId) {
+        continue;
+      }
+
+      try {
+        publishedSkills.push(
+          await this.skillsService.getPublishedSkillSummaryForResource(
+            orgId,
+            skill.id
+          )
+        );
+      } catch (error) {
+        if (!(error instanceof NakamaApiError && error.status === 404)) {
+          throw error;
+        }
+      }
+    }
 
     return {
       profile: {
-        ...(await this.toProfileSummary(profile)),
+        ...(await this.toProfileSummary(profile, view)),
         mcpServers: toMcpServerSummaries(mcpServers),
-        skills: toSkillSummaries(skills, skillUsage),
+        publishedSkills,
+        skills: toSkillSummaries(
+          skills.filter((skill) => !skill.orgId || skill.orgId === orgId),
+          skillUsage
+        ),
         systemPrompt: profile.systemPrompt,
         tools: tools.map(toToolSummary),
       },
@@ -346,7 +402,7 @@ export class ProfileService {
     sourceId: string,
     request: CloneProfileRequest = {}
   ): Promise<ProfileResponse> {
-    const source = await this.requireProfile(orgId, sourceId);
+    const source = await this.requireMutableProfile(orgId, sourceId);
 
     if (source.isSuper) {
       throw new NakamaApiError("Super Bot cannot be cloned.", 400);
@@ -465,6 +521,18 @@ export class ProfileService {
     const profile = await this.requireProfile(orgId, profileId);
     const now = new Date().toISOString();
 
+    if (
+      (await this.db.getSharedAgentInstance(orgId, profileId)) &&
+      (Object.entries(request).some(
+        ([key, value]) => key !== "soulFiles" && value !== undefined
+      ) ||
+        Object.entries(request.soulFiles ?? {}).some(
+          ([name, content]) => name !== "MEMORY.md" && content !== undefined
+        ))
+    ) {
+      throw new NakamaApiError("Shared agent configuration is read-only.", 403);
+    }
+
     validateGeneratedSoulFiles(request.soulFiles);
     validateAcpAgent(request.acpAgent);
 
@@ -563,7 +631,7 @@ export class ProfileService {
     profileId: string,
     request: MoveProfileRequest
   ): Promise<ProfileResponse> {
-    await this.requireProfile(orgId, profileId);
+    await this.requireMutableProfile(orgId, profileId);
 
     for (const platform of [
       "telegram",
@@ -659,9 +727,20 @@ export class ProfileService {
     if (profile.isDefault) {
       const orgProfiles = await this.db.listProfilesForOrg(orgId);
 
-      const successor = orgProfiles.find(
-        (entry) => entry.id !== profileId && !entry.isSuper
-      );
+      let successor: StoredProfileRecord | undefined;
+
+      for (const entry of orgProfiles) {
+        if (
+          entry.id === profileId ||
+          entry.isSuper ||
+          (await this.db.getSharedAgentInstance(orgId, entry.id))
+        ) {
+          continue;
+        }
+
+        successor = entry;
+        break;
+      }
 
       if (orgProfiles.length < 3 || !successor) {
         throw new Error(
@@ -695,20 +774,105 @@ export class ProfileService {
   async listTools(orgId: string): Promise<ListToolsResponse> {
     await ensureBuiltinToolDefinitions(this.db);
 
-    const tools = (await this.db.listTools()).filter(
-      (tool) => !tool.orgId || tool.orgId === orgId
+    const records = await this.db.listTools();
+
+    // Custom modules are org-owned; an ownerless one is unclaimed, not shared.
+    const tools = records.filter((tool) =>
+      tool.orgId ? tool.orgId === orgId : !isCustomToolType(tool.handlerType)
     );
 
-    return { tools: tools.map(toToolDetail) };
+    const details = tools.map(toToolDetail);
+
+    return {
+      tools: [...details, ...(await this.listPublishedTools(orgId, records))],
+    };
   }
 
-  async getTool(toolId: string): Promise<ToolResponse> {
+  private async listPublishedTools(
+    orgId: string,
+    records: StoredToolRecord[]
+  ): Promise<ToolDetail[]> {
+    const details: ToolDetail[] = [];
+    const team = await this.db.getOrganizationById(orgId);
+
+    const parent =
+      team?.parentOrgId && !team.archivedAt && !team.setupPending
+        ? await this.db.getOrganizationById(team.parentOrgId)
+        : null;
+
+    if (
+      parent &&
+      !parent.archivedAt &&
+      !parent.setupPending &&
+      !parent.parentOrgId
+    ) {
+      const publications = await this.db.listOrgSharedResources(parent.id);
+
+      for (const publication of publications) {
+        if (publication.resourceKind !== "tool") {
+          continue;
+        }
+
+        const record = records.find(
+          (tool) =>
+            tool.id === publication.resourceId && tool.orgId === parent.id
+        );
+
+        if (!record) {
+          continue;
+        }
+
+        const config = z
+          .object({ requiresApiKey: z.boolean().optional() })
+          .safeParse(record.handlerConfig);
+
+        details.push({
+          ...toToolDetail(record),
+          handlerConfig: {
+            env: readToolEnvDeclarations(record.handlerConfig),
+            requiresApiKey:
+              config.success && config.data.requiresApiKey === true,
+          },
+          publicationId: publication.id,
+          scope: "parent",
+          sourceOrganization: { id: parent.id, name: parent.name },
+        });
+      }
+    }
+
+    return details;
+  }
+
+  async getTool(toolId: string, orgId?: string): Promise<ToolResponse> {
+    const detail = orgId
+      ? (await this.listTools(orgId)).tools.find((tool) => tool.id === toolId)
+      : undefined;
+
+    if (orgId && !detail) {
+      throw new NakamaApiError("Tool not found.", 404);
+    }
+
     const tool = await this.requireTool(toolId);
 
-    return { tool: await enrichToolParameters(toToolDetail(tool)) };
+    return {
+      tool: await enrichToolParameters(detail ?? toToolDetail(tool), tool),
+    };
   }
 
-  async getToolSource(toolId: string): Promise<ToolSourceResponse> {
+  async getToolSource(
+    toolId: string,
+    orgId?: string
+  ): Promise<ToolSourceResponse> {
+    if (orgId) {
+      const detail = (await this.listTools(orgId)).tools.find(
+        (tool) => tool.id === toolId
+      );
+
+      if (!detail || detail.scope === "parent") {
+        throw new NakamaApiError("Tool source is unavailable.", 404);
+      }
+    }
+
     const tool = await this.requireTool(toolId);
 
     return readToolSource(tool);
@@ -718,10 +882,31 @@ export class ProfileService {
     orgId: string,
     profileId: string
   ): Promise<ListToolsResponse> {
-    await this.requireProfile(orgId, profileId);
-    const tools = await this.db.listToolsForProfile(profileId);
+    const view = await this.resolveProfileView(
+      await this.requireProfile(orgId, profileId)
+    );
 
-    return { tools: tools.map(toToolSummary) };
+    const tools = view.instance
+      ? (view.shared?.assignedTools ?? [])
+      : await this.db.listToolsForProfile(profileId);
+
+    const sharedCatalog = tools.some(
+      (tool) => tool.orgId && tool.orgId !== orgId
+    )
+      ? await this.listPublishedTools(orgId, tools)
+      : [];
+
+    return {
+      tools: tools.flatMap((tool) => {
+        if (!tool.orgId || tool.orgId === orgId) {
+          return [toToolDetail(tool)];
+        }
+
+        const shared = sharedCatalog.find((entry) => entry.id === tool.id);
+
+        return shared ? [shared] : [];
+      }),
+    };
   }
 
   async deleteTool(toolId: string): Promise<void> {
@@ -746,7 +931,10 @@ export class ProfileService {
     }
   }
 
-  async createTool(request: CreateToolRequest): Promise<ToolDetail> {
+  async createTool(
+    request: CreateToolRequest,
+    orgId: string
+  ): Promise<ToolDetail> {
     const name = request.name.trim();
     const description = request.description.trim();
 
@@ -758,7 +946,7 @@ export class ProfileService {
       throw new Error("Tool description is required.");
     }
 
-    const existing = await this.db.getToolByName(name);
+    const existing = await this.db.getToolByNameForOrg(orgId, name);
 
     if (existing) {
       throw new Error(`Tool already exists: ${name}`);
@@ -780,7 +968,8 @@ export class ProfileService {
     );
 
     await CUSTOM_TOOL_HANDLERS[handlerType].validateModule(
-      handlerConfig.modulePath
+      handlerConfig.modulePath,
+      orgId
     );
 
     const now = new Date().toISOString();
@@ -792,6 +981,7 @@ export class ProfileService {
       handlerType,
       id: createId("tool"),
       name,
+      orgId,
       updatedAt: now,
     };
 
@@ -806,16 +996,22 @@ export class ProfileService {
     request: AssignToolRequest,
     meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    await this.requireProfile(orgId, profileId);
+    await this.requireMutableProfile(orgId, profileId);
 
-    const tool = await this.db.getTool(request.toolId);
+    const tool = (await this.listTools(orgId)).tools.find(
+      (item) => item.id === request.toolId
+    );
 
     if (!tool) {
-      throw new Error("Tool not found.");
+      throw new NakamaApiError("Tool not found.", 404);
     }
 
-    if (tool.orgId && tool.orgId !== orgId) {
-      throw new NakamaApiError("Tool not found.", 404);
+    const assigned = await this.db.listToolsForProfile(profileId);
+
+    if (
+      assigned.some((item) => item.id !== tool.id && item.name === tool.name)
+    ) {
+      throw new NakamaApiError("Conflicting tool names are assigned.", 409);
     }
 
     await withAssignmentChange(
@@ -833,7 +1029,7 @@ export class ProfileService {
     toolId: string,
     meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    await this.requireProfile(orgId, profileId);
+    await this.requireMutableProfile(orgId, profileId);
 
     await withAssignmentChange(
       this.db,
@@ -859,7 +1055,7 @@ export class ProfileService {
     request: AssignMcpServerRequest,
     meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    await this.requireProfile(orgId, profileId);
+    await this.requireMutableProfile(orgId, profileId);
 
     const server = await this.db.getMcpServer(request.serverId);
 
@@ -882,7 +1078,7 @@ export class ProfileService {
     serverId: string,
     meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    await this.requireProfile(orgId, profileId);
+    await this.requireMutableProfile(orgId, profileId);
 
     await withAssignmentChange(
       this.db,
@@ -908,12 +1104,32 @@ export class ProfileService {
     request: AssignSkillRequest,
     meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    await this.requireProfile(orgId, profileId);
+    await this.requireMutableProfile(orgId, profileId);
 
     const skill = await this.db.getSkill(request.skillId);
 
-    if (!skill || (skill.orgId != null && skill.orgId !== orgId)) {
+    if (!skill) {
       throw new Error("Skill not found.");
+    }
+
+    if (skill.orgId != null && skill.orgId !== orgId) {
+      await this.skillsService.getPublishedSkillSummaryForResource(
+        orgId,
+        skill.id
+      );
+    }
+
+    const assigned = await this.db.listSkillsForProfile(profileId);
+
+    if (
+      assigned.some(
+        (existing) => existing.id !== skill.id && existing.name === skill.name
+      )
+    ) {
+      throw new NakamaApiError(
+        "A different skill with this name is assigned.",
+        409
+      );
     }
 
     await withAssignmentChange(
@@ -931,7 +1147,7 @@ export class ProfileService {
     skillId: string,
     meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    await this.requireProfile(orgId, profileId);
+    await this.requireMutableProfile(orgId, profileId);
 
     await withAssignmentChange(
       this.db,
@@ -974,7 +1190,7 @@ export class ProfileService {
     profileId: string,
     attachment: ImageAttachment
   ): Promise<ProfileResponse> {
-    const profile = await this.requireProfile(orgId, profileId);
+    const profile = await this.requireMutableProfile(orgId, profileId);
 
     await saveProfileAvatar(orgId, profileId, attachment);
 
@@ -1003,7 +1219,7 @@ export class ProfileService {
   }
 
   async deleteProfileAvatar(orgId: string, profileId: string): Promise<void> {
-    const profile = await this.requireProfile(orgId, profileId);
+    const profile = await this.requireMutableProfile(orgId, profileId);
     const removed = await deleteProfileAvatar(orgId, profileId);
 
     if (!removed) {
@@ -1045,6 +1261,7 @@ export class ProfileService {
         ...shared,
       ],
       profileId,
+      publishedDocuments: await this.listPublishedKnowledgeBaseDocuments(orgId),
       sources,
     };
   }
@@ -1136,7 +1353,7 @@ export class ProfileService {
           "error"
         );
 
-        const entry = {
+        const entry: ImportKnowledgeBaseZipEntry = {
           documentId: document.id,
           filename,
           outcome: "created",
@@ -1226,6 +1443,19 @@ export class ProfileService {
   async listOrganizationKnowledgeBase(
     orgId: string
   ): Promise<{ documents: KnowledgeBaseDocument[] }> {
+    const dir = getOrgKnowledgeBaseDir(orgId);
+
+    try {
+      await guardFilePath(dir, null, undefined, {
+        allowedDirs: [getOrgConfigDir(orgId)],
+      });
+      await guardFilePath(getKnowledgeBaseManifestPath(dir), null, undefined, {
+        allowedDirs: [dir],
+      });
+    } catch {
+      throw new NakamaApiError("Knowledge catalog is unavailable.", 404);
+    }
+
     const documents = await listOrganizationKnowledgeBaseDocuments(orgId);
 
     return {
@@ -1246,7 +1476,8 @@ export class ProfileService {
         orgId,
         document,
         onDuplicate,
-        await this.orgProfileIds(orgId)
+        await this.orgProfileIds(orgId),
+        (documentId) => this.unpublishKnowledgeDocument(orgId, documentId)
       );
 
       return {
@@ -1284,7 +1515,8 @@ export class ProfileService {
     const deleted = await removeOrganizationKnowledgeBaseDocument(
       orgId,
       documentId,
-      await this.orgProfileIds(orgId)
+      await this.orgProfileIds(orgId),
+      (removedId) => this.unpublishKnowledgeDocument(orgId, removedId)
     );
 
     if (!deleted) {
@@ -1292,6 +1524,20 @@ export class ProfileService {
     }
 
     return { deleted: true, documentId };
+  }
+
+  private async unpublishKnowledgeDocument(
+    orgId: string,
+    documentId: string
+  ): Promise<void> {
+    for (const publication of await this.db.listOrgSharedResources(orgId)) {
+      if (
+        publication.resourceKind === "knowledge" &&
+        publication.resourceId === documentId
+      ) {
+        await this.db.deleteOrgSharedResource(orgId, publication.id);
+      }
+    }
   }
 
   async readOrganizationKnowledgeBaseDocument(
@@ -1312,6 +1558,143 @@ export class ProfileService {
           : "Knowledge base document not found.";
 
       throw new NakamaApiError(message, 404);
+    }
+  }
+
+  async listPublishedKnowledgeBaseDocuments(
+    orgId: string
+  ): Promise<PublishedKnowledgeBaseDocument[]> {
+    const organization = await this.db.getOrganizationById(orgId);
+
+    if (!organization || organization.archivedAt || !organization.parentOrgId) {
+      return [];
+    }
+
+    const documents: PublishedKnowledgeBaseDocument[] = [];
+
+    for (const publication of await this.db.listOrgSharedResources(
+      organization.parentOrgId
+    )) {
+      if (publication.resourceKind !== "knowledge") {
+        continue;
+      }
+
+      try {
+        documents.push(
+          await this.resolvePublishedKnowledgeBaseDocument(
+            orgId,
+            publication.id
+          )
+        );
+      } catch (error) {
+        if (!(error instanceof NakamaApiError && error.status === 404)) {
+          throw error;
+        }
+      }
+    }
+
+    return documents;
+  }
+
+  async readPublishedKnowledgeBaseDocument(
+    orgId: string,
+    publicationId: string,
+    options: { render?: "text" } = {}
+  ): Promise<{ bytes: Buffer; contentType: string; filename: string }> {
+    const document = await this.resolvePublishedKnowledgeBaseDocument(
+      orgId,
+      publicationId
+    );
+
+    try {
+      return await readOrganizationKnowledgeBaseDocumentContent(
+        document.sourceOrganization.id,
+        document.id,
+        options
+      );
+    } catch {
+      throw new NakamaApiError("Not found", 404);
+    }
+  }
+
+  private async resolvePublishedKnowledgeBaseDocument(
+    orgId: string,
+    publicationId: string
+  ): Promise<PublishedKnowledgeBaseDocument> {
+    const organization = await this.db.getOrganizationById(orgId);
+
+    if (!organization || organization.archivedAt) {
+      throw new NakamaApiError("Not found", 404);
+    }
+
+    const sourceOrgId = organization.parentOrgId ?? orgId;
+    const source = await this.db.getOrganizationById(sourceOrgId);
+
+    const publication = await this.db.getOrgSharedResource(
+      sourceOrgId,
+      publicationId
+    );
+
+    if (
+      !source ||
+      source.archivedAt ||
+      publication?.resourceKind !== "knowledge"
+    ) {
+      throw new NakamaApiError("Not found", 404);
+    }
+
+    const dir = getOrgKnowledgeBaseDir(sourceOrgId);
+
+    try {
+      await guardFilePath(dir, null, undefined, {
+        allowedDirs: [getOrgConfigDir(sourceOrgId)],
+      });
+      await guardFilePath(getKnowledgeBaseManifestPath(dir), null, undefined, {
+        allowedDirs: [dir],
+      });
+
+      const document = (
+        await listOrganizationKnowledgeBaseDocuments(sourceOrgId)
+      ).find(
+        (entry) =>
+          entry.id === publication.resourceId && entry.status === "ready"
+      );
+
+      if (!document) {
+        throw new NakamaApiError("Not found", 404);
+      }
+
+      const stored = await guardFilePath(
+        getKnowledgeBaseStoredDocumentPath(dir, document.id, document.filename),
+        null,
+        undefined,
+        { allowedDirs: [dir] }
+      );
+
+      if (!(await stat(stored.resolved)).isFile()) {
+        throw new NakamaApiError("Not found", 404);
+      }
+
+      await guardFilePath(
+        getKnowledgeBaseExtractedPath(dir, document.id),
+        null,
+        undefined,
+        { allowedDirs: [dir] }
+      );
+
+      return {
+        filename: document.filename,
+        id: document.id,
+        mediaType: document.mediaType,
+        publicationId: publication.id,
+        scope: "parent",
+        sizeBytes: document.sizeBytes,
+        sourceOrganization: { id: source.id, name: source.name },
+        status: document.status,
+        uploadedAt: document.uploadedAt,
+      };
+    } catch {
+      throw new NakamaApiError("Not found", 404);
     }
   }
 
@@ -1390,6 +1773,19 @@ export class ProfileService {
     );
   }
 
+  private async requireMutableProfile(
+    orgId: string,
+    profileId: string
+  ): Promise<StoredProfileRecord> {
+    const profile = await this.requireProfile(orgId, profileId);
+
+    if (await this.db.getSharedAgentInstance(orgId, profileId)) {
+      throw new NakamaApiError("Shared agent configuration is read-only.", 403);
+    }
+
+    return profile;
+  }
+
   private async requireProfile(
     orgId: string,
     profileId: string
@@ -1423,20 +1819,61 @@ export class ProfileService {
     return tool;
   }
 
+  private async resolveProfileView(profile: StoredProfileRecord) {
+    const instance = profile.orgId
+      ? await this.db.getSharedAgentInstance(profile.orgId, profile.id)
+      : null;
+
+    let shared: Awaited<
+      ReturnType<
+        import("./org-service").OrgService["resolveSharedAgentProfile"]
+      >
+    > = null;
+
+    if (instance && this.orgService && profile.orgId) {
+      try {
+        shared = await this.orgService.resolveSharedAgentProfile(
+          profile.orgId,
+          profile.id
+        );
+      } catch (error) {
+        if (
+          !(
+            error instanceof NakamaApiError &&
+            [400, 404, 409].includes(error.status)
+          )
+        ) {
+          throw error;
+        }
+      }
+    }
+
+    return { instance, profile: shared ?? profile, shared };
+  }
+
   private async toProfileSummary(
-    profile: StoredProfileRecord
+    stored: StoredProfileRecord,
+    resolved?: Awaited<ReturnType<ProfileService["resolveProfileView"]>>
   ): Promise<ProfileSummary> {
+    const view = resolved ?? (await this.resolveProfileView(stored));
+    const profile = view.profile;
     const orgId = profile.orgId;
 
     if (!orgId) {
       throw new Error("Profile is missing orgId.");
     }
 
-    const tools = await this.db.listToolsForProfile(profile.id);
-    const mcpServers = await this.db.listMcpServersForProfile(profile.id);
+    const tools =
+      view.shared?.assignedTools ??
+      (await this.db.listToolsForProfile(profile.id));
+
+    const mcpServers =
+      view.shared?.assignedMcpServers ??
+      (await this.db.listMcpServersForProfile(profile.id));
+
     const soulStack = await resolveSoulStackForProfile(orgId, profile.id);
 
-    return {
+    const summary: ProfileSummary = {
       acpAgent: profile.acpAgent ?? null,
       automationsEnabled: profile.automationsEnabled !== false,
       createdAt: profile.createdAt,
@@ -1451,10 +1888,25 @@ export class ProfileService {
         profile.skillsCuratorConsolidateEnabled ?? null,
       skillsPostTurnReview: profile.skillsPostTurnReview ?? null,
       skillsWriteApproval: profile.skillsWriteApproval ?? null,
-      soulActive: soulStack !== null,
+      soulActive:
+        soulStack !== null ||
+        Boolean(
+          view.shared && Object.values(view.shared.publishedSoul).some(Boolean)
+        ),
       toolCount: tools.length,
       updatedAt: profile.updatedAt,
     };
+
+    if (view.instance) {
+      summary.sharedAgent = {
+        available: Boolean(view.shared),
+        publicationId: view.instance.publicationId,
+        sourceOrgId: view.instance.sourceOrgId,
+        sourceProfileId: view.instance.sourceProfileId,
+      };
+    }
+
+    return summary;
   }
 }
 

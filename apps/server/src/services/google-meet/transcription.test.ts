@@ -6,15 +6,15 @@ import {
   formatTranscript,
   type TranscriptSegment,
 } from "@nakama/core/google-meet";
+import { asTestFetch } from "../../providers/test-helpers";
 import { connectTranscription, transcriptionConfig } from "./transcription";
 
 test("settings trim and validate the dedicated API key", () => {
   expect(transcriptionConfig({ apiKey: " secret " })).toEqual({
     apiKey: "secret",
   });
-  expect(() =>
-    transcriptionConfig({ apiKey: "secret", model: "gpt-4.1" })
-  ).toThrow();
+  const invalidConfig = { apiKey: "secret", model: "gpt-4.1" };
+  expect(() => transcriptionConfig(invalidConfig)).toThrow();
   expect(() => transcriptionConfig({ apiKey: " " })).toThrow();
 });
 
@@ -42,7 +42,7 @@ test("publishes before Stop, captures while request is pending, and reuses voice
   let requests = 0;
 
   const request = spyOn(globalThis, "fetch").mockImplementation(
-    async (_url, init) => {
+    asTestFetch(async (_url, init) => {
       // SAFETY: The transcription request always sends multipart form data.
       const form = init!.body as FormData;
       expect(form.get("model")).toBe("gpt-4o-transcribe-diarize");
@@ -74,7 +74,7 @@ test("publishes before Stop, captures while request is pending, and reuses voice
           },
         ],
       });
-    }
+    })
   );
 
   const session = await connectTranscription({
@@ -129,12 +129,19 @@ test("reused anonymous labels across chunks do not merge voices and invalid resp
   const failures: Error[] = [];
   let calls = 0;
 
-  const request = spyOn(globalThis, "fetch").mockImplementation(async () =>
-    Response.json({
-      segments: [
-        { end: ++calls === 3 ? -1 : 1, speaker: "A", start: 0, text: "hello" },
-      ],
-    })
+  const request = spyOn(globalThis, "fetch").mockImplementation(
+    asTestFetch(async () =>
+      Response.json({
+        segments: [
+          {
+            end: ++calls === 3 ? -1 : 1,
+            speaker: "A",
+            start: 0,
+            text: "hello",
+          },
+        ],
+      })
+    )
   );
 
   const session = await connectTranscription({
@@ -196,7 +203,7 @@ test("reference bank stays at four voices and retries do not duplicate turns", a
   let calls = 0;
 
   const request = spyOn(globalThis, "fetch").mockImplementation(
-    async (_url, init) => {
+    asTestFetch(async (_url, init) => {
       calls++;
 
       if (calls === 1) {
@@ -227,7 +234,7 @@ test("reference bank stays at four voices and retries do not duplicate turns", a
       return Response.json({
         segments: [{ end: 2, speaker: "E", start: 0, text: "again" }],
       });
-    }
+    })
   );
 
   const session = await connectTranscription({
@@ -258,14 +265,16 @@ test("aborting an upload publishes no late segments and removes audio", async ()
   const segments: TranscriptSegment[] = [];
 
   const request = spyOn(globalThis, "fetch").mockImplementation(
-    async (_url, init) =>
-      new Promise<Response>((_resolve, reject) => {
-        init!.signal!.addEventListener(
-          "abort",
-          () => reject(new Error("cancelled")),
-          { once: true }
-        );
-      })
+    asTestFetch(
+      async (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init!.signal!.addEventListener(
+            "abort",
+            () => reject(new Error("cancelled")),
+            { once: true }
+          );
+        })
+    )
   );
 
   const session = await connectTranscription({

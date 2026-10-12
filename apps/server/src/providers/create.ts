@@ -61,7 +61,7 @@ interface CreateProviderOptions {
   apiKey: string;
   instance?: ProviderInstance | null;
   model?: string;
-  provider: ProviderName;
+  provider: Exclude<ProviderName, "chatgpt" | "xai_oauth">;
 }
 
 function createProvider(options: CreateProviderOptions): ProviderClient {

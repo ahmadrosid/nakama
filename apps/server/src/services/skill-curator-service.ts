@@ -181,6 +181,10 @@ export class SkillCuratorService {
       );
 
       for (const skill of assigned) {
+        if (skill.orgId && skill.orgId !== orgId) {
+          continue;
+        }
+
         counts.scanned += 1;
 
         if (isExemptFromCurator(skill)) {
@@ -298,6 +302,10 @@ export class SkillCuratorService {
       const candidates: ConsolidateCandidateSkill[] = [];
 
       for (const skill of assigned) {
+        if (skill.orgId && skill.orgId !== input.orgId) {
+          continue;
+        }
+
         if (isExemptFromCurator(skill)) {
           continue;
         }

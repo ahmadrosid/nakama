@@ -23,7 +23,7 @@ type SubprocessJsonValue =
   | number
   | string
   | SubprocessJsonValue[]
-  | Record<string, SubprocessJsonValue>;
+  | { [key: string]: SubprocessJsonValue };
 
 /** Signal a dedicated POSIX process group or a Windows process tree.
  * Callers must spawn with detached: true on POSIX. Windows callers can await
@@ -193,10 +193,7 @@ export async function spawnJsonTool(
           return;
         }
 
-        const reply = (payload: {
-          error?: string;
-          result?: SubprocessJsonValue;
-        }) => {
+        const reply = (payload: { error?: string; result?: unknown }) => {
           if (child.connected) {
             child.send(
               { id: request.id, type: "nakama-host-result", ...payload },

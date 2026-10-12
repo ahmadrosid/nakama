@@ -409,13 +409,15 @@ describe("PluginService", () => {
       configDir
     );
 
-    for (const packageJson of [
+    const packageJsons: Record<string, Json>[] = [
       { dependencies: { lodash: "1.0.0" } },
       { optionalDependencies: { lodash: "1.0.0" } },
       { peerDependencies: { lodash: "1.0.0" } },
       { name: "another-package" },
       { version: "2.0.0" },
-    ]) {
+    ];
+
+    for (const packageJson of packageJsons) {
       await expect(
         service.previewPluginPackage(validBundle({}, { packageJson }))
       ).rejects.toMatchObject({ code: "invalid_manifest" });

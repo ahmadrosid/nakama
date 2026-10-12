@@ -7,8 +7,18 @@ import {
   slugifyProfileName,
 } from "./profiles";
 
+const profileDefaults = {
+  createdAt: "2026-01-01T00:00:00.000Z",
+  hasAvatar: false,
+  mcpServerCount: 0,
+  soulActive: false,
+  toolCount: 0,
+  updatedAt: "2026-01-01T00:00:00.000Z",
+};
+
 const profiles: ProfileSummary[] = [
   {
+    ...profileDefaults,
     id: "profile_b",
     isDefault: false,
     isSuper: false,
@@ -16,6 +26,7 @@ const profiles: ProfileSummary[] = [
     name: "Beta",
   },
   {
+    ...profileDefaults,
     id: "profile_a",
     isDefault: true,
     isSuper: false,
@@ -23,6 +34,7 @@ const profiles: ProfileSummary[] = [
     name: "Alpha",
   },
   {
+    ...profileDefaults,
     id: "super_bot",
     isDefault: false,
     isSuper: true,
@@ -50,6 +62,7 @@ describe("resolveProfileInput", () => {
   test("matches slugified profile names and near slug typos", () => {
     const scoped = [
       {
+        ...profileDefaults,
         id: "gary",
         isDefault: false,
         isSuper: false,
@@ -97,6 +110,7 @@ describe("resolveProfileInScopes", () => {
           orgName: "Acme",
           profiles: [
             {
+              ...profileDefaults,
               id: "default",
               isDefault: true,
               isSuper: false,
@@ -110,6 +124,7 @@ describe("resolveProfileInScopes", () => {
           orgName: "Beta",
           profiles: [
             {
+              ...profileDefaults,
               id: "gary",
               isDefault: true,
               isSuper: false,

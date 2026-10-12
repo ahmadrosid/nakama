@@ -61,22 +61,21 @@ describe("email tool", () => {
   test("strips cross-action fields advertised by the flat LLM schema", async () => {
     const sender = createFakeMailSender();
 
-    const result = await runEmailTool(
-      {
-        action: "send",
-        folder: "INBOX",
-        limit: 20,
-        query: "noise",
-        subject: "Hello",
-        text: "Body",
-        to: "recipient@example.com",
-        uid: 99,
-      },
-      {
-        createSender: () => sender,
-        loadConfig: async () => completeConfig,
-      }
-    );
+    const input = {
+      action: "send",
+      folder: "INBOX",
+      limit: 20,
+      query: "noise",
+      subject: "Hello",
+      text: "Body",
+      to: "recipient@example.com",
+      uid: 99,
+    } as const;
+
+    const result = await runEmailTool(input, {
+      createSender: () => sender,
+      loadConfig: async () => completeConfig,
+    });
 
     expect("sent" in result && result.sent?.messageId).toBe("fake-message-id");
     expect(sender.sent).toHaveLength(1);
@@ -239,19 +238,28 @@ describe("email tool", () => {
   });
 
   test("requires text body for send", async () => {
+    let senderCreated = false;
+
     await expect(
       runEmailTool(
+        // @ts-expect-error Exercise runtime validation of a send request without its required text field.
         {
           action: "send",
           subject: "Hello",
           to: "recipient@example.com",
         },
         {
-          createSender: () => createFakeMailSender(),
+          createSender: () => {
+            senderCreated = true;
+
+            return createFakeMailSender();
+          },
           loadConfig: async () => completeConfig,
         }
       )
-    ).rejects.toThrow("text is required.");
+    ).rejects.toThrow();
+
+    expect(senderCreated).toBe(false);
   });
 
   test("sanitizes sender errors", async () => {

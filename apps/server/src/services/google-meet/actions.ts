@@ -52,7 +52,7 @@ export const meetingActionSchemas = {
 
 export interface MeetExecutionContext {
   actionKey: string;
-  actor: { id: string; role: "admin" | "member" | "viewer" };
+  actor: { id: string; role: "admin" | "member" };
   captureUrl?(): Promise<string>;
   createCapture?(meeting: Meeting): { token: string; url: string };
   dataDir: string;
@@ -105,7 +105,10 @@ export async function run(
 
   input = schema.parse(input);
 
-  if (!context.actor.id || context.actor.role === "viewer") {
+  if (
+    !context.actor.id ||
+    (context.actor.role !== "admin" && context.actor.role !== "member")
+  ) {
     throw new Error("Member access required");
   }
 

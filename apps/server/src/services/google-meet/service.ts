@@ -176,7 +176,10 @@ export class GoogleMeetService {
         const orgId = context.orgId?.trim();
         const profileId = context.profileId?.trim();
 
-        if (!(orgId && profileId && actor.id) || actor.role === "viewer") {
+        if (
+          !(orgId && profileId && actor.id) ||
+          (actor.role !== "admin" && actor.role !== "member")
+        ) {
           throw new NakamaApiError("Forbidden", 403);
         }
 
@@ -184,7 +187,7 @@ export class GoogleMeetService {
 
         if (
           !member ||
-          member.role === "viewer" ||
+          (member.role !== "admin" && member.role !== "member") ||
           !(await this.db.getProfileForOrg(profileId, orgId))
         ) {
           throw new NakamaApiError("Forbidden", 403);
@@ -237,11 +240,11 @@ export class GoogleMeetService {
     orgId: string,
     action: Action,
     input: MeetActionInput,
-    actor: { id: string; role: "admin" | "member" | "viewer" },
+    actor: { id: string; role: "admin" | "member" },
     signal?: AbortSignal,
     profileId?: string
   ): Promise<MeetActionResults[Action]> {
-    if (!actor.id || actor.role === "viewer") {
+    if (!actor.id || (actor.role !== "admin" && actor.role !== "member")) {
       return Promise.reject(new NakamaApiError("Forbidden", 403));
     }
 

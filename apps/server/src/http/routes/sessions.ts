@@ -29,7 +29,7 @@ import { sessionTurnRegistry } from "../../services/session-turn-registry";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
-  requireNotViewerFromContext,
+  requireOrgMemberFromContext,
 } from "../org-guards";
 import {
   errorResponse,
@@ -203,8 +203,22 @@ export function registerSessionRoutes(
   const sendMessageRequestSchema = z
     .object({
       clientOrigin: z.string().optional(),
-      documents: z.array(z.object({}).passthrough()).optional(),
-      images: z.array(z.object({}).passthrough()).optional(),
+      documents: z
+        .array(
+          z
+            .object({
+              data: z.string(),
+              filename: z.string(),
+              mediaType: z.string(),
+            })
+            .passthrough()
+        )
+        .optional(),
+      images: z
+        .array(
+          z.object({ data: z.string(), mediaType: z.string() }).passthrough()
+        )
+        .optional(),
       message: z.string(),
       stream: z.boolean().optional(),
       whatsappMessage: z
@@ -647,7 +661,7 @@ export function registerSessionRoutes(
       return errorResponse("Image not found", 404);
     }
 
-    return new Response(attachment.bytes, {
+    return new Response(new Uint8Array(attachment.bytes), {
       headers: {
         "Cache-Control": "private, no-store",
         "Content-Disposition": "attachment",
@@ -658,7 +672,7 @@ export function registerSessionRoutes(
   });
 
   app.post("/v1/sessions", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
 
     const rawBody = await readJson(
@@ -769,7 +783,7 @@ export function registerSessionRoutes(
   });
 
   app.delete("/v1/sessions/:sessionId", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const { orgId, sessionId } = await requireSessionAccess(c);
     const purge = c.req.query("purge") === "true";
 
@@ -785,7 +799,7 @@ export function registerSessionRoutes(
   });
 
   app.patch("/v1/sessions/:sessionId", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const { orgId, sessionId } = await requireSessionAccess(c);
 
     const parsedBody = updateSessionRequestSchema.safeParse(
@@ -845,7 +859,7 @@ export function registerSessionRoutes(
   });
 
   app.put("/v1/sessions/:sessionId/acp-settings/:configId", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const { orgId, sessionId } = await requireSessionAccess(c);
     const configId = decodeURIComponent(c.req.param("configId"));
     const body = await readJson(c.req.raw, acpSettingRequestSchema);
@@ -865,7 +879,7 @@ export function registerSessionRoutes(
   });
 
   app.post("/v1/sessions/:sessionId/compact", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const { orgId, sessionId } = await requireSessionAccess(c);
     const body = await readOptionalJson<CompactSessionRequest>(c.req.raw, {});
 
@@ -942,7 +956,7 @@ export function registerSessionRoutes(
   });
 
   app.post("/v1/sessions/:sessionId/branch", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const { orgId, sessionId } = await requireSessionAccess(c);
     const body = await readJson(c.req.raw, branchSessionRequestSchema);
 
@@ -960,7 +974,7 @@ export function registerSessionRoutes(
   });
 
   app.post("/v1/sessions/:sessionId/messages", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const { orgId, sessionId } = await requireSessionAccess(c);
 
     const turnStarted = await agent.beginSessionTurn(sessionId, orgId);

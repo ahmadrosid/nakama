@@ -37,7 +37,7 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
   expect(policyResponse.status).toBe(200);
   expect(await policyResponse.json()).toMatchObject({
     enabled: true,
-    enforcedRoles: ["admin", "member", "viewer"],
+    enforcedRoles: ["admin", "member"],
     keyConfigured: true,
     required: true,
   });
@@ -127,16 +127,16 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
 
   await seedOrgAdmin(databaseAdapter, {
     authService,
-    email: "viewer@example.com",
+    email: "member@example.com",
     orgId: session.orgId,
-    role: "viewer",
-    userId: "user_mfa_viewer",
+    role: "member",
+    userId: "user_mfa_secondaryMember",
   });
 
-  const viewerLogin = await app.fetch(
+  const secondaryMemberLogin = await app.fetch(
     new Request("http://localhost:4310/v1/auth/login", {
       body: JSON.stringify({
-        email: "viewer@example.com",
+        email: "member@example.com",
         password: "password123",
       }),
       headers: { "Content-Type": "application/json" },
@@ -144,8 +144,8 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
     })
   );
 
-  expect(await viewerLogin.json()).toMatchObject({
-    mfaRequired: false,
+  expect(await secondaryMemberLogin.json()).toMatchObject({
+    mfaRequired: true,
   });
 
   // The setup user is a platform admin, so the required policy covers it even
@@ -598,4 +598,95 @@ test("MFA enrollment and disable revoke other browser sessions", async () => {
       )
     ).status
   ).toBe(200);
+});
+
+test("malformed passkey credentials cannot change authentication factors", async () => {
+  const { app, databaseAdapter } = createMinimalHonoApp();
+  const session = await setupFreshInstallSession(app, databaseAdapter);
+  const user = await databaseAdapter.getUserByEmail("admin@example.com");
+
+  if (!user) {
+    throw new Error("Expected setup user");
+  }
+
+  const before = await databaseAdapter.listPasskeys(user.id);
+
+  for (const credential of [
+    {},
+    { id: 7 },
+    {
+      clientExtensionResults: {},
+      id: "fake",
+      rawId: "fake",
+      response: { clientDataJSON: 7 },
+      type: "public-key",
+    },
+  ]) {
+    const login = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/login", {
+        body: JSON.stringify({
+          email: user.email,
+          passkey: credential,
+          passkeyChallenge: "fake",
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+
+    expect(login.status).toBe(400);
+
+    const enrollment = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/mfa/passkey/verify", {
+        body: JSON.stringify({ challenge: "fake", credential }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    expect(enrollment.status).toBe(400);
+
+    const removal = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/mfa/passkey/disable", {
+        body: JSON.stringify({ challenge: "fake", credential }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    expect(removal.status).toBe(400);
+  }
+
+  expect(await databaseAdapter.listPasskeys(user.id)).toEqual(before);
+  expect((await databaseAdapter.getUserById(user.id))?.mfaEnabled).toBe(false);
+
+  const unknownCredential = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/login", {
+      body: JSON.stringify({
+        email: user.email,
+        passkey: {
+          clientExtensionResults: { credProps: { rk: true } },
+          id: "fake",
+          rawId: "fake",
+          response: {
+            authenticatorData: "fake",
+            clientDataJSON: "fake",
+            signature: "fake",
+          },
+          type: "public-key",
+        },
+        passkeyChallenge: "fake",
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    })
+  );
+
+  expect(unknownCredential.status).toBe(401);
 });

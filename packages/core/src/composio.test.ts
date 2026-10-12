@@ -98,6 +98,20 @@ describe("composio-config", () => {
 });
 
 describe("normalizeEnableComposioToolkitRequest", () => {
+  test.each(
+    [
+      undefined,
+      null,
+      false,
+      1,
+      "gmail",
+      [],
+      { toolkitSlug: Symbol("gmail") },
+    ].map((input) => ({ input }))
+  )("rejects malformed request %j", ({ input }) => {
+    expect(() => normalizeEnableComposioToolkitRequest(input)).toThrow();
+  });
+
   test("accepts valid toolkit slug", () => {
     expect(
       normalizeEnableComposioToolkitRequest({ toolkitSlug: "Gmail" })
@@ -112,6 +126,16 @@ describe("normalizeEnableComposioToolkitRequest", () => {
 });
 
 describe("normalizeUpdateProfileComposioToolkitsRequest", () => {
+  test.each(
+    [undefined, null, false, 1, "gmail", [], { assignments: [undefined] }].map(
+      (input) => ({ input })
+    )
+  )("rejects malformed request %j", ({ input }) => {
+    expect(() =>
+      normalizeUpdateProfileComposioToolkitsRequest(input)
+    ).toThrow();
+  });
+
   test("accepts toolkit assignment with action allowlist", () => {
     expect(
       normalizeUpdateProfileComposioToolkitsRequest({

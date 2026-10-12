@@ -239,9 +239,9 @@ describe("plugin capabilities", () => {
     expect(
       (await runReadFile({ path: instructionPath }, context)).content
     ).toBe(SKILL_MD);
-    expect(
-      await skills.composeCatalogForProfile("other_org", profile.id)
-    ).not.toContain("**notes**");
+    await expect(
+      skills.composeCatalogForProfile("other_org", profile.id)
+    ).rejects.toMatchObject({ status: 404 });
 
     const matched = await skills.formatMatchedSkillsForPrompt(
       ORG_ID,

@@ -8,8 +8,8 @@ import type { Context } from "hono";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
-  requireNotViewerFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
+  requireOrgMemberFromContext,
 } from "../org-guards";
 import { errorResponse, json } from "../shared";
 import type { AppEnv, HonoApp } from "../types";
@@ -35,7 +35,7 @@ function requireWorkerAuthorization(
     return;
   }
 
-  requireNotViewerFromContext(c);
+  requireOrgMemberFromContext(c);
 }
 
 export function registerWorkerRoutes(
@@ -201,7 +201,7 @@ export function registerWorkerRoutes(
       },
     }),
     async (c) => {
-      requireNotViewerFromContext(c);
+      requireOrgMemberFromContext(c);
 
       return c.json(
         await workerManager.listPluginWorkers(requireActiveOrgIdFromContext(c)),

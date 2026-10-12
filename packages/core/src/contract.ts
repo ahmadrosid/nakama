@@ -449,6 +449,11 @@ export interface ProfilePackMeta {
   model: string | null;
   name: string;
   profileSkillNames: string[];
+  sharedAgent?: {
+    publicationId: string;
+    sourceOrgId: string;
+    sourceProfileId: string;
+  };
   skillsCuratorConsolidateEnabled: boolean | null;
   skillsPostTurnReview: boolean | null;
   skillsWriteApproval: boolean | null;
@@ -594,7 +599,7 @@ export interface UpdateAuthProfileRequest {
   phone?: string | null;
 }
 
-export type OrgRole = "admin" | "member" | "viewer";
+export type OrgRole = "admin" | "member";
 
 export type ChannelType = "telegram" | "whatsapp" | "discord";
 
@@ -607,6 +612,7 @@ export interface OrganizationSummary {
   monthlyLlmTurnLimit?: number;
   monthlyLlmWarningPercent?: number;
   name: string;
+  parentOrgId?: string | null;
   skillsCuratorArchiveAfterDays?: number;
   skillsCuratorConsolidateEnabled?: boolean;
   skillsCuratorEnabled?: boolean;
@@ -626,6 +632,67 @@ export interface CreateOrganizationRequest {
   };
   name: string;
   slug: string;
+}
+
+export interface CreateTeamRequest
+  extends Pick<CreateOrganizationRequest, "name" | "slug"> {
+  adminUserId?: string;
+  requestId: string;
+}
+
+export type OrgSharedResourceKind =
+  | "knowledge"
+  | "skill"
+  | "agent"
+  | "tool"
+  | "model";
+
+export interface PublishOrgSharedResourceRequest {
+  resourceId: string;
+  resourceKind: OrgSharedResourceKind;
+}
+
+export interface OrgSharedResourcePublication
+  extends PublishOrgSharedResourceRequest {
+  createdAt: string;
+  id: string;
+  orgId: string;
+  updatedAt: string;
+}
+
+export interface OrgSharedResourceResponse {
+  publication: OrgSharedResourcePublication;
+}
+
+export interface OrgSharedResourceSummary extends OrgSharedResourcePublication {
+  label: string;
+  readiness: "ready" | "requires_setup" | "unavailable";
+  sourceOrganization: { id: string; name: string };
+}
+
+export interface ListOrgSharedResourcesResponse {
+  resources: OrgSharedResourceSummary[];
+}
+
+export interface OrganizationOverviewResponse {
+  activeOrgId: string;
+  canManageOrganization: boolean;
+  organization: { id: string; name: string };
+  sharedResources: OrgSharedResourceSummary[];
+  teams: Array<{
+    canSwitch: boolean;
+    id: string;
+    isCurrent: boolean;
+    localResourceCounts: {
+      agents: number;
+      knowledge: number;
+      skills: number;
+      tools: number;
+    };
+    memberCount: number;
+    name: string;
+    slug: string;
+  }>;
 }
 
 export interface UpdateOrganizationRequest {
@@ -2119,6 +2186,12 @@ export interface ProfileSummary {
   mcpServerCount: number;
   model: string | null;
   name: string;
+  sharedAgent?: {
+    available: boolean;
+    publicationId: string;
+    sourceOrgId: string;
+    sourceProfileId: string;
+  };
   /** null = inherit org default; true/false = force consolidate on/off for this profile */
   skillsCuratorConsolidateEnabled?: boolean | null;
   /** null = inherit org default; true/false = force post-turn review on/off for this profile */
@@ -2132,6 +2205,7 @@ export interface ProfileSummary {
 
 export interface ProfileDetail extends ProfileSummary {
   mcpServers: McpServerSummary[];
+  publishedSkills?: PublishedSkillSummary[];
   skills: SkillSummary[];
   systemPrompt: string;
   tools: ToolSummary[];
@@ -2172,11 +2246,34 @@ export interface SkillDetail extends SkillSummary {
 }
 
 export interface ListSkillsResponse {
+  publishedSkills?: PublishedSkillSummary[];
   skills: SkillSummary[];
+}
+
+export interface PublishedSkillSummary
+  extends Pick<
+    SkillSummary,
+    | "createdAt"
+    | "createdBy"
+    | "description"
+    | "disableModelInvocation"
+    | "enabled"
+    | "hasTool"
+    | "id"
+    | "name"
+    | "updatedAt"
+  > {
+  publicationId: string;
+  scope: "parent";
+  sourceOrganization: { id: string; name: string };
 }
 
 export interface SkillResponse {
   skill: SkillDetail;
+}
+
+export interface PublishedSkillResponse {
+  skill: PublishedSkillSummary & { body: string };
 }
 
 export interface SkillFilesResponse {
@@ -2342,6 +2439,9 @@ export interface ToolDetail extends ToolSummary {
   handlerConfig: unknown;
   /** Resolved JSON Schema for javascript tools (module export or handlerConfig). */
   parameters?: JsonSchema;
+  publicationId?: string;
+  scope?: "parent";
+  sourceOrganization?: { id: string; name: string };
   updatedAt: string;
 }
 
@@ -2673,9 +2773,20 @@ export interface KnowledgeBaseSource {
   url: string;
 }
 
+export interface PublishedKnowledgeBaseDocument
+  extends Pick<
+    KnowledgeBaseDocument,
+    "id" | "filename" | "mediaType" | "sizeBytes" | "status" | "uploadedAt"
+  > {
+  publicationId: string;
+  scope: "parent";
+  sourceOrganization: { id: string; name: string };
+}
+
 export interface ListKnowledgeBaseResponse {
   documents: KnowledgeBaseDocument[];
   profileId: string;
+  publishedDocuments?: PublishedKnowledgeBaseDocument[];
   sources: KnowledgeBaseSource[];
 }
 
@@ -2817,15 +2928,20 @@ export interface GenerateTextInput {
   system: string;
 }
 
-export interface JsonSchema {
+export type JsonSchema = {
+  $schema?: string;
   additionalProperties?: boolean | JsonSchema;
   description?: string;
   enum?: Array<string | number | boolean>;
+  exclusiveMaximum?: number | boolean;
+  exclusiveMinimum?: number | boolean;
   items?: JsonSchema;
+  maximum?: number;
+  minimum?: number;
   properties?: Record<string, JsonSchema>;
   required?: string[];
-  type?: string;
-}
+  type?: string | string[];
+};
 
 export interface LlmToolDefinition {
   description: string;
@@ -3023,6 +3139,9 @@ export interface ToolContext {
   forbidProfileSkillMarkdownWrites?: boolean;
   /** Platform admin flag for Super Bot bind checks (same as HTTP ProfileAccess). */
   isPlatformAdmin?: boolean;
+  listPublishedKnowledgeDocuments?: () => Promise<
+    PublishedKnowledgeBaseDocument[]
+  >;
   /** Loads a provider-neutral document/image reference scoped to this execution. */
   loadAttachment?: LoadAttachmentBytes;
   /** Host-owned memory storage; file guards run before these callbacks. */
@@ -3037,6 +3156,12 @@ export interface ToolContext {
   /** Org role of the invoking user. Org-memory tools gate on this; undefined means deny-by-default. */
   orgRole?: OrgRole;
   profileId?: string;
+  /** Reads assigned parent skill files after live server publication checks. */
+  readPublishedSkillFile?: (
+    publicationId: string,
+    filePath: string,
+    maxBytes: number
+  ) => Promise<Uint8Array>;
   /**
    * Records bytes an optimiser removed from a tool result before insertion.
    * Passed in rather than imported because the database lives in the server and

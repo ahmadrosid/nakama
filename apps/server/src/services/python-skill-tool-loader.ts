@@ -12,6 +12,8 @@ export interface PythonSkillToolOptions {
    * org's API keys and workspace on the host. The default is the safe one.
    */
   exposeConfigDir?: boolean;
+  /** Shared code runs relative to the executing team workspace. */
+  useWorkspaceCwd?: boolean;
 }
 
 export async function loadPythonSkillTool(
@@ -59,7 +61,9 @@ export async function loadPythonSkillTool(
           args: [modulePath],
           bin: resolvePythonBin(),
           context,
-          cwd: path.dirname(modulePath),
+          cwd: options.useWorkspaceCwd
+            ? (context.workspaceRoot ?? path.dirname(modulePath))
+            : path.dirname(modulePath),
           input,
           label: "Python skill tool",
           transport: { includeConfigDir: options.exposeConfigDir === true },

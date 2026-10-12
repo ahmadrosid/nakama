@@ -355,20 +355,12 @@ export interface OrgMemorySummaryOptions {
 }
 
 /**
- * Append the org memory section to a system prompt, gated by org role.
- * Viewers never receive the section; everyone else gets it appended when
- * non-empty. Returns the unchanged `systemPrompt` when the section is empty
- * or the role is viewer.
+ * Append non-empty organization memory to a system prompt.
  */
 export function appendOrgMemorySection(
   systemPrompt: string,
-  summary: string,
-  orgRole?: string | null
+  summary: string
 ): string {
-  if (orgRole === "viewer") {
-    return systemPrompt;
-  }
-
   const trimmed = summary.trim();
 
   if (trimmed.length === 0) {

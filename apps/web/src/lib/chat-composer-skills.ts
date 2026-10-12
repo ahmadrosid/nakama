@@ -354,23 +354,31 @@ export function getLeadingCommand(
 ): LeadingCommand | null {
   const leadingOffset = value.length - value.trimStart().length;
 
-  for (const range of getReservedCommandTokenRanges(value, {
+  const reservedRange = getReservedCommandTokenRanges(value, {
     enableLearn: profileCanUseLearnCommand(skills),
-  })) {
+  }).find((range) => range.start === leadingOffset);
+
+  if (reservedRange) {
     const command = RESERVED_COMPOSER_SLASH_COMMANDS.find(
-      (candidate) => candidate.name === range.name
+      (candidate) => candidate.name === reservedRange.name
     );
 
-    if (command && range.start === leadingOffset) {
-      return { description: command.description, range };
+    if (command) {
+      return { description: command.description, range: reservedRange };
     }
   }
 
-  for (const range of getSkillTokenRanges(value)) {
-    const skill = skills.find((candidate) => candidate.name === range.name);
+  const skillRange = getSkillTokenRanges(value).find(
+    (range) => range.start === leadingOffset
+  );
 
-    if (skill && range.start === leadingOffset) {
-      return { description: skill.description.trim(), range };
+  if (skillRange) {
+    const skill = skills.find(
+      (candidate) => candidate.name === skillRange.name
+    );
+
+    if (skill) {
+      return { description: skill.description.trim(), range: skillRange };
     }
   }
 

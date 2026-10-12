@@ -26,6 +26,7 @@ import {
   MAX_IMPORT_ENTRY_BYTES,
   MAX_IMPORT_UNCOMPRESSED_BYTES,
   NAKAMA_EXPORT_MANIFEST,
+  NAKAMA_ORG_EXPORT_MANIFEST,
   previewNakamaDataImport,
   restoreNakamaDataImport,
   retireAppUserData,
@@ -52,6 +53,446 @@ afterEach(async () => {
 }, 30_000);
 
 describe("Nakama data portability", () => {
+  test("backup restore preserves current publication authority and shared history", async () => {
+    const databasePath = join(rootDir, "sqlite", "nakama.sqlite");
+    const database = await createDatabase(`file:${databasePath}`);
+    const raw = new Database(databasePath);
+
+    try {
+      raw.exec(
+        "INSERT INTO organizations (id,name,slug,created_at,updated_at) VALUES ('parent','Parent','parent','now','now')"
+      );
+      raw.exec(
+        "INSERT INTO organizations (id,name,slug,parent_org_id,created_at,updated_at) VALUES ('team','Team','team','parent','now','now')"
+      );
+
+      for (const id of ["active", "revoked", "deleted", "replaced"]) {
+        raw
+          .query(
+            "INSERT INTO profiles (id,name,org_id,created_at,updated_at) VALUES (?,?,'parent','now','now')"
+          )
+          .run(id, id);
+        await database.adapter.publishOrgSharedResource({
+          createdAt: "now",
+          id: `${id}_publication`,
+          orgId: "parent",
+          resourceId: id,
+          resourceKind: "agent",
+          updatedAt: "now",
+        });
+      }
+
+      const instance = await database.adapter.createSharedAgentInstance(
+        "team",
+        "revoked_publication",
+        "shared_instance",
+        "now"
+      );
+
+      raw.exec(
+        "INSERT INTO profiles (id,name,org_id,created_at,updated_at) VALUES ('unpublished','Unpublished','parent','now','now')"
+      );
+      raw
+        .query(
+          "INSERT INTO sessions (id,profile_id,channel,org_id,created_at,updated_at) VALUES ('history',?,'web','team','now','now')"
+        )
+        .run(instance.id);
+      raw.exec(
+        "INSERT INTO session_messages (id,session_id,seq,payload,created_at) VALUES ('message','history',0,'{\"role\":\"user\",\"content\":\"Team history\"}','now')"
+      );
+      const workspace = join(rootDir, "orgs", "team", "profiles", instance.id);
+      await mkdir(workspace, { recursive: true });
+      await writeFile(join(workspace, "MEMORY.md"), "Team memory");
+      const backup = await createNakamaDataExport({ databasePath, rootDir });
+      raw.exec("DELETE FROM profiles WHERE id = 'deleted'");
+      raw.exec(
+        "UPDATE org_shared_resources SET resource_id = 'unpublished' WHERE id = 'replaced_publication'"
+      );
+      await restoreNakamaDataImport(backup.data, {
+        beforeReplace: () => {
+          raw.exec(
+            "DELETE FROM org_shared_resources WHERE id = 'revoked_publication'"
+          );
+          raw.close();
+          database.release();
+        },
+        confirm: true,
+        databasePath,
+        rootDir,
+      });
+      const restored = new Database(databasePath);
+
+      try {
+        expect(
+          restored
+            .query(
+              "SELECT id, parent_org_id FROM organizations WHERE id IN ('parent','team') ORDER BY id"
+            )
+            .all()
+        ).toEqual([
+          { id: "parent", parent_org_id: null },
+          { id: "team", parent_org_id: "parent" },
+        ]);
+        expect(
+          restored
+            .query("SELECT id FROM org_shared_resources ORDER BY id")
+            .all()
+        ).toEqual([{ id: "active_publication" }]);
+        expect(
+          restored.query("SELECT id FROM profiles WHERE id = 'deleted'").get()
+        ).toEqual({ id: "deleted" });
+        expect(
+          restored
+            .query(
+              "SELECT profile_id, team_org_id, source_profile_id, publication_id FROM shared_agent_instances"
+            )
+            .all()
+        ).toEqual([
+          {
+            profile_id: instance.id,
+            publication_id: "revoked_publication",
+            source_profile_id: "revoked",
+            team_org_id: "team",
+          },
+        ]);
+        expect(
+          restored
+            .query("SELECT session_id, payload FROM session_messages")
+            .all()
+        ).toEqual([
+          {
+            payload: '{"role":"user","content":"Team history"}',
+            session_id: "history",
+          },
+        ]);
+        expect(await readFile(join(workspace, "MEMORY.md"), "utf8")).toBe(
+          "Team memory"
+        );
+      } finally {
+        restored.close();
+      }
+
+      const freshRoot = join(rootDir, "fresh");
+      const freshDatabasePath = join(freshRoot, "sqlite", "nakama.sqlite");
+      await restoreNakamaDataImport(backup.data, {
+        confirm: true,
+        databasePath: freshDatabasePath,
+        rootDir: freshRoot,
+      });
+      const fresh = new Database(freshDatabasePath);
+
+      try {
+        expect(
+          fresh
+            .query(
+              "SELECT id, parent_org_id FROM organizations WHERE id IN ('parent','team') ORDER BY id"
+            )
+            .all()
+        ).toEqual([
+          { id: "parent", parent_org_id: null },
+          { id: "team", parent_org_id: "parent" },
+        ]);
+        expect(
+          fresh.query("SELECT id FROM org_shared_resources").all()
+        ).toEqual([]);
+        expect(
+          fresh.query("SELECT profile_id FROM shared_agent_instances").all()
+        ).toEqual([{ profile_id: instance.id }]);
+        expect(fresh.query("SELECT id FROM session_messages").all()).toEqual([
+          { id: "message" },
+        ]);
+      } finally {
+        fresh.close();
+      }
+    } finally {
+      raw.close();
+      database.release();
+    }
+  });
+  test("team archives retain shared references and local history without parent or sibling data", async () => {
+    const databasePath = join(rootDir, "sqlite", "nakama.sqlite");
+    const database = await createDatabase(`file:${databasePath}`);
+    const raw = new Database(databasePath);
+    const oldConfigDir = process.env.NAKAMA_CONFIG_DIR;
+    process.env.NAKAMA_CONFIG_DIR = rootDir;
+
+    try {
+      raw.exec(
+        "INSERT INTO organizations (id,name,slug,created_at,updated_at) VALUES ('parent','Parent','parent','now','now')"
+      );
+      raw.exec(
+        "INSERT INTO organizations (id,name,slug,parent_org_id,created_at,updated_at) VALUES ('team','Team','team','parent','now','now'),('sibling','Sibling','sibling','parent','now','now')"
+      );
+      raw.exec(
+        "INSERT INTO profiles (id,name,org_id,created_at,updated_at) VALUES ('source','Source','parent','now','now'),('sibling_profile','Sibling profile','sibling','now','now')"
+      );
+
+      const publication = await database.adapter.publishOrgSharedResource({
+        createdAt: "now",
+        id: "publication",
+        orgId: "parent",
+        resourceId: "source",
+        resourceKind: "agent",
+        updatedAt: "now",
+      });
+
+      const instance = await database.adapter.createSharedAgentInstance(
+        "team",
+        publication.id,
+        "shared_instance",
+        "now"
+      );
+
+      for (const [orgId, profileId, marker] of [
+        ["parent", "source", "parent_private"],
+        ["team", instance.id, "team_private"],
+        ["sibling", "sibling_profile", "sibling_private"],
+      ]) {
+        const workspace = join(rootDir, "orgs", orgId, "profiles", profileId!);
+        await mkdir(workspace, { recursive: true });
+        await writeFile(join(workspace, "MEMORY.md"), marker!);
+        raw
+          .query(
+            "INSERT INTO sessions (id,profile_id,channel,org_id,created_at,updated_at) VALUES (?,?, 'web',?,'now','now')"
+          )
+          .run(`${orgId}_session`, profileId!, orgId!);
+        raw
+          .query(
+            "INSERT INTO session_messages (id,session_id,seq,payload,created_at) VALUES (?,?,0,?,'now')"
+          )
+          .run(
+            `${orgId}_message`,
+            `${orgId}_session`,
+            JSON.stringify({ content: marker, role: "user" })
+          );
+      }
+
+      const expectedMessages =
+        await database.adapter.listMessagesForSession("team_session");
+
+      const sourceBefore = await database.adapter.getProfile("source");
+
+      const linkBefore = await database.adapter.getSharedAgentInstance(
+        "team",
+        instance.id
+      );
+
+      for (const revoked of [false, true]) {
+        if (revoked) {
+          await database.adapter.deleteOrgSharedResource(
+            "parent",
+            publication.id
+          );
+        }
+
+        const exported = await createNakamaOrgDataExport(
+          database.adapter,
+          "team"
+        );
+
+        const entries = fflate.unzipSync(exported.data);
+
+        const manifestText = Buffer.from(
+          entries[NAKAMA_ORG_EXPORT_MANIFEST]!
+        ).toString("utf8");
+
+        const manifest: unknown = JSON.parse(manifestText);
+        expect(manifest).toMatchObject({
+          organization: { id: "team", parentOrgId: "parent" },
+          profiles: [
+            {
+              id: instance.id,
+              orgId: "team",
+              sharedAgent: {
+                publicationId: publication.id,
+                sourceOrgId: "parent",
+                sourceProfileId: "source",
+              },
+            },
+          ],
+          sessions: [
+            {
+              id: "team_session",
+              messages: expectedMessages,
+              profileId: instance.id,
+            },
+          ],
+        });
+        expect(Object.keys(entries)).toEqual([
+          `profiles/${instance.id}/workspace/MEMORY.md`,
+          NAKAMA_ORG_EXPORT_MANIFEST,
+        ]);
+        expect(
+          Buffer.from(
+            entries[`profiles/${instance.id}/workspace/MEMORY.md`]!
+          ).toString()
+        ).toBe("team_private");
+        expect(manifestText).not.toContain("parent_private");
+        expect(manifestText).not.toContain("sibling_private");
+        expect(manifestText).not.toContain("sibling_profile");
+        await expect(
+          previewNakamaDataImport(exported.data, { rootDir })
+        ).rejects.toMatchObject({ status: 400 });
+        await expect(
+          restoreNakamaDataImport(exported.data, {
+            confirm: true,
+            databasePath,
+            rootDir,
+          })
+        ).rejects.toMatchObject({ status: 400 });
+        expect(await database.adapter.getProfile("source")).toEqual(
+          sourceBefore
+        );
+        expect(
+          await database.adapter.getSharedAgentInstance("team", instance.id)
+        ).toEqual(linkBefore);
+        expect(
+          await database.adapter.listMessagesForSession("team_session")
+        ).toEqual(expectedMessages);
+      }
+    } finally {
+      database.release();
+      raw.close();
+
+      if (oldConfigDir === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = oldConfigDir;
+      }
+    }
+  });
+  test.each([
+    "workspace",
+    "profile",
+    "profile knowledge",
+    "organization knowledge",
+    "attachment",
+  ] as const)(
+    "team exports exclude parent bytes through linked %s paths",
+    async (mode) => {
+      const databasePath = join(rootDir, "sqlite", "nakama.sqlite");
+      const database = await createDatabase(`file:${databasePath}`);
+      const raw = new Database(databasePath);
+      const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+      process.env.NAKAMA_CONFIG_DIR = rootDir;
+
+      try {
+        raw.exec(
+          "INSERT INTO organizations (id,name,slug,created_at,updated_at) VALUES ('parent','Parent','parent','now','now')"
+        );
+        raw.exec(
+          "INSERT INTO organizations (id,name,slug,parent_org_id,created_at,updated_at) VALUES ('team','Team','team','parent','now','now')"
+        );
+        raw.exec(
+          "INSERT INTO profiles (id,name,org_id,created_at,updated_at) VALUES ('source','Source','parent','now','now'),('local','Local','team','now','now')"
+        );
+        const parent = join(rootDir, "orgs", "parent", "profiles", "source");
+        const team = join(rootDir, "orgs", "team", "profiles", "local");
+        const parentKnowledge = join(parent, "knowledge-base");
+        await mkdir(parentKnowledge, { recursive: true });
+        await mkdir(join(parent, "artifacts"));
+        await writeFile(
+          join(parent, "artifacts", "private.txt"),
+          "parent_secret"
+        );
+        await mkdir(join(rootDir, "orgs", "team", "profiles"), {
+          recursive: true,
+        });
+        await writeFile(join(parent, "MEMORY.md"), "parent_secret");
+        await writeFile(
+          join(parentKnowledge, "private.txt"),
+          "parent_unpublished"
+        );
+
+        if (mode === "profile") {
+          await symlink(parent, team, "dir");
+        } else {
+          await mkdir(team, { recursive: true });
+          await writeFile(join(team, "SOUL.md"), "team_identity");
+
+          if (mode === "workspace") {
+            await symlink(join(parent, "MEMORY.md"), join(team, "MEMORY.md"));
+          } else if (mode === "attachment") {
+            await mkdir(join(team, "attachments"));
+            await symlink(
+              join(parent, "MEMORY.md"),
+              join(team, "attachments", "linked")
+            );
+            raw.exec(
+              "INSERT INTO sessions (id,profile_id,channel,org_id,created_at,updated_at) VALUES ('conversation','local','web','team','now','now')"
+            );
+            raw.exec(
+              "INSERT INTO attachments (id,org_id,profile_id,session_id,channel,kind,media_type,size_bytes,storage_path,created_at) VALUES ('linked','team','local','conversation','web','image','image/png',13,'unused','now')"
+            );
+          } else {
+            const destination =
+              mode === "profile knowledge"
+                ? join(team, "knowledge-base")
+                : join(rootDir, "orgs", "team", "knowledge-base");
+
+            await symlink(parentKnowledge, destination, "dir");
+          }
+        }
+
+        const exported = await createNakamaOrgDataExport(
+          database.adapter,
+          "team"
+        );
+
+        const entries = fflate.unzipSync(exported.data);
+        expect(Object.keys(entries)).toEqual(
+          mode === "profile"
+            ? [NAKAMA_ORG_EXPORT_MANIFEST]
+            : ["profiles/local/workspace/SOUL.md", NAKAMA_ORG_EXPORT_MANIFEST]
+        );
+
+        const bytes = Object.values(entries)
+          .map((entry) => Buffer.from(entry).toString("utf8"))
+          .join("\n");
+
+        expect(bytes).not.toContain("parent_secret");
+        expect(bytes).not.toContain("parent_unpublished");
+
+        if (mode === "attachment") {
+          expect(
+            JSON.parse(
+              Buffer.from(entries[NAKAMA_ORG_EXPORT_MANIFEST]!).toString()
+            )
+          ).toMatchObject({
+            sessions: [
+              {
+                attachments: [{ id: "linked", path: null }],
+                id: "conversation",
+              },
+            ],
+          });
+        }
+
+        if (mode !== "profile") {
+          expect(
+            Buffer.from(entries["profiles/local/workspace/SOUL.md"]!).toString()
+          ).toBe("team_identity");
+        }
+
+        expect(await readFile(join(parent, "MEMORY.md"), "utf8")).toBe(
+          "parent_secret"
+        );
+        expect(
+          await readFile(join(parentKnowledge, "private.txt"), "utf8")
+        ).toBe("parent_unpublished");
+      } finally {
+        raw.close();
+        database.release();
+
+        if (previousConfigDir === undefined) {
+          delete process.env.NAKAMA_CONFIG_DIR;
+        } else {
+          process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+        }
+      }
+    }
+  );
+
   test("retirement preserves private bytes outside workspaces and normal exports, including orphan folders", async () => {
     const databasePath = join(rootDir, "sqlite", "nakama.sqlite");
     const database = await createDatabase(`file:${databasePath}`);
@@ -283,7 +724,7 @@ describe("Nakama data portability", () => {
           .join("")
       ).toBe("Saved meeting");
     } finally {
-      restored.close(true);
+      restored.close();
     }
   });
   test("round-trips a backup at the restore entry-byte limit", async () => {
@@ -539,12 +980,11 @@ describe("Nakama data portability", () => {
 
       await writeFile(join(rootDir, "config.ini"), "changed");
 
-      let liveConfigWhenClosed: string | null = null;
+      const configsWhenClosed: string[] = [];
       await restoreNakamaDataImport(exportResult.data, {
         beforeReplace: async () => {
-          liveConfigWhenClosed = await readFile(
-            join(rootDir, "config.ini"),
-            "utf8"
+          configsWhenClosed.push(
+            await readFile(join(rootDir, "config.ini"), "utf8")
           );
           database.release();
         },
@@ -552,7 +992,7 @@ describe("Nakama data portability", () => {
         rootDir,
       });
 
-      expect(liveConfigWhenClosed).toBe("changed");
+      expect(configsWhenClosed).toEqual(["changed"]);
       expect(await readFile(join(rootDir, "config.ini"), "utf8")).toBe(
         "original"
       );

@@ -7,7 +7,27 @@ A **profile** is an agent definition Nakama runs for a session.
 
 It answers one practical question: **which agent should respond, and what is its role?**
 
-Profiles belong to an **organization**. Switching orgs in the dashboard shows only that org's agents.
+Profiles belong to an **organization**. Switching orgs in the dashboard shows that org's agents and permitted shared templates.
+
+## Use a shared agent
+
+A parent organization can publish an agent template for its teams.
+Teams use the same identity and configuration while keeping their conversations, memory, and files private.
+
+1. Select your team in the organization switcher.
+2. Open **System → Organization**.
+3. Select a ready agent in the **Agents** row under **Shared with every team**.
+
+Team admins and members can select shared agents.
+The first selection creates a team-owned agent and opens a new chat.
+Repeated selection reuses that team's agent.
+Parent history, memory, credentials, and workspace files are not copied.
+
+The parent controls the shared identity, style, instructions, model, and permitted assignments.
+Teams cannot edit those fields or clone the shared agent into a local agent.
+Parent updates apply before the next turn and preserve team memory and saved sessions.
+If the source is removed or unpublished, new turns stop. Saved team work remains.
+Configure required integration connections in the team before use.
 
 ## Default profile per organization
 
@@ -69,7 +89,7 @@ When a chat runs with a profile, Nakama builds the agent context in this order:
 2. If soul files exist, compose them into the main system prompt
 3. Append the assigned skills catalog
 4. Append the knowledge base catalog
-5. Append org memory summary for non-viewers (see [Org memory](/org-memory))
+5. Append org memory summary for organization members (see [Org memory](/org-memory))
 6. Expose only the tools allowed for that profile
 
 So a profile is not just a name. It controls both:
@@ -164,7 +184,7 @@ Memory writes and archives use bundled skills (`update-profile-memory`, `archive
 
 | Store | Loaded into chat | How agents write |
 |-------|------------------|------------------|
-| Org memory | Yes (appended as `## Org Memory` for non-viewers) | Org admins via Settings or API — see [Org memory](/org-memory) |
+| Org memory | Yes (appended as `## Org Memory` for organization members) | Org admins via Settings or API — see [Org memory](/org-memory) |
 | `MEMORY.md` | Yes (via soul stack) | `update-profile-memory` skill + `read_file` / `edit_file` / `write_file` |
 | `memory-archive/` | No | `archive-profile-memory` skill + file tools |
 | `artifacts/` | No (**Browse Files → Artifacts**, download API, web chat preview) | `save-artifact` skill + `write_file` or `write_docx` |
@@ -179,7 +199,8 @@ Active `MEMORY.md` has a **4096-byte** soft limit. When it is full, the agent sh
 
 Org memory has separate limits: **8192 bytes** for the live file and **2048 bytes** for the injected summary. See [Org memory](/org-memory).
 
-This data is isolated per org and per profile. Two orgs never read or write the same directory, even if profile ids happen to match.
+Private data is isolated per org and per profile, even if profile IDs match.
+Teams can read explicitly published parent resources. Their memory, files, and saved conversations remain separate.
 
 Each profile also sees the default Nakama documentation source in **Browse Files → Knowledge**:
 
@@ -201,7 +222,8 @@ Profiles are tenant-owned data inside an organization:
 | Tool access | Scoped per profile |
 | Mutations | Platform-admin only; org members chat with org profiles |
 
-Org admins manage members, not profiles. Platform admins need an active org context when creating or editing profiles.
+Org admins manage members and permitted shared-agent selection.
+Platform admins need an active org context for general profile creation and editing.
 
 ## When to create multiple profiles
 
@@ -249,6 +271,14 @@ Missing tool or MCP names on the destination are listed in the preview and skipp
 Profile packs exclude plugin assignments and plugin code. After importing a profile, assign the destination organization’s plugin skills and tools manually. See [Plugins](/plugins).
 
 Profile packs are a different format from [Backup and restore](/backup-restore). A pack cannot restore a whole install, and a full backup ZIP cannot be imported as a profile pack.
+
+### Shared agent packs
+
+A shared agent pack keeps its source reference rather than granting access to the parent.
+Import creates an inactive reference until the destination verifies the same parent publication.
+The pack cannot add parent membership, create a parent relationship, or publish resources.
+Parent secrets and unpublished source files are excluded.
+Restoring access does not overwrite the team's memory.
 
 ## Next steps
 

@@ -26,11 +26,13 @@ async function skillDir(files: Record<string, string>): Promise<string> {
 test("a script nothing can run is reported instead of ignored", async () => {
   // The three layouts an author reaches for first, none of which any loader
   // reached before. Each used to discover as a skill with no tool at all.
-  for (const layout of [
+  const layouts: Record<string, string>[] = [
     { "scripts/hitung.py": BODY },
     { "hitung.py": BODY },
     { "helper.js": "export const x = 1;\n" },
-  ]) {
+  ];
+
+  for (const layout of layouts) {
     const directory = await skillDir({ "SKILL.md": "---\n---\n", ...layout });
 
     const resolved = await resolveSkillScripts({

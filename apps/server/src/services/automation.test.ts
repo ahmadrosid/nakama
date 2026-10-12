@@ -493,6 +493,34 @@ describe("AutomationService", () => {
     expect((await service.getActiveRun(automation.id))?.id).toBe(secondRun.id);
   });
 
+  test("rejects invalid stored delivery status without changing the run", async () => {
+    const db = await createTestDb();
+
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+
+    const automation = await service.create(
+      ORG_ID,
+      {
+        description: "Status check",
+        name: "Status check",
+        prompt: "Say hello",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID
+    );
+
+    const run = await service.createRun(automation.id);
+    await db.updateAutomationRun({ ...run, deliveryStatus: "invalid" });
+
+    await expect(service.listRuns(automation.id)).rejects.toThrow();
+    expect((await db.listAutomationRuns(automation.id))[0]).toMatchObject({
+      deliveryStatus: "invalid",
+      id: run.id,
+    });
+  });
+
   test("refuses a member automation that targets a foreign destination", async () => {
     const db = await createTestDb();
 
@@ -965,7 +993,7 @@ describe("AutomationRunner", () => {
     expect(agentCalls).toBe(1);
     const runs = await service.listRuns(automation.id);
     expect(runs).toHaveLength(1);
-    expect(runs[0]?.id).toBe(claimedRunId);
+    expect(runs[0]).toMatchObject({ id: claimedRunId });
     expect(runs[0]?.status).toBe("completed");
   });
 
@@ -1148,7 +1176,7 @@ describe("AutomationRunner", () => {
 
     const runs = await service.listRuns(automation.id);
     expect(runs[0]?.status).toBe("failed");
-    expect(runs[0]?.error).toBe(result.error);
+    expect(runs[0]).toMatchObject({ error: result.error });
   });
 
   test("disables runAt automations before executing", async () => {

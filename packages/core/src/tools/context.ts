@@ -3,9 +3,9 @@ import { NakamaApiError } from "../api-error";
 import type { ToolContext } from "../contract";
 import { getProfileSoulDir } from "../soul/resolve";
 
-/** Viewers and tool calls without an organization role are denied. */
-export function requireToolNotViewer(context: ToolContext): void {
-  if (!context.orgRole || context.orgRole === "viewer") {
+/** Tool calls require organization membership. */
+export function requireToolOrgMember(context: ToolContext): void {
+  if (context.orgRole !== "admin" && context.orgRole !== "member") {
     throw new NakamaApiError("Forbidden", 403);
   }
 }

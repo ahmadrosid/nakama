@@ -59,8 +59,8 @@ const KnowledgeBaseManifestSchema = z.object({
   sharedDocumentIds: z.array(z.string()).optional(),
 });
 
-// ponytail: One process only; use a shared lock if servers share a data directory.
-const knowledgeBaseMutationLock = createChatLock();
+// shortcut: One process only; use a shared lock if servers share a data directory.
+export const knowledgeBaseMutationLock = createChatLock();
 
 export type KnowledgeBaseDuplicateMatch = "content_hash" | "name_size";
 
@@ -276,7 +276,7 @@ async function readManifestFrom(dir: string): Promise<KnowledgeBaseManifest> {
  * folders, so a failed rename mid-loop would abort the delete on a half
  * migrated tree.
  */
-async function readProfileManifestForReference(
+export async function readProfileManifestForReference(
   orgId: string,
   profileId: string
 ): Promise<KnowledgeBaseManifest> {
@@ -359,7 +359,8 @@ async function uploadDocumentTo(
   dir: string,
   attachment: DocumentAttachment,
   onDuplicate: KnowledgeBaseDuplicateAction,
-  guardRemoval?: (documentId: string) => Promise<void>
+  guardRemoval?: (documentId: string) => Promise<void>,
+  onDocumentRemoved?: (documentId: string) => Promise<void>
 ): Promise<UploadKnowledgeBaseDocumentResult> {
   const filename = attachment.filename.trim();
 
@@ -418,7 +419,8 @@ async function uploadDocumentTo(
     const removed = await deleteDocumentFrom(
       dir,
       duplicate.document.id,
-      guardRemoval
+      guardRemoval,
+      onDocumentRemoved
     );
 
     if (!removed) {
@@ -508,7 +510,8 @@ export async function uploadOrganizationKnowledgeBaseDocument(
   orgId: string,
   attachment: DocumentAttachment,
   onDuplicate: KnowledgeBaseDuplicateAction = "error",
-  knownProfileIds?: readonly string[]
+  knownProfileIds?: readonly string[],
+  onDocumentRemoved?: (documentId: string) => Promise<void>
 ): Promise<UploadKnowledgeBaseDocumentResult> {
   return knowledgeBaseMutationLock.withLock(getOrgConfigDir(orgId), async () =>
     uploadDocumentTo(
@@ -516,7 +519,8 @@ export async function uploadOrganizationKnowledgeBaseDocument(
       attachment,
       onDuplicate,
       (documentId) =>
-        guardSharedDocumentRemoval(orgId, documentId, knownProfileIds)
+        guardSharedDocumentRemoval(orgId, documentId, knownProfileIds),
+      onDocumentRemoved
     )
   );
 }
@@ -566,7 +570,8 @@ async function listProfileIdsOnDisk(orgId: string): Promise<string[]> {
 async function deleteDocumentFrom(
   dir: string,
   documentId: string,
-  guardRemoval?: (documentId: string) => Promise<void>
+  guardRemoval?: (documentId: string) => Promise<void>,
+  onDocumentRemoved?: (documentId: string) => Promise<void>
 ): Promise<boolean> {
   const manifest = await readManifestFrom(dir);
 
@@ -575,6 +580,8 @@ async function deleteDocumentFrom(
   );
 
   if (index < 0) {
+    await onDocumentRemoved?.(documentId);
+
     return false;
   }
 
@@ -594,12 +601,16 @@ async function deleteDocumentFrom(
 
   const extractedPath = getKnowledgeBaseExtractedPath(dir, documentId);
 
-  if (await pathExists(storedPath)) {
-    await removeFile(storedPath);
-  }
+  try {
+    if (await pathExists(storedPath)) {
+      await removeFile(storedPath);
+    }
 
-  if (await pathExists(extractedPath)) {
-    await removeFile(extractedPath);
+    if (await pathExists(extractedPath)) {
+      await removeFile(extractedPath);
+    }
+  } finally {
+    await onDocumentRemoved?.(documentId);
   }
 
   return true;
@@ -623,15 +634,20 @@ export async function deleteKnowledgeBaseDocument(
 export async function deleteOrganizationKnowledgeBaseDocument(
   orgId: string,
   documentId: string,
-  knownProfileIds?: readonly string[]
+  knownProfileIds?: readonly string[],
+  onDocumentRemoved?: (documentId: string) => Promise<void>
 ): Promise<boolean> {
   return knowledgeBaseMutationLock.withLock(
     getOrgConfigDir(orgId),
     async () => {
       const dir = await orgKnowledgeBaseDir(orgId);
 
-      return deleteDocumentFrom(dir, documentId, (candidate) =>
-        guardSharedDocumentRemoval(orgId, candidate, knownProfileIds)
+      return deleteDocumentFrom(
+        dir,
+        documentId,
+        (candidate) =>
+          guardSharedDocumentRemoval(orgId, candidate, knownProfileIds),
+        onDocumentRemoved
       );
     }
   );

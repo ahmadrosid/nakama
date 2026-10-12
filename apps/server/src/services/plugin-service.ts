@@ -3180,10 +3180,6 @@ export function actorMayInvoke(
   access: PluginActionAccess,
   role: PluginActorRole
 ): boolean {
-  if (role === "viewer") {
-    return false;
-  }
-
   if (access === "admin") {
     return role === "admin";
   }

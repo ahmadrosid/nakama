@@ -40,7 +40,9 @@ export async function executeToolCall(
   }
 
   try {
-    const result = await tool.run(call.arguments, context);
+    const result = ToolResultSchema.parse(
+      await tool.run(call.arguments, context)
+    );
 
     // The single place every tool result passes through, so the optimiser is
     // wired once rather than per tool. It returns `result` untouched unless it
@@ -98,12 +100,7 @@ export function createTurnTools(assigned: ToolDefinition[]): ToolDefinition[] {
   active.push({
     description: `Find and load assigned plugin tools before calling them. Search by plugin or action name. Loaded tools remain available for this user request only. Catalog: ${[...catalog].map(([group, actions]) => `${group}: ${actions.join(", ")}`).join("; ")}`,
     name,
-    parameters: {
-      additionalProperties: false,
-      properties: { query: { maxLength: 500, minLength: 1, type: "string" } },
-      required: ["query"],
-      type: "object",
-    },
+    parameters: core.jsonSchemaFromZod(DiscoveryInputSchema),
     async run(input, context) {
       context.signal?.throwIfAborted();
 

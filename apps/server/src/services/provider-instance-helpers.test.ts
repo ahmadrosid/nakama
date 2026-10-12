@@ -529,6 +529,20 @@ describe("applyProviderInstanceUpdate", () => {
 });
 
 describe("buildProviderInstanceFromCreateRequest", () => {
+  test("preserves the requested Ollama label", () => {
+    const instance = buildProviderInstanceFromCreateRequest(
+      {
+        customModels: [{ id: "llama3.2" }],
+        hostMode: "local",
+        label: "Team runtime",
+        type: "ollama",
+      },
+      []
+    );
+
+    expect(instance.label).toBe("Team runtime");
+  });
+
   test("creates a Grok subscription provider without an API key", () => {
     const instance = buildProviderInstanceFromCreateRequest(
       {

@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { PublishedKnowledgeBaseDocument } from "../contract";
 import {
   getKnowledgeBaseDir,
   getKnowledgeBaseExtractedPath,
@@ -163,6 +164,148 @@ describe("knowledge_base_search tool", () => {
       },
     });
   }
+
+  test.each([
+    { memory: false, regex: true },
+    { memory: false, regex: false },
+    { memory: true, regex: true },
+    { memory: true, regex: false },
+  ])(
+    "parent search regex=$regex memory=$memory reads only live publications",
+    async ({ regex, memory }) => {
+      await setupTwoScopes();
+      const parentRoot = getOrgKnowledgeBaseDir("org_parent");
+      await mkdir(parentRoot, { recursive: true });
+      await writeFile(
+        getKnowledgeBaseExtractedPath(parentRoot, "kb_published"),
+        extractedContent("same.txt", "parentneedle authorized fact")
+      );
+      await writeFile(
+        getKnowledgeBaseExtractedPath(parentRoot, "kb_private"),
+        extractedContent("same.txt", "privateneedle unpublished secret")
+      );
+
+      const document: PublishedKnowledgeBaseDocument = {
+        filename: "same.txt",
+        id: "kb_published",
+        mediaType: "text/plain",
+        publicationId: "publication_1",
+        scope: "parent",
+        sizeBytes: 32,
+        sourceOrganization: { id: "org_parent", name: "Parent" },
+        status: "ready",
+        uploadedAt: UPLOADED_AT,
+      };
+
+      let publications = [document];
+      let lookups = 0;
+
+      const context = {
+        listPublishedKnowledgeDocuments: async () => {
+          lookups++;
+
+          return publications;
+        },
+        orgId: ORG_ID,
+        profileId: PROFILE_ID,
+        searchKnowledge: memory
+          ? async () => ({
+              matches: [
+                { file: "memory.md", line: 1, text: "Team memory fact" },
+              ],
+              truncated: false,
+            })
+          : undefined,
+      };
+
+      const initial = await runKnowledgeBaseSearch(
+        { query: "parentneedle", regex },
+        context
+      );
+
+      const parentMatches = initial.matches.filter(
+        (match) => match.scope === "parent"
+      );
+
+      expect(parentMatches).toHaveLength(1);
+      expect(parentMatches[0]).toMatchObject({
+        publicationId: "publication_1",
+        sourceOrganization: document.sourceOrganization,
+      });
+      expect(parentMatches[0]?.file).toBe("kb_published.extracted.txt");
+      expect(initial.root).toBe(getKnowledgeBaseDir(ORG_ID, PROFILE_ID));
+      expect(
+        initial.matches.filter((match) => match.scope === "profile")
+      ).toHaveLength(memory ? 1 : 0);
+
+      const filtered = await runKnowledgeBaseSearch(
+        { filename: "same.txt", query: "parentneedle", regex },
+        context
+      );
+
+      expect(
+        filtered.matches.filter((match) => match.scope === "parent")
+      ).toHaveLength(1);
+
+      const privateResult = await runKnowledgeBaseSearch(
+        { query: "privateneedle", regex },
+        context
+      );
+
+      expect(
+        privateResult.matches.filter((match) => match.scope === "parent")
+      ).toEqual([]);
+      expect(JSON.stringify(privateResult)).not.toContain("unpublished secret");
+      publications = [];
+
+      const revoked = await runKnowledgeBaseSearch(
+        { query: "parentneedle", regex },
+        context
+      );
+
+      expect(
+        revoked.matches.filter((match) => match.scope === "parent")
+      ).toEqual([]);
+      expect(lookups).toBe(4);
+    }
+  );
+
+  test.each([true, false])(
+    "parent search rejects an extracted symlink for regex=%s",
+    async (regex) => {
+      const profileDir = await setupTwoScopes();
+      const parentRoot = getOrgKnowledgeBaseDir("org_parent");
+      await mkdir(parentRoot, { recursive: true });
+      const secret = path.join(profileDir, "secret.txt");
+      await writeFile(secret, "Private team secret");
+      await symlink(
+        secret,
+        getKnowledgeBaseExtractedPath(parentRoot, "kb_published")
+      );
+      await expect(
+        runKnowledgeBaseSearch(
+          { query: "secret", regex },
+          {
+            listPublishedKnowledgeDocuments: async () => [
+              {
+                filename: "shared.txt",
+                id: "kb_published",
+                mediaType: "text/plain",
+                publicationId: "publication_1",
+                scope: "parent",
+                sizeBytes: 19,
+                sourceOrganization: { id: "org_parent", name: "Parent" },
+                status: "ready",
+                uploadedAt: UPLOADED_AT,
+              },
+            ],
+            orgId: ORG_ID,
+            profileId: PROFILE_ID,
+          }
+        )
+      ).rejects.toThrow();
+    }
+  );
 
   test("searches all knowledge base files", async () => {
     const profileDir = await setupKnowledgeBase({

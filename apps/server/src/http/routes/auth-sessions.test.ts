@@ -8,6 +8,7 @@ import { AgentService } from "../../services/agent-service";
 import { AuthService } from "../../services/auth-service";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
+  type AppFetch,
   loginPlatformAdminSession,
   loginUserSession,
   seedOrgAdmin,
@@ -31,7 +32,7 @@ async function createApp() {
 }
 
 async function listSessions(
-  app: { fetch: typeof fetch },
+  app: AppFetch,
   session: TestBrowserSession
 ): Promise<ListBrowserSessionsResponse> {
   const response = await app.fetch(
@@ -46,8 +47,8 @@ async function listSessions(
   return (await response.json()) as ListBrowserSessionsResponse;
 }
 
-function revoke(
-  app: { fetch: typeof fetch },
+async function revoke(
+  app: AppFetch,
   session: TestBrowserSession,
   sessionId: string
 ): Promise<Response> {

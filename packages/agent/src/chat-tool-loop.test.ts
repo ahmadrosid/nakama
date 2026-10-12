@@ -11,6 +11,7 @@ import type {
 } from "@nakama/core";
 import {
   persistInlineAttachmentsInContent,
+  readFileInputSchema,
   rehydrateMessagesForProvider,
   runReadFile,
   toAnthropicUserContent,
@@ -127,6 +128,41 @@ function delayedTool(
 }
 
 describe("agent chat tool loop", () => {
+  test.each([
+    { images: [] },
+    { images: null },
+    { images: [{ data: 123, mediaType: "image/png" }] },
+    { images: [{ data: "aW1hZ2U=" }] },
+    {
+      images: [{ data: "aW1hZ2U=", mediaType: "image/png" }, null],
+    },
+  ])("keeps malformed or empty image results in JSON: %j", async (result) => {
+    const session = createAgentChatSession({
+      provider: createMockProvider([
+        toolTurn([{ arguments: {}, id: "image", name: "sample" }]),
+        textReply("Done"),
+      ]),
+      tools: [{ ...sampleTool, run: async () => result }],
+    });
+
+    expect(await session.send("Inspect")).toBe("Done");
+    const message = session.getHistory().find((item) => item.role === "tool");
+    expect(message?.role).toBe("tool");
+
+    if (message?.role !== "tool") {
+      throw new Error("Missing tool result");
+    }
+
+    expect(JSON.parse(message.content)).toEqual(result);
+    expect(message.attachments).toBeUndefined();
+    expect(session.getHistory().map((item) => item.role)).toEqual([
+      "user",
+      "assistant",
+      "tool",
+      "assistant",
+    ]);
+  });
+
   test("sets current turn image references and clears them on the next turn", async () => {
     const contexts: unknown[] = [];
 
@@ -181,6 +217,7 @@ describe("agent chat tool loop", () => {
                 {
                   attachmentId: "image_1",
                   mediaType: "image/png",
+                  size: 5,
                   type: "image_ref",
                 },
               ];
@@ -251,7 +288,7 @@ describe("agent chat tool loop", () => {
               parallelSafe: stream,
               run: (input) =>
                 runReadFile(
-                  input,
+                  readFileInputSchema.parse(input),
                   { orgId: "org_test", profileId: "profile_test" },
                   { workspaceRoot: dir }
                 ),

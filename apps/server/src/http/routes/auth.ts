@@ -147,12 +147,38 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     }
   };
 
+  const passkeyCredentialSchema = z
+    .object({
+      authenticatorAttachment: z.string().optional(),
+      clientExtensionResults: z.record(
+        z.string(),
+        // OpenAPI generation cannot traverse Zod's recursive JSON union.
+        z.json().openapi({
+          type: ["string", "number", "boolean", "null", "array", "object"],
+        })
+      ),
+      id: z.string(),
+      rawId: z.string(),
+      response: z
+        .object({
+          attestationObject: z.string().optional(),
+          authenticatorData: z.string().optional(),
+          clientDataJSON: z.string(),
+          signature: z.string().optional(),
+          transports: z.array(z.string()).optional(),
+          userHandle: z.string().optional(),
+        })
+        .passthrough(),
+      type: z.string(),
+    })
+    .passthrough();
+
   const authCredentialsSchema = z
     .object({
       backupCode: z.string().optional(),
       email: z.string(),
       mfaCode: z.string().optional(),
-      passkey: z.record(z.string(), z.unknown()).optional(),
+      passkey: passkeyCredentialSchema.optional(),
       passkeyChallenge: z.string().optional(),
       password: z.string().optional(),
     })
@@ -385,7 +411,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     .object({
       email: z.string(),
       orgId: z.string(),
-      role: z.enum(["admin", "member", "viewer"]),
+      role: z.enum(["admin", "member"]),
     })
     .openapi("AcceptOrgInviteResponse");
 
@@ -876,7 +902,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       c.req.raw,
       z.object({
         mfaCode: z.string().trim().min(6).max(8).optional(),
-        passkey: z.record(z.string(), z.unknown()).optional(),
+        passkey: passkeyCredentialSchema.optional(),
         passkeyChallenge: z.string().optional(),
       })
     );
@@ -1039,7 +1065,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.post("/v1/auth/mfa/passkey/start", async (c) => {
-    if (!databaseAdapter) {
+    if (!(authService && databaseAdapter)) {
       return errorResponse("Authentication not configured", 500);
     }
 
@@ -1093,7 +1119,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.post("/v1/auth/mfa/passkey/verify", async (c) => {
-    if (!databaseAdapter) {
+    if (!(authService && databaseAdapter)) {
       return errorResponse("Authentication not configured", 500);
     }
 
@@ -1108,7 +1134,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       c.req.raw,
       z.object({
         challenge: z.string().min(1),
-        credential: z.record(z.string(), z.unknown()),
+        credential: passkeyCredentialSchema,
         name: z.string().trim().min(1).max(100).optional(),
       })
     );
@@ -1186,7 +1212,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
         .object({
           backupCode: z.string().trim().min(1).optional(),
           challenge: z.string().optional(),
-          credential: z.record(z.string(), z.unknown()).optional(),
+          credential: passkeyCredentialSchema.optional(),
         })
         .refine(
           ({ backupCode, challenge, credential }) =>
@@ -1272,7 +1298,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
 
     const body = await readJson<{
       enabled?: boolean;
-      enforcedRoles?: Array<"admin" | "member" | "viewer">;
+      enforcedRoles?: Array<"admin" | "member">;
       required?: boolean;
     }>(
       c.req.raw,
@@ -1306,7 +1332,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.post("/v1/auth/mfa/totp/start", async (c) => {
-    if (!databaseAdapter) {
+    if (!(authService && databaseAdapter)) {
       return errorResponse("Authentication not configured", 500);
     }
 
@@ -1342,7 +1368,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.post("/v1/auth/mfa/totp/verify", async (c) => {
-    if (!databaseAdapter) {
+    if (!(authService && databaseAdapter)) {
       return errorResponse("Authentication not configured", 500);
     }
 
@@ -1408,7 +1434,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.post("/v1/auth/mfa/disable", async (c) => {
-    if (!databaseAdapter) {
+    if (!(authService && databaseAdapter)) {
       return errorResponse("Authentication not configured", 500);
     }
 

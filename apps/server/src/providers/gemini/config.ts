@@ -153,7 +153,7 @@ function buildGeminiTools(
       functionDeclarations: tools.map((tool) => ({
         description: tool.description,
         name: tool.name,
-        parameters: sanitizeGeminiToolParameters(tool.parameters),
+        parametersJsonSchema: sanitizeGeminiToolParameters(tool.parameters),
       })),
     });
   }

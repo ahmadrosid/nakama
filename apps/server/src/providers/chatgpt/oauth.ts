@@ -80,7 +80,9 @@ const codexModelsResponseSchema = z.object({
     .optional(),
 });
 
-function decodeJwtPayload(token: string): JwtPayload | null {
+function decodeJwtPayload(
+  token: string
+): z.infer<typeof jwtPayloadSchema> | null {
   try {
     const parts = token.split(".");
 

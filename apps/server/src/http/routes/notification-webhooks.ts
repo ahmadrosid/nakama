@@ -8,16 +8,21 @@ export function registerNotificationWebhookRoutes(
   app: HonoApp,
   options: ServerOptions
 ): void {
+  const databaseAdapter = options.databaseAdapter;
+
+  const authService = options.authService;
+
+  if (!(databaseAdapter && authService)) {
+    return;
+  }
+
   const notificationWebhookSchema = z.object({
     body: z.string(),
     level: z.enum(["info", "success", "warning", "error"]).optional(),
     title: z.string().optional(),
   });
 
-  const service = new NotificationWebhookService(
-    options.databaseAdapter,
-    options.authService
-  );
+  const service = new NotificationWebhookService(databaseAdapter, authService);
 
   // Public webhook: clients must send a unique Idempotency-Key per event.
   // Replays with the same key are rejected (409) after the first successful claim.

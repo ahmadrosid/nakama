@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
+import { asTestFetch } from "../channel-test-helpers";
 import type { JsonValue } from "../contract";
 import { getDiscordConfigDir, getDiscordConfigPath } from "../discord-config";
 import { createDiscordOutboundAdapter } from "./discord-outbound";
@@ -53,7 +54,7 @@ describe("createDiscordOutboundAdapter", () => {
       }> = [];
 
       const adapter = createDiscordOutboundAdapter({
-        fetchImpl: async (input, init) => {
+        fetchImpl: asTestFetch(async (input, init) => {
           calls.push({
             body: parseJsonObject(String(init?.body)),
             headers: Object.fromEntries(new Headers(init?.headers).entries()),
@@ -61,7 +62,7 @@ describe("createDiscordOutboundAdapter", () => {
           });
 
           return new Response("{}", { status: 200 });
-        },
+        }),
       });
 
       await expect(
@@ -92,7 +93,7 @@ describe("createDiscordOutboundAdapter", () => {
         const calls: Array<{ body: JsonObject; url: string }> = [];
 
         const adapter = createDiscordOutboundAdapter({
-          fetchImpl: async (input, init) => {
+          fetchImpl: asTestFetch(async (input, init) => {
             const url = String(input);
 
             const body = parseJsonObject(String(init?.body));
@@ -108,7 +109,7 @@ describe("createDiscordOutboundAdapter", () => {
             }
 
             return new Response("{}", { status: 200 });
-          },
+          }),
         });
 
         await expect(
@@ -134,7 +135,7 @@ describe("createDiscordOutboundAdapter", () => {
       const contents: string[] = [];
 
       const adapter = createDiscordOutboundAdapter({
-        fetchImpl: async (_input, init) => {
+        fetchImpl: asTestFetch(async (_input, init) => {
           const body = z
             .object({ content: z.string() })
             .parse(parseJsonObject(String(init?.body)));
@@ -142,7 +143,7 @@ describe("createDiscordOutboundAdapter", () => {
           contents.push(body.content);
 
           return new Response("{}", { status: 200 });
-        },
+        }),
       });
 
       await expect(
@@ -163,11 +164,11 @@ describe("createDiscordOutboundAdapter", () => {
       let called = false;
 
       const adapter = createDiscordOutboundAdapter({
-        fetchImpl: async () => {
+        fetchImpl: asTestFetch(async () => {
           called = true;
 
           return new Response("{}", { status: 200 });
-        },
+        }),
       });
 
       await expect(adapter.send({ ...owner, text: "hello" })).resolves.toEqual({
@@ -183,11 +184,11 @@ describe("createDiscordOutboundAdapter", () => {
       let called = false;
 
       const adapter = createDiscordOutboundAdapter({
-        fetchImpl: async () => {
+        fetchImpl: asTestFetch(async () => {
           called = true;
 
           return new Response("{}", { status: 200 });
-        },
+        }),
       });
 
       await expect(adapter.send({ ...owner, text: "hello" })).resolves.toEqual({
@@ -205,7 +206,7 @@ describe("createDiscordOutboundAdapter", () => {
         const urls: string[] = [];
 
         const adapter = createDiscordOutboundAdapter({
-          fetchImpl: async (input) => {
+          fetchImpl: asTestFetch(async (input) => {
             urls.push(String(input));
 
             if (String(input).endsWith("/users/@me/channels")) {
@@ -213,7 +214,7 @@ describe("createDiscordOutboundAdapter", () => {
             }
 
             return new Response("missing access", { status: 403 });
-          },
+          }),
         });
 
         const result = await adapter.send({ ...owner, text: "hello" });
@@ -232,7 +233,9 @@ describe("createDiscordOutboundAdapter", () => {
       "bot_token=test-bot-token\npaired_user_ids=111111111111111111\n",
       async () => {
         const adapter = createDiscordOutboundAdapter({
-          fetchImpl: async () => new Response("{}", { status: 200 }),
+          fetchImpl: asTestFetch(
+            async () => new Response("{}", { status: 200 })
+          ),
         });
 
         await expect(adapter.send({ ...owner, text: "   " })).resolves.toEqual({

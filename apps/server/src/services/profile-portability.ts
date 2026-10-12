@@ -46,6 +46,7 @@ import { unzipSync, zipSync } from "fflate";
 import { getCustomToolHandler, isCustomToolType } from "./custom-tool-handlers";
 import { readHandlerModulePath } from "./custom-tool-shared";
 import {
+  isDirectExportPath,
   MAX_IMPORT_ENTRY_BYTES,
   MAX_IMPORT_UNCOMPRESSED_BYTES,
 } from "./data-portability";
@@ -131,13 +132,13 @@ const IN_PROCESS_SKILL_SOURCE_EXTENSIONS = new Set([
 const IN_PROCESS_SKILL_SOURCE_REASON =
   "Executable JavaScript/TypeScript skill sources run inside the Nakama server process and are never installed from a profile pack.";
 
-const AVATAR_EXTENSION_MEDIA_TYPES = {
-  gif: "image/gif",
-  jpeg: "image/jpeg",
-  jpg: "image/jpeg",
-  png: "image/png",
-  webp: "image/webp",
-} satisfies Record<string, string>;
+const AVATAR_EXTENSION_MEDIA_TYPES = new Map([
+  ["gif", "image/gif"],
+  ["jpeg", "image/jpeg"],
+  ["jpg", "image/jpeg"],
+  ["png", "image/png"],
+  ["webp", "image/webp"],
+]);
 
 const NOT_ALLOWLISTED_REASON =
   "Not part of the profile pack allowlist (secrets and generated data are excluded).";
@@ -226,8 +227,26 @@ export async function createProfilePackExport(
   }
 
   const soulDir = getProfileSoulDir(orgId, profileId);
+
+  if ((await pathExists(soulDir)) && !(await isDirectExportPath(soulDir))) {
+    throw new NakamaApiError(
+      "Linked profile workspaces cannot be exported.",
+      400
+    );
+  }
+
   const { files, skipped } = await inventoryProfileSoulDir(soulDir);
   const meta = await buildProfilePackMeta(db, profileId, profile);
+  const shared = await db.getSharedAgentInstance(orgId, profileId);
+
+  if (shared) {
+    meta.sharedAgent = {
+      publicationId: shared.publicationId,
+      sourceOrgId: shared.sourceOrgId,
+      sourceProfileId: shared.sourceProfileId,
+    };
+  }
+
   const createdAt = (options.now ?? new Date()).toISOString();
 
   const entries: Record<string, Uint8Array> = {};
@@ -237,7 +256,7 @@ export async function createProfilePackExport(
   }
 
   if (options.includeCustomTools ?? true) {
-    const packedTools = await collectPackedCustomTools(db, profileId);
+    const packedTools = await collectPackedCustomTools(db, orgId, profileId);
     meta.customTools = packedTools.tools;
     skipped.push(...packedTools.skipped);
     Object.assign(entries, packedTools.entries);
@@ -246,7 +265,12 @@ export async function createProfilePackExport(
   if (await hasProfileAvatar(orgId, profileId)) {
     const avatar = await readProfileAvatar(orgId, profileId);
 
-    if (avatar) {
+    if (
+      avatar &&
+      (await isDirectExportPath(
+        getProfileAvatarPath(orgId, profileId, avatar.mediaType)
+      ))
+    ) {
       const avatarRelative = basename(
         getProfileAvatarPath(orgId, profileId, avatar.mediaType)
       );
@@ -294,51 +318,54 @@ export async function previewProfilePackImport(
   const manifest = readProfilePackManifest(entries);
 
   const skippedAssignments: ProfilePackSkippedItem[] = [];
-  await previewToolAssignments(
-    db,
-    orgId,
-    manifest,
-    entries,
-    options.restoreCustomTools === true,
-    skippedAssignments
-  );
-  await eachNamedOrSkip(
-    manifest.meta.mcpServerNames,
-    (name) =>
-      findMcpServerForOrg(db, orgId, name, {
-        isPlatformAdmin: options.isPlatformAdmin,
-      }),
-    skippedAssignments,
-    (name) => ({
-      path: `MCP server:${name}`,
-      reason: `MCP server "${name}" is not available to this organization and will be skipped.`,
-    })
-  );
-  await eachNamedOrSkip(
-    manifest.meta.composioToolkitSlugs,
-    (slug) => db.getComposioToolkitBySlug(orgId, slug),
-    skippedAssignments,
-    (slug) => ({
-      path: `Composio toolkit:${slug}`,
-      reason: `Composio toolkit "${slug}" was not found in the destination and will be skipped.`,
-    })
-  );
-  await eachNamedOrSkip(
-    manifest.meta.bundledSkillNames,
-    (name) => db.getSkillByName(name, orgId),
-    skippedAssignments,
-    (name) => ({
-      path: `bundled skill:${name}`,
-      reason: `Bundled skill "${name}" was not found in the destination and will be skipped.`,
-    })
-  );
 
-  for (const skill of readSkillNamesFromZip(entries)) {
-    if (await db.getSkillByName(skill.name, orgId)) {
-      skippedAssignments.push({
-        path: `skills/${skill.folder}`,
-        reason: `Skill "${skill.name}" already exists at a different location and will be skipped.`,
-      });
+  if (!manifest.meta.sharedAgent) {
+    await previewToolAssignments(
+      db,
+      orgId,
+      manifest,
+      entries,
+      options.restoreCustomTools === true,
+      skippedAssignments
+    );
+    await eachNamedOrSkip(
+      manifest.meta.mcpServerNames,
+      (name) =>
+        findMcpServerForOrg(db, orgId, name, {
+          isPlatformAdmin: options.isPlatformAdmin,
+        }),
+      skippedAssignments,
+      (name) => ({
+        path: `MCP server:${name}`,
+        reason: `MCP server "${name}" is not available to this organization and will be skipped.`,
+      })
+    );
+    await eachNamedOrSkip(
+      manifest.meta.composioToolkitSlugs,
+      (slug) => db.getComposioToolkitBySlug(orgId, slug),
+      skippedAssignments,
+      (slug) => ({
+        path: `Composio toolkit:${slug}`,
+        reason: `Composio toolkit "${slug}" was not found in the destination and will be skipped.`,
+      })
+    );
+    await eachNamedOrSkip(
+      manifest.meta.bundledSkillNames,
+      (name) => db.getSkillByName(name, orgId),
+      skippedAssignments,
+      (name) => ({
+        path: `bundled skill:${name}`,
+        reason: `Bundled skill "${name}" was not found in the destination and will be skipped.`,
+      })
+    );
+
+    for (const skill of readSkillNamesFromZip(entries)) {
+      if (await db.getSkillByName(skill.name, orgId)) {
+        skippedAssignments.push({
+          path: `skills/${skill.folder}`,
+          reason: `Skill "${skill.name}" already exists at a different location and will be skipped.`,
+        });
+      }
     }
   }
 
@@ -401,6 +428,16 @@ export async function importProfilePack(
 
   try {
     const skippedAssignments: ProfilePackSkippedItem[] = [];
+
+    if (manifest.meta.sharedAgent) {
+      await db.importSharedAgentReference({
+        ...manifest.meta.sharedAgent,
+        createdAt: now,
+        profileId,
+        teamOrgId: orgId,
+      });
+    }
+
     const soulDir = getProfileSoulDir(orgId, profileId);
     await initSoulDirectory(soulDir);
     await writePackedWorkspaceFiles(
@@ -409,56 +446,59 @@ export async function importProfilePack(
       entries,
       skippedAssignments
     );
-    createdSkillIds = await recreatePackedSkills(
-      db,
-      orgId,
-      profileId,
-      skippedAssignments
-    );
-    await restoreToolAssignments(
-      db,
-      profileId,
-      orgId,
-      manifest,
-      entries,
-      options.restoreCustomTools === true,
-      skippedAssignments,
-      createdCustomTools
-    );
-    await eachNamedOrSkip(
-      manifest.meta.mcpServerNames,
-      (serverName) =>
-        findMcpServerForOrg(db, orgId, serverName, {
-          isPlatformAdmin: options.isPlatformAdmin,
+
+    if (!manifest.meta.sharedAgent) {
+      createdSkillIds = await recreatePackedSkills(
+        db,
+        orgId,
+        profileId,
+        skippedAssignments
+      );
+      await restoreToolAssignments(
+        db,
+        profileId,
+        orgId,
+        manifest,
+        entries,
+        options.restoreCustomTools === true,
+        skippedAssignments,
+        createdCustomTools
+      );
+      await eachNamedOrSkip(
+        manifest.meta.mcpServerNames,
+        (serverName) =>
+          findMcpServerForOrg(db, orgId, serverName, {
+            isPlatformAdmin: options.isPlatformAdmin,
+          }),
+        skippedAssignments,
+        (name) => ({
+          path: `MCP server:${name}`,
+          reason: `MCP server "${name}" is not available to this organization and was skipped.`,
         }),
-      skippedAssignments,
-      (name) => ({
-        path: `MCP server:${name}`,
-        reason: `MCP server "${name}" is not available to this organization and was skipped.`,
-      }),
-      async (server) => {
-        await db.assignMcpServerToProfile(profileId, server.id);
-      }
-    );
-    await eachNamedOrSkip(
-      manifest.meta.bundledSkillNames,
-      (skillName) => db.getSkillByName(skillName, orgId),
-      skippedAssignments,
-      (name) => ({
-        path: `bundled skill:${name}`,
-        reason: `Bundled skill "${name}" was not found in the destination and was skipped.`,
-      }),
-      async (skill) => {
-        await db.assignSkillToProfile(profileId, skill.id);
-      }
-    );
-    await assignComposioToolkitsBySlug(
-      db,
-      orgId,
-      profileId,
-      manifest.meta.composioToolkitSlugs,
-      skippedAssignments
-    );
+        async (server) => {
+          await db.assignMcpServerToProfile(profileId, server.id);
+        }
+      );
+      await eachNamedOrSkip(
+        manifest.meta.bundledSkillNames,
+        (skillName) => db.getSkillByName(skillName, orgId),
+        skippedAssignments,
+        (name) => ({
+          path: `bundled skill:${name}`,
+          reason: `Bundled skill "${name}" was not found in the destination and was skipped.`,
+        }),
+        async (skill) => {
+          await db.assignSkillToProfile(profileId, skill.id);
+        }
+      );
+      await assignComposioToolkitsBySlug(
+        db,
+        orgId,
+        profileId,
+        manifest.meta.composioToolkitSlugs,
+        skippedAssignments
+      );
+    }
 
     await recordProfileChangeEvent(db, {
       actorUserId: options.actorUserId,
@@ -621,7 +661,7 @@ async function buildProfilePackMeta(
   const profileSkillNames: string[] = [];
 
   for (const skill of skills) {
-    if (skill.pluginId) {
+    if (skill.pluginId || (skill.orgId && skill.orgId !== profile.orgId)) {
       continue;
     }
 
@@ -657,7 +697,10 @@ async function buildProfilePackMeta(
     thinkingEffort: profile.thinkingEffort ?? null,
     thinkingEnabled: profile.thinkingEnabled ?? null,
     toolNames: tools
-      .filter((tool) => !tool.pluginId)
+      .filter(
+        (tool) =>
+          !tool.pluginId && (!tool.orgId || tool.orgId === profile.orgId)
+      )
       .map((tool) => tool.name)
       .sort(),
   };
@@ -665,6 +708,7 @@ async function buildProfilePackMeta(
 
 async function collectPackedCustomTools(
   db: DatabaseAdapter,
+  orgId: string,
   profileId: string
 ): Promise<{
   entries: Record<string, Uint8Array>;
@@ -678,6 +722,13 @@ async function collectPackedCustomTools(
 
   for (const tool of tools) {
     if (tool.pluginId || !isCustomToolType(tool.handlerType)) {
+      continue;
+    }
+
+    if (tool.orgId && tool.orgId !== orgId) {
+      skipped.push(
+        customToolSkip(tool.name, "Tool belongs to another organization.")
+      );
       continue;
     }
 
@@ -697,13 +748,13 @@ async function collectPackedCustomTools(
     let absolutePath: string;
 
     try {
-      absolutePath = handler.resolveModulePath(storedModulePath);
+      absolutePath = handler.resolveModulePath(storedModulePath, orgId);
     } catch {
       skipped.push(customToolSkip(tool.name, "has an invalid module path"));
       continue;
     }
 
-    const modulePath = portableCustomToolModulePath(absolutePath);
+    const modulePath = portableCustomToolModulePath(absolutePath, orgId);
 
     if (!(modulePath && modulePath.endsWith(handler.extension))) {
       skipped.push(customToolSkip(tool.name, "has an invalid module path"));
@@ -811,6 +862,7 @@ async function restoreToolAssignments(
       handlerType: packed.definition.handlerType,
       id: createId("tool"),
       name,
+      orgId,
       updatedAt: now,
     };
 
@@ -826,7 +878,7 @@ async function restoreToolAssignments(
     }
 
     try {
-      await handler.validateModule(modulePath);
+      await handler.validateModule(modulePath, orgId);
     } catch (error) {
       await rm(packed.absolutePath, { force: true });
       skipped.push(
@@ -864,7 +916,7 @@ async function resolveToolAssignment(
   // Never resolve tools another organization owns: an unscoped name lookup
   // would let a pack attach a foreign tenant's tool to this profile.
   const existing = await db.getToolByNameForOrg(orgId, name);
-  const packed = findPackedCustomTool(manifest, name);
+  const packed = findPackedCustomTool(manifest, name, orgId);
 
   if (!packed) {
     if (hasPackedCustomToolNamed(manifest, name)) {
@@ -941,14 +993,14 @@ async function existingToolMatchesPack(
   let absolutePath: string;
 
   try {
-    absolutePath = handler.resolveModulePath(modulePath);
+    absolutePath = handler.resolveModulePath(modulePath, existing.orgId);
   } catch {
     return false;
   }
 
   const normalizedConfig = {
     ...existing.handlerConfig,
-    modulePath: portableCustomToolModulePath(absolutePath),
+    modulePath: portableCustomToolModulePath(absolutePath, existing.orgId),
   };
 
   if (
@@ -979,7 +1031,8 @@ function hasPackedCustomToolNamed(
 
 function findPackedCustomTool(
   manifest: ProfilePackManifest,
-  name: string
+  name: string,
+  orgId: string
 ): ValidPackedCustomTool | null {
   const definitions: unknown = manifest.meta.customTools;
 
@@ -1013,12 +1066,12 @@ function findPackedCustomTool(
   let absolutePath: string;
 
   try {
-    absolutePath = handler.resolveModulePath(modulePath);
+    absolutePath = handler.resolveModulePath(modulePath, orgId);
   } catch {
     return null;
   }
 
-  const portableModulePath = portableCustomToolModulePath(absolutePath);
+  const portableModulePath = portableCustomToolModulePath(absolutePath, orgId);
   const sourcePath = `${CUSTOM_TOOLS_ARCHIVE_DIR}/${portableModulePath}`;
 
   if (!portableModulePath) {
@@ -1038,8 +1091,13 @@ function findPackedCustomTool(
   };
 }
 
-function portableCustomToolModulePath(absolutePath: string): string | null {
-  const modulePath = toZipPath(relative(getCustomToolsDir(), absolutePath));
+function portableCustomToolModulePath(
+  absolutePath: string,
+  orgId?: string | null
+): string | null {
+  const modulePath = toZipPath(
+    relative(getCustomToolsDir(orgId ?? undefined), absolutePath)
+  );
 
   if (
     !modulePath ||
@@ -1082,10 +1140,19 @@ function isProfilePackManifest<T>(value: T): value is T & ProfilePackManifest {
   const meta = readStringKeyedRecord(manifest?.get("meta"));
   const skipped = manifest?.get("skipped");
   const customTools = meta?.get("customTools");
+  const sharedAgent = meta?.get("sharedAgent");
+  const sharedReference = readStringKeyedRecord(sharedAgent);
 
   return Boolean(
     manifest &&
       meta &&
+      (sharedAgent === undefined ||
+        (sharedReference &&
+          ["publicationId", "sourceOrgId", "sourceProfileId"].every((key) => {
+            const id = sharedReference.get(key);
+
+            return isString(id) && id.trim().length > 0 && id.length <= 256;
+          }))) &&
       manifest.get("apiVersion") === NAKAMA_API_VERSION &&
       isString(manifest.get("createdAt")) &&
       manifest.get("kind") === PROFILE_PACK_KIND &&
@@ -1123,12 +1190,14 @@ function isProfilePackSkippedItem<T>(value: T): boolean {
 
 function isProfilePackCustomTool<T>(value: T): boolean {
   const tool = readStringKeyedRecord(value);
+  const handlerType = tool?.get("handlerType");
 
   return Boolean(
     tool &&
       isString(tool.get("description")) &&
       isProfilePackJsonValue(tool.get("handlerConfig")) &&
-      isCustomToolType(tool.get("handlerType")) &&
+      isString(handlerType) &&
+      isCustomToolType(handlerType) &&
       isString(tool.get("name"))
   );
 }
@@ -1227,7 +1296,7 @@ async function writePackedAvatar(
     .slice(entry.name.lastIndexOf(".") + 1)
     .toLowerCase();
 
-  const mediaType = AVATAR_EXTENSION_MEDIA_TYPES[extension];
+  const mediaType = AVATAR_EXTENSION_MEDIA_TYPES.get(extension);
 
   if (!mediaType) {
     return;

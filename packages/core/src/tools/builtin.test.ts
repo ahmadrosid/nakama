@@ -166,11 +166,42 @@ describe("file builtin tools", () => {
     );
   });
 
-  test("write_file allows custom tool modules outside profile workspace", async () => {
+  test("write_file refuses other orgs' and install-global tool directories", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-write-"));
     configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    const toolsDir = path.join(configDir, "tools");
+
+    for (const toolsDir of [
+      path.join(configDir, "orgs", "org_other", "tools"),
+      path.join(configDir, "tools"),
+    ]) {
+      await mkdir(toolsDir, { recursive: true });
+
+      await expect(
+        runWriteFile(
+          {
+            content: "export async function run() { return null; }",
+            path: path.join(toolsDir, "echo.js"),
+          },
+          PROFILE_CONTEXT,
+          { workspaceRoot: tempDir }
+        )
+      ).rejects.toThrow(PathGuardError);
+    }
+  });
+
+  test("write_file allows the org's own custom tool modules outside profile workspace", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-write-"));
+    configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    const toolsDir = path.join(
+      configDir,
+      "orgs",
+      PROFILE_CONTEXT.orgId,
+      "tools"
+    );
+
     await mkdir(toolsDir, { recursive: true });
 
     const targetPath = path.join(toolsDir, "echo.js");
@@ -438,9 +469,13 @@ describe("file builtin tools", () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
     const targetPath = path.join(tempDir, "note.txt");
     await writeFile(targetPath, content);
-    await runEditFile({ edits, path: targetPath }, PROFILE_CONTEXT, {
-      workspaceRoot: tempDir,
-    });
+    await runEditFile(
+      { edits: [...edits], path: targetPath },
+      PROFILE_CONTEXT,
+      {
+        workspaceRoot: tempDir,
+      }
+    );
     expect(await readFile(targetPath, "utf8")).toBe(expected);
   });
 
@@ -486,7 +521,7 @@ describe("file builtin tools", () => {
     const targetPath = path.join(tempDir, "note.txt");
     await writeFile(targetPath, content);
     await expect(
-      runEditFile({ edits, path: targetPath }, PROFILE_CONTEXT, {
+      runEditFile({ edits: [...edits], path: targetPath }, PROFILE_CONTEXT, {
         workspaceRoot: tempDir,
       })
     ).rejects.toThrow();
@@ -562,6 +597,132 @@ describe("file builtin tools", () => {
     expect(result.endLine).toBe(1);
     expect(result.totalLines).toBe(1);
     expect(result.truncated).toBe(false);
+  });
+
+  test("published skill reads use the host callback and keep line limits", async () => {
+    const reads: Array<[string, string]> = [];
+    const reference = "published-skill://publication%2Fa/references/a%20b.md";
+
+    const context = {
+      ...PROFILE_CONTEXT,
+      readPublishedSkillFile: (id: string, filePath: string) => {
+        reads.push([id, filePath]);
+
+        return Promise.resolve(Buffer.from("First\nSecond\nThird"));
+      },
+    };
+
+    const result = await runReadFile(
+      { limit: 1, offset: 2, path: reference },
+      context
+    );
+
+    expect(reads).toEqual([["publication/a", "references/a b.md"]]);
+    expect(result).toMatchObject({
+      bytesRead: 6,
+      content: "Second",
+      endLine: 2,
+      path: reference,
+      startLine: 2,
+      totalLines: 3,
+      truncated: true,
+    });
+    setDefaultFileGuardOptions({ maxFileBytes: 2 });
+
+    try {
+      await expect(
+        runReadFile({ path: reference }, context)
+      ).rejects.toMatchObject({ code: "TOO_LARGE" });
+    } finally {
+      setDefaultFileGuardOptions({});
+    }
+  });
+
+  test("published skill reads deny missing context and ambiguous references before host reads", async () => {
+    let reads = 0;
+
+    const readPublishedSkillFile = () => {
+      reads += 1;
+
+      return Promise.resolve(Buffer.from("unused"));
+    };
+
+    for (const input of [
+      { cwd: "/tmp", path: "published-skill://pub/SKILL.md" },
+      { path: "published-skill://pub" },
+      { path: "published-skill://%zz/SKILL.md" },
+      { path: "published-skill://pub/config.ini" },
+    ]) {
+      await expect(
+        runReadFile(input, { ...PROFILE_CONTEXT, readPublishedSkillFile })
+      ).rejects.toThrow();
+    }
+
+    await expect(
+      runReadFile({ path: "published-skill://pub/SKILL.md" }, PROFILE_CONTEXT)
+    ).rejects.toThrow();
+    await expect(
+      runReadFile(
+        { path: "published-skill://pub/SKILL.md" },
+        { readPublishedSkillFile, workspaceRoot: "/tmp" }
+      )
+    ).rejects.toThrow();
+    expect(reads).toBe(0);
+  });
+
+  test("published skill bytes use image detection and propagate host errors", async () => {
+    const image = Buffer.from("89504e470d0a1a0a", "hex");
+
+    const result = await runReadFile(
+      { path: "published-skill://pub/image.bin" },
+      {
+        ...PROFILE_CONTEXT,
+        readPublishedSkillFile: () => Promise.resolve(image),
+      }
+    );
+
+    expect(result.images).toEqual([
+      { data: image.toString("base64"), mediaType: "image/png" },
+    ]);
+    expect(result.bytesRead).toBe(image.length);
+    expect(result.path).toBe("published-skill://pub/image.bin");
+    const failure = new Error("Unavailable");
+    await expect(
+      runReadFile(
+        { path: "published-skill://pub/file.bin" },
+        {
+          ...PROFILE_CONTEXT,
+          readPublishedSkillFile: () => Promise.reject(failure),
+        }
+      )
+    ).rejects.toBe(failure);
+  });
+
+  test("published skill Word files use decoded extensions and bypass local memory", async () => {
+    const bytes = await readFile(
+      path.join(import.meta.dir, "..", "__fixtures__", "sample.docx")
+    );
+
+    const refuseLocalMemory = () => {
+      throw new Error("Local memory must not access parent assets");
+    };
+
+    const result = await runReadFile(
+      { path: "published-skill://pub/report%2Edocx" },
+      {
+        ...PROFILE_CONTEXT,
+        memoryFiles: {
+          read: refuseLocalMemory,
+          remove: refuseLocalMemory,
+          write: refuseLocalMemory,
+        },
+        readPublishedSkillFile: () => Promise.resolve(bytes),
+      }
+    );
+
+    expect(result.content).toContain("Laporan Mingguan");
+    expect(result.content).toContain("**teks tebal**");
+    expect(result.path).toBe("published-skill://pub/report%2Edocx");
   });
 
   test("write_file refuses Word extensions instead of faking a document", async () => {
@@ -982,7 +1143,14 @@ describe("file builtin tools", () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-"));
     configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    const toolsDir = path.join(configDir, "tools");
+
+    const toolsDir = path.join(
+      configDir,
+      "orgs",
+      PROFILE_CONTEXT.orgId,
+      "tools"
+    );
+
     await mkdir(toolsDir, { recursive: true });
 
     const targetPath = path.join(toolsDir, "echo.js");

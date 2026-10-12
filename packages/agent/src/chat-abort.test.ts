@@ -42,7 +42,7 @@ function createCountingProvider(responses: ChatCompletionResult[]) {
 
         return Promise.resolve(result);
       },
-    },
+    } satisfies ProviderClient,
   };
 }
 

@@ -96,6 +96,7 @@ function createServerOptions() {
       ) => ({
         sessions: [{ id: `${profileId}-${channel}` }],
       }),
+      listSkills: async () => ({ skills: [] }),
       providerConfigured: true,
       resolveSession: async () => ({
         send: async (input: { message: string }) => `reply:${input.message}`,
@@ -119,6 +120,225 @@ function createServerOptions() {
 }
 
 describe("createHonoApp", () => {
+  test("rejects invalid profile fields before calling the agent service", async () => {
+    const options = createServerOptions();
+    let calls = 0;
+    options.agent.createProfile = async () => {
+      calls += 1;
+      throw new Error("Unexpected profile creation");
+    };
+
+    const app = createHonoApp(options);
+
+    const session = await setupFreshInstallSession(
+      app,
+      options.databaseAdapter
+    );
+
+    for (const body of [{}, { name: 42 }, { model: true, name: "Agent" }]) {
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/profiles", {
+          body: JSON.stringify(body),
+          headers: session.headers({
+            "Content-Type": "application/json",
+            "X-CSRF-Token": session.csrfToken,
+          }),
+          method: "POST",
+        })
+      );
+
+      expect(response.status).toBe(400);
+    }
+
+    expect(calls).toBe(0);
+  });
+  test("rejects malformed model requests before calling the agent service", async () => {
+    const options = createServerOptions();
+    let calls = 0;
+
+    const unexpectedCall = async () => {
+      calls += 1;
+      throw new Error("Unexpected service call");
+    };
+
+    options.agent.transcribeAudio = unexpectedCall;
+    options.agent.generateImage = unexpectedCall;
+    options.agent.setThinkingSettings = unexpectedCall;
+    const app = createHonoApp(options);
+
+    const session = await setupFreshInstallSession(
+      app,
+      options.databaseAdapter
+    );
+
+    for (const [path, method, body] of [
+      ["/v1/audio/transcribe", "POST", {}],
+      ["/v1/audio/transcribe", "POST", { data: 7, mediaType: "audio/wav" }],
+      ["/v1/images/generate", "POST", { prompt: 7 }],
+      ["/v1/settings/thinking", "PUT", { enabled: "yes" }],
+      ["/v1/settings/thinking", "PUT", { effort: "unknown", enabled: true }],
+    ] as const) {
+      const response = await app.fetch(
+        new Request(`http://localhost:4310${path}`, {
+          body: JSON.stringify(body),
+          headers: session.headers({
+            "Content-Type": "application/json",
+            "X-CSRF-Token": session.csrfToken,
+          }),
+          method,
+        })
+      );
+
+      expect(response.status).toBe(400);
+    }
+
+    expect(calls).toBe(0);
+  });
+
+  test("rejects malformed MCP requests before calling services", async () => {
+    const options = createServerOptions();
+    let calls = 0;
+
+    const unexpectedCall = async () => {
+      calls += 1;
+      throw new Error("Unexpected MCP call");
+    };
+
+    options.mcpService.createServer = unexpectedCall;
+    options.mcpService.updateServer = unexpectedCall;
+    options.mcpService.testServer = unexpectedCall;
+    options.agent.assignMcpServer = unexpectedCall;
+    const app = createHonoApp(options);
+
+    const session = await setupFreshInstallSession(
+      app,
+      options.databaseAdapter
+    );
+
+    for (const [path, method, body] of [
+      ["/v1/mcp/servers", "POST", {}],
+      [
+        "/v1/mcp/servers",
+        "POST",
+        {
+          config: { url: "https://mcp.example.com" },
+          name: 7,
+          transport: "http",
+        },
+      ],
+      [
+        "/v1/mcp/servers/test",
+        "POST",
+        { config: { url: "https://mcp.example.com" }, transport: "unknown" },
+      ],
+      [
+        "/v1/mcp/servers/test",
+        "POST",
+        { config: { url: 7 }, transport: "http" },
+      ],
+      [
+        "/v1/mcp/servers/server",
+        "PATCH",
+        { config: { args: [7], command: "bun" } },
+      ],
+      [
+        "/v1/mcp/servers/test",
+        "POST",
+        {
+          config: { headers: { TOKEN: 7 }, url: "https://mcp.example.com" },
+          transport: "http",
+        },
+      ],
+      [
+        "/v1/mcp/servers/test",
+        "POST",
+        { config: { command: "bun", env: { TOKEN: 7 } }, transport: "stdio" },
+      ],
+      ["/v1/profiles/default/mcp-servers", "POST", { serverId: 7 }],
+    ] as const) {
+      const response = await app.fetch(
+        new Request(`http://localhost:4310${path}`, {
+          body: JSON.stringify(body),
+          headers: session.headers({
+            "Content-Type": "application/json",
+            "X-CSRF-Token": session.csrfToken,
+          }),
+          method,
+        })
+      );
+
+      expect(response.status).toBe(400);
+    }
+
+    expect(calls).toBe(0);
+  });
+
+  test("MCP connection tests accept an unnamed server and the command alias", async () => {
+    const options = createServerOptions();
+    const calls: Parameters<typeof options.mcpService.testServer>[] = [];
+    options.mcpService.testServer = async (
+      ...input: Parameters<typeof options.mcpService.testServer>
+    ) => {
+      calls.push(input);
+
+      return { ok: true, toolCount: 0, tools: [] };
+    };
+
+    const app = createHonoApp(options);
+
+    const session = await setupFreshInstallSession(
+      app,
+      options.databaseAdapter
+    );
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/mcp/servers/test", {
+        body: JSON.stringify({
+          config: {
+            args: ["server.ts"],
+            command: "bun",
+            env: { TOKEN: "test" },
+          },
+          serverId: "existing",
+          transport: " COMMAND ",
+        }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(calls).toEqual([
+      [
+        "stdio",
+        { args: ["server.ts"], command: "bun", env: { TOKEN: "test" } },
+        "existing",
+      ],
+    ]);
+  });
+
+  test("omits database-backed settings and notification routes without a database", () => {
+    const app = createHonoApp({
+      ...createServerOptions(),
+      databaseAdapter: null,
+    });
+
+    const paths = new Set(app.routes.map((route) => route.path));
+
+    for (const path of [
+      "/v1/settings/automation-worker",
+      "/v1/settings/coding-harnesses",
+      "/v1/notification-destinations",
+      "/v1/notify/:destinationId",
+      "/v1/platform/data/export",
+      "/v1/token-optimization",
+    ]) {
+      expect(paths.has(path)).toBe(false);
+    }
+  });
   test("a formerly valid stored backend key is rejected while its owner can still sign in", async () => {
     const root = await mkdtemp(join(tmpdir(), "retired-key-auth-"));
     const filename = join(root, "nakama.sqlite");
@@ -364,12 +584,7 @@ describe("createHonoApp", () => {
       });
       expect((await request("meetings")).status).toBe(200);
       expect((await request("configure", { enabled: false })).status).toBe(403);
-      await options.databaseAdapter.upsertOrgMember({
-        createdAt: new Date().toISOString(),
-        orgId: session.orgId,
-        role: "viewer",
-        userId: user!.id,
-      });
+      await options.databaseAdapter.deleteOrgMember(session.orgId, user!.id);
       expect((await request("meetings")).status).toBe(403);
       expect(
         (await request("upload", { content: "YQ==", filename: "notes.md" }))
@@ -1715,7 +1930,11 @@ describe("createHonoApp", () => {
 
     const listCalls: Array<{ channel: string; profileId: string }> = [];
     const originalListSessions = options.agent.listSessions;
-    options.agent.listSessions = async (orgId, profileId, channel) => {
+    options.agent.listSessions = async (
+      orgId: string,
+      profileId: string,
+      channel: string
+    ) => {
       listCalls.push({ channel, profileId });
 
       return originalListSessions(orgId, profileId, channel);
@@ -1951,55 +2170,6 @@ describe("createHonoApp", () => {
 
       expect(response.status).toBe(200);
     });
-
-    test("returns 403 when viewers mutate protected routes", async () => {
-      const options = createServerOptions();
-      const app = createHonoApp(options);
-
-      const session = await setupFreshInstallSession(
-        app,
-        options.databaseAdapter,
-        "viewer@example.com",
-        "viewer"
-      );
-
-      const response = await app.fetch(
-        new Request("http://localhost:4310/v1/workers/automation/start", {
-          headers: session.headers({
-            "X-CSRF-Token": session.csrfToken,
-          }),
-          method: "POST",
-        })
-      );
-
-      expect(response.status).toBe(403);
-      await expect(response.json()).resolves.toEqual({ error: "Forbidden" });
-    });
-
-    test("returns 403 when viewers send session messages", async () => {
-      const options = createServerOptions();
-      const app = createHonoApp(options);
-
-      const session = await setupFreshInstallSession(
-        app,
-        options.databaseAdapter,
-        "viewer@example.com",
-        "viewer"
-      );
-
-      const response = await app.fetch(
-        new Request("http://localhost:4310/v1/sessions/session_1/messages", {
-          body: JSON.stringify({ message: "hello" }),
-          headers: session.headers({
-            "X-CSRF-Token": session.csrfToken,
-          }),
-          method: "POST",
-        })
-      );
-
-      expect(response.status).toBe(403);
-      await expect(response.json()).resolves.toEqual({ error: "Forbidden" });
-    });
   });
 
   describe("auth request bodies", () => {
@@ -2165,7 +2335,7 @@ describe("createHonoApp", () => {
         new Request("http://localhost:4310/v1/skills", { headers: orgHeaders })
       );
 
-      expect(skillsResponse.status).toBe(403);
+      expect(skillsResponse.status).toBe(200);
     });
     test("returns generic passkey options without authentication", async () => {
       const app = createHonoApp(createServerOptions());

@@ -7,6 +7,7 @@ import {
 } from "@nakama/core";
 import { modelSupportsVision } from "../providers/models";
 import {
+  modelExistsOnInstance,
   type ResolvedProfileProviderSelection,
   resolveConfiguredModelInstance,
   resolveProfileProviderSelection,
@@ -15,15 +16,26 @@ import {
 export function resolveVisionProviderSelection(
   userConfig: UserConfig | null | undefined
 ): ResolvedProfileProviderSelection | null {
-  if (
-    !resolveConfiguredModelInstance(userConfig, userConfig?.visionModel, {
+  const selected = resolveConfiguredModelInstance(
+    userConfig,
+    userConfig?.visionModel,
+    {
       invalid:
         "Configured image parsing model is invalid. Update it in Settings.",
       missingProvider:
         "Configured image parsing provider is missing. Update it in Settings.",
-    })
-  ) {
+    }
+  );
+
+  if (!selected) {
     return null;
+  }
+
+  if (!modelExistsOnInstance(selected.instance, selected.modelId)) {
+    throw new NakamaApiError(
+      "Configured image parsing model is unavailable. Update it in Settings.",
+      400
+    );
   }
 
   const resolved = resolveProfileProviderSelection({

@@ -51,7 +51,7 @@ async function adminCount(db: DatabaseAdapter): Promise<number> {
 describe("last org admin", () => {
   test("refuses to delete the only admin", async () => {
     const db = createSqliteMemoryAdapter();
-    const [admin] = await seedOrgWithAdmins(db, ["admin", "viewer"]);
+    const [admin] = await seedOrgWithAdmins(db, ["admin"]);
 
     expect(await db.deleteOrgMember("org_a", admin!)).toBe(false);
     expect(await adminCount(db)).toBe(1);
@@ -59,9 +59,9 @@ describe("last org admin", () => {
 
   test("refuses to demote the only admin", async () => {
     const db = createSqliteMemoryAdapter();
-    const [admin] = await seedOrgWithAdmins(db, ["admin", "viewer"]);
+    const [admin] = await seedOrgWithAdmins(db, ["admin"]);
 
-    expect(await db.updateOrgMemberRole("org_a", admin!, "viewer")).toBe(false);
+    expect(await db.updateOrgMemberRole("org_a", admin!, "member")).toBe(false);
     expect(await adminCount(db)).toBe(1);
   });
 
@@ -69,7 +69,7 @@ describe("last org admin", () => {
     const db = createSqliteMemoryAdapter();
     const [first] = await seedOrgWithAdmins(db, ["admin", "admin"]);
 
-    expect(await db.updateOrgMemberRole("org_a", first!, "viewer")).toBe(true);
+    expect(await db.updateOrgMemberRole("org_a", first!, "member")).toBe(true);
     expect(await adminCount(db)).toBe(1);
   });
 });

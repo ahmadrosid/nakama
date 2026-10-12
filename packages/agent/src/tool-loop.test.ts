@@ -85,6 +85,30 @@ describe("tool-loop", () => {
     expect(result).toEqual({ error: "boom" });
   });
 
+  test("executeToolCall rejects non-JSON results before distillation", async () => {
+    const spy = spyOn(core, "distillToolResult");
+
+    const invalidTool: ToolDefinition = {
+      ...sampleTool,
+      async run() {
+        return { message: undefined };
+      },
+    };
+
+    try {
+      const result = await executeToolCall([invalidTool], {
+        arguments: {},
+        id: "invalid",
+        name: "sample",
+      });
+
+      expect(result).toHaveProperty("error");
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   test("executeToolCall returns raw result when distillToolResult throws", async () => {
     const payload = { message: "kept" };
 
@@ -158,6 +182,15 @@ describe("createTurnTools", () => {
     const active = createTurnTools(assigned);
     const discovery = active.find((tool) => tool.name === "find_tools")!;
     expect(await discovery.run({}, {})).toHaveProperty("error");
+    expect(await discovery.run({ query: " ".repeat(501) }, {})).toHaveProperty(
+      "error"
+    );
+    expect(await discovery.run({ query: "x".repeat(501) }, {})).toHaveProperty(
+      "error"
+    );
+    expect(
+      await discovery.run({ extra: true, query: "notes" }, {})
+    ).toHaveProperty("error");
     expect(await discovery.run({ query: "unassigned" }, {})).toEqual({
       remaining: 0,
       tools: [],

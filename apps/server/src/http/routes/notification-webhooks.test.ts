@@ -7,14 +7,22 @@ import {
   getWhatsAppConfigPath,
   saveTelegramConfig,
 } from "@nakama/core";
+import { asTestFetch } from "../../providers/test-helpers";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import { seedOrgAdmin } from "../test-session-helpers";
 
 describe("notification webhook routes", () => {
   let tempHome = "";
+  const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
   let homedirSpy: ReturnType<typeof spyOn<typeof os, "homedir">> | null = null;
 
   afterEach(async () => {
+    if (previousConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+    }
+
     homedirSpy?.mockRestore();
     homedirSpy = null;
 
@@ -27,6 +35,7 @@ describe("notification webhook routes", () => {
   async function createApp() {
     tempHome = await mkdtemp(path.join(os.tmpdir(), "nakama-notify-webhook-"));
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
+    process.env.NAKAMA_CONFIG_DIR = path.join(tempHome, ".nakama");
     await saveTelegramConfig(
       { orgId: "org_1", profileId: "agent_1" },
       { botToken: "1234567890:TEST" }
@@ -43,7 +52,7 @@ describe("notification webhook routes", () => {
       const originalFetch = globalThis.fetch;
       const calls: Array<{ url: string; body: unknown; headers: Headers }> = [];
       let providerStatus = 200;
-      globalThis.fetch = async (input, init) => {
+      globalThis.fetch = asTestFetch(async (input, init) => {
         calls.push({
           url: String(input),
           body: JSON.parse(String(init?.body)),
@@ -51,7 +60,7 @@ describe("notification webhook routes", () => {
         });
 
         return new Response("ok", { status: providerStatus });
-      };
+      });
 
       try {
         const { app, databaseAdapter, authService } = await createApp();
@@ -129,6 +138,9 @@ describe("notification webhook routes", () => {
         expect((await notify("evt_bad_payload", { body: " " })).status).toBe(
           400
         );
+        expect(
+          (await notify("evt_1", { body: "Received", level: "fatal" })).status
+        ).toBe(400);
         expect(calls).toEqual([]);
         expect((await notify("evt_1")).status).toBe(204);
         expect((await notify("evt_1")).status).toBe(409);
@@ -170,15 +182,16 @@ describe("notification webhook routes", () => {
     const telegramCalls: Array<{
       chat_id?: number | string;
       message_thread_id?: number;
+      parse_mode?: "HTML";
       text?: string;
     }> = [];
 
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = asTestFetch(async (_input, init) => {
       telegramCalls.push(JSON.parse(String(init?.body)));
 
       return new Response("ok", { status: 200 });
-    };
+    });
 
     try {
       const { app, databaseAdapter, authService } = await createApp();
@@ -298,11 +311,11 @@ describe("notification webhook routes", () => {
   test("rejects a replayed idempotency key without a second telegram send", async () => {
     const telegramCalls: unknown[] = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = asTestFetch(async (_input, init) => {
       telegramCalls.push(init?.body);
 
       return new Response("ok", { status: 200 });
-    };
+    });
 
     try {
       const { app, databaseAdapter, authService } = await createApp();
@@ -357,11 +370,11 @@ describe("notification webhook routes", () => {
   test("does not deliver for an archived organization", async () => {
     const telegramCalls: unknown[] = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = asTestFetch(async (_input, init) => {
       telegramCalls.push(init?.body);
 
       return new Response("ok", { status: 200 });
-    };
+    });
 
     try {
       const { app, databaseAdapter, authService } = await createApp();

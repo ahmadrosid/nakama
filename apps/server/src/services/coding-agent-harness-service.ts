@@ -666,7 +666,7 @@ export function getCodingHarnessInstallCommand(
 }
 
 async function probeHarnessLight(
-  harness: CodingAgentHarnessStatus,
+  harness: Pick<StoredCodingAgentHarnessRecord, "kind" | "name">,
   probeContext?: CodingAgentHarnessProbeContext
 ): Promise<{
   authenticated: boolean | null;

@@ -10,7 +10,7 @@ import { resolveRequestClientOrigin } from "../../services/composio-callback-url
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
-  requireNotViewerFromContext,
+  requireOrgMemberFromContext,
 } from "../org-guards";
 import { json, readJson } from "../shared";
 import type { HonoApp } from "../types";
@@ -29,7 +29,7 @@ export function registerArtifactShareRoutes(
   );
 
   app.post("/v1/profiles/:profileId/artifacts/shares", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
 
@@ -68,7 +68,7 @@ export function registerArtifactShareRoutes(
   });
 
   app.get("/v1/profiles/:profileId/artifacts/shares/status", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const sourcePath = c.req.query("path");
@@ -92,7 +92,7 @@ export function registerArtifactShareRoutes(
   });
 
   app.delete("/v1/profiles/:profileId/artifacts/shares/:shareId", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const shareId = decodeURIComponent(c.req.param("shareId"));
@@ -122,7 +122,7 @@ export function registerArtifactShareRoutes(
           ? "text/plain; charset=utf-8"
           : "application/octet-stream";
 
-      return new Response(bytes, {
+      return new Response(new Uint8Array(bytes), {
         headers: {
           "Content-Disposition": `${disposition}; filename="${downloadName}"`,
           "Content-Type": contentType,

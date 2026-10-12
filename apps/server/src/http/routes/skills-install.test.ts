@@ -3,11 +3,13 @@ import { readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { zipSync } from "fflate";
+import { asTestFetch } from "../../providers/test-helpers";
 import { SkillsService } from "../../services/skills-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
   loginUserSession,
+  seedOrgAdmin,
   setupFreshInstallSession,
 } from "../test-session-helpers";
 
@@ -33,6 +35,7 @@ function createApp() {
   return {
     ...createMinimalHonoApp({
       agent: {
+        listSkills: (orgId: string) => skillsService.listSkills(orgId),
         listSkillFiles: (orgId: string, skillId: string) =>
           skillsService.listSkillFiles(orgId, skillId),
         readSkillFile: (orgId: string, skillId: string, filePath: string) =>
@@ -51,6 +54,140 @@ function createApp() {
 
 const BASE = "http://localhost:4310";
 
+test("skill catalog permits tenant admins without exposing private tenant skills", async () => {
+  const { app, authService, databaseAdapter, skillsService } = createApp();
+
+  const admin = await seedOrgAdmin(databaseAdapter, {
+    authService,
+    email: "catalog-admin@example.com",
+    orgId: "catalog-parent",
+  });
+
+  const session = await loginUserSession(
+    app,
+    admin.email,
+    admin.password,
+    admin.orgId
+  );
+
+  const now = new Date().toISOString();
+  const skillIds = new Map<string, string>();
+
+  const { skill: globalSkill } = await skillsService.createSkill(admin.orgId, {
+    body: "Global instructions",
+    description: "Existing global skill",
+    name: "catalog-global",
+  });
+
+  for (const orgId of [
+    admin.orgId,
+    "catalog-team",
+    "catalog-sibling",
+    "catalog-other",
+  ]) {
+    if (orgId !== admin.orgId) {
+      await databaseAdapter.upsertOrganization({
+        createdAt: now,
+        id: orgId,
+        name: orgId,
+        parentOrgId: orgId === "catalog-other" ? null : admin.orgId,
+        slug: orgId,
+        updatedAt: now,
+      });
+    }
+
+    const profileId = `${orgId}-profile`;
+    await databaseAdapter.upsertProfile({
+      createdAt: now,
+      id: profileId,
+      isSuper: false,
+      model: null,
+      name: orgId,
+      orgId,
+      systemPrompt: "Private profile",
+      updatedAt: now,
+    });
+
+    const { skill } = await skillsService.createSkill(orgId, {
+      body: "Private instructions",
+      description: "Private skill",
+      name: orgId,
+      profileId,
+    });
+
+    skillIds.set(orgId, skill.id);
+  }
+
+  await databaseAdapter.upsertOrgMember({
+    createdAt: now,
+    orgId: "catalog-team",
+    role: "admin",
+    userId: admin.userId,
+  });
+
+  for (const orgId of [admin.orgId, "catalog-team"]) {
+    const response = await app.fetch(
+      new Request(`${BASE}/v1/skills`, {
+        headers: session.headers({}, orgId),
+      })
+    );
+
+    expect(response.status).toBe(200);
+
+    const result: Awaited<ReturnType<SkillsService["listSkills"]>> =
+      await response.json();
+
+    expect(
+      result.skills.filter((skill) => skill.orgId).map((skill) => skill.id)
+    ).toEqual([skillIds.get(orgId)!]);
+    expect(result.skills.map((skill) => skill.id)).toContain(globalSkill.id);
+    expect(result.publishedSkills).toEqual([]);
+  }
+
+  for (const orgId of ["catalog-sibling", "catalog-other"]) {
+    const response = await app.fetch(
+      new Request(`${BASE}/v1/skills`, {
+        headers: session.headers({}, orgId),
+      })
+    );
+
+    expect(response.status).toBe(404);
+  }
+
+  const write = await app.fetch(
+    new Request(`${BASE}/v1/skills`, {
+      body: "{}",
+      headers: session.headers(
+        {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        },
+        admin.orgId
+      ),
+      method: "POST",
+    })
+  );
+
+  expect(write.status).toBe(403);
+
+  for (const role of ["member"] as const) {
+    await databaseAdapter.upsertOrgMember({
+      createdAt: now,
+      orgId: admin.orgId,
+      role,
+      userId: admin.userId,
+    });
+
+    const response = await app.fetch(
+      new Request(`${BASE}/v1/skills`, {
+        headers: session.headers({}, admin.orgId),
+      })
+    );
+
+    expect(response.status).toBe(403);
+  }
+});
+
 describe("POST /v1/skills/install", () => {
   const originalFetch = globalThis.fetch;
 
@@ -64,18 +201,20 @@ describe("POST /v1/skills/install", () => {
 
   test("platform admin installs a valid public SKILL.md and assigns it", async () => {
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = mock(
-      async () =>
-        new Response(
-          zipSync({
-            "skills-main/weather/SKILL.md": new TextEncoder().encode(
-              VALID_SKILL
-            ),
-            "skills-main/weather/references/explainer.md":
-              new TextEncoder().encode("Explainer instructions"),
-          })
-        )
-    ) as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(
+            zipSync({
+              "skills-main/weather/SKILL.md": new TextEncoder().encode(
+                VALID_SKILL
+              ),
+              "skills-main/weather/references/explainer.md":
+                new TextEncoder().encode("Explainer instructions"),
+            })
+          )
+      )
+    );
 
     const { app, databaseAdapter, skillsService } = createApp();
 
@@ -173,17 +312,19 @@ describe("POST /v1/skills/install", () => {
   test("installs a skill from an npx skills add command", async () => {
     let requestedUrl = "";
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = mock(async (input) => {
-      requestedUrl = String(input);
+    globalThis.fetch = asTestFetch(
+      mock(async (input) => {
+        requestedUrl = String(input);
 
-      return new Response(
-        zipSync({
-          "agent-skills-main/pdf/SKILL.md": new TextEncoder().encode(
-            VALID_SKILL.replace("github-weather", "pdf")
-          ),
-        })
-      );
-    }) as typeof fetch;
+        return new Response(
+          zipSync({
+            "agent-skills-main/pdf/SKILL.md": new TextEncoder().encode(
+              VALID_SKILL.replace("github-weather", "pdf")
+            ),
+          })
+        );
+      })
+    );
 
     const { app, databaseAdapter } = createApp();
 
@@ -221,16 +362,18 @@ describe("POST /v1/skills/install", () => {
 
   test("invalid frontmatter returns 400 and writes no skill", async () => {
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = mock(
-      async () =>
-        new Response(
-          zipSync({
-            "skills-main/broken/SKILL.md": new TextEncoder().encode(
-              INVALID_SKILL
-            ),
-          })
-        )
-    ) as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(
+            zipSync({
+              "skills-main/broken/SKILL.md": new TextEncoder().encode(
+                INVALID_SKILL
+              ),
+            })
+          )
+      )
+    );
 
     const { app, databaseAdapter } = createApp();
 
@@ -410,16 +553,18 @@ describe("POST /v1/skills/install", () => {
 
   test("installing the same skill onto a second profile returns 409", async () => {
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = mock(
-      async () =>
-        new Response(
-          zipSync({
-            "skills-main/weather/SKILL.md": new TextEncoder().encode(
-              VALID_SKILL
-            ),
-          })
-        )
-    ) as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(
+            zipSync({
+              "skills-main/weather/SKILL.md": new TextEncoder().encode(
+                VALID_SKILL
+              ),
+            })
+          )
+      )
+    );
 
     const { app, databaseAdapter } = createApp();
 

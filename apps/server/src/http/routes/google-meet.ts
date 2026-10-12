@@ -5,7 +5,7 @@ import { meetingActionSchemas } from "../../services/google-meet/actions";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
-  requireNotViewerFromContext,
+  requireOrgMemberFromContext,
 } from "../org-guards";
 import { json, readJson } from "../shared";
 import type { HonoApp } from "../types";
@@ -36,7 +36,7 @@ export function registerGoogleMeetRoutes(app: HonoApp, options: ServerOptions) {
   }
 
   app.post("/v1/meet/actions/:actionKey", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
 
     if (!options.googleMeetService) {

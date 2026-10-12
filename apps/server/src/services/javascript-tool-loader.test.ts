@@ -4,6 +4,7 @@ import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   getUserConfigPath,
+  type JsonValue,
   parseIniWithSections,
   writeParsedConfigIni,
 } from "@nakama/core";
@@ -66,7 +67,7 @@ describe("javascript tool loader", () => {
     // SAFETY: The test fixture matches the contract used by this test.
     const result = (await tool!.run(
       { message: "hello" },
-      { workspaceRoot: "/tmp/nakama-ws" }
+      { orgId: "org_a", workspaceRoot: "/tmp/nakama-ws" }
     )) as { echoed: string; root: string };
 
     expect(result.echoed).toBe("hello");
@@ -109,9 +110,9 @@ describe("javascript tool loader", () => {
       nested: ["[REDACTED]"],
       present: true,
     });
-    expect(await tool.run({}, { orgId: "org_c" })).toMatchObject({
-      type: "tool_credentials_required",
-    });
+    await expect(tool.run({}, { orgId: "org_c" })).rejects.toThrow(
+      "Tool not available in this organization."
+    );
     await expect(tool.run({ fail: true }, { orgId: "org_a" })).rejects.toThrow(
       "bad key [REDACTED]"
     );
@@ -122,9 +123,14 @@ describe("javascript tool loader", () => {
       echo: "[REDACTED]",
     });
 
-    for (const invalid of ["", " \n", "key\n[provider.evil]", "key\0", 123]) {
+    for (const invalid of ["", " \n", "key\n[provider.evil]", "key\0"]) {
       expect(() => saveToolApiKey("org_a", record.id, invalid)).toThrow();
     }
+
+    expect(() => {
+      // @ts-expect-error Invalid external input must fail runtime validation.
+      saveToolApiKey("org_a", record.id, 123);
+    }).toThrow();
 
     await writeFile(
       path.join(toolsDir, "credential.py"),
@@ -203,7 +209,7 @@ if __name__ == "__main__":
     }`
     );
 
-    const env = [
+    const env: JsonValue[] = [
       { name: "WEATHER_API_URL" },
       { name: "WEATHER_API_KEY", secret: true },
     ];
@@ -240,9 +246,9 @@ if __name__ == "__main__":
     expect(await readFile(getUserConfigPath(), "utf8")).not.toContain(
       "secret-weather-key"
     );
-    expect(await tool.run({}, { orgId: "org_b" })).toMatchObject({
-      type: "tool_credentials_required",
-    });
+    await expect(tool.run({}, { orgId: "org_b" })).rejects.toThrow(
+      "Tool not available in this organization."
+    );
     expect(() =>
       saveToolEnv("org_a", record.id, declared, { OTHER_NAME: "x" })
     ).toThrow();
@@ -299,10 +305,12 @@ if __name__ == "__main__":
 
     const tool = (await loadJavascriptTool(record))!;
     expect(await tool.run({}, { orgId: "org_a" })).toEqual({ present: false });
-    expect(await tool.run({}, {})).toEqual({ present: false });
+    await expect(tool.run({}, {})).rejects.toThrow();
     await saveToolApiKey("org_a", record.id, "optional-key");
     expect(await tool.run({}, { orgId: "org_a" })).toEqual({ present: true });
-    expect(await tool.run({}, { orgId: "org_b" })).toEqual({ present: false });
+    await expect(tool.run({}, { orgId: "org_b" })).rejects.toThrow(
+      "Tool not available in this organization."
+    );
   });
 
   test("reads parallelSafe from handlerConfig, not the module", async () => {
@@ -342,7 +350,7 @@ if __name__ == "__main__":
     configDir = dir;
 
     const tool = await loadJavascriptTool(makeRecord());
-    const result = await tool!.run({}, {});
+    const result = await tool!.run({}, { orgId: "org_a" });
 
     expect(result).toEqual({ error: "Tool module not found: echo.js" });
   });
@@ -365,7 +373,10 @@ if __name__ == "__main__":
     );
 
     // SAFETY: The test fixture matches the contract used by this test.
-    const result = (await tool!.run({}, {})) as { error: string };
+    const result = (await tool!.run({}, { orgId: "org_a" })) as {
+      error: string;
+    };
+
     expect(result.error).toMatch(/export.*run/i);
   });
 
@@ -387,7 +398,9 @@ if __name__ == "__main__":
       makeRecord({ handlerConfig: { modulePath: "boom.js" }, name: "boom" })
     );
 
-    const err = await tool!.run({}, {}).catch((error: Error) => error);
+    const err = await tool!
+      .run({}, { orgId: "org_a" })
+      .catch((error: Error) => error);
 
     expect(err).toBeInstanceOf(Error);
     // SAFETY: The test fixture matches the contract used by this test.
@@ -416,7 +429,9 @@ if __name__ == "__main__":
       })
     );
 
-    const err = await tool!.run({}, {}).catch((error: Error) => error);
+    const err = await tool!
+      .run({}, { orgId: "org_a" })
+      .catch((error: Error) => error);
 
     expect(err).toBeInstanceOf(Error);
     // SAFETY: The test fixture matches the contract used by this test.
@@ -445,7 +460,7 @@ if __name__ == "__main__":
     );
 
     // SAFETY: The test fixture matches the contract used by this test.
-    const result = (await tool!.run({}, {})) as { cwd: string };
+    const result = (await tool!.run({}, { orgId: "org_a" })) as { cwd: string };
     expect(realpathSync(result.cwd)).toBe(realpathSync(toolsDir));
   });
 
@@ -473,7 +488,10 @@ if __name__ == "__main__":
 
     try {
       // SAFETY: The test fixture matches the contract used by this test.
-      const result = (await tool!.run({}, {})) as { secret: string | null };
+      const result = (await tool!.run({}, { orgId: "org_a" })) as {
+        secret: string | null;
+      };
+
       expect(result.secret).toBeNull();
     } finally {
       delete process.env.NAKAMA_TEST_CANARY_SECRET;
@@ -503,7 +521,10 @@ if __name__ == "__main__":
     process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS = "200";
 
     try {
-      const err = await tool!.run({}, {}).catch((error: Error) => error);
+      const err = await tool!
+        .run({}, { orgId: "org_a" })
+        .catch((error: Error) => error);
+
       expect(err).toBeInstanceOf(Error);
       // SAFETY: The test fixture matches the contract used by this test.
       expect((err as Error).message).toMatch(/timed out/i);
@@ -538,9 +559,9 @@ export async function run(input, context) {
 
     const [first, second] = await Promise.all([
       // SAFETY: The test fixture matches the contract used by this test.
-      tool!.run({}, {}) as Promise<{ count: number }>,
+      tool!.run({}, { orgId: "org_a" }) as Promise<{ count: number }>,
       // SAFETY: The test fixture matches the contract used by this test.
-      tool!.run({}, {}) as Promise<{ count: number }>,
+      tool!.run({}, { orgId: "org_a" }) as Promise<{ count: number }>,
     ]);
 
     expect(first.count).toBe(1);
@@ -587,12 +608,15 @@ describe("tool resolver", () => {
         handlerType: "javascript",
         id: "tool_adder",
         name: "adder",
+        orgId: "org_a",
         updatedAt: new Date().toISOString(),
       },
     ]);
 
     expect(tools).toHaveLength(1);
-    expect(await tools[0]!.run({ a: 2, b: 3 }, {})).toEqual({ sum: 5 });
+    expect(await tools[0]!.run({ a: 2, b: 3 }, { orgId: "org_a" })).toEqual({
+      sum: 5,
+    });
   });
 
   test("skips unsupported handler types", async () => {

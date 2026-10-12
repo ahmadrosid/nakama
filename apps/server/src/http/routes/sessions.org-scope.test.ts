@@ -4,6 +4,7 @@ import {
   createInMemoryDatabaseAdapter,
   seedOrgSuperBotProfile,
 } from "@nakama/db";
+import { asTestFetch } from "../../providers/test-helpers";
 import { AgentService } from "../../services/agent-service";
 import { createAttachmentSaver } from "../../services/attachment-service";
 import { setupTestConfigDir } from "../../test-config-dir";
@@ -129,13 +130,15 @@ describe("session routes are scoped to the caller's active org", () => {
       "http://localhost:4310/v1/chat/images/proxy?url=https%3A%2F%2F8.8.8.8%2Fimage.png";
 
     const upstream = spyOn(globalThis, "fetch").mockImplementation(
-      async () =>
-        new Response(png, {
-          headers: {
-            "content-type": "image/png",
-            "set-cookie": "upstream=secret",
-          },
-        })
+      asTestFetch(
+        async () =>
+          new Response(png, {
+            headers: {
+              "content-type": "image/png",
+              "set-cookie": "upstream=secret",
+            },
+          })
+      )
     );
 
     try {
@@ -185,16 +188,16 @@ describe("session routes are scoped to the caller's active org", () => {
     });
 
     await seedOrgAdmin(databaseAdapter, {
-      email: "viewer@example.com",
+      email: "member@example.com",
       orgId: VICTIM_ORG,
       password: PASSWORD,
-      role: "viewer",
-      userId: "user_viewer",
+      role: "member",
+      userId: "user_secondary_member",
     });
 
-    const viewer = await loginUserSession(
+    const member = await loginUserSession(
       app,
-      "viewer@example.com",
+      "member@example.com",
       PASSWORD,
       VICTIM_ORG
     );
@@ -209,7 +212,7 @@ describe("session routes are scoped to the caller's active org", () => {
     const url = `http://localhost:4310/v1/attachments/${saved.attachmentId}/content`;
 
     const response = await app.fetch(
-      new Request(url, { headers: { Cookie: viewer.cookieHeader } })
+      new Request(url, { headers: { Cookie: member.cookieHeader } })
     );
 
     expect(response.status).toBe(200);
@@ -228,7 +231,7 @@ describe("session routes are scoped to the caller's active org", () => {
       saved.attachmentId
     );
     expect(
-      (await app.fetch(new Request(url, { headers: viewer.headers() }))).status
+      (await app.fetch(new Request(url, { headers: member.headers() }))).status
     ).toBe(404);
   });
 
@@ -261,6 +264,58 @@ describe("session routes are scoped to the caller's active org", () => {
       ).toHaveLength(1);
     });
   }
+
+  test("invalid attachments reject before provider use and preserve session history", async () => {
+    const { app, databaseAdapter, victimSessionId } = await createScenario();
+
+    const user = await loginUserSession(
+      app,
+      "victim@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+
+    const history =
+      await databaseAdapter.listMessagesForSession(victimSessionId);
+
+    using provider = spyOn(globalThis, "fetch").mockImplementation(
+      asTestFetch(async () => {
+        throw new Error("Invalid attachments must not reach the provider");
+      })
+    );
+
+    for (const stream of [false, true]) {
+      for (const attachments of [
+        { images: [{ mediaType: "image/png" }] },
+        { images: [{ data: 7, mediaType: "image/png" }] },
+        { documents: [{ data: "ZGF0YQ==", mediaType: "application/pdf" }] },
+        {
+          documents: [{ data: "ZGF0YQ==", filename: "file.pdf", mediaType: 7 }],
+        },
+      ]) {
+        const response = await app.fetch(
+          new Request(
+            `http://localhost:4310/v1/sessions/${victimSessionId}/messages`,
+            {
+              body: JSON.stringify({ ...attachments, message: "Read", stream }),
+              headers: user.headers({
+                "Content-Type": "application/json",
+                "X-CSRF-Token": user.csrfToken,
+              }),
+              method: "POST",
+            }
+          )
+        );
+
+        expect(response.status).toBe(400);
+        expect(
+          await databaseAdapter.listMessagesForSession(victimSessionId)
+        ).toEqual(history);
+      }
+    }
+
+    expect(provider).not.toHaveBeenCalled();
+  });
 
   test("GET /v1/sessions -> 404 for a profile in another org", async () => {
     const { app } = await createScenario();
@@ -606,20 +661,22 @@ describe("clearing a session while its turn is running", () => {
     const providerCalled = Promise.withResolvers<void>();
     const releaseProvider = Promise.withResolvers<void>();
 
-    const provider = spyOn(globalThis, "fetch").mockImplementation(async () => {
-      providerCalled.resolve();
-      await releaseProvider.promise;
+    const provider = spyOn(globalThis, "fetch").mockImplementation(
+      asTestFetch(async () => {
+        providerCalled.resolve();
+        await releaseProvider.promise;
 
-      return Response.json({
-        choices: [
-          {
-            finish_reason: "stop",
-            index: 0,
-            message: { content: "late reply", role: "assistant" },
-          },
-        ],
-      });
-    });
+        return Response.json({
+          choices: [
+            {
+              finish_reason: "stop",
+              index: 0,
+              message: { content: "late reply", role: "assistant" },
+            },
+          ],
+        });
+      })
+    );
 
     try {
       const turn = request("POST", "/messages", { message: "hello" });

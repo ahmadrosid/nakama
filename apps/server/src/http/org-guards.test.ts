@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { NakamaApiError } from "@nakama/core";
 import {
-  requireNotViewer,
   requireOrgAdmin,
+  requireOrgMember,
   requirePlatformAdmin,
 } from "./org-guards";
 import type { RequestAuthContext } from "./shared";
@@ -22,9 +22,9 @@ describe("org guards", () => {
     expect(() => requireOrgAdmin(auth("admin"))).not.toThrow();
   });
 
-  test("requireOrgAdmin rejects members and viewers", () => {
+  test("requireOrgAdmin rejects members and users without membership", () => {
     expect(() => requireOrgAdmin(auth("member"))).toThrow(NakamaApiError);
-    expect(() => requireOrgAdmin(auth("viewer"))).toThrow(NakamaApiError);
+    expect(() => requireOrgAdmin(auth(undefined))).toThrow(NakamaApiError);
 
     try {
       requireOrgAdmin(auth("member"));
@@ -33,14 +33,13 @@ describe("org guards", () => {
     }
   });
 
-  test("requireNotViewer allows admins and members", () => {
-    expect(() => requireNotViewer(auth("admin"))).not.toThrow();
-    expect(() => requireNotViewer(auth("member"))).not.toThrow();
+  test("requireOrgMember allows admins and members", () => {
+    expect(() => requireOrgMember(auth("admin"))).not.toThrow();
+    expect(() => requireOrgMember(auth("member"))).not.toThrow();
   });
 
-  test("requireNotViewer rejects viewers and users without membership", () => {
-    expect(() => requireNotViewer(auth("viewer"))).toThrow(NakamaApiError);
-    expect(() => requireNotViewer(auth(undefined))).toThrow(NakamaApiError);
+  test("requireOrgMember rejects users without membership", () => {
+    expect(() => requireOrgMember(auth(undefined))).toThrow(NakamaApiError);
   });
 
   test("requirePlatformAdmin allows platform admins", () => {

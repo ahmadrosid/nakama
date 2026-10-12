@@ -1,12 +1,17 @@
 import { expect, spyOn, test } from "bun:test";
 import { transcribeAudio } from "./audio-transcription";
+import { asTestFetch } from "./channel-test-helpers";
 
 test("openai_compatible provider with a baseUrl is allowed", async () => {
-  const request = spyOn(globalThis, "fetch").mockImplementation(async (url) => {
-    expect(String(url)).toBe("http://100.64.0.1:8000/v1/audio/transcriptions");
+  const request = spyOn(globalThis, "fetch").mockImplementation(
+    asTestFetch(async (url) => {
+      expect(String(url)).toBe(
+        "http://100.64.0.1:8000/v1/audio/transcriptions"
+      );
 
-    return Response.json({ text: "Local transcript" });
-  });
+      return Response.json({ text: "Local transcript" });
+    })
+  );
 
   try {
     expect(
@@ -50,7 +55,7 @@ test("transcription uses the configured provider endpoint, model, file, and canc
   const signal = new AbortController().signal;
 
   const request = spyOn(globalThis, "fetch").mockImplementation(
-    async (url, init) => {
+    asTestFetch(async (url, init) => {
       expect(url).toBe("https://example.com/v1/audio/transcriptions");
       expect(init?.headers).toEqual({ Authorization: "Bearer secret" });
       expect(init?.signal).toBe(signal);
@@ -63,7 +68,7 @@ test("transcription uses the configured provider endpoint, model, file, and canc
       expect(await file.text()).toBe("audio");
 
       return Response.json({ text: " Meeting transcript " });
-    }
+    })
   );
 
   try {

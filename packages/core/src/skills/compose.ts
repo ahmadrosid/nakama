@@ -51,7 +51,7 @@ export function composeSkillsCatalog(skills: DiscoveredSkill[]): string {
     "",
     ...skills.map(
       (skill) =>
-        `- **${skill.name}**: ${skill.description}${describeSkillTooling(skill)} (instructions: ${JSON.stringify(skill.skillFilePath)})`
+        `- **${skill.name}**: ${skill.description}${describeSkillTooling(skill)}${skill.sourceOrganization ? ` (shared from ${JSON.stringify(skill.sourceOrganization.name)}; source is read-only)` : ""} (instructions: ${JSON.stringify(skill.skillFilePath)})`
     ),
   ];
 
@@ -80,7 +80,11 @@ export function composeMatchedSkillsPrompt(
       ? "Follow the instructions below and read any references they require before starting the task."
       : "Before starting the task, use read_file to read the full instruction file, then read any references it requires. This description is not the full skill. If the instructions cannot be read, report the problem instead of claiming to use the skill.";
 
-    return [header, description, location, loading, body]
+    const source = skill.sourceOrganization
+      ? `Shared from ${JSON.stringify(skill.sourceOrganization.name)}. The source is read-only. Use the published-skill paths only with read_file.`
+      : "";
+
+    return [header, description, source, location, loading, body]
       .filter(Boolean)
       .join("\n");
   });

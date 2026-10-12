@@ -46,12 +46,12 @@ type JsonValue =
 
 type SupermemoryDocument = { [key: string]: JsonValue };
 
-interface SupermemorySearchRequest {
+type SupermemorySearchRequest = {
   containerTags: string[];
   filters?: { OR: Array<{ key: string; value: JsonValue }> };
   limit: number;
   q: string;
-}
+};
 
 interface Options {
   configDir?: string;
@@ -611,12 +611,18 @@ export class MemoryBackendService {
         let document: SupermemoryDocument;
 
         try {
-          document = await readSupermemoryDocument(
+          const response = readSupermemoryDocument(
             await client.request(
               "GET",
               `/v3/documents/${encodeURIComponent(receipt.id)}`
             )
           );
+
+          if (!response) {
+            throw new Error("Invalid Supermemory document response");
+          }
+
+          document = response;
         } catch (error) {
           if (!(error instanceof SupermemoryError && error.status === 404)) {
             throw error;
@@ -632,7 +638,7 @@ export class MemoryBackendService {
             })
           );
 
-          if (!(isString(response.id) && response.id)) {
+          if (!(response && isString(response.id) && response.id)) {
             throw new Error(
               "Supermemory did not acknowledge the saved document"
             );
@@ -640,12 +646,19 @@ export class MemoryBackendService {
 
           receipt.id = response.id;
           await writeTextFile(statePath, JSON.stringify(state));
-          document = await readSupermemoryDocument(
+
+          const saved = readSupermemoryDocument(
             await client.request(
               "GET",
               `/v3/documents/${encodeURIComponent(receipt.id)}`
             )
           );
+
+          if (!saved) {
+            throw new Error("Invalid Supermemory document response");
+          }
+
+          document = saved;
         }
 
         this.assertOwned(document, tag, customId);

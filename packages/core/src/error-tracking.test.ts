@@ -21,6 +21,17 @@ import {
 
 const DSN = "https://key@errors.example.com/7";
 
+test.each(
+  [undefined, null, Symbol("rejection"), () => 42, 1n].map((reason) => ({
+    reason,
+  }))
+)("normalizes a non-Error thrown value %#", ({ reason }) => {
+  const report = buildErrorReport(reason);
+  expect(report.name).toBe("NonError");
+  expect(report.message).toBeString();
+  expect(report.fingerprint).toMatch(/^[a-f0-9]{16}$/);
+});
+
 let configDir = "";
 
 let previousConfigDir: string | undefined;

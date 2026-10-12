@@ -273,13 +273,7 @@ function extractAssistantText(event: CursorEvent): string | null {
     return null;
   }
 
-  const content = message.content;
-
-  if (content.trim()) {
-    return content.trim();
-  }
-
-  return null;
+  return message.content?.trim() || null;
 }
 
 function joinAssistantChunks(chunks: string[]): string {

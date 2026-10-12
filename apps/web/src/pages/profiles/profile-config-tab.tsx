@@ -508,7 +508,7 @@ function ProfileFooterActions({
           },
         ]
       : []),
-    ...(showAdmin
+    ...(showAdmin && !state.detail?.sharedAgent
       ? [
           {
             disabled: busy,
@@ -522,6 +522,10 @@ function ProfileFooterActions({
             label: "Duplicate",
             onClick: () => selectedId && state.openCloneDialog(selectedId),
           },
+        ]
+      : []),
+    ...(showAdmin
+      ? [
           {
             destructive: true,
             disabled: profileDeleteDisabled(state),
@@ -563,16 +567,21 @@ function MoveProfileDialog({
   const { activeOrg } = useAuth();
   const [organizationId, setOrganizationId] = useState("");
   const queryClient = useQueryClient();
+  const canMove = open && state.canManageProfile;
 
   const organizations = useQuery({
-    enabled: open,
+    enabled: canMove,
     queryFn: () => client.listPlatformOrganizations(),
     queryKey: ["platformOrganizations"],
   });
 
   const move = useMutation({
     mutationFn: async () => {
-      const profileId = state.detail!.id;
+      if (!state.detail || state.detail.sharedAgent) {
+        throw new Error("Shared agent configuration is read-only.");
+      }
+
+      const profileId = state.detail.id;
 
       if (!(await state.flushSave())) {
         throw new Error("Save profile changes before changing organization.");
@@ -609,7 +618,7 @@ function MoveProfileDialog({
           onOpenChange(next);
         }
       }}
-      open={open}
+      open={canMove}
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>

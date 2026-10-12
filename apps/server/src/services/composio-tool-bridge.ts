@@ -205,7 +205,10 @@ export async function buildComposioConnectTools(
   orgId: string,
   userId: string,
   profileId: string,
-  composioService: ComposioService
+  composioService: Pick<
+    ComposioService,
+    "isAvailable" | "getAssignedToolkitRecords" | "connectToolkit"
+  >
 ): Promise<ToolDefinition[]> {
   if (!userId) {
     return [];
@@ -319,7 +322,10 @@ export async function buildComposioToolDefinitions(
   orgId: string,
   userId: string,
   profileId: string,
-  composioService: ComposioService,
+  composioService: Pick<
+    ComposioService,
+    "isAvailable" | "getAssignedToolkitRecords" | "getProfileSessionEndpoint"
+  >,
   mcpClientManager: McpClientManager
 ): Promise<ToolDefinition[]> {
   if (!userId) {

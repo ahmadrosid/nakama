@@ -431,7 +431,10 @@ export class ComposioService {
       (profile) => profile.orgId === orgId && profile.isDefault === true
     );
 
-    if (!target) {
+    if (
+      !target ||
+      (await this.databaseAdapter.getSharedAgentInstance(orgId, target.id))
+    ) {
       return;
     }
 
@@ -770,6 +773,10 @@ export class ComposioService {
     input: UpdateProfileComposioToolkitsRequest
   ): Promise<ListProfileComposioToolkitsResponse> {
     this.assertProfileOrg(profile, orgId);
+
+    if (await this.databaseAdapter.getSharedAgentInstance(orgId, profile.id)) {
+      throw new NakamaApiError("Shared agent configuration is read-only.", 403);
+    }
 
     const request: UpdateProfileComposioToolkitsRequest =
       normalizeUpdateProfileComposioToolkitsRequest(input);

@@ -48,7 +48,7 @@ export function createPluginAgentHost(
   ): Promise<PluginJsonValue> => {
     signal?.throwIfAborted();
 
-    if (context.actor.role === "viewer") {
+    if (context.actor.role !== "admin" && context.actor.role !== "member") {
       throw new Error("Forbidden");
     }
 

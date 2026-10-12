@@ -80,6 +80,7 @@ describe("createProviderForInstance routing", () => {
       const result = await client!.generateChat({
         messages: [{ content: "ping", role: "user" }],
         providerOptions: { thinking: { effort: "high", enabled: true } },
+        system: "",
       });
 
       expect(result.content).toBe("ok");
@@ -90,6 +91,7 @@ describe("createProviderForInstance routing", () => {
 
       await client!.generateChat({
         messages: [{ content: "ping", role: "user" }],
+        system: "",
       });
       expect(seenThinking).toEqual({ type: "disabled" });
     } finally {
@@ -166,6 +168,7 @@ describe("createProviderForInstance routing", () => {
 
       const result = await client!.generateChat({
         messages: [{ content: "ping", role: "user" }],
+        system: "",
       });
 
       expect(result.content).toBe("ok");
@@ -242,6 +245,7 @@ describe("createProviderForInstance routing", () => {
       const result = await client!.generateChat({
         messages: [{ content: "ping", role: "user" }],
         providerOptions: { thinking: { effort: "medium", enabled: true } },
+        system: "",
       });
 
       expect(result.content).toBe("ok");
@@ -308,6 +312,7 @@ describe("createProviderForInstance routing", () => {
 
       const result = await client!.generateChat({
         messages: [{ content: "ping", role: "user" }],
+        system: "",
       });
 
       expect(result.content).toBe("ok");
@@ -395,6 +400,7 @@ describe("createProviderForInstance routing", () => {
         const result = await client!.generateChat({
           messages: [{ content: "ping", role: "user" }],
           providerOptions: { thinking: { effort: "medium", enabled: true } },
+          system: "",
         });
 
         expect(result.content).toBe("ok");
@@ -405,6 +411,7 @@ describe("createProviderForInstance routing", () => {
 
         await client!.generateChat({
           messages: [{ content: "ping", role: "user" }],
+          system: "",
         });
         expect(seenEnableThinking).toBe(false);
       } finally {
@@ -480,6 +487,7 @@ describe("createProviderForInstance routing", () => {
       const result = await client!.generateChat({
         messages: [{ content: "ping", role: "user" }],
         providerOptions: { thinking: { effort: "high", enabled: true } },
+        system: "",
       });
 
       expect(result.content).toBe("ok");
@@ -491,6 +499,7 @@ describe("createProviderForInstance routing", () => {
 
       await client!.generateChat({
         messages: [{ content: "ping", role: "user" }],
+        system: "",
       });
       expect(seenThinking).toEqual({ type: "disabled" });
       expect(seenReasoningEffort).toBeUndefined();

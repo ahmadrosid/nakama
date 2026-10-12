@@ -44,7 +44,6 @@ describe("sanitizeGeminiToolParameters", () => {
   });
 
   test("drops $schema and recurses into properties and items", () => {
-    // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
     const sanitized = sanitizeGeminiToolParameters({
       $schema: "https://json-schema.org/draft/2020-12/schema",
       additionalProperties: false,
@@ -64,7 +63,7 @@ describe("sanitizeGeminiToolParameters", () => {
       },
       required: ["path"],
       type: "object",
-    } as never);
+    });
 
     expect(sanitized).toEqual({
       additionalProperties: false,
@@ -98,7 +97,6 @@ describe("buildGeminiChatConfig tool sanitization", () => {
           {
             description: "Read a file",
             name: "read_file",
-            // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
             parameters: {
               properties: {
                 offset: {
@@ -108,7 +106,7 @@ describe("buildGeminiChatConfig tool sanitization", () => {
                 path: { type: "string" },
               },
               type: "object",
-            } as never,
+            },
           },
         ],
       },
@@ -117,8 +115,15 @@ describe("buildGeminiChatConfig tool sanitization", () => {
     );
 
     const tools = config.tools ?? [];
-    const declarations = tools[0]?.functionDeclarations ?? [];
-    const parameters = declarations[0]?.parameters;
+    const functionTool = tools.find((tool) => "functionDeclarations" in tool);
+
+    if (!(functionTool && "functionDeclarations" in functionTool)) {
+      throw new Error("Expected function declarations");
+    }
+
+    const declarations = functionTool.functionDeclarations ?? [];
+    const parameters = declarations[0]?.parametersJsonSchema;
+    expect(declarations[0]?.parameters).toBeUndefined();
 
     expect(JSON.stringify(parameters)).not.toContain("exclusiveMinimum");
     expect(parameters).toMatchObject({

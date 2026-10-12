@@ -410,9 +410,11 @@ describe("McpService", () => {
 
     const stored = await db.getMcpServer(created.server.id);
 
-    expect(updated.server.config.headers).toEqual({
-      Authorization: "••••••••",
-      "X-Custom": "••••••••",
+    expect(updated.server.config).toMatchObject({
+      headers: {
+        Authorization: "••••••••",
+        "X-Custom": "••••••••",
+      },
     });
     expect(stored?.config).toEqual({
       headers: {

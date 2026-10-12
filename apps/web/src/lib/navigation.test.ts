@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   canAccessIntegrationsPage,
+  canAccessOrganizationPage,
   canAccessSystemPage,
   canManagePluginReleases,
   enabledPluginNavEntries,
@@ -62,32 +63,22 @@ describe("visibleNavGroups", () => {
     expect(ids).toContain("usage");
   });
 
-  test("members and viewers cannot access system and organization destinations", () => {
+  test("members can access Organization without system destinations", () => {
     const member = pageIdsFor(false, "member");
     expect(member).not.toContain("integrations");
     expect(member).not.toContain("tools");
     expect(member).not.toContain("mcp");
-    expect(member).not.toContain("organization");
+    expect(member).toContain("organization");
     expect(member).not.toContain("workers");
     expect(member).not.toContain("files");
     expect(member).not.toContain("plugin-management");
     expect(member).not.toContain("usage");
-
-    const viewer = pageIdsFor(false, "viewer");
-    expect(viewer).not.toContain("integrations");
-    expect(viewer).not.toContain("tools");
-    expect(viewer).not.toContain("mcp");
-    expect(viewer).not.toContain("organization");
-    expect(viewer).not.toContain("workers");
-    expect(viewer).not.toContain("files");
-    expect(viewer).not.toContain("plugin-management");
-    expect(viewer).not.toContain("usage");
   });
 
   test("groups left with no reachable item are dropped", () => {
     const groups = visibleNavGroups({
       isPlatformAdmin: false,
-      orgRole: "viewer",
+      orgRole: undefined,
     });
 
     expect(groups.every((group) => group.items.length > 0)).toBe(true);
@@ -110,7 +101,7 @@ describe("workers navigation", () => {
 test("Customize is reachable for every organization role", () => {
   expect(pageIdFromPath("/customize")).toBe("customize");
 
-  for (const role of ["admin", "member", "viewer"]) {
+  for (const role of ["admin", "member"]) {
     expect(pageIdsFor(false, role)).toContain("customize");
   }
 });
@@ -158,10 +149,10 @@ describe("plugin navigation", () => {
     expect(entries[1]?.label).toBe("Notes");
   });
 
-  test("members can open pages; viewers cannot; org admins manage", () => {
+  test("members can open pages; org admins manage", () => {
     expect(canAccessIntegrationsPage("member")).toBe(true);
     expect(canAccessIntegrationsPage("admin")).toBe(true);
-    expect(canAccessIntegrationsPage("viewer")).toBe(false);
+    expect(canAccessIntegrationsPage(undefined)).toBe(false);
     expect(canAccessSystemPage(false, "admin")).toBe(true);
     expect(canAccessSystemPage(false, "member")).toBe(false);
     expect(canManagePluginReleases(true)).toBe(true);
@@ -170,6 +161,16 @@ describe("plugin navigation", () => {
 });
 
 describe("organization navigation", () => {
+  test("requires a tenant role or platform authority", () => {
+    for (const role of ["admin", "member"]) {
+      expect(canAccessOrganizationPage(false, role)).toBe(true);
+    }
+
+    expect(canAccessOrganizationPage(false, undefined)).toBe(false);
+    expect(canAccessOrganizationPage(false, "unknown")).toBe(false);
+    expect(canAccessOrganizationPage(true, undefined)).toBe(true);
+    expect(pageIdsFor(false, undefined)).not.toContain("organization");
+  });
   test("maps the organization path", () => {
     expect(pageIdFromPath("/organization")).toBe("organization");
   });

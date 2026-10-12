@@ -35,6 +35,7 @@ import {
   type WebSearchSettingsResponse,
   type WhatsAppSettingsResponse,
 } from "@nakama/core";
+import { USER_PROVIDER_NAMES } from "@nakama/core/provider-resolution";
 import {
   checkSlackTokensMatch,
   checkSlackWorkspaceAccess,
@@ -65,9 +66,9 @@ import { streamAgentBrowserInstall } from "../coding-harness-install-stream";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
-  requireNotViewerFromContext,
   requireOrgAdminFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
+  requireOrgMemberFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
 import {
@@ -226,7 +227,7 @@ export function registerModelRoutes(
     .openapi("ImageGenerationSettingsResponse");
 
   const generateImageRequestSchema = z
-    .object({})
+    .object({ prompt: z.string(), size: z.string().optional() })
     .passthrough()
     .openapi("GenerateImageRequest");
 
@@ -236,7 +237,11 @@ export function registerModelRoutes(
     .openapi("GenerateImageResponse");
 
   const transcribeAudioRequestSchema = z
-    .object({})
+    .object({
+      data: z.string(),
+      filename: z.string().optional(),
+      mediaType: z.string(),
+    })
     .passthrough()
     .openapi("TranscribeAudioRequest");
 
@@ -403,7 +408,10 @@ export function registerModelRoutes(
     .openapi("DiscoverModelsRequest");
 
   const createProviderRequestSchema = z
-    .object({})
+    .object({
+      apiKey: z.string().default(""),
+      type: z.enum(USER_PROVIDER_NAMES),
+    })
     .passthrough()
     .openapi("CreateProviderRequest");
 
@@ -413,7 +421,10 @@ export function registerModelRoutes(
     .openapi("UpdateProviderRequest");
 
   const configureProviderRequestSchema = z
-    .object({})
+    .object({
+      apiKey: z.string().default(""),
+      provider: z.enum(USER_PROVIDER_NAMES),
+    })
     .passthrough()
     .openapi("ConfigureProviderRequest");
 
@@ -422,7 +433,10 @@ export function registerModelRoutes(
     .openapi("UpdateTimezoneRequest");
 
   const updateThinkingRequestSchema = z
-    .object({})
+    .object({
+      enabled: z.boolean(),
+      effort: z.enum(["low", "medium", "high"]).optional(),
+    })
     .passthrough()
     .openapi("UpdateThinkingRequest");
 
@@ -1913,7 +1927,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/audio/transcribe", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const body = await readJson(c.req.raw, transcribeAudioRequestSchema);
 
     try {
@@ -1961,7 +1975,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/images/generate", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const body = await readJson(c.req.raw, generateImageRequestSchema);
 
     const auth = getRequestAuth(c);
@@ -2510,7 +2524,7 @@ export function registerModelRoutes(
 
   app.put("/v1/settings/error-tracking", async (c) => {
     // Workspace-global config, so there is no org to scope it to and a role guard is
-    // the only thing standing between a viewer and the whole install's error routing.
+    // the only thing standing between an org member and the whole install's error routing.
     requirePlatformAdminFromContext(c);
     const body = await readJson(c.req.raw, updateErrorTrackingRequestSchema);
 

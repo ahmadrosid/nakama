@@ -555,6 +555,43 @@ export interface PublishOrgPluginReleaseInput {
   selectedVersion: string;
 }
 
+export interface StoredOrgTeamCreationRecord {
+  adminUserId: string;
+  completedAt: string | null;
+  createdAt: string;
+  creatorUserId: string;
+  parentOrgId: string;
+  requestHash: string;
+  requestId: string;
+  teamOrgId: string;
+}
+
+export interface BeginOrgTeamCreationInput {
+  adminUserId: string;
+  creatorUserId: string;
+  organization: StoredOrganizationRecord & { parentOrgId: string };
+  requestHash: string;
+  requestId: string;
+}
+
+export interface StoredSharedAgentInstanceRecord {
+  createdAt: string;
+  profileId: string;
+  publicationId: string;
+  sourceOrgId: string;
+  sourceProfileId: string;
+  teamOrgId: string;
+}
+
+export interface StoredOrgSharedResourceRecord {
+  createdAt: string;
+  id: string;
+  orgId: string;
+  resourceId: string;
+  resourceKind: "knowledge" | "skill" | "agent" | "tool" | "model";
+  updatedAt: string;
+}
+
 export interface StoredOrganizationRecord {
   allowedInviteDomains?: string[];
   archivedAt?: string | null;
@@ -564,6 +601,8 @@ export interface StoredOrganizationRecord {
   monthlyLlmTurnLimit?: number;
   monthlyLlmWarningPercent?: number;
   name: string;
+  parentOrgId?: string | null;
+  setupPending?: boolean;
   skillsCuratorArchiveAfterDays?: number;
   skillsCuratorConsolidateEnabled?: boolean;
   skillsCuratorEnabled?: boolean;
@@ -765,6 +804,12 @@ export interface StoredAuditEvent {
 }
 
 export interface DatabaseAdapter {
+  abortOrgTeamCreation(
+    parentOrgId: string,
+    requestId: string,
+    teamOrgId: string
+  ): Promise<boolean>;
+
   activateUserMfa(
     id: string,
     totpSecretEnc: string,
@@ -778,6 +823,9 @@ export interface DatabaseAdapter {
   assignMcpServerToProfile(profileId: string, serverId: string): Promise<void>;
   assignSkillToProfile(profileId: string, skillId: string): Promise<void>;
   assignToolToProfile(profileId: string, toolId: string): Promise<void>;
+  beginOrgTeamCreation(
+    input: BeginOrgTeamCreationInput
+  ): Promise<StoredOrgTeamCreationRecord>;
   /**
    * First-admin claim. Writes the org, the admin and the membership in one
    * transaction, and returns false without writing anything when a human user
@@ -817,6 +865,12 @@ export interface DatabaseAdapter {
     result: string,
     completedAt: string
   ): Promise<void>;
+  completeOrgTeamCreation(
+    parentOrgId: string,
+    requestId: string,
+    teamOrgId: string,
+    completedAt: string
+  ): Promise<boolean>;
   consumeMfaBackupCode(
     userId: string,
     codeHash: string,
@@ -871,6 +925,12 @@ export interface DatabaseAdapter {
 
   /** Append-only insert. Adapters must not expose update/delete for this table. */
   createProfileChangeEvent(record: StoredProfileChangeEvent): Promise<void>;
+  createSharedAgentInstance(
+    teamOrgId: string,
+    publicationId: string,
+    profileId: string,
+    createdAt: string
+  ): Promise<StoredProfileRecord>;
 
   createSkillProposal(record: StoredSkillProposal): Promise<void>;
 
@@ -896,6 +956,7 @@ export interface DatabaseAdapter {
     pluginId: string,
     expectedRevision: number
   ): Promise<boolean>;
+  deleteOrgSharedResource(orgId: string, id: string): Promise<boolean>;
   deletePasskeys(userId: string): Promise<void>;
   deletePluginRelease(pluginId: string, version: string): Promise<boolean>;
   deleteProfile(id: string): Promise<boolean>;
@@ -974,6 +1035,12 @@ export interface DatabaseAdapter {
   ): Promise<StoredNotificationDestinationRecord | null>;
   getOrganizationById(id: string): Promise<StoredOrganizationRecord | null>;
   getOrganizationBySlug(slug: string): Promise<StoredOrganizationRecord | null>;
+  getOrganizationResourceCounts(orgId: string): Promise<{
+    agents: number;
+    members: number;
+    skills: number;
+    tools: number;
+  } | null>;
   getOrgInviteByTokenHash(
     tokenHash: string
   ): Promise<StoredOrgInviteRecord | null>;
@@ -989,6 +1056,14 @@ export interface DatabaseAdapter {
     orgId: string,
     pluginId: string
   ): Promise<StoredOrgPluginRecord | null>;
+  getOrgSharedResource(
+    orgId: string,
+    id: string
+  ): Promise<StoredOrgSharedResourceRecord | null>;
+  getOrgTeamCreation(
+    parentOrgId: string,
+    requestId: string
+  ): Promise<StoredOrgTeamCreationRecord | null>;
   getPasskey(
     userId: string,
     credentialId: string
@@ -1035,6 +1110,10 @@ export interface DatabaseAdapter {
     sessionId: string
   ): Promise<AgentQuestionnaire | null>;
   getSessionTodos(sessionId: string): Promise<AgentTodo[]>;
+  getSharedAgentInstance(
+    teamOrgId: string,
+    profileId: string
+  ): Promise<StoredSharedAgentInstanceRecord | null>;
   getSkill(id: string): Promise<StoredSkillRecord | null>;
   /**
    * Resolve a skill by name within `orgId`, falling back to a global (bundled)
@@ -1083,6 +1162,10 @@ export interface DatabaseAdapter {
    * attachments, or a branch loses the files it copied references to.
    */
   handOverSharedAttachments(sessionId: string, orgId: string): Promise<void>;
+
+  importSharedAgentReference(
+    record: StoredSharedAgentInstanceRecord
+  ): Promise<void>;
   incrementLlmTurnUsage(orgId: string, delta: LlmTurnUsageDelta): Promise<void>;
   incrementLlmUsageDailyStats(
     orgId: string,
@@ -1207,6 +1290,9 @@ export interface DatabaseAdapter {
     status?: OrgMemoryProposalStatus
   ): Promise<StoredOrgMemoryProposal[]>;
   listOrgPlugins(orgId?: string): Promise<StoredOrgPluginRecord[]>;
+  listOrgSharedResources(
+    orgId: string
+  ): Promise<StoredOrgSharedResourceRecord[]>;
   listPasskeys(userId: string): Promise<StoredPasskeyRecord[]>;
 
   listPlatformAdminUsers(): Promise<StoredUserRecord[]>;
@@ -1310,6 +1396,9 @@ export interface DatabaseAdapter {
   publishOrgPluginRelease(
     input: PublishOrgPluginReleaseInput
   ): Promise<PluginPublishResult>;
+  publishOrgSharedResource(
+    record: StoredOrgSharedResourceRecord
+  ): Promise<StoredOrgSharedResourceRecord>;
   /** Gives back one hold taken by tryReserveMonthlyLlmQuota, at most once. */
   releaseMonthlyLlmQuota(orgId: string, reservationId: string): Promise<void>;
   renameFilePins(

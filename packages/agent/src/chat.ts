@@ -6,7 +6,6 @@ import type {
   ChatTurnUsage,
   ChatUsage,
   CompactionResponse,
-  ImageAttachment,
   MessageContentPart,
   ProviderChatOptions,
   ProviderClient,
@@ -325,7 +324,7 @@ export function createAgentChatSession(
       }
     );
 
-    const usage: ChatUsage = {
+    const usage: ChatTurnUsage = {
       cachedInputTokens: totals.cachedInputTokens,
       calls: [...turnUsageCalls],
       estimated: totals.estimated,
@@ -825,7 +824,7 @@ async function runConversation(
       // says: a session where nothing was ever shortened belongs in the control
       // arm even with the feature switched on, or the comparison flatters itself.
       try {
-        toolContext.recordTurnUsage?.({
+        toolContext?.recordTurnUsage?.({
           estimated: Boolean(result.usage?.estimated ?? !result.usage),
           inputTokens: result.usage?.inputTokens ?? 0,
           // Overwritten by the session wrapper, which is the only scope that
@@ -1073,10 +1072,6 @@ async function executeToolCalls(
   }
 }
 
-function isImageAttachment(value: unknown): value is ImageAttachment {
-  return ImageAttachmentSchema.safeParse(value).success;
-}
-
 async function prepareVisualToolResult(
   result: ToolResult,
   preprocess?: AgentChatSessionOptions["preprocessUserContent"]
@@ -1087,13 +1082,18 @@ async function prepareVisualToolResult(
     return { result };
   }
 
-  const images = parsed.data.images;
+  const parsedImages = z
+    .array(ImageAttachmentSchema)
+    .safeParse(parsed.data.images);
 
-  if (
-    !Array.isArray(images) ||
-    images.length === 0 ||
-    !images.every(isImageAttachment)
-  ) {
+  if (!parsedImages.success) {
+    return { result };
+  }
+
+  const images = parsedImages.data;
+  const firstImage = images[0];
+
+  if (!firstImage) {
     return { result };
   }
 
@@ -1103,12 +1103,11 @@ async function prepareVisualToolResult(
   try {
     const content = normalizeUserContent("", images);
     const prepared = preprocess ? await preprocess(content) : content;
-    const preparedText = z.string().safeParse(prepared);
 
     return {
-      attachments: preparedText.success
-        ? [{ text: preparedText.data, type: "text" }]
-        : prepared,
+      attachments: Array.isArray(prepared)
+        ? prepared
+        : [{ text: prepared, type: "text" }],
       result: metadata,
     };
   } catch (error) {
@@ -1118,7 +1117,7 @@ async function prepareVisualToolResult(
         content:
           "Image contents were not inspected. Only file metadata is available; do not infer what the image shows.",
         inspected: false,
-        mediaType: images[0]?.mediaType,
+        mediaType: firstImage.mediaType,
         reason: error instanceof Error ? error.message : String(error),
       },
     };

@@ -25,7 +25,13 @@ const tinyPngBase64 =
 
 async function createScenario() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
-  const agent = new AgentService({ providers: [] }, null, databaseAdapter);
+
+  const agent = new AgentService(
+    { defaultProviderId: null, providers: [] },
+    null,
+    databaseAdapter
+  );
+
   const { app } = createMinimalHonoApp({ agent, databaseAdapter });
 
   await seedOrgAdmin(databaseAdapter, {

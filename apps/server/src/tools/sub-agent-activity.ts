@@ -103,7 +103,7 @@ export function formatToolActivityLabel(
   }
 
   if (tool === "write_file" || tool === "write_docx") {
-    const path = readString(input, "path");
+    const path = readString(details, "path");
 
     if (path) {
       return `Writing ${basename(path)}`;
@@ -111,7 +111,7 @@ export function formatToolActivityLabel(
   }
 
   if (tool === "edit_file") {
-    const path = readString(input, "path");
+    const path = readString(details, "path");
 
     if (path) {
       return `Editing ${basename(path)}`;
@@ -119,20 +119,20 @@ export function formatToolActivityLabel(
   }
 
   if (tool === "delete_file") {
-    const path = readString(input, "path");
+    const path = readString(details, "path");
 
     if (path) {
       return `Deleting ${basename(path)}`;
     }
   }
 
-  const query = readString(input, "query");
+  const query = readString(details, "query");
 
   if (query) {
     return truncateDisplay(query, 72);
   }
 
-  const path = readString(input, "path");
+  const path = readString(details, "path");
 
   if (path) {
     return basename(path);

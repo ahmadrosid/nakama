@@ -13,7 +13,11 @@ import { AgentService } from "../../services/agent-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import type { ServerOptions } from "../context";
 import { createMinimalHonoApp } from "../test-app-helpers";
-import { loginUserSession, seedOrgAdmin } from "../test-session-helpers";
+import {
+  type AppFetch,
+  loginUserSession,
+  seedOrgAdmin,
+} from "../test-session-helpers";
 
 setupTestConfigDir("nakama-settings-rbac-test-");
 
@@ -244,7 +248,7 @@ const INSTALL_WRITES: { body?: unknown; method: string; path: string }[] = [
   { method: "POST", path: "/v1/settings/error-tracking/test" },
 ];
 
-for (const role of ["member", "viewer"] as const) {
+for (const role of ["member"] as const) {
   for (const [method, path] of [
     ["GET", "/v1/settings/telegram?profileId=default"],
     ["GET", "/v1/settings/discord?profileId=default"],
@@ -281,7 +285,6 @@ function createApp(systemStatus?: SystemStatusStub) {
   const databaseAdapter = createInMemoryDatabaseAdapter();
 
   const { app, authService } = createMinimalHonoApp({
-    // SAFETY: This test controls the fixture shape at this boundary.
     agent: {
       configureProvider: record("configureProvider"),
       createProvider: record("createProvider"),
@@ -306,13 +309,12 @@ function createApp(systemStatus?: SystemStatusStub) {
       testDiscordSettings: record("testDiscordSettings"),
       testTelegramSettings: record("testTelegramSettings"),
       updateProvider: record("updateProvider"),
-    } as ServerOptions["agent"],
+    },
     databaseAdapter,
-    // SAFETY: This test controls the fixture shape at this boundary.
     workerManager: {
       startWorker: record("startWorker"),
       stopWorker: record("stopWorker"),
-    } as ServerOptions["workerManager"],
+    },
     systemStatus,
   });
 
@@ -360,7 +362,7 @@ async function login(
 }
 
 async function callRoute(
-  app: { fetch: typeof fetch },
+  app: AppFetch,
   session: {
     headers: (extra?: Record<string, string>) => Record<string, string>;
     csrfToken: string;
@@ -381,7 +383,7 @@ async function callRoute(
 
 describe("install-wide settings writes require a platform admin", () => {
   for (const route of INSTALL_WRITES) {
-    for (const role of ["viewer", "member", "admin"] as const) {
+    for (const role of ["member", "admin"] as const) {
       test(`${route.method} ${route.path} -> 403 for ${role}`, async () => {
         const { app, calls, session } = await login(role);
         const response = await callRoute(app, session, route);
@@ -393,8 +395,8 @@ describe("install-wide settings writes require a platform admin", () => {
     }
   }
 
-  test("a platform admin who is only a viewer in the org still reaches them", async () => {
-    const { app, calls, session } = await login("viewer", true);
+  test("a platform admin who is only a member in the org still reaches them", async () => {
+    const { app, calls, session } = await login("member", true);
 
     const response = await callRoute(app, session, {
       body: { baseUrl: "https://example.com/v1" },
@@ -590,7 +592,6 @@ describe("usage by agent and user is for admins only", () => {
     ["admin", false, true],
     ["member", true, true],
     ["member", false, false],
-    ["viewer", false, false],
   ] as const) {
     test(`${role}${isPlatformAdmin ? " (platform admin)" : ""} -> ${expected}`, async () => {
       const requested: unknown[] = [];

@@ -172,7 +172,7 @@ describe("skill_manage tool", () => {
 
     try {
       for (const context of [
-        memberContext({ orgRole: "viewer" }),
+        memberContext({ orgRole: undefined }),
         memberContext({ channel: "telegram" }),
       ]) {
         await expect(
@@ -274,10 +274,11 @@ describe("skill_manage tool", () => {
 
   test("create assigns skill and makes it matchable", async () => {
     const { db, service, tool } = await setup();
+    const profile = await seedOrgProfile(db);
 
     const result = await tool.run(
       { action: "create", content: researchSkillMarkdown },
-      memberContext()
+      memberContext({ profileId: profile.id })
     );
 
     expect(result).toMatchObject({
@@ -291,12 +292,12 @@ describe("skill_manage tool", () => {
       "assigned"
     );
 
-    const assigned = await db.listSkillsForProfile(PROFILE_ID);
+    const assigned = await db.listSkillsForProfile(profile.id);
     expect(assigned.map((skill) => skill.name)).toContain("research-paper");
 
     const matched = await service.formatMatchedSkillsForPrompt(
       ORG_ID,
-      PROFILE_ID,
+      profile.id,
       "Please research a paper on transformers"
     );
 
@@ -553,17 +554,6 @@ Profile body.
         memberContext()
       )
     ).rejects.toThrow(/different source path/);
-  });
-
-  test("refuses viewer role", async () => {
-    const { tool } = await setup();
-
-    await expect(
-      tool.run(
-        { action: "create", content: researchSkillMarkdown },
-        memberContext({ orgRole: "viewer" })
-      )
-    ).rejects.toThrow("Viewers cannot manage skills.");
   });
 
   test("refuses missing orgRole", async () => {
