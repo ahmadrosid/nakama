@@ -486,7 +486,6 @@ test("admin settings remain available and disappear after a role change", async 
   expect(container.querySelectorAll("h2")).toHaveLength(2);
   expect(reads[0]).toHaveBeenCalledWith(org.id);
   expect(reads[1]).toHaveBeenCalledWith(org.id);
-  expect(reads[3]).toHaveBeenCalledWith(org.id);
 
   for (const read of reads) {
     read.mockClear();

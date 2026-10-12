@@ -1,7 +1,7 @@
 import { Card } from "@nakama/ui/card";
 import { toast } from "@nakama/ui/toast";
 import { cn } from "@nakama/ui/utils";
-import { ChevronDown } from "lucide-react";
+import { ArrowDown01Icon } from "hugeicons-react";
 import { useState } from "react";
 import { SkillsCuratorOrgCard } from "@/components/settings/SkillsCuratorOrgCard";
 import { SkillsPostTurnReviewOrgCard } from "@/components/settings/SkillsPostTurnReviewOrgCard";
@@ -66,10 +66,15 @@ export function SkillsLearningOrgCard() {
     return null;
   }
 
-  const current = PRESETS.find((preset) =>
-    (Object.keys(preset.patch) as (keyof typeof preset.patch)[]).every(
-      (key) => (activeOrg[key] === true) === preset.patch[key]
-    )
+  const current = PRESETS.find(
+    ({ patch }) =>
+      (activeOrg.skillsPostTurnReview === true) ===
+        patch.skillsPostTurnReview &&
+      (activeOrg.skillsWriteApproval === true) === patch.skillsWriteApproval &&
+      (activeOrg.skillsCuratorEnabled === true) ===
+        patch.skillsCuratorEnabled &&
+      (activeOrg.skillsCuratorConsolidateEnabled === true) ===
+        patch.skillsCuratorConsolidateEnabled
   )?.id;
 
   async function choose(preset: (typeof PRESETS)[number]) {
@@ -136,7 +141,8 @@ export function SkillsLearningOrgCard() {
               </span>
             )}
           </span>
-          <ChevronDown
+          <ArrowDown01Icon
+            aria-hidden
             className={cn("size-4 transition-transform", open && "rotate-180")}
           />
         </button>
