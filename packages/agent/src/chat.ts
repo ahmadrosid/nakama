@@ -1,6 +1,7 @@
 import type {
   AgentChannel,
   AutomationDefinition,
+  AutomationDeliveryChannel,
   ChatContextUsage,
   ChatMessage,
   ChatTurnUsage,
@@ -146,6 +147,7 @@ export interface AgentChatSessionOptions {
   archiveHistory?: (history: readonly ChatMessage[]) => Promise<string>;
   channel?: AgentRequest["channel"];
   compaction?: CompactionConfig;
+  deliveryChannel?: AutomationDeliveryChannel;
   enableToolLoop?: boolean;
   initialHistory?: ChatMessage[];
   preprocessUserContent?: (
@@ -199,6 +201,7 @@ export function createAgentChatSession(
   const systemPrompt = buildChatSystemPrompt(activeTools, {
     basePrompt: options.systemPrompt,
     channel,
+    deliveryChannel: options.deliveryChannel,
     enableToolLoop,
     hasDocumentAttachments: messagesIncludeUserDocuments(
       options.initialHistory ?? []

@@ -190,7 +190,8 @@ export class AutomationRunner {
             publishProgress();
           },
         },
-        resume
+        resume,
+        automation.delivery?.channel
       );
 
       const completedRun = await this.automationService.completeRun(

@@ -19,6 +19,7 @@ import type {
   ApplyTelegramPairingRequest,
   AssignSkillRequest,
   AssignToolRequest,
+  AutomationDeliveryChannel,
   BranchSessionResponse,
   ChatContextUsage,
   ChatgptOAuthCredentials,
@@ -1755,7 +1756,8 @@ export class AgentService {
     automationId?: string,
     automationRunId?: string,
     handlers?: Parameters<AgentChatSession["sendStream"]>[1],
-    resume = false
+    resume = false,
+    deliveryChannel?: AutomationDeliveryChannel
   ): Promise<string> {
     if (!this._providerConfigured) {
       throw new Error("Provider is not configured.");
@@ -1849,6 +1851,7 @@ export class AgentService {
 
     const session = createAgentChatSession(harness, {
       channel: "automation",
+      deliveryChannel,
       enableToolLoop: true,
       initialHistory: replay.length
         ? [{ content: prompt, role: "user" }, ...replay]

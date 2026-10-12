@@ -1,21 +1,30 @@
-import type { AgentChannel, ToolDefinition } from "@nakama/core";
+import type {
+  AgentChannel,
+  AutomationDeliveryChannel,
+  ToolDefinition,
+} from "@nakama/core";
 import { UNTRUSTED_DOCUMENT_GUIDANCE } from "@nakama/core";
 import type { AgentRequest } from "./chat";
 
 type MessagingChannelPromptConfig = {
   label: string;
   supportsGroupAudience: boolean;
+  /** How the channel renders text. Also applied to automation reports. */
   format: readonly string[];
+  /** Live-chat behavior only; skipped for automation reports. */
+  chat?: readonly string[];
 };
 
 const MESSAGING_CHANNEL_PROMPT = {
   automation: null,
   cli: null,
   discord: {
+    chat: [
+      "For work that needs tools, send a brief status line first (what you are about to do), then use tools, then send a short outcome when finished.",
+    ],
     format: [
       "Discord supports a Markdown subset: **bold**, *italic*, __underline__, ~~strikethrough~~, inline code, fenced code blocks, and headings.",
       "Avoid tables and very long code blocks; keep messages compact for chat.",
-      "For work that needs tools, send a brief status line first (what you are about to do), then use tools, then send a short outcome when finished.",
     ],
     label: "Discord",
     supportsGroupAudience: true,
@@ -31,21 +40,25 @@ const MESSAGING_CHANNEL_PROMPT = {
   subagent: null,
   task: null,
   telegram: {
+    chat: [
+      "When you save an artifact, Nakama posts a share link after your reply. When the user asks to send or attach the file (or uses /attach), Nakama sends a Telegram document — do not say you cannot attach or send files, and do not redirect them only to the Artifacts tab for that request.",
+    ],
     format: [
       "Write in normal Markdown when formatting helps; Telegram delivery will render a safe rich subset.",
       "Use simple Markdown: **bold**, *italic*, __underline__, inline code, fenced code blocks, headings, links, and short lists.",
       "Avoid raw HTML, Markdown tables, deeply nested lists, and very long code blocks because Telegram is best for compact chat messages.",
-      "When you save an artifact, Nakama posts a share link after your reply. When the user asks to send or attach the file (or uses /attach), Nakama sends a Telegram document — do not say you cannot attach or send files, and do not redirect them only to the Artifacts tab for that request.",
     ],
     label: "Telegram",
     supportsGroupAudience: true,
   },
   web: null,
   whatsapp: {
+    chat: [
+      "WhatsApp /attach resends the most recent saved artifact without an agent turn. Saving a file alone does not upload it.",
+    ],
     format: [
       "WhatsApp only supports simple *bold* and _italic_ formatting.",
       "Do not use markdown headings, bullet lists, numbered lists, tables, or ``` code fences.",
-      "WhatsApp /attach resends the most recent saved artifact without an agent turn. Saving a file alone does not upload it.",
     ],
     label: "WhatsApp",
     supportsGroupAudience: true,
@@ -117,6 +130,8 @@ export function buildChatSystemPrompt(
     userTimezone?: string;
     channel?: AgentRequest["channel"];
     chatKind?: "private" | "group";
+    /** Where an automation run's result is sent; shapes the report format. */
+    deliveryChannel?: AutomationDeliveryChannel;
     hasDocumentAttachments?: boolean;
   } = {}
 ): string {
@@ -254,6 +269,19 @@ export function buildChatSystemPrompt(
       options.channel,
       options.chatKind ?? "private"
     );
+  } else if (
+    options.channel === "automation" &&
+    options.deliveryChannel &&
+    options.deliveryChannel !== "email"
+  ) {
+    const config: MessagingChannelPromptConfig =
+      MESSAGING_CHANNEL_PROMPT[options.deliveryChannel];
+
+    sections.push(
+      "",
+      `Your final reply is sent to ${config.label} as the run report.`,
+      ...config.format
+    );
   }
 
   return sections.join("\n");
@@ -264,12 +292,19 @@ function appendMessagingChannelPrompt(
   channel: MessagingChannel,
   chatKind: "private" | "group"
 ): void {
-  const config = MESSAGING_CHANNEL_PROMPT[channel];
+  const config: MessagingChannelPromptConfig =
+    MESSAGING_CHANNEL_PROMPT[channel];
 
   const audienceLine =
     chatKind === "group" && config.supportsGroupAudience
       ? `You are replying in a ${config.label} channel. Everyone in the channel can see your messages.`
       : `You are replying in a private ${config.label} chat.`;
 
-  sections.push("", audienceLine, ...config.format, ...SHARED_MESSAGING_STYLE);
+  sections.push(
+    "",
+    audienceLine,
+    ...config.format,
+    ...(config.chat ?? []),
+    ...SHARED_MESSAGING_STYLE
+  );
 }
