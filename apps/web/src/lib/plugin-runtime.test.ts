@@ -175,7 +175,7 @@ describe("native plugin activation", () => {
       if (selection === "data") {
         expect(html).toContain('aria-label="Workflow data"');
         expect(html).toContain('aria-label="Workflow views"');
-        expect(html).toContain('aria-busy="true"');
+        expect(html).toMatch(/role="status"[^>]*>Loading data/);
         expect(html).not.toContain('role="dialog"');
         expect(html).not.toContain('aria-label="Step views"');
 
