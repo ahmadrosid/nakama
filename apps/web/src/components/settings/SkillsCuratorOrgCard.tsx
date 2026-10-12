@@ -177,10 +177,10 @@ function SkillsCuratorFreshnessFields({
 }) {
   return (
     <div className="border-border border-b px-4 py-3">
-      <p className="font-medium text-foreground text-sm">Freshness clocks</p>
+      <p className="font-medium text-foreground text-sm">Unused skills</p>
       <div className="mt-3 grid grid-cols-2 gap-3">
         <label className="grid gap-1 text-muted-foreground text-xs">
-          Stale after
+          Mark unused after (days)
           <input
             aria-label="Stale after days"
             className="h-8 rounded-md border border-input bg-background px-2 text-foreground text-sm"
@@ -198,7 +198,7 @@ function SkillsCuratorFreshnessFields({
           />
         </label>
         <label className="grid gap-1 text-muted-foreground text-xs">
-          Archive after
+          Hide after (days)
           <input
             aria-label="Archive after days"
             className="h-8 rounded-md border border-input bg-background px-2 text-foreground text-sm"
@@ -235,7 +235,7 @@ function SkillsCuratorPollIntervalField({
   return (
     <div className="border-border border-b px-4 py-3">
       <label className="grid gap-1 text-muted-foreground text-xs">
-        Automation worker poll interval (minutes)
+        Check for work every (minutes)
         <input
           aria-label="Automation worker poll interval minutes"
           className="h-8 rounded-md border border-input bg-background px-2 text-foreground text-sm"
@@ -279,7 +279,7 @@ function SkillsCuratorRunSection({
     <div className="flex flex-col gap-3 px-4 py-3">
       <p className="text-muted-foreground text-xs tabular-nums">
         {latest?.dryRun ? "Preview · " : null}
-        Last run {lastRunLabel}
+        Last clean-up: {lastRunLabel}
       </p>
       {latest ? (
         <p className="text-muted-foreground text-xs tabular-nums">
@@ -301,7 +301,7 @@ function SkillsCuratorRunSection({
           size="sm"
           variant="outline"
         >
-          Dry run
+          Preview changes
         </Button>
         <Button disabled={running} onClick={() => onRun(false)} size="sm">
           Run now
@@ -342,7 +342,9 @@ export function SkillsCuratorOrgCard() {
       <div className="border-border border-b px-4 py-3">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="font-medium text-foreground text-sm">Skill curator</p>
+            <p className="font-medium text-foreground text-sm">
+              Auto clean-up of skills
+            </p>
           </div>
           <div className="flex shrink-0 items-center gap-2 pt-0.5">
             {busy ? <Spinner /> : null}
@@ -367,7 +369,7 @@ export function SkillsCuratorOrgCard() {
       </div>
       <div className="border-border border-b px-4 py-3">
         <div className="flex items-center justify-between gap-4">
-          <p className="text-foreground text-sm">Consolidate</p>
+          <p className="text-foreground text-sm">Merge similar skills</p>
           <div className="flex shrink-0 items-center gap-2">
             {busy ? <Spinner /> : null}
             <Switch

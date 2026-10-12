@@ -12,7 +12,7 @@ import type {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, type ReactNode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
 import { OrgSettingsProfileBooleanOverrideField } from "@/components/profiles/ProfileOrgBooleanOverrideField";
 import { ProfileSkillsSettingsSection } from "@/components/profiles/ProfileSkillsSettingsSection";
@@ -34,6 +34,7 @@ import {
 import { ProfileConfigTab } from "@/pages/profiles/profile-config-tab";
 import { ProfilesDialogs } from "@/pages/profiles/profiles-dialogs";
 import { useProfilesPage } from "@/pages/profiles/use-profiles-page";
+import { TeamDetailPage } from "@/pages/TeamDetailPage";
 import { OrganizationOverview } from "./OrganizationPanel";
 
 const cleanups: Array<() => void> = [];
@@ -111,7 +112,8 @@ function mount(
     id: "creator",
   },
   content?: ReactNode,
-  orgs: AuthContextValue["orgs"] = []
+  orgs: AuthContextValue["orgs"] = [],
+  initialPath = "/system/organization"
 ) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -152,7 +154,7 @@ function mount(
       await act(async () => {
         root.render(
           <QueryClientProvider client={queryClient}>
-            <MemoryRouter initialEntries={["/system/organization"]}>
+            <MemoryRouter initialEntries={[initialPath]}>
               <AuthContext.Provider value={auth}>
                 {content ??
                   (page ? <OrganizationPage /> : <OrganizationOverview />)}
@@ -526,9 +528,9 @@ test("renders all published resource kinds and stored team counts", async () => 
     container.querySelectorAll("dl")[0].querySelectorAll("dt")
   ).toHaveLength(5);
   expect(container.querySelectorAll("li")).toHaveLength(1);
-  expect(container.querySelector("li button")?.textContent).toContain("14");
+  expect(container.querySelector("li a")?.textContent).toContain("14");
 
-  const teamSummary = container.querySelector("li button")?.textContent ?? "";
+  const teamSummary = container.querySelector("li a")?.textContent ?? "";
 
   for (const count of ["3", "5", "4", "2"]) {
     expect(teamSummary).toContain(count);
@@ -569,18 +571,14 @@ test("long organization, resource, and team names retain accessible detail actio
     expect(rows[index].textContent).toContain(resource.label);
   }
 
-  const team = container.querySelector<HTMLButtonElement>("li button")!;
+  const team = container.querySelector<HTMLAnchorElement>("li a")!;
   expect(team.textContent).toContain(data.teams[0].name);
   expect(team.getAttribute("aria-label")).toBe(`View ${data.teams[0].name}`);
+  expect(team.getAttribute("href")).toBe(
+    `/organization/teams/${data.teams[0].id}`
+  );
   await act(async () => team.focus());
   expect(document.activeElement).toBe(team);
-  await act(async () => {
-    team.click();
-    await settle();
-  });
-  const dialog = document.querySelector('[role="dialog"]')!;
-  expect(dialog.querySelector("h2")?.textContent).toBe(data.teams[0].name);
-  expect(dialog.textContent).toContain(data.teams[0].id);
   expect(switchOrg).not.toHaveBeenCalled();
 });
 
@@ -663,7 +661,10 @@ test("late overview responses cannot replace the newly selected team", async () 
   expect(request.mock.calls).toEqual([["team-a"], ["team-b"]]);
 });
 
-test("team details open without switching and permitted switching waits for success", async () => {
+async function mountTeamDetail(
+  teamPatch: Partial<OrganizationOverviewResponse["teams"][number]>,
+  switchOrg: AuthContextValue["switchOrg"]
+) {
   const queries = new QueryClient({
     defaultOptions: {
       queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
@@ -671,150 +672,217 @@ test("team details open without switching and permitted switching waits for succ
   });
 
   const data = overview("team-a");
-  data.teams[0].id = "team-b";
-  data.teams[0].slug = "sales";
-  data.teams[0].name = "Sales";
-  data.teams[0].isCurrent = false;
+  Object.assign(data.teams[0], { id: "team-b", isCurrent: false }, teamPatch);
   queries.setQueryData(
     queryKeys.organizationOverview("parent", "team-a"),
     data
   );
+
+  const view = mount(
+    queries,
+    switchOrg,
+    undefined,
+    undefined,
+    <Routes>
+      <Route element={<TeamDetailPage />} path="/organization/teams/:teamId" />
+      <Route element={<p>Chat</p>} path="/chat" />
+    </Routes>,
+    [],
+    "/organization/teams/team-b"
+  );
+
+  await view.render(organization("team-a"));
+
+  return view;
+}
+
+function locationOf(container: HTMLElement) {
+  return container.querySelector("[data-chat-location]")?.textContent;
+}
+
+test("team detail shows readiness from stored counts without switching", async () => {
+  const switchOrg = mock(async (_id: string) => undefined);
+
+  const { container } = await mountTeamDetail(
+    {
+      localResourceCounts: { agents: 0, knowledge: 2, skills: 0, tools: 0 },
+      memberCount: 1,
+    },
+    switchOrg
+  );
+
+  expect(container.querySelector("h2")?.textContent).toBe("Team team-a");
+  expect(container.textContent).toContain("2 of 5 steps done");
+  expect(container.textContent).toContain("Add person");
+  expect(container.textContent).not.toContain("Add knowledge");
+  expect(container.textContent).toContain("team-b");
+  expect(switchOrg).not.toHaveBeenCalled();
+});
+
+test("work in this team switches once and opens chat after success", async () => {
   const pending = Promise.withResolvers<void>();
   const switchOrg = mock((_id: string) => pending.promise);
-  const { container, render } = mount(queries, switchOrg);
-  await render(organization("team-a"));
-  const trigger = container.querySelector<HTMLButtonElement>("li button");
-  trigger?.focus();
-  expect(document.activeElement).toBe(trigger);
+  const { container } = await mountTeamDetail({}, switchOrg);
+
+  const work = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Work in this team"
+  )!;
+
   await act(async () => {
-    trigger?.click();
-    await settle();
-  });
-  expect(switchOrg).not.toHaveBeenCalled();
-  const dialog = document.querySelector('[role="dialog"]');
-  expect(dialog?.textContent).toContain("team-b");
-  expect(dialog?.textContent).toContain("sales");
-  expect(
-    [...dialog!.querySelectorAll("dd")].map((node) => node.textContent)
-  ).toEqual(["team-b", "sales", "14", "3", "5", "4", "2"]);
-  const submit = dialog?.querySelector("button");
-  await act(async () => {
-    submit?.click();
-    submit?.click();
+    work.click();
+    work.click();
     await settle();
   });
   expect(switchOrg.mock.calls).toEqual([["team-b"]]);
-  expect(submit?.disabled).toBe(true);
-  expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  expect(work.disabled).toBe(true);
+  expect(locationOf(container)).toBe("/organization/teams/team-b");
   await act(async () => {
     pending.resolve();
     await settle();
   });
+  expect(locationOf(container)).toBe("/chat");
+});
+
+async function addPersonOnTeamDetail(isCurrent: boolean) {
+  const switchOrg = mock(async (_id: string) => undefined);
+
+  const candidates = spyOn(client, "listParentOrgMembers").mockResolvedValue({
+    members: [
+      {
+        createdAt: "2026-10-12T00:00:00Z",
+        email: "new@example.com",
+        name: "New Person",
+        phone: null,
+        role: "member",
+        userId: "new-user",
+      },
+    ],
+  });
+
+  const add = spyOn(client, "addOrgMember").mockResolvedValue({
+    member: {
+      createdAt: "2026-10-12T00:00:00Z",
+      email: "new@example.com",
+      name: "New Person",
+      phone: null,
+      role: "member",
+      userId: "new-user",
+    },
+    temporaryPassword: null,
+  });
+
+  cleanups.push(() => {
+    add.mockRestore();
+    candidates.mockRestore();
+  });
+
+  const { container } = await mountTeamDetail(
+    {
+      isCurrent,
+      localResourceCounts: { agents: 0, knowledge: 0, skills: 0, tools: 0 },
+      memberCount: 1,
+    },
+    switchOrg
+  );
+
+  const addPerson = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Add person"
+  )!;
+
+  await act(async () => {
+    addPerson.click();
+    await settle();
+  });
+
+  return { add, switchOrg };
+}
+
+test("add person on team detail selects an existing parent member in place", async () => {
+  const { add, switchOrg } = await addPersonOnTeamDetail(true);
+
+  expect(switchOrg).not.toHaveBeenCalled();
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  expect(document.querySelector('input[id$="-name"]')).toBeNull();
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+    "New Person"
+  );
+
+  await act(async () => {
+    document
+      .querySelector<HTMLInputElement>('input[name="team-person"]')
+      ?.click();
+  });
+  await act(async () => {
+    document
+      .querySelector("[role=dialog] form")
+      ?.dispatchEvent(
+        new window.Event("submit", { bubbles: true, cancelable: true })
+      );
+    await settle();
+  });
+  expect(add.mock.calls).toHaveLength(1);
+  expect(add.mock.calls[0][0]).toBe("team-b");
+  expect(add.mock.calls[0][1]).toMatchObject({
+    email: "new@example.com",
+    role: "member",
+  });
   expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
 
-test.each([true, false])(
-  "team details prevent switching when permitted is %s",
-  async (canSwitch) => {
-    const queries = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
-      },
-    });
+test("add person switches into the team first when it is not current", async () => {
+  const { switchOrg } = await addPersonOnTeamDetail(false);
 
-    const data = overview("team-a");
-    data.teams[0].canSwitch = canSwitch;
-    data.teams[0].id = canSwitch ? "team-a" : "team-b";
-    data.teams[0].isCurrent = !canSwitch;
-    queries.setQueryData(
-      queryKeys.organizationOverview("parent", "team-a"),
-      data
-    );
-    const switchOrg = mock(async () => undefined);
-    const { container, render } = mount(queries, switchOrg);
-    await render(organization("team-a"));
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>("li button")?.click();
-      await settle();
-    });
-    const dialog = document.querySelector('[role="dialog"]');
-    expect(dialog).not.toBeNull();
-    expect(dialog?.querySelectorAll("button")).toHaveLength(1);
-    expect(switchOrg).not.toHaveBeenCalled();
-  }
-);
+  expect(switchOrg.mock.calls).toEqual([["team-b"]]);
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+});
 
-test("failed switching retains team details and permits retry", async () => {
-  const queries = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+test("team detail hides work action when switching is not permitted", async () => {
+  const switchOrg = mock(async (_id: string) => undefined);
+
+  const { container } = await mountTeamDetail(
+    {
+      canSwitch: false,
+      localResourceCounts: { agents: 0, knowledge: 0, skills: 0, tools: 0 },
+      memberCount: 1,
     },
-  });
-
-  const data = overview("team-a");
-  data.teams[0].id = "team-b";
-  queries.setQueryData(
-    queryKeys.organizationOverview("parent", "team-a"),
-    data
+    switchOrg
   );
 
+  expect(container.textContent).not.toContain("Work in this team");
+
+  const actions = [
+    ...container.querySelectorAll<HTMLButtonElement>("li button"),
+  ];
+
+  expect(actions.length).toBeGreaterThan(0);
+  expect(actions.every((button) => button.disabled)).toBe(true);
+  expect(switchOrg).not.toHaveBeenCalled();
+});
+
+test("failed switch on team detail shows an error and permits retry", async () => {
   const switchOrg = mock(
     async (_id: string) => undefined
   ).mockRejectedValueOnce(new Error("Switch failed"));
 
-  const { container, render } = mount(queries, switchOrg);
-  await render(organization("team-a"));
+  const { container } = await mountTeamDetail({}, switchOrg);
+
+  const work = () =>
+    [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Work in this team"
+    )!;
+
   await act(async () => {
-    container.querySelector<HTMLButtonElement>("li button")?.click();
+    work().click();
     await settle();
   });
+  expect(container.querySelector('[role="alert"]')).not.toBeNull();
+  expect(locationOf(container)).toBe("/organization/teams/team-b");
   await act(async () => {
-    document
-      .querySelector<HTMLButtonElement>('[role="dialog"] button')
-      ?.click();
-    await settle();
-  });
-  expect(
-    document.querySelector('[role="dialog"] [role="alert"]')
-  ).not.toBeNull();
-  expect(container.querySelector("h2")?.textContent).toBe(
-    data.organization.name
-  );
-  await act(async () => {
-    document
-      .querySelector<HTMLButtonElement>('[role="dialog"] button')
-      ?.click();
+    work().click();
     await settle();
   });
   expect(switchOrg.mock.calls).toEqual([["team-b"], ["team-b"]]);
-  expect(document.querySelector('[role="dialog"]')).toBeNull();
-});
-
-test("team changes discard open details from the previous organization", async () => {
-  const queries = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
-    },
-  });
-
-  queries.setQueryData(
-    queryKeys.organizationOverview("parent", "team-a"),
-    overview("team-a")
-  );
-  queries.setQueryData(
-    queryKeys.organizationOverview("parent", "team-b"),
-    overview("team-b")
-  );
-  const { container, render } = mount(queries);
-  await render(organization("team-a"));
-  await act(async () => {
-    container.querySelector<HTMLButtonElement>("li button")?.click();
-    await settle();
-  });
-  expect(document.querySelector('[role="dialog"]')).not.toBeNull();
-  await render(organization("team-b"));
-  expect(document.querySelector('[role="dialog"]')).toBeNull();
-  expect(container.textContent).not.toContain("Team team-a");
+  expect(locationOf(container)).toBe("/chat");
 });
 
 async function fillTeamForm(adminUserId = "creator") {
@@ -921,9 +989,7 @@ test.each(["creator", "another-user"])(
     expect(refreshSession).toHaveBeenCalledTimes(1);
     expect(switchOrg).not.toHaveBeenCalled();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
-    expect(container.querySelector("h2")?.textContent).toBe(
-      data.organization.name
-    );
+    expect(locationOf(container)).toBe("/organization/teams/new-team");
   }
 );
 
@@ -1151,7 +1217,7 @@ test("team membership cannot expose parent team creation controls", async () => 
   ).toHaveLength(0);
   expect(
     container
-      .querySelector<HTMLButtonElement>("li button")
+      .querySelector<HTMLAnchorElement>("li a")
       ?.getAttribute("aria-label")
   ).toBe("View Team team-a");
 });

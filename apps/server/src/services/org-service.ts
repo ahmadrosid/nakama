@@ -1709,6 +1709,27 @@ export class OrgService {
     return { organization: toOrganizationSummary(organization), user };
   }
 
+  async listParentMembers(teamId: string): Promise<ListOrgMembersResponse> {
+    const team = await this.requireActiveOrganization(teamId);
+
+    if (!team.parentOrgId) {
+      throw new NakamaApiError("Not found", 404);
+    }
+
+    const [parent, inTeam] = await Promise.all([
+      this.listMembers(team.parentOrgId),
+      this.databaseAdapter.listOrgMembers(teamId),
+    ]);
+
+    const taken = new Set(inTeam.map((record) => record.userId));
+
+    return {
+      members: parent.members
+        .filter((member) => !taken.has(member.userId))
+        .map((member) => ({ ...member, phone: null })),
+    };
+  }
+
   async listMembers(orgId: string): Promise<ListOrgMembersResponse> {
     const org = await this.databaseAdapter.getOrganizationById(orgId);
 

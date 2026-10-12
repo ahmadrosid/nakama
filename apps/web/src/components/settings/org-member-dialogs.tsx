@@ -12,10 +12,119 @@ import { Input } from "@nakama/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@nakama/ui/popover";
 import { Spinner } from "@nakama/ui/spinner";
 import { useQuery } from "@tanstack/react-query";
-import { Copy01Icon } from "hugeicons-react";
+import { Copy01Icon, Search01Icon, Tick02Icon } from "hugeicons-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { OrgMemberRoleCards } from "@/components/settings/org-member-role-select";
 import { emailSettingsQueryOptions } from "@/hooks/use-app-queries";
+
+const ROLE_NAMES: Record<OrgMemberSummary["role"], string> = {
+  admin: "Org admin",
+  member: "Member",
+  viewer: "Viewer",
+};
+
+function memberInitials(member: OrgMemberSummary) {
+  const source = member.name?.trim() || member.email;
+
+  return source
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+}
+
+export function OrgMemberPicker({
+  members,
+  isLoading,
+  name,
+  value,
+  disabled,
+  onChange,
+}: {
+  members: OrgMemberSummary[];
+  isLoading: boolean;
+  name: string;
+  value: string;
+  disabled: boolean;
+  onChange: (userId: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
+
+  const visible = members.filter(
+    (member) =>
+      !needle ||
+      member.email.toLowerCase().includes(needle) ||
+      (member.name ?? "").toLowerCase().includes(needle)
+  );
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-border">
+      <div className="flex items-center gap-2 border-border border-b bg-muted/50 px-3">
+        <Search01Icon aria-hidden className="size-4 text-muted-foreground" />
+        <input
+          aria-label="Search members"
+          className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
+          disabled={disabled}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search members"
+          value={query}
+        />
+      </div>
+      <div className="max-h-56 divide-y divide-border overflow-y-auto">
+        {isLoading && (
+          <p className="px-4 py-3 text-muted-foreground text-sm">
+            Loading members…
+          </p>
+        )}
+        {visible.map((member) => {
+          const selected = member.userId === value;
+
+          return (
+            <label
+              className={`flex cursor-pointer items-center gap-3 px-3 py-2.5 ${
+                selected ? "bg-primary/10" : "bg-background"
+              }`}
+              key={member.userId}
+            >
+              <input
+                checked={selected}
+                className="sr-only"
+                disabled={disabled}
+                name={name}
+                onChange={() => onChange(member.userId)}
+                type="radio"
+                value={member.userId}
+              />
+              <span
+                aria-hidden
+                className={`flex size-8 shrink-0 items-center justify-center rounded-full font-medium text-xs ${
+                  selected
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {memberInitials(member)}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium text-sm">
+                  {member.name?.trim() || member.email}
+                </span>
+                <span className="block truncate text-muted-foreground text-xs">
+                  {member.email} · {ROLE_NAMES[member.role]}
+                </span>
+              </span>
+              {selected && (
+                <Tick02Icon aria-hidden className="size-4 text-primary" />
+              )}
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export type OrgMemberAddCredentials = {
   email: string;

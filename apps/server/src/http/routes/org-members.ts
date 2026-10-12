@@ -721,6 +721,54 @@ export function registerOrgMemberRoutes(
 
   app.openAPIRegistry.registerPath(
     createRoute({
+      method: "get",
+      operationId: "listParentOrgMembers",
+      path: "/v1/orgs/{orgId}/parent-members",
+      request: { params: orgIdParam },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: listOrgMembersResponseSchema },
+          },
+          description: "Parent members not yet in the team",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "List parent organization members available to add to a team",
+      tags: ["Organizations"],
+    })
+  );
+
+  app.get("/v1/orgs/:orgId/parent-members", async (c) => {
+    const auth = requireOrgAdminFromContext(c);
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+
+    if (auth.activeOrgId !== orgId) {
+      return errorResponse("Not found", 404);
+    }
+
+    if (!orgService) {
+      return errorResponse("Organization service not configured", 500);
+    }
+
+    return json<ListOrgMembersResponse>(
+      await orgService.listParentMembers(orgId)
+    );
+  });
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
       method: "patch",
       operationId: "updateOrgMember",
       path: "/v1/orgs/{orgId}/members/{userId}",

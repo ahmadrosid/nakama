@@ -425,6 +425,10 @@ export function orgSkillProposalsPath(profileId?: string): string {
   return `${PAGE_PATHS.organization}?${params.toString()}`;
 }
 
+export function teamDetailPath(teamId: string): string {
+  return `${PAGE_PATHS.organization}/teams/${encodeURIComponent(teamId)}`;
+}
+
 export const PAGE_PATHS: Record<PageId, string> = {
   automations: "/automations",
   chat: "/chat",
@@ -450,6 +454,7 @@ const PREFIX_PAGE_IDS: readonly [string, PageId][] = [
   ["/customize/connections", "customize"],
   [PAGE_PATHS["plugin-management"], "plugin-management"],
   [PAGE_PATHS.chat, "chat"],
+  [PAGE_PATHS.organization, "organization"],
   [PAGE_PATHS.soul, "soul"],
   [PAGE_PATHS.profiles, "profiles"],
   [PAGE_PATHS.files, "files"],

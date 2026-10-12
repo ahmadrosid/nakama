@@ -58,6 +58,11 @@ const NotificationsPage = lazyPage(
   "NotificationsPage"
 );
 
+const TeamDetailPage = lazyPage(
+  () => import("@/pages/TeamDetailPage"),
+  "TeamDetailPage"
+);
+
 const OrganizationPage = lazyPage(
   () => import("@/pages/OrganizationPage"),
   "OrganizationPage"
@@ -277,6 +282,10 @@ function AppShell() {
                     path="/customize/connections/:section"
                   />
                   <Route element={<OrganizationPage />} path="/organization" />
+                  <Route
+                    element={<TeamDetailPage />}
+                    path="/organization/teams/:teamId"
+                  />
                   <Route
                     element={<NotificationsPage />}
                     path="/notifications"

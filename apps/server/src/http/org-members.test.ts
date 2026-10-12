@@ -20,6 +20,7 @@ import {
 import type {
   CreateOrganizationResponse,
   CreateTeamRequest,
+  ListOrgMembersResponse,
   ListOrgSharedResourcesResponse,
   OrganizationOverviewResponse,
   OrgSharedResourceResponse,
@@ -1421,6 +1422,67 @@ test("team creation uses existing accounts, preserves selection, and recovers re
 
   expect(me.status).toBe(200);
   expect(await me.json()).toMatchObject({ activeOrgId: "org_parent" });
+});
+
+test("team admins list parent members who are not yet in the team", async () => {
+  const { app, authService, databaseAdapter: db } = createMinimalHonoApp();
+  const now = new Date().toISOString();
+
+  for (const id of ["org_parent", "org_team"]) {
+    await db.upsertOrganization({
+      createdAt: now,
+      id,
+      name: id,
+      parentOrgId: id === "org_team" ? "org_parent" : null,
+      slug: id.replace(/_/g, "-"),
+      updatedAt: now,
+    });
+  }
+
+  for (const id of ["user_admin", "user_member", "user_free"]) {
+    await db.createUser({
+      createdAt: now,
+      email: `${id}@example.com`,
+      id,
+      name: id,
+      passwordHash: await authService.hashPassword("password123"),
+      phone: "+1000",
+      updatedAt: now,
+    });
+  }
+
+  for (const [orgId, userId, role] of [
+    ["org_parent", "user_admin", "admin"],
+    ["org_parent", "user_member", "member"],
+    ["org_parent", "user_free", "member"],
+    ["org_team", "user_admin", "admin"],
+    ["org_team", "user_member", "member"],
+  ] as const) {
+    await db.upsertOrgMember({ createdAt: now, orgId, role, userId });
+  }
+
+  const list = async (email: string, orgId: string, path = orgId) => {
+    const session = await loginUserSession(app, email, "password123");
+
+    return app.fetch(
+      new Request(`http://localhost:4310/v1/orgs/${path}/parent-members`, {
+        headers: session.headers({}, orgId),
+      })
+    );
+  };
+
+  const ok = await list("user_admin@example.com", "org_team");
+  expect(ok.status).toBe(200);
+
+  const body: ListOrgMembersResponse = await ok.json();
+
+  expect(body.members.map((member) => member.userId)).toEqual(["user_free"]);
+  expect(body.members[0].phone).toBeNull();
+  expect((await list("user_member@example.com", "org_team")).status).toBe(403);
+  expect((await list("user_admin@example.com", "org_parent")).status).toBe(404);
+  expect(
+    (await list("user_admin@example.com", "org_team", "org_parent")).status
+  ).toBe(404);
 });
 
 test("team creation rejects invalid bodies, roles, contexts, and nested teams", async () => {

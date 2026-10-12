@@ -3409,6 +3409,12 @@ export class NakamaClient {
     );
   }
 
+  async listParentOrgMembers(orgId: string): Promise<ListOrgMembersResponse> {
+    return this.request<ListOrgMembersResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/parent-members`
+    );
+  }
+
   async getOrganizationOverview(
     orgId: string
   ): Promise<OrganizationOverviewResponse> {

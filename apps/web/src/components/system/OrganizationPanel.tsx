@@ -1,7 +1,6 @@
 import type {
   CreateTeamRequest,
   OrganizationOverviewResponse,
-  OrgMemberSummary,
   OrgSharedResourceKind,
   OrgSharedResourceSummary,
 } from "@nakama/core/contract";
@@ -29,19 +28,16 @@ import {
   ArrowRight01Icon,
   BookOpen01Icon,
   ComputerTerminal01Icon,
-  Search01Icon,
   TaskEdit01Icon,
-  Tick02Icon,
   UserGroupIcon,
 } from "hugeicons-react";
 import { type FormEvent, useId, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { OrgArchiveCard } from "@/components/settings/OrgArchiveCard";
 import { OrgMembersCard } from "@/components/settings/OrgMembersCard";
 import { OrgMemoryCard } from "@/components/settings/OrgMemoryCard";
-import { SkillsCuratorOrgCard } from "@/components/settings/SkillsCuratorOrgCard";
-import { SkillsPostTurnReviewOrgCard } from "@/components/settings/SkillsPostTurnReviewOrgCard";
-import { SkillsWriteApprovalOrgCard } from "@/components/settings/SkillsWriteApprovalOrgCard";
+import { OrgMemberPicker } from "@/components/settings/org-member-dialogs";
+import { SkillsLearningOrgCard } from "@/components/settings/SkillsLearningOrgCard";
 import { ToolDetailSections } from "@/components/tools/ToolDetailSections";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAuth } from "@/context/use-auth";
@@ -59,6 +55,7 @@ import {
   canUseToolPlayground,
   profilePath,
   skillDetailPath,
+  teamDetailPath,
 } from "@/lib/navigation";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -830,22 +827,6 @@ function slugifyTeamName(name: string) {
     .slice(0, 64);
 }
 
-const ROLE_NAMES: Record<OrgMemberSummary["role"], string> = {
-  admin: "Org admin",
-  member: "Member",
-  viewer: "Viewer",
-};
-
-function memberInitials(member: OrgMemberSummary) {
-  const source = member.name?.trim() || member.email;
-
-  return source
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
-    .join("");
-}
-
 function TeamAdminPicker({
   orgId,
   value,
@@ -858,80 +839,16 @@ function TeamAdminPicker({
   onChange: (userId: string) => void;
 }) {
   const members = useOrgMembers(orgId);
-  const [query, setQuery] = useState("");
-  const needle = query.trim().toLowerCase();
-
-  const visible = (members.data?.members ?? []).filter(
-    (member) =>
-      !needle ||
-      member.email.toLowerCase().includes(needle) ||
-      (member.name ?? "").toLowerCase().includes(needle)
-  );
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border">
-      <div className="flex items-center gap-2 border-border border-b bg-muted/50 px-3">
-        <Search01Icon aria-hidden className="size-4 text-muted-foreground" />
-        <input
-          aria-label="Search members"
-          className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
-          disabled={disabled}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search members"
-          value={query}
-        />
-      </div>
-      <div className="max-h-56 divide-y divide-border overflow-y-auto">
-        {members.isLoading && (
-          <p className="px-4 py-3 text-muted-foreground text-sm">
-            Loading members…
-          </p>
-        )}
-        {visible.map((member) => {
-          const selected = member.userId === value;
-
-          return (
-            <label
-              className={`flex cursor-pointer items-center gap-3 px-3 py-2.5 ${
-                selected ? "bg-primary/10" : "bg-background"
-              }`}
-              key={member.userId}
-            >
-              <input
-                checked={selected}
-                className="sr-only"
-                disabled={disabled}
-                name="team-admin"
-                onChange={() => onChange(member.userId)}
-                type="radio"
-                value={member.userId}
-              />
-              <span
-                aria-hidden
-                className={`flex size-8 shrink-0 items-center justify-center rounded-full font-medium text-xs ${
-                  selected
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground"
-                }`}
-              >
-                {memberInitials(member)}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium text-sm">
-                  {member.name?.trim() || member.email}
-                </span>
-                <span className="block truncate text-muted-foreground text-xs">
-                  {member.email} · {ROLE_NAMES[member.role]}
-                </span>
-              </span>
-              {selected && (
-                <Tick02Icon aria-hidden className="size-4 text-primary" />
-              )}
-            </label>
-          );
-        })}
-      </div>
-    </div>
+    <OrgMemberPicker
+      disabled={disabled}
+      isLoading={members.isLoading}
+      members={members.data?.members ?? []}
+      name="team-admin"
+      onChange={onChange}
+      value={value}
+    />
   );
 }
 
@@ -943,6 +860,7 @@ function AddTeamDialog({
   creatorId: string;
 }) {
   const { refreshSession } = useAuth();
+  const navigate = useNavigate();
   const createTeam = useCreateTeam(orgId);
   const formId = useId();
   const [open, setOpen] = useState(false);
@@ -955,6 +873,7 @@ function AddTeamDialog({
   const [created, setCreated] = useState(false);
   const running = useRef(false);
   const request = useRef<CreateTeamRequest | null>(null);
+  const createdTeamId = useRef<string | null>(null);
   const slug = slugOverride ?? slugifyTeamName(name);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -997,7 +916,9 @@ function AddTeamDialog({
 
     try {
       if (!created) {
-        await createTeam.mutateAsync(request.current);
+        const result = await createTeam.mutateAsync(request.current);
+
+        createdTeamId.current = result.organization.id;
         setCreated(true);
       }
 
@@ -1009,6 +930,11 @@ function AddTeamDialog({
       setAdminUserId(creatorId);
       request.current = null;
       setCreated(false);
+
+      if (createdTeamId.current) {
+        navigate(teamDetailPath(createdTeamId.current));
+        createdTeamId.current = null;
+      }
     } catch (cause) {
       setError(formatError(cause));
     } finally {
@@ -1126,118 +1052,41 @@ function OrganizationTeamRow({
   team: OrganizationOverviewResponse["teams"][number];
   activeOrgId: string;
 }) {
-  const { switchOrg } = useAuth();
-  const [open, setOpen] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const running = useRef(false);
-
-  async function handleSwitch() {
-    if (running.current || !team.canSwitch || team.id === activeOrgId) {
-      return;
-    }
-
-    running.current = true;
-    setPending(true);
-    setError(null);
-
-    try {
-      await switchOrg(team.id);
-      setOpen(false);
-    } catch (cause) {
-      setError(formatError(cause));
-    } finally {
-      running.current = false;
-      setPending(false);
-    }
-  }
-
   return (
     <li>
-      <Dialog
-        onOpenChange={(nextOpen) => {
-          if (!running.current) {
-            setError(null);
-            setOpen(nextOpen);
-          }
-        }}
-        open={open}
+      <Link
+        aria-label={`View ${team.name}`}
+        className="flex w-full items-center justify-between gap-3 px-5 py-3 text-left outline-none hover:bg-muted/40 focus-visible:bg-muted/40"
+        to={teamDetailPath(team.id)}
       >
-        <DialogTrigger
-          render={
-            <button
-              aria-label={`View ${team.name}`}
-              className="flex w-full cursor-pointer items-center justify-between gap-3 px-5 py-3 text-left outline-none hover:bg-muted/40 focus-visible:bg-muted/40"
-              type="button"
-            />
-          }
-        >
-          <span className="min-w-0 space-y-0.5">
-            <span className="flex flex-wrap items-center gap-2">
-              <span className="break-words font-medium">{team.name}</span>
-              {team.id === activeOrgId && (
-                <span className="rounded-full bg-orange-50 px-2 py-0.5 text-orange-700 text-xs dark:bg-orange-950 dark:text-orange-300">
-                  Current
-                </span>
-              )}
-            </span>
-            <span className="block text-muted-foreground text-xs tabular-nums">
-              {[
-                `${team.memberCount} members`,
-                ...Object.entries(team.localResourceCounts).map(
-                  ([kind, count]) => `${count} ${kind}`
-                ),
-              ].join(" · ")}
-            </span>
+        <span className="min-w-0 space-y-0.5">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="break-words font-medium">{team.name}</span>
+            {team.id === activeOrgId && (
+              <span className="rounded-full bg-orange-50 px-2 py-0.5 text-orange-700 text-xs dark:bg-orange-950 dark:text-orange-300">
+                Current
+              </span>
+            )}
           </span>
-          <span className="flex shrink-0 items-center gap-3">
-            <span className="rounded-md bg-muted px-2 py-0.5 text-muted-foreground text-xs">
-              Shared foundation
-            </span>
-            <ArrowRight01Icon
-              aria-hidden
-              className="size-4 text-muted-foreground"
-            />
+          <span className="block text-muted-foreground text-xs tabular-nums">
+            {[
+              `${team.memberCount} members`,
+              ...Object.entries(team.localResourceCounts).map(
+                ([kind, count]) => `${count} ${kind}`
+              ),
+            ].join(" · ")}
           </span>
-        </DialogTrigger>
-        <DialogContent showCloseButton={!pending}>
-          <DialogHeader>
-            <DialogTitle className="break-words">{team.name}</DialogTitle>
-          </DialogHeader>
-          <dl className="space-y-2">
-            <div>
-              <dt className="text-muted-foreground">Team ID</dt>
-              <dd className="break-all font-mono text-xs">{team.id}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Slug</dt>
-              <dd className="break-words">{team.slug}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Members</dt>
-              <dd className="tabular-nums">{team.memberCount}</dd>
-            </div>
-            {Object.entries(team.localResourceCounts).map(([kind, count]) => (
-              <div className="flex gap-2" key={kind}>
-                <dt className="text-muted-foreground">{kind}</dt>
-                <dd className="tabular-nums">{count}</dd>
-              </div>
-            ))}
-          </dl>
-          {error && (
-            <p className="text-destructive" role="alert">
-              {error}
-            </p>
-          )}
-          {team.canSwitch && team.id !== activeOrgId && (
-            <DialogFooter>
-              <Button disabled={pending} onClick={() => void handleSwitch()}>
-                {pending ? "Switching…" : "Switch to team"}
-              </Button>
-            </DialogFooter>
-          )}
-        </DialogContent>
-      </Dialog>
+        </span>
+        <span className="flex shrink-0 items-center gap-3">
+          <span className="rounded-md bg-muted px-2 py-0.5 text-muted-foreground text-xs">
+            Shared foundation
+          </span>
+          <ArrowRight01Icon
+            aria-hidden
+            className="size-4 text-muted-foreground"
+          />
+        </span>
+      </Link>
     </li>
   );
 }
@@ -1497,9 +1346,7 @@ export function OrganizationPanel() {
               : "Organization settings"}
           </h2>
           <OrgMembersCard />
-          <SkillsWriteApprovalOrgCard />
-          <SkillsPostTurnReviewOrgCard />
-          <SkillsCuratorOrgCard />
+          <SkillsLearningOrgCard />
           <OrgMemoryCard />
           <OrgArchiveCard />
         </>

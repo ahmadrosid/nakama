@@ -43,6 +43,14 @@ export function useOrgMembers(orgId: string | null) {
   });
 }
 
+export function useParentOrgMembers(orgId: string, enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryFn: () => client.listParentOrgMembers(orgId),
+    queryKey: queryKeys.orgParentMembers(orgId),
+  });
+}
+
 export function useCreateTeam(orgId: string) {
   const queryClient = useQueryClient();
 
