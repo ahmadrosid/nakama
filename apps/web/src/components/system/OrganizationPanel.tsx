@@ -25,6 +25,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AiBrain01Icon,
+  ArrowRight01Icon,
   BookOpen01Icon,
   ComputerTerminal01Icon,
   TaskEdit01Icon,
@@ -999,83 +1000,91 @@ function OrganizationTeamRow({
   }
 
   return (
-    <li className="space-y-2 px-5 py-4">
-      <Dialog
-        onOpenChange={(nextOpen) => {
-          if (!running.current) {
-            setError(null);
-            setOpen(nextOpen);
-          }
-        }}
-        open={open}
-      >
-        <div className="flex flex-wrap items-center gap-2">
-          <DialogTrigger
-            render={
-              <Button
-                aria-label={`View ${team.name}`}
-                className="h-auto max-w-full justify-start whitespace-normal break-words px-0 py-0 text-left"
-                variant="link"
-              />
+    <li className="flex items-center justify-between gap-3 px-5 py-3">
+      <div className="min-w-0 space-y-0.5">
+        <Dialog
+          onOpenChange={(nextOpen) => {
+            if (!running.current) {
+              setError(null);
+              setOpen(nextOpen);
             }
-          >
-            {team.name}
-          </DialogTrigger>
-          {team.id === activeOrgId && (
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary text-xs">
-              Current
-            </span>
-          )}
-        </div>
-        <DialogContent showCloseButton={!pending}>
-          <DialogHeader>
-            <DialogTitle className="break-words">{team.name}</DialogTitle>
-          </DialogHeader>
-          <dl className="space-y-2">
-            <div>
-              <dt className="text-muted-foreground">Team ID</dt>
-              <dd className="break-all font-mono text-xs">{team.id}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Slug</dt>
-              <dd className="break-words">{team.slug}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Members</dt>
-              <dd className="tabular-nums">{team.memberCount}</dd>
-            </div>
-            {Object.entries(team.localResourceCounts).map(([kind, count]) => (
-              <div className="flex gap-2" key={kind}>
-                <dt className="text-muted-foreground">{kind}</dt>
-                <dd className="tabular-nums">{count}</dd>
-              </div>
-            ))}
-          </dl>
-          {error && (
-            <p className="text-destructive" role="alert">
-              {error}
-            </p>
-          )}
-          {team.canSwitch && team.id !== activeOrgId && (
-            <DialogFooter>
-              <Button disabled={pending} onClick={() => void handleSwitch()}>
-                {pending ? "Switching…" : "Switch to team"}
-              </Button>
-            </DialogFooter>
-          )}
-        </DialogContent>
-      </Dialog>
-      <p className="text-muted-foreground text-sm tabular-nums">
-        {team.memberCount} members
-      </p>
-      <dl className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground text-sm tabular-nums">
-        {Object.entries(team.localResourceCounts).map(([kind, count]) => (
-          <div className="flex gap-1" key={kind}>
-            <dt>{kind}</dt>
-            <dd>{count}</dd>
+          }}
+          open={open}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <DialogTrigger
+              render={
+                <Button
+                  aria-label={`View ${team.name}`}
+                  className="h-auto max-w-full justify-start whitespace-normal break-words px-0 py-0 text-left font-medium text-foreground no-underline hover:no-underline"
+                  variant="link"
+                />
+              }
+            >
+              {team.name}
+            </DialogTrigger>
+            {team.id === activeOrgId && (
+              <span className="rounded-full bg-orange-50 px-2 py-0.5 text-orange-700 text-xs dark:bg-orange-950 dark:text-orange-300">
+                Current
+              </span>
+            )}
           </div>
-        ))}
-      </dl>
+          <DialogContent showCloseButton={!pending}>
+            <DialogHeader>
+              <DialogTitle className="break-words">{team.name}</DialogTitle>
+            </DialogHeader>
+            <dl className="space-y-2">
+              <div>
+                <dt className="text-muted-foreground">Team ID</dt>
+                <dd className="break-all font-mono text-xs">{team.id}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Slug</dt>
+                <dd className="break-words">{team.slug}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Members</dt>
+                <dd className="tabular-nums">{team.memberCount}</dd>
+              </div>
+              {Object.entries(team.localResourceCounts).map(([kind, count]) => (
+                <div className="flex gap-2" key={kind}>
+                  <dt className="text-muted-foreground">{kind}</dt>
+                  <dd className="tabular-nums">{count}</dd>
+                </div>
+              ))}
+            </dl>
+            {error && (
+              <p className="text-destructive" role="alert">
+                {error}
+              </p>
+            )}
+            {team.canSwitch && team.id !== activeOrgId && (
+              <DialogFooter>
+                <Button disabled={pending} onClick={() => void handleSwitch()}>
+                  {pending ? "Switching…" : "Switch to team"}
+                </Button>
+              </DialogFooter>
+            )}
+          </DialogContent>
+        </Dialog>
+        <p className="text-muted-foreground text-xs tabular-nums">
+          {[
+            `${team.memberCount} members`,
+            ...Object.entries(team.localResourceCounts).map(
+              ([kind, count]) => `${count} ${kind}`
+            ),
+          ].join(" · ")}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-3">
+        <span className="rounded-md bg-muted px-2 py-0.5 text-muted-foreground text-xs">
+          Shared foundation
+        </span>
+        <ArrowRight01Icon
+          aria-hidden
+          className="size-4 text-muted-foreground"
+        />
+      </div>
     </li>
   );
 }
@@ -1119,7 +1128,15 @@ export function OrganizationOverview() {
 
   return (
     <div className="space-y-6">
-      <h2 className="break-words font-semibold text-xl">{organization.name}</h2>
+      <div className="space-y-1">
+        <h2 className="break-words font-semibold text-xl">
+          {organization.name}
+        </h2>
+        <p className="text-muted-foreground text-sm">
+          Shared with every team from day one. Teams build their own work on
+          top.
+        </p>
+      </div>
       {overview.isError && (
         <div className="space-y-2" role="alert">
           <p>{formatError(overview.error)}</p>
@@ -1132,31 +1149,24 @@ export function OrganizationOverview() {
           </Button>
         </div>
       )}
-      <Card className="overflow-hidden">
-        <CardHeader className="border-b px-5 py-4">
-          <CardTitle className="text-base">Shared with every team</CardTitle>
+      <Card className="overflow-hidden shadow-none">
+        <CardHeader className="flex flex-row items-center justify-between gap-3 border-b px-5 py-3">
+          <CardTitle className="text-sm">Shared with every team</CardTitle>
+          <span className="rounded-full bg-orange-50 px-2.5 py-0.5 text-orange-700 text-xs dark:bg-orange-950 dark:text-orange-300">
+            Available to all teams
+          </span>
         </CardHeader>
         <dl className="divide-y">
           {RESOURCE_ROWS.map(({ kind, label, icon: Icon }) => (
             <div
-              className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-start"
+              className="flex flex-col gap-2 px-5 py-3 sm:flex-row sm:items-center sm:gap-4"
               key={kind}
             >
-              <dt className="flex shrink-0 flex-wrap items-center gap-2 font-medium sm:w-32">
+              <dt className="flex shrink-0 items-center gap-3 font-medium text-sm sm:w-32">
                 <Icon aria-hidden className="size-4 text-muted-foreground" />
                 {label}
-                {overview.data.canManageOrganization &&
-                  organization.id === activeOrg.id && (
-                    <ResourcePublicationDialog
-                      key={activeOrg.id}
-                      kind={kind}
-                      label={label}
-                      orgId={activeOrg.id}
-                      resources={sharedResources}
-                    />
-                  )}
               </dt>
-              <dd className="flex min-w-0 flex-wrap gap-2">
+              <dd className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                 {sharedResources
                   .filter((resource) => resource.resourceKind === kind)
                   .map((resource) =>
@@ -1250,7 +1260,7 @@ export function OrganizationOverview() {
                       </Button>
                     ) : (
                       <span
-                        className="max-w-full break-words rounded-lg bg-muted px-2.5 py-1 text-sm"
+                        className="max-w-full break-words rounded-full bg-muted px-2.5 py-0.5 text-muted-foreground text-xs"
                         key={resource.id}
                         title={`Shared from ${resource.sourceOrganization.name}`}
                       >
@@ -1271,13 +1281,28 @@ export function OrganizationOverview() {
                   </span>
                 )}
               </dd>
+              {overview.data.canManageOrganization &&
+                organization.id === activeOrg.id && (
+                  <ResourcePublicationDialog
+                    key={activeOrg.id}
+                    kind={kind}
+                    label={label}
+                    orgId={activeOrg.id}
+                    resources={sharedResources}
+                  />
+                )}
             </div>
           ))}
         </dl>
       </Card>
-      <Card className="overflow-hidden">
-        <CardHeader className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
-          <CardTitle className="text-base">Teams</CardTitle>
+      <Card className="overflow-hidden shadow-none">
+        <CardHeader className="flex flex-row items-center justify-between gap-3 border-b px-5 py-3">
+          <div className="space-y-0.5">
+            <CardTitle className="text-sm">Teams</CardTitle>
+            <p className="text-muted-foreground text-xs">
+              Every team starts from the shared foundation
+            </p>
+          </div>
           {overview.data.canManageOrganization &&
             organization.id === activeOrg.id &&
             user && (

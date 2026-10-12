@@ -9,32 +9,12 @@ import {
 import { useState } from "react";
 import { OrgMemberInvitePopover } from "@/components/settings/org-member-dialogs";
 
-export function OrgMembersCardHeader({
+export function OrgIdRow({
   orgId,
   isTeam = false,
-  inviteOpen,
-  inviteEmail,
-  inviteRole,
-  inviteFormError,
-  invitePending,
-  onInviteOpenChange,
-  onInviteEmailChange,
-  onInviteRoleChange,
-  onInviteSubmit,
-  onAddMember,
 }: {
   orgId: string;
   isTeam?: boolean;
-  inviteOpen: boolean;
-  inviteEmail: string;
-  inviteRole: OrgRole;
-  inviteFormError: string | null;
-  invitePending: boolean;
-  onInviteOpenChange: (open: boolean) => void;
-  onInviteEmailChange: (value: string) => void;
-  onInviteRoleChange: (role: OrgRole) => void;
-  onInviteSubmit: (event: React.FormEvent) => void;
-  onAddMember: () => void;
 }) {
   const [copiedOrgId, setCopiedOrgId] = useState(false);
 
@@ -49,71 +29,96 @@ export function OrgMembersCardHeader({
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className="shrink-0 font-normal text-foreground text-sm leading-none">
-          {isTeam ? "Team" : "Organization"}
-        </span>
-        <code className="inline-flex h-7 max-w-[14rem] items-center truncate rounded border border-border bg-muted/30 px-1.5 font-mono text-2xs text-foreground leading-none sm:max-w-xs">
-          {orgId}
-        </code>
-        <Button
-          aria-label={
-            isTeam
-              ? copiedOrgId
-                ? "Copied team ID"
-                : "Copy team ID"
-              : copiedOrgId
-                ? "Copied org ID"
-                : "Copy org ID"
-          }
-          className="size-7 shrink-0"
-          onClick={() => void handleCopyOrgId()}
-          size="icon-sm"
-          type="button"
-          variant="ghost"
-        >
-          {copiedOrgId ? (
-            <CheckmarkCircle01Icon
-              aria-hidden
-              className="size-3.5 text-emerald-600 dark:text-emerald-400"
-            />
-          ) : (
-            <Copy01Icon aria-hidden className="size-3.5" />
-          )}
-        </Button>
-      </div>
-      <div className="flex items-center gap-1">
-        <OrgMemberInvitePopover
-          formError={inviteFormError}
-          inviteEmail={inviteEmail}
-          inviteRole={inviteRole}
-          onInviteEmailChange={onInviteEmailChange}
-          onInviteRoleChange={onInviteRoleChange}
-          onOpenChange={onInviteOpenChange}
-          onSubmit={onInviteSubmit}
-          open={inviteOpen}
-          pending={invitePending}
-        />
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                aria-label="Add member"
-                onClick={onAddMember}
-                size="icon-sm"
-                type="button"
-                variant="outline"
-              >
-                <UserAdd01Icon aria-hidden className="size-3.5" />
-              </Button>
-            }
+    <div className="flex min-w-0 flex-wrap items-center gap-2 px-4 py-3">
+      <span className="shrink-0 font-normal text-foreground text-sm leading-none">
+        {isTeam ? "Team" : "Organization"}
+      </span>
+      <code className="inline-flex h-7 max-w-[14rem] items-center truncate rounded border border-border bg-muted/30 px-1.5 font-mono text-2xs text-foreground leading-none sm:max-w-xs">
+        {orgId}
+      </code>
+      <Button
+        aria-label={
+          isTeam
+            ? copiedOrgId
+              ? "Copied team ID"
+              : "Copy team ID"
+            : copiedOrgId
+              ? "Copied org ID"
+              : "Copy org ID"
+        }
+        className="size-7 shrink-0"
+        onClick={() => void handleCopyOrgId()}
+        size="icon-sm"
+        type="button"
+        variant="ghost"
+      >
+        {copiedOrgId ? (
+          <CheckmarkCircle01Icon
+            aria-hidden
+            className="size-3.5 text-emerald-600 dark:text-emerald-400"
           />
-          <TooltipContent side="top" sideOffset={8}>
-            Add member
-          </TooltipContent>
-        </Tooltip>
-      </div>
+        ) : (
+          <Copy01Icon aria-hidden className="size-3.5" />
+        )}
+      </Button>
+    </div>
+  );
+}
+
+export function OrgMembersActions({
+  inviteOpen,
+  inviteEmail,
+  inviteRole,
+  inviteFormError,
+  invitePending,
+  onInviteOpenChange,
+  onInviteEmailChange,
+  onInviteRoleChange,
+  onInviteSubmit,
+  onAddMember,
+}: {
+  inviteOpen: boolean;
+  inviteEmail: string;
+  inviteRole: OrgRole;
+  inviteFormError: string | null;
+  invitePending: boolean;
+  onInviteOpenChange: (open: boolean) => void;
+  onInviteEmailChange: (value: string) => void;
+  onInviteRoleChange: (role: OrgRole) => void;
+  onInviteSubmit: (event: React.FormEvent) => void;
+  onAddMember: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <OrgMemberInvitePopover
+        formError={inviteFormError}
+        inviteEmail={inviteEmail}
+        inviteRole={inviteRole}
+        onInviteEmailChange={onInviteEmailChange}
+        onInviteRoleChange={onInviteRoleChange}
+        onOpenChange={onInviteOpenChange}
+        onSubmit={onInviteSubmit}
+        open={inviteOpen}
+        pending={invitePending}
+      />
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              aria-label="Add member"
+              onClick={onAddMember}
+              size="icon-sm"
+              type="button"
+              variant="outline"
+            >
+              <UserAdd01Icon aria-hidden className="size-3.5" />
+            </Button>
+          }
+        />
+        <TooltipContent side="top" sideOffset={8}>
+          Add member
+        </TooltipContent>
+      </Tooltip>
     </div>
   );
 }

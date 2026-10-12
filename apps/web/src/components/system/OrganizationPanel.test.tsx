@@ -366,6 +366,19 @@ test.each(["team", "parent", "standalone"] as const)(
     );
 
     await render(org);
+
+    async function openTab(name: string) {
+      const tab = [
+        ...container.querySelectorAll<HTMLButtonElement>('button[role="tab"]'),
+      ].find((entry) => entry.textContent === name)!;
+
+      await act(async () => {
+        tab.click();
+        await settle();
+      });
+    }
+
+    await openTab("Settings");
     const label = context === "team" ? "Team" : "Organization";
     expect(
       [...container.querySelectorAll("span")].some(
@@ -388,6 +401,7 @@ test.each(["team", "parent", "standalone"] as const)(
       await settle();
     });
     expect(write).toHaveBeenCalledWith(org.id);
+    await openTab("Members");
 
     for (const name of [
       "Invite by email",
@@ -408,6 +422,7 @@ test.each(["team", "parent", "standalone"] as const)(
     const next = { ...org, id: `${org.id}-next` };
     queries.setQueryData(queryKeys.orgMembers(next.id), { members: [] });
     await render(next);
+    await openTab("Settings");
     expect(container.querySelector("code")?.textContent).toBe(next.id);
 
     const nextCopy = container.querySelector<HTMLButtonElement>(
@@ -504,9 +519,10 @@ test("renders all published resource kinds and stored team counts", async () => 
   ).toHaveLength(5);
   expect(container.querySelectorAll("li")).toHaveLength(1);
   expect(container.querySelector("li p")?.textContent).toContain("14");
-  expect(
-    [...container.querySelectorAll("li dd")].map((node) => node.textContent)
-  ).toEqual(["3", "5", "4", "2"]);
+  const teamSummary = container.querySelector("li p")?.textContent ?? "";
+  for (const count of ["3", "5", "4", "2"]) {
+    expect(teamSummary).toContain(count);
+  }
   expect(container.querySelectorAll("dd button")).toHaveLength(2);
 });
 

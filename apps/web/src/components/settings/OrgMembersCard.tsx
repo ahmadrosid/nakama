@@ -3,7 +3,7 @@ import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
 import { Input } from "@nakama/ui/input";
 import { toast } from "@nakama/ui/toast";
-import { type FormEvent, useEffect, useReducer, useState } from "react";
+import { useReducer, useState } from "react";
 import {
   type OrgMemberAddCredentials,
   OrgMemberAddDialog,
@@ -11,7 +11,8 @@ import {
   OrgMemberRemoveDialog,
 } from "@/components/settings/org-member-dialogs";
 import {
-  OrgMembersCardHeader,
+  OrgIdRow,
+  OrgMembersActions,
   OrgMembersSecretBanner,
 } from "@/components/settings/org-members-card-header";
 import { OrgMembersTable } from "@/components/settings/org-members-table";
@@ -143,6 +144,7 @@ export function OrgMembersCard() {
   const updateMemberMutation = useUpdateOrgMember(orgId ?? "");
   const removeMutation = useRemoveOrgMember(orgId ?? "");
 
+  const [tab, setTab] = useState<"members" | "settings">("members");
   const [state, dispatch] = useReducer(
     orgMembersReducer,
     initialOrgMembersState
@@ -336,76 +338,116 @@ export function OrgMembersCard() {
     <>
       <Card className="w-full shadow-none">
         <CardContent className="divide-y divide-border p-0">
-          <OrgMembersCardHeader
-            inviteEmail={state.inviteEmail}
-            inviteFormError={state.formError}
-            inviteOpen={state.inviteOpen}
-            invitePending={inviteMutation.isPending}
-            inviteRole={state.inviteRole}
-            isTeam={Boolean(activeOrg.parentOrgId)}
-            key={`members-header:${activeOrg.id}`}
-            onAddMember={() => {
-              dispatch({ type: "reset-add" });
-              dispatch({ type: "clear-secrets" });
-              dispatch({ type: "patch", values: { addOpen: true } });
-            }}
-            onInviteEmailChange={(value) =>
-              dispatch({ type: "patch", values: { inviteEmail: value } })
-            }
-            onInviteOpenChange={(open) => {
-              dispatch({ type: "patch", values: { inviteOpen: open } });
+          <div
+            aria-label="Organization sections"
+            className="flex items-center justify-between gap-3 px-4 py-2"
+            role="tablist"
+          >
+            <div className="flex gap-1">
+              {(
+                [
+                  ["members", "Members"],
+                  ["settings", "Settings"],
+                ] as const
+              ).map(([value, label]) => (
+                <Button
+                  aria-selected={tab === value}
+                  key={value}
+                  onClick={() => setTab(value)}
+                  role="tab"
+                  size="sm"
+                  type="button"
+                  variant={tab === value ? "secondary" : "ghost"}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+            {tab === "members" ? (
+              <OrgMembersActions
+                inviteEmail={state.inviteEmail}
+                inviteFormError={state.formError}
+                inviteOpen={state.inviteOpen}
+                invitePending={inviteMutation.isPending}
+                inviteRole={state.inviteRole}
+                onAddMember={() => {
+                  dispatch({ type: "reset-add" });
+                  dispatch({ type: "clear-secrets" });
+                  dispatch({ type: "patch", values: { addOpen: true } });
+                }}
+                onInviteEmailChange={(value) =>
+                  dispatch({ type: "patch", values: { inviteEmail: value } })
+                }
+                onInviteOpenChange={(open) => {
+                  dispatch({ type: "patch", values: { inviteOpen: open } });
 
-              if (open) {
-                dispatch({ type: "reset-invite" });
-                dispatch({ type: "clear-secrets" });
-              } else {
-                dispatch({ type: "reset-invite" });
-              }
-            }}
-            onInviteRoleChange={(value) =>
-              dispatch({ type: "patch", values: { inviteRole: value } })
-            }
-            onInviteSubmit={handleInviteSubmit}
-            orgId={activeOrg.id}
-          />
-
-          <InviteDomainsForm
-            allowedDomains={activeOrg.allowedInviteDomains ?? []}
-            key={activeOrg.id}
-            onSave={(domains) =>
-              updateOrg(activeOrg.id, { allowedInviteDomains: domains })
-            }
-          />
-
-          {state.secretValue ? (
-            <OrgMembersSecretBanner
-              onCopy={() => void copySecret(state.secretValue!)}
-              secretHint={state.secretHint}
-              secretValue={state.secretValue}
-            />
-          ) : null}
-
-          <div>
-            <OrgMembersTable
-              currentUserEmail={user?.email}
-              isLoading={isLoading}
-              members={members}
-              onEdit={(member) => dispatch({ member, type: "open-edit" })}
-              onRemove={handleRemove}
-              onRoleChange={handleRoleChange}
-              removePending={removeMutation.isPending}
-              updatePending={updateMemberMutation.isPending}
-            />
-
-            {statusLine ? (
-              <p
-                className="px-4 pt-2 pb-3 text-destructive text-sm"
-                role="alert"
-              >
-                {statusLine}
-              </p>
+                  if (open) {
+                    dispatch({ type: "reset-invite" });
+                    dispatch({ type: "clear-secrets" });
+                  } else {
+                    dispatch({ type: "reset-invite" });
+                  }
+                }}
+                onInviteRoleChange={(value) =>
+                  dispatch({ type: "patch", values: { inviteRole: value } })
+                }
+                onInviteSubmit={handleInviteSubmit}
+              />
             ) : null}
           </div>
+
+          {tab === "settings" ? (
+            <>
+              <InviteDomainsForm
+                allowedDomains={activeOrg.allowedInviteDomains ?? []}
+                key={activeOrg.id}
+                onSave={(domains) =>
+                  updateOrg(activeOrg.id, { allowedInviteDomains: domains })
+                }
+              />
+              <details className="group">
+                <summary className="cursor-pointer px-4 py-3 text-muted-foreground text-sm hover:text-foreground">
+                  Advanced
+                </summary>
+                <OrgIdRow
+                  isTeam={Boolean(activeOrg.parentOrgId)}
+                  orgId={activeOrg.id}
+                />
+              </details>
+            </>
+          ) : (
+            <>
+              {state.secretValue ? (
+                <OrgMembersSecretBanner
+                  onCopy={() => void copySecret(state.secretValue!)}
+                  secretHint={state.secretHint}
+                  secretValue={state.secretValue}
+                />
+              ) : null}
+
+              <div>
+                <OrgMembersTable
+                  currentUserEmail={user?.email}
+                  isLoading={isLoading}
+                  members={members}
+                  onEdit={(member) => dispatch({ member, type: "open-edit" })}
+                  onRemove={handleRemove}
+                  onRoleChange={handleRoleChange}
+                  removePending={removeMutation.isPending}
+                  updatePending={updateMemberMutation.isPending}
+                />
+
+                {statusLine ? (
+                  <p
+                    className="px-4 pt-2 pb-3 text-destructive text-sm"
+                    role="alert"
+                  >
+                    {statusLine}
+                  </p>
+                ) : null}
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -432,66 +474,101 @@ function InviteDomainsForm({
   allowedDomains: string[];
   onSave: (domains: string[]) => Promise<void>;
 }) {
-  const domainsValue = allowedDomains.join(", ");
-  const [value, setValue] = useState(domainsValue);
+  const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setValue(domainsValue);
-  }, [domainsValue]);
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function save(next: string[]) {
     setSaving(true);
     setError(null);
 
     try {
-      await onSave(
-        value
-          .split(/[,\n]+/)
-          .map((domain) => domain.trim())
-          .filter(Boolean)
-      );
-      toast("Allowed invite domains saved.");
+      await onSave(next);
+      toast("Invite settings saved.");
+      return true;
     } catch (err) {
       setError(formatError(err));
+      return false;
     } finally {
       setSaving(false);
     }
   }
 
+  async function addDraft() {
+    const added = draft
+      .split(/[,\s]+/)
+      .map((domain) => domain.trim().toLowerCase())
+      .filter(Boolean);
+
+    if (added.length === 0) {
+      return;
+    }
+
+    if (await save([...new Set([...allowedDomains, ...added])])) {
+      setDraft("");
+    }
+  }
+
   return (
-    <form
-      className="space-y-1.5 px-4 py-3"
-      onSubmit={(event) => void handleSubmit(event)}
-    >
-      <label
-        className="font-medium text-foreground text-sm"
-        htmlFor="allowed-invite-domains"
-      >
-        Allowed invite domains
-      </label>
-      <div className="flex items-center gap-3">
+    <div className="space-y-3 px-4 py-3">
+      <p className="font-medium text-foreground text-sm">Who can join</p>
+      <div className="flex flex-wrap items-center gap-2">
+        {allowedDomains.length === 0 ? (
+          <span className="text-muted-foreground text-sm">
+            Anyone can be invited
+          </span>
+        ) : (
+          allowedDomains.map((domain) => (
+            <span
+              className="inline-flex items-center gap-1 rounded-full bg-muted py-0.5 pr-1 pl-2.5 text-muted-foreground text-xs"
+              key={domain}
+            >
+              {domain}
+              <button
+                aria-label={`Remove ${domain}`}
+                className="rounded-full px-1.5 hover:bg-background hover:text-foreground disabled:opacity-50"
+                disabled={saving}
+                onClick={() =>
+                  void save(allowedDomains.filter((entry) => entry !== domain))
+                }
+                type="button"
+              >
+                ×
+              </button>
+            </span>
+          ))
+        )}
+      </div>
+      <div className="flex items-center gap-2">
         <Input
+          aria-label="Add email domain"
           className="min-w-0 flex-1"
-          id="allowed-invite-domains"
-          onChange={(event) => setValue(event.target.value)}
-          value={value}
+          disabled={saving}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void addDraft();
+            }
+          }}
+          placeholder="Add a domain, e.g. acme.com"
+          value={draft}
         />
-        <Button disabled={saving} type="submit" variant="outline">
-          Save domains
+        <Button
+          disabled={saving || draft.trim() === ""}
+          onClick={() => void addDraft()}
+          type="button"
+          variant="outline"
+        >
+          Add
         </Button>
       </div>
-      <p className="text-muted-foreground text-xs">
-        Separate domains with commas. Leave empty to allow any domain.
-      </p>
       {error ? (
         <p className="text-destructive text-sm" role="alert">
           {error}
         </p>
       ) : null}
-    </form>
+    </div>
   );
 }
 
