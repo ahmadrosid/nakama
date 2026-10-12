@@ -28,7 +28,7 @@ test("workspace rename requires platform admin access and updates pins for every
           throw new NakamaApiError("Not found", 404);
         }
 
-        return profile;
+        return { profile };
       },
     },
   });
@@ -259,7 +259,10 @@ function createApp() {
         throw new NakamaApiError("Not found", 404);
       }
 
-      return { profileId };
+      return {
+        profile: { id: profileId, isSuper: false, ownerUserId: null },
+        profileId,
+      };
     },
     deleteProfileArtifact: async () => ({
       deleted: true,
@@ -685,7 +688,7 @@ test("personal file pins persist and enforce user, org, profile and path boundar
           throw new NakamaApiError("Not found", 404);
         }
 
-        return profile;
+        return { profile };
       },
     },
   });

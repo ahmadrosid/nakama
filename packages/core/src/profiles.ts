@@ -13,13 +13,23 @@ export function filterProfilesForChatAccess(
     orgRole?: OrgRole | null;
     isPlatformAdmin?: boolean;
     excludeSuperBot?: boolean;
+    userId?: string;
   } = {}
 ): ProfileSummary[] {
+  const visible = options.isPlatformAdmin
+    ? profiles
+    : profiles.filter(
+        (profile) =>
+          profile.sharedWithTeam !== false ||
+          (options.userId !== undefined &&
+            profile.ownerUserId === options.userId)
+      );
+
   if (options.excludeSuperBot || !canAccessSuperBotProfile(options)) {
-    return profiles.filter((profile) => !profile.isSuper);
+    return visible.filter((profile) => !profile.isSuper);
   }
 
-  return profiles;
+  return visible;
 }
 
 export function slugifyProfileName(name: string): string {

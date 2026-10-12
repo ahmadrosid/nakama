@@ -36,6 +36,8 @@ function createApp() {
           orgId: string,
           request: Parameters<ProfileService["createProfile"]>[1]
         ) => profileService.createProfile(orgId, request),
+        getProfile: (orgId: string, profileId: string) =>
+          profileService.getProfile(orgId, profileId),
         listProfiles: async (orgId: string) => ({
           profiles: await databaseAdapter.listProfilesForOrg(orgId),
         }),
@@ -426,7 +428,7 @@ describe("profile pack routes", () => {
     30_000
   );
 
-  test("member is forbidden; platform admin who is an org member can export", async () => {
+  test("member cannot export another's agent; platform admin who is an org member can export", async () => {
     const { app, authService, databaseAdapter, profileService } = createApp();
 
     const { orgId, platformSession } = await createOrgAdminSession(
@@ -472,6 +474,8 @@ describe("profile pack routes", () => {
         )
       ).status
     ).toBe(403);
+
+    // Members may import for themselves, so a bad archive fails on content, not access.
     expect(
       (
         await app.fetch(
@@ -482,7 +486,7 @@ describe("profile pack routes", () => {
           })
         )
       ).status
-    ).toBe(403);
+    ).toBe(400);
 
     const platformUser = await databaseAdapter.getUserByEmail(
       "platform@example.com"

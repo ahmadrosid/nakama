@@ -55,6 +55,7 @@ import {
   groupModelsByProvider,
   profileModelSelectionValue,
 } from "@/lib/models";
+import { isProfileOwner } from "@/lib/profiles";
 import {
   type ProfileDetailTab,
   type ProfileSaveStatus,
@@ -188,12 +189,17 @@ export function useProfilesPage() {
   } = useProfileQuery(selectedId);
 
   const canManageProfile =
-    user?.isPlatformAdmin === true && Boolean(detail && !detail.sharedAgent);
+    (user?.isPlatformAdmin === true || isProfileOwner(detail, user?.id)) &&
+    Boolean(detail && !detail.sharedAgent);
 
   const updateMutation = useUpdateProfileMutation();
 
+  // ACP agents run on the server host, so only platform admins may pick one.
+  const { data: acpPresetsData } = useAcpAgentPresetsQuery();
+
   const acpAgentPresets =
-    useAcpAgentPresetsQuery().data ?? NO_ACP_AGENT_PRESETS;
+    (user?.isPlatformAdmin === true ? acpPresetsData : undefined) ??
+    NO_ACP_AGENT_PRESETS;
 
   const acpModelControls = useAcpChatControls({
     agentKey: acpAgentSettingsKey(detail?.acpAgent),

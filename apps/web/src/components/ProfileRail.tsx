@@ -1,17 +1,24 @@
+import type { AcpAgentPresetSummary, ToolSummary } from "@nakama/core/contract";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ProfileAdminPlusButton } from "@/components/ProfileAdminPlusButton";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
+import { ProfileCreateDialog } from "@/components/ProfileCreateDialog";
 import { SidebarNotifications } from "@/components/SidebarNotifications";
 import { SidebarUserMenu } from "@/components/SidebarUserMenu";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
 import { useSelectProfile } from "@/hooks/use-select-profile";
-import { PAGE_PATHS, pathForPage } from "@/lib/navigation";
+import { PAGE_PATHS, pathForPage, profilePath } from "@/lib/navigation";
 import { ditherLogoSrc } from "@/lib/theme";
+
+// Members create plain agents; tools and host-run agents stay with admins.
+const NO_PRESETS: AcpAgentPresetSummary[] = [];
+
+const NO_TOOLS: ToolSummary[] = [];
 
 export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { activeProfileId, onProfilesPage, profiles, selectProfile } =
@@ -22,6 +29,7 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { syncForOrg } = useActiveChatProfile();
   const navigate = useNavigate();
   const location = useLocation();
+  const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
     if (profiles.length === 0) {
@@ -129,8 +137,26 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
               navigate(`${PAGE_PATHS.profiles}?${params.toString()}`);
             }}
           />
-        ) : null}
+        ) : (
+          <ProfileAdminPlusButton
+            label="New agent"
+            onClick={() => setCreateOpen(true)}
+          />
+        )}
       </div>
+
+      {user?.isPlatformAdmin ? null : (
+        <ProfileCreateDialog
+          agentPresets={NO_PRESETS}
+          onCreated={(profileId) => {
+            onNavigate?.();
+            navigate(profilePath(profileId));
+          }}
+          onOpenChange={setCreateOpen}
+          open={createOpen}
+          tools={NO_TOOLS}
+        />
+      )}
 
       <div className="flex shrink-0 flex-col items-center gap-1">
         <SidebarNotifications />

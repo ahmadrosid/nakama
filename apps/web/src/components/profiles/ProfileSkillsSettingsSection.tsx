@@ -9,6 +9,7 @@ import { ProfileSkillsWriteApprovalField } from "@/components/profiles/ProfileSk
 import { useAuth } from "@/context/use-auth";
 import { useUpdateProfileMutation } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
+import { isProfileOwner } from "@/lib/profiles";
 
 export function ProfileSkillsSettingsSection({
   profile,
@@ -17,11 +18,12 @@ export function ProfileSkillsSettingsSection({
   profile: ProfileDetail;
   disabled?: boolean;
 }) {
-  const { activeOrg } = useAuth();
+  const { activeOrg, user } = useAuth();
   const updateMutation = useUpdateProfileMutation();
   const readOnly = disabled || Boolean(profile.sharedAgent);
+  const isOrgAdmin = activeOrg?.role === "admin";
 
-  if (!activeOrg || activeOrg.role !== "admin") {
+  if (!(activeOrg && (isOrgAdmin || isProfileOwner(profile, user?.id)))) {
     return null;
   }
 
@@ -68,12 +70,14 @@ export function ProfileSkillsSettingsSection({
             />
           </div>
         </div>
-        <div className="p-3 sm:px-4 sm:py-3">
-          <ProfileSkillsWriteApprovalField
-            disabled={readOnly}
-            profile={profile}
-          />
-        </div>
+        {isOrgAdmin ? (
+          <div className="p-3 sm:px-4 sm:py-3">
+            <ProfileSkillsWriteApprovalField
+              disabled={readOnly}
+              profile={profile}
+            />
+          </div>
+        ) : null}
         <div className="p-3 sm:px-4 sm:py-3">
           <ProfileSkillsPostTurnReviewField
             disabled={readOnly}

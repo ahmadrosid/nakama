@@ -25,6 +25,8 @@ function createApp() {
           sourceId: string,
           request: Parameters<ProfileService["cloneProfile"]>[2]
         ) => profileService.cloneProfile(orgId, sourceId, request),
+        getProfile: (orgId: string, profileId: string) =>
+          profileService.getProfile(orgId, profileId),
         moveProfile: (
           orgId: string,
           profileId: string,

@@ -45,6 +45,7 @@ import {
 import { useSystemStatusQuery } from "@/hooks/use-system-status";
 import { client, formatError } from "@/lib/client";
 import { profilePath } from "@/lib/navigation";
+import { isProfileOwner } from "@/lib/profiles";
 import { queryKeys } from "@/lib/query-keys";
 import { ProfileConfigAssignmentsSection } from "@/pages/profiles/profile-config-assignments-section";
 import {
@@ -70,12 +71,17 @@ function ProfilePromptPanel({
   canCreateProfile: boolean;
   profileId: string;
 }) {
+  const { user } = useAuth();
+  const isOwner = isProfileOwner(state.detail, user?.id);
+
   return (
     <>
       <ProfileSystemPromptCard state={state} />
-      {canPack ? (
+      {canPack || isOwner ? (
         <section className="space-y-4" id="profile-prompt">
-          {canCreateProfile ? <SoulTab profileId={profileId} /> : null}
+          {canCreateProfile || isOwner ? (
+            <SoulTab profileId={profileId} />
+          ) : null}
           <details className="group/history">
             <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 text-muted-foreground/55 text-sm hover:text-muted-foreground [&::-webkit-details-marker]:hidden">
               <span>Change histories</span>
@@ -126,12 +132,12 @@ function ProfileSectionTab({
 function buildProfileSections({
   channels,
   detail,
-  isOrgAdmin,
+  showBehavior,
   showChannels,
 }: {
   channels: { connected: boolean }[] | null;
   detail: NonNullable<ProfilesPageState["detail"]>;
-  isOrgAdmin: boolean;
+  showBehavior: boolean;
   showChannels: boolean;
 }) {
   const channelHint = channels
@@ -143,7 +149,9 @@ function buildProfileSections({
     ...(showChannels
       ? [{ hint: channelHint, label: "Channels", value: "channels" }]
       : []),
-    ...(isOrgAdmin ? [{ hint: "", label: "Behavior", value: "behavior" }] : []),
+    ...(showBehavior
+      ? [{ hint: "", label: "Behavior", value: "behavior" }]
+      : []),
     {
       hint: String(detail.tools.filter((tool) => !tool.pluginId).length),
       label: "Tools",
@@ -162,6 +170,25 @@ function buildProfileSections({
   ];
 }
 
+function profileTabAccess(
+  detail: NonNullable<ProfilesPageState["detail"]>,
+  user: { id: string; isPlatformAdmin?: boolean } | null | undefined,
+  orgRole: string | undefined
+) {
+  const canCreateProfile = user?.isPlatformAdmin === true;
+  const isOrgAdmin = orgRole === "admin";
+  const canPack = isOrgAdmin || canCreateProfile;
+  const isOwner = isProfileOwner(detail, user?.id);
+
+  return {
+    canCreateProfile,
+    canManage: canCreateProfile || isOwner,
+    canPack,
+    showBehavior: isOrgAdmin || isOwner,
+    showChannels: (canPack || isOwner) && !detail.isSuper,
+  };
+}
+
 export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
   const { user, activeOrg } = useAuth();
   const { hash } = useLocation();
@@ -178,17 +205,17 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
     return null;
   }
 
-  const canCreateProfile = user?.isPlatformAdmin === true;
-  const isOrgAdmin = activeOrg?.role === "admin";
-  const canPack = isOrgAdmin || canCreateProfile;
   const { busy, detail, selectedId } = state;
-  const showChannels = canPack && !detail.isSuper;
+
+  const { canCreateProfile, canManage, canPack, showBehavior, showChannels } =
+    profileTabAccess(detail, user, activeOrg?.role);
+
   const channelsReady = !(isPending || channelsError);
 
   const sections = buildProfileSections({
     channels: showChannels && channelsReady ? channels : null,
     detail,
-    isOrgAdmin,
+    showBehavior,
     showChannels,
   });
 
@@ -221,11 +248,12 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
             profileId={detail.id}
             state={state}
           />
-          {(showChannels || canCreateProfile) && selectedId ? (
+          {(showChannels || canManage) && selectedId ? (
             <ProfileFooterActions
               onExport={() => setExportOpen(true)}
               onMove={() => setMoveOpen(true)}
-              showAdmin={canCreateProfile}
+              showAdmin={canManage}
+              showMove={canCreateProfile}
               showPack={showChannels}
               state={state}
             />
@@ -241,7 +269,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
             </ChannelProfileContext.Provider>
           </Tabs.Panel>
         ) : null}
-        {isOrgAdmin ? (
+        {showBehavior ? (
           <Tabs.Panel className="w-0 min-w-full" value="behavior">
             <ProfileSkillsSettingsSection disabled={busy} profile={detail} />
           </Tabs.Panel>
@@ -480,12 +508,14 @@ function ProfileFooterActions({
   onExport,
   onMove,
   showAdmin,
+  showMove,
   showPack,
   state,
 }: {
   onExport: () => void;
   onMove: () => void;
   showAdmin: boolean;
+  showMove: boolean;
   showPack: boolean;
   state: ProfilesPageState;
 }) {
@@ -510,12 +540,16 @@ function ProfileFooterActions({
       : []),
     ...(showAdmin && !state.detail?.sharedAgent
       ? [
-          {
-            disabled: busy,
-            Icon: Building06Icon,
-            label: "Move agent",
-            onClick: onMove,
-          },
+          ...(showMove
+            ? [
+                {
+                  disabled: busy,
+                  Icon: Building06Icon,
+                  label: "Move agent",
+                  onClick: onMove,
+                },
+              ]
+            : []),
           {
             disabled: busy,
             Icon: Copy01Icon,
@@ -537,20 +571,28 @@ function ProfileFooterActions({
       : []),
   ];
 
+  // Two columns; an odd button out and the destructive one take a full row.
+  const regular = actions.filter((action) => !action.destructive);
+  const fullRow = new Set(regular.length % 2 === 1 ? [regular.at(-1)] : []);
+
   return (
     <footer className="grid w-0 min-w-full grid-cols-2 gap-2">
-      {actions.map(({ Icon, destructive, disabled, label, onClick }) => (
-        <button
-          className={`flex h-10 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-border px-3 text-sm outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 ${destructive ? "col-span-2 text-destructive" : "text-muted-foreground hover:text-foreground"}`}
-          disabled={disabled}
-          key={label}
-          onClick={onClick}
-          type="button"
-        >
-          <Icon aria-hidden className="size-4" />
-          {label}
-        </button>
-      ))}
+      {actions.map((action) => {
+        const { Icon, destructive, disabled, label, onClick } = action;
+
+        return (
+          <button
+            className={`flex h-10 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-border px-3 text-sm outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 ${destructive || fullRow.has(action) ? "col-span-2" : ""} ${destructive ? "text-destructive" : "text-muted-foreground hover:text-foreground"}`}
+            disabled={disabled}
+            key={label}
+            onClick={onClick}
+            type="button"
+          >
+            <Icon aria-hidden className="size-4" />
+            {label}
+          </button>
+        );
+      })}
     </footer>
   );
 }

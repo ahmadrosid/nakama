@@ -421,7 +421,7 @@ export interface CreateSessionOptions {
 type ChatProfileAccess = Pick<
   CreateSessionOptions,
   "excludeSuperBot" | "isPlatformAdmin" | "orgRole"
->;
+> & { user?: { id: string } };
 
 export class AgentService {
   private userConfig: UserConfig | null;
@@ -2240,7 +2240,10 @@ export class AgentService {
       resolvedProfileId
     );
 
-    this.assertChatProfileAccess(profile, options ?? {});
+    this.assertChatProfileAccess(profile, {
+      ...options,
+      user: userId ? { id: userId } : undefined,
+    });
 
     const sharedCapabilityRevision = await this.capabilityRevisionForProfile(
       orgId,
@@ -2364,6 +2367,14 @@ export class AgentService {
         "Super Bot is only available to org admins.",
         403
       );
+    }
+
+    if (
+      profile.sharedWithTeam === false &&
+      !access.isPlatformAdmin &&
+      profile.ownerUserId !== access.user?.id
+    ) {
+      throw new NakamaApiError("This agent is private.", 403);
     }
   }
 
@@ -3976,9 +3987,10 @@ export class AgentService {
 
   async createProfile(
     orgId: string,
-    request: CreateProfileRequest
+    request: CreateProfileRequest,
+    owner?: { ownerUserId: string; sharedWithTeam: boolean }
   ): Promise<ProfileResponse> {
-    return this.profileService.createProfile(orgId, request);
+    return this.profileService.createProfile(orgId, request, owner);
   }
 
   async createProfileWithSuperBot(

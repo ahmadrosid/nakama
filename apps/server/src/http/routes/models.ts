@@ -45,7 +45,7 @@ import {
   saveSlackConfig,
   validateSlackTokens,
 } from "@nakama/core/slack-config";
-import type { Context } from "hono";
+import type { Context, MiddlewareHandler } from "hono";
 import {
   completeChatgptOAuthDeviceSession,
   fetchChatgptCodexModels,
@@ -70,6 +70,7 @@ import {
   requireOrgAdminOrPlatformAdminFromContext,
   requireOrgMemberFromContext,
   requirePlatformAdminFromContext,
+  requireProfileManageFromContext,
 } from "../org-guards";
 import {
   errorResponse,
@@ -2201,16 +2202,24 @@ export function registerModelRoutes(
   });
 
   async function channelOwner(c: Context<AppEnv>) {
-    requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = c.req.query("profileId")?.trim();
 
     if (!profileId) {
+      // Without an agent there is nothing a member could own.
+      requireOrgAdminOrPlatformAdminFromContext(c);
+
       throw new NakamaApiError(
         "Choose an agent to manage this connection.",
         400
       );
     }
+
+    // Admins manage any agent's connections. Members manage their own agent's.
+    await requireProfileManageFromContext(c, agent, {
+      allowOrgAdmin: true,
+      profileId,
+    });
 
     const { profile } = await agent.getProfile(orgId, profileId);
 
@@ -2226,6 +2235,17 @@ export function registerModelRoutes(
     return { orgId, profileId };
   }
 
+  // Check access before any handler reads a body or catches errors into a 400.
+  for (const channel of ["telegram", "discord", "whatsapp", "slack"]) {
+    const requireChannelAccess: MiddlewareHandler<AppEnv> = async (c, next) => {
+      await channelOwner(c);
+      await next();
+    };
+
+    app.use(`/v1/settings/${channel}`, requireChannelAccess);
+    app.use(`/v1/settings/${channel}/*`, requireChannelAccess);
+  }
+
   app.get("/v1/settings/telegram", async (c) =>
     json<TelegramSettingsResponse>(
       await agent.getTelegramSettings(await channelOwner(c))
@@ -2233,7 +2253,6 @@ export function registerModelRoutes(
   );
 
   app.put("/v1/settings/telegram", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = await channelOwner(c);
     const body = await readJson(c.req.raw, updateTelegramRequestSchema);
 
@@ -2253,7 +2272,6 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/telegram/handshake", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = await channelOwner(c);
 
     try {
@@ -2266,16 +2284,13 @@ export function registerModelRoutes(
       return errorResponse(message, 400);
     }
   });
-  app.get("/v1/settings/telegram/requests", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
-
-    return json<TelegramAccessRequestsResponse>(
+  app.get("/v1/settings/telegram/requests", async (c) =>
+    json<TelegramAccessRequestsResponse>(
       await agent.getTelegramAccessRequests(await channelOwner(c))
-    );
-  });
+    )
+  );
 
   app.post("/v1/settings/telegram/requests/:userId/approve", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
     const userId = Number(c.req.param("userId"));
 
     if (!Number.isInteger(userId) || userId <= 0) {
@@ -2294,7 +2309,6 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/telegram/requests/:userId/deny", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
     const userId = Number(c.req.param("userId"));
 
     if (!Number.isInteger(userId) || userId <= 0) {
@@ -2307,7 +2321,6 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/telegram/pairing", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
     const owner = await channelOwner(c);
     const orgId = owner.orgId;
     const body = await readJson(c.req.raw, startTelegramPairingSchema);
@@ -2327,8 +2340,6 @@ export function registerModelRoutes(
   });
 
   app.get("/v1/settings/telegram/pairing/:pairingId", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
-
     try {
       return json<TelegramPairingStatusResponse>(
         await agent.getTelegramPairingStatus(
@@ -2346,8 +2357,6 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/telegram/pairing/:pairingId/cancel", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
-
     try {
       return json<TelegramPairingStatusResponse>(
         await agent.cancelTelegramPairing(
@@ -2365,7 +2374,6 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/telegram/pairing/:pairingId/apply", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
     const body = await readJson(c.req.raw, applyTelegramPairingSchema);
 
     try {
@@ -2393,7 +2401,6 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/discord", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
     const body = await readJson(c.req.raw, updateDiscordRequestSchema);
 
     try {
@@ -2412,8 +2419,6 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/discord/handshake", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
-
     try {
       return json<DiscordSettingsResponse>(
         await agent.regenerateDiscordHandshake(await channelOwner(c))
@@ -2570,7 +2575,6 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/whatsapp", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
     const body = await readJson(c.req.raw, updateWhatsappRequestSchema);
 
     try {
@@ -2589,8 +2593,6 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/whatsapp/pairing-code", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
-
     try {
       return json<WhatsAppSettingsResponse>(
         await agent.regenerateWhatsAppPairingCode(await channelOwner(c))
@@ -2603,8 +2605,6 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/whatsapp/reconnect", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
-
     try {
       const orgId = await channelOwner(c);
 

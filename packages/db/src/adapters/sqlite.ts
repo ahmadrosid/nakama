@@ -169,6 +169,8 @@ interface ProfileRow {
   model: string | null;
   name: string;
   org_id: string | null;
+  owner_user_id: string | null;
+  shared_with_team: number;
   skills_curator_consolidate_enabled: number | null;
   skills_post_turn_review: number | null;
   skills_write_approval: number | null;
@@ -966,10 +968,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       skills_curator_consolidate_enabled,
       acp_agent,
       acp_settings,
+      owner_user_id,
+      shared_with_team,
       created_at,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       system_prompt = excluded.system_prompt,
@@ -985,6 +989,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       skills_curator_consolidate_enabled = excluded.skills_curator_consolidate_enabled,
       acp_agent = excluded.acp_agent,
       acp_settings = excluded.acp_settings,
+      owner_user_id = excluded.owner_user_id,
+      shared_with_team = excluded.shared_with_team,
       updated_at = excluded.updated_at
   `);
 
@@ -1017,6 +1023,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           : 0,
       record.acpAgent ? JSON.stringify(record.acpAgent) : null,
       record.acpSettings ? JSON.stringify(record.acpSettings) : null,
+      record.ownerUserId ?? null,
+      record.sharedWithTeam === false ? 0 : 1,
       record.createdAt,
       record.updatedAt ?? record.createdAt
     );
@@ -6299,6 +6307,8 @@ function toProfileRecord(row: ProfileRow): StoredProfileRecord {
     model: row.model,
     name: row.name,
     orgId: row.org_id ?? null,
+    ownerUserId: row.owner_user_id ?? null,
+    sharedWithTeam: row.shared_with_team !== 0,
     skillsCuratorConsolidateEnabled:
       row.skills_curator_consolidate_enabled == null
         ? null

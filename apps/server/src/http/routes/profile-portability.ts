@@ -14,7 +14,8 @@ import {
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
-  requireOrgAdminOrPlatformAdminFromContext,
+  requireOrgMemberFromContext,
+  requireProfileManageFromContext,
 } from "../org-guards";
 import { errorResponse, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
@@ -170,7 +171,9 @@ export function registerProfilePortabilityRoutes(
   );
 
   app.get("/v1/profiles/:profileId/pack/export", async (c) => {
-    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    const auth = await requireProfileManageFromContext(c, options.agent, {
+      allowOrgAdmin: true,
+    });
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const db = requireDatabase(options);
@@ -192,7 +195,7 @@ export function registerProfilePortabilityRoutes(
   });
 
   app.post("/v1/profiles/pack/import/preview", async (c) => {
-    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const db = requireDatabase(options);
 
@@ -223,7 +226,7 @@ export function registerProfilePortabilityRoutes(
   });
 
   app.post("/v1/profiles/pack/import", async (c) => {
-    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const db = requireDatabase(options);
 
@@ -242,6 +245,11 @@ export function registerProfilePortabilityRoutes(
           confirm: body.confirm,
           isPlatformAdmin: auth.isPlatformAdmin,
           name: body.name,
+          // Members import for themselves: the agent is private and owned by them.
+          ownerUserId:
+            auth.isPlatformAdmin || auth.orgRole === "admin"
+              ? undefined
+              : auth.user.id,
           restoreCustomTools: auth.isPlatformAdmin,
         }
       );

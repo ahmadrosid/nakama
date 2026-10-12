@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS profiles (
   skills_curator_consolidate_enabled INTEGER,
   acp_agent TEXT,
   acp_settings TEXT,
+  owner_user_id TEXT,
+  shared_with_team INTEGER DEFAULT 1 NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE

@@ -20,6 +20,7 @@ import {
   requireOrgAdminFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
   requireOrgMember,
+  requireOrgMemberFromContext,
 } from "../org-guards";
 import { errorResponse, getRequestAuth, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
@@ -903,7 +904,7 @@ export function registerOrgMemberRoutes(
   });
 
   app.get("/v1/orgs/:orgId/usage-summary", async (c) => {
-    const auth = requireOrgAdminFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = decodeURIComponent(c.req.param("orgId"));
 
     if (auth.activeOrgId !== orgId) {

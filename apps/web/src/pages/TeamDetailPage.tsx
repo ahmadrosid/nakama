@@ -525,38 +525,42 @@ function ReadinessCard({
 }
 
 function TeamPeopleAndAgents({
+  canManage,
   onAddAgent,
   onAddPerson,
   orgId,
 }: {
+  canManage: boolean;
   onAddAgent: () => void;
   onAddPerson: () => void;
   orgId: string;
 }) {
-  const { data: membersData } = useOrgMembers(orgId);
+  const { data: membersData } = useOrgMembers(canManage ? orgId : null);
   const { data: agents } = useOrgProfilesQuery(orgId);
   const { user } = useAuth();
 
   return (
     <>
-      <TeamList
-        action="Add person"
-        empty="No people yet"
-        items={membersData?.members.map((member) => ({
-          id: member.userId,
-          name: member.email,
-        }))}
-        onAction={onAddPerson}
-        title="People"
-      >
-        <OrgMembersTable
-          currentUserEmail={user?.email}
-          isLoading={false}
-          members={membersData?.members ?? []}
-          removePending={false}
-          updatePending={false}
-        />
-      </TeamList>
+      {canManage && (
+        <TeamList
+          action="Add person"
+          empty="No people yet"
+          items={membersData?.members.map((member) => ({
+            id: member.userId,
+            name: member.email,
+          }))}
+          onAction={onAddPerson}
+          title="People"
+        >
+          <OrgMembersTable
+            currentUserEmail={user?.email}
+            isLoading={false}
+            members={membersData?.members ?? []}
+            removePending={false}
+            updatePending={false}
+          />
+        </TeamList>
+      )}
       <TeamList
         action="Add agent"
         empty="No agents yet"
@@ -573,7 +577,7 @@ function TeamPeopleAndAgents({
             id: agent.id,
             name: agent.name,
           }))}
-        onAction={onAddAgent}
+        onAction={canManage ? onAddAgent : undefined}
         title="Agents"
       />
     </>
@@ -694,7 +698,7 @@ function TeamList({
   items:
     | { avatar?: ReactNode; detail?: string; id: string; name: string }[]
     | undefined;
-  onAction: () => void;
+  onAction?: () => void;
   title: string;
 }) {
   return (
@@ -704,9 +708,11 @@ function TeamList({
           {title}
           {items ? ` (${items.length})` : ""}
         </h3>
-        <Button onClick={onAction} size="sm" type="button" variant="outline">
-          {action}
-        </Button>
+        {onAction && (
+          <Button onClick={onAction} size="sm" type="button" variant="outline">
+            {action}
+          </Button>
+        )}
       </div>
       {children && items && items.length > 0 ? (
         <div className="border-border border-t">{children}</div>
@@ -978,7 +984,7 @@ function useTeam(
 
 export function TeamDetailPage() {
   const { teamId } = useParams();
-  const { activeOrg, switchOrg } = useAuth();
+  const { activeOrg, orgs, switchOrg, user } = useAuth();
   const navigate = useNavigate();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -997,25 +1003,37 @@ export function TeamDetailPage() {
 
   const canWork = team.isCurrent || team.canSwitch;
 
+  const canManage =
+    user?.isPlatformAdmin === true ||
+    orgs.find((org) => org.id === team.id)?.role === "admin";
+
   const showAddPerson = () => setAddOpen(true);
   const showAddAgent = () => setAddAgentOpen(true);
   const addActions = { agent: showAddAgent, person: showAddPerson };
 
   const steps: TeamStep[] = [
-    {
-      action: "Add person",
-      description: "So they can work with the team",
-      done: team.memberCount > 1,
-      onOpen: showAddPerson,
-      title: "Invite your teammates",
-    },
-    {
-      action: "Add agent",
-      description: "An AI helper that does tasks for the team",
-      done: team.localResourceCounts.agents > 0,
-      onOpen: showAddAgent,
-      title: "Add your first agent",
-    },
+    ...(canManage
+      ? [
+          {
+            action: "Add person",
+            description: "So they can work with the team",
+            done: team.memberCount > 1,
+            onOpen: showAddPerson,
+            title: "Invite your teammates",
+          },
+        ]
+      : []),
+    ...(canManage
+      ? [
+          {
+            action: "Add agent",
+            description: "An AI helper that does tasks for the team",
+            done: team.localResourceCounts.agents > 0,
+            onOpen: showAddAgent,
+            title: "Add your first agent",
+          },
+        ]
+      : []),
   ];
 
   const doneCount = steps.filter((step) => step.done).length + 1;
@@ -1070,11 +1088,12 @@ export function TeamDetailPage() {
       )}
       {usage && <TeamStats usage={usage} />}
       <TeamPeopleAndAgents
+        canManage={canManage}
         onAddAgent={() => void openIn(addActions.agent)}
         onAddPerson={() => void openIn(addActions.person)}
         orgId={team.id}
       />
-      <TeamAdminCard team={team} />
+      {canManage && <TeamAdminCard team={team} />}
       <ProfileCreateDialog
         agentPresets={agentPresets}
         onCreated={() => undefined}

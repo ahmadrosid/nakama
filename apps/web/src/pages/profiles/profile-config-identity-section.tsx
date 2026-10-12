@@ -17,13 +17,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@nakama/ui/select";
+import { Switch } from "@nakama/ui/switch";
+import { toast } from "@nakama/ui/toast";
 import { ArrowDown01Icon } from "hugeicons-react";
 import { useState } from "react";
+import { useAuth } from "@/context/use-auth";
+import { useUpdateProfileMutation } from "@/hooks/use-resource-mutations";
+import { formatError } from "@/lib/client";
 import {
   encodeModelSelection,
   extractModelId,
   profileModelLabel,
 } from "@/lib/models";
+import { isProfileOwner } from "@/lib/profiles";
 import {
   EditableProfileAvatar,
   ProfileSaveIndicator,
@@ -85,6 +91,8 @@ export function ProfileConfigIdentitySection({
     handleAvatarRemove,
   } = state;
 
+  const { user } = useAuth();
+
   if (!detail) {
     return null;
   }
@@ -132,6 +140,13 @@ export function ProfileConfigIdentitySection({
         hasAcpAgent={Boolean(detail.acpAgent)}
         state={state}
       />
+      {isProfileOwner(detail, user?.id) ? (
+        <ProfileShareToggle
+          disabled={identityDisabled}
+          profileId={detail.id}
+          shared={detail.sharedWithTeam !== false}
+        />
+      ) : null}
       {detail.isSuper || saveStatus !== "idle" || nameMissing ? (
         <div className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-muted-foreground text-xs">
           {detail.isSuper ? (
@@ -179,6 +194,35 @@ export function ProfileSystemPromptCard({ state }: { state: IdentityState }) {
         />
       </CardContent>
     </Card>
+  );
+}
+
+function ProfileShareToggle({
+  disabled,
+  profileId,
+  shared,
+}: {
+  disabled: boolean;
+  profileId: string;
+  shared: boolean;
+}) {
+  const updateMutation = useUpdateProfileMutation();
+
+  return (
+    <label className="flex items-center gap-2 text-sm">
+      <Switch
+        aria-label="Share with team"
+        checked={shared}
+        disabled={disabled || updateMutation.isPending}
+        onCheckedChange={(sharedWithTeam) =>
+          void updateMutation
+            .mutateAsync({ input: { sharedWithTeam }, profileId })
+            .catch((error) => toast(formatError(error)))
+        }
+        size="sm"
+      />
+      Share with team
+    </label>
   );
 }
 

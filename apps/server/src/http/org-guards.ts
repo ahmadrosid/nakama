@@ -56,6 +56,52 @@ export function requireOrgMemberFromContext(
   return auth;
 }
 
+interface ProfileOwnerLookup {
+  getProfile(
+    orgId: string,
+    profileId: string
+  ): Promise<{ profile: { isSuper: boolean; ownerUserId?: string | null } }>;
+}
+
+/**
+ * Platform admins manage every agent, and org admins too when `allowOrgAdmin`
+ * is set. Members manage only the agents they created.
+ */
+export async function requireProfileManageFromContext(
+  c: Context<AppEnv>,
+  agent: ProfileOwnerLookup,
+  options: { allowOrgAdmin?: boolean; profileId?: string } = {}
+): Promise<RequestAuthContext> {
+  const auth = getRequestAuth(c);
+
+  if (
+    auth.isPlatformAdmin ||
+    (options.allowOrgAdmin && auth.orgRole === "admin")
+  ) {
+    return auth;
+  }
+
+  requireOrgMember(auth);
+
+  // A missing agent answers 403 too, so members cannot probe which ids exist.
+  const found = await agent
+    .getProfile(
+      requireActiveOrgIdFromContext(c),
+      options.profileId ?? decodeURIComponent(c.req.param("profileId") ?? "")
+    )
+    .catch(() => null);
+
+  if (
+    !found ||
+    found.profile.isSuper ||
+    found.profile.ownerUserId !== auth.user.id
+  ) {
+    throw new NakamaApiError("Forbidden", 403);
+  }
+
+  return auth;
+}
+
 export function requirePlatformAdminFromContext(
   c: Context<AppEnv>
 ): RequestAuthContext {

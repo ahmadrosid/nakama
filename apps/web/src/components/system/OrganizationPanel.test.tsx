@@ -686,7 +686,16 @@ async function mountTeamDetail(
       <Route element={<TeamDetailPage />} path="/organization/teams/:teamId" />
       <Route element={<p>Chat</p>} path="/chat" />
     </Routes>,
-    [],
+    [
+      {
+        createdAt: "",
+        id: "team-b",
+        name: "Team b",
+        role: "admin",
+        slug: "team-b",
+        updatedAt: "",
+      },
+    ],
     "/organization/teams/team-b"
   );
 

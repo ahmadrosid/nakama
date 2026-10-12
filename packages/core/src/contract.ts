@@ -2207,12 +2207,16 @@ export interface ProfileSummary {
   mcpServerCount: number;
   model: string | null;
   name: string;
+  /** Member who created the agent. null for agents created by platform admins. */
+  ownerUserId?: string | null;
   sharedAgent?: {
     available: boolean;
     publicationId: string;
     sourceOrgId: string;
     sourceProfileId: string;
   };
+  /** false = private to the owner and admins. */
+  sharedWithTeam?: boolean;
   /** null = inherit org default; true/false = force consolidate on/off for this profile */
   skillsCuratorConsolidateEnabled?: boolean | null;
   /** null = inherit org default; true/false = force post-turn review on/off for this profile */
@@ -2509,6 +2513,8 @@ export interface UpdateProfileRequest {
   automationsEnabled?: boolean;
   model?: string | null;
   name?: string;
+  /** Owner or admin: false keeps the agent private to its owner. */
+  sharedWithTeam?: boolean;
   skillsCuratorConsolidateEnabled?: boolean | null;
   skillsPostTurnReview?: boolean | null;
   skillsWriteApproval?: boolean | null;

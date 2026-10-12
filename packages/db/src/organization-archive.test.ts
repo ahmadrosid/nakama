@@ -593,6 +593,8 @@ describe("shared agent instance persistence", () => {
       automationsEnabled: true,
       id: "instance_a",
       orgId: "team_a",
+      ownerUserId: null,
+      sharedWithTeam: true,
       skillsCuratorConsolidateEnabled: null,
       skillsPostTurnReview: null,
       skillsWriteApproval: null,
