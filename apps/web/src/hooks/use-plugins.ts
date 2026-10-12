@@ -1,6 +1,7 @@
 import { NakamaApiError } from "@nakama/core/api-error";
 import type {
   DeleteRetainedPluginDataRequest,
+  InstallLocalPluginRequest,
   InstallPluginPackageRequest,
   OrgPluginDetail,
   PluginPackagePreviewResponse,
@@ -254,6 +255,19 @@ export function useInstallOfficialPlugin() {
       await invalidateQueries(queryClient, queryKeys.plugins.releases);
     }
   );
+}
+
+export function useInstallLocalPlugin() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: InstallLocalPluginRequest) =>
+      client.installLocalPlugin(input),
+    onSettled: async (_data, _error, input) => {
+      await invalidateOrgPlugins(queryClient, input.orgId);
+      await invalidateQueries(queryClient, queryKeys.plugins.releases);
+    },
+  });
 }
 
 export function useReinstallOfficialPlugin() {

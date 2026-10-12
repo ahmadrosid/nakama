@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { ListOrgPluginsResponse, OrgRole } from "@nakama/core";
-import { getUserConfigDir, PLUGIN_MANIFEST_API_VERSION } from "@nakama/core";
+import {
+  getProfileSoulDir,
+  getUserConfigDir,
+  PLUGIN_MANIFEST_API_VERSION,
+} from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
   type DatabaseAdapter,
@@ -197,6 +202,185 @@ async function installRelease(
 }
 
 describe("plugin HTTP API", () => {
+  test("local draft routes require platform approval and CSRF without organization middleware", async () => {
+    const { app, authService, databaseAdapter } = createApp();
+    const platform = await setupFreshInstallSession(app, databaseAdapter);
+    const orgId = platform.orgId!;
+    const now = new Date().toISOString();
+    await databaseAdapter.upsertProfile({
+      id: "local-super",
+      orgId,
+      name: "Super",
+      isSuper: true,
+      isDefault: false,
+      model: null,
+      systemPrompt: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const directory = resolve(
+      getProfileSoulDir(orgId, "local-super"),
+      "plugin-drafts/local-notes"
+    );
+
+    await mkdir(resolve(directory, "actions"), { recursive: true });
+    await writeFile(
+      resolve(directory, "package.json"),
+      JSON.stringify({ name: "@test/local-notes", version: "1.0.0" })
+    );
+    await writeFile(
+      resolve(directory, "nakama.plugin.json"),
+      JSON.stringify({
+        id: "local-notes",
+        version: "1.0.0",
+        apiVersion: 1,
+        minNakamaVersion: "0.1.0",
+        name: "Local notes",
+        description: "Local",
+        author: "Test",
+        license: "MIT",
+        skills: [],
+        actions: [
+          {
+            key: "list",
+            entry: "actions/list.js",
+            access: "member",
+            effect: "read",
+            exposeAsTool: true,
+            description: "List",
+            inputSchema: { type: "object" },
+          },
+        ],
+      })
+    );
+    await writeFile(resolve(directory, "actions/list.js"), echoJs);
+    const input = { orgId, profileId: "local-super", draftId: "local-notes" };
+    await seedUser(databaseAdapter, authService, {
+      email: "local-admin@example.com",
+      userId: "local-admin",
+      orgId,
+      role: "admin",
+    });
+
+    const admin = await loginUserSession(
+      app,
+      "local-admin@example.com",
+      PASSWORD,
+      orgId
+    );
+
+    for (const path of ["preview-local", "local-file", "install-local"]) {
+      const body = JSON.stringify({
+        ...input,
+        expectedDigest: "a".repeat(64),
+        expectedRevision: null,
+        path: "actions/list.js",
+      });
+
+      expect(
+        (
+          await jsonRequest(app, `/v1/platform/plugins/${path}`, admin, {
+            method: "POST",
+            body,
+          })
+        ).status
+      ).toBe(403);
+      expect(
+        (
+          await jsonRequest(app, `/v1/platform/plugins/${path}`, null, {
+            method: "POST",
+            body,
+          })
+        ).status
+      ).toBe(401);
+    }
+
+    const noCsrf = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/plugins/preview-local", {
+        method: "POST",
+        headers: platform.headers({ "Content-Type": "application/json" }),
+        body: JSON.stringify(input),
+      })
+    );
+
+    expect(noCsrf.status).toBe(403);
+
+    const response = await jsonRequest(
+      app,
+      "/v1/platform/plugins/preview-local",
+      platform,
+      { method: "POST", body: JSON.stringify(input) }
+    );
+
+    expect(response.status).toBe(200);
+
+    // SAFETY: The authenticated test route returns the validated preview DTO.
+    const preview = (await response.json()) as {
+      digest: string;
+      expectedRevision: null;
+    };
+
+    const file = await jsonRequest(
+      app,
+      "/v1/platform/plugins/local-file",
+      platform,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          ...input,
+          expectedDigest: preview.digest,
+          path: "actions/list.js",
+        }),
+      }
+    );
+
+    expect(file.status).toBe(200);
+    expect(file.headers.get("content-type")).toContain("application/json");
+
+    const installed = await jsonRequest(
+      app,
+      "/v1/platform/plugins/install-local",
+      platform,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          ...input,
+          expectedDigest: preview.digest,
+          expectedRevision: null,
+        }),
+      }
+    );
+
+    expect(installed.status).toBe(200);
+
+    // SAFETY: The preceding successful install route returns an organization installation.
+    const installBody = (await installed.json()) as {
+      install: { lifecycleState: string };
+    };
+
+    expect(installBody.install.lifecycleState).toBe("disabled");
+
+    for (const changes of [
+      { orgId: "foreign" },
+      { profileId: "foreign" },
+      { draftId: "../local-notes" },
+    ]) {
+      expect(
+        (
+          await jsonRequest(
+            app,
+            "/v1/platform/plugins/preview-local",
+            platform,
+            {
+              method: "POST",
+              body: JSON.stringify({ ...input, ...changes }),
+            }
+          )
+        ).status
+      ).toBeGreaterThanOrEqual(400);
+    }
+  });
   // Fresh setup plus seven role logins can exceed 5s on Windows runners.
   test("AE6 authority matrix for platform, org roles, nonmember, and archived org", async () => {
     const { app, authService, databaseAdapter } = createApp();

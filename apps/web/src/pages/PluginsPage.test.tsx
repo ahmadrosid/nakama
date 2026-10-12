@@ -1,0 +1,217 @@
+import { afterEach, expect, spyOn, test } from "bun:test";
+import type { LocalPluginPreviewResponse } from "@nakama/core/contract";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act } from "react";
+import { createRoot } from "react-dom/client";
+import { client } from "@/lib/client";
+import { LocalPluginInstaller } from "./PluginsPage";
+
+const cleanups: Array<() => void> = [];
+
+afterEach(() => {
+  for (const cleanup of cleanups.splice(0)) {
+    cleanup();
+  }
+});
+
+async function settle() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+}
+
+async function openDraft() {
+  const button = [...document.querySelectorAll("button")].find(
+    (item) => item.textContent === "Install from folder"
+  );
+
+  await act(async () => button?.click());
+  await settle();
+  await act(async () =>
+    document
+      .querySelector<HTMLButtonElement>('[aria-label="Super Bot"]')
+      ?.click()
+  );
+  await settle();
+  await act(async () =>
+    document.querySelector<HTMLElement>('[role="option"]')?.click()
+  );
+
+  const input = document.querySelector<HTMLInputElement>(
+    '[aria-label="Draft ID"]'
+  )!;
+
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(
+      Object.getPrototypeOf(input),
+      "value"
+    )!.set!.call(input, "notes");
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+  await settle();
+}
+
+function preview(): LocalPluginPreviewResponse {
+  return {
+    contributions: {
+      actionKeys: ["list"],
+      hasDatabase: false,
+      hasUi: false,
+      skillKeys: [],
+    },
+    digest: "a".repeat(64),
+    draft: { draftId: "notes", orgId: "org-a", profileId: "super" },
+    expectedRevision: null,
+    files: [{ path: "actions/list.js", size: 40 }],
+    integrity: "local",
+    manifest: {
+      actions: [
+        {
+          access: "member",
+          description: "List",
+          effect: "read",
+          entry: "actions/list.js",
+          exposeAsTool: true,
+          inputSchema: { type: "object" },
+          key: "list",
+        },
+      ],
+      apiVersion: 1,
+      author: "Test",
+      description: "Notes",
+      id: "notes",
+      license: "MIT",
+      minNakamaVersion: "0.1.0",
+      name: "Notes",
+      skills: [],
+      version: "1.0.0+dev.abcdef",
+    },
+  };
+}
+
+async function mount() {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+
+  // SAFETY: This component reads only ID, name, and Super Bot status from profile fixtures.
+  const profiles = spyOn(client, "listProfiles").mockResolvedValue({
+    profiles: [{ id: "super", isSuper: true, name: "Super Bot" }],
+  } as Awaited<ReturnType<typeof client.listProfiles>>);
+
+  cleanups.push(() => {
+    act(() => root.unmount());
+    container.remove();
+    profiles.mockRestore();
+    queryClient.clear();
+  });
+
+  async function render(orgId: string) {
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <LocalPluginInstaller key={orgId} orgId={orgId} />
+        </QueryClientProvider>
+      )
+    );
+  }
+
+  await render("org-a");
+
+  return { queryClient, render };
+}
+
+test("local review pins approval, escapes code, and invalidates the installed organization", async () => {
+  const previewCall = spyOn(client, "previewLocalPlugin").mockResolvedValue(
+    preview()
+  );
+
+  const fileCall = spyOn(client, "readLocalPluginFile").mockResolvedValue({
+    content: btoa("</pre><script>window.executed=true</script>"),
+    encoding: "base64",
+    nextOffset: null,
+    path: "actions/list.js",
+  });
+
+  // SAFETY: The component uses successful completion, not installation fields, from this fixture.
+  const installCall = spyOn(client, "installLocalPlugin").mockResolvedValue({
+    install: { lifecycleState: "disabled" },
+  } as never);
+
+  cleanups.push(() => {
+    previewCall.mockRestore();
+    fileCall.mockRestore();
+    installCall.mockRestore();
+  });
+  const { queryClient } = await mount();
+  const invalidation = spyOn(queryClient, "invalidateQueries");
+  await openDraft();
+  await act(async () =>
+    [...document.querySelectorAll("button")]
+      .find((item) => item.textContent === "Preview draft")
+      ?.click()
+  );
+  await settle();
+  expect(previewCall).toHaveBeenCalledWith({
+    draftId: "notes",
+    orgId: "org-a",
+    profileId: "super",
+  });
+
+  const confirm = () =>
+    [...document.querySelectorAll("button")].find(
+      (item) => item.textContent === "Confirm installation"
+    );
+
+  expect(confirm()?.disabled).toBe(true);
+  await act(async () =>
+    [...document.querySelectorAll("button")]
+      .find((item) => item.textContent?.includes("actions/list.js"))
+      ?.click()
+  );
+  await settle();
+  expect(document.querySelector("script")).toBeNull();
+  expect(document.body.textContent).toContain("window.executed=true");
+  expect(confirm()?.disabled).toBe(false);
+  await act(async () => confirm()?.click());
+  await settle();
+  expect(installCall).toHaveBeenCalledWith({
+    ...preview().draft,
+    expectedDigest: preview().digest,
+    expectedRevision: null,
+  });
+  expect(invalidation).toHaveBeenCalled();
+});
+
+test("changing organization removes a pending draft review and cannot confirm its late response", async () => {
+  let resolvePreview!: (value: LocalPluginPreviewResponse) => void;
+
+  const previewCall = spyOn(client, "previewLocalPlugin").mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        resolvePreview = resolve;
+      })
+  );
+
+  const installCall = spyOn(client, "installLocalPlugin");
+  cleanups.push(() => {
+    previewCall.mockRestore();
+    installCall.mockRestore();
+  });
+  const { render } = await mount();
+  await openDraft();
+  await act(async () =>
+    [...document.querySelectorAll("button")]
+      .find((item) => item.textContent === "Preview draft")
+      ?.click()
+  );
+  await render("org-b");
+  await act(async () => resolvePreview(preview()));
+  await settle();
+  expect(document.body.textContent).not.toContain("Confirm installation");
+  expect(installCall).not.toHaveBeenCalled();
+});

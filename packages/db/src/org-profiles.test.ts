@@ -96,6 +96,23 @@ describe("seedOrgDefaultProfile", () => {
 });
 
 describe("seedOrgSuperBotProfile", () => {
+  test("assigns plugin authoring to new and existing Super Bots only", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await upsertSkill(db, "create-plugin");
+    const profile = await seedOrgSuperBotProfile(db, "org_a");
+    expect(
+      (await db.listSkillsForProfile(profile.id)).map((skill) => skill.name)
+    ).toContain("create-plugin");
+    await db.unassignSkillFromProfile(profile.id, "skill_create-plugin");
+    await seedOrgSuperBotProfile(db, "org_a");
+    expect(
+      (await db.listSkillsForProfile(profile.id)).map((skill) => skill.name)
+    ).toContain("create-plugin");
+    const ordinary = await seedOrgDefaultProfile(db, "org_a");
+    expect(
+      (await db.listSkillsForProfile(ordinary.id)).map((skill) => skill.name)
+    ).not.toContain("create-plugin");
+  });
   test("creates one super bot per org", async () => {
     const db = createInMemoryDatabaseAdapter();
 

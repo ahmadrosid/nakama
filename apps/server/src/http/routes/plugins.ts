@@ -103,6 +103,29 @@ export function registerPluginRoutes(
     })
     .openapi("InstallPluginPackageRequest");
 
+  const localDraftSchema = z
+    .object({
+      orgId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
+      profileId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
+      draftId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
+    })
+    .strict();
+
+  const localApprovalSchema = localDraftSchema
+    .extend({
+      expectedDigest: z.string().regex(/^[a-f0-9]{64}$/),
+      expectedRevision: z.number().int().nonnegative().nullable(),
+    })
+    .strict();
+
+  const localFileSchema = localDraftSchema
+    .extend({
+      offset: z.number().int().nonnegative().optional(),
+      expectedDigest: z.string().regex(/^[a-f0-9]{64}$/),
+      path: z.string().min(1).max(240),
+    })
+    .strict();
+
   const openapiBag = (name: string) => z.object({}).passthrough().openapi(name);
   const previewResponseSchema = openapiBag("PluginPackagePreviewResponse");
   const installResponseSchema = openapiBag("InstallPluginPackageResponse");
@@ -439,6 +462,76 @@ export function registerPluginRoutes(
       const preview = await plugins.previewPluginPackage(parsed.data);
 
       return json<PluginPackagePreviewResponse>(preview);
+    } catch (error) {
+      throwPluginHttpError(error);
+    }
+  });
+
+  for (const [path, schema] of [
+    ["preview-local", localDraftSchema],
+    ["install-local", localApprovalSchema],
+    ["local-file", localFileSchema],
+  ] as const) {
+    pluginPath({
+      path: `/v1/platform/plugins/${path}`,
+      method: "post",
+      operationId: path.replace(/-([a-z])/g, (_, letter: string) =>
+        letter.toUpperCase()
+      ),
+      summary: `Review or install a local plugin draft: ${path}`,
+      tags: platform,
+      request: { body: schema },
+      ok: jsonOk(openapiBag(`LocalPlugin_${path}`), "Local plugin result"),
+      extra: {
+        400: errorResponse,
+        403: errorResponse,
+        404: errorResponse,
+        409: errorResponse,
+      },
+    });
+  }
+
+  app.post("/v1/platform/plugins/preview-local", async (c) => {
+    const auth = requirePlatformAdminFromContext(c);
+    const input = await readJson(c.req.raw, localDraftSchema);
+
+    try {
+      return json(
+        await requirePluginService(options).previewLocalPlugin(input, {
+          id: auth.user.id,
+          isPlatformAdmin: auth.isPlatformAdmin,
+        })
+      );
+    } catch (error) {
+      throwPluginHttpError(error);
+    }
+  });
+  app.post("/v1/platform/plugins/local-file", async (c) => {
+    const auth = requirePlatformAdminFromContext(c);
+    const input = await readJson(c.req.raw, localFileSchema);
+
+    try {
+      return json(
+        await requirePluginService(options).readLocalPluginFile(input, {
+          id: auth.user.id,
+          isPlatformAdmin: auth.isPlatformAdmin,
+        })
+      );
+    } catch (error) {
+      throwPluginHttpError(error);
+    }
+  });
+  app.post("/v1/platform/plugins/install-local", async (c) => {
+    const auth = requirePlatformAdminFromContext(c);
+    const input = await readJson(c.req.raw, localApprovalSchema);
+
+    try {
+      return json({
+        install: await requirePluginService(options).installLocalPlugin(input, {
+          id: auth.user.id,
+          isPlatformAdmin: auth.isPlatformAdmin,
+        }),
+      });
     } catch (error) {
       throwPluginHttpError(error);
     }

@@ -29,6 +29,28 @@ The same note you create on the page is the one the agent reads. Another organiz
 
 **5. Update or remove (org admin).** Choose **Update** to move to a newer approved release. A platform admin also sees an **Update** tag on a plugin when the registry has a version nobody approved yet. Choosing **Update** there opens the same package review as the first install, then updates the plugin, so the package name is typed only once. An enabled plugin is switched off for the update and back on afterwards, so its tools are unavailable for a moment. To remove a plugin, uninstall it. Uninstall keeps the organization's plugin data until you confirm a separate delete.
 
+## Create a plugin with Super Bot
+
+Ask Super Bot to create a plugin when your team needs a custom page or agent
+tool. Super Bot prepares source files and built output for review.
+It reports the draft ID and build result. The draft stays uninstalled.
+
+1. As a platform admin, open **System → Plugins → Install from folder**.
+2. Select the active organization's Super Bot and enter its draft ID.
+3. Choose **Preview draft**.
+4. Open each listed file to review the source, built code, and migrations.
+5. Choose **Confirm installation**.
+6. Enable the installed plugin, then assign its tools to the required profiles.
+
+First installation stays disabled. First enable runs migrations and starts
+workers. Reinstall resumes a previously enabled plugin after a successful
+update. If migration fails, the plugin stays disabled with its previous data.
+Changes to reviewed files require another preview.
+
+Only platform admins can review or install local drafts. Plugin code has full
+host access. Approve only code you trust. Super Bot needs an assigned shell tool
+and Bun on the server to build; it reports missing prerequisites.
+
 ## Supermemory
 
 Use Supermemory for the agent memory, shared organization memory, and knowledge base you already use in Nakama. Your existing memory tools, approval flow, and knowledge uploads stay in place.

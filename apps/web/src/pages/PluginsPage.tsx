@@ -1,4 +1,5 @@
 import type {
+  LocalPluginPreviewResponse,
   OrgPluginDetail,
   PluginContributionChangePreview,
   PluginPackagePreviewResponse,
@@ -21,7 +22,15 @@ import {
   DropdownMenuTrigger,
 } from "@nakama/ui/dropdown-menu";
 import { Input } from "@nakama/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@nakama/ui/select";
 import { Spinner } from "@nakama/ui/spinner";
+import { useQuery } from "@tanstack/react-query";
 import { Add01Icon, MoreHorizontalIcon } from "hugeicons-react";
 import { type MouseEvent, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -36,6 +45,7 @@ import {
   useDeleteRetainedPluginData,
   useDisableOrgPlugin,
   useEnableOrgPlugin,
+  useInstallLocalPlugin,
   useInstallOfficialPlugin,
   useInstallOrgPlugin,
   useInstallPluginPackage,
@@ -53,7 +63,7 @@ import {
   useUpdateOrgPlugin,
 } from "@/hooks/use-plugins";
 import { usePinnedPlugins } from "@/hooks/use-sidebar-collapsed";
-import { formatError } from "@/lib/client";
+import { client, formatError } from "@/lib/client";
 import {
   canAccessSystemPage,
   canManagePluginReleases,
@@ -386,6 +396,9 @@ export function PluginsPage() {
           setDialog({ type: "package-entry" });
         }}
       />
+      {canInstallPackages && orgId ? (
+        <LocalPluginInstaller key={orgId} orgId={orgId} />
+      ) : null}
 
       {visiblePluginIds.length === 0 ? (
         <PluginEmptyState
@@ -665,6 +678,269 @@ function PluginPackageForm({
   );
 }
 
+export function LocalPluginInstaller({ orgId }: { orgId: string }) {
+  const [open, setOpen] = useState(false);
+  const [profileId, setProfileId] = useState("");
+  const [draftId, setDraftId] = useState("");
+
+  const [preview, setPreview] = useState<LocalPluginPreviewResponse | null>(
+    null
+  );
+
+  const [file, setFile] = useState<{ path: string; content: string } | null>(
+    null
+  );
+
+  const [reviewed, setReviewed] = useState<Set<string>>(new Set());
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const generation = useRef(0);
+
+  const profiles = useQuery({
+    enabled: open,
+    queryFn: () => client.listProfiles(orgId),
+    queryKey: ["plugin-draft-profiles", orgId],
+  });
+
+  const install = useInstallLocalPlugin();
+
+  function reset() {
+    generation.current += 1;
+    setPreview(null);
+    setFile(null);
+    setReviewed(new Set());
+    setPending(false);
+    setError(null);
+  }
+
+  async function loadPreview() {
+    reset();
+    const turn = generation.current;
+    setPending(true);
+
+    try {
+      const value = await client.previewLocalPlugin({
+        draftId,
+        orgId,
+        profileId,
+      });
+
+      if (turn === generation.current) {
+        setPreview(value);
+      }
+    } catch (failure) {
+      if (turn === generation.current) {
+        setError(formatError(failure));
+      }
+    } finally {
+      if (turn === generation.current) {
+        setPending(false);
+      }
+    }
+  }
+
+  async function readFile(path: string) {
+    if (!preview) {
+      return;
+    }
+
+    const turn = ++generation.current;
+    setFile(null);
+    setPending(true);
+    setError(null);
+
+    try {
+      const chunks: Uint8Array[] = [];
+      let offset: number | null = 0;
+
+      while (offset !== null && turn === generation.current) {
+        const value = await client.readLocalPluginFile({
+          ...preview.draft,
+          expectedDigest: preview.digest,
+          offset,
+          path,
+        });
+
+        chunks.push(
+          Uint8Array.from(atob(value.content), (character) =>
+            character.charCodeAt(0)
+          )
+        );
+        offset = value.nextOffset;
+      }
+
+      if (turn === generation.current) {
+        const data = new Uint8Array(
+          chunks.reduce((size, chunk) => size + chunk.length, 0)
+        );
+
+        let position = 0;
+
+        for (const chunk of chunks) {
+          data.set(chunk, position);
+          position += chunk.length;
+        }
+
+        setFile({ content: new TextDecoder().decode(data), path });
+        setReviewed((previous) => new Set([...previous, path]));
+      }
+    } catch (failure) {
+      if (turn === generation.current) {
+        setError(formatError(failure));
+        setPreview(null);
+        setReviewed(new Set());
+      }
+    } finally {
+      if (turn === generation.current) {
+        setPending(false);
+      }
+    }
+  }
+
+  async function confirm() {
+    if (
+      !preview ||
+      pending ||
+      install.isPending ||
+      reviewed.size !== preview.files.length
+    ) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await install.mutateAsync({
+        ...preview.draft,
+        expectedDigest: preview.digest,
+        expectedRevision: preview.expectedRevision,
+      });
+      setOpen(false);
+      reset();
+    } catch (failure) {
+      setError(formatError(failure));
+      setPreview(null);
+      setReviewed(new Set());
+    }
+  }
+
+  return (
+    <Dialog
+      onOpenChange={(next) => {
+        setOpen(next);
+        reset();
+      }}
+      open={open}
+    >
+      <Button
+        onClick={() => {
+          reset();
+          setOpen(true);
+        }}
+        variant="outline"
+      >
+        Install from folder
+      </Button>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Install from folder</DialogTitle>
+        </DialogHeader>
+        <Select
+          disabled={pending || install.isPending}
+          onValueChange={(value) => {
+            reset();
+            setProfileId(value ?? "");
+          }}
+          value={profileId}
+        >
+          <SelectTrigger aria-label="Super Bot">
+            <SelectValue placeholder="Super Bot" />
+          </SelectTrigger>
+          <SelectContent>
+            {(profiles.data?.profiles ?? [])
+              .filter((profile) => profile.isSuper)
+              .map((profile) => (
+                <SelectItem key={profile.id} value={profile.id}>
+                  {profile.name}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
+        <Input
+          aria-label="Draft ID"
+          disabled={pending || install.isPending}
+          onChange={(event) => {
+            reset();
+            setDraftId(event.target.value);
+          }}
+          placeholder="Draft ID"
+          value={draftId}
+        />
+        {profiles.error ? (
+          <p role="alert">{formatError(profiles.error)}</p>
+        ) : null}
+        {error ? <p role="alert">{error}</p> : null}
+        <Button
+          disabled={!(profileId && draftId) || pending || install.isPending}
+          onClick={loadPreview}
+        >
+          Preview draft
+        </Button>
+        {preview ? (
+          <>
+            <p className="break-all font-mono text-xs">
+              {preview.manifest.name} · {preview.manifest.version}
+              <br />
+              SHA-256: {preview.digest}
+            </p>
+            <p>
+              Plugin code has full host access. First enable and updates run
+              migrations. Reinstall resumes an enabled plugin.
+            </p>
+            <pre className="max-h-48 overflow-auto rounded border p-3 text-xs">
+              {JSON.stringify(preview.manifest, null, 2)}
+            </pre>
+            <ul className="max-h-48 overflow-auto">
+              {preview.files.map((item) => (
+                <li key={item.path}>
+                  <Button
+                    disabled={pending || install.isPending}
+                    onClick={() => readFile(item.path)}
+                    variant="ghost"
+                  >
+                    {reviewed.has(item.path) ? "✓ " : ""}
+                    {item.path} ({item.size} bytes)
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            {file ? (
+              <pre
+                aria-label={file.path}
+                className="max-h-80 overflow-auto whitespace-pre rounded border p-3 text-xs"
+              >
+                {file.content}
+              </pre>
+            ) : null}
+            <DialogFooter>
+              <Button
+                disabled={
+                  pending ||
+                  install.isPending ||
+                  reviewed.size !== preview.files.length
+                }
+                onClick={confirm}
+              >
+                {install.isPending ? "Installing…" : "Confirm installation"}
+              </Button>
+            </DialogFooter>
+          </>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function PluginReleasesList({
   busy,
   plugins,
@@ -697,6 +973,11 @@ function PluginReleasesList({
           >
             <div className="min-w-0">
               <p className="break-all font-mono text-xs">{release.version}</p>
+              {release.source === "local" || release.source === "agent" ? (
+                <span className="text-xs">
+                  {release.source === "agent" ? "Agent-written" : "Local"}
+                </span>
+              ) : null}
               <p className="text-muted-foreground text-xs">
                 {inUse ? "In use" : "Available"}
               </p>

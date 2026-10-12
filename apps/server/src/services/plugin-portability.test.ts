@@ -290,6 +290,14 @@ describe("plugin portability", () => {
 
       const disabled = await restored.adapter.getOrgPlugin(ORG, "supermemory");
       expect(disabled!.lifecycleState).toBe("disabled");
+      expect(
+        (
+          await restored.adapter.getPluginRelease(
+            "supermemory",
+            disabled!.selectedVersion!
+          )
+        )?.source
+      ).toBe("official");
 
       const enabled = await restoredService.enableOrgPlugin(
         ORG,

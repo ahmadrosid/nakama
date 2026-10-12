@@ -3373,7 +3373,33 @@ export interface PluginReleaseSummary {
   digest: string;
   manifest: PluginManifest;
   pluginId: string;
+  /** Missing in older exports; treat as legacy provenance. */
+  source?: "legacy" | "npm" | "official" | "local" | "agent";
   version: string;
+}
+
+export interface LocalPluginDraftRequest {
+  draftId: string;
+  orgId: string;
+  profileId: string;
+}
+
+export interface LocalPluginPreviewResponse
+  extends PluginPackagePreviewResponse {
+  draft: LocalPluginDraftRequest;
+  expectedRevision: number | null;
+  files: Array<{ path: string; size: number }>;
+}
+
+export interface InstallLocalPluginRequest extends LocalPluginDraftRequest {
+  expectedDigest: string;
+  expectedRevision: number | null;
+}
+
+export interface ReadLocalPluginFileRequest extends LocalPluginDraftRequest {
+  expectedDigest: string;
+  offset?: number;
+  path: string;
 }
 
 export interface OrgPluginSummary {

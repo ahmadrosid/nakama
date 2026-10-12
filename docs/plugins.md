@@ -66,7 +66,43 @@ With `useHostLlm: true`, the host writes the active provider’s type, API key, 
 
 `GET /v1/workers/plugins` lists workers for the active organization. Organization admins and platform admins can use the existing worker control/log endpoints for those returned names. The Workers page exposes the same controls.
 
-## Package layout
+## Local drafts from Super Bot
+
+Super Bot's bundled `create-plugin` skill writes a draft beneath its profile
+workspace's `plugin-drafts/<pluginId>/` directory. It keeps sources in `src/`
+alongside built actions, UI, skills, workers, and migrations. Direct `bun build`
+commands compile the draft; the agent does not install it or execute its actions.
+Host shell access is unsandboxed, including during drafting.
+
+A platform admin chooses **System → Plugins → Install from folder**, selects
+the active organization's Super Bot, and enters the draft ID. Preview shows the
+manifest, effective development version, file list, and digest. Open each file
+to review the source and executable output, then confirm installation.
+
+Local review and installation use explicit organization/profile/draft IDs,
+never caller-supplied absolute paths. Only server-local Super Bot drafts in that
+organization are accepted. Symlinks, hard links, special files, oversized trees,
+runtime dependencies, and official plugin IDs are rejected.
+
+The review digest includes the two manifests, sources, and all included
+capability files. Installation publishes the same validated file map. Changed
+files require a new preview. No generated module, worker, migration, or package
+script runs during preview. File review responses contain encoded data, not
+executable HTML or JavaScript.
+
+Fresh installation selects the release for the named organization and leaves
+it disabled. First enable runs migrations and starts declared workers. Reinstall
+uses an immutable content-based development release and preserves the previous
+enabled/disabled state after success. Failed migrations leave the old release
+and database generation selected and disabled. Other organizations keep their
+selected releases. New actions still need profile assignment.
+
+Local releases show **Local**. Server-controlled provenance is stored outside
+the manifest; older releases retain **legacy** provenance. Backup/restore
+preserves provenance and leaves restored plugins disabled. Approved releases
+remain host-wide trusted packages. Human review is not a sandbox.
+
+## Published package layout
 
 ```text
 package.json
@@ -78,7 +114,7 @@ ui/assets/*
 migrations/*.sql
 ```
 
-Publish to the npm registry. Put `nakama.plugin.json` beside `package.json`; their versions must match. Admins enter the npm package name and exact version. Tags, ranges, Git URLs, local paths, other registries, and archive uploads are not supported.
+Publish to the npm registry. Put `nakama.plugin.json` beside `package.json`; their versions must match. Admins enter the npm package name and exact version. The npm route does not accept tags, ranges, Git URLs, local paths, other registries, or archive uploads. Use the reviewed local-draft flow above for server-local drafts.
 
 A restricted package installs when the server has `NAKAMA_PLUGIN_NPM_TOKEN` set. The token is sent to `registry.npmjs.org` only, for preview, install and the update check. It is one token for the whole install, so use a read-only granular token limited to the plugin packages. Without it, a restricted package fails preview like a package that does not exist.
 

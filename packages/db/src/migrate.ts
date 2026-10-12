@@ -2317,6 +2317,19 @@ function migratePluginTables(db: Database): void {
   `);
 
   addNullableTextColumnIfMissing(db, "tools", "plugin_id");
+
+  const releaseColumns = db
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(plugin_releases)"
+    )
+    .all();
+
+  if (!releaseColumns.some((column) => column.name === "source")) {
+    db.exec(
+      "ALTER TABLE plugin_releases ADD COLUMN source TEXT NOT NULL DEFAULT 'legacy'"
+    );
+  }
+
   addNullableTextColumnIfMissing(db, "tools", "plugin_key");
   addNullableTextColumnIfMissing(db, "skills", "plugin_id");
   addNullableTextColumnIfMissing(db, "skills", "plugin_key");
