@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { ProviderJsonRecord } from "../shared";
+import { asTestFetch } from "../test-helpers";
 import {
   CHATGPT_JWT_CLAIM_PATH,
   fetchChatgptCodexModels,
@@ -83,9 +84,9 @@ describe("fetchChatgptCodexModels", () => {
   });
 
   test("throws when Codex returns an error status", async () => {
-    // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
-    globalThis.fetch = (async () =>
-      new Response("nope", { status: 403 })) as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      async () => new Response("nope", { status: 403 })
+    );
 
     const { fetchChatgptCodexModels } = await import("./oauth");
 

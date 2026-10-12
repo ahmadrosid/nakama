@@ -94,7 +94,7 @@ export type DeleteFileInput = z.infer<typeof deleteFileInputSchema>;
 
 export type EditFileInput = z.infer<typeof editFileInputSchema>;
 
-export type ReadFileInput = z.infer<typeof readFileInputSchema>;
+export type ReadFileInput = z.input<typeof readFileInputSchema>;
 
 export interface WriteFileOutput {
   bytesWritten: number;
@@ -330,10 +330,11 @@ function buildFileGuardOptions(
   options: FileToolRunOptions = {}
 ): PathGuardOptions {
   const workspaceRoot = fileToolWorkspaceRoot(context, options);
+  const { orgId } = requireProfileScope(context);
 
   return {
     ...defaultGuardOptions,
-    allowedDirs: [workspaceRoot, getCustomToolsDir()],
+    allowedDirs: [workspaceRoot, getCustomToolsDir(orgId)],
     cwd: workspaceRoot,
   };
 }
@@ -893,50 +894,99 @@ export async function runReadFile(
   guardOptions.allowedDirs!.push(getGlobalSkillsDir());
   const maxBytes = guardOptions.maxFileBytes ?? 10 * 1024 * 1024;
 
-  const guarded = await guardFilePath(
-    parsed.path,
-    parsed.cwd ?? null,
-    undefined,
-    guardOptions
-  );
+  let filePath: string;
+  let contentPath: string;
+  let bytes: Buffer;
+  const shared = parsed.path.startsWith("published-skill://");
 
-  const filePath = guarded.resolved;
+  if (shared) {
+    if (
+      !(context.orgId && context.profileId && context.readPublishedSkillFile) ||
+      parsed.cwd
+    ) {
+      throw new Error(
+        "Published skill reads require profile context and no cwd."
+      );
+    }
 
-  if (BLOCKED_READ_BASENAMES.includes(path.basename(filePath).toLowerCase())) {
-    throw new PathGuardError(
-      `Reading ${path.basename(filePath)} is not allowed`,
-      "SPECIAL_FILE"
+    const reference = /^published-skill:\/\/([^/]+)\/(.+)$/.exec(parsed.path);
+
+    if (!reference) {
+      throw new Error("Invalid published skill reference.");
+    }
+
+    const publicationId = decodeURIComponent(reference[1]!);
+    const relativePath = decodeURIComponent(reference[2]!);
+
+    if (
+      BLOCKED_READ_BASENAMES.includes(path.basename(relativePath).toLowerCase())
+    ) {
+      throw new PathGuardError(
+        "Reading this file is not allowed",
+        "SPECIAL_FILE"
+      );
+    }
+
+    bytes = Buffer.from(
+      await context.readPublishedSkillFile(
+        publicationId,
+        relativePath,
+        maxBytes
+      )
     );
-  }
-
-  let fileStat;
-
-  try {
-    fileStat = await stat(filePath);
-  } catch {
-    throw new Error(`File not found: ${filePath}`);
-  }
-
-  if (!fileStat.isFile()) {
-    throw new Error(`Path is not a file: ${filePath}`);
-  }
-
-  if (fileStat.size > maxBytes) {
-    throw new PathGuardError(
-      `File content exceeds max ${maxBytes} bytes (got ${fileStat.size})`,
-      "TOO_LARGE"
+    filePath = parsed.path;
+    contentPath = relativePath;
+  } else {
+    const guarded = await guardFilePath(
+      parsed.path,
+      parsed.cwd ?? null,
+      undefined,
+      guardOptions
     );
+
+    filePath = guarded.resolved;
+
+    if (
+      BLOCKED_READ_BASENAMES.includes(path.basename(filePath).toLowerCase())
+    ) {
+      throw new PathGuardError(
+        `Reading ${path.basename(filePath)} is not allowed`,
+        "SPECIAL_FILE"
+      );
+    }
+
+    let fileStat;
+
+    try {
+      fileStat = await stat(filePath);
+    } catch {
+      throw new Error(`File not found: ${filePath}`);
+    }
+
+    if (!fileStat.isFile()) {
+      throw new Error(`Path is not a file: ${filePath}`);
+    }
+
+    if (fileStat.size > maxBytes) {
+      throw new PathGuardError(
+        `File content exceeds max ${maxBytes} bytes (got ${fileStat.size})`,
+        "TOO_LARGE"
+      );
+    }
+
+    bytes = await readFile(filePath);
+    contentPath = filePath;
   }
 
-  const bytes = await readFile(filePath);
+  if (bytes.length > maxBytes) {
+    throw new PathGuardError("File exceeds the size limit", "TOO_LARGE");
+  }
+
   const mediaType = detectImageMediaType(bytes);
 
   if (mediaType) {
     if (bytes.length > MAX_IMAGE_BYTES) {
-      throw new PathGuardError(
-        `Image exceeds max ${MAX_IMAGE_BYTES} bytes (got ${bytes.length})`,
-        "TOO_LARGE"
-      );
+      throw new PathGuardError("Image exceeds the size limit", "TOO_LARGE");
     }
 
     return {
@@ -951,11 +1001,12 @@ export async function runReadFile(
     };
   }
 
-  const localContent = await readFileAsText(filePath, bytes);
+  const localContent = await readFileAsText(contentPath, bytes);
 
-  const rawContent = context.memoryFiles
-    ? await context.memoryFiles.read(filePath, localContent)
-    : localContent;
+  const rawContent =
+    !shared && context.memoryFiles
+      ? await context.memoryFiles.read(filePath, localContent)
+      : localContent;
 
   const lines = rawContent.length === 0 ? [] : rawContent.split("\n");
   const totalLines = lines.length;

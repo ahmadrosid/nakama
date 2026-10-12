@@ -40,7 +40,7 @@ export function registerInternalAutomationRoutes(
       .filter(
         (automation): automation is StoredAutomation & { orgId: string } =>
           isWorkerSchedulable(automation, now) &&
-          Boolean(automation.orgId) &&
+          !!automation.orgId &&
           !archivedOrgIds.has(automation.orgId)
       )
       .map((automation) => {

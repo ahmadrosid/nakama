@@ -1,5 +1,4 @@
 import { z } from "@hono/zod-openapi";
-import { NakamaApiError } from "@nakama/core";
 import { mergeWorkspaceSettings } from "@nakama/db";
 import type { ServerOptions } from "../context";
 import {
@@ -19,9 +18,15 @@ export function registerAutomationWorkerSettingsRoutes(
   app: HonoApp,
   options: ServerOptions
 ): void {
+  const databaseAdapter = options.databaseAdapter;
+
+  if (!databaseAdapter) {
+    return;
+  }
+
   app.get("/v1/settings/automation-worker", async (c) => {
     requireActiveOrgIdFromContext(c);
-    const settings = await options.databaseAdapter.getWorkspaceSettings();
+    const settings = await databaseAdapter.getWorkspaceSettings();
 
     return json({
       pollIntervalMinutes: toPollIntervalMinutes(
@@ -35,23 +40,20 @@ export function registerAutomationWorkerSettingsRoutes(
 
     const body = await readJson(
       c.req.raw,
-      z.object({ pollIntervalMinutes: z.number().optional() }).strict()
+      z
+        .object({
+          pollIntervalMinutes: z
+            .number()
+            .int()
+            .min(1)
+            .max(MAX_POLL_INTERVAL_MINUTES),
+        })
+        .strict()
     );
 
-    if (
-      !Number.isInteger(body.pollIntervalMinutes) ||
-      body.pollIntervalMinutes < 1 ||
-      body.pollIntervalMinutes > MAX_POLL_INTERVAL_MINUTES
-    ) {
-      throw new NakamaApiError(
-        `pollIntervalMinutes must be an integer from 1 to ${MAX_POLL_INTERVAL_MINUTES}.`,
-        400
-      );
-    }
-
-    const existing = await options.databaseAdapter.getWorkspaceSettings();
+    const existing = await databaseAdapter.getWorkspaceSettings();
     const pollIntervalMinutes = body.pollIntervalMinutes;
-    await options.databaseAdapter.upsertWorkspaceSettings(
+    await databaseAdapter.upsertWorkspaceSettings(
       mergeWorkspaceSettings(existing, {
         automationWorkerPollIntervalMs: pollIntervalMinutes * MINUTE_MS,
         updatedAt: new Date().toISOString(),

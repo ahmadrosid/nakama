@@ -92,3 +92,13 @@ export async function withTempHome<T>(
     release();
   }
 }
+
+type TestFetchHandler = (
+  ...args: Parameters<typeof fetch>
+) => ReturnType<typeof fetch>;
+
+export function asTestFetch<Fetch extends TestFetchHandler>(
+  fetchMock: Fetch
+): NoInfer<Fetch> & Pick<typeof fetch, "preconnect"> {
+  return Object.assign(fetchMock, { preconnect: () => {} });
+}

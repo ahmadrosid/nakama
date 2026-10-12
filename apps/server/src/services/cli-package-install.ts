@@ -313,35 +313,35 @@ export async function downloadPinnedPackageTarball(
  * of what a package installer needs and nothing else: in particular none of
  * the server's provider keys, session secrets, or `npm_config_*` auth tokens.
  */
-const INSTALL_ENV_PASSTHROUGH = {
-  all_proxy: true,
-  bun_install: true,
-  bun_install_bin: true,
-  bun_install_global_dir: true,
-  home: true,
-  http_proxy: true,
-  https_proxy: true,
-  lang: true,
-  lc_all: true,
-  no_proxy: true,
-  node_extra_ca_certs: true,
-  npm_config_cache: true,
-  npm_config_cafile: true,
-  npm_config_prefix: true,
-  npm_config_registry: true,
-  npm_config_userconfig: true,
-  path: true,
-  shell: true,
-  ssl_cert_dir: true,
-  ssl_cert_file: true,
-  temp: true,
-  tmp: true,
-  tmpdir: true,
-  userprofile: true,
-  xdg_cache_home: true,
-  xdg_config_home: true,
-  xdg_data_home: true,
-} satisfies Record<string, true>;
+const INSTALL_ENV_PASSTHROUGH = new Set([
+  "all_proxy",
+  "bun_install",
+  "bun_install_bin",
+  "bun_install_global_dir",
+  "home",
+  "http_proxy",
+  "https_proxy",
+  "lang",
+  "lc_all",
+  "no_proxy",
+  "node_extra_ca_certs",
+  "npm_config_cache",
+  "npm_config_cafile",
+  "npm_config_prefix",
+  "npm_config_registry",
+  "npm_config_userconfig",
+  "path",
+  "shell",
+  "ssl_cert_dir",
+  "ssl_cert_file",
+  "temp",
+  "tmp",
+  "tmpdir",
+  "userprofile",
+  "xdg_cache_home",
+  "xdg_config_home",
+  "xdg_data_home",
+]);
 
 export function buildRestrictedInstallEnv(
   env: NodeJS.ProcessEnv = getToolExecutionEnv()
@@ -349,7 +349,7 @@ export function buildRestrictedInstallEnv(
   const restricted: NodeJS.ProcessEnv = {};
 
   for (const [key, value] of Object.entries(env)) {
-    if (value !== undefined && INSTALL_ENV_PASSTHROUGH[key.toLowerCase()]) {
+    if (value !== undefined && INSTALL_ENV_PASSTHROUGH.has(key.toLowerCase())) {
       restricted[key] = value;
     }
   }

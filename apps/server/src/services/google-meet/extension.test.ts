@@ -93,7 +93,7 @@ function extension() {
     },
     storage: {
       session: {
-        async get(keys: string | string[]) {
+        async get(keys: keyof ExtensionState | (keyof ExtensionState)[]) {
           return Object.fromEntries(
             (Array.isArray(keys) ? keys : [keys]).map((key) => [
               key,
@@ -101,7 +101,7 @@ function extension() {
             ])
           );
         },
-        async remove(key: string) {
+        async remove(key: keyof ExtensionState) {
           delete state[key];
         },
         async set(value: ExtensionState) {
@@ -255,7 +255,7 @@ test("extension requires a connected Nakama tab and cancels sessions when captur
 });
 
 test("audio worklet encodes every mono sample as PCM16 and tolerates empty input", () => {
-  const messages: ArrayBuffer[] = [];
+  const messages: (number[] | string)[] = [];
   let Processor: any;
   runInNewContext(
     readFileSync(
@@ -268,8 +268,10 @@ test("audio worklet encodes every mono sample as PCM16 and tolerates empty input
     {
       AudioWorkletProcessor: class {
         port = {
-          postMessage(buffer: ArrayBuffer) {
-            messages.push(buffer);
+          postMessage(buffer: ArrayBuffer | "flushed") {
+            messages.push(
+              buffer === "flushed" ? buffer : Array.from(new Int16Array(buffer))
+            );
           },
         };
       },
@@ -284,11 +286,11 @@ test("audio worklet encodes every mono sample as PCM16 and tolerates empty input
   expect(
     processor.process([[new Float32Array([-2, -1, -0.5, 0, 0.5, 1, 2])]])
   ).toBe(true);
-  expect(Array.from(new Int16Array(messages[0]!))).toEqual([
+  expect(messages[0]).toEqual([
     -32_768, -32_768, -16_384, 0, 16_383, 32_767, 32_767,
   ]);
   processor.process([[new Float32Array([0.25])]]);
-  expect(Array.from(new Int16Array(messages[1]!))).toEqual([8191]);
+  expect(messages[1]).toEqual([8191]);
   processor.port.onmessage({ data: "flush" });
   expect(messages.at(-1)).toBe("flushed");
   expect(processor.process([[new Float32Array([1])]])).toBe(false);
@@ -447,7 +449,7 @@ test.each([false, true])(
     let processor: any;
     let stopped = 0;
     const events: string[] = [];
-    const frames: (string | Uint8Array)[] = [];
+    const frames: (string | Uint8Array | ArrayBuffer)[] = [];
 
     const track = {
       stop() {
@@ -526,7 +528,7 @@ test.each([false, true])(
             socket = this;
             queueMicrotask(() => this.onopen?.());
           }
-          send(frame: string | Uint8Array) {
+          send(frame: string | Uint8Array | ArrayBuffer) {
             frames.push(frame);
 
             const text = z.string().safeParse(frame);

@@ -43,6 +43,9 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateOrgLlmMonthlyQuotaTable);
   atomic(migrateSkillsCuratorConsolidateColumns);
   atomic(migrateOrganizationArchivedAt);
+  atomic(migrateOrganizationParent);
+  atomic(migrateOrgSharedResources);
+  atomic(migrateOrgTeamCreationRequests);
   atomic(migrateSkillUsageTables);
   atomic(migrateTenantOrgScope);
   atomic(migrateSkillOrgIds);
@@ -76,6 +79,71 @@ export function migrateDatabase(db: Database): void {
   atomic((database) =>
     addNullableTextColumnIfMissing(database, "profiles", "acp_settings")
   );
+}
+
+function migrateOrgTeamCreationRequests(db: Database): void {
+  db.exec(`
+CREATE TABLE IF NOT EXISTS org_team_creation_requests (
+  parent_org_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  creator_user_id TEXT NOT NULL,
+  admin_user_id TEXT NOT NULL,
+  team_org_id TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL,
+  completed_at TEXT,
+  PRIMARY KEY (parent_org_id, request_id)
+);
+  `);
+}
+
+function migrateOrgSharedResources(db: Database): void {
+  // Retain source links after revocation; a missing publication blocks use.
+  db.exec(`
+CREATE TABLE IF NOT EXISTS org_shared_resources (
+  id TEXT PRIMARY KEY NOT NULL,
+  org_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+  resource_kind TEXT NOT NULL CHECK (resource_kind IN ('knowledge', 'skill', 'agent', 'tool', 'model')),
+  resource_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (org_id, resource_kind, resource_id)
+);
+
+CREATE TABLE IF NOT EXISTS shared_agent_instances (
+  profile_id TEXT PRIMARY KEY NOT NULL REFERENCES profiles (id) ON DELETE CASCADE,
+  team_org_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+  source_org_id TEXT NOT NULL,
+  source_profile_id TEXT NOT NULL,
+  publication_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE (team_org_id, source_profile_id)
+);
+
+CREATE TRIGGER IF NOT EXISTS profiles_unpublish_deleted_source
+AFTER DELETE ON profiles
+BEGIN
+  DELETE FROM org_shared_resources WHERE resource_kind = 'agent' AND resource_id = OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS skills_unpublish_deleted_source
+AFTER DELETE ON skills
+BEGIN
+  DELETE FROM org_shared_resources WHERE resource_kind = 'skill' AND resource_id = OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS tools_unpublish_deleted_source
+AFTER DELETE ON tools
+BEGIN
+  DELETE FROM org_shared_resources WHERE resource_kind = 'tool' AND resource_id = OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS profiles_remove_shared_agent_instance
+AFTER DELETE ON profiles
+BEGIN
+  DELETE FROM shared_agent_instances WHERE profile_id = OLD.id;
+END;
+  `);
 }
 
 function migrateSessionAppUserId(db: Database): void {
@@ -147,7 +215,7 @@ function applyBootstrapSchema(db: Database): void {
     )
     .get();
 
-  if ((current.version ?? 0) >= BOOTSTRAP_SCHEMA_VERSION) {
+  if ((current?.version ?? 0) >= BOOTSTRAP_SCHEMA_VERSION) {
     return;
   }
 
@@ -1150,6 +1218,25 @@ function migrateOrgLlmMonthlyQuotaTable(db: Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_org_llm_quota_reservations_org
       ON org_llm_quota_reservations(org_id);
+  `);
+}
+
+function migrateOrganizationParent(db: Database): void {
+  const columns = db
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(organizations)"
+    )
+    .all();
+
+  if (!columns.some((column) => column.name === "parent_org_id")) {
+    db.exec(`
+      ALTER TABLE organizations ADD COLUMN parent_org_id TEXT
+        REFERENCES organizations (id) ON DELETE RESTRICT CHECK (parent_org_id <> id);
+    `);
+  }
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS organizations_parent_org_id ON organizations (parent_org_id);
   `);
 }
 

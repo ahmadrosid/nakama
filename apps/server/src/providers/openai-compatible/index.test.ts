@@ -30,6 +30,41 @@ const netraStream = (chunks: string[]) =>
   });
 
 describe("OpenAI-compatible provider", () => {
+  test("browser clients cannot expose server provider credentials through the SDK", () => {
+    const fetch = mock(async () => Response.json({}));
+    globalThis.fetch = asTestFetch(fetch);
+
+    const originals = new Map(
+      ["window", "navigator"].map((key) => [
+        key,
+        Object.getOwnPropertyDescriptor(globalThis, key),
+      ])
+    );
+
+    try {
+      Object.defineProperty(globalThis, "window", {
+        configurable: true,
+        value: { document: {} },
+        writable: true,
+      });
+      Object.defineProperty(globalThis, "navigator", {
+        configurable: true,
+        value: {},
+        writable: true,
+      });
+      expect(() => netraProvider()).toThrow();
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      for (const [key, descriptor] of originals) {
+        if (descriptor) {
+          Object.defineProperty(globalThis, key, descriptor);
+        } else {
+          Reflect.deleteProperty(globalThis, key);
+        }
+      }
+    }
+  });
+
   test("Netra text generation asks for JSON without an unsupported response format", async () => {
     globalThis.fetch = asTestFetch(
       mock(async (_input: RequestInfo | URL, init?: RequestInit) => {

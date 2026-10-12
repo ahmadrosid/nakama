@@ -50,6 +50,16 @@ describe("tryServeStaticWeb", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-cache");
   });
 
+  test("serves file types outside the explicit content type table", async () => {
+    const distDir = createDist();
+    const filePath = join(distDir, "notes.txt");
+    writeFileSync(filePath, "release notes");
+
+    const response = serve(distDir, "/notes.txt");
+    expect(response.headers.get("Content-Type")).toBe(Bun.file(filePath).type);
+    expect(await response.text()).toBe("release notes");
+  });
+
   test("keeps the app shell revalidated so a new build is picked up", () => {
     const distDir = createDist();
     expect(serve(distDir, "/").headers.get("Cache-Control")).toBe("no-cache");

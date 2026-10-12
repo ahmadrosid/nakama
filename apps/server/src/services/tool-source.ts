@@ -16,40 +16,42 @@ const serverSrcDir = path.join(
 
 const corePackageRoot = path.resolve(serverSrcDir, "../../../packages/core");
 
-const BUILTIN_SOURCE_BY_NAME = {
-  delete_file: {
-    displayPath: "packages/core/src/tools/builtin.ts",
-    filePath: path.join(corePackageRoot, "src/tools/builtin.ts"),
-  },
-  edit_file: {
-    displayPath: "packages/core/src/tools/builtin.ts",
-    filePath: path.join(corePackageRoot, "src/tools/builtin.ts"),
-  },
-  email: {
-    displayPath: "packages/core/src/tools/email.ts",
-    filePath: path.join(corePackageRoot, "src/tools/email.ts"),
-  },
-  read_file: {
-    displayPath: "packages/core/src/tools/builtin.ts",
-    filePath: path.join(corePackageRoot, "src/tools/builtin.ts"),
-  },
-  search_files: {
-    displayPath: "packages/core/src/tools/search-files.ts",
-    filePath: path.join(corePackageRoot, "src/tools/search-files.ts"),
-  },
-  sqlite: {
-    displayPath: "packages/core/src/tools/sqlite.ts",
-    filePath: path.join(corePackageRoot, "src/tools/sqlite.ts"),
-  },
-  web_search: {
-    displayPath: "packages/core/src/tools/web-search.ts",
-    filePath: path.join(corePackageRoot, "src/tools/web-search.ts"),
-  },
-  write_file: {
-    displayPath: "packages/core/src/tools/builtin.ts",
-    filePath: path.join(corePackageRoot, "src/tools/builtin.ts"),
-  },
-} satisfies Record<string, { filePath: string; displayPath: string }>;
+const BUILTIN_SOURCE_BY_NAME = new Map(
+  Object.entries({
+    delete_file: {
+      displayPath: "packages/core/src/tools/builtin.ts",
+      filePath: path.join(corePackageRoot, "src/tools/builtin.ts"),
+    },
+    edit_file: {
+      displayPath: "packages/core/src/tools/builtin.ts",
+      filePath: path.join(corePackageRoot, "src/tools/builtin.ts"),
+    },
+    email: {
+      displayPath: "packages/core/src/tools/email.ts",
+      filePath: path.join(corePackageRoot, "src/tools/email.ts"),
+    },
+    read_file: {
+      displayPath: "packages/core/src/tools/builtin.ts",
+      filePath: path.join(corePackageRoot, "src/tools/builtin.ts"),
+    },
+    search_files: {
+      displayPath: "packages/core/src/tools/search-files.ts",
+      filePath: path.join(corePackageRoot, "src/tools/search-files.ts"),
+    },
+    sqlite: {
+      displayPath: "packages/core/src/tools/sqlite.ts",
+      filePath: path.join(corePackageRoot, "src/tools/sqlite.ts"),
+    },
+    web_search: {
+      displayPath: "packages/core/src/tools/web-search.ts",
+      filePath: path.join(corePackageRoot, "src/tools/web-search.ts"),
+    },
+    write_file: {
+      displayPath: "packages/core/src/tools/builtin.ts",
+      filePath: path.join(corePackageRoot, "src/tools/builtin.ts"),
+    },
+  })
+);
 
 const BASH_SOURCE = {
   displayPath: "apps/server/src/tools/bash.ts",
@@ -106,7 +108,7 @@ export async function readToolSource(
   }
 
   if (record.handlerType === "builtin") {
-    const source = BUILTIN_SOURCE_BY_NAME[record.name];
+    const source = BUILTIN_SOURCE_BY_NAME.get(record.name);
 
     if (!source) {
       throw new NakamaApiError(
@@ -148,7 +150,7 @@ async function readCustomToolSource(
   let resolvedPath: string;
 
   try {
-    resolvedPath = handler.resolveModulePath(modulePath);
+    resolvedPath = handler.resolveModulePath(modulePath, record.orgId);
   } catch (error) {
     throw new NakamaApiError(
       error instanceof Error ? error.message : String(error),

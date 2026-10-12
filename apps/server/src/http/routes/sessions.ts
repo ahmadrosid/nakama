@@ -203,8 +203,22 @@ export function registerSessionRoutes(
   const sendMessageRequestSchema = z
     .object({
       clientOrigin: z.string().optional(),
-      documents: z.array(z.object({}).passthrough()).optional(),
-      images: z.array(z.object({}).passthrough()).optional(),
+      documents: z
+        .array(
+          z
+            .object({
+              data: z.string(),
+              filename: z.string(),
+              mediaType: z.string(),
+            })
+            .passthrough()
+        )
+        .optional(),
+      images: z
+        .array(
+          z.object({ data: z.string(), mediaType: z.string() }).passthrough()
+        )
+        .optional(),
       message: z.string(),
       stream: z.boolean().optional(),
       whatsappMessage: z
@@ -647,7 +661,7 @@ export function registerSessionRoutes(
       return errorResponse("Image not found", 404);
     }
 
-    return new Response(attachment.bytes, {
+    return new Response(new Uint8Array(attachment.bytes), {
       headers: {
         "Cache-Control": "private, no-store",
         "Content-Disposition": "attachment",

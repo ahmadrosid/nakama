@@ -202,7 +202,8 @@ export interface PluginExecutionContext {
 }
 
 export function validatePluginManifest(
-  input: JsonValue
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Package manifests are untrusted inputs validated by JsonValueSchema.
+  input: unknown
 ): PluginValidationResult {
   const parsed = z.record(z.string(), JsonValueSchema).safeParse(input);
 
@@ -325,7 +326,8 @@ export function validatePluginJsonSchema(
 }
 
 export function validatePluginJsonInstance(
-  schemaInput: PluginJsonSchema,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Package schemas are untrusted inputs validated by JsonSchemaValue.
+  schemaInput: unknown,
   rawInput: JsonValue
 ): PluginInstanceValidationResult {
   const schemaResult = JsonSchemaValue.safeParse(schemaInput);

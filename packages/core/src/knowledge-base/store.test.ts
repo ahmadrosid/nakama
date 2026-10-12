@@ -9,6 +9,7 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { PublishedKnowledgeBaseDocument } from "../contract";
 import { composeKnowledgeBaseCatalog } from "./catalog";
 
 interface KnowledgeBaseManifestFixture {
@@ -109,6 +110,49 @@ describe("knowledge base store", () => {
 
     expect(result.matchCount).toBe(1);
     expect(result.matches[0]?.text).toContain("invoice due date");
+  });
+
+  test("bounds published catalog metadata and excludes failed references", async () => {
+    const profileId = "profile_parent_catalog";
+    await setupProfile(profileId);
+
+    const document: PublishedKnowledgeBaseDocument = {
+      filename: "private-file-label.txt",
+      id: "parent_document",
+      mediaType: "text/plain",
+      publicationId: "publication_parent_document",
+      scope: "parent",
+      sizeBytes: 42,
+      sourceOrganization: { id: "org_parent", name: "Parent" },
+      status: "ready",
+      uploadedAt: "2026-10-11T00:00:00.000Z",
+    };
+
+    const one = await composeKnowledgeBaseCatalog(ORG_ID, profileId, [
+      document,
+    ]);
+
+    const many = await composeKnowledgeBaseCatalog(ORG_ID, profileId, [
+      ...Array.from({ length: 200 }, (_, index) => ({
+        ...document,
+        id: `document_${index}`,
+      })),
+      {
+        ...document,
+        sourceOrganization: { id: "failed_source", name: "Failed" },
+        status: "failed",
+      },
+    ]);
+
+    expect(many.match(/\b(\d+) published documents\b/)?.[1]).toBe("200");
+    expect(Buffer.byteLength(many) - Buffer.byteLength(one)).toBe(2);
+    expect(many).toContain(JSON.stringify(document.sourceOrganization));
+    expect(many).not.toContain("failed_source");
+    expect(many).not.toContain(document.filename);
+    expect(many).not.toContain(document.publicationId);
+    expect(await composeKnowledgeBaseCatalog(ORG_ID, profileId)).not.toContain(
+      "org_parent"
+    );
   });
 
   test("counts only current ready documents in the profile's scope", async () => {
@@ -358,12 +402,26 @@ describe("knowledge base store", () => {
       profileId,
       uploaded.document.id
     );
+    let published = true;
+
+    const unpublish = () => {
+      published = false;
+
+      return Promise.resolve();
+    };
+
     await expect(
-      deleteOrganizationKnowledgeBaseDocument(ORG_ID, uploaded.document.id)
+      deleteOrganizationKnowledgeBaseDocument(
+        ORG_ID,
+        uploaded.document.id,
+        undefined,
+        unpublish
+      )
     ).rejects.toMatchObject({
       documentId: uploaded.document.id,
       profileIds: [profileId],
     } satisfies Partial<KnowledgeBaseDocumentInUseError>);
+    expect(published).toBe(true);
 
     expect(
       await detachSharedKnowledgeBaseDocument(
@@ -375,9 +433,12 @@ describe("knowledge base store", () => {
     expect(
       await deleteOrganizationKnowledgeBaseDocument(
         ORG_ID,
-        uploaded.document.id
+        uploaded.document.id,
+        undefined,
+        unpublish
       )
     ).toBe(true);
+    expect(published).toBe(false);
   });
 
   test("rejects duplicate uploads by default and supports skip/replace", async () => {

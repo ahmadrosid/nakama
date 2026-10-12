@@ -1,10 +1,16 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { asTestFetch } from "../test-helpers";
 import { createOpenAIProvider } from "./index";
 
 type CapturedOpenAIRequest = {
   reasoning?: { effort?: string; summary?: string };
   reasoning_effort?: unknown;
-  tools?: Array<{ name?: string; type?: string }>;
+  tools?: Array<{
+    description?: string;
+    name?: string;
+    parameters?: unknown;
+    type?: string;
+  }>;
 };
 
 import {
@@ -90,7 +96,7 @@ describe("OpenAI codex vision routing", () => {
       }
     );
 
-    globalThis.fetch = fetchMock;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAIProvider({
       apiKey: "sk-test",
@@ -120,20 +126,22 @@ describe("OpenAI codex vision routing", () => {
 
 describe("OpenAI responses payload", () => {
   test("accepts a null usage field", async () => {
-    globalThis.fetch = mock(
-      async () =>
-        new Response(
-          JSON.stringify({
-            output: [
-              {
-                content: [{ text: "Halo.", type: "output_text" }],
-                type: "message",
-              },
-            ],
-            usage: null,
-          }),
-          { headers: { "Content-Type": "application/json" }, status: 200 }
-        )
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(
+            JSON.stringify({
+              output: [
+                {
+                  content: [{ text: "Halo.", type: "output_text" }],
+                  type: "message",
+                },
+              ],
+              usage: null,
+            }),
+            { headers: { "Content-Type": "application/json" }, status: 200 }
+          )
+      )
     );
 
     const provider = createOpenAIProvider({
@@ -153,11 +161,13 @@ describe("OpenAI responses payload", () => {
 
 describe("OpenAI chat completions payload", () => {
   test("accepts a null usage field", async () => {
-    globalThis.fetch = mock(async () =>
-      Response.json({
-        choices: [{ message: { content: "Halo.", role: "assistant" } }],
-        usage: null,
-      })
+    globalThis.fetch = asTestFetch(
+      mock(async () =>
+        Response.json({
+          choices: [{ message: { content: "Halo.", role: "assistant" } }],
+          usage: null,
+        })
+      )
     );
 
     const provider = createOpenAIProvider({
@@ -181,14 +191,18 @@ describe("OpenAI tools + reasoning routing", () => {
     async (model) => {
       const requests: Array<{ url: string; body: CapturedOpenAIRequest }> = [];
 
-      globalThis.fetch = async (url: RequestInfo | URL, init?: RequestInit) => {
-        requests.push({
-          body: JSON.parse(String(init?.body)),
-          url: String(url),
-        });
+      globalThis.fetch = asTestFetch(
+        async (url: RequestInfo | URL, init?: RequestInit) => {
+          requests.push({
+            body: JSON.parse(String(init?.body)),
+            url: String(url),
+          });
 
-        return Response.json({ choices: [{ message: { content: "Done." } }] });
-      };
+          return Response.json({
+            choices: [{ message: { content: "Done." } }],
+          });
+        }
+      );
 
       const provider = createOpenAIProvider({ apiKey: "sk-test", model });
       expect(
@@ -209,7 +223,7 @@ describe("OpenAI tools + reasoning routing", () => {
 
   test("rejects Astra tools on a custom Chat Completions endpoint before HTTP", async () => {
     const fetchMock = mock(async () => Response.json({}));
-    globalThis.fetch = fetchMock;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAIProvider({
       apiKey: "sk-test",
@@ -237,7 +251,7 @@ describe("OpenAI tools + reasoning routing", () => {
     "rejects GPT-6.1 Sol tools on a custom endpoint before HTTP (stream: %s)",
     async (streaming) => {
       const fetchMock = mock(async () => Response.json({}));
-      globalThis.fetch = fetchMock;
+      globalThis.fetch = asTestFetch(fetchMock);
 
       const provider = createOpenAIProvider({
         apiKey: "sk-test",
@@ -270,37 +284,41 @@ describe("OpenAI tools + reasoning routing", () => {
     "%s respects its own tool protocol with a custom GPT-6.1 ID",
     async (providerName) => {
       const model = "GPT-6.1-Sol-custom";
-      globalThis.fetch = async (url: RequestInfo | URL, init?: RequestInit) => {
-        const body = JSON.parse(String(init?.body));
-        expect(body.model).toBe(model);
-        expect(body.reasoning_effort).toBeUndefined();
-        expect(body.reasoning).toBeUndefined();
+      globalThis.fetch = asTestFetch(
+        async (url: RequestInfo | URL, init?: RequestInit) => {
+          const body = JSON.parse(String(init?.body));
+          expect(body.model).toBe(model);
+          expect(body.reasoning_effort).toBeUndefined();
+          expect(body.reasoning).toBeUndefined();
 
-        if (providerName === "openai") {
-          expect(String(url)).toBe("https://api.openai.com/v1/responses");
+          if (providerName === "openai") {
+            expect(String(url)).toBe("https://api.openai.com/v1/responses");
+            expect(body.tools[0]).toMatchObject({
+              name: "search",
+              type: "function",
+            });
+
+            return Response.json({
+              output: [
+                {
+                  content: [{ text: "Done", type: "output_text" }],
+                  type: "message",
+                },
+              ],
+            });
+          }
+
+          expect(String(url)).toBe(
+            "https://gateway.example/v1/chat/completions"
+          );
           expect(body.tools[0]).toMatchObject({
-            name: "search",
+            function: { name: "search" },
             type: "function",
           });
 
-          return Response.json({
-            output: [
-              {
-                content: [{ text: "Done", type: "output_text" }],
-                type: "message",
-              },
-            ],
-          });
+          return Response.json({ choices: [{ message: { content: "Done" } }] });
         }
-
-        expect(String(url)).toBe("https://gateway.example/v1/chat/completions");
-        expect(body.tools[0]).toMatchObject({
-          function: { name: "search" },
-          type: "function",
-        });
-
-        return Response.json({ choices: [{ message: { content: "Done" } }] });
-      };
+      );
 
       const provider = createOpenAIProvider({
         apiKey: "sk-test",
@@ -331,20 +349,24 @@ describe("OpenAI tools + reasoning routing", () => {
   test.each(["text", "json"] as const)(
     "GPT-6.1 Sol generateText supports %s without unsupported reasoning",
     async (format) => {
-      globalThis.fetch = async (url: RequestInfo | URL, init?: RequestInit) => {
-        expect(String(url)).toBe("https://api.openai.com/v1/chat/completions");
-        const body = JSON.parse(String(init?.body));
-        expect(body.model).toBe("gpt-6.1-sol");
-        expect(body.reasoning_effort).toBeUndefined();
-        expect(body.tools).toBeUndefined();
-        expect(body.response_format).toEqual(
-          format === "json" ? { type: "json_object" } : undefined
-        );
+      globalThis.fetch = asTestFetch(
+        async (url: RequestInfo | URL, init?: RequestInit) => {
+          expect(String(url)).toBe(
+            "https://api.openai.com/v1/chat/completions"
+          );
+          const body = JSON.parse(String(init?.body));
+          expect(body.model).toBe("gpt-6.1-sol");
+          expect(body.reasoning_effort).toBeUndefined();
+          expect(body.tools).toBeUndefined();
+          expect(body.response_format).toEqual(
+            format === "json" ? { type: "json_object" } : undefined
+          );
 
-        return Response.json({
-          choices: [{ message: { content: '{"title":"Migration"}' } }],
-        });
-      };
+          return Response.json({
+            choices: [{ message: { content: '{"title":"Migration"}' } }],
+          });
+        }
+      );
 
       const result = await createOpenAIProvider({
         apiKey: "sk-test",
@@ -364,21 +386,23 @@ describe("OpenAI tools + reasoning routing", () => {
     async (model) => {
       const requests: Array<{ url: string; body: CapturedOpenAIRequest }> = [];
 
-      globalThis.fetch = async (url: RequestInfo | URL, init?: RequestInit) => {
-        requests.push({
-          body: JSON.parse(String(init?.body)),
-          url: String(url),
-        });
+      globalThis.fetch = asTestFetch(
+        async (url: RequestInfo | URL, init?: RequestInit) => {
+          requests.push({
+            body: JSON.parse(String(init?.body)),
+            url: String(url),
+          });
 
-        return Response.json({
-          output: [
-            {
-              content: [{ text: "Done.", type: "output_text" }],
-              type: "message",
-            },
-          ],
-        });
-      };
+          return Response.json({
+            output: [
+              {
+                content: [{ text: "Done.", type: "output_text" }],
+                type: "message",
+              },
+            ],
+          });
+        }
+      );
 
       const provider = createOpenAIProvider({ apiKey: "sk-test", model });
 
@@ -456,7 +480,7 @@ describe("OpenAI tools + reasoning routing", () => {
       }
     );
 
-    globalThis.fetch = fetchMock;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAIProvider({
       apiKey: "sk-test",
@@ -487,7 +511,7 @@ describe("OpenAI tools + reasoning routing", () => {
         // SAFETY: The test parses a request body serialized by the provider under test.
         const body = JSON.parse(String(init?.body ?? "{}")) as {
           tools?: unknown[];
-          reasoning?: { effort?: string };
+          reasoning?: { effort?: string; summary?: string };
         };
 
         expect(body.tools?.length).toBe(1);
@@ -507,7 +531,7 @@ describe("OpenAI tools + reasoning routing", () => {
       }
     );
 
-    globalThis.fetch = fetchMock;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAIProvider({
       apiKey: "sk-test",

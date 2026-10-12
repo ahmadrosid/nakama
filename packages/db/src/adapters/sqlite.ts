@@ -17,6 +17,7 @@ import { LLM_USAGE_STATS_ID, WORKSPACE_SETTINGS_ID } from "../constants";
 import { ensureDatabaseDirectory, resolveDatabasePath } from "../database-url";
 import { migrateDatabase } from "../migrate";
 import type {
+  BeginOrgTeamCreationInput,
   CompareAndSetOrgPluginStateInput,
   DatabaseAdapter,
   OrgMemoryProposalStatus,
@@ -42,6 +43,8 @@ import type {
   StoredOrgMemberRecord,
   StoredOrgMemoryProposal,
   StoredOrgPluginRecord,
+  StoredOrgSharedResourceRecord,
+  StoredOrgTeamCreationRecord,
   StoredPasskeyRecord,
   StoredPluginReleaseRecord,
   StoredProfileChangeEvent,
@@ -50,6 +53,7 @@ import type {
   StoredSessionMessageRecord,
   StoredSessionRecord,
   StoredSessionSummaryRecord,
+  StoredSharedAgentInstanceRecord,
   StoredSkillProposal,
   StoredSkillRecord,
   StoredSkillSuggestion,
@@ -433,6 +437,8 @@ interface OrganizationRow {
   monthly_llm_turn_limit: number | null;
   monthly_llm_warning_percent: number;
   name: string;
+  parent_org_id: string | null;
+  setup_pending: number;
   skills_curator_archive_after_days: number;
   skills_curator_consolidate_enabled: number;
   skills_curator_enabled: number;
@@ -1078,7 +1084,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
       if (profile.is_default) {
         const successor = db
-          .query<{ id: string }>(
+          .query<{ id: string }, SQLQueryBindings[]>(
             "SELECT id FROM profiles WHERE org_id = ? AND id != ? AND is_super = 0 ORDER BY created_at LIMIT 1"
           )
           .get(sourceOrgId, profileId);
@@ -2764,12 +2770,103 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     }
   );
 
+  const getOrgTeamCreationStmt = db.prepare<
+    StoredOrgTeamCreationRecord,
+    SQLQueryBindings[]
+  >(`
+    SELECT parent_org_id AS parentOrgId, request_id AS requestId,
+      request_hash AS requestHash, creator_user_id AS creatorUserId,
+      admin_user_id AS adminUserId, team_org_id AS teamOrgId,
+      created_at AS createdAt, completed_at AS completedAt
+    FROM org_team_creation_requests WHERE parent_org_id = ? AND request_id = ?
+  `);
+
+  const insertOrgTeamCreationStmt = db.prepare(`
+    INSERT INTO org_team_creation_requests (parent_org_id, request_id, request_hash, creator_user_id, admin_user_id, team_org_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const completeOrgTeamCreationStmt = db.prepare(
+    "UPDATE org_team_creation_requests SET completed_at = ? WHERE parent_org_id = ? AND request_id = ? AND team_org_id = ? AND completed_at IS NULL"
+  );
+
+  const deleteOrgTeamCreationStmt = db.prepare(
+    "DELETE FROM org_team_creation_requests WHERE parent_org_id = ? AND request_id = ? AND team_org_id = ? AND completed_at IS NULL"
+  );
+
+  const getSharedAgentInstanceStmt = db.prepare<
+    StoredSharedAgentInstanceRecord,
+    SQLQueryBindings[]
+  >(`
+    SELECT profile_id AS profileId, team_org_id AS teamOrgId,
+      source_org_id AS sourceOrgId, source_profile_id AS sourceProfileId,
+      publication_id AS publicationId, created_at AS createdAt
+    FROM shared_agent_instances WHERE team_org_id = ? AND profile_id = ?
+  `);
+
+  const getSharedAgentInstanceForSourceStmt = db.prepare<
+    StoredSharedAgentInstanceRecord,
+    SQLQueryBindings[]
+  >(`
+    SELECT profile_id AS profileId, team_org_id AS teamOrgId,
+      source_org_id AS sourceOrgId, source_profile_id AS sourceProfileId,
+      publication_id AS publicationId, created_at AS createdAt
+    FROM shared_agent_instances WHERE team_org_id = ? AND source_profile_id = ?
+  `);
+
+  const insertSharedAgentInstanceStmt = db.prepare(`
+    INSERT INTO shared_agent_instances (profile_id, team_org_id, source_org_id, source_profile_id, publication_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+
+  const updateSharedAgentInstancePublicationStmt = db.prepare(
+    "UPDATE shared_agent_instances SET publication_id = ? WHERE profile_id = ? AND team_org_id = ?"
+  );
+
+  const listOrgSharedResourcesStmt = db.prepare<
+    StoredOrgSharedResourceRecord,
+    SQLQueryBindings[]
+  >(`
+    SELECT id, org_id AS orgId, resource_kind AS resourceKind,
+      resource_id AS resourceId, created_at AS createdAt, updated_at AS updatedAt
+    FROM org_shared_resources WHERE org_id = ? ORDER BY resource_kind, id
+  `);
+
+  const getOrgSharedResourceStmt = db.prepare<
+    StoredOrgSharedResourceRecord,
+    SQLQueryBindings[]
+  >(`
+    SELECT id, org_id AS orgId, resource_kind AS resourceKind,
+      resource_id AS resourceId, created_at AS createdAt, updated_at AS updatedAt
+    FROM org_shared_resources WHERE org_id = ? AND id = ?
+  `);
+
+  const getOrgSharedResourceBySourceStmt = db.prepare<
+    StoredOrgSharedResourceRecord,
+    SQLQueryBindings[]
+  >(`
+    SELECT id, org_id AS orgId, resource_kind AS resourceKind,
+      resource_id AS resourceId, created_at AS createdAt, updated_at AS updatedAt
+    FROM org_shared_resources WHERE org_id = ? AND resource_kind = ? AND resource_id = ?
+  `);
+
+  const publishOrgSharedResourceStmt = db.prepare(`
+    INSERT INTO org_shared_resources (id, org_id, resource_kind, resource_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(org_id, resource_kind, resource_id) DO NOTHING
+  `);
+
+  const deleteOrgSharedResourceStmt = db.prepare(
+    "DELETE FROM org_shared_resources WHERE org_id = ? AND id = ?"
+  );
+
   const tryMarkOrganizationArchivedStmt = db.prepare(`
-    UPDATE organizations
+    UPDATE organizations AS target
     SET archived_at = ?, updated_at = ?
     WHERE id = ?
       AND archived_at IS NULL
       AND (SELECT COUNT(*) FROM organizations WHERE archived_at IS NULL) > 1
+      AND NOT EXISTS (SELECT 1 FROM organizations WHERE parent_org_id = target.id AND archived_at IS NULL)
   `);
 
   const deleteOrganizationStmt = db.prepare(
@@ -2780,38 +2877,96 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     "SELECT 1 FROM organizations WHERE id = ?"
   );
 
-  const deleteOrganizationTransaction = db.transaction((orgId: string) => {
-    if (!organizationExistsStmt.get(orgId)) {
-      return false;
+  const organizationChildrenStmt = db.prepare(
+    "SELECT 1 FROM organizations WHERE parent_org_id = ? LIMIT 1"
+  );
+
+  const deleteOrganizationTransaction = db.transaction(
+    (
+      orgId: string,
+      pendingRequest?: { parentOrgId: string; requestId: string }
+    ) => {
+      if (pendingRequest) {
+        const request = getOrgTeamCreationStmt.get(
+          pendingRequest.parentOrgId,
+          pendingRequest.requestId
+        );
+
+        if (!request || request.teamOrgId !== orgId || request.completedAt) {
+          return false;
+        }
+      }
+
+      if (
+        !organizationExistsStmt.get(orgId) ||
+        organizationChildrenStmt.get(orgId)
+      ) {
+        return false;
+      }
+
+      db.query(
+        "UPDATE browser_sessions SET active_org_id = NULL WHERE active_org_id = ?"
+      ).run(orgId);
+
+      // These tables gained org_id through migrations rather than FK-backed
+      // schema definitions, so the organization cascade cannot remove them.
+      for (const table of [
+        "llm_turn_usage",
+        "llm_usage_actor_stats",
+        "llm_usage_daily_stats",
+        "llm_usage_stats",
+        "llm_usage_model_stats",
+        "mcp_servers",
+        "skills",
+        "tool_output_savings",
+        "tools",
+        "workspace_settings",
+      ]) {
+        db.query(`DELETE FROM ${table} WHERE org_id = ?`).run(orgId);
+      }
+
+      const deleted = deleteOrganizationStmt.run(orgId).changes > 0;
+
+      if (deleted && pendingRequest) {
+        deleteOrgTeamCreationStmt.run(
+          pendingRequest.parentOrgId,
+          pendingRequest.requestId,
+          orgId
+        );
+      }
+
+      return deleted;
+    }
+  );
+
+  const deleteOrganizationWithForeignKeys = (
+    id: string,
+    pendingRequest?: { parentOrgId: string; requestId: string }
+  ) => {
+    const foreignKeys = db
+      .query<{ foreign_keys: number }, SQLQueryBindings[]>(
+        "PRAGMA foreign_keys"
+      )
+      .get();
+
+    const restoreForeignKeys = foreignKeys?.foreign_keys === 0;
+
+    if (restoreForeignKeys) {
+      db.exec("PRAGMA foreign_keys = ON");
     }
 
-    db.query(
-      "UPDATE browser_sessions SET active_org_id = NULL WHERE active_org_id = ?"
-    ).run(orgId);
-
-    // These tables gained org_id through migrations rather than FK-backed
-    // schema definitions, so the organization cascade cannot remove them.
-    for (const table of [
-      "llm_turn_usage",
-      "llm_usage_actor_stats",
-      "llm_usage_daily_stats",
-      "llm_usage_stats",
-      "llm_usage_model_stats",
-      "mcp_servers",
-      "skills",
-      "tool_output_savings",
-      "tools",
-      "workspace_settings",
-    ]) {
-      db.query(`DELETE FROM ${table} WHERE org_id = ?`).run(orgId);
+    try {
+      return deleteOrganizationTransaction.immediate(id, pendingRequest);
+    } finally {
+      if (restoreForeignKeys) {
+        db.exec("PRAGMA foreign_keys = OFF");
+      }
     }
-
-    return deleteOrganizationStmt.run(orgId).changes > 0;
-  });
+  };
 
   const upsertOrganizationStmt = db.prepare(`
-    INSERT INTO organizations (id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO organizations (id, parent_org_id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       slug = excluded.slug,
@@ -2862,16 +3017,31 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     OrganizationRow,
     SQLQueryBindings[]
   >(`
-    SELECT id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
+    SELECT id, parent_org_id, name, slug, EXISTS (SELECT 1 FROM org_team_creation_requests WHERE team_org_id = organizations.id AND completed_at IS NULL) AS setup_pending, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
     ORDER BY name ASC
+  `);
+
+  const getOrganizationResourceCountsStmt = db.prepare<
+    { agents: number; members: number; skills: number; tools: number },
+    SQLQueryBindings[]
+  >(`
+    SELECT
+      (SELECT COUNT(*) FROM profiles p WHERE p.org_id = o.id
+        AND p.is_default = 0 AND p.is_super = 0
+        AND NOT EXISTS (SELECT 1 FROM shared_agent_instances s WHERE s.profile_id = p.id)) AS agents,
+      (SELECT COUNT(*) FROM org_members m JOIN users u ON u.id = m.user_id
+        WHERE m.org_id = o.id AND m.user_id != ?) AS members,
+      (SELECT COUNT(*) FROM skills s WHERE s.org_id = o.id) AS skills,
+      (SELECT COUNT(*) FROM tools t WHERE t.org_id = o.id) AS tools
+    FROM organizations o WHERE o.id = ?
   `);
 
   const getOrganizationBySlugStmt = db.prepare<
     OrganizationRow,
     SQLQueryBindings[]
   >(`
-    SELECT id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
+    SELECT id, parent_org_id, name, slug, EXISTS (SELECT 1 FROM org_team_creation_requests WHERE team_org_id = organizations.id AND completed_at IS NULL) AS setup_pending, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
     WHERE slug = ?
     LIMIT 1
@@ -2881,7 +3051,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     OrganizationRow,
     SQLQueryBindings[]
   >(`
-    SELECT id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
+    SELECT id, parent_org_id, name, slug, EXISTS (SELECT 1 FROM org_team_creation_requests WHERE team_org_id = organizations.id AND completed_at IS NULL) AS setup_pending, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
     WHERE id = ?
     LIMIT 1
@@ -3294,27 +3464,225 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     );
   };
 
-  const runUpsertOrganizationStmt = (record: StoredOrganizationRecord) => {
-    upsertOrganizationStmt.run(
-      record.id,
-      record.name,
-      record.slug,
-      JSON.stringify(record.allowedInviteDomains ?? []),
-      record.monthlyLlmTokenLimit ?? null,
-      record.monthlyLlmTurnLimit ?? 0,
-      record.monthlyLlmWarningPercent ?? 80,
-      record.skillsWriteApproval ? 1 : 0,
-      record.skillsPostTurnReview ? 1 : 0,
-      record.skillsCuratorEnabled ? 1 : 0,
-      record.skillsCuratorStaleAfterDays ?? 30,
-      record.skillsCuratorArchiveAfterDays ?? 90,
-      record.skillsCuratorConsolidateEnabled ? 1 : 0,
-      record.skillsCuratorLastRunAt ?? null,
-      record.archivedAt ?? null,
-      record.createdAt,
-      record.updatedAt
-    );
-  };
+  const runUpsertOrganizationStmt = db.transaction(
+    (record: StoredOrganizationRecord) => {
+      const existing = getOrganizationByIdStmt.get(record.id);
+
+      if (
+        existing &&
+        record.parentOrgId !== undefined &&
+        record.parentOrgId !== existing.parent_org_id
+      ) {
+        throw new Error("Organization parent cannot change");
+      }
+
+      const parentOrgId = record.parentOrgId ?? existing?.parent_org_id ?? null;
+
+      if (parentOrgId && !(existing && record.archivedAt)) {
+        const parent = getOrganizationByIdStmt.get(parentOrgId);
+
+        if (!parent || parent.parent_org_id || parent.archived_at) {
+          throw new Error("Team requires an active root organization");
+        }
+      }
+
+      if (
+        record.archivedAt &&
+        db
+          .query(
+            "SELECT 1 FROM organizations WHERE parent_org_id = ? AND archived_at IS NULL LIMIT 1"
+          )
+          .get(record.id)
+      ) {
+        throw new Error("Organization has active teams");
+      }
+
+      upsertOrganizationStmt.run(
+        record.id,
+        parentOrgId,
+        record.name,
+        record.slug,
+        JSON.stringify(record.allowedInviteDomains ?? []),
+        record.monthlyLlmTokenLimit ?? null,
+        record.monthlyLlmTurnLimit ?? 0,
+        record.monthlyLlmWarningPercent ?? 80,
+        record.skillsWriteApproval ? 1 : 0,
+        record.skillsPostTurnReview ? 1 : 0,
+        record.skillsCuratorEnabled ? 1 : 0,
+        record.skillsCuratorStaleAfterDays ?? 30,
+        record.skillsCuratorArchiveAfterDays ?? 90,
+        record.skillsCuratorConsolidateEnabled ? 1 : 0,
+        record.skillsCuratorLastRunAt ?? null,
+        record.archivedAt ?? null,
+        record.createdAt,
+        record.updatedAt
+      );
+    }
+  );
+
+  const publishOrgSharedResourceTransaction = db.transaction(
+    (record: StoredOrgSharedResourceRecord) => {
+      const parent = getOrganizationByIdStmt.get(record.orgId);
+
+      if (!parent || parent.parent_org_id || parent.archived_at) {
+        throw new Error("Publication requires an active root organization");
+      }
+
+      if (record.resourceKind === "agent") {
+        const profile = getProfileStmt.get(record.resourceId);
+
+        if (
+          !profile ||
+          profile.org_id !== record.orgId ||
+          profile.is_super ||
+          profile.is_default
+        ) {
+          throw new Error("Agent source cannot be published");
+        }
+      }
+
+      if (record.resourceKind === "skill") {
+        const skill = getSkillStmt.get(record.resourceId);
+
+        if (!skill || skill.org_id !== record.orgId || !skill.enabled) {
+          throw new Error("Skill source cannot be published");
+        }
+      }
+
+      if (record.resourceKind === "tool") {
+        const tool = getToolStmt.get(record.resourceId);
+
+        if (!tool || (tool.org_id && tool.org_id !== record.orgId)) {
+          throw new Error("Tool source cannot be published");
+        }
+      }
+
+      // Filesystem knowledge and configured models are validated by OrgService.
+      publishOrgSharedResourceStmt.run(
+        record.id,
+        record.orgId,
+        record.resourceKind,
+        record.resourceId,
+        record.createdAt,
+        record.updatedAt
+      );
+
+      const published = getOrgSharedResourceBySourceStmt.get(
+        record.orgId,
+        record.resourceKind,
+        record.resourceId
+      );
+
+      if (!published) {
+        throw new Error("Publication was not saved");
+      }
+
+      return published;
+    }
+  );
+
+  const createSharedAgentInstanceTransaction = db.transaction(
+    (
+      teamOrgId: string,
+      publicationId: string,
+      profileId: string,
+      createdAt: string
+    ) => {
+      const team = getOrganizationByIdStmt.get(teamOrgId);
+
+      const parent = team?.parent_org_id
+        ? getOrganizationByIdStmt.get(team.parent_org_id)
+        : null;
+
+      if (
+        !team ||
+        team.archived_at ||
+        team.setup_pending ||
+        !parent ||
+        parent.archived_at ||
+        parent.setup_pending ||
+        parent.parent_org_id
+      ) {
+        throw new Error("Shared agent requires an active team and parent");
+      }
+
+      const publication = getOrgSharedResourceStmt.get(
+        parent.id,
+        publicationId
+      );
+
+      const source =
+        publication?.resourceKind === "agent"
+          ? getProfileStmt.get(publication.resourceId)
+          : null;
+
+      if (
+        !(publication && source) ||
+        source.org_id !== parent.id ||
+        source.is_super ||
+        source.is_default ||
+        source.acp_agent ||
+        source.acp_settings
+      ) {
+        throw new Error("Shared agent source is unavailable");
+      }
+
+      const existing = getSharedAgentInstanceForSourceStmt.get(
+        teamOrgId,
+        source.id
+      );
+
+      if (existing) {
+        const profile = getProfileStmt.get(existing.profileId);
+
+        if (
+          !profile ||
+          profile.org_id !== teamOrgId ||
+          existing.sourceOrgId !== parent.id
+        ) {
+          throw new Error("Shared agent instance has invalid ownership");
+        }
+
+        updateSharedAgentInstancePublicationStmt.run(
+          publicationId,
+          profile.id,
+          teamOrgId
+        );
+
+        return toProfileRecord(profile);
+      }
+
+      if (getProfileStmt.get(profileId)) {
+        throw new Error("Shared agent profile ID already exists");
+      }
+
+      const profile: StoredProfileRecord = {
+        ...toProfileRecord(source),
+        automationsEnabled: true,
+        createdAt,
+        id: profileId,
+        isDefault: false,
+        isSuper: false,
+        orgId: teamOrgId,
+        skillsCuratorConsolidateEnabled: null,
+        skillsPostTurnReview: null,
+        skillsWriteApproval: null,
+        updatedAt: createdAt,
+      };
+
+      runUpsertProfileStmt(profile);
+      insertSharedAgentInstanceStmt.run(
+        profileId,
+        teamOrgId,
+        parent.id,
+        source.id,
+        publicationId,
+        createdAt
+      );
+
+      return profile;
+    }
+  );
 
   const runUpsertOrgMemberStmt = (record: StoredOrgMemberRecord) => {
     upsertOrgMemberStmt.run(
@@ -3326,6 +3694,128 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     );
   };
 
+  const beginOrgTeamCreationTransaction = db.transaction(
+    (input: BeginOrgTeamCreationInput) => {
+      const parentOrgId = input.organization.parentOrgId;
+      const parent = getOrganizationByIdStmt.get(parentOrgId);
+      const creator = getUserByIdStmt.get(input.creatorUserId);
+      const member = getOrgMemberStmt.get(parentOrgId, input.creatorUserId);
+
+      if (
+        !parent ||
+        parent.parent_org_id ||
+        parent.archived_at ||
+        !creator ||
+        creator.disabled_at ||
+        (!creator.is_platform_admin && member?.role !== "admin")
+      ) {
+        throw new Error("Team creation requires an active parent admin");
+      }
+
+      const existing = getOrgTeamCreationStmt.get(parentOrgId, input.requestId);
+
+      if (existing) {
+        if (
+          existing.creatorUserId !== input.creatorUserId ||
+          existing.requestHash !== input.requestHash
+        ) {
+          throw new Error(
+            "Team creation request conflicts with its previous use"
+          );
+        }
+
+        return existing;
+      }
+
+      const admin = getUserByIdStmt.get(input.adminUserId);
+
+      if (
+        !admin ||
+        admin.disabled_at ||
+        input.organization.archivedAt ||
+        getOrganizationByIdStmt.get(input.organization.id)
+      ) {
+        throw new Error(
+          "Team creation requires a new active team and an active admin"
+        );
+      }
+
+      runUpsertOrganizationStmt(input.organization);
+      runUpsertOrgMemberStmt({
+        createdAt: input.organization.createdAt,
+        orgId: input.organization.id,
+        role: "admin",
+        userId: input.adminUserId,
+      });
+      insertOrgTeamCreationStmt.run(
+        parentOrgId,
+        input.requestId,
+        input.requestHash,
+        input.creatorUserId,
+        input.adminUserId,
+        input.organization.id,
+        input.organization.createdAt
+      );
+      const request = getOrgTeamCreationStmt.get(parentOrgId, input.requestId);
+
+      if (!request) {
+        throw new Error("Team creation request was not saved");
+      }
+
+      return request;
+    }
+  );
+
+  const completeOrgTeamCreationTransaction = db.transaction(
+    (
+      parentOrgId: string,
+      requestId: string,
+      teamOrgId: string,
+      completedAt: string
+    ) => {
+      const request = getOrgTeamCreationStmt.get(parentOrgId, requestId);
+
+      if (!request || request.teamOrgId !== teamOrgId) {
+        return false;
+      }
+
+      if (request.completedAt) {
+        return true;
+      }
+
+      const team = getOrganizationByIdStmt.get(teamOrgId);
+      const parent = getOrganizationByIdStmt.get(parentOrgId);
+      const admin = getUserByIdStmt.get(request.adminUserId);
+      const member = getOrgMemberStmt.get(teamOrgId, request.adminUserId);
+
+      if (
+        !team ||
+        team.parent_org_id !== parentOrgId ||
+        team.archived_at ||
+        !parent ||
+        parent.archived_at ||
+        !admin ||
+        admin.disabled_at ||
+        member?.role !== "admin" ||
+        !getDefaultProfileForOrgStmt.get(teamOrgId) ||
+        !listProfilesForOrgStmt
+          .all(teamOrgId)
+          .some((profile) => profile.is_super)
+      ) {
+        return false;
+      }
+
+      return (
+        completeOrgTeamCreationStmt.run(
+          completedAt,
+          parentOrgId,
+          requestId,
+          teamOrgId
+        ).changes > 0
+      );
+    }
+  );
+
   const bootstrapInitialSetupTransaction = db.transaction(
     (input: {
       member: StoredOrgMemberRecord;
@@ -3334,7 +3824,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     }) => {
       const row = countHumanUsersStmt.get(LOCAL_CLIENT_USER_ID);
 
-      if (row.count > 0) {
+      if ((row?.count ?? 0) > 0) {
         return false;
       }
 
@@ -3365,6 +3855,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listUserOrganizationsStmt = db.prepare(`
     SELECT
       o.id,
+      o.parent_org_id,
       o.name,
       o.slug,
       o.allowed_invite_domains,
@@ -3381,6 +3872,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     FROM org_members om
     INNER JOIN organizations o ON o.id = om.org_id
     WHERE om.user_id = ?
+      AND NOT EXISTS (SELECT 1 FROM org_team_creation_requests WHERE team_org_id = o.id AND completed_at IS NULL)
       AND o.archived_at IS NULL
     ORDER BY o.name ASC
   `);
@@ -3529,7 +4021,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         const owned = getOwnedSkillIdStmt.get(
           input.orgId,
           input.pluginId,
-          skill.pluginKey
+          skill.pluginKey ?? null
         );
 
         const id = owned?.id ?? skill.id;
@@ -3565,7 +4057,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         const owned = getOwnedToolIdStmt.get(
           input.orgId,
           input.pluginId,
-          tool.pluginKey
+          tool.pluginKey ?? null
         );
 
         const id = owned?.id ?? tool.id;
@@ -3584,6 +4076,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       }
 
       const published = getOrgPluginStmt.get(input.orgId, input.pluginId);
+
+      if (!published) {
+        throw new Error("Published plugin state is missing.");
+      }
 
       return { ok: true, revision: published.revision };
     }
@@ -3633,6 +4129,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
       const saved = getOrgPluginStmt.get(input.orgId, input.pluginId);
 
+      if (!saved) {
+        throw new Error("Saved plugin state is missing.");
+      }
+
       return { ok: true, revision: saved.revision };
     }
   );
@@ -3666,6 +4166,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   );
 
   return {
+    async abortOrgTeamCreation(parentOrgId, requestId, teamOrgId) {
+      return deleteOrganizationWithForeignKeys(teamOrgId, {
+        parentOrgId,
+        requestId,
+      });
+    },
     async activateUserMfa(id, totpSecretEnc, lastStep, updatedAt) {
       const result = activateUserMfaStmt.run(
         totpSecretEnc,
@@ -3690,6 +4196,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async assignToolToProfile(profileId, toolId) {
       assignToolStmt.run(profileId, toolId);
+    },
+
+    async beginOrgTeamCreation(input) {
+      return beginOrgTeamCreationTransaction.immediate(input);
     },
 
     async bootstrapInitialSetup(input) {
@@ -3736,6 +4246,20 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async completeAutomationRunStep(runId, toolCallId, result, completedAt) {
       completeAutomationRunStepStmt.run(result, completedAt, runId, toolCallId);
     },
+
+    async completeOrgTeamCreation(
+      parentOrgId,
+      requestId,
+      teamOrgId,
+      completedAt
+    ) {
+      return completeOrgTeamCreationTransaction.immediate(
+        parentOrgId,
+        requestId,
+        teamOrgId,
+        completedAt
+      );
+    },
     async consumeMfaBackupCode(userId, codeHash, usedAt) {
       return consumeMfaBackupCodeStmt.run(usedAt, userId, codeHash).changes > 0;
     },
@@ -3760,13 +4284,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async countHumanUsers() {
       const row = countHumanUsersStmt.get(LOCAL_CLIENT_USER_ID);
 
-      return row.count;
+      return row?.count ?? 0;
     },
 
     async countOrgMemoryProposals(orgId, status) {
       const row = countOrgMemoryProposalsStmt.get(orgId, status);
 
-      return row.count;
+      return row?.count ?? 0;
     },
 
     async countPendingSkillProposals(orgId, profileId) {
@@ -3777,13 +4301,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           : countPendingSkillProposalsStmt.get(orgId)
       ) as { count: number };
 
-      return row.count;
+      return row?.count ?? 0;
     },
 
     async countProfileMcpAssignments() {
       const row = countProfileMcpAssignmentsStmt.get();
 
-      return row.count;
+      return row?.count ?? 0;
     },
 
     async countUnreadAutomationRunsByOrg(userId, orgId) {
@@ -3797,13 +4321,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async countUnusedMfaBackupCodes(userId) {
       const row = countUnusedMfaBackupCodesStmt.get(userId);
 
-      return Number(row.count);
+      return Number(row?.count ?? 0);
     },
 
     async countUsers() {
       const row = countUsersStmt.get();
 
-      return row.count;
+      return row?.count ?? 0;
     },
     async createArtifactShare(record) {
       createArtifactShareStmt.run(
@@ -3939,6 +4463,20 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
+    async createSharedAgentInstance(
+      teamOrgId,
+      publicationId,
+      profileId,
+      createdAt
+    ) {
+      return createSharedAgentInstanceTransaction.immediate(
+        teamOrgId,
+        publicationId,
+        profileId,
+        createdAt
+      );
+    },
+
     async createSkillProposal(record) {
       createSkillProposalStmt.run(
         record.id,
@@ -3996,6 +4534,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.skillId
       );
 
+      if (!row) {
+        throw new Error("Created skill version is missing.");
+      }
+
       return { ...record, version: row.version };
     },
 
@@ -4046,25 +4588,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async deleteOrganization(id) {
-      const foreignKeys = db
-        .query<{
-          foreign_keys: number;
-        }>("PRAGMA foreign_keys")
-        .get();
-
-      const restoreForeignKeys = foreignKeys.foreign_keys === 0;
-
-      if (restoreForeignKeys) {
-        db.exec("PRAGMA foreign_keys = ON");
-      }
-
-      try {
-        return deleteOrganizationTransaction(id);
-      } finally {
-        if (restoreForeignKeys) {
-          db.exec("PRAGMA foreign_keys = OFF");
-        }
-      }
+      return deleteOrganizationWithForeignKeys(id);
     },
 
     async deleteOrgMember(orgId, userId) {
@@ -4075,6 +4599,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async deleteOrgPlugin(orgId, pluginId, expectedRevision) {
       return deleteOrgPluginTx(orgId, pluginId, expectedRevision);
+    },
+
+    async deleteOrgSharedResource(orgId, id) {
+      return deleteOrgSharedResourceStmt.run(orgId, id).changes > 0;
     },
 
     async deletePasskeys(userId) {
@@ -4285,6 +4813,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return row ? toOrganizationRecord(row) : null;
     },
 
+    async getOrganizationResourceCounts(orgId) {
+      return getOrganizationResourceCountsStmt.get(LOCAL_CLIENT_USER_ID, orgId);
+    },
+
     async getOrgInviteByTokenHash(tokenHash) {
       const row = getOrgInviteByTokenHashStmt.get(tokenHash);
 
@@ -4318,6 +4850,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const row = getOrgPluginStmt.get(orgId, pluginId);
 
       return row ? toOrgPluginRecord(row) : null;
+    },
+
+    async getOrgSharedResource(orgId, id) {
+      return getOrgSharedResourceStmt.get(orgId, id) ?? null;
+    },
+
+    async getOrgTeamCreation(parentOrgId, requestId) {
+      return getOrgTeamCreationStmt.get(parentOrgId, requestId) ?? null;
     },
     async getPasskey(userId, credentialId) {
       const row = getPasskeyStmt.get(userId, credentialId);
@@ -4419,6 +4959,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return row ? parseAgentTodos(row.agent_todos) : [];
     },
 
+    async getSharedAgentInstance(teamOrgId, profileId) {
+      return getSharedAgentInstanceStmt.get(teamOrgId, profileId) ?? null;
+    },
+
     async getSkill(id) {
       const row = getSkillStmt.get(id);
 
@@ -4516,6 +5060,33 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async handOverSharedAttachments(sessionId, orgId) {
       handOverSharedAttachmentsStmt.run(sessionId, orgId);
+    },
+
+    async importSharedAgentReference(record) {
+      db.transaction(() => {
+        const profile = getProfileForOrgStmt.get(
+          record.profileId,
+          record.teamOrgId
+        );
+
+        if (
+          !profile ||
+          profile.is_default ||
+          profile.is_super ||
+          getSharedAgentInstanceStmt.get(record.teamOrgId, record.profileId)
+        ) {
+          throw new Error("Invalid imported shared agent profile");
+        }
+
+        insertSharedAgentInstanceStmt.run(
+          record.profileId,
+          record.teamOrgId,
+          record.sourceOrgId,
+          record.sourceProfileId,
+          record.publicationId,
+          record.createdAt
+        );
+      }).immediate();
     },
 
     async incrementLlmTurnUsage(orgId, delta) {
@@ -4784,7 +5355,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async listFilePins(orgId, userId, profileId) {
       return db
-        .query<{ path: string }>(
+        .query<{ path: string }, SQLQueryBindings[]>(
           "SELECT path FROM file_pins WHERE org_id = ? AND user_id = ? AND profile_id = ? ORDER BY path"
         )
         .all(orgId, userId, profileId)
@@ -4893,6 +5464,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
       // SAFETY: The adapter writes this row value through its typed contract.
       return rows.map((row) => toOrgPluginRecord(row as OrgPluginRow));
+    },
+
+    async listOrgSharedResources(orgId) {
+      return listOrgSharedResourcesStmt.all(orgId);
     },
     async listPasskeys(userId) {
       return listPasskeysStmt.all(userId).map((row) => toPasskeyRecord(row));
@@ -5133,6 +5708,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async publishOrgPluginRelease(input) {
       return publishOrgPluginReleaseTx(input);
+    },
+
+    async publishOrgSharedResource(record) {
+      return publishOrgSharedResourceTransaction(record);
     },
 
     async releaseMonthlyLlmQuota(orgId, reservationId) {
@@ -5789,7 +6368,7 @@ function normalizeSkillCreatedBy(
 function toMcpServerRecord(row: McpServerRow): StoredMcpServerRecord {
   return {
     // SAFETY: The adapter writes this row value through its typed contract.
-    cachedTools: parseJson(
+    cachedTools: JSON.parse(
       row.cached_tools
     ) as StoredMcpServerRecord["cachedTools"],
     config: parseJson(row.config),
@@ -5849,7 +6428,7 @@ function toPluginReleaseRecord(
     createdAt: row.created_at,
     digest: row.digest ?? "",
     // SAFETY: The adapter writes this row value through its typed contract.
-    manifest: parseJson(row.manifest) as StoredPluginReleaseRecord["manifest"],
+    manifest: JSON.parse(row.manifest) as StoredPluginReleaseRecord["manifest"],
     pluginId: row.plugin_id,
     version: row.version,
   };
@@ -5880,18 +6459,18 @@ type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
-type JsonRecord = { [key: string]: JsonValue };
+type JsonRecord = Record<string, JsonValue>;
 
-function isJsonRecord(value: JsonValue | undefined): value is JsonRecord {
+function isJsonRecord<Value>(value: Value): value is Value & JsonRecord {
   return value instanceof Object && !Array.isArray(value);
 }
 
-function isJsonString(value: JsonValue | undefined): value is string {
+function isJsonString(value: unknown): value is string {
   return Object.prototype.toString.call(value) === "[object String]";
 }
 
 function isAgentTodo(
-  value: JsonValue
+  value: unknown
 ): value is StoredSessionRecord["agentTodos"][number] {
   if (!isJsonRecord(value)) {
     return false;
@@ -5911,7 +6490,7 @@ function isAgentTodo(
 }
 
 function isAgentQuestionChoice(
-  value: JsonValue
+  value: unknown
 ): value is AgentQuestionnaire["questions"][number]["choices"][number] {
   return (
     isJsonRecord(value) &&
@@ -5923,7 +6502,7 @@ function isAgentQuestionChoice(
 }
 
 function isAgentQuestion(
-  value: JsonValue
+  value: unknown
 ): value is AgentQuestionnaire["questions"][number] {
   return (
     isJsonRecord(value) &&
@@ -5950,7 +6529,7 @@ function parseAgentTodos(
   }
 
   try {
-    const parsed: JsonValue = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
 
     if (!Array.isArray(parsed)) {
       return [];
@@ -5970,7 +6549,7 @@ function parseAgentQuestionnaire(
   }
 
   try {
-    const parsed: JsonValue = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
 
     if (!isJsonRecord(parsed)) {
       return null;
@@ -5988,7 +6567,9 @@ function parseAgentQuestionnaire(
       return null;
     }
 
-    const validQuestions = questions.filter(isAgentQuestion);
+    const validQuestions = questions.filter((question) =>
+      isAgentQuestion(question)
+    );
 
     if (validQuestions.length !== questions.length) {
       return null;
@@ -6439,6 +7020,8 @@ function toOrganizationRecord(row: OrganizationRow): StoredOrganizationRecord {
     monthlyLlmTurnLimit: row.monthly_llm_turn_limit ?? 0,
     monthlyLlmWarningPercent: row.monthly_llm_warning_percent ?? 80,
     name: row.name,
+    parentOrgId: row.parent_org_id,
+    setupPending: row.setup_pending === 1,
     skillsCuratorArchiveAfterDays: row.skills_curator_archive_after_days,
     skillsCuratorConsolidateEnabled:
       row.skills_curator_consolidate_enabled !== 0,

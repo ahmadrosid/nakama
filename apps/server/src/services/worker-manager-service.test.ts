@@ -17,31 +17,31 @@ import {
 import { saveWhatsAppConfig } from "@nakama/core/whatsapp-config";
 import { WorkerManagerService } from "./worker-manager-service";
 
+type Pm2Client = NonNullable<
+  ConstructorParameters<typeof WorkerManagerService>[1]
+>;
+
 function createMockPm2() {
   const mockPm2 = {
     connect: mock((cb: (err: Error | null) => void) => cb(null)),
     delete: mock((_name: string, cb: (err: Error | null) => void) => cb(null)),
-    describe: mock(
-      (_name: string, cb: (err: Error | null, list: unknown[]) => void) =>
-        cb(null, [])
+    describe: mock((_name: string, cb: Parameters<Pm2Client["list"]>[0]) =>
+      cb(null, [])
     ),
     disconnect: mock(() => {}),
     flush: mock((_name: string, cb: (err: Error | null) => void) => cb(null)),
-    list: mock((cb: (err: Error | null, list: unknown[]) => void) =>
-      cb(null, [])
-    ),
+    list: mock((cb: Parameters<Pm2Client["list"]>[0]) => cb(null, [])),
     restart: mock((_name: string, cb: (err: Error | null) => void) => cb(null)),
     start: mock(
       (
-        _opts: Parameters<typeof import("pm2").start>[0],
+        _opts: Parameters<Pm2Client["start"]>[0],
         cb: (err: Error | null) => void
       ) => cb(null)
     ),
     stop: mock((_name: string, cb: (err: Error | null) => void) => cb(null)),
   };
 
-  // SAFETY: The test fixture matches the contract used by this test.
-  return mockPm2 as typeof import("pm2");
+  return mockPm2;
 }
 
 const projectRoot = "/tmp/test-project";
@@ -336,7 +336,7 @@ describe("WorkerManagerService", () => {
       const mockPm2 = createMockPm2();
       mockPm2.start = mock(
         (
-          _opts: Parameters<typeof import("pm2").start>[0],
+          _opts: Parameters<Pm2Client["start"]>[0],
           cb: (err: Error | null) => void
         ) => cb(new Error("PM2 start failed"))
       );
@@ -401,7 +401,7 @@ describe("WorkerManagerService", () => {
   describe("getWorkerStatus", () => {
     test("returns managed status for running worker", async () => {
       const mockPm2 = createMockPm2();
-      mockPm2.list = mock((cb: (err: Error | null, list: unknown[]) => void) =>
+      mockPm2.list = mock((cb: Parameters<Pm2Client["list"]>[0]) =>
         cb(null, [
           {
             monit: { cpu: 2.5, memory: 45_000_000 },
@@ -426,7 +426,7 @@ describe("WorkerManagerService", () => {
 
     test("returns managed: true / stopped when worker not in PM2 list", async () => {
       const mockPm2 = createMockPm2();
-      mockPm2.list = mock((cb: (err: Error | null, list: unknown[]) => void) =>
+      mockPm2.list = mock((cb: Parameters<Pm2Client["list"]>[0]) =>
         cb(null, [])
       );
       const service = new WorkerManagerService(projectRoot, mockPm2);
@@ -471,7 +471,7 @@ describe("WorkerManagerService", () => {
   describe("getAllWorkerStatuses", () => {
     test("returns managed true for stopped workers when PM2 is available", async () => {
       const mockPm2 = createMockPm2();
-      mockPm2.list = mock((cb: (err: Error | null, list: unknown[]) => void) =>
+      mockPm2.list = mock((cb: Parameters<Pm2Client["list"]>[0]) =>
         cb(null, [
           {
             monit: { cpu: 3.1, memory: 60_000_000 },
@@ -494,7 +494,7 @@ describe("WorkerManagerService", () => {
 
     test("returns managed true for profile-scoped statuses including slack", async () => {
       const mockPm2 = createMockPm2();
-      mockPm2.list = mock((cb: (err: Error | null, list: unknown[]) => void) =>
+      mockPm2.list = mock((cb: Parameters<Pm2Client["list"]>[0]) =>
         cb(null, [])
       );
       const service = new WorkerManagerService(projectRoot, mockPm2);
@@ -532,7 +532,7 @@ describe("WorkerManagerService", () => {
 
       const mockPm2 = createMockPm2();
       mockPm2.describe = mock(
-        (_name: string, cb: (err: Error | null, list: unknown[]) => void) =>
+        (_name: string, cb: Parameters<Pm2Client["list"]>[0]) =>
           cb(null, [
             {
               name: "whatsapp",
@@ -557,7 +557,7 @@ describe("WorkerManagerService", () => {
     test("returns empty strings when log files are missing", async () => {
       const mockPm2 = createMockPm2();
       mockPm2.describe = mock(
-        (_name: string, cb: (err: Error | null, list: unknown[]) => void) =>
+        (_name: string, cb: Parameters<Pm2Client["list"]>[0]) =>
           cb(null, [
             {
               name: "whatsapp",
@@ -579,7 +579,7 @@ describe("WorkerManagerService", () => {
     test("returns empty strings when pm2_env has no log paths", async () => {
       const mockPm2 = createMockPm2();
       mockPm2.describe = mock(
-        (_name: string, cb: (err: Error | null, list: unknown[]) => void) =>
+        (_name: string, cb: Parameters<Pm2Client["list"]>[0]) =>
           cb(null, [
             {
               name: "whatsapp",
@@ -598,7 +598,7 @@ describe("WorkerManagerService", () => {
     test("throws when PM2 describe fails", async () => {
       const mockPm2 = createMockPm2();
       mockPm2.describe = mock(
-        (_name: string, cb: (err: Error | null, list: unknown[]) => void) =>
+        (_name: string, cb: Parameters<Pm2Client["list"]>[0]) =>
           cb(new Error("PM2 describe failed"))
       );
       const service = new WorkerManagerService(projectRoot, mockPm2);
@@ -612,7 +612,7 @@ describe("WorkerManagerService", () => {
   describe("recoverDesiredWorkers", () => {
     test("does not recover unowned legacy channel workers", async () => {
       const mockPm2 = createMockPm2();
-      mockPm2.list = mock((cb: (err: Error | null, list: unknown[]) => void) =>
+      mockPm2.list = mock((cb: Parameters<Pm2Client["list"]>[0]) =>
         cb(null, [])
       );
       const service = new WorkerManagerService(projectRoot, mockPm2);
@@ -626,7 +626,7 @@ describe("WorkerManagerService", () => {
 
     test("recovers automation worker when desired", async () => {
       const mockPm2 = createMockPm2();
-      mockPm2.list = mock((cb: (err: Error | null, list: unknown[]) => void) =>
+      mockPm2.list = mock((cb: Parameters<Pm2Client["list"]>[0]) =>
         cb(null, [])
       );
       const service = new WorkerManagerService(projectRoot, mockPm2);
@@ -642,7 +642,7 @@ describe("WorkerManagerService", () => {
 
     test("skips workers that are already online", async () => {
       const mockPm2 = createMockPm2();
-      mockPm2.list = mock((cb: (err: Error | null, list: unknown[]) => void) =>
+      mockPm2.list = mock((cb: Parameters<Pm2Client["list"]>[0]) =>
         cb(null, [
           {
             monit: { cpu: 1, memory: 1_000_000 },
@@ -733,7 +733,7 @@ test("plugin workers are isolated, recover desired state, and unregister without
   );
   const [b] = await service.listPluginWorkers("org-b");
   expect(a!.name).not.toBe(b!.name);
-  pm2.list = mock((cb: (error: Error | null, list: unknown[]) => void) =>
+  pm2.list = mock((cb: Parameters<Pm2Client["list"]>[0]) =>
     cb(null, [
       { name: a!.name, pm2_env: { status: "waiting restart" } },
       { name: b!.name, pm2_env: { status: "stopped" } },
@@ -762,10 +762,19 @@ test("plugin workers are isolated, recover desired state, and unregister without
 });
 
 test("Supermemory receives only the requested OpenAI configuration on each start", async () => {
-  const llm = mock((type?: "openai") =>
-    type === "openai"
-      ? { apiKey: "test-key", model: "test-model", type: "openai" }
-      : { apiKey: "restricted", type: "openai_compatible" }
+  const llm = mock(
+    (
+      type?: "openai"
+    ): ReturnType<
+      NonNullable<ConstructorParameters<typeof WorkerManagerService>[2]>
+    > =>
+      type === "openai"
+        ? { apiKey: "test-key", model: "test-model", type: "openai" }
+        : {
+            apiKey: "restricted",
+            model: "restricted-model",
+            type: "openai_compatible",
+          }
   );
 
   const service = new WorkerManagerService(projectRoot, createMockPm2(), llm);
@@ -845,6 +854,78 @@ test("migration preserves an unambiguous connection and leaves ambiguous credent
     { orgId: "org_b", profileId: "agent_org_b" },
     { botToken: "111:rotated" }
   );
+});
+
+test("Telegram migration changes only Telegram notification destinations", async () => {
+  const { createInMemoryDatabaseAdapter } = await import("@nakama/db");
+  const { saveTelegramConfig } = await import("@nakama/core/telegram-config");
+  const db = createInMemoryDatabaseAdapter();
+  const now = new Date().toISOString();
+  await db.upsertOrganization({
+    createdAt: now,
+    id: "org_a",
+    name: "A",
+    slug: "a",
+    updatedAt: now,
+  });
+  await db.upsertProfile({
+    createdAt: now,
+    id: "agent_a",
+    isDefault: true,
+    isSuper: false,
+    model: "test",
+    name: "A",
+    orgId: "org_a",
+    systemPrompt: "",
+    updatedAt: now,
+  });
+
+  const fields = {
+    createdAt: now,
+    name: "Notifications",
+    orgId: "org_a",
+    secretHash: "hash",
+    updatedAt: now,
+  };
+
+  await db.upsertNotificationDestination({
+    ...fields,
+    channel: "telegram",
+    config: { chatId: 1001 },
+    id: "telegram",
+  });
+  await db.upsertNotificationDestination({
+    ...fields,
+    channel: "discord",
+    config: { channelId: "123", profileId: "" },
+    id: "discord",
+  });
+  await db.upsertNotificationDestination({
+    ...fields,
+    channel: "whatsapp",
+    config: { profileId: "" },
+    id: "whatsapp",
+  });
+  await saveTelegramConfig("org_a", {
+    botToken: "111:legacy",
+    profileId: "default",
+  });
+
+  await new WorkerManagerService(
+    projectRoot,
+    createMockPm2()
+  ).migrateAgentChannels(db);
+
+  const destinations = await db.listNotificationDestinationsForOrg("org_a");
+  expect(
+    destinations.find((destination) => destination.id === "telegram")?.config
+  ).toEqual({ chatId: 1001, profileId: "agent_a" });
+  expect(
+    destinations.find((destination) => destination.id === "discord")?.config
+  ).toEqual({ channelId: "123", profileId: "" });
+  expect(
+    destinations.find((destination) => destination.id === "whatsapp")?.config
+  ).toEqual({ profileId: "" });
 });
 
 test("migration archives duplicate legacy WhatsApp credentials when the claimed agent is connected", async () => {

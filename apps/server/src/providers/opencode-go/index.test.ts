@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { asTestFetch } from "../test-helpers";
 import { createOpenCodeGoProvider } from "./index";
 
 const ORIGINAL_FETCH = globalThis.fetch;
@@ -6,11 +7,11 @@ const ORIGINAL_FETCH = globalThis.fetch;
 function mockFetch(
   handler: (request: Request) => Promise<Response> | Response
 ): void {
-  const mockFn: typeof fetch = (input, init?) => {
+  const mockFn: typeof fetch = asTestFetch((input, init?) => {
     const request = new Request(input, init);
 
     return Promise.resolve(handler(request));
-  };
+  });
 
   globalThis.fetch = mockFn;
 }
@@ -21,7 +22,7 @@ afterEach(() => {
 
 describe("createOpenCodeGoProvider", () => {
   test("routes chat-completions models to the OpenAI-compatible endpoint", async () => {
-    let capturedUrl: string | null = null;
+    let capturedUrl = "";
 
     mockFetch((request) => {
       capturedUrl = request.url;
@@ -49,7 +50,7 @@ describe("createOpenCodeGoProvider", () => {
   });
 
   test("routes messages models to the Anthropic-style endpoint", async () => {
-    let capturedUrl: string | null = null;
+    let capturedUrl = "";
 
     mockFetch((request) => {
       capturedUrl = request.url;

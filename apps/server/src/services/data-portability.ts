@@ -30,6 +30,7 @@ import {
   type DataExportManifest,
   type DataExportSkippedItem,
   type DataImportPreviewResponse,
+  getAttachmentFilePath,
   getKnowledgeBaseDir,
   getOrgKnowledgeBaseDir,
   getProfileSoulDir,
@@ -664,10 +665,16 @@ export async function createNakamaOrgDataExport(
   const profiles = [];
 
   for (const profile of await databaseAdapter.listProfilesForOrg(orgId)) {
-    const artifacts = await listArtifacts(orgId, profile.id);
+    const soulDir = getProfileSoulDir(orgId, profile.id);
+
+    const artifacts =
+      (await pathExists(soulDir)) && !(await isDirectExportPath(soulDir))
+        ? []
+        : (await listArtifacts(orgId, profile.id)).artifacts;
+
     const exportedArtifacts = [];
 
-    for (const artifact of artifacts.artifacts) {
+    for (const artifact of artifacts) {
       const archivePath = toZipPath(
         `profiles/${profile.id}/artifacts/${artifact.filename}`
       );
@@ -683,8 +690,6 @@ export async function createNakamaOrgDataExport(
       });
     }
 
-    const soulDir = getProfileSoulDir(orgId, profile.id);
-
     for (const filename of [
       "SOUL.md",
       "STYLE.md",
@@ -693,7 +698,10 @@ export async function createNakamaOrgDataExport(
     ]) {
       const sourcePath = join(soulDir, filename);
 
-      if (await pathExists(sourcePath)) {
+      if (
+        (await pathExists(sourcePath)) &&
+        (await isDirectExportPath(sourcePath))
+      ) {
         const archivePath = `profiles/${profile.id}/workspace/${filename}`;
         validateArchivePath(archivePath);
         entries[archivePath] = await readFile(sourcePath);
@@ -705,9 +713,22 @@ export async function createNakamaOrgDataExport(
       getKnowledgeBaseDir(orgId, profile.id),
       `profiles/${profile.id}/knowledge-base`
     );
+
+    const shared = await databaseAdapter.getSharedAgentInstance(
+      orgId,
+      profile.id
+    );
+
     profiles.push({
       ...profile,
       artifacts: exportedArtifacts,
+      sharedAgent: shared
+        ? {
+            publicationId: shared.publicationId,
+            sourceOrgId: shared.sourceOrgId,
+            sourceProfileId: shared.sourceProfileId,
+          }
+        : undefined,
     });
   }
 
@@ -733,11 +754,20 @@ export async function createNakamaOrgDataExport(
       const attachmentPath = `attachments/${attachment.id}`;
       validateArchivePath(attachmentPath);
 
-      const bytes = await readAttachmentBytes(
+      const sourcePath = getAttachmentFilePath(
         orgId,
         attachment.profileId,
         attachment.id
       );
+
+      const bytes =
+        (await pathExists(sourcePath)) && (await isDirectExportPath(sourcePath))
+          ? await readAttachmentBytes(
+              orgId,
+              attachment.profileId,
+              attachment.id
+            )
+          : null;
 
       if (bytes) {
         entries[attachmentPath] = bytes;
@@ -819,12 +849,25 @@ export async function createNakamaOrgDataExport(
   };
 }
 
+export async function isDirectExportPath(sourcePath: string): Promise<boolean> {
+  const rootDir = getUserConfigDir();
+
+  const expected = resolve(
+    await realpath(rootDir),
+    relative(rootDir, sourcePath)
+  );
+
+  return (await realpath(sourcePath)) === expected;
+}
+
 async function addDirectoryFiles(
   entries: Record<string, Uint8Array>,
   sourceDir: string,
   archiveDir: string
 ): Promise<void> {
-  if (!(await pathExists(sourceDir))) {
+  if (
+    !((await pathExists(sourceDir)) && (await isDirectExportPath(sourceDir)))
+  ) {
     return;
   }
 
@@ -989,6 +1032,107 @@ export async function restoreNakamaDataImport(
       // Set first: a hook that throws may already have released the handle.
       replaceStarted = true;
       await options.beforeReplace();
+    }
+
+    // Read after requests drain, so a publication revoked during staging stays revoked.
+    const permittedPublications = new Set<string>();
+
+    if (liveDatabasePath && (await pathExists(liveDatabasePath))) {
+      const live = new Database(liveDatabasePath, { readonly: true });
+
+      try {
+        if (
+          live
+            .query(
+              "SELECT 1 FROM sqlite_master WHERE type='table' AND name='org_shared_resources'"
+            )
+            .get()
+        ) {
+          const publications = live
+            .query<
+              {
+                id: string;
+                org_id: string;
+                resource_kind: string;
+                resource_id: string;
+              },
+              []
+            >(
+              "SELECT id, org_id, resource_kind, resource_id FROM org_shared_resources"
+            )
+            .all();
+
+          for (const publication of publications) {
+            permittedPublications.add(
+              JSON.stringify([
+                publication.id,
+                publication.org_id,
+                publication.resource_kind,
+                publication.resource_id,
+              ])
+            );
+          }
+        }
+      } finally {
+        live.close();
+      }
+    }
+
+    for (const candidate of stagedDatabases) {
+      if (!(candidate && (await pathExists(candidate)))) {
+        continue;
+      }
+
+      const staged = new Database(candidate);
+
+      try {
+        if (
+          staged
+            .query(
+              "SELECT 1 FROM sqlite_master WHERE type='table' AND name='org_shared_resources'"
+            )
+            .get()
+        ) {
+          staged
+            .transaction(() => {
+              const publications = staged
+                .query<
+                  {
+                    id: string;
+                    org_id: string;
+                    resource_kind: string;
+                    resource_id: string;
+                  },
+                  []
+                >(
+                  "SELECT id, org_id, resource_kind, resource_id FROM org_shared_resources"
+                )
+                .all();
+
+              const remove = staged.query(
+                "DELETE FROM org_shared_resources WHERE id = ?"
+              );
+
+              for (const publication of publications) {
+                if (
+                  !permittedPublications.has(
+                    JSON.stringify([
+                      publication.id,
+                      publication.org_id,
+                      publication.resource_kind,
+                      publication.resource_id,
+                    ])
+                  )
+                ) {
+                  remove.run(publication.id);
+                }
+              }
+            })
+            .immediate();
+        }
+      } finally {
+        staged.close();
+      }
     }
 
     const existingEntries = await listMovableTopLevelEntries(

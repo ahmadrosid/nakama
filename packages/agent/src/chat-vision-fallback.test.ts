@@ -151,7 +151,7 @@ describe("preprocessUserContent vision fallback", () => {
   );
 
   test("stores described images and sends text to the primary provider", async () => {
-    const calls: Array<string | { type: string }[]> = [];
+    const calls: GenerateChatInput["messages"][number]["content"][] = [];
 
     const provider: ProviderClient = {
       async generateChat(input) {

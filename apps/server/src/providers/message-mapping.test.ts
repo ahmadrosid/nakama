@@ -182,17 +182,17 @@ describe("provider user content mapping", () => {
 
     const user = result[0];
 
-    expect(user.type).toBe("message");
-    expect(user.role).toBe("user");
-    expect(user?.type === "message" ? user.content[0] : undefined).toEqual({
-      text: "What is this?",
-      type: "input_text",
+    expect(user).toMatchObject({
+      content: [
+        { text: "What is this?", type: "input_text" },
+        {
+          image_url: expect.stringMatching(/^data:image\/png;base64,/),
+          type: "input_image",
+        },
+      ],
+      role: "user",
+      type: "message",
     });
-    const image = user?.type === "message" ? user.content[1] : undefined;
-    expect(image?.type).toBe("input_image");
-    expect(
-      image?.type === "input_image" ? image.image_url : undefined
-    ).toStartWith("data:image/png;base64,");
   });
 
   test("toOpenAIMessages maps document parts", async () => {
@@ -240,10 +240,17 @@ describe("provider user content mapping", () => {
 
     const user = result[0];
 
-    expect(user?.type === "message" ? user.content[1] : undefined).toEqual({
-      file_data: "data:application/pdf;base64,JVBERi0=",
-      filename: "report.pdf",
-      type: "input_file",
+    expect(user).toMatchObject({
+      content: [
+        { text: "Summarize this file", type: "input_text" },
+        {
+          file_data: "data:application/pdf;base64,JVBERi0=",
+          filename: "report.pdf",
+          type: "input_file",
+        },
+      ],
+      role: "user",
+      type: "message",
     });
   });
 

@@ -11,6 +11,30 @@ const ACCESS_TOKEN = "fake-access-token";
 
 const CALLBACK_BASE_URL = "http://127.0.0.1:4310";
 
+test("stored OAuth grants reject malformed values and preserve valid tokens", () => {
+  for (const config of [
+    undefined,
+    null,
+    [],
+    { oauth: "invalid" },
+    { oauth: { state: 7 } },
+    { oauth: { tokens: { access_token: 7 } } },
+  ]) {
+    expect(readMcpOAuthGrant(config)).toBeUndefined();
+  }
+
+  const grant = {
+    callbackBaseUrl: CALLBACK_BASE_URL,
+    codeVerifier: "verifier",
+    state: "pending",
+    tokens: { access_token: "token", token_type: "Bearer" },
+  };
+
+  expect(
+    readMcpOAuthGrant({ oauth: grant, url: "https://mcp.example.com" })
+  ).toEqual(grant);
+});
+
 /**
  * A remote MCP server that answers 401 until it sees a Bearer token, fronted by
  * the OAuth endpoints the MCP authorization spec discovers: protected resource

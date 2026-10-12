@@ -11,6 +11,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -62,52 +63,89 @@ async function loadSessionState(): Promise<{
   }
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+function useAuthSession() {
   const [user, setUser] = useState<AuthUserResponse | null>(null);
   const [orgs, setOrgs] = useState<UserOrgSummary[]>([]);
   const [platformOrgs, setPlatformOrgs] = useState<OrganizationSummary[]>([]);
   const [platformOrgsError, setPlatformOrgsError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const authRevision = useRef(0);
+  const sessionRequestRevision = useRef(0);
+  const platformRequestRevision = useRef(0);
 
   const refreshPlatformOrgs = useCallback(async () => {
+    const revision = authRevision.current;
+    const sessionRevision = sessionRequestRevision.current;
+    const requestRevision = ++platformRequestRevision.current;
+
     try {
       const { organizations } = await client.listPlatformOrganizations();
+
+      if (
+        revision !== authRevision.current ||
+        sessionRevision !== sessionRequestRevision.current ||
+        requestRevision !== platformRequestRevision.current
+      ) {
+        return;
+      }
+
       setPlatformOrgs(organizations);
       setPlatformOrgsError(false);
     } catch (error) {
-      setPlatformOrgsError(true);
+      if (
+        revision === authRevision.current &&
+        sessionRevision === sessionRequestRevision.current &&
+        requestRevision === platformRequestRevision.current
+      ) {
+        setPlatformOrgsError(true);
+      }
+
       throw error;
     }
   }, []);
 
   const refreshSession = useCallback(async () => {
+    const revision = authRevision.current;
+    const requestRevision = ++sessionRequestRevision.current;
     const session = await loadSessionState();
+
+    if (
+      revision !== authRevision.current ||
+      requestRevision !== sessionRequestRevision.current
+    ) {
+      return;
+    }
+
     setUser(session.user);
     setOrgs(session.orgs);
     setPlatformOrgs(session.platformOrgs);
     setPlatformOrgsError(session.platformOrgsError);
+    setIsLoading(false);
     resetQueryCache();
   }, []);
 
   useEffect(() => {
-    loadSessionState()
-      .then((session) => {
-        setUser(session.user);
-        setOrgs(session.orgs);
-        setPlatformOrgs(session.platformOrgs);
-        setPlatformOrgsError(session.platformOrgsError);
-        resetQueryCache();
-      })
-      .catch(() => {
-        setUser(null);
-        setOrgs([]);
-        setPlatformOrgs([]);
-        setPlatformOrgsError(false);
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
-  }, []);
+    const revision = authRevision.current;
+    const requestRevision = sessionRequestRevision.current + 1;
+    refreshSession().catch(() => {
+      if (
+        revision !== authRevision.current ||
+        requestRevision !== sessionRequestRevision.current
+      ) {
+        return;
+      }
+
+      setUser(null);
+      setOrgs([]);
+      setPlatformOrgs([]);
+      setPlatformOrgsError(false);
+      setIsLoading(false);
+    });
+
+    return () => {
+      authRevision.current += 1;
+    };
+  }, [refreshSession]);
 
   const activeOrg = useMemo(() => {
     const activeOrgId = user?.activeOrgId ?? user?.orgId ?? null;
@@ -125,6 +163,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const setup = useCallback(
     async (request: SetupAuthRequest) => {
+      const revision = ++authRevision.current;
+
       const webPublicUrl =
         request.webPublicUrl ??
         (typeof window !== "undefined" && window.location?.origin
@@ -136,6 +176,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
         ...(webPublicUrl ? { webPublicUrl } : {}),
       });
+
+      if (revision !== authRevision.current) {
+        return;
+      }
+
+      authRevision.current += 1;
       await refreshSession();
     },
     [refreshSession]
@@ -152,8 +198,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         passkeyChallenge?: string;
       }
     ) => {
+      const revision = ++authRevision.current;
       const response = await client.login(email, password, mfa);
-      await refreshSession();
+
+      if (revision === authRevision.current) {
+        authRevision.current += 1;
+        await refreshSession();
+      }
 
       return response;
     },
@@ -161,6 +212,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
+    const revision = ++authRevision.current;
+
     try {
       await client.logout();
     } catch {
@@ -168,19 +221,78 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // cookies and revokes every browser session server-side).
     }
 
+    if (revision !== authRevision.current) {
+      return;
+    }
+
+    authRevision.current += 1;
     client.setOrgId(null);
     setUser(null);
     setOrgs([]);
     setPlatformOrgs([]);
     setPlatformOrgsError(false);
+    setIsLoading(false);
     resetQueryCache();
   }, []);
 
-  const switchOrg = useCallback(async (orgId: string) => {
-    const nextUser = await client.setActiveOrg(orgId);
-    setUser(nextUser);
-    resetQueryCache();
-  }, []);
+  return {
+    activeOrg,
+    authRevision,
+    isLoading,
+    login,
+    logout,
+    orgs,
+    platformOrgs,
+    platformOrgsError,
+    refreshPlatformOrgs,
+    refreshSession,
+    sessionRequestRevision,
+    setIsLoading,
+    setOrgs,
+    setPlatformOrgs,
+    setUser,
+    setup,
+    user,
+  };
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const {
+    activeOrg,
+    authRevision,
+    sessionRequestRevision,
+    user,
+    setUser,
+    orgs,
+    setOrgs,
+    platformOrgs,
+    setPlatformOrgs,
+    platformOrgsError,
+    isLoading,
+    setIsLoading,
+    refreshPlatformOrgs,
+    refreshSession,
+    setup,
+    login,
+    logout,
+  } = useAuthSession();
+
+  const switchOrg = useCallback(
+    async (orgId: string) => {
+      const revision = ++authRevision.current;
+      const nextUser = await client.setActiveOrg(orgId);
+
+      if (revision !== authRevision.current) {
+        return;
+      }
+
+      authRevision.current += 1;
+      setUser(nextUser);
+      setIsLoading(false);
+      resetQueryCache();
+    },
+    [authRevision, setIsLoading, setUser]
+  );
 
   const archiveOrg = useCallback(
     async (orgId: string) => {
@@ -188,30 +300,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error("Only platform admins can delete organizations.");
       }
 
+      const revision = ++authRevision.current;
+      const sessionRevision = sessionRequestRevision.current;
       await client.archivePlatformOrganization(orgId);
+
+      if (
+        revision !== authRevision.current ||
+        sessionRevision !== sessionRequestRevision.current
+      ) {
+        return;
+      }
 
       const [{ orgs: nextOrgs }, { organizations }] = await Promise.all([
         client.listUserOrgs(),
         client.listPlatformOrganizations(),
       ]);
 
+      if (
+        revision !== authRevision.current ||
+        sessionRevision !== sessionRequestRevision.current
+      ) {
+        return;
+      }
+
       const nextOrgId =
         nextOrgIdAfterArchive(nextOrgs, orgId) ??
         organizations.find((org) => !org.archivedAt && org.id !== orgId)?.id;
 
-      setOrgs(nextOrgs);
-      setPlatformOrgs(organizations);
+      let nextUser: AuthUserResponse;
 
       if (nextOrgId) {
-        setUser(await client.setActiveOrg(nextOrgId));
+        nextUser = await client.setActiveOrg(nextOrgId);
       } else {
         client.setOrgId(null);
-        setUser(await client.getMe());
+        nextUser = await client.getMe();
       }
 
+      if (
+        revision !== authRevision.current ||
+        sessionRevision !== sessionRequestRevision.current
+      ) {
+        return;
+      }
+
+      authRevision.current += 1;
+      setOrgs(nextOrgs);
+      setPlatformOrgs(organizations);
+      setUser(nextUser);
+      setIsLoading(false);
       resetQueryCache();
     },
-    [user?.isPlatformAdmin]
+    [
+      authRevision,
+      sessionRequestRevision,
+      setIsLoading,
+      setOrgs,
+      setPlatformOrgs,
+      setUser,
+      user?.isPlatformAdmin,
+    ]
   );
 
   const createOrg = useCallback(
@@ -220,19 +367,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error("Only platform admins can create organizations.");
       }
 
+      const revision = ++authRevision.current;
+      const sessionRevision = sessionRequestRevision.current;
       const created = await client.createUserOrganization(input);
+
+      if (
+        revision !== authRevision.current ||
+        sessionRevision !== sessionRequestRevision.current
+      ) {
+        return;
+      }
 
       const [{ orgs: nextOrgs }, nextUser] = await Promise.all([
         client.listUserOrgs(),
         client.setActiveOrg(created.organization.id),
       ]);
 
+      if (
+        revision !== authRevision.current ||
+        sessionRevision !== sessionRequestRevision.current
+      ) {
+        return;
+      }
+
+      authRevision.current += 1;
       setOrgs(nextOrgs);
       setPlatformOrgs((current) => [...current, created.organization]);
       setUser(nextUser);
+      setIsLoading(false);
       resetQueryCache();
     },
-    [user?.isPlatformAdmin]
+    [
+      authRevision,
+      sessionRequestRevision,
+      setIsLoading,
+      setOrgs,
+      setPlatformOrgs,
+      setUser,
+      user?.isPlatformAdmin,
+    ]
   );
 
   const updateOrg = useCallback(
@@ -252,22 +425,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error("Only org admins can edit organizations.");
       }
 
+      const revision = authRevision.current;
+      const sessionRevision = sessionRequestRevision.current;
+
       if (user?.isPlatformAdmin) {
         await client.updatePlatformOrganization(orgId, input);
       } else {
         await client.updateOrganization(orgId, input);
       }
 
+      if (
+        revision !== authRevision.current ||
+        sessionRevision !== sessionRequestRevision.current
+      ) {
+        return;
+      }
+
       const { orgs: nextOrgs } = await client.listUserOrgs();
+
+      if (
+        revision !== authRevision.current ||
+        sessionRevision !== sessionRequestRevision.current
+      ) {
+        return;
+      }
+
       setOrgs(nextOrgs);
 
       if (user?.isPlatformAdmin) {
         await refreshPlatformOrgs();
       }
 
-      resetQueryCache();
+      if (
+        revision === authRevision.current &&
+        sessionRevision === sessionRequestRevision.current
+      ) {
+        resetQueryCache();
+      }
     },
-    [orgs, platformOrgs, refreshPlatformOrgs, user?.isPlatformAdmin]
+    [
+      authRevision,
+      orgs,
+      platformOrgs,
+      refreshPlatformOrgs,
+      sessionRequestRevision,
+      setOrgs,
+      user?.isPlatformAdmin,
+    ]
   );
 
   const value = useMemo<AuthContextValue>(

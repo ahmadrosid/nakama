@@ -22,6 +22,9 @@ import {
 } from "@nakama/core";
 import { canAccessSuperBotProfile } from "@nakama/core/profiles";
 import { type DatabaseAdapter, DatabaseAutomationStore } from "@nakama/db";
+import { z } from "zod";
+
+const DeliveryStatusSchema = z.enum(["sent", "failed", "skipped"]).nullish();
 
 /** Caller role context used to gate access to admin-only profiles (e.g. Super Bot). */
 export type ProfileAccess = Parameters<typeof canAccessSuperBotProfile>[0];
@@ -541,7 +544,7 @@ function toRunRecord(
     automationId: run.automationId,
     completedAt: run.completedAt,
     deliveryError: run.deliveryError ?? null,
-    deliveryStatus: run.deliveryStatus ?? null,
+    deliveryStatus: DeliveryStatusSchema.parse(run.deliveryStatus) ?? null,
     error: run.error,
     id: run.id,
     output: run.output,

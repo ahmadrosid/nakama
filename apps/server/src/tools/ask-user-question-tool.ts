@@ -88,9 +88,8 @@ function slugId(value: string, fallback: string): string {
   return slug || fallback;
 }
 
-function readQuestionnaire(
-  input: z.input<typeof QuestionnaireInputSchema>
-): AgentQuestionnaire | null {
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This tool-input boundary immediately validates untrusted values with QuestionnaireInputSchema.
+function readQuestionnaire(input: unknown): AgentQuestionnaire | null {
   const parsedInput = QuestionnaireInputSchema.safeParse(input);
 
   if (!parsedInput.success) {
@@ -139,7 +138,7 @@ function readQuestionnaire(
 
   return {
     id: nanoid(),
-    questions: parsed,
+    questions: parsed.filter((question) => question !== null),
     title,
   };
 }

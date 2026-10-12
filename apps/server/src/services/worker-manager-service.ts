@@ -50,23 +50,27 @@ import {
 } from "@nakama/core/worker-heartbeat";
 import type { DatabaseAdapter } from "@nakama/db";
 
-const WORKER_SCRIPTS = {
-  automation: "apps/platform/automation/src/index.ts",
-  discord: "apps/platform/discord/src/index.ts",
-  slack: "apps/platform/slack/src/index.ts",
-  telegram: "apps/platform/telegram/src/index.ts",
-  whatsapp: "apps/platform/whatsapp/src/index.ts",
-} satisfies Record<PlatformWorkerName, string>;
+const WORKER_SCRIPTS = new Map(
+  Object.entries({
+    automation: "apps/platform/automation/src/index.ts",
+    discord: "apps/platform/discord/src/index.ts",
+    slack: "apps/platform/slack/src/index.ts",
+    telegram: "apps/platform/telegram/src/index.ts",
+    whatsapp: "apps/platform/whatsapp/src/index.ts",
+  } satisfies Record<PlatformWorkerName, string>)
+);
 
-const WORKER_DIST_SCRIPTS = {
-  automation: "apps/platform/automation/dist/index.js",
-  discord: "apps/platform/discord/dist/index.js",
-  slack: "apps/platform/slack/dist/index.js",
-  telegram: "apps/platform/telegram/dist/index.js",
-  whatsapp: "apps/platform/whatsapp/dist/index.js",
-} satisfies Partial<Record<PlatformWorkerName, string>>;
+const WORKER_DIST_SCRIPTS = new Map(
+  Object.entries({
+    automation: "apps/platform/automation/dist/index.js",
+    discord: "apps/platform/discord/dist/index.js",
+    slack: "apps/platform/slack/dist/index.js",
+    telegram: "apps/platform/telegram/dist/index.js",
+    whatsapp: "apps/platform/whatsapp/dist/index.js",
+  } satisfies Partial<Record<PlatformWorkerName, string>>)
+);
 
-const VALID_WORKERS = Object.keys(WORKER_SCRIPTS);
+const VALID_WORKERS = [...WORKER_SCRIPTS.keys()];
 
 /**
  * pm2 stops Windows processes with `taskkill /F`, so no signal handler runs.
@@ -85,7 +89,7 @@ export interface PluginWorkerRegistration {
   workers: PluginWorkerContribution[];
 }
 
-interface WorkerProcessEnv {
+type WorkerProcessEnv = {
   NAKAMA_CHANNEL_ORG_ID?: string;
   NAKAMA_CHANNEL_PROFILE_ID?: string;
   NAKAMA_CONFIG_DIR?: string;
@@ -93,7 +97,7 @@ interface WorkerProcessEnv {
   NAKAMA_WHATSAPP_CONTEXT_TOKEN?: string;
   NAKAMA_WHATSAPP_ORG_ID?: string;
   NODE_ENV: string;
-}
+};
 
 interface WorkerStartOptions {
   args: string[];
@@ -104,6 +108,25 @@ interface WorkerStartOptions {
   output?: string;
   script?: string;
   shutdown_with_message?: boolean;
+}
+
+interface Pm2Client {
+  connect(callback: (error: Error | null) => void): void;
+  delete(name: string, callback: (error: Error | null) => void): void;
+  describe(
+    name: string,
+    callback: (error: Error | null, processes?: Pm2ProcessDescription[]) => void
+  ): void;
+  disconnect(): void;
+  flush(name: string, callback: (error: Error | null) => void): void;
+  list(
+    callback: (error: Error | null, processes?: Pm2ProcessDescription[]) => void
+  ): void;
+  start(
+    options: import("pm2").StartOptions,
+    callback: (error: Error | null) => void
+  ): void;
+  stop(name: string, callback: (error: Error | null) => void): void;
 }
 
 type WorkerLlmConfig = Pick<ProviderInstance, "apiKey" | "baseUrl" | "type"> & {
@@ -437,7 +460,10 @@ export class WorkerManagerService {
       for (const destination of await db.listNotificationDestinationsForOrg(
         org.id
       )) {
-        if (!destination.config.profileId) {
+        if (
+          destination.channel === "telegram" &&
+          !destination.config.profileId
+        ) {
           await db.upsertNotificationDestination({
             ...destination,
             config: { ...destination.config, profileId: owners[0]!.profileId },
@@ -543,11 +569,11 @@ export class WorkerManagerService {
   private readonly pluginWorkers = new Map<string, RegisteredPluginWorker>();
   private pluginWorkersPaused = false;
   private pm2Queue: Promise<unknown> = Promise.resolve();
-  private pm2Module: typeof import("pm2") | null = null;
+  private pm2Module: Pm2Client | null = null;
 
   constructor(
     private readonly projectRoot: string,
-    pm2?: typeof import("pm2"),
+    pm2?: Pm2Client,
     private readonly getWorkerLlm?: (
       providerType?: "openai"
     ) => WorkerLlmConfig | null | undefined
@@ -555,15 +581,14 @@ export class WorkerManagerService {
     this.pm2Module = pm2 ?? null;
   }
 
-  private async ensurePm2(): Promise<NonNullable<typeof import("pm2")>> {
+  private async ensurePm2(): Promise<Pm2Client> {
     if (this.pm2Module) {
       return this.pm2Module;
     }
 
     try {
       const mod = await import("pm2");
-      // SAFETY: The dynamic import uses the installed `pm2` package type.
-      const pm2 = (mod.default ?? mod) as NonNullable<typeof import("pm2")>;
+      const pm2: Pm2Client = mod.default ?? mod;
       this.pm2Module = pm2;
 
       return pm2;
@@ -576,9 +601,7 @@ export class WorkerManagerService {
     }
   }
 
-  private async withPm2<T>(
-    action: (pm2: NonNullable<typeof import("pm2")>) => Promise<T>
-  ): Promise<T> {
+  private async withPm2<T>(action: (pm2: Pm2Client) => Promise<T>): Promise<T> {
     const operation = this.pm2Queue
       .catch(() => {})
       .then(async () => {
@@ -662,7 +685,7 @@ export class WorkerManagerService {
     }
   }
 
-  private async deletePluginProcess(pm2: typeof import("pm2"), name: string) {
+  private async deletePluginProcess(pm2: Pm2Client, name: string) {
     const existing = await promisifyPm2<Pm2ProcessDescription[]>((cb) =>
       pm2.describe(name, cb)
     );
@@ -876,13 +899,13 @@ export class WorkerManagerService {
   }
 
   private resolveWorkerScript(name: string): string {
-    const srcScript = WORKER_SCRIPTS[name];
+    const srcScript = WORKER_SCRIPTS.get(name);
 
     if (srcScript && existsSync(join(this.projectRoot, srcScript))) {
       return srcScript;
     }
 
-    const distScript = WORKER_DIST_SCRIPTS[name];
+    const distScript = WORKER_DIST_SCRIPTS.get(name);
 
     if (distScript && existsSync(join(this.projectRoot, distScript))) {
       return distScript;
@@ -892,7 +915,7 @@ export class WorkerManagerService {
   }
 
   private async removeWorkerFromPm2(
-    pm2: NonNullable<typeof import("pm2")>,
+    pm2: Pm2Client,
     name: string
   ): Promise<void> {
     await promisifyPm2<void>((cb) =>

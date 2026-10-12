@@ -30,6 +30,7 @@ export interface DiscoveredSkill {
   /** Scripts declared in frontmatter that resolved into callable tools. */
   scriptTools: SkillScriptTool[];
   skillFilePath: string;
+  sourceOrganization?: { id: string; name: string };
   toolPath: string | null;
 }
 

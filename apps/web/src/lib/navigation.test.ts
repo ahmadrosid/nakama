@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   canAccessIntegrationsPage,
+  canAccessOrganizationPage,
   canAccessSystemPage,
   canManagePluginReleases,
   enabledPluginNavEntries,
@@ -62,12 +63,12 @@ describe("visibleNavGroups", () => {
     expect(ids).toContain("usage");
   });
 
-  test("members and viewers cannot access system and organization destinations", () => {
+  test("members and viewers can access Organization without system destinations", () => {
     const member = pageIdsFor(false, "member");
     expect(member).not.toContain("integrations");
     expect(member).not.toContain("tools");
     expect(member).not.toContain("mcp");
-    expect(member).not.toContain("organization");
+    expect(member).toContain("organization");
     expect(member).not.toContain("workers");
     expect(member).not.toContain("files");
     expect(member).not.toContain("plugin-management");
@@ -77,7 +78,7 @@ describe("visibleNavGroups", () => {
     expect(viewer).not.toContain("integrations");
     expect(viewer).not.toContain("tools");
     expect(viewer).not.toContain("mcp");
-    expect(viewer).not.toContain("organization");
+    expect(viewer).toContain("organization");
     expect(viewer).not.toContain("workers");
     expect(viewer).not.toContain("files");
     expect(viewer).not.toContain("plugin-management");
@@ -170,6 +171,16 @@ describe("plugin navigation", () => {
 });
 
 describe("organization navigation", () => {
+  test("requires a tenant role or platform authority", () => {
+    for (const role of ["admin", "member", "viewer"]) {
+      expect(canAccessOrganizationPage(false, role)).toBe(true);
+    }
+
+    expect(canAccessOrganizationPage(false, undefined)).toBe(false);
+    expect(canAccessOrganizationPage(false, "unknown")).toBe(false);
+    expect(canAccessOrganizationPage(true, undefined)).toBe(true);
+    expect(pageIdsFor(false, undefined)).not.toContain("organization");
+  });
   test("maps the organization path", () => {
     expect(pageIdFromPath("/organization")).toBe("organization");
   });

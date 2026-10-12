@@ -241,7 +241,7 @@ function readReasoningText<ProviderPayload>(
 
 function readReasoningDetails<ProviderPayload>(
   value: ProviderPayload
-): NonNullable<ProviderJsonRecord["reasoning_details"]> {
+): unknown[] {
   const details = readRecord(value).reasoning_details;
 
   return Array.isArray(details) ? details : [];
@@ -250,7 +250,12 @@ function readReasoningDetails<ProviderPayload>(
 function buildThinkingBody(
   thinking: ProviderChatOptions["thinking"] | undefined,
   options: { model: string; hasTools: boolean; netra?: boolean }
-) {
+): Pick<
+  OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
+  "reasoning_effort"
+> & {
+  reasoning?: { effort?: "low" | "medium" | "high"; enabled?: boolean };
+} {
   if (options.netra) {
     return thinking?.enabled
       ? { reasoning: { effort: thinking.effort === "low" ? "low" : "high" } }

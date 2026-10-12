@@ -41,6 +41,12 @@ export function registerPlatformOrgRoutes(
       monthlyLlmTurnLimit: z.number().int().min(0).optional(),
       monthlyLlmWarningPercent: z.number().int().min(1).max(99).optional(),
       name: z.string().optional(),
+      skillsCuratorArchiveAfterDays: z.number().optional(),
+      skillsCuratorConsolidateEnabled: z.boolean().optional(),
+      skillsCuratorEnabled: z.boolean().optional(),
+      skillsCuratorStaleAfterDays: z.number().optional(),
+      skillsPostTurnReview: z.boolean().optional(),
+      skillsWriteApproval: z.boolean().optional(),
     })
     .openapi("UpdateOrganizationRequest");
 

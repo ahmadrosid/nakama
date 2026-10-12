@@ -22,7 +22,7 @@ export const searchFilesInputSchema = z
   })
   .strict();
 
-export type SearchFilesInput = z.infer<typeof searchFilesInputSchema>;
+export type SearchFilesInput = z.input<typeof searchFilesInputSchema>;
 
 export interface SearchFilesOutput {
   matchCount: number;

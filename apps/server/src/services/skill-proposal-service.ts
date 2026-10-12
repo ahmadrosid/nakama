@@ -86,6 +86,10 @@ export class SkillProposalService {
       throw new NakamaApiError("Profile not found.", 404);
     }
 
+    if (await db.getSharedAgentInstance(input.orgId, input.profileId)) {
+      throw new NakamaApiError("Shared agent skills are read-only.", 403);
+    }
+
     if (input.action === "create") {
       return this.stageCreate(input);
     }
@@ -149,6 +153,10 @@ export class SkillProposalService {
 
     if (proposal.status !== "pending") {
       throw new NakamaApiError("Only pending proposals can be approved.", 400);
+    }
+
+    if (await db.getSharedAgentInstance(orgId, proposal.profileId)) {
+      throw new NakamaApiError("Shared agent skills are read-only.", 403);
     }
 
     const changeMeta = {
@@ -742,7 +750,10 @@ export class SkillProposalService {
   }
 
   private async insertProposal(
-    input: Omit<StageSkillProposalInput, "relativePath" | "content"> & {
+    input: Omit<
+      StageSkillProposalInput,
+      "relativePath" | "content" | "consolidateLoserSkillNames"
+    > & {
       skillName: string;
       content: string | null;
       consolidateLoserSkillNames?: string[] | null;

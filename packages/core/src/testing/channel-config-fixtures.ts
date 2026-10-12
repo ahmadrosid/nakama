@@ -24,16 +24,25 @@ export async function withTempHomedir(
 ): Promise<void> {
   const tempHome = await mkdtemp(path.join(os.tmpdir(), prefix));
   const homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
+  const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+  process.env.NAKAMA_CONFIG_DIR = path.join(tempHome, ".nakama");
 
   try {
     await run(tempHome);
   } finally {
+    if (previousConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+    }
+
     homedirSpy.mockRestore();
     await rm(tempHome, { force: true, recursive: true });
   }
 }
 
 export type ChannelIniConfig = {
+  profileId?: string;
   botToken: string;
   handshakeCode?: string | null;
   handshakeExpiresAt?: string | null;
@@ -122,6 +131,7 @@ type SharedChannelConfigCase<TId extends string | number> = {
       allowedUserIds: TId[];
       botToken: string;
       handshakeCode: string | null;
+      handshakeExpiresAt: string | null;
       pairedUserIds: TId[];
       profileId: string;
     } | null;
@@ -129,6 +139,7 @@ type SharedChannelConfigCase<TId extends string | number> = {
     allowedUserIds: TId[];
     botToken: string;
     handshakeCode: string | null;
+    handshakeExpiresAt: string | null;
     pairedUserIds: TId[];
     profileId: string;
   } | null;
@@ -442,6 +453,7 @@ export function describeSharedChannelConfigTests<TId extends string | number>(
             botToken: "file-token",
             handshakeCode: null,
             handshakeExpiresAt: null,
+            pairedUserIds: [],
             profileId: "profile_from_file",
           },
         });

@@ -11,7 +11,6 @@ import type {
   AutomationDelivery,
   AutomationDeliveryNotifyOn,
   AutomationRunStatus,
-  JsonValue,
 } from "./contract";
 import { isDiscordSnowflake, loadDiscordConfigFile } from "./discord-config";
 import { isEmailConfigComplete, loadEmailConfig } from "./email-config";
@@ -29,7 +28,8 @@ const AutomationDeliveryInputSchema = z.object({
 });
 
 export function normalizeAutomationDelivery(
-  value: JsonValue | undefined
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This input boundary validates untrusted delivery values with AutomationDeliveryInputSchema.
+  value: unknown
 ): AutomationDelivery | undefined {
   if (value === undefined || value === null) {
     return;

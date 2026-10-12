@@ -98,11 +98,6 @@ function learnCommandText(
   return textPart?.type === "text" ? textPart.text : null;
 }
 
-function replaceLearnContentText(content: string, nextText: string): string;
-function replaceLearnContentText(
-  content: MessageContentPart[],
-  nextText: string
-): MessageContentPart[];
 function replaceLearnContentText(
   content: string | MessageContentPart[],
   nextText: string

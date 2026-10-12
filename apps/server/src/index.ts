@@ -68,6 +68,7 @@ import { AutomationRunner } from "./services/automation-runner";
 import { AutomationService } from "./services/automation-service";
 import { resolveComposioCallbackBaseUrl } from "./services/composio-callback-url";
 import { ComposioService } from "./services/composio-service";
+import { claimLegacyCustomTools } from "./services/custom-tool-handlers";
 import { retireAppUserData } from "./services/data-portability";
 import { GoogleMeetService } from "./services/google-meet/service";
 import { LlmUsageTracker } from "./services/llm-usage-tracker";
@@ -136,6 +137,8 @@ const database = await createDatabase(config.databaseUrl, {
 const MAX_AUTOMATION_RUN_RESUMES = 2;
 
 await seedDatabase(database.adapter);
+
+await claimLegacyCustomTools(database.adapter);
 
 await retireAppUserData(
   getUserConfigDir(),
@@ -327,6 +330,8 @@ agent.setChannelOwnerCleanup((orgId, profileId) =>
 
 const orgService = new OrgService(database.adapter, authService);
 
+agent.setOrgService(orgService);
+
 orgService.beforeArchiveChannels = async (orgId) => {
   const releaseMeet = googleMeetService.pauseOrganization(orgId);
   const owners: Array<{ orgId: string; profileId: string }> = [];
@@ -491,7 +496,8 @@ const app = createHonoApp({
 const server = startServer({
   canFallbackToNextPort,
   // The limiter needs the peer address, and Bun only exposes it on `server`.
-  fetch: (request: Request, server: Server) => app.fetch(request, { server }),
+  fetch: (request: Request, server: Server<unknown>) =>
+    app.fetch(request, { server }),
   host,
   preferredPort: requestedPort,
 });
@@ -607,7 +613,10 @@ function startServer(options: {
   host: string;
   preferredPort: number;
   canFallbackToNextPort: boolean;
-  fetch: (request: Request, server: Server) => Response | Promise<Response>;
+  fetch: (
+    request: Request,
+    server: Server<unknown>
+  ) => Response | Promise<Response>;
 }): ReturnType<typeof Bun.serve> {
   const lastPort = options.canFallbackToNextPort
     ? Math.min(options.preferredPort + 2000, 65_535)
@@ -618,7 +627,7 @@ function startServer(options: {
   for (let port = options.preferredPort; port <= lastPort; port += 1) {
     try {
       return Bun.serve({
-        async fetch(request, server: Server) {
+        async fetch(request, server: Server<unknown>) {
           disableBunIdleTimeoutForLongHeldRequest(request, server);
           const response = await options.fetch(request, server);
           disableBunIdleTimeoutForSse(request, response, server);

@@ -100,7 +100,11 @@ describe("data portability routes", () => {
     expect(response.headers.get("content-disposition")).toContain(
       "nakama-export-"
     );
-    expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(0);
+    const archive = unzipSync(new Uint8Array(await response.arrayBuffer()));
+
+    expect(Buffer.from(archive["config.ini"]!).toString("utf8")).toBe(
+      "provider=openai"
+    );
   });
 
   test("platform admin exports one user's data without secrets or other users", async () => {

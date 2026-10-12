@@ -1,3 +1,4 @@
+import type { PublishedKnowledgeBaseDocument } from "../contract";
 import { DEFAULT_KNOWLEDGE_SOURCES, NAKAMA_DOCS_LLMS_URL } from "./sources";
 import {
   getProfileSharedDocumentIds,
@@ -7,7 +8,8 @@ import {
 
 export async function composeKnowledgeBaseCatalog(
   orgId: string,
-  profileId: string
+  profileId: string,
+  publishedDocuments: readonly PublishedKnowledgeBaseDocument[] = []
 ): Promise<string> {
   const [profileDocuments, sharedDocumentIds, organizationDocuments] =
     await Promise.all([
@@ -25,11 +27,19 @@ export async function composeKnowledgeBaseCatalog(
 
   const sources = DEFAULT_KNOWLEDGE_SOURCES;
 
+  const readyPublishedDocuments = publishedDocuments.filter(
+    (document) => document.status === "ready"
+  );
+
   const readyDocuments = documents.filter(
     (document) => document.status === "ready"
   );
 
-  if (readyDocuments.length === 0 && sources.length === 0) {
+  if (
+    readyDocuments.length === 0 &&
+    readyPublishedDocuments.length === 0 &&
+    sources.length === 0
+  ) {
     return "";
   }
 
@@ -39,6 +49,23 @@ export async function composeKnowledgeBaseCatalog(
     sections.push(
       "# Uploaded documents",
       `${readyDocuments.length} ready documents. Use knowledge_base_search to find facts in their contents.`
+    );
+  }
+
+  if (readyPublishedDocuments.length > 0) {
+    const parentSources = [
+      ...new Map(
+        readyPublishedDocuments.map((document) => [
+          document.sourceOrganization.id,
+          document.sourceOrganization,
+        ])
+      ).values(),
+    ];
+
+    sections.push(
+      "# Published parent documents",
+      `${readyPublishedDocuments.length} published documents. Use knowledge_base_search to find facts. Results identify the publication and source organization.`,
+      `Source organizations: ${JSON.stringify(parentSources)}`
     );
   }
 

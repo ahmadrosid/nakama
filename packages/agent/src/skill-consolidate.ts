@@ -65,9 +65,13 @@ function buildSkillConsolidatePrompt(input: {
 export async function generateSkillConsolidateMarkdown(input: {
   losers?: SkillConsolidateBodyInput[];
   mode: SkillConsolidateMode;
-  provider: ProviderClient;
+  provider: ProviderClient | null;
   winner: SkillConsolidateBodyInput;
 }): Promise<string | null> {
+  if (!input.provider) {
+    return null;
+  }
+
   const prompt = buildSkillConsolidatePrompt(input);
 
   const result = await input.provider.generateText({
@@ -76,7 +80,7 @@ export async function generateSkillConsolidateMarkdown(input: {
     system: input.mode === "merge" ? MERGE_SYSTEM : DESLOP_SYSTEM,
   });
 
-  const markdown = result.text
+  const markdown = result.content
     .trim()
     .replace(/^```(?:markdown|md)?\s*/i, "")
     .replace(/\s*```$/, "");

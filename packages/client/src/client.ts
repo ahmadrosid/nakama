@@ -58,6 +58,7 @@ import type {
   CreateSessionRequest,
   CreateSessionResponse,
   CreateSkillRequest,
+  CreateTeamRequest,
   CreateToolRequest,
   CreateWorkflowRequest,
   DataImportPreviewResponse,
@@ -103,6 +104,7 @@ import type {
   ListOrgMemoryHistoryResponse,
   ListOrgMemoryProposalsResponse,
   ListOrgPluginsResponse,
+  ListOrgSharedResourcesResponse,
   ListPluginReleasesResponse,
   ListPluginUpdatesResponse,
   ListProfileChangeHistoryResponse,
@@ -131,6 +133,7 @@ import type {
   MoveProfileRequest,
   NotificationDestinationSummary,
   NotificationDestinationWithSecret,
+  OrganizationOverviewResponse,
   OrganizationResponse,
   OrgInviteCreatedResponse,
   OrgLlmQuotaStatusResponse,
@@ -142,6 +145,7 @@ import type {
   OrgMemorySearchResponse,
   OrgPluginDetail,
   OrgPluginSummary,
+  OrgSharedResourceResponse,
   PasskeyAuthenticationOptionsResponse,
   PasskeyCredentialResponse,
   PasskeyRegistrationOptionsResponse,
@@ -160,6 +164,8 @@ import type {
   ProfileResponse,
   PublishArtifactShareRequest,
   PublishArtifactShareResponse,
+  PublishedSkillResponse,
+  PublishOrgSharedResourceRequest,
   RegenerateNotificationDestinationKeyResponse,
   RenameWorkspaceEntryRequest,
   RequestPasswordResetRequest,
@@ -325,11 +331,13 @@ export class NakamaClient {
   }
 
   readonly baseUrl: string;
-  private readonly fetchImpl: typeof fetch;
+  private readonly fetchImpl: NonNullable<NakamaClientOptions["fetch"]>;
   private readonly credentials: RequestCredentials;
   private readonly clientOrigin: string | null;
   private authToken: string | null;
   private orgId: string | null;
+  private orgScopeRevision = 0;
+  private activeOrgRequestRevision = 0;
 
   constructor(options: NakamaClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? resolveServerUrl()).replace(/\/$/, "");
@@ -346,6 +354,7 @@ export class NakamaClient {
   }
 
   setOrgId(orgId: string | null): void {
+    this.orgScopeRevision += 1;
     this.orgId = orgId?.trim() || null;
   }
 
@@ -1095,9 +1104,10 @@ export class NakamaClient {
     );
   }
 
-  async getTool(toolId: string): Promise<ToolResponse> {
+  async getTool(toolId: string, orgId?: string): Promise<ToolResponse> {
     return this.request<ToolResponse>(
-      `/v1/tools/${encodeURIComponent(toolId)}`
+      `/v1/tools/${encodeURIComponent(toolId)}`,
+      orgId ? { headers: { "X-Org-Id": orgId } } : undefined
     );
   }
 
@@ -2864,12 +2874,16 @@ export class NakamaClient {
   }
 
   async setupUser(request: SetupAuthRequest): Promise<AuthUserResponse> {
+    const scopeRevision = this.orgScopeRevision;
+
     const response = await this.request<AuthUserResponse>("/v1/auth/setup", {
       body: JSON.stringify(request),
       method: "POST",
     });
 
-    this.applyAuthUserResponse(response);
+    if (scopeRevision === this.orgScopeRevision) {
+      this.applyAuthUserResponse(response);
+    }
 
     return response;
   }
@@ -2884,12 +2898,16 @@ export class NakamaClient {
       passkeyChallenge?: string;
     }
   ): Promise<AuthUserResponse> {
+    const scopeRevision = this.orgScopeRevision;
+
     const response = await this.request<AuthUserResponse>("/v1/auth/login", {
       body: JSON.stringify({ email, password, ...mfa }),
       method: "POST",
     });
 
-    this.applyAuthUserResponse(response);
+    if (scopeRevision === this.orgScopeRevision) {
+      this.applyAuthUserResponse(response);
+    }
 
     return response;
   }
@@ -2988,6 +3006,8 @@ export class NakamaClient {
   async acceptOrgInvite(
     request: AcceptOrgInviteRequest
   ): Promise<AcceptOrgInviteResponse> {
+    const scopeRevision = this.orgScopeRevision;
+
     const response = await this.request<AcceptOrgInviteResponse>(
       "/v1/auth/accept-invite",
       {
@@ -2996,14 +3016,21 @@ export class NakamaClient {
       }
     );
 
-    this.setOrgId(response.orgId);
+    if (scopeRevision === this.orgScopeRevision) {
+      this.setOrgId(response.orgId);
+    }
 
     return response;
   }
 
   async getMe(): Promise<AuthUserResponse> {
+    const scopeRevision = this.orgScopeRevision;
     const response = await this.request<AuthUserResponse>("/v1/auth/me");
-    this.applyAuthUserResponse(response);
+    const orgId = response.activeOrgId ?? response.orgId ?? null;
+
+    if (scopeRevision === this.orgScopeRevision && orgId !== this.orgId) {
+      this.applyAuthUserResponse(response);
+    }
 
     return response;
   }
@@ -3011,12 +3038,16 @@ export class NakamaClient {
   async updateAuthProfile(
     request: UpdateAuthProfileRequest
   ): Promise<AuthUserResponse> {
+    const scopeRevision = this.orgScopeRevision;
+
     const response = await this.request<AuthUserResponse>("/v1/auth/me", {
       body: JSON.stringify(request),
       method: "PATCH",
     });
 
-    this.applyAuthUserResponse(response);
+    if (scopeRevision === this.orgScopeRevision) {
+      this.applyAuthUserResponse(response);
+    }
 
     return response;
   }
@@ -3338,6 +3369,9 @@ export class NakamaClient {
   }
 
   async setActiveOrg(orgId: string): Promise<AuthUserResponse> {
+    const scopeRevision = this.orgScopeRevision;
+    const requestRevision = ++this.activeOrgRequestRevision;
+
     const response = await this.request<AuthUserResponse>(
       "/v1/auth/active-org",
       {
@@ -3346,7 +3380,12 @@ export class NakamaClient {
       }
     );
 
-    this.applyAuthUserResponse(response);
+    if (
+      scopeRevision === this.orgScopeRevision &&
+      requestRevision === this.activeOrgRequestRevision
+    ) {
+      this.applyAuthUserResponse(response);
+    }
 
     return response;
   }
@@ -3367,6 +3406,130 @@ export class NakamaClient {
   async listOrgMembers(orgId: string): Promise<ListOrgMembersResponse> {
     return this.request<ListOrgMembersResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/members`
+    );
+  }
+
+  async listParentOrgMembers(orgId: string): Promise<ListOrgMembersResponse> {
+    return this.request<ListOrgMembersResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/parent-members`
+    );
+  }
+
+  async getOrganizationOverview(
+    orgId: string
+  ): Promise<OrganizationOverviewResponse> {
+    return this.request<OrganizationOverviewResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/overview`,
+      { headers: { "X-Org-Id": orgId } }
+    );
+  }
+
+  async createTeam(
+    orgId: string,
+    request: CreateTeamRequest
+  ): Promise<CreateOrganizationResponse> {
+    return this.request<CreateOrganizationResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/teams`,
+      {
+        body: JSON.stringify(request),
+        headers: { "X-Org-Id": orgId },
+        method: "POST",
+      }
+    );
+  }
+
+  async listOrgSharedResources(
+    orgId: string
+  ): Promise<ListOrgSharedResourcesResponse> {
+    return this.request<ListOrgSharedResourcesResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/shared-resources`,
+      { headers: { "X-Org-Id": orgId } }
+    );
+  }
+
+  async getPublishedSkill(
+    orgId: string,
+    publicationId: string
+  ): Promise<PublishedSkillResponse> {
+    return this.request(
+      `/v1/orgs/${encodeURIComponent(orgId)}/shared-resources/${encodeURIComponent(publicationId)}/skill`,
+      {
+        headers: { "X-Org-Id": orgId },
+      }
+    );
+  }
+
+  async readPublishedKnowledgeBaseDocument(
+    orgId: string,
+    publicationId: string,
+    options: { render?: "text" } = {}
+  ): Promise<{ contentType: string; data: ArrayBuffer }> {
+    const query = options.render === "text" ? "?render=text" : "";
+
+    const response = await this.fetchRaw(
+      `/v1/orgs/${encodeURIComponent(orgId)}/shared-resources/${encodeURIComponent(publicationId)}/content${query}`,
+      { headers: { "X-Org-Id": orgId } }
+    );
+
+    return {
+      contentType:
+        response.headers.get("Content-Type") ?? "application/octet-stream",
+      data: await response.arrayBuffer(),
+    };
+  }
+
+  async publishOrgSharedResource(
+    orgId: string,
+    request: PublishOrgSharedResourceRequest
+  ): Promise<OrgSharedResourceResponse> {
+    return this.request<OrgSharedResourceResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/shared-resources`,
+      {
+        body: JSON.stringify(request),
+        headers: { "X-Org-Id": orgId },
+        method: "POST",
+      }
+    );
+  }
+
+  async listPublishedSkillFiles(
+    orgId: string,
+    publicationId: string
+  ): Promise<SkillFilesResponse> {
+    return this.request(
+      `/v1/orgs/${encodeURIComponent(orgId)}/shared-resources/${encodeURIComponent(publicationId)}/skill/files`,
+      { headers: { "X-Org-Id": orgId } }
+    );
+  }
+
+  async readPublishedSkillFile(
+    orgId: string,
+    publicationId: string,
+    filePath: string
+  ): Promise<SkillFileResponse> {
+    return this.request(
+      `/v1/orgs/${encodeURIComponent(orgId)}/shared-resources/${encodeURIComponent(publicationId)}/skill/file?${new URLSearchParams({ path: filePath })}`,
+      { headers: { "X-Org-Id": orgId } }
+    );
+  }
+
+  async unpublishOrgSharedResource(
+    orgId: string,
+    publicationId: string
+  ): Promise<void> {
+    await this.request(
+      `/v1/orgs/${encodeURIComponent(orgId)}/shared-resources/${encodeURIComponent(publicationId)}`,
+      { headers: { "X-Org-Id": orgId }, method: "DELETE" }
+    );
+  }
+
+  async createSharedAgentInstance(
+    orgId: string,
+    publicationId: string
+  ): Promise<ProfileResponse> {
+    return this.request<ProfileResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/shared-agents/${encodeURIComponent(publicationId)}/instance`,
+      { headers: { "X-Org-Id": orgId }, method: "POST" }
     );
   }
 

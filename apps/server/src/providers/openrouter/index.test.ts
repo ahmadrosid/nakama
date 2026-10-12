@@ -17,11 +17,11 @@ import {
 } from "../../services/provider-instance-helpers";
 import { createProviderForInstance } from "../create";
 import { type ProviderJsonRecord, parseJsonRecord } from "../shared";
-import { streamFromChunks } from "../test-helpers";
+import { asTestFetch, streamFromChunks } from "../test-helpers";
 import { createOpenRouterProvider } from "./index";
 
 function chatCompletionResponse(
-  content: string,
+  content: string | ProviderJsonRecord[],
   options: { toolCalls?: unknown[]; reasoning?: string } = {}
 ) {
   const message = { content, role: "assistant" };
@@ -76,6 +76,68 @@ function streamError<ErrorValue>(error: ErrorValue): string {
 }
 
 describe("createOpenRouterProvider", () => {
+  test("reads text parts from structured chat and text responses", async () => {
+    const provider = createOpenRouterProvider({
+      apiKey: "test-key",
+      fetcher: async () =>
+        new Response(
+          chatCompletionResponse([
+            { text: "Hello", type: "text" },
+            { text: " world", type: "text" },
+          ]),
+          { headers: { "Content-Type": "application/json" } }
+        ),
+    });
+
+    expect(
+      (await provider.generateChat({ messages: [], system: "test" })).content
+    ).toBe("Hello world");
+    expect(
+      (
+        await provider.generateText({
+          format: "text",
+          prompt: "hi",
+          system: "test",
+        })
+      ).content
+    ).toBe("Hello world");
+  });
+
+  test("rejects a response mode that does not match the request", async () => {
+    const provider = createOpenRouterProvider({
+      apiKey: "test-key",
+      fetcher: async (input, init) => {
+        const request =
+          input instanceof Request ? input : new Request(input, init);
+
+        const body = parseJsonRecord(await request.text());
+
+        return body.stream
+          ? new Response(chatCompletionResponse("unexpected"), {
+              headers: { "Content-Type": "application/json" },
+            })
+          : new Response(
+              streamFromChunks([streamChunk({ content: "unexpected" })]),
+              {
+                headers: { "Content-Type": "text/event-stream" },
+              }
+            );
+      },
+    });
+
+    await expect(
+      provider.generateChat({ messages: [], system: "test" })
+    ).rejects.toThrow();
+    await expect(
+      provider.generateText({ prompt: "hi", system: "test" })
+    ).rejects.toThrow();
+    const onChunk = mock(() => {});
+    await expect(
+      provider.streamChat({ messages: [], system: "test" }, { onChunk })
+    ).rejects.toThrow();
+    expect(onChunk).not.toHaveBeenCalled();
+  });
+
   test.each([
     [undefined, undefined],
     [{}, undefined],
@@ -150,7 +212,12 @@ describe("createOpenRouterProvider", () => {
       ]);
 
       for (const body of bodies) {
-        expect(body.provider).toEqual(expected);
+        if (expected === undefined) {
+          expect(body.provider).toBeUndefined();
+        } else {
+          expect(body).toEqual(expect.objectContaining({ provider: expected }));
+        }
+
         expect(body.model).toBe("openai/gpt-6-luna");
         expect(body).not.toHaveProperty("extra_body");
 
@@ -274,16 +341,20 @@ describe("createOpenRouterProvider", () => {
         await client.generateText({ prompt: "hi", system: "test" });
 
         for (const body of bodies.splice(0)) {
-          expect(body.provider).toEqual(wire);
+          if (wire === undefined) {
+            expect(body).not.toHaveProperty("provider");
+          } else {
+            expect(body).toEqual(expect.objectContaining({ provider: wire }));
+          }
         }
 
         await createProviderForInstance(
           otherLoaded,
           "openai/gpt-6-luna"
         )!.generateChat(input);
-        expect(bodies.splice(0).map((body) => body.provider)).toEqual([
-          undefined,
-        ]);
+        const requests = bodies.splice(0);
+        expect(requests).toHaveLength(1);
+        expect(requests[0]?.provider).toBeUndefined();
       }
     } finally {
       server.close();
@@ -321,8 +392,7 @@ describe("createOpenRouterProvider", () => {
 
     const provider = createOpenRouterProvider({
       apiKey: "sk-or-v1-test",
-      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
-      fetcher: fetchMock as typeof fetch,
+      fetcher: asTestFetch(fetchMock),
       model: "anthropic/claude-sonnet-4-6",
     });
 
@@ -369,8 +439,7 @@ describe("createOpenRouterProvider", () => {
 
     const provider = createOpenRouterProvider({
       apiKey: "test-key",
-      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
-      fetcher: fetchMock as typeof fetch,
+      fetcher: asTestFetch(fetchMock),
     });
 
     await provider.generateChat({
@@ -425,8 +494,7 @@ describe("createOpenRouterProvider", () => {
 
     const provider = createOpenRouterProvider({
       apiKey: "test-key",
-      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
-      fetcher: fetchMock as typeof fetch,
+      fetcher: asTestFetch(fetchMock),
     });
 
     await provider.generateChat({
@@ -467,8 +535,7 @@ describe("createOpenRouterProvider", () => {
 
     const provider = createOpenRouterProvider({
       apiKey: "sk-or-v1-test",
-      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
-      fetcher: fetchMock as typeof fetch,
+      fetcher: asTestFetch(fetchMock),
     });
 
     const result = await provider.generateChat({
@@ -517,8 +584,7 @@ describe("createOpenRouterProvider", () => {
 
     const provider = createOpenRouterProvider({
       apiKey: "sk-or-v1-test",
-      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
-      fetcher: fetchMock as typeof fetch,
+      fetcher: asTestFetch(fetchMock),
     });
 
     const result = await provider.generateChat({
@@ -556,8 +622,7 @@ describe("createOpenRouterProvider", () => {
       customModels: [
         { id: "anthropic/claude-sonnet-4-6", supportsThinking: false },
       ],
-      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
-      fetcher: fetchMock as typeof fetch,
+      fetcher: asTestFetch(fetchMock),
       model: "anthropic/claude-sonnet-4-6",
     });
 
@@ -594,8 +659,7 @@ describe("createOpenRouterProvider", () => {
 
     const provider = createOpenRouterProvider({
       apiKey: "sk-or-v1-test",
-      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
-      fetcher: fetchMock as typeof fetch,
+      fetcher: asTestFetch(fetchMock),
       model: "meta-llama/llama-4-maverick",
     });
 
@@ -638,8 +702,7 @@ describe("createOpenRouterProvider", () => {
 
     const provider = createOpenRouterProvider({
       apiKey: "sk-or-v1-test",
-      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
-      fetcher: fetchMock as typeof fetch,
+      fetcher: asTestFetch(fetchMock),
     });
 
     const chunks: string[] = [];
@@ -707,8 +770,7 @@ describe("createOpenRouterProvider", () => {
 
     const provider = createOpenRouterProvider({
       apiKey: "test-key",
-      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
-      fetcher: fetchMock as typeof fetch,
+      fetcher: asTestFetch(fetchMock),
       model: "openai/gpt-6-luna",
       openRouterRouting: {
         dataCollection: "deny",
@@ -760,8 +822,7 @@ describe("createOpenRouterProvider", () => {
 
     const provider = createOpenRouterProvider({
       apiKey: "test-key",
-      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
-      fetcher: fetchMock as typeof fetch,
+      fetcher: asTestFetch(fetchMock),
     });
 
     const error = await provider
@@ -811,8 +872,7 @@ describe("createOpenRouterProvider", () => {
 
       const provider = createOpenRouterProvider({
         apiKey: "test-key",
-        // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
-        fetcher: fetchMock as typeof fetch,
+        fetcher: asTestFetch(fetchMock),
       });
 
       await expect(
@@ -835,8 +895,7 @@ describe("createOpenRouterProvider", () => {
 
     const provider = createOpenRouterProvider({
       apiKey: "test-key",
-      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
-      fetcher: fetchMock as typeof fetch,
+      fetcher: asTestFetch(fetchMock),
     });
 
     await expect(
@@ -873,8 +932,7 @@ describe("createOpenRouterProvider", () => {
 
     const provider = createOpenRouterProvider({
       apiKey: "test-key",
-      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
-      fetcher: fetchMock as typeof fetch,
+      fetcher: asTestFetch(fetchMock),
     });
 
     const promise = provider.streamChat(
@@ -914,8 +972,7 @@ describe("createOpenRouterProvider", () => {
 
       const provider = createOpenRouterProvider({
         apiKey: "test-key",
-        // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
-        fetcher: fetchMock as typeof fetch,
+        fetcher: asTestFetch(fetchMock),
       });
 
       await expect(
@@ -952,8 +1009,7 @@ describe("createOpenRouterProvider", () => {
 
     const provider = createOpenRouterProvider({
       apiKey: "test-key",
-      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
-      fetcher: fetchMock as typeof fetch,
+      fetcher: asTestFetch(fetchMock),
     });
 
     const onToolInputDelta = mock(() => {});
@@ -1002,8 +1058,7 @@ describe("createOpenRouterProvider", () => {
 
     const provider = createOpenRouterProvider({
       apiKey: "test-key",
-      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
-      fetcher: fetchMock as typeof fetch,
+      fetcher: asTestFetch(fetchMock),
     });
 
     const error = await provider
@@ -1340,8 +1395,7 @@ describe("createOpenRouterProvider", () => {
 
     const provider = createOpenRouterProvider({
       apiKey: "sk-or-v1-test",
-      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
-      fetcher: fetchMock as typeof fetch,
+      fetcher: asTestFetch(fetchMock),
     });
 
     await expect(

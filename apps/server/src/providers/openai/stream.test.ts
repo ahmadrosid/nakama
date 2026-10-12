@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { streamFromChunks } from "../test-helpers";
+import { asTestFetch, streamFromChunks } from "../test-helpers";
 import { createOpenAIProvider } from "./index";
 
 const originalFetch = globalThis.fetch;
@@ -39,7 +39,7 @@ afterEach(() => {
 describe("OpenAI provider streaming", () => {
   test("streams chat completion chunks", async () => {
     const fetchMock = mock(
-      async () =>
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
         new Response(
           streamFromChunks([
             'data:{"choices":[{"delta":{"content":"Hel"}}]}\r\n\r\n',
@@ -50,7 +50,7 @@ describe("OpenAI provider streaming", () => {
         )
     );
 
-    globalThis.fetch = fetchMock;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAIProvider({
       apiKey: "sk-test",
@@ -106,7 +106,7 @@ describe("OpenAI provider streaming", () => {
       }
     );
 
-    globalThis.fetch = fetchMock;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAIProvider({
       apiKey: "pplx-test",
@@ -156,7 +156,7 @@ describe("OpenAI provider streaming", () => {
         }
       );
 
-      globalThis.fetch = fetchMock;
+      globalThis.fetch = asTestFetch(fetchMock);
 
       const provider = createOpenAIProvider({
         apiKey: "sk-test",
@@ -196,15 +196,17 @@ describe("OpenAI provider streaming", () => {
   );
 
   test("uses streamed text when no output item arrives", async () => {
-    globalThis.fetch = mock(
-      async () =>
-        new Response(
-          streamFromChunks([
-            'data:{"type":"response.output_text.delta","delta":"Hi"}\r\n\r\n',
-            'data:{"type":"response.completed","response":{"output":[]}}\r\n\r\n',
-          ]),
-          { status: 200 }
-        )
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(
+            streamFromChunks([
+              'data:{"type":"response.output_text.delta","delta":"Hi"}\r\n\r\n',
+              'data:{"type":"response.completed","response":{"output":[]}}\r\n\r\n',
+            ]),
+            { status: 200 }
+          )
+      )
     );
 
     const result = await createOpenAIProvider({
@@ -223,16 +225,18 @@ describe("OpenAI provider streaming", () => {
   });
 
   test("accepts null error, incomplete_details, and usage in lifecycle events", async () => {
-    globalThis.fetch = mock(
-      async () =>
-        new Response(
-          streamFromChunks([
-            'data:{"type":"response.created","response":{"error":null,"incomplete_details":null,"usage":null,"output":[]}}\r\n\r\n',
-            'data:{"type":"response.output_text.delta","delta":"Hi"}\r\n\r\n',
-            'data:{"type":"response.completed","response":{"error":null,"incomplete_details":null,"output":[],"usage":{"input_tokens":3,"output_tokens":1,"total_tokens":4}}}\r\n\r\n',
-          ]),
-          { status: 200 }
-        )
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(
+            streamFromChunks([
+              'data:{"type":"response.created","response":{"error":null,"incomplete_details":null,"usage":null,"output":[]}}\r\n\r\n',
+              'data:{"type":"response.output_text.delta","delta":"Hi"}\r\n\r\n',
+              'data:{"type":"response.completed","response":{"error":null,"incomplete_details":null,"output":[],"usage":{"input_tokens":3,"output_tokens":1,"total_tokens":4}}}\r\n\r\n',
+            ]),
+            { status: 200 }
+          )
+      )
     );
 
     const result = await createOpenAIProvider({
@@ -252,14 +256,16 @@ describe("OpenAI provider streaming", () => {
   });
 
   test("uses completed response output when item events are absent", async () => {
-    globalThis.fetch = mock(
-      async () =>
-        new Response(
-          streamFromChunks([
-            'data:{"type":"response.completed","response":{"output":[{"id":"msg_1","type":"message","content":[{"type":"output_text","text":"Hi"}]}]}}\r\n\r\n',
-          ]),
-          { status: 200 }
-        )
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(
+            streamFromChunks([
+              'data:{"type":"response.completed","response":{"output":[{"id":"msg_1","type":"message","content":[{"type":"output_text","text":"Hi"}]}]}}\r\n\r\n',
+            ]),
+            { status: 200 }
+          )
+      )
     );
 
     const result = await createOpenAIProvider({
@@ -278,15 +284,17 @@ describe("OpenAI provider streaming", () => {
   });
 
   test("reports a failed Responses stream", async () => {
-    globalThis.fetch = mock(
-      async () =>
-        new Response(
-          streamFromChunks([
-            'data:{"type":"response.output_text.delta","delta":"Partial"}\r\n\r\n',
-            'data:{"type":"response.failed","response":{"error":{"message":"Provider failed"}}}\r\n\r\n',
-          ]),
-          { status: 200 }
-        )
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(
+            streamFromChunks([
+              'data:{"type":"response.output_text.delta","delta":"Partial"}\r\n\r\n',
+              'data:{"type":"response.failed","response":{"error":{"message":"Provider failed"}}}\r\n\r\n',
+            ]),
+            { status: 200 }
+          )
+      )
     );
 
     expect(
@@ -317,7 +325,7 @@ describe("OpenAI provider streaming", () => {
       );
     });
 
-    globalThis.fetch = fetchMock;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAIProvider({
       apiKey: "sk-test",
@@ -364,7 +372,7 @@ describe("OpenAI provider streaming", () => {
       }
     );
 
-    globalThis.fetch = fetchMock;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAIProvider({
       apiKey: "sk-test",
@@ -429,7 +437,7 @@ describe("OpenAI provider streaming", () => {
       }
     );
 
-    globalThis.fetch = fetchMock;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     return { bodies, fetchMock };
   };
@@ -543,7 +551,7 @@ describe("OpenAI provider streaming", () => {
       })
     );
 
-    globalThis.fetch = fetchMock;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const result = await deepseekProvider().generateChat({
       messages: [{ content: "Think", role: "user" }],

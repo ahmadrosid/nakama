@@ -360,7 +360,7 @@ function startFakeRegistry(
       const url = new URL(request.url);
 
       if (url.pathname === "/tarball.tgz") {
-        return new Response(body);
+        return new Response(new Uint8Array(body));
       }
 
       const [, name, version] = url.pathname.split("/");
@@ -518,12 +518,15 @@ describe("pinned package verification", () => {
   test("keeps installer plumbing and drops server secrets from the env", () => {
     const restricted = buildRestrictedInstallEnv({
       AWS_SECRET_ACCESS_KEY: "super-secret",
+      constructor: "super-secret",
       HOME: "/home/nakama",
       HTTPS_PROXY: "http://proxy.test",
+      LANG: undefined,
       NAKAMA_SESSION_SECRET: "super-secret",
       "npm_config_//registry.test/:_authToken": "super-secret",
       npm_config_registry: "https://registry.test",
       PATH: "/usr/bin",
+      toString: "super-secret",
     });
 
     expect(restricted).toEqual({

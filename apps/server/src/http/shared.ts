@@ -813,7 +813,10 @@ export function streamTurnSubscribe(sessionId: string): Response | null {
 
 export function streamMessage(
   sessionId: string,
-  session: AgentChatSession,
+  session: Pick<
+    AgentChatSession,
+    "getContextUsage" | "getTurnUsage" | "sendStream"
+  >,
   input: SendMessageInput,
   onComplete?: (terminal: StreamEvent) => void,
   requestSignal?: AbortSignal,

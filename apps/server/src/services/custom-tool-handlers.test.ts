@@ -36,6 +36,7 @@ function makeRecord(
     handlerType: "python",
     id: "tool_flaky",
     name: "flaky",
+    orgId: "org_test",
     updatedAt: new Date().toISOString(),
     ...overrides,
   };
@@ -242,7 +243,7 @@ describe("getCustomToolHandler seam", () => {
   test("does not retry post-side-effect failures", async () => {
     const configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    const toolsDir = path.join(configDir, "tools");
+    const toolsDir = path.join(configDir, "orgs", "org_test", "tools");
     const wsDir = path.join(configDir, "ws");
     await mkdir(toolsDir, { recursive: true });
     await mkdir(wsDir, { recursive: true });
@@ -276,7 +277,9 @@ export async function run() {
         })
       );
 
-      await expect(tool!.run({}, { workspaceRoot: wsDir })).rejects.toThrow();
+      await expect(
+        tool!.run({}, { orgId: "org_test", workspaceRoot: wsDir })
+      ).rejects.toThrow();
 
       const sideEffects = Number(
         (await Bun.file(path.join(wsDir, "side-effects.txt")).text()).trim()
@@ -298,7 +301,7 @@ export async function run() {
   test("python handler failures are actually retried through the seam", async () => {
     const configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    const toolsDir = path.join(configDir, "tools");
+    const toolsDir = path.join(configDir, "orgs", "org_test", "tools");
     const wsDir = path.join(configDir, "ws");
     await mkdir(toolsDir, { recursive: true });
     await mkdir(wsDir, { recursive: true });
@@ -336,7 +339,10 @@ if __name__ == "__main__":
       expect(tool).not.toBeNull();
 
       // SAFETY: The test fixture matches the contract used by this test.
-      const result = (await tool!.run({}, { workspaceRoot: wsDir })) as {
+      const result = (await tool!.run(
+        {},
+        { orgId: "org_test", workspaceRoot: wsDir }
+      )) as {
         ok: boolean;
         attempts: number;
       };
@@ -359,7 +365,7 @@ if __name__ == "__main__":
   test("an exhausted tool reports under the record's own name", async () => {
     const configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    const toolsDir = path.join(configDir, "tools");
+    const toolsDir = path.join(configDir, "orgs", "org_test", "tools");
     const wsDir = path.join(configDir, "ws");
     await mkdir(toolsDir, { recursive: true });
     await mkdir(wsDir, { recursive: true });
@@ -382,7 +388,9 @@ if __name__ == "__main__":
         })
       );
 
-      await expect(tool!.run({}, { workspaceRoot: wsDir })).rejects.toThrow();
+      await expect(
+        tool!.run({}, { orgId: "org_test", workspaceRoot: wsDir })
+      ).rejects.toThrow();
 
       // The seam passes definition.name, not the module path or the record id,
       // and only running it end to end says which one arrived.
@@ -401,7 +409,7 @@ if __name__ == "__main__":
   test("javascript handler failures are actually retried through the seam", async () => {
     const configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    const toolsDir = path.join(configDir, "tools");
+    const toolsDir = path.join(configDir, "orgs", "org_test", "tools");
     const wsDir = path.join(configDir, "ws");
     await mkdir(toolsDir, { recursive: true });
     await mkdir(wsDir, { recursive: true });
@@ -445,7 +453,10 @@ export async function run(input, context) {
       expect(tool).not.toBeNull();
 
       // SAFETY: The test fixture matches the contract used by this test.
-      const result = (await tool!.run({}, { workspaceRoot: wsDir })) as {
+      const result = (await tool!.run(
+        {},
+        { orgId: "org_test", workspaceRoot: wsDir }
+      )) as {
         ok: boolean;
         attempts: number;
       };

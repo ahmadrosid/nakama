@@ -16,9 +16,17 @@ export function registerNotificationDestinationRoutes(
   app: HonoApp,
   options: ServerOptions
 ): void {
+  const databaseAdapter = options.databaseAdapter;
+
+  const authService = options.authService;
+
+  if (!(databaseAdapter && authService)) {
+    return;
+  }
+
   const service = new NotificationDestinationService(
-    options.databaseAdapter,
-    options.authService
+    databaseAdapter,
+    authService
   );
 
   const telegramConfigSchema = z.object({

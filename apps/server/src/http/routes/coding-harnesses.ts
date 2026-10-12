@@ -17,12 +17,16 @@ export function registerCodingHarnessSettingsRoutes(
   app: HonoApp,
   options: ServerOptions
 ): void {
+  const databaseAdapter = options.databaseAdapter;
+
+  if (!databaseAdapter) {
+    return;
+  }
+
   app.get("/v1/settings/coding-harnesses", async (c) => {
     requireActiveOrgIdFromContext(c);
 
-    const settings = await loadCodingAgentWorkspaceSettings(
-      options.databaseAdapter
-    );
+    const settings = await loadCodingAgentWorkspaceSettings(databaseAdapter);
 
     return json({
       loginCommands: listCodingHarnessLoginCommands(),
@@ -47,10 +51,9 @@ export function registerCodingHarnessSettingsRoutes(
       );
     }
 
-    const settings = await saveCodingAgentWorkspaceSettings(
-      options.databaseAdapter,
-      { providerPassthroughEnabled: body.providerPassthroughEnabled }
-    );
+    const settings = await saveCodingAgentWorkspaceSettings(databaseAdapter, {
+      providerPassthroughEnabled: body.providerPassthroughEnabled,
+    });
 
     return json({
       loginCommands: listCodingHarnessLoginCommands(),

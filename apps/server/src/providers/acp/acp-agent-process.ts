@@ -41,9 +41,12 @@ export async function startAcpAgentProcess(
     child.once("error", () => resolve());
   });
 
-  // SAFETY: Node's Readable.toWeb yields ReadableStream<any>, and the ACP
-  // stream only reads Uint8Array chunks from the child's stdout.
-  const stdout = Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>;
+  // SAFETY: Node's byte stream implements the SDK's DOM stream contract; only reader overload declarations differ.
+  const stdout = Readable.toWeb(child.stdout) as ReturnType<
+    typeof Readable.toWeb
+  > &
+    ReadableStream<Uint8Array>;
+
   const stream = acp.ndJsonStream(Writable.toWeb(child.stdin), stdout);
 
   const connection = new acp.ClientSideConnection(() => client, stream);

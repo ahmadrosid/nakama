@@ -11,12 +11,120 @@ import {
 import { Input } from "@nakama/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@nakama/ui/popover";
 import { Spinner } from "@nakama/ui/spinner";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { useQuery } from "@tanstack/react-query";
-import { Copy01Icon, Mail01Icon } from "hugeicons-react";
+import { Copy01Icon, Search01Icon, Tick02Icon } from "hugeicons-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { OrgMemberRoleSelect } from "@/components/settings/org-member-role-select";
+import { OrgMemberRoleCards } from "@/components/settings/org-member-role-select";
 import { emailSettingsQueryOptions } from "@/hooks/use-app-queries";
+
+const ROLE_NAMES: Record<OrgMemberSummary["role"], string> = {
+  admin: "Org admin",
+  member: "Member",
+  viewer: "Viewer",
+};
+
+function memberInitials(member: OrgMemberSummary) {
+  const source = member.name?.trim() || member.email;
+
+  return source
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+}
+
+export function OrgMemberPicker({
+  members,
+  isLoading,
+  name,
+  value,
+  disabled,
+  onChange,
+}: {
+  members: OrgMemberSummary[];
+  isLoading: boolean;
+  name: string;
+  value: string;
+  disabled: boolean;
+  onChange: (userId: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
+
+  const visible = members.filter(
+    (member) =>
+      !needle ||
+      member.email.toLowerCase().includes(needle) ||
+      (member.name ?? "").toLowerCase().includes(needle)
+  );
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-border">
+      <div className="flex items-center gap-2 border-border border-b bg-muted/50 px-3">
+        <Search01Icon aria-hidden className="size-4 text-muted-foreground" />
+        <input
+          aria-label="Search members"
+          className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
+          disabled={disabled}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search members"
+          value={query}
+        />
+      </div>
+      <div className="max-h-56 divide-y divide-border overflow-y-auto">
+        {isLoading && (
+          <p className="px-4 py-3 text-muted-foreground text-sm">
+            Loading members…
+          </p>
+        )}
+        {visible.map((member) => {
+          const selected = member.userId === value;
+
+          return (
+            <label
+              className={`flex cursor-pointer items-center gap-3 px-3 py-2.5 ${
+                selected ? "bg-primary/10" : "bg-background"
+              }`}
+              key={member.userId}
+            >
+              <input
+                checked={selected}
+                className="sr-only"
+                disabled={disabled}
+                name={name}
+                onChange={() => onChange(member.userId)}
+                type="radio"
+                value={member.userId}
+              />
+              <span
+                aria-hidden
+                className={`flex size-8 shrink-0 items-center justify-center rounded-full font-medium text-xs ${
+                  selected
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {memberInitials(member)}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium text-sm">
+                  {member.name?.trim() || member.email}
+                </span>
+                <span className="block truncate text-muted-foreground text-xs">
+                  {member.email} · {ROLE_NAMES[member.role]}
+                </span>
+              </span>
+              {selected && (
+                <Tick02Icon aria-hidden className="size-4 text-primary" />
+              )}
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export type OrgMemberAddCredentials = {
   email: string;
@@ -30,6 +138,7 @@ function OrgMemberInviteForm({
   pending,
   onInviteEmailChange,
   onInviteRoleChange,
+  onCancel,
   onSubmit,
 }: {
   inviteEmail: string;
@@ -38,6 +147,7 @@ function OrgMemberInviteForm({
   pending: boolean;
   onInviteEmailChange: (value: string) => void;
   onInviteRoleChange: (role: OrgRole) => void;
+  onCancel: () => void;
   onSubmit: (event: React.FormEvent) => void;
 }) {
   const { data: emailSettings, isLoading: emailSettingsLoading } = useQuery(
@@ -47,28 +157,29 @@ function OrgMemberInviteForm({
   const emailConfigured = emailSettings?.configured === true;
 
   return (
-    <>
-      {emailSettingsLoading || emailConfigured ? null : (
-        <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-muted-foreground text-sm">
-          Email is not configured. You can still create an invite and share its
-          token manually.{" "}
-          <Link
-            className="font-medium text-foreground underline-offset-4 hover:underline"
-            to="/customize/tools"
-          >
-            Configure in Customize → Tools
-          </Link>
-        </p>
-      )}
-      <form className="space-y-4" onSubmit={onSubmit}>
+    <form onSubmit={onSubmit}>
+      <div className="space-y-4 p-4">
+        {emailSettingsLoading || emailConfigured ? null : (
+          <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-muted-foreground text-sm">
+            Email is not configured. You can still create an invite and share
+            its token manually.{" "}
+            <Link
+              className="font-medium text-foreground underline-offset-4 hover:underline"
+              to="/customize/tools"
+            >
+              Configure in Customize → Tools
+            </Link>
+          </p>
+        )}
         <div>
           <label
-            className="mb-1 block font-medium text-sm"
+            className="mb-1.5 block font-medium text-sm"
             htmlFor="invite-email"
           >
             Email
           </label>
           <Input
+            className="h-10 rounded-xl"
             id="invite-email"
             onChange={(event) => onInviteEmailChange(event.target.value)}
             placeholder="colleague@example.com"
@@ -78,13 +189,8 @@ function OrgMemberInviteForm({
           />
         </div>
         <div>
-          <label
-            className="mb-1 block font-medium text-sm"
-            htmlFor="invite-role"
-          >
-            Role
-          </label>
-          <OrgMemberRoleSelect
+          <p className="mb-1.5 font-medium text-sm">Role</p>
+          <OrgMemberRoleCards
             onChange={onInviteRoleChange}
             value={inviteRole}
           />
@@ -92,16 +198,16 @@ function OrgMemberInviteForm({
         {formError ? (
           <p className="text-destructive text-sm">{formError}</p>
         ) : null}
-        <Button
-          className="w-full sm:w-auto"
-          disabled={pending}
-          size="sm"
-          type="submit"
-        >
+      </div>
+      <div className="flex justify-end gap-2 border-t bg-muted/50 p-4">
+        <Button onClick={onCancel} type="button" variant="outline">
+          Cancel
+        </Button>
+        <Button disabled={pending} type="submit">
           {pending ? "Sending…" : "Send invite"}
         </Button>
-      </form>
-    </>
+      </div>
+    </form>
   );
 }
 
@@ -128,32 +234,16 @@ export function OrgMemberInvitePopover({
 }) {
   return (
     <Popover onOpenChange={onOpenChange} open={open}>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <span className="inline-flex">
-              <PopoverTrigger
-                render={
-                  <Button
-                    aria-label="Invite by email"
-                    size="icon-sm"
-                    type="button"
-                    variant="outline"
-                  >
-                    <Mail01Icon aria-hidden className="size-3.5" />
-                  </Button>
-                }
-              />
-            </span>
-          }
-        />
-        <TooltipContent side="top" sideOffset={8}>
-          Invite by email
-        </TooltipContent>
-      </Tooltip>
+      <PopoverTrigger
+        render={
+          <Button aria-label="Invite by email" type="button" variant="outline">
+            Invite by email
+          </Button>
+        }
+      />
       <PopoverContent
         align="end"
-        className="w-80 overflow-hidden p-0"
+        className="w-96 overflow-hidden p-0"
         sideOffset={4}
       >
         <div className="space-y-1 border-border border-b px-4 py-3">
@@ -163,17 +253,16 @@ export function OrgMemberInvitePopover({
             organization.
           </p>
         </div>
-        <div className="space-y-4 p-4">
-          <OrgMemberInviteForm
-            formError={formError}
-            inviteEmail={inviteEmail}
-            inviteRole={inviteRole}
-            onInviteEmailChange={onInviteEmailChange}
-            onInviteRoleChange={onInviteRoleChange}
-            onSubmit={onSubmit}
-            pending={pending}
-          />
-        </div>
+        <OrgMemberInviteForm
+          formError={formError}
+          inviteEmail={inviteEmail}
+          inviteRole={inviteRole}
+          onCancel={() => onOpenChange(false)}
+          onInviteEmailChange={onInviteEmailChange}
+          onInviteRoleChange={onInviteRoleChange}
+          onSubmit={onSubmit}
+          pending={pending}
+        />
       </PopoverContent>
     </Popover>
   );
@@ -246,7 +335,7 @@ export function OrgMemberAddDialog({
 }) {
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-lg">
         {credentials ? (
           <>
             <DialogHeader>
@@ -285,29 +374,51 @@ export function OrgMemberAddDialog({
               <DialogTitle>Add member</DialogTitle>
             </DialogHeader>
             <form className="space-y-4" onSubmit={onSubmit}>
-              <div>
-                <label
-                  className="mb-1 block font-medium text-sm"
-                  htmlFor="add-name"
-                >
-                  Name
-                </label>
-                <Input
-                  id="add-name"
-                  onChange={(event) => onAddNameChange(event.target.value)}
-                  placeholder="Jane Doe"
-                  required
-                  value={addName}
-                />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label
+                    className="mb-1.5 block font-medium text-sm"
+                    htmlFor="add-name"
+                  >
+                    Name
+                  </label>
+                  <Input
+                    className="h-10 rounded-xl"
+                    id="add-name"
+                    onChange={(event) => onAddNameChange(event.target.value)}
+                    placeholder="Jane Doe"
+                    required
+                    value={addName}
+                  />
+                </div>
+                <div>
+                  <label
+                    className="mb-1.5 block font-medium text-sm"
+                    htmlFor="add-phone"
+                  >
+                    Phone{" "}
+                    <span className="font-normal text-muted-foreground">
+                      (optional)
+                    </span>
+                  </label>
+                  <Input
+                    className="h-10 rounded-xl"
+                    id="add-phone"
+                    onChange={(event) => onAddPhoneChange(event.target.value)}
+                    placeholder="+1234567890"
+                    value={addPhone}
+                  />
+                </div>
               </div>
               <div>
                 <label
-                  className="mb-1 block font-medium text-sm"
+                  className="mb-1.5 block font-medium text-sm"
                   htmlFor="add-email"
                 >
                   Email
                 </label>
                 <Input
+                  className="h-10 rounded-xl"
                   id="add-email"
                   onChange={(event) => onAddEmailChange(event.target.value)}
                   placeholder="jane@example.com"
@@ -317,30 +428,8 @@ export function OrgMemberAddDialog({
                 />
               </div>
               <div>
-                <label
-                  className="mb-1 block font-medium text-sm"
-                  htmlFor="add-phone"
-                >
-                  Phone{" "}
-                  <span className="font-normal text-muted-foreground">
-                    (optional)
-                  </span>
-                </label>
-                <Input
-                  id="add-phone"
-                  onChange={(event) => onAddPhoneChange(event.target.value)}
-                  placeholder="+1234567890"
-                  value={addPhone}
-                />
-              </div>
-              <div>
-                <label
-                  className="mb-1 block font-medium text-sm"
-                  htmlFor="add-role"
-                >
-                  Role
-                </label>
-                <OrgMemberRoleSelect
+                <p className="mb-1.5 font-medium text-sm">Role</p>
+                <OrgMemberRoleCards
                   onChange={onAddRoleChange}
                   value={addRole}
                 />
@@ -349,6 +438,13 @@ export function OrgMemberAddDialog({
                 <p className="text-destructive text-sm">{formError}</p>
               ) : null}
               <DialogFooter>
+                <Button
+                  onClick={() => onOpenChange(false)}
+                  type="button"
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
                 <Button disabled={pending} type="submit">
                   {pending ? "Adding…" : "Add member"}
                 </Button>
@@ -390,33 +486,55 @@ export function OrgMemberEditDialog({
 }) {
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Edit member</DialogTitle>
         </DialogHeader>
         <form className="space-y-4" onSubmit={onSubmit}>
-          <div>
-            <label
-              className="mb-1 block font-medium text-sm"
-              htmlFor="edit-name"
-            >
-              Name
-            </label>
-            <Input
-              id="edit-name"
-              onChange={(event) => onEditNameChange(event.target.value)}
-              placeholder="Jane Doe"
-              value={editName}
-            />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label
+                className="mb-1.5 block font-medium text-sm"
+                htmlFor="edit-name"
+              >
+                Name
+              </label>
+              <Input
+                className="h-10 rounded-xl"
+                id="edit-name"
+                onChange={(event) => onEditNameChange(event.target.value)}
+                placeholder="Jane Doe"
+                value={editName}
+              />
+            </div>
+            <div>
+              <label
+                className="mb-1.5 block font-medium text-sm"
+                htmlFor="edit-phone"
+              >
+                Phone{" "}
+                <span className="font-normal text-muted-foreground">
+                  (optional)
+                </span>
+              </label>
+              <Input
+                className="h-10 rounded-xl"
+                id="edit-phone"
+                onChange={(event) => onEditPhoneChange(event.target.value)}
+                placeholder="+1234567890"
+                value={editPhone}
+              />
+            </div>
           </div>
           <div>
             <label
-              className="mb-1 block font-medium text-sm"
+              className="mb-1.5 block font-medium text-sm"
               htmlFor="edit-email"
             >
               Email
             </label>
             <Input
+              className="h-10 rounded-xl"
               disabled
               id="edit-email"
               readOnly
@@ -425,32 +543,20 @@ export function OrgMemberEditDialog({
             />
           </div>
           <div>
-            <label
-              className="mb-1 block font-medium text-sm"
-              htmlFor="edit-phone"
-            >
-              Phone
-            </label>
-            <Input
-              id="edit-phone"
-              onChange={(event) => onEditPhoneChange(event.target.value)}
-              placeholder="+1234567890"
-              value={editPhone}
-            />
-          </div>
-          <div>
-            <label
-              className="mb-1 block font-medium text-sm"
-              htmlFor="edit-role"
-            >
-              Role
-            </label>
-            <OrgMemberRoleSelect onChange={onEditRoleChange} value={editRole} />
+            <p className="mb-1.5 font-medium text-sm">Role</p>
+            <OrgMemberRoleCards onChange={onEditRoleChange} value={editRole} />
           </div>
           {formError ? (
             <p className="text-destructive text-sm">{formError}</p>
           ) : null}
           <DialogFooter>
+            <Button
+              onClick={() => onOpenChange(false)}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
             <Button disabled={pending} type="submit">
               {pending ? "Saving…" : "Save changes"}
             </Button>

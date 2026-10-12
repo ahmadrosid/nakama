@@ -69,6 +69,7 @@ import type {
   ProviderChatOptions,
   ProviderClient,
   ProviderInstance,
+  PublishedSkillResponse,
   RunToolResponse,
   SaveInlineAttachment,
   SendEmailTestResponse,
@@ -190,6 +191,7 @@ import {
   rehydrateAttachmentRefsInContent,
   removeTelegramAccessRequest,
   replaceImagePartsWithDescriptions,
+  requireToolNotViewer,
   resolveDiscordApplicationId,
   resolveOllamaHostMode,
   saveComposioConfig,
@@ -227,6 +229,7 @@ import {
   type StoredProfileRecord,
   type StoredSessionRecord,
   type StoredSessionSummaryRecord,
+  type StoredToolRecord,
   SUPER_BOT_TOOL_AUTHORING_RULES,
 } from "@nakama/db";
 import { z } from "zod";
@@ -344,6 +347,7 @@ import type { McpService } from "./mcp-service";
 import { buildMcpToolDefinitions } from "./mcp-tool-bridge";
 import { MemoryBackendService } from "./memory-backend-service";
 import { OrgMemoryService } from "./org-memory-service";
+import type { OrgService } from "./org-service";
 import { OrgUsageQuotaService } from "./org-usage-quota-service";
 import type { PluginService } from "./plugin-service";
 import type { ProfileChangeMeta } from "./profile-change-history";
@@ -358,6 +362,7 @@ import {
   countModelsForInstance,
   mergeModelsForConfig,
   modelExistsOnInstance,
+  providerPublicationLock,
   resolveConfiguredModelInstance,
   resolveDefaultModelForInstance,
   resolveInitialModel,
@@ -392,6 +397,7 @@ interface StoredSession {
   pluginRevision: string;
   profileId: string;
   session: AgentChatSession;
+  sharedCapabilityRevision?: string;
 }
 
 export type { SubAgentRunInput, SubAgentRunResult };
@@ -446,6 +452,7 @@ export class AgentService {
   private skillProposalService: SkillProposalService | null = null;
   private skillSuggestionService: SkillSuggestionService | null = null;
   private orgMemoryService: OrgMemoryService | null = null;
+  private orgService: OrgService | null = null;
   private readonly memoryBackend: MemoryBackendService;
   private readonly sessions = new Map<string, StoredSession>();
   private readonly ephemeralSessions = new EphemeralSessionStore((entry) =>
@@ -644,6 +651,11 @@ export class AgentService {
   setSkillsService(service: SkillsService): void {
     this.skillsService = service;
     this.sessions.clear();
+  }
+
+  setOrgService(service: OrgService): void {
+    this.orgService = service;
+    this.profileService.setOrgService(service);
   }
 
   setSkillProposalService(service: SkillProposalService): void {
@@ -1749,7 +1761,7 @@ export class AgentService {
       throw new Error("Provider is not configured.");
     }
 
-    const profile = await this.requireProfile(orgId, profileId);
+    const profile = await this.requireExecutionProfile(orgId, profileId);
 
     const tools = [
       ...(await this.resolveProfileTools(profile, {
@@ -1773,7 +1785,7 @@ export class AgentService {
     const toolContext = buildToolExecutionContext({
       assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
       automationId,
-      ...this.memoryBackend.toolContext(orgId, profileId),
+      ...this.knowledgeToolContext(orgId, profileId),
       automationRunId,
       orgId,
       orgRole: "member",
@@ -1936,7 +1948,7 @@ export class AgentService {
     orgId: string,
     profileId: string
   ): Promise<ToolDefinition[]> {
-    const profile = await this.requireProfile(orgId, profileId);
+    const profile = await this.requireExecutionProfile(orgId, profileId);
 
     const tools = await this.resolveProfileTools(profile, {
       includeAutomationTools: false,
@@ -1945,6 +1957,28 @@ export class AgentService {
     });
 
     return partitionTools(tools).localTools;
+  }
+
+  private knowledgeToolContext(orgId: string, profileId: string): ToolContext {
+    return {
+      ...this.memoryBackend.toolContext(orgId, profileId),
+      listPublishedKnowledgeDocuments: async () => {
+        await this.requireProfile(orgId, profileId);
+
+        return this.profileService.listPublishedKnowledgeBaseDocuments(orgId);
+      },
+      readPublishedSkillFile: async (publicationId, filePath, maxBytes) => {
+        await this.requireProfile(orgId, profileId);
+
+        return this.requireSkillsService().readPublishedSkillFileForProfile(
+          orgId,
+          profileId,
+          publicationId,
+          filePath,
+          maxBytes
+        );
+      },
+    };
   }
 
   buildPluginToolContext(
@@ -1956,7 +1990,7 @@ export class AgentService {
     }
   ): ToolContext {
     return buildToolExecutionContext({
-      ...this.memoryBackend.toolContext(orgId, context.profileId),
+      ...this.knowledgeToolContext(orgId, context.profileId),
       assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
       orgId,
       orgRole: "member",
@@ -1979,7 +2013,7 @@ export class AgentService {
       throw new Error("Provider is not configured.");
     }
 
-    const profile = await this.requireProfile(orgId, profileId);
+    const profile = await this.requireExecutionProfile(orgId, profileId);
 
     const { systemPrompt, soulActive } = await this.resolveProfileSystemPrompt(
       orgId,
@@ -2036,7 +2070,11 @@ export class AgentService {
     }
 
     const timeoutMs = clampSubAgentTimeout(input.timeoutMs);
-    const profile = await this.requireProfile(input.orgId, input.profileId);
+
+    const profile = await this.requireExecutionProfile(
+      input.orgId,
+      input.profileId
+    );
 
     const tools = await this.resolveProfileTools(profile, {
       includeAutomationTools: false,
@@ -2083,7 +2121,7 @@ export class AgentService {
       systemPrompt: childSystemPrompt,
       toolContext: buildToolExecutionContext({
         agentDepth: input.agentDepth,
-        ...this.memoryBackend.toolContext(input.orgId, input.profileId),
+        ...this.knowledgeToolContext(input.orgId, input.profileId),
         assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(input.orgId),
         clientOrigin: input.clientOrigin,
         orgId: input.orgId,
@@ -2193,8 +2231,17 @@ export class AgentService {
       profileId
     );
 
-    const profile = await this.requireProfile(orgId, resolvedProfileId);
+    const profile = await this.requireExecutionProfile(
+      orgId,
+      resolvedProfileId
+    );
+
     this.assertChatProfileAccess(profile, options ?? {});
+
+    const sharedCapabilityRevision = await this.capabilityRevisionForProfile(
+      orgId,
+      resolvedProfileId
+    );
 
     const sessionId = nanoid();
     const modelOverride = this.normalizeSessionModelOverride(options?.model);
@@ -2246,6 +2293,7 @@ export class AgentService {
         lastActiveAt: Date.now(),
         record,
         session,
+        sharedCapabilityRevision,
       });
 
       return sessionId;
@@ -2256,6 +2304,7 @@ export class AgentService {
       pluginRevision: await this.pluginCapabilityRevision(orgId),
       profileId: resolvedProfileId,
       session,
+      sharedCapabilityRevision,
     });
 
     return sessionId;
@@ -2363,6 +2412,11 @@ export class AgentService {
       entry.record.userId
     );
 
+    const sharedCapabilityRevision = await this.capabilityRevisionForProfile(
+      orgId,
+      entry.record.profileId
+    );
+
     const session = await this.buildChatSession(
       channel,
       orgId,
@@ -2378,6 +2432,7 @@ export class AgentService {
 
     entry.record.model = model;
     entry.session = session;
+    entry.sharedCapabilityRevision = sharedCapabilityRevision;
     await this.ephemeralSessions.set(entry);
 
     return true;
@@ -2458,7 +2513,9 @@ export class AgentService {
       this.ephemeralSessions.has(sessionId) ||
       (!options?.persistedOnly && sessionTurnRegistry.isActive(sessionId))
     ) {
-      const liveSession = await this.resolveSession(sessionId, orgId);
+      const liveSession =
+        this.ephemeralSessions.get(sessionId)?.session ??
+        (await this.resolveSession(sessionId, orgId));
 
       if (liveSession) {
         const history = liveSession.getHistory();
@@ -2721,7 +2778,8 @@ export class AgentService {
 
   async resolveSession(
     sessionId: string,
-    orgId: string
+    orgId: string,
+    forNewTurn = false
   ): Promise<AgentChatSession | null> {
     const record = await this.getSessionRecordForOrg(sessionId, orgId);
 
@@ -2729,23 +2787,46 @@ export class AgentService {
       return null;
     }
 
-    // Never rebuilt: the history only exists inside this object, so dropping
-    // it to pick up a config change would silently empty the conversation.
+    if (forNewTurn && record.model) {
+      this.normalizeSessionModelOverride(record.model);
+    }
+
     const ephemeral = this.ephemeralSessions.get(sessionId);
+    const stored = this.sessions.get(sessionId);
+
+    if (sessionTurnRegistry.isActive(sessionId) && !forNewTurn) {
+      const active = ephemeral?.session ?? stored?.session;
+
+      if (active) {
+        return active;
+      }
+    }
+
+    const sharedCapabilityRevision = await this.capabilityRevisionForProfile(
+      orgId,
+      record.profileId
+    );
 
     if (ephemeral) {
+      if (
+        (ephemeral.sharedCapabilityRevision ?? "") !==
+          sharedCapabilityRevision &&
+        !(await this.rebuildEphemeralSession(ephemeral, orgId, record.model))
+      ) {
+        throw new NakamaApiError("Session refresh failed. Try again.", 503);
+      }
+
       return ephemeral.session;
     }
 
-    const stored = this.sessions.get(sessionId);
     const pluginRevision = await this.pluginCapabilityRevision(orgId);
 
-    if (stored && stored.pluginRevision === pluginRevision) {
+    if (
+      stored &&
+      stored.pluginRevision === pluginRevision &&
+      (stored.sharedCapabilityRevision ?? "") === sharedCapabilityRevision
+    ) {
       return stored.session;
-    }
-
-    if (stored) {
-      this.sessions.delete(sessionId);
     }
 
     const channel = parseAgentChannel(record.channel);
@@ -2779,6 +2860,7 @@ export class AgentService {
       pluginRevision,
       profileId: record.profileId,
       session,
+      sharedCapabilityRevision,
     });
 
     return session;
@@ -2873,14 +2955,27 @@ export class AgentService {
       return null;
     }
 
-    const cached = this.sessions.get(sessionId);
-    const pluginRevision = await this.pluginCapabilityRevision(orgId);
+    const turn = sessionTurnRegistry.beginTurn(sessionId);
 
-    if (cached && cached.pluginRevision !== pluginRevision) {
-      this.sessions.delete(sessionId);
+    if (!turn.started) {
+      return false;
     }
 
-    return sessionTurnRegistry.beginTurn(sessionId).started;
+    try {
+      await this.resolveSharedAgentProfile(orgId, record.profileId);
+
+      if (
+        this.sessions.has(sessionId) ||
+        this.ephemeralSessions.has(sessionId)
+      ) {
+        await this.resolveSession(sessionId, orgId, true);
+      }
+
+      return true;
+    } catch (error) {
+      sessionTurnRegistry.cancelTurn(sessionId);
+      throw error;
+    }
   }
 
   async clearSession(sessionId: string, orgId: string): Promise<boolean> {
@@ -2970,7 +3065,7 @@ export class AgentService {
       tools,
       buildToolExecutionContext({
         channel: "web",
-        ...this.memoryBackend.toolContext(orgId, profile.id),
+        ...this.knowledgeToolContext(orgId, profile.id),
         orgId,
         profileId: profile.id,
       })
@@ -3018,6 +3113,11 @@ export class AgentService {
     value: string
   ): Promise<AcpSessionSettingsResponse> {
     const profile = await this.requireProfile(orgId, profileId);
+
+    if (await this.db.getSharedAgentInstance(orgId, profileId)) {
+      throw new NakamaApiError("Shared agent configuration is read-only.", 403);
+    }
+
     await this.registerAcpDraftTools(orgId, profile);
 
     const agentOptions = acpOptionsForProfile(
@@ -3516,63 +3616,98 @@ export class AgentService {
     providerId: string,
     request: UpdateProviderRequest
   ): Promise<UpdateProviderResponse> {
-    if (!this.userConfig) {
-      throw new Error("Provider is not configured.");
-    }
+    return providerPublicationLock.withLock("providers", async () => {
+      if (!this.userConfig) {
+        throw new Error("Provider is not configured.");
+      }
 
-    const current = findProviderInstance(this.userConfig, providerId);
+      const current = findProviderInstance(this.userConfig, providerId);
 
-    if (!current) {
-      throw new Error("Provider not found.");
-    }
+      if (!current) {
+        throw new Error("Provider not found.");
+      }
 
-    const updated = applyProviderInstanceUpdate(current, request);
+      const updated = applyProviderInstanceUpdate(current, request);
+      await this.unpublishProviderModels(providerId, current);
 
-    const providers = this.userConfig.providers.map((instance) =>
-      instance.id === providerId ? updated : instance
-    );
+      const providers = this.userConfig.providers.map((instance) =>
+        instance.id === providerId ? updated : instance
+      );
 
-    this.userConfig = { ...this.userConfig, providers };
-    await saveUserConfig(this.userConfig);
-    this.refreshProviderConfig();
+      const config = { ...this.userConfig, providers };
+      await saveUserConfig(config);
+      this.userConfig = config;
+      this.refreshProviderConfig();
+      await this.unpublishProviderModels(providerId, updated);
 
-    return {
-      provider: toProviderInstanceSummary(
-        updated,
-        countModelsForInstance(updated)
-      ),
-    };
+      return {
+        provider: toProviderInstanceSummary(
+          updated,
+          countModelsForInstance(updated)
+        ),
+      };
+    });
   }
 
   async deleteProvider(providerId: string): Promise<DeleteProviderResponse> {
-    if (!this.userConfig) {
-      throw new Error("Provider is not configured.");
+    return providerPublicationLock.withLock("providers", async () => {
+      if (!this.userConfig) {
+        throw new Error("Provider is not configured.");
+      }
+
+      const providers = this.userConfig.providers.filter(
+        (instance) => instance.id !== providerId
+      );
+
+      if (providers.length === this.userConfig.providers.length) {
+        await this.unpublishProviderModels(providerId);
+        throw new Error("Provider not found.");
+      }
+
+      let defaultProviderId = this.userConfig.defaultProviderId;
+
+      if (defaultProviderId === providerId) {
+        defaultProviderId = providers[0]?.id ?? null;
+      }
+
+      const config = {
+        ...this.userConfig,
+        defaultProviderId,
+        providers,
+      };
+
+      await saveUserConfig(config);
+      this.userConfig = config;
+      this.refreshProviderConfig();
+      await this.unpublishProviderModels(providerId);
+
+      return { defaultProviderId };
+    });
+  }
+
+  private async unpublishProviderModels(
+    providerId: string,
+    instance?: ProviderInstance
+  ): Promise<void> {
+    const prefix = `${providerId}::`;
+
+    for (const org of await this.db.listOrganizations()) {
+      for (const publication of await this.db.listOrgSharedResources(org.id)) {
+        if (
+          publication.resourceKind === "model" &&
+          publication.resourceId.startsWith(prefix) &&
+          !(
+            instance &&
+            modelExistsOnInstance(
+              instance,
+              publication.resourceId.slice(prefix.length)
+            )
+          )
+        ) {
+          await this.db.deleteOrgSharedResource(org.id, publication.id);
+        }
+      }
     }
-
-    const providers = this.userConfig.providers.filter(
-      (instance) => instance.id !== providerId
-    );
-
-    if (providers.length === this.userConfig.providers.length) {
-      throw new Error("Provider not found.");
-    }
-
-    let defaultProviderId = this.userConfig.defaultProviderId;
-
-    if (defaultProviderId === providerId) {
-      defaultProviderId = providers[0]?.id ?? null;
-    }
-
-    this.userConfig = {
-      ...this.userConfig,
-      defaultProviderId,
-      providers,
-    };
-
-    await saveUserConfig(this.userConfig);
-    this.refreshProviderConfig();
-
-    return { defaultProviderId };
   }
 
   async persistXaiOAuth(
@@ -3901,16 +4036,19 @@ export class AgentService {
     return this.profileService.listTools(orgId);
   }
 
-  async getTool(toolId: string): Promise<ToolResponse> {
-    return this.profileService.getTool(toolId);
+  async getTool(toolId: string, orgId?: string): Promise<ToolResponse> {
+    return this.profileService.getTool(toolId, orgId);
   }
 
-  async getToolSource(toolId: string): Promise<ToolSourceResponse> {
-    return this.profileService.getToolSource(toolId);
+  async getToolSource(
+    toolId: string,
+    orgId?: string
+  ): Promise<ToolSourceResponse> {
+    return this.profileService.getToolSource(toolId, orgId);
   }
 
-  async createTool(request: CreateToolRequest) {
-    const tool = await this.profileService.createTool(request);
+  async createTool(request: CreateToolRequest, orgId: string) {
+    const tool = await this.profileService.createTool(request, orgId);
 
     return { tool };
   }
@@ -3925,7 +4063,7 @@ export class AgentService {
     context: { orgId: string; userId: string }
   ): Promise<RunToolResponse> {
     const parsedParameters = agentJsonRecordSchema.parse(parameters);
-    const { tool } = await this.profileService.getTool(toolId);
+    const { tool } = await this.profileService.getTool(toolId, context.orgId);
     const handler = getCustomToolHandler(tool.handlerType);
 
     if (!handler) {
@@ -3945,18 +4083,32 @@ export class AgentService {
       toolId
     );
 
-    const loaded = await handler.load(record);
+    await this.requireExecutionProfile(context.orgId, profileId);
+
+    const toolContext = buildToolExecutionContext({
+      ...this.knowledgeToolContext(context.orgId, profileId),
+      orgId: context.orgId,
+      profileId,
+      userId: context.userId,
+    });
+
+    const inherited = Boolean(record.orgId && record.orgId !== context.orgId);
+    await this.publishedToolRevisionForRecords(context.orgId, [record]);
+
+    const loaded = await handler.load(
+      {
+        ...record,
+        moduleOrgId: record.orgId,
+        orgId: inherited ? context.orgId : record.orgId,
+      },
+      inherited ? toolContext : undefined
+    );
 
     if (!loaded) {
       throw new Error(`Failed to load tool "${tool.name}".`);
     }
 
-    const toolContext = buildToolExecutionContext({
-      ...this.memoryBackend.toolContext(context.orgId, profileId),
-      orgId: context.orgId,
-      profileId,
-      userId: context.userId,
-    });
+    await this.publishedToolRevisionForRecords(context.orgId, [record]);
 
     const raw = await executeToolCall(
       [loaded],
@@ -3975,9 +4127,10 @@ export class AgentService {
 
   async suggestToolPlaygroundParams(
     toolId: string,
-    prompt: string
+    prompt: string,
+    orgId: string
   ): Promise<SuggestToolParamsResponse> {
-    const { tool } = await this.profileService.getTool(toolId);
+    const { tool } = await this.profileService.getTool(toolId, orgId);
     const handler = getCustomToolHandler(tool.handlerType);
 
     if (!handler) {
@@ -3985,14 +4138,6 @@ export class AgentService {
         `Only custom ${customToolTypesLabel()} tools support parameter suggestions.`
       );
     }
-
-    const record = await this.db.getTool(toolId);
-
-    if (!record) {
-      throw new NakamaApiError("Tool not found.", 404);
-    }
-
-    const loaded = await handler.load(record);
 
     const provider = createProviderFromActiveConfig(
       this.userConfig,
@@ -4002,7 +4147,7 @@ export class AgentService {
     const parameters = await suggestToolParamsFromPrompt(
       {
         description: tool.description,
-        parameters: loaded?.parameters,
+        parameters: tool.parameters,
         prompt,
         toolName: tool.name,
       },
@@ -4068,8 +4213,34 @@ export class AgentService {
     return this.requireSkillsService().getSkill(skillId, orgId);
   }
 
+  async getPublishedSkill(
+    orgId: string,
+    publicationId: string
+  ): Promise<PublishedSkillResponse> {
+    return this.requireSkillsService().getPublishedSkill(orgId, publicationId);
+  }
+
   async listSkillFiles(orgId: string, skillId: string) {
     return this.requireSkillsService().listSkillFiles(orgId, skillId);
+  }
+
+  async listPublishedSkillFiles(orgId: string, publicationId: string) {
+    return this.requireSkillsService().listPublishedSkillFiles(
+      orgId,
+      publicationId
+    );
+  }
+
+  async readPublishedSkillFile(
+    orgId: string,
+    publicationId: string,
+    filePath: string
+  ) {
+    return this.requireSkillsService().readPublishedSkillFile(
+      orgId,
+      publicationId,
+      filePath
+    );
   }
 
   async listSkillVersions(orgId: string, skillId: string) {
@@ -4297,6 +4468,18 @@ export class AgentService {
     );
   }
 
+  async readPublishedKnowledgeBaseDocument(
+    orgId: string,
+    publicationId: string,
+    options: { render?: "text" } = {}
+  ): Promise<{ bytes: Buffer; contentType: string; filename: string }> {
+    return this.profileService.readPublishedKnowledgeBaseDocument(
+      orgId,
+      publicationId,
+      options
+    );
+  }
+
   async getProfileSoulStatus(
     orgId: string,
     profileId: string,
@@ -4366,6 +4549,13 @@ export class AgentService {
 
     if (!isWritableSoulFileKey(key)) {
       throw new Error(`Invalid soul file key: ${key}`);
+    }
+
+    if (
+      key !== "memory" &&
+      (await this.db.getSharedAgentInstance(orgId, profileId))
+    ) {
+      throw new NakamaApiError("Shared agent configuration is read-only.", 403);
     }
 
     const field = soulFieldFromKey(key);
@@ -4634,6 +4824,114 @@ export class AgentService {
     return profile ? record : null;
   }
 
+  private async resolveSharedAgentProfile(
+    orgId: string,
+    profileId: string
+  ): ReturnType<OrgService["resolveSharedAgentProfile"]> {
+    if (this.orgService) {
+      const shared = await this.orgService.resolveSharedAgentProfile(
+        orgId,
+        profileId
+      );
+
+      if (shared?.model) {
+        this.normalizeSessionModelOverride(shared.model);
+      }
+
+      return shared;
+    }
+
+    if (await this.db.getSharedAgentInstance(orgId, profileId)) {
+      throw new NakamaApiError("Shared agent is unavailable.", 503);
+    }
+
+    return null;
+  }
+
+  private async requireExecutionProfile(
+    orgId: string,
+    profileId: string
+  ): Promise<StoredProfileRecord> {
+    const profile = await this.requireProfile(orgId, profileId);
+
+    return (await this.resolveSharedAgentProfile(orgId, profileId)) ?? profile;
+  }
+
+  private async capabilityRevisionForProfile(
+    orgId: string,
+    profileId: string
+  ): Promise<string> {
+    const shared = await this.resolveSharedAgentProfile(orgId, profileId);
+
+    const skills =
+      (await this.skillsService?.capabilityRevisionForProfile(
+        orgId,
+        profileId
+      )) ?? "";
+
+    const tools =
+      shared?.assignedTools ?? (await this.db.listToolsForProfile(profileId));
+
+    const publishedTools = await this.publishedToolRevisionForRecords(
+      orgId,
+      tools
+    );
+
+    return shared || publishedTools
+      ? JSON.stringify([shared, skills, publishedTools])
+      : skills;
+  }
+
+  private async publishedToolRevisionForRecords(
+    orgId: string,
+    records: StoredToolRecord[]
+  ): Promise<string> {
+    const foreign = records.filter(
+      (record) => record.orgId && record.orgId !== orgId
+    );
+
+    if (!foreign.length) {
+      return "";
+    }
+
+    if (new Set(records.map((record) => record.name)).size !== records.length) {
+      throw new NakamaApiError("Conflicting tool names are assigned.", 409);
+    }
+
+    const team = await this.db.getOrganizationById(orgId);
+
+    const parent =
+      team?.parentOrgId && !team.archivedAt
+        ? await this.db.getOrganizationById(team.parentOrgId)
+        : null;
+
+    if (
+      !parent ||
+      parent.archivedAt ||
+      parent.parentOrgId ||
+      foreign.some((record) => record.orgId !== parent.id)
+    ) {
+      throw new NakamaApiError("Tool is unavailable.", 404);
+    }
+
+    const catalog = await this.db.listOrgSharedResources(parent.id);
+
+    const publications = foreign.map((record) => {
+      const detail = catalog.find(
+        (entry) =>
+          entry.resourceId === record.id && entry.resourceKind === "tool"
+      );
+
+      if (!detail) {
+        throw new NakamaApiError("Tool is unavailable.", 404);
+      }
+
+      return detail.id;
+    });
+
+    return JSON.stringify([foreign, publications]);
+  }
+
   private async requireProfile(
     orgId: string,
     profileId: string
@@ -4649,14 +4947,14 @@ export class AgentService {
 
   private async requireProfileRecord(
     profileId: string
-  ): Promise<StoredProfileRecord> {
+  ): Promise<StoredProfileRecord & { orgId: string }> {
     const profile = await this.db.getProfile(profileId);
 
     if (!profile?.orgId) {
       throw new Error("Profile not found.");
     }
 
-    return profile;
+    return { ...profile, orgId: profile.orgId };
   }
 
   private async resolveSessionProfile(
@@ -4692,14 +4990,151 @@ export class AgentService {
       userId?: string | null;
     } = {}
   ): Promise<ToolDefinition[]> {
-    const storedTools = await this.db.listToolsForProfile(profile.id);
+    const shared = profile.orgId
+      ? await this.resolveSharedAgentProfile(profile.orgId, profile.id)
+      : null;
 
-    const tools = await resolveProfileStoredTools(storedTools, this.db, [], {
+    const storedTools =
+      shared?.assignedTools ?? (await this.db.listToolsForProfile(profile.id));
+
+    const publishedTools = profile.orgId
+      ? await this.publishedToolRevisionForRecords(profile.orgId, storedTools)
+      : "";
+
+    const guarded = Boolean(shared || publishedTools);
+
+    const resolveOptions = {
       actorRole: options.actorRole ?? undefined,
+      orgService: this.orgService ?? undefined,
       pluginService: this.pluginService,
       serverTools: this.serverTools,
       userConfig: this.userConfig,
-    });
+    };
+
+    const tools = guarded
+      ? (
+          await Promise.all(
+            storedTools.map((record) => {
+              const inherited = Boolean(
+                shared || (record.orgId && record.orgId !== profile.orgId)
+              );
+
+              return resolveProfileStoredTools(
+                [
+                  {
+                    ...record,
+                    moduleOrgId: record.orgId,
+                    orgId:
+                      inherited && record.orgId ? profile.orgId : record.orgId,
+                  },
+                ],
+                this.db,
+                [],
+                {
+                  ...resolveOptions,
+                  sharedContext: inherited
+                    ? buildToolExecutionContext({
+                        orgId: profile.orgId!,
+                        profileId: profile.id,
+                      })
+                    : undefined,
+                }
+              );
+            })
+          )
+        ).flat()
+      : await resolveProfileStoredTools(
+          storedTools,
+          this.db,
+          [],
+          resolveOptions
+        );
+
+    if (guarded) {
+      for (let index = 0; index < tools.length; index++) {
+        const tool = tools[index]!;
+        const record = storedTools.find((item) => item.name === tool.name)!;
+
+        if (!shared && (!record.orgId || record.orgId === profile.orgId)) {
+          continue;
+        }
+
+        tools[index] = {
+          ...tool,
+          // The source can replace its handler after the caller selects a batch.
+          parallelSafe: false,
+          run: async (input, context) => {
+            requireToolNotViewer(context);
+
+            if (
+              !context.orgId ||
+              context.orgId !== profile.orgId ||
+              context.profileId !== profile.id
+            ) {
+              throw new NakamaApiError("Tool is unavailable.", 404);
+            }
+
+            const current = await this.resolveSharedAgentProfile(
+              context.orgId,
+              profile.id
+            );
+
+            if (shared && !current) {
+              throw new NakamaApiError("Tool is unavailable.", 404);
+            }
+
+            const currentRecords =
+              current?.assignedTools ??
+              (await this.db.listToolsForProfile(profile.id));
+
+            await this.publishedToolRevisionForRecords(
+              context.orgId,
+              currentRecords
+            );
+
+            const assigned = currentRecords.find(
+              (item) => item.id === record.id && item.name === tool.name
+            );
+
+            // A new handler needs a new approval policy before execution.
+            if (!assigned || assigned.handlerType !== record.handlerType) {
+              throw new NakamaApiError("Tool is unavailable.", 404);
+            }
+
+            const [definition] = await resolveProfileStoredTools(
+              [
+                {
+                  ...assigned,
+                  moduleOrgId: assigned.orgId,
+                  orgId: assigned.orgId ? context.orgId : null,
+                },
+              ],
+              this.db,
+              [],
+              {
+                ...resolveOptions,
+                sharedContext: buildToolExecutionContext({
+                  orgId: context.orgId,
+                  profileId: profile.id,
+                }),
+              }
+            );
+
+            if (!definition) {
+              throw new NakamaApiError("Tool is unavailable.", 404);
+            }
+
+            return definition.run(
+              input,
+              buildToolExecutionContext({
+                ...context,
+                workspaceRoot: undefined,
+              })
+            );
+          },
+        };
+      }
+    }
 
     const includeAutomationTools = options.includeAutomationTools ?? true;
     const includeTodoTools = options.includeTodoTools ?? true;
@@ -4713,23 +5148,79 @@ export class AgentService {
     let resolved = [...tools];
 
     if (this.mcpService) {
-      const mcpServers = await this.db.listMcpServersForProfile(profile.id);
+      const mcpServers =
+        shared?.assignedMcpServers ??
+        (await this.db.listMcpServersForProfile(profile.id));
+
       const orgId = profile.orgId;
 
       if (!orgId) {
         throw new Error("Profile organization is missing.");
       }
 
-      resolved = [
-        ...resolved,
-        ...buildMcpToolDefinitions(
-          mcpServers,
-          this.mcpService,
-          this.db,
-          orgId,
-          profile.id
-        ),
-      ];
+      const mcpTools = shared
+        ? mcpServers.flatMap((server) =>
+            buildMcpToolDefinitions(
+              [server],
+              this.mcpService!,
+              this.db,
+              orgId,
+              profile.id
+            ).map<ToolDefinition>((tool) => ({
+              ...tool,
+              run: async (input, context) => {
+                requireToolNotViewer(context);
+
+                if (
+                  !context.orgId ||
+                  context.orgId !== orgId ||
+                  context.profileId !== profile.id
+                ) {
+                  throw new NakamaApiError("Tool is unavailable.", 404);
+                }
+
+                const current = await this.resolveSharedAgentProfile(
+                  orgId,
+                  profile.id
+                );
+
+                const assigned = current?.assignedMcpServers.find(
+                  (item) => item.id === server.id
+                );
+
+                const definition =
+                  assigned &&
+                  buildMcpToolDefinitions(
+                    [assigned],
+                    this.mcpService!,
+                    this.db,
+                    orgId,
+                    profile.id
+                  ).find((item) => item.name === tool.name);
+
+                if (!definition) {
+                  throw new NakamaApiError("Tool is unavailable.", 404);
+                }
+
+                return definition.run(
+                  input,
+                  buildToolExecutionContext({
+                    ...context,
+                    workspaceRoot: undefined,
+                  })
+                );
+              },
+            }))
+          )
+        : buildMcpToolDefinitions(
+            mcpServers,
+            this.mcpService,
+            this.db,
+            orgId,
+            profile.id
+          );
+
+      resolved = [...resolved, ...mcpTools];
     }
 
     if (this.composioService && this.mcpClientManager && options.userId) {
@@ -4836,6 +5327,13 @@ export class AgentService {
       resolved = resolved.filter((tool) => tool.name !== SUB_AGENT_TOOL_NAME);
     }
 
+    if (
+      guarded &&
+      new Set(resolved.map((tool) => tool.name)).size !== resolved.length
+    ) {
+      throw new NakamaApiError("Conflicting tool names are assigned.", 409);
+    }
+
     return resolved;
   }
 
@@ -4852,7 +5350,7 @@ export class AgentService {
     cognito?: CognitoSessionOptions
   ): Promise<AgentChatSession> {
     await this.ensureVisionSettingsLoaded();
-    const profile = await this.requireProfile(orgId, profileId);
+    const profile = await this.requireExecutionProfile(orgId, profileId);
     // skill_manage writes skills and expands /learn, both of which outlive the
     // chat, so a cognito session never gets it whatever the channel allows.
     const includeSkillManageTools = !cognito && SKILL_MANAGE_CHANNELS[channel];
@@ -4898,7 +5396,8 @@ export class AgentService {
       profile.systemPrompt,
       orgRole,
       skillUsageContext,
-      !cognito
+      !cognito,
+      false
     );
 
     // Per-org override for the tool-output optimiser. Undefined leaves the
@@ -4978,7 +5477,7 @@ export class AgentService {
     const toolContext = buildToolExecutionContext({
       assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
       channel,
-      ...this.memoryBackend.toolContext(orgId, profileId),
+      ...this.knowledgeToolContext(orgId, profileId),
       codingWorkspaceRoot,
       forbidMemoryWrites: cognito ? true : undefined,
       forbidProfileSkillMarkdownWrites: hasSkillManage,
@@ -5059,6 +5558,10 @@ export class AgentService {
           }
         );
 
+        if (!visionProvider) {
+          throw new NakamaApiError(VISION_MODEL_REQUIRED_MESSAGE, 400);
+        }
+
         if (this.llmUsageTracker) {
           visionProvider = wrapProviderWithUsageTracking(
             visionProvider,
@@ -5095,6 +5598,25 @@ export class AgentService {
       },
       resolvePromptContext: async (context) => {
         const parts: string[] = [];
+
+        if (this.skillsService) {
+          parts.push(
+            await this.skillsService.composePublishedSkillsCatalogForProfile(
+              orgId,
+              profileId,
+              skillUsageContext,
+              !cognito
+            )
+          );
+        }
+
+        parts.push(
+          await composeKnowledgeBaseCatalog(
+            orgId,
+            profileId,
+            await this.profileService.listPublishedKnowledgeBaseDocuments(orgId)
+          )
+        );
 
         const todoContext =
           await this.agentTodoState.formatForPrompt(sessionId);
@@ -5227,7 +5749,7 @@ export class AgentService {
     profileId: string,
     codingWorkspaceRoot?: string
   ): Promise<string> {
-    const profile = await this.db.getProfile(profileId);
+    const profile = await this.requireExecutionProfile(orgId, profileId);
     const installed = await listInstalledCodingAgentHarnesses(this.db);
 
     const workspaceRoot =
@@ -5285,7 +5807,7 @@ export class AgentService {
     harness: CodingAgentHarnessStatus,
     workspaceRoot: string,
     probeContext: {
-      userConfig: typeof this.userConfig;
+      userConfig: UserConfig | null;
       profileModel: string | null;
     }
   ): Promise<string> {
@@ -5321,13 +5843,20 @@ export class AgentService {
     profilePrompt: string,
     orgRole?: OrgRole | null,
     usageContext?: import("./skills-service").SkillUsageRecordingContext,
-    recordSkillUsage = true
+    recordSkillUsage = true,
+    includeKnowledgeCatalog = true
   ): Promise<{ systemPrompt: string; soulActive: boolean }> {
     const stack = await loadSoulStack(
       getProfileSoulDir(orgId, profileId),
       (content) =>
         this.memoryBackend.readMemory(orgId, profileId, "MEMORY.md", content)
     );
+
+    const shared = await this.resolveSharedAgentProfile(orgId, profileId);
+
+    if (shared) {
+      stack.files = { ...stack.files, ...shared.publishedSoul };
+    }
 
     let systemPrompt = stack
       ? composeSoulSystemPrompt(stack, { profilePrompt })
@@ -5338,7 +5867,8 @@ export class AgentService {
         orgId,
         profileId,
         usageContext,
-        recordSkillUsage
+        recordSkillUsage,
+        includeKnowledgeCatalog
       );
 
       if (skillsCatalog.trim()) {
@@ -5348,7 +5878,8 @@ export class AgentService {
       const agentBrowserCapability =
         await this.skillsService.composeAgentBrowserCapabilityForProfile(
           orgId,
-          profileId
+          profileId,
+          includeKnowledgeCatalog
         );
 
       if (agentBrowserCapability.trim()) {
@@ -5356,10 +5887,16 @@ export class AgentService {
       }
     }
 
-    const kbCatalog = await composeKnowledgeBaseCatalog(orgId, profileId);
+    if (includeKnowledgeCatalog) {
+      const kbCatalog = await composeKnowledgeBaseCatalog(
+        orgId,
+        profileId,
+        await this.profileService.listPublishedKnowledgeBaseDocuments(orgId)
+      );
 
-    if (kbCatalog.trim()) {
-      systemPrompt = `${systemPrompt.trim()}\n\n${kbCatalog.trim()}`;
+      if (kbCatalog.trim()) {
+        systemPrompt = `${systemPrompt.trim()}\n\n${kbCatalog.trim()}`;
+      }
     }
 
     if (orgRole !== "viewer") {
@@ -5450,7 +5987,7 @@ export class AgentService {
     );
 
     const resolvedProvider =
-      primarySupportsVision === false
+      provider && primarySupportsVision === false
         ? wrapProviderForNonVision(provider)
         : provider;
 

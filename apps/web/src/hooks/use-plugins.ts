@@ -312,7 +312,9 @@ function invalidateOrgPlugins(
     queryKeys.plugins.all(orgId),
     queryKeys.tools.all,
     queryKeys.skills.all,
-    queryKeys.profiles.all
+    queryKeys.profiles.all,
+    ["organizationOverview"],
+    ["organizationPublicationCatalog"]
   );
 }
 

@@ -15,7 +15,7 @@ type LlmCassetteExchange = {
   };
   response: {
     status: number;
-    body: unknown;
+    body: z.infer<ReturnType<typeof z.json>>;
   };
 };
 
@@ -39,7 +39,7 @@ const cassetteSchema = z.object({
           method: z.string(),
           url: z.string(),
         }),
-        response: z.object({ body: z.unknown(), status: z.number() }),
+        response: z.object({ body: z.json(), status: z.number() }),
       })
     )
     .optional(),
@@ -52,7 +52,7 @@ const cassetteSchema = z.object({
       url: z.string(),
     })
     .optional(),
-  response: z.object({ body: z.unknown(), status: z.number() }).optional(),
+  response: z.object({ body: z.json(), status: z.number() }).optional(),
   version: z.union([z.literal(1), z.literal(2)]),
 });
 

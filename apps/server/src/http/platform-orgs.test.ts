@@ -54,6 +54,7 @@ describe("platform org routes", () => {
         id: expect.stringMatching(/^org_/),
         monthlyLlmTurnLimit: 0,
         name: "Acme Corp",
+        parentOrgId: null,
         skillsCuratorArchiveAfterDays: 90,
         skillsCuratorConsolidateEnabled: false,
         skillsCuratorEnabled: false,
@@ -256,6 +257,53 @@ describe("platform org routes", () => {
     expect(
       await databaseAdapter.getOrganizationById(created.organization.id)
     ).toBeNull();
+  });
+
+  test("platform admin can update org skill settings", async () => {
+    const { app, authService, databaseAdapter } = createPlatformApp();
+
+    const session = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+
+    const headers = session.headers({
+      "X-CSRF-Token": session.csrfToken,
+    });
+
+    const created = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/orgs", {
+        body: JSON.stringify({ name: "Acme", slug: "acme-skills" }),
+        headers,
+        method: "POST",
+      })
+    );
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
+    const { organization } = (await created.json()) as {
+      organization: { id: string };
+    };
+
+    const updated = await app.fetch(
+      new Request(`http://localhost:4310/v1/platform/orgs/${organization.id}`, {
+        body: JSON.stringify({
+          skillsCuratorEnabled: true,
+          skillsPostTurnReview: true,
+          skillsWriteApproval: true,
+        }),
+        headers,
+        method: "PATCH",
+      })
+    );
+
+    expect(updated.status).toBe(200);
+
+    const stored = await databaseAdapter.getOrganizationById(organization.id);
+
+    expect(stored?.skillsCuratorEnabled).toBe(true);
+    expect(stored?.skillsPostTurnReview).toBe(true);
+    expect(stored?.skillsWriteApproval).toBe(true);
   });
 
   test("org admin cannot archive via platform delete", async () => {

@@ -167,10 +167,53 @@ export function registerProfileRoutes(
     .passthrough()
     .openapi("ListProfilesResponse");
 
-  const profileSchema = z.object({}).passthrough().openapi("ProfileResponse");
+  const profileSchema = z
+    .object({
+      profile: z
+        .object({
+          publishedSkills: z
+            .array(
+              z.object({
+                createdAt: z.string(),
+                createdBy: z.enum(["agent", "human", "bundled"]),
+                description: z.string(),
+                disableModelInvocation: z.boolean(),
+                enabled: z.boolean(),
+                hasTool: z.boolean(),
+                id: z.string(),
+                name: z.string(),
+                updatedAt: z.string(),
+                publicationId: z.string(),
+                scope: z.literal("parent"),
+                sourceOrganization: z.object({
+                  id: z.string(),
+                  name: z.string(),
+                }),
+              })
+            )
+            .optional(),
+        })
+        .passthrough(),
+    })
+    .passthrough()
+    .openapi("ProfileResponse");
 
   const createProfileSchema = z
-    .object({})
+    .object({
+      id: z.string().optional(),
+      isSuper: z.boolean().optional(),
+      model: z.string().nullable().optional(),
+      name: z.string(),
+      soulFiles: z
+        .object({
+          "SOUL.md": z.string().optional(),
+          "STYLE.md": z.string().optional(),
+          "INSTRUCTIONS.md": z.string().optional(),
+          "MEMORY.md": z.string().optional(),
+        })
+        .optional(),
+      systemPrompt: z.string().optional(),
+    })
     .passthrough()
     .openapi("CreateProfileRequest");
 
@@ -192,7 +235,7 @@ export function registerProfileRoutes(
   const initSoulSchema = z.object({}).passthrough().openapi("InitSoulResponse");
 
   const updateSoulFileSchema = z
-    .object({})
+    .object({ content: z.string() })
     .passthrough()
     .openapi("UpdateSoulFileRequest");
 
@@ -217,12 +260,35 @@ export function registerProfileRoutes(
     .openapi("DeleteArtifactResponse");
 
   const listKnowledgeBaseSchema = z
-    .object({})
+    .object({
+      publishedDocuments: z
+        .array(
+          z.object({
+            id: z.string(),
+            filename: z.string(),
+            mediaType: z.string(),
+            sizeBytes: z.number(),
+            status: z.enum(["ready", "failed"]),
+            uploadedAt: z.string(),
+            scope: z.literal("parent"),
+            publicationId: z.string(),
+            sourceOrganization: z.object({ id: z.string(), name: z.string() }),
+          })
+        )
+        .optional(),
+    })
     .passthrough()
     .openapi("ListKnowledgeBaseResponse");
 
   const uploadKnowledgeBaseSchema = z
-    .object({})
+    .object({
+      document: z.object({
+        data: z.string(),
+        filename: z.string(),
+        mediaType: z.string(),
+      }),
+      onDuplicate: z.enum(["error", "skip", "replace"]).optional(),
+    })
     .passthrough()
     .openapi("UploadKnowledgeBaseRequest");
 
@@ -281,7 +347,7 @@ export function registerProfileRoutes(
     .openapi("KnowledgeBaseDocumentInUseResponse");
 
   const imageAttachmentSchema = z
-    .object({})
+    .object({ data: z.string(), mediaType: z.string() })
     .passthrough()
     .openapi("ImageAttachment");
 
@@ -1076,6 +1142,36 @@ export function registerProfileRoutes(
   );
   app.openAPIRegistry.registerPath(
     createRoute({
+      method: "get",
+      operationId: "getPublishedKnowledgeBaseDocumentContent",
+      path: "/v1/orgs/{orgId}/shared-resources/{publicationId}/content",
+      request: {
+        params: z.object({ orgId: z.string(), publicationId: z.string() }),
+        query: z.object({
+          inline: z.enum(["0", "1"]).optional(),
+          render: z.enum(["text"]).optional(),
+        }),
+      },
+      responses: {
+        200: {
+          content: { "*/*": { schema: z.string() } },
+          description: "Published knowledge document bytes",
+        },
+        401: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Authentication required",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Document unavailable",
+        },
+      },
+      summary: "Read published knowledge through active organization context",
+      tags: ["Organizations"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
       method: "put",
       operationId: "attachSharedKnowledgeBaseDocument",
       path: "/v1/profiles/{profileId}/knowledge-base/shared/{documentId}",
@@ -1496,7 +1592,7 @@ export function registerProfileRoutes(
     const downloadName = artifactPath.split("/").pop() ?? "artifact";
     const disposition = c.req.query("inline") === "1" ? "inline" : "attachment";
 
-    return new Response(artifact.bytes, {
+    return new Response(new Uint8Array(artifact.bytes), {
       headers: {
         "Content-Disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(downloadName)}`,
         "Content-Type": artifact.contentType,
@@ -1645,7 +1741,7 @@ export function registerProfileRoutes(
       const disposition =
         c.req.query("inline") === "1" ? "inline" : "attachment";
 
-      return new Response(document.bytes, {
+      return new Response(new Uint8Array(document.bytes), {
         headers: {
           "Content-Disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(downloadName)}`,
           "Content-Type": document.contentType,
@@ -1655,7 +1751,7 @@ export function registerProfileRoutes(
   );
 
   app.get("/v1/orgs/:orgId/knowledge-base", async (c) => {
-    requirePlatformAdminFromContext(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
 
     if (orgId !== decodeURIComponent(c.req.param("orgId"))) {
@@ -1728,13 +1824,38 @@ export function registerProfileRoutes(
       { render: c.req.query("render") === "text" ? "text" : undefined }
     );
 
-    return new Response(document.bytes, {
+    return new Response(new Uint8Array(document.bytes), {
       headers: {
         "Content-Disposition": `${c.req.query("inline") === "1" ? "inline" : "attachment"}; filename="${document.filename.replace(/["\\]/g, "_")}"`,
         "Content-Type": document.contentType,
       },
     });
   });
+
+  app.get(
+    "/v1/orgs/:orgId/shared-resources/:publicationId/content",
+    async (c) => {
+      const auth = getRequestAuth(c);
+      const orgId = decodeURIComponent(c.req.param("orgId"));
+
+      if (auth.activeOrgId !== orgId) {
+        throw new NakamaApiError("Not found", 404);
+      }
+
+      const document = await agent.readPublishedKnowledgeBaseDocument(
+        orgId,
+        decodeURIComponent(c.req.param("publicationId")),
+        { render: c.req.query("render") === "text" ? "text" : undefined }
+      );
+
+      return new Response(new Uint8Array(document.bytes), {
+        headers: {
+          "Content-Disposition": `${c.req.query("inline") === "1" ? "inline" : "attachment"}; filename="${document.filename.replace(/["\\]/g, "_")}"`,
+          "Content-Type": document.contentType,
+        },
+      });
+    }
+  );
 
   app.put(
     "/v1/profiles/:profileId/knowledge-base/shared/:documentId",
@@ -1793,7 +1914,7 @@ export function registerProfileRoutes(
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const avatar = await agent.getProfileAvatar(orgId, profileId);
 
-    return new Response(avatar.bytes, {
+    return new Response(new Uint8Array(avatar.bytes), {
       headers: { "Content-Type": avatar.mediaType },
     });
   });

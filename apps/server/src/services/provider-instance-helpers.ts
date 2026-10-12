@@ -5,7 +5,6 @@ import {
   defaultOllamaBaseUrl,
   defaultOllamaLabel,
   findCustomModel,
-  findProviderInstance,
   isChatgptProviderConnected,
   isOllamaCloudInstance,
   isValidBaseUrl,
@@ -26,6 +25,7 @@ import {
   validateProviderApiKeyFormat,
   validateProviderInstanceLabel,
 } from "@nakama/core";
+import { createChatLock } from "@nakama/core/channel-chat-lock";
 import type {
   CreateProviderRequest,
   ProviderInstanceSummary,
@@ -53,6 +53,9 @@ import {
   type CreateProviderForInstanceOptions,
   createProviderForInstance,
 } from "../providers/create";
+
+// shortcut: One process only; use a shared lock if servers share provider configuration.
+export const providerPublicationLock = createChatLock();
 
 export function toProviderInstanceSummary(
   instance: ProviderInstance,
@@ -319,10 +322,10 @@ export function buildProviderInstanceFromCreateRequest(
   return {
     apiKey,
     id: createProviderInstanceId(),
-    label,
-    type,
     ...fields,
     createdAt: new Date().toISOString(),
+    label,
+    type,
   };
 }
 
@@ -437,14 +440,16 @@ export function applyProviderInstanceUpdate(
 
 function buildProviderFieldsFromRequest(
   request: CreateProviderRequest
-): Pick<
-  ProviderInstance,
-  | "baseUrl"
-  | "customModels"
-  | "label"
-  | "hostMode"
-  | "wireApi"
-  | "openRouterRouting"
+): Partial<
+  Pick<
+    ProviderInstance,
+    | "baseUrl"
+    | "customModels"
+    | "label"
+    | "hostMode"
+    | "wireApi"
+    | "openRouterRouting"
+  >
 > {
   const type = request.type;
 
@@ -675,9 +680,8 @@ export function resolveConfiguredModelInstance(
     throw new NakamaApiError(errors.invalid, 400);
   }
 
-  const instance = findProviderInstance(
-    { providers: userConfig?.providers ?? [] },
-    decoded.providerId
+  const instance = userConfig?.providers.find(
+    (entry) => entry.id === decoded.providerId
   );
 
   if (!instance) {
@@ -695,7 +699,7 @@ export function resolveProfileProviderSelection(options: {
   const { providers, defaultProviderId, profileModel } = options;
 
   const active = defaultProviderId
-    ? findProviderInstance({ providers }, defaultProviderId)
+    ? providers.find((entry) => entry.id === defaultProviderId)
     : null;
 
   const fallbackInstance = active ?? providers[0] ?? null;
@@ -707,7 +711,7 @@ export function resolveProfileProviderSelection(options: {
   const decoded = decodeStoredModelSelection(profileModel);
 
   if (decoded && decoded.providerId !== "__unknown__") {
-    const explicit = findProviderInstance({ providers }, decoded.providerId);
+    const explicit = providers.find((entry) => entry.id === decoded.providerId);
 
     if (explicit) {
       return {

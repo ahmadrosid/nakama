@@ -3,22 +3,12 @@ title: "How Multi-tenancy Works"
 description: "Learn how organizations, roles, and tenant isolation work in Nakama."
 ---
 
-Nakama is built for running more than one team or customer on the same deployment.
+Nakama lets teams use common resources while keeping their work private.
+One installation can serve separate customers or teams within one organization.
 
-The main rule is simple:
-
-- One **organization** is one tenant boundary
-
-That organization keeps its own:
-
-- Profiles
-- Sessions
-- Members
-- Tools
-- Skills
-- MCP servers
-- Usage data
-- [Org memory](/org-memory) — shared, admin-curated facts for every profile in the org
+An organization can publish resources to its teams. Each team keeps its own
+members, chats, files, memory, credentials, automations, usage, and local agents.
+Existing organizations stay separate until an admin creates a team beneath one.
 
 ## Why this matters
 
@@ -35,9 +25,83 @@ For example:
 | Actor | Scope | Capabilities |
 |---|---|---|
 | Platform admin | Whole deployment | Create orgs, remove an org from use, and manage shared system-level bot resources |
-| Org admin | One organization | Invite members and manage roles |
+| Parent org admin | Parent organization | Publish resources, create teams, and view team summaries |
+| Team or standalone org admin | Own organization | Invite members, manage roles, and manage permitted settings |
 | Org member | One organization | Chat with profiles and use the workspace |
-| Org viewer | One organization | Read chat history only — no org memory, agent invoke, or mutations |
+| Org viewer | One organization | Read permitted history and the shared overview; no org memory, agent invoke, or mutations |
+
+Parent admin access does not grant access to a team's chats or files.
+Team membership does not grant access to private parent resources.
+Team users see sibling summaries only when they also belong to those teams.
+Parent admins can see all team summaries. A summary does not grant team access.
+
+## Share resources with teams
+
+Open **System → Organization** in the parent organization.
+The **Shared with every team** card shows published resources in five rows.
+Resources remain private until a permitted parent admin publishes them.
+
+| Resource | What teams receive |
+|---|---|
+| Knowledge | Published documents for reading and search |
+| Skills | Published profile skills available for permitted agent assignments |
+| Agents | Shared templates that create team-owned agents when selected |
+| Tools | Published tool availability, with existing permissions and approvals |
+| Models | Configured model choices; provider keys remain under platform administration |
+
+1. Select **Manage** beside the resource row.
+2. Select a resource from the list.
+3. Select **Publish document**, **Publish skill**, **Publish agent**, **Publish tool**, or **Publish model**.
+
+To remove a publication, open **Manage** and select **Unpublish** beside it.
+Removal blocks new use unless another valid access source remains, such as a global resource.
+It does not promise to cancel a call already running.
+Parent changes apply on the next resource read or agent turn.
+
+Teams can add local resources under their existing permissions.
+Publication does not assign every tool or skill to every agent.
+Use the existing agent assignment controls for permitted resources.
+Default Bot and Super Bot cannot be published.
+
+Published tools do not supply parent credentials.
+Connect integrations for the executing team when setup is required.
+Personal OAuth connections remain tied to the signed-in user and team.
+Platform admins still manage custom tool definitions and provider keys.
+
+## Create a team
+
+A standalone organization becomes a parent when its admin creates its first team.
+Its existing work stays in that organization.
+Teams have one parent level. Nested teams and moving existing organizations under a parent are not supported.
+
+1. Switch to the parent organization.
+2. Open **System → Organization**.
+3. Select **Add team**.
+4. Enter **Team name**.
+5. Enter a **Slug** with lowercase letters, numbers, and optional hyphens between words.
+6. Keep your user ID in **First admin user ID**, or enter another existing user's ID.
+7. Select **Create team**.
+
+The selected user becomes the first team admin.
+Selecting another user does not add the creator to the team.
+The parent stays selected after creation.
+
+The **Teams** card shows member counts, local additions, and the **Current** team.
+Select a row to open the team page.
+The page shows setup steps and **Work in this team**, which switches you into the team.
+Team admins select **Add person** to add an existing organization member to the team.
+The list shows only people who are not yet in the team.
+The organization switcher also lists your teams.
+
+## Manage team settings
+
+Open **System → Organization** while the team is selected.
+Permitted admins use **Current team settings** for members, invitations, skill policy, and organization memory.
+The team ID and copy action remain available.
+A standalone or parent organization shows **Organization settings** instead.
+
+If a request fails, use the displayed retry action.
+Failed publication changes do not replace the current resource list.
 
 ## Practical mental model
 
@@ -70,13 +134,15 @@ If one team needs different bots but should still share users and data boundarie
 
 ## Remove an organization
 
-A leftover or test organization can stay in the switcher and keep scheduled work running. A **platform admin** can take it out of use from **Control center → Workspace → Organization**.
+A leftover or test organization can stay in the switcher and keep scheduled work running. A **platform admin** can take it out of use from **System → Organization**.
 
 1. Switch into the organization you want to remove
-2. Open **Control center → Workspace → Organization**
+2. Open **System → Organization**
 3. Confirm **Delete organization**
 
 That hides the organization from the switcher, chat, and workers. Members, profiles, and files stay on disk. The last remaining organization cannot be removed. Org admins cannot do this.
+
+A parent cannot be archived while active teams remain.
 
 ## Important limitation
 
@@ -93,13 +159,15 @@ Those changes affect every organization. Telegram and WhatsApp bridge settings,
 enabled Composio apps, personal Composio connections, profiles, sessions, and
 organization memory stay scoped to one organization.
 
-Org admins manage members, but creating and cloning profiles (and most tool / MCP / skill provisioning) is still a platform-admin responsibility.
+General profile creation and cloning, and most tool, MCP, and skill provisioning, remain platform-admin responsibilities.
+Team admins and members can select permitted published agents from **System → Organization**.
 
 **Exception:** org admins can **export and import a single agent pack** (secrets-free zip) for agents in their active org. Import creates a new profile and re-links tools/MCP by name when they already exist in the destination. It does not open general agent creation or cloning, or unrestricted tool assignment. See [Export and import an agent pack](/profiles#export-and-import-a-profile-pack).
 
 So the split is:
 
 - Org admin manages people, plus profile pack export/import for their org
+- Parent org admin publishes resources and creates teams
 - Platform admin manages the broader bot system
 
 ## Next steps

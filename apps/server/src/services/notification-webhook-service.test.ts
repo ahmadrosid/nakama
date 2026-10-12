@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { NotificationDestinationChannel } from "@nakama/core";
+import type {
+  NotificationDestinationChannel,
+  TelegramOutboundAdapter,
+} from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AuthService } from "./auth-service";
 import { NotificationWebhookService } from "./notification-webhook-service";
@@ -256,12 +259,7 @@ describe("NotificationWebhookService", () => {
   test("delivers to telegram topics with formatted text", async () => {
     const { apiKey, authService, databaseAdapter } = await seedDestination();
 
-    const calls: Array<{
-      text: string;
-      chatIds?: number[];
-      topicId?: number;
-      parseMode?: "HTML";
-    }> = [];
+    const calls: Parameters<TelegramOutboundAdapter["send"]>[0][] = [];
 
     const service = new NotificationWebhookService(
       databaseAdapter,

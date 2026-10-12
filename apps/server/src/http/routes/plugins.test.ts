@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { resolve } from "node:path";
-import type { OrgRole } from "@nakama/core";
+import type { ListOrgPluginsResponse, OrgRole } from "@nakama/core";
 import { getUserConfigDir, PLUGIN_MANIFEST_API_VERSION } from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
@@ -1012,7 +1012,7 @@ describe("plugin HTTP API", () => {
       const listed = await jsonRequest(app, "/v1/plugins", member);
       expect(
         (await listed.json()).plugins.some(
-          (plugin: { pluginId: string; enabled: boolean }) =>
+          (plugin: ListOrgPluginsResponse["plugins"][number]) =>
             plugin.pluginId === pluginId && plugin.lifecycleState === "enabled"
         )
       ).toBe(true);

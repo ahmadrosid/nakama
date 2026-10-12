@@ -4,7 +4,7 @@ import {
   createPartFromText,
   type Part,
 } from "@google/genai";
-import type { ChatMessage, LlmToolDefinition } from "@nakama/core";
+import type { ChatMessage } from "@nakama/core";
 import { resolveUserContentForProvider } from "@nakama/core";
 import {
   type ProviderJsonRecord,
@@ -90,6 +90,10 @@ async function toGeminiUserParts(
       }
 
       continue;
+    }
+
+    if (part.type !== "image" && part.type !== "document") {
+      throw new Error(`Unsupported content part type: ${part.type}`);
     }
 
     parts.push({
@@ -192,7 +196,7 @@ export function parseGeminiFunctionCalls(
     | Array<{
         id?: string;
         name?: string;
-        args?: LlmToolDefinition["parameters"];
+        args?: unknown;
       }>
     | undefined
 ): import("@nakama/core").ToolCall[] {

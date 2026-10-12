@@ -13,11 +13,14 @@ import { loginUserSession, seedOrgAdmin } from "../test-session-helpers";
 
 const TEST_API_KEY = "ck_test";
 
-type ComposioServiceWithApiClientCache = ComposioService & {
-  apiClientCache: { key: string; client: ComposioApiClient } | null;
-};
-
-function createMockClient(): ComposioApiClient {
+function createMockClient(): Pick<
+  ComposioApiClient,
+  | "createProfileSession"
+  | "deleteConnectedAccount"
+  | "linkToolkitAccount"
+  | "listCatalogToolkits"
+  | "listSessionTools"
+> {
   return {
     async createProfileSession() {
       return {
@@ -56,11 +59,12 @@ async function createApp() {
   const composioService = new ComposioService(databaseAdapter, authService);
   composioService.reloadConfiguration();
 
-  // SAFETY: This test controls the fixture shape at this boundary.
-  (composioService as ComposioServiceWithApiClientCache).apiClientCache = {
-    client: createMockClient(),
-    key: TEST_API_KEY,
-  };
+  Object.assign(composioService, {
+    apiClientCache: {
+      client: createMockClient(),
+      key: TEST_API_KEY,
+    },
+  });
 
   return createMinimalHonoApp({
     agent: new AgentService(null, null, databaseAdapter),

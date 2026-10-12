@@ -1,7 +1,7 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { type AgentChatSession, createAgentChatSession } from "@nakama/agent";
+import { createAgentChatSession } from "@nakama/agent";
 import {
   type ChatMessage,
   getUserConfigDir,
@@ -840,29 +840,29 @@ describe("session persistence", () => {
   });
 
   test("clear leaves the delete to clearSession instead of firing it unawaited", () => {
-    let cleared = false;
+    const session = createAgentChatSession(
+      { provider: summaryProvider },
+      { initialHistory: historyWithTool() }
+    );
 
-    // SAFETY: The test fixture matches the contract used by this test.
-    const session = {
-      clear() {
-        cleared = true;
-      },
-      getHistory: () => [],
-      getHistoryRevision: () => 0,
-    } as AgentChatSession;
+    const db = createInMemoryDatabaseAdapter();
 
     // An unawaited call here rejects with nowhere to report, and Bun ends the
     // process on an unhandled rejection. AgentService.clearSession awaits the
     // same delete right after, so this wrapper must not repeat it.
-    // SAFETY: The test fixture matches the contract used by this test.
-    const db = {
-      deleteMessagesForSession() {
+    const deleteSpy = spyOn(db, "deleteMessagesForSession").mockImplementation(
+      () => {
         throw new Error("clear() must not delete messages");
-      },
-    } as DatabaseAdapter;
+      }
+    );
 
-    wrapPersistedSession("session_1", session, db).clear();
+    try {
+      wrapPersistedSession("session_1", session, db).clear();
 
-    expect(cleared).toBe(true);
+      expect(session.getHistory()).toEqual([]);
+      expect(deleteSpy).not.toHaveBeenCalled();
+    } finally {
+      deleteSpy.mockRestore();
+    }
   });
 });

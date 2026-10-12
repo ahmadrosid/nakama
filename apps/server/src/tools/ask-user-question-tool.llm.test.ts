@@ -71,81 +71,91 @@ test("ask_user_question schema is callable by a real OpenAI model", async () => 
   const cassettePath = cassetteFilePath(cassetteName);
   const existing = await loadCassette(cassettePath);
   const mode = process.env.LLM_VCR_MODE?.trim().toLowerCase();
-  const instance = await resolveOpenAiInstance();
+  const replay = mode === "replay" || (mode !== "record" && existing !== null);
+  const instance = replay ? null : await resolveOpenAiInstance();
 
-  if (!existing && mode !== "record" && !instance) {
+  const model = replay
+    ? z.object({ model: z.string() }).parse(existing?.request?.body).model
+    : "gpt-4o-mini";
+
+  if (!(replay || instance)) {
     throw new Error(
       "Missing OpenAI credentials to record ask_user_question cassette. Set OPENAI_API_KEY or configure an OpenAI provider, then run with LLM_VCR_MODE=record."
     );
   }
 
-  await withMswCassette(cassetteName, async () => {
-    const liveProvider = createProviderForInstance(
-      instance ?? {
-        apiKey: "sk-replay-placeholder",
-        createdAt: new Date().toISOString(),
-        id: "replay-openai",
-        label: "OpenAI",
-        type: "openai",
-      },
-      "gpt-4o-mini"
-    );
-
-    if (!liveProvider) {
-      throw new Error("Failed to construct OpenAI provider.");
-    }
-
-    const db = createInMemoryDatabaseAdapter();
-    const state = new AgentQuestionnaireState(db);
-    await db.upsertSession({
-      agentQuestionnaire: null,
-      agentTodos: [],
-      channel: "web",
-      createdAt: new Date().toISOString(),
-      id: "session_llm",
-      model: null,
-      profileId: "default",
-      title: null,
-    });
-
-    const tool = createAskUserQuestionTools(state).find(
-      (entry) => entry.name === "ask_user_question"
-    );
-
-    if (!tool) {
-      throw new Error("ask_user_question tool missing");
-    }
-
-    const result = await liveProvider.generateChat({
-      messages: [
-        {
-          content:
-            "Before you help me schedule anything, ask what timezone I am in. Use the ask_user_question tool with at most 4 choices.",
-          role: "user",
+  await withMswCassette(
+    cassetteName,
+    async () => {
+      const liveProvider = createProviderForInstance(
+        instance ?? {
+          apiKey: "sk-replay-placeholder",
+          createdAt: new Date().toISOString(),
+          id: "replay-openai",
+          label: "OpenAI",
+          type: "openai",
         },
-      ],
-      system:
-        "You are a helpful assistant. When you need information from the user, you must call the ask_user_question tool. Prefer 2-4 choices per question. Do not answer in plain text.",
-      tools: [toLlmToolDefinition(tool)],
-    });
-
-    const toolCall = result.toolCalls?.[0];
-    expect(toolCall?.name).toBe("ask_user_question");
-
-    const parsedArgs = QuestionnaireCallSchema.safeParse(toolCall?.arguments);
-
-    if (!parsedArgs.success) {
-      throw new Error(
-        `expected ask_user_question questions array, got ${JSON.stringify(toolCall?.arguments)}`
+        model
       );
-    }
 
-    expect(parsedArgs.data.questions[0]?.choices.length).toBeGreaterThan(0);
+      if (!liveProvider) {
+        throw new Error("Failed to construct OpenAI provider.");
+      }
 
-    const stored = await tool.run(parsedArgs.data, {
-      sessionId: "session_llm",
-    });
+      const db = createInMemoryDatabaseAdapter();
+      const state = new AgentQuestionnaireState(db);
+      await db.upsertSession({
+        agentQuestionnaire: null,
+        agentTodos: [],
+        channel: "web",
+        createdAt: new Date().toISOString(),
+        id: "session_llm",
+        model: null,
+        profileId: "default",
+        title: null,
+      });
 
-    expect(stored.questionnaire.title).toBe(parsedArgs.data.title);
-  });
+      const tool = createAskUserQuestionTools(state).find(
+        (entry) => entry.name === "ask_user_question"
+      );
+
+      if (!tool) {
+        throw new Error("ask_user_question tool missing");
+      }
+
+      const result = await liveProvider.generateChat({
+        messages: [
+          {
+            content:
+              "Before you help me schedule anything, ask what timezone I am in. Use the ask_user_question tool with at most 4 choices.",
+            role: "user",
+          },
+        ],
+        system:
+          "You are a helpful assistant. When you need information from the user, you must call the ask_user_question tool. Prefer 2-4 choices per question. Do not answer in plain text.",
+        tools: [toLlmToolDefinition(tool)],
+      });
+
+      const toolCall = result.toolCalls?.[0];
+      expect(toolCall?.name).toBe("ask_user_question");
+
+      const parsedArgs = QuestionnaireCallSchema.safeParse(toolCall?.arguments);
+
+      if (!parsedArgs.success) {
+        throw new Error(
+          `expected ask_user_question questions array, got ${JSON.stringify(toolCall?.arguments)}`
+        );
+      }
+
+      expect(parsedArgs.data.questions[0]?.choices.length).toBeGreaterThan(0);
+
+      await tool.run(parsedArgs.data, {
+        sessionId: "session_llm",
+      });
+
+      const stored = await state.get("session_llm");
+      expect(stored?.title).toBe(parsedArgs.data.title);
+    },
+    { url: "https://api.openai.com/v1/responses" }
+  );
 });

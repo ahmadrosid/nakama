@@ -374,6 +374,32 @@ describe("getLeadingCommand", () => {
     expect(found?.description).toBe(weatherSkill.description.trim());
   });
 
+  test("keeps the first matching skill when names repeat", () => {
+    const duplicate = { ...weatherSkill, description: "Second skill" };
+
+    const found = getLeadingCommand("/skill weather", [
+      weatherSkill,
+      duplicate,
+    ]);
+
+    expect(found?.description).toBe(weatherSkill.description.trim());
+  });
+
+  test("ignores later skills when the leading skill is unavailable", () => {
+    expect(
+      getLeadingCommand("/skill missing /skill weather", [weatherSkill])
+    ).toBeNull();
+  });
+
+  test("finds a leading skill after whitespace and ignores later tokens", () => {
+    const found = getLeadingCommand("  /skill weather /skill missing", [
+      weatherSkill,
+    ]);
+
+    expect(found?.range).toEqual({ end: 16, name: "weather", start: 2 });
+    expect(found?.description).toBe(weatherSkill.description.trim());
+  });
+
   test("ignores a command mid-sentence", () => {
     expect(getLeadingCommand("run /skill weather", [weatherSkill])).toBeNull();
   });

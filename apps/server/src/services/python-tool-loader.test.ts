@@ -234,7 +234,7 @@ if __name__ == "__main__":
     // SAFETY: The test fixture matches the contract used by this test.
     const result = (await tool!.run(
       { message: "hello" },
-      { workspaceRoot: "/tmp/nakama-ws" }
+      { orgId: "org_a", workspaceRoot: "/tmp/nakama-ws" }
     )) as { echoed: string; root: string };
 
     expect(result.echoed).toBe("hello");
@@ -260,7 +260,9 @@ if __name__ == "__main__":
 
     process.env.NAKAMA_PYTHON_BIN = "/tmp/not-an-allowlisted-python";
     const tool = await loadPythonTool(makeRecord());
-    await expect(tool!.run({}, {})).rejects.toThrow(/allowlist/i);
+    await expect(tool!.run({}, { orgId: "org_a" })).rejects.toThrow(
+      /allowlist/i
+    );
   });
 
   test("returns an error tool when the module file is missing", async () => {
@@ -268,8 +270,11 @@ if __name__ == "__main__":
     configDir = dir;
 
     const tool = await loadPythonTool(makeRecord());
+
     // SAFETY: The test fixture matches the contract used by this test.
-    const result = (await tool!.run({}, {})) as { error: string };
+    const result = (await tool!.run({}, { orgId: "org_a" })) as {
+      error: string;
+    };
 
     expect(result.error).toContain("echo.py");
   });
@@ -291,7 +296,10 @@ print("hi")
     );
 
     // SAFETY: The test fixture matches the contract used by this test.
-    const result = (await tool!.run({}, {})) as { error: string };
+    const result = (await tool!.run({}, { orgId: "org_a" })) as {
+      error: string;
+    };
+
     expect(result.error).toMatch(/run\s*\(/i);
   });
 
@@ -315,7 +323,10 @@ print("hi")
     );
 
     // SAFETY: The test fixture matches the contract used by this test.
-    const result = (await tool!.run({}, {})) as { error: string };
+    const result = (await tool!.run({}, { orgId: "org_a" })) as {
+      error: string;
+    };
+
     expect(result.error).toMatch(/__main__/i);
   });
 
@@ -343,7 +354,9 @@ if __name__ == "__main__":
 
     // A failed spawn must reject so the retry policy can retry transient
     // failures; executeToolCall turns the throw into `{ error }` for callers.
-    const err = await tool!.run({}, {}).catch((error: Error) => error);
+    const err = await tool!
+      .run({}, { orgId: "org_a" })
+      .catch((error: Error) => error);
 
     expect(err).toBeInstanceOf(Error);
     // SAFETY: The test fixture matches the contract used by this test.
@@ -377,7 +390,9 @@ if __name__ == "__main__":
       })
     );
 
-    await expect(tool!.run({}, {})).rejects.toThrow(/non-json/i);
+    await expect(tool!.run({}, { orgId: "org_a" })).rejects.toThrow(
+      /non-json/i
+    );
   });
 
   test("returns an error tool when the module prints nothing to stdout", async () => {
@@ -406,7 +421,9 @@ if __name__ == "__main__":
       })
     );
 
-    await expect(tool!.run({}, {})).rejects.toThrow(/no output/i);
+    await expect(tool!.run({}, { orgId: "org_a" })).rejects.toThrow(
+      /no output/i
+    );
   });
 
   test("runs with cwd scoped to the tools directory, not the server checkout", async () => {
@@ -435,7 +452,7 @@ if __name__ == "__main__":
     );
 
     // SAFETY: The test fixture matches the contract used by this test.
-    const result = (await tool!.run({}, {})) as { cwd: string };
+    const result = (await tool!.run({}, { orgId: "org_a" })) as { cwd: string };
     expect(realpathSync(result.cwd)).toBe(realpathSync(toolsDir));
   });
 
@@ -468,7 +485,10 @@ if __name__ == "__main__":
 
     try {
       // SAFETY: The test fixture matches the contract used by this test.
-      const result = (await tool!.run({}, {})) as { secret: string | null };
+      const result = (await tool!.run({}, { orgId: "org_a" })) as {
+        secret: string | null;
+      };
+
       expect(result.secret).toBeNull();
     } finally {
       delete process.env.NAKAMA_TEST_CANARY_SECRET;
@@ -514,7 +534,9 @@ if __name__ == "__main__":
     process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS = "200";
 
     try {
-      await expect(tool!.run({}, {})).rejects.toThrow(/timed out/i);
+      await expect(tool!.run({}, { orgId: "org_a" })).rejects.toThrow(
+        /timed out/i
+      );
     } finally {
       delete process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS;
     }
@@ -573,12 +595,15 @@ if __name__ == "__main__":
         handlerType: "python",
         id: "tool_adder_py",
         name: "adder_py",
+        orgId: "org_a",
         updatedAt: new Date().toISOString(),
       },
     ]);
 
     expect(tools).toHaveLength(1);
-    expect(await tools[0]!.run({ a: 2, b: 3 }, {})).toEqual({ sum: 5 });
+    expect(await tools[0]!.run({ a: 2, b: 3 }, { orgId: "org_a" })).toEqual({
+      sum: 5,
+    });
   });
 });
 
@@ -601,9 +626,12 @@ describe("agent-service playground dispatch", () => {
   test("runToolPlayground executes a python tool instead of its error stub", async () => {
     const { configDir: dir, toolsDir } = await setupToolsDir();
     configDir = dir;
+    await mkdir(path.join(configDir, "orgs", "org_playground", "tools"), {
+      recursive: true,
+    });
 
     await writeFile(
-      path.join(toolsDir, "shout.py"),
+      path.join(configDir, "orgs", "org_playground", "tools", "shout.py"),
       `import json, sys
 
 def run(input, context):
@@ -643,6 +671,7 @@ if __name__ == "__main__":
       handlerType: "python",
       id: "tool_shout",
       name: "shout",
+      orgId: "org_playground",
       updatedAt: now,
     });
     await databaseAdapter.assignToolToProfile(

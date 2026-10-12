@@ -152,7 +152,6 @@ export function useProfilesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { profileId: liveChatProfileId } = useActiveChatProfile();
   const { user } = useAuth();
-  const canManageProfile = user?.isPlatformAdmin === true;
 
   const {
     data: profiles = [],
@@ -187,6 +186,9 @@ export function useProfilesPage() {
     error: detailError,
     refetch: refetchDetail,
   } = useProfileQuery(selectedId);
+
+  const canManageProfile =
+    user?.isPlatformAdmin === true && Boolean(detail && !detail.sharedAgent);
 
   const updateMutation = useUpdateProfileMutation();
 
@@ -338,7 +340,7 @@ export function useProfilesPage() {
       const snapshot = editStateRef.current;
       const { selectedId: profileId, detail: profileDetail } = snapshot;
 
-      if (!(profileId && profileDetail)) {
+      if (!(profileId && profileDetail) || profileDetail.sharedAgent) {
         return;
       }
 
@@ -385,7 +387,7 @@ export function useProfilesPage() {
       detail: profileDetail,
     } = editStateRef.current;
 
-    if (!(profileId && profileDetail)) {
+    if (!(profileId && profileDetail) || profileDetail.sharedAgent) {
       return true;
     }
 
@@ -495,36 +497,48 @@ export function useProfilesPage() {
 
   const handleEditNameChange = useCallback(
     (value: string) => {
+      if (!canManageProfile) {
+        return;
+      }
+
       setEditName(value);
       editStateRef.current.editName = value;
       scheduleSave(profileTextSaveDelayMs);
     },
-    [scheduleSave]
+    [canManageProfile, scheduleSave]
   );
 
   const handleEditPromptChange = useCallback(
     (value: string) => {
+      if (!canManageProfile) {
+        return;
+      }
+
       setEditPrompt(value);
       editStateRef.current.editPrompt = value;
       scheduleSave(profileTextSaveDelayMs);
     },
-    [scheduleSave]
+    [canManageProfile, scheduleSave]
   );
 
   const handleEditModelChange = useCallback(
     (model: string | null) => {
+      if (!canManageProfile) {
+        return;
+      }
+
       setEditModel(model);
       editStateRef.current.editModel = model;
       scheduleSave(profileModelSaveDelayMs);
     },
-    [scheduleSave]
+    [canManageProfile, scheduleSave]
   );
 
   // Saved right away, not debounced: the agent is a choice, not text. An empty
   // preset id returns the profile to the built-in chat.
   const handleEditAcpAgent = useCallback(
     async (presetId: string) => {
-      if (!selectedId) {
+      if (!(selectedId && canManageProfile)) {
         return;
       }
 
@@ -542,7 +556,7 @@ export function useProfilesPage() {
         setError(formatError(err));
       }
     },
-    [acpAgentPresets, selectedId, updateProfile]
+    [acpAgentPresets, canManageProfile, selectedId, updateProfile]
   );
 
   const switchingProfileRef = useRef(false);
@@ -820,6 +834,12 @@ export function useProfilesPage() {
   }
 
   function openCloneDialog(profileId: string) {
+    const profile = profiles.find((entry) => entry.id === profileId);
+
+    if (!profile || profile.sharedAgent || user?.isPlatformAdmin !== true) {
+      return;
+    }
+
     setCloneTargetId(profileId);
   }
 
@@ -843,8 +863,13 @@ export function useProfilesPage() {
 
   async function handleCloneConfirm() {
     const profileId = cloneTargetId;
+    const profile = profiles.find((entry) => entry.id === profileId);
 
-    if (!profileId) {
+    if (
+      !(profileId && profile) ||
+      profile.sharedAgent ||
+      user?.isPlatformAdmin !== true
+    ) {
       return;
     }
 
@@ -895,7 +920,7 @@ export function useProfilesPage() {
   }
 
   async function handleAssignTool(toolId: string) {
-    if (!selectedId) {
+    if (!(selectedId && canManageProfile)) {
       return;
     }
 
@@ -917,7 +942,7 @@ export function useProfilesPage() {
   }
 
   async function handleAssignMcpServer(serverId: string) {
-    if (!selectedId) {
+    if (!(selectedId && canManageProfile)) {
       return;
     }
 
@@ -935,7 +960,7 @@ export function useProfilesPage() {
   }
 
   async function handleCreateMcpServer(request: CreateMcpServerRequest) {
-    if (!selectedId) {
+    if (!(selectedId && canManageProfile)) {
       return;
     }
 
@@ -964,6 +989,10 @@ export function useProfilesPage() {
       throw new Error("Select a profile first.");
     }
 
+    if (!canManageProfile) {
+      throw new Error("Profile assignments are read-only.");
+    }
+
     setError(null);
 
     try {
@@ -979,6 +1008,10 @@ export function useProfilesPage() {
       throw new Error("Select a profile first.");
     }
 
+    if (!canManageProfile) {
+      throw new Error("Profile assignments are read-only.");
+    }
+
     await assignMutation.mutateAsync({
       profileId: selectedId,
       toolId: [BASH_TOOL_ID],
@@ -988,7 +1021,7 @@ export function useProfilesPage() {
   async function handleDeleteSkill(skillId: string) {
     const skill = allSkills.find((entry) => entry.id === skillId);
 
-    if (!skill) {
+    if (!(skill && canManageProfile)) {
       return;
     }
 
@@ -1003,7 +1036,7 @@ export function useProfilesPage() {
   }
 
   async function handleCreateSkill(request: CreateSkillRequest) {
-    if (!selectedId) {
+    if (!(selectedId && canManageProfile)) {
       return;
     }
 
@@ -1024,7 +1057,7 @@ export function useProfilesPage() {
   }
 
   async function handleInstallSkill(request: InstallSkillRequest) {
-    if (!selectedId) {
+    if (!(selectedId && canManageProfile)) {
       return;
     }
 
@@ -1041,7 +1074,7 @@ export function useProfilesPage() {
   }
 
   async function handleAssignComposioToolkit(toolkitId: string) {
-    if (!(selectedId && profileComposioData)) {
+    if (!(selectedId && profileComposioData && canManageProfile)) {
       return;
     }
 
@@ -1064,7 +1097,7 @@ export function useProfilesPage() {
   }
 
   async function handleRemoveAssignmentConfirm() {
-    if (!(selectedId && removeConfirm)) {
+    if (!(selectedId && removeConfirm && canManageProfile)) {
       return;
     }
 
@@ -1123,7 +1156,7 @@ export function useProfilesPage() {
 
     event.target.value = "";
 
-    if (!(selectedId && file)) {
+    if (!(selectedId && file && canManageProfile)) {
       return;
     }
 
@@ -1148,7 +1181,7 @@ export function useProfilesPage() {
   }
 
   async function handleAvatarRemove() {
-    if (!selectedId) {
+    if (!(selectedId && canManageProfile)) {
       return;
     }
 

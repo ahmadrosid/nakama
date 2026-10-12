@@ -52,6 +52,56 @@ function fakeTelegramFetch(getUsername: () => string) {
 }
 
 describe("TelegramManagedBotPairingService", () => {
+  test("polling advances past valid update IDs and ignores missing or invalid IDs", async () => {
+    const requests: unknown[] = [];
+
+    const service = new TelegramManagedBotPairingService(
+      "manager-token",
+      async (input, init) => {
+        const method = String(input).split("/").at(-1);
+
+        if (method === "getMe") {
+          return Response.json({
+            ok: true,
+            result: { username: "ManagerBot" },
+          });
+        }
+
+        if (method !== "getUpdates") {
+          throw new Error(`unexpected Telegram method: ${method}`);
+        }
+
+        requests.push(JSON.parse(String(init?.body)));
+
+        return Response.json({
+          ok: true,
+          result: [
+            { update_id: 9 },
+            {},
+            { update_id: null },
+            { update_id: "invalid" },
+            { update_id: "1000" },
+            { update_id: 3 },
+          ],
+        });
+      }
+    );
+
+    const started = await service.start("org", "user", "profile");
+
+    for (let poll = 0; poll < 3; poll++) {
+      expect(
+        (await service.status(started.pairingId, "org", "user")).status
+      ).toBe("waiting");
+    }
+
+    expect(requests[0]).not.toHaveProperty("offset");
+    expect(requests.slice(1)).toEqual([
+      expect.objectContaining({ offset: 10 }),
+      expect.objectContaining({ offset: 10 }),
+    ]);
+  });
+
   test("pairs the requested managed bot and keeps it org scoped", async () => {
     let username = "";
 

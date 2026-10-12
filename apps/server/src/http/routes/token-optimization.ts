@@ -34,13 +34,19 @@ export function registerTokenOptimizationRoutes(
   app: HonoApp,
   options: ServerOptions
 ): void {
+  const { databaseAdapter } = options;
+
+  if (!databaseAdapter) {
+    return;
+  }
+
   app.get("/v1/token-optimization", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
 
     const [rows, turnRows, settings, installed] = await Promise.all([
-      options.databaseAdapter.listToolOutputSavings(orgId),
-      options.databaseAdapter.listLlmTurnUsage(orgId),
-      options.databaseAdapter.getWorkspaceSettings(),
+      databaseAdapter.listToolOutputSavings(orgId),
+      databaseAdapter.listLlmTurnUsage(orgId),
+      databaseAdapter.getWorkspaceSettings(),
       isOmniInstalled(),
     ]);
 
@@ -172,9 +178,9 @@ export function registerTokenOptimizationRoutes(
     );
 
     const enabled = Boolean(body.enabled);
-    const existing = await options.databaseAdapter.getWorkspaceSettings();
+    const existing = await databaseAdapter.getWorkspaceSettings();
 
-    await options.databaseAdapter.upsertWorkspaceSettings(
+    await databaseAdapter.upsertWorkspaceSettings(
       mergeWorkspaceSettings(existing, {
         tokenOptimizerEnabled: enabled,
         updatedAt: new Date().toISOString(),

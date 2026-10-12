@@ -1,6 +1,6 @@
 import type { OrgRole, SetupAuthRequest } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
-import type { AuthService } from "../../services/auth-service";
+import type { AuthService } from "../services/auth-service";
 
 export const TEST_ORG_ID = "org_test";
 
@@ -8,7 +8,10 @@ export const LOCAL_CLIENT_EMAIL = "local-client@nakama.internal";
 
 export function buildSetupAuthBody(
   email = "admin@example.com",
-  overrides: Partial<SetupAuthRequest> = {}
+  overrides: {
+    admin?: Partial<SetupAuthRequest["admin"]>;
+    organization?: Partial<SetupAuthRequest["organization"]>;
+  } = {}
 ): SetupAuthRequest {
   return {
     admin: {

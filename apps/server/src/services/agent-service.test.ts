@@ -1,17 +1,28 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   type ChatCompletionResult,
   ensureBundledSkillFiles,
   type GenerateChatInput,
+  getProfileSoulDir,
+  getUserConfigPath,
   loadDiscordConfigFile,
   loadTelegramConfigFile,
+  loadUserConfig,
   loadWhatsAppConfigFile,
   type ProfileResponse,
   type ProviderClient,
   type ProviderInstance,
+  saveUserConfig,
   type ToolContext,
   type ToolDefinition,
 } from "@nakama/core";
@@ -20,18 +31,604 @@ import type { StoredProfileRecord } from "@nakama/db";
 import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
+  mergeWorkspaceSettings,
   WORKSPACE_SETTINGS_ID,
 } from "@nakama/db";
 import { createMinimalHonoApp } from "../http/test-app-helpers";
 import { setupFreshInstallSession } from "../http/test-session-helpers";
+import { asTestFetch } from "../providers/test-helpers";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
 import { createDefaultProfile } from "./agent-service-test-fixtures";
+import { AuthService } from "./auth-service";
 import { LlmUsageTracker } from "./llm-usage-tracker";
+import { OrgService } from "./org-service";
 import { resolveDefaultModelForInstance } from "./provider-instance-helpers";
 import { sessionTurnRegistry } from "./session-turn-registry";
 
 const TEST_ORG_ID = "org_test";
+
+describe("provider model publication removal", () => {
+  setupTestConfigDir("nakama-provider-publication-removal-");
+  const keptModel = { id: "gpt-4o-mini", name: "Kept" };
+  const removedModel = { id: "retired-custom", name: "Removed" };
+
+  async function setup(customModels?: ProviderInstance["customModels"]) {
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+
+    const config = {
+      defaultProviderId: "provider-one",
+      providers: ["provider-one", "provider-one-extra", "provider-two"].map(
+        (id) => ({
+          apiKey: "private-provider-key",
+          createdAt: now,
+          id,
+          label: id,
+          ...(customModels
+            ? {
+                baseUrl: "https://provider.example.invalid/v1",
+                customModels,
+                type: "openai_compatible" as const,
+              }
+            : { type: "openai" as const }),
+        })
+      ),
+    };
+
+    await saveUserConfig(config);
+    await db.createUser({
+      createdAt: now,
+      email: "provider-admin@example.com",
+      id: "admin",
+      passwordHash: "test",
+      updatedAt: now,
+    });
+
+    for (const id of ["root", "archived", "other"]) {
+      await db.upsertOrganization({
+        archivedAt: null,
+        createdAt: now,
+        id,
+        name: id,
+        slug: id,
+        updatedAt: now,
+      });
+      await db.upsertOrgMember({
+        createdAt: now,
+        orgId: id,
+        role: "admin",
+        userId: "admin",
+      });
+
+      for (const [kind, resourceId] of [
+        ["model", "provider-one::gpt-4o-mini"],
+        ["model", "provider-two::gpt-4o-mini"],
+        ["model", "provider-one-extra::gpt-4o-mini"],
+        ["knowledge", "provider-one::gpt-4o-mini"],
+      ] as const) {
+        await db.publishOrgSharedResource({
+          createdAt: now,
+          id: `${id}_${kind}_${resourceId}`,
+          orgId: id,
+          resourceId,
+          resourceKind: kind,
+          updatedAt: now,
+        });
+      }
+
+      if (customModels) {
+        for (const providerId of ["provider-one", "provider-two"]) {
+          await db.publishOrgSharedResource({
+            createdAt: now,
+            id: `${id}_${providerId}_removed`,
+            orgId: id,
+            resourceId: `${providerId}::${removedModel.id}`,
+            resourceKind: "model",
+            updatedAt: now,
+          });
+        }
+      }
+
+      if (id === "archived") {
+        await db.upsertOrganization({
+          archivedAt: now,
+          createdAt: now,
+          id,
+          name: id,
+          slug: id,
+          updatedAt: now,
+        });
+      }
+    }
+
+    return {
+      config,
+      db,
+      orgService: new OrgService(db, new AuthService()),
+      service: new AgentService(config, null, db),
+    };
+  }
+
+  test("deletion revokes every organization reference but preserves other providers and resource kinds", async () => {
+    const { db, service } = await setup();
+    expect(await service.deleteProvider("provider-one")).toEqual({
+      defaultProviderId: "provider-one-extra",
+    });
+
+    for (const id of ["root", "archived", "other"]) {
+      const publications = await db.listOrgSharedResources(id);
+      expect(publications).toHaveLength(3);
+      expect(
+        publications.some(
+          (entry) =>
+            entry.resourceKind === "model" &&
+            entry.resourceId === "provider-one::gpt-4o-mini"
+        )
+      ).toBe(false);
+      expect(
+        publications.some(
+          (entry) =>
+            entry.resourceKind === "knowledge" &&
+            entry.resourceId === "provider-one::gpt-4o-mini"
+        )
+      ).toBe(true);
+    }
+
+    expect(
+      (await loadUserConfig())?.providers.map((entry) => entry.id)
+    ).toEqual(["provider-one-extra", "provider-two"]);
+    expect(
+      (await service.getModels()).providers.map((entry) => entry.id)
+    ).toEqual(["provider-one-extra", "provider-two"]);
+    await service.deleteProvider("provider-one-extra");
+    expect(await service.deleteProvider("provider-two")).toEqual({
+      defaultProviderId: null,
+    });
+    expect((await loadUserConfig())?.providers).toEqual([]);
+    expect((await service.listProviders()).providers).toEqual([]);
+  });
+
+  test("a deletion retry revokes references after a database failure", async () => {
+    const { db, service } = await setup();
+
+    const failure = spyOn(db, "deleteOrgSharedResource").mockRejectedValueOnce(
+      new Error("database unavailable")
+    );
+
+    try {
+      await expect(service.deleteProvider("provider-one")).rejects.toThrow();
+      expect(
+        (await loadUserConfig())?.providers.some(
+          (entry) => entry.id === "provider-one"
+        )
+      ).toBe(false);
+      expect(
+        (await service.listProviders()).providers.some(
+          (entry) => entry.id === "provider-one"
+        )
+      ).toBe(false);
+    } finally {
+      failure.mockRestore();
+    }
+
+    await expect(service.deleteProvider("provider-one")).rejects.toThrow();
+
+    for (const org of await db.listOrganizations()) {
+      expect(
+        (await db.listOrgSharedResources(org.id)).filter(
+          (entry) =>
+            entry.resourceKind === "model" &&
+            entry.resourceId.startsWith("provider-one::")
+        )
+      ).toEqual([]);
+    }
+  });
+
+  test("a failed configuration write preserves cached providers and publications", async () => {
+    const { config, db, service } = await setup();
+    const before = await db.listOrgSharedResources("root");
+    const configPath = getUserConfigPath();
+    await rm(configPath);
+    await mkdir(configPath);
+
+    try {
+      await expect(service.deleteProvider("provider-one")).rejects.toThrow();
+      expect(
+        (await service.listProviders()).providers.map((entry) => entry.id)
+      ).toEqual(config.providers.map((entry) => entry.id));
+      expect(await db.listOrgSharedResources("root")).toEqual(before);
+    } finally {
+      await rm(configPath, { recursive: true });
+      await saveUserConfig(config);
+    }
+
+    await expect(service.deleteProvider("provider-one")).resolves.toMatchObject(
+      { defaultProviderId: "provider-one-extra" }
+    );
+  });
+
+  test("provider deletion waits for publication insertion and then revokes it", async () => {
+    const { db, orgService, service } = await setup();
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const publish = db.publishOrgSharedResource.bind(db);
+
+    const pending = spyOn(db, "publishOrgSharedResource").mockImplementation(
+      async (record) => {
+        entered.resolve();
+        await release.promise;
+
+        return publish(record);
+      }
+    );
+
+    const publishing = orgService.publishSharedResource(
+      "root",
+      { resourceId: "provider-one::gpt-4o-mini", resourceKind: "model" },
+      "admin"
+    );
+
+    await entered.promise;
+    const deleting = service.deleteProvider("provider-one");
+
+    try {
+      expect(
+        await Promise.race([
+          deleting.then(() => true),
+          Bun.sleep(20).then(() => false),
+        ])
+      ).toBe(false);
+    } finally {
+      release.resolve();
+      await Promise.allSettled([publishing, deleting]);
+      pending.mockRestore();
+    }
+
+    await expect(publishing).resolves.toMatchObject({
+      resourceId: "provider-one::gpt-4o-mini",
+    });
+    await expect(deleting).resolves.toMatchObject({
+      defaultProviderId: "provider-one-extra",
+    });
+    expect(
+      (await db.listOrgSharedResources("root")).filter(
+        (entry) =>
+          entry.resourceKind === "model" &&
+          entry.resourceId.startsWith("provider-one::")
+      )
+    ).toEqual([]);
+  });
+
+  test("provider updates remove only invalid model references and never republish restored models", async () => {
+    const { db, service } = await setup([keptModel, removedModel]);
+
+    const before = new Map(
+      await Promise.all(
+        (await db.listOrganizations()).map(
+          async (org) =>
+            [org.id, await db.listOrgSharedResources(org.id)] as const
+        )
+      )
+    );
+
+    await service.updateProvider("provider-one", { label: "Updated provider" });
+
+    for (const [id, publications] of before) {
+      expect(await db.listOrgSharedResources(id)).toEqual(publications);
+    }
+
+    const updated = await service.updateProvider("provider-one", {
+      customModels: [keptModel],
+    });
+
+    expect(updated.provider).toMatchObject({
+      id: "provider-one",
+      label: "Updated provider",
+      modelCount: 1,
+    });
+    expect(JSON.stringify(updated)).not.toContain("private-provider-key");
+
+    for (const [id, publications] of before) {
+      expect(await db.listOrgSharedResources(id)).toEqual(
+        publications.filter(
+          (entry) => entry.resourceId !== `provider-one::${removedModel.id}`
+        )
+      );
+    }
+
+    await service.updateProvider("provider-one", {
+      customModels: [keptModel, removedModel],
+    });
+    expect(
+      (await service.getModels()).models.some(
+        (model) => model.id === removedModel.id
+      )
+    ).toBe(true);
+    expect(
+      (await db.listOrgSharedResources("root")).some(
+        (entry) => entry.resourceId === `provider-one::${removedModel.id}`
+      )
+    ).toBe(false);
+  });
+
+  test("provider shortlist updates preserve other global provider access and publications", async () => {
+    const { config, db } = await setup();
+
+    const instance: ProviderInstance = {
+      ...config.providers[0]!,
+      customModels: [keptModel, removedModel],
+    };
+
+    const configured = {
+      ...config,
+      providers: [instance, ...config.providers.slice(1)],
+    };
+
+    await saveUserConfig(configured);
+    const service = new AgentService(configured, null, db);
+    const before = await db.listOrgSharedResources("root");
+    await service.updateProvider("provider-one", {
+      customModels: [removedModel],
+    });
+    expect(await db.listOrgSharedResources("root")).toEqual(
+      before.filter(
+        (entry) =>
+          !(
+            entry.resourceKind === "model" &&
+            entry.resourceId === "provider-one::gpt-4o-mini"
+          )
+      )
+    );
+    expect(
+      (await service.getModels()).models.some(
+        (model) => model.id === keptModel.id
+      )
+    ).toBe(true);
+    expect((await loadUserConfig())?.providers[0]?.customModels).toEqual([
+      removedModel,
+    ]);
+  });
+
+  test("invalid provider updates and failed file writes retain valid publication records", async () => {
+    const { config, db, service } = await setup([keptModel, removedModel]);
+    const before = await db.listOrgSharedResources("root");
+    await expect(
+      service.updateProvider("provider-one", { customModels: [] })
+    ).rejects.toThrow();
+    expect(await db.listOrgSharedResources("root")).toEqual(before);
+    expect((await loadUserConfig())?.providers[0]?.customModels).toEqual([
+      keptModel,
+      removedModel,
+    ]);
+    const configPath = getUserConfigPath();
+    await rm(configPath);
+    await mkdir(configPath);
+
+    try {
+      await expect(
+        service.updateProvider("provider-one", { customModels: [keptModel] })
+      ).rejects.toThrow();
+      expect((await service.listProviders()).providers[0]?.modelCount).toBe(2);
+      expect(await db.listOrgSharedResources("root")).toEqual(before);
+    } finally {
+      await rm(configPath, { recursive: true });
+      await saveUserConfig(config);
+    }
+  });
+
+  test("an update retry removes stale references before restoring the model", async () => {
+    const { db, service } = await setup([keptModel, removedModel]);
+
+    const failure = spyOn(db, "deleteOrgSharedResource").mockRejectedValueOnce(
+      new Error("database unavailable")
+    );
+
+    try {
+      await expect(
+        service.updateProvider("provider-one", { customModels: [keptModel] })
+      ).rejects.toThrow();
+      expect((await loadUserConfig())?.providers[0]?.customModels).toEqual([
+        keptModel,
+      ]);
+      expect(
+        (await db.listOrgSharedResources("root")).some(
+          (entry) => entry.resourceId === `provider-one::${removedModel.id}`
+        )
+      ).toBe(true);
+    } finally {
+      failure.mockRestore();
+    }
+
+    await service.updateProvider("provider-one", {
+      customModels: [keptModel, removedModel],
+    });
+
+    for (const org of await db.listOrganizations()) {
+      expect(
+        (await db.listOrgSharedResources(org.id)).some(
+          (entry) => entry.resourceId === `provider-one::${removedModel.id}`
+        )
+      ).toBe(false);
+    }
+  });
+
+  test("a pending provider update blocks publication of a removed model", async () => {
+    const { db, orgService, service } = await setup([keptModel, removedModel]);
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const remove = db.deleteOrgSharedResource.bind(db);
+
+    const pending = spyOn(db, "deleteOrgSharedResource").mockImplementation(
+      async (orgId, id) => {
+        entered.resolve();
+        await release.promise;
+
+        return remove(orgId, id);
+      }
+    );
+
+    const updating = service.updateProvider("provider-one", {
+      customModels: [keptModel],
+    });
+
+    await entered.promise;
+    let publicationFinished = false;
+
+    const publishing = orgService.publishSharedResource(
+      "root",
+      { resourceId: `provider-one::${removedModel.id}`, resourceKind: "model" },
+      "admin"
+    );
+
+    const observed = publishing.then(
+      () => {
+        publicationFinished = true;
+      },
+      () => {
+        publicationFinished = true;
+      }
+    );
+
+    try {
+      await Bun.sleep(20);
+      expect(publicationFinished).toBe(false);
+    } finally {
+      release.resolve();
+      await Promise.allSettled([updating, observed]);
+      pending.mockRestore();
+    }
+
+    await expect(updating).resolves.toMatchObject({
+      provider: { id: "provider-one", modelCount: 1 },
+    });
+    await expect(publishing).rejects.toMatchObject({ status: 400 });
+    expect(
+      (await db.listOrgSharedResources("root")).some(
+        (entry) => entry.resourceId === `provider-one::${removedModel.id}`
+      )
+    ).toBe(false);
+  });
+});
+
+describe("shared agent direct configuration", () => {
+  setupTestConfigDir("nakama-shared-direct-config-");
+
+  test("blocks source configuration writes after revocation and keeps team memory writable", async () => {
+    const db = createInMemoryDatabaseAdapter();
+
+    const source = {
+      ...createDefaultProfile(),
+      isDefault: false,
+      orgId: TEST_ORG_ID,
+    };
+
+    for (const id of [source.orgId, "team"]) {
+      await db.upsertOrganization({
+        createdAt: source.createdAt,
+        id,
+        name: id,
+        parentOrgId: id === "team" ? source.orgId : null,
+        slug: id,
+        updatedAt: source.updatedAt,
+      });
+    }
+
+    await db.upsertProfile(source);
+    const storedSource = await db.getProfile(source.id);
+
+    const publication = await db.publishOrgSharedResource({
+      createdAt: source.createdAt,
+      id: "publication",
+      orgId: source.orgId,
+      resourceId: source.id,
+      resourceKind: "agent",
+      updatedAt: source.updatedAt,
+    });
+
+    const profile = await db.createSharedAgentInstance(
+      "team",
+      publication.id,
+      "shared",
+      source.createdAt
+    );
+
+    const service = new AgentService(null, null, db);
+    const directory = getProfileSoulDir("team", profile.id);
+    await mkdir(directory, { recursive: true });
+
+    for (const file of [
+      "SOUL.md",
+      "STYLE.md",
+      "INSTRUCTIONS.md",
+      "MEMORY.md",
+      "USER.md",
+    ]) {
+      await writeFile(path.join(directory, file), file);
+    }
+
+    const meta = { actorUserId: "admin", source: "dashboard" as const };
+
+    for (const revoked of [false, true]) {
+      if (revoked) {
+        await db.deleteOrgSharedResource(source.orgId, publication.id);
+      }
+
+      for (const key of ["soul", "style", "instructions"]) {
+        await expect(
+          service.writeProfileSoulFile(
+            "team",
+            profile.id,
+            key,
+            { content: "Changed" },
+            meta
+          )
+        ).rejects.toMatchObject({ status: 403 });
+      }
+
+      await expect(
+        service.setAcpDraftSetting("team", profile.id, "model", "Changed")
+      ).rejects.toMatchObject({ status: 403 });
+      expect(await db.getProfile(profile.id)).toEqual(profile);
+      expect(await db.listProfileChangeEvents("team", profile.id)).toEqual([]);
+    }
+
+    await expect(
+      service.writeProfileSoulFile(
+        source.orgId,
+        profile.id,
+        "soul",
+        { content: "Changed" },
+        meta
+      )
+    ).rejects.toMatchObject({ status: 404 });
+
+    for (const file of ["SOUL.md", "STYLE.md", "INSTRUCTIONS.md", "USER.md"]) {
+      expect(await readFile(path.join(directory, file), "utf8")).toBe(file);
+    }
+
+    await service.writeProfileSoulFile(
+      "team",
+      profile.id,
+      "memory",
+      { content: "Team memory" },
+      meta
+    );
+    expect(await readFile(path.join(directory, "MEMORY.md"), "utf8")).toBe(
+      "Team memory"
+    );
+    expect(await db.getProfile(source.id)).toEqual(storedSource);
+    await service.writeProfileSoulFile(source.orgId, source.id, "style", {
+      content: "Local style",
+    });
+    expect(
+      await readFile(
+        path.join(getProfileSoulDir(source.orgId, source.id), "STYLE.md"),
+        "utf8"
+      )
+    ).toBe("Local style");
+  });
+});
 
 import { SkillsService } from "./skills-service";
 
@@ -597,7 +1194,7 @@ describe("AgentService thinking provider options", () => {
 
 test("rejects a Netra provider when the model endpoint rejects its API key", async () => {
   using fetchMock = spyOn(globalThis, "fetch").mockImplementation(
-    async () => new Response("invalid key", { status: 401 })
+    asTestFetch(async () => new Response("invalid key", { status: 401 }))
   );
 
   const service = new AgentService(null, null, createInMemoryDatabaseAdapter());
@@ -613,8 +1210,10 @@ test("rejects a Netra provider when the model endpoint rejects its API key", asy
 });
 
 test("discovers the supported Netra model without a custom base URL", async () => {
-  using fetchMock = spyOn(globalThis, "fetch").mockImplementation(async () =>
-    Response.json({ data: [{ id: NETRA_AGENT_MODEL_ID }] })
+  using fetchMock = spyOn(globalThis, "fetch").mockImplementation(
+    asTestFetch(async () =>
+      Response.json({ data: [{ id: NETRA_AGENT_MODEL_ID }] })
+    )
   );
 
   const service = new AgentService(null, null, createInMemoryDatabaseAdapter());
@@ -745,7 +1344,7 @@ describe("AgentService usage pricing context", () => {
     );
 
     using fetchMock = spyOn(globalThis, "fetch").mockImplementation(
-      async (...args: Parameters<typeof fetch>) => {
+      asTestFetch(async (...args: Parameters<typeof fetch>) => {
         const init = args[1];
         const body = JSON.parse(String(init?.body));
 
@@ -762,13 +1361,14 @@ describe("AgentService usage pricing context", () => {
           choices: [{ message: { content: "ok" } }],
           usage: { completion_tokens: 20_000, prompt_tokens: 100_000 },
         });
-      }
+      })
     );
 
     const id = await service.createSession(ORG_ID, "web", profile.id);
     const session = await service.resolveSession(id, ORG_ID);
     await session!.send({
-      message: [{ data: "aGVsbG8=", mediaType: "image/png", type: "image" }],
+      images: [{ data: "aGVsbG8=", mediaType: "image/png" }],
+      message: "Describe the image",
     });
     const byModel = await tracker.getStatsByModel(ORG_ID);
     expect(
@@ -787,6 +1387,97 @@ describe("AgentService usage pricing context", () => {
 });
 
 describe("AgentService vision settings", () => {
+  setupTestConfigDir("nakama-vision-settings-");
+
+  test.each(["primary", "vision"] as const)(
+    "handles missing %s credentials without a provider call",
+    async (missing) => {
+      const originalDeepseekKey = process.env.DEEPSEEK_API_KEY;
+      const originalOpenaiKey = process.env.OPENAI_API_KEY;
+      delete process.env.DEEPSEEK_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+
+      using fetchMock = spyOn(globalThis, "fetch").mockImplementation(
+        asTestFetch(async () => {
+          throw new Error("Unexpected provider call");
+        })
+      );
+
+      try {
+        const db = createInMemoryDatabaseAdapter();
+
+        const profile = {
+          ...createDefaultProfile(),
+          model: "primary::deepseek-v4-flash",
+        };
+
+        await db.upsertProfile(profile);
+        const tracker = new LlmUsageTracker(db);
+
+        const service = new AgentService(
+          {
+            defaultProviderId: "primary",
+            providers: [
+              {
+                apiKey: missing === "primary" ? "" : "test",
+                createdAt: profile.createdAt,
+                id: "primary",
+                label: "Primary",
+                type: "deepseek",
+              },
+              {
+                apiKey: "",
+                createdAt: profile.createdAt,
+                id: "vision",
+                label: "Vision",
+                type: "openai",
+              },
+            ],
+            visionModel: "vision::gpt-4o-mini",
+          },
+          null,
+          db,
+          tracker
+        );
+
+        const id = await service.createSession(ORG_ID, "web", profile.id);
+        const session = await service.resolveSession(id, ORG_ID);
+        expect(session).not.toBeNull();
+
+        if (missing === "primary") {
+          await session!.send("Hello");
+          expect(session!.getHistory().map((message) => message.role)).toEqual([
+            "user",
+            "assistant",
+          ]);
+        } else {
+          await expect(
+            session!.send({
+              images: [{ data: "aGVsbG8=", mediaType: "image/png" }],
+              message: "Describe",
+            })
+          ).rejects.toMatchObject({ status: 400 });
+          expect(session!.getHistory()).toEqual([]);
+        }
+
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect((await tracker.getStats(ORG_ID)).requestCount).toBe(0);
+      } finally {
+        if (originalDeepseekKey === undefined) {
+          delete process.env.DEEPSEEK_API_KEY;
+        } else {
+          process.env.DEEPSEEK_API_KEY = originalDeepseekKey;
+        }
+
+        if (originalOpenaiKey === undefined) {
+          delete process.env.OPENAI_API_KEY;
+        } else {
+          process.env.OPENAI_API_KEY = originalOpenaiKey;
+        }
+      }
+    }
+  );
+
   test("persists vision model in the database", async () => {
     const db = createInMemoryDatabaseAdapter();
 
@@ -875,16 +1566,18 @@ describe("AgentService transcription settings", () => {
     "does not reset coding-agent passthrough when $field is saved",
     async ({ field, model, save }) => {
       const db = createInMemoryDatabaseAdapter();
-      await db.upsertWorkspaceSettings({
-        codingAgentHarnesses: [],
-        codingAgentProviderPassthrough: false,
-        id: "workspace-settings",
-        imageModel: null,
-        selectedCodingAgentHarness: null,
-        transcriptionModel: null,
-        updatedAt: new Date().toISOString(),
-        visionModel: null,
-      });
+      await db.upsertWorkspaceSettings(
+        mergeWorkspaceSettings(null, {
+          codingAgentHarnesses: [],
+          codingAgentProviderPassthrough: false,
+          id: "workspace-settings",
+          imageModel: null,
+          selectedCodingAgentHarness: null,
+          transcriptionModel: null,
+          updatedAt: new Date().toISOString(),
+          visionModel: null,
+        })
+      );
 
       const service = new AgentService(
         {
@@ -943,25 +1636,28 @@ describe("AgentService coding delegation context", () => {
 
   test("includes harness command template and backend guidance for bash delegation", async () => {
     const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile({ ...createDefaultProfile(), id: "profile_test" });
     await installFakeOpenCode(tempBinDir);
-    await db.upsertWorkspaceSettings({
-      codingAgentHarnesses: [
-        {
-          args: [],
-          command: "opencode",
-          enabled: true,
-          id: "coding-harness-opencode",
-          kind: "opencode",
-          name: "OpenCode",
-        },
-      ],
-      id: WORKSPACE_SETTINGS_ID,
-      imageModel: null,
-      selectedCodingAgentHarness: null,
-      transcriptionModel: null,
-      updatedAt: new Date().toISOString(),
-      visionModel: null,
-    });
+    await db.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(null, {
+        codingAgentHarnesses: [
+          {
+            args: [],
+            command: "opencode",
+            enabled: true,
+            id: "coding-harness-opencode",
+            kind: "opencode",
+            name: "OpenCode",
+          },
+        ],
+        id: WORKSPACE_SETTINGS_ID,
+        imageModel: null,
+        selectedCodingAgentHarness: null,
+        transcriptionModel: null,
+        updatedAt: new Date().toISOString(),
+        visionModel: null,
+      })
+    );
 
     const service = new AgentService(null, null, db);
 
@@ -978,15 +1674,18 @@ describe("AgentService coding delegation context", () => {
 
   test("lists install commands when no coding agent CLI is installed", async () => {
     const db = createInMemoryDatabaseAdapter();
-    await db.upsertWorkspaceSettings({
-      codingAgentHarnesses: [],
-      id: WORKSPACE_SETTINGS_ID,
-      imageModel: null,
-      selectedCodingAgentHarness: null,
-      transcriptionModel: null,
-      updatedAt: new Date().toISOString(),
-      visionModel: null,
-    });
+    await db.upsertProfile({ ...createDefaultProfile(), id: "profile_test" });
+    await db.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(null, {
+        codingAgentHarnesses: [],
+        id: WORKSPACE_SETTINGS_ID,
+        imageModel: null,
+        selectedCodingAgentHarness: null,
+        transcriptionModel: null,
+        updatedAt: new Date().toISOString(),
+        visionModel: null,
+      })
+    );
 
     const service = new AgentService(null, null, db);
 
@@ -1005,6 +1704,7 @@ describe("AgentService coding delegation context", () => {
 
   test("asks the user when multiple coding agent CLIs are installed", async () => {
     const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile({ ...createDefaultProfile(), id: "profile_test" });
     await installFakeOpenCode(tempBinDir);
     await Bun.write(
       path.join(
@@ -1023,32 +1723,34 @@ describe("AgentService coding delegation context", () => {
       0o755
     );
 
-    await db.upsertWorkspaceSettings({
-      codingAgentHarnesses: [
-        {
-          args: [],
-          command: "opencode",
-          enabled: true,
-          id: "coding-harness-opencode",
-          kind: "opencode",
-          name: "OpenCode",
-        },
-        {
-          args: [],
-          command: "claude",
-          enabled: true,
-          id: "coding-harness-claude-code",
-          kind: "claude_code",
-          name: "Claude Code",
-        },
-      ],
-      id: WORKSPACE_SETTINGS_ID,
-      imageModel: null,
-      selectedCodingAgentHarness: "coding-harness-opencode",
-      transcriptionModel: null,
-      updatedAt: new Date().toISOString(),
-      visionModel: null,
-    });
+    await db.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(null, {
+        codingAgentHarnesses: [
+          {
+            args: [],
+            command: "opencode",
+            enabled: true,
+            id: "coding-harness-opencode",
+            kind: "opencode",
+            name: "OpenCode",
+          },
+          {
+            args: [],
+            command: "claude",
+            enabled: true,
+            id: "coding-harness-claude-code",
+            kind: "claude_code",
+            name: "Claude Code",
+          },
+        ],
+        id: WORKSPACE_SETTINGS_ID,
+        imageModel: null,
+        selectedCodingAgentHarness: "coding-harness-opencode",
+        transcriptionModel: null,
+        updatedAt: new Date().toISOString(),
+        visionModel: null,
+      })
+    );
 
     const service = new AgentService(null, null, db);
 
@@ -1401,11 +2103,11 @@ describe("AgentService bot token validation", () => {
     const botToken = "123456:QA-fake-token-xyz";
     let requestCount = 0;
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = (async () => {
+    globalThis.fetch = asTestFetch(async () => {
       requestCount += 1;
 
       return new Response(JSON.stringify({ ok: false }), { status: 401 });
-    }) as typeof fetch;
+    });
 
     const service = new AgentService(
       null,
@@ -1462,11 +2164,11 @@ describe("AgentService bot token validation", () => {
     const botToken = "123456:QA-fake-token-xyz";
     let requestCount = 0;
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = (async () => {
+    globalThis.fetch = asTestFetch(async () => {
       requestCount += 1;
 
       return new Response(null, { status: 401 });
-    }) as typeof fetch;
+    });
 
     const service = new AgentService(
       null,
@@ -1521,11 +2223,13 @@ describe("AgentService bot token validation", () => {
 
   test("preserves Telegram config after a rejected replacement and on token-less edits", async () => {
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = (async () =>
-      new Response(
-        JSON.stringify({ ok: true, result: { id: 123_456, is_bot: true } }),
-        { status: 200 }
-      )) as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      async () =>
+        new Response(
+          JSON.stringify({ ok: true, result: { id: 123_456, is_bot: true } }),
+          { status: 200 }
+        )
+    );
 
     const service = new AgentService(
       null,
@@ -1541,8 +2245,9 @@ describe("AgentService bot token validation", () => {
     const beforeReplacement = await loadTelegramConfigFile(TEST_ORG_ID);
 
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = (async () =>
-      new Response(null, { status: 401 })) as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      async () => new Response(null, { status: 401 })
+    );
     await expect(
       service.setTelegramSettings(TEST_ORG_ID, {
         allowedUserIds: "43",
@@ -1555,9 +2260,9 @@ describe("AgentService bot token validation", () => {
     );
 
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = (async () => {
+    globalThis.fetch = asTestFetch(async () => {
       throw new Error("Token-less Telegram edits must not call the provider.");
-    }) as typeof fetch;
+    });
     await service.setTelegramSettings(TEST_ORG_ID, {
       allowedUserIds: "43",
       profileId: "edited",
@@ -1571,10 +2276,12 @@ describe("AgentService bot token validation", () => {
 
   test("revalidates a cached Discord token and preserves config when rejected", async () => {
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = (async () =>
-      new Response(JSON.stringify({ id: "1525937133096013954" }), {
-        status: 200,
-      })) as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      async () =>
+        new Response(JSON.stringify({ id: "1525937133096013954" }), {
+          status: 200,
+        })
+    );
 
     const service = new AgentService(
       null,
@@ -1591,11 +2298,11 @@ describe("AgentService bot token validation", () => {
     let rejectedRequestCount = 0;
 
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = (async () => {
+    globalThis.fetch = asTestFetch(async () => {
       rejectedRequestCount += 1;
 
       return new Response(null, { status: 401 });
-    }) as typeof fetch;
+    });
     await expect(
       service.setDiscordSettings({
         allowedUserIds: "987654321098765432",
@@ -1623,8 +2330,9 @@ describe("AgentService bot token validation", () => {
     const { app } = createMinimalHonoApp({ agent: service, databaseAdapter });
     const session = await setupFreshInstallSession(app, databaseAdapter);
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = (async () =>
-      new Response(null, { status: 401 })) as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      async () => new Response(null, { status: 401 })
+    );
 
     for (const channel of ["telegram", "discord"] as const) {
       const botToken = `rejected-${channel}-token`;

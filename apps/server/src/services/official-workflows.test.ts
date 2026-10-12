@@ -8,6 +8,7 @@ import {
   type WorkflowRunRecord,
 } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { z } from "zod";
 import { PluginService } from "./plugin-service";
 
 const directories: string[] = [];
@@ -34,6 +35,7 @@ test("official workflow install imports once, executes through IPC, isolates org
   const db = createInMemoryDatabaseAdapter();
 
   const legacy: StoredWorkflow = {
+    createdAt: "2026-01-01T00:00:00.000Z",
     description: "",
     enabled: true,
     id: "legacy",
@@ -41,6 +43,7 @@ test("official workflow install imports once, executes through IPC, isolates org
     orgId: "org_a",
     profileId: "profile_a",
     steps: [{ id: "summary", kind: "summarize", prompt: "Summarize" }],
+    updatedAt: "2026-01-01T00:00:00.000Z",
     version: 1,
   };
 
@@ -59,7 +62,7 @@ test("official workflow install imports once, executes through IPC, isolates org
 
       if (operation === "legacy_workflows") {
         return context.orgId === "org_a"
-          ? [{ runs: [], workflow: legacy }]
+          ? [{ runs: [], workflow: z.json().parse(legacy) }]
           : [];
       }
 
@@ -72,7 +75,7 @@ test("official workflow install imports once, executes through IPC, isolates org
       }
 
       if (operation === "execute_tool") {
-        return request.get("input");
+        return z.json().parse(request.get("input"));
       }
 
       if (operation === "summarize") {

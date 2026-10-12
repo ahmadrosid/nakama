@@ -83,10 +83,10 @@ describe("static web serving before auth", () => {
   });
 });
 
-type MockWorkerManager = Pick<
-  ServerOptions["workerManager"],
-  "getWorkerLogs" | "isValidWorker"
->;
+type MockWorkerManager = Pick<ServerOptions["workerManager"], "isValidWorker"> &
+  Partial<
+    Pick<ServerOptions["workerManager"], "getWorkerLogs" | "clearWorkerLogs">
+  >;
 
 async function createMockAppWithWorkerManager(
   workerManager: MockWorkerManager

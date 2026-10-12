@@ -175,7 +175,7 @@ describe("coding-agent spawn env", () => {
 
   test("protects credential env keys from caller overrides", () => {
     const env = mergeCodingAgentSpawnEnv(
-      { HOME: "/tmp" },
+      { ANTHROPIC_API_KEY: "base-key", HOME: "/tmp", UNSET_FLAG: undefined },
       {
         ANTHROPIC_API_KEY: "sk-from-nakama",
         ANTHROPIC_BASE_URL: "https://api.anthropic.com",
@@ -191,6 +191,8 @@ describe("coding-agent spawn env", () => {
 
     expect(env.ANTHROPIC_API_KEY).toBe("sk-from-nakama");
     expect(env.CUSTOM_FLAG).toBe("1");
+    expect(env.HOME).toBe("/tmp");
+    expect(env).not.toHaveProperty("UNSET_FLAG");
   });
 
   test("redacts secrets for prompt context", () => {

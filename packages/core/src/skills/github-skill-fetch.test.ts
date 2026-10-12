@@ -3,6 +3,7 @@ import * as childProcess from "node:child_process";
 import { existsSync } from "node:fs";
 import { zipSync } from "fflate";
 import { NakamaApiError } from "../api-error";
+import { asTestFetch } from "../channel-test-helpers";
 import {
   fetchGitHubSkillBundle,
   fetchGitHubSkillMarkdown,
@@ -16,14 +17,15 @@ describe("fetchGitHubSkillMarkdown size limits", () => {
   });
 
   test("rejects oversized Content-Length before reading the body", async () => {
-    // SAFETY: Bun mocks below implement the fetch response contract used by these tests.
-    globalThis.fetch = mock(
-      async () =>
-        new Response("ignored", {
-          headers: { "Content-Length": String(600 * 1024) },
-          status: 200,
-        })
-    ) as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response("ignored", {
+            headers: { "Content-Length": String(600 * 1024) },
+            status: 200,
+          })
+      )
+    );
 
     await expect(
       fetchGitHubSkillMarkdown(
@@ -49,14 +51,15 @@ describe("fetchGitHubSkillMarkdown size limits", () => {
 
   test("aborts while streaming once the body exceeds the cap", async () => {
     const oversized = "x".repeat(513 * 1024);
-    // SAFETY: Bun mocks below implement the fetch response contract used by these tests.
-    globalThis.fetch = mock(
-      async () =>
-        new Response(oversized, {
-          headers: { "Content-Type": "text/plain" },
-          status: 200,
-        })
-    ) as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(oversized, {
+            headers: { "Content-Type": "text/plain" },
+            status: 200,
+          })
+      )
+    );
 
     try {
       await fetchGitHubSkillMarkdown(
@@ -92,12 +95,13 @@ describe("complete GitHub skill downloads", () => {
   };
 
   test("installs a complete skill without calling the rate-limited GitHub API", async () => {
-    // SAFETY: Bun's mock keeps this test handler compatible with global fetch.
-    globalThis.fetch = mock(async (input: RequestInfo | URL) =>
-      String(input) === "https://codeload.github.com/acme/repo/zip/main"
-        ? new Response(zipSync(files))
-        : new Response(null, { status: 403 })
-    ) as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      mock(async (input: RequestInfo | URL) =>
+        String(input) === "https://codeload.github.com/acme/repo/zip/main"
+          ? new Response(zipSync(files))
+          : new Response(null, { status: 403 })
+      )
+    );
     const bundle = await fetchGitHubSkillBundle(url);
     expect(bundle.content).toBe("skill");
     expect(bundle.files.map((file) => file.path).sort()).toEqual([
@@ -111,19 +115,20 @@ describe("complete GitHub skill downloads", () => {
   });
 
   test("repository links follow HEAD and include root supporting files", async () => {
-    // SAFETY: Bun's mock keeps this test handler compatible with global fetch.
-    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
-      expect(String(input)).toBe(
-        "https://codeload.github.com/acme/repo/zip/HEAD"
-      );
+    globalThis.fetch = asTestFetch(
+      mock(async (input: RequestInfo | URL) => {
+        expect(String(input)).toBe(
+          "https://codeload.github.com/acme/repo/zip/HEAD"
+        );
 
-      return new Response(
-        zipSync({
-          "repo-master/SKILL.md": encode("skill"),
-          "repo-master/scripts/run.py": encode("print(1)"),
-        })
-      );
-    }) as typeof fetch;
+        return new Response(
+          zipSync({
+            "repo-master/SKILL.md": encode("skill"),
+            "repo-master/scripts/run.py": encode("print(1)"),
+          })
+        );
+      })
+    );
 
     const bundle = await fetchGitHubSkillBundle(
       "https://github.com/acme/repo/"
@@ -176,14 +181,15 @@ describe("complete GitHub skill downloads", () => {
       label: "oversized bundle",
     },
   ])("rejects $label without falling back to Git", async ({ extra }) => {
-    // SAFETY: Bun mocks below implement the fetch response contract used by these tests.
-    globalThis.fetch = mock(
-      async () =>
-        new Response(
-          // SAFETY: Each test case supplies a valid fflate ZIP input object.
-          zipSync({ ...files, ...extra } as Parameters<typeof zipSync>[0])
-        )
-    ) as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(
+            // SAFETY: Each test case supplies a valid fflate ZIP input object.
+            zipSync({ ...files, ...extra } as Parameters<typeof zipSync>[0])
+          )
+      )
+    );
     const git = spyOn(childProcess, "execFile");
 
     try {
@@ -199,8 +205,7 @@ describe("complete GitHub skill downloads", () => {
     encode("not a zip"),
     zipSync({ "repo-main/README.md": encode("no skill") }),
   ])("rejects invalid or missing skill archives", async (archive) => {
-    // SAFETY: Bun mocks below implement the fetch response contract used by these tests.
-    globalThis.fetch = mock(async () => new Response(archive)) as typeof fetch;
+    globalThis.fetch = asTestFetch(mock(async () => new Response(archive)));
     await expect(fetchGitHubSkillBundle(url)).rejects.toThrow();
   });
 
@@ -213,39 +218,39 @@ describe("complete GitHub skill downloads", () => {
     "submodule metadata",
     "empty directory",
   ])("falls back to Git for %s and removes temporary files", async (status) => {
-    // SAFETY: Bun mocks below implement the fetch response contract used by these tests.
-    // SAFETY: Bun mocks below implement the fetch response contract used by these tests.
-    globalThis.fetch = mock(async () => {
-      if (status === "large archive") {
-        return new Response(
-          new ReadableStream({
-            pull(controller) {
-              controller.enqueue(new Uint8Array(1024 * 1024));
-            },
-          })
-        );
-      }
+    globalThis.fetch = asTestFetch(
+      mock(async () => {
+        if (status === "large archive") {
+          return new Response(
+            new ReadableStream({
+              pull(controller) {
+                controller.enqueue(new Uint8Array(1024 * 1024));
+              },
+            })
+          );
+        }
 
-      if (status === "submodule metadata") {
-        return new Response(
-          zipSync({
-            ...files,
-            "repo-main/.gitmodules": encode("[submodule]"),
-          })
-        );
-      }
+        if (status === "submodule metadata") {
+          return new Response(
+            zipSync({
+              ...files,
+              "repo-main/.gitmodules": encode("[submodule]"),
+            })
+          );
+        }
 
-      if (status === "empty directory") {
-        return new Response(
-          zipSync({
-            ...files,
-            "repo-main/skills/demo/submodule/": new Uint8Array(),
-          })
-        );
-      }
+        if (status === "empty directory") {
+          return new Response(
+            zipSync({
+              ...files,
+              "repo-main/skills/demo/submodule/": new Uint8Array(),
+            })
+          );
+        }
 
-      return new Response(null, { status: Number(status) });
-    }) as typeof fetch;
+        return new Response(null, { status: Number(status) });
+      })
+    );
     const commands: string[][] = [];
 
     // SAFETY: This stub models execFile calls made by github-skill-fetch.
@@ -302,10 +307,9 @@ describe("complete GitHub skill downloads", () => {
   test.each(["120000 blob", "160000 commit"])(
     "Git rejects %s entries and cleans up",
     async (entryType) => {
-      // SAFETY: Bun mocks below implement the fetch response contract used by these tests.
-      globalThis.fetch = mock(
-        async () => new Response(null, { status: 403 })
-      ) as typeof fetch;
+      globalThis.fetch = asTestFetch(
+        mock(async () => new Response(null, { status: 403 }))
+      );
       let temp = "";
 
       // SAFETY: This stub models execFile calls made by github-skill-fetch.

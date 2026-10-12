@@ -32,22 +32,6 @@ export interface ErrorReport {
   stack?: string;
 }
 
-interface ThrownRecord {
-  [key: string]: ThrownValue;
-}
-
-type ThrownValue =
-  | Error
-  | string
-  | number
-  | boolean
-  | bigint
-  | symbol
-  | ThrownRecord
-  | ThrownValue[]
-  | null
-  | undefined;
-
 /**
  * Returns whether the report actually reached the ingest. A sink with nowhere to
  * send returns false rather than resolving quietly, so "not delivered" can never
@@ -137,8 +121,8 @@ interface ErrorParts {
   stack?: string;
 }
 
-// SAFETY: JavaScript throws and rejection reasons can hold any value; this boundary normalizes them before reporting.
-function errorToParts(error: ThrownValue): ErrorParts {
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- JavaScript throws can hold any value; this boundary normalizes them.
+function errorToParts(error: unknown): ErrorParts {
   if (error instanceof Error) {
     const parts: ErrorParts = {
       message: error.message || String(error),
@@ -177,7 +161,8 @@ export interface ReportErrorOptions {
 }
 
 export function buildErrorReport(
-  error: ThrownValue,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Thrown values are untrusted and normalized by errorToParts.
+  error: unknown,
   options: ReportErrorOptions = {}
 ): ErrorReport {
   const parts = errorToParts(error);
@@ -219,7 +204,8 @@ export function setErrorSink(next: ErrorSink | null): void {
  * await still leaves the report somewhere recoverable.
  */
 export async function reportError(
-  error: ThrownValue,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Thrown values are untrusted and normalized by buildErrorReport.
+  error: unknown,
   options: ReportErrorOptions = {}
 ): Promise<ErrorReport> {
   const report = buildErrorReport(error, options);
@@ -294,11 +280,13 @@ export async function flushPendingErrorReports(): Promise<number> {
  * default exit(1), so the exit is re-applied by hand below.
  */
 export function installErrorHandlers(source: string): () => void {
-  const onUncaught = (error: ThrownValue) => {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Process errors are untrusted and normalized by reportError.
+  const onUncaught = (error: unknown) => {
     void reportError(error, { source });
   };
 
-  const onRejection = (reason: ThrownValue) => {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Promise rejections can hold any value; reportError normalizes them.
+  const onRejection = (reason: unknown) => {
     void reportError(reason, { source }).finally(() => {
       process.exit(1);
     });

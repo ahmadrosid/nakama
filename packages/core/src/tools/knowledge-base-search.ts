@@ -3,7 +3,11 @@ import { realpath } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import { z } from "zod";
 import { createChatLock } from "../channel-chat-lock";
-import type { ToolContext, ToolDefinition } from "../contract";
+import type {
+  PublishedKnowledgeBaseDocument,
+  ToolContext,
+  ToolDefinition,
+} from "../contract";
 import { ensureDir } from "../fs";
 import {
   getKnowledgeBaseDir,
@@ -18,7 +22,8 @@ import {
   listOrganizationKnowledgeBaseDocuments,
 } from "../knowledge-base/store";
 import { getProfileSoulDir } from "../soul/resolve";
-import { resolveWorkspaceRoot } from "./paths";
+import { getOrgConfigDir } from "../user-config";
+import { guardFilePath, resolveWorkspaceRoot } from "./paths";
 import { buildRipgrepArgs, type RipgrepMatch, runRipgrep } from "./ripgrep";
 import {
   jsonSchemaFromZod,
@@ -37,13 +42,17 @@ export const knowledgeBaseSearchInputSchema = z
   })
   .strict();
 
-export type KnowledgeBaseSearchInput = z.infer<
+export type KnowledgeBaseSearchInput = z.input<
   typeof knowledgeBaseSearchInputSchema
 >;
 
-type KnowledgeBaseScope = "organization" | "profile";
+type KnowledgeBaseScope = "organization" | "profile" | "parent";
 
-type ScopedMatch = RipgrepMatch & { scope: KnowledgeBaseScope };
+type ScopedMatch = RipgrepMatch & {
+  scope: KnowledgeBaseScope;
+  publicationId?: string;
+  sourceOrganization?: PublishedKnowledgeBaseDocument["sourceOrganization"];
+};
 
 const searchIndexLock = createChatLock();
 
@@ -72,7 +81,7 @@ export const knowledgeBaseSearchTool: ToolDefinition<
   KnowledgeBaseSearchOutput
 > = {
   description:
-    "Search uploaded knowledge base documents for relevant facts. Includes profile documents and organization documents attached to this profile. Does not search inherited URL sources such as Nakama documentation — use web_fetch on llms.txt and specific .md pages for product docs. When the result carries `unreadable`, those documents are attached but hold no searchable text, so report them as unreadable instead of telling the user nothing covers the topic.",
+    "Search uploaded knowledge base documents for relevant facts. Includes profile documents, organization documents attached to this profile, and published parent documents available to this team. Parent results identify their publication and source organization. Does not search inherited URL sources such as Nakama documentation — use web_fetch on llms.txt and specific .md pages for product docs. When the result carries `unreadable`, those documents are attached but hold no searchable text, so report them as unreadable instead of telling the user nothing covers the topic.",
   name: "knowledge_base_search",
   parallelSafe: true,
   parameters: jsonSchemaFromZod(knowledgeBaseSearchInputSchema),
@@ -95,24 +104,25 @@ export async function runKnowledgeBaseSearch(
 
   const parsed = parseToolInput(knowledgeBaseSearchInputSchema, input);
 
-  // The backend call, the profile root and the organization target are
-  // independent reads, so they share one round of I/O.
-  const [backend, workspaceRoot, organizationTarget, profileTarget] =
-    await Promise.all([
-      context.searchKnowledge?.({
-        ...parsed,
-        regex: parsed.regex,
-      }),
-      resolveWorkspaceRoot(
-        options.workspaceRoot ?? getProfileSoulDir(orgId, profileId)
-      ),
-      resolveOrganizationSearchTarget(
-        orgId,
-        profileId,
-        parsed.filename ?? null
-      ),
-      resolveProfileSearchTarget(orgId, profileId, parsed.filename ?? null),
-    ]);
+  // The backend, workspace, and document targets are independent reads.
+  const [
+    backend,
+    workspaceRoot,
+    organizationTarget,
+    profileTarget,
+    parentTarget,
+  ] = await Promise.all([
+    context.searchKnowledge?.({
+      ...parsed,
+      regex: parsed.regex,
+    }),
+    resolveWorkspaceRoot(
+      options.workspaceRoot ?? getProfileSoulDir(orgId, profileId)
+    ),
+    resolveOrganizationSearchTarget(orgId, profileId, parsed.filename ?? null),
+    resolveProfileSearchTarget(orgId, profileId, parsed.filename ?? null),
+    resolveParentSearchTarget(context, parsed.filename ?? null),
+  ]);
 
   const unreadable = [
     ...profileTarget.unreadable,
@@ -132,20 +142,26 @@ export async function runKnowledgeBaseSearch(
       scope: "profile" as const,
     }));
 
-    const organizationResult = parsed.regex
-      ? await runSearchTarget(organizationTarget, parsed, organizationRoot)
-      : (
-          await runLexicalSearchTargets(
-            getKnowledgeBaseDir(orgId, profileId),
-            [organizationTarget],
-            parsed,
-            workspaceRoot
+    const sharedResults = parsed.regex
+      ? await Promise.all(
+          [organizationTarget, parentTarget].map((target) =>
+            runSearchTarget(
+              target,
+              parsed,
+              target.kind === "file" ? dirname(target.root) : target.root
+            )
           )
-        )[0]!;
+        )
+      : await runLexicalSearchTargets(
+          getKnowledgeBaseDir(orgId, profileId),
+          [organizationTarget, parentTarget],
+          parsed,
+          workspaceRoot
+        );
 
     const merged = mergeScopedMatches(
       profileMatches,
-      organizationResult.matches,
+      sharedResults.flatMap((result) => result.matches),
       parsed.maxResults
     );
 
@@ -155,28 +171,37 @@ export async function runKnowledgeBaseSearch(
       query: parsed.query,
       root: getKnowledgeBaseDir(orgId, profileId),
       truncated:
-        backend.truncated || organizationResult.truncated || merged.dropped,
+        backend.truncated ||
+        sharedResults.some((result) => result.truncated) ||
+        merged.dropped,
       ...unreadableField,
     };
   }
 
   await ensureKnowledgeBaseDirs(orgId, profileId);
 
-  const [profileResult, organizationResult] = parsed.regex
+  const [profileResult, organizationResult, parentResult] = parsed.regex
     ? await Promise.all([
         runSearchTarget(profileTarget, parsed, workspaceRoot),
         runSearchTarget(organizationTarget, parsed, organizationRoot),
+        runSearchTarget(
+          parentTarget,
+          parsed,
+          parentTarget.kind === "file"
+            ? dirname(parentTarget.root)
+            : parentTarget.root
+        ),
       ])
     : await runLexicalSearchTargets(
         getKnowledgeBaseDir(orgId, profileId),
-        [profileTarget, organizationTarget],
+        [profileTarget, organizationTarget, parentTarget],
         parsed,
         workspaceRoot
       );
 
   const merged = mergeScopedMatches(
     profileResult.matches,
-    organizationResult.matches,
+    [...organizationResult.matches, ...parentResult.matches],
     parsed.maxResults
   );
 
@@ -186,7 +211,10 @@ export async function runKnowledgeBaseSearch(
     query: parsed.query,
     root: getKnowledgeBaseDir(orgId, profileId),
     truncated:
-      profileResult.truncated || organizationResult.truncated || merged.dropped,
+      profileResult.truncated ||
+      organizationResult.truncated ||
+      parentResult.truncated ||
+      merged.dropped,
     ...unreadableField,
   };
 }
@@ -218,11 +246,79 @@ function mergeScopedMatches(
   };
 }
 
-type SearchTarget = { unreadable: string[] } & (
+type SearchTarget = {
+  unreadable: string[];
+  publishedDocuments?: PublishedKnowledgeBaseDocument[];
+} & (
   | { kind: "dir"; root: string; glob: string; scope: KnowledgeBaseScope }
   | { kind: "file"; root: string; glob: null; scope: KnowledgeBaseScope }
   | { kind: "missing"; root: string; scope: KnowledgeBaseScope }
 );
+
+async function resolveParentSearchTarget(
+  context: ToolContext,
+  filename: string | null
+): Promise<SearchTarget> {
+  const documents = (await context.listPublishedKnowledgeDocuments?.()) ?? [];
+
+  if (!documents.length) {
+    return { kind: "missing", root: "", scope: "parent", unreadable: [] };
+  }
+
+  const sourceOrgId = documents[0]!.sourceOrganization.id;
+
+  if (
+    documents.some((document) => document.sourceOrganization.id !== sourceOrgId)
+  ) {
+    throw new Error("Published knowledge must have one source organization.");
+  }
+
+  const root = getOrgKnowledgeBaseDir(sourceOrgId);
+  await guardFilePath(root, null, undefined, {
+    allowedDirs: [getOrgConfigDir(sourceOrgId)],
+  });
+
+  for (const document of documents) {
+    await guardFilePath(
+      getKnowledgeBaseExtractedPath(root, document.id),
+      null,
+      undefined,
+      { allowedDirs: [root] }
+    );
+  }
+
+  return {
+    ...pickSearchTarget(root, "parent", documents, filename),
+    publishedDocuments: documents,
+  };
+}
+
+function scopeSearchMatch(
+  target: SearchTarget,
+  match: RipgrepMatch
+): ScopedMatch[] {
+  if (target.scope !== "parent") {
+    return [{ ...match, scope: target.scope }];
+  }
+
+  const document = target.publishedDocuments?.find(
+    (entry) =>
+      basename(match.file) === `${entry.id}${KNOWLEDGE_BASE_EXTRACTED_SUFFIX}`
+  );
+
+  if (!document) {
+    return [];
+  }
+
+  return [
+    {
+      ...match,
+      publicationId: document.publicationId,
+      scope: "parent",
+      sourceOrganization: document.sourceOrganization,
+    },
+  ];
+}
 
 async function resolveProfileSearchTarget(
   orgId: string,
@@ -342,7 +438,7 @@ function unreadableFilenames(
 
 async function runSearchTarget(
   target: SearchTarget,
-  parsed: KnowledgeBaseSearchInput,
+  parsed: z.output<typeof knowledgeBaseSearchInputSchema>,
   relativeTo: string,
   maxResults = parsed.maxResults
 ): Promise<{ matches: ScopedMatch[]; truncated: boolean }> {
@@ -373,10 +469,9 @@ async function runSearchTarget(
   );
 
   return {
-    matches: result.matches.slice(0, maxResults).map((match) => ({
-      ...match,
-      scope: target.scope,
-    })),
+    matches: result.matches
+      .slice(0, maxResults)
+      .flatMap((match) => scopeSearchMatch(target, match)),
     truncated: result.truncated || result.matches.length > maxResults,
   };
 }
@@ -384,7 +479,7 @@ async function runSearchTarget(
 async function runLexicalSearchTargets(
   profileRoot: string,
   targets: SearchTarget[],
-  parsed: KnowledgeBaseSearchInput,
+  parsed: z.output<typeof knowledgeBaseSearchInputSchema>,
   workspaceRoot: string
 ): Promise<{ matches: ScopedMatch[]; truncated: boolean }[]> {
   if (parsed.maxResults <= 0) {
@@ -422,6 +517,10 @@ async function runLexicalSearchTargets(
           const root =
             target.kind === "file" ? dirname(target.root) : target.root;
 
+          if (target.scope === "parent") {
+            removeCollection(db, target.scope);
+          }
+
           const pattern =
             target.kind === "file" ? basename(target.root) : target.glob;
 
@@ -454,7 +553,7 @@ async function runLexicalSearchTargets(
               const body = await Bun.file(join(root, row.path)).text();
               const snippet = extractSnippet(body, parsed.query, 16_000);
 
-              return {
+              return scopeSearchMatch(target, {
                 file:
                   target.scope === "profile"
                     ? relative(
@@ -463,13 +562,15 @@ async function runLexicalSearchTargets(
                       )
                     : row.path,
                 line: snippet.line,
-                scope: target.scope,
                 text: snippet.text,
-              };
+              });
             })
           );
 
-          return { matches, truncated: rows.length > parsed.maxResults };
+          return {
+            matches: matches.flat(),
+            truncated: rows.length > parsed.maxResults,
+          };
         })
       );
     } finally {
