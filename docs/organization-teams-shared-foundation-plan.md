@@ -2668,3 +2668,13 @@ Final bun run check, bun run knip, and git diff --check passed. The canonical bu
 Delivery stage 4 is complete. All five implementation steps and all four delivery stages are complete. Push and a ready PR remain required. The current branch is main, as previously requested. GitHub main matches the local origin/main reference. A main-to-main PR cannot carry these changes. Publication needs a user choice of review branch before pushing. The prepared PR description uses the repository ADHD format. Browser behavior and live OAuth delivery remain unverified.
 
 Evidence: /tmp/nakama-stage4-{pipeline,docs-types,docs-build,lint,check,knip,full-test}.log; /tmp/nakama-final-{server-build,web-build,server-types,agent-types,client-types,core-types,db-types}.log. Prepared PR body: /tmp/nakama-organization-teams-pr.md.
+
+### Slice 4b — Review branch and current-main compatibility
+
+The user requested a new branch. Work now uses codex/organization-teams-shared-foundation. The current main contained three commits missing from the feature branch. The merge keeps main's built-in FTS5 document search, release version, and tracked SQLite statement cleanup. Conflict resolution preserves parent publication filtering and result provenance in both regex and indexed searches, including searches with a team memory backend. Parent index entries refresh from the current authorized source. Both migration test groups remain present.
+
+All 83 focused search, migration, and organization archive tests passed with 420 assertions. Core, database, and server types passed. Full Ultracite, anti-slop, knip, and git diff --check passed. Full bun run test passed: 4,406 server and package tests with 22 skips and 16,442 assertions, plus 942 web tests with 4,248 assertions. No test failed. Server, web, and documentation builds passed. React Doctor returned 91/100, four warnings, and no errors. The additional performance warning is in chat-composer-skills.ts, which matches main. The web build retains its large-chunk warning. One verification repair added readable spacing between migration tests and main's cleanup helper.
+
+All implementation and delivery checkboxes remain complete. The branch choice is resolved. Next: push this branch and open the ready PR against main. No browser check, live OAuth check, or paid provider call ran. The original design remains attached to the plan.
+
+Evidence: /tmp/nakama-main-merge-{focused,core-types,db-types,server-types,format,oxlint,lint,check,knip,full-test,server-build,web-build,docs-build,doctor}.log.

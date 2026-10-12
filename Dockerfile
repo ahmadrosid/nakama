@@ -40,7 +40,9 @@ FROM oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52
 WORKDIR /runtime-deps
 
 COPY .docker/runtime-deps/package.json .docker/runtime-deps/bun.lock ./
-RUN bun install --frozen-lockfile --production --ignore-scripts
+RUN bun install --frozen-lockfile --production --ignore-scripts \
+  # The runtime is Debian (glibc); the SDK never picks its musl binary here.
+  && rm -rf node_modules/@anthropic-ai/claude-agent-sdk-linux-x64-musl
 
 # --- Production runtime (server + workspace packages + built static assets) ---
 FROM oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52d95a519631e2fc61 AS runtime
@@ -113,14 +115,9 @@ COPY --chown=1000:1000 --from=build-assets /app/apps/platform/discord/dist apps/
 COPY --chown=1000:1000 --from=build-assets /app/apps/platform/slack/dist apps/platform/slack/dist
 COPY --chown=1000:1000 --from=runtime-deps /runtime-deps/node_modules node_modules
 
-# Use the installed QMD CLI through Bun; its upstream launcher expects Node.
-RUN printf '#!/bin/sh\nexec bun /app/node_modules/@tobilu/qmd/dist/cli/qmd.js "$@"\n' > /usr/local/bin/qmd \
-  && chmod 755 /usr/local/bin/qmd
-
 RUN test -f apps/server/src/services/javascript-tool-runner.js \
   && test -f apps/server/src/services/plugin-runner.js \
-  && test -f node_modules/pm2/bin/pm2-runtime \
-  && qmd --version
+  && test -f node_modules/pm2/bin/pm2-runtime
 
 ENV NODE_ENV=production \
     NAKAMA_HOST=0.0.0.0 \
