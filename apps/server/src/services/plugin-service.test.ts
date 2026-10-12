@@ -505,6 +505,54 @@ describe("PluginService", () => {
     expect(await db.listPluginReleases()).toHaveLength(0);
   });
 
+  test("local install rejects a pending enable without changing its operation", async () => {
+    const { db, draft, service, actor } = await localDraft();
+    const preview = await service.previewLocalPlugin(draft, actor);
+
+    const installed = await service.installLocalPlugin(
+      { ...draft, expectedDigest: preview.digest, expectedRevision: null },
+      actor
+    );
+
+    const reached = Promise.withResolvers<void>();
+    const resume = Promise.withResolvers<void>();
+    setPluginLifecycleTestHooks({
+      async afterMigrationBeforePublish() {
+        reached.resolve();
+        await resume.promise;
+      },
+    });
+
+    const enabling = service.enableOrgPlugin(
+      draft.orgId,
+      "notes",
+      installed.revision
+    );
+
+    try {
+      await reached.promise;
+      const pending = (await db.getOrgPlugin(draft.orgId, "notes"))!;
+      await expect(
+        service.installLocalPlugin(
+          {
+            ...draft,
+            expectedDigest: preview.digest,
+            expectedRevision: pending.revision,
+          },
+          actor
+        )
+      ).rejects.toMatchObject({ code: "invalid_state" });
+      expect(await db.getOrgPlugin(draft.orgId, "notes")).toEqual(pending);
+    } finally {
+      resume.resolve();
+      await enabling;
+    }
+
+    expect((await db.getOrgPlugin(draft.orgId, "notes"))?.lifecycleState).toBe(
+      "enabled"
+    );
+  });
+
   test("failed first enable leaves the local release disabled without a database generation", async () => {
     const { db, draft, directory, service, actor } = await localDraft();
     await mkdir(join(directory, "migrations"));
@@ -560,6 +608,108 @@ describe("PluginService", () => {
     await expect(
       service.previewLocalPlugin(draft, actor)
     ).rejects.toMatchObject({ code: "expansion_limit" });
+  });
+
+  for (const kind of ["total size", "path length", "depth", "special file"]) {
+    test.skipIf(kind === "special file" && process.platform === "win32")(
+      `local review bounds ${kind}`,
+      async () => {
+        const { draft, directory, service, actor } = await localDraft();
+
+        if (kind === "total size") {
+          for (let index = 0; index < 6; index += 1) {
+            const path = join(directory, "src", String(index));
+            await writeFile(path, "");
+            await truncate(path, 20 * 1024 * 1024);
+          }
+        } else if (kind === "path length") {
+          await writeFile(join(directory, "src", "x".repeat(241)), "");
+        } else if (kind === "depth") {
+          await mkdir(
+            join(directory, "src", ...Array.from({ length: 25 }, () => "d")),
+            { recursive: true }
+          );
+        } else {
+          const result = Bun.spawnSync(["mkfifo", join(directory, "src/pipe")]);
+          expect(result.exitCode).toBe(0);
+        }
+
+        await expect(
+          service.previewLocalPlugin(draft, actor)
+        ).rejects.toMatchObject({
+          code:
+            kind === "total size" || kind === "depth"
+              ? "expansion_limit"
+              : "unsafe_path",
+        });
+      }
+    );
+  }
+
+  test("local review rejects missing migration and worker entries and unavailable worker support", async () => {
+    const { draft, directory, service, actor } = await localDraft();
+
+    const capabilities: Record<string, Json>[] = [
+      { database: { migrations: [{ id: "001", path: "migrations/001.sql" }] } },
+      {
+        workers: [{ entry: "workers/index.js", key: "index", name: "Indexer" }],
+      },
+    ];
+
+    for (const capability of capabilities) {
+      await writeFile(
+        join(directory, "nakama.plugin.json"),
+        JSON.stringify(notesManifest(capability))
+      );
+      await expect(
+        service.previewLocalPlugin(draft, actor)
+      ).rejects.toBeDefined();
+    }
+
+    await mkdir(join(directory, "workers"));
+    await writeFile(join(directory, "workers/index.js"), sideEffectJs);
+    await expect(
+      service.previewLocalPlugin(draft, actor)
+    ).rejects.toMatchObject({ code: "package_unavailable" });
+    expect(existsSync(SIDE_EFFECT_MARKER)).toBe(false);
+  });
+
+  test("local review rejects ordinary profiles and reads large output in bounded chunks", async () => {
+    const { db, draft, directory, service, actor } = await localDraft();
+    const profile = (await db.getProfile(draft.profileId))!;
+    await db.upsertProfile({ ...profile, isSuper: false });
+    await expect(
+      service.previewLocalPlugin(draft, actor)
+    ).rejects.toMatchObject({ code: "not_found" });
+    await db.upsertProfile(profile);
+    const output = Buffer.alloc(1024 * 1024 + 7, "x");
+    await writeFile(join(directory, "src/large.txt"), output);
+    const preview = await service.previewLocalPlugin(draft, actor);
+
+    const first = await service.readLocalPluginFile(
+      { ...draft, expectedDigest: preview.digest, path: "src/large.txt" },
+      actor
+    );
+
+    expect(Buffer.from(first.content, "base64")).toEqual(
+      output.subarray(0, first.nextOffset!)
+    );
+    expect(first.nextOffset).toBe(1024 * 1024);
+
+    const last = await service.readLocalPluginFile(
+      {
+        ...draft,
+        expectedDigest: preview.digest,
+        offset: first.nextOffset!,
+        path: "src/large.txt",
+      },
+      actor
+    );
+
+    expect(Buffer.from(last.content, "base64")).toEqual(
+      output.subarray(first.nextOffset!)
+    );
+    expect(last.nextOffset).toBeNull();
   });
 
   for (const field of [

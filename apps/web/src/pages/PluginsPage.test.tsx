@@ -215,3 +215,64 @@ test("changing organization removes a pending draft review and cannot confirm it
   expect(document.body.textContent).not.toContain("Confirm installation");
   expect(installCall).not.toHaveBeenCalled();
 });
+
+for (const stage of ["preview", "file", "install"]) {
+  test(`failed local ${stage} clears loading and requires a fresh review`, async () => {
+    const previewCall = spyOn(client, "previewLocalPlugin").mockResolvedValue(
+      preview()
+    );
+
+    const fileCall = spyOn(client, "readLocalPluginFile").mockResolvedValue({
+      content: btoa("export {}"),
+      encoding: "base64",
+      nextOffset: null,
+      path: "actions/list.js",
+    });
+
+    const installCall = spyOn(client, "installLocalPlugin").mockRejectedValue(
+      new Error("stale approval")
+    );
+
+    if (stage === "preview") {
+      previewCall.mockRejectedValueOnce(new Error("missing draft"));
+    } else if (stage === "file") {
+      fileCall.mockRejectedValueOnce(new Error("changed draft"));
+    }
+
+    cleanups.push(() => {
+      previewCall.mockRestore();
+      fileCall.mockRestore();
+      installCall.mockRestore();
+    });
+    await mount();
+    await openDraft();
+
+    const button = (label: string) =>
+      [...document.querySelectorAll("button")].find(
+        (item) => item.textContent === label
+      );
+
+    await act(async () => button("Preview draft")?.click());
+    await settle();
+
+    if (stage !== "preview") {
+      await act(async () =>
+        [...document.querySelectorAll("button")]
+          .find((item) => item.textContent?.includes("actions/list.js"))
+          ?.click()
+      );
+      await settle();
+    }
+
+    if (stage === "install") {
+      await act(async () => button("Confirm installation")?.click());
+      await settle();
+    }
+
+    expect(button("Preview draft")?.disabled).toBe(false);
+    expect(button("Confirm installation")).toBeUndefined();
+    await act(async () => button("Preview draft")?.click());
+    await settle();
+    expect(button("Confirm installation")?.disabled).toBe(true);
+  });
+}
