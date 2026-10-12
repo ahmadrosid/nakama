@@ -111,6 +111,7 @@ function PluginWorkersSection() {
               online: "Online",
               stopped: "Offline",
             };
+
             const status = worker.process.status;
 
             return (
