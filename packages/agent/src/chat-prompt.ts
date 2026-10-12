@@ -83,6 +83,9 @@ const SHARED_MESSAGING_STYLE = [
   "Do not mention tools, JSON, or internal steps in the user-visible reply.",
 ] as const;
 
+const AUTOMATION_REPORT_STYLE =
+  'Your final reply is read as a message from a person. Write plainly, lead with the result, and skip openers like "Here is your report" or "Task completed".';
+
 function isMessagingChannel(
   channel: AgentRequest["channel"] | undefined
 ): channel is MessagingChannel {
@@ -269,19 +272,18 @@ export function buildChatSystemPrompt(
       options.channel,
       options.chatKind ?? "private"
     );
-  } else if (
-    options.channel === "automation" &&
-    options.deliveryChannel &&
-    options.deliveryChannel !== "email"
-  ) {
-    const config: MessagingChannelPromptConfig =
-      MESSAGING_CHANNEL_PROMPT[options.deliveryChannel];
+  } else if (options.channel === "automation") {
+    sections.push("", AUTOMATION_REPORT_STYLE);
 
-    sections.push(
-      "",
-      `Your final reply is sent to ${config.label} as the run report.`,
-      ...config.format
-    );
+    if (options.deliveryChannel && options.deliveryChannel !== "email") {
+      const config: MessagingChannelPromptConfig =
+        MESSAGING_CHANNEL_PROMPT[options.deliveryChannel];
+
+      sections.push(
+        `Your final reply is sent to ${config.label} as the run report.`,
+        ...config.format
+      );
+    }
   }
 
   return sections.join("\n");
