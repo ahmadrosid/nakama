@@ -310,3 +310,38 @@ test("missing extraction data stops before the database write and summary", asyn
   expect(writes).toBe(0);
   expect(summaries).toBe(0);
 });
+
+test("trying one step resolves earlier results and records no run", async () => {
+  const service = createWorkflowServiceStub(createBaseWorkflow());
+  let runsCreated = 0;
+  service.createRun = async () => {
+    runsCreated += 1;
+    throw new Error("Trying a step must not create a run.");
+  };
+
+  const calls: WorkflowRecord[] = [];
+
+  const runner = new WorkflowRunner(service, {
+    executeTool: async (_profileId, _name, input) => {
+      calls.push(input);
+
+      return { ok: true };
+    },
+    runWorkflowSummarize: async () => "unused",
+  });
+
+  const result = await runner.executeDataStep(
+    {
+      id: "save",
+      input: { text: "{{steps.fetch.text}}" },
+      kind: "tool",
+      tool: "echo_tool",
+    },
+    { input: {}, steps: { fetch: { text: "hello" } } },
+    { profileId: "profile_test", runId: "test_1", workflowId: "workflow_test" }
+  );
+
+  expect(result).toEqual({ input: { text: "hello" }, output: { ok: true } });
+  expect(calls).toEqual([{ text: "hello" }]);
+  expect(runsCreated).toBe(0);
+});

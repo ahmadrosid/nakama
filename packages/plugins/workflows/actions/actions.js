@@ -764,6 +764,54 @@ async function run(input, context) {
     if (context.actionKey === "tools") {
       return host({ agentId, op: "tools" });
     }
+    const runner = new WorkflowRunner(service, {
+      executeTool: (id, name, args, runId, workflowId) => host({
+        agentId: id,
+        input: args,
+        name,
+        op: "execute_tool",
+        runId,
+        workflowId
+      }),
+      runWorkflowSummarize: async (_org, id, prompt, bag) => host({ agentId: id, bag, op: "summarize", prompt })
+    });
+    if (context.actionKey === "test_step") {
+      const started = Date.now();
+      try {
+        const steps = input.steps ?? [];
+        const index = steps.findIndex((entry) => entry.id === input.stepId);
+        const step = steps[index];
+        if (!step || step.kind === "summarize") {
+          throw new Error("Choose a tool, compare, assert, or template step.");
+        }
+        const earlier = steps.slice(0, index);
+        const tools = await host({ agentId, op: "tools" });
+        validateWorkflowSteps([
+          ...earlier,
+          step,
+          { id: "__try_summary", kind: "summarize", prompt: "-" }
+        ], new Set([
+          ...tools.map((tool) => tool.name),
+          ...earlier.flatMap((entry) => entry.kind === "tool" ? [entry.tool] : [])
+        ]));
+        const [latest] = existing ? await service.listRuns(existing.id) : [];
+        const outputs = Object.fromEntries((latest?.steps ?? []).filter((receipt) => receipt.status === "completed").map((receipt) => [
+          receipt.stepId,
+          parseWorkflowValue(receipt.output)
+        ]));
+        const result = await runner.executeDataStep(step, buildReceiptBag(input.input ?? parseWorkflowRecord(latest?.input ?? {}), outputs), {
+          profileId: agentId,
+          runId: `test_${crypto.randomUUID()}`,
+          workflowId: existing?.id ?? "draft"
+        });
+        return { ...result, durationMs: Date.now() - started };
+      } catch (error) {
+        return {
+          durationMs: Date.now() - started,
+          error: error instanceof Error ? error.message : String(error)
+        };
+      }
+    }
     if (context.actionKey === "create_workflow" || context.actionKey === "update_workflow") {
       const tools = await host({ agentId, op: "tools" });
       const allowed = new Set(tools.map((tool) => tool.name));
@@ -788,17 +836,6 @@ async function run(input, context) {
       return parseWorkflowValue(await service.update(input.workflowId, changes, allowed));
     }
     if (context.actionKey === "run_workflow") {
-      const runner = new WorkflowRunner(service, {
-        executeTool: (id, name, args, runId, workflowId) => host({
-          agentId: id,
-          input: args,
-          name,
-          op: "execute_tool",
-          runId,
-          workflowId
-        }),
-        runWorkflowSummarize: async (_org, id, prompt, bag) => host({ agentId: id, bag, op: "summarize", prompt })
-      });
       const result = await runner.run(input.workflowId, input.input ?? {});
       if (result.skipped) {
         throw new Error(result.error ?? "Workflow run skipped.");

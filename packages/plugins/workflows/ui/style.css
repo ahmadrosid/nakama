@@ -1034,3 +1034,31 @@
     margin-top: 8px;
   }
 }
+
+[data-plugin-id="workflows"] {
+  .workflow-try {
+    display: grid;
+    gap: 12px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .workflow-try > [data-slot="button"] {
+    justify-self: start;
+  }
+  .workflow-try-status {
+    margin: 0;
+    font-weight: 500;
+  }
+  .workflow-try-status[data-status="completed"] {
+    color: #15803d;
+  }
+  .workflow-try-status[data-status="failed"] {
+    color: var(--destructive);
+  }
+  .workflow-try-heading {
+    margin: 0 0 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted-foreground);
+  }
+}

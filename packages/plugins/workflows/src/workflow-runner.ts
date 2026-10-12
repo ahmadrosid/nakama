@@ -195,7 +195,7 @@ export class WorkflowRunner {
     }
   }
 
-  private async executeDataStep(
+  async executeDataStep(
     step: WorkflowStep,
     bag: WorkflowBag,
     context: {

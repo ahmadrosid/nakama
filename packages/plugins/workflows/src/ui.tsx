@@ -57,6 +57,12 @@ type ActionResponses = {
   list_workflows: StoredWorkflow[];
   profiles: Profile[];
   run_workflow: WorkflowActionResult;
+  test_step: {
+    durationMs: number;
+    error?: string;
+    input?: WorkflowValue;
+    output?: WorkflowValue;
+  };
   runs: WorkflowRunRecord[];
   tools: ToolInfo[];
   update_workflow: StoredWorkflow;
@@ -1239,6 +1245,12 @@ export function apply(ctx: Context) {
     const [expanded, setExpanded] = React.useState(false);
     const [tools, setTools] = React.useState<ToolInfo[]>([]);
     const [picking, setPicking] = React.useState(false);
+
+    const [tried, setTried] = React.useState<{
+      key: string;
+      result: ActionResponses["test_step"];
+    } | null>(null);
+
     const [toolsError, setToolsError] = React.useState("");
     const panelRef = React.useRef<HTMLElement>(null);
     React.useEffect(() => {
@@ -1443,6 +1455,39 @@ export function apply(ctx: Context) {
       setSteps((current) => [...current, step]);
       setSelection(step.key);
     };
+
+    const tryStep = (step: StepDraft) =>
+      void perform(async () => {
+        const runRecord = parseInputRecord(runInput);
+
+        const request: WorkflowRecord = {
+          agentId,
+          stepId: step.id,
+          steps: parseWorkflowValue([
+            ...serializeSteps(steps),
+            {
+              id: summaryStep?.id ?? "summary",
+              kind: "summarize",
+              prompt: summary,
+            },
+          ]),
+        };
+
+        // Without run input, the server reuses the last run's input.
+        if (runRecord && Object.keys(runRecord).length) {
+          request.input = runRecord;
+        }
+
+        if (workflow) {
+          request.workflowId = workflow.id;
+        }
+
+        const result = await action("test_step", request);
+
+        if (mounted.current) {
+          setTried({ key: step.key, result });
+        }
+      });
 
     const runWorkflow = (previous?: WorkflowRecord | null) =>
       void perform(async () => {
@@ -2022,15 +2067,62 @@ export function apply(ctx: Context) {
                           (selectedStep?.id ?? summaryStep?.id ?? "summary")
                       );
 
-                      return receipt ? (
+                      const attempt =
+                        selectedStep && tried?.key === selectedStep.key
+                          ? tried.result
+                          : null;
+
+                      return (
                         <div className="workflow-step-fields">
-                          <StepReceipt receipt={receipt} />
+                          {selectedStep && (
+                            <section className="workflow-try">
+                              <Button
+                                disabled={busy}
+                                onClick={() => tryStep(selectedStep)}
+                                type="button"
+                                variant="outline"
+                              >
+                                <Icon kind="play" />
+                                {busy ? "Trying…" : "Try this step"}
+                              </Button>
+                              {attempt && (
+                                <>
+                                  <p
+                                    className="workflow-try-status"
+                                    data-status={
+                                      attempt.error ? "failed" : "completed"
+                                    }
+                                  >
+                                    {attempt.error ? "Stopped" : "Worked"} in{" "}
+                                    {formatDuration(attempt.durationMs)}
+                                  </p>
+                                  <StepReceipt
+                                    receipt={{
+                                      error: attempt.error
+                                        ? readableError(attempt.error)
+                                        : null,
+                                      input: attempt.input,
+                                      output: attempt.output,
+                                    }}
+                                  />
+                                </>
+                              )}
+                            </section>
+                          )}
+                          {receipt ? (
+                            <section>
+                              <h3 className="workflow-try-heading">Last run</h3>
+                              <StepReceipt receipt={receipt} />
+                            </section>
+                          ) : (
+                            !attempt && (
+                              <p className="workflow-empty">
+                                No results yet. Try this step or run the
+                                workflow.
+                              </p>
+                            )
+                          )}
                         </div>
-                      ) : (
-                        <p className="workflow-empty">
-                          No test results yet. Run the workflow to see this
-                          step’s input and output.
-                        </p>
                       );
                     })()}
                 </div>
@@ -2136,7 +2228,7 @@ export function apply(ctx: Context) {
     receipt,
     showError = true,
   }: {
-    receipt: WorkflowRunStepRecord;
+    receipt: Pick<WorkflowRunStepRecord, "error" | "input" | "output">;
     showError?: boolean;
   }) {
     const sections = [

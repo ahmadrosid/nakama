@@ -1035,6 +1035,34 @@ var style_default = `[data-plugin-id="workflows"] {
     margin-top: 8px;
   }
 }
+
+[data-plugin-id="workflows"] {
+  .workflow-try {
+    display: grid;
+    gap: 12px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .workflow-try > [data-slot="button"] {
+    justify-self: start;
+  }
+  .workflow-try-status {
+    margin: 0;
+    font-weight: 500;
+  }
+  .workflow-try-status[data-status="completed"] {
+    color: #15803d;
+  }
+  .workflow-try-status[data-status="failed"] {
+    color: var(--destructive);
+  }
+  .workflow-try-heading {
+    margin: 0 0 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted-foreground);
+  }
+}
 `;
 
 // src/workflow-ops.ts
@@ -1730,6 +1758,7 @@ function apply(ctx) {
     const [expanded, setExpanded] = React.useState(false);
     const [tools, setTools] = React.useState([]);
     const [picking, setPicking] = React.useState(false);
+    const [tried, setTried] = React.useState(null);
     const [toolsError, setToolsError] = React.useState("");
     const panelRef = React.useRef(null);
     React.useEffect(() => {
@@ -1880,6 +1909,31 @@ function apply(ctx) {
       setSteps((current) => [...current, step]);
       setSelection(step.key);
     };
+    const tryStep = (step) => void perform(async () => {
+      const runRecord = parseInputRecord(runInput);
+      const request = {
+        agentId,
+        stepId: step.id,
+        steps: parseWorkflowValue([
+          ...serializeSteps(steps),
+          {
+            id: summaryStep?.id ?? "summary",
+            kind: "summarize",
+            prompt: summary
+          }
+        ])
+      };
+      if (runRecord && Object.keys(runRecord).length) {
+        request.input = runRecord;
+      }
+      if (workflow) {
+        request.workflowId = workflow.id;
+      }
+      const result = await action("test_step", request);
+      if (mounted.current) {
+        setTried({ key: step.key, result });
+      }
+    });
     const runWorkflow = (previous) => void perform(async () => {
       if (!workflow || dirty || !enabled) {
         return;
@@ -2253,13 +2307,34 @@ function apply(ctx) {
       value: summary
     }))), panelTab === "database" && /* @__PURE__ */ React.createElement(DatabasePanel, null), panelTab === "test" && (() => {
       const receipt = runs[0]?.steps?.find((step) => step.stepId === (selectedStep?.id ?? summaryStep?.id ?? "summary"));
-      return receipt ? /* @__PURE__ */ React.createElement("div", {
+      const attempt = selectedStep && tried?.key === selectedStep.key ? tried.result : null;
+      return /* @__PURE__ */ React.createElement("div", {
         className: "workflow-step-fields"
-      }, /* @__PURE__ */ React.createElement(StepReceipt, {
+      }, selectedStep && /* @__PURE__ */ React.createElement("section", {
+        className: "workflow-try"
+      }, /* @__PURE__ */ React.createElement(Button, {
+        disabled: busy,
+        onClick: () => tryStep(selectedStep),
+        type: "button",
+        variant: "outline"
+      }, /* @__PURE__ */ React.createElement(Icon, {
+        kind: "play"
+      }), busy ? "Trying…" : "Try this step"), attempt && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("p", {
+        className: "workflow-try-status",
+        "data-status": attempt.error ? "failed" : "completed"
+      }, attempt.error ? "Stopped" : "Worked", " in", " ", formatDuration(attempt.durationMs)), /* @__PURE__ */ React.createElement(StepReceipt, {
+        receipt: {
+          error: attempt.error ? readableError(attempt.error) : null,
+          input: attempt.input,
+          output: attempt.output
+        }
+      }))), receipt ? /* @__PURE__ */ React.createElement("section", null, /* @__PURE__ */ React.createElement("h3", {
+        className: "workflow-try-heading"
+      }, "Last run"), /* @__PURE__ */ React.createElement(StepReceipt, {
         receipt
-      })) : /* @__PURE__ */ React.createElement("p", {
+      })) : !attempt && /* @__PURE__ */ React.createElement("p", {
         className: "workflow-empty"
-      }, "No test results yet. Run the workflow to see this step’s input and output.");
+      }, "No results yet. Try this step or run the workflow."));
     })()))), /* @__PURE__ */ React.createElement(Dialog, {
       onOpenChange: (open) => {
         if (!(open || busy)) {
