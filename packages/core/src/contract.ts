@@ -3256,9 +3256,13 @@ export interface ToolContext {
 }
 
 export interface ToolDefinition<Input = unknown, Output = unknown> {
+  /** Rechecked before a deferred tool is returned by discovery. */
+  canDiscover?: (context: ToolContext) => Promise<boolean>;
   description: string;
-  /** Assigned plugin tools in this group are discovered per user turn. */
+  /** Assigned tools in this group are loaded through discovery. */
   discoveryGroup?: string;
+  /** Plugins default to one turn; MCP discoveries can last for the session. */
+  discoveryScope?: "session";
   /**
    * When true, the LLM provider runs this tool itself and `run` is never
    * called. Only `web_search` uses it today: the built-in stub is hosted, a

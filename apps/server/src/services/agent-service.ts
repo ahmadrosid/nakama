@@ -5058,6 +5058,7 @@ export class AgentService {
       includeSkillManageTools?: boolean;
       /** False in a cognito session: proposing org memory is a write-back. */
       includeMemoryWriteTools?: boolean;
+      mcpDiscovery?: boolean;
       userId?: string | null;
     } = {}
   ): Promise<ToolDefinition[]> {
@@ -5229,6 +5230,32 @@ export class AgentService {
         throw new Error("Profile organization is missing.");
       }
 
+      const discoveryAccess = options.mcpDiscovery
+        ? async (serverId: string, toolName: string, context: ToolContext) => {
+            requireToolOrgMember(context);
+
+            if (
+              context.orgId !== orgId ||
+              context.profileId !== profile.id ||
+              !(await this.db.getProfileForOrg(profile.id, orgId))
+            ) {
+              return false;
+            }
+
+            const current = shared
+              ? ((await this.resolveSharedAgentProfile(orgId, profile.id))
+                  ?.assignedMcpServers ?? [])
+              : await this.db.listMcpServersForProfile(profile.id);
+
+            return current.some(
+              (server) =>
+                server.id === serverId &&
+                server.enabled &&
+                server.cachedTools.some((tool) => tool.name === toolName)
+            );
+          }
+        : undefined;
+
       const mcpTools = shared
         ? mcpServers.flatMap((server) =>
             buildMcpToolDefinitions(
@@ -5236,7 +5263,8 @@ export class AgentService {
               this.mcpService!,
               this.db,
               orgId,
-              profile.id
+              profile.id,
+              discoveryAccess
             ).map<ToolDefinition>((tool) => ({
               ...tool,
               run: async (input, context) => {
@@ -5266,7 +5294,8 @@ export class AgentService {
                     this.mcpService!,
                     this.db,
                     orgId,
-                    profile.id
+                    profile.id,
+                    discoveryAccess
                   ).find((item) => item.name === tool.name);
 
                 if (!definition) {
@@ -5288,7 +5317,8 @@ export class AgentService {
             this.mcpService,
             this.db,
             orgId,
-            profile.id
+            profile.id,
+            discoveryAccess
           );
 
       resolved = [...resolved, ...mcpTools];
@@ -5441,6 +5471,8 @@ export class AgentService {
           : undefined,
       includeMemoryWriteTools: !cognito,
       includeSkillManageTools,
+      mcpDiscovery:
+        process.env.NAKAMA_MCP_TOOL_DISCOVERY === "1" && !profile.acpAgent,
       userId,
     });
 
