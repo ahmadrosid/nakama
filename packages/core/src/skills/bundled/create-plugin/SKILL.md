@@ -207,9 +207,10 @@ color you may use. Do not search the host or other folders for more tokens.
   the page header.
 - States: show a `Spinner` while loading, a short empty message, and errors in
   `--destructive` with `role="alert"`.
-- Narrow widths: the page also opens in the chat side panel, about 450px
-  wide. Use `flex-wrap` or `repeat(auto-fit, minmax(120px, 1fr))` grids, not
-  a fixed column count, and no fixed widths; three tiles then fit one row.
+- Narrow widths: the page also opens in the chat side panel, where the
+  content is about 360px wide. Use `flex-wrap` or
+  `repeat(auto-fit, minmax(100px, 1fr))` grids, not a fixed column count, and
+  no fixed widths; three tiles then fit one row.
 - Tables: show at most four columns, and put the column the user cares about
   most right after the name column. Wrap the table in an `overflow-x: auto`
   box so extra width scrolls instead of breaking the page.
