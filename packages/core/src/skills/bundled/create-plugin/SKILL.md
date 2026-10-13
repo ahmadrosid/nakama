@@ -208,9 +208,11 @@ color you may use. Do not search the host or other folders for more tokens.
 - States: show a `Spinner` while loading, a short empty message, and errors in
   `--destructive` with `role="alert"`.
 - Narrow widths: the page also opens in the chat side panel, about 450px
-  wide. Use `flex-wrap` or `repeat(auto-fit, minmax(160px, 1fr))` grids, not
-  a fixed column count, and no fixed widths. Wrap tables wider than three
-  columns in an `overflow-x: auto` box.
+  wide. Use `flex-wrap` or `repeat(auto-fit, minmax(120px, 1fr))` grids, not
+  a fixed column count, and no fixed widths; three tiles then fit one row.
+- Tables: show at most four columns, and put the column the user cares about
+  most right after the name column. Wrap the table in an `overflow-x: auto`
+  box so extra width scrolls instead of breaking the page.
 
 Skills: declare `skills: [{key:"use-greeting",directory:"skills/use-greeting"}]`
 and include that directory's SKILL.md with name and description.
