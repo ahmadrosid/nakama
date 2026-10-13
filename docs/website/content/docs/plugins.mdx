@@ -35,6 +35,28 @@ Ask Super Bot to create a plugin when your team needs a custom page or agent
 tool. Super Bot starts from a template, prepares source files and built output,
 and shows a plugin card in the chat. The draft stays uninstalled.
 
+### What to ask for
+
+A clear request gives a draft that needs fewer changes. Tell Super Bot:
+
+- **What it does.** One sentence for each action, with the inputs it needs.
+- **Who can run it.** Every member, or admins only.
+- **Whether it changes data.** Say if an action saves, sends, or deletes something.
+- **The page.** What people see and which buttons they use. Skip this if you only need an agent tool.
+- **Agent use.** Say if profiles should call the action as a tool in chat.
+
+For example:
+
+> Create a plugin called Standup Notes. Add an action `add_note` that saves a
+> note with a team name and text, for every member. Add an action
+> `list_notes` that returns today's notes for a team. Show a page with a team
+> picker, a text box, a Save button, and today's notes. Let profiles use
+> `list_notes` as a tool.
+
+To change a draft, ask Super Bot in the same chat, for example "add a delete
+button to each note". It updates and rebuilds the same draft, then shows a
+new card. Review and install from the new card.
+
 The card walks through five steps: **Drafted**, **Review and install**,
 **Enable**, **Connect to profiles**, and **Try it**. Each step shows its button
 only to the people who can do it, and the card updates as each step finishes.
