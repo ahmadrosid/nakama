@@ -25,17 +25,22 @@ afterEach(() => {
 });
 
 async function renderDraft(lifecycleState: "enabled" | "disabled") {
-  // SAFETY: The card reads only these plugin fields.
-  const plugin = {
+  const plugin: OrgPluginDetail = {
     actions: [],
+    availableVersions: ["0.1.0"],
+    databaseGeneration: null,
+    description: "Notes plugin.",
     installed: true,
+    lastLifecycleError: null,
     lifecycleState,
     name: "Notes",
+    pendingOperation: null,
     pluginId: "notes",
     revision: 1,
     selectedVersion: "0.1.0",
     ui: { assetsDir: "ui", entryModule: "ui/app.js", pageLabel: "Notes" },
-  } as unknown as OrgPluginDetail;
+    updatedAt: "2026-10-13T00:00:00Z",
+  };
 
   const list = spyOn(client, "listOrgPlugins").mockResolvedValue({
     plugins: [plugin],
