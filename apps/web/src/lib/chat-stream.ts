@@ -83,6 +83,67 @@ function formatDefaultToolResult(result: unknown): string | null {
   return String(result);
 }
 
+export interface ToolResultImage {
+  data: string;
+  mimeType: string;
+}
+
+interface ToolResultImageSplit {
+  images: ToolResultImage[];
+  rest: unknown;
+}
+
+/** Pull MCP-style `{ type: "image" }` content out of a tool result; `rest` keeps the text parts. */
+export function splitToolResultImages(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
+  result: unknown
+): ToolResultImageSplit {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
+  if (typeof result !== "object" || result === null) {
+    return { images: [], rest: result };
+  }
+
+  // SAFETY: The enclosing parser checks the value before this conversion.
+  const { content } = result as { content?: unknown };
+
+  if (!Array.isArray(content)) {
+    return { images: [], rest: result };
+  }
+
+  const images: ToolResultImage[] = [];
+  const texts: string[] = [];
+
+  for (const item of content) {
+    // SAFETY: Each field is checked before use.
+    const { type, data, mimeType, text } = (item ?? {}) as {
+      type?: unknown;
+      data?: unknown;
+      mimeType?: unknown;
+      text?: unknown;
+    };
+
+    if (
+      type === "image" &&
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
+      typeof data === "string" &&
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
+      typeof mimeType === "string" &&
+      /^image\/[\w.+-]+$/.test(mimeType)
+    ) {
+      images.push({ data, mimeType });
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
+    } else if (type === "text" && typeof text === "string" && text.trim()) {
+      texts.push(text.trim());
+    }
+  }
+
+  if (images.length === 0) {
+    return { images, rest: result };
+  }
+
+  return { images, rest: texts.length > 0 ? texts.join("\n\n") : null };
+}
+
 export function formatToolResult(
   tool: string | undefined,
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
