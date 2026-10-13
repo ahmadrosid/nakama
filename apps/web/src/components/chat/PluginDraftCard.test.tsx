@@ -43,12 +43,16 @@ async function renderDraft(lifecycleState: "enabled" | "disabled") {
 
   const shown: ChatAttachmentPanelConfig[] = [];
 
-  // SAFETY: The card calls only show on this fixture.
-  const panel = {
-    show: (config: ChatAttachmentPanelConfig) => {
+  const panel: ChatAttachmentPanelContextValue = {
+    activeId: null,
+    hide: () => {},
+    isFullscreen: false,
+    isOpen: false,
+    show: (config) => {
       shown.push(config);
     },
-  } as unknown as ChatAttachmentPanelContextValue;
+    update: () => {},
+  };
 
   // SAFETY: The card reads only the active org and platform admin flag.
   const auth = {
@@ -56,9 +60,11 @@ async function renderDraft(lifecycleState: "enabled" | "disabled") {
     user: { isPlatformAdmin: false },
   } as AuthContextValue;
 
-  // SAFETY: PluginDrafts reads only tool and toolResult from each item.
-  const messages = [
+  const messages: ChatListItem[] = [
     {
+      content: "",
+      id: "draft",
+      role: "tool",
       tool: "submit_plugin_draft",
       toolResult: {
         actions: ["list"],
@@ -72,7 +78,7 @@ async function renderDraft(lifecycleState: "enabled" | "disabled") {
         version: "0.1.0",
       },
     },
-  ] as unknown as ChatListItem[];
+  ];
 
   const container = document.createElement("div");
   document.body.append(container);
