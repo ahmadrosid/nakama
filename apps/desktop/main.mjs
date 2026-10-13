@@ -282,12 +282,12 @@ export const windowIcon = app.isPackaged
   ? undefined
   : join(import.meta.dirname, "../web/public/icons/icon-512.png");
 
-// The page header doubles as the title bar. Overlay colors follow the header's
-// --card and --muted-foreground tokens so the native buttons blend in.
+// The web app draws its own 40px title bar. Overlay colors follow its
+// --sidebar and --muted-foreground tokens so the native buttons blend in.
 const titleBarOverlay = () =>
   nativeTheme.shouldUseDarkColors
-    ? { color: "#18181b", height: 56, symbolColor: "#a1a1aa" }
-    : { color: "#ffffff", height: 56, symbolColor: "#737373" };
+    ? { color: "#111113", height: 40, symbolColor: "#a1a1aa" }
+    : { color: "#fafafa", height: 40, symbolColor: "#737373" };
 
 export async function createWindow(url, { show = true } = {}) {
   const origin = new URL(serverUrl(url)).origin;
@@ -302,7 +302,7 @@ export async function createWindow(url, { show = true } = {}) {
     title: "Nakama",
     ...(process.platform === "darwin" && {
       titleBarStyle: "hiddenInset",
-      trafficLightPosition: { x: 12, y: 21 },
+      trafficLightPosition: { x: 14, y: 14 },
     }),
     ...(process.platform === "win32" && {
       titleBarOverlay: titleBarOverlay(),
