@@ -53,19 +53,23 @@
   color: var(--c-muted);
 }
 
+/* Matches the other tool rows: an opaque 20px box that breaks the timeline line. */
 .wsIcon {
+  position: relative;
+  z-index: 10;
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
   width: 14px;
-  height: 14px;
+  height: 20px;
   color: var(--c-muted);
-  opacity: 0.5;
+  background: var(--background);
 }
 
 .wsIcon svg {
   display: block;
+  opacity: 0.5;
 }
 
 .wsRowButton:hover .wsIcon {
