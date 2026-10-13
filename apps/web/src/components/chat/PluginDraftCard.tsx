@@ -5,7 +5,10 @@ import { cn } from "@nakama/ui/utils";
 import { Tick02Icon } from "hugeicons-react";
 import { type ReactNode, useState } from "react";
 import { readRecord, readString } from "@/components/chat/web-search.shared";
+import { PluginSurface } from "@/components/PluginSurface";
 import { useAuth } from "@/context/use-auth";
+import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
+import { useTheme } from "@/context/use-theme";
 import {
   useEnableOrgPlugin,
   useOrgPlugins,
@@ -115,6 +118,7 @@ function PluginDraftCard({
   const plugins = useOrgPlugins().data ?? [];
   const access = usePluginAgentAccess();
   const enable = useEnableOrgPlugin();
+  const panel = useOptionalChatAttachmentPanel();
   const [connecting, setConnecting] = useState<OrgPluginDetail | null>(null);
   const plugin = plugins.find((item) => item.pluginId === draft.pluginId);
 
@@ -160,6 +164,24 @@ function PluginDraftCard({
         installed={installed}
         isPlatformAdmin={isPlatformAdmin}
         onConnect={setConnecting}
+        openControl={
+          panel && enabled && plugin?.ui ? (
+            <Button
+              onClick={() =>
+                panel.show({
+                  content: <PluginPanelBody pluginId={plugin.pluginId} />,
+                  id: `plugin:${plugin.pluginId}`,
+                  title: plugin.name,
+                  typeLabel: "Plugin",
+                })
+              }
+              size="sm"
+              variant="outline"
+            >
+              Open
+            </Button>
+          ) : null
+        }
         plugin={plugin}
         reviewControl={
           isPlatformAdmin && activeOrg ? (
@@ -186,7 +208,41 @@ function PluginDraftCard({
   );
 }
 
+/** Reads live plugin and theme so the panel follows reinstalls and theme switches. */
+function PluginPanelBody({ pluginId }: { pluginId: string }) {
+  const { activeOrg } = useAuth();
+  const { resolvedTheme } = useTheme();
+
+  const plugin = useOrgPlugins().data?.find(
+    (item) => item.pluginId === pluginId
+  );
+
+  if (!(activeOrg && plugin?.ui && plugin.lifecycleState === "enabled")) {
+    return (
+      <p className="p-4 text-muted-foreground text-sm" role="status">
+        Plugin is not enabled
+      </p>
+    );
+  }
+
+  return (
+    <PluginSurface
+      fallback={
+        <p className="p-4 text-muted-foreground text-sm" role="status">
+          Loading plugin
+        </p>
+      }
+      inlineHeaderActions
+      key={`${activeOrg.id}:${pluginId}:${plugin.selectedVersion}:${plugin.revision}:${resolvedTheme}`}
+      orgId={activeOrg.id}
+      plugin={plugin}
+      theme={resolvedTheme}
+    />
+  );
+}
+
 function PluginDraftProgress({
+  openControl,
   reviewControl,
   reviewInstruction,
   enableControl,
@@ -201,6 +257,7 @@ function PluginDraftProgress({
   onConnect,
   tried,
 }: {
+  openControl: ReactNode;
   reviewControl: ReactNode;
   reviewInstruction: string;
   enableControl: ReactNode;
@@ -279,9 +336,12 @@ function PluginDraftProgress({
             plugin-drafts/{draft.draftId} · {draft.version}
           </p>
         </div>
-        <p className="shrink-0 text-muted-foreground text-xs tabular-nums">
-          {current < 0 ? "Live" : `Step ${current + 1} of ${steps.length}`}
-        </p>
+        <div className="flex shrink-0 items-center gap-3">
+          <p className="text-muted-foreground text-xs tabular-nums">
+            {current < 0 ? "Live" : `Step ${current + 1} of ${steps.length}`}
+          </p>
+          {openControl}
+        </div>
       </header>
       <ol className="flex flex-col px-4 py-3">
         {steps.map((step, index) => {
