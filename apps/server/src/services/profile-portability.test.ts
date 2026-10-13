@@ -485,6 +485,7 @@ describe("profile portability", () => {
       `---\nname: ${name}\ndescription: ${name}.\nscripts: scripts/extra.py\n---\n\nBody.\n`,
       "utf8"
     );
+
     const source = [
       "import json",
       "import sys",
@@ -498,6 +499,7 @@ describe("profile portability", () => {
       '    print(json.dumps(run(json.loads(sys.stdin.read() or "{}"), {})))',
       "",
     ].join("\n");
+
     await writeFile(path.join(dir, "tool.py"), source, "utf8");
     await writeFile(path.join(dir, "scripts", "extra.py"), source, "utf8");
     const id = `skill_${name}`;
@@ -515,6 +517,7 @@ describe("profile portability", () => {
       updatedAt: now(),
     });
     await db.assignSkillToProfile(profileId, id);
+
     return name;
   }
 
@@ -522,22 +525,27 @@ describe("profile portability", () => {
   // platform admin may install it, exactly like custom tool source.
   test("packed python skill scripts install only with platform admin approval", async () => {
     const { db, service } = await setup();
+
     const { profile } = await service.createProfile(ORG, {
       name: "Python Bot",
     });
+
     const name = await writePythonSkill(db, ORG, profile.id);
 
     const exported = await createProfilePackExport(db, ORG, profile.id);
 
     const orgAdminDb = createInMemoryDatabaseAdapter();
+
     const preview = await previewProfilePackImport(
       orgAdminDb,
       DEST,
       exported.data
     );
+
     const blocked = preview.skippedAssignments
       .filter((item) => item.reason.includes("platform admin"))
       .map((item) => item.path);
+
     expect(blocked).toContain(`skills/${name}/tool.py`);
     expect(blocked).toContain(`skills/${name}/scripts/extra.py`);
 
@@ -547,11 +555,13 @@ describe("profile portability", () => {
       exported.data,
       { confirm: true }
     );
+
     const orgAdminDir = path.join(
       soul(DEST, orgAdminImport.profileId),
       "skills",
       name
     );
+
     expect(await pathExists(path.join(orgAdminDir, "tool.py"))).toBe(false);
     const orgAdminSkill = await discoverSkillDirectory(orgAdminDir);
     expect(orgAdminSkill?.hasTool).toBe(false);
@@ -563,17 +573,20 @@ describe("profile portability", () => {
     ).toContain(name);
 
     const platformDb = createInMemoryDatabaseAdapter();
+
     const platformImport = await importProfilePack(
       platformDb,
       DEST,
       exported.data,
       { allowPythonSkillTools: true, confirm: true }
     );
+
     const platformDir = path.join(
       soul(DEST, platformImport.profileId),
       "skills",
       name
     );
+
     expect(await pathExists(path.join(platformDir, "tool.py"))).toBe(true);
     const platformSkill = await discoverSkillDirectory(platformDir);
     expect(platformSkill?.hasTool).toBe(true);

@@ -113,16 +113,29 @@ if __name__ == "__main__":
     "utf8"
   );
   const previous = process.env.NAKAMA_CONFIG_DIR;
+
   process.env.NAKAMA_CONFIG_DIR = directory;
+
   try {
     const tool = await loadPythonSkillTool({
+      body: "",
       description: "Report the config dir",
+      directory,
+      disableModelInvocation: false,
+      hasTool: true,
+      includeBodyOnMatch: true,
       name: "config_reader",
+      scriptIssues: [],
+      scriptTools: [],
+      skillFilePath: toolPath,
       toolPath,
-    } as unknown as DiscoveredSkill);
+    } satisfies DiscoveredSkill);
+
+    // SAFETY: The test fixture matches the contract used by this test.
     const result = await tool?.run({}, {
       signal: new AbortController().signal,
     } as never);
+
     expect(result).toEqual({ config_dir: null });
   } finally {
     if (previous === undefined) {
@@ -130,6 +143,7 @@ if __name__ == "__main__":
     } else {
       process.env.NAKAMA_CONFIG_DIR = previous;
     }
+
     await rm(directory, { force: true, recursive: true });
   }
 });
