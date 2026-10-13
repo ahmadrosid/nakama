@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { executeToolCall } from "@nakama/agent";
 import { toLlmToolDefinition } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { estimateToolToken } from "../providers/usage-tracking";
@@ -65,6 +66,26 @@ test("ask_user_question stores the questionnaire with generated ids", async () =
       prompt: "What timezone?",
     },
   ]);
+});
+
+test("ask_user_question succeeds through the tool loop without a placeholder", async () => {
+  const { tool, state } = await createTool();
+
+  const result = await executeToolCall(
+    [tool],
+    {
+      arguments: {
+        questions: [{ choices: ["Yes", "No"], prompt: "Continue?" }],
+        title: "Need input",
+      },
+      id: "call_1",
+      name: "ask_user_question",
+    },
+    { sessionId: "session_test" }
+  );
+
+  expect(result).not.toHaveProperty("error");
+  expect(await state.get("session_test")).not.toBeNull();
 });
 
 test("ask_user_question accepts legacy choice objects", async () => {
