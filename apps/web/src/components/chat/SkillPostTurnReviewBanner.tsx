@@ -3,9 +3,9 @@ import { Button } from "@nakama/ui/button";
 import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
 import {
-  Add01Icon,
   ArrowRight01Icon,
   Cancel01Icon,
+  File01Icon,
   QuillWrite02Icon,
 } from "hugeicons-react";
 import { useState } from "react";
@@ -183,9 +183,11 @@ export function SkillPostTurnReviewBanner({
             return (
               <div className="-mx-3 text-sm" key={suggestion.id}>
                 <div className="flex items-center gap-3 px-3 py-2">
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
-                    <Add01Icon aria-hidden className="size-4" strokeWidth={2} />
-                  </span>
+                  <File01Icon
+                    aria-hidden
+                    className="size-4 shrink-0 text-muted-foreground"
+                    strokeWidth={1.5}
+                  />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium text-foreground">
                       New skill:{" "}
