@@ -568,6 +568,8 @@ export function openPrivateDatabase(databasePath: string): Database {
 
   if (databasePath !== ":memory:") {
     chmodSync(databasePath, PRIVATE_FILE_MODE);
+    // DELETE journal removal must sync its directory before a commit is acknowledged.
+    db.exec("PRAGMA synchronous = EXTRA");
   }
 
   return db;
