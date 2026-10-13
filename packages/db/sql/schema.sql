@@ -691,6 +691,7 @@ CREATE TABLE IF NOT EXISTS plugin_releases (
   version TEXT NOT NULL,
   manifest TEXT NOT NULL,
   digest TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'legacy',
   created_at TEXT NOT NULL,
   PRIMARY KEY (plugin_id, version)
 );

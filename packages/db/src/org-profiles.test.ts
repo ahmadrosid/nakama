@@ -96,6 +96,40 @@ describe("seedOrgDefaultProfile", () => {
 });
 
 describe("seedOrgSuperBotProfile", () => {
+  test.each(["create-plugin", "create-skill"])(
+    "assigns %s to new and existing Super Bots only",
+    async (name) => {
+      const db = createInMemoryDatabaseAdapter();
+      await upsertSkill(db, name);
+      const profile = await seedOrgSuperBotProfile(db, "org_a");
+      expect(
+        (await db.listSkillsForProfile(profile.id)).map((skill) => skill.name)
+      ).toContain(name);
+      await db.unassignSkillFromProfile(profile.id, `skill_${name}`);
+      await seedOrgSuperBotProfile(db, "org_a");
+      expect(
+        (await db.listSkillsForProfile(profile.id)).map((skill) => skill.name)
+      ).toContain(name);
+      const ordinary = await seedOrgDefaultProfile(db, "org_a");
+      expect(
+        (await db.listSkillsForProfile(ordinary.id)).map((skill) => skill.name)
+      ).not.toContain(name);
+    }
+  );
+  test("assigns a Super Bot skill whose row syncs after the Super Bot exists", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const profile = await seedOrgSuperBotProfile(db, "org_a");
+    const ordinary = await seedOrgDefaultProfile(db, "org_a");
+    await upsertSkill(db, "create-skill");
+    await ensureBundledSkillsAssigned(db);
+    expect(
+      (await db.listSkillsForProfile(profile.id)).map((skill) => skill.name)
+    ).toContain("create-skill");
+    expect(
+      (await db.listSkillsForProfile(ordinary.id)).map((skill) => skill.name)
+    ).not.toContain("create-skill");
+  });
+
   test("creates one super bot per org", async () => {
     const db = createInMemoryDatabaseAdapter();
 

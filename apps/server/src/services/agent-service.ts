@@ -518,7 +518,8 @@ export class AgentService {
         return selection
           ? `${selection.instance.id}::${selection.model}`
           : profileModel;
-      }
+      },
+      () => this.pluginService
     );
     this.orgMemoryTools = createOrgMemoryTools(this.getOrgMemoryService());
     this._providerConfigured =

@@ -13,10 +13,14 @@ const bundledDir =
     ? path.resolve(moduleDir, "../../../packages/core/src/skills/bundled")
     : moduleDir;
 
+export function bundledSkillDirectory(name: BundledSkillName): string {
+  return path.join(bundledDir, name);
+}
+
 export async function readBundledSkillMarkdown(
   name: BundledSkillName
 ): Promise<string> {
-  return readFile(path.join(bundledDir, name, "SKILL.md"), "utf8");
+  return readFile(path.join(bundledSkillDirectory(name), "SKILL.md"), "utf8");
 }
 
 export async function readBundledSkillBody(

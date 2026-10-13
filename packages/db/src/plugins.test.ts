@@ -143,6 +143,23 @@ function toolContribution(
 }
 
 describe("plugin metadata migration", () => {
+  test("upgrades release provenance without granting official status", () => {
+    const db = createLegacyHostDatabase();
+    db.exec(`CREATE TABLE plugin_releases (
+      plugin_id TEXT, version TEXT, manifest TEXT, digest TEXT, created_at TEXT,
+      PRIMARY KEY(plugin_id, version));
+      INSERT INTO plugin_releases VALUES ('workflows', '1.0.0', '{}', 'digest', 'now');`);
+
+    try {
+      migrateDatabase(db);
+      migrateDatabase(db);
+      expect(db.query("SELECT source FROM plugin_releases").get()).toEqual({
+        source: "legacy",
+      });
+    } finally {
+      db.close();
+    }
+  });
   test("upgrades an existing database and preserves ordinary rows", () => {
     const db = createLegacyHostDatabase();
 
@@ -550,6 +567,7 @@ describe("plugin ownership adapter", () => {
       digest: "sha256:same",
       manifest: notesManifest(),
       pluginId: "notes",
+      source: "local",
       version: "1.0.0",
     });
 
@@ -558,6 +576,7 @@ describe("plugin ownership adapter", () => {
       digest: "sha256:same",
       manifest: notesManifest(),
       pluginId: "notes",
+      source: "agent",
       version: "1.0.0",
     });
 
@@ -574,6 +593,7 @@ describe("plugin ownership adapter", () => {
     expect(conflict).toEqual({ ok: false, reason: "digest_conflict" });
     expect(await db.getPluginRelease("notes", "1.0.0")).toMatchObject({
       digest: "sha256:same",
+      source: "local",
       version: "1.0.0",
     });
   });

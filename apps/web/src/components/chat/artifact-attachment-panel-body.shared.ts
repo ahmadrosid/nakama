@@ -12,7 +12,8 @@ import {
 } from "@/lib/chat-artifacts";
 import { formatBytes } from "@/lib/knowledge-base-files";
 
-const WIDE_ARTIFACT_PANEL_WIDTH = 768;
+/** HTML artifacts and plugin pages are full layouts; give them room. */
+export const WIDE_ARTIFACT_PANEL_WIDTH = 768;
 
 const NARROW_ARTIFACT_PANEL_WIDTH = 448;
 

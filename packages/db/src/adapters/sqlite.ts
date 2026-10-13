@@ -1757,8 +1757,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   );
 
   const insertPluginReleaseStmt = db.prepare(`
-    INSERT INTO plugin_releases (plugin_id, version, manifest, digest, created_at)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO plugin_releases (plugin_id, version, manifest, digest, created_at, source)
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
 
   const fillEmptyPluginReleaseDigestStmt = db.prepare(`
@@ -3936,7 +3936,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.version,
         JSON.stringify(record.manifest),
         record.digest,
-        record.createdAt
+        record.createdAt,
+        record.source ?? "legacy"
       );
 
       return { ok: true };
@@ -6417,6 +6418,7 @@ interface PluginReleaseRow {
   digest: string | null;
   manifest: string;
   plugin_id: string;
+  source: NonNullable<StoredPluginReleaseRecord["source"]>;
   version: string;
 }
 
@@ -6442,6 +6444,7 @@ function toPluginReleaseRecord(
     // SAFETY: The adapter writes this row value through its typed contract.
     manifest: JSON.parse(row.manifest) as StoredPluginReleaseRecord["manifest"],
     pluginId: row.plugin_id,
+    source: row.source ?? "legacy",
     version: row.version,
   };
 }

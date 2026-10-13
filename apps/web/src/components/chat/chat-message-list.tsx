@@ -43,6 +43,7 @@ import { segmentAssistantTurn } from "@/components/chat/assistant-tool-group.sha
 import { ToolCredentialCard } from "@/components/chat/chat-add-capabilities-dialogs";
 import { ChatUsageBadge } from "@/components/chat/chat-usage-badge";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
+import { PluginDrafts } from "@/components/chat/PluginDraftCard";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import { useArtifactsExist } from "@/hooks/use-resource-mutations";
@@ -166,6 +167,21 @@ function ChatMessageListSession({
   contentClassName,
 }: ChatMessageListProps) {
   const turns = useMemo(() => groupMessagesIntoTurns(messages), [messages]);
+
+  // A plugin draft card marks "Try it" once its tool runs anywhere in the chat.
+  const usedPluginToolKey = [
+    ...new Set(
+      messages.flatMap((item) =>
+        item.tool?.startsWith("plugin_") ? [item.tool] : []
+      )
+    ),
+  ].join("\n");
+
+  const usedPluginTools = useMemo(
+    () => (usedPluginToolKey ? usedPluginToolKey.split("\n") : []),
+    [usedPluginToolKey]
+  );
+
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const scrollerRef = useRef<HTMLElement | null>(null);
   const isAtBottomRef = useRef(true);
@@ -334,6 +350,7 @@ function ChatMessageListSession({
             showUsage={showUsage}
             streamActive={streamActive}
             turnStartedAt={turnStartedAt}
+            usedPluginTools={usedPluginTools}
             workStreamActive={
               workStreamActive && turnIndex === turns.length - 1
             }
@@ -362,6 +379,7 @@ function ChatMessageListSession({
       turnStartedAt,
       workStreamActive,
       turns.length,
+      usedPluginTools,
     ]
   );
 
@@ -437,6 +455,7 @@ function AssistantTurn({
   onBranchMessage,
   onOpenFileCitation,
   onRetryMessage,
+  usedPluginTools,
 }: {
   readOnly?: boolean;
   sessionId?: string;
@@ -455,6 +474,7 @@ function AssistantTurn({
   onBranchMessage?: (message: ChatListItem) => void;
   onOpenFileCitation?: (path: string) => void;
   onRetryMessage?: (message: ChatListItem) => void;
+  usedPluginTools: string[];
 }) {
   const turnMessages = messages.map(({ message }) => message);
   const segments = segmentAssistantTurn(turnMessages, workStreamActive);
@@ -534,6 +554,11 @@ function AssistantTurn({
       <CreatedProfiles
         complete={interactiveTurnComplete}
         messages={turnMessages}
+      />
+      <PluginDrafts
+        complete={interactiveTurnComplete}
+        messages={turnMessages}
+        usedTools={usedPluginTools}
       />
       {showActions ? (
         <AssistantMessageActions

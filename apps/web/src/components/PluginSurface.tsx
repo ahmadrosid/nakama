@@ -21,7 +21,10 @@ export function PluginSurface({
   theme,
   tool,
   fallback,
+  inlineHeaderActions = false,
 }: {
+  /** Panels have no page header, so header actions render inside the page. */
+  inlineHeaderActions?: boolean;
   orgId: string;
   plugin: OrgPluginDetail;
   theme: "dark" | "light";
@@ -149,6 +152,14 @@ export function PluginSurface({
           ) : (
             <Page
               renderHeaderActions={(children) => {
+                if (inlineHeaderActions) {
+                  return (
+                    <div className="flex items-center justify-end gap-2">
+                      {children}
+                    </div>
+                  );
+                }
+
                 const target = document.querySelector(
                   "[data-page-header-actions]"
                 );

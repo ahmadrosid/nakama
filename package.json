@@ -17,6 +17,7 @@
     "check": "ultracite check && bun run check:anti-slop",
     "check:acp": "bun run scripts/check-acp.ts",
     "check:anti-slop": "oxlint",
+    "check:ci": "oxlint && oxlint apps/server/src/http --ignore-pattern 'apps/server/src/http/routes/**' && oxlint docs/website && ultracite check docs/website",
     "cli": "bun run apps/cli/src/index.ts",
     "desktop": "bun run --cwd apps/desktop dev",
     "dev": "bun run dev:web",

@@ -1,0 +1,10 @@
+# Build __PLUGIN_NAME__
+
+Run from `plugin-drafts/__PLUGIN_ID__/`:
+
+```sh
+bun build ./src/__ACTION_KEY__.js --outfile actions/__ACTION_KEY__.js --target bun
+bun build ./src/ui.jsx --outfile ui/app.js --target browser
+```
+
+Build each new action the same way.
