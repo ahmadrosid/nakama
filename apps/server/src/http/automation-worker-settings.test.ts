@@ -6,12 +6,14 @@ import { createMinimalHonoApp } from "./test-app-helpers";
 import {
   loginUserSession,
   setupFreshInstallSession,
+  type TestBrowserSession,
 } from "./test-session-helpers";
 
 setupTestConfigDir("nakama-automation-worker-settings-test-");
 
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
+
   return createMinimalHonoApp({
     agent: new AgentService(null, null, databaseAdapter),
     databaseAdapter,
@@ -22,15 +24,18 @@ describe("automation worker settings routes", () => {
   test("persists the workspace-global five-minute default and requires a platform admin to update it", async () => {
     const { app, databaseAdapter } = createApp();
     const admin = await setupFreshInstallSession(app, databaseAdapter);
+
     const getDefault = await app.fetch(
       new Request("http://localhost:4310/v1/settings/automation-worker", {
         headers: admin.headers(),
       })
     );
+
     expect(getDefault.status).toBe(200);
     expect(await getDefault.json()).toEqual({ pollIntervalMinutes: 5 });
 
     const orgId = admin.orgId!;
+
     const memberResponse = await app.fetch(
       new Request(`http://localhost:4310/v1/orgs/${orgId}/members`, {
         body: JSON.stringify({
@@ -45,16 +50,20 @@ describe("automation worker settings routes", () => {
         method: "POST",
       })
     );
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const { temporaryPassword } = (await memberResponse.json()) as {
       temporaryPassword: string;
     };
+
     const member = await loginUserSession(
       app,
       "member@example.com",
       temporaryPassword,
       orgId
     );
-    const update = (session: typeof admin, minutes: number) =>
+
+    const update = (session: TestBrowserSession, minutes?: number) =>
       app.fetch(
         new Request("http://localhost:4310/v1/settings/automation-worker", {
           body: JSON.stringify({ pollIntervalMinutes: minutes }),
@@ -65,18 +74,25 @@ describe("automation worker settings routes", () => {
           method: "PUT",
         })
       );
+
     expect((await update(member, 10)).status).toBe(403);
     expect(await (await update(admin, 10)).json()).toEqual({
       pollIntervalMinutes: 10,
     });
     const stored = await databaseAdapter.getWorkspaceSettings();
     expect(stored?.automationWorkerPollIntervalMs).toBe(10 * 60 * 1000);
+
     const getSaved = await app.fetch(
       new Request("http://localhost:4310/v1/settings/automation-worker", {
         headers: admin.headers(),
       })
     );
+
     expect(await getSaved.json()).toEqual({ pollIntervalMinutes: 10 });
-    expect((await update(admin, 0)).status).toBe(400);
+
+    for (const minutes of [undefined, 0, 1441, 1.5, Number.NaN]) {
+      expect((await update(admin, minutes)).status).toBe(400);
+      expect(await databaseAdapter.getWorkspaceSettings()).toEqual(stored);
+    }
   });
 });

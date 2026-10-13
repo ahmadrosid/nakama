@@ -54,9 +54,31 @@ From the repository root:
 
 The script uses `docker buildx` (default `linux/amd64`), then starts the container.
 
+The build helper reads these optional environment variables:
+
+- `NAKAMA_CONTAINER_NAME` sets the container name. The default is `nakama`.
+- `NAKAMA_IMAGE_NAME` sets the local image name. The default is `nakama`.
+- `NAKAMA_HOST_PORT` sets the published host port. The default is `4310`.
+- `NAKAMA_DATA_VOLUME` sets the Docker volume name. The default is
+  `nakama-data`.
+
+For example, this builds and starts an isolated local install on port 4311:
+
+```bash
+NAKAMA_CONTAINER_NAME=nakama-dev \
+NAKAMA_IMAGE_NAME=nakama-dev \
+NAKAMA_HOST_PORT=4311 \
+NAKAMA_DATA_VOLUME=nakama-dev-data \
+./scripts/docker-build-run.sh
+```
+
 ## Configuration
 
-The data root follows `NAKAMA_CONFIG_DIR` when set. By default it is `/nakama/data` in the container (mapped to your Docker volume).
+The data root follows `NAKAMA_CONFIG_DIR` when set. If you set it, use an
+absolute path. Nakama rejects relative paths because they depend on the process
+working directory and can break profile isolation. The default inside the
+container is `/nakama/data`, which maps to the `nakama-data` volume. The build
+helper always mounts its data volume at `/nakama/data`.
 
 On first run, complete the setup wizard in the browser and add your LLM provider. See [Providers](/providers) and [First-time setup](/first-time-setup).
 
@@ -68,6 +90,14 @@ Use readiness checks to keep traffic away from an unavailable database, and requ
 - HTTP responses include `X-Request-Id`. Nakama honors incoming IDs up to 255 characters or generates one. Response logs include this ID, method, status, and duration; `debug` also logs request start. URLs, request bodies, and credentials are not included in these HTTP logs. Streaming durations measure response setup, not the whole stream.
 - Use `/healthz` for liveness and `/readyz` for readiness on port 4310. Readiness returns 200 when the active connection can read the migrated database, or 503 when unavailable. It does not track restore progress and can remain ready while the old connection is still usable. Neither probe needs login or checks external providers or worker connectivity. The existing `/health` behavior is unchanged.
 - Set `NAKAMA_METRICS=true` to enable `/metrics`; otherwise it returns 404. It serves Prometheus-format HTTP response and server-error counters, which reset on process restart. Nakama sends nothing to an external collector. The endpoint needs no login and uses the same listener as the dashboard: restrict access through your network or reverse proxy before enabling it.
+
+### HTTPS and session cookies
+
+On HTTPS, the session and CSRF cookies are issued as `__Host-nakama_session` and `__Host-nakama_csrf`. Browsers bind those to the exact host, so a sibling host under the same parent domain cannot plant or overwrite a session.
+
+- A proxy that terminates TLS must send `X-Forwarded-Proto: https`, otherwise Nakama treats the request as plain HTTP, issues the unprefixed `nakama_session` and `nakama_csrf` cookies, and loses the host binding.
+- Unprefixed cookies are ignored on HTTPS, so the first sign-in after upgrading happens once more. Signing in again reissues the host-bound pair and clears the old cookies.
+- Plain HTTP deployments keep the unprefixed cookies, because browsers discard `Secure` cookies on `http://` origins.
 
 ### First-boot seed (optional)
 
@@ -92,12 +122,22 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data \
 
 ## Reset a local Docker install
 
-To remove the container, volume, and image and start fresh:
+To remove the default local resources and start fresh:
 
 ```bash
 ./scripts/docker-destroy.sh
 ./scripts/docker-build-run.sh
 ```
+
+The reset script removes the container named `nakama`, every container that
+publishes port `4310` (including unrelated containers), the `nakama-data` and
+`nakama-config` volumes, and the local image named `nakama`. Stop any unrelated
+containers before running it if you still need them.
+
+The script does not remove the cached
+`ghcr.io/ahmadrosid/nakama:latest` image. It also uses the default names, so
+custom names set through the build helper can remain unless you remove them
+yourself.
 
 ## Optional: CloakBrowser with agent-browser
 

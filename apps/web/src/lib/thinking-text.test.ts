@@ -16,10 +16,22 @@ describe("splitThinkingLines", () => {
   test("splits long prose into sentences", () => {
     const text =
       "First sentence here. Second sentence follows. Third sentence closes the thought.";
+
     expect(splitThinkingLines(text)).toEqual([
       "First sentence here.",
       "Second sentence follows.",
       "Third sentence closes the thought.",
+    ]);
+  });
+
+  test("shows adjacent bold headings as separate plain text steps", () => {
+    expect(
+      splitThinkingLines(
+        "**Synthesizing key lessons summary****Summarizing growth and focus lessons**"
+      )
+    ).toEqual([
+      "Synthesizing key lessons summary",
+      "Summarizing growth and focus lessons",
     ]);
   });
 });

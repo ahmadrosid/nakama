@@ -45,7 +45,13 @@ export function FilesSearchRow({
       <Select
         onValueChange={(value) => {
           if (value != null) {
-            onTypeFilterChange(value as ArtifactTypeFilter);
+            const selectedFilter = typeOptions.find(
+              (option) => option === value
+            );
+
+            if (selectedFilter) {
+              onTypeFilterChange(selectedFilter);
+            }
           }
         }}
         value={typeFilter}

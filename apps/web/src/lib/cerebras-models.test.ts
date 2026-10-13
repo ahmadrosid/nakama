@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  cerebrasPricingPerMillion,
   normalizeCerebrasModel,
   normalizeCerebrasModels,
 } from "./cerebras-models";
@@ -38,20 +37,6 @@ const fixture = {
   ],
 };
 
-describe("cerebrasPricingPerMillion", () => {
-  test("converts per-token API pricing to dollars per million tokens", () => {
-    expect(
-      cerebrasPricingPerMillion({
-        completion: "0.00000075",
-        prompt: "0.00000035",
-      })
-    ).toEqual({
-      inputPerMillionUsd: 0.35,
-      outputPerMillionUsd: 0.75,
-    });
-  });
-});
-
 describe("normalizeCerebrasModels", () => {
   test("maps capabilities.reasoning and vision", () => {
     const rows = normalizeCerebrasModels(fixture);
@@ -60,6 +45,8 @@ describe("normalizeCerebrasModels", () => {
 
     expect(gpt?.reasoning).toBe(true);
     expect(gpt?.vision).toBe(false);
+    expect(gpt?.inputPerMillionUsd).toBe(0.35);
+    expect(gpt?.outputPerMillionUsd).toBe(0.75);
     expect(gemma?.reasoning).toBe(true);
     expect(gemma?.vision).toBe(true);
   });

@@ -14,7 +14,7 @@ import {
 import type { ReactNode } from "react";
 import { CatalogProviderModelFields } from "@/components/CatalogProviderModelFields";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
-import type { CatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
+import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
 import { ShortlistBrowseProviderModelFields } from "@/components/ShortlistBrowseProviderModelFields";
 import {
@@ -83,6 +83,35 @@ function providerModelCountLabel(modelCount: number): string {
   return modelCount === 1 ? "1 model" : `${modelCount} models`;
 }
 
+function compatibleRemoteProvider(
+  card: ReturnType<typeof useProviderInstanceCard>
+): "ollama" | "netra" | "openai_compatible" {
+  if (card.isOllama) {
+    return "ollama";
+  }
+
+  if (card.providerType === "netra") {
+    return "netra";
+  }
+
+  return "openai_compatible";
+}
+
+function providerKeyActionLabel(
+  card: ReturnType<typeof useProviderInstanceCard>,
+  hasApiKey: boolean
+): string {
+  if (card.isXaiOAuth) {
+    return hasApiKey ? "Reconnect Grok" : "Connect Grok";
+  }
+
+  if (card.isChatgpt) {
+    return hasApiKey ? "Reconnect ChatGPT" : "Connect ChatGPT";
+  }
+
+  return hasApiKey ? "Update key" : "Add key";
+}
+
 function ProviderInstanceTableRow({
   instance,
   card,
@@ -127,26 +156,18 @@ function ProviderInstanceTableRow({
           ) : null}
           {canManage ? (
             <ProviderActionButton
-              label="Manage models"
+              label={
+                card.isOpenRouter
+                  ? "Manage models and routing"
+                  : "Manage models"
+              }
               onClick={card.openManage}
             >
               <ListViewIcon className="size-3.5" />
             </ProviderActionButton>
           ) : null}
           <ProviderActionButton
-            label={
-              card.isXaiOAuth
-                ? instance.hasApiKey
-                  ? "Reconnect Grok"
-                  : "Connect Grok"
-                : card.isChatgpt
-                  ? instance.hasApiKey
-                    ? "Reconnect ChatGPT"
-                    : "Connect ChatGPT"
-                  : instance.hasApiKey
-                    ? "Update key"
-                    : "Add key"
-            }
+            label={providerKeyActionLabel(card, instance.hasApiKey)}
             onClick={() => card.setReplaceKeyOpen(true)}
           >
             <Key01Icon className="size-3.5" />
@@ -185,6 +206,7 @@ function ProviderManageModelsFields({
           disabled={card.busy}
           displayName={instance.label}
           displayNameError={null}
+          hideIdentity={card.providerType === "netra"}
           hostMode={instance.hostMode ?? undefined}
           identityReadOnly
           modelsError={null}
@@ -192,7 +214,7 @@ function ProviderManageModelsFields({
           onCustomModelsChange={card.handleManageModelsChange}
           onDisplayNameChange={() => {}}
           providerInstanceId={instance.id}
-          remoteProvider={card.isOllama ? "ollama" : "openai_compatible"}
+          remoteProvider={compatibleRemoteProvider(card)}
         />
       ) : null}
       {card.isOpenRouter ? (
@@ -201,6 +223,8 @@ function ProviderManageModelsFields({
           disabled={card.busy}
           modelsError={card.dialogError}
           onCustomModelsChange={card.handleManageModelsChange}
+          onRoutingChange={card.setOpenRouterRouting}
+          routing={card.openRouterRouting}
         />
       ) : null}
       {isShortlistBrowseProvider(card.providerType) ? (
@@ -215,14 +239,14 @@ function ProviderManageModelsFields({
           }
         />
       ) : null}
-      {card.isCatalogShortlist ? (
+      {isCatalogShortlistProvider(card.providerType) ? (
         <CatalogProviderModelFields
           catalogModels={card.catalogModelsForType}
           customModels={card.manageModels}
           disabled={card.busy}
           modelsError={card.dialogError}
           onCustomModelsChange={card.handleManageModelsChange}
-          provider={card.providerType as CatalogShortlistProvider}
+          provider={card.providerType}
           providerInstanceId={instance.id}
         />
       ) : null}
@@ -277,6 +301,7 @@ function ProviderInstanceCardDialogs({
           dialogError={card.dialogError}
           editBaseUrl={card.editBaseUrl}
           editLabel={card.editLabel}
+          hideIdentity={card.providerType === "netra"}
           hostMode={instance.hostMode ?? undefined}
           manageModels={card.editManageModels}
           onBaseUrlChange={card.setEditBaseUrl}
@@ -284,10 +309,14 @@ function ProviderInstanceCardDialogs({
           onDisplayNameChange={card.setEditLabel}
           onOpenChange={card.setEditOpen}
           onSave={() => void card.saveCompatible()}
-          onWireApiChange={card.isOllama ? undefined : card.setEditWireApi}
+          onWireApiChange={
+            card.isOllama || card.providerType === "netra"
+              ? undefined
+              : card.setEditWireApi
+          }
           open={card.editOpen}
           providerInstanceId={instance.id}
-          remoteProvider={card.isOllama ? "ollama" : "openai_compatible"}
+          remoteProvider={compatibleRemoteProvider(card)}
           wireApi={card.editWireApi}
         />
       ) : null}
@@ -299,6 +328,9 @@ function ProviderInstanceCardDialogs({
           onOpenChange={card.setManageOpen}
           onSave={() => void card.saveManageModels()}
           open={card.manageOpen}
+          title={
+            card.isOpenRouter ? "Manage models and routing" : "Manage models"
+          }
         >
           <ProviderManageModelsFields card={card} instance={instance} />
         </ProviderManageModelsDialog>
@@ -332,6 +364,7 @@ export function ProviderInstanceCard({
     onError,
     onUpdate,
   });
+
   const canManage = canManageProviderModels(card);
 
   return (

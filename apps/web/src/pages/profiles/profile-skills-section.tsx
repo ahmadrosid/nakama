@@ -4,16 +4,15 @@ import type {
   SkillUsageSummary,
 } from "@nakama/core/contract";
 import { BUNDLED_SKILL_NAMES } from "@nakama/core/skills/bundled-names";
-import { BASH_TOOL_ID } from "@nakama/core/tools/protected";
 import { Button } from "@nakama/ui/button";
 import { Delete02Icon } from "hugeicons-react";
 import { useMemo } from "react";
-import { SkillAssignPicker } from "@/components/SkillAssignPicker";
 import { useAuth } from "@/context/use-auth";
 import { formatSessionRelativeTime } from "@/lib/chat-history";
 import type { RemoveAssignmentTarget } from "@/pages/profiles/profiles-page.shared";
 
 const bundledSkillNames = new Set<string>(BUNDLED_SKILL_NAMES);
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const EMPTY_SKILL_USAGE: SkillUsageSummary = {
@@ -47,7 +46,9 @@ function formatSkillUsageHint(skill: SkillSummary): string | null {
   const lastLabel = usage.lastUsedAt
     ? formatSessionRelativeTime(usage.lastUsedAt)
     : "never";
+
   const useLabel = usage.useCount === 1 ? "use" : "uses";
+
   return `Last matched ${lastLabel} · ${usage.useCount} ${useLabel}`;
 }
 
@@ -70,6 +71,7 @@ function isSkillUnused(skill: SkillSummary, staleAfterDays: number): boolean {
 function compareAssignedSkills(a: SkillSummary, b: SkillSummary): number {
   const aBundled = isBundledSkill(a);
   const bBundled = isBundledSkill(b);
+
   if (aBundled !== bBundled) {
     return aBundled ? 1 : -1;
   }
@@ -164,25 +166,13 @@ function SkillGroupHeader({ label }: { label: string }) {
 function ProfileSkillsToolbar({
   assignedCount,
   busy,
-  allSkills,
-  assignedSkillIds,
-  bashAssigned,
   onCreateOpen,
-  onInstallOpen,
-  onAssign,
-  onDelete,
-  onAssignBash,
+  onAddOpen,
 }: {
   assignedCount: number;
   busy: boolean;
-  allSkills: SkillSummary[];
-  assignedSkillIds: ReadonlySet<string>;
-  bashAssigned: boolean;
   onCreateOpen: () => void;
-  onInstallOpen: () => void;
-  onAssign: (skillId: string) => void;
-  onDelete: (skillId: string) => void;
-  onAssignBash: () => void | Promise<void>;
+  onAddOpen: () => void;
 }) {
   return (
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -204,23 +194,13 @@ function ProfileSkillsToolbar({
         </Button>
         <Button
           disabled={busy}
-          onClick={onInstallOpen}
+          onClick={onAddOpen}
           size="sm"
           type="button"
           variant="outline"
         >
-          Install from GitHub
+          Add skill
         </Button>
-        <SkillAssignPicker
-          assignedSkillIds={assignedSkillIds}
-          bashAssigned={bashAssigned}
-          buttonLabel="Add skills"
-          disabled={busy}
-          onAssign={onAssign}
-          onAssignBash={onAssignBash}
-          onDelete={onDelete}
-          skills={allSkills}
-        />
       </div>
     </div>
   );
@@ -336,37 +316,32 @@ export function ProfileSkillsSection({
   detail,
   busy,
   allSkills,
-  assignedSkillIds,
   onCreateOpen,
-  onInstallOpen,
-  onAssign,
-  onDelete,
+  onAddOpen,
   onViewDetail,
   onRemove,
-  onAssignBash,
 }: {
   detail: ProfileDetail;
   busy: boolean;
   allSkills: SkillSummary[];
-  assignedSkillIds: ReadonlySet<string>;
   onCreateOpen: () => void;
-  onInstallOpen: () => void;
-  onAssign: (skillId: string) => void;
-  onDelete: (skillId: string) => void;
+  onAddOpen: () => void;
   onViewDetail: (skillId: string) => void;
   onRemove: (target: RemoveAssignmentTarget) => void;
-  onAssignBash: () => void | Promise<void>;
 }) {
   const { activeOrg } = useAuth();
   const staleAfterDays = activeOrg?.skillsCuratorStaleAfterDays ?? 30;
+
   const sortedSkills = useMemo(
     () => detail.skills.toSorted(compareAssignedSkills),
     [detail.skills]
   );
+
   const customSkills = useMemo(
     () => sortedSkills.filter((skill) => !isBundledSkill(skill)),
     [sortedSkills]
   );
+
   const bundledSkills = useMemo(
     () => sortedSkills.filter((skill) => isBundledSkill(skill)),
     [sortedSkills]
@@ -375,16 +350,10 @@ export function ProfileSkillsSection({
   return (
     <div className="pt-5">
       <ProfileSkillsToolbar
-        allSkills={allSkills}
         assignedCount={detail.skills.length}
-        assignedSkillIds={assignedSkillIds}
-        bashAssigned={detail.tools.some((tool) => tool.id === BASH_TOOL_ID)}
         busy={busy}
-        onAssign={onAssign}
-        onAssignBash={onAssignBash}
+        onAddOpen={onAddOpen}
         onCreateOpen={onCreateOpen}
-        onDelete={onDelete}
-        onInstallOpen={onInstallOpen}
       />
       <ProfileSkillsContent
         allSkillsEmpty={allSkills.length === 0}

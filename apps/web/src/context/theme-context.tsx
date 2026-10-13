@@ -19,9 +19,11 @@ const THEME_CYCLE: Theme[] = ["light", "dark", "system"];
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(getInitialTheme);
+
   const [resolvedTheme, setResolvedTheme] = useState(() =>
     resolveTheme(getInitialTheme())
   );
+
   const themeRef = useRef(theme);
 
   useEffect(() => {
@@ -45,13 +47,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
     const handleChange = () => {
       if (themeRef.current !== "system") {
         return;
       }
+
       syncTheme("system");
     };
+
     mediaQuery.addEventListener("change", handleChange);
+
     return () => mediaQuery.removeEventListener("change", handleChange);
   }, [syncTheme]);
 
@@ -62,6 +68,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const toggleTheme = useCallback(() => {
     setThemeState((current) => {
       const index = THEME_CYCLE.indexOf(current);
+
       return THEME_CYCLE[(index + 1) % THEME_CYCLE.length] ?? "dark";
     });
   }, []);

@@ -81,6 +81,7 @@ export function McpArgsEditor({
   function handleDraftChange(value: string) {
     if (!value.includes(",")) {
       setDraft(value);
+
       return;
     }
 
@@ -107,6 +108,7 @@ export function McpArgsEditor({
     if (event.key === "Enter" || event.key === ",") {
       event.preventDefault();
       addArg(draft);
+
       return;
     }
 

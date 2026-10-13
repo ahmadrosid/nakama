@@ -33,6 +33,7 @@ export function defaultModelForProvider(
   provider: SelectedProvider
 ): string {
   const providerModels = filterModelsByProvider(models, provider);
+
   return (
     providerModels.find((model) => model.default)?.id ??
     providerModels[0]?.id ??
@@ -50,6 +51,7 @@ export function formatProviderLabel(
     provider === "openrouter" ||
     provider === "gemini" ||
     provider === "deepseek" ||
+    provider === "netra" ||
     provider === "doubao" ||
     provider === "mistral" ||
     provider === "perplexity" ||
@@ -70,6 +72,7 @@ export function formatProviderLabel(
     provider === "xai" ||
     provider === "together" ||
     provider === "xiaomi" ||
+    provider === "meta" ||
     provider === "qwen" ||
     provider === "qwen_cn" ||
     provider === "vercel_ai_gateway"
@@ -89,9 +92,11 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
     { id: "openrouter", label: "OpenRouter" },
     { id: "gemini", label: "Gemini" },
     { id: "deepseek", label: "DeepSeek" },
+    { id: "netra", label: "Netra Runtime" },
     { id: "doubao", label: "Doubao (Volcengine)" },
     { id: "together", label: "Together AI" },
     { id: "xiaomi", label: "Xiaomi MiMo" },
+    { id: "meta", label: "Meta Model API" },
     { id: "vercel_ai_gateway", label: "Vercel AI Gateway" },
     { id: "mistral", label: "Mistral" },
     { id: "qwen", label: "Qwen (DashScope)" },
@@ -113,9 +118,7 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
   ];
 
 /** Custom OpenAI-compatible endpoints can be added more than once; builtins are one instance each. */
-export function allowsMultipleProviderInstances(
-  provider: SelectedProvider
-): boolean {
+function allowsMultipleProviderInstances(provider: SelectedProvider): boolean {
   return provider === "openai_compatible" || provider === "ollama";
 }
 
@@ -150,20 +153,24 @@ export function isOpenCodeZenBaseUrl(
   baseUrl: string | null | undefined
 ): boolean {
   const trimmed = baseUrl?.trim();
+
   if (!trimmed) {
     return false;
   }
 
   try {
     const url = new URL(trimmed);
+
     if (url.hostname.toLowerCase() !== "opencode.ai") {
       return false;
     }
 
     const path = url.pathname.toLowerCase();
+
     return /\/zen(\/|$)/.test(path) && !/\/zen\/go(\/|$)/.test(path);
   } catch {
     const normalized = trimmed.toLowerCase();
+
     return (
       normalized.includes("opencode.ai/zen") &&
       !normalized.includes("opencode.ai/zen/go")
@@ -277,6 +284,7 @@ export function validateBaseUrlInput(baseUrl: string): string | null {
 
   try {
     const parsed = new URL(trimmed);
+
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       return "Base URL must use http or https.";
     }
@@ -303,6 +311,7 @@ export function validateCustomModelsInput(
   for (const row of valid) {
     const hasInput = row.inputPerMillionUsd !== undefined;
     const hasOutput = row.outputPerMillionUsd !== undefined;
+
     if (hasInput !== hasOutput) {
       return `Model "${row.id.trim()}" must set both input and output $/1M rates, or leave both blank.`;
     }
@@ -319,12 +328,14 @@ export function validateOpenRouterModelsInput(
   }>
 ): string | null {
   const listError = validateCustomModelsInput(models);
+
   if (listError) {
     return listError;
   }
 
   for (const row of models) {
     const slugError = validateCustomOpenRouterModel(row.id);
+
     if (slugError) {
       return slugError;
     }
@@ -351,7 +362,7 @@ export function defaultOllamaSetupBaseUrl(hostMode: OllamaHostMode): string {
 
 const OPENCODE_GO_MODEL_ID_PATTERN = /^opencode-go\/[\w.-]+$/;
 
-export function validateOpenCodeGoModelId(model: string): string | null {
+function validateOpenCodeGoModelId(model: string): string | null {
   const trimmed = model.trim();
 
   if (!trimmed) {
@@ -369,12 +380,14 @@ export function validateOpenCodeGoModelsInput(
   models: Array<{ id: string }>
 ): string | null {
   const listError = validateCustomModelsInput(models);
+
   if (listError) {
     return listError;
   }
 
   for (const row of models) {
     const idError = validateOpenCodeGoModelId(row.id);
+
     if (idError) {
       return idError;
     }
@@ -412,28 +425,38 @@ export function modelsFromShortlistRows(
 
   for (const row of rows) {
     const id = row.id.trim();
+
     if (!id) {
       continue;
     }
 
-    models.push({
+    const model: ProviderModelOption = {
       id,
       name: row.name?.trim() || id,
       provider,
-      ...(row.default ? { default: true } : {}),
-      ...(row.supportsThinking === undefined
-        ? {}
-        : { supportsThinking: row.supportsThinking }),
-      ...(row.supportsVision === undefined
-        ? {}
-        : { supportsVision: row.supportsVision }),
-      ...(row.inputPerMillionUsd === undefined
-        ? {}
-        : { inputPerMillionUsd: row.inputPerMillionUsd }),
-      ...(row.outputPerMillionUsd === undefined
-        ? {}
-        : { outputPerMillionUsd: row.outputPerMillionUsd }),
-    });
+    };
+
+    if (row.default) {
+      model.default = true;
+    }
+
+    if (row.supportsThinking !== undefined) {
+      model.supportsThinking = row.supportsThinking;
+    }
+
+    if (row.supportsVision !== undefined) {
+      model.supportsVision = row.supportsVision;
+    }
+
+    if (row.inputPerMillionUsd !== undefined) {
+      model.inputPerMillionUsd = row.inputPerMillionUsd;
+    }
+
+    if (row.outputPerMillionUsd !== undefined) {
+      model.outputPerMillionUsd = row.outputPerMillionUsd;
+    }
+
+    models.push(model);
   }
 
   return models;
@@ -452,22 +475,30 @@ export function modelsFromOpenRouterRows(
 
   for (const row of rows) {
     const id = row.id.trim();
+
     if (!id) {
       continue;
     }
 
-    models.push({
+    const model: ProviderModelOption = {
       id,
       name: row.name?.trim() || id,
-      provider: "openrouter" as const,
-      ...(row.default ? { default: true } : {}),
-      ...(row.inputPerMillionUsd === undefined
-        ? {}
-        : { inputPerMillionUsd: row.inputPerMillionUsd }),
-      ...(row.outputPerMillionUsd === undefined
-        ? {}
-        : { outputPerMillionUsd: row.outputPerMillionUsd }),
-    });
+      provider: "openrouter",
+    };
+
+    if (row.default) {
+      model.default = true;
+    }
+
+    if (row.inputPerMillionUsd !== undefined) {
+      model.inputPerMillionUsd = row.inputPerMillionUsd;
+    }
+
+    if (row.outputPerMillionUsd !== undefined) {
+      model.outputPerMillionUsd = row.outputPerMillionUsd;
+    }
+
+    models.push(model);
   }
 
   return models;
@@ -481,12 +512,15 @@ export function appendOpenRouterModelRow(
 ): CustomModelEntry[] {
   // Spread rather than copying known keys, so anything the browse row carries
   // (pricing, context window) survives instead of being silently dropped.
-  const base = rows
-    .filter((row) => row.id.trim())
-    .map(({ default: _wasDefault, ...row }) => ({
-      ...row,
-      name: row.name ?? row.id,
-    }));
+  const base: CustomModelEntry[] = [];
+
+  for (const { default: _wasDefault, ...row } of rows) {
+    if (!row.id.trim()) {
+      continue;
+    }
+
+    base.push({ ...row, name: row.name ?? row.id });
+  }
 
   if (base.some((row) => row.id === modelId)) {
     return base.map((row) => ({ ...row, default: row.id === modelId }));
@@ -509,7 +543,7 @@ export function resolveOpenRouterSetupModel(
   return valid.find((row) => row.default)?.id ?? valid[0]?.id ?? "";
 }
 
-export function validateCustomOpenRouterModel(model: string): string | null {
+function validateCustomOpenRouterModel(model: string): string | null {
   const trimmed = model.trim();
 
   if (!trimmed) {
@@ -542,12 +576,14 @@ export function buildCreateProviderRequest(options: {
   baseUrl?: string;
   hostMode?: OllamaHostMode;
   customModels?: ConfigureProviderRequest["customModels"];
+  openRouterRouting?: CreateProviderRequest["openRouterRouting"];
   wireApi?: WireApi;
   chatgptOAuth?: CreateProviderRequest["chatgptOAuth"];
   xaiOAuth?: CreateProviderRequest["xaiOAuth"];
 }): CreateProviderRequest {
   const customModels =
     options.provider === "openai_compatible" ||
+    options.provider === "netra" ||
     ([
       "openrouter",
       "xai_oauth",
@@ -564,15 +600,31 @@ export function buildCreateProviderRequest(options: {
   return {
     apiKey: options.apiKey,
     type: options.provider,
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
     ...(options.xaiOAuth ? { xaiOAuth: options.xaiOAuth } : {}),
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
     ...(options.chatgptOAuth ? { chatgptOAuth: options.chatgptOAuth } : {}),
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
     ...(options.model ? { model: options.model } : {}),
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
     ...(options.displayName?.trim()
       ? { label: options.displayName.trim() }
       : {}),
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
     ...(options.baseUrl?.trim() ? { baseUrl: options.baseUrl.trim() } : {}),
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
     ...(options.hostMode ? { hostMode: options.hostMode } : {}),
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
+    ...(options.provider === "openrouter" &&
+    options.openRouterRouting &&
+    Object.values(options.openRouterRouting).some(
+      (value) => value !== undefined
+    )
+      ? { openRouterRouting: options.openRouterRouting }
+      : {}),
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
     ...(customModels ? { customModels } : {}),
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
     ...(options.wireApi === "responses" ? { wireApi: options.wireApi } : {}),
   };
 }
@@ -621,8 +673,10 @@ export function groupModelsByProvider(models: ProviderModelOption[]): Array<{
 
   for (const model of models) {
     const providerId = model.providerId ?? model.provider;
+
     const providerLabel =
       model.providerLabel ?? formatProviderLabel(model.provider);
+
     const existing = groups.get(providerId);
 
     if (existing) {
@@ -640,7 +694,7 @@ export function groupModelsByProvider(models: ProviderModelOption[]): Array<{
   return [...groups.values()];
 }
 
-export const UNSET_MODEL_VALUE = "";
+const UNSET_MODEL_VALUE = "";
 
 export function profileModelSelectionValue(
   modelId: string | null,
@@ -693,6 +747,7 @@ export function knownModelSelection(
 
   const decoded = decodeModelSelection(selection);
   const modelId = decoded?.modelId ?? selection;
+
   const pinnedProvider =
     decoded && decoded.providerId !== "__unknown__" ? decoded.providerId : null;
 
@@ -720,6 +775,7 @@ export function profileModelLabel(
     const group = groups.find(
       (entry) => entry.providerId === decoded.providerId
     );
+
     const match = group?.models.find((model) => model.id === resolvedModelId);
 
     if (match) {
@@ -729,6 +785,7 @@ export function profileModelLabel(
 
   for (const group of groups) {
     const match = group.models.find((model) => model.id === resolvedModelId);
+
     if (match) {
       return match.name;
     }
@@ -739,13 +796,21 @@ export function profileModelLabel(
 
 export function effectiveProfileModelSelection(
   profileModel: string | null | undefined,
-  groups: ReturnType<typeof groupModelsByProvider>
+  groups: ReturnType<typeof groupModelsByProvider>,
+  defaultProviderId?: string | null
 ): string | null {
-  if (!profileModel) {
-    return null;
+  if (profileModel) {
+    return profileModelSelectionValue(profileModel, groups);
   }
 
-  return profileModelSelectionValue(profileModel, groups);
+  const active = groups.find((group) => group.providerId === defaultProviderId);
+
+  const model =
+    active?.models.find((entry) => entry.default) ?? active?.models[0];
+
+  return model && active
+    ? encodeModelSelection(active.providerId, model.id)
+    : null;
 }
 
 export function resolveModelThinkingSupport(
@@ -764,7 +829,9 @@ export function resolveModelThinkingSupport(
       const group = groups.find(
         (entry) => entry.providerId === decoded.providerId
       );
+
       const match = group?.models.find((model) => model.id === resolvedModelId);
+
       if (match) {
         return match;
       }
@@ -772,6 +839,7 @@ export function resolveModelThinkingSupport(
 
     for (const group of groups) {
       const match = group.models.find((model) => model.id === resolvedModelId);
+
       if (match) {
         return match;
       }
@@ -779,6 +847,7 @@ export function resolveModelThinkingSupport(
   };
 
   const model = findModel();
+
   if (!model) {
     return;
   }
@@ -790,6 +859,7 @@ export function resolveModelThinkingSupport(
     model.provider === "doubao" ||
     model.provider === "together" ||
     model.provider === "xiaomi" ||
+    model.provider === "meta" ||
     model.provider === "vercel_ai_gateway" ||
     model.provider === "mistral" ||
     model.provider === "qwen" ||
@@ -821,7 +891,9 @@ export function resolveModelVisionSupport(
       const group = groups.find(
         (entry) => entry.providerId === decoded.providerId
       );
+
       const match = group?.models.find((model) => model.id === resolvedModelId);
+
       if (match) {
         return match;
       }
@@ -829,6 +901,7 @@ export function resolveModelVisionSupport(
 
     for (const group of groups) {
       const match = group.models.find((model) => model.id === resolvedModelId);
+
       if (match) {
         return match;
       }
@@ -836,6 +909,7 @@ export function resolveModelVisionSupport(
   };
 
   const model = findModel();
+
   if (!model) {
     return;
   }
@@ -847,6 +921,7 @@ export function resolveModelVisionSupport(
     model.provider === "doubao" ||
     model.provider === "together" ||
     model.provider === "xiaomi" ||
+    model.provider === "meta" ||
     model.provider === "vercel_ai_gateway" ||
     model.provider === "mistral" ||
     model.provider === "qwen" ||
@@ -913,6 +988,7 @@ export function modelsFromCustomRows(
 
   for (const row of rows) {
     const id = row.id.trim();
+
     if (!id) {
       continue;
     }
@@ -921,6 +997,7 @@ export function modelsFromCustomRows(
       id,
       name: row.name?.trim() || id,
       provider: "openai_compatible" as const,
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
       ...(row.default ? { default: true } : {}),
     });
   }

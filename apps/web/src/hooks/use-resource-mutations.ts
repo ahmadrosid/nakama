@@ -1,6 +1,7 @@
 import { NakamaApiError } from "@nakama/core/api-error";
 import type {
   CreateProfileRequest,
+  CreateProfileWithSuperBotRequest,
   DocumentAttachment,
   ImageAttachment,
   KnowledgeBaseDuplicateAction,
@@ -24,6 +25,7 @@ import { useRunningTurnsStore } from "@/context/running-turns-store";
 import { useAuth } from "@/context/use-auth";
 import { HISTORY_SESSION_CHANNELS } from "@/lib/chat-history";
 import { client } from "@/lib/client";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 import { sessionListPollInterval, withFirstPage } from "@/lib/session-list";
 
@@ -50,17 +52,16 @@ export function useDeleteToolMutation() {
 
   return useMutation({
     mutationFn: (toolId: string) => client.deleteTool(toolId),
-    onSuccess: async (_data, toolId) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.tools.all }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.tools.detail(toolId),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.tools.source(toolId),
-        }),
-      ]);
-    },
+    onSuccess: (_data, toolId) =>
+      invalidateQueries(
+        queryClient,
+        queryKeys.tools.all,
+        queryKeys.tools.detail(toolId),
+        queryKeys.tools.source(toolId),
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
+      ),
   });
 }
 
@@ -69,14 +70,31 @@ export function useCreateProfileMutation() {
 
   return useMutation({
     mutationFn: (input: CreateProfileRequest) => client.createProfile(input),
-    onSuccess: async (data) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.soul.profile(data.profile.id),
-        }),
-      ]);
-    },
+    onSuccess: (data) =>
+      invalidateQueries(
+        queryClient,
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"],
+        queryKeys.soul.profile(data.profile.id)
+      ),
+  });
+}
+
+export function useCreateProfileWithSuperBotMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: CreateProfileWithSuperBotRequest) =>
+      client.createProfileWithSuperBot(input),
+    onSuccess: (data) =>
+      invalidateQueries(
+        queryClient,
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"],
+        queryKeys.soul.profile(data.profile.id)
+      ),
   });
 }
 
@@ -91,14 +109,8 @@ export function useUpdateProfileMutation() {
       profileId: string;
       input: UpdateProfileRequest;
     }) => client.updateProfile(profileId, input),
-    onSuccess: async (_data, variables) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.profiles.detail(variables.profileId),
-        }),
-      ]);
-    },
+    onSuccess: (_data, variables) =>
+      invalidateProfileQueries(queryClient, variables.profileId),
   });
 }
 
@@ -114,21 +126,17 @@ export function useUpdateSessionMutation() {
       sessionId: string;
       input: UpdateSessionRequest;
     }) => client.updateSession(sessionId, input),
-    onSuccess: async (_data, variables) => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.sessions(variables.profileId),
-      });
-    },
+    onSuccess: (_data, variables) =>
+      invalidateQueries(queryClient, queryKeys.sessions(variables.profileId)),
   });
 }
+
 export function useDeleteSessionMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (sessionId: string) => client.deleteSession(sessionId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["sessions"] });
-    },
+    onSuccess: () => invalidateQueries(queryClient, ["sessions"]),
   });
 }
 
@@ -137,14 +145,14 @@ export function useCloneProfileMutation() {
 
   return useMutation({
     mutationFn: (profileId: string) => client.cloneProfile(profileId),
-    onSuccess: async (data) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.soul.profile(data.profile.id),
-        }),
-      ]);
-    },
+    onSuccess: (data) =>
+      invalidateQueries(
+        queryClient,
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"],
+        queryKeys.soul.profile(data.profile.id)
+      ),
   });
 }
 
@@ -153,9 +161,8 @@ export function useDeleteProfileMutation() {
 
   return useMutation({
     mutationFn: (profileId: string) => client.deleteProfile(profileId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all });
-    },
+    onSuccess: (_data, profileId) =>
+      invalidateProfileQueries(queryClient, profileId),
   });
 }
 
@@ -163,12 +170,13 @@ async function invalidateProfileQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   profileId: string
 ) {
-  await Promise.all([
-    queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
-    queryClient.invalidateQueries({
-      queryKey: queryKeys.profiles.detail(profileId),
-    }),
-  ]);
+  await invalidateQueries(
+    queryClient,
+    queryKeys.profiles.all,
+    queryKeys.profiles.detail(profileId),
+    ["organizationOverview"],
+    ["organizationPublicationCatalog"]
+  );
 }
 
 export function useUploadProfileAvatarMutation() {
@@ -182,9 +190,8 @@ export function useUploadProfileAvatarMutation() {
       profileId: string;
       attachment: ImageAttachment;
     }) => client.uploadProfileAvatar(profileId, attachment),
-    onSuccess: async (_data, variables) => {
-      await invalidateProfileQueries(queryClient, variables.profileId);
-    },
+    onSuccess: (_data, variables) =>
+      invalidateProfileQueries(queryClient, variables.profileId),
   });
 }
 
@@ -193,9 +200,8 @@ export function useDeleteProfileAvatarMutation() {
 
   return useMutation({
     mutationFn: (profileId: string) => client.deleteProfileAvatar(profileId),
-    onSuccess: async (_data, profileId) => {
-      await invalidateProfileQueries(queryClient, profileId);
-    },
+    onSuccess: (_data, profileId) =>
+      invalidateProfileQueries(queryClient, profileId),
   });
 }
 
@@ -215,19 +221,15 @@ export function useAssignToolMutation() {
           client.assignTool(profileId, { toolId: id })
         )
       );
+
       const failure = results.find((result) => result.status === "rejected");
+
       if (failure?.status === "rejected") {
         throw failure.reason;
       }
     },
-    onSettled: async (_data, _error, variables) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.profiles.detail(variables.profileId),
-        }),
-      ]);
-    },
+    onSettled: (_data, _error, variables) =>
+      invalidateProfileQueries(queryClient, variables.profileId),
   });
 }
 
@@ -247,19 +249,15 @@ export function useUnassignToolMutation() {
           client.unassignTool(profileId, id)
         )
       );
+
       const failure = results.find((result) => result.status === "rejected");
+
       if (failure?.status === "rejected") {
         throw failure.reason;
       }
     },
-    onSettled: async (_data, _error, variables) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.profiles.detail(variables.profileId),
-        }),
-      ]);
-    },
+    onSettled: (_data, _error, variables) =>
+      invalidateProfileQueries(queryClient, variables.profileId),
   });
 }
 
@@ -274,7 +272,13 @@ export function useCreateMcpServerMutation() {
         queryKeys.mcp.detail(data.server.id),
         data.server
       );
-      await queryClient.invalidateQueries({ queryKey: queryKeys.mcp.all });
+      await invalidateQueries(
+        queryClient,
+        queryKeys.mcp.all,
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
+      );
     },
   });
 }
@@ -292,7 +296,13 @@ export function useUpdateMcpServerMutation() {
     }) => client.updateMcpServer(serverId, request),
     onSuccess: async (data, { serverId }) => {
       queryClient.setQueryData(queryKeys.mcp.detail(serverId), data.server);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.mcp.all });
+      await invalidateQueries(
+        queryClient,
+        queryKeys.mcp.all,
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
+      );
     },
   });
 }
@@ -301,16 +311,17 @@ export function useDeleteMcpServerMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (serverId: string) => client.deleteMcpServer(serverId),
-    onSuccess: async (_data, serverId) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.mcp.all }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.mcp.detail(serverId),
-        }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
-      ]);
-    },
+    mutationFn: ({ serverId, force }: { serverId: string; force: boolean }) =>
+      client.deleteMcpServer(serverId, force),
+    onSuccess: (_data, { serverId }) =>
+      invalidateQueries(
+        queryClient,
+        queryKeys.mcp.all,
+        queryKeys.mcp.detail(serverId),
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
+      ),
   });
 }
 
@@ -321,7 +332,13 @@ export function useConnectMcpServerMutation() {
     mutationFn: (serverId: string) => client.connectMcpServer(serverId),
     onSuccess: async (data, serverId) => {
       queryClient.setQueryData(queryKeys.mcp.detail(serverId), data.server);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.mcp.all });
+      await invalidateQueries(
+        queryClient,
+        queryKeys.mcp.all,
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
+      );
     },
   });
 }
@@ -333,7 +350,13 @@ export function useSyncMcpServerMutation() {
     mutationFn: (serverId: string) => client.syncMcpServer(serverId),
     onSuccess: async (data, serverId) => {
       queryClient.setQueryData(queryKeys.mcp.detail(serverId), data.server);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.mcp.all });
+      await invalidateQueries(
+        queryClient,
+        queryKeys.mcp.all,
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
+      );
     },
   });
 }
@@ -349,14 +372,8 @@ export function useAssignMcpServerMutation() {
       profileId: string;
       serverId: string;
     }) => client.assignMcpServer(profileId, { serverId }),
-    onSuccess: async (_data, variables) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.profiles.detail(variables.profileId),
-        }),
-      ]);
-    },
+    onSuccess: (_data, variables) =>
+      invalidateProfileQueries(queryClient, variables.profileId),
   });
 }
 
@@ -371,14 +388,8 @@ export function useUnassignMcpServerMutation() {
       profileId: string;
       serverId: string;
     }) => client.unassignMcpServer(profileId, serverId),
-    onSuccess: async (_data, variables) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.profiles.detail(variables.profileId),
-        }),
-      ]);
-    },
+    onSuccess: (_data, variables) =>
+      invalidateProfileQueries(queryClient, variables.profileId),
   });
 }
 
@@ -388,9 +399,13 @@ export function useCreateSkillMutation() {
   return useMutation({
     mutationFn: (input: Parameters<typeof client.createSkill>[0]) =>
       client.createSkill(input),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.skills.all });
-    },
+    onSuccess: () =>
+      invalidateQueries(
+        queryClient,
+        queryKeys.skills.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
+      ),
   });
 }
 
@@ -400,15 +415,15 @@ export function useInstallSkillMutation() {
   return useMutation({
     mutationFn: (input: Parameters<typeof client.installSkill>[0]) =>
       client.installSkill(input),
-    onSuccess: async (_data, variables) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.skills.all }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.profiles.detail(variables.profileId),
-        }),
-      ]);
-    },
+    onSuccess: (_data, variables) =>
+      invalidateQueries(
+        queryClient,
+        queryKeys.skills.all,
+        queryKeys.profiles.all,
+        queryKeys.profiles.detail(variables.profileId),
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
+      ),
   });
 }
 
@@ -428,16 +443,23 @@ export function usePatchSkillMutation() {
       client.patchSkill(skillId, input, profileId ? { profileId } : undefined),
     onSuccess: async (data, variables) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.skills.all }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.skills.detail(variables.skillId),
-        }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
+        invalidateQueries(
+          queryClient,
+          ["organizationOverview"],
+          ["organizationPublicationCatalog"]
+        ),
+        invalidateQueries(queryClient, queryKeys.skills.all),
+        invalidateQueries(
+          queryClient,
+          queryKeys.skills.detail(variables.skillId)
+        ),
+        invalidateQueries(queryClient, queryKeys.profiles.all),
         ...(variables.profileId
           ? [
-              queryClient.invalidateQueries({
-                queryKey: queryKeys.profiles.detail(variables.profileId),
-              }),
+              invalidateQueries(
+                queryClient,
+                queryKeys.profiles.detail(variables.profileId)
+              ),
             ]
           : []),
       ]);
@@ -454,12 +476,14 @@ export function useDeleteSkillMutation() {
 
   return useMutation({
     mutationFn: (skillId: string) => client.deleteSkill(skillId),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.skills.all }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
-      ]);
-    },
+    onSuccess: () =>
+      invalidateQueries(
+        queryClient,
+        queryKeys.skills.all,
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
+      ),
   });
 }
 
@@ -474,14 +498,8 @@ export function useAssignSkillMutation() {
       profileId: string;
       skillId: string;
     }) => client.assignSkill(profileId, { skillId }),
-    onSuccess: async (_data, variables) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.profiles.detail(variables.profileId),
-        }),
-      ]);
-    },
+    onSuccess: (_data, variables) =>
+      invalidateProfileQueries(queryClient, variables.profileId),
   });
 }
 
@@ -496,14 +514,8 @@ export function useUnassignSkillMutation() {
       profileId: string;
       skillId: string;
     }) => client.unassignSkill(profileId, skillId),
-    onSuccess: async (_data, variables) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.profiles.detail(variables.profileId),
-        }),
-      ]);
-    },
+    onSuccess: (_data, variables) =>
+      invalidateProfileQueries(queryClient, variables.profileId),
   });
 }
 
@@ -532,6 +544,7 @@ export function useHistorySessionsQuery(profileId: string, search?: string) {
   const localTurn = runningSessionIds.length > 0;
   const runningSessionIdSet = new Set(runningSessionIds);
   const enabled = Boolean(profileId) && search !== "";
+
   const queryKey = search
     ? queryKeys.sessionSearch(profileId, search)
     : queryKeys.sessions(profileId);
@@ -540,6 +553,7 @@ export function useHistorySessionsQuery(profileId: string, search?: string) {
     enabled,
     getNextPageParam: (lastPage: ListSessionsResponse) =>
       lastPage.nextCursor ?? undefined,
+    // SAFETY: The enclosing parser checks the value before this conversion.
     initialPageParam: null as string | null,
     // Typing on keeps the previous results up; a first search starts empty.
     placeholderData: (previous, previousQuery) =>
@@ -555,23 +569,29 @@ export function useHistorySessionsQuery(profileId: string, search?: string) {
   const pollInterval = sessionListPollInterval(query.data?.pages[0]?.sessions, {
     localTurn,
   });
+
   useQuery({
     enabled: enabled && pollInterval !== false,
     queryFn: async () => {
       const head = await listSessionPage(profileId, null, search);
+
       const data =
         queryClient.getQueryData<
           InfiniteData<ListSessionsResponse, string | null>
         >(queryKey);
+
       if (!data) {
         return null;
       }
+
       const next = withFirstPage(data, head);
+
       if (next) {
         queryClient.setQueryData(queryKey, next);
       } else {
         await queryClient.refetchQueries({ exact: true, queryKey });
       }
+
       return null;
     },
     queryKey: queryKeys.sessionListHead(profileId, search),
@@ -579,8 +599,10 @@ export function useHistorySessionsQuery(profileId: string, search?: string) {
   });
 
   const { fetchNextPage, refetch } = query;
+
   const loadNextPage = useCallback(async () => {
     const { data } = await fetchNextPage();
+
     // Chats moved across the cursor between the two requests, so the pages
     // no longer join up: load them again from the first one.
     if (data?.pages.at(-1)?.stale) {
@@ -589,6 +611,7 @@ export function useHistorySessionsQuery(profileId: string, search?: string) {
   }, [fetchNextPage, refetch]);
 
   const seen = new Set<string>();
+
   const sessions = (query.data?.pages ?? [])
     .flatMap((page) => page.sessions)
     // A chat that moved between two page loads can come back on both.
@@ -596,7 +619,9 @@ export function useHistorySessionsQuery(profileId: string, search?: string) {
       if (seen.has(session.id)) {
         return false;
       }
+
       seen.add(session.id);
+
       return true;
     })
     // The server answers from its own registry, which this tab can be ahead of
@@ -659,19 +684,23 @@ const EMPTY_PINNED_FILES: WorkspaceEntry[] = [];
 export function useFilePins(profileId: string | null, enabled: boolean) {
   const { activeOrg, user } = useAuth();
   const queryClient = useQueryClient();
+
   const pins = useQuery({
     enabled: Boolean(enabled && profileId && activeOrg),
     queryFn: () => client.listProfileFilePins(profileId!),
     queryKey: ["file-pins", activeOrg?.id, user?.id, profileId],
   });
+
   const mutation = useMutation({
     mutationFn: (body: { path: string; pinned: boolean }) =>
       client.setProfileFilePinned(profileId!, body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["file-pins"] }),
+    onSuccess: () => invalidateQueries(queryClient, ["file-pins"]),
   });
+
   const entries = pins.data?.entries ?? EMPTY_PINNED_FILES;
   const pending = pins.isPending || pins.isError || mutation.isPending;
   const { mutate } = mutation;
+
   const controls = useMemo(
     () => ({
       paths: new Set(entries.map((entry) => entry.path)),
@@ -680,6 +709,7 @@ export function useFilePins(profileId: string | null, enabled: boolean) {
     }),
     [entries, pending, mutate]
   );
+
   return { controls, entries, error: pins.error || mutation.error };
 }
 
@@ -710,6 +740,7 @@ export function useArtifactsExist(
     combine: (results) => results.map((result) => result.data !== false),
     queries: artifacts.map((artifact) => {
       const ownerId = artifact.ownerProfileId ?? profileId ?? "";
+
       return {
         enabled: enabled && Boolean(ownerId),
         queryFn: () => client.hasProfileArtifact(ownerId, artifact.path),
@@ -736,11 +767,11 @@ export function useWriteArtifactMutation() {
       artifactPath: string;
       content: string;
     }) => client.writeProfileArtifactContent(profileId, artifactPath, content),
-    onSuccess: async (_data, variables) => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.artifacts.profile(variables.profileId),
-      });
-    },
+    onSuccess: (_data, variables) =>
+      invalidateQueries(
+        queryClient,
+        queryKeys.artifacts.profile(variables.profileId)
+      ),
   });
 }
 
@@ -756,10 +787,11 @@ export function useDeleteArtifactMutation() {
       filename: string;
     }) => client.deleteProfileArtifact(profileId, filename),
     onSuccess: async (_data, variables) => {
-      await queryClient.invalidateQueries({ queryKey: ["file-pins"] });
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.artifacts.profile(variables.profileId),
-      });
+      await invalidateQueries(queryClient, ["file-pins"]);
+      await invalidateQueries(
+        queryClient,
+        queryKeys.artifacts.profile(variables.profileId)
+      );
     },
   });
 }
@@ -783,14 +815,11 @@ export function usePublishArtifactShareMutation() {
   return useMutation({
     mutationFn: ({ profileId, path }: { profileId: string; path: string }) =>
       client.publishProfileArtifactShare(profileId, path),
-    onSuccess: async (_data, variables) => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.artifacts.shareStatus(
-          variables.profileId,
-          variables.path
-        ),
-      });
-    },
+    onSuccess: (_data, variables) =>
+      invalidateQueries(
+        queryClient,
+        queryKeys.artifacts.shareStatus(variables.profileId, variables.path)
+      ),
   });
 }
 
@@ -813,17 +842,16 @@ export function useRevokeArtifactShareMutation() {
         if (error instanceof NakamaApiError && error.status === 404) {
           return { id: shareId, revoked: false };
         }
+
         throw error;
       }
     },
     onSuccess: async (_data, variables) => {
       if (variables.path) {
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.artifacts.shareStatus(
-            variables.profileId,
-            variables.path
-          ),
-        });
+        await invalidateQueries(
+          queryClient,
+          queryKeys.artifacts.shareStatus(variables.profileId, variables.path)
+        );
       }
     },
   });
@@ -840,6 +868,8 @@ export function useSoulFileQuery(
       const response = await client.getProfileSoulStatus(profileId!, {
         includeContents: true,
       });
+
+      // SAFETY: The enclosing parser checks the value before this conversion.
       return response.contents?.[fileKey as keyof SoulStackFiles] ?? "";
     },
     queryKey: [
@@ -862,11 +892,8 @@ export function useBranchSessionMutation() {
       sessionId: string;
       messageIndex: number;
     }) => client.branchSession(sessionId, { messageIndex }),
-    onSuccess: async (_data, variables) => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.sessions(variables.profileId),
-      });
-    },
+    onSuccess: (_data, variables) =>
+      invalidateQueries(queryClient, queryKeys.sessions(variables.profileId)),
   });
 }
 
@@ -886,12 +913,10 @@ export function useWriteSoulFileMutation() {
     onSuccess: async (_data, variables) => {
       const soulKey = queryKeys.soul.profile(variables.profileId);
 
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: soulKey }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
-        queryClient.invalidateQueries({
-          queryKey: [...soulKey, "file", variables.fileKey],
-        }),
+      await invalidateQueries(queryClient, soulKey, queryKeys.profiles.all, [
+        ...soulKey,
+        "file",
+        variables.fileKey,
       ]);
     },
   });
@@ -916,9 +941,7 @@ export function useWriteUserContextMutation() {
 
   return useMutation({
     mutationFn: (content: string) => client.writeUserContext(content),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.userContext });
-    },
+    onSuccess: () => invalidateQueries(queryClient, queryKeys.userContext),
   });
 }
 
@@ -935,11 +958,30 @@ export function useUploadKnowledgeBaseDocumentMutation() {
       document: DocumentAttachment;
       onDuplicate?: KnowledgeBaseDuplicateAction;
     }) => client.uploadKnowledgeBaseDocument(profileId, document, onDuplicate),
-    onSuccess: async (_data, variables) => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.knowledgeBase.profile(variables.profileId),
-      });
-    },
+    onSuccess: (_data, variables) =>
+      invalidateQueries(
+        queryClient,
+        queryKeys.knowledgeBase.profile(variables.profileId)
+      ),
+  });
+}
+
+export function useImportKnowledgeBaseZipMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      profileId,
+      zipBase64,
+    }: {
+      profileId: string;
+      zipBase64: string;
+    }) => client.importKnowledgeBaseZip(profileId, zipBase64),
+    onSettled: (_data, _error, variables) =>
+      invalidateQueries(
+        queryClient,
+        queryKeys.knowledgeBase.profile(variables.profileId)
+      ),
   });
 }
 
@@ -954,11 +996,11 @@ export function useAttachSharedKnowledgeBaseDocumentMutation() {
       profileId: string;
       documentId: string;
     }) => client.attachSharedKnowledgeBaseDocument(profileId, documentId),
-    onSuccess: async (_data, variables) => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.knowledgeBase.profile(variables.profileId),
-      });
-    },
+    onSuccess: (_data, variables) =>
+      invalidateQueries(
+        queryClient,
+        queryKeys.knowledgeBase.profile(variables.profileId)
+      ),
   });
 }
 
@@ -973,11 +1015,11 @@ export function useDetachSharedKnowledgeBaseDocumentMutation() {
       profileId: string;
       documentId: string;
     }) => client.detachSharedKnowledgeBaseDocument(profileId, documentId),
-    onSuccess: async (_data, variables) => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.knowledgeBase.profile(variables.profileId),
-      });
-    },
+    onSuccess: (_data, variables) =>
+      invalidateQueries(
+        queryClient,
+        queryKeys.knowledgeBase.profile(variables.profileId)
+      ),
   });
 }
 
@@ -992,10 +1034,10 @@ export function useDeleteKnowledgeBaseDocumentMutation() {
       profileId: string;
       documentId: string;
     }) => client.deleteKnowledgeBaseDocument(profileId, documentId),
-    onSuccess: async (_data, variables) => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.knowledgeBase.profile(variables.profileId),
-      });
-    },
+    onSuccess: (_data, variables) =>
+      invalidateQueries(
+        queryClient,
+        queryKeys.knowledgeBase.profile(variables.profileId)
+      ),
   });
 }

@@ -61,14 +61,18 @@ function isContentArtifactTool(tool: string | undefined): boolean {
 }
 
 function relativePathFromCompletedTool(message: ChatListItem): string | null {
+  // SAFETY: The branch checks that the tool result is a non-null object.
   const result =
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     typeof message.toolResult === "object" && message.toolResult !== null
       ? (message.toolResult as { path?: string; error?: string })
       : null;
 
   if (
     !result ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     typeof result.error === "string" ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     typeof result.path !== "string"
   ) {
     return null;
@@ -125,6 +129,7 @@ export function upsertStreamingToolMessage(
     event.tool,
     event.accumulatedArguments
   );
+
   const isArtifactTool =
     event.tool === "write_file" || event.tool === "write_docx";
 
@@ -137,11 +142,13 @@ export function upsertStreamingToolMessage(
   }
 
   const contentField = event.tool === "write_docx" ? "markdown" : "content";
+
   const toolInput =
     parsed.relativePath == null
       ? undefined
       : {
           path: `artifacts/${parsed.relativePath}`,
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
           ...(parsed.content == null ? {} : { [contentField]: parsed.content }),
         };
 
@@ -155,6 +162,7 @@ export function upsertStreamingToolMessage(
     toolGroupId: event.toolGroupId,
     toolInputAccumulatedJson: event.accumulatedArguments,
     toolStatus: "running",
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
     ...(toolInput ? { toolInput } : {}),
   };
 
@@ -168,6 +176,7 @@ export function upsertStreamingToolMessage(
       ...next[existingIndex],
       ...nextMessage,
     };
+
     return next;
   }
 

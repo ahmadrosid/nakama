@@ -3,6 +3,7 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
+
 const WORKFLOWS_DIR = join(REPO_ROOT, ".github/workflows");
 
 // Scopes that publish or sign artifacts, as opposed to reporting status.
@@ -23,9 +24,11 @@ async function workflows(): Promise<[string, Workflow][]> {
   const files = (await readdir(WORKFLOWS_DIR)).filter((file) =>
     file.endsWith(".yml")
   );
+
   return await Promise.all(
     files.map(async (file) => [
       file,
+      // SAFETY: The workflow contract is asserted by this test's named shape and checked by fixtures.
       Bun.YAML.parse(
         await Bun.file(join(WORKFLOWS_DIR, file)).text()
       ) as Workflow,
@@ -111,11 +114,13 @@ describe("dependency installs in CI", () => {
 
 describe("nested installs declared by the repository", () => {
   test("install the docs workspace frozen and without scripts", async () => {
+    // SAFETY: This test reads the repository package manifest and checks its scripts contract.
     const manifest = (await Bun.file(
       join(REPO_ROOT, "package.json")
     ).json()) as {
       scripts: Record<string, string>;
     };
+
     const unsafe = Object.entries(manifest.scripts).flatMap(([name, script]) =>
       unsafeInstalls(`package.json ${name}`, script)
     );

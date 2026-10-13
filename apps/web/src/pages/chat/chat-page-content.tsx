@@ -49,6 +49,7 @@ export function ChatPageContent(state: ChatPageState) {
     thinkingEffortVisible,
     thinkingEffort,
     thinkingEffortDisabled,
+    thinkingEffortOptions,
     readOnlySession,
     isEmptyState,
     composerDisabled,
@@ -70,6 +71,7 @@ export function ChatPageContent(state: ChatPageState) {
   } = state;
 
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
+
   const cognitoControl = shouldShowCognitoControl(cognito, isEmptyState) ? (
     // Pinned to the column's top-right corner, which is the top right of the
     // screen area. The backdrop keeps it readable over a scrolling transcript.
@@ -84,6 +86,7 @@ export function ChatPageContent(state: ChatPageState) {
 
   const { visible: showUsage } = useChatUsageVisible();
   const sessionUsage = useMemo(() => sumChatUsage(messages), [messages]);
+
   const { banner: skillReviewBanner } = usePostTurnSkillReviewOverlay({
     lastSuccessfulTurnAt,
     profile: activeProfile,
@@ -134,6 +137,7 @@ export function ChatPageContent(state: ChatPageState) {
           );
         }}
         onThinkingEffortChange={handleThinkingEffortChange}
+        placeholder={isEmptyState ? composerEntry.placeholder : undefined}
         primarySupportsVision={activeModelSupportsVision}
         profileId={profileId}
         profileModelId={extractModelId(currentModelSelection)}
@@ -147,6 +151,7 @@ export function ChatPageContent(state: ChatPageState) {
         showTips={isEmptyState}
         thinkingEffort={thinkingEffort}
         thinkingEffortDisabled={thinkingEffortDisabled}
+        thinkingEffortOptions={thinkingEffortOptions}
         thinkingEffortVisible={thinkingEffortVisible}
         todos={agentTodos}
       />
@@ -203,6 +208,7 @@ export function ChatPageContent(state: ChatPageState) {
               showUsage={showUsage}
               streamActive={busy}
               turnStartedAt={turnStartedAt}
+              workStreamActive={turnStartedAt !== null}
             />
           </div>
 

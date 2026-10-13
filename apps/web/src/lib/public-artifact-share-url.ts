@@ -2,6 +2,7 @@ const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
 function isLocalHostname(hostname: string): boolean {
   const host = hostname.toLowerCase();
+
   return LOCAL_HOSTS.has(host) || host.endsWith(".localhost");
 }
 
@@ -15,11 +16,13 @@ function resolvePublicArtifactShareOrigin(
   options?: { isProd?: boolean }
 ): string {
   const trimmed = baseUrl.trim().replace(/\/$/, "");
+
   if (!trimmed) {
     return "";
   }
 
   let parsed: URL;
+
   try {
     parsed = new URL(trimmed);
   } catch {
@@ -31,6 +34,7 @@ function resolvePublicArtifactShareOrigin(
   }
 
   const isProd = options?.isProd ?? import.meta.env.PROD;
+
   if (isProd && isLocalHostname(parsed.hostname)) {
     throw new Error("This share link is unavailable.");
   }
@@ -47,5 +51,6 @@ export function buildPublicArtifactShareUrl(
   const origin = resolvePublicArtifactShareOrigin(baseUrl, options);
   const path = `/v1/public/artifact-shares/${encodeURIComponent(token)}`;
   const suffix = query ? `?${query}` : "";
+
   return `${origin}${path}${suffix}`;
 }

@@ -12,7 +12,9 @@ function entry(id: string, lastActiveAt: number): EphemeralSession {
   return {
     attachmentIds: new Set<string>(),
     lastActiveAt,
+    // SAFETY: The test fixture matches the contract used by this test.
     record: { id } as StoredSessionRecord,
+    // SAFETY: The test fixture matches the contract used by this test.
     session: {} as AgentChatSession,
   };
 }
@@ -20,10 +22,13 @@ function entry(id: string, lastActiveAt: number): EphemeralSession {
 describe("EphemeralSessionStore", () => {
   test("evicts entries past the idle threshold and keeps the rest", async () => {
     const evicted: string[] = [];
+
     const store = new EphemeralSessionStore((session) => {
       evicted.push(session.record.id);
+
       return Promise.resolve();
     });
+
     const now = Date.now();
 
     await store.set(entry("stale", now - 13 * HOUR_MS));
@@ -38,8 +43,10 @@ describe("EphemeralSessionStore", () => {
 
   test("a new session collects what an abandoned one left behind", async () => {
     const evicted: string[] = [];
+
     const store = new EphemeralSessionStore((session) => {
       evicted.push(session.record.id);
+
       return Promise.resolve();
     });
 
@@ -53,8 +60,10 @@ describe("EphemeralSessionStore", () => {
 
   test("deleting runs the purge once and only once", async () => {
     const evicted: string[] = [];
+
     const store = new EphemeralSessionStore((session) => {
       evicted.push(session.record.id);
+
       return Promise.resolve();
     });
 

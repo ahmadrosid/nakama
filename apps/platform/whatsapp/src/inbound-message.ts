@@ -15,9 +15,11 @@ interface WhatsAppInboundKey {
   fromMe?: boolean | null;
   id?: string | null;
   participant?: string | null;
+  participantAlt?: string | null;
   participantLid?: string | null;
   participantPn?: string | null;
   remoteJid?: string | null;
+  remoteJidAlt?: string | null;
   senderLid?: string | null;
   senderPn?: string | null;
 }
@@ -40,6 +42,7 @@ export interface WhatsAppInboundChat {
 }
 
 const OUTBOUND_TTL_MS = 120_000;
+
 const outboundSeenAt = new Map<string, number>();
 
 export function rememberWhatsAppOutbound(input: {
@@ -50,11 +53,13 @@ export function rememberWhatsAppOutbound(input: {
   const now = Date.now();
   pruneWhatsAppOutbound(now);
   const id = input.id?.trim();
+
   if (id) {
     outboundSeenAt.set(`id:${input.jid}:${id}`, now);
   }
 
   const text = input.text?.trim();
+
   if (text) {
     outboundSeenAt.set(`text:${input.jid}:${text}`, now);
   }
@@ -68,6 +73,7 @@ export function isWhatsAppOutboundEcho(input: {
 }): boolean {
   pruneWhatsAppOutbound(Date.now());
   const id = input.id?.trim();
+
   if (!input.fromMe) {
     return false;
   }
@@ -77,6 +83,7 @@ export function isWhatsAppOutboundEcho(input: {
   }
 
   const text = input.text.trim();
+
   return Boolean(text && outboundSeenAt.has(`text:${input.jid}:${text}`));
 }
 
@@ -126,6 +133,7 @@ export function extractInboundText(
   }
 
   const materialized = materializeMessage(extracted);
+
   return readTextContent(materialized);
 }
 
@@ -150,6 +158,7 @@ function extractQuotedText(
 ): string | null {
   const quotedMessage = extractContextInfo(message)?.quotedMessage;
   const quotedText = extractInboundText(quotedMessage).trim();
+
   return quotedText || null;
 }
 
@@ -174,9 +183,11 @@ export function parseInboundWhatsAppMessage(
 ): WhatsAppInboundChat | null {
   const remoteJid = msg.key.remoteJid;
   const text = extractInboundText(msg.message);
+
   const content = msg.message
     ? (extractMessageContent(msg.message) ?? msg.message)
     : null;
+
   const media = content?.imageMessage
     ? { kind: "image" as const, message: content.imageMessage }
     : content?.documentMessage
@@ -218,12 +229,11 @@ export function parseInboundWhatsAppMessage(
     return null;
   }
 
-  return {
+  const inbound: WhatsAppInboundChat = {
     fromMe,
     isGroup,
     jid: remoteJid,
     me,
-    ...(media ? { media } : {}),
     mentionedJids,
     messageId: msg.key.id?.trim() || null,
     quotedParticipant,
@@ -232,6 +242,12 @@ export function parseInboundWhatsAppMessage(
     senderJids,
     text,
   };
+
+  if (media) {
+    inbound.media = media;
+  }
+
+  return inbound;
 }
 
 function collectSenderJids(
@@ -240,15 +256,15 @@ function collectSenderJids(
   isGroup: boolean,
   me: WhatsAppAccount | undefined
 ): string[] {
-  const record = key as WhatsAppInboundKey & Record<string, unknown>;
   const extraIdentities = [
-    record.participantAlt,
-    record.remoteJidAlt,
-    record.senderPn,
-    record.participantPn,
-    record.senderLid,
-    record.participantLid,
+    key.participantAlt,
+    key.remoteJidAlt,
+    key.senderPn,
+    key.participantPn,
+    key.senderLid,
+    key.participantLid,
   ];
+
   const candidates = isGroup
     ? [
         key.participantPn,
@@ -270,13 +286,7 @@ function collectSenderJids(
         ...extraIdentities,
       ];
 
-  return [
-    ...new Set(
-      candidates.filter(
-        (jid): jid is string => typeof jid === "string" && Boolean(jid)
-      )
-    ),
-  ];
+  return [...new Set(candidates.filter((jid): jid is string => Boolean(jid)))];
 }
 
 function extractContextInfo(
@@ -319,6 +329,7 @@ function materializeMessage(
   }
 
   try {
+    // SAFETY: JSON round-tripping preserves the serializable protobuf message shape.
     return JSON.parse(JSON.stringify(message)) as Partial<proto.IMessage>;
   } catch {
     return null;

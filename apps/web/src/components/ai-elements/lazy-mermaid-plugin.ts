@@ -14,6 +14,7 @@ export function createLazyMermaidPlugin(
         }
 
         const { mermaid } = await loadPlugin();
+
         return mermaid.getMermaid(config).render(id, chart);
       },
     }),

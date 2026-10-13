@@ -37,12 +37,13 @@ export async function buildTelegramImageInput(
   return null;
 }
 
-export async function downloadTelegramImage(
+async function downloadTelegramImage(
   ctx: Context,
   fileId: string
 ): Promise<ImageAttachment> {
   try {
     const downloaded = await downloadTelegramFile(ctx, fileId, MAX_IMAGE_BYTES);
+
     const mediaType = inferMediaType(
       downloaded.filePath,
       downloaded.contentType

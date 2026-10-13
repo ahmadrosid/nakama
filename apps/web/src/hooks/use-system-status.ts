@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/use-auth";
 import { useChannelProfileId } from "@/hooks/use-app-queries";
 import { client } from "@/lib/client";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
 const REFRESH_INTERVAL_MS = 10_000;
@@ -34,18 +35,17 @@ export function useSystemStatusQuery() {
   const { activeOrg } = useAuth();
   const orgId = activeOrg?.id ?? null;
   const api = client.forOrg(orgId);
+
   return useQuery({
     queryFn: async () =>
       normalizeSystemStatus(await api.getSystemStatus(profileId)),
     queryKey: [...queryKeys.systemStatus, orgId, profileId],
     refetchInterval: REFRESH_INTERVAL_MS,
-    refetchIntervalInBackground: true,
   });
 }
 
 export function useRefreshSystemStatus() {
   const queryClient = useQueryClient();
 
-  return () =>
-    queryClient.invalidateQueries({ queryKey: queryKeys.systemStatus });
+  return () => invalidateQueries(queryClient, queryKeys.systemStatus);
 }

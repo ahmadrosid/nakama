@@ -37,12 +37,9 @@ export function buildHarnessNonInteractiveArgs(
   if (kind === "codex") {
     return [
       ...baseArgs,
-      "--ask-for-approval",
-      "never",
       "exec",
+      "--dangerously-bypass-approvals-and-sandbox",
       "--skip-git-repo-check",
-      "--sandbox",
-      "workspace-write",
       "--color",
       "never",
       prompt,
@@ -77,6 +74,7 @@ export function buildHarnessNonInteractiveArgs(
     }
 
     piArgs.push("-p", prompt);
+
     return piArgs;
   }
 
@@ -103,12 +101,15 @@ export async function buildCodingAgentCommandTemplate(
 ): Promise<CodingAgentCommandTemplate> {
   const escapedTask = shellEscape(taskPrompt.trim());
   const baseCommand = [harness.command, ...harness.args].join(" ");
+
   const { spawn, routing } = await resolveCodingAgentSpawnBundle({
     harnessKind: harness.kind,
     profileModel: options.profileModel,
     userConfig: options.userConfig,
   });
+
   const spawnEnv = spawn.env;
+
   const shared = {
     backend: harness.kind,
     harnessName: harness.name,
@@ -120,12 +121,9 @@ export async function buildCodingAgentCommandTemplate(
       ...shared,
       command: [
         baseCommand,
-        "--ask-for-approval",
-        "never",
         "exec",
+        "--dangerously-bypass-approvals-and-sandbox",
         "--skip-git-repo-check",
-        "--sandbox",
-        "workspace-write",
         "--color",
         "never",
         escapedTask,
@@ -182,6 +180,7 @@ export async function buildCodingAgentCommandTemplate(
     const piProvider = routing.providerType
       ? mapNakamaProviderToPi(routing.providerType, routing.baseUrl)
       : null;
+
     const piModel = routing.model
       ? formatModelForHarness(
           "pi",
@@ -189,6 +188,7 @@ export async function buildCodingAgentCommandTemplate(
           routing.model
         )
       : null;
+
     const commandParts = [baseCommand];
 
     if (piProvider) {
@@ -259,6 +259,7 @@ export function formatCodingAgentCommandContext(
 
   if (template.notes.length > 0) {
     lines.push("", "Notes:");
+
     for (const note of template.notes) {
       lines.push(`- ${note}`);
     }
@@ -282,6 +283,7 @@ function getBackendSkillName(
     opencode: "coding-backend-opencode",
     pi: "coding-backend-pi",
   } as const;
+
   return names[backend];
 }
 

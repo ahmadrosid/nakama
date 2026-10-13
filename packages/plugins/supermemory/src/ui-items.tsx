@@ -3,8 +3,10 @@
 /** @jsxFrag React.Fragment */
 import type { Context, Item } from "./ui-context";
 import type { CollectionModel } from "./use-collection";
+
 export function createItems(ctx: Context) {
   const React = ctx.React;
+
   const {
     Button,
     Dialog,
@@ -14,6 +16,7 @@ export function createItems(ctx: Context) {
     DialogDescription,
     DialogFooter,
   } = ctx.ui;
+
   function ItemActions({
     item,
     model,
@@ -23,6 +26,7 @@ export function createItems(ctx: Context) {
   }) {
     const { busy, act, memory } = model;
     const [dialog, setDialog] = React.useState<"delete" | null>(null);
+
     const controls = (
       <>
         <Button
@@ -53,6 +57,7 @@ export function createItems(ctx: Context) {
         )}
       </>
     );
+
     return (
       <div className="sm-row">
         <Dialog
@@ -107,6 +112,7 @@ export function createItems(ctx: Context) {
       </div>
     );
   }
+
   function DocumentTable({ model }: { model: CollectionModel }) {
     return (
       <div className="sm-table-wrap">
@@ -149,8 +155,10 @@ export function createItems(ctx: Context) {
       </div>
     );
   }
+
   return function Items({ model }: { model: CollectionModel }) {
     const { loading, items, activeQuery, memory } = model;
+
     return loading ? (
       <p role="status">Loading…</p>
     ) : items.length === 0 ? (

@@ -44,6 +44,7 @@ export function isDiscordAttachableArtifact(input: {
   mimeType?: string;
 }): boolean {
   const extension = fileExtension(input.filename);
+
   if (extension && DISCORD_ATTACHABLE_EXTENSIONS.has(extension)) {
     return true;
   }
@@ -51,6 +52,7 @@ export function isDiscordAttachableArtifact(input: {
   const mimeType =
     normalizeMimeType(input.mimeType ?? "") ||
     inferArtifactMimeType(input.filename);
+
   return DISCORD_ATTACHABLE_MIME_TYPES.has(mimeType);
 }
 
@@ -65,18 +67,22 @@ export function formatDiscordUnsupportedAttachmentMessage(input: {
   mimeType?: string;
 }): string {
   const extension = fileExtension(input.filename);
+
   const typeLabel = extension
     ? `.${extension}`
     : input.mimeType?.trim() || "unknown";
+
   return `Unsupported file type for Discord attachment (${typeLabel}). Supported: PDF, images (PNG/JPEG/GIF/WebP), text, CSV, ZIP, and common document types.`;
 }
 
 function fileExtension(filename: string): string {
   const basename = filename.split(/[\\/]/).pop() ?? filename;
   const dotIndex = basename.lastIndexOf(".");
+
   if (dotIndex <= 0 || dotIndex === basename.length - 1) {
     return "";
   }
+
   return basename.slice(dotIndex + 1).toLowerCase();
 }
 

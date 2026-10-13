@@ -1,12 +1,9 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type {
-  CreateOrganizationRequest,
   CreateOrganizationResponse,
-  InviteOrgMemberRequest,
   ListOrganizationsResponse,
   OrganizationResponse,
   OrgInviteCreatedResponse,
-  UpdateOrganizationRequest,
 } from "@nakama/core/contract";
 import type { ServerOptions } from "../context";
 import { requirePlatformAdminFromContext } from "../org-guards";
@@ -18,9 +15,11 @@ export function registerPlatformOrgRoutes(
   options: ServerOptions
 ): void {
   const { orgService } = options;
+
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
+
   const createOrganizationSchema = z
     .object({
       admin: z
@@ -34,10 +33,35 @@ export function registerPlatformOrgRoutes(
       slug: z.string(),
     })
     .openapi("CreateOrganizationRequest");
+
+  const updateOrganizationSchema = z
+    .object({
+      allowedInviteDomains: z.array(z.string()).optional(),
+      monthlyLlmTokenLimit: z.number().int().min(0).optional(),
+      monthlyLlmTurnLimit: z.number().int().min(0).optional(),
+      monthlyLlmWarningPercent: z.number().int().min(1).max(99).optional(),
+      name: z.string().optional(),
+      skillsCuratorArchiveAfterDays: z.number().optional(),
+      skillsCuratorConsolidateEnabled: z.boolean().optional(),
+      skillsCuratorEnabled: z.boolean().optional(),
+      skillsCuratorStaleAfterDays: z.number().optional(),
+      skillsPostTurnReview: z.boolean().optional(),
+      skillsWriteApproval: z.boolean().optional(),
+    })
+    .openapi("UpdateOrganizationRequest");
+
+  const inviteOrgMemberSchema = z
+    .object({
+      email: z.string(),
+      role: z.enum(["admin", "member"]),
+    })
+    .openapi("InviteOrgMemberRequest");
+
   const organizationSchema = z
     .object({})
     .passthrough()
     .openapi("CreateOrganizationResponse");
+
   const listOrganizationsSchema = z
     .object({})
     .passthrough()
@@ -112,6 +136,7 @@ export function registerPlatformOrgRoutes(
     }
 
     const organizations = await orgService.listOrganizations();
+
     return json<ListOrganizationsResponse>({ organizations });
   });
 
@@ -122,8 +147,9 @@ export function registerPlatformOrgRoutes(
       return errorResponse("Organization service not configured", 500);
     }
 
-    const body = await readJson<CreateOrganizationRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, createOrganizationSchema);
     const result = await orgService.createOrganization(body, auth.user.id);
+
     return json<CreateOrganizationResponse>(result, 201);
   });
 
@@ -136,19 +162,7 @@ export function registerPlatformOrgRoutes(
         body: {
           content: {
             "application/json": {
-              schema: z
-                .object({
-                  monthlyLlmTokenLimit: z.number().int().min(0).optional(),
-                  monthlyLlmTurnLimit: z.number().int().min(0).optional(),
-                  monthlyLlmWarningPercent: z
-                    .number()
-                    .int()
-                    .min(1)
-                    .max(99)
-                    .optional(),
-                  name: z.string().optional(),
-                })
-                .openapi("UpdateOrganizationRequest"),
+              schema: updateOrganizationSchema,
             },
           },
           required: true,
@@ -199,8 +213,9 @@ export function registerPlatformOrgRoutes(
     }
 
     const orgId = decodeURIComponent(c.req.param("orgId"));
-    const body = await readJson<UpdateOrganizationRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, updateOrganizationSchema);
     const organization = await orgService.updateOrganization(orgId, body);
+
     return json<OrganizationResponse>({ organization });
   });
 
@@ -256,10 +271,12 @@ export function registerPlatformOrgRoutes(
     }
 
     const orgId = decodeURIComponent(c.req.param("orgId"));
+
     const organization = await orgService.archiveOrganization(
       orgId,
       auth.user.id
     );
+
     return json<OrganizationResponse>({ organization });
   });
 
@@ -306,6 +323,7 @@ export function registerPlatformOrgRoutes(
 
     const orgId = decodeURIComponent(c.req.param("orgId"));
     await orgService.permanentlyDeleteOrganization(orgId);
+
     return new Response(null, { status: 204 });
   });
 
@@ -318,12 +336,7 @@ export function registerPlatformOrgRoutes(
         body: {
           content: {
             "application/json": {
-              schema: z
-                .object({
-                  email: z.string(),
-                  role: z.enum(["admin", "member", "viewer"]),
-                })
-                .openapi("InviteOrgMemberRequest"),
+              schema: inviteOrgMemberSchema,
             },
           },
           required: true,
@@ -370,7 +383,8 @@ export function registerPlatformOrgRoutes(
     }
 
     const orgId = decodeURIComponent(c.req.param("orgId"));
-    const body = await readJson<InviteOrgMemberRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, inviteOrgMemberSchema);
+
     const invite = await orgService.createInvite({
       email: body.email,
       invitedByUserId: auth.user.id,
@@ -430,6 +444,7 @@ export function registerPlatformOrgRoutes(
     }
 
     await orgService.disableMember(orgId, userId);
+
     return new Response(null, { status: 204 });
   });
 
@@ -473,6 +488,7 @@ export function registerPlatformOrgRoutes(
     }
 
     await orgService.enableMember(orgId, userId);
+
     return new Response(null, { status: 204 });
   });
 
@@ -512,12 +528,14 @@ export function registerPlatformOrgRoutes(
 
   app.delete("/v1/platform/users/:userId", async (c) => {
     const auth = requirePlatformAdminFromContext(c);
+
     if (!orgService) {
       return errorResponse("Organization service not configured", 500);
     }
 
     const userId = decodeURIComponent(c.req.param("userId"));
     await orgService.eraseUser(userId, auth.user.id);
+
     return new Response(null, { status: 204 });
   });
 }

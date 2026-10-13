@@ -21,6 +21,7 @@ interface SocketEnvelope {
 }
 
 const MAX_BACKOFF_MS = 30_000;
+
 const SEEN_EVENT_LIMIT = 500;
 
 /**
@@ -33,7 +34,7 @@ export function connectSlackSocket(options: {
   appToken: string;
   onEvent: (event: SlackMessageEvent) => void;
   onStatus: (connected: boolean) => void;
-}): { close: () => void } {
+}) {
   let socket: WebSocket | null = null;
   let closed = false;
   let backoffMs = 1000;
@@ -43,6 +44,7 @@ export function connectSlackSocket(options: {
     if (closed) {
       return;
     }
+
     setTimeout(() => void open(), backoffMs);
     backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
   }
@@ -55,29 +57,40 @@ export function connectSlackSocket(options: {
     if (envelope.type === "hello") {
       backoffMs = 1000;
       options.onStatus(true);
+
       return;
     }
 
     if (envelope.type === "disconnect") {
       socket?.close();
+
       return;
     }
 
     const event = envelope.payload?.event;
     const eventId = envelope.payload?.event_id;
+
     if (envelope.type !== "events_api" || !event) {
       return;
     }
+
     // Slack redelivers when an ack is late; never run the same turn twice.
     if (eventId) {
       if (seenEventIds.has(eventId)) {
         return;
       }
+
       seenEventIds.add(eventId);
+
       if (seenEventIds.size > SEEN_EVENT_LIMIT) {
-        seenEventIds.delete(seenEventIds.values().next().value as string);
+        const oldestEventId = seenEventIds.values().next().value;
+
+        if (oldestEventId) {
+          seenEventIds.delete(oldestEventId);
+        }
       }
     }
+
     options.onEvent(event);
   }
 
@@ -87,6 +100,7 @@ export function connectSlackSocket(options: {
     }
 
     let url: string;
+
     try {
       ({ url } = await callSlackApi<{ url: string }>(
         "apps.connections.open",
@@ -95,6 +109,7 @@ export function connectSlackSocket(options: {
     } catch (error) {
       console.error("Slack connection failed:", error);
       scheduleReconnect();
+
       return;
     }
 
@@ -102,6 +117,7 @@ export function connectSlackSocket(options: {
     socket = next;
     next.addEventListener("message", (message) => {
       try {
+        // SAFETY: Slack sends each Socket Mode event as a JSON envelope.
         handleEnvelope(JSON.parse(String(message.data)) as SocketEnvelope);
       } catch (error) {
         console.error("Slack envelope error:", error);

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { CatalogModelsBrowseList } from "@/components/CatalogModelsBrowseList";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
@@ -6,10 +7,11 @@ import { queryKeys } from "@/lib/query-keys";
 export interface RemoteModelRow {
   id: string;
   name: string;
+  supportsThinking?: boolean;
   supportsVision?: boolean;
 }
 
-export type RemoteBrowseSelectHandler = (row: RemoteModelRow) => void;
+type RemoteBrowseSelectHandler = (row: RemoteModelRow) => void;
 
 const EMPTY_ROWS: RemoteModelRow[] = [];
 
@@ -22,7 +24,7 @@ interface RemoteModelsBrowseListProps {
   multiSelect?: boolean;
   onAddMany?: (rows: RemoteModelRow[]) => void;
   onSelect: RemoteBrowseSelectHandler;
-  provider?: "ollama" | "openai_compatible";
+  provider?: "ollama" | "openai_compatible" | "netra";
   providerId?: string;
 }
 
@@ -38,6 +40,18 @@ export function RemoteModelsBrowseList({
   multiSelect,
   onAddMany,
 }: RemoteModelsBrowseListProps) {
+  const credentialCacheKey = useMemo(() => {
+    let first = 0;
+    let second = 0;
+
+    for (let index = 0; index < apiKey.length; index += 1) {
+      first = (first * 31 + apiKey.charCodeAt(index)) % 1_000_000_007;
+      second = (second * 37 + apiKey.charCodeAt(index)) % 1_000_000_009;
+    }
+
+    return `${apiKey.length}:${first}:${second}`;
+  }, [apiKey]);
+
   const trimmedBaseUrl = baseUrl?.trim() ?? "";
   const canFetch = Boolean(providerId?.trim() || trimmedBaseUrl);
 
@@ -46,33 +60,50 @@ export function RemoteModelsBrowseList({
     queryFn: async () => {
       // When providerId is set, still forward baseUrl so Edit provider can probe a
       // typed (unsaved) URL while the server resolves stored credentials via id.
-      const response = await client.discoverModels(
-        providerId?.trim()
-          ? {
-              providerId: providerId.trim(),
-              ...(trimmedBaseUrl ? { baseUrl: trimmedBaseUrl } : {}),
-              ...(apiKey.trim() ? { apiKey } : {}),
-              ...(provider ? { provider } : {}),
-              ...(hostMode ? { hostMode } : {}),
-            }
-          : {
-              apiKey,
-              baseUrl: trimmedBaseUrl,
-              ...(provider ? { provider } : {}),
-              ...(hostMode ? { hostMode } : {}),
-            }
-      );
+      const trimmedProviderId = providerId?.trim();
 
-      return (response.customModels ?? response.models ?? []).map((entry) => ({
-        id: entry.id,
-        name: entry.name?.trim() || entry.id,
-        ...(entry.supportsVision === undefined
-          ? {}
-          : { supportsVision: entry.supportsVision }),
-      }));
+      const request: Parameters<typeof client.discoverModels>[0] =
+        trimmedProviderId
+          ? { providerId: trimmedProviderId }
+          : { apiKey, baseUrl: trimmedBaseUrl };
+
+      if (trimmedProviderId && trimmedBaseUrl) {
+        request.baseUrl = trimmedBaseUrl;
+      }
+
+      if (trimmedProviderId && apiKey.trim()) {
+        request.apiKey = apiKey;
+      }
+
+      if (provider) {
+        request.provider = provider;
+      }
+
+      if (hostMode) {
+        request.hostMode = hostMode;
+      }
+
+      const response = await client.discoverModels(request);
+
+      return (response.customModels ?? response.models ?? []).map((entry) => {
+        const row: RemoteModelRow = {
+          id: entry.id,
+          name: entry.name?.trim() || entry.id,
+        };
+
+        if (entry.supportsThinking !== undefined) {
+          row.supportsThinking = entry.supportsThinking;
+        }
+
+        if (entry.supportsVision !== undefined) {
+          row.supportsVision = entry.supportsVision;
+        }
+
+        return row;
+      });
     },
     queryKey: queryKeys.remoteModelDiscovery({
-      apiKey: apiKey.trim() ? "set" : "",
+      apiKey: credentialCacheKey,
       baseUrl: trimmedBaseUrl,
       hostMode,
       provider,

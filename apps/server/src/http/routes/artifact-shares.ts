@@ -1,7 +1,7 @@
+import { z } from "@hono/zod-openapi";
 import { NakamaApiError } from "@nakama/core";
 import type {
   ArtifactShareStatusResponse,
-  PublishArtifactShareRequest,
   PublishArtifactShareResponse,
   RevokeArtifactShareResponse,
 } from "@nakama/core/contract";
@@ -10,7 +10,7 @@ import { resolveRequestClientOrigin } from "../../services/composio-callback-url
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
-  requireNotViewerFromContext,
+  requireOrgMemberFromContext,
 } from "../org-guards";
 import { json, readJson } from "../shared";
 import type { HonoApp } from "../types";
@@ -29,10 +29,16 @@ export function registerArtifactShareRoutes(
   );
 
   app.post("/v1/profiles/:profileId/artifacts/shares", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
-    const body = await readJson<PublishArtifactShareRequest>(c.req.raw);
+
+    const body = await readJson(
+      c.req.raw,
+      z
+        .object({ clientOrigin: z.string().optional(), path: z.string() })
+        .strict()
+    );
 
     if (!body.path?.trim()) {
       return json({ error: "path is required" }, 400);
@@ -43,21 +49,26 @@ export function registerArtifactShareRoutes(
       body.clientOrigin
     );
 
+    const publishRequest = {
+      orgId,
+      profileId,
+      request: c.req.raw,
+      sourcePath: body.path.trim(),
+      userId: auth.user.id,
+    };
+
+    if (clientOrigin) {
+      Object.assign(publishRequest, { clientOrigin });
+    }
+
     return json<PublishArtifactShareResponse>(
-      await service.publishArtifactShare({
-        orgId,
-        profileId,
-        request: c.req.raw,
-        sourcePath: body.path.trim(),
-        userId: auth.user.id,
-        ...(clientOrigin ? { clientOrigin } : {}),
-      }),
+      await service.publishArtifactShare(publishRequest),
       201
     );
   });
 
   app.get("/v1/profiles/:profileId/artifacts/shares/status", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const sourcePath = c.req.query("path");
@@ -81,7 +92,7 @@ export function registerArtifactShareRoutes(
   });
 
   app.delete("/v1/profiles/:profileId/artifacts/shares/:shareId", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const shareId = decodeURIComponent(c.req.param("shareId"));
@@ -104,13 +115,14 @@ export function registerArtifactShareRoutes(
 
       const downloadName = metadata.filename.replace(/["\\]/g, "_");
       const disposition = metadata.inlineAllowed ? "inline" : "attachment";
+
       const contentType = metadata.inlineAllowed
         ? metadata.mimeType
         : metadata.mimeType.startsWith("text/")
           ? "text/plain; charset=utf-8"
           : "application/octet-stream";
 
-      return new Response(bytes, {
+      return new Response(new Uint8Array(bytes), {
         headers: {
           "Content-Disposition": `${disposition}; filename="${downloadName}"`,
           "Content-Type": contentType,

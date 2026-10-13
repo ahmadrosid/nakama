@@ -3,6 +3,7 @@ import type { AgentService } from "../services/agent-service";
 import type { AuthService } from "../services/auth-service";
 import type { AutomationService } from "../services/automation-service";
 import type { ComposioService } from "../services/composio-service";
+import type { GoogleMeetService } from "../services/google-meet/service";
 import type { McpService } from "../services/mcp-service";
 import type { OrgMemoryService } from "../services/org-memory-service";
 import type { OrgService } from "../services/org-service";
@@ -19,8 +20,17 @@ export interface ServerOptions {
   automationService: AutomationService;
   composioService?: ComposioService | null;
   databaseAdapter?: DatabaseAdapter | null;
+  googleMeetService?: GoogleMeetService | null;
   mcpService: McpService;
-  /** Close/reopen SQLite and reload config after a data-root restore. */
+  /**
+   * Release the SQLite file before a restore moves the data root. Set only on
+   * Windows, which cannot move an open database.
+   */
+  onBeforeDataRestore?: () => void | Promise<void>;
+  /**
+   * Close/reopen SQLite and reload config after a data-root restore. Also runs
+   * when a restore fails after `onBeforeDataRestore`, to reopen what is on disk.
+   */
   onDataRestored?: () => Promise<void>;
   orgMemoryService?: OrgMemoryService | null;
   orgService?: OrgService | null;

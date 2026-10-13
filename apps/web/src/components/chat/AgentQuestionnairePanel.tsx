@@ -37,6 +37,7 @@ export function AgentQuestionnairePanel({
 
   if (questionnaire !== syncedQuestionnaire) {
     setSyncedQuestionnaire(questionnaire);
+
     if (questionnaire) {
       setAnswers(
         Object.fromEntries(
@@ -64,15 +65,19 @@ export function AgentQuestionnairePanel({
 
     return questionnaire.questions.map((question) => {
       const state = answers[question.id];
+
       const customChoice = question.choices.find((choice) =>
         isCustomChoice(choice)
       );
+
       const useCustomAnswer =
         (question.allowCustomAnswer || Boolean(customChoice)) &&
         (state?.customAnswer.trim().length ?? 0) > 0;
+
       const answer = useCustomAnswer
         ? (state?.customAnswer.trim() ?? "")
         : (state?.selectedChoiceLabel ?? "");
+
       return {
         answer,
         prompt: question.prompt,
@@ -100,16 +105,18 @@ export function AgentQuestionnairePanel({
       const input = activeQuestionElement.querySelector<HTMLInputElement>(
         "input:not(:disabled)"
       );
+
       const selectedOption =
         activeQuestionElement.querySelector<HTMLButtonElement>(
           "button[data-question-option='true'][data-selected='true']:not(:disabled)"
         );
+
       const firstOption =
         activeQuestionElement.querySelector<HTMLButtonElement>(
           "button[data-question-option='true']:not(:disabled)"
         );
 
-      (input ?? selectedOption ?? firstOption)?.focus();
+      (selectedOption ?? firstOption ?? input)?.focus();
     });
 
     return () => window.cancelAnimationFrame(focusTarget);
@@ -121,19 +128,25 @@ export function AgentQuestionnairePanel({
 
   const activeQuestionnaire = questionnaire!;
   const activeQuestion = activeQuestionnaire.questions[currentQuestionIndex]!;
+
   const activeState = answers[activeQuestion.id] ?? {
     customAnswer: "",
     selectedChoiceId: null,
     selectedChoiceLabel: null,
   };
+
   const canGoPrevious = currentQuestionIndex > 0;
+
   const canGoNext =
     currentQuestionIndex < activeQuestionnaire.questions.length - 1;
+
   const activeAnswer =
     resolvedAnswers[currentQuestionIndex]?.answer.trim() ?? "";
+
   const canSubmit = resolvedAnswers.some(
     (answer) => answer.answer.trim().length > 0
   );
+
   const canContinue = canGoNext ? activeAnswer.length > 0 : canSubmit;
 
   function handleContinue(): void {
@@ -143,6 +156,7 @@ export function AgentQuestionnairePanel({
 
     if (canGoNext) {
       setCurrentQuestionIndex((current) => current + 1);
+
       return;
     }
 
@@ -174,6 +188,7 @@ export function AgentQuestionnairePanel({
     const selectedIndex = activeQuestion.choices.findIndex(
       (choice) => choice.id === activeState.selectedChoiceId
     );
+
     const nextIndex =
       selectedIndex === -1
         ? offset > 0
@@ -193,12 +208,26 @@ export function AgentQuestionnairePanel({
     if (event.key === "ArrowDown") {
       event.preventDefault();
       selectChoiceByOffset(1);
+
       return;
     }
 
     if (event.key === "ArrowUp") {
       event.preventDefault();
       selectChoiceByOffset(-1);
+
+      return;
+    }
+
+    const isTyping = event.target instanceof HTMLInputElement;
+
+    if (!isTyping && /^[1-9]$/.test(event.key)) {
+      event.preventDefault();
+
+      if (!disabled) {
+        selectChoice(Number(event.key) - 1);
+      }
+
       return;
     }
 
@@ -211,6 +240,7 @@ export function AgentQuestionnairePanel({
   function handleSkip(): void {
     if (canGoNext) {
       setCurrentQuestionIndex((current) => current + 1);
+
       return;
     }
 
@@ -224,14 +254,10 @@ export function AgentQuestionnairePanel({
         className={composerShelfPanelClass(stackEdge)}
       >
         <AgentQuestionnaireNav
-          activeAnswerLength={activeAnswer.length}
-          canGoNext={canGoNext}
-          canGoPrevious={canGoPrevious}
+          answered={resolvedAnswers.map(
+            (answer) => answer.answer.trim().length > 0
+          )}
           currentQuestionIndex={currentQuestionIndex}
-          disabled={disabled}
-          onNext={() => setCurrentQuestionIndex((current) => current + 1)}
-          onPrevious={() => setCurrentQuestionIndex((current) => current - 1)}
-          totalQuestions={activeQuestionnaire.questions.length}
         />
         <div className="space-y-4 px-3 py-3" onKeyDown={handleKeyDown}>
           <div key={activeQuestion.id} ref={activeQuestionRef}>
@@ -257,13 +283,27 @@ export function AgentQuestionnairePanel({
             >
               Skip
             </button>
-            <Button
-              disabled={disabled || !canContinue}
-              onClick={handleContinue}
-              type="button"
-            >
-              {canGoNext ? "Continue" : "Submit"}
-            </Button>
+            <div className="flex items-center gap-2">
+              {canGoPrevious ? (
+                <Button
+                  disabled={disabled}
+                  onClick={() =>
+                    setCurrentQuestionIndex((current) => current - 1)
+                  }
+                  type="button"
+                  variant="outline"
+                >
+                  Back
+                </Button>
+              ) : null}
+              <Button
+                disabled={disabled || !canContinue}
+                onClick={handleContinue}
+                type="button"
+              >
+                {canGoNext ? "Continue" : "Submit"}
+              </Button>
+            </div>
           </div>
         </div>
       </aside>

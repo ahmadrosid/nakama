@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { z } from "zod";
 import type { ChannelConfigScope } from "./channel-config-shared";
 import type { WhatsAppWorkerStatus } from "./contract";
 import { pathExists, readTextOrNull, removeFile, writeTextFile } from "./fs";
@@ -9,7 +10,6 @@ import {
 } from "./whatsapp-config";
 import {
   createWorkerHeartbeatStore,
-  isProcessAlive,
   type WorkerHeartbeatBase,
 } from "./worker-heartbeat";
 
@@ -24,17 +24,18 @@ export function createWhatsAppWorkerHeartbeat(
 ) {
   return createWorkerHeartbeatStore<WhatsAppWorkerHeartbeat>({
     getDir: () => getWhatsAppConfigDir(orgId),
-    parse: (value) => value as unknown as WhatsAppWorkerHeartbeat,
+    parse: (value, base) => {
+      const parsed = z
+        .object({ connected: z.boolean().optional() })
+        .safeParse(value);
+
+      return parsed.success ? { ...base, ...parsed.data } : null;
+    },
   });
 }
+
 const store = createWhatsAppWorkerHeartbeat();
 
-export const getWhatsAppWorkerHeartbeatPath = store.getPath;
-export const parseWhatsAppWorkerHeartbeat = store.parse;
-export const readWhatsAppWorkerHeartbeat = store.read;
-export const clearWhatsAppWorkerHeartbeat = store.clear;
-export const isWhatsAppWorkerRunning = store.isRunning;
-export const isWhatsAppProcessAlive = isProcessAlive;
 export const isWhatsAppHeartbeatAlive = store.isAlive;
 
 export function getWhatsAppQrCodePath(
@@ -54,19 +55,6 @@ export function resolveWhatsAppWorkerStatus(
   const ok = !configured || running;
 
   return { configured, connected, ok, paired, qrCode, running };
-}
-
-export async function writeWhatsAppWorkerHeartbeat(
-  pid = process.pid,
-  updatedAt = new Date().toISOString(),
-  connected = false,
-  orgId: ChannelConfigScope = null
-): Promise<void> {
-  await createWhatsAppWorkerHeartbeat(orgId).write({
-    connected,
-    pid,
-    updatedAt,
-  });
 }
 
 export async function writeWhatsAppQrCode(
@@ -92,6 +80,7 @@ export async function readWhatsAppQrCode(
   orgId: ChannelConfigScope = null
 ): Promise<string | null> {
   const raw = await readTextOrNull(getWhatsAppQrCodePath(orgId));
+
   return raw?.trim() || null;
 }
 

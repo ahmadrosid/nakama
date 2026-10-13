@@ -9,12 +9,14 @@ import { pathForPage, SETUP_PATH } from "@/lib/navigation";
 
 export function SetupWizardPage() {
   const { health, loading } = useAppContext();
+
   const {
     activeOrg,
     isAuthenticated,
     isLoading: authLoading,
     user,
   } = useAuth();
+
   const [wizardInProgress, setWizardInProgress] = useState(false);
 
   // The provider step can be skipped, so an account is what finishes setup.

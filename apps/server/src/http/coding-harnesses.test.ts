@@ -16,9 +16,12 @@ import {
 function createHarnessApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const authService = new AuthService();
+
+  // SAFETY: The test checks this response against the endpoint contract asserted below.
   const app = createHonoApp({
     agent: new AgentService(null, null, databaseAdapter),
     authService,
+    // SAFETY: This route test supplies only the service methods it exercises.
     automationService: {} as never,
     databaseAdapter,
     mcpService: {} as never,
@@ -56,11 +59,15 @@ describe("coding harness settings routes", () => {
         headers: session.headers(),
       })
     );
+
     expect(getDefault.status).toBe(200);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const defaultBody = (await getDefault.json()) as {
       providerPassthroughEnabled: boolean;
       loginCommands: Array<{ command: string; name: string }>;
     };
+
     expect(defaultBody.providerPassthroughEnabled).toBe(true);
     expect(defaultBody.loginCommands.map((item) => item.command)).toEqual([
       "codex login",
@@ -79,10 +86,14 @@ describe("coding harness settings routes", () => {
         method: "PUT",
       })
     );
+
     expect(putResponse.status).toBe(200);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const saved = (await putResponse.json()) as {
       providerPassthroughEnabled: boolean;
     };
+
     expect(saved.providerPassthroughEnabled).toBe(false);
 
     const getSaved = await app.fetch(
@@ -90,9 +101,12 @@ describe("coding harness settings routes", () => {
         headers: session.headers(),
       })
     );
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const savedBody = (await getSaved.json()) as {
       providerPassthroughEnabled: boolean;
     };
+
     expect(savedBody.providerPassthroughEnabled).toBe(false);
   });
 
@@ -118,10 +132,14 @@ describe("coding harness settings routes", () => {
         method: "POST",
       })
     );
+
     expect(memberResp.status).toBe(201);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const memberProvisioned = (await memberResp.json()) as {
       temporaryPassword: string;
     };
+
     const memberSession = await loginUserSession(
       app,
       "member@example.com",
@@ -134,6 +152,7 @@ describe("coding harness settings routes", () => {
         headers: memberSession.headers(),
       })
     );
+
     expect(memberGet.status).toBe(200);
 
     const memberPut = await app.fetch(
@@ -146,6 +165,7 @@ describe("coding harness settings routes", () => {
         method: "PUT",
       })
     );
+
     expect(memberPut.status).toBe(403);
 
     const adminPut = await app.fetch(
@@ -158,10 +178,14 @@ describe("coding harness settings routes", () => {
         method: "PUT",
       })
     );
+
     expect(adminPut.status).toBe(200);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const saved = (await adminPut.json()) as {
       providerPassthroughEnabled: boolean;
     };
+
     expect(saved.providerPassthroughEnabled).toBe(false);
   });
 
@@ -176,9 +200,11 @@ describe("coding harness settings routes", () => {
     const orgId = adminSession.orgId!;
 
     await loginPlatformAdminSession(app, authService, databaseAdapter);
+
     const platformUser = await databaseAdapter.getUserByEmail(
       "platform@example.com"
     );
+
     if (!platformUser) {
       throw new Error("platform admin user missing");
     }
@@ -207,10 +233,14 @@ describe("coding harness settings routes", () => {
         method: "PUT",
       })
     );
+
     expect(putResponse.status).toBe(200);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const saved = (await putResponse.json()) as {
       providerPassthroughEnabled: boolean;
     };
+
     expect(saved.providerPassthroughEnabled).toBe(false);
   });
 });

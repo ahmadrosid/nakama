@@ -15,6 +15,7 @@ function sharePublishRequest(init?: RequestInit): Request {
 async function withFreshConfigDir<T>(run: () => T | Promise<T>): Promise<T> {
   const configDir = join(tmpdir(), `nakama-artifact-share-base-${Date.now()}`);
   mkdirSync(configDir, { recursive: true });
+
   try {
     return await withTestEnv(
       {

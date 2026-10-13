@@ -1,7 +1,6 @@
 import { join } from "node:path";
 import { writeTextFile } from "../fs";
 import { SOUL_FILES } from "./load";
-import type { SoulStackFiles } from "./types";
 
 export const WRITABLE_SOUL_FILES = SOUL_FILES;
 
@@ -20,5 +19,3 @@ export async function writeSoulFile(
     ensureDir: directory,
   });
 }
-
-export type { SoulStackFiles };

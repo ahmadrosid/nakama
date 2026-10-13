@@ -15,8 +15,9 @@ export type ProfileChangeMeta = {
 function parseAssignmentIds(value: string | null): string[] | null {
   try {
     const parsed: unknown = JSON.parse(value ?? "[]");
+
     return Array.isArray(parsed) &&
-      parsed.every((id): id is string => typeof id === "string")
+      parsed.every((id): id is string => isString(id))
       ? [...new Set<string>(parsed)]
       : null;
   } catch {
@@ -35,6 +36,7 @@ export async function describeProfileChangeEvents(
   const itemName = (field: "skills" | "tools", id: string) => {
     const key = `${field}:${id}`;
     let name = names.get(key);
+
     if (!name) {
       name = (field === "skills" ? db.getSkill(id) : db.getTool(id)).then(
         (item) =>
@@ -42,32 +44,41 @@ export async function describeProfileChangeEvents(
       );
       names.set(key, name);
     }
+
     return name;
   };
 
   return Promise.all(
     events.map(async (event): Promise<ProfileChangeEvent> => {
       let actorName: string | null = null;
+
       if (event.actorUserId) {
         let actor = actors.get(event.actorUserId);
+
         if (!actor) {
           actor = db
             .getUserById(event.actorUserId)
             .then((user) => user?.name?.trim() || null);
           actors.set(event.actorUserId, actor);
         }
+
         actorName = await actor;
       }
+
       const result: ProfileChangeEvent = { ...event, actorName };
       const field = event.field;
+
       if (field !== "skills" && field !== "tools") {
         return result;
       }
+
       const before = parseAssignmentIds(event.beforeValue);
       const after = parseAssignmentIds(event.afterValue);
+
       if (!(before && after)) {
         return result;
       }
+
       const beforeIds = new Set(before);
       const afterIds = new Set(after);
       result.assignmentNames = Object.fromEntries(
@@ -78,10 +89,12 @@ export async function describeProfileChangeEvents(
           ])
         )
       );
+
       const describe = async (id: string) => ({
         id,
         name: await itemName(field, id),
       });
+
       result.assignmentChanges = {
         added: await Promise.all(
           after.filter((id) => !beforeIds.has(id)).map(describe)
@@ -90,6 +103,7 @@ export async function describeProfileChangeEvents(
           before.filter((id) => !afterIds.has(id)).map(describe)
         ),
       };
+
       return result;
     })
   );
@@ -156,16 +170,21 @@ export async function withAssignmentChange(
   const beforeIds = input.meta
     ? await listAssignmentIds(db, input.profileId, input.field)
     : [];
+
   await mutate();
+
   if (!input.meta) {
     return;
   }
+
   const afterIds = await listAssignmentIds(db, input.profileId, input.field);
   const beforeValue = JSON.stringify([...beforeIds].sort());
   const afterValue = JSON.stringify([...afterIds].sort());
+
   if (beforeValue === afterValue) {
     return;
   }
+
   await recordProfileChangeEvent(db, {
     actorUserId: input.meta.actorUserId,
     afterValue,
@@ -181,6 +200,8 @@ export function soulFieldFromKey(key: string): ProfileChangeField | null {
   if (!isWritableSoulFileKey(key)) {
     return null;
   }
+
+  // SAFETY: isWritableSoulFileKey confirms this key is a writable soul file.
   return `soul.${key}` as ProfileChangeField;
 }
 
@@ -190,5 +211,10 @@ export function soulFieldFromFileName(
   if (!fileName.endsWith(".md")) {
     return null;
   }
+
   return soulFieldFromKey(fileName.slice(0, -3).toLowerCase());
+}
+
+function isString<T>(value: T): value is T & string {
+  return Object.prototype.toString.call(value) === "[object String]";
 }

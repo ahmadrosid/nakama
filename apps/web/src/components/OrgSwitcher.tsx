@@ -51,7 +51,7 @@ function validateCreateOrg(name: string, slug: string): string | null {
   return null;
 }
 
-function orgSubmitError(err: unknown, fallback: string): string {
+function orgSubmitError(err: Error, fallback: string): string {
   if (err instanceof Error) {
     return err.message;
   }
@@ -68,15 +68,17 @@ function OrgSwitcherTrigger({
   collapsed,
   initial,
   label,
+  isTeam,
   ...props
 }: {
   collapsed: boolean;
   initial: string;
   label: string;
+  isTeam: boolean;
 } & ComponentProps<typeof Button>) {
   return (
     <Button
-      aria-label={collapsed ? `Current organization: ${label}` : undefined}
+      aria-label={`Current ${isTeam ? "team" : "organization"}: ${label}`}
       className={cn(
         "font-normal hover:bg-sidebar-accent/60 motion-reduce:transition-none",
         collapsed
@@ -261,8 +263,10 @@ function useOrgSwitcherDialogs() {
     setError(null);
 
     const validationError = validateCreateOrg(name, slug);
+
     if (validationError) {
       setError(validationError);
+
       return;
     }
 
@@ -278,7 +282,14 @@ function useOrgSwitcherDialogs() {
       setSlug("");
       slugEditedRef.current = false;
     } catch (err) {
-      setError(orgSubmitError(err, "Failed to create organization"));
+      setError(
+        orgSubmitError(
+          err instanceof Error
+            ? err
+            : new Error("Failed to create organization"),
+          "Failed to create organization"
+        )
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -286,6 +297,7 @@ function useOrgSwitcherDialogs() {
 
   async function handleEdit(event: React.FormEvent) {
     event.preventDefault();
+
     if (!editingOrgRef.current) {
       return;
     }
@@ -293,8 +305,10 @@ function useOrgSwitcherDialogs() {
     setError(null);
 
     const trimmedName = name.trim();
+
     if (!trimmedName) {
       setError("Organization name is required.");
+
       return;
     }
 
@@ -306,7 +320,14 @@ function useOrgSwitcherDialogs() {
       editingOrgRef.current = null;
       setName("");
     } catch (err) {
-      setError(orgSubmitError(err, "Failed to update organization"));
+      setError(
+        orgSubmitError(
+          err instanceof Error
+            ? err
+            : new Error("Failed to update organization"),
+          "Failed to update organization"
+        )
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -314,6 +335,7 @@ function useOrgSwitcherDialogs() {
 
   function handleEditOpenChange(open: boolean) {
     setEditOpen(open);
+
     if (!open) {
       editingOrgRef.current = null;
       setError(null);
@@ -343,7 +365,7 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
   const { user, orgs, activeOrg, switchOrg } = useAuth();
   const dialogs = useOrgSwitcherDialogs();
 
-  if (!user || orgs.length === 0) {
+  if (!user || (!activeOrg && orgs.length === 0)) {
     return null;
   }
 
@@ -358,6 +380,7 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
             <OrgSwitcherTrigger
               collapsed={collapsed}
               initial={initial}
+              isTeam={Boolean(activeOrg?.parentOrgId)}
               label={label}
             />
           }
@@ -371,12 +394,18 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
         >
           <div className="border-border/50 border-b px-2 py-1.5">
             <p className="font-medium text-muted-foreground text-xs">
-              Select organization
+              {orgs.some((org) => org.parentOrgId)
+                ? "Select organization or team"
+                : "Select organization"}
             </p>
           </div>
           <div className="p-1">
+            {activeOrg && !orgs.some((org) => org.id === activeOrg.id) ? (
+              <DropdownMenuItem>{activeOrg.name}</DropdownMenuItem>
+            ) : null}
             {orgs.map((org) => (
               <DropdownMenuItem
+                aria-label={`Switch to ${org.parentOrgId ? "team" : "organization"} ${org.name}`}
                 className="pr-1"
                 key={org.id}
                 onClick={() => {
@@ -386,6 +415,11 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
                 }}
               >
                 <span className="min-w-0 flex-1 truncate">{org.name}</span>
+                {org.parentOrgId ? (
+                  <span className="shrink-0 text-muted-foreground text-xs">
+                    Team
+                  </span>
+                ) : null}
                 {canEditOrg(org, Boolean(user.isPlatformAdmin)) ? (
                   <Button
                     aria-label={`Edit ${org.name}`}

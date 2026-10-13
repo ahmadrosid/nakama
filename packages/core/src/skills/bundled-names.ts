@@ -9,7 +9,9 @@ export const DEFAULT_BUNDLED_SKILL_NAMES = [
 ] as const;
 
 export const SUPER_BOT_BUNDLED_SKILL_NAMES = [
+  "create-plugin",
   "create-profile",
+  "create-skill",
   "coding-agent",
 ] as const;
 
@@ -22,7 +24,10 @@ export const RUNTIME_ONLY_BUNDLED_SKILL_NAMES = [
 ] as const;
 
 /** Bundled skills that install/sync but are never auto-assigned (manual opt-in). */
-export const OPT_IN_BUNDLED_SKILL_NAMES = ["agent-browser"] as const;
+export const OPT_IN_BUNDLED_SKILL_NAMES = [
+  "agent-browser",
+  "google-meet",
+] as const;
 
 export const BUNDLED_SKILL_NAMES = [
   ...DEFAULT_BUNDLED_SKILL_NAMES,

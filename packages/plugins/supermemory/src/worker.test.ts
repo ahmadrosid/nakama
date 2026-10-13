@@ -4,11 +4,29 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { installServer } from "./worker";
 
+type JsonValue =
+  | boolean
+  | null
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+type JsonRecord = { [key: string]: JsonValue };
+
+function asJsonRecord(value: JsonValue): JsonRecord {
+  if (!(value instanceof Object) || Array.isArray(value)) {
+    throw new Error("Expected a JSON object");
+  }
+
+  return value;
+}
+
 test("the worker rejects a binary whose checksum does not match the pinned release", async () => {
   const directory = await mkdtemp(join(tmpdir(), "supermemory-download-"));
   const original = globalThis.fetch;
-  globalThis.fetch = (async () =>
-    new Response("not-a-server")) as unknown as typeof fetch;
+  globalThis.fetch = async () => new Response("not-a-server");
+
   try {
     await expect(installServer(directory)).rejects.toThrow("checksum mismatch");
     expect(
@@ -22,6 +40,7 @@ test("the worker rejects a binary whose checksum does not match the pinned relea
 
 test("worker refuses inherited chat credentials without explicit extraction settings", async () => {
   const directory = await mkdtemp(join(tmpdir(), "supermemory-provider-"));
+
   try {
     await Bun.write(
       join(directory, "llm.json"),
@@ -31,6 +50,7 @@ test("worker refuses inherited chat credentials without explicit extraction sett
         type: "openai_compatible",
       })
     );
+
     const child = Bun.spawn(
       [process.execPath, new URL("./worker.ts", import.meta.url).pathname],
       {
@@ -43,11 +63,13 @@ test("worker refuses inherited chat credentials without explicit extraction sett
         stdout: "pipe",
       }
     );
+
     const [code, stdout, stderr] = await Promise.all([
       child.exited,
       new Response(child.stdout).text(),
       new Response(child.stderr).text(),
     ]);
+
     expect(code).not.toBe(0);
     expect(await Bun.file(join(directory, "status.json")).json()).toMatchObject(
       { state: "error" }
@@ -63,29 +85,36 @@ test("worker refuses inherited chat credentials without explicit extraction sett
 
 test("extraction proxy translates legacy parameters and restricts access", async () => {
   const { startExtractionProxy } = await import("./worker");
-  const requests: Record<string, unknown>[] = [];
+  const requests: JsonRecord[] = [];
+
   const upstream = Bun.serve({
     async fetch(request) {
       expect(request.headers.get("Authorization")).toBe("Bearer real-key");
-      requests.push(await request.json());
+      const body = asJsonRecord(await request.json());
+      requests.push(body);
+
       return Response.json({ choices: [{ message: { content: "ok" } }] });
     },
     hostname: "127.0.0.1",
     port: 0,
   });
+
   const proxy = startExtractionProxy({
     apiKey: "real-key",
     baseUrl: `http://127.0.0.1:${upstream.port}/v1`,
     model: "gpt-5.6-luna",
     revision: "test",
   });
+
   try {
     const url = proxy.baseUrl + "/chat/completions";
     expect((await fetch(url, { body: "{}", method: "POST" })).status).toBe(401);
+
     const headers = {
       Authorization: `Bearer ${proxy.token}`,
       "Content-Type": "application/json",
     };
+
     expect(
       (
         await fetch(proxy.baseUrl + "/other", {
@@ -95,6 +124,7 @@ test("extraction proxy translates legacy parameters and restricts access", async
         })
       ).status
     ).toBe(404);
+
     const response = await fetch(url, {
       body: JSON.stringify({
         max_tokens: 100,
@@ -105,6 +135,7 @@ test("extraction proxy translates legacy parameters and restricts access", async
       headers,
       method: "POST",
     });
+
     expect(response.status).toBe(200);
     expect(requests).toEqual([
       {

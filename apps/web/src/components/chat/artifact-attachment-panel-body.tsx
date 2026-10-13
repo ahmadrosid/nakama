@@ -113,18 +113,23 @@ function resolveArtifactBodyPhase({
   if (loading) {
     return "loading";
   }
+
   if (error) {
     return "error";
   }
+
   if (hasContent && showSource) {
     return "source";
   }
+
   if (hasContent) {
     return "content";
   }
+
   if (canPreview) {
     return "empty";
   }
+
   return "unavailable";
 }
 
@@ -248,6 +253,7 @@ function ArtifactHtmlPreview({
 }) {
   const { activeOrg } = useAuth();
   const orgId = activeOrg?.id;
+
   const [preview, setPreview] = useState<{
     content: string;
     orgId: string | undefined;
@@ -259,6 +265,7 @@ function ArtifactHtmlPreview({
     if (!profileId) {
       return;
     }
+
     const controller = new AbortController();
     const scopedClient = client.forOrg(orgId ?? null);
     void resolveArtifactHtmlAssets(
@@ -280,17 +287,21 @@ function ArtifactHtmlPreview({
           setPreview({ content, error: formatError(error), html: "", orgId });
         }
       });
+
     return () => controller.abort();
   }, [content, artifactPath, profileId, orgId]);
 
   const current =
     preview?.content === content && preview.orgId === orgId ? preview : null;
+
   if (profileId && !current) {
     return <LoadingState />;
   }
+
   if (current?.error) {
     return <ArtifactBodyError error={current.error} />;
   }
+
   return (
     <ArtifactHtmlFrame
       html={htmlForArtifactPreview(profileId ? (current?.html ?? "") : content)}
@@ -315,6 +326,7 @@ function ArtifactHtmlFrame({
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       const frame = frameRef.current?.contentWindow;
+
       if (
         frame &&
         event.source === frame &&
@@ -324,7 +336,9 @@ function ArtifactHtmlFrame({
         frame.postMessage({ nakamaArtifactHtml: html }, "*");
       }
     };
+
     window.addEventListener("message", onMessage);
+
     return () => window.removeEventListener("message", onMessage);
   }, [html]);
 
@@ -389,13 +403,14 @@ function resolveTextSourceView(
   previewMode: ArtifactPreviewMode,
   format: "markdown" | "plain",
   language: string | null
-): { sourceFormat: "markdown" | "plain"; sourceLanguage: string | null } {
+) {
   if (previewMode === "source") {
     return {
-      sourceFormat: "plain",
+      sourceFormat: "plain" as const,
       sourceLanguage: language ?? (format === "markdown" ? "markdown" : null),
     };
   }
+
   return { sourceFormat: format, sourceLanguage: language };
 }
 
@@ -409,6 +424,7 @@ function ArtifactTextRendered({
   sourceFormat: "markdown" | "plain";
 }) {
   const renderedRef = useRef<HTMLDivElement>(null);
+
   const headings = useMemo(
     () => (sourceFormat === "markdown" ? extractMarkdownHeadings(content) : []),
     [content, sourceFormat]
@@ -441,9 +457,11 @@ function ArtifactAttachmentTextBody({
     format,
     language
   );
+
   const showCodeBlock = Boolean(content && sourceFormat !== "markdown");
   const showContent = !(loading || error) && Boolean(content);
   const showUnavailable = !(loading || error || canPreview);
+
   const rendered = content
     ? renderTextContent({
         content,
@@ -565,6 +583,7 @@ export function ArtifactAttachmentPanelBody(
       return <ArtifactAttachmentTextBody {...props} />;
     default: {
       const _exhaustive: never = props;
+
       return _exhaustive;
     }
   }

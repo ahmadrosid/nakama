@@ -6,10 +6,9 @@ import {
   OversizedTelegramFileError,
 } from "./attachments";
 
-export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
-export const OVERSIZED_AUDIO_REPLY =
-  "Audio is too large. Maximum size is 25 MB.";
+const OVERSIZED_AUDIO_REPLY = "Audio is too large. Maximum size is 25 MB.";
 
 export function hasTelegramAudio(ctx: Context): boolean {
   return Boolean(ctx.message?.voice || ctx.message?.audio);
@@ -28,11 +27,13 @@ export async function buildTelegramAudioInput(
   }
 
   const downloaded = await downloadTelegramFile(ctx, fileId, MAX_AUDIO_BYTES);
+
   const filename = inferAudioFilename(
     downloaded.filePath,
     Boolean(voice),
     audio?.file_name
   );
+
   const mediaType = inferAudioMediaType(
     downloaded.filePath,
     downloaded.contentType,
@@ -51,7 +52,7 @@ export async function buildTelegramAudioInput(
   return { message };
 }
 
-export function formatTelegramAudioError(error: unknown): string {
+export function formatTelegramAudioError(error: Error | string): string {
   if (error instanceof OversizedTelegramFileError) {
     return OVERSIZED_AUDIO_REPLY;
   }
@@ -60,7 +61,7 @@ export function formatTelegramAudioError(error: unknown): string {
     return error.message;
   }
 
-  return String(error);
+  return error;
 }
 
 function inferAudioFilename(

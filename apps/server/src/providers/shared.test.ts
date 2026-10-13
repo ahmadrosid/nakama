@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { ChatMessage } from "@nakama/core";
+import type { ChatMessage, ToolCall } from "@nakama/core";
 import {
   extractOpenAITokenUsage,
-  formatHttpErrorBody,
+  finalizePendingToolCalls,
+  mergePendingToolCall,
   normalizeThinkingEffort,
+  type PendingToolCall,
   parseJsonRecord,
   readRecord,
   readSseEvents,
@@ -58,6 +60,30 @@ describe("provider shared helpers", () => {
     expect(parseJsonRecord("{bad json")).toEqual({});
   });
 
+  test("joins partial tool calls in index order and drops incomplete calls", () => {
+    const pending = new Map<number, PendingToolCall>();
+    mergePendingToolCall(pending, {
+      function: { arguments: '{"second":' },
+      index: 1,
+    });
+    mergePendingToolCall(pending, {
+      function: { arguments: "{bad json", name: "first" },
+      id: "call_0",
+      index: 0,
+    });
+    mergePendingToolCall(pending, {
+      function: { arguments: "2}", name: "second" },
+      id: "call_1",
+      index: 1,
+    });
+    mergePendingToolCall(pending, { id: "incomplete", index: 2 });
+
+    expect(finalizePendingToolCalls(pending)).toEqual([
+      { arguments: {}, id: "call_0", name: "first" },
+      { arguments: { second: 2 }, id: "call_1", name: "second" },
+    ]);
+  });
+
   test("readRecord only accepts plain records", () => {
     expect(readRecord({ ok: true })).toEqual({ ok: true });
     expect(readRecord(null)).toEqual({});
@@ -71,41 +97,32 @@ describe("provider shared helpers", () => {
     expect(normalizeThinkingEffort(undefined)).toBe("medium");
   });
 
-  test("formatHttpErrorBody extracts OpenCode-style JSON errors", () => {
-    expect(
-      formatHttpErrorBody(
-        "OpenCode Zen",
-        429,
-        JSON.stringify({
-          error: {
-            message: "Rate limit exceeded. Please try again later.",
-            type: "FreeUsageLimitError",
-          },
-          type: "error",
-        })
-      )
-    ).toBe(
-      "OpenCode Zen request failed (429 FreeUsageLimitError): Rate limit exceeded. Please try again later."
-    );
-  });
-
   const user = (content: string): ChatMessage => ({ content, role: "user" });
+
   const toolResult = (toolCallId: string, content = "ok"): ChatMessage => ({
     content,
     name: "lookup",
     role: "tool",
     toolCallId,
   });
+
   const assistantTools = (
     id: string,
-    args: Record<string, unknown> = {},
+    args: ToolCall["arguments"] = {},
     thinking?: string
-  ): ChatMessage => ({
-    content: "",
-    role: "assistant",
-    ...(thinking ? { thinking } : {}),
-    toolCalls: [{ arguments: args, id, name: "lookup" }],
-  });
+  ): ChatMessage => {
+    const message: Extract<ChatMessage, { role: "assistant" }> = {
+      content: "",
+      role: "assistant",
+      toolCalls: [{ arguments: args, id, name: "lookup" }],
+    };
+
+    if (thinking) {
+      message.thinking = thinking;
+    }
+
+    return message;
+  };
 
   test("sanitizeToolCallHistory drops orphaned tool_calls assistants", () => {
     expect(
@@ -130,6 +147,7 @@ describe("provider shared helpers", () => {
       toolResult("call_1"),
       { content: "Done", role: "assistant" },
     ];
+
     expect(sanitizeToolCallHistory(messages)).toEqual(messages);
   });
 });

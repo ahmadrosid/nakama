@@ -22,6 +22,7 @@ async function loadExamples(directory: string): Promise<string | undefined> {
   }
 
   const entries = await readDirectoryEntries(examplesDir);
+
   const markdownFiles = entries
     .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
     .map((entry) => entry.name)
@@ -46,33 +47,41 @@ async function loadExamples(directory: string): Promise<string | undefined> {
 
 export async function loadSoulStack(
   directory: string,
-  readMemory?: (content: string) => Promise<string>,
-  fallbackDirectory?: string
+  readMemory?: (content: string) => Promise<string>
 ): Promise<LoadedSoulStack> {
   const files: LoadedSoulStack["files"] = {};
   const loaded: string[] = [];
 
-  for (const [key, filename] of Object.entries(SOUL_FILES)) {
+  // SAFETY: Every entry comes from the statically declared SOUL_FILES map.
+  for (const [key, filename] of Object.entries(SOUL_FILES) as Array<
+    [keyof typeof SOUL_FILES, string]
+  >) {
     let content: string | undefined;
+
     if (key === "memory" && readMemory) {
       let raw = "";
+
       try {
         raw = await readText(join(directory, filename));
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        if (
+          !(
+            error instanceof Error &&
+            "code" in error &&
+            error.code === "ENOENT"
+          )
+        ) {
           throw error;
         }
       }
+
       content = (await readMemory(raw)).trim() || undefined;
     } else {
       content = await readTextIfExists(join(directory, filename));
-      if (key !== "memory" && !content && fallbackDirectory) {
-        content = await readTextIfExists(join(fallbackDirectory, filename));
-      }
     }
 
     if (content) {
-      files[key as keyof typeof SOUL_FILES] = content;
+      files[key] = content;
       loaded.push(filename);
     }
   }
@@ -105,5 +114,6 @@ export function toSoulStatus(stack: LoadedSoulStack): SoulStatus {
 
 export async function getSoulStatus(directory: string): Promise<SoulStatus> {
   const stack = await loadSoulStack(directory);
+
   return toSoulStatus(stack);
 }

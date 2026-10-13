@@ -14,6 +14,7 @@ export function createCapturingProvider(
   const provider: ProviderClient & { lastInput?: GenerateChatInput } = {
     generateChat(input) {
       provider.lastInput = input;
+
       return Promise.resolve(response);
     },
     generateText() {
@@ -22,12 +23,15 @@ export function createCapturingProvider(
     name: options.name ?? "anthropic",
     streamChat(input, handlers) {
       provider.lastInput = input;
+
       if (options.thinking) {
         handlers.onThinking?.(options.thinking);
       }
+
       if (response.content) {
         handlers.onChunk(response.content);
       }
+
       return Promise.resolve(response);
     },
   };

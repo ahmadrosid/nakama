@@ -36,7 +36,7 @@ function json(body, status = 200) {
         status,
     });
 }
-async function telegram(token, method, body) {
+async function telegram(token, method, body, resultSchema) {
     if (!token) {
         throw new Error("Telegram manager is not configured");
     }
@@ -46,11 +46,12 @@ async function telegram(token, method, body) {
         method: "POST",
         signal: AbortSignal.timeout(5000),
     });
-    const payload = (await response.json());
-    if (!(response.ok && payload.ok) || payload.result === undefined) {
+    const payloadSchema = z.object({ ok: z.boolean(), result: resultSchema });
+    const payload = payloadSchema.safeParse(await response.json());
+    if (!(response.ok && payload.success && payload.data.ok)) {
         throw new Error("Telegram request failed");
     }
-    return payload.result;
+    return payload.data.result;
 }
 export async function handleTelegramPairing(request, options) {
     if (!(options.managerToken && options.webhookSecret)) {
@@ -76,7 +77,10 @@ export async function handleTelegramPairing(request, options) {
                 return json({ error: "Too many pairings. Try again later." }, 429);
             }
             try {
-                const manager = await telegram(options.managerToken, "getMe", {});
+                const manager = await telegram(options.managerToken, "getMe", {}, z.object({
+                    can_manage_bots: z.boolean().optional(),
+                    username: z.string().optional(),
+                }));
                 if (!(manager.username && manager.can_manage_bots)) {
                     throw new Error("Manager permission missing");
                 }
@@ -121,7 +125,7 @@ export async function handleTelegramPairing(request, options) {
         if (!(pairing.bot_id && pairing.owner_user_id)) {
             return json({ error: "Bot is not ready" }, 409);
         }
-        const token = await telegram(options.managerToken, "getManagedBotToken", { user_id: Number(pairing.bot_id) });
+        const token = await telegram(options.managerToken, "getManagedBotToken", { user_id: Number(pairing.bot_id) }, z.string());
         // Recheck after the external call: cancellation/ownership changes may race it.
         const current = await getTelegramPairing(options.sql, pairing.id, secretHash);
         if (!current || current.bot_id !== pairing.bot_id) {
@@ -156,7 +160,7 @@ export async function handleTelegramWebhook(request, options) {
             message.from.id === message.chat.id) {
             const pairing = await bindTelegramPairing(options.sql, id, String(message.from.id));
             if (pairing) {
-                const manager = await telegram(options.managerToken, "getMe", {});
+                const manager = await telegram(options.managerToken, "getMe", {}, z.object({ username: z.string() }));
                 await telegram(options.managerToken, "sendMessage", {
                     chat_id: message.chat.id,
                     reply_markup: {
@@ -170,7 +174,7 @@ export async function handleTelegramWebhook(request, options) {
                         ],
                     },
                     text: "Create your bot to connect it to the Nakama server where you scanned this QR. Keep the suggested username so we can match it securely.",
-                });
+                }, z.object({}));
             }
         }
         if (managed) {

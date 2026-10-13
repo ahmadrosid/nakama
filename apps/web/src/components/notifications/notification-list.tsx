@@ -1,6 +1,7 @@
 import { cn } from "@nakama/ui/utils";
 import { ArrowRight01Icon, BrainIcon, SharedWifiIcon } from "hugeicons-react";
 import { Link } from "react-router-dom";
+import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import type { NotificationItem } from "@/hooks/use-notifications";
 import { formatSessionRelativeTime } from "@/lib/chat-history";
 
@@ -12,6 +13,7 @@ function NotificationIcon({
   size?: "sm" | "md";
 }) {
   const Icon = kind === "automation-run" ? SharedWifiIcon : BrainIcon;
+
   return (
     <span
       className={cn(
@@ -33,13 +35,21 @@ function NotificationListItem({
   compact?: boolean;
   onNavigate?: () => void;
 }) {
+  const { setProfileId } = useActiveChatProfile();
+
   return (
     <Link
       className={cn(
         "flex min-w-0 overflow-hidden transition-colors hover:bg-muted/60",
         compact ? "gap-2.5 rounded-md px-2 py-2" : "gap-3 px-4 py-3"
       )}
-      onClick={onNavigate}
+      onClick={() => {
+        if (item.profileId) {
+          setProfileId(item.profileId);
+        }
+
+        onNavigate?.();
+      }}
       to={item.href}
     >
       <NotificationIcon kind={item.kind} size={compact ? "sm" : "md"} />

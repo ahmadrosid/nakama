@@ -122,6 +122,43 @@
       }
     },
     {
+      "key": "test_step",
+      "access": "member",
+      "effect": "write",
+      "entry": "actions/actions.js",
+      "exposeAsTool": false,
+      "description": "Run one workflow step with the last run's data, without saving a run.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "workflowId": {
+            "type": "string"
+          },
+          "agentId": {
+            "type": "string"
+          },
+          "stepId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": ["stepId", "steps"]
+      }
+    },
+    {
       "key": "delete_workflow",
       "access": "member",
       "effect": "write",

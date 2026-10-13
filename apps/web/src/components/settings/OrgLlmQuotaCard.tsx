@@ -4,16 +4,25 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/context/use-auth";
 import { client, formatError } from "@/lib/client";
 
+const compactNumber = new Intl.NumberFormat(undefined, {
+  maximumFractionDigits: 1,
+  notation: "compact",
+});
+
 export function OrgLlmQuotaCard() {
   const { activeOrg } = useAuth();
+
   const [quotaState, setQuotaState] = useState<{
     error: string | null;
     orgId: string;
     quota: OrgLlmQuotaStatusResponse | null;
   } | null>(null);
+
   const activeOrgId = activeOrg?.id;
+
   const quota =
     quotaState && quotaState.orgId === activeOrgId ? quotaState.quota : null;
+
   const error =
     quotaState && quotaState.orgId === activeOrgId ? quotaState.error : null;
 
@@ -21,6 +30,7 @@ export function OrgLlmQuotaCard() {
     if (!activeOrg || activeOrg.role !== "admin") {
       return;
     }
+
     const orgId = activeOrg.id;
     let cancelled = false;
     void client
@@ -39,6 +49,7 @@ export function OrgLlmQuotaCard() {
           });
         }
       });
+
     return () => {
       cancelled = true;
     };
@@ -46,6 +57,15 @@ export function OrgLlmQuotaCard() {
 
   if (!activeOrg || activeOrg.role !== "admin") {
     return null;
+  }
+
+  if (quota && !quota.tokenLimit && !quota.turnLimit) {
+    return (
+      <p className="px-4 text-muted-foreground text-sm tabular-nums">
+        This month: {quota.turns.toLocaleString()} turns ·{" "}
+        {compactNumber.format(quota.tokens)} tokens · no limit
+      </p>
+    );
   }
 
   return (
@@ -61,38 +81,42 @@ export function OrgLlmQuotaCard() {
             </p>
           ) : null}
           {quota ? (
-            <>
-              {[
-                { label: "Month", value: quota.month },
-                { label: "Status", value: quota.status },
-                {
-                  label: "Turns",
-                  value: `${quota.turns.toLocaleString()} / ${quota.turnLimit ? quota.turnLimit.toLocaleString() : "∞"}`,
-                },
-                {
-                  label: "Tokens",
-                  value: `${quota.tokens.toLocaleString()} / ${quota.tokenLimit ? quota.tokenLimit.toLocaleString() : "∞"}`,
-                },
-              ].map(({ label, value }) => (
-                <div
-                  className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-                  key={label}
-                >
-                  <span>{label}</span>
-                  <span className="text-muted-foreground tabular-nums">
-                    {value}
-                  </span>
-                </div>
-              ))}
-              <p className="px-4 py-3 text-muted-foreground text-xs">
-                Warning at {quota.warningPercent}% · month resets at 00:00 UTC
-              </p>
-            </>
+            <QuotaRows quota={quota} />
           ) : error ? null : (
             <p className="px-4 py-3 text-muted-foreground">Loading usage…</p>
           )}
         </CardContent>
       </Card>
     </section>
+  );
+}
+
+function QuotaRows({ quota }: { quota: OrgLlmQuotaStatusResponse }) {
+  return (
+    <>
+      {[
+        { label: "Month", value: quota.month },
+        { label: "Status", value: quota.status },
+        {
+          label: "Turns",
+          value: `${quota.turns.toLocaleString()} / ${quota.turnLimit ? quota.turnLimit.toLocaleString() : "∞"}`,
+        },
+        {
+          label: "Tokens",
+          value: `${quota.tokens.toLocaleString()} / ${quota.tokenLimit ? quota.tokenLimit.toLocaleString() : "∞"}`,
+        },
+      ].map(({ label, value }) => (
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+          key={label}
+        >
+          <span>{label}</span>
+          <span className="text-muted-foreground tabular-nums">{value}</span>
+        </div>
+      ))}
+      <p className="px-4 py-3 text-muted-foreground text-xs">
+        Warning at {quota.warningPercent}% · month resets at 00:00 UTC
+      </p>
+    </>
   );
 }

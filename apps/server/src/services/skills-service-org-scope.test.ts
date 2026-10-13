@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureBundledSkillFiles } from "@nakama/core";
@@ -7,6 +7,7 @@ import {
   createSqliteDatabase,
   type DatabaseAdapter,
   ensureProfileDefaultBundledSkills,
+  type SqliteDatabase,
 } from "@nakama/db";
 import { SkillProposalService } from "./skill-proposal-service";
 import { SkillSuggestionService } from "./skill-suggestion-service";
@@ -27,6 +28,7 @@ const ORG_A_SKILL = markdown(
   "Deploy notes for org A. Use when deploying.",
   "Org A steps."
 );
+
 const ORG_B_SKILL = markdown(
   "deploy-notes",
   "Deploy notes for org B. Use when deploying.",
@@ -61,20 +63,21 @@ async function seedTenant(
 
 describe("skills are scoped per org", () => {
   let configDir: string;
+  let database: SqliteDatabase;
 
   beforeEach(async () => {
     configDir = await mkdtemp(join(tmpdir(), "nakama-skill-org-scope-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    database?.close();
     delete process.env.NAKAMA_CONFIG_DIR;
+    await rm(configDir, { force: true, recursive: true });
   });
 
   async function openDb(): Promise<DatabaseAdapter> {
-    const database = await createSqliteDatabase(
-      `file:${join(configDir, "nakama.db")}`
-    );
+    database = await createSqliteDatabase(":memory:");
     const db = database.adapter;
 
     await seedTenant(db, "org_a", "profile_a");
@@ -239,6 +242,7 @@ describe("skills are scoped per org", () => {
     const orgA = await service.getSkill(
       (await db.getSkillByName("deploy-notes", "org_a"))?.id ?? ""
     );
+
     const orgB = await service.getSkill(
       (await db.getSkillByName("deploy-notes", "org_b"))?.id ?? ""
     );
@@ -306,6 +310,7 @@ describe("skills are scoped per org", () => {
     const orgB = await service.getSkill(
       (await db.getSkillByName("deploy-notes", "org_b"))?.id ?? ""
     );
+
     const orgA = await service.getSkill(
       (await db.getSkillByName("deploy-notes", "org_a"))?.id ?? ""
     );

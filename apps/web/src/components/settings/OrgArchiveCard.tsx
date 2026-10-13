@@ -30,6 +30,7 @@ export function OrgArchiveCard() {
   async function handleArchive() {
     setPending(true);
     setFormError(null);
+
     try {
       await archiveOrg(org.id);
       setConfirmOpen(false);

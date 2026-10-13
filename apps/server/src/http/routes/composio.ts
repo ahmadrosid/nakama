@@ -11,8 +11,8 @@ import { NakamaApiError } from "@nakama/core";
 import { resolveComposioCallbackBaseUrl } from "../../services/composio-callback-url";
 import type { ServerOptions } from "../context";
 import {
-  requireNotViewerFromContext,
   requireOrgAdminFromContext,
+  requireOrgMemberFromContext,
 } from "../org-guards";
 import {
   errorResponse,
@@ -28,12 +28,14 @@ export function registerComposioOAuthRoutes(
   options: ServerOptions
 ): void {
   const service = options.composioService;
+
   if (!service) {
     return;
   }
 
   app.get("/v1/composio/oauth/callback", async (c) => {
     const state = c.req.query("state");
+
     if (!state) {
       return errorResponse("Missing OAuth state.", 400);
     }
@@ -42,6 +44,7 @@ export function registerComposioOAuthRoutes(
       const connectedAccountId = c.req.query("connected_account_id");
       const result = await service.completeOAuth(state, { connectedAccountId });
       const accept = c.req.header("accept") ?? "";
+
       const wantsHtml =
         accept.includes("text/html") || !accept.includes("application/json");
 
@@ -77,12 +80,14 @@ export function registerComposioRoutes(
   options: ServerOptions
 ): void {
   const service = options.composioService;
+
   if (!service) {
     return;
   }
 
   app.get("/v1/composio/toolkits", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
+
     return json<ListComposioToolkitsResponse>(
       await service.listToolkits(auth.activeOrgId!, auth.user.id)
     );
@@ -132,13 +137,14 @@ export function registerComposioRoutes(
   });
 
   app.post("/v1/composio/toolkits/:toolkitSlug/connect", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
 
     try {
       const body = await readOptionalJson<ComposioConnectRequest>(
         c.req.raw,
         {}
       );
+
       return json<ComposioConnectResponse>(
         await service.connectToolkit(
           auth.activeOrgId!,
@@ -163,7 +169,7 @@ export function registerComposioRoutes(
   });
 
   app.post("/v1/composio/toolkits/:toolkitSlug/disconnect", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
 
     try {
       return json<ComposioToolkitSummary>(
@@ -186,7 +192,7 @@ export function registerComposioRoutes(
   });
 
   app.post("/v1/composio/toolkits/:toolkitSlug/sync", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
 
     try {
       return json<ComposioToolkitSummary>(
@@ -210,6 +216,7 @@ export function registerComposioRoutes(
 
   app.get("/v1/profiles/:profileId/composio-toolkits", async (c) => {
     const auth = requireOrgAdminFromContext(c);
+
     const profile = await options.databaseAdapter?.getProfile(
       c.req.param("profileId")
     );
@@ -225,6 +232,7 @@ export function registerComposioRoutes(
 
   app.put("/v1/profiles/:profileId/composio-toolkits", async (c) => {
     const auth = requireOrgAdminFromContext(c);
+
     const profile = await options.databaseAdapter?.getProfile(
       c.req.param("profileId")
     );
@@ -237,6 +245,7 @@ export function registerComposioRoutes(
       const body = await readJson<UpdateProfileComposioToolkitsRequest>(
         c.req.raw
       );
+
       return json<ListProfileComposioToolkitsResponse>(
         await service.updateProfileAssignments(auth.activeOrgId!, profile, body)
       );

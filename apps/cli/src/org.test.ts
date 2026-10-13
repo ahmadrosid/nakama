@@ -12,31 +12,39 @@ test("org switching scopes the new session and preserves the current client on f
   process.env.NAKAMA_CONFIG_DIR = configDir;
   let failSession = false;
   const requests: { path: string; org: string | null }[] = [];
+
   const client = new NakamaClient({
     baseUrl: "https://example.com",
+    // SAFETY: This fetch stub forwards requests to the test server.
     fetch: (async (input, init) => {
       const path = new URL(String(input)).pathname;
       requests.push({ org: new Headers(init?.headers).get("X-Org-Id"), path });
+
       if (path === "/v1/auth/orgs") {
         return Response.json({
           orgs: [{ id: "org_new", name: "Team", slug: "team" }],
         });
       }
+
       if (path === "/v1/profiles") {
         return Response.json({
           profiles: [{ id: "profile_new", isSuper: true, name: "Bot" }],
         });
       }
+
       if (path === "/v1/sessions") {
         expect(JSON.parse(String(init?.body)).profileId).toBe("profile_new");
+
         return failSession
           ? Response.json({ error: "unavailable" }, { status: 500 })
           : Response.json({ sessionId: "session_new" });
       }
+
       return Response.json({ providerConfigured: true });
     }) as typeof fetch,
     orgId: "org_old",
   });
+
   try {
     const lines: string[] = [];
     expect(
@@ -69,6 +77,7 @@ test("org switching scopes the new session and preserves the current client on f
     } else {
       process.env.NAKAMA_CONFIG_DIR = previous;
     }
+
     await rm(configDir, { force: true, recursive: true });
   }
 });

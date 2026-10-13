@@ -66,6 +66,7 @@ function clientAddress(
 ): string | null {
   if (trustProxy) {
     const forwarded = c.req.header("x-forwarded-for")?.split(",")[0]?.trim();
+
     if (forwarded) {
       return forwarded;
     }
@@ -100,6 +101,7 @@ export function createRateLimitMiddleware(
     // not counted at all.
     if (!address) {
       await next();
+
       return;
     }
 
@@ -118,6 +120,7 @@ export function createRateLimitMiddleware(
     if (!live) {
       budgets.set(key, { count: 1, resetAt: at + windowMs });
       await next();
+
       return;
     }
 
@@ -129,6 +132,7 @@ export function createRateLimitMiddleware(
         { error: "Too many requests." },
         { headers: { "Retry-After": String(retryAfter) }, status: 429 }
       );
+
       return;
     }
 

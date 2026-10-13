@@ -13,6 +13,8 @@ describe("user context routes", () => {
   test("stores USER.md per authenticated member", async () => {
     const databaseAdapter = createInMemoryDatabaseAdapter();
     const authService = new AuthService();
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const app = createHonoApp({
       agent: new AgentService(null, null, databaseAdapter),
       authService,
@@ -52,7 +54,9 @@ describe("user context routes", () => {
         method: "POST",
       })
     );
+
     expect(initResponse.status).toBe(201);
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const initBody = (await initResponse.json()) as { created: boolean };
     expect(initBody.created).toBe(true);
 
@@ -61,11 +65,15 @@ describe("user context routes", () => {
         headers: session.headers(),
       })
     );
+
     expect(getResponse.status).toBe(200);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const status = (await getResponse.json()) as {
       active: boolean;
       content?: string;
     };
+
     expect(status.active).toBe(true);
     expect(status.content).toContain("# About Me");
 
@@ -79,6 +87,7 @@ describe("user context routes", () => {
         method: "PUT",
       })
     );
+
     expect(writeResponse.status).toBe(204);
 
     expect(await databaseAdapter.getUserContext(org1Id, user!.id)).toBe(
@@ -100,6 +109,7 @@ describe("user context routes", () => {
         method: "PUT",
       })
     );
+
     expect(writeSecondOrgResponse.status).toBe(204);
 
     expect(await databaseAdapter.getUserContext(org1Id, user!.id)).toBe(

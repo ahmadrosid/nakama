@@ -1,6 +1,7 @@
+import { Button } from "@nakama/ui/button";
+import { Card, CardContent } from "@nakama/ui/card";
 import { Switch } from "@nakama/ui/switch";
 import {
-  ChannelAccessSettings,
   ChannelConnectionStep,
   ChannelSettings,
   ChannelSetupChecklist,
@@ -12,7 +13,7 @@ import { WhatsAppSettingsLinkingSection } from "@/components/whatsapp-settings-l
 
 export function WhatsAppSettingsCardContent({
   embedded,
-  statusBadge,
+  connected,
   configured,
   paired,
   running,
@@ -41,11 +42,12 @@ export function WhatsAppSettingsCardContent({
   onManageAllowedPhones,
   requireGroupMention,
   onRequireGroupMentionChange,
+  allowUnpairedGroupMembers,
+  onAllowUnpairedGroupMembersChange,
   onSave,
 }: {
   embedded: boolean;
-  headerSubtitle: string;
-  statusBadge: string;
+  connected: boolean;
   configured: boolean;
   paired: boolean;
   running: boolean;
@@ -64,7 +66,10 @@ export function WhatsAppSettingsCardContent({
   showReconnect: boolean;
   onReconnect: () => void;
   reconnectPending: boolean;
-  worker: { process?: { managed?: boolean } } | null | undefined;
+  worker:
+    | { process?: { error?: string; managed?: boolean } }
+    | null
+    | undefined;
   statusLine: string | null;
   formError: string | null;
   loadError: unknown;
@@ -74,9 +79,12 @@ export function WhatsAppSettingsCardContent({
   onManageAllowedPhones: () => void;
   requireGroupMention: boolean;
   onRequireGroupMentionChange: (value: boolean) => void;
+  allowUnpairedGroupMembers: boolean;
+  onAllowUnpairedGroupMembersChange: (value: boolean) => void;
   onSave: () => void;
 }) {
   const paneItemClass = "px-4 py-3";
+
   const linking = (
     <WhatsAppSettingsLinkingSection
       awaitingQr={awaitingQr}
@@ -98,6 +106,7 @@ export function WhatsAppSettingsCardContent({
       showReconnect={showReconnect}
     />
   );
+
   const footer = (
     <IntegrationSettingsFooter
       canSave={canSave}
@@ -111,12 +120,34 @@ export function WhatsAppSettingsCardContent({
       submitLabel={actionLabel}
     />
   );
-  const step =
-    !(configured && running) || (paired && statusBadge !== "Connected")
-      ? 0
-      : paired && !showQr
-        ? 2
-        : 1;
+
+  let step = running ? 1 : 0;
+
+  if (paired) {
+    step = 2;
+  }
+
+  if (showQr || awaitingQr || bridgeStarting || linkingAfterScan) {
+    step = 1;
+  }
+
+  if (!configured) {
+    step = 0;
+  }
+
+  const isConnected = running && connected;
+  const managed = worker?.process?.managed === true;
+
+  const workerActions = (
+    <WorkerActionBar
+      compact
+      pm2Error={worker?.process?.error}
+      pm2Managed={managed}
+      running={running}
+      workerName="whatsapp"
+    />
+  );
+
   const checklist = (
     <ChannelSetupChecklist
       label="WhatsApp setup progress"
@@ -125,50 +156,69 @@ export function WhatsAppSettingsCardContent({
     >
       {step === 0 && configured ? (
         <ChannelConnectionStep
-          managed={worker?.process?.managed === true}
+          managed={managed}
           platform="whatsapp"
           running={running}
           starting={savePending}
         >
-          <WorkerActionBar
-            compact
-            pm2Managed={worker?.process?.managed ?? false}
-            running={running}
-            workerName="whatsapp"
-          />
+          {workerActions}
         </ChannelConnectionStep>
       ) : null}
       {step === 1 ? linking : null}
       {footer}
     </ChannelSetupChecklist>
   );
+
   if (step < 2) {
     return checklist;
   }
+
   return (
     <div className="space-y-4">
-      {checklist}
-      <ChannelAccessSettings
-        actions={
-          <WorkerActionBar
-            compact
-            pm2Managed={worker?.process?.managed ?? false}
-            running={running}
-            workerName="whatsapp"
+      <div
+        className="group flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/5 px-5 py-4 data-[connected=true]:border-border data-[connected=true]:bg-card"
+        data-connected={isConnected}
+      >
+        <div className="flex min-w-0 items-center gap-3">
+          <span
+            aria-hidden
+            className="size-2.5 shrink-0 rounded-full bg-amber-500 group-data-[connected=true]:bg-emerald-600"
           />
-        }
-        configured={configured}
-        onEdit={onManageAllowedPhones}
-        pending={savePending}
-        statusBadge={statusBadge}
-        summary={allowedPhoneSummary}
-      />
-      <ChannelSettings>
-        {linkedNumber ? (
-          <SettingsRow label="Connected number">
-            <span className="text-foreground text-sm">{linkedNumber}</span>
+          <div className="min-w-0">
+            <p className="font-semibold text-sm">
+              {isConnected ? "Connected" : "Offline"}
+            </p>
+            <p
+              className="break-all text-muted-foreground text-xs"
+              hidden={!linkedNumber}
+            >
+              {linkedNumber}
+            </p>
+          </div>
+        </div>
+        {workerActions}
+      </div>
+      <Card className="w-full overflow-hidden shadow-none">
+        <CardContent className="divide-y divide-border p-0">
+          <SettingsRow label="Who can message this agent?">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <span className="text-muted-foreground text-xs">
+                {allowedPhoneSummary}
+              </span>
+              <Button
+                disabled={savePending}
+                onClick={onManageAllowedPhones}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                Edit
+              </Button>
+            </div>
           </SettingsRow>
-        ) : null}
+        </CardContent>
+      </Card>
+      <ChannelSettings>
         <SettingsRow label="Only reply when mentioned in groups">
           <Switch
             aria-label="Only reply when mentioned in groups"
@@ -176,6 +226,15 @@ export function WhatsAppSettingsCardContent({
             disabled={savePending}
             id="whatsapp-require-group-mention"
             onCheckedChange={onRequireGroupMentionChange}
+          />
+        </SettingsRow>
+        <SettingsRow label="Reply to unpaired group members">
+          <Switch
+            aria-label="Reply to unpaired group members"
+            checked={allowUnpairedGroupMembers}
+            disabled={savePending}
+            id="whatsapp-allow-unpaired-group-members"
+            onCheckedChange={onAllowUnpairedGroupMembersChange}
           />
         </SettingsRow>
         {linking}

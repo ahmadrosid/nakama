@@ -1,6 +1,7 @@
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 
 export const ORG_ID = "org_test";
+
 export const PROFILE_ID = "profile_default";
 
 export async function createAutomationTestDb() {

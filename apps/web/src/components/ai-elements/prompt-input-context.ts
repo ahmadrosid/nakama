@@ -11,7 +11,7 @@ export interface AttachmentsContext {
   remove: (id: string) => void;
 }
 
-export interface TextInputContext {
+interface TextInputContext {
   clear: () => void;
   setInput: (v: string) => void;
   value: string;
@@ -39,11 +39,13 @@ export const LocalAttachmentsContext = createContext<AttachmentsContext | null>(
 
 export const usePromptInputController = () => {
   const ctx = useContext(PromptInputController);
+
   if (!ctx) {
     throw new Error(
       "Wrap your component inside <PromptInputProvider> to use usePromptInputController()."
     );
   }
+
   return ctx;
 };
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ProviderInstance } from "@nakama/core";
 import { NakamaApiError } from "@nakama/core";
+import type { OpenRouterRoutingSettings } from "@nakama/core/contract";
 import { getModelsForProviderInstance } from "../providers/compatible-models";
 import {
   applyProviderInstanceUpdate,
@@ -20,6 +21,105 @@ function createProviderInstance(
   };
 }
 
+describe("OpenRouter routing validation", () => {
+  test.each([
+    null,
+    [[]],
+    true,
+    { zdr: "true" },
+    { requireParameters: 1 },
+    { dataCollection: "never" },
+    { extra_body: {} },
+    { data_collection: "deny" },
+  ])("rejects invalid routing %j on create and update", (value) => {
+    // SAFETY: The test fixture matches the contract used by this test.
+    const openRouterRouting = value as OpenRouterRoutingSettings;
+    expect(() =>
+      buildProviderInstanceFromCreateRequest(
+        {
+          apiKey: `sk-or-${"x".repeat(24)}`,
+          openRouterRouting,
+          type: "openrouter",
+        },
+        []
+      )
+    ).toThrow(NakamaApiError);
+    expect(() =>
+      applyProviderInstanceUpdate(
+        createProviderInstance({
+          id: "or",
+          label: "OpenRouter",
+          type: "openrouter",
+        }),
+        { openRouterRouting }
+      )
+    ).toThrow(NakamaApiError);
+  });
+
+  test("does not apply OpenRouter routing to other providers", () => {
+    const openRouterRouting = {
+      dataCollection: "deny",
+      requireParameters: true,
+      zdr: true,
+    } as const;
+
+    const instance = buildProviderInstanceFromCreateRequest(
+      { apiKey: `sk-${"x".repeat(48)}`, openRouterRouting, type: "openai" },
+      []
+    );
+
+    expect(instance).not.toHaveProperty("openRouterRouting");
+    expect(
+      applyProviderInstanceUpdate(instance, { openRouterRouting })
+    ).not.toHaveProperty("openRouterRouting");
+  });
+});
+
+describe("Netra provider setup", () => {
+  test("keeps the exact selected model and its saved organization rates", () => {
+    const instance = buildProviderInstanceFromCreateRequest(
+      {
+        apiKey: "netra-key",
+        customModels: [
+          {
+            cachedInputPerMillionUsd: 0.01,
+            default: true,
+            id: "deepseek/deepseek-v4-flash-0731",
+            inputPerMillionUsd: 0.1,
+            outputPerMillionUsd: 0.25,
+            supportsThinking: true,
+          },
+        ],
+        type: "netra",
+      },
+      []
+    );
+
+    expect(instance.customModels?.[0]?.id).toBe(
+      "deepseek/deepseek-v4-flash-0731"
+    );
+    expect(getModelsForProviderInstance(instance)[0]?.provider).toBe("netra");
+    expect(
+      modelExistsOnInstance(instance, "deepseek/deepseek-v4.1-flash")
+    ).toBe(false);
+    expect(instance.customModels?.[0]?.cachedInputPerMillionUsd).toBe(0.01);
+  });
+
+  test("rejects the unsupported Responses API", () => {
+    expect(() =>
+      buildProviderInstanceFromCreateRequest(
+        {
+          apiKey: "netra-key",
+          model: "deepseek/deepseek-v4-flash-0731",
+          type: "netra",
+          wireApi: "responses",
+        },
+        []
+      )
+    ).toThrow();
+  });
+});
+
 describe("resolveProfileProviderSelection", () => {
   test("preserves saved DeepSeek aliases instead of falling back to the active provider", () => {
     const deepseek = createProviderInstance({
@@ -27,11 +127,13 @@ describe("resolveProfileProviderSelection", () => {
       label: "DeepSeek",
       type: "deepseek",
     });
+
     const active = createProviderInstance({
       id: "openai-1",
       label: "OpenAI",
       type: "openai",
     });
+
     for (const profileModel of [
       "deepseek-v4-flash",
       "deepseek-1::deepseek-v4-flash",
@@ -52,6 +154,7 @@ describe("resolveProfileProviderSelection", () => {
       label: "ChatGPT",
       type: "chatgpt",
     });
+
     const options = { defaultProviderId: instance.id, providers: [instance] };
 
     expect(
@@ -69,6 +172,7 @@ describe("resolveProfileProviderSelection", () => {
       label: "ChatGPT",
       type: "chatgpt",
     });
+
     const openai = createProviderInstance({
       id: "openai-1",
       label: "OpenAI",
@@ -292,6 +396,7 @@ describe("applyProviderInstanceUpdate", () => {
     // unrecognised value falls back to chat rather than being persisted.
     expect(
       applyProviderInstanceUpdate(instance, {
+        // SAFETY: The test fixture matches the contract used by this test.
         wireApi: "nonsense" as never,
       }).wireApi
     ).toBeUndefined();
@@ -424,6 +529,20 @@ describe("applyProviderInstanceUpdate", () => {
 });
 
 describe("buildProviderInstanceFromCreateRequest", () => {
+  test("preserves the requested Ollama label", () => {
+    const instance = buildProviderInstanceFromCreateRequest(
+      {
+        customModels: [{ id: "llama3.2" }],
+        hostMode: "local",
+        label: "Team runtime",
+        type: "ollama",
+      },
+      []
+    );
+
+    expect(instance.label).toBe("Team runtime");
+  });
+
   test("creates a Grok subscription provider without an API key", () => {
     const instance = buildProviderInstanceFromCreateRequest(
       {
@@ -438,6 +557,7 @@ describe("buildProviderInstanceFromCreateRequest", () => {
       },
       []
     );
+
     expect(instance.type).toBe("xai_oauth");
     expect(instance.xaiRefreshToken).toBe("refresh");
     expect(instance.apiKey).toBe("");
@@ -474,7 +594,9 @@ describe("buildProviderInstanceFromCreateRequest", () => {
         throw new Error("expected a rejection");
       } catch (error) {
         expect(error).toBeInstanceOf(NakamaApiError);
+        // SAFETY: The test fixture matches the contract used by this test.
         expect((error as NakamaApiError).message).toBe(message);
+        // SAFETY: The test fixture matches the contract used by this test.
         expect((error as NakamaApiError).status).toBe(400);
       }
     }

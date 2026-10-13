@@ -1,15 +1,23 @@
 import { describe, expect, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AgentService } from "../../services/agent-service";
+import { AuthService } from "../../services/auth-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
-import { loginUserSession, seedOrgAdmin } from "../test-session-helpers";
+import {
+  loginPlatformAdminSession,
+  loginUserSession,
+  seedOrgAdmin,
+} from "../test-session-helpers";
 
 setupTestConfigDir("nakama-profile-avatar-org-scope-test-");
 
 const PASSWORD = "password123";
+
 const ATTACKER_ORG = "org_attacker";
+
 const VICTIM_ORG = "org_victim";
+
 const VICTIM_PROFILE = "profile_victim";
 
 const tinyPngBase64 =
@@ -17,7 +25,13 @@ const tinyPngBase64 =
 
 async function createScenario() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
-  const agent = new AgentService({ providers: [] }, null, databaseAdapter);
+
+  const agent = new AgentService(
+    { defaultProviderId: null, providers: [] },
+    null,
+    databaseAdapter
+  );
+
   const { app } = createMinimalHonoApp({ agent, databaseAdapter });
 
   await seedOrgAdmin(databaseAdapter, {
@@ -39,7 +53,7 @@ async function createScenario() {
     mediaType: "image/png",
   });
 
-  return { app };
+  return { app, databaseAdapter };
 }
 
 const AVATAR_PATH = `http://localhost:4310/v1/profiles/${VICTIM_PROFILE}/avatar`;
@@ -55,6 +69,7 @@ describe("GET /v1/profiles/:profileId/avatar is org scoped", () => {
 
   test("hides the avatar from another org", async () => {
     const { app } = await createScenario();
+
     const attacker = await loginUserSession(
       app,
       "attacker@example.com",
@@ -67,12 +82,53 @@ describe("GET /v1/profiles/:profileId/avatar is org scoped", () => {
     );
 
     expect(response.status).toBe(404);
+
+    const requestedOrg = await app.fetch(
+      new Request(`${AVATAR_PATH}?orgId=${VICTIM_ORG}`, {
+        headers: { Cookie: attacker.cookieHeader },
+      })
+    );
+
+    expect(requestedOrg.status).toBe(404);
+  });
+
+  test("serves a remote org avatar to a platform admin by cookie", async () => {
+    const { app, databaseAdapter } = await createScenario();
+
+    const admin = await loginPlatformAdminSession(
+      app,
+      new AuthService(),
+      databaseAdapter
+    );
+
+    const selected = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/active-org", {
+        body: JSON.stringify({ orgId: ATTACKER_ORG }),
+        headers: admin.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": admin.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    expect(selected.status).toBe(200);
+
+    const response = await app.fetch(
+      new Request(`${AVATAR_PATH}?orgId=${VICTIM_ORG}`, {
+        headers: { Cookie: admin.cookieHeader },
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("image/png");
   });
 
   // The web UI renders avatars in an <img> tag, which sends the session cookie
   // and no X-Org-Id header, so the org has to resolve from the session alone.
   test("serves the avatar to its own org from the session cookie alone", async () => {
     const { app } = await createScenario();
+
     const victim = await loginUserSession(
       app,
       "victim@example.com",

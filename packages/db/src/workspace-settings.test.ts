@@ -95,6 +95,7 @@ describe("workspace settings merge", () => {
 
   test("persists the automation polling interval in SQLite", async () => {
     const database = await createSqliteDatabase(":memory:");
+
     try {
       const initial = await database.adapter.getWorkspaceSettings();
       await database.adapter.upsertWorkspaceSettings(
@@ -113,7 +114,9 @@ describe("workspace settings merge", () => {
 
   test("defaults the automation polling interval for legacy direct writes", async () => {
     const database = await createSqliteDatabase(":memory:");
+
     try {
+      // SAFETY: This legacy direct write omits the field under test.
       await database.adapter.upsertWorkspaceSettings({
         codingAgentHarnesses: [],
         codingAgentProviderPassthrough: true,

@@ -4,7 +4,7 @@ import {
   extractPairedTurnArtifacts,
   isScratchArtifactPath,
 } from "./channel-artifacts";
-import type { ChatMessage } from "./contract";
+import type { ChatMessage, JsonValue } from "./contract";
 
 const ARTIFACTS_ROOT =
   "/Users/test/.nakama/orgs/org_1/profiles/profile_1/artifacts";
@@ -32,8 +32,8 @@ function assistantWithToolCalls(
 function toolMessage(input: {
   id: string;
   name: string;
-  input: Record<string, unknown>;
-  result: Record<string, unknown>;
+  input: { [key: string]: JsonValue };
+  result: { [key: string]: JsonValue };
 }): ChatMessage {
   return {
     content: JSON.stringify(input.result),
@@ -127,6 +127,7 @@ describe("extractPairedTurnArtifacts", () => {
 
   test("delivers CSV with incomplete metadata and the resolved filename", () => {
     const contentPath = `${ARTIFACTS_ROOT}/report-2026-09-08.csv`;
+
     const messages: ChatMessage[] = [
       { content: "tolong kirim csv file kesini please", role: "user" },
       assistantWithToolCalls([
@@ -152,6 +153,7 @@ describe("extractPairedTurnArtifacts", () => {
         result: { bytesWritten: 23, path: `${contentPath}.nakama-meta.json` },
       }),
     ];
+
     expect(extractPairedTurnArtifacts(messages)).toEqual([
       {
         filename: "report-2026-09-08.csv",
@@ -164,14 +166,22 @@ describe("extractPairedTurnArtifacts", () => {
   });
 
   test("does not infer artifacts without a valid byte count", () => {
-    for (const bytesWritten of [undefined, -1, 1.5, "934"]) {
+    for (const bytesWritten of [undefined, null, -1, 1.5, "934"]) {
+      const result: Parameters<typeof toolMessage>[0]["result"] = {
+        path: `${ARTIFACTS_ROOT}/report.csv`,
+      };
+
+      if (bytesWritten !== undefined) {
+        result.bytesWritten = bytesWritten;
+      }
+
       expect(
         extractPairedTurnArtifacts([
           toolMessage({
             id: "content",
             input: {},
             name: "write_file",
-            result: { bytesWritten, path: `${ARTIFACTS_ROOT}/report.csv` },
+            result,
           }),
         ])
       ).toEqual([]);

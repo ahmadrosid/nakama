@@ -17,6 +17,7 @@ export function AuthGuard() {
   if (!isAuthenticated) {
     return <Navigate replace to="/login" />;
   }
+
   if (
     user?.mfaRequired &&
     !user.mfaEnrolled &&

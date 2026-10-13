@@ -1,10 +1,42 @@
 import { describe, expect, test } from "bun:test";
 import {
+  formatLocalCitations,
   segmentAssistantTurn,
   toolGroupElapsedSeconds,
 } from "@/components/chat/assistant-tool-group.shared";
 import type { ChatListItem } from "./chat-history";
 import { groupMessagesIntoTurns, turnKey } from "./chat-message-turns";
+
+test("numbers local file citations without changing web links or images", () => {
+  expect(
+    formatLocalCitations(
+      "See [Paid Ads](wiki/paid-ads.md), [site](https://example.com), and ![logo](wiki/logo.png)."
+    ).markdown
+  ).toBe(
+    "See Paid Ads (`wiki/paid-ads.md`), [site](https://example.com), and ![logo](wiki/logo.png)."
+  );
+  expect(
+    formatLocalCitations(
+      "[Paid Ads](wiki/paid-ads.md) and [Paid Ads](wiki/paid-ads.md)",
+      "bob"
+    )
+  ).toEqual({
+    citations: [
+      {
+        href: "#file-citation?citation=1&file=wiki%2Fpaid-ads.md&profile=bob",
+        label: "Paid Ads",
+        number: 1,
+        path: "wiki/paid-ads.md",
+      },
+    ],
+    markdown:
+      "[1](#file-citation?citation=1&file=wiki%2Fpaid-ads.md&profile=bob) and [1](#file-citation?citation=1&file=wiki%2Fpaid-ads.md&profile=bob)",
+  });
+  expect(formatLocalCitations("[site](https://example.com)", "bob")).toEqual({
+    citations: [],
+    markdown: "[site](https://example.com)",
+  });
+});
 
 function item(
   partial: Pick<ChatListItem, "id" | "role"> & Partial<ChatListItem>
@@ -22,6 +54,7 @@ describe("groupMessagesIntoTurns", () => {
       item({ content: "Progress", id: "a1", role: "assistant" }),
       item({ id: "t2", role: "tool", toolStatus: "done" }),
     ];
+
     expect(segmentAssistantTurn(messages, true)).toMatchObject([
       { kind: "work" },
       { kind: "text" },
@@ -72,6 +105,7 @@ describe("groupMessagesIntoTurns", () => {
         toolStatus: "done",
       }),
     ];
+
     expect(toolGroupElapsedSeconds(tools, 100_000)).toBe(8);
     expect(toolGroupElapsedSeconds(tools, 12_000, true)).toBe(11);
     expect(toolGroupElapsedSeconds(tools, 200_000)).toBe(8);
@@ -108,12 +142,14 @@ describe("groupMessagesIntoTurns", () => {
     expect(turns).toHaveLength(3);
     expect(turns[0]).toMatchObject({ kind: "user", message: { id: "u1" } });
     expect(turns[1]?.kind).toBe("assistant");
+
     if (turns[1]?.kind === "assistant") {
       expect(turns[1].messages.map(({ message }) => message.id)).toEqual([
         "t1",
         "a1",
       ]);
     }
+
     expect(turns[2]).toMatchObject({ kind: "user", message: { id: "u2" } });
   });
 
@@ -128,6 +164,7 @@ describe("groupMessagesIntoTurns", () => {
 
     expect(turns).toHaveLength(1);
     expect(turns[0]?.kind).toBe("assistant");
+
     if (turns[0]?.kind === "assistant") {
       expect(turns[0].messages.map(({ message }) => message.id)).toEqual([
         "a0",
@@ -162,10 +199,12 @@ describe("groupMessagesIntoTurns", () => {
         })
       )
     );
+
     const segments = segmentAssistantTurn([
       ...tools,
       item({ id: "thinking", role: "assistant", thinking: "Next step" }),
     ]);
+
     expect(segments).toHaveLength(1);
     expect(segments[0]).toMatchObject({
       groupId: "0-0",
@@ -181,12 +220,14 @@ describe("groupMessagesIntoTurns", () => {
       thinking: "First step",
       thinkingStreaming: true,
     });
+
     const tool = item({ id: "t1", role: "tool", toolGroupId: "g1" });
     const duringTool = segmentAssistantTurn([first, tool]);
     expect(duringTool[0]).toMatchObject({
       groupId: "a1",
       thinking: { thinkingStreaming: false },
     });
+
     const segments = segmentAssistantTurn([
       first,
       tool,
@@ -197,6 +238,7 @@ describe("groupMessagesIntoTurns", () => {
         thinkingStreaming: true,
       }),
     ]);
+
     expect(segments).toHaveLength(1);
     expect(segments[0]).toMatchObject({
       groupId: "a1",
@@ -220,6 +262,7 @@ describe("groupMessagesIntoTurns", () => {
       item({ id: "t2", role: "tool", toolGroupId: "g1" }),
       item({ content: "Done", id: "a2", role: "assistant" }),
     ]);
+
     expect(segments.map((segment) => segment.kind)).toEqual([
       "work",
       "text",
@@ -245,6 +288,7 @@ describe("turnKey", () => {
     const turn = groupMessagesIntoTurns([
       item({ content: "hi", id: "u1", role: "user" }),
     ])[0]!;
+
     expect(turnKey(turn)).toBe("u1");
   });
 
@@ -253,6 +297,7 @@ describe("turnKey", () => {
       item({ content: "x", id: "a1", role: "assistant" }),
       item({ id: "t1", role: "tool", tool: "bash", toolStatus: "done" }),
     ])[0]!;
+
     const withExtra = groupMessagesIntoTurns([
       item({ content: "x", id: "a1", role: "assistant" }),
       item({ id: "t1", role: "tool", tool: "bash", toolStatus: "done" }),

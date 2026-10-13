@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { client } from "@/lib/client";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
 export function useExportProfilePackMutation() {
@@ -20,8 +21,6 @@ export function useImportProfilePackMutation() {
   return useMutation({
     mutationFn: ({ file }: { file: File }) =>
       client.importProfilePack(file, { confirm: true }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all });
-    },
+    onSuccess: () => invalidateQueries(queryClient, queryKeys.profiles.all),
   });
 }

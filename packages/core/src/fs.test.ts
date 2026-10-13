@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmod, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readText, writeTextFile } from "./fs";
@@ -18,6 +26,7 @@ async function createExistingFile(mode: number): Promise<string> {
   const path = join(directory, "config.txt");
   await writeFile(path, "old", { mode });
   await chmod(path, mode);
+
   return path;
 }
 
@@ -76,4 +85,20 @@ describe("writeTextFile atomic replace", () => {
     expect(values).toContain(await readText(path));
     expect(await readdir(directory)).toEqual(["worker-heartbeat.json"]);
   });
+
+  test.skipIf(process.platform !== "win32")(
+    "removes the temp file when the rename keeps failing on Windows",
+    async () => {
+      const directory = await mkdtemp(join(tmpdir(), "nakama-fs-atomic-"));
+      temporaryDirectories.push(directory);
+      // Renaming a file onto a directory fails with EPERM on every attempt.
+      const path = join(directory, "occupied");
+      await mkdir(path);
+
+      await expect(writeTextFile(path, "value")).rejects.toMatchObject({
+        code: "EPERM",
+      });
+      expect(await readdir(directory)).toEqual(["occupied"]);
+    }
+  );
 });

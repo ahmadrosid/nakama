@@ -1,12 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import type { StoredMcpServerRecord } from "@nakama/db";
-import { McpClientManager } from "./mcp-client-manager";
+import type { McpService } from "./mcp-service";
 import {
   buildMcpToolDefinitions,
   isValidLlmToolName,
   namespacedMcpToolName,
   sanitizeLlmToolNamePart,
 } from "./mcp-tool-bridge";
+
+function failingMcpService(message: string): Pick<McpService, "callTool"> {
+  return {
+    callTool() {
+      return Promise.reject(new Error(message));
+    },
+  };
+}
 
 function serverLookup(servers: StoredMcpServerRecord[]) {
   return {
@@ -15,6 +23,7 @@ function serverLookup(servers: StoredMcpServerRecord[]) {
     },
   };
 }
+
 describe("mcp tool bridge", () => {
   test("namespaces tool names by server", () => {
     expect(namespacedMcpToolName("filesystem", "read_file")).toBe(
@@ -34,7 +43,8 @@ describe("mcp tool bridge", () => {
   });
 
   test("deduplicates sanitized tool names", () => {
-    const manager = new McpClientManager();
+    const mcpService = failingMcpService("unused");
+
     const servers: StoredMcpServerRecord[] = [
       {
         cachedTools: [
@@ -55,7 +65,7 @@ describe("mcp tool bridge", () => {
 
     const tools = buildMcpToolDefinitions(
       servers,
-      manager,
+      mcpService,
       serverLookup(servers),
       "org_test",
       "profile_test"
@@ -69,7 +79,8 @@ describe("mcp tool bridge", () => {
   });
 
   test("builds tools only from attached servers", () => {
-    const manager = new McpClientManager();
+    const mcpService = failingMcpService("unused");
+
     const servers: StoredMcpServerRecord[] = [
       {
         cachedTools: [
@@ -96,7 +107,7 @@ describe("mcp tool bridge", () => {
 
     const tools = buildMcpToolDefinitions(
       servers,
-      manager,
+      mcpService,
       serverLookup(servers),
       "org_test",
       "profile_test"
@@ -106,8 +117,11 @@ describe("mcp tool bridge", () => {
     expect(tools[0]?.name).toBe("filesystem__read_file");
   });
 
-  test("returns an error when the server is disconnected", async () => {
-    const manager = new McpClientManager();
+  test("returns an error when the call fails", async () => {
+    const mcpService = failingMcpService(
+      'MCP server "filesystem" is not connected.'
+    );
+
     const servers: StoredMcpServerRecord[] = [
       {
         cachedTools: [{ description: "Read a file", name: "read_file" }],
@@ -125,11 +139,12 @@ describe("mcp tool bridge", () => {
 
     const tools = buildMcpToolDefinitions(
       servers,
-      manager,
+      mcpService,
       serverLookup(servers),
       "org_test",
       "profile_test"
     );
+
     const result = await tools[0]!.run({}, {});
 
     expect(result).toEqual({
@@ -138,7 +153,8 @@ describe("mcp tool bridge", () => {
   });
 
   test("excludes disabled servers from new tool definitions", () => {
-    const manager = new McpClientManager();
+    const mcpService = failingMcpService("unused");
+
     const servers: StoredMcpServerRecord[] = [
       {
         cachedTools: [{ description: "Read a file", name: "read_file" }],
@@ -156,7 +172,7 @@ describe("mcp tool bridge", () => {
 
     const tools = buildMcpToolDefinitions(
       servers,
-      manager,
+      mcpService,
       serverLookup(servers),
       "org_test",
       "profile_test"
@@ -168,15 +184,15 @@ describe("mcp tool bridge", () => {
   test("blocks an existing tool definition after its server is disabled", async () => {
     let enabled = true;
     const calls: string[] = [];
-    const manager = {
-      async callTool() {
+
+    const mcpService: Pick<McpService, "callTool"> = {
+      callTool() {
         calls.push("callTool");
-        return { ok: true };
+
+        return Promise.resolve({ ok: true });
       },
-      async ensureConnected() {
-        calls.push("ensureConnected");
-      },
-    } as unknown as McpClientManager;
+    };
+
     const server: StoredMcpServerRecord = {
       cachedTools: [{ description: "Read a file", name: "read_file" }],
       config: { command: "mcp-filesystem" },
@@ -189,9 +205,10 @@ describe("mcp tool bridge", () => {
       transport: "stdio",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
+
     const tools = buildMcpToolDefinitions(
       [server],
-      manager,
+      mcpService,
       {
         async getMcpServer() {
           return { ...server, enabled };
@@ -206,5 +223,152 @@ describe("mcp tool bridge", () => {
 
     expect(result).toEqual({ error: expect.any(String) });
     expect(calls).toEqual([]);
+  });
+
+  test("adds validated current chat images only for opted-in MCP tools", async () => {
+    const calls: unknown[] = [];
+
+    const server: StoredMcpServerRecord = {
+      cachedTools: [
+        {
+          description: "Inspect",
+          inputSchema: {
+            properties: {
+              nakamaContext: {
+                properties: {},
+                type: "object",
+                "x-nakama-context": "current-chat",
+              },
+              query: { type: "string" },
+            },
+            type: "object",
+          },
+          name: "inspect",
+        },
+      ],
+      config: { url: "https://example.com/mcp" },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      enabled: true,
+      id: "mcp_1",
+      lastError: null,
+      name: "images",
+      status: "connected",
+      transport: "http",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+
+    const tool = buildMcpToolDefinitions(
+      [server],
+      {
+        async callTool(_server, _name, args) {
+          calls.push(args);
+
+          return { ok: true };
+        },
+      },
+      serverLookup([server]),
+      "org_test",
+      "profile_test"
+    )[0]!;
+
+    expect(tool.parameters?.properties).toBeDefined();
+    expect(tool.parameters?.properties).not.toHaveProperty("nakamaContext");
+    await tool.run(
+      { nakamaContext: { images: [] }, query: "read it" },
+      {
+        currentChatImages: [{ attachmentId: "att_1", mediaType: "image/png" }],
+        loadAttachment: async () => ({
+          bytes: Buffer.from("image"),
+          mediaType: "image/png",
+        }),
+        whatsappMessage: {
+          chatJid: "chat@g.us",
+          fromMe: false,
+          isGroup: true,
+          senderJid: "sender@s.whatsapp.net",
+          senderJids: ["sender@s.whatsapp.net"],
+        },
+      }
+    );
+
+    expect(calls).toEqual([
+      {
+        nakamaContext: {
+          images: [
+            {
+              data: Buffer.from("image").toString("base64"),
+              mediaType: "image/png",
+            },
+          ],
+          whatsapp: {
+            chatJid: "chat@g.us",
+            fromMe: false,
+            isGroup: true,
+            senderJid: "sender@s.whatsapp.net",
+            senderJids: ["sender@s.whatsapp.net"],
+          },
+        },
+        query: "read it",
+      },
+    ]);
+  });
+
+  test("returns an error and skips MCP call for an invalid current image", async () => {
+    let called = false;
+
+    const server: StoredMcpServerRecord = {
+      cachedTools: [
+        {
+          description: "Inspect",
+          inputSchema: {
+            properties: {
+              nakamaContext: {
+                type: "object",
+                "x-nakama-context": "current-chat",
+              },
+            },
+            type: "object",
+          },
+          name: "inspect",
+        },
+      ],
+      config: { url: "https://example.com/mcp" },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      enabled: true,
+      id: "mcp_1",
+      lastError: null,
+      name: "images",
+      status: "connected",
+      transport: "http",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+
+    const tool = buildMcpToolDefinitions(
+      [server],
+      {
+        async callTool() {
+          called = true;
+
+          return {};
+        },
+      },
+      serverLookup([server]),
+      "org_test",
+      "profile_test"
+    )[0]!;
+
+    const result = await tool.run(
+      {},
+      {
+        currentChatImages: [{ attachmentId: "att_1", mediaType: "image/png" }],
+        loadAttachment: async () => ({
+          bytes: Buffer.from("bad"),
+          mediaType: "text/plain",
+        }),
+      }
+    );
+
+    expect(result).toEqual({ error: expect.any(String) });
+    expect(called).toBe(false);
   });
 });

@@ -107,6 +107,7 @@ describe("buildConsolidatePlan", () => {
       lastUsedAt: "2026-08-01T00:00:00.000Z",
       useCount: 10,
     };
+
     const low = {
       ...agentSkill(
         "deploy-assistant",
@@ -140,17 +141,20 @@ describe("buildConsolidatePlan", () => {
 
   test("lists verbose solo skills and skips budget-exhausted extras", () => {
     const verboseBody = "x".repeat(SKILL_CONSOLIDATE_VERBOSE_CHAR_THRESHOLD);
+
     const topics = [
       "invoice parser pdf vendor",
       "calendar sync google events",
       "slack notifier channel alerts",
       "github pr review comments",
     ];
+
     const skills = topics.map((description, index) =>
       agentSkill(`verbose-${index}`, description, {
         body: verboseBody,
       })
     );
+
     const plan = buildConsolidatePlan({ now: NOW, skills });
 
     expect(plan.clusters).toHaveLength(0);
@@ -183,6 +187,7 @@ describe("buildConsolidatePlan", () => {
       name: "hello-skill",
       sourcePath: "/tmp/x",
     });
+
     expect(tokens.has("hello")).toBe(true);
     expect(tokens.has("world")).toBe(true);
     expect(tokens.has("skill")).toBe(true);

@@ -1,4 +1,4 @@
-import type { NotificationWebhookRequest } from "@nakama/core";
+import { z } from "@hono/zod-openapi";
 import { NotificationWebhookService } from "../../services/notification-webhook-service";
 import type { ServerOptions } from "../context";
 import { readJson } from "../shared";
@@ -8,15 +8,26 @@ export function registerNotificationWebhookRoutes(
   app: HonoApp,
   options: ServerOptions
 ): void {
-  const service = new NotificationWebhookService(
-    options.databaseAdapter,
-    options.authService
-  );
+  const databaseAdapter = options.databaseAdapter;
+
+  const authService = options.authService;
+
+  if (!(databaseAdapter && authService)) {
+    return;
+  }
+
+  const notificationWebhookSchema = z.object({
+    body: z.string(),
+    level: z.enum(["info", "success", "warning", "error"]).optional(),
+    title: z.string().optional(),
+  });
+
+  const service = new NotificationWebhookService(databaseAdapter, authService);
 
   // Public webhook: clients must send a unique Idempotency-Key per event.
   // Replays with the same key are rejected (409) after the first successful claim.
   app.post("/v1/notify/:destinationId", async (c) => {
-    const body = await readJson<NotificationWebhookRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, notificationWebhookSchema);
     const apiKey = c.req.header("x-api-key")?.trim() ?? null;
     const idempotencyKey = c.req.header("idempotency-key")?.trim() ?? null;
     await service.deliver(
@@ -25,6 +36,7 @@ export function registerNotificationWebhookRoutes(
       body,
       idempotencyKey
     );
+
     return new Response(null, { status: 204 });
   });
 }

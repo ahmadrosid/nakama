@@ -210,6 +210,7 @@ export default function HomePage() {
             <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {features.map((feature) => {
                 const Icon = feature.icon;
+
                 return (
                   <li key={feature.title}>
                     <article className="feature-card group flex h-full flex-col rounded-2xl border border-stone-200 bg-white p-6 dark:border-white/8 dark:bg-[#111113]">

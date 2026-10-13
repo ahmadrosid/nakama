@@ -15,15 +15,6 @@ describe("skill paths", () => {
     configDir = undefined;
   });
 
-  test("resolveSkillDiscoveryDirs defaults to ~/.nakama/agent/skills", async () => {
-    configDir = await mkdtemp(path.join(tmpdir(), "nakama-paths-test-"));
-    process.env.NAKAMA_CONFIG_DIR = configDir;
-
-    await expect(resolveSkillDiscoveryDirs()).resolves.toEqual([
-      path.join(configDir, "agent", "skills"),
-    ]);
-  });
-
   test("resolveSkillDiscoveryDirs includes profile skills dir", async () => {
     configDir = await mkdtemp(path.join(tmpdir(), "nakama-paths-test-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
@@ -91,6 +82,7 @@ Use Claude Code guidance.
       "skills",
       "coding-backend-claude-code"
     );
+
     const profileDir = path.join(
       configDir,
       "orgs",

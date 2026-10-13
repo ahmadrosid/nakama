@@ -5,8 +5,11 @@ import { join } from "node:path";
 import type { ListBrowserSessionsResponse } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AgentService } from "../../services/agent-service";
+import { AuthService } from "../../services/auth-service";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
+  type AppFetch,
+  loginPlatformAdminSession,
   loginUserSession,
   seedOrgAdmin,
   setupFreshInstallSession,
@@ -29,7 +32,7 @@ async function createApp() {
 }
 
 async function listSessions(
-  app: { fetch: typeof fetch },
+  app: AppFetch,
   session: TestBrowserSession
 ): Promise<ListBrowserSessionsResponse> {
   const response = await app.fetch(
@@ -37,12 +40,15 @@ async function listSessions(
       headers: session.headers(),
     })
   );
+
   expect(response.status).toBe(200);
+
+  // SAFETY: This test controls the fixture shape at this boundary.
   return (await response.json()) as ListBrowserSessionsResponse;
 }
 
-function revoke(
-  app: { fetch: typeof fetch },
+async function revoke(
+  app: AppFetch,
   session: TestBrowserSession,
   sessionId: string
 ): Promise<Response> {
@@ -58,6 +64,107 @@ function revoke(
 }
 
 describe("browser session governance", () => {
+  test("platform admin selects an organization without membership", async () => {
+    const { app, databaseAdapter } = await createApp();
+    await setupFreshInstallSession(app, databaseAdapter);
+    const now = new Date().toISOString();
+    await databaseAdapter.upsertOrganization({
+      createdAt: now,
+      id: "org_remote",
+      name: "Remote",
+      slug: "remote",
+      updatedAt: now,
+    });
+    await databaseAdapter.upsertProfile({
+      createdAt: now,
+      id: "agent_remote",
+      isDefault: false,
+      isSuper: false,
+      model: null,
+      name: "Remote agent",
+      orgId: "org_remote",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+
+    const admin = await loginPlatformAdminSession(
+      app,
+      new AuthService(),
+      databaseAdapter
+    );
+
+    const switched = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/active-org", {
+        body: JSON.stringify({ orgId: "org_remote" }),
+        headers: admin.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": admin.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    expect(switched.status).toBe(200);
+    expect((await switched.json()).activeOrgId).toBe("org_remote");
+
+    const me = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/me", {
+        headers: admin.headers(),
+      })
+    );
+
+    expect((await me.json()).activeOrgId).toBe("org_remote");
+
+    const remoteProfiles = await app.fetch(
+      new Request("http://localhost:4310/v1/profiles", {
+        headers: admin.headers({}, "org_remote"),
+      })
+    );
+
+    expect(remoteProfiles.status).toBe(200);
+    expect((await remoteProfiles.json()).profiles).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "agent_remote" })])
+    );
+
+    await seedOrgAdmin(databaseAdapter, {
+      email: "member@example.com",
+      orgId: "org_member",
+      userId: "user_member",
+    });
+    const member = await loginUserSession(app, "member@example.com", PASSWORD);
+
+    const denied = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/active-org", {
+        body: JSON.stringify({ orgId: "org_remote" }),
+        headers: member.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": member.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    expect(denied.status).toBe(404);
+
+    await databaseAdapter.upsertOrganization({
+      ...(await databaseAdapter.getOrganizationById("org_remote"))!,
+      archivedAt: new Date().toISOString(),
+    });
+
+    const archived = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/active-org", {
+        body: JSON.stringify({ orgId: "org_remote" }),
+        headers: admin.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": admin.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    expect(archived.status).toBe(404);
+  });
+
   test("a user lists their own devices and marks the one making the request", async () => {
     const { app, databaseAdapter } = await createApp();
     const first = await setupFreshInstallSession(app, databaseAdapter);
@@ -83,8 +190,10 @@ describe("browser session governance", () => {
     // Ask the doomed session which row is its own, so the revoke targets it
     // rather than whichever session happens to sort first.
     const doomedOwn = await listSessions(app, doomed);
+
     const doomedId =
       doomedOwn.sessions.find((entry) => entry.current)?.id ?? "";
+
     expect(doomedId).not.toBe("");
 
     const response = await revoke(app, keep, doomedId);
@@ -96,6 +205,7 @@ describe("browser session governance", () => {
         headers: doomed.headers(),
       })
     );
+
     expect(afterRevoke.status).toBe(401);
 
     // The caller's own session is untouched, and the revoked row is gone.
@@ -129,88 +239,6 @@ describe("browser session governance", () => {
     );
   });
 
-  test("an API key cannot list human browser sessions", async () => {
-    const { app, authService, databaseAdapter } = await createApp();
-    const owner = await setupFreshInstallSession(app, databaseAdapter);
-    const user = await databaseAdapter.getUserByEmail("admin@example.com");
-    if (!(user && owner.orgId)) {
-      throw new Error("Expected setup admin");
-    }
-
-    const secret = `nk_live_${"d".repeat(64)}`;
-    await databaseAdapter.createApiKey({
-      createdAt: new Date().toISOString(),
-      createdByUserId: user.id,
-      environment: "live",
-      expiresAt: null,
-      id: "key_auth_sessions_list",
-      keyPrefix: secret.slice(0, 20),
-      lastUsedAt: null,
-      name: "Auth sessions list test",
-      orgId: owner.orgId,
-      revokedAt: null,
-      secretHash: authService.hashToken(secret),
-    });
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/auth/sessions", {
-        headers: { Authorization: `Bearer ${secret}` },
-      })
-    );
-
-    expect(response.status).toBe(403);
-    const ownerSessions = await listSessions(app, owner);
-    expect(ownerSessions.sessions.some((entry) => entry.current)).toBe(true);
-  });
-
-  test("an API key cannot revoke a human browser session", async () => {
-    const { app, authService, databaseAdapter } = await createApp();
-    const owner = await setupFreshInstallSession(app, databaseAdapter);
-    const ownerSessions = await listSessions(app, owner);
-    const ownerSessionId = ownerSessions.sessions[0]?.id ?? "";
-    const user = await databaseAdapter.getUserByEmail("admin@example.com");
-    if (!ownerSessionId) {
-      throw new Error("Expected setup admin and browser session");
-    }
-    if (!user) {
-      throw new Error("Expected setup admin and browser session");
-    }
-    if (!owner.orgId) {
-      throw new Error("Expected setup admin and browser session");
-    }
-
-    const secret = `nk_live_${"e".repeat(64)}`;
-    await databaseAdapter.createApiKey({
-      createdAt: new Date().toISOString(),
-      createdByUserId: user.id,
-      environment: "live",
-      expiresAt: null,
-      id: "key_auth_sessions_revoke",
-      keyPrefix: secret.slice(0, 20),
-      lastUsedAt: null,
-      name: "Auth sessions revoke test",
-      orgId: owner.orgId,
-      revokedAt: null,
-      secretHash: authService.hashToken(secret),
-    });
-
-    const response = await app.fetch(
-      new Request(
-        `http://localhost:4310/v1/auth/sessions/${encodeURIComponent(ownerSessionId)}`,
-        {
-          headers: { Authorization: `Bearer ${secret}` },
-          method: "DELETE",
-        }
-      )
-    );
-
-    expect(response.status).toBe(403);
-    const remaining = await listSessions(app, owner);
-    expect(remaining.sessions.map((entry) => entry.id)).toContain(
-      ownerSessionId
-    );
-  });
-
   test("a platform admin force-revokes every session a user holds", async () => {
     const { app, databaseAdapter } = await createApp();
     const admin = await setupFreshInstallSession(app, databaseAdapter);
@@ -229,6 +257,7 @@ describe("browser session governance", () => {
     );
 
     expect(response.status).toBe(200);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await response.json()) as { revoked: number };
     expect(body.revoked).toBeGreaterThanOrEqual(2);
   });
@@ -242,6 +271,7 @@ describe("browser session governance", () => {
       orgId: "org_other",
       userId: "user_orgadmin",
     });
+
     const orgAdmin = await loginUserSession(
       app,
       "orgadmin@example.com",

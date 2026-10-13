@@ -2,10 +2,6 @@ import type { AgentTodo } from "@nakama/core/contract";
 import { renderTelegramTodoStatus, type TelegramTodoRunState } from "./format";
 import type { TelegramRichMessenger } from "./rich-message";
 
-interface TelegramReplyMessage {
-  message_id: number;
-}
-
 export class TelegramTodoStatusMessage {
   private messageId: number | null = null;
   private lastRendered = "";

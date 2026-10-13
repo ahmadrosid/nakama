@@ -20,6 +20,7 @@ import { client, formatError } from "@/lib/client";
 import { createPasskey, getPasskey } from "@/lib/passkey";
 
 type BackupCodeMethod = "mfa" | "passkey";
+
 type MfaUser = ReturnType<typeof useAuth>["user"];
 
 function MfaSettingsContent({
@@ -59,6 +60,7 @@ function MfaSettingsContent({
     startTotp,
     verifyTotp,
   } = actions;
+
   const { backupCodes, busy, code, error, totpUri, user } = state;
 
   return (
@@ -431,6 +433,7 @@ function MfaActionDialogs({
     setDisableVerifyOpen,
     setError,
   } = actions;
+
   const {
     backupCodeDialogOpen,
     backupCodeInput,
@@ -639,8 +642,10 @@ export function MfaSettingsCard() {
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
   const [disablePasskeyDialogOpen, setDisablePasskeyDialogOpen] =
     useState(false);
+
   const [disablePasskeyBackupCode, setDisablePasskeyBackupCode] = useState("");
   const [available, setAvailable] = useState(false);
   const [disableCode, setDisableCode] = useState("");
@@ -650,6 +655,7 @@ export function MfaSettingsCard() {
   const [disableVerifyOpen, setDisableVerifyOpen] = useState(false);
   const [backupCodeDialogOpen, setBackupCodeDialogOpen] = useState(false);
   const [backupCodeInput, setBackupCodeInput] = useState("");
+
   const [backupCodeMethod, setBackupCodeMethod] =
     useState<BackupCodeMethod>("passkey");
 
@@ -664,6 +670,7 @@ export function MfaSettingsCard() {
     if (!(user?.passkeyEnabled || user?.mfaEnabled)) {
       return;
     }
+
     setBackupCodeInput("");
     setBackupCodeMethod(user.passkeyEnabled ? "passkey" : "mfa");
     setError(null);
@@ -673,6 +680,7 @@ export function MfaSettingsCard() {
   async function generateBackupCodes() {
     setBusy(true);
     setError(null);
+
     try {
       let input:
         | { mfaCode: string }
@@ -680,10 +688,12 @@ export function MfaSettingsCard() {
             passkey: PasskeyCredentialResponse;
             passkeyChallenge: string;
           };
+
       if (backupCodeMethod === "passkey") {
         if (!user?.email) {
           return;
         }
+
         const result = await client.getPasskeyLoginOptions();
         input = {
           passkey: await getPasskey(result.options),
@@ -692,6 +702,7 @@ export function MfaSettingsCard() {
       } else {
         input = { mfaCode: backupCodeInput.trim() };
       }
+
       const result = await client.generateBackupCodes(input);
       setBackupCodes(result.backupCodes);
       setBackupCodeInput("");
@@ -708,16 +719,20 @@ export function MfaSettingsCard() {
   async function startPasskey() {
     setBusy(true);
     setError(null);
+
     try {
       const result = await client.startPasskey();
       const credential = await createPasskey(result.options);
+
       const verification = await client.verifyPasskey(
         result.challenge,
         credential
       );
+
       if (verification.backupCodes.length > 0) {
         setBackupCodes(verification.backupCodes);
       }
+
       await refreshSession();
       toast(
         verification.backupCodes.length > 0
@@ -734,6 +749,7 @@ export function MfaSettingsCard() {
   async function disablePasskeyWithPasskey() {
     setBusy(true);
     setError(null);
+
     try {
       const result = await client.getPasskeyLoginOptions();
       const credential = await getPasskey(result.options);
@@ -755,6 +771,7 @@ export function MfaSettingsCard() {
   async function disablePasskeyWithBackupCode() {
     setBusy(true);
     setError(null);
+
     try {
       await client.disablePasskey({
         backupCode: disablePasskeyBackupCode.trim(),
@@ -769,6 +786,7 @@ export function MfaSettingsCard() {
       setBusy(false);
     }
   }
+
   if (!available) {
     return null;
   }
@@ -776,6 +794,7 @@ export function MfaSettingsCard() {
   async function startTotp() {
     setBusy(true);
     setError(null);
+
     try {
       const result = await client.startTotp();
       setTotpUri(result.uri);
@@ -790,6 +809,7 @@ export function MfaSettingsCard() {
   async function verifyTotp() {
     setBusy(true);
     setError(null);
+
     try {
       const result = await client.verifyTotp(code.trim());
       setBackupCodes(result.backupCodes);
@@ -811,6 +831,7 @@ export function MfaSettingsCard() {
   async function disableMfa() {
     setBusy(true);
     setError(null);
+
     try {
       await client.disableMfa(
         disableMethod === "totp"
@@ -830,6 +851,7 @@ export function MfaSettingsCard() {
       setBusy(false);
     }
   }
+
   function cancelTotpSetup() {
     setTotpUri(null);
     setCode("");

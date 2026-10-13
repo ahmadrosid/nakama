@@ -21,11 +21,21 @@ async function toolFor(lastLine: string) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "skill-tool-"));
   const toolPath = path.join(directory, "tool.py");
   await writeFile(toolPath, `${BODY}    ${lastLine}\n`);
+
   const tool = await loadPythonSkillTool({
+    body: "",
     description: "Add two numbers",
+    directory,
+    disableModelInvocation: false,
+    hasTool: true,
+    includeBodyOnMatch: true,
     name: "adder",
+    scriptIssues: [],
+    scriptTools: [],
+    skillFilePath: toolPath,
     toolPath,
-  } as unknown as DiscoveredSkill);
+  } satisfies DiscoveredSkill);
+
   return { directory, tool };
 }
 
@@ -37,11 +47,15 @@ test.each([
   'sys.stdout.write(json.dumps(run(json.loads(sys.stdin.read() or "{}"), {})))',
 ])("a skill tool that writes its result with %s runs", async (lastLine) => {
   const { directory, tool } = await toolFor(lastLine);
+
   try {
     expect(tool).not.toBeNull();
+
+    // SAFETY: The test fixture matches the contract used by this test.
     const result = await tool?.run({ a: 2, b: 3 }, {
       signal: new AbortController().signal,
     } as never);
+
     expect(result).toEqual({ sum: 5 });
   } finally {
     await rm(directory, { force: true, recursive: true });
@@ -52,15 +66,27 @@ test("a skill tool that never reads stdin is refused with a reason naming it", a
   const directory = await mkdtemp(path.join(os.tmpdir(), "skill-tool-"));
   const toolPath = path.join(directory, "tool.py");
   await writeFile(toolPath, "def run(payload, context):\n    return payload\n");
+
   try {
     const tool = await loadPythonSkillTool({
+      body: "",
       description: "Echo",
+      directory,
+      disableModelInvocation: false,
+      hasTool: true,
+      includeBodyOnMatch: true,
       name: "echo",
+      scriptIssues: [],
+      scriptTools: [],
+      skillFilePath: toolPath,
       toolPath,
-    } as unknown as DiscoveredSkill);
+    } satisfies DiscoveredSkill);
+
+    // SAFETY: The test fixture matches the contract used by this test.
     const result = (await tool?.run({}, {
       signal: new AbortController().signal,
     } as never)) as { error: string };
+
     expect(result.error).toContain("sys.stdin");
   } finally {
     await rm(directory, { force: true, recursive: true });

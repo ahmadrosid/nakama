@@ -28,7 +28,11 @@ export function ModelCostFilterSelect({
 }) {
   return (
     <Select
-      onValueChange={(next) => onValueChange(next as ModelCostFilter)}
+      onValueChange={(next) => {
+        if (next === "all" || next === "free") {
+          onValueChange(next);
+        }
+      }}
       value={value}
     >
       <SelectTrigger className="w-27.5">
@@ -43,9 +47,10 @@ export function ModelCostFilterSelect({
 }
 
 const MODEL_ROW_HEIGHT = 73;
+
 const MODEL_ROW_OVERSCAN = 6;
 
-export type BrowseModelBadgeTone = "emerald" | "amber";
+type BrowseModelBadgeTone = "emerald" | "amber";
 
 export interface BrowseModelRowDisplay {
   badges?: Array<{ label: string; tone: BrowseModelBadgeTone }>;
@@ -130,6 +135,7 @@ export function VirtualModelBrowseList<T>({
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
+
     if (!element) {
       return;
     }
@@ -139,27 +145,33 @@ export function VirtualModelBrowseList<T>({
 
     const observer = new ResizeObserver(updateHeight);
     observer.observe(element);
+
     return () => observer.disconnect();
   }, []);
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
+
     if (!element) {
       return;
     }
+
     element.scrollTop = 0;
   }, [rows]);
 
   const totalHeight = rows.length * MODEL_ROW_HEIGHT;
   const visibleCount = Math.ceil(viewportHeight / MODEL_ROW_HEIGHT);
+
   const startIndex = Math.max(
     0,
     Math.floor(scrollTop / MODEL_ROW_HEIGHT) - MODEL_ROW_OVERSCAN
   );
+
   const endIndex = Math.min(
     rows.length,
     startIndex + visibleCount + MODEL_ROW_OVERSCAN * 2
   );
+
   const visibleRows = rows.slice(startIndex, endIndex);
 
   return (

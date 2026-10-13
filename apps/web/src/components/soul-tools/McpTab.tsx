@@ -39,6 +39,7 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
     serverId: string;
     url: string;
   } | null>(null);
+
   const {
     data: servers = [],
     isLoading,
@@ -46,6 +47,7 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
   } = useMcpServersQuery(
     pendingAuth ? { refetchInterval: AUTHORIZATION_POLL_INTERVAL_MS } : {}
   );
+
   const createMutation = useCreateMcpServerMutation();
   const updateMutation = useUpdateMcpServerMutation();
   const deleteMutation = useDeleteMcpServerMutation();
@@ -57,16 +59,20 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
   const [createOpen, setCreateOpen] = useState(false);
   const [editServerId, setEditServerId] = useState<string | null>(null);
   const [expandedServerId, setExpandedServerId] = useState<string | null>(null);
+
   const [deleteTarget, setDeleteTarget] = useState<McpServerSummary | null>(
     null
   );
+
   const pendingAuthStatus = pendingAuth
     ? servers.find((server) => server.id === pendingAuth.serverId)?.status
     : undefined;
+
   const editServer =
     servers.find((server) => server.id === editServerId) ?? null;
 
   const loading = isLoading && servers.length === 0;
+
   const busy =
     [
       createMutation,
@@ -75,6 +81,7 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
       connectMutation,
       syncMutation,
     ].some((mutation) => mutation.isPending) || testingServerId !== null;
+
   const errorMessage = actionError ?? (error ? formatError(error) : null);
 
   useEffect(() => {
@@ -98,10 +105,7 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
   }
 
   function requestDelete(server: McpServerSummary) {
-    if (
-      isPreinstalledMcpServerId(server.id) ||
-      (server.assignedProfileCount ?? 0) > 0
-    ) {
+    if (isPreinstalledMcpServerId(server.id)) {
       return;
     }
 
@@ -116,7 +120,10 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
     setActionError(null);
 
     try {
-      await deleteMutation.mutateAsync(deleteTarget.id);
+      await deleteMutation.mutateAsync({
+        force: true,
+        serverId: deleteTarget.id,
+      });
       setExpandedServerId((current) =>
         current === deleteTarget.id ? null : current
       );
@@ -165,6 +172,7 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
         serverId: server.id,
         transport: server.transport,
       });
+
       if (result.ok) {
         setActionNotice(
           `Connection successful. Found ${result.toolCount} tool${result.toolCount === 1 ? "" : "s"}.`
@@ -218,6 +226,7 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
         onSync={(serverId) => void handleSync(serverId)}
         onTestConnection={(serverId) => {
           const server = servers.find((item) => item.id === serverId);
+
           if (server) {
             void handleTestConnection(server);
           }
@@ -231,6 +240,7 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
         busy={createMutation.isPending}
         onOpenChange={(open) => {
           setCreateOpen(open);
+
           if (!open) {
             setActionError(null);
           }
@@ -243,6 +253,7 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
               ...request,
               connect: true,
             });
+
             setCreateOpen(false);
 
             if (startAuthorization(response)) {
@@ -332,6 +343,9 @@ function DeleteMcpServerDialog({
           <DialogDescription>
             Remove {target?.name ? `"${target.name}"` : "this MCP server"}. This
             cannot be undone.
+            {(target?.assignedProfileCount ?? 0) > 0
+              ? ` It will also unassign this server from ${target?.assignedProfileCount} profile${target?.assignedProfileCount === 1 ? "" : "s"}.`
+              : null}
           </DialogDescription>
         </DialogHeader>
 
@@ -350,7 +364,13 @@ function DeleteMcpServerDialog({
             type="button"
             variant="destructive"
           >
-            {busy ? <Spinner className="size-4" /> : "Delete"}
+            {busy ? (
+              <Spinner className="size-4" />
+            ) : (target?.assignedProfileCount ?? 0) > 0 ? (
+              "Force delete"
+            ) : (
+              "Delete"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

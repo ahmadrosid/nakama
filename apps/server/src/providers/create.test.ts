@@ -1,8 +1,24 @@
 import { describe, expect, test } from "bun:test";
 import type { ProviderInstance } from "@nakama/core";
 import { createProviderForInstance } from "./create";
+import { type ProviderJsonRecord, parseJsonRecord } from "./shared";
 
 describe("createProviderForInstance routing", () => {
+  test("blocks Netra models without a verified tool turn", () => {
+    const instance: ProviderInstance = {
+      apiKey: "test-key",
+      createdAt: "2026-10-05T00:00:00.000Z",
+      customModels: [{ id: "deepseek/deepseek-v4.1-flash" }],
+      id: "netra-1",
+      label: "Netra Runtime",
+      type: "netra",
+    };
+
+    expect(() =>
+      createProviderForInstance(instance, "deepseek/deepseek-v4.1-flash")
+    ).toThrow();
+  });
+
   test("routes xiaomi instances to the configured base URL with auth", async () => {
     let seenPath = "";
     let seenAuth = "";
@@ -14,12 +30,16 @@ describe("createProviderForInstance routing", () => {
         const url = new URL(request.url);
         seenPath = url.pathname;
         seenAuth = request.headers.get("authorization") ?? "";
+
+        // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
         const body = (await request.json()) as {
           model?: string;
           thinking?: unknown;
         };
+
         seenModel = body.model ?? "";
         seenThinking = body.thinking;
+
         return Response.json({
           choices: [
             {
@@ -60,6 +80,7 @@ describe("createProviderForInstance routing", () => {
       const result = await client!.generateChat({
         messages: [{ content: "ping", role: "user" }],
         providerOptions: { thinking: { effort: "high", enabled: true } },
+        system: "",
       });
 
       expect(result.content).toBe("ok");
@@ -70,8 +91,88 @@ describe("createProviderForInstance routing", () => {
 
       await client!.generateChat({
         messages: [{ content: "ping", role: "user" }],
+        system: "",
       });
       expect(seenThinking).toEqual({ type: "disabled" });
+    } finally {
+      mock.stop(true);
+    }
+  });
+
+  test("routes meta instances to the configured base URL with reasoning effort", async () => {
+    let seenPath = "";
+    let seenAuth = "";
+    let seenModel = "";
+    let seenEffort: unknown;
+
+    const mock = Bun.serve({
+      fetch: async (request) => {
+        const url = new URL(request.url);
+        seenPath = url.pathname;
+        seenAuth = request.headers.get("authorization") ?? "";
+
+        // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
+        const body = (await request.json()) as {
+          model?: string;
+          reasoning_effort?: unknown;
+        };
+
+        seenModel = body.model ?? "";
+        seenEffort = body.reasoning_effort;
+
+        return Response.json({
+          choices: [
+            {
+              finish_reason: "stop",
+              index: 0,
+              message: { content: "ok", role: "assistant" },
+            },
+          ],
+          created: 1,
+          id: "mock",
+          model: seenModel,
+          object: "chat.completion",
+          usage: {
+            completion_tokens: 1,
+            prompt_tokens: 1,
+            total_tokens: 2,
+          },
+        });
+      },
+      port: 0,
+    });
+
+    try {
+      const instance: ProviderInstance = {
+        apiKey: "test-key",
+        baseUrl: `http://127.0.0.1:${mock.port}/v1`,
+        createdAt: new Date().toISOString(),
+        id: "inst_meta",
+        label: "Meta Model API",
+        type: "meta",
+      };
+
+      const client = createProviderForInstance(instance, "muse-spark-1.3");
+
+      expect(client?.name).toBe("meta");
+
+      const result = await client!.generateChat({
+        messages: [{ content: "ping", role: "user" }],
+        providerOptions: { thinking: { effort: "high", enabled: true } },
+        system: "",
+      });
+
+      expect(result.content).toBe("ok");
+      expect(seenPath).toBe("/v1/chat/completions");
+      expect(seenAuth).toBe("Bearer test-key");
+      expect(seenModel).toBe("muse-spark-1.3");
+      expect(seenEffort).toBe("high");
+
+      await client!.generateChat({
+        messages: [{ content: "ping", role: "user" }],
+        system: "",
+      });
+      expect(seenEffort).toBe("minimal");
     } finally {
       mock.stop(true);
     }
@@ -103,8 +204,10 @@ describe("createProviderForInstance routing", () => {
         const url = new URL(request.url);
         seenPath = url.pathname;
         seenAuth = request.headers.get("authorization") ?? "";
+        // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
         const body = (await request.json()) as { model?: string };
         seenModel = body.model ?? "";
+
         return Response.json({
           choices: [
             {
@@ -144,6 +247,7 @@ describe("createProviderForInstance routing", () => {
 
       const result = await client!.generateChat({
         messages: [{ content: "ping", role: "user" }],
+        system: "",
       });
 
       expect(result.content).toBe("ok");
@@ -166,12 +270,16 @@ describe("createProviderForInstance routing", () => {
         const url = new URL(request.url);
         seenPath = url.pathname;
         seenAuth = request.headers.get("authorization") ?? "";
+
+        // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
         const body = (await request.json()) as {
           model?: string;
           reasoning?: unknown;
         };
+
         seenModel = body.model ?? "";
         seenReasoning = body.reasoning;
+
         return Response.json({
           choices: [
             {
@@ -216,6 +324,7 @@ describe("createProviderForInstance routing", () => {
       const result = await client!.generateChat({
         messages: [{ content: "ping", role: "user" }],
         providerOptions: { thinking: { effort: "medium", enabled: true } },
+        system: "",
       });
 
       expect(result.content).toBe("ok");
@@ -239,8 +348,10 @@ describe("createProviderForInstance routing", () => {
         const url = new URL(request.url);
         seenPath = url.pathname;
         seenAuth = request.headers.get("authorization") ?? "";
+        // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
         const body = (await request.json()) as { model?: string };
         seenModel = body.model ?? "";
+
         return Response.json({
           choices: [
             {
@@ -280,6 +391,7 @@ describe("createProviderForInstance routing", () => {
 
       const result = await client!.generateChat({
         messages: [{ content: "ping", role: "user" }],
+        system: "",
       });
 
       expect(result.content).toBe("ok");
@@ -317,12 +429,16 @@ describe("createProviderForInstance routing", () => {
           const url = new URL(request.url);
           seenPath = url.pathname;
           seenAuth = request.headers.get("authorization") ?? "";
+
+          // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
           const body = (await request.json()) as {
             enable_thinking?: unknown;
             model?: string;
           };
+
           seenModel = body.model ?? "";
           seenEnableThinking = body.enable_thinking;
+
           return Response.json({
             choices: [
               {
@@ -363,6 +479,7 @@ describe("createProviderForInstance routing", () => {
         const result = await client!.generateChat({
           messages: [{ content: "ping", role: "user" }],
           providerOptions: { thinking: { effort: "medium", enabled: true } },
+          system: "",
         });
 
         expect(result.content).toBe("ok");
@@ -373,6 +490,7 @@ describe("createProviderForInstance routing", () => {
 
         await client!.generateChat({
           messages: [{ content: "ping", role: "user" }],
+          system: "",
         });
         expect(seenEnableThinking).toBe(false);
       } finally {
@@ -393,14 +511,18 @@ describe("createProviderForInstance routing", () => {
         const url = new URL(request.url);
         seenPath = url.pathname;
         seenAuth = request.headers.get("authorization") ?? "";
+
+        // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
         const body = (await request.json()) as {
           model?: string;
           reasoning_effort?: unknown;
           thinking?: unknown;
         };
+
         seenModel = body.model ?? "";
         seenThinking = body.thinking;
         seenReasoningEffort = body.reasoning_effort;
+
         return Response.json({
           choices: [
             {
@@ -444,6 +566,7 @@ describe("createProviderForInstance routing", () => {
       const result = await client!.generateChat({
         messages: [{ content: "ping", role: "user" }],
         providerOptions: { thinking: { effort: "high", enabled: true } },
+        system: "",
       });
 
       expect(result.content).toBe("ok");
@@ -455,6 +578,7 @@ describe("createProviderForInstance routing", () => {
 
       await client!.generateChat({
         messages: [{ content: "ping", role: "user" }],
+        system: "",
       });
       expect(seenThinking).toEqual({ type: "disabled" });
       expect(seenReasoningEffort).toBeUndefined();
@@ -466,13 +590,14 @@ describe("createProviderForInstance routing", () => {
   test("routes perplexity chat and keeps citations while omitting local tools", async () => {
     let seenPath = "";
     let seenAuth = "";
-    const seenBodies: Array<Record<string, unknown>> = [];
+    const seenBodies: ProviderJsonRecord[] = [];
 
     const mock = Bun.serve({
       fetch: async (request) => {
         seenPath = new URL(request.url).pathname;
         seenAuth = request.headers.get("authorization") ?? "";
-        seenBodies.push((await request.json()) as Record<string, unknown>);
+        seenBodies.push(parseJsonRecord(await request.text()));
+
         return Response.json({
           choices: [
             {
@@ -505,6 +630,7 @@ describe("createProviderForInstance routing", () => {
         label: "Perplexity Sonar",
         type: "perplexity",
       };
+
       const client = createProviderForInstance(instance, "sonar");
 
       const result = await client!.generateChat({

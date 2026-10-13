@@ -1,16 +1,21 @@
 const RAW_HOST = "raw.githubusercontent.com";
+
 const GITHUB_HOSTS = new Set(["github.com", "www.github.com"]);
+
 const SKILL_FILE_NAME = "SKILL.md";
+
 /** Encoded path/query/fragment separators that must not become real separators after decode. */
 const ENCODED_SEPARATOR_PATTERN = /%(?:2[fF]|5[cC]|23|3[fF])/;
 
 export function resolveGitHubSkillRawUrl(input: string): string {
   const trimmed = input.trim();
+
   if (!trimmed) {
     throw new Error("GitHub skill URL is required.");
   }
 
   let parsed: URL;
+
   try {
     parsed = new URL(trimmed);
   } catch {
@@ -38,6 +43,7 @@ export function resolveGitHubSkillRawUrl(input: string): string {
 
 function normalizeRawUrl(parsed: URL): string {
   const segments = splitPath(parsed.pathname);
+
   if (segments.length < 4) {
     throw new Error(
       "raw.githubusercontent.com URL must be /{owner}/{repo}/{ref}/…/SKILL.md."
@@ -54,6 +60,7 @@ function normalizeRawUrl(parsed: URL): string {
 
 function githubHtmlUrlToRaw(parsed: URL): string {
   const segments = splitPath(parsed.pathname);
+
   if (segments.length < 4) {
     throw new Error(
       "GitHub URL must point to a SKILL.md blob/raw path or a tree folder that contains SKILL.md."
@@ -103,9 +110,11 @@ function buildRawUrl(
 
 function ensureSkillFilePath(pathPart: string, mode: "file" | "tree"): string {
   let normalized = pathPart;
+
   while (normalized.endsWith("/")) {
     normalized = normalized.slice(0, -1);
   }
+
   if (!normalized) {
     throw new Error(
       mode === "tree"
@@ -118,6 +127,7 @@ function ensureSkillFilePath(pathPart: string, mode: "file" | "tree"): string {
   const parts = normalized.split("/").filter((segment) => segment.length > 0);
 
   const base = parts.at(-1) ?? "";
+
   if (base === SKILL_FILE_NAME) {
     return parts.join("/");
   }
@@ -144,6 +154,7 @@ function splitPath(pathname: string): string[] {
     }
 
     let value: string;
+
     try {
       value = decodeURIComponent(segment);
     } catch {

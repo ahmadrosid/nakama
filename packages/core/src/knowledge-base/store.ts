@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { z } from "zod";
+import { createChatLock } from "../channel-chat-lock";
 import type {
   DocumentAttachment,
   KnowledgeBaseDocument,
@@ -39,6 +41,26 @@ interface KnowledgeBaseManifest {
   /** Additive references to organization-owned documents. */
   sharedDocumentIds?: string[];
 }
+
+const KnowledgeBaseDocumentSchema = z.object({
+  contentHash: z.string().optional(),
+  error: z.string().optional(),
+  filename: z.string(),
+  id: z.string(),
+  mediaType: z.string(),
+  scope: z.enum(["organization", "profile"]).optional(),
+  sizeBytes: z.number(),
+  status: z.enum(["ready", "failed"]),
+  uploadedAt: z.string(),
+});
+
+const KnowledgeBaseManifestSchema = z.object({
+  documents: z.array(KnowledgeBaseDocumentSchema),
+  sharedDocumentIds: z.array(z.string()).optional(),
+});
+
+// shortcut: One process only; use a shared lock if servers share a data directory.
+export const knowledgeBaseMutationLock = createChatLock();
 
 export type KnowledgeBaseDuplicateMatch = "content_hash" | "name_size";
 
@@ -86,6 +108,7 @@ function findDuplicateDocument(
   const byHash = documents.find(
     (document) => document.contentHash === candidate.contentHash
   );
+
   if (byHash) {
     return { document: byHash, match: "content_hash" };
   }
@@ -95,6 +118,7 @@ function findDuplicateDocument(
       document.filename === candidate.filename &&
       document.sizeBytes === candidate.sizeBytes
   );
+
   if (byNameSize) {
     return { document: byNameSize, match: "name_size" };
   }
@@ -134,6 +158,7 @@ async function flattenKnowledgeBaseLayout(dir: string): Promise<void> {
 
   if (await pathExists(extractedDir)) {
     const entries = await readdir(extractedDir, { withFileTypes: true });
+
     for (const entry of entries) {
       if (!entry.isFile()) {
         continue;
@@ -146,11 +171,13 @@ async function flattenKnowledgeBaseLayout(dir: string): Promise<void> {
         getKnowledgeBaseExtractedPath(dir, documentId)
       );
     }
+
     await rm(extractedDir, { force: true, recursive: true });
   }
 
   if (await pathExists(uploadsDir)) {
     const documentDirs = await readdir(uploadsDir, { withFileTypes: true });
+
     for (const documentDir of documentDirs) {
       if (!documentDir.isDirectory()) {
         continue;
@@ -158,6 +185,7 @@ async function flattenKnowledgeBaseLayout(dir: string): Promise<void> {
 
       const legacyDocumentDir = join(uploadsDir, documentDir.name);
       const files = await readdir(legacyDocumentDir, { withFileTypes: true });
+
       for (const file of files) {
         if (!file.isFile()) {
           continue;
@@ -169,6 +197,7 @@ async function flattenKnowledgeBaseLayout(dir: string): Promise<void> {
         );
       }
     }
+
     await rm(uploadsDir, { force: true, recursive: true });
   }
 }
@@ -185,6 +214,7 @@ async function profileKnowledgeBaseDir(
   await migrateLegacyKnowledgeBaseDir(orgId, profileId);
   const dir = getKnowledgeBaseDir(orgId, profileId);
   await flattenKnowledgeBaseLayout(dir);
+
   return dir;
 }
 
@@ -192,12 +222,14 @@ async function profileKnowledgeBaseDir(
 async function orgKnowledgeBaseDir(orgId: string): Promise<string> {
   const dir = getOrgKnowledgeBaseDir(orgId);
   await flattenKnowledgeBaseLayout(dir);
+
   return dir;
 }
 
 function decodeDocumentBytes(data: string): Buffer {
   const raw = data.trim();
   const base64 = raw.includes(",") ? (raw.split(",")[1] ?? "") : raw;
+
   return Buffer.from(base64, "base64");
 }
 
@@ -216,29 +248,18 @@ async function readManifestFrom(dir: string): Promise<KnowledgeBaseManifest> {
   }
 
   try {
-    const parsed: unknown = JSON.parse(raw);
-    if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      Array.isArray((parsed as KnowledgeBaseManifest).documents)
-    ) {
-      // A manifest written by an older build or edited by hand can carry
-      // `sharedDocumentIds` in any shape: normalized on read, a string would
-      // substring-match document ids and break `filter` on detach.
-      const rawShared = (parsed as KnowledgeBaseManifest).sharedDocumentIds;
-      const sharedDocumentIds = Array.isArray(rawShared)
-        ? rawShared.filter(
-            (entry): entry is string =>
-              typeof entry === "string" && entry.length > 0
-          )
-        : undefined;
+    const parsed = KnowledgeBaseManifestSchema.safeParse(JSON.parse(raw));
+
+    if (parsed.success) {
+      const sharedDocumentIds = parsed.data.sharedDocumentIds?.filter(
+        (entry) => entry.length > 0
+      );
 
       return {
-        documents: (parsed as KnowledgeBaseManifest).documents,
-        sharedDocumentIds:
-          sharedDocumentIds && sharedDocumentIds.length > 0
-            ? sharedDocumentIds
-            : undefined,
+        documents: parsed.data.documents,
+        sharedDocumentIds: sharedDocumentIds?.length
+          ? sharedDocumentIds
+          : undefined,
       };
     }
   } catch {
@@ -255,7 +276,7 @@ async function readManifestFrom(dir: string): Promise<KnowledgeBaseManifest> {
  * folders, so a failed rename mid-loop would abort the delete on a half
  * migrated tree.
  */
-async function readProfileManifestForReference(
+export async function readProfileManifestForReference(
   orgId: string,
   profileId: string
 ): Promise<KnowledgeBaseManifest> {
@@ -302,6 +323,7 @@ export async function listKnowledgeBaseDocuments(
 ): Promise<KnowledgeBaseDocument[]> {
   const dir = await profileKnowledgeBaseDir(orgId, profileId);
   const manifest = await readManifestFrom(dir);
+
   return sortByUploadedAt(manifest.documents);
 }
 
@@ -309,6 +331,7 @@ export async function listOrganizationKnowledgeBaseDocuments(
   orgId: string
 ): Promise<KnowledgeBaseDocument[]> {
   const manifest = await readManifestFrom(await orgKnowledgeBaseDir(orgId));
+
   return sortByUploadedAt(manifest.documents);
 }
 
@@ -326,6 +349,7 @@ async function guardSharedDocumentRemoval(
     documentId,
     knownProfileIds
   );
+
   if (profileIds.length > 0) {
     throw new KnowledgeBaseDocumentInUseError(documentId, profileIds);
   }
@@ -335,7 +359,8 @@ async function uploadDocumentTo(
   dir: string,
   attachment: DocumentAttachment,
   onDuplicate: KnowledgeBaseDuplicateAction,
-  guardRemoval?: (documentId: string) => Promise<void>
+  guardRemoval?: (documentId: string) => Promise<void>,
+  onDocumentRemoved?: (documentId: string) => Promise<void>
 ): Promise<UploadKnowledgeBaseDocumentResult> {
   const filename = attachment.filename.trim();
 
@@ -372,6 +397,7 @@ async function uploadDocumentTo(
   let outcome: KnowledgeBaseUploadOutcome = "created";
 
   const existingManifest = await readManifestFrom(dir);
+
   const duplicate = findDuplicateDocument(existingManifest.documents, {
     contentHash,
     filename,
@@ -393,17 +419,21 @@ async function uploadDocumentTo(
     const removed = await deleteDocumentFrom(
       dir,
       duplicate.document.id,
-      guardRemoval
+      guardRemoval,
+      onDocumentRemoved
     );
+
     if (!removed) {
       throw new Error("Failed to replace existing knowledge base document.");
     }
+
     outcome = "replaced";
   }
 
   const documentId = createId("kb");
   const uploadedAt = new Date().toISOString();
   const safeFilename = sanitizeFilename(filename);
+
   const originalPath = getKnowledgeBaseStoredDocumentPath(
     dir,
     documentId,
@@ -427,6 +457,7 @@ async function uploadDocumentTo(
       mediaType,
       uploadedAt,
     });
+
     await writeTextFile(
       getKnowledgeBaseExtractedPath(dir, documentId),
       `${header}${body}\n`
@@ -447,8 +478,11 @@ async function uploadDocumentTo(
     sizeBytes: bytes.length,
     status,
     uploadedAt,
-    ...(error ? { error } : {}),
   };
+
+  if (error) {
+    document.error = error;
+  }
 
   const manifest = await readManifestFrom(dir);
   manifest.documents.push(document);
@@ -463,10 +497,12 @@ export async function uploadKnowledgeBaseDocument(
   attachment: DocumentAttachment,
   onDuplicate: KnowledgeBaseDuplicateAction = "error"
 ): Promise<UploadKnowledgeBaseDocumentResult> {
-  return uploadDocumentTo(
-    await profileKnowledgeBaseDir(orgId, profileId),
-    attachment,
-    onDuplicate
+  return knowledgeBaseMutationLock.withLock(getOrgConfigDir(orgId), async () =>
+    uploadDocumentTo(
+      await profileKnowledgeBaseDir(orgId, profileId),
+      attachment,
+      onDuplicate
+    )
   );
 }
 
@@ -474,14 +510,18 @@ export async function uploadOrganizationKnowledgeBaseDocument(
   orgId: string,
   attachment: DocumentAttachment,
   onDuplicate: KnowledgeBaseDuplicateAction = "error",
-  knownProfileIds?: readonly string[]
+  knownProfileIds?: readonly string[],
+  onDocumentRemoved?: (documentId: string) => Promise<void>
 ): Promise<UploadKnowledgeBaseDocumentResult> {
-  return await uploadDocumentTo(
-    await orgKnowledgeBaseDir(orgId),
-    attachment,
-    onDuplicate,
-    (documentId) =>
-      guardSharedDocumentRemoval(orgId, documentId, knownProfileIds)
+  return knowledgeBaseMutationLock.withLock(getOrgConfigDir(orgId), async () =>
+    uploadDocumentTo(
+      await orgKnowledgeBaseDir(orgId),
+      attachment,
+      onDuplicate,
+      (documentId) =>
+        guardSharedDocumentRemoval(orgId, documentId, knownProfileIds),
+      onDocumentRemoved
+    )
   );
 }
 
@@ -499,22 +539,29 @@ export async function findProfilesReferencingSharedDocument(
   const candidates = knownProfileIds
     ? [...knownProfileIds]
     : await listProfileIdsOnDisk(orgId);
+
   const profileIds: string[] = [];
+
   for (const profileId of candidates) {
     const manifest = await readProfileManifestForReference(orgId, profileId);
+
     if (manifest.sharedDocumentIds?.includes(documentId)) {
       profileIds.push(profileId);
     }
   }
+
   return profileIds.sort();
 }
 
 async function listProfileIdsOnDisk(orgId: string): Promise<string[]> {
   const profilesDir = join(getOrgConfigDir(orgId), "profiles");
+
   if (!(await pathExists(profilesDir))) {
     return [];
   }
+
   const entries = await readdir(profilesDir, { withFileTypes: true });
+
   return entries
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name);
@@ -523,14 +570,18 @@ async function listProfileIdsOnDisk(orgId: string): Promise<string[]> {
 async function deleteDocumentFrom(
   dir: string,
   documentId: string,
-  guardRemoval?: (documentId: string) => Promise<void>
+  guardRemoval?: (documentId: string) => Promise<void>,
+  onDocumentRemoved?: (documentId: string) => Promise<void>
 ): Promise<boolean> {
   const manifest = await readManifestFrom(dir);
+
   const index = manifest.documents.findIndex(
     (document) => document.id === documentId
   );
 
   if (index < 0) {
+    await onDocumentRemoved?.(documentId);
+
     return false;
   }
 
@@ -547,14 +598,19 @@ async function deleteDocumentFrom(
     documentId,
     document.filename
   );
+
   const extractedPath = getKnowledgeBaseExtractedPath(dir, documentId);
 
-  if (await pathExists(storedPath)) {
-    await removeFile(storedPath);
-  }
+  try {
+    if (await pathExists(storedPath)) {
+      await removeFile(storedPath);
+    }
 
-  if (await pathExists(extractedPath)) {
-    await removeFile(extractedPath);
+    if (await pathExists(extractedPath)) {
+      await removeFile(extractedPath);
+    }
+  } finally {
+    await onDocumentRemoved?.(documentId);
   }
 
   return true;
@@ -565,18 +621,35 @@ export async function deleteKnowledgeBaseDocument(
   profileId: string,
   documentId: string
 ): Promise<boolean> {
-  const dir = await profileKnowledgeBaseDir(orgId, profileId);
-  return deleteDocumentFrom(dir, documentId);
+  return knowledgeBaseMutationLock.withLock(
+    getOrgConfigDir(orgId),
+    async () => {
+      const dir = await profileKnowledgeBaseDir(orgId, profileId);
+
+      return deleteDocumentFrom(dir, documentId);
+    }
+  );
 }
 
 export async function deleteOrganizationKnowledgeBaseDocument(
   orgId: string,
   documentId: string,
-  knownProfileIds?: readonly string[]
+  knownProfileIds?: readonly string[],
+  onDocumentRemoved?: (documentId: string) => Promise<void>
 ): Promise<boolean> {
-  const dir = await orgKnowledgeBaseDir(orgId);
-  return await deleteDocumentFrom(dir, documentId, (candidate) =>
-    guardSharedDocumentRemoval(orgId, candidate, knownProfileIds)
+  return knowledgeBaseMutationLock.withLock(
+    getOrgConfigDir(orgId),
+    async () => {
+      const dir = await orgKnowledgeBaseDir(orgId);
+
+      return deleteDocumentFrom(
+        dir,
+        documentId,
+        (candidate) =>
+          guardSharedDocumentRemoval(orgId, candidate, knownProfileIds),
+        onDocumentRemoved
+      );
+    }
   );
 }
 
@@ -586,6 +659,7 @@ export async function getProfileSharedDocumentIds(
 ): Promise<string[]> {
   const dir = await profileKnowledgeBaseDir(orgId, profileId);
   const manifest = await readManifestFrom(dir);
+
   return [...new Set(manifest.sharedDocumentIds ?? [])];
 }
 
@@ -594,16 +668,23 @@ export async function attachSharedKnowledgeBaseDocument(
   profileId: string,
   documentId: string
 ): Promise<void> {
-  const shared = await readManifestFrom(await orgKnowledgeBaseDir(orgId));
-  if (!shared.documents.some((document) => document.id === documentId)) {
-    throw new Error("Shared knowledge base document not found.");
-  }
-  const dir = await profileKnowledgeBaseDir(orgId, profileId);
-  const manifest = await readManifestFrom(dir);
-  manifest.sharedDocumentIds = [
-    ...new Set([...(manifest.sharedDocumentIds ?? []), documentId]),
-  ];
-  await writeManifestTo(dir, manifest);
+  return knowledgeBaseMutationLock.withLock(
+    getOrgConfigDir(orgId),
+    async () => {
+      const shared = await readManifestFrom(await orgKnowledgeBaseDir(orgId));
+
+      if (!shared.documents.some((document) => document.id === documentId)) {
+        throw new Error("Shared knowledge base document not found.");
+      }
+
+      const dir = await profileKnowledgeBaseDir(orgId, profileId);
+      const manifest = await readManifestFrom(dir);
+      manifest.sharedDocumentIds = [
+        ...new Set([...(manifest.sharedDocumentIds ?? []), documentId]),
+      ];
+      await writeManifestTo(dir, manifest);
+    }
+  );
 }
 
 export async function detachSharedKnowledgeBaseDocument(
@@ -611,15 +692,23 @@ export async function detachSharedKnowledgeBaseDocument(
   profileId: string,
   documentId: string
 ): Promise<boolean> {
-  const dir = await profileKnowledgeBaseDir(orgId, profileId);
-  const manifest = await readManifestFrom(dir);
-  const ids = manifest.sharedDocumentIds ?? [];
-  if (!ids.includes(documentId)) {
-    return false;
-  }
-  manifest.sharedDocumentIds = ids.filter((id) => id !== documentId);
-  await writeManifestTo(dir, manifest);
-  return true;
+  return knowledgeBaseMutationLock.withLock(
+    getOrgConfigDir(orgId),
+    async () => {
+      const dir = await profileKnowledgeBaseDir(orgId, profileId);
+      const manifest = await readManifestFrom(dir);
+      const ids = manifest.sharedDocumentIds ?? [];
+
+      if (!ids.includes(documentId)) {
+        return false;
+      }
+
+      manifest.sharedDocumentIds = ids.filter((id) => id !== documentId);
+      await writeManifestTo(dir, manifest);
+
+      return true;
+    }
+  );
 }
 
 /**
@@ -633,6 +722,7 @@ function stripExtractedTextHeader(text: string): string {
   const match = text.match(
     /^# source: [^\n]*\n# mediaType: [^\n]*\n# uploadedAt: [^\n]*\n/
   );
+
   if (match) {
     return text.slice(match[0].length);
   }
@@ -677,6 +767,7 @@ async function readDocumentContentFrom(
     if (await pathExists(extractedPath)) {
       const raw = (await readBytes(extractedPath)).toString("utf8");
       const body = stripExtractedTextHeader(raw);
+
       return {
         bytes: Buffer.from(body, "utf8"),
         contentType: "text/plain",
@@ -705,6 +796,7 @@ export async function readKnowledgeBaseDocumentContent(
   options: { render?: "text" } = {}
 ): Promise<{ bytes: Buffer; contentType: string; filename: string }> {
   const dir = await profileKnowledgeBaseDir(orgId, profileId);
+
   return readDocumentContentFrom(dir, documentId, options);
 }
 
@@ -714,5 +806,6 @@ export async function readOrganizationKnowledgeBaseDocumentContent(
   options: { render?: "text" } = {}
 ): Promise<{ bytes: Buffer; contentType: string; filename: string }> {
   const dir = await orgKnowledgeBaseDir(orgId);
+
   return readDocumentContentFrom(dir, documentId, options);
 }

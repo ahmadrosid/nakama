@@ -18,19 +18,43 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
 import {
   Building03Icon,
+  ComputerIcon,
   Logout03Icon,
+  MoonIcon,
   SparklesIcon,
+  Sun01Icon,
   UserIcon,
 } from "hugeicons-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { THEME_OPTIONS } from "@/components/theme-options";
 import { UserContextEditorDialog } from "@/components/UserContextCard";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
 import { client, formatError } from "@/lib/client";
-import { canAccessSystemPage, PAGE_PATHS } from "@/lib/navigation";
+import { canAccessOrganizationPage, PAGE_PATHS } from "@/lib/navigation";
+import type { Theme } from "@/lib/theme";
+
+const THEME_OPTIONS: {
+  id: Theme;
+  label: string;
+  icon: typeof Sun01Icon;
+}[] = [
+  { icon: Sun01Icon, id: "light", label: "Light" },
+  { icon: MoonIcon, id: "dark", label: "Dark" },
+  { icon: ComputerIcon, id: "system", label: "System" },
+];
+
+function accountInitials(name: string) {
+  const words = name.split(/\s+/).filter(Boolean);
+
+  const letters =
+    words.length > 1
+      ? `${words[0][0]}${words[1][0]}`
+      : (words[0] ?? "?").slice(0, 2);
+
+  return letters.toUpperCase();
+}
 
 export function SidebarUserMenu() {
   const { user, activeOrg, logout, refreshSession } = useAuth();
@@ -45,11 +69,14 @@ export function SidebarUserMenu() {
   }
 
   const displayName = user.name?.trim() || user.email;
+
   const initial = (
     user.name?.trim()?.[0] ??
     user.email[0] ??
     "?"
   ).toUpperCase();
+
+  const initials = accountInitials(displayName);
 
   const trigger = (
     <button
@@ -77,20 +104,28 @@ export function SidebarUserMenu() {
                   side="right"
                   sideOffset={8}
                 >
-                  <div className="space-y-0.5 px-3.5 py-3">
-                    <p className="truncate font-semibold text-foreground text-sm">
-                      {displayName}
-                    </p>
-                    <p className="truncate text-muted-foreground text-xs">
-                      {user.email}
-                    </p>
+                  <div className="flex items-center gap-2.5 px-3.5 py-3">
+                    <span
+                      aria-hidden="true"
+                      className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-primary-foreground text-xs"
+                    >
+                      {initials}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-foreground text-sm">
+                        {displayName}
+                      </p>
+                      <p className="truncate text-muted-foreground text-xs">
+                        {user.email}
+                      </p>
+                    </div>
                   </div>
 
                   <div className="h-px bg-border" />
 
                   <div className="p-1">
                     <DropdownMenuItem
-                      className="px-2.5 py-2"
+                      className="px-2.5 py-1.5"
                       onClick={() => {
                         setProfileOpen(true);
                       }}
@@ -99,7 +134,7 @@ export function SidebarUserMenu() {
                       Profile
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      className="px-2.5 py-2"
+                      className="px-2.5 py-1.5"
                       onClick={() => {
                         setPersonalisationOpen(true);
                       }}
@@ -107,12 +142,12 @@ export function SidebarUserMenu() {
                       <SparklesIcon className="size-4 text-muted-foreground" />
                       Personalisation
                     </DropdownMenuItem>
-                    {canAccessSystemPage(
+                    {canAccessOrganizationPage(
                       user.isPlatformAdmin === true,
                       activeOrg?.role
                     ) && (
                       <DropdownMenuItem
-                        className="px-2.5 py-2"
+                        className="px-2.5 py-1.5"
                         render={<Link to={PAGE_PATHS.organization} />}
                       >
                         <Building03Icon
@@ -126,11 +161,11 @@ export function SidebarUserMenu() {
 
                   <div className="h-px bg-border" />
 
-                  <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+                  <div className="flex items-center justify-between gap-3 px-3.5 py-2">
                     <span className="text-muted-foreground text-sm">Theme</span>
                     <div
                       aria-label="Color theme"
-                      className="flex rounded-md bg-muted/60 p-0.5"
+                      className="flex gap-0.5 rounded-md bg-muted p-0.5"
                       role="group"
                     >
                       {THEME_OPTIONS.map((option) => {
@@ -142,7 +177,7 @@ export function SidebarUserMenu() {
                             aria-label={option.label}
                             aria-pressed={selected}
                             className={cn(
-                              "rounded-sm p-1 text-muted-foreground transition-colors hover:text-foreground",
+                              "rounded-sm px-2 py-1 text-muted-foreground transition-colors hover:text-foreground",
                               selected &&
                                 "bg-background text-foreground shadow-sm"
                             )}
@@ -167,7 +202,7 @@ export function SidebarUserMenu() {
 
                   <div className="p-1">
                     <DropdownMenuItem
-                      className="px-2.5 py-2"
+                      className="px-2.5 py-1.5"
                       onClick={() => {
                         void logout();
                       }}
@@ -205,8 +240,10 @@ export function SidebarUserMenu() {
             // Server revoked all sessions and cleared cookies; drop local auth
             // so AuthGuard sends the user to login with the new password.
             void logout();
+
             return;
           }
+
           void refreshSession();
         }}
         open={profileOpen}
@@ -255,6 +292,7 @@ function UserProfileDialog({
       setConfirmPassword("");
       setError(null);
     }
+
     onOpenChange(nextOpen);
   }
 
@@ -263,37 +301,51 @@ function UserProfileDialog({
     setError(null);
 
     const trimmedEmail = formEmail.trim();
+
     if (!trimmedEmail) {
       setError("Email is required.");
+
       return;
     }
 
     const emailChanged = trimmedEmail.toLowerCase() !== email.toLowerCase();
+
     if (emailChanged && !currentPassword) {
       setError("Enter your current password to change email.");
+
       return;
     }
 
     const wantsPasswordChange = Boolean(newPassword || confirmPassword);
+
     if (wantsPasswordChange) {
       if (!(currentPassword && newPassword)) {
         setError("Enter your current password and a new password.");
+
         return;
       }
+
       if (newPassword !== confirmPassword) {
         setError("New password and confirmation do not match.");
+
         return;
       }
     }
 
     setPending(true);
+
     try {
-      await client.updateAuthProfile({
-        ...(emailChanged ? { currentPassword } : {}),
+      const request: Parameters<typeof client.updateAuthProfile>[0] = {
         email: trimmedEmail,
         name: formName,
         phone: formPhone,
-      });
+      };
+
+      if (emailChanged) {
+        request.currentPassword = currentPassword;
+      }
+
+      await client.updateAuthProfile(request);
 
       if (wantsPasswordChange) {
         await client.changePassword({
@@ -302,6 +354,7 @@ function UserProfileDialog({
         });
         onOpenChange(false);
         onSaved({ passwordChanged: true });
+
         return;
       }
 

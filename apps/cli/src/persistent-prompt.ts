@@ -8,10 +8,13 @@ import type { TerminalInput } from "./terminal-input";
 import type { TerminalRenderer } from "./terminal-renderer";
 
 const BRACKETED_PASTE_START = "\x1b[200~";
+
 const BRACKETED_PASTE_END = "\x1b[201~";
 
 const BLINK_INTERVAL_MS = 530;
+
 const MAX_VISIBLE_SUGGESTIONS = 8;
+
 /** Cap bracketed-paste accumulation so a missing end sequence cannot grow forever. */
 export const MAX_BRACKETED_PASTE_BYTES = 256 * 1024;
 
@@ -25,13 +28,13 @@ export interface PersistentPromptOptions {
   onSubmit: (result: PromptLineResult) => void | Promise<void>;
   prefix?: string;
   renderer: Pick<TerminalRenderer, "setComposerState">;
-  terminalInput: TerminalInput;
+  terminalInput: Pick<TerminalInput, "onInput">;
 }
 
 export class PersistentPrompt {
   private readonly prefix: string;
   private readonly renderer: Pick<TerminalRenderer, "setComposerState">;
-  private readonly terminalInput: TerminalInput;
+  private readonly terminalInput: Pick<TerminalInput, "onInput">;
   private readonly getSuggestions: (input: string) => PromptSuggestion[];
   private readonly onSubmit: (result: PromptLineResult) => void | Promise<void>;
   private readonly onCancel: () => void;
@@ -132,10 +135,12 @@ export class PersistentPrompt {
 
     let display = "";
     let offset = 0;
+
     for (const [index, paste] of this.textPastes.entries()) {
       display += `${this.value.slice(offset, paste.start)}[Text #${index + 1}]`;
       offset = paste.end;
     }
+
     display += this.value.slice(offset);
 
     this.renderer.setComposerState({
@@ -176,6 +181,7 @@ export class PersistentPrompt {
         this.notifyClipboard(
           "No image on clipboard. Copy a screenshot or image first."
         );
+
         return false;
       }
 
@@ -184,13 +190,16 @@ export class PersistentPrompt {
       this.resetSelection();
       this.cursorVisible = true;
       this.render();
+
       return true;
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
           : "Failed to read clipboard image.";
+
       this.notifyClipboard(message);
+
       return false;
     }
   }
@@ -202,8 +211,10 @@ export class PersistentPrompt {
 
     const normalized = normalizePastedText(pasted);
     const filePath = pastedImagePath(pasted);
+
     if (filePath) {
       this.queueClipboardAttach(filePath);
+
       return;
     }
 
@@ -216,6 +227,7 @@ export class PersistentPrompt {
       this.resetSelection();
       this.cursorVisible = true;
       this.render();
+
       return;
     }
 
@@ -239,6 +251,7 @@ export class PersistentPrompt {
     if (endIndex >= 0) {
       const pasted = this.pasteBuffer.slice(0, endIndex);
       this.finishBracketedPaste(pasted);
+
       return;
     }
 
@@ -261,6 +274,7 @@ export class PersistentPrompt {
       void this.waitForClipboardAttach().then(() => {
         this.submitValue();
       });
+
       return;
     }
 
@@ -291,6 +305,7 @@ export class PersistentPrompt {
 
     if (suggestion && (this.hasNavigated || suggestion.submitOnEnter)) {
       this.applySuggestion(suggestion, true);
+
       return;
     }
 
@@ -304,11 +319,13 @@ export class PersistentPrompt {
 
     if (key === "\u001b" && this.onAbortStream) {
       this.onAbortStream();
+
       return;
     }
 
     if (this.inBracketedPaste) {
       this.appendBracketedPaste(key);
+
       return;
     }
 
@@ -326,26 +343,32 @@ export class PersistentPrompt {
       this.appendBracketedPaste(
         key.slice(startIndex + BRACKETED_PASTE_START.length)
       );
+
       return;
     }
 
     if (key === "\u0003") {
       this.onCancel();
+
       return;
     }
 
     const mouse = key.match(/^\x1b\[<(\d+);\d+;\d+M$/);
+
     if (mouse) {
       // biome-ignore lint/suspicious/noBitwiseOperators: SGR mouse buttons encode Shift/Alt/Ctrl in bits 2–4.
       const button = Number(mouse[1]) & ~28;
+
       if (button === 64 || button === 65) {
         this.onScrollHistory?.(button === 64 ? "line_up" : "line_down");
       }
+
       return;
     }
 
     if (key === "\u0004" && this.value.length === 0) {
       this.onCancel();
+
       return;
     }
 
@@ -358,11 +381,13 @@ export class PersistentPrompt {
       this.resetSelection();
       this.cursorVisible = true;
       this.render();
+
       return;
     }
 
     if (key === "\r") {
       void this.submit();
+
       return;
     }
 
@@ -409,31 +434,37 @@ export class PersistentPrompt {
 
     if (matchesKey(key, Key.ctrl("v"))) {
       this.queueClipboardAttach();
+
       return;
     }
 
     if (key === "\u001b[5~") {
       this.onScrollHistory?.("page_up");
+
       return;
     }
 
     if (key === "\u001b[6~") {
       this.onScrollHistory?.("page_down");
+
       return;
     }
 
     if (key === "\u001b[H" || key === "\u001b[1~") {
       this.onScrollHistory?.("home");
+
       return;
     }
 
     if (key === "\u001b[F" || key === "\u001b[4~") {
       this.onScrollHistory?.("end");
+
       return;
     }
 
     if (key === "\u007f" || key === "\b") {
       const lastPaste = this.textPastes.at(-1);
+
       if (lastPaste && lastPaste.end === this.value.length) {
         this.value = this.value.slice(0, lastPaste.start);
         this.textPastes.pop();
@@ -446,6 +477,7 @@ export class PersistentPrompt {
       this.resetSelection();
       this.cursorVisible = true;
       this.render();
+
       return;
     }
 
@@ -468,6 +500,7 @@ export class PersistentPrompt {
       this.cursorVisible = true;
       this.render();
       this.startBlink();
+
       return;
     }
 

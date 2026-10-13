@@ -2,8 +2,11 @@ import { MAX_IMAGE_BYTES } from "@nakama/core/message-content";
 import { readFileAsDataUrl } from "@/lib/read-file-as-data-url";
 
 export const COMPRESS_IMAGE_OVER_BYTES = 1024 * 1024;
+
 const MAX_DIMENSION = 2048;
+
 const QUALITY_STEPS = [0.85, 0.7, 0.55, 0.4] as const;
+
 const SCALE_STEPS = [1, 0.75, 0.5, 0.35] as const;
 
 export function scaleImageDimensions(
@@ -17,10 +20,13 @@ export function scaleImageDimensions(
   const longestEdge = Math.max(scaledWidth, scaledHeight);
 
   if (longestEdge <= maxDimension) {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
     return { height: scaledHeight, width: scaledWidth };
   }
 
   const fitScale = maxDimension / longestEdge;
+
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
   return {
     height: Math.max(1, Math.round(scaledHeight * fitScale)),
     width: Math.max(1, Math.round(scaledWidth * fitScale)),
@@ -49,10 +55,12 @@ function extensionForMediaType(
 
 function renameForMediaType(filename: string, mediaType: string): string {
   const base = filename.replace(/\.[^.]+$/, "") || "image";
+
   return `${base}${extensionForMediaType(mediaType, filename)}`;
 }
 
 async function loadImageBitmap(file: File): Promise<ImageBitmap> {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
   if (typeof createImageBitmap === "function") {
     try {
       return await createImageBitmap(file);
@@ -62,6 +70,7 @@ async function loadImageBitmap(file: File): Promise<ImageBitmap> {
   }
 
   const dataUrl = await readFileAsDataUrl(file);
+
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const element = new Image();
     element.onload = () => resolve(element);

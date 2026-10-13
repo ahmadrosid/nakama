@@ -3,10 +3,14 @@ import { existsSync } from "node:fs";
 import {
   appendFile,
   cp,
+  link,
   mkdir,
   mkdtemp,
   readFile,
+  rename,
   rm,
+  symlink,
+  truncate,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -19,12 +23,18 @@ import {
   closePluginPackageRegistry,
   pluginPackage,
   pluginTarball,
+  publishPluginPackageVersion,
 } from "../testing/plugin-package-fixture";
-import { PluginService } from "./plugin-service";
+import { createSuperBotTools } from "../tools/super-bot-tools";
+import { PluginService, setPluginLifecycleTestHooks } from "./plugin-service";
+import type { ProfileService } from "./profile-service";
+import { SuperBotSessionState } from "./super-bot-session-state";
 
 afterEach(closePluginPackageRegistry);
 
 const SIDE_EFFECT_MARKER = join(tmpdir(), "nakama-plugin-side-effect-marker");
+
+type Json = boolean | Json[] | { [key: string]: Json } | null | number | string;
 
 const identity = {
   author: "Nakama",
@@ -41,7 +51,7 @@ writeFileSync(${JSON.stringify(SIDE_EFFECT_MARKER)}, "ran");
 throw new Error("plugin side-effect executed");
 `;
 
-function notesManifest(overrides: Record<string, unknown> = {}) {
+function notesManifest(overrides: Record<string, Json> = {}) {
   return {
     actions: [
       {
@@ -68,10 +78,11 @@ function notesManifest(overrides: Record<string, unknown> = {}) {
 }
 
 function validBundle(
-  overrides: Record<string, unknown> = {},
+  overrides: Record<string, Json> = {},
   options?: Parameters<typeof pluginPackage>[1]
 ): ReturnType<typeof pluginPackage> {
   const manifest = notesManifest(overrides);
+
   return pluginPackage(
     {
       "actions/list.js": sideEffectJs,
@@ -94,110 +105,801 @@ describe("PluginService", () => {
   });
 
   afterEach(async () => {
+    setPluginLifecycleTestHooks(null);
     await rm(SIDE_EFFECT_MARKER, { force: true });
     await rm(configDir, { force: true, recursive: true });
   });
 
-  test("installs the bundled Google Meet plugin and executes its isolated action", async () => {
+  async function localDraft() {
     const db = createInMemoryDatabaseAdapter();
-    const workers: string[] = [];
-    const service = new PluginService(db, configDir, {
-      officialPackagesDir: resolve(
-        import.meta.dir,
-        "../../../../packages/plugins"
-      ),
-      workerManager: {
-        async registerPluginWorkers(registration, start) {
-          expect(start).toBe(true);
-          workers.push(...registration.workers.map((worker) => worker.key));
-        },
-        async unregisterPluginWorkers() {},
-      },
+    const now = new Date().toISOString();
+    await db.upsertOrganization({
+      createdAt: now,
+      id: "org_local",
+      name: "Local",
+      slug: "local",
+      updatedAt: now,
     });
-    const actor = { id: "admin", role: "admin" as const };
-    const installed = await service.installOfficialPlugin(
-      "org-meet",
-      "google-meet",
+    await db.upsertProfile({
+      createdAt: now,
+      id: "super_local",
+      isDefault: false,
+      isSuper: true,
+      model: null,
+      name: "Super",
+      orgId: "org_local",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+
+    const draft = {
+      draftId: "notes",
+      orgId: "org_local",
+      profileId: "super_local",
+    };
+
+    const directory = join(
+      configDir,
+      "orgs/org_local/profiles/super_local/plugin-drafts/notes"
+    );
+
+    const contents = {
+      "actions/list.js": sideEffectJs,
+      "nakama.plugin.json": JSON.stringify(notesManifest()),
+      "package.json": JSON.stringify({ name: "@test/notes", version: "1.0.0" }),
+      "skills/notes/SKILL.md":
+        "---\nname: notes\ndescription: Notes\n---\nList notes.",
+      "src/list.js": sideEffectJs,
+      "ui/assets/app.js": "export {}",
+      "ui/index.js": sideEffectJs,
+    };
+
+    for (const [path, content] of Object.entries(contents)) {
+      await mkdir(dirname(join(directory, path)), { recursive: true });
+      await writeFile(join(directory, path), content);
+    }
+
+    return {
+      actor: { id: "platform", isPlatformAdmin: true },
+      db,
+      directory,
+      draft,
+      service: new PluginService(db, configDir),
+    };
+  }
+
+  test("submit_plugin_draft describes Super Bot's own draft without installing it", async () => {
+    const { db, directory, draft, service } = await localDraft();
+
+    const submit = createSuperBotTools(
+      // SAFETY: submit_plugin_draft never touches profile management.
+      {} as ProfileService,
+      new SuperBotSessionState(),
+      undefined,
+      () => service
+    ).find((tool) => tool.name === "submit_plugin_draft");
+
+    const context = { orgId: draft.orgId, profileId: draft.profileId };
+
+    expect(
+      await submit?.run({ draftId: draft.draftId }, context)
+    ).toMatchObject({
+      actions: ["list"],
+      draftId: "notes",
+      fileCount: 7,
+      pluginId: "notes",
+      type: "plugin_draft_ready",
+    });
+    expect(await db.getOrgPlugin(draft.orgId, "notes")).toBeNull();
+    await expect(
+      submit?.run({ draftId: draft.draftId }, { ...context, profileId: "x" })
+    ).rejects.toThrow();
+
+    const manifest = notesManifest();
+    manifest.actions[0].inputSchema = {
+      properties: { query: { description: "Search text", type: "string" } },
+      type: "object",
+    };
+    await writeFile(
+      join(directory, "nakama.plugin.json"),
+      JSON.stringify(manifest)
+    );
+
+    await expect(
+      submit?.run({ draftId: draft.draftId }, context)
+    ).rejects.toThrow("invalid_manifest: unsupported_schema");
+  });
+
+  test("local review and first install publish only reviewed bytes and stay disabled", async () => {
+    const { db, draft, directory, service, actor } = await localDraft();
+    const preview = await service.previewLocalPlugin(draft, actor);
+    expect(preview.expectedRevision).toBeNull();
+    expect(preview.files.some((file) => file.path === "src/list.js")).toBe(
+      true
+    );
+
+    const file = await service.readLocalPluginFile(
+      { ...draft, expectedDigest: preview.digest, path: "actions/list.js" },
       actor
     );
-    expect(installed.lifecycleState).toBe("enabled");
-    expect(workers).toContain("meet");
-    const result = await service.invokePluginAction({
-      access: "ui",
-      actionKey: "meetings",
-      actor,
-      input: {},
-      orgId: "org-meet",
-      pluginId: "google-meet",
+
+    expect(Buffer.from(file.content, "base64").toString()).toBe(sideEffectJs);
+
+    const install = await service.installLocalPlugin(
+      { ...draft, expectedDigest: preview.digest, expectedRevision: null },
+      actor
+    );
+
+    expect(install.lifecycleState).toBe("disabled");
+    expect(install.databaseGeneration).toBeNull();
+    expect(existsSync(SIDE_EFFECT_MARKER)).toBe(false);
+
+    const release = await db.getPluginRelease(
+      "notes",
+      install.selectedVersion!
+    );
+
+    expect(release?.source).toBe("local");
+    expect(release?.digest).toBe(preview.digest);
+    expect(
+      await readFile(
+        join(
+          getPluginReleaseDir("notes", install.selectedVersion!, configDir),
+          "actions/list.js"
+        ),
+        "utf8"
+      )
+    ).toBe(sideEffectJs);
+    await rm(directory, { recursive: true });
+    expect(
+      await service.getOrgPluginDetail("org_local", "notes")
+    ).toBeDefined();
+  });
+
+  test("local install rejects changed review files without publishing", async () => {
+    const { db, draft, directory, service, actor } = await localDraft();
+    const preview = await service.previewLocalPlugin(draft, actor);
+    await appendFile(join(directory, "src/list.js"), "\n// changed");
+    await expect(
+      service.readLocalPluginFile(
+        { ...draft, expectedDigest: preview.digest, path: "src/list.js" },
+        actor
+      )
+    ).rejects.toMatchObject({ code: "digest_mismatch" });
+    await expect(
+      service.installLocalPlugin(
+        { ...draft, expectedDigest: preview.digest, expectedRevision: null },
+        actor
+      )
+    ).rejects.toMatchObject({ code: "digest_mismatch" });
+    expect(await db.listPluginReleases()).toHaveLength(0);
+    expect(await db.getOrgPlugin(draft.orgId, "notes")).toBeNull();
+  });
+
+  test("local reinstall reuses content, rejects stale revision, and preserves other organizations", async () => {
+    const { db, draft, directory, service, actor } = await localDraft();
+    const firstPreview = await service.previewLocalPlugin(draft, actor);
+
+    const first = await service.installLocalPlugin(
+      { ...draft, expectedDigest: firstPreview.digest, expectedRevision: null },
+      actor
+    );
+
+    await db.upsertOrganization({
+      createdAt: first.updatedAt,
+      id: "org_other",
+      name: "Other",
+      slug: "other",
+      updatedAt: first.updatedAt,
     });
-    expect(result.result).toMatchObject({
-      authenticated: false,
-      configured: false,
-      meetings: [],
-      worker: { state: "stopped" },
-    });
-    const release = getPluginReleaseDir(
-      "google-meet",
+    await service.addOrgPlugin("org_other", "notes", first.selectedVersion!);
+    const other = await db.getOrgPlugin("org_other", "notes");
+
+    const repeated = await service.installLocalPlugin(
+      {
+        ...draft,
+        expectedDigest: firstPreview.digest,
+        expectedRevision: first.revision,
+      },
+      actor
+    );
+
+    expect(repeated.selectedVersion).toBe(first.selectedVersion);
+    expect(await db.listPluginReleases()).toHaveLength(1);
+    await appendFile(join(directory, "actions/list.js"), "\n// changed");
+    const changed = await service.previewLocalPlugin(draft, actor);
+    await expect(
+      service.installLocalPlugin(
+        { ...draft, expectedDigest: changed.digest, expectedRevision: null },
+        actor
+      )
+    ).rejects.toMatchObject({ code: "stale_revision" });
+
+    const updated = await service.installLocalPlugin(
+      {
+        ...draft,
+        expectedDigest: changed.digest,
+        expectedRevision: repeated.revision,
+      },
+      actor
+    );
+
+    expect(updated.selectedVersion).not.toBe(first.selectedVersion);
+    expect(updated.lifecycleState).toBe("disabled");
+    expect(await db.getOrgPlugin("org_other", "notes")).toEqual(other);
+    expect(await db.listPluginReleases()).toHaveLength(2);
+  });
+
+  test("local reinstall rejects modified release bytes without changing the installation", async () => {
+    const { db, draft, service, actor } = await localDraft();
+    const preview = await service.previewLocalPlugin(draft, actor);
+
+    const installed = await service.installLocalPlugin(
+      { ...draft, expectedDigest: preview.digest, expectedRevision: null },
+      actor
+    );
+
+    const releaseDir = getPluginReleaseDir(
+      "notes",
       installed.selectedVersion!,
       configDir
     );
-    // Import the bundled worker from the installed release, outside package dependencies.
-    const child = Bun.spawn(
-      [
-        process.execPath,
-        "-e",
-        "await import(process.argv[1])",
-        join(release, "workers/meet.js"),
-      ],
-      { cwd: configDir, stderr: "pipe", stdout: "pipe" }
-    );
-    const errors = await new Response(child.stderr).text();
-    expect(await child.exited, errors).toBe(0);
+
+    for (const path of ["actions/list.js", "unexpected.js"]) {
+      const original = path === "actions/list.js" ? sideEffectJs : null;
+      await writeFile(join(releaseDir, path), "export const changed = true;");
+      await expect(
+        service.installLocalPlugin(
+          {
+            ...draft,
+            expectedDigest: preview.digest,
+            expectedRevision: installed.revision,
+          },
+          actor
+        )
+      ).rejects.toMatchObject({ code: "digest_mismatch" });
+      expect(await db.getOrgPlugin(draft.orgId, "notes")).toEqual(installed);
+
+      if (original) {
+        await writeFile(join(releaseDir, path), original);
+      } else {
+        await rm(join(releaseDir, path));
+      }
+    }
   });
 
-  test("installs rebuilt Google Meet bytes without replacing another org's release", async () => {
+  test("local review requires platform authority and a Super Bot in the named organization", async () => {
+    const { draft, service, actor } = await localDraft();
+    await expect(
+      service.previewLocalPlugin(draft, { ...actor, isPlatformAdmin: false })
+    ).rejects.toMatchObject({ code: "forbidden" });
+
+    for (const changes of [
+      { orgId: "other" },
+      { profileId: "other" },
+      { draftId: "../notes" },
+      { draftId: "%2e%2e" },
+      { draftId: "/notes" },
+    ]) {
+      await expect(
+        service.previewLocalPlugin({ ...draft, ...changes }, actor)
+      ).rejects.toBeDefined();
+    }
+  });
+
+  test("enabled local reinstall restores enabled state and migration failure preserves the previous generation", async () => {
+    const { db, draft, directory, service, actor } = await localDraft();
+    await mkdir(join(directory, "migrations"));
+    await writeFile(
+      join(directory, "migrations/001.sql"),
+      "CREATE TABLE notes (body TEXT);"
+    );
+
+    const manifest = notesManifest({
+      database: { migrations: [{ id: "001", path: "migrations/001.sql" }] },
+    });
+
+    await writeFile(
+      join(directory, "nakama.plugin.json"),
+      JSON.stringify(manifest)
+    );
+    const preview = await service.previewLocalPlugin(draft, actor);
+
+    const first = await service.installLocalPlugin(
+      { ...draft, expectedDigest: preview.digest, expectedRevision: null },
+      actor
+    );
+
+    const enabled = await service.enableOrgPlugin(
+      draft.orgId,
+      "notes",
+      first.revision
+    );
+
+    await appendFile(join(directory, "src/list.js"), "\n// source change");
+    const secondPreview = await service.previewLocalPlugin(draft, actor);
+
+    const second = await service.installLocalPlugin(
+      {
+        ...draft,
+        expectedDigest: secondPreview.digest,
+        expectedRevision: enabled.revision,
+      },
+      actor
+    );
+
+    expect(second.lifecycleState).toBe("enabled");
+    expect(second.selectedVersion).not.toBe(enabled.selectedVersion);
+    await writeFile(join(directory, "migrations/002.sql"), "INVALID SQL;");
+    await writeFile(
+      join(directory, "nakama.plugin.json"),
+      JSON.stringify(
+        notesManifest({
+          database: {
+            migrations: [
+              { id: "001", path: "migrations/001.sql" },
+              { id: "002", path: "migrations/002.sql" },
+            ],
+          },
+        })
+      )
+    );
+    const broken = await service.previewLocalPlugin(draft, actor);
+    await expect(
+      service.installLocalPlugin(
+        {
+          ...draft,
+          expectedDigest: broken.digest,
+          expectedRevision: second.revision,
+        },
+        actor
+      )
+    ).rejects.toBeDefined();
+    const recovered = await db.getOrgPlugin(draft.orgId, "notes");
+    expect(recovered?.lifecycleState).toBe("disabled");
+    expect(recovered?.selectedVersion).toBe(second.selectedVersion);
+    expect(recovered?.databaseGeneration).toBe(second.databaseGeneration);
+    expect(existsSync(SIDE_EFFECT_MARKER)).toBe(false);
+  });
+
+  test("local review checks host compatibility, official identity, and package versions", async () => {
+    const { draft, directory, service, actor } = await localDraft();
+
+    const changes: Record<string, Json>[] = [
+      { minNakamaVersion: "999.0.0" },
+      { id: "workflows" },
+      { version: "2.0.0" },
+      { apiVersion: 999 },
+    ];
+
+    for (const change of changes) {
+      await writeFile(
+        join(directory, "nakama.plugin.json"),
+        JSON.stringify(notesManifest(change))
+      );
+      await expect(
+        service.previewLocalPlugin(draft, actor)
+      ).rejects.toMatchObject({ code: "invalid_manifest" });
+    }
+  });
+
+  test("local review rejects official IDs even when the draft ID matches", async () => {
+    const { draft, directory, service, actor } = await localDraft();
+    await writeFile(
+      join(directory, "nakama.plugin.json"),
+      JSON.stringify(notesManifest({ id: "workflows" }))
+    );
+    await rename(directory, join(dirname(directory), "workflows"));
+    await expect(
+      service.previewLocalPlugin({ ...draft, draftId: "workflows" }, actor)
+    ).rejects.toMatchObject({ code: "invalid_manifest" });
+  });
+
+  test("concurrent local installs use one revision and retained reinstall stays disabled", async () => {
+    const { db, draft, service, actor } = await localDraft();
+    const preview = await service.previewLocalPlugin(draft, actor);
+
+    const request = {
+      ...draft,
+      expectedDigest: preview.digest,
+      expectedRevision: null,
+    };
+
+    const results = await Promise.allSettled([
+      service.installLocalPlugin(request, actor),
+      service.installLocalPlugin(request, actor),
+    ]);
+
+    expect(
+      results.filter((result) => result.status === "fulfilled")
+    ).toHaveLength(1);
+    expect(
+      results.find((result) => result.status === "rejected")
+    ).toMatchObject({
+      reason: { code: "stale_revision" },
+    });
+    const installed = (await db.getOrgPlugin(draft.orgId, "notes"))!;
+
+    const retained = await service.uninstallOrgPlugin(
+      draft.orgId,
+      "notes",
+      installed.revision
+    );
+
+    const restored = await service.installLocalPlugin(
+      { ...request, expectedRevision: retained.revision },
+      actor
+    );
+
+    expect(restored.lifecycleState).toBe("disabled");
+    expect(restored.selectedVersion).toBe(installed.selectedVersion);
+    expect(restored.databaseGeneration).toBe(retained.databaseGeneration);
+  });
+
+  test("failed local publication creates no organization installation", async () => {
+    const { db, draft, service, actor } = await localDraft();
+    const preview = await service.previewLocalPlugin(draft, actor);
+    await writeFile(join(configDir, "plugins"), "not a directory");
+    await expect(
+      service.installLocalPlugin(
+        { ...draft, expectedDigest: preview.digest, expectedRevision: null },
+        actor
+      )
+    ).rejects.toBeDefined();
+    expect(await db.getOrgPlugin(draft.orgId, "notes")).toBeNull();
+    expect(await db.listPluginReleases()).toHaveLength(0);
+  });
+
+  test("local install rejects a pending enable without changing its operation", async () => {
+    const { db, draft, service, actor } = await localDraft();
+    const preview = await service.previewLocalPlugin(draft, actor);
+
+    const installed = await service.installLocalPlugin(
+      { ...draft, expectedDigest: preview.digest, expectedRevision: null },
+      actor
+    );
+
+    const reached = Promise.withResolvers<void>();
+    const resume = Promise.withResolvers<void>();
+    setPluginLifecycleTestHooks({
+      async afterMigrationBeforePublish() {
+        reached.resolve();
+        await resume.promise;
+      },
+    });
+
+    const enabling = service.enableOrgPlugin(
+      draft.orgId,
+      "notes",
+      installed.revision
+    );
+
+    try {
+      await reached.promise;
+      const pending = (await db.getOrgPlugin(draft.orgId, "notes"))!;
+      await expect(
+        service.installLocalPlugin(
+          {
+            ...draft,
+            expectedDigest: preview.digest,
+            expectedRevision: pending.revision,
+          },
+          actor
+        )
+      ).rejects.toMatchObject({ code: "invalid_state" });
+      expect(await db.getOrgPlugin(draft.orgId, "notes")).toEqual(pending);
+    } finally {
+      resume.resolve();
+      await enabling;
+    }
+
+    expect((await db.getOrgPlugin(draft.orgId, "notes"))?.lifecycleState).toBe(
+      "enabled"
+    );
+  });
+
+  test("failed first enable leaves the local release disabled without a database generation", async () => {
+    const { db, draft, directory, service, actor } = await localDraft();
+    await mkdir(join(directory, "migrations"));
+    await writeFile(join(directory, "migrations/001.sql"), "INVALID SQL;");
+    await writeFile(
+      join(directory, "nakama.plugin.json"),
+      JSON.stringify(
+        notesManifest({
+          database: { migrations: [{ id: "001", path: "migrations/001.sql" }] },
+        })
+      )
+    );
+    const preview = await service.previewLocalPlugin(draft, actor);
+
+    const installed = await service.installLocalPlugin(
+      { ...draft, expectedDigest: preview.digest, expectedRevision: null },
+      actor
+    );
+
+    await expect(
+      service.enableOrgPlugin(draft.orgId, "notes", installed.revision)
+    ).rejects.toBeDefined();
+    const failed = await db.getOrgPlugin(draft.orgId, "notes");
+    expect(failed?.selectedVersion).toBe(installed.selectedVersion);
+    expect(failed?.databaseGeneration).toBeNull();
+    expect(failed?.lifecycleState).toBe("disabled");
+  });
+
+  test("local review rejects linked roots, linked ancestors, and excessive entry counts", async () => {
+    const { draft, directory, service, actor } = await localDraft();
+    const moved = directory + "-moved";
+    await rename(directory, moved);
+    await symlink(moved, directory);
+    await expect(
+      service.previewLocalPlugin(draft, actor)
+    ).rejects.toMatchObject({ code: "unsafe_path" });
+    await rm(directory);
+    await rename(moved, directory);
+    const workspace = dirname(dirname(directory));
+    await rename(workspace, workspace + "-moved");
+    await symlink(workspace + "-moved", workspace);
+    await expect(
+      service.previewLocalPlugin(draft, actor)
+    ).rejects.toMatchObject({ code: "unsafe_path" });
+    await rm(workspace);
+    await rename(workspace + "-moved", workspace);
+    await mkdir(join(directory, "src/files"));
+
+    for (let index = 0; index < 2001; index += 1) {
+      await writeFile(join(directory, "src/files", String(index)), "");
+    }
+
+    await expect(
+      service.previewLocalPlugin(draft, actor)
+    ).rejects.toMatchObject({ code: "expansion_limit" });
+  });
+
+  for (const kind of ["total size", "path length", "depth", "special file"]) {
+    test.skipIf(kind === "special file" && process.platform === "win32")(
+      `local review bounds ${kind}`,
+      async () => {
+        const { draft, directory, service, actor } = await localDraft();
+
+        if (kind === "total size") {
+          for (let index = 0; index < 6; index += 1) {
+            const path = join(directory, "src", String(index));
+            await writeFile(path, "");
+            await truncate(path, 20 * 1024 * 1024);
+          }
+        } else if (kind === "path length") {
+          await writeFile(join(directory, "src", "x".repeat(241)), "");
+        } else if (kind === "depth") {
+          await mkdir(
+            join(directory, "src", ...Array.from({ length: 25 }, () => "d")),
+            { recursive: true }
+          );
+        } else {
+          const result = Bun.spawnSync(["mkfifo", join(directory, "src/pipe")]);
+          expect(result.exitCode).toBe(0);
+        }
+
+        await expect(
+          service.previewLocalPlugin(draft, actor)
+        ).rejects.toMatchObject({
+          code:
+            kind === "total size" || kind === "depth"
+              ? "expansion_limit"
+              : "unsafe_path",
+        });
+      }
+    );
+  }
+
+  test("local review rejects missing migration and worker entries and unavailable worker support", async () => {
+    const { draft, directory, service, actor } = await localDraft();
+
+    const capabilities: Record<string, Json>[] = [
+      { database: { migrations: [{ id: "001", path: "migrations/001.sql" }] } },
+      {
+        workers: [{ entry: "workers/index.js", key: "index", name: "Indexer" }],
+      },
+    ];
+
+    for (const capability of capabilities) {
+      await writeFile(
+        join(directory, "nakama.plugin.json"),
+        JSON.stringify(notesManifest(capability))
+      );
+      await expect(
+        service.previewLocalPlugin(draft, actor)
+      ).rejects.toBeDefined();
+    }
+
+    await mkdir(join(directory, "workers"));
+    await writeFile(join(directory, "workers/index.js"), sideEffectJs);
+    await expect(
+      service.previewLocalPlugin(draft, actor)
+    ).rejects.toMatchObject({ code: "package_unavailable" });
+    expect(existsSync(SIDE_EFFECT_MARKER)).toBe(false);
+  });
+
+  test("local review rejects ordinary profiles and reads large output in bounded chunks", async () => {
+    const { db, draft, directory, service, actor } = await localDraft();
+    const profile = (await db.getProfile(draft.profileId))!;
+    await db.upsertProfile({ ...profile, isSuper: false });
+    await expect(
+      service.previewLocalPlugin(draft, actor)
+    ).rejects.toMatchObject({ code: "not_found" });
+    await db.upsertProfile(profile);
+    const output = Buffer.alloc(1024 * 1024 + 7, "x");
+    await writeFile(join(directory, "src/large.txt"), output);
+    const preview = await service.previewLocalPlugin(draft, actor);
+
+    const first = await service.readLocalPluginFile(
+      { ...draft, expectedDigest: preview.digest, path: "src/large.txt" },
+      actor
+    );
+
+    expect(Buffer.from(first.content, "base64")).toEqual(
+      output.subarray(0, first.nextOffset!)
+    );
+    expect(first.nextOffset).toBe(1024 * 1024);
+
+    const last = await service.readLocalPluginFile(
+      {
+        ...draft,
+        expectedDigest: preview.digest,
+        offset: first.nextOffset!,
+        path: "src/large.txt",
+      },
+      actor
+    );
+
+    expect(Buffer.from(last.content, "base64")).toEqual(
+      output.subarray(first.nextOffset!)
+    );
+    expect(last.nextOffset).toBeNull();
+  });
+
+  for (const field of [
+    "dependencies",
+    "optionalDependencies",
+    "peerDependencies",
+  ]) {
+    test(`local review rejects nonempty ${field}`, async () => {
+      const { draft, directory, service, actor } = await localDraft();
+      await writeFile(
+        join(directory, "package.json"),
+        JSON.stringify({
+          name: "@test/notes",
+          version: "1.0.0",
+          [field]: { unsafe: "*" },
+        })
+      );
+      await expect(
+        service.previewLocalPlugin(draft, actor)
+      ).rejects.toMatchObject({ code: "invalid_manifest" });
+    });
+  }
+
+  for (const file of [
+    "package.json",
+    "nakama.plugin.json",
+    "actions/list.js",
+    "ui/index.js",
+    "ui/assets/app.js",
+    "skills/notes/SKILL.md",
+  ]) {
+    test(`local review rejects missing ${file}`, async () => {
+      const { draft, directory, service, actor } = await localDraft();
+      await rm(join(directory, file));
+      await expect(
+        service.previewLocalPlugin(draft, actor)
+      ).rejects.toBeDefined();
+    });
+  }
+
+  for (const kind of [
+    "symlink",
+    "hardlink",
+    "oversized",
+    "leaf replacement",
+    "ancestor replacement",
+  ]) {
+    test(`local review rejects ${kind}`, async () => {
+      const { draft, directory, service, actor } = await localDraft();
+      const path = join(directory, "actions/list.js");
+      const outside = join(configDir, "outside.js");
+      await writeFile(outside, "private");
+
+      if (kind === "symlink" || kind === "hardlink") {
+        await rm(path);
+        await (kind === "symlink"
+          ? symlink(outside, path)
+          : link(outside, path));
+      } else if (kind === "oversized") {
+        await truncate(path, 21 * 1024 * 1024);
+      } else {
+        let changed = false;
+        setPluginLifecycleTestHooks({
+          async beforeLocalFileRead(selected) {
+            if (selected !== path || changed) {
+              return;
+            }
+
+            changed = true;
+
+            if (kind === "leaf replacement") {
+              await rm(path);
+              await symlink(outside, path);
+            } else {
+              await rename(
+                join(directory, "actions"),
+                join(directory, "old-actions")
+              );
+              await symlink(
+                join(directory, "old-actions"),
+                join(directory, "actions")
+              );
+            }
+          },
+        });
+      }
+
+      await expect(
+        service.previewLocalPlugin(draft, actor)
+      ).rejects.toBeDefined();
+    });
+  }
+
+  test("installs rebuilt Supermemory bytes without replacing another org's release", async () => {
     const db = createInMemoryDatabaseAdapter();
     const officialPackagesDir = join(configDir, "official");
     await cp(
-      resolve(import.meta.dir, "../../../../packages/plugins/google-meet"),
-      join(officialPackagesDir, "google-meet"),
+      resolve(import.meta.dir, "../../../../packages/plugins/supermemory"),
+      join(officialPackagesDir, "supermemory"),
       { recursive: true }
     );
+
     const service = new PluginService(db, configDir, {
       officialPackagesDir,
+      async onHostRequest() {
+        return {};
+      },
       workerManager: {
         async registerPluginWorkers() {},
         async unregisterPluginWorkers() {},
       },
     });
+
     const actor = { id: "admin", role: "admin" as const };
+
     const first = await service.installOfficialPlugin(
       "org-a",
-      "google-meet",
+      "supermemory",
       actor
     );
+
     const originalPath = join(
-      getPluginReleaseDir("google-meet", first.selectedVersion!, configDir),
+      getPluginReleaseDir("supermemory", first.selectedVersion!, configDir),
       "ui/app.js"
     );
+
     const original = await readFile(originalPath, "utf8");
     await appendFile(
-      join(officialPackagesDir, "google-meet/ui/app.js"),
+      join(officialPackagesDir, "supermemory/ui/app.js"),
       "\n// rebuilt\n"
     );
 
     const second = await service.installOfficialPlugin(
       "org-b",
-      "google-meet",
+      "supermemory",
       actor
     );
+
     expect(second.lifecycleState).toBe("enabled");
     expect(second.selectedVersion).not.toBe(first.selectedVersion);
     expect(
       await readFile(
         join(
           getPluginReleaseDir(
-            "google-meet",
+            "supermemory",
             second.selectedVersion!,
             configDir
           ),
@@ -207,12 +909,14 @@ describe("PluginService", () => {
       )
     ).toBe(`${original}\n// rebuilt\n`);
     expect(await readFile(originalPath, "utf8")).toBe(original);
-    expect(await db.getOrgPlugin("org-a", "google-meet")).toEqual(first);
+    expect(await db.getOrgPlugin("org-a", "supermemory")).toEqual(first);
+
     const repeated = await service.installOfficialPlugin(
       "org-b",
-      "google-meet",
+      "supermemory",
       actor
     );
+
     expect(repeated.selectedVersion).toBe(second.selectedVersion);
   });
 
@@ -236,6 +940,7 @@ describe("PluginService", () => {
     const installed = await service.installPluginPackage(archive, {
       expectedDigest: preview.digest,
     });
+
     expect(installed.digest).toBe(preview.digest);
     expect(installed.releaseDir).toBe(
       getPluginReleaseDir("notes", "1.0.0", configDir)
@@ -356,6 +1061,7 @@ describe("PluginService", () => {
       createInMemoryDatabaseAdapter(),
       configDir
     );
+
     for (const packageName of [
       "file:./plugin",
       "https://example.com/a.tgz",
@@ -367,6 +1073,7 @@ describe("PluginService", () => {
         service.previewPluginPackage({ packageName, version: "1.0.0" })
       ).rejects.toMatchObject({ code: "invalid_package" });
     }
+
     for (const version of ["latest", "^1.0.0", "1", "*", "1.0.0 || 2.0.0"]) {
       await expect(
         service.previewPluginPackage({ packageName: "notes", version })
@@ -384,10 +1091,12 @@ describe("PluginService", () => {
         expectedIntegrity: `sha512-${Buffer.alloc(64).toString("base64")}`,
       })
     ).rejects.toMatchObject({ code: "digest_mismatch" });
+
     const corrupted = validBundle(
       {},
       { integrity: `sha512-${Buffer.alloc(64).toString("base64")}` }
     );
+
     await expect(service.previewPluginPackage(corrupted)).rejects.toMatchObject(
       { code: "package_unavailable" }
     );
@@ -397,18 +1106,64 @@ describe("PluginService", () => {
     );
   });
 
+  test("reads a restricted package only with the npm token, and keeps the token on the registry host", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new PluginService(db, configDir);
+    const source = validBundle({}, { token: "npm_fixture_token" });
+
+    await expect(service.previewPluginPackage(source)).rejects.toMatchObject({
+      code: "package_unavailable",
+    });
+
+    process.env.NAKAMA_PLUGIN_NPM_TOKEN = "npm_fixture_token";
+
+    try {
+      const preview = await service.previewPluginPackage(source);
+
+      const installed = await service.installPluginPackage(source, {
+        expectedDigest: preview.digest,
+      });
+
+      expect(installed.digest).toBe(preview.digest);
+      expect(
+        JSON.stringify(await db.getPluginRelease("notes", "1.0.0"))
+      ).not.toContain("npm_fixture_token");
+
+      publishPluginPackageVersion(source.packageName, "1.1.0");
+
+      expect(await service.listPluginUpdates()).toEqual([
+        {
+          packageName: source.packageName,
+          pluginId: "notes",
+          version: "1.1.0",
+        },
+      ]);
+
+      await expect(
+        service.previewPluginPackage(
+          validBundle({}, { tarball: "https://registry.example/notes.tgz" })
+        )
+      ).rejects.toMatchObject({ code: "invalid_package" });
+    } finally {
+      delete process.env.NAKAMA_PLUGIN_NPM_TOKEN;
+    }
+  });
+
   test("requires bundled dependencies and matching package identity", async () => {
     const service = new PluginService(
       createInMemoryDatabaseAdapter(),
       configDir
     );
-    for (const packageJson of [
+
+    const packageJsons: Record<string, Json>[] = [
       { dependencies: { lodash: "1.0.0" } },
       { optionalDependencies: { lodash: "1.0.0" } },
       { peerDependencies: { lodash: "1.0.0" } },
       { name: "another-package" },
       { version: "2.0.0" },
-    ]) {
+    ];
+
+    for (const packageJson of packageJsons) {
       await expect(
         service.previewPluginPackage(validBundle({}, { packageJson }))
       ).rejects.toMatchObject({ code: "invalid_manifest" });
@@ -420,7 +1175,9 @@ describe("PluginService", () => {
       createInMemoryDatabaseAdapter(),
       configDir
     );
+
     const command = `bun -e 'require("fs").writeFileSync(${JSON.stringify(SIDE_EFFECT_MARKER)}, "ran")'`;
+
     const source = validBundle(
       {},
       {
@@ -435,11 +1192,14 @@ describe("PluginService", () => {
         },
       }
     );
+
     await service.previewPluginPackage(source);
+
     const installed = await service.installPluginPackage(
       source,
       approvedPluginPackage(source)
     );
+
     expect(existsSync(SIDE_EFFECT_MARKER)).toBe(false);
     expect(existsSync(join(installed.releaseDir, "node_modules"))).toBe(false);
   });
@@ -450,6 +1210,7 @@ describe("PluginService", () => {
     const first = validBundle();
     await service.installPluginPackage(first);
     const existingDir = getPluginReleaseDir("notes", "1.0.0", configDir);
+
     const existingBytes = await readFile(
       join(existingDir, "nakama.plugin.json"),
       "utf8"
@@ -459,6 +1220,7 @@ describe("PluginService", () => {
     failingDb.upsertPluginRelease = async () => {
       throw new Error("metadata write failed");
     };
+
     const failingService = new PluginService(failingDb, configDir);
     const next = validBundle({ version: "1.1.0" });
 
@@ -499,6 +1261,7 @@ describe("PluginService", () => {
     const other = validBundle({
       description: "Different bytes under the same version",
     });
+
     await expect(service.installPluginPackage(other)).rejects.toMatchObject({
       code: "version_conflict",
     });
@@ -525,6 +1288,7 @@ describe("PluginService", () => {
   test("rejects a missing referenced file during preview", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new PluginService(db, configDir);
+
     const archive = pluginPackage({
       "nakama.plugin.json": JSON.stringify(notesManifest()),
       "skills/notes/SKILL.md": "# Notes\n",
@@ -538,6 +1302,7 @@ describe("PluginService", () => {
   test("cleans abandoned staging without executing it", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new PluginService(db, configDir);
+
     const abandoned = join(
       configDir,
       "plugins",
@@ -545,6 +1310,7 @@ describe("PluginService", () => {
       "abandoned",
       "side-effect.js"
     );
+
     await mkdir(dirname(abandoned), { recursive: true });
     await writeFile(abandoned, sideEffectJs);
 
@@ -556,6 +1322,7 @@ describe("PluginService", () => {
   test("concurrent installs of different plugins keep both releases", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new PluginService(db, configDir);
+
     const [notes, tasks] = await Promise.all([
       service.installPluginPackage(validBundle()),
       service.installPluginPackage(validBundle({ id: "tasks", name: "Tasks" })),

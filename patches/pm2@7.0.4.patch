@@ -1,0 +1,24 @@
+diff --git a/paths.js b/paths.js
+index ed305a0ba59fd3f149f20f0fa6353cf02da643b2..3069fb05e66554aebfce8f1d1c5dbb0da09d3484 100644
+--- a/paths.js
++++ b/paths.js
+@@ -77,10 +77,15 @@ module.exports = function(PM2_HOME) {
+   });
+ 
+   if (process.platform === 'win32') {
+-    //@todo instead of static unique rpc/pub file custom with PM2_HOME or UID
+-    pm2_file_stucture.DAEMON_RPC_PORT = '\\\\.\\pipe\\rpc.sock';
+-    pm2_file_stucture.DAEMON_PUB_PORT = '\\\\.\\pipe\\pub.sock';
+-    pm2_file_stucture.INTERACTOR_RPC_PORT = '\\\\.\\pipe\\interactor.sock';
++    // Named pipes are global to the session, so derive them from PM2_HOME:
++    // two installs with different homes must not share one daemon.
++    var pipe_id = require('crypto').createHash('sha1')
++      .update(p.resolve(PM2_HOME).toLowerCase())
++      .digest('hex')
++      .slice(0, 12);
++    pm2_file_stucture.DAEMON_RPC_PORT = '\\\\.\\pipe\\pm2-' + pipe_id + '-rpc.sock';
++    pm2_file_stucture.DAEMON_PUB_PORT = '\\\\.\\pipe\\pm2-' + pipe_id + '-pub.sock';
++    pm2_file_stucture.INTERACTOR_RPC_PORT = '\\\\.\\pipe\\pm2-' + pipe_id + '-interactor.sock';
+   }
+ 
+   return pm2_file_stucture;

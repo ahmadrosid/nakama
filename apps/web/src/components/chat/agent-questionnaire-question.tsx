@@ -6,6 +6,30 @@ import {
   isCustomChoice,
 } from "@/components/chat/agent-questionnaire.shared";
 
+function RadioDot({ selected }: { selected: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "size-4 shrink-0 rounded-full border bg-background transition-all",
+        selected ? "border-[5px] border-primary" : "border-muted-foreground/40"
+      )}
+    />
+  );
+}
+
+const optionRowClass =
+  "flex min-h-11 w-full items-center gap-3 rounded-lg border px-3.5 text-left text-foreground text-sm transition-colors";
+
+function optionStateClass(selected: boolean, disabled: boolean): string {
+  return cn(
+    selected
+      ? "border-primary bg-primary/5"
+      : "border-transparent bg-muted/60 hover:bg-muted",
+    disabled && "pointer-events-none opacity-50"
+  );
+}
+
 export function AgentQuestionnaireQuestion({
   questionIndex,
   question,
@@ -22,31 +46,35 @@ export function AgentQuestionnaireQuestion({
   const customChoice = question.choices.find((choice) =>
     isCustomChoice(choice)
   );
+
   const showCustomInput = question.allowCustomAnswer || Boolean(customChoice);
 
   return (
     <section className="space-y-2.5">
-      <p className="font-medium text-foreground text-sm">
+      <p className="font-medium text-base text-foreground">
         {questionIndex + 1}. {question.prompt}
       </p>
       {question.choices.length > 0 ? (
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           {question.choices.map((choice) => {
-            if (isCustomChoice(choice)) {
-              const selected = state.selectedChoiceId === choice.id;
+            const selected = state.selectedChoiceId === choice.id;
 
+            if (isCustomChoice(choice)) {
               return (
                 <div
-                  className="flex items-center gap-2.5 py-0.5"
+                  className={cn(
+                    optionRowClass,
+                    "border-dashed",
+                    selected
+                      ? "border-primary bg-primary/5"
+                      : "border-muted-foreground/30",
+                    disabled && "pointer-events-none opacity-50"
+                  )}
                   key={choice.id}
                 >
                   <button
                     aria-label={choice.label}
-                    className={cn(
-                      "flex shrink-0 items-center gap-2.5 text-left text-sm transition-colors",
-                      selected ? "text-primary" : "text-foreground",
-                      disabled && "pointer-events-none opacity-50"
-                    )}
+                    className="flex shrink-0 items-center"
                     data-question-option="true"
                     data-selected={selected}
                     disabled={disabled}
@@ -59,22 +87,7 @@ export function AgentQuestionnaireQuestion({
                     }
                     type="button"
                   >
-                    <span
-                      aria-hidden
-                      className={cn(
-                        "flex size-3.5 shrink-0 items-center justify-center rounded-full border",
-                        selected
-                          ? "border-primary"
-                          : "border-muted-foreground/40"
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "size-1.5 rounded-full bg-primary transition-opacity",
-                          selected ? "opacity-100" : "opacity-0"
-                        )}
-                      />
-                    </span>
+                    <RadioDot selected={selected} />
                   </button>
                   <Input
                     className="h-auto flex-1 border-0 bg-transparent! px-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
@@ -101,14 +114,11 @@ export function AgentQuestionnaireQuestion({
               );
             }
 
-            const selected = state.selectedChoiceId === choice.id;
-
             return (
               <button
                 className={cn(
-                  "flex w-full items-center gap-2.5 py-1 text-left text-sm transition-colors",
-                  selected ? "text-primary" : "text-foreground",
-                  disabled && "pointer-events-none opacity-50"
+                  optionRowClass,
+                  optionStateClass(selected, disabled)
                 )}
                 data-question-option="true"
                 data-selected={selected}
@@ -123,20 +133,7 @@ export function AgentQuestionnaireQuestion({
                 }
                 type="button"
               >
-                <span
-                  aria-hidden
-                  className={cn(
-                    "flex size-3.5 shrink-0 items-center justify-center rounded-full border",
-                    selected ? "border-primary" : "border-muted-foreground/40"
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "size-1.5 rounded-full bg-primary transition-opacity",
-                      selected ? "opacity-100" : "opacity-0"
-                    )}
-                  />
-                </span>
+                <RadioDot selected={selected} />
                 {choice.label}
               </button>
             );
@@ -145,18 +142,12 @@ export function AgentQuestionnaireQuestion({
       ) : null}
       {showCustomInput && !customChoice ? (
         <Input
+          className="min-h-11 rounded-lg border-dashed"
           disabled={disabled}
           onChange={(event) =>
             onStateChange({
               ...state,
               customAnswer: event.target.value,
-              selectedChoiceId: state.selectedChoiceId,
-              selectedChoiceLabel: state.selectedChoiceLabel,
-            })
-          }
-          onFocus={() =>
-            onStateChange({
-              ...state,
               selectedChoiceId: state.selectedChoiceId,
               selectedChoiceLabel: state.selectedChoiceLabel,
             })

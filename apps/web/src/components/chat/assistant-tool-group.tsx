@@ -1,12 +1,20 @@
 import { Button } from "@nakama/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
+import { useQuery } from "@tanstack/react-query";
 import {
+  AiBrain01Icon,
   ArrowDown01Icon,
   ArrowRight01Icon,
+  Audit02Icon,
+  BookOpen01Icon,
+  ComputerTerminal01Icon,
+  McpServerIcon,
+  PropertySearchIcon,
   Rotate02Icon,
-  Wrench01Icon,
+  TaskEdit01Icon,
 } from "hugeicons-react";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -16,6 +24,8 @@ import {
 } from "@/components/ai-elements/message";
 import {
   type AssistantTurnSegment,
+  formatLocalCitations,
+  type LocalFileCitation,
   toolGroupElapsedSeconds,
 } from "@/components/chat/assistant-tool-group.shared";
 import { ImageGenerationToolRow } from "@/components/chat/ImageGenerationToolRow";
@@ -24,6 +34,9 @@ import thinkingStyles from "@/components/chat/ThinkingReasoning.module.css";
 import { WebFetchToolRow } from "@/components/chat/WebFetchToolRow";
 import { WebSearchToolRow } from "@/components/chat/WebSearchToolRow";
 import { WorkflowRunToolRow } from "@/components/chat/WorkflowRunToolRow";
+import { readString } from "@/components/chat/web-search.shared";
+import { WorkspaceFilePreview } from "@/components/chat/workspace-file-preview";
+import { CodingAgentCommandLogo } from "@/components/coding-agent-logos";
 import { PluginSurface } from "@/components/PluginSurface";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useAuth } from "@/context/use-auth";
@@ -42,6 +55,8 @@ import {
   isSubAgentTool,
   isToolResultError,
   parseSubAgentResult,
+  splitToolResultImages,
+  type ToolResultImage,
 } from "@/lib/chat-stream";
 import {
   isGenerateImageTool,
@@ -56,14 +71,17 @@ import {
   shouldRenderWebSearchToolRow,
 } from "@/lib/chat-stream-web-search";
 import { isRunWorkflowTool } from "@/lib/chat-stream-workflow";
+import { client, formatError } from "@/lib/client";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
 import { findPluginTool } from "@/lib/plugin-runtime";
 import { splitStreamingMarkdown } from "@/lib/streaming-markdown-seal";
+
 export function AssistantTurnSegmentView({
   segment,
   showThinking = true,
   modelLabel,
   profileId,
+  onOpenFileCitation,
   onRetryMessage,
   retryDisabled = false,
 }: {
@@ -71,6 +89,7 @@ export function AssistantTurnSegmentView({
   showThinking?: boolean;
   modelLabel?: string | null;
   profileId?: string | null;
+  onOpenFileCitation?: (path: string) => void;
   onRetryMessage?: (message: ChatListItem) => void;
   retryDisabled?: boolean;
 }) {
@@ -97,11 +116,13 @@ export function AssistantTurnSegmentView({
         ) : null}
         <AssistantTextContent
           message={segment.message}
+          onOpenFileCitation={onOpenFileCitation}
           onRetry={
             segment.message.failed && onRetryMessage
               ? () => onRetryMessage(segment.message)
               : undefined
           }
+          profileId={profileId}
           retryDisabled={retryDisabled}
         />
       </MessageContent>
@@ -124,15 +145,47 @@ function StreamingPlainTail({ text }: { text: string }) {
 
 function AssistantTextContent({
   message,
+  profileId,
+  onOpenFileCitation,
   onRetry,
   retryDisabled = false,
 }: {
   message: ChatListItem;
+  profileId?: string | null;
+  onOpenFileCitation?: (path: string) => void;
   onRetry?: () => void;
   retryDisabled?: boolean;
 }) {
+  const { user } = useAuth();
   const streaming = Boolean(message.streaming && !message.thinkingStreaming);
   const content = useRafCoalescedValue(message.content, streaming);
+
+  const citedProfileId =
+    user?.isPlatformAdmin && onOpenFileCitation ? profileId : null;
+
+  function openCitation(event: MouseEvent<HTMLElement>) {
+    const link =
+      event.target instanceof Element
+        ? event.target.closest('a[href^="#file-citation?"]')
+        : null;
+
+    if (!(link && event.currentTarget.contains(link))) {
+      return;
+    }
+
+    const query = new URLSearchParams(
+      link.getAttribute("href")?.split("?")[1] ?? ""
+    );
+
+    const path = query.get("file");
+
+    if (!path || query.get("profile") !== citedProfileId) {
+      return;
+    }
+
+    event.preventDefault();
+    onOpenFileCitation?.(path);
+  }
 
   if (message.failed) {
     return (
@@ -163,20 +216,110 @@ function AssistantTextContent({
     );
   }
 
+  // oxlint-disable react-doctor/click-events-have-key-events react-doctor/no-static-element-interactions -- Citation anchors receive native keyboard clicks; this wrapper only delegates them.
   if (!streaming) {
-    return <MessageResponse>{content || "…"}</MessageResponse>;
+    const { markdown, citations } = formatLocalCitations(
+      content,
+      citedProfileId
+    );
+
+    return (
+      <div
+        className="flex w-full min-w-0 flex-col gap-0"
+        onClick={openCitation}
+      >
+        <MessageResponse>{markdown || "…"}</MessageResponse>
+        <LocalCitationFooter citations={citations} />
+      </div>
+    );
   }
 
   const { sealed, tail } = splitStreamingMarkdown(content);
+  const { markdown } = formatLocalCitations(sealed, citedProfileId);
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-0">
+    <div className="flex w-full min-w-0 flex-col gap-0" onClick={openCitation}>
       {sealed ? (
         <MessageResponse isAnimating={false} mode="streaming">
-          {sealed}
+          {markdown}
         </MessageResponse>
       ) : null}
       {tail || !sealed ? <StreamingPlainTail text={tail} /> : null}
+    </div>
+  );
+}
+// oxlint-enable react-doctor/click-events-have-key-events react-doctor/no-static-element-interactions
+
+export function LocalCitationPreview({
+  path,
+  profileId,
+  onClose,
+}: {
+  path: string;
+  profileId: string;
+  onClose: () => void;
+}) {
+  const { activeOrg } = useAuth();
+  const folder = path.slice(0, path.lastIndexOf("/"));
+
+  const { data, error } = useQuery({
+    queryFn: () => client.listProfileWorkspaceFiles(profileId, folder),
+    queryKey: ["citation-file", activeOrg?.id, profileId, folder],
+  });
+
+  const entry = data?.entries.find(
+    (candidate) => candidate.kind === "file" && candidate.path === path
+  );
+
+  if (entry) {
+    return (
+      <WorkspaceFilePreview
+        entry={entry}
+        id={`citation:${profileId}:${path}`}
+        onClose={onClose}
+        profileId={profileId}
+      />
+    );
+  }
+
+  if (error || data) {
+    return (
+      <p className="text-destructive text-sm" role="alert">
+        {error ? formatError(error) : "File not found."}
+      </p>
+    );
+  }
+
+  return null;
+}
+
+function LocalCitationFooter({
+  citations,
+}: {
+  citations: LocalFileCitation[];
+}) {
+  if (citations.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      aria-label="Sources"
+      className="mt-3 flex flex-wrap gap-1.5 border-border/60 border-t pt-2 text-xs"
+    >
+      {citations.map(({ href, label, number, path }) => (
+        <a
+          aria-label={`Open ${label} in file preview`}
+          className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary"
+          href={href}
+          key={path}
+          title={path}
+        >
+          <span className="font-semibold text-primary">{number}</span>
+          <span className="truncate">{label}</span>
+          <span className="truncate text-muted-foreground">· {path}</span>
+        </a>
+      ))}
     </div>
   );
 }
@@ -188,14 +331,14 @@ function PluginToolRow({ message }: { message: ChatListItem }) {
   const { resolvedTheme } = useTheme();
   const plugin = match?.plugin;
   const fallback = <ToolTimelineItem message={message} />;
+
   if (
-    !(match && activeOrg) ||
-    activeOrg.role === "viewer" ||
-    !plugin?.ui ||
+    !(match && activeOrg && plugin?.ui) ||
     plugin.lifecycleState !== "enabled"
   ) {
     return fallback;
   }
+
   return (
     <PluginSurface
       fallback={fallback}
@@ -234,14 +377,35 @@ function AssistantWorkGroup({
     return null;
   }
 
+  const images = visibleTools.flatMap((tool) =>
+    toolItemImages(tool).images.map((image, index) => ({
+      image,
+      key: `${tool.id}-${index}`,
+    }))
+  );
+
   return (
-    <OtherWorkGroup
-      active={active}
-      modelLabel={modelLabel}
-      profileId={profileId}
-      thinking={thinking}
-      tools={visibleTools}
-    />
+    <>
+      <OtherWorkGroup
+        active={active}
+        modelLabel={modelLabel}
+        profileId={profileId}
+        thinking={thinking}
+        tools={visibleTools}
+      />
+      {images.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {images.map(({ image, key }) => (
+            <img
+              alt="Tool result"
+              className="max-h-40 max-w-full rounded-md border border-border object-contain"
+              key={key}
+              src={toolResultImageSrc(image)}
+            />
+          ))}
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -259,6 +423,7 @@ function OtherWorkGroup({
   profileId?: string | null;
 }) {
   const isThinkingStreaming = active && Boolean(thinking?.thinkingStreaming);
+  const runningTool = tools.findLast((tool) => tool.toolStatus === "running");
 
   if (!thinking) {
     return (
@@ -273,6 +438,9 @@ function OtherWorkGroup({
 
   return (
     <ThinkingReasoning
+      activityLabel={
+        runningTool ? toolActivityLabel(runningTool.tool) : undefined
+      }
       className="w-full max-w-full"
       isThinkingStreaming={isThinkingStreaming}
       isWorkActive={active}
@@ -281,6 +449,7 @@ function OtherWorkGroup({
       thinkingDurationMs={
         tools.length === 0 && !active ? thinking.thinkingDurationMs : undefined
       }
+      toolCount={tools.length}
     >
       {tools.map((tool, index) => (
         <TimelineStep isLast={index === tools.length - 1} key={tool.id}>
@@ -295,6 +464,25 @@ function OtherWorkGroup({
   );
 }
 
+function toolActivityLabel(tool: string | undefined): string {
+  switch (tool) {
+    case "web_search":
+      return "Searching the web…";
+    case "web_fetch":
+      return "Reading webpage…";
+    case "knowledge_base_search":
+      return "Searching knowledge base…";
+    case "search_files":
+      return "Searching files…";
+    case "read_file":
+      return "Reading file…";
+    case "bash":
+      return "Running command…";
+    default:
+      return "Using tool…";
+  }
+}
+
 function ToolOnlyWorkGroup({
   isWorkActive,
   tools,
@@ -307,82 +495,80 @@ function ToolOnlyWorkGroup({
   profileId?: string | null;
 }) {
   const [open, setOpen] = useState(isWorkActive);
+  const [wasWorkActive, setWasWorkActive] = useState(isWorkActive);
   const elapsedSeconds = useWorkDuration(isWorkActive, tools);
 
-  useEffect(() => {
-    if (isWorkActive) {
-      setOpen(true);
-      return;
-    }
-
-    const reducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
-    const delay = reducedMotion ? 0 : 360;
-    const timerId = window.setTimeout(() => setOpen(false), delay);
-    return () => window.clearTimeout(timerId);
-  }, [isWorkActive]);
+  if (wasWorkActive !== isWorkActive) {
+    setWasWorkActive(isWorkActive);
+    setOpen(isWorkActive);
+  }
 
   const done = !isWorkActive;
-  const expanded = done ? open : true;
-  const toolLabel = tools.length === 1 ? "1 tool" : `${tools.length} tools`;
+  const expanded = open;
+  const toolLabel = `${tools.length} ${tools.length === 1 ? "step" : "steps"}`;
+  const runningTool = tools.findLast((tool) => tool.toolStatus === "running");
 
   return (
     <div className={cn(thinkingStyles.root, "w-full max-w-full")}>
       <button
         aria-expanded={expanded}
-        aria-label="Toggle tools"
+        aria-label="Toggle activity"
         className={cn(
           thinkingStyles.header,
-          done && thinkingStyles.headerClickable,
+          thinkingStyles.headerClickable,
           expanded && thinkingStyles.headerExpanded
         )}
-        onClick={() => done && setOpen((current) => !current)}
+        onClick={() => setOpen((current) => !current)}
         type="button"
       >
         {done ? (
           <span className={thinkingStyles.label}>
-            <span className={thinkingStyles.verb}>Used</span> {toolLabel}
+            <span className={thinkingStyles.verb}>{toolLabel}</span>
             {elapsedSeconds === null
               ? null
               : ` · ${formatElapsedSeconds(elapsedSeconds)}`}
           </span>
         ) : (
           <span className={cn(thinkingStyles.label, thinkingStyles.shimmer)}>
-            Working…
+            {runningTool ? toolActivityLabel(runningTool.tool) : "Working…"}
+            {` · ${toolLabel}`}
             {elapsedSeconds === null
               ? null
               : ` · ${formatElapsedSeconds(elapsedSeconds)}`}
           </span>
         )}
-        {done ? (
-          <svg
-            aria-hidden="true"
-            className={thinkingStyles.chevron}
-            height="12"
-            viewBox="0 0 24 24"
-            width="12"
-          >
-            <path
-              d="m4.5 15.75 7.5-7.5 7.5 7.5"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="1.8"
-            />
-          </svg>
-        ) : null}
+        <svg
+          aria-hidden="true"
+          className={thinkingStyles.chevron}
+          height="12"
+          viewBox="0 0 24 24"
+          width="12"
+        >
+          <path
+            d="m4.5 15.75 7.5-7.5 7.5 7.5"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.8"
+          />
+        </svg>
       </button>
 
       <div
+        aria-hidden={!expanded}
         className={cn(
           thinkingStyles.collapsible,
           !expanded && thinkingStyles.collapsibleCollapsed
         )}
       >
         <div className={thinkingStyles.inner}>
-          <div className={thinkingStyles.timeline}>
+          <div
+            className={cn(
+              thinkingStyles.timeline,
+              thinkingStyles.timelineWithTools
+            )}
+          >
             <div className={thinkingStyles.tools}>
               {tools.map((tool, index) => (
                 <TimelineStep isLast={index === tools.length - 1} key={tool.id}>
@@ -456,10 +642,13 @@ function useWorkDuration(
     if (!active) {
       return;
     }
+
     setNow(Date.now());
     const intervalId = window.setInterval(() => setNow(Date.now()), 1000);
+
     return () => window.clearInterval(intervalId);
   }, [active]);
+
   return toolGroupElapsedSeconds(tools, now, active);
 }
 
@@ -545,9 +734,11 @@ function subAgentStatusTone(status: string | undefined): string {
   if (status === "fail") {
     return "text-red-600 dark:text-red-400";
   }
+
   if (status === "timeout") {
     return "text-amber-700 dark:text-amber-400";
   }
+
   return "text-muted-foreground";
 }
 
@@ -634,7 +825,7 @@ function SubAgentOutputSection({
       <div className="pl-6">
         <button
           aria-expanded={expanded}
-          className="flex w-full items-center gap-1 text-left text-muted-foreground text-sm transition-colors hover:text-foreground"
+          className="flex w-fit max-w-full items-center gap-1 text-left text-muted-foreground text-sm transition-colors hover:text-foreground"
           onClick={onToggle}
           type="button"
         >
@@ -676,14 +867,17 @@ function SubAgentToolRow({
 }) {
   const isRunning = message.toolStatus === "running";
   const elapsedSeconds = useElapsedSeconds(isRunning, message.createdAt);
+
   const parsed =
     message.toolStatus === "done"
       ? parseSubAgentResult(message.toolResult)
       : null;
+
   const output =
     message.toolStatus === "done"
       ? formatSubAgentToolResult(message.toolResult)
       : null;
+
   const [open, setOpen] = useState(false);
 
   return (
@@ -784,13 +978,39 @@ function SubAgentMark({
   );
 }
 
+/** Old sessions keep image bytes in the result; new ones send them apart. */
+function toolItemImages(message: ChatListItem) {
+  if (message.toolStatus !== "done") {
+    return { images: [] satisfies ToolResultImage[], rest: null };
+  }
+
+  const { images, rest } = splitToolResultImages(message.toolResult);
+
+  return {
+    images: [
+      ...images,
+      ...(message.toolImages ?? []).map((image) => ({
+        data: image.data,
+        mimeType: image.mediaType,
+      })),
+    ],
+    rest,
+  };
+}
+
+function toolResultImageSrc(image: ToolResultImage): string {
+  return `data:${image.mimeType};base64,${image.data}`;
+}
+
 function ToolTimelineOutput({
   command,
+  hasImages,
   isError,
   isRunning,
   output,
 }: {
   command: string | null;
+  hasImages: boolean;
   isError: boolean;
   isRunning: boolean;
   output: string | null;
@@ -813,7 +1033,7 @@ function ToolTimelineOutput({
     );
   }
 
-  if (command) {
+  if (command || hasImages) {
     return null;
   }
 
@@ -826,22 +1046,38 @@ function ToolTimelineOutput({
 
 function ToolTimelineDetails({
   command,
+  images,
   isError,
   isRunning,
   output,
+  query,
 }: {
   command: string | null;
+  images: ToolResultImage[];
   isError: boolean;
   isRunning: boolean;
   output: string | null;
+  query: string | null;
 }) {
   return (
-    <div className="mt-2 space-y-2">
+    <div className="mt-2 space-y-2 pl-5">
       {command ? (
         <DetailBlock content={command} label="Command" tone="command" />
       ) : null}
+      {query ? (
+        <DetailBlock content={query} label="Query" tone="command" />
+      ) : null}
+      {images.map((image) => (
+        <img
+          alt="Tool result"
+          className="max-h-96 max-w-full rounded-md border border-border"
+          key={image.data}
+          src={toolResultImageSrc(image)}
+        />
+      ))}
       <ToolTimelineOutput
         command={command}
+        hasImages={images.length > 0}
         isError={isError}
         isRunning={isRunning}
         output={output}
@@ -852,54 +1088,122 @@ function ToolTimelineDetails({
 
 function ToolTimelineItem({ message }: { message: ChatListItem }) {
   const isRunning = message.toolStatus === "running";
+
   const command =
     message.tool === "bash"
       ? formatToolCommand(message.tool, message.toolInput)
       : null;
+
+  const { images, rest } = toolItemImages(message);
+
   const output =
-    message.toolStatus === "done"
-      ? formatToolResult(message.tool, message.toolResult)
-      : null;
+    message.toolStatus === "done" ? formatToolResult(message.tool, rest) : null;
+
+  const queryValue = message.toolInput?.query;
+  const query = readString(queryValue);
+
   const isError =
     message.toolStatus === "done" &&
     isToolResultError(message.toolResult, output);
-  const hasDetails = Boolean(isRunning || command || output);
+
+  const hasDetails = Boolean(
+    isRunning || command || query || output || images.length > 0
+  );
+
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // Mount details on first open, then keep them so close can animate too.
+  const [detailsMounted, setDetailsMounted] = useState(false);
+
+  function toggleDetails(next: boolean) {
+    setDetailsMounted(true);
+    setDetailsOpen(next);
+  }
 
   return (
     <div>
-      <CollapsibleTrigger
-        className="pl-0"
-        disabled={!hasDetails}
-        label={formatToolActionLabel(message.tool, message.toolInput)}
-        labelClassName={isError ? "text-red-600 dark:text-red-400" : undefined}
-        onToggle={() => {
-          if (hasDetails) {
-            setDetailsOpen((current) => !current);
-          }
-        }}
-        open={detailsOpen}
-      />
-      {detailsOpen && hasDetails ? (
-        <ToolTimelineDetails
+      <div className="flex items-center gap-3">
+        <CollapsibleTrigger
+          className="pl-0"
           command={command}
-          isError={isError}
-          isRunning={isRunning}
-          output={output}
+          disabled={!hasDetails}
+          label={formatToolActionLabel(message.tool, message.toolInput)}
+          labelClassName={
+            isError ? "text-red-600 dark:text-red-400" : undefined
+          }
+          onToggle={() => {
+            if (hasDetails) {
+              toggleDetails(!detailsOpen);
+            }
+          }}
+          open={detailsOpen}
+          tool={message.tool}
         />
+        {images[0] ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  className={cn(
+                    "ml-auto shrink-0 transition-[opacity,visibility] duration-200",
+                    detailsOpen && "invisible opacity-0"
+                  )}
+                  onClick={() => toggleDetails(true)}
+                  type="button"
+                >
+                  <img
+                    alt="Tool result"
+                    className="h-8 w-12 rounded border border-border object-cover"
+                    src={toolResultImageSrc(images[0])}
+                  />
+                </button>
+              }
+            />
+            <TooltipContent
+              className="max-w-none bg-transparent p-0 [&>*:last-child]:hidden"
+              side="left"
+            >
+              <img
+                alt="Tool result preview"
+                className="max-h-80 w-96 max-w-[60vw] rounded-md border border-border bg-background object-contain shadow-lg"
+                src={toolResultImageSrc(images[0])}
+              />
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+      </div>
+      {detailsMounted && hasDetails ? (
+        <div
+          className={cn(
+            "grid starting:grid-rows-[0fr] starting:opacity-0 transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none",
+            detailsOpen
+              ? "grid-rows-[1fr] opacity-100"
+              : "grid-rows-[0fr] opacity-0"
+          )}
+          inert={!detailsOpen}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <ToolTimelineDetails
+              command={command}
+              images={images}
+              isError={isError}
+              isRunning={isRunning}
+              output={output}
+              query={query}
+            />
+          </div>
+        </div>
       ) : null}
     </div>
   );
 }
 
-function DefaultToolIcon({ className }: { className?: string }) {
-  return (
-    <Wrench01Icon
-      aria-hidden
-      className={cn("size-3.5 shrink-0 text-muted-foreground", className)}
-    />
-  );
-}
+const TOOL_ICONS = new Map<string, typeof AiBrain01Icon>([
+  ["bash", ComputerTerminal01Icon],
+  ["edit_file", TaskEdit01Icon],
+  ["knowledge_base_search", PropertySearchIcon],
+  ["read_file", BookOpen01Icon],
+  ["search_files", Audit02Icon],
+]);
 
 function CollapsibleTrigger({
   open,
@@ -908,29 +1212,51 @@ function CollapsibleTrigger({
   labelClassName,
   disabled = false,
   className,
+  command,
+  tool,
 }: {
+  command?: string | null;
   open: boolean;
   onToggle: () => void;
   label: string;
   labelClassName?: string;
   disabled?: boolean;
   className?: string;
+  tool?: string;
 }) {
+  const isMcpTool =
+    tool?.includes("__") &&
+    !tool.startsWith("plugin_") &&
+    !tool.startsWith("composio__");
+
+  const ToolIcon =
+    (tool ? TOOL_ICONS.get(tool) : undefined) ??
+    (isMcpTool ? McpServerIcon : AiBrain01Icon);
+
   return (
     <button
       aria-expanded={disabled ? undefined : open}
       className={cn(
-        "flex w-full min-w-0 items-center gap-1.5 text-left text-muted-foreground text-sm transition-colors hover:text-foreground disabled:cursor-default disabled:hover:text-muted-foreground",
+        "flex w-fit min-w-0 max-w-full items-center gap-1.5 text-left text-muted-foreground text-sm transition-colors hover:text-foreground disabled:cursor-default disabled:hover:text-muted-foreground",
         className
       )}
       disabled={disabled}
       onClick={onToggle}
       type="button"
     >
-      <DefaultToolIcon />
-      <span className={cn("min-w-0 flex-1 truncate", labelClassName)}>
-        {label}
+      <span
+        aria-hidden="true"
+        className="relative z-10 flex h-5 w-3.5 shrink-0 items-center justify-center bg-background"
+      >
+        <CodingAgentCommandLogo
+          className="size-3.5 text-foreground"
+          command={command ?? ""}
+          fallback={
+            <ToolIcon className="size-3.5 text-muted-foreground opacity-50" />
+          }
+        />
       </span>
+      <span className={cn("min-w-0 truncate", labelClassName)}>{label}</span>
       {disabled ? null : (
         <ArrowDown01Icon
           aria-hidden
@@ -984,7 +1310,7 @@ function DetailBlock({
       </div>
       <pre
         className={cn(
-          "max-h-64 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs leading-relaxed",
+          "max-h-32 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs leading-relaxed",
           tone === "error"
             ? "text-red-700 dark:text-red-300"
             : tone === "output"

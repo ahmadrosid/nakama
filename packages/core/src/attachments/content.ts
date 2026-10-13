@@ -1,8 +1,4 @@
-import type {
-  AgentChannel,
-  ChatMessage,
-  MessageContentPart,
-} from "../contract";
+import type { ChatMessage, MessageContentPart } from "../contract";
 import {
   MAX_DOCUMENT_BYTES,
   MAX_IMAGE_BYTES,
@@ -35,60 +31,10 @@ export type LoadAttachmentBytes = (
   attachmentId: string
 ) => Promise<LoadedAttachmentBytes | null>;
 
-export function messageContentHasImageRefs(
-  content: string | MessageContentPart[]
-): boolean {
-  return countUserImageRefs(content) > 0;
-}
-
-export function messageContentHasDocumentRefs(
-  content: string | MessageContentPart[]
-): boolean {
-  return countUserDocumentRefs(content) > 0;
-}
-
-export function countUserImageRefs(
-  content: string | MessageContentPart[]
-): number {
-  if (typeof content === "string") {
-    return 0;
-  }
-
-  return content.filter((part) => part.type === "image_ref").length;
-}
-
-export function countUserDocumentRefs(
-  content: string | MessageContentPart[]
-): number {
-  if (typeof content === "string") {
-    return 0;
-  }
-
-  return content.filter((part) => part.type === "document_ref").length;
-}
-
-export function messagesIncludeUserImageRefs(
-  messages: readonly ChatMessage[]
-): boolean {
-  return messages.some(
-    (message) =>
-      message.role === "user" && messageContentHasImageRefs(message.content)
-  );
-}
-
-export function messagesIncludeUserDocumentRefs(
-  messages: readonly ChatMessage[]
-): boolean {
-  return messages.some(
-    (message) =>
-      message.role === "user" && messageContentHasDocumentRefs(message.content)
-  );
-}
-
 export function messageContentHasInlineAttachments(
   content: string | MessageContentPart[]
 ): boolean {
-  if (typeof content === "string") {
+  if (!Array.isArray(content)) {
     return false;
   }
 
@@ -102,8 +48,7 @@ export async function persistInlineAttachmentsInContent(
   save: SaveInlineAttachment
 ): Promise<string | MessageContentPart[]> {
   if (
-    typeof content === "string" ||
-    !messageContentHasInlineAttachments(content)
+    !(Array.isArray(content) && messageContentHasInlineAttachments(content))
   ) {
     return content;
   }
@@ -116,6 +61,7 @@ export async function persistInlineAttachmentsInContent(
         normalizeAttachmentBase64(part.data, MAX_IMAGE_BYTES, "image"),
         "base64"
       );
+
       const saved = await save({
         bytes,
         kind: "image",
@@ -136,6 +82,7 @@ export async function persistInlineAttachmentsInContent(
         normalizeAttachmentBase64(part.data, MAX_DOCUMENT_BYTES, "document"),
         "base64"
       );
+
       const saved = await save({
         bytes,
         filename: part.filename,
@@ -181,7 +128,7 @@ export async function rehydrateAttachmentRefsInContent(
   load: LoadAttachmentBytes,
   options: RehydrateOptions = {}
 ): Promise<string | MessageContentPart[]> {
-  if (typeof content === "string") {
+  if (!Array.isArray(content)) {
     return content;
   }
 
@@ -249,6 +196,7 @@ export async function rehydrateMessagesForProvider(
     (last, message, index) => (message.role === "user" ? index : last),
     -1
   );
+
   const result: ChatMessage[] = [];
 
   for (const [index, message] of messages.entries()) {
@@ -266,11 +214,4 @@ export async function rehydrateMessagesForProvider(
   }
 
   return result;
-}
-
-export interface AttachmentPersistenceContext {
-  channel: AgentChannel;
-  orgId: string;
-  profileId: string;
-  sessionId: string;
 }

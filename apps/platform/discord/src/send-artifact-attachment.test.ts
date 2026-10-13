@@ -3,6 +3,7 @@ import {
   DISCORD_ARTIFACT_ATTACHMENT_MAX_BYTES,
   isDiscordAttachableArtifact,
 } from "@nakama/core/discord-attachment";
+import type { TextBasedChannel } from "discord.js";
 import { sendDiscordArtifactAttachment } from "./send-artifact-attachment";
 
 describe("sendDiscordArtifactAttachment limits", () => {
@@ -43,11 +44,12 @@ describe("sendDiscordArtifactAttachment limits", () => {
   });
 
   test("rejects oversized attachments", async () => {
+    // SAFETY: Oversize validation returns before the mock channel can be used.
     const channel = {
       send: async () => {
         throw new Error("should not send");
       },
-    } as never;
+    } as TextBasedChannel;
 
     const result = await sendDiscordArtifactAttachment(channel, {
       bytes: new Uint8Array(DISCORD_ARTIFACT_ATTACHMENT_MAX_BYTES + 1),

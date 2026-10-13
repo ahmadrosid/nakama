@@ -13,13 +13,23 @@ export function filterProfilesForChatAccess(
     orgRole?: OrgRole | null;
     isPlatformAdmin?: boolean;
     excludeSuperBot?: boolean;
+    userId?: string;
   } = {}
 ): ProfileSummary[] {
+  const visible = options.isPlatformAdmin
+    ? profiles
+    : profiles.filter(
+        (profile) =>
+          profile.sharedWithTeam !== false ||
+          (options.userId !== undefined &&
+            profile.ownerUserId === options.userId)
+      );
+
   if (options.excludeSuperBot || !canAccessSuperBotProfile(options)) {
-    return profiles.filter((profile) => !profile.isSuper);
+    return visible.filter((profile) => !profile.isSuper);
   }
 
-  return profiles;
+  return visible;
 }
 
 export function slugifyProfileName(name: string): string {
@@ -66,6 +76,7 @@ export function resolveProfileInput(
   }
 
   const lower = trimmed.toLowerCase();
+
   const superBotAliases = new Set([
     "super_bot",
     "super-bot",
@@ -130,6 +141,7 @@ export function isProfileSelectionIndexInput(
   }
 
   const numeric = Number(trimmed);
+
   return Number.isInteger(numeric) && numeric >= 1 && numeric <= profileCount;
 }
 
@@ -140,6 +152,7 @@ function levenshtein(left: string, right: string): number {
 
   const rows = left.length + 1;
   const cols = right.length + 1;
+
   const matrix = Array.from({ length: rows }, (_, rowIndex) =>
     Array.from({ length: cols }, (_, colIndex) =>
       rowIndex === 0 ? colIndex : colIndex === 0 ? rowIndex : 0
@@ -213,6 +226,7 @@ export function resolveProfileInScopes(
   }
 
   const [onlyMatch] = matches;
+
   if (!onlyMatch) {
     return null;
   }
@@ -234,6 +248,7 @@ export function formatProfileSelectionPrompt(
   orgName?: string | null
 ): string {
   const sorted = sortProfilesForPicker(profiles);
+
   const current = currentProfileId
     ? sorted.find((profile) => profile.id === currentProfileId)
     : undefined;
@@ -275,6 +290,7 @@ export function pickProfileForOrg(
   }
 
   const [firstProfile] = profiles;
+
   if (!firstProfile) {
     throw new Error("No profiles are available.");
   }

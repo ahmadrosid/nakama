@@ -1,6 +1,22 @@
 import { describe, expect, test } from "bun:test";
 import { getProfileSoulDir } from "../soul/resolve";
-import { buildToolExecutionContext } from "./context";
+import { buildToolExecutionContext, requireToolOrgMember } from "./context";
+
+describe("requireToolOrgMember", () => {
+  for (const orgRole of ["admin", "member"] as const) {
+    test(`allows ${orgRole}`, () => {
+      expect(() => requireToolOrgMember({ orgRole })).not.toThrow();
+    });
+  }
+
+  for (const orgRole of [undefined] as const) {
+    test(`denies ${orgRole ?? "missing role"}`, () => {
+      expect(() => requireToolOrgMember({ orgRole })).toThrow(
+        expect.objectContaining({ status: 403 })
+      );
+    });
+  }
+});
 
 describe("buildToolExecutionContext", () => {
   test("adds profile workspace root when org and profile are set", () => {

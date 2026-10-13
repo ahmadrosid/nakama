@@ -12,10 +12,12 @@ function applyLoginShellPath(): void {
   }
 
   const shell = process.env.SHELL?.trim() || "/bin/zsh";
+
   const result = spawnSync(shell, ["-l", "-c", 'printf %s "$PATH"'], {
     encoding: "utf8",
     timeout: 3000,
   });
+
   const shellPath = result.stdout?.trim();
 
   if (result.status === 0 && shellPath) {
@@ -32,10 +34,7 @@ export function ensureProcessPath(): void {
   ensured = true;
 }
 
-function getBunGlobalPaths(home = homedir()): {
-  binDir: string;
-  globalDir: string;
-} {
+function getBunGlobalPaths(home = homedir()) {
   return {
     binDir: path.join(home, ".bun", "bin"),
     globalDir: path.join(home, ".bun", "install", "global"),
@@ -48,19 +47,54 @@ export function ensureBunGlobalInstallDirs(home = homedir()): void {
   mkdirSync(globalDir, { recursive: true });
 }
 
+/**
+ * Windows env names are case-insensitive, and Bun reports this one as `PATH`.
+ * Writing `Path` beside it would hand the child two spellings of one variable.
+ */
+function getPathKey(): string {
+  if (process.platform !== "win32") {
+    return "PATH";
+  }
+
+  return (
+    Object.keys(process.env).find((key) => key.toUpperCase() === "PATH") ??
+    "Path"
+  );
+}
+
+/**
+ * The desktop app installs CLIs with `bun install -g` into its own
+ * BUN_INSTALL_BIN, which is not on the PATH it hands the server.
+ */
+function withBunInstallBin(current: string): string {
+  const bunBin = process.env.BUN_INSTALL_BIN;
+
+  if (
+    process.platform !== "win32" ||
+    !bunBin ||
+    current
+      .split(path.delimiter)
+      .some((entry) => entry.toLowerCase() === bunBin.toLowerCase())
+  ) {
+    return current;
+  }
+
+  return current ? `${bunBin}${path.delimiter}${current}` : bunBin;
+}
+
 export function getToolExecutionEnv(): NodeJS.ProcessEnv {
   ensureProcessPath();
 
   const home = homedir();
   const { binDir, globalDir } = getBunGlobalPaths(home);
-  const pathKey = process.platform === "win32" ? "Path" : "PATH";
+  const pathKey = getPathKey();
 
   if (process.env.NAKAMA_DISABLE_FIX_PATH === "1") {
     return {
       ...process.env,
       BUN_INSTALL_BIN: process.env.BUN_INSTALL_BIN ?? binDir,
       BUN_INSTALL_GLOBAL_DIR: process.env.BUN_INSTALL_GLOBAL_DIR ?? globalDir,
-      [pathKey]: process.env[pathKey] ?? "",
+      [pathKey]: withBunInstallBin(process.env[pathKey] ?? ""),
     };
   }
 
@@ -74,8 +108,4 @@ export function getToolExecutionEnv(): NodeJS.ProcessEnv {
     BUN_INSTALL_GLOBAL_DIR: process.env.BUN_INSTALL_GLOBAL_DIR ?? globalDir,
     [pathKey]: prefix ? `${prefix}${path.delimiter}${current}` : current,
   };
-}
-
-export function resetProcessPathState(): void {
-  ensured = false;
 }

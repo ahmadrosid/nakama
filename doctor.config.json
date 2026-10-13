@@ -1,0 +1,10 @@
+{
+  "ignore": {
+    "overrides": [
+      {
+        "files": ["**/*.test.ts", "**/*.test.tsx"],
+        "rules": ["anti-slop/no-copy-assertions"]
+      }
+    ]
+  }
+}

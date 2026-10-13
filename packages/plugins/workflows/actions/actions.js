@@ -1,15 +1,30 @@
 // @bun
 // src/workflow-ops.ts
 var TEMPLATE_PATTERN = /\{\{([^}]+)\}\}/g;
+function parseWorkflowValue(value) {
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) {
+    throw new Error("Workflow values must be JSON serializable.");
+  }
+  const parsed = JSON.parse(serialized);
+  return parsed;
+}
+function parseWorkflowRecord(value) {
+  const parsed = parseWorkflowValue(value);
+  if (!isWorkflowRecord(parsed)) {
+    throw new Error("Workflow values must be JSON objects.");
+  }
+  return parsed;
+}
 function getPathValue(bag, path) {
   const trimmed = path.trim();
   if (!trimmed) {
     return;
   }
   const parts = trimmed.split(".").filter(Boolean);
-  let current = bag;
+  let current = { input: bag.input, steps: bag.steps };
   for (const part of parts) {
-    if (current == null || typeof current !== "object") {
+    if (!isWorkflowRecord(current)) {
       return;
     }
     current = current[part];
@@ -29,27 +44,29 @@ function resolveTemplateString(template, bag) {
     if (value === undefined || value === null) {
       return "";
     }
-    if (typeof value === "string") {
-      return value;
+    const stringValue = readString(value);
+    if (stringValue !== null) {
+      return stringValue;
     }
-    return JSON.stringify(value);
+    return JSON.stringify(value) ?? "";
   });
 }
 function resolveWorkflowValue(value, bag) {
-  if (typeof value === "string") {
-    if (!value.includes("{{")) {
-      return value;
+  const stringValue = readString(value);
+  if (stringValue !== null) {
+    if (!stringValue.includes("{{")) {
+      return stringValue;
     }
-    if (value.match(/^\{\{[^}]+\}\}$/)) {
-      const inner = value.slice(2, -2).trim();
+    if (stringValue.match(/^\{\{[^}]+\}\}$/)) {
+      const inner = stringValue.slice(2, -2).trim();
       return requireTemplateValue(bag, inner);
     }
-    return resolveTemplateString(value, bag);
+    return resolveTemplateString(stringValue, bag);
   }
   if (Array.isArray(value)) {
     return value.map((entry) => resolveWorkflowValue(entry, bag));
   }
-  if (value && typeof value === "object") {
+  if (isWorkflowRecord(value)) {
     const resolved = {};
     for (const [key, entry] of Object.entries(value)) {
       resolved[key] = resolveWorkflowValue(entry, bag);
@@ -63,7 +80,11 @@ function executeCompare(input) {
   const right = input.right;
   if (input.op === "eq") {
     const ok2 = deepEqual(left, right);
-    return { left, ok: ok2, right, ...ok2 ? {} : { diff: { left, right } } };
+    const result = { left, ok: ok2, right };
+    if (!ok2) {
+      result.diff = { left, right };
+    }
+    return result;
   }
   if (input.op === "near") {
     const leftNum = toNumber(left);
@@ -108,8 +129,9 @@ function buildReceiptBag(input, stepOutputs) {
 function collectTemplateRefs(value) {
   const refs = [];
   const visit = (current) => {
-    if (typeof current === "string") {
-      for (const match of current.matchAll(TEMPLATE_PATTERN)) {
+    const stringValue = readString(current);
+    if (stringValue !== null) {
+      for (const match of stringValue.matchAll(TEMPLATE_PATTERN)) {
         refs.push(match[1]?.trim() ?? "");
       }
       return;
@@ -120,7 +142,7 @@ function collectTemplateRefs(value) {
       }
       return;
     }
-    if (current && typeof current === "object") {
+    if (isWorkflowRecord(current)) {
       for (const entry of Object.values(current)) {
         visit(entry);
       }
@@ -169,14 +191,15 @@ function validateWorkflowSteps(steps, allowedTools) {
       if (!allowedTools.has(tool)) {
         throw new Error(`Tool step ${id} references unknown tool: ${tool}`);
       }
-      if (!record.input || typeof record.input !== "object" || Array.isArray(record.input)) {
+      if (!isWorkflowRecord(record.input)) {
         throw new Error(`Tool step ${id} requires an input object. Use input, not args; use {} for tools without arguments.`);
       }
     }
     if (kind === "compare") {
-      const op = record.op;
-      if (typeof op !== "string" || !WORKFLOW_COMPARE_OPS.includes(op)) {
-        throw new Error(`Compare step ${id} has invalid op: ${String(op)}. Use ${WORKFLOW_COMPARE_OPS.join(" | ")}.`);
+      const opValue = record.op;
+      const op = readString(opValue);
+      if (op === null || !isWorkflowCompareOp(op)) {
+        throw new Error(`Compare step ${id} has invalid op: ${String(opValue)}. Use ${WORKFLOW_COMPARE_OPS.join(" | ")}.`);
       }
       if (!("left" in record) || record.left === undefined) {
         throw new Error(`Compare step ${id} is missing left.`);
@@ -193,7 +216,7 @@ function validateWorkflowSteps(steps, allowedTools) {
         label: "template text"
       });
     }
-    const refs = collectTemplateRefs(step);
+    const refs = collectTemplateRefs(record);
     for (const ref of refs) {
       validateTemplateRef(ref, priorStepIds, id);
     }
@@ -204,38 +227,51 @@ function validateWorkflowSteps(steps, allowedTools) {
   }
 }
 function asStepRecord(step, index) {
-  if (!step || typeof step !== "object" || Array.isArray(step)) {
+  const record = JSON.parse(JSON.stringify(step));
+  if (!isWorkflowRecord(record)) {
     throw new Error(`Step ${index + 1} must be an object.`);
   }
-  return step;
+  return record;
 }
 function readStepId(step, index) {
-  const id = typeof step.id === "string" ? step.id.trim() : "";
+  const id = readString(step.id)?.trim() ?? "";
   if (!id) {
     throw new Error(`Step ${index + 1} is missing an id.`);
   }
   return id;
 }
 function readStepKind(step, id) {
-  const kind = typeof step.kind === "string" ? step.kind.trim() : "";
+  const kind = readString(step.kind)?.trim() ?? "";
   if (!kind) {
-    if (typeof step.type === "string" && step.type.trim()) {
+    if (readString(step.type)?.trim()) {
       throw new Error(`Step ${id} uses type; use kind instead (${WORKFLOW_STEP_KINDS.join(" | ")}).`);
     }
     throw new Error(`Step ${id} is missing kind (${WORKFLOW_STEP_KINDS.join(" | ")}).`);
   }
-  if (!WORKFLOW_STEP_KINDS.includes(kind)) {
+  if (!isWorkflowStepKind(kind)) {
     throw new Error(`Step ${id} has invalid kind: ${kind}. Use ${WORKFLOW_STEP_KINDS.join(" | ")}.`);
   }
   return kind;
 }
+function readString(value) {
+  return value === String(value) ? value : null;
+}
+function isWorkflowRecord(value) {
+  return value instanceof Object && !Array.isArray(value);
+}
+function isWorkflowStepKind(value) {
+  return WORKFLOW_STEP_KINDS.some((kind) => kind === value);
+}
+function isWorkflowCompareOp(value) {
+  return WORKFLOW_COMPARE_OPS.some((op) => op === value);
+}
 function readRequiredStepString(step, key, prefix, options) {
-  const value = typeof step[key] === "string" ? step[key].trim() : "";
+  const value = readString(step[key])?.trim() ?? "";
   if (value) {
     return value;
   }
   const alias = options?.alias;
-  if (alias && typeof step[alias] === "string" && step[alias].trim()) {
+  if (alias && readString(step[alias])?.trim()) {
     throw new Error(`${prefix} uses ${alias}; use ${key} instead.`);
   }
   throw new Error(`${prefix} is missing ${options?.label ?? key}.`);
@@ -260,8 +296,10 @@ function validateTemplateRef(ref, priorStepIds, currentStepId) {
   throw new Error(`Invalid template reference: ${ref}`);
 }
 function containsValue(haystack, needle) {
-  if (typeof haystack === "string" && typeof needle === "string") {
-    return haystack.includes(needle);
+  const haystackString = readString(haystack);
+  const needleString = readString(needle);
+  if (haystackString !== null && needleString !== null) {
+    return haystackString.includes(needleString);
   }
   if (Array.isArray(haystack)) {
     return haystack.some((entry) => deepEqual(entry, needle));
@@ -269,11 +307,13 @@ function containsValue(haystack, needle) {
   return false;
 }
 function toNumber(value) {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
+  const numberValue = Number(value);
+  if (value === numberValue && Number.isFinite(numberValue)) {
+    return numberValue;
   }
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value);
+  const stringValue = readString(value);
+  if (stringValue !== null && stringValue.trim()) {
+    const parsed = Number(stringValue);
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
@@ -281,9 +321,6 @@ function toNumber(value) {
 function deepEqual(left, right) {
   if (Object.is(left, right)) {
     return true;
-  }
-  if (typeof left !== "object" || typeof right !== "object" || left === null || right === null) {
-    return false;
   }
   if (Array.isArray(left) || Array.isArray(right)) {
     if (!(Array.isArray(left) && Array.isArray(right))) {
@@ -293,6 +330,9 @@ function deepEqual(left, right) {
       return false;
     }
     return left.every((entry, index) => deepEqual(entry, right[index]));
+  }
+  if (!(isWorkflowRecord(left) && isWorkflowRecord(right))) {
+    return false;
   }
   const leftRecord = left;
   const rightRecord = right;
@@ -348,6 +388,7 @@ class WorkflowRunner {
       if (step.kind === "summarize") {
         continue;
       }
+      let failure;
       const stepRecord = await this.workflowService.createRunStep(runId, step, position);
       try {
         const result = await this.executeDataStep(step, bag(), {
@@ -355,12 +396,17 @@ class WorkflowRunner {
           runId,
           workflowId: workflow.id
         });
-        stepOutputs[step.id] = result.output;
         await this.workflowService.updateRunStep(runId, stepRecord.id, {
+          error: result.error,
           input: result.input,
           output: result.output,
-          status: "completed"
+          status: result.error ? "failed" : "completed"
         });
+        if (result.error) {
+          failure = result.error;
+        } else {
+          stepOutputs[step.id] = result.output;
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         await this.workflowService.updateRunStep(runId, stepRecord.id, {
@@ -368,6 +414,9 @@ class WorkflowRunner {
           status: "failed"
         });
         throw new Error(message);
+      }
+      if (failure) {
+        throw new Error(failure);
       }
     }
     const summarizeStep = workflow.steps.find((step) => step.kind === "summarize");
@@ -394,64 +443,67 @@ class WorkflowRunner {
   }
   async executeDataStep(step, bag, context) {
     if (step.kind === "tool") {
-      const input = resolveWorkflowValue(step.input, bag);
+      const input = parseWorkflowRecord(resolveWorkflowValue(parseWorkflowValue(step.input), bag));
       const output = await this.agentService.executeTool(context.profileId, step.tool, input, context.runId, context.workflowId);
       const toolError = readToolError(output);
-      if (toolError) {
-        throw new Error(toolError);
-      }
-      return { input, output };
+      return toolError ? { error: toolError, input, output } : { input, output };
     }
     if (step.kind === "compare") {
       const left = resolveWorkflowValue(step.left, bag);
       const right = resolveWorkflowValue(step.right, bag);
       const result = executeCompare({
-        left,
+        left: parseWorkflowValue(left),
         op: step.op,
-        right,
+        right: parseWorkflowValue(right),
         tolerance: step.tolerance
       });
+      const input = { left, op: step.op, right };
       if (!result.ok) {
-        throw new Error(`Compare step ${step.id} failed: ${JSON.stringify(result)}`);
+        return {
+          error: `Compare step ${step.id} failed: ${JSON.stringify(result)}`,
+          input,
+          output: result
+        };
       }
-      return { input: { left, op: step.op, right }, output: result };
+      return { input, output: result };
     }
     if (step.kind === "assert") {
       const result = executeAssert({
         bag,
-        expected: step.expected,
+        expected: parseWorkflowValue(step.expected),
         path: step.path
       });
+      const input = { expected: result.expected, path: step.path };
       if (!result.ok) {
-        throw new Error(`Assert step ${step.id} failed: expected ${JSON.stringify(result.expected)}, got ${JSON.stringify(result.actual)}`);
+        return {
+          error: `Assert step ${step.id} failed: expected ${JSON.stringify(result.expected)}, got ${JSON.stringify(result.actual)}`,
+          input,
+          output: result
+        };
       }
-      return {
-        input: { expected: result.expected, path: step.path },
-        output: result
-      };
+      return { input, output: result };
     }
     if (step.kind === "template") {
       const output = resolveTemplateString(step.template, bag);
       return { input: { template: step.template }, output };
     }
-    throw new Error(`Unsupported workflow step kind: ${step.kind}`);
+    throw new Error("Unsupported workflow step kind.");
   }
 }
 function readToolError(output) {
-  if (!output || typeof output !== "object" || Array.isArray(output)) {
+  if (!(output instanceof Object) || Array.isArray(output)) {
     return null;
   }
-  const record = output;
-  if (typeof record.error !== "string" || !record.error.trim()) {
+  const record = parseWorkflowRecord(output);
+  const error = record.error;
+  if (error === undefined || error === null || error !== String(error) || !error.trim()) {
     return null;
   }
-  return Object.keys(record).length === 1 ? record.error : null;
+  return Object.keys(record).length === 1 ? error : null;
 }
 
 // src/workflow-service.ts
 import { Database } from "bun:sqlite";
-
-// src/workflow-validate.ts
 function validateWorkflowInput(input) {
   const name = input.name?.trim() ?? "";
   if (!name) {
@@ -462,13 +514,15 @@ function validateWorkflowInput(input) {
   }
 }
 
-// src/workflow-service.ts
 class WorkflowService {
   orgId;
   db;
   constructor(path, orgId) {
     this.orgId = orgId;
     this.db = new Database(path, { strict: true });
+    if (path !== ":memory:") {
+      this.db.exec("PRAGMA synchronous = EXTRA");
+    }
     this.db.exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
   }
   close() {
@@ -671,30 +725,30 @@ async function run(input, context) {
   const host = context.host;
   try {
     if (context.actionKey === "database") {
-      return host({ op: "workflow_database", table: input.table });
+      return input.table ? host({ op: "workflow_database", table: input.table }) : host({ op: "workflow_database" });
     }
     if (context.actionKey === "profiles") {
       return host({ op: "profiles" });
     }
     if (context.actionKey === "import_legacy") {
       const legacy = await host({ op: "legacy_workflows" });
-      return service.importLegacy(legacy);
+      return parseWorkflowValue(await service.importLegacy(legacy));
     }
     if (context.actionKey === "list_workflows") {
-      return service.listForOrg();
+      return parseWorkflowValue(await service.listForOrg());
     }
     const existing = input.workflowId ? await service.get(input.workflowId) : null;
     if (input.workflowId && !existing) {
       throw new Error("Workflow not found.");
     }
     if (context.actionKey === "get_workflow") {
-      return existing;
+      return parseWorkflowValue(existing);
     }
     if (context.actionKey === "runs") {
-      return service.listRuns(input.workflowId);
+      return parseWorkflowValue(await service.listRuns(input.workflowId));
     }
     if (context.actionKey === "get_run") {
-      return service.getRun(input.workflowId, input.runId);
+      return parseWorkflowValue(await service.getRun(input.workflowId, input.runId));
     }
     if (context.actionKey === "delete_run") {
       return {
@@ -713,6 +767,54 @@ async function run(input, context) {
     if (context.actionKey === "tools") {
       return host({ agentId, op: "tools" });
     }
+    const runner = new WorkflowRunner(service, {
+      executeTool: (id, name, args, runId, workflowId) => host({
+        agentId: id,
+        input: args,
+        name,
+        op: "execute_tool",
+        runId,
+        workflowId
+      }),
+      runWorkflowSummarize: async (_org, id, prompt, bag) => host({ agentId: id, bag, op: "summarize", prompt })
+    });
+    if (context.actionKey === "test_step") {
+      const started = Date.now();
+      try {
+        const steps = input.steps ?? [];
+        const index = steps.findIndex((entry) => entry.id === input.stepId);
+        const step = steps[index];
+        if (!step || step.kind === "summarize") {
+          throw new Error("Choose a tool, compare, assert, or template step.");
+        }
+        const earlier = steps.slice(0, index);
+        const tools = await host({ agentId, op: "tools" });
+        validateWorkflowSteps([
+          ...earlier,
+          step,
+          { id: "__try_summary", kind: "summarize", prompt: "-" }
+        ], new Set([
+          ...tools.map((tool) => tool.name),
+          ...earlier.flatMap((entry) => entry.kind === "tool" ? [entry.tool] : [])
+        ]));
+        const [latest] = existing ? await service.listRuns(existing.id) : [];
+        const outputs = Object.fromEntries((latest?.steps ?? []).filter((receipt) => receipt.status === "completed").map((receipt) => [
+          receipt.stepId,
+          parseWorkflowValue(receipt.output)
+        ]));
+        const result = await runner.executeDataStep(step, buildReceiptBag(input.input ?? parseWorkflowRecord(latest?.input ?? {}), outputs), {
+          profileId: agentId,
+          runId: `test_${crypto.randomUUID()}`,
+          workflowId: existing?.id ?? "draft"
+        });
+        return { ...result, durationMs: Date.now() - started };
+      } catch (error) {
+        return {
+          durationMs: Date.now() - started,
+          error: error instanceof Error ? error.message : String(error)
+        };
+      }
+    }
     if (context.actionKey === "create_workflow" || context.actionKey === "update_workflow") {
       const tools = await host({ agentId, op: "tools" });
       const allowed = new Set(tools.map((tool) => tool.name));
@@ -722,20 +824,21 @@ async function run(input, context) {
           Object.assign(changes, { [key]: input[key] });
         }
       }
-      return context.actionKey === "create_workflow" ? await service.create(changes, agentId, allowed) : await service.update(input.workflowId, changes, allowed);
+      if (context.actionKey === "create_workflow") {
+        if (!(changes.name && changes.steps)) {
+          throw new Error("Workflow name and steps are required.");
+        }
+        const request = {
+          ...changes,
+          description: changes.description ?? changes.name,
+          name: changes.name,
+          steps: changes.steps
+        };
+        return parseWorkflowValue(await service.create(request, agentId, allowed));
+      }
+      return parseWorkflowValue(await service.update(input.workflowId, changes, allowed));
     }
     if (context.actionKey === "run_workflow") {
-      const runner = new WorkflowRunner(service, {
-        executeTool: (id, name, args, runId, workflowId) => host({
-          agentId: id,
-          input: args,
-          name,
-          op: "execute_tool",
-          runId,
-          workflowId
-        }),
-        runWorkflowSummarize: async (_org, id, prompt, bag) => await host({ agentId: id, bag, op: "summarize", prompt })
-      });
       const result = await runner.run(input.workflowId, input.input ?? {});
       if (result.skipped) {
         throw new Error(result.error ?? "Workflow run skipped.");

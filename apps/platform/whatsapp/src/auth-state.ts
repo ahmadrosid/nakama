@@ -17,6 +17,7 @@ export async function usePrivateMultiFileAuthState(directory: string) {
   await chmod(directory, PRIVATE_DIR_MODE);
 
   const entries = await readdir(directory, { withFileTypes: true });
+
   for (const entry of entries) {
     if (entry.isFile()) {
       await chmod(join(directory, entry.name), PRIVATE_FILE_MODE);

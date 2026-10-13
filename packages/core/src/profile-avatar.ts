@@ -12,20 +12,20 @@ import { getProfileSoulDir } from "./soul/resolve";
 
 const AVATAR_BASENAME = "avatar";
 
-const MEDIA_TYPE_TO_EXTENSION: Record<string, string> = {
+const MEDIA_TYPE_TO_EXTENSION = {
   "image/gif": "gif",
   "image/jpeg": "jpg",
   "image/png": "png",
   "image/webp": "webp",
-};
+} satisfies Record<string, string>;
 
-const EXTENSION_TO_MEDIA_TYPE: Record<string, string> = {
+const EXTENSION_TO_MEDIA_TYPE = {
   gif: "image/gif",
   jpeg: "image/jpeg",
   jpg: "image/jpeg",
   png: "image/png",
   webp: "image/webp",
-};
+} satisfies Record<string, string>;
 
 export interface ProfileAvatarData {
   bytes: Buffer;
@@ -43,7 +43,9 @@ export function getProfileAvatarPath(
     return join(directory, AVATAR_BASENAME);
   }
 
-  const extension = MEDIA_TYPE_TO_EXTENSION[mediaType];
+  const extension = Object.entries(MEDIA_TYPE_TO_EXTENSION).find(
+    ([type]) => type === mediaType
+  )?.[1];
 
   if (!extension) {
     throw new Error(`Unsupported avatar media type: ${mediaType}`);
@@ -73,6 +75,7 @@ export async function saveProfileAvatar(
   const base64 = attachment.data.includes(",")
     ? (attachment.data.split(",")[1] ?? "")
     : attachment.data;
+
   const bytes = Buffer.from(base64, "base64");
   const filePath = getProfileAvatarPath(orgId, profileId, attachment.mediaType);
 
@@ -90,7 +93,10 @@ export async function readProfileAvatar(
   }
 
   const extension = filePath.slice(filePath.lastIndexOf(".") + 1).toLowerCase();
-  const mediaType = EXTENSION_TO_MEDIA_TYPE[extension];
+
+  const mediaType = Object.entries(EXTENSION_TO_MEDIA_TYPE).find(
+    ([candidate]) => candidate === extension
+  )?.[1];
 
   if (!mediaType) {
     return null;
@@ -135,7 +141,11 @@ async function findProfileAvatarFile(
 
     const extension = entry.slice(entry.lastIndexOf(".") + 1).toLowerCase();
 
-    if (EXTENSION_TO_MEDIA_TYPE[extension]) {
+    if (
+      Object.entries(EXTENSION_TO_MEDIA_TYPE).some(
+        ([candidate]) => candidate === extension
+      )
+    ) {
       return join(directory, entry);
     }
   }

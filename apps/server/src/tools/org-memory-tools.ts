@@ -1,52 +1,55 @@
 import {
   emptyObjectSchema,
   getProfileSharedDocumentIds,
+  type JsonValue,
   type KnowledgeBaseDocument,
   listKnowledgeBaseDocuments,
   listOrganizationKnowledgeBaseDocuments,
-  type OrgRole,
+  requireToolOrgMember,
   type ToolContext,
   type ToolDefinition,
 } from "@nakama/core";
+import { z } from "zod";
 import type { OrgMemoryService } from "../services/org-memory-service";
 
 /** The one org-memory tool that writes. Cognito sessions drop it. */
 export const PROPOSE_ORG_MEMORY_TOOL_NAME = "propose_org_memory";
 
+const OrgMemoryInputSchema = z.object({
+  bullet: z.string().optional().catch(undefined),
+  sourceDocumentIds: z.array(z.json()).optional().catch([]),
+});
+
+const OrgMemorySearchInputSchema = z.object({
+  query: z.string().optional().catch(undefined),
+});
+
 function requireOrgId(context: ToolContext): string {
   const orgId = context.orgId?.trim();
+
   if (!orgId) {
     throw new Error("Organization context is required.");
   }
+
   return orgId;
 }
 
 /**
- * Deny-by-default role gate for org-memory tools. Viewers are blocked; an
+ * Deny-by-default role gate for org-memory tools. Membership is required; an
  * undefined role (no user context) also blocks. Automation/task runners pass
  * an explicit `orgRole: "member"`; sub-agents inherit the parent role.
  */
-function requireOrgMemoryAccess(context: ToolContext): {
-  orgId: string;
-  role: OrgRole;
-} {
+function requireOrgMemoryAccess(context: ToolContext) {
   const orgId = requireOrgId(context);
-  const role = context.orgRole;
-  if (role === undefined || role === null) {
-    throw new Error("Org memory tools require an organization role.");
-  }
-  if (role === "viewer") {
-    throw new Error("Viewers cannot access org memory.");
-  }
-  return { orgId, role };
+  requireToolOrgMember(context);
+
+  return { orgId };
 }
 
-function readString(input: unknown, key: string): string | null {
-  if (typeof input !== "object" || input === null || !(key in input)) {
-    return null;
-  }
-  const value = (input as Record<string, unknown>)[key];
-  return typeof value === "string" && value.trim() ? value.trim() : null;
+function readBullet(
+  input: z.infer<typeof OrgMemoryInputSchema>
+): string | null {
+  return input.bullet?.trim() || null;
 }
 
 /**
@@ -58,16 +61,14 @@ function readString(input: unknown, key: string): string | null {
 async function resolveSourceDocumentIds(
   orgId: string,
   profileId: string | null | undefined,
-  raw: unknown
+  raw: JsonValue[] | undefined
 ): Promise<string[] | undefined> {
   if (raw === undefined) {
     return undefined;
   }
-  if (!Array.isArray(raw)) {
-    return [];
-  }
+
   if (!profileId?.trim()) {
-    return raw.filter((entry): entry is string => typeof entry === "string");
+    return raw.flatMap((entry) => z.string().safeParse(entry).data ?? []);
   }
 
   const [profileDocuments, sharedDocumentIds, organizationDocuments] =
@@ -76,18 +77,22 @@ async function resolveSourceDocumentIds(
       getProfileSharedDocumentIds(orgId, profileId),
       listOrganizationKnowledgeBaseDocuments(orgId),
     ]);
+
   const documents: KnowledgeBaseDocument[] = [
     ...profileDocuments,
     ...organizationDocuments.filter((document) =>
       sharedDocumentIds.includes(document.id)
     ),
   ];
+
   const byId = new Map<string, KnowledgeBaseDocument>();
   const byFilename = new Map<string, KnowledgeBaseDocument>();
+
   for (const document of documents) {
     byId.set(document.id, document);
     // Profile scope is listed first, so it wins a filename collision.
     const filename = document.filename.toLowerCase();
+
     if (!byFilename.has(filename)) {
       byFilename.set(filename, document);
     }
@@ -95,21 +100,30 @@ async function resolveSourceDocumentIds(
 
   const resolved: string[] = [];
   const seen = new Set<string>();
+
   for (const entry of raw) {
-    if (typeof entry !== "string") {
+    const parsedEntry = z.string().safeParse(entry);
+
+    if (!parsedEntry.success) {
       continue;
     }
-    const key = entry.trim();
+
+    const key = parsedEntry.data.trim();
+
     if (!key) {
       continue;
     }
+
     const document = byId.get(key) ?? byFilename.get(key.toLowerCase()) ?? null;
+
     if (!document || seen.has(document.id)) {
       continue;
     }
+
     seen.add(document.id);
     resolved.push(document.id);
   }
+
   return resolved;
 }
 
@@ -133,11 +147,14 @@ export function createOrgMemoryTools(
         type: "object",
       },
       async run(input, context: ToolContext) {
+        const parsedInput = OrgMemorySearchInputSchema.parse(input);
         const { orgId } = requireOrgMemoryAccess(context);
-        const query = readString(input, "query");
+        const query = parsedInput.query?.trim();
+
         if (!query) {
           throw new Error("query is required.");
         }
+
         return service.search(orgId, query);
       },
     },
@@ -149,6 +166,7 @@ export function createOrgMemoryTools(
       async run(_input, context: ToolContext) {
         const { orgId } = requireOrgMemoryAccess(context);
         const content = await service.getMemory(orgId);
+
         return { content };
       },
     },
@@ -176,17 +194,15 @@ export function createOrgMemoryTools(
         type: "object",
       },
       async run(input, context: ToolContext) {
+        const parsedInput = OrgMemoryInputSchema.safeParse(input);
+        const toolInput = parsedInput.success ? parsedInput.data : {};
         const { orgId } = requireOrgMemoryAccess(context);
-        const bullet = readString(input, "bullet");
+        const bullet = readBullet(toolInput);
+
         if (!bullet) {
           throw new Error("bullet is required.");
         }
-        const rawSourceIds =
-          typeof input === "object" &&
-          input !== null &&
-          "sourceDocumentIds" in input
-            ? (input as Record<string, unknown>).sourceDocumentIds
-            : undefined;
+
         return service.propose(orgId, {
           bullet,
           profileId: context.profileId ?? null,
@@ -195,7 +211,7 @@ export function createOrgMemoryTools(
           sourceDocumentIds: await resolveSourceDocumentIds(
             orgId,
             context.profileId,
-            rawSourceIds
+            toolInput.sourceDocumentIds
           ),
         });
       },
