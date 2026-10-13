@@ -132,6 +132,89 @@ function PluginDraftCard({
         findPluginTool(plugins, tool)?.plugin.pluginId === draft.pluginId
     );
 
+  return (
+    <section className="w-full rounded-xl bg-card shadow-sm ring-1 ring-border/80 dark:shadow-none">
+      <PluginDraftProgress
+        connected={connected}
+        connectedCount={connectedCount}
+        draft={draft}
+        enable={enable}
+        enableControl={
+          canEnable && plugin ? (
+            <Button
+              disabled={enable.isPending}
+              onClick={() =>
+                enable.mutate({
+                  expectedRevision: plugin.revision,
+                  pluginId: plugin.pluginId,
+                })
+              }
+              size="sm"
+            >
+              {enable.isPending ? <Spinner className="size-4" /> : null}
+              Enable plugin
+            </Button>
+          ) : null
+        }
+        enabled={enabled}
+        installed={installed}
+        isPlatformAdmin={isPlatformAdmin}
+        onConnect={setConnecting}
+        plugin={plugin}
+        reviewControl={
+          isPlatformAdmin && activeOrg ? (
+            <LocalPluginInstaller
+              draft={{ draftId: draft.draftId, profileId: draft.profileId }}
+              orgId={activeOrg.id}
+            />
+          ) : null
+        }
+        reviewInstruction={
+          isPlatformAdmin
+            ? "Review the files, then install."
+            : "Waiting for a platform admin"
+        }
+        tried={tried}
+      />
+      {connecting ? (
+        <PluginAgentAccessDialog
+          onClose={() => setConnecting(null)}
+          plugin={connecting}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function PluginDraftProgress({
+  reviewControl,
+  reviewInstruction,
+  enableControl,
+  connected,
+  connectedCount,
+  draft,
+  enable,
+  enabled,
+  installed,
+  isPlatformAdmin,
+  plugin,
+  onConnect,
+  tried,
+}: {
+  reviewControl: ReactNode;
+  reviewInstruction: string;
+  enableControl: ReactNode;
+  connected: boolean | undefined;
+  connectedCount: number;
+  draft: PluginDraft;
+  enable: ReturnType<typeof useEnableOrgPlugin>;
+  enabled: boolean | undefined;
+  installed: boolean | undefined;
+  isPlatformAdmin: boolean;
+  plugin: OrgPluginDetail | undefined;
+  onConnect(plugin: OrgPluginDetail): void;
+  tried: boolean | undefined;
+}) {
   const action = draft.actions[0] ?? "its tool";
 
   const steps: Array<{
@@ -146,38 +229,15 @@ function PluginDraftCard({
       title: "Drafted",
     },
     {
-      controls:
-        isPlatformAdmin && activeOrg ? (
-          <LocalPluginInstaller
-            draft={{ draftId: draft.draftId, profileId: draft.profileId }}
-            orgId={activeOrg.id}
-          />
-        ) : null,
+      controls: reviewControl,
       detail: installed
         ? `Version ${draft.version} installed`
-        : isPlatformAdmin
-          ? "Review the files, then install."
-          : "Waiting for a platform admin",
+        : reviewInstruction,
       done: Boolean(installed),
       title: "Review and install",
     },
     {
-      controls:
-        canEnable && plugin ? (
-          <Button
-            disabled={enable.isPending}
-            onClick={() =>
-              enable.mutate({
-                expectedRevision: plugin.revision,
-                pluginId: plugin.pluginId,
-              })
-            }
-            size="sm"
-          >
-            {enable.isPending ? <Spinner className="size-4" /> : null}
-            Enable plugin
-          </Button>
-        ) : null,
+      controls: enableControl,
       detail: enable.error
         ? formatError(enable.error)
         : enabled
@@ -189,7 +249,7 @@ function PluginDraftCard({
     {
       controls:
         isPlatformAdmin && plugin ? (
-          <Button onClick={() => setConnecting(plugin)} size="sm">
+          <Button onClick={() => onConnect(plugin)} size="sm">
             Choose profiles
           </Button>
         ) : null,
@@ -209,7 +269,7 @@ function PluginDraftCard({
   const current = steps.findIndex((step) => !step.done);
 
   return (
-    <section className="w-full rounded-xl bg-card shadow-sm ring-1 ring-border/80 dark:shadow-none">
+    <>
       <header className="flex items-center justify-between gap-3 border-border border-b px-4 py-3">
         <div className="min-w-0">
           <h3 className="truncate font-medium text-foreground text-sm">
@@ -278,12 +338,6 @@ function PluginDraftCard({
           );
         })}
       </ol>
-      {connecting ? (
-        <PluginAgentAccessDialog
-          onClose={() => setConnecting(null)}
-          plugin={connecting}
-        />
-      ) : null}
-    </section>
+    </>
   );
 }

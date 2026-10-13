@@ -712,6 +712,182 @@ function formatJsonForReview(text: string): string {
   }
 }
 
+function LocalPluginReviewFiles({
+  disabled,
+  file,
+  files,
+  onClose,
+  onRead,
+  reviewed,
+}: {
+  disabled: boolean;
+  file: { path: string; content: string } | null;
+  files: LocalPluginPreviewResponse["files"];
+  onClose(): void;
+  onRead(path: string): Promise<void>;
+  reviewed: Set<string>;
+}) {
+  return (
+    <>
+      {LOCAL_REVIEW_GROUPS.map(([label, pattern], index) => {
+        const groupFiles = files.filter(
+          (item) =>
+            LOCAL_REVIEW_GROUPS.findIndex(([, match]) =>
+              match.test(item.path)
+            ) === index
+        );
+
+        if (groupFiles.length === 0) {
+          return null;
+        }
+
+        const runs = index < 3;
+
+        return (
+          <section className="min-w-0" key={String(pattern)}>
+            <h3
+              className={cn(
+                "mb-1.5 font-semibold text-xs uppercase tracking-wide",
+                runs ? "text-primary" : "text-muted-foreground"
+              )}
+            >
+              {label}
+            </h3>
+            <ul
+              className={cn(
+                "divide-y overflow-hidden rounded-lg border",
+                runs && "border-primary/40"
+              )}
+            >
+              {groupFiles.map((item) => {
+                const open = file?.path === item.path;
+                const read = reviewed.has(item.path);
+
+                return (
+                  <li key={item.path}>
+                    <button
+                      aria-expanded={open}
+                      className={cn(
+                        "flex min-h-11 w-full items-center gap-2.5 px-3 text-left text-sm disabled:opacity-60",
+                        open && "bg-muted/60"
+                      )}
+                      disabled={disabled}
+                      onClick={() => (open ? onClose() : onRead(item.path))}
+                      type="button"
+                    >
+                      {open ? (
+                        <ArrowDown01Icon aria-hidden className="size-4" />
+                      ) : (
+                        <ArrowRight01Icon aria-hidden className="size-4" />
+                      )}
+                      <span className="min-w-0 flex-1 truncate font-mono text-[13px]">
+                        {item.path}
+                      </span>
+                      <span className="text-muted-foreground text-xs">
+                        {formatBytes(item.size)}
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 font-medium text-xs",
+                          read
+                            ? "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300"
+                            : "border text-muted-foreground"
+                        )}
+                      >
+                        {read ? "Read" : "Not read"}
+                      </span>
+                    </button>
+                    {open ? (
+                      <pre
+                        aria-label={file.path}
+                        className="max-h-72 overflow-auto whitespace-pre-wrap break-all border-t bg-background p-3 font-mono text-xs leading-relaxed"
+                      >
+                        {file.content}
+                      </pre>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        );
+      })}
+    </>
+  );
+}
+
+function LocalPluginDraftPicker({
+  disabled,
+  draftId,
+  error,
+  open,
+  orgId,
+  profileId,
+  onDraftChange,
+  onProfileChange,
+  onPreview,
+}: {
+  disabled: boolean;
+  draftId: string;
+  error: string | null;
+  open: boolean;
+  orgId: string;
+  profileId: string;
+  onDraftChange(value: string): void;
+  onProfileChange(value: string): void;
+  onPreview(): Promise<void>;
+}) {
+  const profiles = useQuery({
+    enabled: open,
+    queryFn: () => client.listProfiles(orgId),
+    queryKey: ["plugin-draft-profiles", orgId],
+  });
+
+  return (
+    <>
+      <Select
+        disabled={disabled}
+        onValueChange={(value) => {
+          onProfileChange(value ?? "");
+        }}
+        value={profileId}
+      >
+        <SelectTrigger aria-label="Super Bot">
+          <SelectValue placeholder="Super Bot" />
+        </SelectTrigger>
+        <SelectContent>
+          {(profiles.data?.profiles ?? [])
+            .filter((profile) => profile.isSuper)
+            .map((profile) => (
+              <SelectItem key={profile.id} value={profile.id}>
+                {profile.name}
+              </SelectItem>
+            ))}
+        </SelectContent>
+      </Select>
+      <Input
+        aria-label="Draft ID"
+        disabled={disabled}
+        onChange={(event) => {
+          onDraftChange(event.target.value);
+        }}
+        placeholder="Draft ID"
+        value={draftId}
+      />
+      {profiles.error ? (
+        <p role="alert">{formatError(profiles.error)}</p>
+      ) : null}
+      {error ? <p role="alert">{error}</p> : null}
+      <Button
+        disabled={!(profileId && draftId) || disabled}
+        onClick={onPreview}
+      >
+        Preview draft
+      </Button>
+    </>
+  );
+}
+
 export function LocalPluginInstaller({
   draft,
   orgId,
@@ -735,12 +911,6 @@ export function LocalPluginInstaller({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const generation = useRef(0);
-
-  const profiles = useQuery({
-    enabled: open && !draft,
-    queryFn: () => client.listProfiles(orgId),
-    queryKey: ["plugin-draft-profiles", orgId],
-  });
 
   const install = useInstallLocalPlugin();
 
@@ -890,52 +1060,28 @@ export function LocalPluginInstaller({
         <DialogHeader>
           <DialogTitle>Install from folder</DialogTitle>
         </DialogHeader>
-        {draft ? null : (
-          <>
-            <Select
-              disabled={pending || install.isPending}
-              onValueChange={(value) => {
-                reset();
-                setProfileId(value ?? "");
-              }}
-              value={profileId}
-            >
-              <SelectTrigger aria-label="Super Bot">
-                <SelectValue placeholder="Super Bot" />
-              </SelectTrigger>
-              <SelectContent>
-                {(profiles.data?.profiles ?? [])
-                  .filter((profile) => profile.isSuper)
-                  .map((profile) => (
-                    <SelectItem key={profile.id} value={profile.id}>
-                      {profile.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-            <Input
-              aria-label="Draft ID"
-              disabled={pending || install.isPending}
-              onChange={(event) => {
-                reset();
-                setDraftId(event.target.value);
-              }}
-              placeholder="Draft ID"
-              value={draftId}
-            />
-          </>
-        )}
-        {profiles.error ? (
-          <p role="alert">{formatError(profiles.error)}</p>
-        ) : null}
-        {error ? <p role="alert">{error}</p> : null}
-        {draft ? null : (
-          <Button
-            disabled={!(profileId && draftId) || pending || install.isPending}
-            onClick={loadPreview}
-          >
-            Preview draft
-          </Button>
+        {draft ? (
+          error ? (
+            <p role="alert">{error}</p>
+          ) : null
+        ) : (
+          <LocalPluginDraftPicker
+            disabled={pending || install.isPending}
+            draftId={draftId}
+            error={error}
+            onDraftChange={(value) => {
+              reset();
+              setDraftId(value);
+            }}
+            onPreview={loadPreview}
+            onProfileChange={(value) => {
+              reset();
+              setProfileId(value);
+            }}
+            open={open}
+            orgId={orgId}
+            profileId={profileId}
+          />
         )}
         {preview ? (
           <>
@@ -951,94 +1097,14 @@ export function LocalPluginInstaller({
                 migrations. Reinstall resumes an enabled plugin.
               </p>
             </div>
-            {LOCAL_REVIEW_GROUPS.map(([label, pattern], index) => {
-              const files = preview.files.filter(
-                (item) =>
-                  LOCAL_REVIEW_GROUPS.findIndex(([, match]) =>
-                    match.test(item.path)
-                  ) === index
-              );
-
-              if (files.length === 0) {
-                return null;
-              }
-
-              const runs = index < 3;
-
-              return (
-                <section className="min-w-0" key={String(pattern)}>
-                  <h3
-                    className={cn(
-                      "mb-1.5 font-semibold text-xs uppercase tracking-wide",
-                      runs ? "text-primary" : "text-muted-foreground"
-                    )}
-                  >
-                    {label}
-                  </h3>
-                  <ul
-                    className={cn(
-                      "divide-y overflow-hidden rounded-lg border",
-                      runs && "border-primary/40"
-                    )}
-                  >
-                    {files.map((item) => {
-                      const open = file?.path === item.path;
-                      const read = reviewed.has(item.path);
-
-                      return (
-                        <li key={item.path}>
-                          <button
-                            aria-expanded={open}
-                            className={cn(
-                              "flex min-h-11 w-full items-center gap-2.5 px-3 text-left text-sm disabled:opacity-60",
-                              open && "bg-muted/60"
-                            )}
-                            disabled={pending || install.isPending}
-                            onClick={() =>
-                              open ? setFile(null) : readFile(item.path)
-                            }
-                            type="button"
-                          >
-                            {open ? (
-                              <ArrowDown01Icon aria-hidden className="size-4" />
-                            ) : (
-                              <ArrowRight01Icon
-                                aria-hidden
-                                className="size-4"
-                              />
-                            )}
-                            <span className="min-w-0 flex-1 truncate font-mono text-[13px]">
-                              {item.path}
-                            </span>
-                            <span className="text-muted-foreground text-xs">
-                              {formatBytes(item.size)}
-                            </span>
-                            <span
-                              className={cn(
-                                "rounded-full px-2 py-0.5 font-medium text-xs",
-                                read
-                                  ? "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300"
-                                  : "border text-muted-foreground"
-                              )}
-                            >
-                              {read ? "Read" : "Not read"}
-                            </span>
-                          </button>
-                          {open ? (
-                            <pre
-                              aria-label={file.path}
-                              className="max-h-72 overflow-auto whitespace-pre-wrap break-all border-t bg-background p-3 font-mono text-xs leading-relaxed"
-                            >
-                              {file.content}
-                            </pre>
-                          ) : null}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </section>
-              );
-            })}
+            <LocalPluginReviewFiles
+              disabled={pending || install.isPending}
+              file={file}
+              files={preview.files}
+              onClose={() => setFile(null)}
+              onRead={readFile}
+              reviewed={reviewed}
+            />
             <DialogFooter className="sticky -bottom-4 z-10 items-center gap-3 bg-muted sm:justify-between">
               <span className="min-w-0 truncate font-mono text-muted-foreground text-xs">
                 sha256 {preview.digest}
