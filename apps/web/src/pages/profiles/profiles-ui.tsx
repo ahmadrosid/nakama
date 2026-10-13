@@ -122,6 +122,7 @@ export function EditableProfileAvatar({
   const [colorIndex, setColorIndex] = useState(
     () => moodstoneIndexes(profile.id || profile.name || "?").colorIndex
   );
+
   const [previewAvatarIndex, setPreviewAvatarIndex] = useState<number | null>(
     null
   );
