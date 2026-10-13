@@ -1026,11 +1026,11 @@ function ToolTimelineDetails({
       {query ? (
         <DetailBlock content={query} label="Query" tone="command" />
       ) : null}
-      {images.map((image, index) => (
+      {images.map((image) => (
         <img
           alt="Tool result"
           className="max-h-96 max-w-full rounded-md border border-border"
-          key={index}
+          key={image.data}
           src={toolResultImageSrc(image)}
         />
       ))}

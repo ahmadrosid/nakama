@@ -81,6 +81,24 @@ function shouldAutoscrollOnHeightGrowth(atBottom: boolean): boolean {
 /** Growth right after a button click is the user expanding something: let it grow down, don't re-pin. */
 const USER_TOGGLE_PIN_PAUSE_MS = 600;
 
+function useUserTogglePinPause() {
+  const userToggleAtRef = useRef(0);
+
+  const onClickCapture = useCallback((event: MouseEvent<HTMLElement>) => {
+    if (event.target instanceof Element && event.target.closest("button")) {
+      userToggleAtRef.current = performance.now();
+    }
+  }, []);
+
+  const isPinPaused = useCallback(
+    () =>
+      performance.now() - userToggleAtRef.current <= USER_TOGGLE_PIN_PAUSE_MS,
+    []
+  );
+
+  return { isPinPaused, onClickCapture };
+}
+
 /** Top/bottom inset as Virtuoso Header/Footer — never put padding on the scroller. */
 function VirtuosoEdgePad() {
   return <div aria-hidden className="h-4 shrink-0" />;
@@ -192,7 +210,8 @@ function ChatMessageListSession({
   const stickIntentRef = useRef(true);
   const lastListHeightRef = useRef(0);
   const didInitialPinRef = useRef(false);
-  const userToggleAtRef = useRef(0);
+  const userTogglePinPause = useUserTogglePinPause();
+  const { isPinPaused } = userTogglePinPause;
   const [isAtBottom, setIsAtBottom] = useState(true);
   const canPreviewCitations = useOptionalChatAttachmentPanel() !== null;
 
@@ -302,19 +321,13 @@ function ChatMessageListSession({
       if (
         height > previous &&
         shouldAutoscrollOnHeightGrowth(stickIntentRef.current) &&
-        performance.now() - userToggleAtRef.current > USER_TOGGLE_PIN_PAUSE_MS
+        !isPinPaused()
       ) {
         pinLatest("auto");
       }
     },
-    [pinLatest]
+    [isPinPaused, pinLatest]
   );
-
-  const handleClickCapture = useCallback((event: MouseEvent<HTMLElement>) => {
-    if (event.target instanceof Element && event.target.closest("button")) {
-      userToggleAtRef.current = performance.now();
-    }
-  }, []);
 
   const renderTurn = useCallback(
     (turnIndex: number, turn: MessageTurn) => {
@@ -417,7 +430,7 @@ function ChatMessageListSession({
     <ConversationStickinessProvider value={stickiness}>
       <Conversation
         className={cn("min-h-0 flex-1", className)}
-        onClickCapture={handleClickCapture}
+        onClickCapture={userTogglePinPause.onClickCapture}
       >
         <Virtuoso
           atBottomStateChange={handleAtBottomStateChange}
