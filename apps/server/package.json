@@ -13,7 +13,7 @@
     "@agentclientprotocol/codex-acp": "2.1.1",
     "@agentclientprotocol/sdk": "1.7.0",
     "@anthropic-ai/sdk": "^0.120.0",
-    "@composio/core": "^0.19.0",
+    "@composio/core": "^0.23.0",
     "@google/genai": "^2.7.0",
     "@hono/zod-openapi": "^1.4.0",
     "@modelcontextprotocol/sdk": "^1.30.1",
