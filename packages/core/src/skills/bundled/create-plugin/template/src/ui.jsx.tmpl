@@ -7,6 +7,7 @@ import css from "./ui.css" with { type: "text" };
 
 export const inject = ["slots", "host", "styles", "ui"];
 
+/** @param {import("./nakama-plugin").PluginContext} ctx */
 export function apply(ctx) {
   const React = ctx.React;
   const { Button, Input, Spinner } = ctx.ui;
@@ -75,7 +76,7 @@ export function apply(ctx) {
   }
 
   // Shown in chat when an agent calls the action as a tool.
-  function ToolCard({ result, status }) {
+  function ToolCard({ result = null, status }) {
     if (status === "running") {
       return <p className="plugin-muted">Running…</p>;
     }

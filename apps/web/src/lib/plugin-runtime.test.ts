@@ -542,3 +542,21 @@ test("the Workflows plugin owns the run result renderer", async () => {
   expect(html).toContain("2 words");
   expect(html).toContain("Fetch News");
 });
+
+test("the plugin template types list every ctx.ui export", async () => {
+  const types = await Bun.file(
+    new URL(
+      "../../../../packages/core/src/skills/bundled/create-plugin/template/src/nakama-plugin.d.ts.tmpl",
+      import.meta.url
+    )
+  ).text();
+  const body = types.slice(
+    types.indexOf("export interface PluginUi {"),
+    types.indexOf("export interface PluginToolProps")
+  );
+  const typed = [...body.matchAll(/^ {2}([A-Z]\w*):/gm)].map(
+    ([, name]) => name
+  );
+
+  expect(typed.sort()).toEqual(Object.keys(ui).sort());
+});

@@ -1,0 +1,240 @@
+// Types for the ctx object that the host passes to apply() in src/ui.jsx.
+// Reference only: the host supplies every value at runtime. Do not import it.
+// Every export of ctx.ui is listed below; anything missing is not available.
+
+type Node = unknown;
+type Component<P = {}> = (props: P) => Node;
+type Children = { children?: Node };
+type Html = Children & {
+  className?: string;
+  id?: string;
+  style?: Record<string, string | number>;
+  "aria-label"?: string;
+  [prop: `data-${string}` | `aria-${string}`]: unknown;
+};
+type Field = Html & {
+  value?: string | number;
+  defaultValue?: string | number;
+  placeholder?: string;
+  disabled?: boolean;
+  name?: string;
+  onChange?: (event: { target: { value: string } }) => void;
+};
+type Open = Children & {
+  open?: boolean;
+  defaultOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+};
+type Positioned = Html & {
+  side?: "top" | "right" | "bottom" | "left";
+  align?: "start" | "center" | "end";
+  sideOffset?: number;
+};
+/** Pass `render={<Button variant="outline" />}` to make a trigger use a Button. */
+type Trigger = Html & { render?: Node; disabled?: boolean };
+
+export interface PluginUi {
+  Button: Component<
+    Html & {
+      variant?:
+        | "default"
+        | "outline"
+        | "ghost"
+        | "secondary"
+        | "destructive"
+        | "link";
+      size?: "default" | "xs" | "sm" | "lg" | "icon";
+      type?: "button" | "submit" | "reset";
+      disabled?: boolean;
+      onClick?: (event: unknown) => void;
+    }
+  >;
+  /** Has a shadow. Use a bordered .plugin-panel instead. */
+  Card: Component<Html>;
+  CardHeader: Component<Html>;
+  CardTitle: Component<Html>;
+  CardDescription: Component<Html>;
+  CardContent: Component<Html>;
+  CardFooter: Component<Html>;
+  Checkbox: Component<
+    Html & {
+      checked?: boolean;
+      defaultChecked?: boolean;
+      disabled?: boolean;
+      onCheckedChange?: (checked: boolean) => void;
+    }
+  >;
+  CodeBlock: Component<{
+    code: string;
+    lang?: string | null;
+    className?: string;
+    fillHeight?: boolean;
+  }>;
+  Command: Component<Html & { shouldFilter?: boolean }>;
+  CommandDialog: Component<
+    Open & { title?: string; description?: string; showCloseButton?: boolean }
+  >;
+  CommandInput: Component<
+    Html & { value?: string; onValueChange?: (value: string) => void; placeholder?: string }
+  >;
+  CommandList: Component<Html>;
+  CommandEmpty: Component<Html>;
+  CommandGroup: Component<Html & { heading?: Node }>;
+  CommandItem: Component<
+    Html & { value?: string; disabled?: boolean; onSelect?: (value: string) => void }
+  >;
+  CommandSeparator: Component<Html>;
+  CommandShortcut: Component<Html>;
+  Dialog: Component<Open>;
+  DialogTrigger: Component<Trigger>;
+  DialogPortal: Component<Children>;
+  DialogOverlay: Component<Html>;
+  DialogContent: Component<Html & { showCloseButton?: boolean }>;
+  DialogHeader: Component<Html>;
+  DialogTitle: Component<Html>;
+  DialogDescription: Component<Html>;
+  DialogFooter: Component<Html & { showCloseButton?: boolean }>;
+  DialogClose: Component<Trigger>;
+  /** A ready confirm dialog. Mount it to open it; onClose unmounts it. */
+  ConfirmDialog: Component<{
+    title: string;
+    description: Node;
+    confirmLabel?: string;
+    onConfirm: () => Promise<unknown>;
+    onClose: () => void;
+  }>;
+  DropdownMenu: Component<Open>;
+  DropdownMenuTrigger: Component<Trigger>;
+  DropdownMenuContent: Component<Positioned>;
+  DropdownMenuItem: Component<
+    Html & {
+      variant?: "default" | "destructive";
+      disabled?: boolean;
+      onClick?: (event: unknown) => void;
+    }
+  >;
+  ExpandableTextarea: Component<{
+    label: string;
+    htmlFor: string;
+    value: string;
+    onChange: (event: { target: { value: string } }) => void;
+    onSave?: () => boolean | void | Promise<boolean | void>;
+    disabled?: boolean;
+    placeholder?: string;
+    dialogTitle?: string;
+  }>;
+  /** A label above one control. Give the control the same id. */
+  FormField: Component<{
+    id?: string;
+    label: Node;
+    children: Node;
+    className?: string;
+    density?: "default" | "compact";
+    footer?: Node;
+  }>;
+  Input: Component<
+    Field & {
+      type?: string;
+      onKeyDown?: (event: { key: string; preventDefault(): void }) => void;
+    }
+  >;
+  InputGroup: Component<Html>;
+  InputGroupAddon: Component<
+    Html & { align?: "inline-start" | "inline-end" | "block-start" | "block-end" }
+  >;
+  InputGroupButton: Component<
+    Html & {
+      size?: "xs" | "sm" | "icon-xs" | "icon-sm";
+      variant?: "default" | "outline" | "ghost" | "secondary";
+      disabled?: boolean;
+      onClick?: (event: unknown) => void;
+    }
+  >;
+  InputGroupInput: Component<Field>;
+  InputGroupText: Component<Html>;
+  InputGroupTextarea: Component<Field & { rows?: number }>;
+  /** Animated dot matrix used for loading art. Rarely needed. */
+  Matrix: Component<Html & { rows: number; cols: number }>;
+  Popover: Component<Open>;
+  PopoverTrigger: Component<Trigger>;
+  PopoverContent: Component<Positioned>;
+  PopoverHeader: Component<{ title: string }>;
+  Select: Component<
+    Children & {
+      value?: string | null;
+      defaultValue?: string | null;
+      onValueChange?: (value: string | null) => void;
+      items?: Array<{ label: Node; value: string }>;
+      disabled?: boolean;
+    }
+  >;
+  SelectTrigger: Component<Html & { size?: "default" | "sm" }>;
+  SelectValue: Component<Html & { placeholder?: Node }>;
+  SelectContent: Component<Positioned>;
+  SelectItem: Component<Html & { value: string; disabled?: boolean }>;
+  Spinner: Component<{ className?: string }>;
+  Switch: Component<{
+    checked: boolean;
+    onCheckedChange: (checked: boolean) => void;
+    disabled?: boolean;
+    id?: string;
+    size?: "default" | "sm";
+    "aria-label"?: string;
+  }>;
+  Textarea: Component<Field & { rows?: number }>;
+  /** The host already mounts one. Plugins cannot raise toasts. */
+  Toaster: Component;
+  TooltipProvider: Component<Children & { delay?: number }>;
+  Tooltip: Component<Open>;
+  TooltipTrigger: Component<Trigger>;
+  TooltipContent: Component<Positioned>;
+}
+
+export interface PluginToolProps {
+  action: string;
+  input?: Record<string, unknown>;
+  result?: unknown;
+  status: "running" | "done";
+}
+
+export interface PluginPageProps {
+  /** Wrap buttons in this to show them in the page header. */
+  renderHeaderActions?: (children: Node) => Node;
+}
+
+export interface PluginReact {
+  createElement(type: unknown, props?: unknown, ...children: Node[]): Node;
+  Fragment: unknown;
+  useState<T>(initial: T | (() => T)): [T, (next: T | ((current: T) => T)) => void];
+  useEffect(effect: () => void | (() => void), deps?: unknown[]): void;
+  useMemo<T>(factory: () => T, deps: unknown[]): T;
+  useCallback<T extends (...args: never[]) => unknown>(callback: T, deps: unknown[]): T;
+  useRef<T>(initial: T): { current: T };
+  useId(): string;
+}
+
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      [element: string]: Html & Record<string, unknown>;
+    }
+  }
+}
+
+export interface PluginContext {
+  React: PluginReact;
+  ui: PluginUi;
+  host: { call(action: string, input?: unknown): Promise<unknown> };
+  slots: {
+    register(slot: "page", component: Component<PluginPageProps>): void;
+    register(slot: `tool:${string}`, component: Component<PluginToolProps>): void;
+  };
+  /** Adds a style tag. The host removes it when the plugin unloads. */
+  styles(css: string): void;
+  /** Runs setup now; the returned cleanup runs when the plugin unloads. */
+  effect(setup: () => () => void): void;
+  orgId: string;
+  pluginId: string;
+  theme: "dark" | "light";
+  signal: AbortSignal;
+}

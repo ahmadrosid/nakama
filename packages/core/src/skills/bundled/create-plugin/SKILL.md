@@ -22,7 +22,8 @@ bun <skill directory>/scripts/new-plugin.mjs <plugin-id> "<Plugin Name>" <action
 
 The script writes `plugin-drafts/<plugin-id>/` with a manifest, package.json,
 `src/<action-key>.js`, an example page in `src/ui.jsx` and `src/ui.css`,
-`src/BUILD.md`, and the built `actions/<action-key>.js` and `ui/app.js`.
+`src/nakama-plugin.d.ts` (types for `ctx`), `src/BUILD.md`, and the built
+`actions/<action-key>.js` and `ui/app.js`.
 It refuses an existing draft; edit that draft instead. Then replace the example
 action, page, description, and input schema with the real ones, and rebuild.
 
@@ -128,6 +129,9 @@ Make the page look like the rest of Nakama. Start from the template page.
   rows), `Input`, `Textarea`, `Select` parts, `Switch`, `Checkbox`, `Dialog`
   parts, `DropdownMenu` parts, `Tooltip`, `Spinner`. Do not build look-alike
   buttons or inputs from plain elements.
+- Read `src/nakama-plugin.d.ts` before you use a component. It lists every
+  `ctx`, `ctx.React`, and `ctx.ui` export with its props. Anything not listed
+  is not available: no `toast()`, no `cn()`, no icons.
 - No shadows: never set `box-shadow`. Do not use `Card`, because it adds a
   shadow; group content in a bordered `.plugin-panel` like the template.
 - Styling: Tailwind classes do not work in plugins. Put CSS in `src/ui.css`,
