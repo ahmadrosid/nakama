@@ -7,9 +7,13 @@ import css from "./ui.css" with { type: "text" };
 
 export const inject = ["slots", "host", "styles", "ui"];
 
+// JSX compiles to React.createElement, so components anywhere in this file
+// need this binding. apply() sets it before the host renders anything.
+let React;
+
 /** @param {import("./nakama-plugin").PluginContext} ctx */
 export function apply(ctx) {
-  const React = ctx.React;
+  React = ctx.React;
   const { Button, Input, Spinner } = ctx.ui;
 
   ctx.styles(css);

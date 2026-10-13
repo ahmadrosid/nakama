@@ -16,6 +16,8 @@
   --n-radius-sm: calc(var(--radius) - 4px);
   --n-font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
   --n-content-width: 720px;
+  /* Good numbers and gains. Use --destructive for bad ones. */
+  --n-positive: oklch(50.8% 0.118 165.612);
 
   .plugin-page {
     display: flex;
@@ -25,6 +27,11 @@
     color: var(--foreground);
     font-size: var(--n-text-base);
     line-height: 1.5;
+  }
+
+  /* ctx.ui Card ships a shadow; plugin pages use borders only. */
+  [data-slot="card"] {
+    box-shadow: none;
   }
 
   /* A bordered panel. Nakama uses borders, not shadows. */
@@ -73,4 +80,8 @@
     color: var(--muted-foreground);
     font-size: var(--n-text-sm);
   }
+}
+
+.dark [data-plugin-id="__PLUGIN_ID__"] {
+  --n-positive: oklch(84.5% 0.143 164.978);
 }

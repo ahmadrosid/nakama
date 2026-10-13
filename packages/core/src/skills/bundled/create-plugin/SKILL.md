@@ -138,8 +138,10 @@ UI: declare `ui: {entryModule:"ui/app.js",assetsDir:"ui",pageLabel:"Greeting"}`.
 Export `inject = ["slots","host","ui","styles"]` and `apply(ctx)`.
 Use `ctx.React` and `ctx.ui`, never bundled React, React DOM, or internal
 Nakama imports. Keep the `/** @jsxRuntime classic */` and
-`/** @jsx React.createElement */` lines at the top of `src/ui.jsx`, and set
-`const React = ctx.React` inside `apply`. Register exactly one page with
+`/** @jsx React.createElement */` lines, the module-level `let React;`, and
+`React = ctx.React;` in `apply` from the template. Never shadow it with
+`const React` inside `apply`: components outside `apply` then crash with
+`React is not defined`. Register exactly one page with
 `ctx.slots.register("page", Component)`. Call actions through
 `ctx.host.call(actionKey,input)`; it resolves to the action result.
 Keep top-level code free of side effects.
@@ -160,8 +162,10 @@ Make the page look like the rest of Nakama. Start from the template page.
 - Read `src/nakama-plugin.d.ts` before you use a component. It lists every
   `ctx`, `ctx.React`, and `ctx.ui` export with its props. Anything not listed
   is not available: no `toast()`, no `cn()`, no icons.
-- No shadows: never set `box-shadow`. Do not use `Card`, because it adds a
-  shadow; group content in a bordered `.plugin-panel` like the template.
+- Grouping: use `Card`, `CardHeader`, `CardTitle`, and `CardContent` for
+  boxes such as stat tiles. The template CSS removes the card shadow; never
+  set `box-shadow` yourself. `CardHeader` and `CardContent` pad 24px, so pass
+  a class with `--n-space-4` padding for small tiles.
 - Styling: Tailwind classes do not work in plugins. Put CSS in `src/ui.css`,
   import it as text, pass it to `ctx.styles(css)`, and nest every rule under
   `[data-plugin-id="<plugin-id>"]`.
@@ -189,11 +193,13 @@ Make the page look like the rest of Nakama. Start from the template page.
 | `--muted` / `--muted-foreground` | light gray / mid gray | #1f1f23 / #a1a1aa | quiet fills / secondary text |
 | `--border` | light gray | #27272a | 1px lines |
 | `--primary` / `--primary-foreground` | #b45309 / white | #f59e0b / #0a0a0b | main action, links |
-| `--destructive` | red | light red | errors, delete |
+| `--destructive` | red | light red | errors, delete, bad numbers |
+| `--n-positive` | emerald 700 | emerald 300 | good numbers, gains (template `ui.css`) |
 | `--ring` | #b45309 | #f59e0b | focus outline |
 
 Always write `var(--primary)`, never the hex value. The hex values are for
-reference only; the variables switch with the theme.
+reference only; the variables switch with the theme. This table lists every
+color you may use. Do not search the host or other folders for more tokens.
 - Copy: one clear label per control. No subtitles or helper text unless a
   mistake would cause harm. Use `aria-label` on inputs without visible labels
   and on icon-only buttons.
@@ -201,7 +207,10 @@ reference only; the variables switch with the theme.
   the page header.
 - States: show a `Spinner` while loading, a short empty message, and errors in
   `--destructive` with `role="alert"`.
-- Small screens: use `flex-wrap` and `minmax(0, 1fr)` grids; no fixed widths.
+- Narrow widths: the page also opens in the chat side panel, about 450px
+  wide. Use `flex-wrap` or `repeat(auto-fit, minmax(160px, 1fr))` grids, not
+  a fixed column count, and no fixed widths. Wrap tables wider than three
+  columns in an `overflow-x: auto` box.
 
 Skills: declare `skills: [{key:"use-greeting",directory:"skills/use-greeting"}]`
 and include that directory's SKILL.md with name and description.
