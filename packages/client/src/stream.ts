@@ -122,6 +122,7 @@ export async function readStreamEvents(
 
       if (payload.type === "tool_end") {
         handlers.onToolEnd?.({
+          images: payload.images,
           result: payload.result,
           tool: payload.tool,
           toolCallId: payload.toolCallId,

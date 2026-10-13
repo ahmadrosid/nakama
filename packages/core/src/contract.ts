@@ -1359,6 +1359,7 @@ export type StreamEvent =
       toolCallId: string;
       tool: string;
       result: unknown;
+      images?: ImageAttachment[];
     }
   | { type: "todos_updated"; todos: AgentTodo[] }
   | { type: "questionnaire_updated"; questionnaire: AgentQuestionnaire | null }
@@ -3106,6 +3107,7 @@ export interface StreamChatHandlers {
     toolCallId: string;
     tool: string;
     result: unknown;
+    images?: ImageAttachment[];
   }) => void;
   onToolInputDelta?: (event: {
     toolCallId: string;

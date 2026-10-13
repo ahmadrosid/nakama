@@ -170,6 +170,25 @@ describe("chatMessagesToListItems", () => {
     });
   });
 
+  test("tool message image attachments become tool images", () => {
+    const items = chatMessagesToListItems([
+      {
+        attachments: [
+          { text: "Image output", type: "text" },
+          { data: "aW1hZ2U=", mediaType: "image/jpeg", type: "image" },
+        ],
+        content: '{"text":"[image/jpeg]"}',
+        name: "screenshot",
+        role: "tool",
+        toolCallId: "tool_1",
+      },
+    ]);
+
+    expect(items[0]?.toolImages).toEqual([
+      { data: "aW1hZ2U=", mediaType: "image/jpeg" },
+    ]);
+  });
+
   test("renders described images as attachments and keeps vision-native images inline", () => {
     const messages: ChatMessage[] = [
       {

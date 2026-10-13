@@ -6,6 +6,7 @@ import type {
   ChatMessage,
   ChatUsage,
   CompactionResponse,
+  ImageAttachment,
   SendMessageInput,
   SendMessageRequest,
 } from "@nakama/core/contract";
@@ -47,6 +48,7 @@ export interface StreamHandlers {
     toolCallId: string;
     tool: string;
     result: unknown;
+    images?: ImageAttachment[];
   }) => void;
   onToolInputDelta?: (event: {
     toolCallId: string;

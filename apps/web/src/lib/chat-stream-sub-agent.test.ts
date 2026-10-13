@@ -147,6 +147,17 @@ describe("splitToolResultImages", () => {
     });
   });
 
+  test("drops server image stubs and keeps text", () => {
+    expect(
+      splitToolResultImages({
+        content: [
+          { mimeType: "image/png", type: "image" },
+          { text: "Saved", type: "text" },
+        ],
+      })
+    ).toEqual({ images: [], rest: "Saved" });
+  });
+
   test("leaves results without images unchanged", () => {
     const result = { content: [{ text: "ok", type: "text" }] };
     expect(splitToolResultImages(result)).toEqual({ images: [], rest: result });

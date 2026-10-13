@@ -7,6 +7,7 @@ import type {
   ChatTurnUsage,
   ChatUsage,
   CompactionResponse,
+  ImageAttachment,
   MessageContentPart,
   ProviderChatOptions,
   ProviderClient,
@@ -94,6 +95,7 @@ interface StreamHandlers {
     toolCallId: string;
     tool: string;
     result: unknown;
+    images?: ImageAttachment[];
   }) => void;
   onToolInputDelta?: (event: {
     toolGroupId?: string;
@@ -990,6 +992,7 @@ async function executeToolCalls(
         const toolCompletedAt = Date.now();
 
         handlers?.onToolEnd?.({
+          images: toolResultImages(attachments),
           result,
           tool: call.name,
           toolCallId: call.id,
@@ -1051,6 +1054,7 @@ async function executeToolCalls(
     const toolCompletedAt = Date.now();
 
     handlers?.onToolEnd?.({
+      images: toolResultImages(attachments),
       result,
       tool: call.name,
       toolCallId: call.id,
@@ -1073,6 +1077,19 @@ async function executeToolCalls(
 
     history.push(message);
   }
+}
+
+/** The images the model sees, so the chat UI can show the same ones. */
+function toolResultImages(
+  attachments: MessageContentPart[] | undefined
+): ImageAttachment[] | undefined {
+  const images = (attachments ?? []).flatMap((part) =>
+    part.type === "image"
+      ? [{ data: part.data, mediaType: part.mediaType }]
+      : []
+  );
+
+  return images.length > 0 ? images : undefined;
 }
 
 async function prepareVisualToolResult(

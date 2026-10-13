@@ -112,6 +112,8 @@ export function splitToolResultImages(
 
   const images: ToolResultImage[] = [];
   const texts: string[] = [];
+  // The server now sends image bytes apart and leaves a `{ type: "image" }` stub.
+  let hasImagePart = false;
 
   for (const item of content) {
     // SAFETY: Each field is checked before use.
@@ -121,6 +123,10 @@ export function splitToolResultImages(
       mimeType?: unknown;
       text?: unknown;
     };
+
+    if (type === "image") {
+      hasImagePart = true;
+    }
 
     if (
       type === "image" &&
@@ -137,7 +143,7 @@ export function splitToolResultImages(
     }
   }
 
-  if (images.length === 0) {
+  if (!hasImagePart) {
     return { images, rest: result };
   }
 
@@ -812,6 +818,7 @@ export function buildStreamHandlers(
                 subAgentActivity: undefined,
                 toolCompletedAt: Date.now(),
                 toolGroupId: event.toolGroupId ?? message.toolGroupId,
+                toolImages: event.images,
                 toolResult: event.result,
                 toolStatus: "done",
               }

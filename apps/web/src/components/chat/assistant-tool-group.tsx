@@ -377,14 +377,35 @@ function AssistantWorkGroup({
     return null;
   }
 
+  const images = visibleTools.flatMap((tool) =>
+    toolItemImages(tool).images.map((image, index) => ({
+      image,
+      key: `${tool.id}-${index}`,
+    }))
+  );
+
   return (
-    <OtherWorkGroup
-      active={active}
-      modelLabel={modelLabel}
-      profileId={profileId}
-      thinking={thinking}
-      tools={visibleTools}
-    />
+    <>
+      <OtherWorkGroup
+        active={active}
+        modelLabel={modelLabel}
+        profileId={profileId}
+        thinking={thinking}
+        tools={visibleTools}
+      />
+      {images.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {images.map(({ image, key }) => (
+            <img
+              alt="Tool result"
+              className="max-h-40 max-w-full rounded-md border border-border object-contain"
+              key={key}
+              src={toolResultImageSrc(image)}
+            />
+          ))}
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -957,6 +978,26 @@ function SubAgentMark({
   );
 }
 
+/** Old sessions keep image bytes in the result; new ones send them apart. */
+function toolItemImages(message: ChatListItem) {
+  if (message.toolStatus !== "done") {
+    return { images: [] satisfies ToolResultImage[], rest: null };
+  }
+
+  const { images, rest } = splitToolResultImages(message.toolResult);
+
+  return {
+    images: [
+      ...images,
+      ...(message.toolImages ?? []).map((image) => ({
+        data: image.data,
+        mimeType: image.mediaType,
+      })),
+    ],
+    rest,
+  };
+}
+
 function toolResultImageSrc(image: ToolResultImage): string {
   return `data:${image.mimeType};base64,${image.data}`;
 }
@@ -1053,10 +1094,7 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
       ? formatToolCommand(message.tool, message.toolInput)
       : null;
 
-  const { images, rest } =
-    message.toolStatus === "done"
-      ? splitToolResultImages(message.toolResult)
-      : { images: [], rest: null };
+  const { images, rest } = toolItemImages(message);
 
   const output =
     message.toolStatus === "done" ? formatToolResult(message.tool, rest) : null;
