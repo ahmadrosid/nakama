@@ -1827,7 +1827,7 @@ export function apply(ctx: Context) {
                 canRun={Boolean(workflow) && !dirty && enabled && !busy}
                 onRunAgain={(input) => runWorkflow(input)}
                 runs={runs}
-                stepIds={steps.map((step) => step.id)}
+                stepIds={allSteps.map((step) => step.id)}
                 stepNames={Object.fromEntries(
                   allSteps.map((step) => [step.id, title(step.id)])
                 )}
@@ -2542,9 +2542,7 @@ export function apply(ctx: Context) {
       ? toolParts(missingTool).app || toolParts(missingTool).action
       : "";
 
-    const recordedIds = receipts
-      .filter((step) => step.kind !== "summarize")
-      .map((step) => step.stepId);
+    const recordedIds = receipts.map((step) => step.stepId);
 
     const ids = recordedIds.some((id) => !stepIds.includes(id))
       ? recordedIds
