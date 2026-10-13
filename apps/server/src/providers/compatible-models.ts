@@ -10,8 +10,7 @@ import {
   NETRA_AGENT_MODEL_ID,
 } from "@nakama/core/discovery-providers";
 import OpenAI from "openai";
-import type { ProviderModelOption } from "./models";
-import { AVAILABLE_MODELS } from "./models";
+import { AVAILABLE_MODELS, type ProviderModelOption } from "./model-catalog";
 import { openRouterSlugSupportsThinking } from "./openrouter/thinking";
 import {
   type ProviderJsonRecord,
