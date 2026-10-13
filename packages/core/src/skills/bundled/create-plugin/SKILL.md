@@ -6,6 +6,34 @@ include-body-on-match: true
 
 Create a local draft for human review. Never install or enable the plugin yourself.
 
+## Ask first (mandatory)
+
+Before you run the template script for a new plugin, call `ask_user_question`
+once. Then stop and wait for the answers. Do not write files in the same turn.
+
+Ask only what the request does not already answer, in one batch of at most five
+questions. Give each question two to four choices and set
+`allowCustomAnswer: true`. Pick from:
+
+- **Actions:** what each action does and the inputs it needs.
+- **Access:** every member, or admins only (`access`).
+- **Effect:** read only, or saves, sends, or deletes data (`effect`).
+- **Data:** no stored data, files under `dataDir`, or a SQLite table (migrations).
+- **Page:** what the page shows and which buttons it has, or no page.
+- **Agent use:** whether profiles call the action as a tool in chat.
+- **Outside services:** which API it calls. Plugins have no secret store, so a
+  key needs an admin-only `save_settings` action with `exposeAsTool: false`
+  that stores it under `dataDir`.
+
+If the request answers all of them, ask one question instead: show the plan in
+the prompt (plugin ID, actions with access and effect, page, data) with the
+choices "Build it" and "Change something".
+
+Build from the answers. Do not add actions, pages, or storage the user did not
+ask for. If `ask_user_question` is not available, ask the same questions in one
+plain message and wait. When the user asks to change an existing draft, ask
+only if the change is unclear.
+
 ## Workspace and build
 
 Use the profile workspace from the tool context. Write only beneath
