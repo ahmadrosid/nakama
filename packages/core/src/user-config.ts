@@ -603,7 +603,12 @@ export async function saveUserConfig(config: UserConfig): Promise<void> {
 
   for (const provider of providers) {
     const sectionName = `${PROVIDER_SECTION_PREFIX}${provider.id}`;
-    sections[sectionName] = buildProviderSectionValues(provider);
+    // Keep a legacy file key until the server migration moves it into the
+    // secret store; the CLI can save the config before the server starts.
+    const legacyApiKey = existingParsed.sections[sectionName]?.api_key;
+    sections[sectionName] = legacyApiKey
+      ? { ...buildProviderSectionValues(provider), api_key: legacyApiKey }
+      : buildProviderSectionValues(provider);
   }
 
   await writeParsedConfigIni(global, sections);
@@ -913,13 +918,6 @@ function buildConfigIniLines(
     lines.push(`[${sectionName}]`);
 
     for (const [key, value] of Object.entries(values)) {
-      if (
-        key === "api_key" ||
-        (sectionName === "email" && key === "password")
-      ) {
-        continue;
-      }
-
       lines.push(`${key}=${value}`);
     }
 

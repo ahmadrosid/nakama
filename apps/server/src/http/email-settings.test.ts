@@ -158,13 +158,13 @@ describe("email settings routes", () => {
     expect((await overridden.json()).source).toBe("environment");
     delete process.env.NAKAMA_EMAIL_PASSWORD;
 
-    const missing = await app.fetch(
+    const fallback = await app.fetch(
       new Request("http://localhost:4310/v1/settings/email", {
         headers: session.headers(),
       })
     );
 
-    expect((await missing.json()).source).toBe("missing");
+    expect((await fallback.json()).source).toBe("settings");
 
     const selected = await app.fetch(
       new Request("http://localhost:4310/v1/settings/email/secret/use-stored", {

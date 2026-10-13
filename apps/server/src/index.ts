@@ -153,9 +153,27 @@ await retireAppUserData(
   resolveDatabasePath(config.databaseUrl, { baseDir: getUserConfigDir() })
 );
 
-const managedSecrets = new ManagedSecrets(database.adapter);
+let managedSecrets: ManagedSecrets;
 
-await managedSecrets.migrateLegacyFiles();
+try {
+  managedSecrets = new ManagedSecrets(database.adapter);
+  await managedSecrets.migrateLegacyFiles();
+} catch (error) {
+  // Saved keys stay in config.ini until the migration succeeds, so print the
+  // fix instead of a stack trace and let the operator restart.
+  console.error(
+    `Nakama cannot start: ${error instanceof Error ? error.message : String(error)}`
+  );
+
+  if (!process.env.NAKAMA_SECRETS_KEY) {
+    console.error(
+      "Create a key with `openssl rand -base64 32`, set it as NAKAMA_SECRETS_KEY, and keep it with your backups."
+    );
+  }
+
+  database.release();
+  process.exit(1);
+}
 
 if (process.env.NAKAMA_SECRETS_KEY_NEXT) {
   await managedSecrets.rotateKey(process.env.NAKAMA_SECRETS_KEY_NEXT);

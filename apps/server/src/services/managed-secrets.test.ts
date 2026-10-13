@@ -3,11 +3,12 @@ import { createCipheriv, randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { loadUserConfig, saveUserConfig } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { ManagedSecrets } from "./managed-secrets";
 
 describe("ManagedSecrets", () => {
-  test("encrypts values and keeps environment overrides pinned", async () => {
+  test("encrypts values and falls back to the saved value after an override", async () => {
     const db = createInMemoryDatabaseAdapter();
     const key = randomBytes(32).toString("base64");
     const secrets = new ManagedSecrets(db, key);
@@ -24,11 +25,6 @@ describe("ManagedSecrets", () => {
         TEST_PROVIDER_KEY: "sk-env",
       })
     ).toMatchObject({ source: "environment", value: "sk-env" });
-    expect(
-      await secrets.resolve("global", "provider:one", ["TEST_PROVIDER_KEY"], {})
-    ).toMatchObject({ source: "missing", value: null });
-
-    await secrets.useStored("global", "provider:one");
     expect(
       await secrets.resolve("global", "provider:one", ["TEST_PROVIDER_KEY"], {})
     ).toMatchObject({ source: "settings", value: "sk-saved" });
@@ -210,7 +206,7 @@ describe("ManagedSecrets", () => {
     }
   });
 
-  test("does not keep a legacy fallback behind an environment override", async () => {
+  test("keeps the file value behind an environment override", async () => {
     const root = await mkdtemp(join(tmpdir(), "nakama-env-migration-"));
     const previous = process.env.EXA_API_KEY;
     process.env.EXA_API_KEY = "active-env-key";
@@ -220,21 +216,23 @@ describe("ManagedSecrets", () => {
         join(root, "config.ini"),
         "[web_search]\nprovider=exa\napi_key=old-file-key\n"
       );
+
       const db = createInMemoryDatabaseAdapter();
-      const secrets = new ManagedSecrets(db);
+
+      const secrets = new ManagedSecrets(
+        db,
+        randomBytes(32).toString("base64")
+      );
+
       await secrets.migrateLegacyFiles(root);
-      expect(
-        (await db.getManagedSecret("global", "web-search:exa"))?.encryptedValue
-      ).toBeNull();
       expect(
         (await secrets.resolve("global", "web-search:exa", ["EXA_API_KEY"]))
           .value
       ).toBe("active-env-key");
       delete process.env.EXA_API_KEY;
       expect(
-        (await secrets.resolve("global", "web-search:exa", ["EXA_API_KEY"]))
-          .source
-      ).toBe("missing");
+        await secrets.resolve("global", "web-search:exa", ["EXA_API_KEY"])
+      ).toMatchObject({ source: "settings", value: "old-file-key" });
       expect(await readFile(join(root, "config.ini"), "utf8")).not.toContain(
         "old-file-key"
       );
@@ -243,6 +241,56 @@ describe("ManagedSecrets", () => {
         delete process.env.EXA_API_KEY;
       } else {
         process.env.EXA_API_KEY = previous;
+      }
+
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  test("keeps legacy provider keys when the config is saved before migration", async () => {
+    const root = await mkdtemp(join(tmpdir(), "nakama-save-before-migration-"));
+    const previous = process.env.NAKAMA_CONFIG_DIR;
+    process.env.NAKAMA_CONFIG_DIR = root;
+
+    try {
+      await writeFile(
+        join(root, "config.ini"),
+        [
+          "default_provider_id=aaaa",
+          "[provider.aaaa]",
+          "type=openai",
+          "api_key=sk-first",
+          "[provider.bbbb]",
+          "type=openai",
+          "api_key=sk-second",
+          "",
+        ].join("\n")
+      );
+      const config = await loadUserConfig();
+
+      await saveUserConfig({ ...config!, localAuthTokenHash: "rotated" });
+
+      const secrets = new ManagedSecrets(
+        createInMemoryDatabaseAdapter(),
+        randomBytes(32).toString("base64")
+      );
+
+      await secrets.migrateLegacyFiles(root);
+
+      expect(
+        (await secrets.resolve("global", "provider:aaaa", [], {})).value
+      ).toBe("sk-first");
+      expect(
+        (await secrets.resolve("global", "provider:bbbb", [], {})).value
+      ).toBe("sk-second");
+      expect(await readFile(join(root, "config.ini"), "utf8")).not.toContain(
+        "api_key"
+      );
+    } finally {
+      if (previous === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = previous;
       }
 
       await rm(root, { force: true, recursive: true });

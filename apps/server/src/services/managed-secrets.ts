@@ -109,7 +109,7 @@ export class ManagedSecrets {
       };
     }
 
-    if (row?.source === "settings" && row.encryptedValue) {
+    if (row?.encryptedValue) {
       return {
         source: "settings",
         value: this.decrypt(row),
@@ -159,17 +159,14 @@ export class ManagedSecrets {
       .find(Boolean);
 
     await this.db.putManagedSecret({
-      encryptedValue: override ? null : this.encrypt(scope, name, value),
+      encryptedValue: this.encrypt(scope, name, value),
       name,
       scope,
       source: override ? "environment" : "settings",
     });
     const stored = await this.db.getManagedSecret(scope, name);
 
-    if (
-      !override &&
-      (!stored?.encryptedValue || this.decrypt(stored) !== value)
-    ) {
+    if (!stored?.encryptedValue || this.decrypt(stored) !== value) {
       throw new Error("Secret migration verification failed.");
     }
   }
@@ -400,6 +397,12 @@ export class ManagedSecrets {
           await this.migrate("global", "email", values.password.trim(), [
             "NAKAMA_EMAIL_PASSWORD",
           ]);
+        }
+
+        delete values.api_key;
+
+        if (section === "email") {
+          delete values.password;
         }
       }
 
