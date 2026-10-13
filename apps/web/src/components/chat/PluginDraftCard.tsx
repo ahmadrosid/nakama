@@ -156,7 +156,7 @@ function PluginDraftCard({
       detail: installed
         ? `Version ${draft.version} installed`
         : isPlatformAdmin
-          ? "Read each file, then install."
+          ? "Review the files, then install."
           : "Waiting for a platform admin",
       done: Boolean(installed),
       title: "Review and install",

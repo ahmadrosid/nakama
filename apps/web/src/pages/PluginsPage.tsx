@@ -703,6 +703,15 @@ const LOCAL_REVIEW_GROUPS = [
   ["Config and other files", /./],
 ] as const;
 
+/** Display only: the install still uses the reviewed bytes and digest. */
+function formatJsonForReview(text: string): string {
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2);
+  } catch {
+    return text;
+  }
+}
+
 export function LocalPluginInstaller({
   draft,
   orgId,
@@ -812,7 +821,12 @@ export function LocalPluginInstaller({
           position += chunk.length;
         }
 
-        setFile({ content: new TextDecoder().decode(data), path });
+        const text = new TextDecoder().decode(data);
+
+        setFile({
+          content: path.endsWith(".json") ? formatJsonForReview(text) : text,
+          path,
+        });
         setReviewed((previous) => new Set([...previous, path]));
       }
     } catch (failure) {
@@ -829,12 +843,7 @@ export function LocalPluginInstaller({
   }
 
   async function confirm() {
-    if (
-      !preview ||
-      pending ||
-      install.isPending ||
-      reviewed.size !== preview.files.length
-    ) {
+    if (!preview || pending || install.isPending) {
       return;
     }
 
@@ -957,7 +966,7 @@ export function LocalPluginInstaller({
               const runs = index < 3;
 
               return (
-                <section key={String(pattern)}>
+                <section className="min-w-0" key={String(pattern)}>
                   <h3
                     className={cn(
                       "mb-1.5 font-semibold text-xs uppercase tracking-wide",
@@ -1018,7 +1027,7 @@ export function LocalPluginInstaller({
                           {open ? (
                             <pre
                               aria-label={file.path}
-                              className="max-h-72 overflow-auto whitespace-pre border-t bg-background p-3 font-mono text-xs leading-relaxed"
+                              className="max-h-72 overflow-auto whitespace-pre-wrap break-all border-t bg-background p-3 font-mono text-xs leading-relaxed"
                             >
                               {file.content}
                             </pre>
@@ -1039,11 +1048,7 @@ export function LocalPluginInstaller({
                   {reviewed.size} of {preview.files.length} read
                 </span>
                 <Button
-                  disabled={
-                    pending ||
-                    install.isPending ||
-                    reviewed.size !== preview.files.length
-                  }
+                  disabled={pending || install.isPending}
                   onClick={confirm}
                 >
                   {install.isPending ? "Installing…" : "Confirm installation"}

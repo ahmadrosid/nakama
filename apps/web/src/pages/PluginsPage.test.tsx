@@ -167,7 +167,7 @@ test("local review pins approval, escapes code, and invalidates the installed or
       (item) => item.textContent === "Confirm installation"
     );
 
-  expect(confirm()?.disabled).toBe(true);
+  expect(confirm()?.disabled).toBe(false);
   await act(async () =>
     [...document.querySelectorAll("button")]
       .find((item) => item.textContent?.includes("actions/list.js"))
@@ -246,7 +246,7 @@ test("a cancelled preview cannot clear a newer preview's loading state", async (
   await act(async () => responses[1]!(preview()));
   await settle();
   expect(button("Preview draft")?.disabled).toBe(false);
-  expect(button("Confirm installation")?.disabled).toBe(true);
+  expect(button("Confirm installation")?.disabled).toBe(false);
 });
 
 for (const stage of ["preview", "file", "install"]) {
@@ -306,7 +306,7 @@ for (const stage of ["preview", "file", "install"]) {
     expect(button("Confirm installation")).toBeUndefined();
     await act(async () => button("Preview draft")?.click());
     await settle();
-    expect(button("Confirm installation")?.disabled).toBe(true);
+    expect(button("Confirm installation")?.disabled).toBe(false);
   });
 }
 
