@@ -230,14 +230,46 @@ function StatusDashboard({
 }
 
 export function LlmUsageTab() {
-  const { data: status, error, isLoading } = useSystemStatusQuery();
+  const {
+    data: status,
+    dataUpdatedAt,
+    error,
+    isLoading,
+  } = useSystemStatusQuery();
+
   const refreshSystemStatus = useRefreshSystemStatus();
   const errorMessage = error ? formatError(error) : null;
+  const isStale = Boolean(errorMessage && status);
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <OrgLlmQuotaCard />
-      {errorMessage ? (
+      {isStale ? (
+        <div
+          className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/25 bg-primary/5 py-2.5 pr-2.5 pl-4"
+          role="status"
+        >
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <p className="font-medium text-sm">
+              Showing data from{" "}
+              {new Date(dataUpdatedAt).toLocaleTimeString(undefined, {
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </p>
+            <p className="text-muted-foreground text-xs">{errorMessage}</p>
+          </div>
+          <Button
+            className="shrink-0 bg-background"
+            onClick={() => void refreshSystemStatus()}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Retry
+          </Button>
+        </div>
+      ) : errorMessage ? (
         <div
           className="flex flex-wrap items-start justify-between gap-3 border-destructive/40 border-b bg-destructive/10 px-4 py-3"
           role="alert"
@@ -264,7 +296,9 @@ export function LlmUsageTab() {
           className="h-80 animate-pulse bg-muted/40"
         />
       ) : status ? (
-        <LlmUsageSection usage={status.llmUsage} />
+        <div className={cn(isStale && "opacity-60")}>
+          <LlmUsageSection usage={status.llmUsage} />
+        </div>
       ) : null}
     </div>
   );
