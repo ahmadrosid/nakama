@@ -153,7 +153,11 @@ export function PluginSurface({
             <Page
               renderHeaderActions={(children) => {
                 if (inlineHeaderActions) {
-                  return children;
+                  return (
+                    <div className="flex items-center justify-end gap-2">
+                      {children}
+                    </div>
+                  );
                 }
 
                 const target = document.querySelector(
