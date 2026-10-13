@@ -1505,3 +1505,27 @@
     padding: 16px;
   }
 }
+
+/* Desktop app: the shell headers are the title bar. Unlayered so these win
+   over the header padding utilities. */
+html[data-desktop] :is(.app-shell-header, .profile-rail) {
+  -webkit-app-region: drag;
+}
+html[data-desktop]
+  :is(.app-shell-header, .profile-rail)
+  :is(a, button, input, select, [role="button"], [role="menu"]) {
+  -webkit-app-region: no-drag;
+}
+/* macOS traffic lights take the rail's top cell and spill past its border. */
+html[data-desktop="darwin"] .profile-rail {
+  padding-top: 3.5rem;
+}
+html[data-desktop="darwin"]
+  .sidebar-shell:not([data-collapsed])
+  .app-shell-header {
+  padding-left: 1.25rem;
+}
+/* Windows draws min/max/close over the right end of the page header. */
+html[data-desktop="win32"] [data-app-shell-content] > .app-shell-header {
+  padding-right: 9rem;
+}
