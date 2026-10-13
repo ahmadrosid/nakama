@@ -1,4 +1,8 @@
+import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createSqliteDatabase } from "./adapters/sqlite";
 
 describe("SQLite session model persistence", () => {
@@ -72,6 +76,63 @@ describe("SQLite session model persistence", () => {
       });
     } finally {
       database.close();
+    }
+  });
+
+  test("writes the profile org on insert and keeps it on re-upsert", async () => {
+    const root = mkdtempSync(join(tmpdir(), "session-org-"));
+    const filename = join(root, "nakama.sqlite");
+    const database = await createSqliteDatabase(`file:${filename}`);
+    const raw = new Database(filename);
+    const now = new Date().toISOString();
+
+    try {
+      await database.adapter.upsertOrganization({
+        createdAt: now,
+        id: "org_test",
+        name: "Test",
+        slug: "test",
+        updatedAt: now,
+      });
+      await database.adapter.upsertProfile({
+        createdAt: now,
+        id: "profile_test",
+        isDefault: true,
+        isSuper: false,
+        model: null,
+        name: "Test",
+        orgId: "org_test",
+        systemPrompt: "Test",
+        updatedAt: now,
+      });
+
+      const record = {
+        agentQuestionnaire: null,
+        agentTodos: [],
+        channel: "web",
+        createdAt: now,
+        id: "session_test",
+        model: "provider-1::chat-model",
+        profileId: "profile_test",
+        title: null,
+        userId: null,
+      };
+
+      await database.adapter.upsertSession(record);
+
+      expect(
+        raw.query("SELECT org_id FROM sessions WHERE id = 'session_test'").get()
+      ).toEqual({ org_id: "org_test" });
+
+      await database.adapter.upsertSession(record);
+
+      expect(
+        raw.query("SELECT org_id FROM sessions WHERE id = 'session_test'").get()
+      ).toEqual({ org_id: "org_test" });
+    } finally {
+      raw.close(true);
+      database.release();
+      rmSync(root, { force: true, recursive: true });
     }
   });
 });

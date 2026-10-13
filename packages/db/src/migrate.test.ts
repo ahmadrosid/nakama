@@ -875,6 +875,42 @@ describe("skill org id backfill", () => {
   });
 });
 
+describe("session org id backfill", () => {
+  test("recovers the owning org from the profile and leaves orphan sessions alone", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      // Rows as every pre-fix install has them: org_id never written.
+      db.exec(`
+        INSERT INTO organizations (id, name, slug, created_at, updated_at)
+          VALUES ('org_a', 'Org A', 'org-a', 'now', 'now');
+        INSERT INTO profiles (id, name, org_id, created_at, updated_at)
+          VALUES ('profile_a', 'Agent A', 'org_a', 'now', 'now');
+      `);
+      db.exec("PRAGMA foreign_keys = OFF");
+      db.exec(`
+        INSERT INTO sessions (id, profile_id, channel, created_at, updated_at)
+          VALUES ('session_a', 'profile_a', 'web', 'now', 'now'),
+                 ('session_orphan', 'profile_gone', 'web', 'now', 'now');
+      `);
+      db.exec("PRAGMA foreign_keys = ON");
+
+      migrateDatabase(db);
+
+      expect(
+        db.query("SELECT id, org_id FROM sessions ORDER BY id").all()
+      ).toEqual([
+        { id: "session_a", org_id: "org_a" },
+        { id: "session_orphan", org_id: null },
+      ]);
+    } finally {
+      db.close();
+    }
+  });
+});
+
 describe("schema path resolution", () => {
   test("resolves schema.sql from the db package during source execution", () => {
     const schemaPath = resolveSchemaPath();

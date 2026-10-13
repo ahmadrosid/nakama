@@ -50,6 +50,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateTenantOrgScope);
   atomic(migrateSkillOrgIds);
   atomic(migrateProfileOrgColumns);
+  atomic(migrateSessionOrgIds);
   atomic(migrateBrowserSessionsTable);
   atomic(migratePasswordResetTokensTable);
   migrateLegacyProfileIds(db);
@@ -1520,6 +1521,22 @@ function migrateProfileOrgColumns(db: Database): void {
     WHERE org_id IS NULL
   `).run();
   })();
+}
+
+/**
+ * `sessions.org_id` shipped empty because the only insert path never set it,
+ * so every row a pre-fix install holds is NULL. The owning org is recoverable
+ * from the session's profile, which migrateProfileOrgColumns scopes first. A
+ * session whose profile is gone keeps NULL instead of failing the boot.
+ */
+function migrateSessionOrgIds(db: Database): void {
+  db.prepare(`
+    UPDATE sessions
+    SET org_id = (
+      SELECT org_id FROM profiles WHERE profiles.id = sessions.profile_id
+    )
+    WHERE org_id IS NULL
+  `).run();
 }
 
 export function addOrgIdColumnIfMissing(db: Database, tableName: string): void {
