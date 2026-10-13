@@ -624,6 +624,27 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
     supportsVision: true,
   },
   {
+    contextWindow: 1_048_576,
+    default: true,
+    id: "muse-spark-1.3",
+    inputPerMillionUsd: 1.25,
+    name: "Muse Spark 1.3",
+    outputPerMillionUsd: 4.25,
+    provider: "meta",
+    supportsThinking: true,
+    supportsVision: true,
+  },
+  {
+    contextWindow: 1_048_576,
+    id: "muse-wonder-1.0",
+    inputPerMillionUsd: 4,
+    name: "Muse Wonder 1.0",
+    outputPerMillionUsd: 20,
+    provider: "meta",
+    supportsThinking: true,
+    supportsVision: true,
+  },
+  {
     contextWindow: 131_072,
     default: true,
     id: "gpt-oss-120b",
@@ -1072,6 +1093,7 @@ export function getDefaultModel(
       provider === "doubao" ||
       provider === "together" ||
       provider === "xiaomi" ||
+      provider === "meta" ||
       provider === "vercel_ai_gateway" ||
       provider === "mistral" ||
       provider === "qwen" ||
@@ -1098,23 +1120,25 @@ export function getDefaultModel(
               ? "openai/gpt-oss-120b"
               : provider === "xiaomi"
                 ? "mimo-v2.5-pro"
-                : provider === "vercel_ai_gateway"
-                  ? "openai/gpt-4o-mini"
-                  : provider === "mistral"
-                    ? "mistral-small-2603"
-                    : provider === "qwen" || provider === "qwen_cn"
-                      ? "qwen3.7-plus"
-                      : provider === "perplexity"
-                        ? "sonar"
-                        : provider === "cerebras"
-                          ? "gpt-oss-120b"
-                          : provider === "fireworks"
-                            ? "accounts/fireworks/models/kimi-k2p6"
-                            : provider === "opencode_go"
-                              ? "opencode-go/kimi-k2.7-code"
-                              : provider === "cloudflare"
-                                ? "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
-                                : "gpt-5.4";
+                : provider === "meta"
+                  ? "muse-spark-1.3"
+                  : provider === "vercel_ai_gateway"
+                    ? "openai/gpt-4o-mini"
+                    : provider === "mistral"
+                      ? "mistral-small-2603"
+                      : provider === "qwen" || provider === "qwen_cn"
+                        ? "qwen3.7-plus"
+                        : provider === "perplexity"
+                          ? "sonar"
+                          : provider === "cerebras"
+                            ? "gpt-oss-120b"
+                            : provider === "fireworks"
+                              ? "accounts/fireworks/models/kimi-k2p6"
+                              : provider === "opencode_go"
+                                ? "opencode-go/kimi-k2.7-code"
+                                : provider === "cloudflare"
+                                  ? "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+                                  : "gpt-5.4";
 
   return models.find((model) => model.default)?.id ?? models[0]?.id ?? fallback;
 }
@@ -1182,6 +1206,7 @@ export function resolveModel(
       provider === "doubao" ||
       provider === "together" ||
       provider === "xiaomi" ||
+      provider === "meta" ||
       provider === "vercel_ai_gateway" ||
       provider === "mistral" ||
       provider === "qwen" ||

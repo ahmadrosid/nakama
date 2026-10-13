@@ -107,6 +107,7 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   doubao: "Doubao (Volcengine)",
   fireworks: "Fireworks",
   gemini: "Gemini",
+  meta: "Meta Model API",
   minimax: "MiniMax",
   minimax_cn: "MiniMax (CN)",
   mistral: "Mistral",

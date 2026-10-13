@@ -48,6 +48,7 @@ const PROVIDER_CHOICES: Array<{ id: UserProviderName; label: string }> = [
   { id: "doubao", label: "Doubao (Volcengine)" },
   { id: "together", label: "Together AI" },
   { id: "xiaomi", label: "Xiaomi MiMo" },
+  { id: "meta", label: "Meta Model API" },
   { id: "vercel_ai_gateway", label: "Vercel AI Gateway" },
   { id: "mistral", label: "Mistral" },
   { id: "qwen", label: "Qwen (DashScope)" },
@@ -279,6 +280,7 @@ function resolveProviderChoice(input: string): UserProviderName | null {
     normalized === "xai" ||
     normalized === "together" ||
     normalized === "xiaomi" ||
+    normalized === "meta" ||
     normalized === "qwen" ||
     normalized === "qwen_cn" ||
     normalized === "vercel_ai_gateway"

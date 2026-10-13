@@ -99,6 +99,85 @@ describe("createProviderForInstance routing", () => {
     }
   });
 
+  test("routes meta instances to the configured base URL with reasoning effort", async () => {
+    let seenPath = "";
+    let seenAuth = "";
+    let seenModel = "";
+    let seenEffort: unknown;
+
+    const mock = Bun.serve({
+      fetch: async (request) => {
+        const url = new URL(request.url);
+        seenPath = url.pathname;
+        seenAuth = request.headers.get("authorization") ?? "";
+
+        // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
+        const body = (await request.json()) as {
+          model?: string;
+          reasoning_effort?: unknown;
+        };
+
+        seenModel = body.model ?? "";
+        seenEffort = body.reasoning_effort;
+
+        return Response.json({
+          choices: [
+            {
+              finish_reason: "stop",
+              index: 0,
+              message: { content: "ok", role: "assistant" },
+            },
+          ],
+          created: 1,
+          id: "mock",
+          model: seenModel,
+          object: "chat.completion",
+          usage: {
+            completion_tokens: 1,
+            prompt_tokens: 1,
+            total_tokens: 2,
+          },
+        });
+      },
+      port: 0,
+    });
+
+    try {
+      const instance: ProviderInstance = {
+        apiKey: "test-key",
+        baseUrl: `http://127.0.0.1:${mock.port}/v1`,
+        createdAt: new Date().toISOString(),
+        id: "inst_meta",
+        label: "Meta Model API",
+        type: "meta",
+      };
+
+      const client = createProviderForInstance(instance, "muse-spark-1.3");
+
+      expect(client?.name).toBe("meta");
+
+      const result = await client!.generateChat({
+        messages: [{ content: "ping", role: "user" }],
+        providerOptions: { thinking: { effort: "high", enabled: true } },
+        system: "",
+      });
+
+      expect(result.content).toBe("ok");
+      expect(seenPath).toBe("/v1/chat/completions");
+      expect(seenAuth).toBe("Bearer test-key");
+      expect(seenModel).toBe("muse-spark-1.3");
+      expect(seenEffort).toBe("high");
+
+      await client!.generateChat({
+        messages: [{ content: "ping", role: "user" }],
+        system: "",
+      });
+      expect(seenEffort).toBe("minimal");
+    } finally {
+      mock.stop(true);
+    }
+  });
+
   test("creates an xai client from an xai instance", () => {
     const instance: ProviderInstance = {
       apiKey: "test-key",

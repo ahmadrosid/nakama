@@ -2917,6 +2917,7 @@ export type ProviderName =
   | "xai"
   | "together"
   | "xiaomi"
+  | "meta"
   | "qwen"
   | "qwen_cn"
   | "vercel_ai_gateway";

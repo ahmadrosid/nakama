@@ -50,6 +50,7 @@ const PROVIDER_ID_OVERRIDES: Record<string, SelectedProvider> = {
   alibaba: "qwen",
   bytedance: "doubao",
   deepseek: "deepseek",
+  meta: "meta",
   mistral: "mistral",
   opencode: "openai_compatible",
   openrouter: "openrouter",

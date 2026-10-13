@@ -43,6 +43,8 @@ const DEFAULT_TOGETHER_BASE_URL = "https://api.together.xyz/v1";
 
 const DEFAULT_XIAOMI_BASE_URL = "https://api.xiaomimimo.com/v1";
 
+const DEFAULT_META_BASE_URL = "https://api.meta.ai/v1";
+
 const DEFAULT_VERCEL_AI_GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh/v1";
 
 const DEFAULT_MISTRAL_BASE_URL = "https://api.mistral.ai/v1";
@@ -167,6 +169,13 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         baseUrl: baseUrlOverride ?? DEFAULT_XIAOMI_BASE_URL,
         model,
         providerName: "xiaomi",
+      });
+    case "meta":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? DEFAULT_META_BASE_URL,
+        model,
+        providerName: "meta",
       });
     case "vercel_ai_gateway":
       return createOpenAIProvider({

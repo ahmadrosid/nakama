@@ -185,6 +185,7 @@ export function modelExistsOnInstance(
       instance.type === "vercel_ai_gateway" ||
       instance.type === "together" ||
       instance.type === "xiaomi" ||
+      instance.type === "meta" ||
       instance.type === "mistral" ||
       instance.type === "qwen" ||
       instance.type === "qwen_cn" ||
@@ -417,6 +418,7 @@ export function applyProviderInstanceUpdate(
       instance.type === "doubao" ||
       instance.type === "together" ||
       instance.type === "xiaomi" ||
+      instance.type === "meta" ||
       instance.type === "vercel_ai_gateway" ||
       instance.type === "mistral" ||
       instance.type === "qwen" ||

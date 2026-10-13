@@ -170,6 +170,10 @@ function providerLabel(providerName: ProviderName): string {
     return "Xiaomi MiMo";
   }
 
+  if (providerName === "meta") {
+    return "Meta Model API";
+  }
+
   if (providerName === "vercel_ai_gateway") {
     return "Vercel AI Gateway";
   }
@@ -268,7 +272,7 @@ type OpenAIChatCompletionRequest = {
   stream?: true;
   stream_options?: { include_usage: boolean };
   thinking?: { type: "disabled" | "enabled" };
-  reasoning_effort?: ThinkingEffort | "none";
+  reasoning_effort?: ThinkingEffort | "minimal" | "none";
   enable_thinking?: boolean;
   reasoning?: { effort: ThinkingEffort; enabled: true };
   tool_choice?: "auto";
@@ -526,6 +530,13 @@ async function buildChatCompletionRequestBody(options: {
 
   if (provider === "xiaomi") {
     body.thinking = buildXiaomiThinkingBody(options.thinking).thinking;
+  }
+
+  // Muse Spark rejects "none" and reasons when the field is omitted.
+  if (provider === "meta") {
+    body.reasoning_effort = options.thinking?.enabled
+      ? normalizeThinkingEffort(options.thinking.effort)
+      : "minimal";
   }
 
   if (provider === "qwen" || provider === "qwen_cn") {
