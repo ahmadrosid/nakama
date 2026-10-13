@@ -193,6 +193,32 @@ Nakama falls back to its standard tool display when a renderer is missing, disab
 
 Keep rendering free of mutations. Use explicit buttons for writes. For polling, return cleanup from your React effect. Use `ctx.effect(() => cleanup)` for activation resources. Each page or chat card has its own activation; organization, theme, and installation changes dispose the old one. Keep module-level code free of side effects and scope CSS under your plugin's `data-plugin-id` wrapper.
 
+### Shared UI controls
+
+Use `ctx.ui` controls so your page matches Nakama in light and dark mode. Add `"ui"` to `inject` first.
+
+| Group | Controls |
+|---|---|
+| Buttons | `Button` — variants `default`, `outline`, `ghost`, `secondary`, `destructive`, `link`; sizes `default`, `xs`, `sm`, `lg`, `icon` |
+| Text | `Input`, `Textarea`, `ExpandableTextarea` |
+| Input groups | `InputGroup`, `InputGroupAddon`, `InputGroupInput`, `InputGroupTextarea`, `InputGroupText`, `InputGroupButton` |
+| Choices | `Checkbox`, `Switch`, `Select`, `SelectTrigger`, `SelectValue`, `SelectContent`, `SelectItem` |
+| Form layout | `FormField` |
+| Dialogs | `Dialog`, `DialogTrigger`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogDescription`, `DialogFooter`, `DialogClose`, `DialogPortal`, `DialogOverlay`, `ConfirmDialog` |
+| Menus | `DropdownMenu`, `DropdownMenuTrigger`, `DropdownMenuContent`, `DropdownMenuItem`, `Popover`, `PopoverTrigger`, `PopoverContent`, `PopoverHeader` |
+| Tooltips | `TooltipProvider`, `Tooltip`, `TooltipTrigger`, `TooltipContent` |
+| Command palette | `Command`, `CommandDialog`, `CommandInput`, `CommandList`, `CommandEmpty`, `CommandGroup`, `CommandItem`, `CommandSeparator`, `CommandShortcut` |
+| Display | `CodeBlock`, `Spinner`, `Matrix` |
+| Cards | `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter` |
+
+Use React hooks from `ctx.React`, such as `useState`, `useEffect`, and `useRef`.
+
+Limits:
+
+- Tailwind classes in your plugin are not built. Put styles in your own CSS and load it with `ctx.styles(css)`.
+- Toasts, icons, and class helpers are not available. Nakama already mounts `Toaster`.
+- Prefer a bordered panel over `Card`; Nakama pages use borders, not shadows.
+
 ## 5. Build and check locally
 
 From your package directory:
