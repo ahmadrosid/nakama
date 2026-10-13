@@ -121,9 +121,9 @@ test("opens an enabled plugin page in the side panel", async () => {
 
   await act(async () => open?.click());
 
-  expect(shown.map(({ id, title }) => ({ id, title }))).toEqual([
-    { id: "plugin:notes", title: "Notes" },
-  ]);
+  expect(
+    shown.map(({ defaultWidth, id, title }) => ({ defaultWidth, id, title }))
+  ).toEqual([{ defaultWidth: 768, id: "plugin:notes", title: "Notes" }]);
 });
 
 test("does not offer the panel before the plugin is enabled", async () => {

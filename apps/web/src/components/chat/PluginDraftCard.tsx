@@ -4,6 +4,8 @@ import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
 import { Tick02Icon } from "hugeicons-react";
 import { type ReactNode, useState } from "react";
+import { WIDE_ARTIFACT_PANEL_WIDTH } from "@/components/chat/artifact-attachment-panel-body.shared";
+import { clampAttachmentPanelWidth } from "@/components/chat/attachment-panel-width";
 import { readRecord, readString } from "@/components/chat/web-search.shared";
 import { PluginSurface } from "@/components/PluginSurface";
 import { useAuth } from "@/context/use-auth";
@@ -170,6 +172,9 @@ function PluginDraftCard({
               onClick={() =>
                 panel.show({
                   content: <PluginPanelBody pluginId={plugin.pluginId} />,
+                  defaultWidth: clampAttachmentPanelWidth(
+                    WIDE_ARTIFACT_PANEL_WIDTH
+                  ),
                   id: `plugin:${plugin.pluginId}`,
                   title: plugin.name,
                   typeLabel: "Plugin",
