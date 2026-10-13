@@ -686,10 +686,16 @@ function PluginPackageForm({
   );
 }
 
-export function LocalPluginInstaller({ orgId }: { orgId: string }) {
+export function LocalPluginInstaller({
+  draft,
+  orgId,
+}: {
+  draft?: { draftId: string; profileId: string };
+  orgId: string;
+}) {
   const [open, setOpen] = useState(false);
-  const [profileId, setProfileId] = useState("");
-  const [draftId, setDraftId] = useState("");
+  const [profileId, setProfileId] = useState(draft?.profileId ?? "");
+  const [draftId, setDraftId] = useState(draft?.draftId ?? "");
 
   const [preview, setPreview] = useState<LocalPluginPreviewResponse | null>(
     null
@@ -705,7 +711,7 @@ export function LocalPluginInstaller({ orgId }: { orgId: string }) {
   const generation = useRef(0);
 
   const profiles = useQuery({
-    enabled: open,
+    enabled: open && !draft,
     queryFn: () => client.listProfiles(orgId),
     queryKey: ["plugin-draft-profiles", orgId],
   });
@@ -844,56 +850,67 @@ export function LocalPluginInstaller({ orgId }: { orgId: string }) {
         onClick={() => {
           reset();
           setOpen(true);
+
+          if (draft) {
+            void loadPreview();
+          }
         }}
-        variant="outline"
+        size={draft ? "sm" : "default"}
+        variant={draft ? "default" : "outline"}
       >
-        Install from folder
+        {draft ? "Review and install" : "Install from folder"}
       </Button>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Install from folder</DialogTitle>
         </DialogHeader>
-        <Select
-          disabled={pending || install.isPending}
-          onValueChange={(value) => {
-            reset();
-            setProfileId(value ?? "");
-          }}
-          value={profileId}
-        >
-          <SelectTrigger aria-label="Super Bot">
-            <SelectValue placeholder="Super Bot" />
-          </SelectTrigger>
-          <SelectContent>
-            {(profiles.data?.profiles ?? [])
-              .filter((profile) => profile.isSuper)
-              .map((profile) => (
-                <SelectItem key={profile.id} value={profile.id}>
-                  {profile.name}
-                </SelectItem>
-              ))}
-          </SelectContent>
-        </Select>
-        <Input
-          aria-label="Draft ID"
-          disabled={pending || install.isPending}
-          onChange={(event) => {
-            reset();
-            setDraftId(event.target.value);
-          }}
-          placeholder="Draft ID"
-          value={draftId}
-        />
+        {draft ? null : (
+          <>
+            <Select
+              disabled={pending || install.isPending}
+              onValueChange={(value) => {
+                reset();
+                setProfileId(value ?? "");
+              }}
+              value={profileId}
+            >
+              <SelectTrigger aria-label="Super Bot">
+                <SelectValue placeholder="Super Bot" />
+              </SelectTrigger>
+              <SelectContent>
+                {(profiles.data?.profiles ?? [])
+                  .filter((profile) => profile.isSuper)
+                  .map((profile) => (
+                    <SelectItem key={profile.id} value={profile.id}>
+                      {profile.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <Input
+              aria-label="Draft ID"
+              disabled={pending || install.isPending}
+              onChange={(event) => {
+                reset();
+                setDraftId(event.target.value);
+              }}
+              placeholder="Draft ID"
+              value={draftId}
+            />
+          </>
+        )}
         {profiles.error ? (
           <p role="alert">{formatError(profiles.error)}</p>
         ) : null}
         {error ? <p role="alert">{error}</p> : null}
-        <Button
-          disabled={!(profileId && draftId) || pending || install.isPending}
-          onClick={loadPreview}
-        >
-          Preview draft
-        </Button>
+        {draft ? null : (
+          <Button
+            disabled={!(profileId && draftId) || pending || install.isPending}
+            onClick={loadPreview}
+          >
+            Preview draft
+          </Button>
+        )}
         {preview ? (
           <>
             <p className="break-all font-mono text-xs">
@@ -1428,7 +1445,7 @@ function PluginRowDetails({
   );
 }
 
-function PluginAgentAccessDialog({
+export function PluginAgentAccessDialog({
   plugin,
   onClose,
 }: {

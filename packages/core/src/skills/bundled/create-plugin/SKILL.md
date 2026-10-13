@@ -13,6 +13,18 @@ Use the profile workspace from the tool context. Write only beneath
 Keep `package.json`, `nakama.plugin.json`, `src/`, and built output together.
 Put build instructions in `src/BUILD.md`. Keep sources after installation.
 
+Start every new plugin from the template. Choose the plugin ID, display name,
+and first action key, then run this from the profile workspace (bash cwd):
+
+```sh
+bun <skill directory>/scripts/new-plugin.mjs <plugin-id> "<Plugin Name>" <action-key>
+```
+
+The script writes `plugin-drafts/<plugin-id>/` with a manifest, package.json,
+`src/<action-key>.js`, `src/BUILD.md`, and the built `actions/<action-key>.js`.
+It refuses an existing draft; edit that draft instead. Then replace the example
+action, description, and input schema with the real ones, and rebuild.
+
 Check `bun --version` with bash. If Bun or a needed library is absent, report
 the prerequisite. Do not install dependencies or coding tools silently.
 An assigned bash tool is required. A coding-agent CLI is optional.
@@ -70,6 +82,9 @@ Set the minimum host version to one you support. Use `access: "admin"` for
 admin-only actions and `effect: "write"` for mutations. Input schemas support
 type, properties, required, additionalProperties, items, enum, string length,
 numeric bounds, and array length bounds. Do not use remote references.
+Any other keyword fails with `invalid_manifest: unsupported_schema`, including
+`description`, `default`, `title`, and `format` on a property. Describe inputs in
+the action `description` and apply defaults in `run`.
 
 ## Actions and host calls
 
@@ -115,8 +130,11 @@ Optional useHostLlm supplies an owner-only provider configuration.
 
 ## Handoff
 
-Report profile ID, draft ID, build result, and the review location:
-System → Plugins → Install from folder. State that the draft is uninstalled.
+After the last successful build, call `submit_plugin_draft` with the draft ID.
+It shows a card that walks the admin through review, install, enable, and
+profile access. If it fails, fix the reported problem, rebuild, and call it again.
+
+Then report the build result in one or two lines. State that the draft is uninstalled.
 A platform admin reviews source and built files before installation.
 Fresh installations stay disabled. An admin enables them separately and assigns
 new actions to profiles. Installed plugins have full server/browser privileges.

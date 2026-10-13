@@ -1,13 +1,18 @@
-import { access, mkdir, rename, rm } from "node:fs/promises";
+import { access, copyFile, mkdir, readdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { writePrivateTextFileIfMissing, writeTextFile } from "../../fs";
 import { getGlobalSkillsDir, SKILL_FILE_NAME } from "../paths";
-import { BUNDLED_SKILL_NAMES, readBundledSkillMarkdown } from "./index";
+import {
+  BUNDLED_SKILL_NAMES,
+  bundledSkillDirectory,
+  readBundledSkillMarkdown,
+} from "./index";
 
 /** Bundled skills whose installed SKILL.md must be overwritten on startup (content drift). */
 const FORCE_REFRESH_BUNDLED_SKILL_NAMES = new Set<string>([
   "manage-skills",
   "coding-agent",
+  "create-plugin",
   "coding-backend-codex",
   "coding-backend-cursor",
   "agent-browser",
@@ -55,6 +60,32 @@ async function migrateRenamedBundledSkillDirectories(): Promise<string[]> {
   return refreshed;
 }
 
+/** Scripts and templates beside SKILL.md are read-only assets; always refresh them. */
+async function copyBundledSkillAssets(
+  name: (typeof BUNDLED_SKILL_NAMES)[number],
+  directory: string
+): Promise<void> {
+  const source = bundledSkillDirectory(name);
+
+  const entries = await readdir(source, {
+    recursive: true,
+    withFileTypes: true,
+  });
+
+  for (const entry of entries) {
+    const from = path.join(entry.parentPath, entry.name);
+    const relative = path.relative(source, from);
+
+    if (!entry.isFile() || relative === SKILL_FILE_NAME) {
+      continue;
+    }
+
+    const to = path.join(directory, relative);
+    await mkdir(path.dirname(to), { recursive: true });
+    await copyFile(from, to);
+  }
+}
+
 export async function ensureBundledSkillFiles(): Promise<string[]> {
   const created: string[] = [];
   const refreshed = await migrateRenamedBundledSkillDirectories();
@@ -65,6 +96,7 @@ export async function ensureBundledSkillFiles(): Promise<string[]> {
     const directory = `${skillsRoot}/${name}`;
     const skillFilePath = `${directory}/${SKILL_FILE_NAME}`;
     const content = await readBundledSkillMarkdown(name);
+    await copyBundledSkillAssets(name, directory);
 
     if (
       refreshed.includes(name) ||

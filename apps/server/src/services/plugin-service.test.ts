@@ -25,7 +25,10 @@ import {
   pluginTarball,
   publishPluginPackageVersion,
 } from "../testing/plugin-package-fixture";
+import { createSuperBotTools } from "../tools/super-bot-tools";
 import { PluginService, setPluginLifecycleTestHooks } from "./plugin-service";
+import type { ProfileService } from "./profile-service";
+import { SuperBotSessionState } from "./super-bot-session-state";
 
 afterEach(closePluginPackageRegistry);
 
@@ -164,6 +167,48 @@ describe("PluginService", () => {
       service: new PluginService(db, configDir),
     };
   }
+
+  test("submit_plugin_draft describes Super Bot's own draft without installing it", async () => {
+    const { db, directory, draft, service } = await localDraft();
+
+    const submit = createSuperBotTools(
+      // SAFETY: submit_plugin_draft never touches profile management.
+      {} as ProfileService,
+      new SuperBotSessionState(),
+      undefined,
+      () => service
+    ).find((tool) => tool.name === "submit_plugin_draft");
+
+    const context = { orgId: draft.orgId, profileId: draft.profileId };
+
+    expect(
+      await submit?.run({ draftId: draft.draftId }, context)
+    ).toMatchObject({
+      actions: ["list"],
+      draftId: "notes",
+      fileCount: 7,
+      pluginId: "notes",
+      type: "plugin_draft_ready",
+    });
+    expect(await db.getOrgPlugin(draft.orgId, "notes")).toBeNull();
+    await expect(
+      submit?.run({ draftId: draft.draftId }, { ...context, profileId: "x" })
+    ).rejects.toThrow();
+
+    const manifest = notesManifest();
+    manifest.actions[0].inputSchema = {
+      properties: { query: { description: "Search text", type: "string" } },
+      type: "object",
+    };
+    await writeFile(
+      join(directory, "nakama.plugin.json"),
+      JSON.stringify(manifest)
+    );
+
+    await expect(
+      submit?.run({ draftId: draft.draftId }, context)
+    ).rejects.toThrow("invalid_manifest: unsupported_schema");
+  });
 
   test("local review and first install publish only reviewed bytes and stay disabled", async () => {
     const { db, draft, directory, service, actor } = await localDraft();

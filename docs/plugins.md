@@ -74,6 +74,17 @@ alongside built actions, UI, skills, workers, and migrations. Direct `bun build`
 commands compile the draft; the agent does not install it or execute its actions.
 Host shell access is unsandboxed, including during drafting.
 
+The skill ships `scripts/new-plugin.mjs` and a `template/` folder. Super Bot runs
+`bun <skill dir>/scripts/new-plugin.mjs <id> "<Name>" <action>` from its
+workspace to scaffold and build a new draft. `ensureBundledSkillFiles` copies
+those assets into the installed skill folder on every start.
+
+When the draft builds, Super Bot calls `submit_plugin_draft`. The tool runs
+`PluginService.describeLocalPlugin`, which validates the draft without the
+platform-admin check, and returns `type: "plugin_draft_ready"`. The web chat
+renders that result as `PluginDraftCard`. The card reads its state from the org
+plugin list and plugin agent access.
+
 A platform admin chooses **System → Plugins → Install from folder**, selects
 the active organization's Super Bot, and enters the draft ID. Preview shows the
 manifest, effective development version, file list, and digest. Open each file

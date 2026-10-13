@@ -66,6 +66,11 @@ export async function ensureBundledSkillsAssigned(
 
   for (const profile of profiles) {
     await ensureProfileDefaultBundledSkills(db, profile.id);
+
+    // Boot seeds Super Bots before skill rows sync, so a new skill lands here.
+    if (profile.isSuper) {
+      await ensureProfileSuperBotBundledSkills(db, profile.id);
+    }
   }
 }
 

@@ -455,6 +455,13 @@ export class PluginService {
     };
   }
 
+  /** Super Bot's handoff: validates its own draft without approving it. */
+  async describeLocalPlugin(draft: LocalPluginDraftRequest) {
+    const inspected = await this.inspectLocalPlugin(draft);
+
+    return { ...toPreview(inspected), fileCount: inspected.files.size };
+  }
+
   async readLocalPluginFile(
     request: ReadLocalPluginFileRequest,
     actor: { id: string; isPlatformAdmin: boolean }
@@ -631,24 +638,39 @@ export class PluginService {
 
     const validated = validatePluginManifest(manifest);
 
-    if (
-      !validated.ok ||
-      packageJson.version !== validated.manifest.version ||
-      validated.manifest.id !== draft.draftId ||
-      getNakamaVersion() === "dev" ||
-      !Bun.semver.satisfies(
-        getNakamaVersion(),
-        `>=${validated.manifest.minNakamaVersion}`
-      ) ||
-      OFFICIAL_PLUGINS.has(validated.manifest.id) ||
-      validated.manifest.id === "google-meet" ||
+    if (!validated.ok) {
+      throw invalidLocalManifest(validated.code);
+    }
+
+    const { id, minNakamaVersion } = validated.manifest;
+
+    // HTTP maps only the code; the reason lets Super Bot fix its own draft.
+    const failures: Array<[boolean, string]> = [
       [
-        packageJson.dependencies,
-        packageJson.optionalDependencies,
-        packageJson.peerDependencies,
-      ].some((dependencies) => Object.keys(dependencies ?? {}).length > 0)
-    ) {
-      throw new PluginHostError("invalid_manifest");
+        packageJson.version !== validated.manifest.version,
+        "package_version_mismatch",
+      ],
+      [id !== draft.draftId, "id_must_match_draft_folder"],
+      [
+        getNakamaVersion() === "dev" ||
+          !Bun.semver.satisfies(getNakamaVersion(), `>=${minNakamaVersion}`),
+        "unsupported_nakama_version",
+      ],
+      [OFFICIAL_PLUGINS.has(id) || id === "google-meet", "official_plugin_id"],
+      [
+        [
+          packageJson.dependencies,
+          packageJson.optionalDependencies,
+          packageJson.peerDependencies,
+        ].some((dependencies) => Object.keys(dependencies ?? {}).length > 0),
+        "package_dependencies",
+      ],
+    ];
+
+    const failure = failures.find(([failed]) => failed);
+
+    if (failure) {
+      throw invalidLocalManifest(failure[1]);
     }
 
     assertReferencedFilesExist(validated.manifest, files);
@@ -2727,6 +2749,10 @@ function isUiReleasePath(
   const assetsDir = ui.assetsDir.replace(/\/+$/, "");
 
   return relativePath === assetsDir || relativePath.startsWith(`${assetsDir}/`);
+}
+
+function invalidLocalManifest(reason: string): PluginHostError {
+  return new PluginHostError("invalid_manifest", `invalid_manifest: ${reason}`);
 }
 
 function toPreview(inspected: InspectedPackage): PluginPackagePreview {

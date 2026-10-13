@@ -309,3 +309,49 @@ for (const stage of ["preview", "file", "install"]) {
     expect(button("Confirm installation")?.disabled).toBe(true);
   });
 }
+
+test("a chat draft opens straight into review for that draft", async () => {
+  const previewCall = spyOn(client, "previewLocalPlugin").mockResolvedValue(
+    preview()
+  );
+
+  const profiles = spyOn(client, "listProfiles");
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const queryClient = new QueryClient();
+
+  cleanups.push(() => {
+    act(() => root.unmount());
+    container.remove();
+    previewCall.mockRestore();
+    profiles.mockRestore();
+    queryClient.clear();
+  });
+
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <LocalPluginInstaller
+          draft={{ draftId: "notes", profileId: "super" }}
+          orgId="org-a"
+        />
+      </QueryClientProvider>
+    )
+  );
+  await act(async () =>
+    [...document.querySelectorAll("button")]
+      .find((item) => item.textContent === "Review and install")
+      ?.click()
+  );
+  await settle();
+
+  expect(previewCall).toHaveBeenCalledWith({
+    draftId: "notes",
+    orgId: "org-a",
+    profileId: "super",
+  });
+  expect(profiles).not.toHaveBeenCalled();
+  expect(document.querySelector('[aria-label="Draft ID"]')).toBeNull();
+  expect(document.body.textContent).toContain("actions/list.js");
+});

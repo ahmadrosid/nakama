@@ -32,15 +32,22 @@ The same note you create on the page is the one the agent reads. Another organiz
 ## Create a plugin with Super Bot
 
 Ask Super Bot to create a plugin when your team needs a custom page or agent
-tool. Super Bot prepares source files and built output for review.
-It reports the draft ID and build result. The draft stays uninstalled.
+tool. Super Bot starts from a template, prepares source files and built output,
+and shows a plugin card in the chat. The draft stays uninstalled.
 
-1. As a platform admin, open **System → Plugins → Install from folder**.
-2. Select the active organization's Super Bot and enter its draft ID.
-3. Choose **Preview draft**.
-4. Open each listed file to review the source, built code, and migrations.
-5. Choose **Confirm installation**.
-6. Enable the installed plugin, then assign its tools to the required profiles.
+The card walks through five steps: **Drafted**, **Review and install**,
+**Enable**, **Connect to profiles**, and **Try it**. Each step shows its button
+only to the people who can do it, and the card updates as each step finishes.
+
+1. As a platform admin, choose **Review and install** on the card.
+2. Open each listed file to review the source, built code, and migrations.
+3. Choose **Confirm installation**.
+4. As an org admin, choose **Enable plugin**.
+5. As a platform admin, choose **Choose profiles** and select the profiles that get its tools.
+6. Ask one of those profiles to run the tool.
+
+You can also review a draft from **System → Plugins → Install from folder**:
+select the Super Bot, enter the draft ID, and choose **Preview draft**.
 
 First installation stays disabled. First enable runs migrations and starts
 workers. Reinstall resumes a previously enabled plugin after a successful

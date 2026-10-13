@@ -20,6 +20,7 @@ import {
   loadToolSetup,
   saveToolSetup,
 } from "../services/custom-tool-shared";
+import type { PluginService } from "../services/plugin-service";
 import type { ProfileService } from "../services/profile-service";
 import {
   PROFILE_UPDATE_CONFIRMATION_MESSAGE,
@@ -76,9 +77,58 @@ export function createSuperBotTools(
   resolveInheritedModel?: (
     model: string | null,
     context: ToolContext
-  ) => Promise<string | null>
+  ) => Promise<string | null>,
+  getPluginService?: () => PluginService | null
 ): ToolDefinition[] {
   return [
+    {
+      description:
+        "Show the plugin draft card in chat after plugin-drafts/<draftId> builds. The card tracks review, install, enable, and profile access for the admin. Call once per finished draft, then end the turn.",
+      name: "submit_plugin_draft",
+      parameters: {
+        additionalProperties: false,
+        properties: {
+          draftId: {
+            description: "Folder name under plugin-drafts/.",
+            type: "string",
+          },
+        },
+        required: ["draftId"],
+        type: "object",
+      },
+      async run(input, context) {
+        const orgId = requireOrgId(context);
+        const profileId = context.profileId?.trim();
+        const plugins = getPluginService?.();
+
+        if (!profileId) {
+          throw new Error("A profile is required to submit a plugin draft.");
+        }
+
+        if (!plugins) {
+          throw new Error("Plugins are not available on this server.");
+        }
+
+        const { draftId } = z
+          .object({ draftId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/) })
+          .strict()
+          .parse(input);
+
+        const draft = { draftId, orgId, profileId };
+        const preview = await plugins.describeLocalPlugin(draft);
+
+        return {
+          ...draft,
+          actions: preview.contributions.actionKeys,
+          digest: preview.digest,
+          fileCount: preview.fileCount,
+          name: preview.manifest.name,
+          pluginId: preview.manifest.id,
+          type: "plugin_draft_ready",
+          version: preview.manifest.version,
+        };
+      },
+    },
     {
       description:
         "Present a custom tool build plan for one-click approval, optional API key, and agent assignment. Call before writing code, then end the turn. Never accept API keys in tool inputs or chat. After approval, build and register with create_tool using the returned setupId. Works for any JavaScript or Python tool.",
