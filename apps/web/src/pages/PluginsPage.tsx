@@ -31,8 +31,15 @@ import {
   SelectValue,
 } from "@nakama/ui/select";
 import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import { useQuery } from "@tanstack/react-query";
-import { Add01Icon, MoreHorizontalIcon, Search01Icon } from "hugeicons-react";
+import {
+  Add01Icon,
+  ArrowDown01Icon,
+  ArrowRight01Icon,
+  MoreHorizontalIcon,
+  Search01Icon,
+} from "hugeicons-react";
 import {
   type Dispatch,
   type MouseEvent,
@@ -72,6 +79,7 @@ import {
 } from "@/hooks/use-plugins";
 import { usePinnedPlugins } from "@/hooks/use-sidebar-collapsed";
 import { client, formatError } from "@/lib/client";
+import { formatBytes } from "@/lib/knowledge-base-files";
 import {
   canAccessSystemPage,
   canManagePluginReleases,
@@ -686,6 +694,15 @@ function PluginPackageForm({
   );
 }
 
+// Code that runs first, so the reviewer reads it first. The last group catches the rest.
+const LOCAL_REVIEW_GROUPS = [
+  ["Runs on the server", /^(actions|workers)\//],
+  ["Runs in the browser", /^ui\//],
+  ["Database migrations", /^migrations\//],
+  ["Source", /^src\//],
+  ["Config and other files", /./],
+] as const;
+
 export function LocalPluginInstaller({
   draft,
   orgId,
@@ -913,51 +930,125 @@ export function LocalPluginInstaller({
         )}
         {preview ? (
           <>
-            <p className="break-all font-mono text-xs">
-              {preview.manifest.name} · {preview.manifest.version}
-              <br />
-              SHA-256: {preview.digest}
-            </p>
-            <p>
-              Plugin code has full host access. First enable and updates run
-              migrations. Reinstall resumes an enabled plugin.
-            </p>
-            <pre className="max-h-48 overflow-auto rounded border p-3 text-xs">
-              {JSON.stringify(preview.manifest, null, 2)}
-            </pre>
-            <ul className="max-h-48 overflow-auto">
-              {preview.files.map((item) => (
-                <li key={item.path}>
-                  <Button
-                    disabled={pending || install.isPending}
-                    onClick={() => readFile(item.path)}
-                    variant="ghost"
+            <div>
+              <p className="font-medium">
+                {preview.manifest.name}{" "}
+                <span className="font-normal text-muted-foreground">
+                  {preview.manifest.version}
+                </span>
+              </p>
+              <p className="text-muted-foreground text-sm">
+                Plugin code has full host access. First enable and updates run
+                migrations. Reinstall resumes an enabled plugin.
+              </p>
+            </div>
+            {LOCAL_REVIEW_GROUPS.map(([label, pattern], index) => {
+              const files = preview.files.filter(
+                (item) =>
+                  LOCAL_REVIEW_GROUPS.findIndex(([, match]) =>
+                    match.test(item.path)
+                  ) === index
+              );
+
+              if (files.length === 0) {
+                return null;
+              }
+
+              const runs = index < 3;
+
+              return (
+                <section key={String(pattern)}>
+                  <h3
+                    className={cn(
+                      "mb-1.5 font-semibold text-xs uppercase tracking-wide",
+                      runs ? "text-primary" : "text-muted-foreground"
+                    )}
                   >
-                    {reviewed.has(item.path) ? "✓ " : ""}
-                    {item.path} ({item.size} bytes)
-                  </Button>
-                </li>
-              ))}
-            </ul>
-            {file ? (
-              <pre
-                aria-label={file.path}
-                className="max-h-80 overflow-auto whitespace-pre rounded border p-3 text-xs"
-              >
-                {file.content}
-              </pre>
-            ) : null}
-            <DialogFooter>
-              <Button
-                disabled={
-                  pending ||
-                  install.isPending ||
-                  reviewed.size !== preview.files.length
-                }
-                onClick={confirm}
-              >
-                {install.isPending ? "Installing…" : "Confirm installation"}
-              </Button>
+                    {label}
+                  </h3>
+                  <ul
+                    className={cn(
+                      "divide-y overflow-hidden rounded-lg border",
+                      runs && "border-primary/40"
+                    )}
+                  >
+                    {files.map((item) => {
+                      const open = file?.path === item.path;
+                      const read = reviewed.has(item.path);
+
+                      return (
+                        <li key={item.path}>
+                          <button
+                            aria-expanded={open}
+                            className={cn(
+                              "flex min-h-11 w-full items-center gap-2.5 px-3 text-left text-sm disabled:opacity-60",
+                              open && "bg-muted/60"
+                            )}
+                            disabled={pending || install.isPending}
+                            onClick={() =>
+                              open ? setFile(null) : readFile(item.path)
+                            }
+                            type="button"
+                          >
+                            {open ? (
+                              <ArrowDown01Icon aria-hidden className="size-4" />
+                            ) : (
+                              <ArrowRight01Icon
+                                aria-hidden
+                                className="size-4"
+                              />
+                            )}
+                            <span className="min-w-0 flex-1 truncate font-mono text-[13px]">
+                              {item.path}
+                            </span>
+                            <span className="text-muted-foreground text-xs">
+                              {formatBytes(item.size)}
+                            </span>
+                            <span
+                              className={cn(
+                                "rounded-full px-2 py-0.5 font-medium text-xs",
+                                read
+                                  ? "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300"
+                                  : "border text-muted-foreground"
+                              )}
+                            >
+                              {read ? "Read" : "Not read"}
+                            </span>
+                          </button>
+                          {open ? (
+                            <pre
+                              aria-label={file.path}
+                              className="max-h-72 overflow-auto whitespace-pre border-t bg-background p-3 font-mono text-xs leading-relaxed"
+                            >
+                              {file.content}
+                            </pre>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              );
+            })}
+            <DialogFooter className="sticky -bottom-4 z-10 items-center gap-3 bg-muted sm:justify-between">
+              <span className="min-w-0 truncate font-mono text-muted-foreground text-xs">
+                sha256 {preview.digest}
+              </span>
+              <div className="flex shrink-0 items-center gap-3">
+                <span className="text-muted-foreground text-sm tabular-nums">
+                  {reviewed.size} of {preview.files.length} read
+                </span>
+                <Button
+                  disabled={
+                    pending ||
+                    install.isPending ||
+                    reviewed.size !== preview.files.length
+                  }
+                  onClick={confirm}
+                >
+                  {install.isPending ? "Installing…" : "Confirm installation"}
+                </Button>
+              </div>
             </DialogFooter>
           </>
         ) : null}

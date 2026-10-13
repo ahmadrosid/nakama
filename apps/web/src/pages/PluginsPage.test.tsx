@@ -355,3 +355,57 @@ test("a chat draft opens straight into review for that draft", async () => {
   expect(document.querySelector('[aria-label="Draft ID"]')).toBeNull();
   expect(document.body.textContent).toContain("actions/list.js");
 });
+
+test("draft review lists code that runs before source and config", async () => {
+  const previewCall = spyOn(client, "previewLocalPlugin").mockResolvedValue({
+    ...preview(),
+    files: [
+      { path: "nakama.plugin.json", size: 700 },
+      { path: "src/list.js", size: 90 },
+      { path: "actions/list.js", size: 40 },
+    ],
+  });
+
+  const fileCall = spyOn(client, "readLocalPluginFile").mockResolvedValue({
+    content: btoa("export {}"),
+    encoding: "base64",
+    nextOffset: null,
+    path: "actions/list.js",
+  });
+
+  cleanups.push(() => {
+    previewCall.mockRestore();
+    fileCall.mockRestore();
+  });
+  await mount();
+  await openDraft();
+  await act(async () =>
+    [...document.querySelectorAll("button")]
+      .find((item) => item.textContent === "Preview draft")
+      ?.click()
+  );
+  await settle();
+
+  const order = [
+    ...document.querySelectorAll("li > button[aria-expanded]"),
+  ].map((item) => item.textContent ?? "");
+
+  expect(order.map((text) => text.split(/\s/)[0])).toEqual([
+    "actions/list.js40",
+    "src/list.js90",
+    "nakama.plugin.json700",
+  ]);
+  expect(document.body.textContent).toContain("0 of 3 read");
+
+  await act(async () =>
+    document
+      .querySelector<HTMLButtonElement>("li > button[aria-expanded]")
+      ?.click()
+  );
+  await settle();
+
+  expect(
+    document.querySelector('[aria-label="actions/list.js"]')
+  ).not.toBeNull();
+  expect(document.body.textContent).toContain("1 of 3 read");
+});
