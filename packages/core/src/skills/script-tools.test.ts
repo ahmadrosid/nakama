@@ -49,6 +49,50 @@ test("a script nothing can run is reported instead of ignored", async () => {
   }
 });
 
+test("documented shell scripts stay instructions instead of becoming tools", async () => {
+  const directory = await skillDir({
+    "scripts/new-plugin.mjs": "console.log('draft');\n",
+  });
+
+  try {
+    for (const body of [
+      "```sh\nbun <skill directory>/scripts/new-plugin.mjs example\n```",
+      "node scripts/new-plugin.mjs example",
+      'bun "./scripts/new-plugin.mjs" example',
+    ]) {
+      const resolved = await resolveSkillScripts({
+        body,
+        declared: [],
+        directory,
+        skillName: "create-plugin",
+        toolPath: null,
+      });
+
+      expect(resolved.issues).toEqual([]);
+      expect(resolved.tools).toEqual([]);
+    }
+
+    for (const body of [
+      "Read scripts/new-plugin.mjs before use.",
+      "bun scripts/new-plugin.mjs.bak",
+      "bun other-scripts/new-plugin.mjs",
+    ]) {
+      const resolved = await resolveSkillScripts({
+        body,
+        declared: [],
+        directory,
+        skillName: "create-plugin",
+        toolPath: null,
+      });
+
+      expect(resolved.issues).toHaveLength(1);
+      expect(resolved.tools).toEqual([]);
+    }
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 test("a declared script becomes its own tool, named and described from the file", async () => {
   const directory = await skillDir({
     "SKILL.md": "---\n---\n",

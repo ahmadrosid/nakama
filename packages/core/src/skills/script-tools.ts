@@ -242,6 +242,7 @@ async function listSkillScripts(directory: string): Promise<string[]> {
  * reports every shipped script that nothing will run.
  */
 export async function resolveSkillScripts(input: {
+  body?: string;
   declared: string[];
   directory: string;
   skillName: string;
@@ -317,6 +318,23 @@ export async function resolveSkillScripts(input: {
 
   for (const script of present) {
     if (reachable.has(script)) {
+      continue;
+    }
+
+    const relative = path
+      .relative(input.directory, script)
+      .split(path.sep)
+      .join("/");
+
+    const escaped = relative.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+
+    // Scripts invoked by the skill through bash do not need a tool harness.
+    const command = new RegExp(
+      `^[ \\t]*(?:bun|node|python3?)[ \\t]+[^\\r\\n]*?(?<=[/ \\t"'])${escaped}(?=[ \\t"'\\r\\n]|$)`,
+      "mu"
+    );
+
+    if (command.test(input.body ?? "")) {
       continue;
     }
 

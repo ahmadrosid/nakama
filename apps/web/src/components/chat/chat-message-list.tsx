@@ -928,26 +928,26 @@ function AssistantMessageActions({
 function UserMessageContent({ message }: { message: ChatListItem }) {
   if (message.questionnaireAnswers?.length) {
     return (
-      <div className="rounded-2xl border border-border/70 bg-muted/40 px-4 py-3">
-        <p className="mb-2 font-medium text-muted-foreground text-sm">
-          Answers
-        </p>
-        <div className="space-y-3">
-          {message.questionnaireAnswers.map((entry) => (
-            <div
-              className="space-y-1"
-              key={`${entry.questionId}:${entry.prompt}`}
-            >
-              <p className="whitespace-pre-wrap text-foreground">
+      <ol className="-my-1 divide-y divide-border">
+        {message.questionnaireAnswers.map((entry, index) => (
+          <li
+            className="flex gap-3 py-2.5"
+            key={`${entry.questionId}:${entry.prompt}`}
+          >
+            <span className="w-4 shrink-0 text-13 text-muted-foreground tabular-nums">
+              {index + 1}
+            </span>
+            <div className="min-w-0 space-y-0.5">
+              <p className="whitespace-pre-wrap text-13 text-muted-foreground">
                 {entry.prompt}
               </p>
-              <p className="whitespace-pre-wrap text-muted-foreground text-sm">
+              <p className="whitespace-pre-wrap font-medium text-[15px] text-foreground leading-snug">
                 {entry.answer}
               </p>
             </div>
-          ))}
-        </div>
-      </div>
+          </li>
+        ))}
+      </ol>
     );
   }
 
