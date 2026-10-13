@@ -208,7 +208,7 @@ describe("native plugin activation", () => {
 
       if (selection === "history") {
         expect(html).toContain('aria-label="History"');
-        expect(html).toContain('aria-label="1 of 1 steps ran"');
+        expect(html).toContain('aria-label="1 of 2 steps ran"');
         expect(html).toContain('data-status="failed"');
         expect(html).toContain('aria-expanded="true"');
         expect(html).toContain(

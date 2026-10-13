@@ -772,11 +772,18 @@
     border-radius: 10px;
   }
   @container (max-width: 760px) {
-    .workflow-run-detail {
-      padding-left: 18px;
+    .workflow-day-runs > li > button {
+      gap: 12px;
+      padding: 0 14px;
     }
-    .workflow-run-time {
-      width: auto;
+    .workflow-run-detail {
+      padding: 0 14px 14px;
+    }
+    .workflow-run-actions {
+      flex-wrap: wrap;
+    }
+    .workflow-run-actions p {
+      flex-basis: 100%;
     }
     .workflow-step-last {
       display: none;

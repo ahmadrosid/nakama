@@ -773,11 +773,18 @@ var style_default = `[data-plugin-id="workflows"] {
     border-radius: 10px;
   }
   @container (max-width: 760px) {
-    .workflow-run-detail {
-      padding-left: 18px;
+    .workflow-day-runs > li > button {
+      gap: 12px;
+      padding: 0 14px;
     }
-    .workflow-run-time {
-      width: auto;
+    .workflow-run-detail {
+      padding: 0 14px 14px;
+    }
+    .workflow-run-actions {
+      flex-wrap: wrap;
+    }
+    .workflow-run-actions p {
+      flex-basis: 100%;
     }
     .workflow-step-last {
       display: none;
@@ -2406,7 +2413,7 @@ function apply(ctx) {
       canRun: Boolean(workflow) && !dirty && enabled && !busy,
       onRunAgain: (input) => runWorkflow(input),
       runs,
-      stepIds: steps.map((step) => step.id),
+      stepIds: allSteps.map((step) => step.id),
       stepNames: Object.fromEntries(allSteps.map((step) => [step.id, title(step.id)]))
     }), view === "data" && /* @__PURE__ */ React.createElement("section", {
       "aria-label": "Workflow data",
@@ -2803,7 +2810,7 @@ function apply(ctx) {
     const failed = receipts.find((step) => step.status === "failed");
     const missingTool = /^Unknown tool: (.+)$/i.exec(run.error ?? "")?.[1];
     const missingName = missingTool ? toolParts(missingTool).app || toolParts(missingTool).action : "";
-    const recordedIds = receipts.filter((step) => step.kind !== "summarize").map((step) => step.stepId);
+    const recordedIds = receipts.map((step) => step.stepId);
     const ids = recordedIds.some((id) => !stepIds.includes(id)) ? recordedIds : stepIds;
     const reached = ids.filter((id) => timeline.has(id)).length;
     return /* @__PURE__ */ React.createElement("li", {
