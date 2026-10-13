@@ -550,10 +550,12 @@ test("the plugin template types list every ctx.ui export", async () => {
       import.meta.url
     )
   ).text();
+
   const body = types.slice(
     types.indexOf("export interface PluginUi {"),
     types.indexOf("export interface PluginToolProps")
   );
+
   const typed = [...body.matchAll(/^ {2}([A-Z]\w*):/gm)].map(
     ([, name]) => name
   );
