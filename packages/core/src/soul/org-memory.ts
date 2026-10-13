@@ -37,7 +37,10 @@ export function normalizeOrgMemoryDedupKey(bullet: string): string {
   return normalizeOrgMemoryBullet(bullet).toLowerCase();
 }
 
-export function detectOrgMemoryInjectionWarnings(bullet: string): string[] {
+export function detectOrgMemoryInjectionWarnings(
+  bullet: string,
+  { markup = true }: { markup?: boolean } = {}
+): string[] {
   const warnings: string[] = [];
 
   if (/ignore (all )?previous/i.test(bullet)) {
@@ -48,6 +51,11 @@ export function detectOrgMemoryInjectionWarnings(bullet: string): string[] {
   // a model exactly like `system:` and slipped past a bare `^system:` anchor.
   if (/^\s*(?:[-*+]\s+)?system:/im.test(bullet)) {
     warnings.push("Contains a system-style prefix.");
+  }
+
+  // Skills are markdown documents, so headings and tags are normal there.
+  if (!markup) {
+    return warnings;
   }
 
   if (/^##\s/m.test(bullet)) {

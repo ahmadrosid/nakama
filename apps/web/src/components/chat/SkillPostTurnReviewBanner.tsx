@@ -182,10 +182,10 @@ export function SkillPostTurnReviewBanner({
 
             return (
               <div className="-mx-3 text-sm" key={suggestion.id}>
-                <div className="flex items-center gap-3 px-3 py-2">
+                <div className="flex items-start gap-3 px-3 py-2">
                   <File01Icon
                     aria-hidden
-                    className="size-4 shrink-0 text-muted-foreground"
+                    className="mt-0.5 size-4 shrink-0 text-muted-foreground"
                     strokeWidth={1.5}
                   />
                   <div className="min-w-0 flex-1">
