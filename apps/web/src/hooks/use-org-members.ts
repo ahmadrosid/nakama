@@ -36,6 +36,15 @@ export function useOrganizationOverview(
   });
 }
 
+export function useOrgUsageSummary(orgId: string | null) {
+  return useQuery({
+    enabled: Boolean(orgId),
+    queryFn: () => client.getOrganizationUsageSummary(orgId ?? ""),
+    queryKey: ["orgUsageSummary", orgId] as const,
+    retry: false,
+  });
+}
+
 export function useOrgMembers(orgId: string | null) {
   return useQuery({
     ...orgMembersQueryOptions(orgId ?? ""),

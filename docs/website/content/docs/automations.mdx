@@ -32,7 +32,7 @@ A `runAt` automation whose timestamp has already passed is not scheduled. Disabl
 
 Scheduled runs are driven by the automation worker, a separate process managed by PM2 alongside the channel bridges. It reports a heartbeat, so **Control center → Workspace → Workers** tells you whether schedules are actually being served. If the worker is down, `manual` runs from the dashboard still work and scheduled ones do not fire.
 
-The worker loads the schedule list at startup and reloads it on a polling interval. The default interval is five minutes, and it accepts 1 to 1440 minutes. An organization admin can change it on **System → Organization**, on the **Skill curator** card. Polling doesn't send a live schedule-change event to the worker.
+The worker loads the schedule list at startup and reloads it on a polling interval. The default interval is five minutes, and it accepts 1 to 1440 minutes. An organization admin can change it on **System → Organization**, on the **Auto clean-up of skills** card, under **How bots learn skills → Customize**. Polling doesn't send a live schedule-change event to the worker.
 
 This reload boundary matters for new schedules. A schedule created just after a reload can wait for the next poll before it is registered. A one-time `runAt` that passes before the worker sees it is missed rather than caught up later. Allow for the polling interval when you create time-sensitive one-time automations, and make sure the worker is running before you create them.
 

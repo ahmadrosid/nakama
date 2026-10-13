@@ -137,6 +137,7 @@ export function ChatPageContent(state: ChatPageState) {
           );
         }}
         onThinkingEffortChange={handleThinkingEffortChange}
+        placeholder={isEmptyState ? composerEntry.placeholder : undefined}
         primarySupportsVision={activeModelSupportsVision}
         profileId={profileId}
         profileModelId={extractModelId(currentModelSelection)}

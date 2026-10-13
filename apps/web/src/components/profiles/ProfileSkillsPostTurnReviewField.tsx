@@ -1,4 +1,5 @@
 import type { ProfileDetail } from "@nakama/core/contract";
+import { BookOpen01Icon } from "hugeicons-react";
 import { ProfileOrgBooleanOverrideField } from "@/components/profiles/ProfileOrgBooleanOverrideField";
 
 export function ProfileSkillsPostTurnReviewField({
@@ -10,13 +11,14 @@ export function ProfileSkillsPostTurnReviewField({
 }) {
   return (
     <ProfileOrgBooleanOverrideField
-      description="Review each reply for lessons that can improve skills."
+      description="After each reply, look for ways to get better at its skills."
       disabled={disabled}
       field="skillsPostTurnReview"
+      icon={<BookOpen01Icon size={18} />}
       id="profile-skills-post-turn-review"
-      label="Learn after a turn"
+      label="Learn from chats"
       profile={profile}
-      savedToast="Learn after a turn setting saved."
+      savedToast="Saved."
     />
   );
 }

@@ -51,6 +51,34 @@ afterEach(() => {
 });
 
 describe("ACP MCP tools", () => {
+  test("hides tools the agent already has", async () => {
+    const session = freshSession();
+    setAcpToolAccess(
+      session.key,
+      [
+        echoTool,
+        { ...echoTool, name: "bash" },
+        { ...echoTool, name: "read_file" },
+      ],
+      context
+    );
+
+    const list = await handleAcpMcpRequest(session.token, {
+      id: 1,
+      jsonrpc: "2.0",
+      method: "tools/list",
+    });
+
+    // SAFETY: The tools/list reply carries { result: { tools } } once its kind is "reply".
+    const names =
+      list.kind === "reply" &&
+      (list.body as { result: { tools: { name: string }[] } }).result.tools.map(
+        (tool) => tool.name
+      );
+
+    expect(names).toEqual(["echo_tool"]);
+  });
+
   test("lists and runs the chat's tools for the token that owns them", async () => {
     const session = freshSession();
     setAcpToolAccess(session.key, [echoTool], context);

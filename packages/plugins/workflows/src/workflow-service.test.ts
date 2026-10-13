@@ -12,6 +12,9 @@ test("save action finishes updating before closing its database", async () => {
   const service = new WorkflowService(databasePath, "org_a");
 
   try {
+    expect(service.db.query("PRAGMA synchronous").get()).toEqual({
+      synchronous: 3,
+    });
     service.db.exec(
       await readFile(
         new URL("../migrations/001-workflows.sql", import.meta.url),

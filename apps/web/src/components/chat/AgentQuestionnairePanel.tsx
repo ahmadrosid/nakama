@@ -116,7 +116,7 @@ export function AgentQuestionnairePanel({
           "button[data-question-option='true']:not(:disabled)"
         );
 
-      (input ?? selectedOption ?? firstOption)?.focus();
+      (selectedOption ?? firstOption ?? input)?.focus();
     });
 
     return () => window.cancelAnimationFrame(focusTarget);
@@ -219,6 +219,18 @@ export function AgentQuestionnairePanel({
       return;
     }
 
+    const isTyping = event.target instanceof HTMLInputElement;
+
+    if (!isTyping && /^[1-9]$/.test(event.key)) {
+      event.preventDefault();
+
+      if (!disabled) {
+        selectChoice(Number(event.key) - 1);
+      }
+
+      return;
+    }
+
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       handleContinue();
@@ -242,14 +254,10 @@ export function AgentQuestionnairePanel({
         className={composerShelfPanelClass(stackEdge)}
       >
         <AgentQuestionnaireNav
-          activeAnswerLength={activeAnswer.length}
-          canGoNext={canGoNext}
-          canGoPrevious={canGoPrevious}
+          answered={resolvedAnswers.map(
+            (answer) => answer.answer.trim().length > 0
+          )}
           currentQuestionIndex={currentQuestionIndex}
-          disabled={disabled}
-          onNext={() => setCurrentQuestionIndex((current) => current + 1)}
-          onPrevious={() => setCurrentQuestionIndex((current) => current - 1)}
-          totalQuestions={activeQuestionnaire.questions.length}
         />
         <div className="space-y-4 px-3 py-3" onKeyDown={handleKeyDown}>
           <div key={activeQuestion.id} ref={activeQuestionRef}>
@@ -275,13 +283,27 @@ export function AgentQuestionnairePanel({
             >
               Skip
             </button>
-            <Button
-              disabled={disabled || !canContinue}
-              onClick={handleContinue}
-              type="button"
-            >
-              {canGoNext ? "Continue" : "Submit"}
-            </Button>
+            <div className="flex items-center gap-2">
+              {canGoPrevious ? (
+                <Button
+                  disabled={disabled}
+                  onClick={() =>
+                    setCurrentQuestionIndex((current) => current - 1)
+                  }
+                  type="button"
+                  variant="outline"
+                >
+                  Back
+                </Button>
+              ) : null}
+              <Button
+                disabled={disabled || !canContinue}
+                onClick={handleContinue}
+                type="button"
+              >
+                {canGoNext ? "Continue" : "Submit"}
+              </Button>
+            </div>
           </div>
         </div>
       </aside>

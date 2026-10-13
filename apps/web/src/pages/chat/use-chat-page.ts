@@ -142,7 +142,12 @@ function useChatComposerDraft({
     routeSession?.sessionId ?? null
   );
 
-  const [composerEntry, setComposerEntry] = useState(() => ({
+  const [composerEntry, setComposerEntry] = useState<{
+    initialInput: string;
+    placeholder?: string;
+    revision: number;
+    scopeKey: string | null;
+  }>(() => ({
     initialInput: readComposerDraft(composerDraftKey),
     revision: 0,
     scopeKey: composerDraftKey,
@@ -158,6 +163,9 @@ function useChatComposerDraft({
 
   return { composerDraftKey, composerEntry, setComposerEntry };
 }
+
+const AUTOMATION_COMPOSER_PLACEHOLDER =
+  "Describe what to automate and when, e.g. every weekday at 9am, summarize new support emails.";
 
 export function useChatPage() {
   const queryClient = useQueryClient();
@@ -947,10 +955,19 @@ export function useChatPage() {
       setProfileId(requestedProfile);
     }
 
+    const placeholder =
+      searchParams.get("intent") === "automation"
+        ? AUTOMATION_COMPOSER_PLACEHOLDER
+        : undefined;
+
     if (requestedDraft !== null) {
       storeComposerDraft(targetDraftKey, requestedDraft);
+    }
+
+    if (requestedDraft !== null || placeholder) {
       setComposerEntry((current) => ({
-        initialInput: requestedDraft,
+        initialInput: requestedDraft ?? current.initialInput,
+        placeholder,
         revision: current.revision + 1,
         scopeKey: targetDraftKey,
       }));

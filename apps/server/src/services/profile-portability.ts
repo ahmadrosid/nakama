@@ -201,6 +201,8 @@ export interface ImportProfilePackOptions {
   isPlatformAdmin?: boolean;
   name?: string;
   now?: Date;
+  /** A member importing for themselves: the agent is private and gets no host tools. */
+  ownerUserId?: string | null;
   restoreCustomTools?: boolean;
 }
 
@@ -403,6 +405,12 @@ export async function importProfilePack(
   const profileId = await resolveImportedProfileId(db, name);
   const now = (options.now ?? new Date()).toISOString();
 
+  const ownerUserId = options.ownerUserId ?? null;
+
+  if (ownerUserId && manifest.meta.sharedAgent) {
+    throw new NakamaApiError("Shared agents cannot be imported here.", 403);
+  }
+
   const profile: StoredProfileRecord = {
     createdAt: now,
     id: profileId,
@@ -411,10 +419,13 @@ export async function importProfilePack(
     model: manifest.meta.model,
     name,
     orgId,
+    ownerUserId,
+    sharedWithTeam: ownerUserId === null,
     skillsCuratorConsolidateEnabled:
       manifest.meta.skillsCuratorConsolidateEnabled,
     skillsPostTurnReview: manifest.meta.skillsPostTurnReview,
-    skillsWriteApproval: manifest.meta.skillsWriteApproval,
+    // The write-approval gate is an admin setting, so a member's pack cannot lower it.
+    skillsWriteApproval: ownerUserId ? null : manifest.meta.skillsWriteApproval,
     systemPrompt: manifest.meta.systemPrompt,
     thinkingEffort: manifest.meta.thinkingEffort,
     thinkingEnabled: manifest.meta.thinkingEnabled,
@@ -462,7 +473,8 @@ export async function importProfilePack(
         entries,
         options.restoreCustomTools === true,
         skippedAssignments,
-        createdCustomTools
+        createdCustomTools,
+        ownerUserId !== null
       );
       await eachNamedOrSkip(
         manifest.meta.mcpServerNames,
@@ -830,7 +842,8 @@ async function restoreToolAssignments(
   entries: ProfilePackZipEntry[],
   restoreCustomTools: boolean,
   skipped: ProfilePackSkippedItem[],
-  createdTools: CreatedCustomTool[]
+  createdTools: CreatedCustomTool[],
+  blockHostTools: boolean
 ): Promise<void> {
   for (const name of manifest.meta.toolNames) {
     const resolution = await resolveToolAssignment(
@@ -848,6 +861,14 @@ async function restoreToolAssignments(
     }
 
     if (resolution.kind === "existing") {
+      if (blockHostTools && resolution.tool.handlerType === "bash") {
+        skipped.push({
+          path: `tool:${name}`,
+          reason: `Tool "${name}" runs commands on the server and was skipped.`,
+        });
+        continue;
+      }
+
       await db.assignToolToProfile(profileId, resolution.tool.id);
       continue;
     }

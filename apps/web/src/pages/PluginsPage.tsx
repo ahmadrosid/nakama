@@ -1,4 +1,5 @@
 import type {
+  LocalPluginPreviewResponse,
   OrgPluginDetail,
   PluginContributionChangePreview,
   PluginPackagePreviewResponse,
@@ -6,6 +7,7 @@ import type {
   PluginReleaseSummary,
 } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
+import { Checkbox } from "@nakama/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -21,10 +23,32 @@ import {
   DropdownMenuTrigger,
 } from "@nakama/ui/dropdown-menu";
 import { Input } from "@nakama/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@nakama/ui/select";
 import { Spinner } from "@nakama/ui/spinner";
-import { Add01Icon, MoreHorizontalIcon } from "hugeicons-react";
-import { type MouseEvent, useRef, useState } from "react";
+import { cn } from "@nakama/ui/utils";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Add01Icon,
+  ArrowDown01Icon,
+  ArrowRight01Icon,
+  MoreHorizontalIcon,
+  Search01Icon,
+} from "hugeicons-react";
+import {
+  type Dispatch,
+  type MouseEvent,
+  type SetStateAction,
+  useRef,
+  useState,
+} from "react";
 import { Link, useParams } from "react-router-dom";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useAuth } from "@/context/use-auth";
 import {
   formatPluginTrustLines,
@@ -36,6 +60,7 @@ import {
   useDeleteRetainedPluginData,
   useDisableOrgPlugin,
   useEnableOrgPlugin,
+  useInstallLocalPlugin,
   useInstallOfficialPlugin,
   useInstallOrgPlugin,
   useInstallPluginPackage,
@@ -53,7 +78,8 @@ import {
   useUpdateOrgPlugin,
 } from "@/hooks/use-plugins";
 import { usePinnedPlugins } from "@/hooks/use-sidebar-collapsed";
-import { formatError } from "@/lib/client";
+import { client, formatError } from "@/lib/client";
+import { formatBytes } from "@/lib/knowledge-base-files";
 import {
   canAccessSystemPage,
   canManagePluginReleases,
@@ -386,6 +412,9 @@ export function PluginsPage() {
           setDialog({ type: "package-entry" });
         }}
       />
+      {canInstallPackages && orgId ? (
+        <LocalPluginInstaller key={orgId} orgId={orgId} />
+      ) : null}
 
       {visiblePluginIds.length === 0 ? (
         <PluginEmptyState
@@ -665,6 +694,440 @@ function PluginPackageForm({
   );
 }
 
+// Code that runs first, so the reviewer reads it first. The last group catches the rest.
+const LOCAL_REVIEW_GROUPS = [
+  ["Runs on the server", /^(actions|workers)\//],
+  ["Runs in the browser", /^ui\//],
+  ["Database migrations", /^migrations\//],
+  ["Source", /^src\//],
+  ["Config and other files", /./],
+] as const;
+
+/** Display only: the install still uses the reviewed bytes and digest. */
+function formatJsonForReview(text: string): string {
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2);
+  } catch {
+    return text;
+  }
+}
+
+function LocalPluginReviewFiles({
+  disabled,
+  file,
+  files,
+  onClose,
+  onRead,
+  reviewed,
+}: {
+  disabled: boolean;
+  file: { path: string; content: string } | null;
+  files: LocalPluginPreviewResponse["files"];
+  onClose(): void;
+  onRead(path: string): Promise<void>;
+  reviewed: Set<string>;
+}) {
+  return (
+    <>
+      {LOCAL_REVIEW_GROUPS.map(([label, pattern], index) => {
+        const groupFiles = files.filter(
+          (item) =>
+            LOCAL_REVIEW_GROUPS.findIndex(([, match]) =>
+              match.test(item.path)
+            ) === index
+        );
+
+        if (groupFiles.length === 0) {
+          return null;
+        }
+
+        const runs = index < 3;
+
+        return (
+          <section className="min-w-0" key={String(pattern)}>
+            <h3
+              className={cn(
+                "mb-1.5 font-semibold text-xs uppercase tracking-wide",
+                runs ? "text-primary" : "text-muted-foreground"
+              )}
+            >
+              {label}
+            </h3>
+            <ul
+              className={cn(
+                "divide-y overflow-hidden rounded-lg border",
+                runs && "border-primary/40"
+              )}
+            >
+              {groupFiles.map((item) => {
+                const open = file?.path === item.path;
+                const read = reviewed.has(item.path);
+
+                return (
+                  <li key={item.path}>
+                    <button
+                      aria-expanded={open}
+                      className={cn(
+                        "flex min-h-11 w-full items-center gap-2.5 px-3 text-left text-sm disabled:opacity-60",
+                        open && "bg-muted/60"
+                      )}
+                      disabled={disabled}
+                      onClick={() => (open ? onClose() : onRead(item.path))}
+                      type="button"
+                    >
+                      {open ? (
+                        <ArrowDown01Icon aria-hidden className="size-4" />
+                      ) : (
+                        <ArrowRight01Icon aria-hidden className="size-4" />
+                      )}
+                      <span className="min-w-0 flex-1 truncate font-mono text-[13px]">
+                        {item.path}
+                      </span>
+                      <span className="text-muted-foreground text-xs">
+                        {formatBytes(item.size)}
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 font-medium text-xs",
+                          read
+                            ? "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300"
+                            : "border text-muted-foreground"
+                        )}
+                      >
+                        {read ? "Read" : "Not read"}
+                      </span>
+                    </button>
+                    {open ? (
+                      <pre
+                        aria-label={file.path}
+                        className="max-h-72 overflow-auto whitespace-pre-wrap break-all border-t bg-background p-3 font-mono text-xs leading-relaxed"
+                      >
+                        {file.content}
+                      </pre>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        );
+      })}
+    </>
+  );
+}
+
+function LocalPluginDraftPicker({
+  disabled,
+  draftId,
+  error,
+  open,
+  orgId,
+  profileId,
+  onDraftChange,
+  onProfileChange,
+  onPreview,
+}: {
+  disabled: boolean;
+  draftId: string;
+  error: string | null;
+  open: boolean;
+  orgId: string;
+  profileId: string;
+  onDraftChange(value: string): void;
+  onProfileChange(value: string): void;
+  onPreview(): Promise<void>;
+}) {
+  const profiles = useQuery({
+    enabled: open,
+    queryFn: () => client.listProfiles(orgId),
+    queryKey: ["plugin-draft-profiles", orgId],
+  });
+
+  return (
+    <>
+      <Select
+        disabled={disabled}
+        onValueChange={(value) => {
+          onProfileChange(value ?? "");
+        }}
+        value={profileId}
+      >
+        <SelectTrigger aria-label="Super Bot">
+          <SelectValue placeholder="Super Bot" />
+        </SelectTrigger>
+        <SelectContent>
+          {(profiles.data?.profiles ?? [])
+            .filter((profile) => profile.isSuper)
+            .map((profile) => (
+              <SelectItem key={profile.id} value={profile.id}>
+                {profile.name}
+              </SelectItem>
+            ))}
+        </SelectContent>
+      </Select>
+      <Input
+        aria-label="Draft ID"
+        disabled={disabled}
+        onChange={(event) => {
+          onDraftChange(event.target.value);
+        }}
+        placeholder="Draft ID"
+        value={draftId}
+      />
+      {profiles.error ? (
+        <p role="alert">{formatError(profiles.error)}</p>
+      ) : null}
+      {error ? <p role="alert">{error}</p> : null}
+      <Button
+        disabled={!(profileId && draftId) || disabled}
+        onClick={onPreview}
+      >
+        Preview draft
+      </Button>
+    </>
+  );
+}
+
+export function LocalPluginInstaller({
+  draft,
+  orgId,
+}: {
+  draft?: { draftId: string; profileId: string };
+  orgId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [profileId, setProfileId] = useState(draft?.profileId ?? "");
+  const [draftId, setDraftId] = useState(draft?.draftId ?? "");
+
+  const [preview, setPreview] = useState<LocalPluginPreviewResponse | null>(
+    null
+  );
+
+  const [file, setFile] = useState<{ path: string; content: string } | null>(
+    null
+  );
+
+  const [reviewed, setReviewed] = useState<Set<string>>(new Set());
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const generation = useRef(0);
+
+  const install = useInstallLocalPlugin();
+
+  function reset() {
+    generation.current += 1;
+    setPreview(null);
+    setFile(null);
+    setReviewed(new Set());
+    setPending(false);
+    setError(null);
+  }
+
+  async function loadPreview() {
+    reset();
+    const turn = generation.current;
+    setPending(true);
+
+    try {
+      const value = await client.previewLocalPlugin({
+        draftId,
+        orgId,
+        profileId,
+      });
+
+      if (turn === generation.current) {
+        setPreview(value);
+      }
+    } catch (failure) {
+      if (turn === generation.current) {
+        setError(formatError(failure));
+      }
+    } finally {
+      setPending((previous) =>
+        turn === generation.current ? false : previous
+      );
+    }
+  }
+
+  async function readFile(path: string) {
+    if (!preview) {
+      return;
+    }
+
+    const turn = ++generation.current;
+    setFile(null);
+    setPending(true);
+    setError(null);
+
+    try {
+      const chunks: Uint8Array[] = [];
+      let offset: number | null = 0;
+
+      while (offset !== null && turn === generation.current) {
+        const value = await client.readLocalPluginFile({
+          ...preview.draft,
+          expectedDigest: preview.digest,
+          offset,
+          path,
+        });
+
+        chunks.push(
+          Uint8Array.from(atob(value.content), (character) =>
+            character.charCodeAt(0)
+          )
+        );
+        offset = value.nextOffset;
+      }
+
+      if (turn === generation.current) {
+        const data = new Uint8Array(
+          chunks.reduce((size, chunk) => size + chunk.length, 0)
+        );
+
+        let position = 0;
+
+        for (const chunk of chunks) {
+          data.set(chunk, position);
+          position += chunk.length;
+        }
+
+        const text = new TextDecoder().decode(data);
+
+        setFile({
+          content: path.endsWith(".json") ? formatJsonForReview(text) : text,
+          path,
+        });
+        setReviewed((previous) => new Set([...previous, path]));
+      }
+    } catch (failure) {
+      if (turn === generation.current) {
+        setError(formatError(failure));
+        setPreview(null);
+        setReviewed(new Set());
+      }
+    } finally {
+      setPending((previous) =>
+        turn === generation.current ? false : previous
+      );
+    }
+  }
+
+  async function confirm() {
+    if (!preview || pending || install.isPending) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await install.mutateAsync({
+        ...preview.draft,
+        expectedDigest: preview.digest,
+        expectedRevision: preview.expectedRevision,
+      });
+      setOpen(false);
+      reset();
+    } catch (failure) {
+      setError(formatError(failure));
+      setPreview(null);
+      setReviewed(new Set());
+    }
+  }
+
+  return (
+    <Dialog
+      onOpenChange={(next) => {
+        setOpen(next);
+        reset();
+      }}
+      open={open}
+    >
+      <Button
+        onClick={() => {
+          reset();
+          setOpen(true);
+
+          if (draft) {
+            void loadPreview();
+          }
+        }}
+        size={draft ? "sm" : "default"}
+        variant={draft ? "default" : "outline"}
+      >
+        {draft ? "Review and install" : "Install from folder"}
+      </Button>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Install from folder</DialogTitle>
+        </DialogHeader>
+        {draft ? (
+          error ? (
+            <p role="alert">{error}</p>
+          ) : null
+        ) : (
+          <LocalPluginDraftPicker
+            disabled={pending || install.isPending}
+            draftId={draftId}
+            error={error}
+            onDraftChange={(value) => {
+              reset();
+              setDraftId(value);
+            }}
+            onPreview={loadPreview}
+            onProfileChange={(value) => {
+              reset();
+              setProfileId(value);
+            }}
+            open={open}
+            orgId={orgId}
+            profileId={profileId}
+          />
+        )}
+        {preview ? (
+          <>
+            <div>
+              <p className="font-medium">
+                {preview.manifest.name}{" "}
+                <span className="font-normal text-muted-foreground">
+                  {preview.manifest.version}
+                </span>
+              </p>
+              <p className="text-muted-foreground text-sm">
+                Plugin code has full host access. First enable and updates run
+                migrations. Reinstall resumes an enabled plugin.
+              </p>
+            </div>
+            <LocalPluginReviewFiles
+              disabled={pending || install.isPending}
+              file={file}
+              files={preview.files}
+              onClose={() => setFile(null)}
+              onRead={readFile}
+              reviewed={reviewed}
+            />
+            <DialogFooter className="sticky -bottom-4 z-10 items-center gap-3 bg-muted sm:justify-between">
+              <span className="min-w-0 truncate font-mono text-muted-foreground text-xs">
+                sha256 {preview.digest}
+              </span>
+              <div className="flex shrink-0 items-center gap-3">
+                <span className="text-muted-foreground text-sm tabular-nums">
+                  {reviewed.size} of {preview.files.length} read
+                </span>
+                <Button
+                  disabled={pending || install.isPending}
+                  onClick={confirm}
+                >
+                  {install.isPending ? "Installing…" : "Confirm installation"}
+                </Button>
+              </div>
+            </DialogFooter>
+          </>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function PluginReleasesList({
   busy,
   plugins,
@@ -697,6 +1160,11 @@ function PluginReleasesList({
           >
             <div className="min-w-0">
               <p className="break-all font-mono text-xs">{release.version}</p>
+              {release.source === "local" || release.source === "agent" ? (
+                <span className="text-xs">
+                  {release.source === "agent" ? "Agent-written" : "Local"}
+                </span>
+              ) : null}
               <p className="text-muted-foreground text-xs">
                 {inUse ? "In use" : "Available"}
               </p>
@@ -1169,7 +1637,7 @@ function PluginRowDetails({
   );
 }
 
-function PluginAgentAccessDialog({
+export function PluginAgentAccessDialog({
   plugin,
   onClose,
 }: {
@@ -1252,66 +1720,21 @@ function PluginAgentAccessDialog({
             </Button>
           </div>
         ) : null}
-        {data && !access.error ? (
-          hasResources ? (
-            <div className="max-h-80 space-y-1 overflow-y-auto">
-              {data.profiles.length === 0 ? (
-                <p className="py-4 text-muted-foreground text-sm">
-                  No agents in this organization.
-                </p>
-              ) : null}
-              {data.profiles.map((profile) => {
-                const state = pluginAgentAccessState(
-                  profile,
-                  plugin.pluginId,
-                  data
-                );
-
-                const partial =
-                  changes[profile.id] === undefined &&
-                  state.assigned > 0 &&
-                  !state.full;
-
-                return (
-                  <label
-                    className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2.5 hover:bg-muted/50"
-                    key={profile.id}
-                  >
-                    <input
-                      checked={changes[profile.id] ?? state.full}
-                      className="size-4 shrink-0 accent-primary"
-                      disabled={busy}
-                      onChange={(event) =>
-                        setChanges((current) => ({
-                          ...current,
-                          [profile.id]: event.target.checked,
-                        }))
-                      }
-                      ref={(element) => {
-                        if (element) {
-                          element.indeterminate = partial;
-                        }
-                      }}
-                      type="checkbox"
-                    />
-                    <span className="min-w-0 flex-1 break-words text-sm">
-                      {profile.name}
-                    </span>
-                    {partial ? (
-                      <span className="text-muted-foreground text-xs">
-                        Partial access
-                      </span>
-                    ) : null}
-                  </label>
-                );
-              })}
-            </div>
+        {data &&
+          !access.error &&
+          (hasResources ? (
+            <PluginAgentAccessList
+              busy={busy}
+              changes={changes}
+              data={data}
+              pluginId={plugin.pluginId}
+              setChanges={setChanges}
+            />
           ) : (
             <p className="text-muted-foreground text-sm">
               This plugin has no tools or skills to assign.
             </p>
-          )
-        ) : null}
+          ))}
         {save.error ? (
           <p className="text-destructive text-sm" role="alert">
             {formatError(save.error)} Some changes may have been saved. Review
@@ -1337,6 +1760,129 @@ function PluginAgentAccessDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PluginAgentAccessList({
+  busy,
+  changes,
+  data,
+  pluginId,
+  setChanges,
+}: {
+  busy: boolean;
+  changes: Record<string, boolean>;
+  data: NonNullable<ReturnType<typeof usePluginAgentAccess>["data"]>;
+  pluginId: string;
+  setChanges: Dispatch<SetStateAction<Record<string, boolean>>>;
+}) {
+  const [query, setQuery] = useState("");
+
+  const profiles = data.profiles;
+
+  const isSelected = (profile: (typeof profiles)[number]) =>
+    changes[profile.id] ?? pluginAgentAccessState(profile, pluginId, data).full;
+
+  const needle = query.trim().toLowerCase();
+
+  const shown = profiles.filter((profile) =>
+    profile.name.toLowerCase().includes(needle)
+  );
+
+  const selectedCount = profiles.filter(isSelected).length;
+
+  const allShownSelected = shown.length > 0 && shown.every(isSelected);
+  const someShownSelected = shown.some(isSelected);
+
+  function selectShown(selected: boolean) {
+    setChanges((current) => ({
+      ...current,
+      ...Object.fromEntries(shown.map((profile) => [profile.id, selected])),
+    }));
+  }
+
+  return (
+    <div className="space-y-3">
+      {profiles.length > 0 ? (
+        <>
+          <div className="relative">
+            <Search01Icon
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              aria-label="Search agents"
+              className="pl-9"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search agents"
+              value={query}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3 border-border border-y px-2 py-1.5">
+            <label className="flex cursor-pointer items-center gap-3 font-medium text-sm">
+              <Checkbox
+                checked={allShownSelected}
+                disabled={busy || shown.length === 0}
+                indeterminate={someShownSelected && !allShownSelected}
+                onCheckedChange={selectShown}
+              />
+              Select all
+            </label>
+            <span className="text-muted-foreground text-xs">
+              {selectedCount} of {profiles.length} selected
+            </span>
+          </div>
+        </>
+      ) : null}
+      <div className="max-h-80 space-y-1 overflow-y-auto">
+        {profiles.length === 0 ? (
+          <p className="py-4 text-muted-foreground text-sm">
+            No agents in this organization.
+          </p>
+        ) : null}
+        {profiles.length > 0 && shown.length === 0 ? (
+          <p className="py-4 text-center text-muted-foreground text-sm">
+            No agents match.
+          </p>
+        ) : null}
+        {shown.map((profile) => {
+          const state = pluginAgentAccessState(profile, pluginId, data);
+
+          const partial =
+            changes[profile.id] === undefined &&
+            state.assigned > 0 &&
+            !state.full;
+
+          return (
+            <label
+              className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2.5 hover:bg-muted/50"
+              key={profile.id}
+            >
+              <Checkbox
+                checked={changes[profile.id] ?? state.full}
+                disabled={busy}
+                indeterminate={partial}
+                onCheckedChange={(checked) =>
+                  setChanges((current) => ({
+                    ...current,
+                    [profile.id]: checked,
+                  }))
+                }
+              />
+              <ProfileAvatar profile={profile} size="sm" />
+              <span className="min-w-0 flex-1 break-words text-sm">
+                {profile.name}
+              </span>
+              {partial ? (
+                <span className="text-muted-foreground text-xs">
+                  Partial access
+                </span>
+              ) : null}
+            </label>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

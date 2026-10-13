@@ -258,13 +258,11 @@ function AppShell() {
                     path="/plugins/google-meet"
                   />
                   <Route element={<PluginPage />} path="/plugins/:pluginId" />
-                  <Route element={<PlatformAdminGuard allowOrgAdmin />}>
-                    <Route element={<ProfilesPage />} path="/profiles" />
-                    <Route
-                      element={<ProfileChannelSettingsPage />}
-                      path="/profiles/:profileId/channels/:channel"
-                    />
-                  </Route>
+                  <Route element={<ProfilesPage />} path="/profiles" />
+                  <Route
+                    element={<ProfileChannelSettingsPage />}
+                    path="/profiles/:profileId/channels/:channel"
+                  />
                   <Route element={<PlatformAdminGuard />}>
                     <Route
                       element={<SkillDetailPage />}

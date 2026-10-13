@@ -91,7 +91,7 @@ describe("tool-loop", () => {
     const invalidTool: ToolDefinition = {
       ...sampleTool,
       async run() {
-        return { message: undefined };
+        return { message: 1n };
       },
     };
 
@@ -107,6 +107,23 @@ describe("tool-loop", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  test("executeToolCall drops undefined fields like JSON serialization", async () => {
+    const optionalTool: ToolDefinition = {
+      ...sampleTool,
+      async run() {
+        return { message: "kept", placeholder: undefined };
+      },
+    };
+
+    const result = await executeToolCall([optionalTool], {
+      arguments: {},
+      id: "optional",
+      name: "sample",
+    });
+
+    expect(result).toEqual({ message: "kept" });
   });
 
   test("executeToolCall returns raw result when distillToolResult throws", async () => {

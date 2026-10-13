@@ -119,6 +119,10 @@ export async function runSqliteTool(
   const db = new Database(databasePath);
 
   try {
+    if (databasePath !== ":memory:") {
+      db.exec("PRAGMA synchronous = EXTRA");
+    }
+
     const statement = db.query(sql);
 
     if (isRowsStatement(sql)) {

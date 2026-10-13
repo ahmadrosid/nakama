@@ -1,22 +1,24 @@
 import type { ProfileSummary } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { ConfirmDialog } from "@nakama/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@nakama/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@nakama/ui/popover";
 import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
 import {
   Add01Icon,
   Camera01Icon,
   Delete02Icon,
+  DiceFaces05Icon,
+  Undo02Icon,
   Upload04Icon,
   UserGroup02Icon,
 } from "hugeicons-react";
 import { type ReactNode, useState } from "react";
+import { moodstoneIndexes, moodstoneSvg } from "@/components/moodstone";
+import {
+  moodstoneAvatars,
+  moodstoneColors,
+} from "@/components/moodstone-avatars";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import {
   type ProfileSaveStatus,
@@ -100,6 +102,7 @@ export function EditableProfileAvatar({
   disabled,
   uploading,
   onPick,
+  onPreset,
   onRemove,
   size = "md",
   avatarClassName,
@@ -109,78 +112,197 @@ export function EditableProfileAvatar({
   disabled: boolean;
   uploading: boolean;
   onPick: () => void;
+  onPreset: (svg: string) => Promise<void>;
   onRemove?: () => Promise<void>;
   size?: "xs" | "sm" | "md" | "ml" | "lg";
 }) {
+  const [open, setOpen] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
 
-  const triggerClassName =
-    "group relative shrink-0 rounded-full transition-transform duration-150 ease-out active:not-disabled:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
+  const [colorIndex, setColorIndex] = useState(
+    () => moodstoneIndexes(profile.id || profile.name || "?").colorIndex
+  );
 
-  if (profile.hasAvatar && onRemove) {
-    return (
-      <>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <button
-                aria-label="Change or remove profile image"
-                className={triggerClassName}
-                disabled={disabled}
-                type="button"
-              />
-            }
-          >
-            <ProfileAvatar
-              className={avatarClassName}
-              profile={profile}
-              size={size}
-            />
-            <ProfileAvatarOverlay size={size} uploading={uploading} />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-40">
-            <DropdownMenuItem className="cursor-pointer" onClick={onPick}>
-              <Camera01Icon aria-hidden className="size-4" />
-              Change image
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="cursor-pointer"
-              onClick={() => setRemoveOpen(true)}
-              variant="destructive"
-            >
-              <Delete02Icon aria-hidden className="size-4" />
-              Remove image
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        {removeOpen ? (
-          <ConfirmDialog
-            confirmLabel="Remove"
-            description={`Remove the profile image for "${profile.name}"?`}
-            onClose={() => setRemoveOpen(false)}
-            onConfirm={onRemove}
-            title="Remove profile image?"
-          />
-        ) : null}
-      </>
-    );
-  }
+  const [previewAvatarIndex, setPreviewAvatarIndex] = useState<number | null>(
+    null
+  );
 
   return (
-    <button
-      aria-label="Change profile image"
-      className={triggerClassName}
-      disabled={disabled}
-      onClick={onPick}
-      type="button"
-    >
-      <ProfileAvatar
-        className={avatarClassName}
-        profile={profile}
-        size={size}
-      />
-      <ProfileAvatarOverlay size={size} uploading={uploading} />
-    </button>
+    <>
+      <Popover
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen);
+          setPreviewAvatarIndex(null);
+        }}
+        open={open}
+      >
+        <PopoverTrigger
+          aria-label="Change profile image"
+          className="group relative shrink-0 rounded-full transition-transform duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 active:not-disabled:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={disabled}
+        >
+          <ProfileAvatar
+            className={avatarClassName}
+            profile={profile}
+            size={size}
+          />
+          <ProfileAvatarOverlay size={size} uploading={uploading} />
+        </PopoverTrigger>
+        <PopoverContent
+          align="center"
+          className="flex w-68 min-w-0 flex-col gap-0.5 p-1.5"
+        >
+          <div
+            className="relative mb-1 flex h-33 items-center justify-center rounded-lg transition-colors duration-150 ease-out"
+            style={{ backgroundColor: `${moodstoneColors[colorIndex].lit}4d` }}
+          >
+            {previewAvatarIndex === null ? (
+              <ProfileAvatar
+                active
+                className="size-20 rounded-none outline-none"
+                profile={profile}
+                size="lg"
+              />
+            ) : (
+              <img
+                alt="Avatar preview"
+                className="size-20"
+                height={80}
+                src={`data:image/svg+xml,${encodeURIComponent(
+                  moodstoneSvg(
+                    previewAvatarIndex,
+                    colorIndex,
+                    !window.matchMedia("(prefers-reduced-motion: reduce)")
+                      .matches
+                  )
+                )}`}
+                width={80}
+              />
+            )}
+            {previewAvatarIndex === null ? null : (
+              <Button
+                aria-label="Undo"
+                className="absolute top-2 left-2 bg-background/85 shadow-xs"
+                onClick={() => setPreviewAvatarIndex(null)}
+                size="icon"
+                variant="ghost"
+              >
+                <Undo02Icon aria-hidden />
+              </Button>
+            )}
+            <Button
+              aria-label="Shuffle"
+              className="absolute top-2 right-2 bg-background/85 shadow-xs"
+              onClick={() => {
+                setPreviewAvatarIndex(
+                  Math.floor(Math.random() * moodstoneAvatars.length)
+                );
+                setColorIndex(
+                  Math.floor(Math.random() * moodstoneColors.length)
+                );
+              }}
+              size="icon"
+              variant="ghost"
+            >
+              <DiceFaces05Icon aria-hidden />
+            </Button>
+          </div>
+          <div className="grid grid-cols-7 gap-0.5 px-1.5 pt-0.5 pb-1">
+            {moodstoneAvatars.map((avatar, avatarIndex) => (
+              <button
+                aria-label={`Preview ${avatar.cut} avatar`}
+                aria-pressed={avatarIndex === previewAvatarIndex}
+                className={cn(
+                  "flex h-9 cursor-pointer items-center justify-center rounded-lg transition-colors duration-150 ease-out hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                  avatarIndex === previewAvatarIndex &&
+                    "bg-muted ring-[1.5px] ring-foreground ring-inset"
+                )}
+                key={avatar.cut}
+                onClick={() => setPreviewAvatarIndex(avatarIndex)}
+                type="button"
+              >
+                <img
+                  alt=""
+                  className="size-7"
+                  height={28}
+                  src={`data:image/svg+xml,${encodeURIComponent(
+                    moodstoneSvg(avatarIndex, colorIndex)
+                  )}`}
+                  width={28}
+                />
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-12 justify-items-center gap-0.5 px-2 pt-1 pb-2">
+            {moodstoneColors.map((color, index) => (
+              <button
+                aria-label={`${color.name} color`}
+                aria-pressed={index === colorIndex}
+                className={cn(
+                  "size-4 cursor-pointer rounded-full outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring",
+                  index === colorIndex && "outline-2 outline-foreground"
+                )}
+                key={color.name}
+                onClick={() => setColorIndex(index)}
+                style={{
+                  background: `linear-gradient(135deg, ${color.lit}, ${color.shade})`,
+                }}
+                type="button"
+              />
+            ))}
+          </div>
+          {previewAvatarIndex === null ? null : (
+            <Button
+              className="mb-1"
+              onClick={() => {
+                setPreviewAvatarIndex(null);
+                setOpen(false);
+                void onPreset(moodstoneSvg(previewAvatarIndex, colorIndex));
+              }}
+              size="lg"
+            >
+              Apply
+            </Button>
+          )}
+          <div className="-mx-1.5 my-0.5 h-px bg-border" />
+          <Button
+            className="justify-start gap-2.5 font-normal"
+            onClick={() => {
+              setOpen(false);
+              onPick();
+            }}
+            size="lg"
+            variant="ghost"
+          >
+            <Upload04Icon aria-hidden className="text-muted-foreground" />
+            Upload image…
+          </Button>
+          {profile.hasAvatar && onRemove ? (
+            <Button
+              className="justify-start gap-2.5 font-normal text-destructive hover:text-destructive"
+              onClick={() => {
+                setOpen(false);
+                setRemoveOpen(true);
+              }}
+              size="lg"
+              variant="ghost"
+            >
+              <Delete02Icon aria-hidden />
+              Remove image
+            </Button>
+          ) : null}
+        </PopoverContent>
+      </Popover>
+      {removeOpen && onRemove ? (
+        <ConfirmDialog
+          confirmLabel="Remove"
+          description={`Remove the profile image for "${profile.name}"?`}
+          onClose={() => setRemoveOpen(false)}
+          onConfirm={onRemove}
+          title="Remove profile image?"
+        />
+      ) : null}
+    </>
   );
 }
 

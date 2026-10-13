@@ -353,7 +353,8 @@ export class ProfileService {
 
   async createProfile(
     orgId: string,
-    request: CreateProfileRequest
+    request: CreateProfileRequest,
+    owner?: { ownerUserId: string; sharedWithTeam: boolean }
   ): Promise<ProfileResponse> {
     const name = request.name.trim();
 
@@ -375,6 +376,8 @@ export class ProfileService {
       model: request.model ?? null,
       name,
       orgId,
+      ownerUserId: owner?.ownerUserId ?? null,
+      sharedWithTeam: owner?.sharedWithTeam ?? true,
       systemPrompt:
         request.systemPrompt?.trim() ?? "You are a helpful personal assistant.",
       updatedAt: now,
@@ -551,6 +554,7 @@ export class ProfileService {
           : request.automationsEnabled,
       model: request.model === undefined ? profile.model : request.model,
       name: request.name?.trim() ?? profile.name,
+      sharedWithTeam: request.sharedWithTeam ?? profile.sharedWithTeam,
       skillsCuratorConsolidateEnabled:
         request.skillsCuratorConsolidateEnabled === undefined
           ? profile.skillsCuratorConsolidateEnabled
@@ -1884,6 +1888,8 @@ export class ProfileService {
       mcpServerCount: mcpServers.length,
       model: profile.model,
       name: profile.name,
+      ownerUserId: profile.ownerUserId ?? null,
+      sharedWithTeam: profile.sharedWithTeam !== false,
       skillsCuratorConsolidateEnabled:
         profile.skillsCuratorConsolidateEnabled ?? null,
       skillsPostTurnReview: profile.skillsPostTurnReview ?? null,

@@ -24,6 +24,13 @@ describe("sqlite tool", () => {
     const databasePath = join(dir, "workflow-data.sqlite");
 
     try {
+      expect(
+        await runSqliteTool(
+          { sql: "PRAGMA synchronous" },
+          { orgId: "org_test" },
+          { databasePath }
+        )
+      ).toEqual({ columns: ["synchronous"], rows: [{ synchronous: 3 }] });
       await runSqliteTool(
         { sql: "CREATE TABLE items (name TEXT)" },
         { orgId: "org_test" },

@@ -15,6 +15,7 @@ import { AppProvider } from "@/context/app-context";
 import { AuthProvider } from "@/context/auth-context";
 import { AuthContext } from "@/context/auth-context-shared";
 import { client } from "@/lib/client";
+import { queryKeys } from "@/lib/query-keys";
 import { type ChatPageState, useChatPage } from "./use-chat-page";
 
 test.each([false, true])(
@@ -589,10 +590,9 @@ test("switching orgs clears the old chat while new profiles load", async () => {
   });
   const previousProfile = useActiveChatProfileStore.getState();
   useActiveChatProfileStore.setState({ orgId: "orgA", profileId: "profileA" });
-  queryClient.setQueryData(
-    ["profiles", "orgA"],
-    [{ id: "profileA", name: "A" }]
-  );
+  queryClient.setQueryData(queryKeys.profiles.all, [
+    { id: "profileA", name: "A" },
+  ]);
 
   const nextProfiles = Promise.withResolvers<{
     profiles: { id: string; name: string }[];
@@ -677,6 +677,8 @@ test("switching orgs clears the old chat while new profiles load", async () => {
     expect(getMessages).toHaveBeenCalledTimes(1);
 
     client.setOrgId("orgB");
+    // The auth context clears the cache when the org changes.
+    queryClient.clear();
     await act(async () => root.render(renderForOrg("orgB")));
     expect(listProfiles).toHaveBeenCalledTimes(1);
     expect(pathname).toBe("/chat");

@@ -55,6 +55,7 @@ export function useAutomationsPage() {
 
   const [searchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const appliedUrlId = useRef<string | null>(null);
 
   const {
     data: runs = [],
@@ -131,8 +132,10 @@ export function useAutomationsPage() {
 
     if (
       automationFromUrl &&
+      automationFromUrl !== appliedUrlId.current &&
       automations.some((automation) => automation.id === automationFromUrl)
     ) {
+      appliedUrlId.current = automationFromUrl;
       setSelectedId(automationFromUrl);
 
       return;
@@ -284,8 +287,8 @@ export function useAutomationsPage() {
   }
 
   function goToCreateAutomation(draft?: string) {
-    if (draft && profileId) {
-      navigateToNewChat(profileId, { draft });
+    if (profileId) {
+      navigateToNewChat(profileId, { draft, intent: "automation" });
 
       return;
     }
@@ -296,7 +299,10 @@ export function useAutomationsPage() {
       return;
     }
 
-    navigateToNewChat(superBotProfile.id, { draft });
+    navigateToNewChat(superBotProfile.id, {
+      draft,
+      intent: "automation",
+    });
   }
 
   const selectedProfileName = selected

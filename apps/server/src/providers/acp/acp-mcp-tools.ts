@@ -92,13 +92,29 @@ export function isNakamaToolPermission(
   );
 }
 
+// The ACP agent brings its own file, shell, search and web tools.
+const ACP_NATIVE_TOOL_NAMES = new Set([
+  "bash",
+  "delete_file",
+  "edit_file",
+  "read_file",
+  "ripgrep",
+  "search_files",
+  "web_fetch",
+  "web_search",
+  "write_file",
+]);
+
 /** Which tools and context the agent's MCP calls run with, for one chat. */
 export function setAcpToolAccess(
   sessionKey: string,
   tools: ToolDefinition[],
   context: ToolContext
 ): void {
-  accessByToken.set(tokenFor(sessionKey), { context, tools });
+  accessByToken.set(tokenFor(sessionKey), {
+    context,
+    tools: tools.filter((tool) => !ACP_NATIVE_TOOL_NAMES.has(tool.name)),
+  });
 }
 
 /**

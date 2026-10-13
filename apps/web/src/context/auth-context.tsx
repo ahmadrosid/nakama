@@ -34,12 +34,25 @@ function resetQueryCache(): void {
   queryClient.clear();
 }
 
-async function loadSessionState(): Promise<{
-  user: AuthUserResponse;
+interface SessionState {
   orgs: UserOrgSummary[];
   platformOrgs: OrganizationSummary[];
   platformOrgsError: boolean;
-}> {
+  user: AuthUserResponse;
+}
+
+let mountLoad: Promise<SessionState> | null = null;
+
+// StrictMode runs the mount effect twice; both runs share one set of requests.
+function loadMountSessionState(): Promise<SessionState> {
+  mountLoad ??= loadSessionState().finally(() => {
+    mountLoad = null;
+  });
+
+  return mountLoad;
+}
+
+async function loadSessionState(): Promise<SessionState> {
   const [user, { orgs }] = await Promise.all([
     client.getMe(),
     client.listUserOrgs(),
@@ -70,6 +83,8 @@ function useAuthSession() {
   const [platformOrgsError, setPlatformOrgsError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const authRevision = useRef(0);
+  // `undefined` until the first session loads; `null` after logout.
+  const sessionIdentity = useRef<string | null | undefined>(undefined);
   const sessionRequestRevision = useRef(0);
   const platformRequestRevision = useRef(0);
 
@@ -104,10 +119,13 @@ function useAuthSession() {
     }
   }, []);
 
-  const refreshSession = useCallback(async () => {
+  const refreshSession = useCallback(async (shareMountLoad = false) => {
     const revision = authRevision.current;
     const requestRevision = ++sessionRequestRevision.current;
-    const session = await loadSessionState();
+
+    const session = await (shareMountLoad
+      ? loadMountSessionState()
+      : loadSessionState());
 
     if (
       revision !== authRevision.current ||
@@ -121,13 +139,22 @@ function useAuthSession() {
     setPlatformOrgs(session.platformOrgs);
     setPlatformOrgsError(session.platformOrgsError);
     setIsLoading(false);
-    resetQueryCache();
+
+    // Same user and org keep their cache: the first load holds only requests
+    // for this identity, and a refresh (MFA, invite) does not change tenant.
+    const identity = `${session.user.id}:${session.user.activeOrgId ?? session.user.orgId ?? ""}`;
+    const previous = sessionIdentity.current;
+    sessionIdentity.current = identity;
+
+    if (previous !== undefined && previous !== identity) {
+      resetQueryCache();
+    }
   }, []);
 
   useEffect(() => {
     const revision = authRevision.current;
     const requestRevision = sessionRequestRevision.current + 1;
-    refreshSession().catch(() => {
+    refreshSession(true).catch(() => {
       if (
         revision !== authRevision.current ||
         requestRevision !== sessionRequestRevision.current
@@ -232,6 +259,7 @@ function useAuthSession() {
     setPlatformOrgs([]);
     setPlatformOrgsError(false);
     setIsLoading(false);
+    sessionIdentity.current = null;
     resetQueryCache();
   }, []);
 
@@ -460,7 +488,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         revision === authRevision.current &&
         sessionRevision === sessionRequestRevision.current
       ) {
-        resetQueryCache();
+        // Same org, new settings: mark everything stale so the next mount
+        // refetches, but refetch only the overview in place. Refetching every
+        // mounted query makes the settings page flash loading states.
+        void queryClient.invalidateQueries({ refetchType: "none" });
+        void queryClient.invalidateQueries({
+          queryKey: ["organizationOverview"],
+        });
       }
     },
     [

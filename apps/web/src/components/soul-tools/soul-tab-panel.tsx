@@ -252,8 +252,8 @@ function FileStatusListItem({
     <li>
       <button
         className={cn(
-          "group flex min-h-11 w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition",
-          "hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset"
+          "group flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-[inherit] px-4 py-3 text-left transition",
+          "hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
         )}
         onClick={onClick}
         type="button"

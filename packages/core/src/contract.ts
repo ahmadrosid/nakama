@@ -780,6 +780,27 @@ export interface OrgLlmQuotaStatusResponse {
   warningPercent: number;
 }
 
+export interface OrgUsageLeader {
+  name: string;
+  requestCount: number;
+}
+
+export interface OrgUsageSummaryResponse {
+  /** Every agent by requests, Super Bot excluded. */
+  agents: OrgUsageLeader[];
+  /** Estimated spend over the last 30 UTC days. */
+  costUsd30d: number;
+  /** Last 30 UTC days, oldest first. */
+  daily: LlmUsageDayStats[];
+  /** Every member by requests. */
+  people: OrgUsageLeader[];
+  requests7d: number;
+  /** The 7 days before `requests7d`. */
+  requestsPrev7d: number;
+  /** Agent with the most requests, all time. */
+  topAgent: OrgUsageLeader | null;
+}
+
 export interface OrganizationResponse {
   organization: OrganizationSummary;
 }
@@ -2195,12 +2216,16 @@ export interface ProfileSummary {
   mcpServerCount: number;
   model: string | null;
   name: string;
+  /** Member who created the agent. null for agents created by platform admins. */
+  ownerUserId?: string | null;
   sharedAgent?: {
     available: boolean;
     publicationId: string;
     sourceOrgId: string;
     sourceProfileId: string;
   };
+  /** false = private to the owner and admins. */
+  sharedWithTeam?: boolean;
   /** null = inherit org default; true/false = force consolidate on/off for this profile */
   skillsCuratorConsolidateEnabled?: boolean | null;
   /** null = inherit org default; true/false = force post-turn review on/off for this profile */
@@ -2472,6 +2497,11 @@ export interface ProfileResponse {
   profile: ProfileDetail;
 }
 
+export interface CreateProfileWithSuperBotRequest {
+  name?: string;
+  prompt: string;
+}
+
 export interface CreateProfileRequest {
   id?: string;
   isSuper?: boolean;
@@ -2492,6 +2522,8 @@ export interface UpdateProfileRequest {
   automationsEnabled?: boolean;
   model?: string | null;
   name?: string;
+  /** Owner or admin: false keeps the agent private to its owner. */
+  sharedWithTeam?: boolean;
   skillsCuratorConsolidateEnabled?: boolean | null;
   skillsPostTurnReview?: boolean | null;
   skillsWriteApproval?: boolean | null;
@@ -3354,7 +3386,33 @@ export interface PluginReleaseSummary {
   digest: string;
   manifest: PluginManifest;
   pluginId: string;
+  /** Missing in older exports; treat as legacy provenance. */
+  source?: "legacy" | "npm" | "official" | "local" | "agent";
   version: string;
+}
+
+export interface LocalPluginDraftRequest {
+  draftId: string;
+  orgId: string;
+  profileId: string;
+}
+
+export interface LocalPluginPreviewResponse
+  extends PluginPackagePreviewResponse {
+  draft: LocalPluginDraftRequest;
+  expectedRevision: number | null;
+  files: Array<{ path: string; size: number }>;
+}
+
+export interface InstallLocalPluginRequest extends LocalPluginDraftRequest {
+  expectedDigest: string;
+  expectedRevision: number | null;
+}
+
+export interface ReadLocalPluginFileRequest extends LocalPluginDraftRequest {
+  expectedDigest: string;
+  offset?: number;
+  path: string;
 }
 
 export interface OrgPluginSummary {

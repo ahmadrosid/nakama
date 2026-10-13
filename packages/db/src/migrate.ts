@@ -80,6 +80,24 @@ export function migrateDatabase(db: Database): void {
   atomic((database) =>
     addNullableTextColumnIfMissing(database, "profiles", "acp_settings")
   );
+  atomic((database) =>
+    addNullableTextColumnIfMissing(database, "profiles", "owner_user_id")
+  );
+  atomic(migrateProfileSharedWithTeamColumn);
+}
+
+function migrateProfileSharedWithTeamColumn(db: Database): void {
+  const columns = db
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(profiles)"
+    )
+    .all();
+
+  if (!columns.some((column) => column.name === "shared_with_team")) {
+    db.exec(
+      "ALTER TABLE profiles ADD COLUMN shared_with_team INTEGER NOT NULL DEFAULT 1;"
+    );
+  }
 }
 
 function migrateOrgTeamCreationRequests(db: Database): void {
@@ -2314,6 +2332,19 @@ function migratePluginTables(db: Database): void {
   `);
 
   addNullableTextColumnIfMissing(db, "tools", "plugin_id");
+
+  const releaseColumns = db
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(plugin_releases)"
+    )
+    .all();
+
+  if (!releaseColumns.some((column) => column.name === "source")) {
+    db.exec(
+      "ALTER TABLE plugin_releases ADD COLUMN source TEXT NOT NULL DEFAULT 'legacy'"
+    );
+  }
+
   addNullableTextColumnIfMissing(db, "tools", "plugin_key");
   addNullableTextColumnIfMissing(db, "skills", "plugin_id");
   addNullableTextColumnIfMissing(db, "skills", "plugin_key");

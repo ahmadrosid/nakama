@@ -6,7 +6,7 @@ import { client } from "@/lib/client";
 import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
-export function useAutomationsQuery(refetchInterval = 30_000) {
+export function useAutomationsQuery(refetchInterval = 60_000) {
   const { isAuthenticated, isLoading } = useAuth();
 
   return useQuery({

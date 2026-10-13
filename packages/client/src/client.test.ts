@@ -561,6 +561,50 @@ test("official plugin reinstall sends revision and explicit organization", async
   expect(await request.json()).toEqual({ expectedRevision: 7 });
 });
 
+test("local draft transport pins the explicit organization, digest, revision, and review offset", async () => {
+  const requests: Request[] = [];
+
+  const client = new NakamaClient({
+    baseUrl: "http://localhost",
+    fetch: async (input, init) => {
+      requests.push(new Request(input, init));
+
+      return Response.json({});
+    },
+    orgId: "other-org",
+  });
+
+  const draft = { draftId: "notes", orgId: "reviewed-org", profileId: "super" };
+  await client.previewLocalPlugin(draft);
+  await client.readLocalPluginFile({
+    ...draft,
+    expectedDigest: "a".repeat(64),
+    offset: 1024,
+    path: "src/list.js",
+  });
+  await client.installLocalPlugin({
+    ...draft,
+    expectedDigest: "a".repeat(64),
+    expectedRevision: 7,
+  });
+  expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
+    "/v1/platform/plugins/preview-local",
+    "/v1/platform/plugins/local-file",
+    "/v1/platform/plugins/install-local",
+  ]);
+  expect(await requests[0]!.json()).toEqual(draft);
+  expect(await requests[1]!.json()).toMatchObject({
+    ...draft,
+    expectedDigest: "a".repeat(64),
+    offset: 1024,
+  });
+  expect(await requests[2]!.json()).toEqual({
+    ...draft,
+    expectedDigest: "a".repeat(64),
+    expectedRevision: 7,
+  });
+});
+
 test("chat stream request includes cookie CSRF protection", async () => {
   const originalDocument = Object.getOwnPropertyDescriptor(
     globalThis,

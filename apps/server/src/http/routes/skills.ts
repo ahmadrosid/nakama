@@ -13,6 +13,7 @@ import {
   requireActiveOrgIdFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
   requirePlatformAdminFromContext,
+  requireProfileManageFromContext,
 } from "../org-guards";
 import { getRequestAuth, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
@@ -644,7 +645,10 @@ export function registerSkillRoutes(
   });
 
   app.post("/v1/profiles/:profileId/skills", async (c) => {
-    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    const auth = await requireProfileManageFromContext(c, agent, {
+      allowOrgAdmin: true,
+    });
+
     const orgId = requireActiveOrgIdFromContext(c);
     const body = await readJson(c.req.raw, assignSkillSchema);
 
@@ -659,7 +663,10 @@ export function registerSkillRoutes(
   });
 
   app.delete("/v1/profiles/:profileId/skills/:skillId", async (c) => {
-    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    const auth = await requireProfileManageFromContext(c, agent, {
+      allowOrgAdmin: true,
+    });
+
     const orgId = requireActiveOrgIdFromContext(c);
 
     return json<ProfileResponse>(

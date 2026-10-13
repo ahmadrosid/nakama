@@ -94,7 +94,7 @@ export function SkillsWriteApprovalOrgCard() {
             <div className="flex shrink-0 items-center gap-2">
               {busy ? <Spinner /> : null}
               <Switch
-                aria-label="Require approval for skill writes"
+                aria-label="Ask me before a bot saves a skill"
                 checked={enabled}
                 disabled={busy}
                 onCheckedChange={(checked) => void handleToggle(checked)}
@@ -140,7 +140,7 @@ export function SkillsWriteApprovalOrgCard() {
           disabled={busy}
           field="skillsWriteApproval"
           profiles={profiles}
-          savedToast="Profile skill write approval setting saved."
+          savedToast="Saved."
         />
       )}
     </Card>

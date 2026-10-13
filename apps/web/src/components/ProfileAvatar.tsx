@@ -4,7 +4,7 @@ import { cn } from "@nakama/ui/utils";
 import { hashToSeeds, oklchToCss } from "hashvatar";
 import { Hashvatar } from "hashvatar/react";
 import { useEffect, useMemo, useState } from "react";
-import { moodstoneAvatars, moodstoneColors } from "./moodstone-avatars";
+import { moodstoneIndexes, moodstoneSvg } from "./moodstone";
 
 type ProfileAvatarProfile = Pick<
   ProfileSummary,
@@ -109,25 +109,11 @@ export function ProfileAvatar({
       return avatarUrl;
     }
 
-    const identity = profile.id || profile.name || "?";
-    let hash = 0;
+    const { avatarIndex, colorIndex } = moodstoneIndexes(
+      profile.id || profile.name || "?"
+    );
 
-    for (let index = 0; index < identity.length; index++) {
-      hash = (hash * 31 + identity.charCodeAt(index)) % 0x1_00_00_00_00;
-    }
-
-    const avatar = moodstoneAvatars[hash % moodstoneAvatars.length];
-
-    const color =
-      moodstoneColors[
-        Math.floor(hash / moodstoneAvatars.length) % moodstoneColors.length
-      ];
-
-    const template = active && !reducedMotion ? avatar.animated : avatar.still;
-
-    const svg = template
-      .replaceAll("MOODSTONE_LIT", color.lit)
-      .replaceAll("MOODSTONE_SHADE", color.shade);
+    const svg = moodstoneSvg(avatarIndex, colorIndex, active && !reducedMotion);
 
     // An image document isolates SVG gradient IDs, even for repeated profiles.
     return `data:image/svg+xml,${encodeURIComponent(svg)}`;

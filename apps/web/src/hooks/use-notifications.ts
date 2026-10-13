@@ -39,12 +39,12 @@ export function useNotifications(): {
 
   const { data: proposalsData, isLoading: proposalsLoading } =
     useOrgMemoryProposals(isOrgAdmin ? orgId : null, "pending", {
-      refetchInterval: 30_000,
+      refetchInterval: 60_000,
     });
 
   const { data: skillProposalsData, isLoading: skillProposalsLoading } =
     useSkillProposals(isOrgAdmin ? orgId : null, {
-      refetchInterval: 30_000,
+      refetchInterval: 60_000,
       status: "pending",
     });
 

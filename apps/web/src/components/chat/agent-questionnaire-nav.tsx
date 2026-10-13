@@ -1,58 +1,34 @@
-import { Button } from "@nakama/ui/button";
-import { ArrowDown01Icon, ArrowUp01Icon } from "hugeicons-react";
+import { cn } from "@nakama/ui/utils";
 
 export function AgentQuestionnaireNav({
   currentQuestionIndex,
-  totalQuestions,
-  disabled,
-  canGoPrevious,
-  canGoNext,
-  activeAnswerLength,
-  onPrevious,
-  onNext,
+  answered,
 }: {
   currentQuestionIndex: number;
-  totalQuestions: number;
-  disabled: boolean;
-  canGoPrevious: boolean;
-  canGoNext: boolean;
-  activeAnswerLength: number;
-  onPrevious: () => void;
-  onNext: () => void;
+  answered: boolean[];
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 border-border/60 border-b px-3 py-2.5">
-      <div className="min-w-0">
-        <p className="truncate font-medium text-foreground text-sm">
-          Questions
-        </p>
-      </div>
-      <div className="flex items-center gap-1 text-muted-foreground text-xs">
-        <Button
-          aria-label="Previous question"
-          className="size-6 text-muted-foreground"
-          disabled={disabled || !canGoPrevious}
-          onClick={onPrevious}
-          size="icon-sm"
-          type="button"
-          variant="ghost"
-        >
-          <ArrowUp01Icon aria-hidden className="size-3.5" />
-        </Button>
-        <span className="min-w-10 text-center">
-          {currentQuestionIndex + 1} of {totalQuestions}
+    <div className="flex items-center justify-between gap-3 px-3 pt-3 pb-1">
+      <p className="truncate font-medium text-foreground text-sm">Questions</p>
+      <div className="flex items-center gap-2.5">
+        <div aria-hidden className="flex gap-1">
+          {answered.map((isAnswered, index) => (
+            <span
+              className={cn(
+                "h-1 w-4 rounded-full transition-colors",
+                isAnswered || index < currentQuestionIndex
+                  ? "bg-primary"
+                  : index === currentQuestionIndex
+                    ? "bg-primary/40"
+                    : "bg-muted-foreground/20"
+              )}
+              key={index}
+            />
+          ))}
+        </div>
+        <span className="text-muted-foreground text-xs">
+          {currentQuestionIndex + 1} of {answered.length}
         </span>
-        <Button
-          aria-label="Next question"
-          className="size-6 text-muted-foreground"
-          disabled={disabled || !canGoNext || activeAnswerLength === 0}
-          onClick={onNext}
-          size="icon-sm"
-          type="button"
-          variant="ghost"
-        >
-          <ArrowDown01Icon aria-hidden className="size-3.5" />
-        </Button>
       </div>
     </div>
   );

@@ -349,7 +349,7 @@ export function SkillsCuratorOrgCard() {
           <div className="flex shrink-0 items-center gap-2 pt-0.5">
             {busy ? <Spinner /> : null}
             <Switch
-              aria-label="Enable skill curator"
+              aria-label="Auto clean-up of skills"
               checked={enabled}
               disabled={busy}
               onCheckedChange={(checked) =>
@@ -373,7 +373,7 @@ export function SkillsCuratorOrgCard() {
           <div className="flex shrink-0 items-center gap-2">
             {busy ? <Spinner /> : null}
             <Switch
-              aria-label="Enable skill consolidate"
+              aria-label="Merge similar skills"
               checked={consolidateEnabled}
               disabled={busy || !enabled}
               onCheckedChange={(checked) =>

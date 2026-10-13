@@ -13,8 +13,8 @@ import {
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
-  requireOrgAdminOrPlatformAdminFromContext,
   requirePlatformAdminFromContext,
+  requireProfileManageFromContext,
 } from "../org-guards";
 import { errorResponse, getRequestAuth, readJson } from "../shared";
 import type { HonoApp } from "../types";
@@ -262,7 +262,10 @@ export function registerSystemRoutes(
     const orgId = auth.activeOrgId ?? null;
 
     if (profileId) {
-      requireOrgAdminOrPlatformAdminFromContext(c);
+      await requireProfileManageFromContext(c, agent, {
+        allowOrgAdmin: true,
+        profileId,
+      });
       await agent.getProfile(requireActiveOrgIdFromContext(c), profileId);
     }
 

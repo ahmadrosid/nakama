@@ -20,20 +20,20 @@ export function useAppNavigation() {
     navigateToChat(session: RequestedChatSession) {
       navigate(buildChatPath(session.profileId, session.sessionId));
     },
-    navigateToNewChat(profileId?: string | null, options?: { draft?: string }) {
+    navigateToNewChat(
+      profileId?: string | null,
+      options?: { draft?: string; intent?: "automation" }
+    ) {
       const draft = options?.draft?.trim();
-
-      if (!draft) {
-        navigate(buildNewChatPath(profileId));
-
-        return;
-      }
-
       const url = new URL(buildNewChatPath(profileId), "http://nakama.local");
 
-      if (draft.length <= MAX_URL_CHAT_DRAFT_LENGTH) {
+      if (options?.intent) {
+        url.searchParams.set("intent", options.intent);
+      }
+
+      if (draft && draft.length <= MAX_URL_CHAT_DRAFT_LENGTH) {
         url.searchParams.set("draft", draft);
-      } else {
+      } else if (draft) {
         url.searchParams.set("draftKey", storeChatDraft(draft));
       }
 

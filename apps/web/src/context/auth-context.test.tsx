@@ -498,9 +498,7 @@ for (const operation of [
               ? ORG_A.id
               : ORG_B.id
         );
-        expect(queryClient.getQueryData<number>(cacheKey)).toBe(
-          mode === "current" && operation.includes("update") ? undefined : 2
-        );
+        expect(queryClient.getQueryData<number>(cacheKey)).toBe(2);
 
         if (operation.includes("update")) {
           expect(

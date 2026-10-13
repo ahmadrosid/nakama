@@ -4,7 +4,7 @@
  */
 
 import { cn } from "@nakama/ui/utils";
-import { ArrowDown01Icon } from "hugeicons-react";
+import { ArrowDown01Icon, GlobeIcon } from "hugeicons-react";
 import type { ReactNode } from "react";
 import styles from "./WebSearch.module.css";
 import type {
@@ -146,25 +146,6 @@ function CheckIcon() {
   );
 }
 
-function LinkIcon() {
-  return (
-    <svg
-      aria-hidden
-      fill="none"
-      height="14"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.8"
-      viewBox="0 0 24 24"
-      width="14"
-    >
-      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-    </svg>
-  );
-}
-
 export interface WebSourceCardProps {
   formatDisplayUrl?: (source: WebSearchSource) => string;
   headerText: string;
@@ -221,7 +202,11 @@ function WebSourceCardHeaderContent({
   return (
     <>
       <span className={styles.wsIcon}>
-        {mode === "fetch" ? <LinkIcon /> : <SearchIcon />}
+        {mode === "fetch" ? (
+          <GlobeIcon aria-hidden size={14} />
+        ) : (
+          <SearchIcon />
+        )}
       </span>
       <span className={styles.wsLabel}>
         <span

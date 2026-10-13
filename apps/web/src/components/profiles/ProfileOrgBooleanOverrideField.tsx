@@ -13,6 +13,7 @@ import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useAuth } from "@/context/use-auth";
 import { useUpdateProfileMutation } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
+import { isProfileOwner } from "@/lib/profiles";
 
 type OverrideField = keyof Pick<
   UpdateProfileRequest,
@@ -33,9 +34,31 @@ function toStoredOverride(value: boolean | null | undefined): boolean | null {
   return null;
 }
 
+export function SettingIcon({
+  checked,
+  children,
+}: {
+  checked: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors ${
+        checked
+          ? "bg-primary/10 text-primary"
+          : "bg-muted text-muted-foreground"
+      }`}
+    >
+      {children}
+    </span>
+  );
+}
+
 function BooleanOverrideSwitch({
   size = "sm",
   avatar,
+  icon,
   busy,
   checked,
   disabled,
@@ -48,6 +71,7 @@ function BooleanOverrideSwitch({
 }: {
   size?: "default" | "sm";
   avatar?: ReactNode;
+  icon?: ReactNode;
   busy: boolean;
   checked: boolean;
   disabled: boolean;
@@ -65,6 +89,7 @@ function BooleanOverrideSwitch({
         htmlFor={id}
       >
         {avatar}
+        {icon ? <SettingIcon checked={checked}>{icon}</SettingIcon> : null}
         <span className="min-w-0">
           <span className="block">{label}</span>
           {description ? (
@@ -108,6 +133,7 @@ export function ProfileOrgBooleanOverrideField({
   profile,
   disabled = false,
   field,
+  icon,
   id,
   label,
   description,
@@ -115,6 +141,7 @@ export function ProfileOrgBooleanOverrideField({
 }: {
   disabled?: boolean;
   field: OverrideField;
+  icon?: ReactNode;
   id: string;
   label: string;
   description?: string;
@@ -126,6 +153,7 @@ export function ProfileOrgBooleanOverrideField({
       description={description}
       disabled={disabled}
       field={field}
+      icon={icon}
       id={id}
       key={`${profile.id}:${field}:${String(profile[field])}`}
       label={label}
@@ -173,7 +201,7 @@ function useProfileBooleanOverride(
   field: OverrideField,
   savedToast: string
 ) {
-  const { activeOrg } = useAuth();
+  const { activeOrg, user } = useAuth();
   const updateMutation = useUpdateProfileMutation();
 
   const [override, setOverride] = useState<boolean | null>(() =>
@@ -186,7 +214,10 @@ function useProfileBooleanOverride(
   const overridden = override !== null;
 
   async function persist(next: boolean | null) {
-    if (profile.sharedAgent || activeOrg?.role !== "admin") {
+    const canEdit =
+      activeOrg?.role === "admin" || isProfileOwner(profile, user?.id);
+
+    if (profile.sharedAgent || !canEdit) {
       return;
     }
 
@@ -211,7 +242,6 @@ function useProfileBooleanOverride(
     overridden,
     persist,
     readOnly: Boolean(profile.sharedAgent),
-    role: activeOrg?.role,
   };
 }
 
@@ -253,6 +283,7 @@ function ProfileOrgBooleanOverrideFieldBody({
   profile,
   disabled = false,
   field,
+  icon,
   id,
   label,
   description,
@@ -260,6 +291,7 @@ function ProfileOrgBooleanOverrideFieldBody({
 }: {
   disabled?: boolean;
   field: OverrideField;
+  icon?: ReactNode;
   id: string;
   label: string;
   description?: string;
@@ -268,16 +300,13 @@ function ProfileOrgBooleanOverrideFieldBody({
 }) {
   const state = useProfileBooleanOverride(profile, field, savedToast);
 
-  if (state.role !== "admin") {
-    return null;
-  }
-
   return (
     <BooleanOverrideSwitch
       busy={state.busy}
       checked={state.checked}
       description={description}
       disabled={disabled || state.readOnly}
+      icon={icon}
       id={id}
       label={label}
       onCheckedChange={(next) => {

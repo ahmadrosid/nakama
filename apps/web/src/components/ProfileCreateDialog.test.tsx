@@ -45,6 +45,12 @@ test("Select all checks every tool, clears them, and marks a partial pick", asyn
     );
   });
 
+  await act(async () => {
+    [...document.querySelectorAll("button")]
+      .find((button) => button.textContent === "Change")
+      ?.click();
+  });
+
   const boxes = () => [
     ...document.querySelectorAll<HTMLInputElement>(
       "#create-profile-tool-list input[type=checkbox]"
@@ -57,7 +63,7 @@ test("Select all checks every tool, clears them, and marks a partial pick", asyn
       .filter((box) => box.checked).length;
 
   expect(boxes()).toHaveLength(tools.length + 1);
-  expect(checkedTools()).toBe(0);
+  expect(checkedTools()).toBe(1);
 
   await act(async () => {
     boxes()[0]?.click();

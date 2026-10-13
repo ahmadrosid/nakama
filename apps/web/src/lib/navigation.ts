@@ -246,7 +246,6 @@ export function visibleNavGroups(access: {
         item.id === "files" ||
         item.id === "tools" ||
         item.id === "soul" ||
-        item.id === "profiles" ||
         item.id === "workers"
       ) {
         return canAccessSystemPage(access.isPlatformAdmin, access.orgRole);

@@ -170,6 +170,8 @@ interface ProfileRow {
   model: string | null;
   name: string;
   org_id: string | null;
+  owner_user_id: string | null;
+  shared_with_team: number;
   skills_curator_consolidate_enabled: number | null;
   skills_post_turn_review: number | null;
   skills_write_approval: number | null;
@@ -567,6 +569,8 @@ export function openPrivateDatabase(databasePath: string): Database {
 
   if (databasePath !== ":memory:") {
     chmodSync(databasePath, PRIVATE_FILE_MODE);
+    // DELETE journal removal must sync its directory before a commit is acknowledged.
+    db.exec("PRAGMA synchronous = EXTRA");
   }
 
   return db;
@@ -1012,10 +1016,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       skills_curator_consolidate_enabled,
       acp_agent,
       acp_settings,
+      owner_user_id,
+      shared_with_team,
       created_at,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       system_prompt = excluded.system_prompt,
@@ -1031,6 +1037,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       skills_curator_consolidate_enabled = excluded.skills_curator_consolidate_enabled,
       acp_agent = excluded.acp_agent,
       acp_settings = excluded.acp_settings,
+      owner_user_id = excluded.owner_user_id,
+      shared_with_team = excluded.shared_with_team,
       updated_at = excluded.updated_at
   `);
 
@@ -1063,6 +1071,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           : 0,
       record.acpAgent ? JSON.stringify(record.acpAgent) : null,
       record.acpSettings ? JSON.stringify(record.acpSettings) : null,
+      record.ownerUserId ?? null,
+      record.sharedWithTeam === false ? 0 : 1,
       record.createdAt,
       record.updatedAt ?? record.createdAt
     );
@@ -1793,8 +1803,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   );
 
   const insertPluginReleaseStmt = db.prepare(`
-    INSERT INTO plugin_releases (plugin_id, version, manifest, digest, created_at)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO plugin_releases (plugin_id, version, manifest, digest, created_at, source)
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
 
   const fillEmptyPluginReleaseDigestStmt = db.prepare(`
@@ -3972,7 +3982,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.version,
         JSON.stringify(record.manifest),
         record.digest,
-        record.createdAt
+        record.createdAt,
+        record.source ?? "legacy"
       );
 
       return { ok: true };
@@ -6397,6 +6408,8 @@ function toProfileRecord(row: ProfileRow): StoredProfileRecord {
     model: row.model,
     name: row.name,
     orgId: row.org_id ?? null,
+    ownerUserId: row.owner_user_id ?? null,
+    sharedWithTeam: row.shared_with_team !== 0,
     skillsCuratorConsolidateEnabled:
       row.skills_curator_consolidate_enabled == null
         ? null
@@ -6503,6 +6516,7 @@ interface PluginReleaseRow {
   digest: string | null;
   manifest: string;
   plugin_id: string;
+  source: NonNullable<StoredPluginReleaseRecord["source"]>;
   version: string;
 }
 
@@ -6528,6 +6542,7 @@ function toPluginReleaseRecord(
     // SAFETY: The adapter writes this row value through its typed contract.
     manifest: JSON.parse(row.manifest) as StoredPluginReleaseRecord["manifest"],
     pluginId: row.plugin_id,
+    source: row.source ?? "legacy",
     version: row.version,
   };
 }

@@ -37,9 +37,12 @@ export function OrgMembersTable({
   isLoading: boolean;
   updatePending: boolean;
   removePending: boolean;
-  onEdit: (member: OrgMemberSummary) => void;
-  onRemove: (member: OrgMemberSummary) => void;
+  /** Without both handlers the table is read-only and has no actions column. */
+  onEdit?: (member: OrgMemberSummary) => void;
+  onRemove?: (member: OrgMemberSummary) => void;
 }) {
+  const editable = Boolean(onEdit && onRemove);
+
   if (isLoading) {
     return (
       <div className="flex items-center gap-2 px-4 py-2 text-muted-foreground text-sm">
@@ -65,9 +68,11 @@ export function OrgMembersTable({
           <th className="px-4 py-2.5 font-normal">Name</th>
           <th className="w-20 px-2 py-2.5 font-normal sm:w-28">Role</th>
           <th className="w-28 px-2 py-2.5 font-normal sm:w-36">Joined</th>
-          <th className="w-12 px-2 py-2.5">
-            <span className="sr-only">Actions</span>
-          </th>
+          {editable ? (
+            <th className="w-12 px-2 py-2.5">
+              <span className="sr-only">Actions</span>
+            </th>
+          ) : null}
         </tr>
       </thead>
       <tbody className="divide-y divide-border border-border border-t">
@@ -94,44 +99,46 @@ export function OrgMembersTable({
               <td className={`${CELL} px-2 text-muted-foreground`}>
                 {formatJoined(member.createdAt)}
               </td>
-              <td className={`${CELL} px-2 text-right`}>
-                {isSelf ? null : (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      render={
-                        <Button
-                          aria-label={`Actions for ${displayName}`}
-                          className="text-muted-foreground"
-                          size="icon-sm"
-                          type="button"
-                          variant="ghost"
-                        />
-                      }
-                    >
-                      <MoreHorizontalIcon aria-hidden className="size-4" />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        aria-label={`Edit ${displayName}`}
-                        disabled={updatePending}
-                        onClick={() => onEdit(member)}
+              {editable ? (
+                <td className={`${CELL} px-2 text-right`}>
+                  {isSelf ? null : (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button
+                            aria-label={`Actions for ${displayName}`}
+                            className="text-muted-foreground"
+                            size="icon-sm"
+                            type="button"
+                            variant="ghost"
+                          />
+                        }
                       >
-                        <Edit03Icon aria-hidden />
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        aria-label={`Remove ${displayName}`}
-                        disabled={removePending}
-                        onClick={() => onRemove(member)}
-                        variant="destructive"
-                      >
-                        <Delete02Icon aria-hidden />
-                        Remove
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-              </td>
+                        <MoreHorizontalIcon aria-hidden className="size-4" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          aria-label={`Edit ${displayName}`}
+                          disabled={updatePending}
+                          onClick={() => onEdit?.(member)}
+                        >
+                          <Edit03Icon aria-hidden />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          aria-label={`Remove ${displayName}`}
+                          disabled={removePending}
+                          onClick={() => onRemove?.(member)}
+                          variant="destructive"
+                        >
+                          <Delete02Icon aria-hidden />
+                          Remove
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </td>
+              ) : null}
             </tr>
           );
         })}

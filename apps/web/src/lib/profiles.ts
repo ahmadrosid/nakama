@@ -13,6 +13,14 @@ export function resolveSuperBotChatProfileId(
   return profiles.find((profile) => profile.isSuper)?.id ?? null;
 }
 
+/** True for the member who created the agent. Admin-created agents have no owner. */
+export function isProfileOwner(
+  profile: Pick<ProfileSummary, "ownerUserId"> | null | undefined,
+  userId: string | undefined
+): boolean {
+  return Boolean(userId) && profile?.ownerUserId === userId;
+}
+
 export function findDefaultProfile(
   profiles: ProfileSummary[]
 ): ProfileSummary | undefined {

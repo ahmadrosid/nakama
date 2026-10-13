@@ -34,9 +34,13 @@ export function assertYearMonth(value: string): string {
 }
 
 /** Per-profile soul stack: ~/.nakama/orgs/{orgId}/profiles/{profileId}/ */
-export function getProfileSoulDir(orgId: string, profileId: string): string {
+export function getProfileSoulDir(
+  orgId: string,
+  profileId: string,
+  configDir = getUserConfigDir()
+): string {
   return join(
-    getUserConfigDir(),
+    configDir,
     "orgs",
     assertConfigPathSegment(orgId, "orgId"),
     "profiles",

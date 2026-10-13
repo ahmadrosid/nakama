@@ -46,7 +46,7 @@ export function SkillsPostTurnReviewOrgCard() {
           <div className="flex shrink-0 items-center gap-2">
             {busy ? <Spinner /> : null}
             <Switch
-              aria-label="Enable learn after a turn"
+              aria-label="Bots learn from chats"
               checked={enabled}
               disabled={busy}
               onCheckedChange={(checked) => void handleToggle(checked)}

@@ -2310,8 +2310,8 @@ describe("createHonoApp", () => {
       expect(listResponse.status).toBe(200);
 
       const createProfileResponse = await app.fetch(
-        new Request("http://localhost:4310/v1/profiles", {
-          body: JSON.stringify({ name: "Blocked", systemPrompt: "nope" }),
+        new Request("http://localhost:4310/v1/profiles/default/move", {
+          body: JSON.stringify({ organizationId: "other" }),
           headers: {
             ...orgHeaders,
             "Content-Type": "application/json",

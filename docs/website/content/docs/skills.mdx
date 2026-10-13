@@ -161,8 +161,8 @@ always runs.
 
 A skill written into a profile's own skills directory — by hand, or by an
 organization member asking the agent to create one with `skill_manage` — does
-not, until the org reviews its writes. Turn on **Skill write approval** for the
-profile in **Agent → your agent** and every write to that profile's skills is
+not, until the org reviews its writes. Turn on **Ask me before saving a skill** for the
+profile in **Agent → your agent → Behavior** and every write to that profile's skills is
 staged for an admin to approve. Code already in the skill stays blocked until
 reviewed: ask the agent to use `skill_manage` with `action: approve_code`, the
 skill name, and the code file path, then approve its proposal. Each code file
@@ -223,6 +223,8 @@ The slash picker also reserves **`/learn`** — use it to turn notes, a URL, a l
 
 Nakama also ships bundled skills for system workflows. The `create-profile` bundled skill is assigned only to Super Bot, so profile-authoring instructions load when Super Bot is asked to create a profile without adding those instructions to ordinary profile prompts. That skill runs a confirm-first factory: draft soul files in chat, wait for explicit confirmation, then create.
 
+The `create-skill` bundled skill is also assigned only to Super Bot. When you ask Super Bot to write or improve a skill, it drafts the full `SKILL.md` in chat, waits for your confirmation, then saves it with `skill_manage`. If write approval is on, the skill waits for an admin to approve it.
+
 For more detail, see [Agent prompts](/agent-prompt).
 
 ## How to create and assign skills
@@ -260,7 +262,7 @@ When `manage-skills` or `skill-installer` is assigned, interactive chat gets a `
 
 ### Write approval (optional)
 
-Org admins can enable **skill write approval** under **Control center → Workspace → Organization → Skill write approval**. When the gate is on, skill changes wait for admin review before they go live; see [Self-improving skills](/self-improving-skills). Unused agent- and human-authored skills can be archived (moved, never deleted) by the optional **skill curator** on the same Organization page. A separate opt-in can also **consolidate** overlapping agent skills with an LLM; see [Self-improving skills](/self-improving-skills).
+Org admins can enable **Ask me before a bot saves a skill** under **Control center → Workspace → Organization → How bots learn skills → Customize**. Agent owners can turn it on or off for their own agent under **Agent → your agent → Behavior**. When the gate is on, skill changes wait for admin review before they go live; see [Self-improving skills](/self-improving-skills). Unused agent- and human-authored skills can be archived (moved, never deleted) by the optional **Auto clean-up of skills** on the same Organization page. A separate opt-in can also **consolidate** overlapping agent skills with an LLM; see [Self-improving skills](/self-improving-skills).
 
 ### Bundled system skills
 

@@ -636,9 +636,10 @@ export function ChatAddCapabilitiesDialogs({
   skillOpen: boolean;
   toolOpen: boolean;
 }) {
-  const { data: tools = [] } = useToolsQuery();
-  const { data: servers = [] } = useMcpServersQuery();
-  const { data: profile } = useProfileQuery(profileId);
+  const dialogOpen = toolOpen || mcpOpen;
+  const { data: tools = [] } = useToolsQuery({ enabled: dialogOpen });
+  const { data: servers = [] } = useMcpServersQuery({ enabled: dialogOpen });
+  const { data: profile } = useProfileQuery(dialogOpen ? profileId : null);
   const assignToolMutation = useAssignToolMutation();
   const assignMcpMutation = useAssignMcpServerMutation();
   const createMcpMutation = useCreateMcpServerMutation();
@@ -789,13 +790,13 @@ function ChatSkillDialog({
   profileId: string;
 }) {
   const { activeOrg } = useAuth();
-  const { data: profile } = useProfileQuery(profileId);
+  const { data: profile } = useProfileQuery(open ? profileId : null);
 
   const {
     data: skills = [],
     isLoading: skillsLoading,
     error: skillsError,
-  } = useSkillsQuery();
+  } = useSkillsQuery({ enabled: open });
 
   const assignToolMutation = useAssignToolMutation();
   const assignSkillMutation = useAssignSkillMutation();

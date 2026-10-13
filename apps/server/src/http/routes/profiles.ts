@@ -32,6 +32,7 @@ import {
   renameWorkspaceEntry,
 } from "@nakama/core";
 import { filterProfilesForChatAccess } from "@nakama/core/profiles";
+import type { Context } from "hono";
 import { listAcpAgentPresets } from "../../providers/acp/acp-agent-presets";
 import { ArtifactShareService } from "../../services/artifact-share-service";
 import type { ServerOptions } from "../context";
@@ -41,9 +42,10 @@ import {
   requireOrgAdminOrPlatformAdminFromContext,
   requireOrgMemberFromContext,
   requirePlatformAdminFromContext,
+  requireProfileManageFromContext,
 } from "../org-guards";
 import { getRequestAuth, json, readJson, readOptionalJson } from "../shared";
-import type { HonoApp } from "../types";
+import type { AppEnv, HonoApp } from "../types";
 
 const ORG_ADMIN_PROFILE_SETTING_KEYS = new Set([
   "automationsEnabled",
@@ -70,6 +72,19 @@ export function registerProfileRoutes(
   options: ServerOptions
 ): void {
   const { agent } = options;
+
+  const requireProfileManage = (c: Context<AppEnv>) =>
+    requireProfileManageFromContext(c, agent);
+
+  const requireProfileReadAccess = async (c: Context<AppEnv>) => {
+    const auth = getRequestAuth(c);
+
+    if (auth.isPlatformAdmin || auth.orgRole === "admin") {
+      return auth;
+    }
+
+    return requireProfileManage(c);
+  };
 
   const artifactShares =
     options.databaseAdapter && options.authService
@@ -1309,20 +1324,67 @@ export function registerProfileRoutes(
       profiles: filterProfilesForChatAccess(response.profiles, {
         isPlatformAdmin: auth.isPlatformAdmin,
         orgRole: auth.orgRole,
+        userId: auth.user.id,
       }),
     });
   });
 
   app.post("/v1/profiles", async (c) => {
-    requirePlatformAdminFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const body = await readJson(c.req.raw, createProfileSchema);
 
-    return json<ProfileResponse>(await agent.createProfile(orgId, body), 201);
+    // Members get a private agent they own. Platform admins keep the shared default.
+    return json<ProfileResponse>(
+      await agent.createProfile(
+        orgId,
+        auth.isPlatformAdmin ? body : { ...body, isSuper: false },
+        auth.isPlatformAdmin
+          ? undefined
+          : { ownerUserId: auth.user.id, sharedWithTeam: false }
+      ),
+      201
+    );
+  });
+
+  app.post("/v1/profiles/with-super-bot", async (c) => {
+    const auth = requireOrgMemberFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+
+    const body = await readJson(
+      c.req.raw,
+      z.object({
+        name: z.string().trim().min(1).optional(),
+        prompt: z.string().trim().min(1),
+      })
+    );
+
+    // Super Bot has host tools, so members never route their text through it.
+    // Their description becomes the agent's prompt and the agent stays private.
+    if (!auth.isPlatformAdmin) {
+      return json<ProfileResponse>(
+        await agent.createProfile(
+          orgId,
+          {
+            name:
+              body.name ??
+              body.prompt.split(/\s+/).slice(0, 4).join(" ").trim(),
+            systemPrompt: body.prompt,
+          },
+          { ownerUserId: auth.user.id, sharedWithTeam: false }
+        ),
+        201
+      );
+    }
+
+    return json<ProfileResponse>(
+      await agent.createProfileWithSuperBot(orgId, body),
+      201
+    );
   });
 
   app.get("/v1/profiles/:profileId/soul", async (c) => {
-    requirePlatformAdminFromContext(c);
+    await requireProfileManage(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const includeContents = c.req.query("contents") === "true";
@@ -1333,7 +1395,7 @@ export function registerProfileRoutes(
   });
 
   app.get("/v1/profiles/:profileId/soul/stack", async (c) => {
-    requirePlatformAdminFromContext(c);
+    await requireProfileManage(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
 
@@ -1343,7 +1405,7 @@ export function registerProfileRoutes(
   });
 
   app.post("/v1/profiles/:profileId/soul/init", async (c) => {
-    requirePlatformAdminFromContext(c);
+    await requireProfileManage(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
 
@@ -1354,7 +1416,7 @@ export function registerProfileRoutes(
   });
 
   app.put("/v1/profiles/:profileId/soul/files/:fileKey", async (c) => {
-    const auth = requirePlatformAdminFromContext(c);
+    const auth = await requireProfileManage(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const body = await readJson(c.req.raw, updateSoulFileSchema);
@@ -1370,7 +1432,7 @@ export function registerProfileRoutes(
   });
 
   app.get("/v1/profiles/:profileId/workspace/pins", async (c) => {
-    const auth = requirePlatformAdminFromContext(c);
+    const auth = await requireProfileManage(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     await agent.getProfile(orgId, profileId);
@@ -1409,7 +1471,7 @@ export function registerProfileRoutes(
   });
 
   app.patch("/v1/profiles/:profileId/workspace/rename", async (c) => {
-    requirePlatformAdminFromContext(c);
+    await requireProfileManage(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     await agent.getProfile(orgId, profileId);
@@ -1440,7 +1502,7 @@ export function registerProfileRoutes(
   });
 
   app.put("/v1/profiles/:profileId/workspace/pins", async (c) => {
-    const auth = requirePlatformAdminFromContext(c);
+    const auth = await requireProfileManage(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     await agent.getProfile(orgId, profileId);
@@ -1487,7 +1549,7 @@ export function registerProfileRoutes(
   });
 
   app.get("/v1/profiles/:profileId/workspace", async (c) => {
-    requirePlatformAdminFromContext(c);
+    await requireProfileManage(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     await agent.getProfile(orgId, profileId);
@@ -1498,7 +1560,7 @@ export function registerProfileRoutes(
   });
 
   app.get("/v1/profiles/:profileId/workspace/content", async (c) => {
-    requirePlatformAdminFromContext(c);
+    await requireProfileManage(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     await agent.getProfile(orgId, profileId);
@@ -1531,7 +1593,7 @@ export function registerProfileRoutes(
   });
 
   app.get("/v1/profiles/:profileId/artifacts", async (c) => {
-    requirePlatformAdminFromContext(c);
+    await requireProfileManage(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const limitRaw = c.req.query("limit");
@@ -1632,7 +1694,7 @@ export function registerProfileRoutes(
   });
 
   app.delete("/v1/profiles/:profileId/artifacts", async (c) => {
-    requirePlatformAdminFromContext(c);
+    await requireProfileManage(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const artifactPath = c.req.query("path");
@@ -1647,7 +1709,7 @@ export function registerProfileRoutes(
   });
 
   app.get("/v1/profiles/:profileId/knowledge-base", async (c) => {
-    requirePlatformAdminFromContext(c);
+    await requireProfileManage(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
 
@@ -1657,7 +1719,7 @@ export function registerProfileRoutes(
   });
 
   app.post("/v1/profiles/:profileId/knowledge-base", async (c) => {
-    requirePlatformAdminFromContext(c);
+    await requireProfileManage(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const body = await readJson(c.req.raw, uploadKnowledgeBaseSchema);
@@ -1676,7 +1738,7 @@ export function registerProfileRoutes(
   });
 
   app.post("/v1/profiles/:profileId/knowledge-base/import-zip", async (c) => {
-    requirePlatformAdminFromContext(c);
+    await requireProfileManage(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
 
@@ -1693,7 +1755,7 @@ export function registerProfileRoutes(
   app.delete(
     "/v1/profiles/:profileId/knowledge-base/:documentId",
     async (c) => {
-      requirePlatformAdminFromContext(c);
+      await requireProfileManage(c);
       const orgId = requireActiveOrgIdFromContext(c);
       const profileId = decodeURIComponent(c.req.param("profileId"));
 
@@ -1710,7 +1772,7 @@ export function registerProfileRoutes(
   app.get(
     "/v1/profiles/:profileId/knowledge-base/:documentId/content",
     async (c) => {
-      requirePlatformAdminFromContext(c);
+      await requireProfileManage(c);
       const orgId = requireActiveOrgIdFromContext(c);
       const profileId = decodeURIComponent(c.req.param("profileId"));
       const documentId = decodeURIComponent(c.req.param("documentId"));
@@ -1860,7 +1922,7 @@ export function registerProfileRoutes(
   app.put(
     "/v1/profiles/:profileId/knowledge-base/shared/:documentId",
     async (c) => {
-      requirePlatformAdminFromContext(c);
+      await requireProfileManage(c);
       const orgId = requireActiveOrgIdFromContext(c);
       const profileId = decodeURIComponent(c.req.param("profileId"));
       const documentId = decodeURIComponent(c.req.param("documentId"));
@@ -1886,7 +1948,7 @@ export function registerProfileRoutes(
   app.delete(
     "/v1/profiles/:profileId/knowledge-base/shared/:documentId",
     async (c) => {
-      requirePlatformAdminFromContext(c);
+      await requireProfileManage(c);
       const orgId = requireActiveOrgIdFromContext(c);
       const profileId = decodeURIComponent(c.req.param("profileId"));
       const documentId = decodeURIComponent(c.req.param("documentId"));
@@ -1920,7 +1982,7 @@ export function registerProfileRoutes(
   });
 
   app.put("/v1/profiles/:profileId/avatar", async (c) => {
-    requirePlatformAdminFromContext(c);
+    await requireProfileManage(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const body = await readJson(c.req.raw, imageAttachmentSchema);
@@ -1931,7 +1993,7 @@ export function registerProfileRoutes(
   });
 
   app.delete("/v1/profiles/:profileId/avatar", async (c) => {
-    requirePlatformAdminFromContext(c);
+    await requireProfileManage(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     await agent.deleteProfileAvatar(orgId, profileId);
@@ -1940,7 +2002,7 @@ export function registerProfileRoutes(
   });
 
   app.get("/v1/profiles/:profileId", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    await requireProfileReadAccess(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
 
@@ -1948,7 +2010,7 @@ export function registerProfileRoutes(
   });
 
   app.get("/v1/profiles/:profileId/history", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    await requireProfileReadAccess(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const limitRaw = c.req.query("limit");
@@ -2015,11 +2077,33 @@ export function registerProfileRoutes(
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const body = await readJson(c.req.raw, updateProfileSchema);
 
-    if (!auth.isPlatformAdmin) {
-      requireOrgAdmin(auth);
+    // Sharing a member's agent is the owner's call. Admins cannot force it.
+    if (body.sharedWithTeam !== undefined) {
+      const { profile } = await agent.getProfile(orgId, profileId);
 
-      if (!isOrgAdminAllowedProfileSettingsUpdate(body)) {
+      if (profile.ownerUserId !== auth.user.id) {
         throw new NakamaApiError("Forbidden", 403);
+      }
+    }
+
+    if (!auth.isPlatformAdmin) {
+      // Owners edit their own agent, except settings that run code on the host.
+      const isOwner = await requireProfileManage(c).then(
+        () => true,
+        () => false
+      );
+
+      if (isOwner) {
+        // Host-run agents are an admin control.
+        if (body.acpAgent !== undefined) {
+          throw new NakamaApiError("Forbidden", 403);
+        }
+      } else {
+        requireOrgAdmin(auth);
+
+        if (!isOrgAdminAllowedProfileSettingsUpdate(body)) {
+          throw new NakamaApiError("Forbidden", 403);
+        }
       }
     }
 
@@ -2066,7 +2150,7 @@ export function registerProfileRoutes(
     })
   );
   app.post("/v1/profiles/:profileId/clone", async (c) => {
-    requirePlatformAdminFromContext(c);
+    await requireProfileManage(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const body = await readOptionalJson<CloneProfileRequest>(c.req.raw, {});
@@ -2115,7 +2199,7 @@ export function registerProfileRoutes(
   });
 
   app.delete("/v1/profiles/:profileId", async (c) => {
-    requirePlatformAdminFromContext(c);
+    await requireProfileManage(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     await agent.deleteProfile(orgId, profileId);

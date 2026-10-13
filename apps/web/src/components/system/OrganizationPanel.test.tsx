@@ -686,7 +686,16 @@ async function mountTeamDetail(
       <Route element={<TeamDetailPage />} path="/organization/teams/:teamId" />
       <Route element={<p>Chat</p>} path="/chat" />
     </Routes>,
-    [],
+    [
+      {
+        createdAt: "",
+        id: "team-b",
+        name: "Team b",
+        role: "admin",
+        slug: "team-b",
+        updatedAt: "",
+      },
+    ],
     "/organization/teams/team-b"
   );
 
@@ -711,7 +720,7 @@ test("team detail shows readiness from stored counts without switching", async (
   );
 
   expect(container.querySelector("h2")?.textContent).toBe("Team team-a");
-  expect(container.textContent).toContain("2 of 5 steps done");
+  expect(container.textContent).toContain("1/3");
   expect(container.textContent).toContain("Add person");
   expect(container.textContent).not.toContain("Add knowledge");
   expect(container.textContent).toContain("team-b");

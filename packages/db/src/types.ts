@@ -111,6 +111,10 @@ export interface StoredProfileRecord {
   model: string | null;
   name: string;
   orgId?: string | null;
+  /** Member who created the agent. null for agents created by platform admins. */
+  ownerUserId?: string | null;
+  /** Private agents (false) are visible only to their owner and admins. Defaults to shared. */
+  sharedWithTeam?: boolean;
   /** null = inherit org default; true/false = force consolidate on/off for this profile */
   skillsCuratorConsolidateEnabled?: boolean | null;
   /** null = inherit org default; true/false = force post-turn review on/off for this profile */

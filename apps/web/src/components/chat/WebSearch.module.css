@@ -9,11 +9,9 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font:
-    13px / 1.4 system-ui,
-    -apple-system,
-    sans-serif;
-  color: var(--c-text);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--c-muted);
 }
 
 :global(.dark) .ws,
@@ -55,18 +53,23 @@
   color: var(--c-muted);
 }
 
+/* Matches the other tool rows: an opaque 20px box that breaks the timeline line. */
 .wsIcon {
+  position: relative;
+  z-index: 10;
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
   width: 14px;
-  height: 14px;
+  height: 20px;
   color: var(--c-muted);
+  background: var(--background);
 }
 
 .wsIcon svg {
   display: block;
+  opacity: 0.5;
 }
 
 .wsRowButton:hover .wsIcon {
@@ -78,16 +81,7 @@
   flex: 1;
   align-items: center;
   min-width: 0;
-  font-weight: 550;
   white-space: nowrap;
-}
-
-.wsRowButton .wsLabel {
-  color: inherit;
-}
-
-.wsRow .wsLabel {
-  color: var(--c-text);
 }
 
 .wsQuote {
@@ -113,15 +107,10 @@
 }
 
 .wsShimmer.isDone {
-  color: var(--c-text);
-  -webkit-text-fill-color: var(--c-text);
-  background: none;
-  animation: none;
-}
-
-.wsRowButton .wsShimmer.isDone {
   color: currentColor;
   -webkit-text-fill-color: currentColor;
+  background: none;
+  animation: none;
 }
 
 .wsChevronIcon {

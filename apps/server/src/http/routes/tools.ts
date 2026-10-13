@@ -25,6 +25,7 @@ import {
   requireActiveOrgIdFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
   requirePlatformAdminFromContext,
+  requireProfileManageFromContext,
 } from "../org-guards";
 import { json, readJson } from "../shared";
 import type { HonoApp } from "../types";
@@ -692,7 +693,7 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.get("/v1/profiles/:profileId/tools", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    await requireProfileManageFromContext(c, agent, { allowOrgAdmin: true });
     const orgId = requireActiveOrgIdFromContext(c);
 
     return json<ListToolsResponse>(
@@ -704,9 +705,21 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.post("/v1/profiles/:profileId/tools", async (c) => {
-    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    const auth = await requireProfileManageFromContext(c, agent, {
+      allowOrgAdmin: true,
+    });
+
     const orgId = requireActiveOrgIdFromContext(c);
     const body = await readJson(c.req.raw, assignToolSchema);
+
+    // Members may not hand their agent a host shell.
+    if (auth.orgRole !== "admin" && !auth.isPlatformAdmin) {
+      const tool = await options.databaseAdapter?.getTool(body.toolId);
+
+      if (tool?.handlerType === "bash") {
+        throw new NakamaApiError("Forbidden", 403);
+      }
+    }
 
     return json<ProfileResponse>(
       await agent.assignTool(
@@ -719,7 +732,10 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.delete("/v1/profiles/:profileId/tools/:toolId", async (c) => {
-    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    const auth = await requireProfileManageFromContext(c, agent, {
+      allowOrgAdmin: true,
+    });
+
     const orgId = requireActiveOrgIdFromContext(c);
 
     return json<ProfileResponse>(

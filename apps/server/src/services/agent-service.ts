@@ -30,6 +30,7 @@ import type {
   ConfigureProviderRequest,
   ConfigureProviderResponse,
   CreateProfileRequest,
+  CreateProfileWithSuperBotRequest,
   CreateProviderRequest,
   CreateProviderResponse,
   CreateSkillRequest,
@@ -420,7 +421,7 @@ export interface CreateSessionOptions {
 type ChatProfileAccess = Pick<
   CreateSessionOptions,
   "excludeSuperBot" | "isPlatformAdmin" | "orgRole"
->;
+> & { user?: { id: string } };
 
 export class AgentService {
   private userConfig: UserConfig | null;
@@ -519,7 +520,8 @@ export class AgentService {
         return selection
           ? `${selection.instance.id}::${selection.model}`
           : profileModel;
-      }
+      },
+      () => this.pluginService
     );
     this.orgMemoryTools = createOrgMemoryTools(this.getOrgMemoryService());
     this._providerConfigured =
@@ -2406,7 +2408,10 @@ export class AgentService {
       resolvedProfileId
     );
 
-    this.assertChatProfileAccess(profile, options ?? {});
+    this.assertChatProfileAccess(profile, {
+      ...options,
+      user: userId ? { id: userId } : undefined,
+    });
 
     const sharedCapabilityRevision = await this.capabilityRevisionForProfile(
       orgId,
@@ -2530,6 +2535,14 @@ export class AgentService {
         "Super Bot is only available to org admins.",
         403
       );
+    }
+
+    if (
+      profile.sharedWithTeam === false &&
+      !access.isPlatformAdmin &&
+      profile.ownerUserId !== access.user?.id
+    ) {
+      throw new NakamaApiError("This agent is private.", 403);
     }
   }
 
@@ -4308,9 +4321,65 @@ export class AgentService {
 
   async createProfile(
     orgId: string,
-    request: CreateProfileRequest
+    request: CreateProfileRequest,
+    owner?: { ownerUserId: string; sharedWithTeam: boolean }
   ): Promise<ProfileResponse> {
-    return this.profileService.createProfile(orgId, request);
+    return this.profileService.createProfile(orgId, request, owner);
+  }
+
+  async createProfileWithSuperBot(
+    orgId: string,
+    request: CreateProfileWithSuperBotRequest
+  ): Promise<ProfileResponse> {
+    const superBot = (await this.db.listProfilesForOrg(orgId)).find(
+      (profile) => profile.isSuper
+    );
+
+    if (!superBot) {
+      throw new Error("Super Bot is not available in this organization.");
+    }
+
+    const nameLine = request.name
+      ? `Use the name "${request.name}".`
+      : "Pick a short name.";
+
+    let createdProfileId: string | null = null;
+
+    await this.runAutomationPrompt(
+      orgId,
+      superBot.id,
+      [
+        "Create one new agent for the request below. Do not ask for confirmation. Call create_profile exactly once with name and soulFiles (SOUL.md and INSTRUCTIONS.md), then stop.",
+        nameLine,
+        `Request: ${request.prompt}`,
+      ].join("\n"),
+      undefined,
+      undefined,
+      {
+        onChunk() {},
+        onToolEnd(event) {
+          // SAFETY: create_profile returns { type: "profile_created", profile }; every field is checked below.
+          const result = event.result as {
+            profile?: { id?: string };
+            type?: string;
+          } | null;
+
+          if (
+            event.tool === "create_profile" &&
+            result?.type === "profile_created" &&
+            result.profile?.id
+          ) {
+            createdProfileId = result.profile.id;
+          }
+        },
+      }
+    );
+
+    if (!createdProfileId) {
+      throw new Error("Super Bot did not create an agent.");
+    }
+
+    return this.profileService.getProfile(orgId, createdProfileId);
   }
 
   async updateProfile(

@@ -130,7 +130,7 @@ export type OrgMemberAddCredentials = {
   temporaryPassword: string;
 };
 
-function OrgMemberInviteForm({
+export function OrgMemberInviteForm({
   inviteEmail,
   inviteRole,
   formError,

@@ -498,7 +498,7 @@ const CHART_WIDTH = 300;
 
 const CHART_HEIGHT = 120;
 
-function SpendChart({
+export function SpendChart({
   daily,
   metric,
   selected,

@@ -41,7 +41,6 @@ export function useSystemStatusQuery() {
       normalizeSystemStatus(await api.getSystemStatus(profileId)),
     queryKey: [...queryKeys.systemStatus, orgId, profileId],
     refetchInterval: REFRESH_INTERVAL_MS,
-    refetchIntervalInBackground: true,
   });
 }
 
