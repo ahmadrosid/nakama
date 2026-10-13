@@ -28,7 +28,7 @@ export class MeetingStore {
     const path = join(directory, "meetings.sqlite");
     this.db = new Database(path);
     chmodSync(path, 0o600);
-    this.db.exec(`PRAGMA busy_timeout=5000;
+    this.db.exec(`PRAGMA synchronous=EXTRA; PRAGMA busy_timeout=5000;
       CREATE TABLE IF NOT EXISTS tenant (id INTEGER PRIMARY KEY CHECK(id=1), orgId TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS meetings (
         id TEXT PRIMARY KEY, actorId TEXT NOT NULL, profileId TEXT, url TEXT NOT NULL,

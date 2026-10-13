@@ -2062,6 +2062,7 @@ export class PluginService {
     const db = new Database(databasePath);
 
     try {
+      db.exec("PRAGMA synchronous = EXTRA");
       ensureMigrationLedger(db);
       const applied = readAppliedMigrations(db);
       assertMigrationCompatibility(applied, migrations);
@@ -3143,6 +3144,7 @@ function applyPluginMigrations(
   const db = new Database(databasePath);
 
   try {
+    db.exec("PRAGMA synchronous = EXTRA");
     ensureMigrationLedger(db);
     const applied = readAppliedMigrations(db);
     assertMigrationCompatibility(applied, migrations);

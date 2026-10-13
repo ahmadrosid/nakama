@@ -496,6 +496,7 @@ async function runLexicalSearchTargets(
     });
 
     try {
+      db.exec("PRAGMA synchronous = EXTRA");
       db.run(
         "CREATE TABLE IF NOT EXISTS docs (id INTEGER PRIMARY KEY, collection TEXT NOT NULL, path TEXT NOT NULL, mtime_ms REAL NOT NULL, size INTEGER NOT NULL, UNIQUE (collection, path))"
       );

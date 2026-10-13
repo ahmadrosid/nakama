@@ -19547,6 +19547,9 @@ async function run(input2, context) {
     throw new Error("Plugin database unavailable");
   }
   const db = new Database(context.databasePath);
+  if (context.databasePath !== ":memory:") {
+    db.exec("PRAGMA synchronous = EXTRA");
+  }
   db.exec("PRAGMA busy_timeout = 5000");
   const externalSettingsPath = join(context.dataDir, "connection.json");
   const managed = !existsSync(externalSettingsPath);

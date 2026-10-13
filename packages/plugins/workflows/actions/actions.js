@@ -520,6 +520,9 @@ class WorkflowService {
   constructor(path, orgId) {
     this.orgId = orgId;
     this.db = new Database(path, { strict: true });
+    if (path !== ":memory:") {
+      this.db.exec("PRAGMA synchronous = EXTRA");
+    }
     this.db.exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
   }
   close() {

@@ -137,6 +137,9 @@ export async function run(input: Input, context: Context): Promise<JsonValue> {
   }
 
   const db = new Database(context.databasePath);
+  if (context.databasePath !== ":memory:") {
+    db.exec("PRAGMA synchronous = EXTRA");
+  }
   db.exec("PRAGMA busy_timeout = 5000");
   const externalSettingsPath = join(context.dataDir, "connection.json");
   const managed = !existsSync(externalSettingsPath);
