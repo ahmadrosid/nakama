@@ -120,7 +120,6 @@ function PluginDraftCard({
   const plugins = useOrgPlugins().data ?? [];
   const access = usePluginAgentAccess();
   const enable = useEnableOrgPlugin();
-  const panel = useOptionalChatAttachmentPanel();
   const [connecting, setConnecting] = useState<OrgPluginDetail | null>(null);
   const plugin = plugins.find((item) => item.pluginId === draft.pluginId);
 
@@ -147,19 +146,7 @@ function PluginDraftCard({
         enable={enable}
         enableControl={
           canEnable && plugin ? (
-            <Button
-              disabled={enable.isPending}
-              onClick={() =>
-                enable.mutate({
-                  expectedRevision: plugin.revision,
-                  pluginId: plugin.pluginId,
-                })
-              }
-              size="sm"
-            >
-              {enable.isPending ? <Spinner className="size-4" /> : null}
-              Enable plugin
-            </Button>
+            <PluginEnableButton enable={enable} plugin={plugin} />
           ) : null
         }
         enabled={enabled}
@@ -167,25 +154,7 @@ function PluginDraftCard({
         isPlatformAdmin={isPlatformAdmin}
         onConnect={setConnecting}
         openControl={
-          panel && enabled && plugin?.ui ? (
-            <Button
-              onClick={() =>
-                panel.show({
-                  content: <PluginPanelBody pluginId={plugin.pluginId} />,
-                  defaultWidth: clampAttachmentPanelWidth(
-                    WIDE_ARTIFACT_PANEL_WIDTH
-                  ),
-                  id: `plugin:${plugin.pluginId}`,
-                  title: plugin.name,
-                  typeLabel: "Plugin",
-                })
-              }
-              size="sm"
-              variant="outline"
-            >
-              Open
-            </Button>
-          ) : null
+          enabled && plugin ? <PluginOpenButton plugin={plugin} /> : null
         }
         plugin={plugin}
         reviewControl={
@@ -210,6 +179,56 @@ function PluginDraftCard({
         />
       ) : null}
     </section>
+  );
+}
+
+function PluginEnableButton({
+  enable,
+  plugin,
+}: {
+  enable: ReturnType<typeof useEnableOrgPlugin>;
+  plugin: OrgPluginDetail;
+}) {
+  return (
+    <Button
+      disabled={enable.isPending}
+      onClick={() =>
+        enable.mutate({
+          expectedRevision: plugin.revision,
+          pluginId: plugin.pluginId,
+        })
+      }
+      size="sm"
+    >
+      {enable.isPending ? <Spinner className="size-4" /> : null}
+      Enable plugin
+    </Button>
+  );
+}
+
+function PluginOpenButton({ plugin }: { plugin: OrgPluginDetail }) {
+  const panel = useOptionalChatAttachmentPanel();
+
+  if (!(panel && plugin.ui)) {
+    return null;
+  }
+
+  return (
+    <Button
+      onClick={() =>
+        panel.show({
+          content: <PluginPanelBody pluginId={plugin.pluginId} />,
+          defaultWidth: clampAttachmentPanelWidth(WIDE_ARTIFACT_PANEL_WIDTH),
+          id: `plugin:${plugin.pluginId}`,
+          title: plugin.name,
+          typeLabel: "Plugin",
+        })
+      }
+      size="sm"
+      variant="outline"
+    >
+      Open
+    </Button>
   );
 }
 
