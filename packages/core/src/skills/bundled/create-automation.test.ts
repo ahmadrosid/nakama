@@ -63,6 +63,12 @@ describe("ensureBundledSkillFiles", () => {
 
     expect(manifest.id).toBe("standup-digest");
     expect(manifest.actions[0].entry).toBe("actions/summarize.js");
+    expect(manifest.ui.entryModule).toBe("ui/app.js");
+
+    const page = await readFile(join(draft, "ui", "app.js"), "utf8");
+
+    expect(page).toContain('[data-plugin-id="standup-digest"]');
+    expect(page).not.toMatch(/from\s*"react/);
     expect(
       await Bun.file(join(draft, "actions", "summarize.js")).exists()
     ).toBe(true);

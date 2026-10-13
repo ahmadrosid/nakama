@@ -74,15 +74,27 @@ for (const entry of entries) {
   );
 }
 
-const build = await Bun.build({
-  entrypoints: [path.join(target, "src", `${action}.js`)],
-  naming: `${action}.js`,
-  outdir: path.join(target, "actions"),
-  target: "bun",
-});
+const builds = [
+  {
+    entry: `${action}.js`,
+    file: `${action}.js`,
+    out: "actions",
+    target: "bun",
+  },
+  { entry: "ui.jsx", file: "app.js", out: "ui", target: "browser" },
+];
 
-if (!build.success) {
-  fail(build.logs.map(String).join("\n"));
+for (const item of builds) {
+  const build = await Bun.build({
+    entrypoints: [path.join(target, "src", item.entry)],
+    naming: item.file,
+    outdir: path.join(target, item.out),
+    target: item.target,
+  });
+
+  if (!build.success) {
+    fail(build.logs.map(String).join("\n"));
+  }
 }
 
 console.log(`Created ${target}`);

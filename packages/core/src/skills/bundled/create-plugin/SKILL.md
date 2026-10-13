@@ -1,6 +1,6 @@
 ---
 name: create-plugin
-description: Draft or build a custom Nakama plugin with actions, an optional dashboard page, skills, workers, and migrations. Use when the user asks Super Bot to create a plugin.
+description: Draft or build a custom Nakama plugin with actions, a dashboard page, skills, workers, and migrations. Use when the user asks Super Bot to create a plugin.
 include-body-on-match: true
 ---
 
@@ -21,9 +21,10 @@ bun <skill directory>/scripts/new-plugin.mjs <plugin-id> "<Plugin Name>" <action
 ```
 
 The script writes `plugin-drafts/<plugin-id>/` with a manifest, package.json,
-`src/<action-key>.js`, `src/BUILD.md`, and the built `actions/<action-key>.js`.
+`src/<action-key>.js`, an example page in `src/ui.jsx` and `src/ui.css`,
+`src/BUILD.md`, and the built `actions/<action-key>.js` and `ui/app.js`.
 It refuses an existing draft; edit that draft instead. Then replace the example
-action, description, and input schema with the real ones, and rebuild.
+action, page, description, and input schema with the real ones, and rebuild.
 
 Check `bun --version` with bash. If Bun or a needed library is absent, report
 the prerequisite. Do not install dependencies or coding tools silently.
@@ -35,7 +36,7 @@ Use direct commands such as:
 
 ```sh
 bun build ./src/greet.js --outfile actions/greet.js --target bun
-bun build ./src/ui.js --outfile ui/app.js --target browser
+bun build ./src/ui.jsx --outfile ui/app.js --target browser
 ```
 
 Do not run generated package scripts or lifecycle scripts. Do not import actions,
@@ -107,13 +108,68 @@ plugin-tool execution. Summaries have no tools.
 UI: declare `ui: {entryModule:"ui/app.js",assetsDir:"ui",pageLabel:"Greeting"}`.
 Export `inject = ["slots","host","ui","styles"]` and `apply(ctx)`.
 Use `ctx.React` and `ctx.ui`, never bundled React, React DOM, or internal
-Nakama imports. Register exactly one page with
+Nakama imports. Keep the `/** @jsxRuntime classic */` and
+`/** @jsx React.createElement */` lines at the top of `src/ui.jsx`, and set
+`const React = ctx.React` inside `apply`. Register exactly one page with
 `ctx.slots.register("page", Component)`. Call actions through
-`ctx.host.call(actionKey,input)`. Scope CSS under
-`[data-plugin-id="greeting"]`. Keep top-level code free of side effects.
+`ctx.host.call(actionKey,input)`; it resolves to the action result.
+Keep top-level code free of side effects.
 Clean up React effects and `ctx.effect` resources.
-Optional `tool:<actionKey>` renderers receive action, input, result, and status;
-handle older result shapes and do not mutate during rendering.
+Optional `tool:<actionKey>` renderers show the action result in chat. They
+receive action, input, result, and status (`running` or `done`); handle older
+result shapes and do not mutate during rendering.
+
+## Nakama design style for pages
+
+Make the page look like the rest of Nakama. Start from the template page.
+
+- Components: use `ctx.ui` for every control: `Button` (variants `default`,
+  `outline`, `ghost`, `secondary`, `destructive`, `link`; size `sm` in dense
+  rows), `Input`, `Textarea`, `Select` parts, `Switch`, `Checkbox`, `Dialog`
+  parts, `DropdownMenu` parts, `Tooltip`, `Spinner`. Do not build look-alike
+  buttons or inputs from plain elements.
+- No shadows: never set `box-shadow`. Do not use `Card`, because it adds a
+  shadow; group content in a bordered `.plugin-panel` like the template.
+- Styling: Tailwind classes do not work in plugins. Put CSS in `src/ui.css`,
+  import it as text, pass it to `ctx.styles(css)`, and nest every rule under
+  `[data-plugin-id="<plugin-id>"]`.
+- Tokens: the template `src/ui.css` defines the size tokens below. Use them
+  and the host color variables in every rule. Do not write raw colors, sizes
+  outside the scale, or gradients. The host already shows
+  `pageLabel` as the page title and pads the page, so do not add a big title.
+
+| Token | Value | Use |
+|---|---|---|
+| `--n-space-1/2/3/4/6` | 4, 8, 12, 16, 24px | gaps and padding |
+| `--n-text-xs` | 12px | code, badges |
+| `--n-text-sm` | 13px | secondary text, errors |
+| `--n-text-base` | 14px | body |
+| `--n-text-lg` | 18px | section titles (rare) |
+| `--n-weight-medium` / `--n-weight-semibold` | 500 / 600 | labels / titles |
+| `--n-radius` / `--n-radius-sm` | host radius (10px) / 6px | boxes / small chips |
+| `--n-font-mono` | JetBrains Mono | code and IDs |
+| `--n-content-width` | 720px | page max width (up to 960px for tables) |
+
+| Host color | Light | Dark | Use |
+|---|---|---|---|
+| `--background` / `--foreground` | white / near black | #0a0a0b / #fafafa | page and text |
+| `--card` | white | #18181b | raised boxes |
+| `--muted` / `--muted-foreground` | light gray / mid gray | #1f1f23 / #a1a1aa | quiet fills / secondary text |
+| `--border` | light gray | #27272a | 1px lines |
+| `--primary` / `--primary-foreground` | #b45309 / white | #f59e0b / #0a0a0b | main action, links |
+| `--destructive` | red | light red | errors, delete |
+| `--ring` | #b45309 | #f59e0b | focus outline |
+
+Always write `var(--primary)`, never the hex value. The hex values are for
+reference only; the variables switch with the theme.
+- Copy: one clear label per control. No subtitles or helper text unless a
+  mistake would cause harm. Use `aria-label` on inputs without visible labels
+  and on icon-only buttons.
+- Page actions: pass buttons to `renderHeaderActions(...)` to place them in
+  the page header.
+- States: show a `Spinner` while loading, a short empty message, and errors in
+  `--destructive` with `role="alert"`.
+- Small screens: use `flex-wrap` and `minmax(0, 1fr)` grids; no fixed widths.
 
 Skills: declare `skills: [{key:"use-greeting",directory:"skills/use-greeting"}]`
 and include that directory's SKILL.md with name and description.

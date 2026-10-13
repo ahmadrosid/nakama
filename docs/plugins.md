@@ -76,7 +76,10 @@ Host shell access is unsandboxed, including during drafting.
 
 The skill ships `scripts/new-plugin.mjs` and a `template/` folder. Super Bot runs
 `bun <skill dir>/scripts/new-plugin.mjs <id> "<Name>" <action>` from its
-workspace to scaffold and build a new draft. `ensureBundledSkillFiles` copies
+workspace to scaffold and build a new draft: one action, an example page
+(`src/ui.jsx`, `src/ui.css`), and a chat card for the action. The skill also
+teaches the page style (host `ctx.ui` components, scoped CSS, host color
+variables). `ensureBundledSkillFiles` copies
 those assets into the installed skill folder on every start.
 
 When the draft builds, Super Bot calls `submit_plugin_draft`. The tool runs
@@ -87,8 +90,9 @@ plugin list and plugin agent access.
 
 A platform admin chooses **System → Plugins → Install from folder**, selects
 the active organization's Super Bot, and enters the draft ID. Preview shows the
-manifest, effective development version, file list, and digest. Open each file
-to review the source and executable output, then confirm installation.
+effective development version, digest, and files grouped by what runs. Open
+files to review the source and executable output, then confirm installation.
+Install does not require opening every file.
 
 Local review and installation use explicit organization/profile/draft IDs,
 never caller-supplied absolute paths. Only server-local Super Bot drafts in that

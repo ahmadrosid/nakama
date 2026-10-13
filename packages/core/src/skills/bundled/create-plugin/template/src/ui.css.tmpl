@@ -1,0 +1,76 @@
+/* Scope every rule to this plugin. Colors come from the host variables, so the
+   page matches Nakama in light and dark mode. Size tokens use the --n- prefix. */
+[data-plugin-id="__PLUGIN_ID__"] {
+  --n-space-1: 4px;
+  --n-space-2: 8px;
+  --n-space-3: 12px;
+  --n-space-4: 16px;
+  --n-space-6: 24px;
+  --n-text-xs: 12px;
+  --n-text-sm: 13px;
+  --n-text-base: 14px;
+  --n-text-lg: 18px;
+  --n-weight-medium: 500;
+  --n-weight-semibold: 600;
+  --n-radius: var(--radius);
+  --n-radius-sm: calc(var(--radius) - 4px);
+  --n-font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+  --n-content-width: 720px;
+
+  .plugin-page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--n-space-4);
+    max-width: var(--n-content-width);
+    color: var(--foreground);
+    font-size: var(--n-text-base);
+    line-height: 1.5;
+  }
+
+  /* A bordered panel. Nakama uses borders, not shadows. */
+  .plugin-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--n-space-3);
+    padding: var(--n-space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--n-radius);
+    background: var(--card);
+  }
+
+  .plugin-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--n-space-2);
+  }
+
+  .plugin-form > input {
+    flex: 1 1 200px;
+    width: auto;
+  }
+
+  .plugin-result {
+    margin: 0;
+    padding: var(--n-space-3);
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--n-radius);
+    background: var(--muted);
+    font-family: var(--n-font-mono);
+    font-size: var(--n-text-xs);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .plugin-error {
+    margin: 0;
+    color: var(--destructive);
+    font-size: var(--n-text-sm);
+  }
+
+  .plugin-muted {
+    margin: 0;
+    color: var(--muted-foreground);
+    font-size: var(--n-text-sm);
+  }
+}
