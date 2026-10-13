@@ -40,8 +40,10 @@ export async function executeToolCall(
   }
 
   try {
+    // Check what the model and the transcript receive: the JSON-serialized
+    // value, so optional fields left undefined are dropped, not rejected.
     const result = ToolResultSchema.parse(
-      await tool.run(call.arguments, context)
+      JSON.parse(JSON.stringify(await tool.run(call.arguments, context)))
     );
 
     // The single place every tool result passes through, so the optimiser is
@@ -49,7 +51,11 @@ export async function executeToolCall(
     // is enabled, recognises the tool, and produces something strictly shorter.
     try {
       return ToolResultSchema.parse(
-        await core.distillToolResult(call.name, result, context)
+        JSON.parse(
+          JSON.stringify(
+            await core.distillToolResult(call.name, result, context)
+          )
+        )
       );
     } catch (error) {
       // Distillation is best-effort: never replace a successful tool result with
@@ -59,7 +65,7 @@ export async function executeToolCall(
         error instanceof Error ? error.message : error
       );
 
-      return ToolResultSchema.parse(result);
+      return result;
     }
   } catch (error) {
     context.signal?.throwIfAborted();
