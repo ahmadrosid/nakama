@@ -333,6 +333,7 @@ export async function createWindow(url, { show = true } = {}) {
     nativeTheme.on("updated", syncOverlay);
     window.on("closed", () => nativeTheme.off("updated", syncOverlay));
   }
+
   window.webContents.setWindowOpenHandler(({ url: target }) => {
     openInBrowser(target);
 
