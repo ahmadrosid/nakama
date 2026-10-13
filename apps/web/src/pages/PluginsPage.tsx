@@ -741,9 +741,9 @@ export function LocalPluginInstaller({ orgId }: { orgId: string }) {
         setError(formatError(failure));
       }
     } finally {
-      if (turn === generation.current) {
-        setPending(false);
-      }
+      setPending((previous) =>
+        turn === generation.current ? false : previous
+      );
     }
   }
 
@@ -799,9 +799,9 @@ export function LocalPluginInstaller({ orgId }: { orgId: string }) {
         setReviewed(new Set());
       }
     } finally {
-      if (turn === generation.current) {
-        setPending(false);
-      }
+      setPending((previous) =>
+        turn === generation.current ? false : previous
+      );
     }
   }
 

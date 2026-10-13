@@ -216,6 +216,39 @@ test("changing organization removes a pending draft review and cannot confirm it
   expect(installCall).not.toHaveBeenCalled();
 });
 
+test("a cancelled preview cannot clear a newer preview's loading state", async () => {
+  const responses: Array<(value: LocalPluginPreviewResponse) => void> = [];
+
+  const previewCall = spyOn(client, "previewLocalPlugin").mockImplementation(
+    () => new Promise((resolve) => responses.push(resolve))
+  );
+
+  cleanups.push(() => previewCall.mockRestore());
+  await mount();
+  await openDraft();
+
+  const button = (label: string) =>
+    [...document.querySelectorAll("button")].find(
+      (item) => item.textContent === label
+    );
+
+  await act(async () => button("Preview draft")?.click());
+  await act(async () => button("Close")?.click());
+  await settle();
+  await act(async () => button("Install from folder")?.click());
+  await settle();
+  await act(async () => button("Preview draft")?.click());
+  expect(previewCall).toHaveBeenCalledTimes(2);
+  await act(async () => responses[0]!(preview()));
+  await settle();
+  expect(button("Preview draft")?.disabled).toBe(true);
+  expect(button("Confirm installation")).toBeUndefined();
+  await act(async () => responses[1]!(preview()));
+  await settle();
+  expect(button("Preview draft")?.disabled).toBe(false);
+  expect(button("Confirm installation")?.disabled).toBe(true);
+});
+
 for (const stage of ["preview", "file", "install"]) {
   test(`failed local ${stage} clears loading and requires a fresh review`, async () => {
     const previewCall = spyOn(client, "previewLocalPlugin").mockResolvedValue(
