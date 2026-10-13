@@ -1087,6 +1087,7 @@ export async function restoreNakamaDataImport(
 
       try {
         staged.exec("PRAGMA synchronous = EXTRA");
+
         if (
           staged
             .query(
@@ -1616,6 +1617,7 @@ async function disableRestoredOrgPlugins(databasePath: string): Promise<void> {
   try {
     db.exec("PRAGMA synchronous = EXTRA");
     // SAFETY: This query returns one named column, `name`.
+
     const tables = db
       .query(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'org_plugins'"
