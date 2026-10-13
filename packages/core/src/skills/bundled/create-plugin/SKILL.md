@@ -214,6 +214,11 @@ color you may use. Do not search the host or other folders for more tokens.
 - Tables: show at most four columns, and put the column the user cares about
   most right after the name column. Wrap the table in an `overflow-x: auto`
   box so extra width scrolls instead of breaking the page.
+- Do not: add a hero block, `h1`/`h2` headings, all-caps letter-spaced labels,
+  taglines, numbered feature lists, pill shapes (`999px` radius), or bordered
+  `div`s that copy `Card`. Nakama pages are plain work tools, not landing pages.
+- A request for a nicer or better page means these rules applied with more
+  care. It does not mean more decoration.
 
 Skills: declare `skills: [{key:"use-greeting",directory:"skills/use-greeting"}]`
 and include that directory's SKILL.md with name and description.

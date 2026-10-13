@@ -34,15 +34,11 @@
     box-shadow: none;
   }
 
-  /* A bordered panel. Nakama uses borders, not shadows. */
+  /* Content inside a Card. The Card draws the border and background. */
   .plugin-panel {
     display: flex;
     flex-direction: column;
     gap: var(--n-space-3);
-    padding: var(--n-space-4);
-    border: 1px solid var(--border);
-    border-radius: var(--n-radius);
-    background: var(--card);
   }
 
   .plugin-form {

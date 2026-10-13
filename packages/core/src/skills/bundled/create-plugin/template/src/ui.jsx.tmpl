@@ -14,7 +14,7 @@ let React;
 /** @param {import("./nakama-plugin").PluginContext} ctx */
 export function apply(ctx) {
   React = ctx.React;
-  const { Button, Input, Spinner } = ctx.ui;
+  const { Button, Card, CardContent, Input, Spinner } = ctx.ui;
 
   ctx.styles(css);
 
@@ -55,7 +55,8 @@ export function apply(ctx) {
             Clear
           </Button>
         )}
-        <section className="plugin-panel">
+        <Card>
+          <CardContent className="plugin-panel">
             <form className="plugin-form" onSubmit={run}>
               <Input
                 aria-label="Name"
@@ -74,7 +75,8 @@ export function apply(ctx) {
               </p>
             ) : null}
             {result ? <Result value={result} /> : null}
-        </section>
+          </CardContent>
+        </Card>
       </div>
     );
   }
