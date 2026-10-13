@@ -4,9 +4,6 @@
   "workspaces": {
     "": {
       "name": "nakama",
-      "dependencies": {
-        "@simplewebauthn/server": "^14.0.3",
-      },
       "devDependencies": {
         "@biomejs/biome": "2.5.14",
         "@oxlint/plugins": "1.87.0",
@@ -94,6 +91,7 @@
         "@nakama/core": "workspace:*",
         "@nakama/db": "workspace:*",
         "@openrouter/sdk": "^1.2.108",
+        "@simplewebauthn/server": "^14.0.3",
         "fflate": "^0.8.3",
         "hono": "^4.13.13",
         "microsandbox": "0.7.4",

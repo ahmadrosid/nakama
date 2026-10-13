@@ -112,7 +112,7 @@ describe("WorkflowRunner", () => {
     const failingSteps: WorkflowStep[] = [
       {
         id: "fetch",
-        input: {},
+        input: { query: "news" },
         kind: "tool",
         tool: "web_search",
       },
@@ -142,11 +142,24 @@ describe("WorkflowRunner", () => {
       },
     };
 
+    const updates: Array<{ input?: unknown; status: string }> = [];
+    service.updateRunStep = async (_runId, _id, update) => {
+      updates.push(update);
+    };
+
     const runner = new WorkflowRunner(service, agent);
     const result = await runner.run("workflow_test");
 
     expect(result.error).toMatch(/cannot be executed locally/i);
     expect(summarizeCalled).toBe(false);
+    expect(updates).toEqual([
+      {
+        error: "web_search cannot be executed locally.",
+        input: { query: "news" },
+        output: { error: "web_search cannot be executed locally." },
+        status: "failed",
+      },
+    ]);
   });
 
   test("compares template-shaped input strings without resolving them twice", async () => {
@@ -248,7 +261,16 @@ function createWorkflowServiceStub(workflow: StoredWorkflow) {
     async get(id: string) {
       return id === workflow.id ? workflow : null;
     },
-    async updateRunStep() {},
+    async updateRunStep(
+      _runId: string,
+      _id: string,
+      _update: {
+        error?: string;
+        input?: unknown;
+        output?: unknown;
+        status: string;
+      }
+    ) {},
   };
 }
 
@@ -287,4 +309,39 @@ test("missing extraction data stops before the database write and summary", asyn
   expect(result.error).toBeDefined();
   expect(writes).toBe(0);
   expect(summaries).toBe(0);
+});
+
+test("trying one step resolves earlier results and records no run", async () => {
+  const service = createWorkflowServiceStub(createBaseWorkflow());
+  let runsCreated = 0;
+  service.createRun = async () => {
+    runsCreated += 1;
+    throw new Error("Trying a step must not create a run.");
+  };
+
+  const calls: WorkflowRecord[] = [];
+
+  const runner = new WorkflowRunner(service, {
+    executeTool: async (_profileId, _name, input) => {
+      calls.push(input);
+
+      return { ok: true };
+    },
+    runWorkflowSummarize: async () => "unused",
+  });
+
+  const result = await runner.executeDataStep(
+    {
+      id: "save",
+      input: { text: "{{steps.fetch.text}}" },
+      kind: "tool",
+      tool: "echo_tool",
+    },
+    { input: {}, steps: { fetch: { text: "hello" } } },
+    { profileId: "profile_test", runId: "test_1", workflowId: "workflow_test" }
+  );
+
+  expect(result).toEqual({ input: { text: "hello" }, output: { ok: true } });
+  expect(calls).toEqual([{ text: "hello" }]);
+  expect(runsCreated).toBe(0);
 });

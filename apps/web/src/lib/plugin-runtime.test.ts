@@ -77,7 +77,7 @@ describe("native plugin activation", () => {
     expect(stylesheet).toContain('[data-plugin-id="workflows"]');
   });
 
-  test.each(["", "summary", "empty", "draft", "data"])(
+  test.each(["", "summary", "empty", "draft", "data", "history"])(
     "a loaded workflow renders shared controls with selection %s",
     async (selection) => {
       const module = await import(
@@ -125,11 +125,35 @@ describe("native plugin activation", () => {
             const value =
               index < initialStates.length
                 ? initialStates[index]
-                : index === 14 && selection === "data"
-                  ? "data"
-                  : index === 15 && selection === "summary"
-                    ? "summary"
-                    : initial;
+                : index === 14 && selection === "history"
+                  ? [
+                      {
+                        completedAt: "2026-09-13T08:00:00.021Z",
+                        error:
+                          "Unknown tool: transcript-desk__list_transcripts",
+                        id: "failed-run",
+                        input: {},
+                        startedAt: "2026-09-13T08:00:00.000Z",
+                        status: "failed",
+                        steps: [
+                          {
+                            completedAt: "2026-09-13T08:00:00.021Z",
+                            id: "receipt",
+                            kind: "tool",
+                            startedAt: "2026-09-13T08:00:00.000Z",
+                            status: "failed",
+                            stepId: "fetch_hn",
+                          },
+                        ],
+                      },
+                    ]
+                  : index === 16 && selection === "history"
+                    ? "runs"
+                    : index === 16 && selection === "data"
+                      ? "data"
+                      : index === 17 && selection === "summary"
+                        ? "summary"
+                        : initial;
 
             return React.useState(value);
           }) as typeof React.useState,
@@ -148,7 +172,7 @@ describe("native plugin activation", () => {
         expect(html).toContain("Create your first workflow");
         expect(html).toContain("Create workflow");
         expect(html).not.toContain("<form");
-        expect(html).not.toContain("Test run");
+        expect(html).not.toContain("Try it");
 
         return;
       }
@@ -169,15 +193,30 @@ describe("native plugin activation", () => {
       expect(html).toContain('role="switch"');
       expect(html).toContain('data-slot="select-trigger"');
       expect(html).toContain('data-slot="input"');
-      expect(html).toMatch(/<button[^>]*>.*?Test run<\/button>/s);
+      expect(html).toMatch(/<button[^>]*>.*?Try it<\/button>/s);
       expect(html).not.toContain('type="submit"');
 
       if (selection === "data") {
         expect(html).toContain('aria-label="Workflow data"');
         expect(html).toContain('aria-label="Workflow views"');
-        expect(html).toContain('aria-busy="true"');
+        expect(html).toMatch(/role="status"[^>]*>Loading data/);
         expect(html).not.toContain('role="dialog"');
         expect(html).not.toContain('aria-label="Step views"');
+
+        return;
+      }
+
+      if (selection === "history") {
+        expect(html).toContain('aria-label="History"');
+        expect(html).toContain('aria-label="1 of 1 steps ran"');
+        expect(html).toContain('data-status="failed"');
+        expect(html).toContain('aria-expanded="true"');
+        expect(html).toContain(
+          'href="/profiles?profile=agent-a&amp;section=tools"'
+        );
+        expect(html).not.toContain(
+          '<details class="workflow-run-receipts" open'
+        );
 
         return;
       }

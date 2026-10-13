@@ -57,6 +57,14 @@ test("stopping the local server disconnects IPC and waits for cleanup", async ()
   }
 });
 
+test("the root manifest has no dependencies, because the runtime install skips them", async () => {
+  const manifest = JSON.parse(
+    await readFile(join(import.meta.dirname, "../../../package.json"), "utf8")
+  );
+
+  expect(manifest.dependencies ?? {}).toEqual({});
+});
+
 test("a missing runtime rejects instead of hanging", async () => {
   await expect(
     startLocalServer(join(root, "missing"), join(root, "missing-data"))

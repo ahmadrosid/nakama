@@ -19,7 +19,11 @@ type WorkflowRunResult = {
   skipped?: boolean;
 };
 
-type DataStepResult = { input: WorkflowValue; output: WorkflowValue };
+type DataStepResult = {
+  error?: string;
+  input: WorkflowValue;
+  output: WorkflowValue;
+};
 
 export interface WorkflowHost {
   executeTool(
@@ -111,6 +115,8 @@ export class WorkflowRunner {
         continue;
       }
 
+      let failure: string | undefined;
+
       const stepRecord = await this.workflowService.createRunStep(
         runId,
         step,
@@ -124,12 +130,18 @@ export class WorkflowRunner {
           workflowId: workflow.id,
         });
 
-        stepOutputs[step.id] = result.output;
         await this.workflowService.updateRunStep(runId, stepRecord.id, {
+          error: result.error,
           input: result.input,
           output: result.output,
-          status: "completed",
+          status: result.error ? "failed" : "completed",
         });
+
+        if (result.error) {
+          failure = result.error;
+        } else {
+          stepOutputs[step.id] = result.output;
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         await this.workflowService.updateRunStep(runId, stepRecord.id, {
@@ -137,6 +149,10 @@ export class WorkflowRunner {
           status: "failed",
         });
         throw new Error(message);
+      }
+
+      if (failure) {
+        throw new Error(failure);
       }
     }
 
@@ -179,7 +195,7 @@ export class WorkflowRunner {
     }
   }
 
-  private async executeDataStep(
+  async executeDataStep(
     step: WorkflowStep,
     bag: WorkflowBag,
     context: {
@@ -203,11 +219,9 @@ export class WorkflowRunner {
 
       const toolError = readToolError(output);
 
-      if (toolError) {
-        throw new Error(toolError);
-      }
-
-      return { input, output };
+      return toolError
+        ? { error: toolError, input, output }
+        : { input, output };
     }
 
     if (step.kind === "compare") {
@@ -221,13 +235,17 @@ export class WorkflowRunner {
         tolerance: step.tolerance,
       });
 
+      const input = { left, op: step.op, right };
+
       if (!result.ok) {
-        throw new Error(
-          `Compare step ${step.id} failed: ${JSON.stringify(result)}`
-        );
+        return {
+          error: `Compare step ${step.id} failed: ${JSON.stringify(result)}`,
+          input,
+          output: result,
+        };
       }
 
-      return { input: { left, op: step.op, right }, output: result };
+      return { input, output: result };
     }
 
     if (step.kind === "assert") {
@@ -237,16 +255,17 @@ export class WorkflowRunner {
         path: step.path,
       });
 
+      const input = { expected: result.expected, path: step.path };
+
       if (!result.ok) {
-        throw new Error(
-          `Assert step ${step.id} failed: expected ${JSON.stringify(result.expected)}, got ${JSON.stringify(result.actual)}`
-        );
+        return {
+          error: `Assert step ${step.id} failed: expected ${JSON.stringify(result.expected)}, got ${JSON.stringify(result.actual)}`,
+          input,
+          output: result,
+        };
       }
 
-      return {
-        input: { expected: result.expected, path: step.path },
-        output: result,
-      };
+      return { input, output: result };
     }
 
     if (step.kind === "template") {

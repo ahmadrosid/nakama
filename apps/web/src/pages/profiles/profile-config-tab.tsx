@@ -100,7 +100,15 @@ function ProfilePromptPanel({
   );
 }
 
-function initialProfileSection(detailTab: string, hash: string) {
+function initialProfileSection(
+  detailTab: string,
+  hash: string,
+  search: string
+) {
+  if (new URLSearchParams(search).get("section") === "tools") {
+    return "tools";
+  }
+
   if (detailTab === "proposals") {
     return "tools";
   }
@@ -191,14 +199,14 @@ function profileTabAccess(
 
 export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
   const { user, activeOrg } = useAuth();
-  const { hash } = useLocation();
+  const { hash, search } = useLocation();
   const [moveOpen, setMoveOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const { channels, error: channelsError, isPending } = useProfileChannels();
   const { navigateToSkillDetail } = useAppNavigation();
 
   const [section, setSection] = useState(() =>
-    initialProfileSection(state.detailTab, hash)
+    initialProfileSection(state.detailTab, hash, search)
   );
 
   if (!state.detail) {

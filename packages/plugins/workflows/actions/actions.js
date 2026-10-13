@@ -388,6 +388,7 @@ class WorkflowRunner {
       if (step.kind === "summarize") {
         continue;
       }
+      let failure;
       const stepRecord = await this.workflowService.createRunStep(runId, step, position);
       try {
         const result = await this.executeDataStep(step, bag(), {
@@ -395,12 +396,17 @@ class WorkflowRunner {
           runId,
           workflowId: workflow.id
         });
-        stepOutputs[step.id] = result.output;
         await this.workflowService.updateRunStep(runId, stepRecord.id, {
+          error: result.error,
           input: result.input,
           output: result.output,
-          status: "completed"
+          status: result.error ? "failed" : "completed"
         });
+        if (result.error) {
+          failure = result.error;
+        } else {
+          stepOutputs[step.id] = result.output;
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         await this.workflowService.updateRunStep(runId, stepRecord.id, {
@@ -408,6 +414,9 @@ class WorkflowRunner {
           status: "failed"
         });
         throw new Error(message);
+      }
+      if (failure) {
+        throw new Error(failure);
       }
     }
     const summarizeStep = workflow.steps.find((step) => step.kind === "summarize");
@@ -437,10 +446,7 @@ class WorkflowRunner {
       const input = parseWorkflowRecord(resolveWorkflowValue(parseWorkflowValue(step.input), bag));
       const output = await this.agentService.executeTool(context.profileId, step.tool, input, context.runId, context.workflowId);
       const toolError = readToolError(output);
-      if (toolError) {
-        throw new Error(toolError);
-      }
-      return { input, output };
+      return toolError ? { error: toolError, input, output } : { input, output };
     }
     if (step.kind === "compare") {
       const left = resolveWorkflowValue(step.left, bag);
@@ -451,10 +457,15 @@ class WorkflowRunner {
         right: parseWorkflowValue(right),
         tolerance: step.tolerance
       });
+      const input = { left, op: step.op, right };
       if (!result.ok) {
-        throw new Error(`Compare step ${step.id} failed: ${JSON.stringify(result)}`);
+        return {
+          error: `Compare step ${step.id} failed: ${JSON.stringify(result)}`,
+          input,
+          output: result
+        };
       }
-      return { input: { left, op: step.op, right }, output: result };
+      return { input, output: result };
     }
     if (step.kind === "assert") {
       const result = executeAssert({
@@ -462,13 +473,15 @@ class WorkflowRunner {
         expected: parseWorkflowValue(step.expected),
         path: step.path
       });
+      const input = { expected: result.expected, path: step.path };
       if (!result.ok) {
-        throw new Error(`Assert step ${step.id} failed: expected ${JSON.stringify(result.expected)}, got ${JSON.stringify(result.actual)}`);
+        return {
+          error: `Assert step ${step.id} failed: expected ${JSON.stringify(result.expected)}, got ${JSON.stringify(result.actual)}`,
+          input,
+          output: result
+        };
       }
-      return {
-        input: { expected: result.expected, path: step.path },
-        output: result
-      };
+      return { input, output: result };
     }
     if (step.kind === "template") {
       const output = resolveTemplateString(step.template, bag);
@@ -491,8 +504,6 @@ function readToolError(output) {
 
 // src/workflow-service.ts
 import { Database } from "bun:sqlite";
-
-// src/workflow-validate.ts
 function validateWorkflowInput(input) {
   const name = input.name?.trim() ?? "";
   if (!name) {
@@ -503,7 +514,6 @@ function validateWorkflowInput(input) {
   }
 }
 
-// src/workflow-service.ts
 class WorkflowService {
   orgId;
   db;
@@ -754,6 +764,54 @@ async function run(input, context) {
     if (context.actionKey === "tools") {
       return host({ agentId, op: "tools" });
     }
+    const runner = new WorkflowRunner(service, {
+      executeTool: (id, name, args, runId, workflowId) => host({
+        agentId: id,
+        input: args,
+        name,
+        op: "execute_tool",
+        runId,
+        workflowId
+      }),
+      runWorkflowSummarize: async (_org, id, prompt, bag) => host({ agentId: id, bag, op: "summarize", prompt })
+    });
+    if (context.actionKey === "test_step") {
+      const started = Date.now();
+      try {
+        const steps = input.steps ?? [];
+        const index = steps.findIndex((entry) => entry.id === input.stepId);
+        const step = steps[index];
+        if (!step || step.kind === "summarize") {
+          throw new Error("Choose a tool, compare, assert, or template step.");
+        }
+        const earlier = steps.slice(0, index);
+        const tools = await host({ agentId, op: "tools" });
+        validateWorkflowSteps([
+          ...earlier,
+          step,
+          { id: "__try_summary", kind: "summarize", prompt: "-" }
+        ], new Set([
+          ...tools.map((tool) => tool.name),
+          ...earlier.flatMap((entry) => entry.kind === "tool" ? [entry.tool] : [])
+        ]));
+        const [latest] = existing ? await service.listRuns(existing.id) : [];
+        const outputs = Object.fromEntries((latest?.steps ?? []).filter((receipt) => receipt.status === "completed").map((receipt) => [
+          receipt.stepId,
+          parseWorkflowValue(receipt.output)
+        ]));
+        const result = await runner.executeDataStep(step, buildReceiptBag(input.input ?? parseWorkflowRecord(latest?.input ?? {}), outputs), {
+          profileId: agentId,
+          runId: `test_${crypto.randomUUID()}`,
+          workflowId: existing?.id ?? "draft"
+        });
+        return { ...result, durationMs: Date.now() - started };
+      } catch (error) {
+        return {
+          durationMs: Date.now() - started,
+          error: error instanceof Error ? error.message : String(error)
+        };
+      }
+    }
     if (context.actionKey === "create_workflow" || context.actionKey === "update_workflow") {
       const tools = await host({ agentId, op: "tools" });
       const allowed = new Set(tools.map((tool) => tool.name));
@@ -778,17 +836,6 @@ async function run(input, context) {
       return parseWorkflowValue(await service.update(input.workflowId, changes, allowed));
     }
     if (context.actionKey === "run_workflow") {
-      const runner = new WorkflowRunner(service, {
-        executeTool: (id, name, args, runId, workflowId) => host({
-          agentId: id,
-          input: args,
-          name,
-          op: "execute_tool",
-          runId,
-          workflowId
-        }),
-        runWorkflowSummarize: async (_org, id, prompt, bag) => host({ agentId: id, bag, op: "summarize", prompt })
-      });
       const result = await runner.run(input.workflowId, input.input ?? {});
       if (result.skipped) {
         throw new Error(result.error ?? "Workflow run skipped.");
