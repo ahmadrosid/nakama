@@ -382,7 +382,7 @@ function groupPluginIds(
       ids: pluginIds.filter(
         (id) => !builtIn.has(id) && createdBySuperBot.has(id)
       ),
-      title: "Created by Super Bot",
+      title: "Created by you",
     },
     {
       ids: pluginIds.filter(
