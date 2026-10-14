@@ -21,10 +21,16 @@ import {
   Switch,
 } from "@nakama/ui";
 import {
+  AlertCircleIcon,
   ArrowRight01Icon,
   Copy01Icon,
   Delete02Icon,
   Download01Icon,
+  Mic01Icon,
+  Search01Icon,
+  Settings01Icon,
+  StopIcon,
+  Upload01Icon,
 } from "hugeicons-react";
 import * as React from "react";
 import { useAuth } from "@/context/use-auth";
@@ -63,6 +69,101 @@ function meetingStatus(meeting: Meeting) {
   }
 
   return meeting.transcriptFile ? "Transcript ready" : "No speech captured";
+}
+
+function isActive(meeting: Meeting) {
+  return ["queued", "joining", "recording", "transcribing"].includes(
+    meeting.state
+  );
+}
+
+function statusTone(meeting: Meeting) {
+  if (meeting.state === "failed") {
+    return meeting.transcriptFile ? "warning" : "danger";
+  }
+
+  return meeting.transcriptFile ? "success" : "muted";
+}
+
+function formatElapsed(milliseconds: number) {
+  const seconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const minutes = Math.floor(seconds / 60);
+  const pad = (value: number) => String(value).padStart(2, "0");
+
+  return minutes >= 60
+    ? `${Math.floor(minutes / 60)}:${pad(minutes % 60)}:${pad(seconds % 60)}`
+    : `${pad(minutes)}:${pad(seconds % 60)}`;
+}
+
+function meetingLength(meeting: Meeting) {
+  if (meeting.sourceName) {
+    return "Uploaded";
+  }
+
+  const minutes = Math.round((meeting.updatedAt - meeting.createdAt) / 60_000);
+
+  return minutes < 1 ? "Under 1 min" : `${minutes} min`;
+}
+
+function useTranscriptSegments(
+  call: MeetCall,
+  signal: AbortSignal,
+  meetingId: string
+) {
+  const [segments, setSegments] = React.useState<TranscriptSegment[]>([]);
+  const [error, setError] = React.useState("");
+  const [loaded, setLoaded] = React.useState(false);
+
+  React.useEffect(() => {
+    let alive = true;
+    let cursor = 0;
+    let running = false;
+
+    function refresh() {
+      if (!alive || running || signal.aborted) {
+        return;
+      }
+
+      running = true;
+      void call("transcript", {
+        after: cursor,
+        meetingId,
+      })
+        .then((result) => {
+          if (alive && !signal.aborted) {
+            cursor = result.nextCursor;
+            setSegments((previous) => {
+              const seen = new Set(previous.map((segment) => segment.id));
+
+              return [
+                ...previous,
+                ...result.segments.filter((segment) => !seen.has(segment.id)),
+              ];
+            });
+            setError("");
+            setLoaded(true);
+          }
+        })
+        .catch((reason) => {
+          if (alive && !signal.aborted) {
+            setError(formatError(reason));
+          }
+        })
+        .finally(() => {
+          running = false;
+        });
+    }
+
+    void refresh();
+    const timer = setInterval(() => void refresh(), 2000);
+
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [meetingId, call, signal]);
+
+  return { error, loaded, segments };
 }
 
 function Settings({
@@ -190,69 +291,24 @@ function Transcript({
   close,
   call,
   signal,
+  onDelete,
 }: {
   meeting: Meeting;
   close(): void;
   call: MeetCall;
   signal: AbortSignal;
+  onDelete(meeting: Meeting): void;
 }) {
-  const [segments, setSegments] = React.useState<TranscriptSegment[]>([]);
+  const { error, loaded, segments } = useTranscriptSegments(
+    call,
+    signal,
+    meeting.id
+  );
+
   const text = formatTranscript(segments, Boolean(meeting.sourceName));
-  const [error, setError] = React.useState("");
-  const [loaded, setLoaded] = React.useState(false);
   const [copyStatus, setCopyStatus] = React.useState("");
   const heading = React.useRef<HTMLHeadingElement>(null);
   React.useEffect(() => heading.current?.focus(), []);
-  React.useEffect(() => {
-    let alive = true;
-    let cursor = 0;
-    let running = false;
-
-    function refresh() {
-      if (!alive || running || signal.aborted) {
-        return;
-      }
-
-      running = true;
-      void call("transcript", {
-        after: cursor,
-        meetingId: meeting.id,
-      })
-        .then((result) => {
-          const value = result;
-
-          if (alive && !signal.aborted) {
-            cursor = value.nextCursor;
-            setSegments((previous) => {
-              const seen = new Set(previous.map((segment) => segment.id));
-
-              return [
-                ...previous,
-                ...value.segments.filter((segment) => !seen.has(segment.id)),
-              ];
-            });
-            setError("");
-            setLoaded(true);
-          }
-        })
-        .catch((reason) => {
-          if (alive && !signal.aborted) {
-            setError(formatError(reason));
-          }
-        })
-        .finally(() => {
-          running = false;
-        });
-    }
-
-    void refresh();
-    const timer = setInterval(() => void refresh(), 2000);
-
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, [meeting.id, call, signal]);
 
   function download() {
     const url = URL.createObjectURL(
@@ -325,6 +381,18 @@ function Transcript({
           >
             <Download01Icon aria-hidden="true" size={16} />
           </Button>
+          {!isActive(meeting) && (
+            <Button
+              aria-label="Delete meeting"
+              className="meet-delete"
+              onClick={() => onDelete(meeting)}
+              size="icon"
+              title="Delete meeting"
+              variant="ghost"
+            >
+              <Delete02Icon aria-hidden="true" size={16} />
+            </Button>
+          )}
         </div>
       </div>
       {copyStatus && (
@@ -351,9 +419,7 @@ function Transcript({
         <Card className="meet-card">
           <p className="meet-empty" role="status">
             {loaded
-              ? ["queued", "joining", "recording", "transcribing"].includes(
-                  meeting.state
-                )
+              ? isActive(meeting)
                 ? "Waiting for speech…"
                 : "No speech was captured."
               : "Loading transcript…"}
@@ -364,87 +430,123 @@ function Transcript({
   );
 }
 
-function MeetingRow({
+function LiveMeeting({
   meeting,
   busy,
+  call,
+  signal,
   onStop,
-  onDelete,
   onOpen,
 }: {
   meeting: Meeting;
   busy: boolean;
+  call: MeetCall;
+  signal: AbortSignal;
   onStop(meetingId: string): void;
-  onDelete(meeting: Meeting): void;
+  onOpen(meeting: Meeting): void;
+}) {
+  const { segments } = useTranscriptSegments(call, signal, meeting.id);
+  const [now, setNow] = React.useState(Date.now);
+
+  React.useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  const label =
+    meeting.state === "recording" && !meeting.stopRequested
+      ? `Recording · ${formatElapsed(now - meeting.createdAt)}`
+      : meetingStatus(meeting);
+
+  return (
+    <Card className="meet-card">
+      <div className="meet-live-heading">
+        <div className="meet-meta">
+          <span className="meet-live-status" role="status">
+            <span aria-hidden="true" className="meet-live-dot" />
+            {label}
+          </span>
+          <h2 className="meet-live-title">
+            {meeting.title || "Untitled meeting"}
+          </h2>
+          <span className="meet-status">{meeting.url}</span>
+        </div>
+        <div className="meet-row">
+          <Button onClick={() => onOpen(meeting)}>Open transcript</Button>
+          <Button
+            disabled={
+              busy ||
+              !!meeting.stopRequested ||
+              meeting.state === "transcribing"
+            }
+            onClick={() => onStop(meeting.id)}
+            variant="outline"
+          >
+            <StopIcon aria-hidden="true" size={14} />
+            Stop
+          </Button>
+        </div>
+      </div>
+      <div className="meet-live-preview">
+        {segments.slice(-2).map((segment) => (
+          <p key={segment.id}>
+            <strong>{segment.speakerName || "Unknown speaker"}</strong>{" "}
+            {segment.text}
+          </p>
+        ))}
+        <span className="meet-status meet-listening">
+          <Mic01Icon aria-hidden="true" size={14} />
+          Listening…
+        </span>
+        {meeting.error && <p role="alert">{meeting.error}</p>}
+      </div>
+      <p className="meet-live-warning">
+        <AlertCircleIcon aria-hidden="true" size={14} />
+        Keep this tab open until the call ends.
+      </p>
+    </Card>
+  );
+}
+
+function MeetingRow({
+  meeting,
+  onOpen,
+}: {
+  meeting: Meeting;
   onOpen(meeting: Meeting): void;
 }) {
   return (
     <li>
-      <div className="meet-meeting">
-        <div className="meet-meta">
-          <h3>{meeting.title || meeting.sourceName || "Untitled meeting"}</h3>
+      <button
+        className="meet-meeting"
+        onClick={() => onOpen(meeting)}
+        type="button"
+      >
+        <span className="meet-meta">
+          <span className="meet-meeting-title">
+            {meeting.title || meeting.sourceName || "Untitled meeting"}
+          </span>
           <span className="meet-status">
-            {new Date(meeting.createdAt).toLocaleDateString(undefined, {
+            {new Date(meeting.createdAt).toLocaleString(undefined, {
               day: "numeric",
-              month: "short",
-              year: "numeric",
-            })}
-            {" · "}
-            {new Date(meeting.createdAt).toLocaleTimeString(undefined, {
               hour: "numeric",
               minute: "2-digit",
+              month: "short",
             })}
+            {" · "}
+            {meetingLength(meeting)}
           </span>
-        </div>
-        <div className="meet-row">
-          {meetingStatus(meeting) !== "Transcript ready" && (
-            <span className="meet-badge">{meetingStatus(meeting)}</span>
-          )}
-          {["queued", "joining", "recording", "transcribing"].includes(
-            meeting.state
-          ) && (
-            <Button
-              className="meet-action"
-              disabled={
-                busy ||
-                !!meeting.stopRequested ||
-                meeting.state === "transcribing"
-              }
-              onClick={() => onStop(meeting.id)}
-              size="sm"
-              variant="outline"
-            >
-              Stop transcription
-            </Button>
-          )}
-          {["finished", "failed"].includes(meeting.state) && (
-            <Button
-              aria-label="Delete meeting"
-              className="meet-action meet-delete"
-              disabled={busy}
-              onClick={() => {
-                onDelete(meeting);
-              }}
-              size="icon"
-              title="Delete meeting"
-              variant="ghost"
-            >
-              <Delete02Icon aria-hidden="true" size={16} />
-            </Button>
-          )}
-          <Button
-            aria-label={
-              meeting.transcriptFile ? "Read transcript" : "View details"
-            }
-            className="meet-open"
-            onClick={() => onOpen(meeting)}
-            size="icon"
-            title={meeting.transcriptFile ? "Read transcript" : "View details"}
-            variant="ghost"
-          >
-            <ArrowRight01Icon aria-hidden="true" size={16} />
-          </Button>
-        </div>
-      </div>
+        </span>
+        <span className="meet-badge" data-tone={statusTone(meeting)}>
+          {meetingStatus(meeting)}
+        </span>
+        <ArrowRight01Icon
+          aria-hidden="true"
+          className="meet-chevron"
+          size={16}
+        />
+      </button>
       {meeting.error && <p role="alert">{meeting.error}</p>}
     </li>
   );
@@ -457,23 +559,30 @@ function ConnectionStatus({
   overview: Overview | null;
   connected: boolean;
 }) {
-  let connectionMessage =
-    "Connected. Start transcription from the extension in your Google Meet tab. Keep this page open.";
-
   if (!overview) {
-    connectionMessage = "Checking connection…";
-  } else if (!overview.configured) {
-    connectionMessage = "Set a transcription API key in Settings.";
+    return null;
+  }
+
+  if (overview.configured && overview.enabled && connected) {
+    return (
+      <span className="meet-connection" data-tone="success" role="status">
+        Extension connected
+      </span>
+    );
+  }
+
+  let message =
+    "Open the Chrome extension on this page and choose Connect this Nakama tab.";
+
+  if (!overview.configured) {
+    message = "Set a transcription API key in Settings.";
   } else if (!overview.enabled) {
-    connectionMessage = "Google Meet is disabled.";
-  } else if (!connected) {
-    connectionMessage =
-      "Open the Chrome extension on this page and choose Connect this Nakama tab.";
+    message = "Google Meet is disabled.";
   }
 
   return (
-    <span className="meet-status" role="status">
-      {connectionMessage}
+    <span className="meet-connection" data-tone="muted" role="status">
+      {message}
     </span>
   );
 }
@@ -690,24 +799,41 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
     }
   }
 
+  const [query, setQuery] = React.useState("");
   const meetings = overview?.meetings ?? [];
+  const live = meetings.filter(isActive);
+  const search = query.trim().toLowerCase();
 
-  const groups = [
-    {
-      meetings: meetings.filter((meeting) =>
-        ["queued", "joining", "recording", "transcribing"].includes(
-          meeting.state
-        )
-      ),
-      title: "In progress",
-    },
-    {
-      meetings: meetings.filter((meeting) =>
-        ["finished", "failed"].includes(meeting.state)
-      ),
-      title: "Meeting history",
-    },
-  ];
+  const history = meetings.filter(
+    (meeting) =>
+      !isActive(meeting) &&
+      (meeting.title || meeting.sourceName || "Untitled meeting")
+        .toLowerCase()
+        .includes(search)
+  );
+
+  const deleteDialog = deleting && (
+    <ConfirmDialog
+      confirmLabel="Delete meeting"
+      description={`This permanently deletes the meeting from ${new Date(deleting.createdAt).toLocaleString()} and its transcript. You can’t undo this.`}
+      onClose={() => setDeleting(null)}
+      onConfirm={async () => {
+        await call("delete", { meetingId: deleting.id });
+        setSelected(null);
+        setOverview((previous) =>
+          previous
+            ? {
+                ...previous,
+                meetings: previous.meetings.filter(
+                  (meeting) => meeting.id !== deleting.id
+                ),
+              }
+            : previous
+        );
+      }}
+      title="Delete meeting?"
+    />
+  );
 
   if (selected) {
     return (
@@ -719,130 +845,118 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
           meeting={
             meetings.find((meeting) => meeting.id === selected.id) ?? selected
           }
+          onDelete={setDeleting}
           signal={signal}
         />
+        {deleteDialog}
       </section>
     );
   }
 
   return (
     <section className="meet-page">
-      <a download href="/google-meet-extension.zip">
-        Download Chrome extension
-      </a>
-      {error && <p role="alert">{error}</p>}
-      <Card className="meet-card">
-        <div className="meet-card-heading">
-          <h2>Google Meet</h2>
-          {overview?.canConfigure && (
-            <Button
-              onClick={() => setSettings(true)}
-              size="sm"
-              variant="outline"
-            >
-              Settings
-            </Button>
-          )}
-        </div>
-        <div
-          className="meet-card-heading"
-          style={{ borderBottom: 0, borderTop: "1px solid var(--border)" }}
-        >
+      <header className="meet-header">
+        <div className="meet-row">
+          <h1>Google Meet</h1>
           <ConnectionStatus
             connected={extensionConnected}
             overview={overview}
           />
         </div>
-      </Card>
+        <div className="meet-row">
+          <input
+            accept=".md,.markdown,.mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm"
+            aria-label="Upload audio or Markdown"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+
+              if (file) {
+                void upload(file);
+              }
+            }}
+            ref={uploadInput}
+            type="file"
+          />
+          <Button
+            disabled={uploading}
+            onClick={() => uploadInput.current?.click()}
+            title="Audio up to 7 MB or Markdown up to 1 MB"
+            variant="outline"
+          >
+            <Upload01Icon aria-hidden="true" size={16} />
+            {uploading ? "Importing…" : "Upload file"}
+          </Button>
+          {overview?.canConfigure && (
+            <Button
+              aria-label="Settings"
+              onClick={() => setSettings(true)}
+              size="icon"
+              title="Settings"
+              variant="outline"
+            >
+              <Settings01Icon aria-hidden="true" size={16} />
+            </Button>
+          )}
+        </div>
+      </header>
+      {overview && !extensionConnected && (
+        <a
+          className="meet-extension-link"
+          download
+          href="/google-meet-extension.zip"
+        >
+          Download Chrome extension
+        </a>
+      )}
+      {error && <p role="alert">{error}</p>}
+      {live.map((meeting) => (
+        <LiveMeeting
+          busy={busy}
+          call={call}
+          key={meeting.id}
+          meeting={meeting}
+          onOpen={setSelected}
+          onStop={(meetingId) => void action("leave", { meetingId })}
+          signal={signal}
+        />
+      ))}
       {overview ? (
-        groups.flatMap((group) => {
-          if (group.title === "In progress" && !group.meetings.length) {
-            return [];
-          }
-
-          return [
-            <section key={group.title}>
-              <Card className="meet-card">
-                <div className="meet-card-heading">
-                  <h2>{group.title}</h2>
-                  <div className="meet-row">
-                    <span className="meet-status">{group.meetings.length}</span>
-                    {group.title === "Meeting history" && (
-                      <>
-                        <input
-                          accept=".md,.markdown,.mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm"
-                          aria-label="Upload audio or Markdown"
-                          hidden
-                          onChange={(event) => {
-                            const file = event.target.files?.[0];
-                            event.target.value = "";
-
-                            if (file) {
-                              void upload(file);
-                            }
-                          }}
-                          ref={uploadInput}
-                          type="file"
-                        />
-                        <Button
-                          disabled={uploading}
-                          onClick={() => uploadInput.current?.click()}
-                          size="sm"
-                          title="Audio up to 7 MB or Markdown up to 1 MB"
-                          variant="outline"
-                        >
-                          {uploading ? "Importing…" : "Upload file"}
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </div>
-                {group.meetings.length ? (
-                  <ul className="meet-list">
-                    {group.meetings.map((meeting) => (
-                      <MeetingRow
-                        busy={busy}
-                        key={meeting.id}
-                        meeting={meeting}
-                        onDelete={setDeleting}
-                        onOpen={setSelected}
-                        onStop={(meetingId) =>
-                          void action("leave", { meetingId })
-                        }
-                      />
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="meet-empty">No meetings yet.</p>
-                )}
-              </Card>
-            </section>,
-          ];
-        })
+        <Card className="meet-card">
+          <div className="meet-card-heading">
+            <h2>Meeting history</h2>
+            <label className="meet-search">
+              <Search01Icon aria-hidden="true" size={14} />
+              <input
+                aria-label="Search meetings"
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search meetings"
+                type="search"
+                value={query}
+              />
+            </label>
+          </div>
+          {history.length ? (
+            <ul className="meet-list">
+              {history.map((meeting) => (
+                <MeetingRow
+                  key={meeting.id}
+                  meeting={meeting}
+                  onOpen={setSelected}
+                />
+              ))}
+            </ul>
+          ) : (
+            <p className="meet-empty">
+              {search ? "No meetings match." : "No meetings yet."}
+            </p>
+          )}
+        </Card>
       ) : (
         <p>Loading…</p>
       )}
-      {deleting && (
-        <ConfirmDialog
-          confirmLabel="Delete meeting"
-          description={`This permanently deletes the meeting from ${new Date(deleting.createdAt).toLocaleString()} and its transcript. You can’t undo this.`}
-          onClose={() => setDeleting(null)}
-          onConfirm={async () => {
-            await call("delete", { meetingId: deleting.id });
-            setOverview((previous) =>
-              previous
-                ? {
-                    ...previous,
-                    meetings: previous.meetings.filter(
-                      (meeting) => meeting.id !== deleting.id
-                    ),
-                  }
-                : previous
-            );
-          }}
-          title="Delete meeting?"
-        />
-      )}
+      {deleteDialog}
       {(settings ?? (overview?.canConfigure && !overview.configured)) && (
         <Settings
           call={call}
