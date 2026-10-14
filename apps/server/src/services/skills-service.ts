@@ -2200,6 +2200,7 @@ export class SkillsService {
       .update(source)
       .digest("hex")
       .slice(0, 12);
+
     const name = `${record.pluginId}.${record.pluginKey}.${version}`;
 
     if (!PLUGIN_SKILL_COPY_NAME.test(name)) {

@@ -616,6 +616,7 @@ describe("file builtin tools", () => {
       { limit: 1, offset: 2, path: reference },
       context
     );
+
     // The reference is absolute, so a stray cwd is ignored.
     await runReadFile({ cwd: "/tmp", path: reference }, context);
 

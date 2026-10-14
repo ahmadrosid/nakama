@@ -203,6 +203,7 @@ describe("plugin capabilities", () => {
     expect(tool).toBeDefined();
     await db.assignSkillToProfile(profile.id, skill!.id);
     await db.assignToolToProfile(profile.id, tool!.id);
+
     // Older hosts named copies by the full source hash; the next sync drops them.
     const legacyCopy = join(
       getProfileSoulDir(ORG_ID, profile.id),
@@ -210,6 +211,7 @@ describe("plugin capabilities", () => {
       ".plugins",
       "a".repeat(64)
     );
+
     await mkdir(legacyCopy, { recursive: true });
     await writeFile(join(legacyCopy, "SKILL.md"), SKILL_MD);
 

@@ -115,6 +115,7 @@ export async function guardFilePath(
   }
 
   const expanded = expandHome(rawPath);
+
   // An absolute path does not depend on cwd, so a stray cwd must not fail it.
   // The resolved path still goes through every check below.
   const absolute = path.isAbsolute(expanded)

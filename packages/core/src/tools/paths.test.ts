@@ -68,6 +68,7 @@ describe("guardFilePath", () => {
           undefined,
           options
         );
+
         expect(result.resolved).toBe(
           path.join(await realpath(workspace), "notes.md")
         );
