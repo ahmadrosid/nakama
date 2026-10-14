@@ -148,6 +148,11 @@ have picked it up. Two limits keep work from sitting:
 A PR that is waiting for a review is not stale. The 7 days start when a reviewer
 has commented.
 
+A daily workflow, `.github/workflows/stale.yml`, applies both limits and leaves a
+comment when it does. It skips a PR whose latest review is an approval, because
+an approval asks for nothing. It only releases issues labelled `stage: now`, and
+never the repository owner's own assignments.
+
 ## Code style and checks
 
 Lint and format with Biome via [Ultracite](https://www.ultracite.ai/). Config: `biome.jsonc`.

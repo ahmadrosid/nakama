@@ -1,0 +1,124 @@
+# Applies the two limits in CONTRIBUTING.md, "When work goes quiet", so they do
+# not depend on someone remembering to look.
+name: Stale
+
+on:
+  schedule:
+    - cron: "17 1 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Print what would change and change nothing
+        type: boolean
+        default: true
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label quiet PRs and release idle assignments
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+          DAYS: "7"
+        run: |
+          set -euo pipefail
+
+          cutoff=$(date -u -d "$DAYS days ago" +%Y-%m-%dT%H:%M:%SZ)
+          rule="https://github.com/$REPO/blob/main/CONTRIBUTING.md#when-work-goes-quiet"
+
+          change() {
+            if [ "$DRY_RUN" = true ]; then
+              echo "  dry run: gh api $*"
+            else
+              gh api "$@" >/dev/null
+            fi
+          }
+
+          # ---- reviewed PRs with no reply ----
+
+          gh api "repos/$REPO/pulls?state=open&per_page=100" --paginate --jq '
+            .[] | select(.user.type != "Bot")
+            | [.number, .user.login, ([.labels[].name] | index("stale") != null)] | @tsv' |
+          while IFS=$'\t' read -r pr author stale; do
+            # Everything that happened on the PR as "time, login, kind", oldest first.
+            # A commit counts as the author moving, whoever pushed it.
+            events=$({
+              gh api "repos/$REPO/issues/$pr/comments?per_page=100" --paginate --jq '
+                .[] | select(.user.type != "Bot") | [.created_at, .user.login, "comment"] | @tsv'
+              gh api "repos/$REPO/pulls/$pr/comments?per_page=100" --paginate --jq '
+                .[] | select(.user.type != "Bot") | [.created_at, .user.login, "comment"] | @tsv'
+              gh api "repos/$REPO/pulls/$pr/reviews?per_page=100" --paginate --jq '
+                .[] | select(.user.type != "Bot" and .submitted_at != null)
+                | [.submitted_at, .user.login, .state] | @tsv'
+              gh api "repos/$REPO/pulls/$pr/commits?per_page=100" --paginate --jq '
+                .[] | [.commit.committer.date, "-", "commit"] | @tsv'
+            } | sort)
+
+            review=$(awk -F'\t' -v a="$author" '$3 != "commit" && $2 != a' <<<"$events" | tail -1)
+
+            # Never reviewed: the PR waits on a reviewer, which is not the author's clock.
+            [ -n "$review" ] || continue
+
+            reviewed_at=$(cut -f1 <<<"$review")
+            kind=$(cut -f3 <<<"$review")
+            reply=$(awk -F'\t' -v a="$author" -v t="$reviewed_at" \
+              '($3 == "commit" || $2 == a) && $1 > t' <<<"$events" | tail -1)
+
+            if [ -n "$reply" ]; then
+              if [ "$stale" = true ]; then
+                echo "#$pr: $author replied, label comes off"
+                change -X DELETE "repos/$REPO/issues/$pr/labels/stale"
+              fi
+              continue
+            fi
+
+            # An approval asks for nothing, so there is nothing to reply to.
+            [ "$kind" != APPROVED ] || continue
+            [[ "$reviewed_at" < "$cutoff" ]] || continue
+            [ "$stale" = false ] || continue
+
+            echo "#$pr: no reply from $author since $reviewed_at"
+            change -X POST "repos/$REPO/issues/$pr/labels" -f 'labels[]=stale'
+            change -X POST "repos/$REPO/issues/$pr/comments" -f body="@$author No reply here for $DAYS days after the last review, so this PR is now \`stale\`. Anyone may continue it, and you keep the credit. A comment or a commit from you takes the label off. See [When work goes quiet]($rule)."
+          done
+
+          # ---- assigned issues with no PR ----
+
+          gh api "repos/$REPO/issues?state=open&assignee=*&labels=stage%3A%20now&per_page=100" --paginate --jq '
+            .[] | select(.pull_request == null)
+            | [.number, ([.assignees[].login] | join(" "))] | @tsv' |
+          while IFS=$'\t' read -r issue assignees; do
+            timeline=$(gh api "repos/$REPO/issues/$issue/timeline?per_page=100" --paginate | jq -s 'add // []')
+
+            # An open PR that mentions the issue is work in progress, whoever opened it.
+            if jq -e 'any(.[]; .event == "cross-referenced"
+                and .source.issue.pull_request != null
+                and .source.issue.state == "open")' <<<"$timeline" >/dev/null; then
+              continue
+            fi
+
+            for user in $assignees; do
+              # The owner assigns himself to hold a decision, not to claim a build.
+              [ "$user" != "$OWNER" ] || continue
+
+              # Saying "I need longer" on the issue restarts the week.
+              last=$(jq -r --arg u "$user" '
+                [.[] | select((.event == "assigned" and .assignee.login == $u)
+                           or (.event == "commented" and .user.login == $u))
+                 | .created_at] | max // empty' <<<"$timeline")
+
+              [ -n "$last" ] || continue
+              [[ "$last" < "$cutoff" ]] || continue
+
+              echo "#$issue: $user assigned, quiet since $last, no open PR"
+              change -X DELETE "repos/$REPO/issues/$issue/assignees" -f "assignees[]=$user"
+              change -X POST "repos/$REPO/issues/$issue/comments" -f body="@$user No open PR mentions this issue and it has been quiet for $DAYS days, so it is unassigned and someone else can take it. Comment to be assigned again. See [When work goes quiet]($rule)."
+            done
+          done
