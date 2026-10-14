@@ -176,6 +176,12 @@ describe("chatMessagesToListItems", () => {
         attachments: [
           { text: "Image output", type: "text" },
           { data: "aW1hZ2U=", mediaType: "image/jpeg", type: "image" },
+          {
+            attachmentId: "att_1",
+            mediaType: "image/png",
+            size: 5,
+            type: "image_ref",
+          },
         ],
         content: '{"text":"[image/jpeg]"}',
         name: "screenshot",
@@ -185,7 +191,8 @@ describe("chatMessagesToListItems", () => {
     ]);
 
     expect(items[0]?.toolImages).toEqual([
-      { data: "aW1hZ2U=", mediaType: "image/jpeg" },
+      { mediaType: "image/jpeg", url: "data:image/jpeg;base64,aW1hZ2U=" },
+      { mediaType: "image/png", url: "/v1/attachments/att_1/content" },
     ]);
   });
 

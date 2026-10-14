@@ -984,7 +984,7 @@ async function executeToolCalls(
           toolGroupId,
         });
 
-        const { result, attachments } = await prepareVisualToolResult(
+        const { result, attachments, images } = await prepareVisualToolResult(
           await executeToolCall(tools, call, contextForCall(call)),
           preprocessUserContent
         );
@@ -992,7 +992,7 @@ async function executeToolCalls(
         const toolCompletedAt = Date.now();
 
         handlers?.onToolEnd?.({
-          images: toolResultImages(attachments),
+          images,
           result,
           tool: call.name,
           toolCallId: call.id,
@@ -1046,7 +1046,7 @@ async function executeToolCalls(
       toolGroupId,
     });
 
-    const { result, attachments } = await prepareVisualToolResult(
+    const { result, attachments, images } = await prepareVisualToolResult(
       await executeToolCall(tools, call, contextForCall(call)),
       preprocessUserContent
     );
@@ -1054,7 +1054,7 @@ async function executeToolCalls(
     const toolCompletedAt = Date.now();
 
     handlers?.onToolEnd?.({
-      images: toolResultImages(attachments),
+      images,
       result,
       tool: call.name,
       toolCallId: call.id,
@@ -1079,23 +1079,15 @@ async function executeToolCalls(
   }
 }
 
-/** The images the model sees, so the chat UI can show the same ones. */
-function toolResultImages(
-  attachments: MessageContentPart[] | undefined
-): ImageAttachment[] | undefined {
-  const images = (attachments ?? []).flatMap((part) =>
-    part.type === "image"
-      ? [{ data: part.data, mediaType: part.mediaType }]
-      : []
-  );
-
-  return images.length > 0 ? images : undefined;
-}
-
 async function prepareVisualToolResult(
   result: ToolResult,
   preprocess?: AgentChatSessionOptions["preprocessUserContent"]
-): Promise<{ result: ToolResult; attachments?: MessageContentPart[] }> {
+): Promise<{
+  result: ToolResult;
+  attachments?: MessageContentPart[];
+  /** The tool's own images, so the chat UI can show them. */
+  images?: ImageAttachment[];
+}> {
   const parsed = VisualToolResultSchema.safeParse(result);
 
   if (!parsed.success) {
@@ -1128,10 +1120,12 @@ async function prepareVisualToolResult(
       attachments: Array.isArray(prepared)
         ? prepared
         : [{ text: prepared, type: "text" }],
+      images,
       result: metadata,
     };
   } catch (error) {
     return {
+      images,
       result: {
         ...metadata,
         content:

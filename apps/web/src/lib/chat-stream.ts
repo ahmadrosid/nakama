@@ -818,7 +818,10 @@ export function buildStreamHandlers(
                 subAgentActivity: undefined,
                 toolCompletedAt: Date.now(),
                 toolGroupId: event.toolGroupId ?? message.toolGroupId,
-                toolImages: event.images,
+                toolImages: event.images?.map((image) => ({
+                  mediaType: image.mediaType,
+                  url: `data:${image.mediaType};base64,${image.data}`,
+                })),
                 toolResult: event.result,
                 toolStatus: "done",
               }

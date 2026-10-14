@@ -56,7 +56,6 @@ import {
   isToolResultError,
   parseSubAgentResult,
   splitToolResultImages,
-  type ToolResultImage,
 } from "@/lib/chat-stream";
 import {
   isGenerateImageTool,
@@ -378,9 +377,9 @@ function AssistantWorkGroup({
   }
 
   const images = visibleTools.flatMap((tool) =>
-    toolItemImages(tool).images.map((image, index) => ({
-      image,
+    toolItemImages(tool).images.map((src, index) => ({
       key: `${tool.id}-${index}`,
+      src,
     }))
   );
 
@@ -395,12 +394,12 @@ function AssistantWorkGroup({
       />
       {images.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-2">
-          {images.map(({ image, key }) => (
+          {images.map(({ key, src }) => (
             <img
               alt="Tool result"
               className="max-h-40 max-w-full rounded-md border border-border object-contain"
               key={key}
-              src={toolResultImageSrc(image)}
+              src={src}
             />
           ))}
         </div>
@@ -981,25 +980,18 @@ function SubAgentMark({
 /** Old sessions keep image bytes in the result; new ones send them apart. */
 function toolItemImages(message: ChatListItem) {
   if (message.toolStatus !== "done") {
-    return { images: [] satisfies ToolResultImage[], rest: null };
+    return { images: [] satisfies string[], rest: null };
   }
 
   const { images, rest } = splitToolResultImages(message.toolResult);
 
   return {
     images: [
-      ...images,
-      ...(message.toolImages ?? []).map((image) => ({
-        data: image.data,
-        mimeType: image.mediaType,
-      })),
+      ...images.map((image) => `data:${image.mimeType};base64,${image.data}`),
+      ...(message.toolImages ?? []).map((image) => image.url),
     ],
     rest,
   };
-}
-
-function toolResultImageSrc(image: ToolResultImage): string {
-  return `data:${image.mimeType};base64,${image.data}`;
 }
 
 function ToolTimelineOutput({
@@ -1053,7 +1045,7 @@ function ToolTimelineDetails({
   query,
 }: {
   command: string | null;
-  images: ToolResultImage[];
+  images: string[];
   isError: boolean;
   isRunning: boolean;
   output: string | null;
@@ -1071,8 +1063,8 @@ function ToolTimelineDetails({
         <img
           alt="Tool result"
           className="max-h-96 max-w-full rounded-md border border-border"
-          key={image.data}
-          src={toolResultImageSrc(image)}
+          key={image}
+          src={image}
         />
       ))}
       <ToolTimelineOutput
@@ -1153,7 +1145,7 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
                   <img
                     alt="Tool result"
                     className="h-8 w-12 rounded border border-border object-cover"
-                    src={toolResultImageSrc(images[0])}
+                    src={images[0]}
                   />
                 </button>
               }
@@ -1165,7 +1157,7 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
               <img
                 alt="Tool result preview"
                 className="max-h-80 w-96 max-w-[60vw] rounded-md border border-border bg-background object-contain shadow-lg"
-                src={toolResultImageSrc(images[0])}
+                src={images[0]}
               />
             </TooltipContent>
           </Tooltip>

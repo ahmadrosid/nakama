@@ -1182,6 +1182,49 @@ describe("agent chat tool loop", () => {
     expect(message.attachments).toContainEqual({ ...image, type: "image" });
   });
 
+  test("tool images reach onToolEnd after preprocess stores them as refs", async () => {
+    const image = { data: "aW1hZ2U=", mediaType: "image/png" };
+
+    const replies = [
+      toolTurn([{ arguments: {}, id: "shot", name: "sample" }]),
+      textReply("Done"),
+    ];
+
+    const session = createAgentChatSession(
+      {
+        provider: {
+          ...createMockProvider([]),
+          streamChat: async () => replies.shift() ?? textReply("Extra"),
+        },
+        tools: [
+          { ...sampleTool, run: async () => ({ images: [image], text: "ok" }) },
+        ],
+      },
+      {
+        preprocessUserContent: async (content) =>
+          Array.isArray(content)
+            ? [
+                {
+                  attachmentId: "att_1",
+                  mediaType: "image/png",
+                  size: 5,
+                  type: "image_ref",
+                },
+              ]
+            : content,
+      }
+    );
+
+    const ended: unknown[] = [];
+
+    await session.sendStream("Look", {
+      onChunk() {},
+      onToolEnd: (event) => ended.push(event.images),
+    });
+
+    expect(ended).toEqual([[image]]);
+  });
+
   test("runs parallelSafe tool calls concurrently and preserves history order", async () => {
     const track = { active: 0, max: 0 };
 

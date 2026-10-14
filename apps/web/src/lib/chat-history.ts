@@ -4,7 +4,6 @@ import type {
   AgentQuestionAnswer,
   ChatMessage,
   ChatUsage,
-  ImageAttachment,
   SessionMessageMeta,
 } from "@nakama/core/contract";
 import { AGENT_CHANNELS } from "@nakama/core/contract";
@@ -416,8 +415,8 @@ export interface ChatListItem {
   toolCallId?: string;
   toolCompletedAt?: number;
   toolGroupId?: string;
-  /** Images the tool returned, as the model saw them. */
-  toolImages?: ImageAttachment[];
+  /** Images the tool returned, as display URLs. */
+  toolImages?: Array<{ mediaType: string; url: string }>;
   // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This dictionary holds external JSON keys until the boundary parser validates each value.
   toolInput?: Record<string, unknown>;
   toolInputAccumulatedJson?: string;
@@ -772,11 +771,26 @@ export function chatMessagesToListItems(
         toolCallId: message.toolCallId,
         toolCompletedAt: message.toolCompletedAt,
         toolGroupId: message.toolGroupId,
-        toolImages: message.attachments?.flatMap((part) =>
-          part.type === "image"
-            ? [{ data: part.data, mediaType: part.mediaType }]
-            : []
-        ),
+        toolImages: message.attachments?.flatMap((part) => {
+          // Stored tool images are `image_ref`; inline `image` is the fallback.
+          if (part.type === "image_ref") {
+            return [
+              {
+                mediaType: part.mediaType,
+                url: `/v1/attachments/${encodeURIComponent(part.attachmentId)}/content`,
+              },
+            ];
+          }
+
+          return part.type === "image"
+            ? [
+                {
+                  mediaType: part.mediaType,
+                  url: `data:${part.mediaType};base64,${part.data}`,
+                },
+              ]
+            : [];
+        }),
         toolInput: toolInputs.get(message.toolCallId),
         toolResult: parseToolResult(message.content),
         toolStartedAt: message.toolStartedAt,
