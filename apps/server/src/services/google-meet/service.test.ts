@@ -321,9 +321,11 @@ test("shared capture listener consumes tokens once and preserves protocol 2 fina
 test("built-in recording imports use the current member and cancel without saving", async () => {
   await service.close();
   let importing!: () => void;
+
   const started = new Promise<void>((resolve) => {
     importing = resolve;
   });
+
   const importer = spyOn(
     recordingImport,
     "importMeetRecording"
@@ -337,17 +339,21 @@ test("built-in recording imports use the current member and cancel without savin
     await new Promise<void>((resolve) =>
       signal.addEventListener("abort", () => resolve(), { once: true })
     );
+
     return { filename: "meeting.mp4", text: "Late transcript" };
   });
+
   service = new GoogleMeetService(db, root, async () => ({ text: "" }), {
     async downloadMeetRecording() {
       throw new Error("Unexpected download");
     },
     async listMeetRecordings(orgId, userId) {
       expect([orgId, userId]).toEqual(["a", "alice"]);
+
       return { driveConnected: true, gmailConnected: true, recordings: [] };
     },
   });
+
   try {
     expect(
       (await service.invoke("a", "recordings", {}, admin)).driveConnected
@@ -361,12 +367,14 @@ test("built-in recording imports use the current member and cancel without savin
       )
     ).rejects.toThrow();
     expect(importer).not.toHaveBeenCalled();
+
     const pending = service.invoke(
       "a",
       "import-recording",
       { fileId: "drive_file_123", messageId: "msg" },
       admin
     );
+
     const settled = Promise.allSettled([pending]);
     await started;
     await expect(service.withSnapshot(async () => true)).rejects.toThrow();

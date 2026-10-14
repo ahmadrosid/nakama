@@ -118,22 +118,28 @@ export class ComposioService {
 
   private async meetAccounts(orgId: string, userId: string) {
     const actingUserId = await this.resolveComposioActingUserId(orgId, userId);
+
     const toolkits =
       await this.databaseAdapter.listComposioToolkitsForOrg(orgId);
+
     const connections =
       await this.databaseAdapter.listComposioUserConnectionsForUser(
         orgId,
         actingUserId
       );
+
     const account = (slug: string) => {
       const toolkit = toolkits.find(
         (item) => item.toolkitSlug === slug && item.status === "enabled"
       );
+
       const connection = connections.find(
         (item) => item.toolkitId === toolkit?.id && item.status === "connected"
       );
+
       return connection?.connectedAccountId ?? null;
     };
+
     return {
       actingUserId: composioUserId(actingUserId),
       drive: account("googledrive"),
@@ -143,6 +149,7 @@ export class ComposioService {
 
   async listMeetRecordings(orgId: string, userId: string) {
     const accounts = await this.meetAccounts(orgId, userId);
+
     if (!(accounts.gmail && accounts.drive)) {
       return {
         driveConnected: !!accounts.drive,
@@ -150,13 +157,16 @@ export class ComposioService {
         recordings: [],
       };
     }
+
     const client = await this.getApiClient();
+
     if (!client) {
       throw new NakamaApiError(
         "Configure Composio before importing recordings.",
         400
       );
     }
+
     const result = unwrapMeetToolResult(
       await client.executeTool(
         "GMAIL_FETCH_EMAILS",
@@ -171,15 +181,20 @@ export class ComposioService {
         }
       )
     );
+
     const messages = findMeetMessages(result).slice(0, 10);
     const recordings: MeetActionResults["recordings"]["recordings"] = [];
     const seen = new Set<string>();
+
     for (const message of messages) {
       const messageId = meetString(message.messageId ?? message.id);
+
       if (!messageId) {
         continue;
       }
+
       let full: unknown;
+
       try {
         full = unwrapMeetToolResult(
           await client.executeTool(
@@ -192,12 +207,16 @@ export class ComposioService {
       } catch {
         continue;
       }
+
       for (const fileId of extractMeetDriveIds(full)) {
         if (seen.has(fileId)) {
           continue;
         }
+
         seen.add(fileId);
+        // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Composio tool payloads are untyped JSON objects.
         let metadata: Record<string, unknown>;
+
         try {
           const value = unwrapMeetToolResult(
             await client.executeTool(
@@ -207,16 +226,23 @@ export class ComposioService {
               { fields: "id,name,mimeType,size", fileId }
             )
           );
+
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Composio tool payloads are untyped JSON narrowed here by shape.
           if (!value || typeof value !== "object" || Array.isArray(value)) {
             continue;
           }
+
+          // SAFETY: The surrounding code checked this value before the assertion.
+          // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Composio tool payloads are untyped JSON objects.
           metadata = value as Record<string, unknown>;
         } catch {
           continue;
         }
+
         const name = meetString(metadata.name ?? metadata.title);
         const mimeType = meetString(metadata.mimeType);
         const size = metadata.size == null ? 0 : Number(metadata.size);
+
         if (
           !(
             name &&
@@ -230,6 +256,7 @@ export class ComposioService {
         ) {
           continue;
         }
+
         recordings.push({
           date: meetString(
             message.messageTimestamp ?? message.internalDate ?? message.date
@@ -241,6 +268,7 @@ export class ComposioService {
         });
       }
     }
+
     return { driveConnected: true, gmailConnected: true, recordings };
   }
 
@@ -251,23 +279,29 @@ export class ComposioService {
     fileId: string
   ) {
     const listed = await this.listMeetRecordings(orgId, userId);
+
     const recording = listed.recordings.find(
       (item) => item.messageId === messageId && item.fileId === fileId
     );
+
     if (!recording) {
       throw new NakamaApiError(
         "Recording not found in your connected accounts.",
         404
       );
     }
+
     if (recording.size > 1024 ** 3) {
       throw new NakamaApiError("Recording is larger than 1 GiB.", 400);
     }
+
     const accounts = await this.meetAccounts(orgId, userId);
     const client = await this.getApiClient();
+
     if (!(client && accounts.drive)) {
       throw new NakamaApiError("Google Drive is not connected.", 400);
     }
+
     const result = unwrapMeetToolResult(
       await client.executeTool(
         "GOOGLEDRIVE_DOWNLOAD_FILE",
@@ -278,6 +312,7 @@ export class ComposioService {
         }
       )
     );
+
     return { file: result, recording };
   }
 
@@ -1289,21 +1324,32 @@ export class ComposioService {
   }
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Composio tool payloads are untyped JSON that this function inspects structurally.
 function meetString(value: unknown): string {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Composio tool payloads are untyped JSON narrowed here by shape.
   return typeof value === "string" ? value.trim() : "";
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- Composio tool payloads are untyped JSON that this function inspects structurally.
 function unwrapMeetToolResult(value: unknown): unknown {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Composio tool payloads are untyped JSON narrowed here by shape.
   if (!value || typeof value !== "object") {
     return value;
   }
+
+  // SAFETY: The surrounding code checked this value before the assertion.
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Composio tool payloads are untyped JSON objects.
   const record = value as Record<string, unknown>;
+
   if (record.successful === false) {
     throw new Error("Composio request failed.");
   }
+
   if (!("data" in record)) {
     return value;
   }
+
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Composio tool payloads are untyped JSON narrowed here by shape.
   if (typeof record.data === "string") {
     try {
       return unwrapMeetToolResult(JSON.parse(record.data));
@@ -1311,18 +1357,28 @@ function unwrapMeetToolResult(value: unknown): unknown {
       return record.data;
     }
   }
+
   return unwrapMeetToolResult(record.data);
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type -- Composio tool payloads are untyped JSON that this function inspects structurally.
 function findMeetMessages(value: unknown): Record<string, unknown>[] {
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Composio tool payloads are untyped JSON objects.
   const found: Record<string, unknown>[] = [];
   const seen = new Set<string>();
+
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Composio tool payloads are untyped JSON that this function inspects structurally.
   const visit = (node: unknown, depth: number) => {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Composio tool payloads are untyped JSON narrowed here by shape.
     if (depth > 6 || !node || typeof node !== "object") {
       return;
     }
+
+    // SAFETY: The surrounding code checked this value before the assertion.
+    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Composio tool payloads are untyped JSON objects.
     const record = node as Record<string, unknown>;
     const id = meetString(record.messageId ?? record.id);
+
     if (
       id &&
       (record.messageId ||
@@ -1335,22 +1391,31 @@ function findMeetMessages(value: unknown): Record<string, unknown>[] {
       seen.add(id);
       found.push(record);
     }
+
     for (const child of Object.values(record)) {
       visit(child, depth + 1);
     }
   };
+
   visit(value, 0);
+
   return found;
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Composio tool payloads are untyped JSON that this function inspects structurally.
 function extractMeetDriveIds(value: unknown): string[] {
   const ids = new Set<string>();
+
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Composio tool payloads are untyped JSON that this function inspects structurally.
   const visit = (node: unknown, depth: number) => {
     if (depth > 10 || !node) {
       return;
     }
+
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Composio tool payloads are untyped JSON narrowed here by shape.
     if (typeof node === "string") {
       let text = node;
+
       if (
         text.length > 50 &&
         !text.includes("://") &&
@@ -1360,16 +1425,20 @@ function extractMeetDriveIds(value: unknown): string[] {
           text.replace(/-/g, "+").replace(/_/g, "/"),
           "base64"
         ).toString("utf8");
+
         if (decoded.includes("drive.google.com")) {
           text = decoded;
         }
       }
+
       text = text.replace(/&amp;/g, "&");
+
       try {
         text = decodeURIComponent(text);
       } catch {
         /* Keep original text. */
       }
+
       for (const pattern of [
         /drive\.google\.com\/file\/d\/([A-Za-z0-9_-]{10,})/g,
         /drive\.google\.com\/(?:open|uc)\?[^\s"'<>]*?id=([A-Za-z0-9_-]{10,})/g,
@@ -1379,14 +1448,19 @@ function extractMeetDriveIds(value: unknown): string[] {
           ids.add(match[1]!);
         }
       }
+
       return;
     }
+
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Composio tool payloads are untyped JSON narrowed here by shape.
     if (typeof node === "object") {
       for (const child of Object.values(node)) {
         visit(child, depth + 1);
       }
     }
   };
+
   visit(value, 0);
+
   return [...ids];
 }

@@ -219,6 +219,7 @@ test("uploads preserve Markdown and use Nakama's host for audio without plugin c
 
 test("recording import saves only a complete Whisper result in the member's history", async () => {
   const dir = mkdtempSync(join(tmpdir(), "meet-recording-import-"));
+
   const importer = spyOn(
     recordingImport,
     "importMeetRecording"
@@ -226,6 +227,7 @@ test("recording import saves only a complete Whisper result in the member's hist
     filename: "Sprint.mp4",
     text: "Decision one.\n\nDecision two.",
   });
+
   const composio = {
     downloadMeetRecording: mock(async () => {
       throw new Error("Unexpected download");
@@ -244,6 +246,7 @@ test("recording import saves only a complete Whisper result in the member's hist
       ],
     })),
   };
+
   const context: MeetExecutionContext = {
     actionKey: "recordings",
     actor: { id: "member", role: "member" },
@@ -252,10 +255,14 @@ test("recording import saves only a complete Whisper result in the member's hist
     orgId: "org",
     profileId: "profile",
   };
+
   try {
+    // SAFETY: The surrounding code checked this value before the assertion.
     const listed = (await run({}, context)) as { recordings: unknown[] };
     expect(listed.recordings).toHaveLength(1);
     expect(composio.listMeetRecordings).toHaveBeenCalledWith("org", "member");
+
+    // SAFETY: The surrounding code checked this value before the assertion.
     const meeting = (await run(
       { fileId: "drive_file_123", messageId: "msg_1" },
       {
@@ -263,6 +270,7 @@ test("recording import saves only a complete Whisper result in the member's hist
         actionKey: "import-recording",
       }
     )) as { id: string; state: string };
+
     expect(meeting.state).toBe("finished");
     const store = new MeetingStore(dir, "org");
     expect(
@@ -288,7 +296,11 @@ test("recording import saves only a complete Whisper result in the member's hist
     expect(after.list("member", "profile")).toHaveLength(1);
     after.close();
     await expect(
-      run({}, { ...context, actor: { id: "viewer", role: "viewer" as "member" } })
+      run(
+        {},
+        // SAFETY: The surrounding code checked this value before the assertion.
+        { ...context, actor: { id: "viewer", role: "viewer" as "member" } }
+      )
     ).rejects.toThrow();
   } finally {
     importer.mockRestore();

@@ -242,7 +242,9 @@ export class ComposioApiClient {
     slug: string,
     userId: string,
     connectedAccountId: string,
+    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Composio tool payloads are untyped JSON objects.
     args: Record<string, unknown>
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Composio tool payloads are untyped JSON passed through to the caller.
   ): Promise<unknown> {
     return this.composio.tools.execute(slug, {
       arguments: args,

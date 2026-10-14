@@ -138,6 +138,7 @@ const database = await createDatabase(config.databaseUrl, {
 const MAX_AUTOMATION_RUN_RESUMES = 2;
 
 await seedDatabase(database.adapter);
+
 await cleanupInterruptedMeetImports();
 
 await claimLegacyCustomTools(database.adapter);
@@ -179,6 +180,7 @@ const agent = new AgentService(
   database.adapter,
   llmUsageTracker
 );
+
 const composioService = new ComposioService(database.adapter, authService);
 
 const googleMeetService = new GoogleMeetService(

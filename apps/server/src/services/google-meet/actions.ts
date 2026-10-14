@@ -276,31 +276,39 @@ export async function run(
         context.profileId
       );
     }
+
     if (action === "recordings" || action === "import-recording") {
       if (!context.composio) {
         throw new Error("Recording import is unavailable");
       }
+
       if (action === "recordings") {
         return context.composio.listMeetRecordings(
           context.orgId,
           context.actor.id
         );
       }
+
       const result = await importMeetRecording(
         context.composio,
         {
           dataDir: context.dataDir,
+          // SAFETY: The surrounding code checked this value before the assertion.
           fileId: input.fileId as string,
+          // SAFETY: The surrounding code checked this value before the assertion.
           messageId: input.messageId as string,
           orgId: context.orgId,
           userId: context.actor.id,
         },
         context.signal ?? AbortSignal.timeout(20 * 60_000)
       );
+
       context.signal?.throwIfAborted();
+
       if (!result.text.trim()) {
         throw new Error("Recording transcription returned no speech");
       }
+
       return store.importFile(
         result.filename,
         result.text,

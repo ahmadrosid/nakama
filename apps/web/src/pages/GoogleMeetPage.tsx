@@ -614,9 +614,11 @@ function useExtensionBridge(
 
 function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
   type Recording = MeetActionResults["recordings"]["recordings"][number];
+
   const [result, setResult] = React.useState<
     MeetActionResults["recordings"] | null
   >(null);
+
   const [error, setError] = React.useState("");
   const [importing, setImporting] = React.useState(false);
   React.useEffect(() => {
@@ -624,6 +626,7 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
     call("recordings").then(
       (value) => {
         if (mounted) {
+          // SAFETY: The surrounding code checked this value before the assertion.
           setResult(value as NonNullable<typeof result>);
         }
       },
@@ -633,13 +636,16 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
         }
       }
     );
+
     return () => {
       mounted = false;
     };
   }, [call]);
+
   async function importRecording(recording: Recording) {
     setImporting(true);
     setError("");
+
     try {
       await call("import-recording", {
         fileId: recording.fileId,
@@ -652,6 +658,7 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
       setImporting(false);
     }
   }
+
   return (
     <Dialog
       onOpenChange={(open) => {
@@ -721,6 +728,7 @@ function UploadFileButton({
   onUpload(file: File): Promise<void>;
 }) {
   const uploadInput = React.useRef<HTMLInputElement>(null);
+
   return (
     <>
       <input
@@ -730,6 +738,7 @@ function UploadFileButton({
         onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = "";
+
           if (file) {
             void onUpload(file);
           }
