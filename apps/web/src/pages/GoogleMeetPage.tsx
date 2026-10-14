@@ -552,6 +552,54 @@ function MeetingRow({
   );
 }
 
+function MeetingHistory({
+  meetings,
+  onOpen,
+}: {
+  meetings: Meeting[];
+  onOpen(meeting: Meeting): void;
+}) {
+  const [query, setQuery] = React.useState("");
+  const search = query.trim().toLowerCase();
+
+  const history = meetings.filter(
+    (meeting) =>
+      !isActive(meeting) &&
+      (meeting.title || meeting.sourceName || "Untitled meeting")
+        .toLowerCase()
+        .includes(search)
+  );
+
+  return (
+    <Card className="meet-card">
+      <div className="meet-card-heading">
+        <h2>Meeting history</h2>
+        <label className="meet-search">
+          <Search01Icon aria-hidden="true" size={14} />
+          <input
+            aria-label="Search meetings"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search meetings"
+            type="search"
+            value={query}
+          />
+        </label>
+      </div>
+      {history.length ? (
+        <ul className="meet-list">
+          {history.map((meeting) => (
+            <MeetingRow key={meeting.id} meeting={meeting} onOpen={onOpen} />
+          ))}
+        </ul>
+      ) : (
+        <p className="meet-empty">
+          {search ? "No meetings match." : "No meetings yet."}
+        </p>
+      )}
+    </Card>
+  );
+}
+
 function ConnectionStatus({
   overview,
   connected,
@@ -799,18 +847,8 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
     }
   }
 
-  const [query, setQuery] = React.useState("");
   const meetings = overview?.meetings ?? [];
   const live = meetings.filter(isActive);
-  const search = query.trim().toLowerCase();
-
-  const history = meetings.filter(
-    (meeting) =>
-      !isActive(meeting) &&
-      (meeting.title || meeting.sourceName || "Untitled meeting")
-        .toLowerCase()
-        .includes(search)
-  );
 
   const deleteDialog = deleting && (
     <ConfirmDialog
@@ -923,36 +961,7 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
         />
       ))}
       {overview ? (
-        <Card className="meet-card">
-          <div className="meet-card-heading">
-            <h2>Meeting history</h2>
-            <label className="meet-search">
-              <Search01Icon aria-hidden="true" size={14} />
-              <input
-                aria-label="Search meetings"
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search meetings"
-                type="search"
-                value={query}
-              />
-            </label>
-          </div>
-          {history.length ? (
-            <ul className="meet-list">
-              {history.map((meeting) => (
-                <MeetingRow
-                  key={meeting.id}
-                  meeting={meeting}
-                  onOpen={setSelected}
-                />
-              ))}
-            </ul>
-          ) : (
-            <p className="meet-empty">
-              {search ? "No meetings match." : "No meetings yet."}
-            </p>
-          )}
-        </Card>
+        <MeetingHistory meetings={meetings} onOpen={setSelected} />
       ) : (
         <p>Loading…</p>
       )}
