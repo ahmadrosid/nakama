@@ -83,7 +83,7 @@ function formatDefaultToolResult(result: unknown): string | null {
   return String(result);
 }
 
-export interface ToolResultImage {
+interface ToolResultImage {
   data: string;
   mimeType: string;
 }
