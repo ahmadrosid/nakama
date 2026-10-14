@@ -816,3 +816,119 @@ const timer = setInterval(() => {
     expect(logs.some((name) => !name.startsWith("old-"))).toBe(true);
   });
 });
+
+describe("bash tool Nakama state guard", () => {
+  let configDir = "";
+  let previousConfigDir: string | undefined;
+  let profileWorkspace = "";
+  const context = { orgId: "org_test", profileId: "profile_test" };
+
+  afterEach(async () => {
+    if (previousConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+    }
+
+    if (configDir) {
+      await rm(configDir, { force: true, recursive: true });
+      configDir = "";
+    }
+  });
+
+  async function setupConfigDir(): Promise<void> {
+    previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+    configDir = await realpath(
+      await mkdtemp(path.join(os.tmpdir(), "nakama-guard-"))
+    );
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+    profileWorkspace = getProfileSoulDir("org_test", "profile_test");
+    await mkdir(profileWorkspace, { recursive: true });
+    await mkdir(path.join(configDir, "data", "sqlite"), { recursive: true });
+    await writeFile(path.join(configDir, "local-auth-token"), "tc_local_x\n");
+    await writeFile(path.join(configDir, "config.ini"), "api_key=secret\n");
+    await writeFile(
+      path.join(configDir, "data", "sqlite", "nakama.sqlite"),
+      ""
+    );
+    await writeFile(
+      path.join(configDir, "orgs", "org_test", "workflow-data.sqlite"),
+      ""
+    );
+  }
+
+  test("refuses commands that read Nakama secrets or server databases", async () => {
+    await setupConfigDir();
+    const root = configDir.replaceAll("\\", "/");
+    const marker = path.join(profileWorkspace, "ran.txt").replaceAll("\\", "/");
+
+    const commands = [
+      `cat ${root}/local-auth-token`,
+      `curl -s -H "Authorization: Bearer $(cat ${root}/local-auth-token)" http://127.0.0.1:4310/v1/profiles`,
+      `sqlite3 ${root}/data/sqlite/nakama.sqlite "select * from users"`,
+      `cat "$NAKAMA_CONFIG_DIR/config.ini" | sed 's/key=.*/key=***/'`,
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: shell syntax under test
+      "sqlite3 ${NAKAMA_CONFIG_DIR}/orgs/org_test/workflow-data.sqlite .tables",
+      `find ${root} -name '*.sqlite'`,
+      "cd ../../.. && sqlite3 orgs/org_test/workflow-data.sqlite .tables",
+    ];
+
+    for (const command of commands) {
+      await expect(
+        runBash({ command: `${command}; touch ${marker}` }, context, {
+          backend: "host",
+        })
+      ).rejects.toThrow();
+    }
+
+    expect(await readdir(profileWorkspace)).not.toContain("ran.txt");
+  });
+
+  test("still runs ordinary commands in the profile workspace", async () => {
+    await setupConfigDir();
+    await writeFile(path.join(profileWorkspace, "notes.md"), "hello notes\n");
+    const workspace = profileWorkspace.replaceAll("\\", "/");
+
+    const listing = await runBash({ command: "ls" }, context, {
+      backend: "host",
+    });
+
+    expect(listing.exitCode).toBe(0);
+    expect(listing.stdout).toContain("notes.md");
+
+    const read = await runBash(
+      { command: `cat notes.md && cat ${workspace}/notes.md` },
+      context,
+      { backend: "host" }
+    );
+
+    expect(read.exitCode).toBe(0);
+    expect(read.stdout).toBe("hello notes\nhello notes\n");
+
+    const ownDatabase = await runBash(
+      { command: `echo rows > ${workspace}/own.db && cat ${workspace}/own.db` },
+      context,
+      { backend: "host" }
+    );
+
+    expect(ownDatabase.exitCode).toBe(0);
+    expect(ownDatabase.stdout.trim()).toBe("rows");
+
+    const build = await runBash(
+      {
+        command:
+          "mkdir -p plugin-drafts/demo && cd plugin-drafts/demo && echo 'console.log(1)' > index.ts && bun build index.ts --outfile=dist/index.js",
+        timeoutMs: 60_000,
+      },
+      context,
+      { backend: "host" }
+    );
+
+    expect(build.exitCode).toBe(0);
+    expect(
+      await readdir(
+        path.join(profileWorkspace, "plugin-drafts", "demo", "dist")
+      )
+    ).toContain("index.js");
+  }, 60_000);
+});
