@@ -167,6 +167,7 @@ describe("model command", () => {
       input: "/model",
       models: modelsCache.models,
     });
+
     const open = resolveSuggestions({
       input: "/model ",
       models: modelsCache.models,
@@ -196,14 +197,17 @@ test("org picker opens before selection and filters organizations", () => {
       updatedAt: "",
     },
   ];
+
   expect(
     resolveSuggestions({ input: "/org", orgs })[0]?.submitOnEnter
   ).toBeUndefined();
+
   const choices = resolveSuggestions({
     currentOrgId: "org_a",
     input: "/org ",
     orgs,
   });
+
   expect(choices).toHaveLength(2);
   expect(choices[0]).toMatchObject({
     insertValue: "/org org_a",

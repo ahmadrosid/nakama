@@ -2,16 +2,34 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
+import { z } from "zod";
+import { asTestFetch } from "../channel-test-helpers";
+import type { JsonValue } from "../contract";
 import { saveTelegramConfig } from "../telegram-config";
 import { createTelegramOutboundAdapter } from "./telegram-outbound";
 
 const owner = { orgId: "org_test", profileId: "agent_test" };
 
+type JsonObject = Record<string, JsonValue>;
+
+const JsonObjectSchema = z.record(z.string(), z.json());
+
+function parseJsonObject(text: string): JsonObject {
+  return JsonObjectSchema.parse(JSON.parse(text));
+}
+
 describe("createTelegramOutboundAdapter", () => {
   let tempHome = "";
+  const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
   let homedirSpy: ReturnType<typeof spyOn<typeof os, "homedir">> | null = null;
 
   afterEach(async () => {
+    if (previousConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+    }
+
     homedirSpy?.mockRestore();
     homedirSpy = null;
 
@@ -24,21 +42,24 @@ describe("createTelegramOutboundAdapter", () => {
   async function useTempHome(run: () => Promise<void>): Promise<void> {
     tempHome = await mkdtemp(path.join(os.tmpdir(), "nakama-tg-outbound-"));
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
+    process.env.NAKAMA_CONFIG_DIR = path.join(tempHome, ".nakama");
     await saveTelegramConfig(owner, { botToken: "1234567890:TEST" });
     await run();
   }
 
   test("sends to a plain chat", async () => {
     await useTempHome(async () => {
-      const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+      const calls: Array<{ url: string; body: JsonObject }> = [];
+
       const adapter = createTelegramOutboundAdapter({
-        fetchImpl: async (input, init) => {
+        fetchImpl: asTestFetch(async (input, init) => {
           calls.push({
-            body: JSON.parse(String(init?.body)),
+            body: parseJsonObject(String(init?.body)),
             url: String(input),
           });
+
           return new Response("ok", { status: 200 });
-        },
+        }),
       });
 
       await expect(
@@ -52,12 +73,14 @@ describe("createTelegramOutboundAdapter", () => {
 
   test("sends to a topic when topicId is provided", async () => {
     await useTempHome(async () => {
-      const calls: Array<Record<string, unknown>> = [];
+      const calls: JsonObject[] = [];
+
       const adapter = createTelegramOutboundAdapter({
-        fetchImpl: async (_input, init) => {
-          calls.push(JSON.parse(String(init?.body)));
+        fetchImpl: asTestFetch(async (_input, init) => {
+          calls.push(parseJsonObject(String(init?.body)));
+
           return new Response("ok", { status: 200 });
-        },
+        }),
       });
 
       await expect(
@@ -73,12 +96,14 @@ describe("createTelegramOutboundAdapter", () => {
 
   test("renders markdown as Telegram HTML when parse mode is requested", async () => {
     await useTempHome(async () => {
-      const calls: Array<Record<string, unknown>> = [];
+      const calls: JsonObject[] = [];
+
       const adapter = createTelegramOutboundAdapter({
-        fetchImpl: async (_input, init) => {
-          calls.push(JSON.parse(String(init?.body)));
+        fetchImpl: asTestFetch(async (_input, init) => {
+          calls.push(parseJsonObject(String(init?.body)));
+
           return new Response("ok", { status: 200 });
-        },
+        }),
       });
 
       await expect(

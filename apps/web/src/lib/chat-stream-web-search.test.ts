@@ -118,6 +118,23 @@ describe("chat-stream-web-search", () => {
     expect(sources[0]?.href).toBe("https://example.com/news");
   });
 
+  test("parseWebSearchSourcesFromResult keeps the first source for a URL", () => {
+    expect(
+      parseWebSearchSourcesFromResult({
+        sources: [
+          { title: "First", url: "https://example.com/story" },
+          { title: "Later", url: "https://example.com/story" },
+        ],
+      })
+    ).toEqual([
+      {
+        href: "https://example.com/story",
+        title: "First",
+        url: "https://example.com/story",
+      },
+    ]);
+  });
+
   test("parseWebSearchSourcesFromResult returns empty for malformed payloads", () => {
     expect(parseWebSearchSourcesFromResult(null)).toEqual([]);
     expect(parseWebSearchSourcesFromResult({ unexpected: true })).toEqual([]);
@@ -262,6 +279,7 @@ describe("buildStreamHandlers web_search lifecycle", () => {
     let messages: ChatListItem[] = [];
 
     const handlers = buildStreamHandlers((updater) => {
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This test updater supports both direct values and React state updater functions.
       messages = typeof updater === "function" ? updater(messages) : updater;
     });
 
@@ -304,6 +322,7 @@ describe("buildStreamHandlers web_search lifecycle", () => {
     let messages: ChatListItem[] = [];
 
     const handlers = buildStreamHandlers((updater) => {
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This test updater supports both direct values and React state updater functions.
       messages = typeof updater === "function" ? updater(messages) : updater;
     });
 

@@ -9,14 +9,19 @@ test("a prefetched setting is not fetched again when its hook mounts", async () 
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+
+  // SAFETY: The fixture provides the settings fields used by this hook.
   const getThinkingSettings = spyOn(
     client,
     "getThinkingSettings"
   ).mockResolvedValue({ effort: "medium", enabled: true } as never);
+
   function Probe() {
     useThinkingSettings();
+
     return null;
   }
+
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);

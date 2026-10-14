@@ -39,33 +39,40 @@ async function createArchiveOverEntryLimit(): Promise<Buffer> {
   const archive = (
     await createNakamaDataExport({ rootDir: getUserConfigDir() })
   ).data;
+
   const entries = unzipSync(archive);
+
   for (let index = 0; index < MAX_IMPORT_ENTRIES; index += 1) {
     entries[`empty-${index}.txt`] = new Uint8Array();
   }
+
   return Buffer.from(zipSync(entries, { level: 0 }));
 }
 
 describe("data portability routes", () => {
   test("platform export returns 413 instead of downloading an unrestorable ZIP", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const session = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     const zipMock = spyOn(fflate, "zipSync").mockReturnValue(
       new Uint8Array(MAX_IMPORT_ARCHIVE_BYTES + 1)
     );
+
     try {
       const response = await app.fetch(
         new Request("http://localhost:4310/v1/platform/data/export", {
           headers: session.headers(),
         })
       );
+
       expect(response.status).toBe(413);
       expect(response.headers.get("content-disposition")).toBeNull();
-      expect(typeof (await response.json()).error).toBe("string");
+      expect((await response.json()).error).toEqual(expect.any(String));
     } finally {
       zipMock.mockRestore();
     }
@@ -73,11 +80,13 @@ describe("data portability routes", () => {
 
   test("platform admin can download a Nakama export ZIP", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const session = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     await writeFile(join(getUserConfigDir(), "config.ini"), "provider=openai");
 
     const response = await app.fetch(
@@ -91,30 +100,40 @@ describe("data portability routes", () => {
     expect(response.headers.get("content-disposition")).toContain(
       "nakama-export-"
     );
-    expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(0);
+    const archive = unzipSync(new Uint8Array(await response.arrayBuffer()));
+
+    expect(Buffer.from(archive["config.ini"]!).toString("utf8")).toBe(
+      "provider=openai"
+    );
   });
 
   test("platform admin exports one user's data without secrets or other users", async () => {
     const { app, authService, databaseAdapter, orgService } = createApp();
+
     const session = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     const targetOrg = await orgService.createOrganization({
       name: "Target Org",
       slug: "target-org",
     });
+
     const otherOrg = await orgService.createOrganization({
       name: "Other Org",
       slug: "other-org",
     });
+
     const [targetProfile] = await databaseAdapter.listProfilesForOrg(
       targetOrg.organization.id
     );
+
     const [otherProfile] = await databaseAdapter.listProfilesForOrg(
       otherOrg.organization.id
     );
+
     expect(targetProfile).toBeDefined();
     expect(otherProfile).toBeDefined();
 
@@ -169,12 +188,14 @@ describe("data portability routes", () => {
         sessionId: "session_dsar_target",
       },
     ]);
+
     const attachmentPath = await saveAttachmentBytes(
       targetOrg.organization.id,
       targetProfile!.id,
       "attachment_dsar_target",
       Buffer.from("portable attachment")
     );
+
     await databaseAdapter.insertAttachment({
       channel: "web",
       createdAt: now,
@@ -232,6 +253,8 @@ describe("data portability routes", () => {
       "attachments/attachment_dsar_target",
       NAKAMA_USER_EXPORT_MANIFEST,
     ]);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const manifest = JSON.parse(
       Buffer.from(archive[NAKAMA_USER_EXPORT_MANIFEST]!).toString("utf8")
     ) as {
@@ -242,6 +265,7 @@ describe("data portability routes", () => {
       }>;
       user: { email: string; id: string };
     };
+
     expect(manifest.user).toMatchObject({
       email: "target@example.com",
       id: "user_dsar_target",
@@ -254,9 +278,11 @@ describe("data portability routes", () => {
     expect(manifest.sessions[0]!.attachments[0]!.path).toBe(
       "attachments/attachment_dsar_target"
     );
+
     const exportedText = Object.values(archive)
       .map((entry) => Buffer.from(entry).toString("utf8"))
       .join("\n");
+
     expect(exportedText).not.toContain("passwordHash");
     expect(exportedText).not.toContain("provider-secret");
     expect(exportedText).not.toContain("other-tenant-secret");
@@ -267,30 +293,37 @@ describe("data portability routes", () => {
         { headers: session.headers() }
       )
     );
+
     expect(missingResponse.status).toBe(404);
   });
 
   test("platform admin exports one organization's data without secrets or other tenants", async () => {
     const { app, authService, databaseAdapter, orgService } = createApp();
+
     const session = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     const targetOrg = await orgService.createOrganization({
       name: "Target Export Org",
       slug: "target-export-org",
     });
+
     const otherOrg = await orgService.createOrganization({
       name: "Other Export Org",
       slug: "other-export-org",
     });
+
     const [targetProfile] = await databaseAdapter.listProfilesForOrg(
       targetOrg.organization.id
     );
+
     const [otherProfile] = await databaseAdapter.listProfilesForOrg(
       otherOrg.organization.id
     );
+
     expect(targetProfile).toBeDefined();
     expect(otherProfile).toBeDefined();
 
@@ -330,12 +363,14 @@ describe("data portability routes", () => {
         sessionId: "session_org_export",
       },
     ]);
+
     const attachmentPath = await saveAttachmentBytes(
       targetOrg.organization.id,
       targetProfile!.id,
       "attachment_org_export",
       Buffer.from("portable org attachment")
     );
+
     await databaseAdapter.insertAttachment({
       channel: "web",
       createdAt: now,
@@ -375,13 +410,16 @@ describe("data portability routes", () => {
       targetOrg.organization.id,
       targetProfile!.id
     );
+
     const profileKnowledgeBaseDir = getKnowledgeBaseDir(
       targetOrg.organization.id,
       targetProfile!.id
     );
+
     const orgKnowledgeBaseDir = getOrgKnowledgeBaseDir(
       targetOrg.organization.id
     );
+
     await mkdir(artifactDir, { recursive: true });
     await mkdir(profileKnowledgeBaseDir, { recursive: true });
     await mkdir(orgKnowledgeBaseDir, { recursive: true });
@@ -445,6 +483,7 @@ describe("data portability routes", () => {
     );
     expect(Object.keys(archive)).toContain("attachments/attachment_org_export");
 
+    // SAFETY: This test controls the fixture shape at this boundary.
     const manifest = JSON.parse(
       Buffer.from(archive[NAKAMA_ORG_EXPORT_MANIFEST]!).toString("utf8")
     ) as {
@@ -457,6 +496,7 @@ describe("data portability routes", () => {
         messages: Array<{ payload: { content: string } }>;
       }>;
     };
+
     expect(manifest.organization.id).toBe(targetOrg.organization.id);
     expect(manifest.members).toContainEqual(
       expect.objectContaining({
@@ -483,6 +523,7 @@ describe("data portability routes", () => {
     const exportedText = Object.values(archive)
       .map((entry) => Buffer.from(entry).toString("utf8"))
       .join("\n");
+
     expect(exportedText).not.toContain("passwordHash");
     expect(exportedText).not.toContain("provider-secret");
     expect(exportedText).not.toContain("other-tenant-secret");
@@ -493,16 +534,19 @@ describe("data portability routes", () => {
         { headers: session.headers() }
       )
     );
+
     expect(missingResponse.status).toBe(404);
   });
 
   test("platform admin can preview import without mutating local data", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const session = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     await writeFile(join(getUserConfigDir(), "config.ini"), "original");
 
     const exportResponse = await app.fetch(
@@ -510,6 +554,7 @@ describe("data portability routes", () => {
         headers: session.headers(),
       })
     );
+
     const archive = Buffer.from(await exportResponse.arrayBuffer());
     await writeFile(join(getUserConfigDir(), "config.ini"), "changed");
 
@@ -536,17 +581,21 @@ describe("data portability routes", () => {
 
   test("platform admin can restore import only with confirmation", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const session = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     await writeFile(join(getUserConfigDir(), "config.ini"), "original");
+
     const exportResponse = await app.fetch(
       new Request("http://localhost:4310/v1/platform/data/export", {
         headers: session.headers(),
       })
     );
+
     const archive = Buffer.from(await exportResponse.arrayBuffer());
     await writeFile(join(getUserConfigDir(), "config.ini"), "changed");
 
@@ -563,6 +612,7 @@ describe("data portability routes", () => {
         method: "POST",
       })
     );
+
     expect(rejected.status).toBe(400);
 
     const response = await app.fetch(
@@ -590,11 +640,13 @@ describe("data portability routes", () => {
 
   test("non-platform users cannot export or import data", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     const createResponse = await app.fetch(
       new Request("http://localhost:4310/v1/platform/orgs", {
         body: JSON.stringify({
@@ -613,10 +665,13 @@ describe("data portability routes", () => {
         method: "POST",
       })
     );
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const created = (await createResponse.json()) as {
       organization: { id: string };
       adminMember: { temporaryPassword: string };
     };
+
     const loginResponse = await app.fetch(
       new Request("http://localhost:4310/v1/auth/login", {
         headers: { "Content-Type": "application/json" },
@@ -627,6 +682,7 @@ describe("data portability routes", () => {
         method: "POST",
       })
     );
+
     const orgSession = browserSessionFromResponse(
       loginResponse,
       created.organization.id
@@ -637,18 +693,21 @@ describe("data portability routes", () => {
         headers: orgSession.headers(),
       })
     );
+
     const userExportResponse = await app.fetch(
       new Request(
         "http://localhost:4310/v1/platform/users/user_missing/data/export",
         { headers: orgSession.headers() }
       )
     );
+
     const orgExportResponse = await app.fetch(
       new Request(
         `http://localhost:4310/v1/platform/orgs/${created.organization.id}/data/export`,
         { headers: orgSession.headers() }
       )
     );
+
     const previewResponse = await app.fetch(
       new Request("http://localhost:4310/v1/platform/data/import/preview", {
         body: JSON.stringify({ data: Buffer.from("bad").toString("base64") }),
@@ -668,11 +727,13 @@ describe("data portability routes", () => {
 
   test("invalid import archive is rejected and preserves current files", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const session = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     await mkdir(getUserConfigDir(), { recursive: true });
     await writeFile(join(getUserConfigDir(), "config.ini"), "keep");
 
@@ -700,6 +761,7 @@ describe("data portability routes", () => {
 
   test("platform restore releases the database before files move and reopens after", async () => {
     const calls: string[] = [];
+
     const { app, authService, databaseAdapter } = createMinimalHonoApp({
       agent: {
         listProfiles: async () => ({ profiles: [{ id: "default" }] }),
@@ -710,21 +772,26 @@ describe("data portability routes", () => {
           join(getUserConfigDir(), "config.ini"),
           "utf8"
         );
+
         calls.push(`release:${live}`);
       },
       onDataRestored: async () => {
         calls.push("reopen");
       },
     });
+
     const session = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     await writeFile(join(getUserConfigDir(), "config.ini"), "original");
+
     const archive = (
       await createNakamaDataExport({ rootDir: getUserConfigDir() })
     ).data;
+
     await writeFile(join(getUserConfigDir(), "config.ini"), "changed");
 
     const response = await app.fetch(
@@ -747,6 +814,7 @@ describe("data portability routes", () => {
 
   test("platform restore reopens a released database when clearing plugin workers fails", async () => {
     const calls: string[] = [];
+
     const { app, authService, databaseAdapter } = createMinimalHonoApp({
       agent: {
         listProfiles: async () => ({ profiles: [{ id: "default" }] }),
@@ -764,12 +832,15 @@ describe("data portability routes", () => {
         },
       },
     });
+
     const session = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     await writeFile(join(getUserConfigDir(), "config.ini"), "original");
+
     const archive = (
       await createNakamaDataExport({ rootDir: getUserConfigDir() })
     ).data;
@@ -794,11 +865,13 @@ describe("data portability routes", () => {
 
   test("platform preview and restore reject archives over the entry limit", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const session = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     const configPath = join(getUserConfigDir(), "config.ini");
     await writeFile(configPath, "keep");
     const archive = await createArchiveOverEntryLimit();
@@ -814,6 +887,7 @@ describe("data portability routes", () => {
         method: "POST",
       })
     );
+
     expect(previewResponse.status).toBe(400);
 
     const restoreResponse = await app.fetch(
@@ -826,6 +900,7 @@ describe("data portability routes", () => {
         method: "POST",
       })
     );
+
     expect(restoreResponse.status).toBe(400);
     await expect(readFile(configPath, "utf8")).resolves.toBe("keep");
   });

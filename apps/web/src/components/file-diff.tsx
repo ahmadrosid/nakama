@@ -17,8 +17,17 @@ export function FileDiff({
   rows: FileDiffRow[];
   wrap?: boolean;
 }) {
+  const newFile = rows.length > 0 && rows.every((row) => row.old == null);
+
   return (
-    <div className={cn(styles.diff, wrap && styles.wrap, className)}>
+    <div
+      className={cn(
+        styles.diff,
+        wrap && styles.wrap,
+        newFile && styles.newFile,
+        className
+      )}
+    >
       {rows.length === 0 ? (
         <p className={styles.diffEmpty}>No line changes.</p>
       ) : (
@@ -28,7 +37,11 @@ export function FileDiff({
               className={cn(styles.diffRow, styles[row.type])}
               key={`${row.type}-${row.old ?? "x"}-${row.cur ?? "x"}`}
             >
-              <span className={cn(styles.ln, styles.old)}>{row.old ?? ""}</span>
+              {newFile ? null : (
+                <span className={cn(styles.ln, styles.old)}>
+                  {row.old ?? ""}
+                </span>
+              )}
               <span className={cn(styles.ln, styles.new)}>{row.cur ?? ""}</span>
               <span className={styles.sign}>
                 {row.type === "add" ? "+" : row.type === "del" ? "-" : ""}

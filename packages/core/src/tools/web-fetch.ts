@@ -43,6 +43,8 @@ export const webFetchInputSchema = z
 
 export function webFetchParameters(): JsonSchema {
   const { $schema, ...schema } = webFetchInputSchema.toJSONSchema();
+
+  // SAFETY: Zod generated this JSON Schema from the public web-fetch input schema.
   return schema as JsonSchema;
 }
 
@@ -59,6 +61,7 @@ export interface WebFetchOutput {
 }
 
 const MAX_BODY_BYTES = 1024 * 1024;
+
 /**
  * MAX_BODY_BYTES bounds the transfer; this bounds what reaches the model. Without
  * it a single fetch can spend a megabyte of context: one call in a local session
@@ -68,13 +71,18 @@ const MAX_BODY_BYTES = 1024 * 1024;
  * which answered the same question for Composio results.
  */
 const MAX_CONTENT_CHARS = 16_000;
+
 const TRUNCATION_MARKER = "\n...[truncated]";
+
 const REQUEST_TIMEOUT_MS = 30_000;
+
 const MAX_REDIRECTS = 5;
+
 const USER_AGENT =
   "nakama-web_fetch/1.0 (+https://github.com/ahmadrosid/nakama)";
 
 const NON_PUBLIC_IPV6_RANGES = new BlockList();
+
 for (const [network, prefix] of [
   ["::", 96], // Unspecified, loopback, and deprecated IPv4-compatible.
   ["::ffff:0:0", 96], // IPv4-mapped.
@@ -101,6 +109,7 @@ for (const [network, prefix] of [
  */
 function isPrivateIpv4(ip: string): boolean {
   const octets = ip.split(".").map((part) => Number(part));
+
   if (
     octets.length !== 4 ||
     octets.some((n) => !Number.isInteger(n) || n < 0 || n > 255)
@@ -114,54 +123,67 @@ function isPrivateIpv4(ip: string): boolean {
   if (a === 0) {
     return true;
   }
+
   // 10.0.0.0/8 — RFC1918
   if (a === 10) {
     return true;
   }
+
   // 100.64.0.0/10 — CGNAT
   if (a === 100 && b >= 64 && b <= 127) {
     return true;
   }
+
   // 127.0.0.0/8 — loopback
   if (a === 127) {
     return true;
   }
+
   // 169.254.0.0/16 — link-local
   if (a === 169 && b === 254) {
     return true;
   }
+
   // 172.16.0.0/12 — RFC1918
   if (a === 172 && b >= 16 && b <= 31) {
     return true;
   }
+
   // 192.0.0.0/24 — IETF protocol assignments
   if (a === 192 && b === 0 && c === 0) {
     return true;
   }
+
   // 192.0.2.0/24 — TEST-NET-1
   if (a === 192 && b === 0 && c === 2) {
     return true;
   }
+
   // 192.88.99.0/24 — 6to4 relay anycast
   if (a === 192 && b === 88 && c === 99) {
     return true;
   }
+
   // 192.168.0.0/16 — RFC1918
   if (a === 192 && b === 168) {
     return true;
   }
+
   // 198.18.0.0/15 — benchmarking
   if (a === 198 && (b === 18 || b === 19)) {
     return true;
   }
+
   // 198.51.100.0/24 — TEST-NET-2
   if (a === 198 && b === 51 && c === 100) {
     return true;
   }
+
   // 203.0.113.0/24 — TEST-NET-3
   if (a === 203 && b === 0 && c === 113) {
     return true;
   }
+
   // 224.0.0.0/4 — multicast; 240.0.0.0/4 — reserved
   if (a >= 224) {
     return true;
@@ -176,12 +198,15 @@ function isPrivateIpv6(ip: string): boolean {
 
 function isPrivateIp(ip: string): boolean {
   const family = isIP(ip);
+
   if (family === 4) {
     return isPrivateIpv4(ip);
   }
+
   if (family === 6) {
     return isPrivateIpv6(ip);
   }
+
   return true;
 }
 
@@ -211,21 +236,24 @@ async function resolvePublicAddresses(
         `web_fetch blocked: address ${bare} is private or reserved.`
       );
     }
+
     return [bare];
   }
 
   let records: { address: string }[];
+
   try {
     const lookup = Promise.withResolvers<{ address: string }[]>();
+
     using _listener = signal
       ? addAbortListener(signal, () => lookup.reject(signal.reason))
       : undefined;
+
     dnsLookup(bare, { all: true }).then(lookup.resolve, lookup.reject);
     records = await lookup.promise;
   } catch (err) {
-    throw new Error(
-      `web_fetch failed to resolve hostname ${bare}: ${(err as Error).message}`
-    );
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`web_fetch failed to resolve hostname ${bare}: ${detail}`);
   }
 
   if (records.length === 0) {
@@ -242,6 +270,7 @@ async function resolvePublicAddresses(
       privateAddress ??= record.address;
       continue;
     }
+
     publicAddresses.push(record.address);
   }
 
@@ -256,6 +285,7 @@ async function resolvePublicAddresses(
 
 function parseUrl(rawUrl: string): URL {
   let url: URL;
+
   try {
     url = new URL(rawUrl);
   } catch {
@@ -282,6 +312,15 @@ function contentTypeIsHtml(contentType: string): boolean {
 /** Bun's fetch takes a TLS override; the DOM `RequestInit` type does not model it. */
 type PinnedFetchInit = BunFetchInit & { tls?: { serverName: string } };
 
+interface PinnedRequest {
+  init: PinnedFetchInit;
+  input: URL;
+}
+
+interface DeclaredImageMetadata {
+  value: string | null;
+}
+
 /**
  * Same request, aimed at `address` instead of re-resolving the hostname.
  * The logical URL still supplies the path, the `Host` header and the TLS
@@ -291,7 +330,7 @@ function pinnedRequest(
   logical: URL,
   address: string,
   signal: AbortSignal
-): { input: URL; init: PinnedFetchInit } {
+): PinnedRequest {
   const input = new URL(logical.toString());
   input.hostname = isIP(address) === 6 ? `[${address}]` : address;
 
@@ -326,12 +365,14 @@ async function fetchFirstReachable(
 
   for (const address of addresses) {
     const { input, init } = pinnedRequest(logical, address, signal);
+
     try {
       return await fetch(input, init);
     } catch (error) {
       if (signal.aborted) {
         throw error;
       }
+
       lastError = error;
     }
   }
@@ -349,6 +390,7 @@ async function fetchWithRedirects(
 ): Promise<{ response: Response; finalUrl: string }> {
   let current = url;
   let currentAddresses = addresses;
+
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
     const response = await fetchFirstReachable(
       current,
@@ -359,17 +401,21 @@ async function fetchWithRedirects(
     if (response.status >= 300 && response.status < 400) {
       await response.body?.cancel();
       const location = response.headers.get("location");
+
       if (!location) {
         throw new Error(
           `web_fetch: redirect ${response.status} without Location header.`
         );
       }
+
       const nextUrl = new URL(location, current);
+
       if (nextUrl.protocol !== "http:" && nextUrl.protocol !== "https:") {
         throw new Error(
           `web_fetch: redirect to unsupported protocol ${nextUrl.protocol}.`
         );
       }
+
       validateUrl?.(nextUrl);
       currentAddresses = await resolvePublicAddresses(nextUrl.hostname, signal);
       current = nextUrl;
@@ -388,8 +434,10 @@ async function readBoundedBody(
 ): Promise<Buffer<ArrayBuffer>> {
   // If length is known and oversized, reject up-front.
   const contentLength = response.headers.get("content-length");
+
   if (contentLength) {
     const declared = Number(contentLength);
+
     if (Number.isFinite(declared) && declared > maxBytes) {
       await response.body?.cancel();
       throw new Error(
@@ -399,22 +447,28 @@ async function readBoundedBody(
   }
 
   const reader = response.body?.getReader();
+
   if (!reader) {
     return Buffer.alloc(0);
   }
 
   const chunks: Uint8Array[] = [];
   let received = 0;
+
   try {
     for (;;) {
       const { done, value } = await reader.read();
+
       if (done) {
         return Buffer.concat(chunks, received);
       }
+
       received += value.byteLength;
+
       if (received > maxBytes) {
         throw new Error(`web_fetch: response body exceeds ${maxBytes} bytes.`);
       }
+
       chunks.push(value);
     }
   } finally {
@@ -438,6 +492,7 @@ export async function fetchRemoteImage(
   const url = parseUrl(rawUrl);
   validateImageUrl(url);
   const addresses = await resolvePublicAddresses(url.hostname, signal);
+
   const { response } = await fetchWithRedirects(
     url,
     addresses,
@@ -447,9 +502,11 @@ export async function fetchRemoteImage(
       validateRedirect?.(next);
     }
   );
+
   const contentType =
     response.headers.get("content-type")?.split(";")[0].trim().toLowerCase() ??
     "";
+
   if (
     !(
       response.ok &&
@@ -461,8 +518,10 @@ export async function fetchRemoteImage(
     await response.body?.cancel();
     throw new Error("Upstream did not return a supported image.");
   }
+
   const bytes = await readBoundedBody(response, MAX_IMAGE_BYTES);
   const signature = bytes.subarray(0, 12).toString("hex");
+
   const valid =
     (contentType === "image/png" && signature.startsWith("89504e470d0a1a0a")) ||
     (contentType === "image/jpeg" && signature.startsWith("ffd8ff")) ||
@@ -471,22 +530,27 @@ export async function fetchRemoteImage(
     (contentType === "image/webp" &&
       signature.startsWith("52494646") &&
       signature.slice(16) === "57454250");
+
   if (!valid) {
     throw new Error("Image bytes do not match the declared type.");
   }
+
   return { bytes, contentType };
 }
 
 export async function convertHtmlToMarkdown(html: string): Promise<string> {
   const removeCommentNoise = (value: string) =>
     value.replace(/<!--(?:\[--|\]--|\[|\])?-->/g, "");
+
   // Strip whole comments before parsing: Word's conditional comments
   // (`<!--[if gte mso 9]>…<![endif]-->`) otherwise survive as visible text.
   const cleanedHtml = html.replace(/<!--[\s\S]*?-->/g, "");
+
   const markdown = NodeHtmlMarkdown.translate(cleanedHtml, {
     bulletMarker: "-",
     codeBlockStyle: "fenced",
   });
+
   return removeCommentNoise(markdown)
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -504,25 +568,31 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
   parameters: webFetchParameters(),
   async run(input) {
     let parsed: WebFetchInput;
+
     try {
       parsed = webFetchInputSchema.parse(input);
     } catch (err) {
       if (err instanceof z.ZodError) {
         const issue = err.issues[0];
+
         const at =
           issue.path && issue.path.length > 0
             ? ` at ${issue.path.join(".")}`
             : "";
+
         throw new Error(`web_fetch: invalid parameter${at}: ${issue.message}`);
       }
+
       throw err instanceof Error ? err : new Error(String(err));
     }
 
     const raw = Boolean(parsed.raw);
     const url = parseUrl(parsed.url);
+
     if (parsed.imageMetadata) {
       validateImageUrl(url);
     }
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
@@ -531,9 +601,12 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
         url.hostname,
         controller.signal
       );
+
       let checkAllowed: ((candidate: URL) => void) | undefined;
+
       if (parsed.imageMetadata) {
         const robotsUrl = new URL("/robots.txt", url);
+
         const { response: robotsResponse } = await fetchWithRedirects(
           robotsUrl,
           addresses,
@@ -544,10 +617,12 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
             }
           }
         );
+
         if (robotsResponse.status !== 200 && robotsResponse.status !== 404) {
           await robotsResponse.body?.cancel();
           throw new Error("web_fetch: robots policy is unavailable.");
         }
+
         if (
           robotsResponse.status === 200 &&
           !/^text\/plain\b/i.test(
@@ -557,15 +632,18 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
           await robotsResponse.body?.cancel();
           throw new Error("web_fetch: robots policy is not plain text.");
         }
+
         const rulesText =
           robotsResponse.status === 200
             ? new TextDecoder().decode(
                 await readBoundedBody(robotsResponse, 512 * 1024)
               )
             : "";
+
         if (robotsResponse.status === 404) {
           await robotsResponse.body?.cancel();
         }
+
         const rules = robotsParser(robotsUrl.toString(), rulesText);
         checkAllowed = (candidate) => {
           if (
@@ -575,8 +653,10 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
             throw new Error("web_fetch: robots policy disallows this URL.");
           }
         };
+
         checkAllowed(url);
       }
+
       const { response, finalUrl } = await fetchWithRedirects(
         url,
         addresses,
@@ -591,21 +671,25 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
       }
 
       const contentType = response.headers.get("content-type") ?? "";
+
       const body = new TextDecoder().decode(
         await readBoundedBody(response, MAX_BODY_BYTES)
       );
+
       const bytes = Buffer.byteLength(body, "utf8");
 
       let imageUrl: string | null = null;
       let images: ImageAttachment[] | undefined;
       const page = new URL(finalUrl);
+
       if (
         parsed.imageMetadata &&
         contentTypeIsHtml(contentType) &&
         page.protocol === "https:" &&
         page.hostname === url.hostname
       ) {
-        const declared: { value: string | null } = { value: null };
+        const declared: DeclaredImageMetadata = { value: null };
+
         // Bun provides HTMLRewriter globally; Biome's default globals omit it.
         // biome-ignore lint/correctness/noUndeclaredVariables: Bun runtime global
         const rewriter = new HTMLRewriter().on("meta", {
@@ -617,7 +701,9 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
             }
           },
         });
+
         await rewriter.transform(new Response(body)).text();
+
         if (declared.value) {
           try {
             // Bun's HTMLRewriter returns attribute entities verbatim. Decode the
@@ -627,10 +713,13 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
               /&(?:amp|#0*38|#x0*26);/gi,
               "&"
             );
+
             if (/&(?:#|[a-z]+);/i.test(reference)) {
               throw new Error("Undecoded image URL entity");
             }
+
             const image = new URL(reference, page);
+
             if (
               image.protocol === "https:" &&
               image.origin === page.origin &&
@@ -638,6 +727,7 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
               /\.(?:jpe?g|png|gif|webp)$/i.test(image.pathname)
             ) {
               checkAllowed?.(image);
+
               const verifiedImage = await fetchRemoteImage(
                 image.toString(),
                 controller.signal,
@@ -645,6 +735,7 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
                   throw new Error("og:image must be a direct image URL.");
                 }
               );
+
               images = [
                 {
                   data: verifiedImage.bytes.toString("base64"),
@@ -660,6 +751,7 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
       }
 
       let content = body;
+
       const shouldConvert =
         !raw &&
         contentTypeIsHtml(contentType) &&
@@ -672,26 +764,36 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
       // After conversion, so the cap applies to what the model actually reads
       // rather than to the markup it never sees.
       const truncated = content.length > MAX_CONTENT_CHARS;
+
       if (truncated) {
         const keep = Math.max(0, MAX_CONTENT_CHARS - TRUNCATION_MARKER.length);
         content = `${content.slice(0, keep)}${TRUNCATION_MARKER}`;
       }
 
-      return {
+      const result: WebFetchOutput = {
         bytes,
         content,
         contentType,
         finalUrl,
-        ...(parsed.imageMetadata ? { imageUrl } : {}),
-        ...(images ? { images } : {}),
         status: response.status,
         truncated,
         url: url.toString(),
       };
+
+      if (parsed.imageMetadata) {
+        result.imageUrl = imageUrl;
+      }
+
+      if (images) {
+        result.images = images;
+      }
+
+      return result;
     } catch (err) {
-      if ((err as Error).name === "AbortError") {
+      if (err instanceof Error && err.name === "AbortError") {
         throw new Error(`web_fetch timed out after ${REQUEST_TIMEOUT_MS}ms.`);
       }
+
       throw err instanceof Error ? err : new Error(String(err));
     } finally {
       clearTimeout(timer);

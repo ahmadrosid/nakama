@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/use-auth";
 import { useChannelProfileId } from "@/hooks/use-app-queries";
 import { client } from "@/lib/client";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
 export function useWorkerLogs(
@@ -13,6 +14,7 @@ export function useWorkerLogs(
   const { activeOrg } = useAuth();
   const orgId = activeOrg?.id ?? null;
   const api = client.forOrg(orgId);
+
   return useQuery({
     enabled,
     queryFn: () => api.getWorkerLogs(workerName, lines, profileId),
@@ -31,12 +33,14 @@ export function useClearWorkerLogs(workerName: string) {
   const { activeOrg } = useAuth();
   const orgId = activeOrg?.id ?? null;
   const api = client.forOrg(orgId);
+
   const queryKey = [
     ...queryKeys.workerLogs,
     workerName,
     orgId,
     ...(profileId ? [profileId] : []),
   ];
+
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -50,9 +54,7 @@ export function useClearWorkerLogs(workerName: string) {
           stdout: "",
         }
       );
-      void queryClient.invalidateQueries({
-        queryKey: submittedQueryKey,
-      });
+      void invalidateQueries(queryClient, submittedQueryKey);
     },
   });
 }

@@ -25,6 +25,7 @@ import { isPluginOwned } from "@/hooks/use-plugins";
 import { formatError } from "@/lib/client";
 
 const bundledNames = new Set<string>(BUNDLED_SKILL_NAMES);
+
 const runtimeOnlyNames = new Set<string>(RUNTIME_ONLY_BUNDLED_SKILL_NAMES);
 
 interface AddSkillDialogProps {
@@ -61,6 +62,7 @@ export function AddSkillDialog({
   skillsError,
 }: AddSkillDialogProps) {
   const [running, setRunning] = useState(false);
+
   return (
     <Dialog
       onOpenChange={(nextOpen) => {
@@ -133,21 +135,26 @@ function OrganizationSkills({
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<SkillSummary | null>(null);
   const [installProgress, setInstallProgress] = useState<string | null>(null);
+
   const { data: browserStatus } = useAgentBrowserSettings(
     skills.some((skill) => skill.name === "agent-browser")
   );
+
   const browserInstall = useInstallAgentBrowser();
   const busy = disabled || browserInstall.isPending;
+
   const visibleSkills = skills.filter(
     (skill) =>
       !runtimeOnlyNames.has(skill.name) &&
       (skill.orgId == null || skill.orgId === orgId)
   );
+
   const results = visibleSkills.filter((skill) =>
     `${skill.name} ${skill.description}`
       .toLowerCase()
       .includes(search.toLowerCase().trim())
   );
+
   const browserNeedsInstall = browserStatus?.ready !== true;
 
   function isAdded(skillId: string) {
@@ -158,6 +165,7 @@ function OrganizationSkills({
     if (busy || isAdded(skillId)) {
       return;
     }
+
     setSelected((current) =>
       current.includes(skillId)
         ? current.filter((id) => id !== skillId)
@@ -170,19 +178,23 @@ function OrganizationSkills({
     if (busy || !profileId || selected.length === 0) {
       return;
     }
+
     setRunning(true);
     setError(null);
+
     try {
       for (const skillId of selected) {
         if (isAdded(skillId)) {
           setSelected((current) => current.filter((id) => id !== skillId));
           continue;
         }
+
         // oxlint-disable-next-line react-doctor/async-await-in-loop -- Stop on failure and keep later skills selected.
         await onAssign(skillId);
         setAdded((current) => new Set([...current, skillId]));
         setSelected((current) => current.filter((id) => id !== skillId));
       }
+
       onOpenChange(false);
     } catch (cause) {
       setError(formatError(cause));
@@ -195,8 +207,10 @@ function OrganizationSkills({
     if (!(pendingDelete && onDelete) || busy) {
       return;
     }
+
     setRunning(true);
     setError(null);
+
     try {
       await onDelete(pendingDelete.id);
       setSelected((current) => current.filter((id) => id !== pendingDelete.id));
@@ -212,8 +226,10 @@ function OrganizationSkills({
     if (busy) {
       return;
     }
+
     setRunning(true);
     setError(null);
+
     try {
       await onAssignBash();
     } catch (cause) {
@@ -227,13 +243,16 @@ function OrganizationSkills({
     if (busy || !bashAssigned || user?.isPlatformAdmin !== true) {
       return;
     }
+
     setRunning(true);
     setError(null);
     setInstallProgress(null);
+
     try {
       const status = await browserInstall.mutateAsync({
         onProgress: setInstallProgress,
       });
+
       if (!status.ready) {
         setError(status.statusMessage ?? "agent-browser is not ready.");
       }
@@ -659,6 +678,7 @@ function InstallSkillForm({
   const [method, setMethod] = useState<"command" | "github" | "upload">(
     "github"
   );
+
   const [command, setCommand] = useState("");
   const [url, setUrl] = useState("");
   const [zip, setZip] = useState<File | null>(null);
@@ -687,11 +707,13 @@ function InstallSkillForm({
       if (method === "upload" && zip) {
         const bytes = new Uint8Array(await zip.arrayBuffer());
         let binary = "";
+
         for (let index = 0; index < bytes.length; index += 32_768) {
           binary += String.fromCharCode(
             ...bytes.subarray(index, index + 32_768)
           );
         }
+
         await onSubmit({ profileId, zipBase64: btoa(binary) });
       } else if (method === "command") {
         await onSubmit({ command: command.trim(), profileId });
@@ -710,15 +732,17 @@ function InstallSkillForm({
   return (
     <form className="space-y-6" onSubmit={handleSubmit}>
       <div className="grid grid-cols-3 gap-2" role="tablist">
-        {[
-          ["github", "GitHub URL"],
-          ["command", "npx command"],
-          ["upload", "Upload ZIP"],
-        ].map(([value, label]) => (
+        {(
+          [
+            ["github", "GitHub URL"],
+            ["command", "npx command"],
+            ["upload", "Upload ZIP"],
+          ] as const
+        ).map(([value, label]) => (
           <Button
             disabled={busy}
             key={value}
-            onClick={() => setMethod(value as typeof method)}
+            onClick={() => setMethod(value)}
             role="tab"
             type="button"
             variant={method === value ? "default" : "outline"}

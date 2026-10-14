@@ -66,6 +66,7 @@ function readAnsiSequence(text: string, start: number): string {
   }
 
   let i = start + 1;
+
   if (i >= text.length) {
     return text.slice(start);
   }
@@ -75,29 +76,36 @@ function readAnsiSequence(text: string, start: number): string {
   // CSI: ESC [ params final
   if (ch === "[") {
     i += 1;
-    while (i < text.length && /[0-9;]/.test(text[i] as string)) {
+
+    while (i < text.length && /[0-9;]/.test(text[i]!)) {
       i += 1;
     }
+
     if (i < text.length) {
       i += 1;
     }
+
     return text.slice(start, i);
   }
 
   // OSC: ESC ] string BEL or ESC \
   if (ch === "]") {
     i += 1;
+
     while (i < text.length) {
       if (text[i] === "\x07") {
         i += 1;
         break;
       }
+
       if (text[i] === "\x1b" && text[i + 1] === "\\") {
         i += 2;
         break;
       }
+
       i += 1;
     }
+
     return text.slice(start, i);
   }
 
@@ -116,6 +124,7 @@ function readAnsiSequence(text: string, start: number): string {
  */
 export function* tokenizeText(text: string): Generator<TextToken> {
   let i = 0;
+
   while (i < text.length) {
     if (text[i] === "\x1b") {
       const value = readAnsiSequence(text, i);
@@ -124,7 +133,7 @@ export function* tokenizeText(text: string): Generator<TextToken> {
       continue;
     }
 
-    const char = text[i] as string;
+    const char = text[i]!;
     yield { type: "char", value: char, width: getCharWidth(char) };
     i += 1;
   }
@@ -135,11 +144,13 @@ export function* tokenizeText(text: string): Generator<TextToken> {
  */
 export function stripAnsi(text: string): string {
   let result = "";
+
   for (const token of tokenizeText(text)) {
     if (token.type === "char") {
       result += token.value;
     }
   }
+
   return result;
 }
 
@@ -148,11 +159,13 @@ export function stripAnsi(text: string): string {
  */
 export function visibleLength(text: string): number {
   let length = 0;
+
   for (const token of tokenizeText(text)) {
     if (token.type === "char") {
       length += token.width;
     }
   }
+
   return length;
 }
 
@@ -162,11 +175,14 @@ function isSgrSequence(seq: string): boolean {
 
 function parseSgrParams(seq: string): number[] {
   const body = seq.slice(2, -1);
+
   if (body === "") {
     return [0];
   }
+
   return body.split(";").map((part) => {
     const n = Number(part);
+
     return Number.isNaN(n) ? 0 : n;
   });
 }
@@ -181,6 +197,7 @@ function activeAnsiPrefix(text: string): string {
     }
 
     const params = parseSgrParams(token.value);
+
     if (params.length === 1 && params[0] === 0) {
       opens.length = 0;
       continue;
@@ -218,9 +235,11 @@ export function wrapText(text: string, width: number): string[] {
   for (const token of tokenizeText(text)) {
     if (token.type === "ansi") {
       currentLine += token.value;
+
       if (isSgrSequence(token.value)) {
         activePrefix = activeAnsiPrefix(currentLine);
       }
+
       continue;
     }
 
@@ -275,17 +294,21 @@ export function truncateText(
   for (const token of tokenizeText(text)) {
     if (token.type === "ansi") {
       result += token.value;
+
       if (isSgrSequence(token.value)) {
         activePrefix = activeAnsiPrefix(result);
       }
+
       continue;
     }
 
     if (width + token.width + ellipsisWidth > maxWidth) {
       result += ellipsis;
+
       if (activePrefix) {
         result += "\x1b[0m";
       }
+
       break;
     }
 

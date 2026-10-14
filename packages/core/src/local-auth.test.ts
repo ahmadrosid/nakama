@@ -12,6 +12,7 @@ import {
 import {
   getUserConfigDir,
   getUserConfigPath,
+  loadUserConfig,
   saveUserConfig,
 } from "./user-config";
 
@@ -35,15 +36,23 @@ describe("loadLocalAuthToken", () => {
     const token = await loadLocalAuthToken();
     expect(token).toStartWith("tc_local_");
 
+    if (token === null) {
+      throw new Error("Expected a local token");
+    }
+
     const rawConfig = await readFile(getUserConfigPath(), "utf8");
     expect(rawConfig).toContain("local_auth_token_hash=");
-    expect(rawConfig).not.toContain(token!);
+    expect(rawConfig).not.toContain(token);
 
     const storedToken = await readFile(
       join(getUserConfigDir(), "local-auth-token"),
       "utf8"
     );
+
     expect(storedToken.trim()).toBe(token);
+    await expect(verifyLocalAuthToken(token)).resolves.toEqual({
+      email: "local-client@nakama.internal",
+    });
   });
 
   test("reuses the token from the private local token file", async () => {
@@ -106,6 +115,47 @@ describe("loadLocalAuthToken", () => {
       email: "local-client@nakama.internal",
     });
     await expect(loadLocalAuthToken()).resolves.toBe(rotated);
+  });
+
+  test("rotateLocalAuthToken preserves the full user config", async () => {
+    configDir = await mkdtemp(join(tmpdir(), "nakama-local-auth-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    const original = await loadLocalAuthToken();
+
+    const config = {
+      defaultProviderId: "provider-test",
+      imageModel: "openai:gpt-image-1",
+      providers: [
+        {
+          apiKey: "sk-test",
+          createdAt: "2026-09-25T00:00:00.000Z",
+          id: "provider-test",
+          label: "Test provider",
+          type: "openai" as const,
+        },
+      ],
+      thinkingEffort: "low" as const,
+      thinkingEnabled: false,
+      timezone: "America/New_York",
+      transcriptionModel: "openai:whisper-1",
+      visionModel: "openai:gpt-4o",
+    };
+
+    await saveUserConfig({
+      ...config,
+      localAuthTokenHash: createHash("sha256").update(original!).digest("hex"),
+    });
+    const before = await loadUserConfig();
+
+    const rotated = await rotateLocalAuthToken();
+    const after = await loadUserConfig();
+
+    expect(after).toEqual({
+      ...before,
+      localAuthTokenHash: createHash("sha256").update(rotated).digest("hex"),
+    });
+    expect(after?.localAuthTokenHash).not.toBe(before?.localAuthTokenHash);
   });
 
   test("rotateLocalAuthToken refuses when the token comes from env", async () => {

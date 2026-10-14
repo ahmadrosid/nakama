@@ -66,7 +66,9 @@ describe("GET /health", () => {
     );
 
     expect(response.status).toBe(200);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const payload = (await response.json()) as { builtinTools: string[] };
+
     for (const name of REQUIRED_BUILTIN_TOOLS) {
       expect(payload.builtinTools).toContain(name);
     }

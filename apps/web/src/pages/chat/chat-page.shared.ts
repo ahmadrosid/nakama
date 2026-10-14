@@ -27,7 +27,7 @@ export function findRetryPrompt(
   messages: ChatListItem[],
   assistantMessage: ChatListItem
 ): ChatListItem | null {
-  if (typeof assistantMessage.historyIndex !== "number") {
+  if (assistantMessage.historyIndex === undefined) {
     return null;
   }
 
@@ -35,7 +35,7 @@ export function findRetryPrompt(
     messages.findLast(
       (message) =>
         message.role === "user" &&
-        typeof message.historyIndex === "number" &&
+        message.historyIndex !== undefined &&
         message.historyIndex < assistantMessage.historyIndex!
     ) ?? null
   );
@@ -45,14 +45,14 @@ function findRetryCheckpoint(
   messages: ChatListItem[],
   promptMessage: ChatListItem
 ): ChatListItem | null {
-  if (typeof promptMessage.historyIndex !== "number") {
+  if (promptMessage.historyIndex === undefined) {
     return null;
   }
 
   return (
     messages.findLast(
       (message) =>
-        typeof message.historyIndex === "number" &&
+        message.historyIndex !== undefined &&
         message.historyIndex < promptMessage.historyIndex!
     ) ?? null
   );
@@ -78,15 +78,14 @@ export function planPromptBranch(
   const checkpoint = findRetryCheckpoint(messages, prompt);
   const messageIndex = checkpoint?.historyIndex;
 
-  if (typeof messageIndex !== "number") {
+  if (messageIndex === undefined) {
     return null;
   }
 
   return {
     initialMessages: messages.filter(
       (item) =>
-        typeof item.historyIndex === "number" &&
-        item.historyIndex <= messageIndex
+        item.historyIndex !== undefined && item.historyIndex <= messageIndex
     ),
     messageIndex,
   };
@@ -147,6 +146,7 @@ export function markStreamingTurnFailed(
         streaming: false,
         thinkingStreaming: false,
       };
+
       return next;
     }
   }
@@ -170,6 +170,7 @@ export function appendFailedTurnIfNeeded(
   }
 
   const last = messages.at(-1);
+
   if (last?.role === "user" && last.content === failed.text) {
     return [...messages, buildFailedAssistantMessage(failed.error)];
   }
@@ -220,7 +221,7 @@ export function messagesWithoutFailedTurn(
   let start = failedIndex;
   const previous = messages[failedIndex - 1];
 
-  if (previous?.role === "user" && typeof previous.historyIndex !== "number") {
+  if (previous?.role === "user" && previous.historyIndex === undefined) {
     start = failedIndex - 1;
   }
 
@@ -252,11 +253,13 @@ export function releaseChatStream(stream: {
 }): "detached" | "aborted" | "idle" {
   if (stream.detach) {
     stream.detach();
+
     return "detached";
   }
 
   if (stream.abort) {
     stream.abort.abort();
+
     return "aborted";
   }
 

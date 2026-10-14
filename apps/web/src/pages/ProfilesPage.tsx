@@ -12,8 +12,10 @@ export function ProfilesPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { setProfileId } = useActiveChatProfile();
+
   const { data: profiles = [], isLoading: profilesLoading } =
     useProfilesQuery();
+
   const legacyKnowledge = searchParams.get("tab") === "knowledge";
   const legacyArtifacts = searchParams.get("tab") === "artifacts";
   const movedTab = legacyArtifacts || legacyKnowledge;
@@ -27,9 +29,11 @@ export function ProfilesPage() {
       searchParams.toString(),
       profiles
     );
+
     if (profileId) {
       setProfileId(profileId);
     }
+
     navigate(legacyKnowledge ? "/files?tab=knowledge" : "/files", {
       replace: true,
     });

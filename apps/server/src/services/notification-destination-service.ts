@@ -9,6 +9,7 @@ import {
   normalizeCreateNotificationDestinationRequest,
   normalizeUpdateNotificationDestinationRequest,
   type RegenerateNotificationDestinationKeyResponse,
+  type UpdateNotificationDestinationRequest,
 } from "@nakama/core";
 import type {
   DatabaseAdapter,
@@ -30,6 +31,7 @@ function toSummary(
     updatedAt: record.updatedAt,
     webhookPath: notificationDestinationWebhookPath(record.id),
   };
+
   if (record.channel === "telegram") {
     return {
       ...common,
@@ -37,9 +39,11 @@ function toSummary(
       telegram: { ...record.config, topicId: record.config.topicId ?? null },
     };
   }
+
   if (record.channel === "discord") {
     return { ...common, channel: record.channel, discord: record.config };
   }
+
   return { ...common, channel: record.channel, whatsapp: record.config };
 }
 
@@ -47,9 +51,11 @@ function destinationConfig(request: CreateNotificationDestinationRequest) {
   if (request.channel === "telegram") {
     return { channel: request.channel, config: request.telegram };
   }
+
   if (request.channel === "discord") {
     return { channel: request.channel, config: request.discord };
   }
+
   return { channel: request.channel, config: request.whatsapp };
 }
 
@@ -61,6 +67,7 @@ export class NotificationDestinationService {
 
   private async requireChannelProfile(orgId: string, profileId?: string) {
     const profiles = await this.databaseAdapter.listProfilesForOrg(orgId);
+
     if (!(profileId && profiles.some((profile) => profile.id === profileId))) {
       throw new NakamaApiError("Choose an agent in this organization.", 400);
     }
@@ -69,18 +76,20 @@ export class NotificationDestinationService {
   async list(orgId: string): Promise<ListNotificationDestinationsResponse> {
     const destinations =
       await this.databaseAdapter.listNotificationDestinationsForOrg(orgId);
+
     return { destinations: destinations.map(toSummary) };
   }
 
   async create(
     orgId: string,
-    input: unknown
+    input: CreateNotificationDestinationRequest
   ): Promise<NotificationDestinationWithSecret> {
     const request = normalizeCreateNotificationDestinationRequest(input);
     const configured = destinationConfig(request);
     await this.requireChannelProfile(orgId, configured.config.profileId);
     const apiKey = nanoid(32);
     const now = new Date().toISOString();
+
     const record: StoredNotificationDestinationRecord = {
       ...configured,
       createdAt: now,
@@ -102,15 +111,18 @@ export class NotificationDestinationService {
   async update(
     orgId: string,
     destinationId: string,
-    input: unknown
+    input: UpdateNotificationDestinationRequest
   ): Promise<NotificationDestinationSummary> {
     const existing = await this.getOwnedRecord(orgId, destinationId);
+
     const request = normalizeUpdateNotificationDestinationRequest(
       input,
       existing.channel
     );
+
     const configured = destinationConfig(request);
     await this.requireChannelProfile(orgId, configured.config.profileId);
+
     const updated: StoredNotificationDestinationRecord = {
       ...existing,
       ...configured,
@@ -119,6 +131,7 @@ export class NotificationDestinationService {
     };
 
     await this.databaseAdapter.upsertNotificationDestination(updated);
+
     return toSummary(updated);
   }
 
@@ -128,6 +141,7 @@ export class NotificationDestinationService {
   ): Promise<RegenerateNotificationDestinationKeyResponse> {
     const existing = await this.getOwnedRecord(orgId, destinationId);
     const apiKey = nanoid(32);
+
     const updated: StoredNotificationDestinationRecord = {
       ...existing,
       secretHash: this.authService.hashToken(apiKey),

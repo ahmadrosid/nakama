@@ -25,15 +25,27 @@ const identity = {
 };
 
 describe("validatePluginManifest", () => {
+  test.each(
+    [undefined, null, false, 7, "manifest", [], { id: 7 }].map((input) => ({
+      input,
+    }))
+  )("rejects malformed package input: $input", ({ input }) => {
+    expect(validatePluginManifest(input).ok).toBe(false);
+    expect(validatePluginJsonInstance(input, {}).ok).toBe(false);
+  });
+
   test("preserves an optional HTTPS icon", () => {
     const icon = "https://example.com/plugin.svg";
+
     const result = validatePluginManifest({
       ...identity,
       apiVersion: 1,
       icon,
       minNakamaVersion: "0.1.0",
     });
+
     expect(result.ok).toBe(true);
+
     if (result.ok) {
       expect(result.manifest).toHaveProperty("icon", icon);
     }
@@ -65,6 +77,7 @@ describe("validatePluginManifest", () => {
     });
 
     expect(result.ok).toBe(true);
+
     if (result.ok) {
       expect(result.manifest.skills).toEqual([
         { directory: "skills/notes", key: "notes" },
@@ -86,6 +99,7 @@ describe("validatePluginManifest", () => {
     });
 
     expect(result.ok).toBe(true);
+
     if (result.ok) {
       expect(result.manifest.ui?.pageLabel).toBe("Notes");
     }
@@ -133,6 +147,7 @@ describe("validatePluginManifest", () => {
     });
 
     expect(result.ok).toBe(true);
+
     if (result.ok) {
       expect(result.manifest.actions).toHaveLength(1);
       expect(result.manifest.actions[0]?.key).toBe("list");
@@ -504,14 +519,17 @@ describe("derivePluginToolName", () => {
 
 test("worker manifests preserve declarations and reject unsafe or duplicate entries", () => {
   const base = { ...identity, apiVersion: 1, minNakamaVersion: "0.1.0" };
+
   const worker = {
     entry: "workers/engine.js",
     key: "engine",
     name: "Memory engine",
     useHostLlm: true,
   };
+
   const result = validatePluginManifest({ ...base, workers: [worker] });
   expect(result.ok && result.manifest.workers).toEqual([worker]);
+
   for (const workers of [
     [worker, worker],
     [{ ...worker, entry: "../outside.js" }],

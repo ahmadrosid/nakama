@@ -10,6 +10,7 @@ import {
 } from "./error-tracking-config";
 
 const SEND_TIMEOUT_MS = 3000;
+
 const SENTRY_CLIENT = "nakama/1";
 
 export interface SentryDsn {
@@ -86,7 +87,7 @@ export function parseSentryDsn(dsn: string): SentryDsn | null {
 }
 
 export function toSentryEvent(report: ErrorReport): SentryEvent {
-  return {
+  const event: SentryEvent = {
     contexts: {
       os: { name: report.runtime.platform },
       runtime: { name: "bun", version: report.runtime.bun },
@@ -96,7 +97,6 @@ export function toSentryEvent(report: ErrorReport): SentryEvent {
     exception: {
       values: [{ type: report.name, value: report.message }],
     },
-    ...(report.stack ? { extra: { stack: report.stack } } : {}),
     // Grouping is ours rather than the ingest's, so one bug stays one issue even when
     // stack frames differ between installs.
     fingerprint: [report.fingerprint],
@@ -115,6 +115,12 @@ export function toSentryEvent(report: ErrorReport): SentryEvent {
     // server_name is deliberately absent. Sentry defaults it to the hostname, which on
     // a self-hosted install is often the operator's own machine or cluster name.
   };
+
+  if (report.stack) {
+    event.extra = { stack: report.stack };
+  }
+
+  return event;
 }
 
 /**
@@ -134,10 +140,12 @@ export async function sendSentryEvent(
   timeoutMs = SEND_TIMEOUT_MS
 ): Promise<boolean> {
   const payload = JSON.stringify(event);
+
   const envelopeHeader = JSON.stringify({
     event_id: event.event_id,
     sent_at: new Date().toISOString(),
   });
+
   const itemHeader = JSON.stringify({
     content_type: "application/json",
     length: Buffer.byteLength(payload),

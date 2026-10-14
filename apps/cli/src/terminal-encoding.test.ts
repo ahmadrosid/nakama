@@ -10,6 +10,7 @@ describe("restoreReadableEncoding", () => {
         this.push(null);
       },
     });
+
     stream.setEncoding("utf8");
     restoreReadableEncoding(stream, "hex");
 
@@ -27,6 +28,7 @@ describe("restoreReadableEncoding", () => {
         this.push(null);
       },
     });
+
     stream.setEncoding("utf8");
     restoreReadableEncoding(stream, null);
 

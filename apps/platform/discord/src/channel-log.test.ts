@@ -9,6 +9,7 @@ describe("formatDiscordInboundMessageLog", () => {
       content: "hello",
       id: "msg_1",
     });
+
     expect(line).toContain("messageId=msg_1");
     expect(line).toContain("authorId=user_secret_9");
     expect(line).toContain("channelId=channel_secret_9");

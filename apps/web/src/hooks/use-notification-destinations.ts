@@ -10,6 +10,7 @@ import {
 } from "@tanstack/react-query";
 import { useAuth } from "@/context/use-auth";
 import { client } from "@/lib/client";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
 const notificationDestinationsQueryOptions = (orgId: string) =>
@@ -31,6 +32,7 @@ export function useNotificationWhatsAppSettings(
 ) {
   const { activeOrg } = useAuth();
   const orgId = activeOrg?.id ?? null;
+
   return useQuery({
     enabled: enabled && !!orgId && !!profileId,
     queryFn: () => client.forOrg(orgId).getWhatsAppSettings(profileId),
@@ -45,9 +47,7 @@ export function useCreateNotificationDestination(orgId: string) {
     mutationFn: (request: CreateNotificationDestinationRequest) =>
       client.forOrg(orgId).createNotificationDestination(request),
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.notificationDestinations(orgId),
-      });
+      invalidateQueries(queryClient, queryKeys.notificationDestinations(orgId));
     },
   });
 }
@@ -67,9 +67,7 @@ export function useUpdateNotificationDestination(orgId: string) {
         .forOrg(orgId)
         .updateNotificationDestination(destinationId, request),
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.notificationDestinations(orgId),
-      });
+      invalidateQueries(queryClient, queryKeys.notificationDestinations(orgId));
     },
   });
 }
@@ -81,9 +79,7 @@ export function useRegenerateNotificationDestinationKey(orgId: string) {
     mutationFn: (destinationId: string) =>
       client.forOrg(orgId).regenerateNotificationDestinationKey(destinationId),
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.notificationDestinations(orgId),
-      });
+      invalidateQueries(queryClient, queryKeys.notificationDestinations(orgId));
     },
   });
 }
@@ -95,9 +91,7 @@ export function useDeleteNotificationDestination(orgId: string) {
     mutationFn: (destinationId: string) =>
       client.forOrg(orgId).deleteNotificationDestination(destinationId),
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.notificationDestinations(orgId),
-      });
+      invalidateQueries(queryClient, queryKeys.notificationDestinations(orgId));
     },
   });
 }

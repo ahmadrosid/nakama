@@ -22,6 +22,7 @@ export function getArtifactDownloadUrl(
   filename: string
 ): string {
   const query = new URLSearchParams({ path: filename });
+
   return `${client.baseUrl}/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`;
 }
 

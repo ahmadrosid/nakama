@@ -1,15 +1,26 @@
-import type { SkillCuratorRunResult } from "@nakama/core/contract";
+import type {
+  SkillCuratorRunResult,
+  UpdateOrganizationRequest,
+} from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { Card } from "@nakama/ui/card";
 import { Spinner } from "@nakama/ui/spinner";
 import { Switch } from "@nakama/ui/switch";
 import { toast } from "@nakama/ui/toast";
-import { useCallback, useEffect, useState } from "react";
+import {
+  type Dispatch,
+  type SetStateAction,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import type { AuthContextValue } from "@/context/auth-context-shared";
 import { useAuth } from "@/context/use-auth";
 import { client, formatError } from "@/lib/client";
 
 function parseIntegerInput(value: string): number | undefined {
   const parsed = Number(value);
+
   return Number.isInteger(parsed) ? parsed : undefined;
 }
 
@@ -19,6 +30,7 @@ function formatRunTime(value: string | null | undefined): string {
   }
 
   const time = Date.parse(value);
+
   if (Number.isNaN(time)) {
     return "Never";
   }
@@ -26,130 +38,181 @@ function formatRunTime(value: string | null | undefined): string {
   return new Date(time).toLocaleString();
 }
 
+type SkillsCuratorRunState = {
+  lastRunAt: string | null;
+  latest: SkillCuratorRunResult | null;
+  orgId: string;
+};
+
+type PollIntervalState = {
+  orgId: string;
+  value: number | null;
+};
+
 async function updateOrgFlag(
-  updateOrg: ReturnType<typeof useAuth>["updateOrg"],
+  updateOrg: AuthContextValue["updateOrg"],
   orgId: string,
-  patch: Parameters<ReturnType<typeof useAuth>["updateOrg"]>[1],
-  setBusy: (value: boolean) => void
+  patch: UpdateOrganizationRequest,
+  setBusyOrgId: Dispatch<SetStateAction<string | null>>
 ): Promise<void> {
-  setBusy(true);
+  setBusyOrgId(orgId);
+
   try {
     await updateOrg(orgId, patch);
   } catch (error) {
     toast(formatError(error));
   } finally {
-    setBusy(false);
+    setBusyOrgId((busyOrgId) => (busyOrgId === orgId ? null : busyOrgId));
   }
 }
 
 async function updatePollInterval(
   value: number,
-  setBusy: (busy: boolean) => void,
-  setPollIntervalMinutes: (value: number | null) => void
+  orgId: string,
+  setBusyOrgId: Dispatch<SetStateAction<string | null>>,
+  setPollIntervalState: Dispatch<SetStateAction<PollIntervalState | null>>
 ): Promise<void> {
-  setBusy(true);
+  setBusyOrgId(orgId);
+
   try {
     const settings = await client.setAutomationWorkerSettings(value);
-    setPollIntervalMinutes(settings.pollIntervalMinutes);
+    setPollIntervalState({ orgId, value: settings.pollIntervalMinutes });
   } catch (error) {
     toast(formatError(error));
   } finally {
-    setBusy(false);
+    setBusyOrgId((busyOrgId) => (busyOrgId === orgId ? null : busyOrgId));
   }
 }
 
 async function runSkillCurator(
   orgId: string,
   dryRun: boolean,
-  setRunning: (value: boolean) => void,
-  setLatest: (value: SkillCuratorRunResult | null) => void,
-  setLastRunAt: (value: string | null) => void
+  isCurrentRequest: () => boolean,
+  setRunningOrgId: Dispatch<SetStateAction<string | null>>,
+  setRunState: Dispatch<SetStateAction<SkillsCuratorRunState | null>>
 ): Promise<void> {
-  setRunning(true);
+  setRunningOrgId(orgId);
+
   try {
     const { result } = await client.runOrgSkillCurator(orgId, { dryRun });
-    setLatest(result);
-    if (!dryRun && result.status === "completed") {
-      setLastRunAt(result.finishedAt);
+
+    if (!isCurrentRequest()) {
+      return;
     }
+
+    setRunState((current) => ({
+      lastRunAt:
+        !dryRun && result.status === "completed"
+          ? result.finishedAt
+          : current?.orgId === orgId
+            ? current.lastRunAt
+            : null,
+      latest: result,
+      orgId,
+    }));
   } catch (error) {
-    toast(formatError(error));
+    if (isCurrentRequest()) {
+      toast(formatError(error));
+    }
   } finally {
-    setRunning(false);
+    if (isCurrentRequest()) {
+      setRunningOrgId((runningOrgId) =>
+        runningOrgId === orgId ? null : runningOrgId
+      );
+    }
   }
-}
-
-function loadSkillsCuratorLatest(
-  orgId: string | undefined,
-  role: string | undefined,
-  loadLatest: (id: string) => Promise<void>
-) {
-  if (!orgId || role !== "admin") {
-    return;
-  }
-
-  void loadLatest(orgId).catch((error: unknown) => {
-    toast(formatError(error));
-  });
-}
-
-function loadAutomationPollInterval(
-  orgId: string | undefined,
-  isPlatformAdmin: boolean | undefined,
-  setPollIntervalMinutes: (value: number | null) => void
-) {
-  if (!orgId || isPlatformAdmin !== true) {
-    return;
-  }
-
-  void client
-    .getAutomationWorkerSettings()
-    .then((settings) => setPollIntervalMinutes(settings.pollIntervalMinutes))
-    .catch((error: unknown) => toast(formatError(error)));
 }
 
 function useSkillsCuratorOrgCard() {
   const { activeOrg, updateOrg, user } = useAuth();
-  const [busy, setBusy] = useState(false);
-  const [running, setRunning] = useState(false);
-  const [latest, setLatest] = useState<SkillCuratorRunResult | null>(null);
-  const [lastRunAt, setLastRunAt] = useState<string | null>(null);
-  const [pollIntervalMinutes, setPollIntervalMinutes] = useState<number | null>(
-    null
-  );
+  const latestRequestRef = useRef(0);
+  const pollRequestRef = useRef(0);
+  const runRequestRef = useRef(0);
+  const [busyOrgId, setBusyOrgId] = useState<string | null>(null);
+  const [runningOrgId, setRunningOrgId] = useState<string | null>(null);
+  const [runState, setRunState] = useState<SkillsCuratorRunState | null>(null);
+
+  const [pollIntervalState, setPollIntervalState] =
+    useState<PollIntervalState | null>(null);
 
   const orgId = activeOrg?.id;
+  const latest = runState && runState.orgId === orgId ? runState.latest : null;
 
-  const loadLatest = useCallback(async (id: string) => {
-    const response = await client.getOrgSkillCuratorLatest(id);
-    setLatest(response.result);
-    setLastRunAt(response.lastRunAt);
-  }, []);
+  const lastRunAt =
+    runState && runState.orgId === orgId ? runState.lastRunAt : null;
+
+  const pollIntervalMinutes =
+    pollIntervalState && pollIntervalState.orgId === orgId
+      ? pollIntervalState.value
+      : null;
 
   useEffect(() => {
-    loadSkillsCuratorLatest(orgId, activeOrg?.role, loadLatest);
-  }, [activeOrg?.role, loadLatest, orgId]);
+    const requestId = ++latestRequestRef.current;
+    const currentRequestId = ++runRequestRef.current;
+
+    if (!orgId || activeOrg?.role !== "admin") {
+      return;
+    }
+
+    void client
+      .getOrgSkillCuratorLatest(orgId)
+      .then((response) => {
+        if (latestRequestRef.current !== requestId) {
+          return;
+        }
+
+        setRunState({
+          lastRunAt: response.lastRunAt,
+          latest: response.result,
+          orgId,
+        });
+      })
+      .catch((error) => {
+        if (latestRequestRef.current === requestId) {
+          toast(formatError(error));
+        }
+      });
+
+    return () => {
+      if (runRequestRef.current === currentRequestId) {
+        runRequestRef.current += 1;
+      }
+    };
+  }, [activeOrg?.role, orgId]);
 
   useEffect(() => {
-    loadAutomationPollInterval(
-      orgId,
-      user?.isPlatformAdmin,
-      setPollIntervalMinutes
-    );
+    const requestId = ++pollRequestRef.current;
+
+    if (!orgId || user?.isPlatformAdmin !== true) {
+      return;
+    }
+
+    void client
+      .getAutomationWorkerSettings()
+      .then((settings) => {
+        if (pollRequestRef.current === requestId) {
+          setPollIntervalState({ orgId, value: settings.pollIntervalMinutes });
+        }
+      })
+      .catch((error) => {
+        if (pollRequestRef.current === requestId) {
+          toast(formatError(error));
+        }
+      });
   }, [orgId, user?.isPlatformAdmin]);
 
   return {
     activeOrg,
-    busy,
+    busy: busyOrgId === orgId,
     lastRunAt,
     latest,
     pollIntervalMinutes,
-    running,
-    setBusy,
-    setLastRunAt,
-    setLatest,
-    setPollIntervalMinutes,
-    setRunning,
+    running: runningOrgId === orgId,
+    runRequestRef,
+    setBusyOrgId,
+    setPollIntervalState,
+    setRunningOrgId,
+    setRunState,
     updateOrg,
     user,
   };
@@ -170,10 +233,10 @@ function SkillsCuratorFreshnessFields({
 }) {
   return (
     <div className="border-border border-b px-4 py-3">
-      <p className="font-medium text-foreground text-sm">Freshness clocks</p>
+      <p className="font-medium text-foreground text-sm">Unused skills</p>
       <div className="mt-3 grid grid-cols-2 gap-3">
         <label className="grid gap-1 text-muted-foreground text-xs">
-          Stale after
+          Mark unused after (days)
           <input
             aria-label="Stale after days"
             className="h-8 rounded-md border border-input bg-background px-2 text-foreground text-sm"
@@ -182,6 +245,7 @@ function SkillsCuratorFreshnessFields({
             min={1}
             onBlur={(event) => {
               const value = parseIntegerInput(event.currentTarget.value);
+
               if (value !== undefined) {
                 onUpdateFlag({ skillsCuratorStaleAfterDays: value });
               }
@@ -190,7 +254,7 @@ function SkillsCuratorFreshnessFields({
           />
         </label>
         <label className="grid gap-1 text-muted-foreground text-xs">
-          Archive after
+          Hide after (days)
           <input
             aria-label="Archive after days"
             className="h-8 rounded-md border border-input bg-background px-2 text-foreground text-sm"
@@ -200,6 +264,7 @@ function SkillsCuratorFreshnessFields({
             min={2}
             onBlur={(event) => {
               const value = parseIntegerInput(event.currentTarget.value);
+
               if (value !== undefined) {
                 onUpdateFlag({ skillsCuratorArchiveAfterDays: value });
               }
@@ -226,7 +291,7 @@ function SkillsCuratorPollIntervalField({
   return (
     <div className="border-border border-b px-4 py-3">
       <label className="grid gap-1 text-muted-foreground text-xs">
-        Automation worker poll interval (minutes)
+        Check for work every (minutes)
         <input
           aria-label="Automation worker poll interval minutes"
           className="h-8 rounded-md border border-input bg-background px-2 text-foreground text-sm"
@@ -235,12 +300,14 @@ function SkillsCuratorPollIntervalField({
           min={1}
           onBlur={(event) => {
             const value = parseIntegerInput(event.currentTarget.value);
+
             if (value !== undefined) {
               onPollIntervalCommit(value);
             }
           }}
           onChange={(event) => {
             const value = event.currentTarget.valueAsNumber;
+
             if (Number.isFinite(value)) {
               onPollIntervalChange(value);
             }
@@ -268,7 +335,7 @@ function SkillsCuratorRunSection({
     <div className="flex flex-col gap-3 px-4 py-3">
       <p className="text-muted-foreground text-xs tabular-nums">
         {latest?.dryRun ? "Preview · " : null}
-        Last run {lastRunLabel}
+        Last clean-up: {lastRunLabel}
       </p>
       {latest ? (
         <p className="text-muted-foreground text-xs tabular-nums">
@@ -290,7 +357,7 @@ function SkillsCuratorRunSection({
           size="sm"
           variant="outline"
         >
-          Dry run
+          Preview changes
         </Button>
         <Button disabled={running} onClick={() => onRun(false)} size="sm">
           Run now
@@ -309,11 +376,11 @@ export function SkillsCuratorOrgCard() {
     latest,
     pollIntervalMinutes,
     running,
-    setBusy,
-    setLastRunAt,
-    setLatest,
-    setPollIntervalMinutes,
-    setRunning,
+    runRequestRef,
+    setBusyOrgId,
+    setPollIntervalState,
+    setRunState,
+    setRunningOrgId,
     updateOrg,
     user,
   } = useSkillsCuratorOrgCard();
@@ -331,12 +398,14 @@ export function SkillsCuratorOrgCard() {
       <div className="border-border border-b px-4 py-3">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="font-medium text-foreground text-sm">Skill curator</p>
+            <p className="font-medium text-foreground text-sm">
+              Auto clean-up of skills
+            </p>
           </div>
           <div className="flex shrink-0 items-center gap-2 pt-0.5">
             {busy ? <Spinner /> : null}
             <Switch
-              aria-label="Enable skill curator"
+              aria-label="Auto clean-up of skills"
               checked={enabled}
               disabled={busy}
               onCheckedChange={(checked) =>
@@ -346,7 +415,7 @@ export function SkillsCuratorOrgCard() {
                   {
                     skillsCuratorEnabled: checked,
                   },
-                  setBusy
+                  setBusyOrgId
                 )
               }
               size="sm"
@@ -356,11 +425,11 @@ export function SkillsCuratorOrgCard() {
       </div>
       <div className="border-border border-b px-4 py-3">
         <div className="flex items-center justify-between gap-4">
-          <p className="text-foreground text-sm">Consolidate</p>
+          <p className="text-foreground text-sm">Merge similar skills</p>
           <div className="flex shrink-0 items-center gap-2">
             {busy ? <Spinner /> : null}
             <Switch
-              aria-label="Enable skill consolidate"
+              aria-label="Merge similar skills"
               checked={consolidateEnabled}
               disabled={busy || !enabled}
               onCheckedChange={(checked) =>
@@ -370,7 +439,7 @@ export function SkillsCuratorOrgCard() {
                   {
                     skillsCuratorConsolidateEnabled: checked,
                   },
-                  setBusy
+                  setBusyOrgId
                 )
               }
               size="sm"
@@ -382,16 +451,23 @@ export function SkillsCuratorOrgCard() {
         archiveAfterDays={activeOrg.skillsCuratorArchiveAfterDays ?? 90}
         busy={busy}
         onUpdateFlag={(patch) =>
-          void updateOrgFlag(updateOrg, currentOrgId, patch, setBusy)
+          void updateOrgFlag(updateOrg, currentOrgId, patch, setBusyOrgId)
         }
         staleAfterDays={activeOrg.skillsCuratorStaleAfterDays ?? 30}
       />
       {user?.isPlatformAdmin === true ? (
         <SkillsCuratorPollIntervalField
           busy={busy}
-          onPollIntervalChange={setPollIntervalMinutes}
+          onPollIntervalChange={(value) =>
+            setPollIntervalState({ orgId: currentOrgId, value })
+          }
           onPollIntervalCommit={(value) =>
-            void updatePollInterval(value, setBusy, setPollIntervalMinutes)
+            void updatePollInterval(
+              value,
+              currentOrgId,
+              setBusyOrgId,
+              setPollIntervalState
+            )
           }
           pollIntervalMinutes={pollIntervalMinutes}
         />
@@ -401,15 +477,16 @@ export function SkillsCuratorOrgCard() {
           lastRunAt ?? activeOrg.skillsCuratorLastRunAt
         )}
         latest={latest}
-        onRun={(dryRun) =>
+        onRun={(dryRun) => {
+          const requestId = ++runRequestRef.current;
           void runSkillCurator(
             currentOrgId,
             dryRun,
-            setRunning,
-            setLatest,
-            setLastRunAt
-          )
-        }
+            () => runRequestRef.current === requestId,
+            setRunningOrgId,
+            setRunState
+          );
+        }}
         running={running}
       />
     </Card>

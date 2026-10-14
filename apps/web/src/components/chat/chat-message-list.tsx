@@ -19,6 +19,7 @@ import {
 } from "hugeicons-react";
 import {
   forwardRef,
+  type MouseEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -43,6 +44,7 @@ import { segmentAssistantTurn } from "@/components/chat/assistant-tool-group.sha
 import { ToolCredentialCard } from "@/components/chat/chat-add-capabilities-dialogs";
 import { ChatUsageBadge } from "@/components/chat/chat-usage-badge";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
+import { PluginDrafts } from "@/components/chat/PluginDraftCard";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import { useArtifactsExist } from "@/hooks/use-resource-mutations";
@@ -52,11 +54,6 @@ import {
   formatSessionTimestamp,
   isEditableUserMessage,
 } from "@/lib/chat-history";
-import {
-  followOutputBehavior,
-  listOverflowsViewport,
-  shouldAutoscrollOnHeightGrowth,
-} from "@/lib/chat-list-stickiness";
 import {
   groupMessagesIntoTurns,
   type IndexedMessage,
@@ -71,6 +68,36 @@ import {
 import { sumChatUsage } from "@/lib/chat-usage";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
 import { isPastedTextDocument } from "@/lib/pasted-text";
+import { listOverflowsViewport } from "./chat-message-list.shared";
+
+function followOutputBehavior(atBottom: boolean): false | "auto" {
+  return atBottom ? "auto" : false;
+}
+
+function shouldAutoscrollOnHeightGrowth(atBottom: boolean): boolean {
+  return atBottom;
+}
+
+/** Growth right after a button click is the user expanding something: let it grow down, don't re-pin. */
+const USER_TOGGLE_PIN_PAUSE_MS = 600;
+
+function useUserTogglePinPause() {
+  const userToggleAtRef = useRef(0);
+
+  const onClickCapture = useCallback((event: MouseEvent<HTMLElement>) => {
+    if (event.target instanceof Element && event.target.closest("button")) {
+      userToggleAtRef.current = performance.now();
+    }
+  }, []);
+
+  const isPinPaused = useCallback(
+    () =>
+      performance.now() - userToggleAtRef.current <= USER_TOGGLE_PIN_PAUSE_MS,
+    []
+  );
+
+  return { isPinPaused, onClickCapture };
+}
 
 /** Top/bottom inset as Virtuoso Header/Footer — never put padding on the scroller. */
 function VirtuosoEdgePad() {
@@ -136,6 +163,7 @@ interface ChatMessageListProps {
 
 export function ChatMessageList(props: ChatMessageListProps) {
   const sessionAnchor = props.sessionId ?? props.messages[0]?.id ?? "empty";
+
   return <ChatMessageListSession key={sessionAnchor} {...props} />;
 }
 
@@ -161,18 +189,37 @@ function ChatMessageListSession({
   contentClassName,
 }: ChatMessageListProps) {
   const turns = useMemo(() => groupMessagesIntoTurns(messages), [messages]);
+
+  // A plugin draft card marks "Try it" once its tool runs anywhere in the chat.
+  const usedPluginToolKey = [
+    ...new Set(
+      messages.flatMap((item) =>
+        item.tool?.startsWith("plugin_") ? [item.tool] : []
+      )
+    ),
+  ].join("\n");
+
+  const usedPluginTools = useMemo(
+    () => (usedPluginToolKey ? usedPluginToolKey.split("\n") : []),
+    [usedPluginToolKey]
+  );
+
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const scrollerRef = useRef<HTMLElement | null>(null);
   const isAtBottomRef = useRef(true);
   const stickIntentRef = useRef(true);
   const lastListHeightRef = useRef(0);
   const didInitialPinRef = useRef(false);
+  const userTogglePinPause = useUserTogglePinPause();
+  const { isPinPaused } = userTogglePinPause;
   const [isAtBottom, setIsAtBottom] = useState(true);
   const canPreviewCitations = useOptionalChatAttachmentPanel() !== null;
+
   const [citationPreview, setCitationPreview] = useState<{
     path: string;
     profileId: string;
   } | null>(null);
+
   const openCitationPreview = useCallback(
     (path: string) => {
       if (profileId) {
@@ -181,10 +228,12 @@ function ChatMessageListSession({
     },
     [profileId]
   );
+
   const closeCitationPreview = useCallback(() => setCitationPreview(null), []);
 
   const showAwaitingPlaceholder =
     streamActive && isAwaitingModelResponse(messages);
+
   const awaitingLabel = showAwaitingPlaceholder
     ? awaitingModelLabel(messages)
     : null;
@@ -192,6 +241,7 @@ function ChatMessageListSession({
   const pinLatest = useCallback((behavior: "auto" | "smooth") => {
     const scroller = scrollerRef.current;
     const listHeight = lastListHeightRef.current;
+
     // Per Virtuoso docs: omit alignToBottom for top packing. Never use
     // scrollToIndex({ align: "end" }) when content still fits the viewport —
     // that is what packs short threads to the bottom.
@@ -201,8 +251,10 @@ function ChatMessageListSession({
       if (scroller) {
         scroller.scrollTop = 0;
       }
+
       return;
     }
+
     virtuosoRef.current?.scrollToIndex({
       align: "end",
       behavior,
@@ -239,6 +291,7 @@ function ChatMessageListSession({
   // align-end semantics, so skip it while the list still fits the viewport.
   const handleFollowOutput = useCallback((_atBottom: boolean) => {
     const scroller = scrollerRef.current;
+
     if (
       !(
         scroller &&
@@ -247,6 +300,7 @@ function ChatMessageListSession({
     ) {
       return false;
     }
+
     return followOutputBehavior(stickIntentRef.current);
   }, []);
 
@@ -260,17 +314,19 @@ function ChatMessageListSession({
       if (!didInitialPinRef.current) {
         didInitialPinRef.current = true;
         pinLatest("auto");
+
         return;
       }
 
       if (
         height > previous &&
-        shouldAutoscrollOnHeightGrowth(stickIntentRef.current)
+        shouldAutoscrollOnHeightGrowth(stickIntentRef.current) &&
+        !isPinPaused()
       ) {
         pinLatest("auto");
       }
     },
-    [pinLatest]
+    [isPinPaused, pinLatest]
   );
 
   const renderTurn = useCallback(
@@ -319,6 +375,7 @@ function ChatMessageListSession({
             showUsage={showUsage}
             streamActive={streamActive}
             turnStartedAt={turnStartedAt}
+            usedPluginTools={usedPluginTools}
             workStreamActive={
               workStreamActive && turnIndex === turns.length - 1
             }
@@ -347,6 +404,7 @@ function ChatMessageListSession({
       turnStartedAt,
       workStreamActive,
       turns.length,
+      usedPluginTools,
     ]
   );
 
@@ -370,7 +428,10 @@ function ChatMessageListSession({
 
   return (
     <ConversationStickinessProvider value={stickiness}>
-      <Conversation className={cn("min-h-0 flex-1", className)}>
+      <Conversation
+        className={cn("min-h-0 flex-1", className)}
+        onClickCapture={userTogglePinPause.onClickCapture}
+      >
         <Virtuoso
           atBottomStateChange={handleAtBottomStateChange}
           atBottomThreshold={80}
@@ -422,6 +483,7 @@ function AssistantTurn({
   onBranchMessage,
   onOpenFileCitation,
   onRetryMessage,
+  usedPluginTools,
 }: {
   readOnly?: boolean;
   sessionId?: string;
@@ -440,6 +502,7 @@ function AssistantTurn({
   onBranchMessage?: (message: ChatListItem) => void;
   onOpenFileCitation?: (path: string) => void;
   onRetryMessage?: (message: ChatListItem) => void;
+  usedPluginTools: string[];
 }) {
   const turnMessages = messages.map(({ message }) => message);
   const segments = segmentAssistantTurn(turnMessages, workStreamActive);
@@ -454,13 +517,16 @@ function AssistantTurn({
   const liveArtifacts = artifacts.filter((_, index) => artifactExists[index]);
   // Wait for the full SSE reply (tools + final summary), not the brief gap after tool_end.
   const showArtifacts = turnComplete && liveArtifacts.length > 0;
+
   const showActions =
     !streamActive &&
     interactiveTurnComplete &&
     anchorMessage != null &&
     !anchorMessage.failed;
+
   const retryDisabled =
     actionsDisabled || branchingMessageId === anchorMessage?.id;
+
   const turnUsage = showUsage ? sumChatUsage(turnMessages) : undefined;
 
   return (
@@ -517,6 +583,11 @@ function AssistantTurn({
         complete={interactiveTurnComplete}
         messages={turnMessages}
       />
+      <PluginDrafts
+        complete={interactiveTurnComplete}
+        messages={turnMessages}
+        usedTools={usedPluginTools}
+      />
       {showActions ? (
         <AssistantMessageActions
           actionsDisabled={actionsDisabled}
@@ -542,17 +613,21 @@ function CreatedProfiles({
   if (!complete) {
     return null;
   }
+
   const profiles = messages.flatMap((message) => {
     if (message.tool !== "create_profile") {
       return [];
     }
 
     const profile = parseProfileCreatedResult(message.toolResult);
+
     return profile ? [profile] : [];
   });
+
   if (profiles.length === 0) {
     return null;
   }
+
   return (
     <div className="flex w-full flex-col gap-2">
       {profiles.map((profile) => (
@@ -588,6 +663,7 @@ function ChatMessageRow({
   onEditMessage?: (message: ChatListItem, text: string) => void;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
+
   const canEdit =
     Boolean(onEditMessage) && !disabled && isEditableUserMessage(message);
 
@@ -599,6 +675,7 @@ function ChatMessageRow({
       if (!trimmed || unchanged) {
         return;
       }
+
       setDraft(null);
       onEditMessage?.(message, trimmed);
     }
@@ -617,8 +694,10 @@ function ChatMessageRow({
               if (event.key === "Escape") {
                 event.preventDefault();
                 setDraft(null);
+
                 return;
               }
+
               if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
                 event.preventDefault();
                 submit();
@@ -717,7 +796,7 @@ function isBranchableAssistantMessage(message: ChatListItem): boolean {
     message.role === "assistant" &&
     !message.failed &&
     !message.streaming &&
-    typeof message.historyIndex === "number" &&
+    message.historyIndex != null &&
     Boolean(message.createdAt)
   );
 }
@@ -761,9 +840,11 @@ function AssistantMessageActions({
     try {
       await navigator.clipboard.writeText(content);
       setCopied(true);
+
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current);
       }
+
       copyTimeoutRef.current = setTimeout(() => {
         setCopied(false);
         copyTimeoutRef.current = null;
@@ -847,26 +928,26 @@ function AssistantMessageActions({
 function UserMessageContent({ message }: { message: ChatListItem }) {
   if (message.questionnaireAnswers?.length) {
     return (
-      <div className="rounded-2xl border border-border/70 bg-muted/40 px-4 py-3">
-        <p className="mb-2 font-medium text-muted-foreground text-sm">
-          Answers
-        </p>
-        <div className="space-y-3">
-          {message.questionnaireAnswers.map((entry) => (
-            <div
-              className="space-y-1"
-              key={`${entry.questionId}:${entry.prompt}`}
-            >
-              <p className="whitespace-pre-wrap text-foreground">
+      <ol className="-my-1 divide-y divide-border">
+        {message.questionnaireAnswers.map((entry, index) => (
+          <li
+            className="flex gap-3 py-2.5"
+            key={`${entry.questionId}:${entry.prompt}`}
+          >
+            <span className="w-4 shrink-0 text-13 text-muted-foreground tabular-nums">
+              {index + 1}
+            </span>
+            <div className="min-w-0 space-y-0.5">
+              <p className="whitespace-pre-wrap text-13 text-muted-foreground">
                 {entry.prompt}
               </p>
-              <p className="whitespace-pre-wrap text-muted-foreground text-sm">
+              <p className="whitespace-pre-wrap font-medium text-[15px] text-foreground leading-snug">
                 {entry.answer}
               </p>
             </div>
-          ))}
-        </div>
-      </div>
+          </li>
+        ))}
+      </ol>
     );
   }
 
@@ -874,6 +955,7 @@ function UserMessageContent({ message }: { message: ChatListItem }) {
     message.documents?.filter((document) =>
       isPastedTextDocument(document.filename, document.mediaType)
     ) ?? [];
+
   const otherDocuments =
     message.documents?.filter(
       (document) => !isPastedTextDocument(document.filename, document.mediaType)

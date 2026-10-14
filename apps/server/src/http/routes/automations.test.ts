@@ -15,8 +15,8 @@ import {
 import { AuthService } from "../../services/auth-service";
 import { AutomationService } from "../../services/automation-service";
 import { OrgService } from "../../services/org-service";
-import { createHonoApp } from "../app";
-import type { ServerOptions } from "../context";
+import { setupTestConfigDir } from "../../test-config-dir";
+import { createMinimalHonoApp } from "../test-app-helpers";
 import { seedOrgForUser } from "../test-org-helpers";
 import {
   type AppFetch,
@@ -24,12 +24,16 @@ import {
   setupFreshInstallSession,
 } from "../test-session-helpers";
 
+setupTestConfigDir("nakama-automation-routes-");
+
 const PROFILE_ID = "profile_default";
+
 const MEMBER_EMAIL = "member@example.com";
+
 const MEMBER_PASSWORD = "password123";
 
 interface RouteTestFixture {
-  app: ReturnType<typeof createHonoApp>;
+  app: ReturnType<typeof createMinimalHonoApp>["app"];
   authService: AuthService;
   automationService: AutomationService;
   databaseAdapter: DatabaseAdapter;
@@ -39,25 +43,21 @@ function createFixture(): RouteTestFixture {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const authService = new AuthService();
   const orgService = new OrgService(databaseAdapter, authService);
+
   const automationService = new AutomationService(databaseAdapter, {
     getUserTimezone: async () => "UTC",
   });
-  // Only the automation surface is exercised; the remaining collaborators are
-  // unreachable stubs, so they are cast once instead of fully constructed.
-  const options = {
+
+  const { app } = createMinimalHonoApp({
     agent: { providerConfigured: true, runAutomation: async () => ({}) },
     authService,
     automationService,
     databaseAdapter,
-    mcpService: {},
     orgService,
-    systemStatus: {},
-    webDistDir: null,
-    workerManager: {},
-  } as unknown as ServerOptions;
+  });
 
   return {
-    app: createHonoApp(options),
+    app,
     authService,
     automationService,
     databaseAdapter,
@@ -86,7 +86,9 @@ async function seedProfile(
 async function loginMember(fixture: RouteTestFixture) {
   // Hono's `fetch` is structurally narrower than the DOM `fetch` the shared
   // session helper declares; the runtime shape is identical.
-  const app = fixture.app as unknown as AppFetch;
+  // SAFETY: This test controls the fixture shape at this boundary.
+  const app = fixture.app as AppFetch;
+
   const install = await setupFreshInstallSession(
     app,
     fixture.databaseAdapter,
@@ -144,7 +146,7 @@ async function writeChannelConfigs(orgId: string): Promise<string> {
   return configDir;
 }
 
-function automationBody(delivery: unknown): string {
+function automationBody<T>(delivery: T): string {
   return JSON.stringify({
     delivery,
     description: "Report",
@@ -181,6 +183,7 @@ describe("automation destination authorization over HTTP", () => {
         );
 
         expect(response.status).toBe(403);
+        // SAFETY: This test controls the fixture shape at this boundary.
         expect(((await response.json()) as { error: string }).error).toContain(
           "organization admin"
         );
@@ -205,6 +208,7 @@ describe("automation destination authorization over HTTP", () => {
       } else {
         process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
       }
+
       await rm(configDir, { force: true, recursive: true });
     }
   });
@@ -251,6 +255,7 @@ describe("automation destination authorization over HTTP", () => {
       } else {
         process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
       }
+
       await rm(configDir, { force: true, recursive: true });
     }
   });

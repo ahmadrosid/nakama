@@ -40,6 +40,7 @@ export function matchSkillsForMessage(
 
 export function extractExplicitSkillName(message: string): string | null {
   const match = message.match(EXPLICIT_SKILL_PATTERN);
+
   return match?.[1]?.toLowerCase() ?? null;
 }
 
@@ -106,6 +107,7 @@ function containsWord(haystack: string, word: string): boolean {
   const pattern = new RegExp(
     `(?:^|[^a-z0-9-])${escapeRegExp(word)}(?:[^a-z0-9-]|$)`
   );
+
   return pattern.test(haystack);
 }
 

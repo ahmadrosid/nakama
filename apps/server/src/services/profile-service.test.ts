@@ -11,6 +11,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { getProfileSoulDir, writeArtifactShareSnapshot } from "@nakama/core";
+import type { UpdateProfileRequest } from "@nakama/core/contract";
 import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
@@ -60,7 +61,7 @@ describe("profile service createTool", () => {
       path.join(os.tmpdir(), "nakama-profile-tool-")
     );
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
-    const toolsDir = path.join(tempConfigDir, "tools");
+    const toolsDir = path.join(tempConfigDir, "orgs", "org_test", "tools");
     await mkdir(toolsDir, { recursive: true });
 
     await writeFile(
@@ -73,11 +74,15 @@ describe("profile service createTool", () => {
     );
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
-    const tool = await service.createTool({
-      description: "Echo input",
-      handlerConfig: { modulePath: "echo.js" },
-      name: "echo",
-    });
+
+    const tool = await service.createTool(
+      {
+        description: "Echo input",
+        handlerConfig: { modulePath: "echo.js" },
+        name: "echo",
+      },
+      "org_test"
+    );
 
     expect(tool.handlerType).toBe("javascript");
   });
@@ -87,18 +92,22 @@ describe("profile service createTool", () => {
       path.join(os.tmpdir(), "nakama-profile-tool-")
     );
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
-    const toolsDir = path.join(tempConfigDir, "tools");
+    const toolsDir = path.join(tempConfigDir, "orgs", "org_test", "tools");
     await mkdir(toolsDir, { recursive: true });
 
     await writeFile(path.join(toolsDir, "echo.py"), PYTHON_ECHO_TOOL);
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
-    const tool = await service.createTool({
-      description: "Echo input",
-      handlerConfig: { modulePath: "echo.py" },
-      handlerType: "python",
-      name: "echo_py",
-    });
+
+    const tool = await service.createTool(
+      {
+        description: "Echo input",
+        handlerConfig: { modulePath: "echo.py" },
+        handlerType: "python",
+        name: "echo_py",
+      },
+      "org_test"
+    );
 
     expect(tool.handlerType).toBe("python");
   });
@@ -108,7 +117,7 @@ describe("profile service createTool", () => {
       path.join(os.tmpdir(), "nakama-profile-tool-")
     );
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
-    const toolsDir = path.join(tempConfigDir, "tools");
+    const toolsDir = path.join(tempConfigDir, "orgs", "org_test", "tools");
     await mkdir(toolsDir, { recursive: true });
 
     await writeFile(path.join(toolsDir, "echo.py"), PYTHON_ECHO_TOOL);
@@ -118,17 +127,22 @@ describe("profile service createTool", () => {
       required: ["message"],
       type: "object",
     };
+
     const service = new ProfileService(createInMemoryDatabaseAdapter());
-    const tool = await service.createTool({
-      description: "Echo input",
-      handlerConfig: {
-        modulePath: "echo.py",
-        parameters,
-        requiresApiKey: true,
+
+    const tool = await service.createTool(
+      {
+        description: "Echo input",
+        handlerConfig: {
+          modulePath: "echo.py",
+          parameters,
+          requiresApiKey: true,
+        },
+        handlerType: "python",
+        name: "echo_py",
       },
-      handlerType: "python",
-      name: "echo_py",
-    });
+      "org_test"
+    );
 
     expect(tool.handlerConfig).toEqual({
       modulePath: "echo.py",
@@ -151,18 +165,22 @@ describe("profile service createTool", () => {
       path.join(os.tmpdir(), "nakama-profile-tool-")
     );
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
-    const toolsDir = path.join(tempConfigDir, "tools");
+    const toolsDir = path.join(tempConfigDir, "orgs", "org_test", "tools");
     await mkdir(toolsDir, { recursive: true });
 
     await writeFile(path.join(toolsDir, "echo.py"), PYTHON_ECHO_TOOL);
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
-    const tool = await service.createTool({
-      description: "Echo input",
-      handlerConfig: { modulePath: "echo.py" },
-      handlerType: "python",
-      name: "echo_py",
-    });
+
+    const tool = await service.createTool(
+      {
+        description: "Echo input",
+        handlerConfig: { modulePath: "echo.py" },
+        handlerType: "python",
+        name: "echo_py",
+      },
+      "org_test"
+    );
 
     expect(tool.handlerConfig).toEqual({ modulePath: "echo.py" });
     expect(tool.parameters).toEqual({
@@ -176,12 +194,15 @@ describe("profile service createTool", () => {
 
     for (const parameters of [["message"], "message", null]) {
       await expect(
-        service.createTool({
-          description: "Bad params",
-          handlerConfig: { modulePath: "echo.py", parameters },
-          handlerType: "python",
-          name: "bad_params",
-        })
+        service.createTool(
+          {
+            description: "Bad params",
+            handlerConfig: { modulePath: "echo.py", parameters },
+            handlerType: "python",
+            name: "bad_params",
+          },
+          "org_test"
+        )
       ).rejects.toThrow();
     }
   });
@@ -190,12 +211,15 @@ describe("profile service createTool", () => {
     const service = new ProfileService(createInMemoryDatabaseAdapter());
 
     await expect(
-      service.createTool({
-        description: "Bad tool",
-        handlerConfig: { modulePath: "bad-tool.js" },
-        handlerType: "custom",
-        name: "bad-tool",
-      })
+      service.createTool(
+        {
+          description: "Bad tool",
+          handlerConfig: { modulePath: "bad-tool.js" },
+          handlerType: "custom",
+          name: "bad-tool",
+        },
+        "org_test"
+      )
     ).rejects.toThrow(/javascript or python tools can be created/i);
   });
 });
@@ -262,6 +286,7 @@ describe("profile service createProfile", () => {
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
     const created = await service.createProfile(ORG_ID, { name: "Soul Bot" });
+
     const soulDir = path.join(
       tempConfigDir,
       "orgs",
@@ -269,6 +294,7 @@ describe("profile service createProfile", () => {
       "profiles",
       created.profile.id
     );
+
     const soulContent = await readFile(path.join(soulDir, "SOUL.md"), "utf8");
 
     expect(soulContent.trim().length).toBeGreaterThan(0);
@@ -300,6 +326,23 @@ describe("profile service createProfile", () => {
       "update_profile_memory"
     );
     expect(tools.map((tool) => tool.name)).not.toContain("web_search");
+    const listed = await service.listProfileTools(ORG_ID, created.profile.id);
+    expect(listed.tools).toHaveLength(tools.length);
+
+    for (const tool of tools) {
+      expect(listed.tools).toContainEqual(
+        expect.objectContaining({
+          createdAt: tool.createdAt,
+          handlerConfig: tool.handlerConfig,
+          id: tool.id,
+          updatedAt: tool.updatedAt,
+        })
+      );
+    }
+
+    await expect(
+      service.listProfileTools("other_org", created.profile.id)
+    ).rejects.toThrow();
   });
 
   test("assigns default bundled skills when they exist", async () => {
@@ -340,9 +383,11 @@ describe("profile service createProfile", () => {
     const db = createInMemoryDatabaseAdapter();
 
     const service = new ProfileService(db);
+
     const created = await service.createProfile(ORG_ID, {
       name: "No Tools Bot",
     });
+
     const tools = await db.listToolsForProfile(created.profile.id);
 
     expect(tools).toEqual([]);
@@ -355,6 +400,7 @@ describe("profile service createProfile", () => {
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
+
     const created = await service.createProfile(ORG_ID, {
       name: "Support Bot",
       soulFiles: {
@@ -363,6 +409,7 @@ describe("profile service createProfile", () => {
         "STYLE.md": "# Style\n\nClear and kind.",
       },
     });
+
     const soulDir = path.join(
       tempConfigDir,
       "orgs",
@@ -396,6 +443,7 @@ describe("profile service createProfile", () => {
     await expect(
       service.createProfile(ORG_ID, {
         name: "Bad Soul Bot",
+        // SAFETY: The test fixture matches the contract used by this test.
         soulFiles: {
           "../SOUL.md": "# Bad",
         } as never,
@@ -432,6 +480,7 @@ describe("profile service createProfile", () => {
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
+
     const created = await service.createProfile(ORG_ID, {
       name: "Research Assistant",
     });
@@ -446,9 +495,11 @@ describe("profile service createProfile", () => {
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
+
     const first = await service.createProfile("org_first", {
       name: "Penulis",
     });
+
     const second = await service.createProfile("org_second", {
       name: "Penulis",
     });
@@ -467,6 +518,7 @@ describe("profile service createProfile", () => {
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
+
     const created = await service.createProfile(ORG_ID, {
       id: "research-bot",
       name: "Research Bot",
@@ -579,6 +631,7 @@ describe("profile service updateProfile", () => {
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
+
     const created = await service.createProfile(ORG_ID, {
       name: "Support Bot",
       soulFiles: {
@@ -587,6 +640,7 @@ describe("profile service updateProfile", () => {
         "STYLE.md": "# Style\n\nClear and kind.",
       },
     });
+
     const soulDir = path.join(
       tempConfigDir,
       "orgs",
@@ -621,6 +675,7 @@ describe("profile service assignSkill", () => {
   afterEach(async () => {
     process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
     process.env.PATH = originalPath;
+
     if (originalDisableFixPath === undefined) {
       delete process.env.NAKAMA_DISABLE_FIX_PATH;
     } else {
@@ -681,6 +736,7 @@ describe("profile service assignSkill", () => {
     const service = new ProfileService(db);
     const created = await service.createProfile(ORG_ID, { name: "Worker Bot" });
     const now = new Date().toISOString();
+
     for (const [id, orgId] of [
       ["other-skill", "other-org"],
       ["shared-skill", null],
@@ -704,10 +760,12 @@ describe("profile service assignSkill", () => {
       service.assignSkill(ORG_ID, created.profile.id, {
         skillId: "other-skill",
       })
-    ).rejects.toThrow("Skill not found.");
+    ).rejects.toMatchObject({ status: 404 });
+
     const updated = await service.assignSkill(ORG_ID, created.profile.id, {
       skillId: "shared-skill",
     });
+
     expect(updated.profile.skills.map((skill) => skill.id)).toEqual([
       "shared-skill",
     ]);
@@ -757,6 +815,7 @@ describe("profile service knowledge base", () => {
       profileId,
       uploaded.document.id
     );
+
     expect(deleted.deleted).toBe(true);
 
     const afterDelete = await service.listKnowledgeBase(ORG_ID, profileId);
@@ -770,6 +829,7 @@ describe("profile service knowledge base", () => {
     const service = new ProfileService(createInMemoryDatabaseAdapter());
     const created = await service.createProfile(ORG_ID, { name: "KB Bot" });
     const profileId = created.profile.id;
+
     const attachment = {
       data: Buffer.from("project fact", "utf8").toString("base64"),
       filename: "notes.txt",
@@ -792,6 +852,7 @@ describe("profile service knowledge base", () => {
       attachment,
       "replace"
     );
+
     expect(replaced.outcome).toBe("replaced");
     expect(replaced.document.id).not.toBe(first.document.id);
 
@@ -823,6 +884,7 @@ describe("profile service knowledge base", () => {
       uploaded.document.id,
       { render: "text" }
     );
+
     expect(preview.contentType).toBe("text/plain");
     expect(preview.bytes.toString("utf8")).toBe("project fact");
 
@@ -831,6 +893,7 @@ describe("profile service knowledge base", () => {
       profileId,
       uploaded.document.id
     );
+
     expect(download.bytes.toString("utf8")).toBe("project fact");
   });
 
@@ -874,11 +937,13 @@ describe("profile service cloneProfile", () => {
     const db = createInMemoryDatabaseAdapter();
     await ensureBuiltinToolDefinitions(db);
     const service = new ProfileService(db);
+
     const source = await service.createProfile(ORG_ID, {
       model: "anthropic:claude-sonnet-4-6",
       name: "Research Bot",
       systemPrompt: "You research things.",
     });
+
     return { db, service, sourceId: source.profile.id };
   }
 
@@ -996,6 +1061,7 @@ describe("profile service cloneProfile", () => {
     "clones get a random id even when a case-similar id is taken on Windows",
     async () => {
       const { service, sourceId } = await setup();
+
       const taken = await service.createProfile(ORG_ID, {
         id: "Research-Bot-Copy",
         name: "Taken",
@@ -1012,10 +1078,12 @@ describe("profile service cloneProfile", () => {
 
   test("refuses to clone Super Bot and writes nothing", async () => {
     const { db, service } = await setup();
+
     const superBot = await service.createProfile(ORG_ID, {
       isSuper: true,
       name: "Super Bot",
     });
+
     const countBefore = (await db.listProfilesForOrg(ORG_ID)).length;
 
     await expect(
@@ -1103,6 +1171,7 @@ describe("profile service cloneProfile", () => {
     const retry = await service.cloneProfile(ORG_ID, sourceId, {
       id: destId,
     });
+
     expect(retry.profile.id).toBe(destId);
     expect(retry.profile.tools.length).toBeGreaterThan(0);
   });
@@ -1130,6 +1199,7 @@ describe("profile service deleteProfile", () => {
     );
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
     const db = createInMemoryDatabaseAdapter();
+
     return { db, service: new ProfileService(db) };
   }
 
@@ -1177,12 +1247,14 @@ describe("profile service deleteProfile", () => {
     const { db, service } = await setup();
     const removed = await service.createProfile(ORG_ID, { name: "Removed" });
     const shareId = "share_delete_test";
+
     const storagePath = await writeArtifactShareSnapshot({
       bytes: Buffer.from("shared private data"),
       filename: "report.md",
       orgId: ORG_ID,
       shareId,
     });
+
     await db.createArtifactShare({
       createdAt: new Date().toISOString(),
       createdByUserId: "user_test",
@@ -1241,6 +1313,7 @@ describe("profile service plugin tool org scope", () => {
 
   afterEach(async () => {
     process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+
     if (tempConfigDir) {
       await rm(tempConfigDir, { force: true, recursive: true });
       tempConfigDir = "";
@@ -1314,6 +1387,268 @@ describe("profile service plugin tool org scope", () => {
   });
 });
 
+describe("shared profile configuration", () => {
+  setupTestConfigDir("profile-shared-config-");
+
+  async function setup() {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new ProfileService(db);
+    const now = new Date().toISOString();
+
+    for (const id of ["parent", "team", "other"]) {
+      await db.upsertOrganization({
+        createdAt: now,
+        id,
+        name: id,
+        parentOrgId: id === "team" ? "parent" : null,
+        slug: id,
+        updatedAt: now,
+      });
+    }
+
+    const source = await service.createProfile("parent", {
+      id: "template",
+      name: "Template",
+      systemPrompt: "Published instructions",
+    });
+
+    const publication = await db.publishOrgSharedResource({
+      createdAt: now,
+      id: "publication",
+      orgId: "parent",
+      resourceId: source.profile.id,
+      resourceKind: "agent",
+      updatedAt: now,
+    });
+
+    const profile = await db.createSharedAgentInstance(
+      "team",
+      publication.id,
+      "shared_instance",
+      now
+    );
+
+    const teamDir = getProfileSoulDir("team", profile.id);
+    await mkdir(teamDir, { recursive: true });
+
+    for (const file of [
+      "SOUL.md",
+      "STYLE.md",
+      "INSTRUCTIONS.md",
+      "MEMORY.md",
+      "USER.md",
+    ]) {
+      await writeFile(path.join(teamDir, file), `Team ${file}`);
+    }
+
+    return { db, profile, publication, service, source, teamDir };
+  }
+
+  test("template field changes fail before records, files, or audit history change", async () => {
+    const { db, profile, service, teamDir } = await setup();
+    const stored = await db.getProfile(profile.id);
+
+    const requests: UpdateProfileRequest[] = [
+      { name: "Changed" },
+      { model: "changed-provider::model" },
+      { systemPrompt: "Changed instructions" },
+      { acpAgent: { args: [], command: "changed" } },
+      { acpAgent: null },
+      { automationsEnabled: false },
+      { skillsCuratorConsolidateEnabled: true },
+      { skillsPostTurnReview: true },
+      { skillsWriteApproval: false },
+      { soulFiles: { "SOUL.md": "Changed soul" } },
+      { soulFiles: { "STYLE.md": "Changed style" } },
+      { soulFiles: { "INSTRUCTIONS.md": "Changed instructions" } },
+      {
+        soulFiles: {
+          "MEMORY.md": "Changed memory",
+          "STYLE.md": "Changed style",
+        },
+      },
+      { name: "Changed", soulFiles: { "MEMORY.md": "Changed memory" } },
+    ];
+
+    for (const request of requests) {
+      await expect(
+        service.updateProfile("team", profile.id, request, {
+          actorUserId: "actor",
+          source: "dashboard",
+        })
+      ).rejects.toMatchObject({ status: 403 });
+    }
+
+    expect(await db.getProfile(profile.id)).toEqual(stored);
+    expect(await db.listProfileChangeEvents("team", profile.id)).toEqual([]);
+
+    for (const file of [
+      "SOUL.md",
+      "STYLE.md",
+      "INSTRUCTIONS.md",
+      "MEMORY.md",
+      "USER.md",
+    ]) {
+      expect(await readFile(path.join(teamDir, file), "utf8")).toBe(
+        `Team ${file}`
+      );
+    }
+
+    await db.deleteOrgSharedResource("parent", "publication");
+    await expect(
+      service.updateProfile("team", profile.id, { name: "Local copy" })
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      service.updateProfile("other", profile.id, { name: "Foreign" })
+    ).rejects.toMatchObject({ status: 404 });
+    expect(await db.getProfile(profile.id)).toEqual(stored);
+  });
+
+  test("shared assignments, cloning, transfer, and avatar changes are read-only", async () => {
+    const { db, profile, service, teamDir } = await setup();
+    const now = new Date().toISOString();
+    await db.upsertTool({
+      createdAt: now,
+      description: "Test",
+      handlerConfig: {},
+      handlerType: "bash",
+      id: "tool_local",
+      name: "local",
+      orgId: "team",
+      updatedAt: now,
+    });
+    await db.upsertSkill({
+      createdAt: now,
+      createdBy: "human",
+      description: "Test",
+      disableModelInvocation: false,
+      enabled: true,
+      hasTool: false,
+      id: "skill_local",
+      name: "local",
+      orgId: "team",
+      sourcePath: path.join(teamDir, "skills", "local"),
+      updatedAt: now,
+    });
+    await db.upsertMcpServer({
+      cachedTools: [],
+      config: { command: "echo" },
+      createdAt: now,
+      enabled: true,
+      id: "server",
+      lastError: null,
+      name: "Echo",
+      status: "disconnected",
+      transport: "stdio",
+      updatedAt: now,
+    });
+    await db.assignToolToProfile(profile.id, "tool_local");
+    await db.assignSkillToProfile(profile.id, "skill_local");
+    await db.assignMcpServerToProfile(profile.id, "server");
+    const before = await db.getProfile(profile.id);
+
+    const actions = [
+      () => service.assignTool("team", profile.id, { toolId: "tool_local" }),
+      () => service.unassignTool("team", profile.id, "tool_local"),
+      () => service.assignSkill("team", profile.id, { skillId: "skill_local" }),
+      () => service.unassignSkill("team", profile.id, "skill_local"),
+      () => service.assignMcpServer("team", profile.id, { serverId: "server" }),
+      () => service.unassignMcpServer("team", profile.id, "server"),
+      () => service.cloneProfile("team", profile.id, { id: "copy" }),
+      () =>
+        service.moveProfile("team", profile.id, { organizationId: "other" }),
+      () =>
+        service.uploadProfileAvatar("team", profile.id, {
+          data: tinyPngBase64,
+          mediaType: "image/png",
+        }),
+      () => service.deleteProfileAvatar("team", profile.id),
+    ];
+
+    for (const action of actions) {
+      await expect(action()).rejects.toMatchObject({ status: 403 });
+    }
+
+    expect(await db.getProfile(profile.id)).toEqual(before);
+    expect(
+      (await db.listToolsForProfile(profile.id)).map((tool) => tool.id)
+    ).toEqual(["tool_local"]);
+    expect(
+      (await db.listSkillsForProfile(profile.id)).map((skill) => skill.id)
+    ).toEqual(["skill_local"]);
+    expect(
+      (await db.listMcpServersForProfile(profile.id)).map((server) => server.id)
+    ).toEqual(["server"]);
+    expect(await db.getProfile("copy")).toBeNull();
+    expect(await db.getProfileForOrg(profile.id, "other")).toBeNull();
+    expect(await db.listProfileChangeEvents("team", profile.id)).toEqual([]);
+    expect(await readFile(path.join(teamDir, "MEMORY.md"), "utf8")).toBe(
+      "Team MEMORY.md"
+    );
+    expect((await service.getProfile("team", profile.id)).profile.id).toBe(
+      profile.id
+    );
+  });
+
+  test("team memory remains writable and shared instances cannot become the default profile", async () => {
+    const { db, profile, service, source, teamDir } = await setup();
+    const sourceDir = getProfileSoulDir("parent", source.profile.id);
+
+    const parentMemory = await readFile(
+      path.join(sourceDir, "MEMORY.md"),
+      "utf8"
+    );
+
+    const updated = await service.updateProfile(
+      "team",
+      profile.id,
+      { soulFiles: { "MEMORY.md": "New private memory" } },
+      { actorUserId: "actor", source: "dashboard" }
+    );
+
+    expect(updated.profile.name).toBe("Template");
+    expect(updated.profile.systemPrompt).toBe("Published instructions");
+    expect(await readFile(path.join(teamDir, "MEMORY.md"), "utf8")).toBe(
+      "New private memory"
+    );
+    expect(await readFile(path.join(sourceDir, "MEMORY.md"), "utf8")).toBe(
+      parentMemory
+    );
+    expect(
+      (await db.listProfileChangeEvents("team", profile.id)).map(
+        (event) => event.field
+      )
+    ).toEqual(["soul.memory"]);
+
+    const local = await service.createProfile("team", {
+      id: "default",
+      name: "Default",
+    });
+
+    await db.upsertProfile({
+      ...(await db.getProfile(local.profile.id))!,
+      isDefault: true,
+    });
+    await service.createProfile("team", {
+      id: "super",
+      isSuper: true,
+      name: "Super",
+    });
+    await expect(service.deleteProfile("team", "default")).rejects.toThrow();
+    expect((await db.getProfile("default"))?.isDefault).toBe(true);
+    expect((await db.getProfile(profile.id))?.isDefault).toBe(false);
+    await service.createProfile("team", { id: "local", name: "Local" });
+    await service.updateProfile("team", "local", { name: "Changed local" });
+    await service.deleteProfile("team", "default");
+    expect(await db.getProfile("default")).toBeNull();
+    expect((await db.getProfile("local"))?.isDefault).toBe(true);
+    expect((await db.getProfile(profile.id))?.isDefault).toBe(false);
+    expect(
+      (await db.getSharedAgentInstance("team", profile.id))?.sourceProfileId
+    ).toBe(source.profile.id);
+  });
+});
+
 describe("profile organization transfer", () => {
   setupTestConfigDir("profile-transfer-");
   test("moves workspace and sessions without changing profile identity", async () => {
@@ -1321,6 +1656,7 @@ describe("profile organization transfer", () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new ProfileService(db);
     const now = new Date().toISOString();
+
     for (const id of ["source", "destination"]) {
       await db.upsertOrganization({
         createdAt: now,
@@ -1330,21 +1666,29 @@ describe("profile organization transfer", () => {
         updatedAt: now,
       });
     }
+
     const { profile } = await service.createProfile("source", {
       name: "Moving bot",
     });
+
     const sourceDir = path.join(configDir, "orgs/source/profiles", profile.id);
+
     const targetDir = path.join(
       configDir,
       "orgs/destination/profiles",
       profile.id
     );
+
     await writeFile(path.join(sourceDir, "MEMORY.md"), "Remember me");
     await db.upsertSession({
+      agentQuestionnaire: null,
+      agentTodos: [],
       channel: "web",
       createdAt: now,
       id: "moving-session",
+      model: null,
       profileId: profile.id,
+      title: null,
     });
     await service.moveProfile("source", profile.id, {
       organizationId: "destination",
@@ -1367,10 +1711,12 @@ describe("profile organization transfer", () => {
     const databasePath = path.join(configDir, "transfer.sqlite");
     const database = await createSqliteDatabase(`file:${databasePath}`);
     const raw = new Database(databasePath);
+
     try {
       const db = database.adapter;
       const service = new ProfileService(db);
       const now = new Date().toISOString();
+
       for (const id of ["source", "destination"]) {
         await db.upsertOrganization({
           createdAt: now,
@@ -1380,30 +1726,40 @@ describe("profile organization transfer", () => {
           updatedAt: now,
         });
       }
+
       const { profile } = await service.createProfile("source", {
         name: "Transfer data",
       });
+
       const { profile: successor } = await service.createProfile("source", {
         name: "Successor",
       });
+
       const stored = (await db.getProfile(profile.id))!;
       await db.upsertProfile({ ...stored, isDefault: true });
+
       const sourceDir = path.join(
         configDir,
         "orgs/source/profiles",
         profile.id
       );
+
       const targetDir = path.join(
         configDir,
         "orgs/destination/profiles",
         profile.id
       );
+
       await writeFile(path.join(sourceDir, "MEMORY.md"), "Keep my memory");
       await db.upsertSession({
+        agentQuestionnaire: null,
+        agentTodos: [],
         channel: "web",
         createdAt: now,
         id: "transfer-session",
+        model: null,
         profileId: profile.id,
+        title: null,
       });
       const archive = sessionHistoryArchivePath("source", "transfer-session");
       await mkdir(path.dirname(archive), { recursive: true });
@@ -1527,6 +1883,7 @@ describe("profile organization transfer", () => {
       });
       expect((await db.getProfile(successor.id))?.isDefault).toBe(true);
       expect((await db.getProfile(profile.id))?.isDefault).toBe(false);
+
       for (const table of [
         "sessions",
         "attachments",
@@ -1539,6 +1896,7 @@ describe("profile organization transfer", () => {
             .get(profile.id)
         ).toEqual({ org_id: "destination" });
       }
+
       expect((await db.getAutomation("transfer-auto"))?.enabled).toBe(false);
       expect((await db.getWorkflow("transfer-flow"))?.enabled).toBe(false);
       expect(await db.listProfileComposioToolkits(profile.id)).toHaveLength(0);

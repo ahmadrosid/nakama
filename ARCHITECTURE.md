@@ -17,6 +17,7 @@ flowchart TB
     tg["apps/platform/telegram"]
     wa["apps/platform/whatsapp"]
     dc["apps/platform/discord"]
+    sl["apps/platform/slack"]
   end
 
   subgraph sdk ["@nakama/client"]
@@ -55,6 +56,7 @@ flowchart TB
     telegram["telegram worker"]
     whatsapp["whatsapp worker"]
     discord["discord worker"]
+    slack["slack worker"]
     pluginworkers["plugin workers"]
   end
 
@@ -97,13 +99,13 @@ nakama/
 │   ├── server/                 # HTTP API, auth, org, agent runtime
 │   ├── web/                    # Dashboard
 │   ├── cli/                    # Terminal client
-│   └── platform/{automation,telegram,whatsapp,discord}/
+│   └── platform/{automation,telegram,whatsapp,discord,slack}/
 ├── packages/
 │   ├── agent/                  # Prompt assembly, tool loop, chat session
 │   ├── core/                   # Contracts, soul, config, builtin tools
 │   ├── db/                     # SQLite schema, adapters, migrations
 │   ├── client/                 # Shared HTTP/SSE client
-│   ├── plugins/                # Bundled plugins, including workflows
+│   ├── plugins/                # Bundled plugins, including workflows, Supermemory, and Google Meet
 │   ├── telegram-manager/      # Telegram manager client and store
 │   └── ui/                    # Shared UI components
 └── docs/website/
@@ -118,7 +120,7 @@ nakama/
 | `packages/agent` | This package owns prompts, the tool loop, compaction, and `AgentChatSession`. |
 | `packages/core` | This package owns contracts, soul compose, builtins, channel helpers, and config. |
 | `packages/db` | This package owns the schema and adapters for persisted entities. |
-| `packages/plugins` | Bundled plugins add capabilities such as workflows. `PluginService` manages releases and org installations. |
+| `packages/plugins` | Bundled plugins add capabilities such as workflows, Supermemory, and Google Meet. `PluginService` manages releases and org installations. |
 
 ## HTTP
 
@@ -190,7 +192,7 @@ Tool definitions are shared; `profile_tools` controls which custom tools a profi
 The server starts workers with PM2 through [`worker-manager-service.ts`](./apps/server/src/services/worker-manager-service.ts).
 
 - `apps/platform/automation` does scheduled work and skill-curator ticks.
-- `apps/platform/telegram`, `whatsapp`, and `discord` are channel bridges.
+- `apps/platform/telegram`, `whatsapp`, `discord`, and `slack` are channel bridges.
 - Installed plugins can contribute their own workers.
 
 The database stores automations in `automations` and `automation_runs`.
@@ -223,13 +225,13 @@ The internal `sessions.app_user_id` column marks retired sessions from the remov
 
 | Area | Tables |
 |---|---|
-| Tenant / auth | `organizations`, `users`, `org_members`, `org_invites`, `browser_sessions`, `channel_org_mappings`, `password_reset_tokens` |
+| Tenant / auth | `organizations`, `users`, `org_members`, `org_invites`, `browser_sessions`, `channel_org_mappings`, `password_reset_tokens`, `user_mfa_backup_codes`, `user_passkeys`, `user_passkey_challenges` |
 | Agent config | `profiles`, `tools`, `profile_tools`, `skills`, `profile_skills`, `profile_skill_usage`, `mcp_servers`, `profile_mcp_servers` |
 | Runtime | `sessions`, `session_messages`, `attachments`, `artifact_shares` |
-| Execution | `automations`, `automation_runs`, `automation_run_read_state`, `workflows`, `workflow_runs`, `workflow_run_steps` |
+| Execution | `automations`, `automation_runs`, `automation_run_read_state`, `automation_run_steps`, `workflows`, `workflow_runs`, `workflow_run_steps` |
 | Approvals | `org_memory_proposals`, `skill_proposals`, `skill_suggestions` |
 | Composio | `composio_toolkits`, `profile_composio_toolkits`, `composio_user_connections` |
-| Notifications | `notification_destinations` |
+| Notifications | `notification_destinations`, `notification_webhook_deliveries` |
 | Plugins | `plugin_releases`, `org_plugins` |
 | Audit / files | `audit_events`, `profile_change_events`, `file_pins` |
 | Analytics / config | `llm_usage_stats`, `llm_usage_model_stats`, `workspace_settings` |

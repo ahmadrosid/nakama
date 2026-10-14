@@ -21,7 +21,7 @@ const cases = [
     history: [
       { content: "Which file did you just create?", role: "user" },
       { content: "I created artifacts/report.csv.", role: "assistant" },
-    ] as ChatMessage[],
+    ] satisfies ChatMessage[],
     message: "Send that again",
     name: "resend",
     send: true,
@@ -51,6 +51,7 @@ const cases = [
 for (const scenario of cases) {
   test(`WhatsApp agent artifact decision: ${scenario.name}`, async () => {
     const config = await loadUserConfig();
+
     const provider = createOpenAIProvider({
       apiKey:
         config?.providers.find(
@@ -61,11 +62,15 @@ for (const scenario of cases) {
       // Match the recorded Responses API model regardless of local catalogs.
       model: "gpt-5.6-luna",
     });
+
     const previous = process.env.NAKAMA_CONFIG_DIR;
+
     const home = await mkdtemp(
       path.join(tmpdir(), "nakama-whatsapp-cassette-")
     );
+
     process.env.NAKAMA_CONFIG_DIR = home;
+
     try {
       const orgId = "org_test";
       const profileId = "profile_test";
@@ -79,6 +84,7 @@ for (const scenario of cases) {
         path.join(artifactsDir, "other-report.csv"),
         "example,value\nexample,20"
       );
+
       const session = createAgentChatSession(
         { provider },
         {
@@ -99,6 +105,7 @@ for (const scenario of cases) {
           ],
         }
       );
+
       await withMswCassette(
         `whatsapp-artifact-${scenario.name}`,
         () => session.send(scenario.message),
@@ -107,10 +114,13 @@ for (const scenario of cases) {
         }
       );
       const history = session.getHistory();
+
       const results = history.filter(
         (item) => item.role === "tool" && item.name === "send_whatsapp_artifact"
       );
+
       expect(results.length).toBe(scenario.send ? 1 : 0);
+
       if (scenario.name === "discovery") {
         expect(
           history.some(
@@ -118,27 +128,34 @@ for (const scenario of cases) {
           )
         ).toBe(true);
       }
+
       if (scenario.send) {
         const message = results[0];
+
         if (message?.role !== "tool") {
           throw new Error("Missing send result");
         }
+
         const prepared = JSON.parse(message.content);
         expect(prepared.status).toBe("prepared");
         expect(prepared.ok).toBe(true);
+
         if (scenario.name === "resend" || scenario.name === "discovery") {
           expect(prepared.path).toBe("report.csv");
         }
+
         if (scenario.name === "consolidate") {
           const csv = await readFile(
             path.join(artifactsDir, prepared.path),
             "utf8"
           );
+
           expect(csv).toContain("2026-09-01");
           expect(csv).toContain("2026-09-27");
           expect(csv).not.toContain("2026-09-28");
         }
       }
+
       if (scenario.name === "save-only") {
         expect(
           await readFile(path.join(artifactsDir, "draft.csv"), "utf8")
@@ -150,6 +167,7 @@ for (const scenario of cases) {
       } else {
         process.env.NAKAMA_CONFIG_DIR = previous;
       }
+
       await rm(home, { force: true, recursive: true });
     }
   }, 120_000);

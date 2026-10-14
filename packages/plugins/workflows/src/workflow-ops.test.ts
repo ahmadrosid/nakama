@@ -8,6 +8,7 @@ import {
   resolveTemplateString,
   resolveWorkflowValue,
   validateWorkflowSteps,
+  type WorkflowValue,
 } from "./workflow-ops";
 
 describe("workflow-ops", () => {
@@ -116,7 +117,7 @@ describe("workflow-ops", () => {
             type: "tool",
           },
           { id: "summarize", instruction: "Brief.", type: "summarize" },
-        ] as never,
+        ] satisfies WorkflowValue[],
         new Set(["web_search"])
       )
     ).toThrow(/use kind instead/i);
@@ -137,7 +138,7 @@ describe("workflow-ops", () => {
             kind: "compare",
           },
           { id: "summarize", kind: "summarize", prompt: "Brief." },
-        ] as never,
+        ] satisfies WorkflowValue[],
         new Set(["web_search"])
       )
     ).toThrow(/invalid op: undefined\. Use eq \| near \| contains/i);
@@ -163,7 +164,7 @@ describe("workflow-ops", () => {
             instruction: "Write a brief.",
             kind: "summarize",
           },
-        ] as never,
+        ] satisfies WorkflowValue[],
         new Set(["web_search"])
       )
     ).toThrow(/use prompt instead/i);
@@ -175,12 +176,14 @@ test("missing template references fail while explicit null and falsy values reso
     { empty: "", flag: false, nullable: null, zero: 0 },
     { extract: "instructions" }
   );
+
   for (const reference of ["input.missing", "steps.extract.stories"]) {
     expect(() => resolveWorkflowValue(`{{${reference}}}`, bag)).toThrow();
     expect(() =>
       resolveTemplateString(`Result: {{${reference}}}`, bag)
     ).toThrow();
   }
+
   expect(
     resolveWorkflowValue(
       {

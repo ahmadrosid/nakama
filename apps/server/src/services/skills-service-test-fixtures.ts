@@ -19,6 +19,7 @@ export async function seedSkillOrg(
     updatedAt: now,
   });
   const profile = await seedOrgDefaultProfile(db, ORG_ID);
+
   if (options.profileSkillsWriteApproval !== undefined) {
     await db.upsertProfile({
       ...profile,
@@ -26,5 +27,6 @@ export async function seedSkillOrg(
       updatedAt: now,
     });
   }
+
   return profile;
 }

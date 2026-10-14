@@ -16,14 +16,17 @@ function createMessenger(): TelegramRichMessenger & {
     edited,
     async send(text: string) {
       sent.push(text);
+
       return { message_id: 1 };
     },
     async sendPlain(text: string) {
       sent.push(text);
+
       return { message_id: 1 };
     },
     async sendRaw(text: string) {
       sent.push(text);
+
       return { message_id: 1 };
     },
     sent,
@@ -49,6 +52,7 @@ describe("TelegramTodoStatusMessage", () => {
   test("skips duplicate renders", async () => {
     const messenger = createMessenger();
     const status = new TelegramTodoStatusMessage(messenger);
+
     const todos = [
       { content: "Write tests", id: "todo_1", status: "pending" as const },
     ];

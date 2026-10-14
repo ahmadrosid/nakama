@@ -27,7 +27,7 @@ export function createDiscordMessenger(
       return last;
     },
     async sendTyping() {
-      if ("sendTyping" in channel && typeof channel.sendTyping === "function") {
+      if ("sendTyping" in channel) {
         await channel.sendTyping();
       }
     },
@@ -35,8 +35,8 @@ export function createDiscordMessenger(
 }
 
 export function createInteractionMessenger(
-  followUp: (content: string) => Promise<unknown>,
-  editReply: (content: string) => Promise<unknown>
+  followUp: (content: string) => Promise<void>,
+  editReply: (content: string) => Promise<void>
 ): DiscordMessenger {
   let answered = false;
 

@@ -7,6 +7,7 @@ export function registerProcessLifecycleHandlers(
     if (shuttingDown) {
       return;
     }
+
     shuttingDown = true;
 
     void (async () => {
@@ -24,6 +25,7 @@ export function registerProcessLifecycleHandlers(
       shutdown(0);
     });
   }
+
   // pm2 stops Windows workers with a "shutdown" message instead of a signal.
   if (process.platform === "win32") {
     process.on("message", (message) => {

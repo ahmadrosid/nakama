@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { NotificationDestinationChannel } from "@nakama/core";
+import type {
+  NotificationDestinationChannel,
+  TelegramOutboundAdapter,
+} from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AuthService } from "./auth-service";
 import { NotificationWebhookService } from "./notification-webhook-service";
@@ -33,6 +36,7 @@ describe("NotificationWebhookService", () => {
       updatedAt: "2026-07-04T10:00:00.000Z",
     });
     const channel = options?.channel ?? "telegram";
+
     const configured =
       channel === "telegram"
         ? {
@@ -48,6 +52,7 @@ describe("NotificationWebhookService", () => {
               },
             }
           : { channel, config: { profileId: "agent_1" } };
+
     await databaseAdapter.upsertNotificationDestination({
       ...configured,
       createdAt: "2026-07-04T10:00:00.000Z",
@@ -66,7 +71,9 @@ describe("NotificationWebhookService", () => {
       const { apiKey, authService, databaseAdapter } = await seedDestination({
         channel,
       });
+
       const calls: Array<{ channel: string; input: unknown }> = [];
+
       const service = new NotificationWebhookService(
         databaseAdapter,
         authService,
@@ -74,23 +81,27 @@ describe("NotificationWebhookService", () => {
           discord: {
             send: async (input) => {
               calls.push({ channel: "discord", input });
+
               return { ok: true };
             },
           },
           telegram: {
             send: async (input) => {
               calls.push({ channel: "telegram", input });
+
               return { ok: true };
             },
           },
           whatsapp: {
             send: async (input) => {
               calls.push({ channel: "whatsapp", input });
+
               return { ok: true };
             },
           },
         }
       );
+
       const results = await Promise.allSettled([
         service.deliver(
           "dest_1",
@@ -105,18 +116,21 @@ describe("NotificationWebhookService", () => {
           "evt_1"
         ),
       ]);
+
       expect(
         results.filter((result) => result.status === "fulfilled")
       ).toHaveLength(1);
       expect(
         results.find((result) => result.status === "rejected")
       ).toMatchObject({ reason: { status: 409 } });
+
       const target =
         channel === "telegram"
           ? { chatIds: [1001], parseMode: "HTML", topicId: 22 }
           : channel === "discord"
             ? { channelId: "123456789012345678" }
             : {};
+
       expect(calls).toEqual([
         {
           channel,
@@ -137,18 +151,23 @@ describe("NotificationWebhookService", () => {
       const { apiKey, authService, databaseAdapter } = await seedDestination({
         channel,
       });
+
       let sends = 0;
+
       const adapter = {
         send: async () => {
           sends += 1;
+
           return { error: "offline", ok: false };
         },
       };
+
       const service = new NotificationWebhookService(
         databaseAdapter,
         authService,
         { discord: adapter, telegram: adapter, whatsapp: adapter }
       );
+
       await expect(
         service.deliver("dest_1", apiKey, { body: "Hello" }, "evt_failure")
       ).rejects.toMatchObject({ status: 502 });
@@ -162,23 +181,30 @@ describe("NotificationWebhookService", () => {
       const { apiKey, authService, databaseAdapter } = await seedDestination({
         channel,
       });
+
       const profile = await databaseAdapter.getProfile("agent_1");
+
       if (!profile) {
         throw new Error("Missing test profile");
       }
+
       await databaseAdapter.upsertProfile({ ...profile, orgId: "org_2" });
       let sends = 0;
+
       const adapter = {
         send: async () => {
           sends += 1;
+
           return { ok: true };
         },
       };
+
       const service = new NotificationWebhookService(
         databaseAdapter,
         authService,
         { discord: adapter, telegram: adapter, whatsapp: adapter }
       );
+
       await expect(
         service.deliver("dest_1", apiKey, { body: "Hello" }, "evt_scope")
       ).rejects.toMatchObject({ status: 409 });
@@ -199,18 +225,23 @@ describe("NotificationWebhookService", () => {
         channel: "discord",
         channelId,
       });
+
       let sends = 0;
+
       const adapter = {
         send: async () => {
           sends += 1;
+
           return { ok: true };
         },
       };
+
       const service = new NotificationWebhookService(
         databaseAdapter,
         authService,
         { discord: adapter, telegram: adapter, whatsapp: adapter }
       );
+
       await expect(
         service.deliver("dest_1", apiKey, { body: "Hello" }, "evt_bad_target")
       ).rejects.toMatchObject({ status: 409 });
@@ -227,12 +258,8 @@ describe("NotificationWebhookService", () => {
 
   test("delivers to telegram topics with formatted text", async () => {
     const { apiKey, authService, databaseAdapter } = await seedDestination();
-    const calls: Array<{
-      text: string;
-      chatIds?: number[];
-      topicId?: number;
-      parseMode?: "HTML";
-    }> = [];
+
+    const calls: Parameters<TelegramOutboundAdapter["send"]>[0][] = [];
 
     const service = new NotificationWebhookService(
       databaseAdapter,
@@ -241,6 +268,7 @@ describe("NotificationWebhookService", () => {
         telegram: {
           send: async (input) => {
             calls.push(input);
+
             return { ok: true };
           },
         },
@@ -304,6 +332,7 @@ describe("NotificationWebhookService", () => {
 
   test("requires an idempotency key", async () => {
     const { apiKey, authService, databaseAdapter } = await seedDestination();
+
     const service = new NotificationWebhookService(
       databaseAdapter,
       authService,
@@ -325,6 +354,7 @@ describe("NotificationWebhookService", () => {
   test("does not send twice for a repeated idempotency key", async () => {
     const { apiKey, authService, databaseAdapter } = await seedDestination();
     let sendCount = 0;
+
     const service = new NotificationWebhookService(
       databaseAdapter,
       authService,
@@ -332,6 +362,7 @@ describe("NotificationWebhookService", () => {
         telegram: {
           send: async () => {
             sendCount += 1;
+
             return { ok: true };
           },
         },
@@ -350,6 +381,7 @@ describe("NotificationWebhookService", () => {
   test("keeps the claim when telegram delivery fails so a retry cannot double-send", async () => {
     const { apiKey, authService, databaseAdapter } = await seedDestination();
     let sendCount = 0;
+
     const service = new NotificationWebhookService(
       databaseAdapter,
       authService,
@@ -357,6 +389,7 @@ describe("NotificationWebhookService", () => {
         telegram: {
           send: async () => {
             sendCount += 1;
+
             return { error: "telegram down", ok: false };
           },
         },
@@ -377,6 +410,7 @@ describe("NotificationWebhookService", () => {
   test("allows the same idempotency key again after the replay window is pruned", async () => {
     const { apiKey, authService, databaseAdapter } = await seedDestination();
     let sendCount = 0;
+
     const service = new NotificationWebhookService(
       databaseAdapter,
       authService,
@@ -384,6 +418,7 @@ describe("NotificationWebhookService", () => {
         telegram: {
           send: async () => {
             sendCount += 1;
+
             return { ok: true };
           },
         },

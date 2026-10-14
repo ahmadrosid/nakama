@@ -1,6 +1,7 @@
 import { dirname, join } from "node:path";
 import { getDiscordConfigDir } from "@nakama/core/discord-config";
 import { readTextOrNull, writeTextFile } from "@nakama/core/fs";
+import { z } from "zod";
 
 /** Persisted ownership of Discord threads the bot started. */
 export class ThreadStore {
@@ -16,30 +17,47 @@ export class ThreadStore {
 
     if (raw === null) {
       this.owned = new Set();
+
       return;
     }
 
     let parsed: unknown;
+
     try {
-      parsed = JSON.parse(raw) as unknown;
+      parsed = JSON.parse(raw);
     } catch {
       this.owned = new Set();
+
       return;
     }
 
     const next = new Set<string>();
 
-    if (Array.isArray(parsed)) {
-      for (const value of parsed) {
-        if (typeof value === "string" && value.trim()) {
-          next.add(value.trim());
+    const arrayResult = z.array(z.unknown()).safeParse(parsed);
+
+    if (arrayResult.success) {
+      for (const value of arrayResult.data) {
+        const stringResult = z.string().safeParse(value);
+
+        if (stringResult.success && stringResult.data.trim()) {
+          next.add(stringResult.data.trim());
         }
       }
-    } else if (typeof parsed === "object" && parsed !== null) {
+    } else {
+      const recordResult = z.record(z.string(), z.unknown()).safeParse(parsed);
+
+      if (!recordResult.success) {
+        this.owned = next;
+
+        return;
+      }
+
       // Legacy shape: { "threadId": "threadId" } or old key→threadId maps.
-      for (const value of Object.values(parsed as Record<string, unknown>)) {
-        if (typeof value === "string" && value.trim()) {
-          next.add(value.trim());
+      for (const value of Object.values(recordResult.data)) {
+        const stringResult = z.string().safeParse(value);
+
+        if (stringResult.success && stringResult.data.trim()) {
+          next.add(stringResult.data.trim());
         }
       }
     }
@@ -49,9 +67,11 @@ export class ThreadStore {
 
   add(threadId: string): void {
     const id = threadId.trim();
+
     if (!id) {
       return;
     }
+
     this.owned.add(id);
   }
 

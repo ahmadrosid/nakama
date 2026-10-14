@@ -31,14 +31,19 @@ function createAnthropicClient(
   baseUrl?: string,
   fetchImpl?: typeof fetch
 ): Anthropic {
-  return new Anthropic({
+  const options: ConstructorParameters<typeof Anthropic>[0] = {
     apiKey,
     fetch: fetchImpl ?? fetchWithoutIdleTimeout,
-    ...(baseUrl?.trim() ? { baseURL: baseUrl.trim() } : {}),
-  });
+  };
+
+  if (baseUrl?.trim()) {
+    options.baseURL = baseUrl.trim();
+  }
+
+  return new Anthropic(options);
 }
 
-function formatAnthropicError(error: unknown, label: string): Error {
+function formatAnthropicError(error: Error, label: string): Error {
   if (error instanceof APIError) {
     return new Error(
       `${label} request failed (${error.status}): ${error.message}`
@@ -59,7 +64,10 @@ async function withAnthropicError<T>(
   try {
     return await run();
   } catch (error) {
-    throw formatAnthropicError(error, label);
+    throw formatAnthropicError(
+      error instanceof Error ? error : new Error(String(error)),
+      label
+    );
   }
 }
 
@@ -67,11 +75,13 @@ export function createAnthropicProvider(
   options: AnthropicProviderOptions
 ): ProviderClient {
   const model = options.model ?? "claude-sonnet-4-6";
+
   const client = createAnthropicClient(
     options.apiKey,
     options.baseUrl,
     options.fetch
   );
+
   const name: ProviderName = options.providerName ?? "anthropic";
   const label = options.providerLabel ?? DEFAULT_PROVIDER_LABEL;
 
@@ -96,6 +106,7 @@ export function createAnthropicProvider(
     },
     generateText(input: GenerateTextInput) {
       const useJson = (input.format ?? "json") === "json";
+
       const system = useJson
         ? `${input.system}\n\nRespond with valid JSON only.`
         : `${input.system}\n\nReturn only the requested text. No JSON, labels, or markdown fences.`;
@@ -137,10 +148,15 @@ export function createAnthropicProvider(
           outputTokens: message.usage?.output_tokens,
         });
 
-        return {
+        const result: GenerateTextResult = {
           content,
-          ...(usage ? { usage } : {}),
-        } satisfies GenerateTextResult;
+        };
+
+        if (usage) {
+          result.usage = usage;
+        }
+
+        return result;
       }, label);
     },
     name,

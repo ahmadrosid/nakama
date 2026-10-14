@@ -1,9 +1,20 @@
 import { Button } from "@nakama/ui/button";
 import { TooltipProvider } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
-import { ArrowLeft02Icon } from "hugeicons-react";
+import {
+  ArrowLeft01Icon,
+  ArrowLeft02Icon,
+  ArrowRight01Icon,
+  Search01Icon,
+} from "hugeicons-react";
 import { useMemo } from "react";
-import { Link, Outlet, useLocation, useMatch } from "react-router-dom";
+import {
+  Link,
+  Outlet,
+  useLocation,
+  useMatch,
+  useNavigate,
+} from "react-router-dom";
 import { AppSidebar } from "@/components/AppSidebar";
 import { CommandPalette } from "@/components/CommandPalette";
 import { MobileNavDrawer } from "@/components/MobileNavDrawer";
@@ -30,35 +41,86 @@ export function Layout() {
 
   return (
     <TooltipProvider delay={0}>
-      <div className="flex h-svh overflow-hidden bg-background pl-[env(safe-area-inset-left)]">
-        {/* The rail and sidebar cost a fixed 296px, so on a phone they live
+      <div className="flex h-svh flex-col overflow-hidden bg-background">
+        <DesktopTitleBar />
+        <div className="flex min-h-0 flex-1 overflow-hidden pl-[env(safe-area-inset-left)]">
+          {/* The rail and sidebar cost a fixed 296px, so on a phone they live
             in MobileNavDrawer instead of the layout. */}
-        <div className="hidden h-full sm:flex">
-          <ProfileRail />
-          <AppSidebar />
-        </div>
-        <div
-          className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pr-[env(safe-area-inset-right)]"
-          data-app-shell-content=""
-        >
-          <AppShellHeader
-            hideDesktop={
-              shell.pathname === PAGE_PATHS.profiles ||
-              shell.pathname.startsWith(`${PAGE_PATHS.profiles}/skills/`)
-            }
-            label={shell.headerLabel}
-            page={shell.page}
-          />
-          <AppShellError error={shell.error} />
-          <main className={appShellMainClassName(shell.page, shell.pathname)}>
-            <RouteBoundary resetKey={shell.pathname}>
-              <Outlet />
-            </RouteBoundary>
-          </main>
+          <div className="hidden h-full sm:flex">
+            <ProfileRail />
+            <AppSidebar />
+          </div>
+          <div
+            className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pr-[env(safe-area-inset-right)]"
+            data-app-shell-content=""
+          >
+            <AppShellHeader
+              hideDesktop={
+                shell.pathname === PAGE_PATHS.profiles ||
+                shell.pathname.startsWith(`${PAGE_PATHS.profiles}/skills/`)
+              }
+              label={shell.headerLabel}
+              page={shell.page}
+            />
+            <AppShellError error={shell.error} />
+            <main className={appShellMainClassName(shell.page, shell.pathname)}>
+              <RouteBoundary resetKey={shell.pathname}>
+                <Outlet />
+              </RouteBoundary>
+            </main>
+          </div>
         </div>
       </div>
       <CommandPalette />
     </TooltipProvider>
+  );
+}
+
+/**
+ * The desktop app's window title bar. CSS shows it only under
+ * `html[data-desktop]`, which the Electron preload sets.
+ */
+function DesktopTitleBar() {
+  const navigate = useNavigate();
+  const shortcut = navigator.userAgent.includes("Mac") ? "⌘K" : "Ctrl K";
+
+  return (
+    <div className="desktop-title-bar">
+      <Button
+        aria-label="Back"
+        className="text-muted-foreground hover:text-foreground"
+        onClick={() => navigate(-1)}
+        size="icon-sm"
+        title="Back"
+        variant="ghost"
+      >
+        <ArrowLeft01Icon aria-hidden="true" className="size-4" />
+      </Button>
+      <Button
+        aria-label="Forward"
+        className="text-muted-foreground hover:text-foreground"
+        onClick={() => navigate(1)}
+        size="icon-sm"
+        title="Forward"
+        variant="ghost"
+      >
+        <ArrowRight01Icon aria-hidden="true" className="size-4" />
+      </Button>
+      <button
+        className="desktop-title-bar-search"
+        // CommandPalette owns its open state and listens for this shortcut.
+        onClick={() =>
+          window.dispatchEvent(
+            new KeyboardEvent("keydown", { ctrlKey: true, key: "k" })
+          )
+        }
+        type="button"
+      >
+        <Search01Icon aria-hidden="true" className="size-3.5" />
+        <span className="flex-1 text-left">Search</span>
+        <kbd className="font-sans text-2xs">{shortcut}</kbd>
+      </button>
+    </div>
   );
 }
 
@@ -69,22 +131,29 @@ function useAppShell() {
   const chatRoute = useMatch("/chat/:profileId/:sessionId");
   const chatProfileId = chatRoute?.params.profileId ?? "";
   const chatSessionId = chatRoute?.params.sessionId ?? null;
+
   const { data: sessions, hasNextPage } =
     useHistorySessionsQuery(chatProfileId);
+
   const listedChat = sessions.find((session) => session.id === chatSessionId);
+
   // An old chat opened by URL can sit on a page the sidebar has not loaded.
   const { data: unlistedChat } = useSessionSummaryQuery(
     chatProfileId,
     listedChat || !hasNextPage ? null : chatSessionId
   );
+
   const chatTitle = (listedChat ?? unlistedChat)?.title?.trim();
 
   const { data: orgPlugins = [] } = useOrgPlugins();
+
   const pluginNav = useMemo(
     () => enabledPluginNavEntries(orgPlugins),
     [orgPlugins]
   );
+
   const activePluginId = pluginIdFromPath(location.pathname);
+
   const activePlugin = pluginNav.find(
     (entry) => entry.pluginId === activePluginId
   );
@@ -116,6 +185,7 @@ function isFlushContentPage(page: PageId, pathname: string): boolean {
 function appShellMainClassName(page: PageId, pathname: string): string {
   const flush = isFlushContentPage(page, pathname);
   const skillDetail = pathname.startsWith(`${PAGE_PATHS.profiles}/skills/`);
+
   return cn(
     "min-h-0 flex-1",
     flush
@@ -135,10 +205,13 @@ function AppShellHeader({
   page: PageId;
 }) {
   const hideTitle = page === "soul";
+
   const showCustomizeBack =
     page !== "notifications" && !SIDEBAR_PAGE_IDS.includes(page);
+
   const backLabel =
     page === "customize" ? "Back to Chat" : "Back to Control center";
+
   const backPath =
     page === "customize" ? PAGE_PATHS.chat : PAGE_PATHS.customize;
 

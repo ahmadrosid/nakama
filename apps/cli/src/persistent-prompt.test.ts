@@ -6,7 +6,7 @@ import {
   PersistentPrompt,
 } from "./persistent-prompt";
 import type { PromptLineResult } from "./prompt";
-import { consumeTerminalInput, type TerminalInput } from "./terminal-input";
+import { consumeTerminalInput } from "./terminal-input";
 import type { ComposerState, TerminalRenderer } from "./terminal-renderer";
 
 class FakeRenderer implements Pick<TerminalRenderer, "setComposerState"> {
@@ -27,6 +27,7 @@ class FakeTerminalInput {
 
   onInput(listener: (chunk: string) => void): () => void {
     this.listener = listener;
+
     return () => {
       this.listener = null;
     };
@@ -39,9 +40,11 @@ class FakeTerminalInput {
 
 describe("PersistentPrompt", () => {
   const prompts: PersistentPrompt[] = [];
+
   let stdoutWriteSpy: ReturnType<
     typeof spyOn<typeof process.stdout, "write">
   > | null = null;
+
   let stderrWriteSpy: ReturnType<
     typeof spyOn<typeof process.stderr, "write">
   > | null = null;
@@ -63,26 +66,33 @@ describe("PersistentPrompt", () => {
     async (key) => {
       stdoutWriteSpy = spyOn(process.stdout, "write").mockReturnValue(true);
       const image = { data: "aW1hZ2U=", mediaType: "image/png" };
+
       const read = spyOn(clipboard, "readClipboardImage").mockResolvedValue(
         image
       );
+
       const terminalInput = new FakeTerminalInput();
       const renderer = new FakeRenderer();
       const submitted: PromptLineResult[] = [];
+
       const prompt = new PersistentPrompt({
         onCancel: () => {},
         onScrollHistory: () => {},
         onSubmit: (result) => submitted.push(result),
         renderer,
-        terminalInput: terminalInput as unknown as TerminalInput,
+        terminalInput,
       });
+
       prompts.push(prompt);
+
       try {
         prompt.start();
         prompt.prefill("Describe this");
+
         for (const event of consumeTerminalInput(key).events) {
           terminalInput.emit(event);
         }
+
         await Bun.sleep(0);
         expect(renderer.state?.imageCount).toBe(1);
         expect(terminalInput.mouseTracking).toBe(false);
@@ -105,18 +115,23 @@ describe("PersistentPrompt", () => {
     stdoutWriteSpy = spyOn(process.stdout, "write").mockReturnValue(true);
     const first = Promise.withResolvers<{ data: string; mediaType: string }>();
     const image = { data: "aW1hZ2U=", mediaType: "image/png" };
+
     const read = spyOn(clipboard, "readClipboardImage")
       .mockImplementationOnce(() => first.promise)
       .mockResolvedValue(image);
+
     const terminalInput = new FakeTerminalInput();
     const submitted: PromptLineResult[] = [];
+
     const prompt = new PersistentPrompt({
       onCancel: () => {},
       onSubmit: (result) => submitted.push(result),
       renderer: new FakeRenderer(),
-      terminalInput: terminalInput as unknown as TerminalInput,
+      terminalInput,
     });
+
     prompts.push(prompt);
+
     try {
       prompt.start();
       terminalInput.emit("\u0016");
@@ -135,24 +150,31 @@ describe("PersistentPrompt", () => {
 
   test("attaches a pasted image path and preserves text typed while it loads", async () => {
     stdoutWriteSpy = spyOn(process.stdout, "write").mockReturnValue(true);
+
     const pending = Promise.withResolvers<{
       data: string;
       mediaType: string;
     }>();
+
     const image = { data: "aW1hZ2U=", mediaType: "image/png" };
+
     const read = spyOn(clipboard, "readClipboardImage").mockReturnValue(
       pending.promise
     );
+
     const terminalInput = new FakeTerminalInput();
     const renderer = new FakeRenderer();
     const submitted: PromptLineResult[] = [];
+
     const prompt = new PersistentPrompt({
       onCancel: () => {},
       onSubmit: (result) => submitted.push(result),
       renderer,
-      terminalInput: terminalInput as unknown as TerminalInput,
+      terminalInput,
     });
+
     prompts.push(prompt);
+
     try {
       prompt.start();
       terminalInput.emit("\x1b[200~'/tmp/screen shot.png'");
@@ -180,22 +202,26 @@ describe("PersistentPrompt", () => {
     const terminalInput = new FakeTerminalInput();
     const renderer = new FakeRenderer();
     const scrolls: string[] = [];
+
     const prompt = new PersistentPrompt({
       onCancel: () => {},
       onScrollHistory: (event) => scrolls.push(event),
       onSubmit: () => {},
       renderer,
-      terminalInput: terminalInput as unknown as TerminalInput,
+      terminalInput,
     });
+
     prompts.push(prompt);
     prompt.start();
     prompt.prefill("unfinished draft");
     expect(terminalInput.mouseTracking).toBe(false);
 
     const { events } = consumeTerminalInput("\x1b[5~\x1b[6~\x1b[H\x1b[F");
+
     for (const event of events) {
       terminalInput.emit(event);
     }
+
     expect(scrolls).toEqual(["page_up", "page_down", "home", "end"]);
     expect(renderer.state?.value).toBe("unfinished draft");
     prompt.stop();
@@ -207,12 +233,14 @@ describe("PersistentPrompt", () => {
     const terminalInput = new FakeTerminalInput();
     const renderer = new FakeRenderer();
     const submitted: PromptLineResult[] = [];
+
     const prompt = new PersistentPrompt({
       onCancel: () => {},
       onSubmit: (result) => submitted.push(result),
       renderer,
-      terminalInput: terminalInput as unknown as TerminalInput,
+      terminalInput,
     });
+
     prompts.push(prompt);
     prompt.start();
     prompt.prefill("Review: ");
@@ -242,6 +270,7 @@ describe("PersistentPrompt", () => {
       () => true
     );
     const renderer = new FakeRenderer();
+
     const suggestions: PromptSuggestion[] = [
       {
         description: "Claude Sonnet [Anthropic]",
@@ -249,12 +278,13 @@ describe("PersistentPrompt", () => {
         label: "claude-sonnet",
       },
     ];
+
     const prompt = new PersistentPrompt({
       getSuggestions: (input) => (input === "/model " ? suggestions : []),
       onCancel: () => {},
       onSubmit: (_result: PromptLineResult) => {},
       renderer,
-      terminalInput: new FakeTerminalInput() as unknown as TerminalInput,
+      terminalInput: new FakeTerminalInput(),
     });
 
     prompts.push(prompt);
@@ -281,18 +311,20 @@ describe("PersistentPrompt", () => {
     );
     const terminalInput = new FakeTerminalInput();
     const submitted: PromptLineResult[] = [];
+
     const suggestion: PromptSuggestion = {
       description: "Claude Sonnet [Anthropic]",
       insertValue: "/model provider-a::claude-sonnet",
       label: "claude-sonnet",
       submitOnEnter: true,
     };
+
     const prompt = new PersistentPrompt({
       getSuggestions: (input) => (input === "/model " ? [suggestion] : []),
       onCancel: () => {},
       onSubmit: (result) => submitted.push(result),
       renderer: new FakeRenderer(),
-      terminalInput: terminalInput as unknown as TerminalInput,
+      terminalInput,
     });
 
     prompts.push(prompt);
@@ -310,6 +342,7 @@ describe("PersistentPrompt", () => {
     );
     const terminalInput = new FakeTerminalInput();
     const submitted: PromptLineResult[] = [];
+
     const prompt = new PersistentPrompt({
       getSuggestions: () => [
         {
@@ -321,7 +354,7 @@ describe("PersistentPrompt", () => {
       onCancel: () => {},
       onSubmit: (result) => submitted.push(result),
       renderer: new FakeRenderer(),
-      terminalInput: terminalInput as unknown as TerminalInput,
+      terminalInput,
     });
 
     prompts.push(prompt);
@@ -340,11 +373,12 @@ describe("PersistentPrompt", () => {
     const renderer = new FakeRenderer();
     const terminalInput = new FakeTerminalInput();
     const submitted: PromptLineResult[] = [];
+
     const prompt = new PersistentPrompt({
       onCancel: () => {},
       onSubmit: (result) => submitted.push(result),
       renderer,
-      terminalInput: terminalInput as unknown as TerminalInput,
+      terminalInput,
     });
 
     prompts.push(prompt);
@@ -369,20 +403,23 @@ describe("PersistentPrompt", () => {
       () => true
     );
     const stderrChunks: string[] = [];
+    // SAFETY: The test only writes string or byte chunks and returns success.
     stderrWriteSpy = spyOn(process.stderr, "write").mockImplementation(((
       chunk: string | Uint8Array
     ) => {
       stderrChunks.push(String(chunk));
+
       return true;
     }) as typeof process.stderr.write);
 
     const renderer = new FakeRenderer();
     const terminalInput = new FakeTerminalInput();
+
     const prompt = new PersistentPrompt({
       onCancel: () => {},
       onSubmit: () => {},
       renderer,
-      terminalInput: terminalInput as unknown as TerminalInput,
+      terminalInput,
     });
 
     prompts.push(prompt);

@@ -13,8 +13,11 @@ import { SkillsService } from "./skills-service";
 import { ORG_ID, seedSkillOrg } from "./skills-service-test-fixtures";
 
 const OTHER_ORG_SECRET = "other-org-api-key";
+
 const SKILL_NAME = "exfiltrate";
+
 const OTHER_ORG_ID = "org_other";
+
 const OTHER_ORG_SECRET_RELATIVE = `orgs/${OTHER_ORG_ID}/profiles/profile_x/secret.txt`;
 
 const memberSkillMarkdown = `---
@@ -78,6 +81,7 @@ interface PayloadResult {
 }
 
 function noSignal() {
+  // SAFETY: This test controls the fixture shape at this boundary.
   return { signal: new AbortController().signal } as never;
 }
 
@@ -97,6 +101,7 @@ describe("member-authored skill code", () => {
       "profiles",
       "profile_x"
     );
+
     await mkdir(otherTenantDir, { recursive: true });
     await writeFile(
       join(configDir, "config.ini"),
@@ -139,6 +144,7 @@ describe("member-authored skill code", () => {
       "payload.py",
       payloadSource
     );
+
     return service;
   }
 
@@ -148,9 +154,12 @@ describe("member-authored skill code", () => {
     const tools = await service.loadToolsForProfile(ORG_ID, profileId);
 
     expect(tools.map((tool) => tool.name)).toEqual([`${SKILL_NAME}_payload`]);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const result = (await tools[0].run({}, noSignal())) as {
       error?: string;
     };
+
     expect(result.error).toContain("skill write approval");
     // The payload writes this the moment the host runs it.
     await expect(
@@ -162,11 +171,12 @@ describe("member-authored skill code", () => {
     await seedMemberSkill();
 
     const tool = await loadPythonSkillTool(
+      // SAFETY: This test controls the fixture shape at this boundary.
       {
         description: "Read the deployment secret store",
         name: SKILL_NAME,
         toolPath: null,
-      } as unknown as DiscoveredSkill,
+      } as DiscoveredSkill,
       {
         description: "Read the deployment secret store",
         name: `${SKILL_NAME}_payload`,
@@ -175,6 +185,7 @@ describe("member-authored skill code", () => {
       { exposeConfigDir: true }
     );
 
+    // SAFETY: This test controls the fixture shape at this boundary.
     const result = (await tool?.run({}, noSignal())) as PayloadResult;
 
     expect(result.configDir).toBe(configDir);
@@ -196,6 +207,7 @@ describe("member-authored skill code", () => {
     expect(await blocked[0].run({}, noSignal())).toHaveProperty("error");
 
     const proposals = new SkillProposalService(db, service);
+
     const staged = await proposals.stageProposal({
       action: "approve_code",
       orgId: ORG_ID,
@@ -203,11 +215,13 @@ describe("member-authored skill code", () => {
       relativePath: "payload.py",
       skillName: SKILL_NAME,
     });
+
     await proposals.approveProposal(ORG_ID, staged.proposalId!, "admin");
 
     const tools = await service.loadToolsForProfile(ORG_ID, profileId);
 
     expect(tools.map((tool) => tool.name)).toEqual([`${SKILL_NAME}_payload`]);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const result = (await tools[0].run({}, noSignal())) as PayloadResult;
 
     expect(result.configDir).toBeNull();
@@ -227,6 +241,7 @@ describe("member-authored skill code", () => {
       relativePath: "payload.py",
       skillName: SKILL_NAME,
     });
+
     await writeFile(
       join(memberSkillDir(), "payload.py"),
       `${payloadSource}\n# changed again`
@@ -246,17 +261,22 @@ describe("member-authored skill code", () => {
     await writeFile(join(globalDir, "tool.py"), envProbeSource);
     const service = new SkillsService(db);
     await service.syncDiscoveredSkills();
+
     const weather = (await service.listSkills()).skills.find(
       (skill) => skill.name === "weather"
     )!;
+
     await db.assignSkillToProfile(profileId, weather.id);
 
     const tools = await service.loadToolsForProfile(ORG_ID, profileId);
 
     expect(tools.map((tool) => tool.name)).toEqual(["weather"]);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const result = (await tools[0].run({}, noSignal())) as {
       configDir: string;
     };
+
     expect(result.configDir).toBe(configDir);
   }, 20_000);
 });

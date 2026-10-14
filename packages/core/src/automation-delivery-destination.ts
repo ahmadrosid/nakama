@@ -1,7 +1,28 @@
+import { z } from "zod";
 import { NakamaApiError } from "./api-error";
 import type { OrgRole } from "./contract";
 import { DISCORD_API_BASE_URL, DISCORD_USER_AGENT } from "./discord-config";
 import { isTelegramUserAuthorized } from "./telegram-config";
+
+const TelegramChatResponseSchema = z.object({
+  result: z
+    .object({
+      permissions: z
+        .object({ can_send_messages: z.boolean().optional() })
+        .nullish(),
+    })
+    .nullish(),
+});
+
+const DiscordUserResponseSchema = z.object({ id: z.string().min(1) });
+
+const DiscordPermissionsResponseSchema = z.object({
+  permissions: z.union([z.string(), z.number()]).optional(),
+});
+
+const PermissionBitsSchema = z
+  .union([z.string().regex(/^\d+$/).transform(Number), z.number()])
+  .refine((bits) => Number.isSafeInteger(bits) && bits >= 0);
 
 /**
  * Caller identity used to decide who may pin automation output to a concrete
@@ -14,6 +35,7 @@ export interface AutomationDeliveryAccess {
 
 /** Discord permission bits an automation destination needs: view it, then post. */
 const DISCORD_VIEW_CHANNEL = 1024;
+
 const DISCORD_SEND_MESSAGES = 2048;
 
 const TELEGRAM_API_BASE_URL = "https://api.telegram.org";
@@ -68,6 +90,7 @@ export async function assertTelegramBotCanPostToChat(options: {
   fetchImpl?: typeof fetch;
 }): Promise<void> {
   const fetchImpl = options.fetchImpl ?? fetch;
+
   const response = await fetchImpl(
     `${TELEGRAM_API_BASE_URL}/bot${options.botToken}/getChat?chat_id=${options.chatId}`
   );
@@ -80,11 +103,13 @@ export async function assertTelegramBotCanPostToChat(options: {
   }
 
   // The Bot API wraps the chat in an `ok`/`result` envelope.
-  const payload = (await response.json().catch(() => null)) as {
-    result?: { permissions?: { can_send_messages?: unknown } | null } | null;
-  } | null;
+  const json = await response.json().catch(() => null);
+  const payload = TelegramChatResponseSchema.safeParse(json);
 
-  if (payload?.result?.permissions?.can_send_messages === false) {
+  if (
+    payload.success &&
+    payload.data.result?.permissions?.can_send_messages === false
+  ) {
     throw new NakamaApiError(
       `The configured Telegram bot cannot post in chat ${options.chatId}.`,
       400
@@ -107,10 +132,11 @@ async function resolveDiscordBotId(
     return null;
   }
 
-  const payload = (await response.json().catch(() => null)) as {
-    id?: unknown;
-  } | null;
-  return typeof payload?.id === "string" && payload.id ? payload.id : null;
+  const payload = DiscordUserResponseSchema.safeParse(
+    await response.json().catch(() => null)
+  );
+
+  return payload.success ? payload.data.id : null;
 }
 
 /**
@@ -149,10 +175,13 @@ export async function assertDiscordBotCanPostToChannel(options: {
     );
   }
 
-  const payload = (await response.json().catch(() => null)) as {
-    permissions?: unknown;
-  } | null;
-  const granted = toPermissionBits(payload?.permissions);
+  const payload = DiscordPermissionsResponseSchema.safeParse(
+    await response.json().catch(() => null)
+  );
+
+  const granted = payload.success
+    ? toPermissionBits(payload.data.permissions)
+    : null;
 
   if (
     granted === null ||
@@ -171,15 +200,8 @@ function hasDiscordPermission(granted: number, permission: number): boolean {
   return Math.trunc(granted / permission) % 2 === 1;
 }
 
-function toPermissionBits(value: unknown): number | null {
-  const bits =
-    typeof value === "string"
-      ? /^\d+$/.test(value.trim())
-        ? Number(value.trim())
-        : Number.NaN
-      : value;
+function toPermissionBits(value: string | number | undefined): number | null {
+  const parsed = PermissionBitsSchema.safeParse(value);
 
-  return typeof bits === "number" && Number.isSafeInteger(bits) && bits >= 0
-    ? bits
-    : null;
+  return parsed.success ? parsed.data : null;
 }

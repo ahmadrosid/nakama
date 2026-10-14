@@ -32,18 +32,20 @@ import { getUserConfigDir } from "./user-config";
  * routes to the same binary agree.
  */
 const DEFAULT_VERSION = "0.7.9";
+
 const RELEASES = "https://github.com/fajarhide/omni/releases/download";
+
 const DOWNLOAD_TIMEOUT_MS = 60_000;
 
 /** Only the targets the project publishes a tarball for. Windows ships as a zip
  * and no deployment here runs on it, so it is reported unsupported rather than
  * half-handled. */
-const TARGETS: Record<string, string> = {
+const TARGETS = {
   "darwin-arm64": "aarch64-apple-darwin",
   "darwin-x64": "x86_64-apple-darwin",
   "linux-arm64": "aarch64-unknown-linux-musl",
   "linux-x64": "x86_64-unknown-linux-musl",
-};
+} satisfies Record<string, string>;
 
 export type OmniInstallResult = { error?: string; installed: boolean };
 
@@ -51,7 +53,11 @@ export function omniTarget(
   platform: string = process.platform,
   arch: string = process.arch
 ): string | null {
-  return TARGETS[`${platform}-${arch}`] ?? null;
+  return (
+    Object.entries(TARGETS).find(
+      ([target]) => target === `${platform}-${arch}`
+    )?.[1] ?? null
+  );
 }
 
 export function omniVersion(): string {
@@ -72,6 +78,7 @@ export function managedOmniPath(): string {
  */
 export function omniCommand(): string {
   const managed = managedOmniPath();
+
   return existsSync(managed) ? managed : "omni";
 }
 
@@ -87,11 +94,13 @@ export function isAutoInstallAllowed(): boolean {
 export function digestFor(sums: string, archive: string): string | null {
   for (const line of sums.split("\n")) {
     const [digest, name] = line.trim().split(/\s+/);
+
     // `sha256sum` marks binary mode with a leading asterisk on the filename.
     if (name?.replace(/^\*/, "") === archive && /^[0-9a-f]{64}$/.test(digest)) {
       return digest;
     }
   }
+
   return null;
 }
 
@@ -108,6 +117,7 @@ export function installOmni(): Promise<OmniInstallResult> {
   inFlight ??= attempt().finally(() => {
     inFlight = null;
   });
+
   return inFlight;
 }
 
@@ -120,6 +130,7 @@ async function attempt(): Promise<OmniInstallResult> {
   }
 
   const target = omniTarget();
+
   if (!target) {
     return {
       error: `No omni release is published for ${process.platform}-${process.arch}.`,
@@ -140,13 +151,16 @@ async function attempt(): Promise<OmniInstallResult> {
     ]);
 
     const expected = digestFor(sums, archive);
+
     if (!expected) {
       return {
         error: `SHA256SUMS for v${version} does not list ${archive}.`,
         installed: false,
       };
     }
+
     const actual = createHash("sha256").update(tarball).digest("hex");
+
     if (actual !== expected) {
       return { error: `Checksum mismatch for ${archive}.`, installed: false };
     }
@@ -156,11 +170,13 @@ async function attempt(): Promise<OmniInstallResult> {
     writeFileSync(tarPath, tarball);
 
     const failure = await extract(tarPath, staging);
+
     if (failure) {
       return { error: failure, installed: false };
     }
 
     const binary = join(staging, "omni");
+
     if (!existsSync(binary)) {
       return {
         error: `${archive} did not contain an omni binary.`,
@@ -172,6 +188,7 @@ async function attempt(): Promise<OmniInstallResult> {
     // Rename last and from the same filesystem, so the path the spawner reads
     // either holds nothing or holds a complete, verified, executable binary.
     renameSync(binary, managedOmniPath());
+
     return { installed: true };
   } catch (cause) {
     return {
@@ -187,9 +204,11 @@ async function fetchBytes(url: string): Promise<Buffer> {
   const response = await fetch(url, {
     signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
   });
+
   if (!response.ok) {
     throw new Error(`GET ${url} returned ${response.status}.`);
   }
+
   return Buffer.from(await response.arrayBuffer());
 }
 
@@ -200,12 +219,15 @@ async function fetchText(url: string): Promise<string> {
 function extract(tarPath: string, into: string): Promise<string | null> {
   return new Promise((resolve) => {
     let child: ReturnType<typeof spawn>;
+
     try {
       child = spawn("tar", ["-xzf", tarPath, "-C", into], { stdio: "ignore" });
     } catch (cause) {
       resolve(`tar could not be started: ${String(cause)}`);
+
       return;
     }
+
     child.on("error", (cause) =>
       resolve(`tar could not be started: ${cause.message}`)
     );

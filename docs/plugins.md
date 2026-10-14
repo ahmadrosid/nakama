@@ -6,15 +6,31 @@ Nakama plugins are trusted npm packages. A platform admin installs the bytes. An
 
 The **Official plugins** catalog is an allowlist shipped with Nakama. Organization admins can install these packages with one click; no npm lookup or separate platform approval is required. Third-party package installation still requires platform approval.
 
-Workflows lives in `packages/plugins/workflows`. Its manifest, bundled actions, UI, skills, and migrations are copied into the same immutable release store used for npm plugins. It uses the existing organization lifecycle, contribution ownership, private database generations, backup, and retained-data deletion. A package's `author` or id never makes it official.
+The shipped official catalog contains **Workflows**, **Supermemory**, and
+**Google Meet**. Workflows lives in `packages/plugins/workflows`; Supermemory
+lives in `packages/plugins/supermemory`; and Google Meet lives in
+`packages/plugins/google-meet`. Their manifests, bundled actions, UI, skills,
+and migrations are copied into the same immutable release store used for npm
+plugins. A package's `author` or id never makes it official.
 
 Official catalog entries declare required host support and an optional setup action. Installation checks requirements before publishing a release. If setup fails after this install enabled the plugin, it disables the plugin while retaining its data for retry; a plugin that was already enabled is left running.
 
 This follows the declared-dependency and reversible-effect ideas described in [DeepSeek Harness's Cordis primer](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/cordis-primer.md). Nakama uses its existing package and organization lifecycle for these guarantees.
 
-Run `bun run --cwd packages/plugins/workflows build` after source edits and include the updated action and UI bundles in the change. Runtime images include the package under `packages/plugins`; source development and built server entrypoints use the same catalog.
+Run `bun run --cwd packages/plugins/workflows build` after source edits and include the updated action and UI bundles in the change. Runtime images include the packages under `packages/plugins`; source development and built server entrypoints use the same catalog.
 
 For local development, rebuild the plugin, then choose **System → Plugins → Official plugins → Reinstall**. Organization admins can reload the bundled files without manually bumping the package version. Reinstall preserves workflows, run history, and the enabled/disabled state. It creates an immutable development release for changed content and switches only the active organization; other organizations keep their selected code. Unchanged content reuses its development release. If an update or migration fails, the plugin remains disabled with its previous data available for recovery.
+
+### Google Meet
+
+`packages/plugins/google-meet` is the official Google Meet capture and
+transcription plugin. Its Chrome extension captures meeting audio, and the
+plugin worker transcribes recordings with the organization's configured
+transcription provider. Install the plugin from **System → Plugins**, then
+enable it for the active organization. See [Google Meet](/google-meet) for the
+Chrome extension and capture workflow. Rebuild it with
+`bun run --cwd packages/plugins/google-meet build` and include the action, UI,
+worker, and extension files in a source change.
 
 ### Supermemory
 
@@ -50,7 +66,58 @@ With `useHostLlm: true`, the host writes the active provider’s type, API key, 
 
 `GET /v1/workers/plugins` lists workers for the active organization. Organization admins and platform admins can use the existing worker control/log endpoints for those returned names. The Workers page exposes the same controls.
 
-## Package layout
+## Local drafts from Super Bot
+
+Super Bot's bundled `create-plugin` skill writes a draft beneath its profile
+workspace's `plugin-drafts/<pluginId>/` directory. It keeps sources in `src/`
+alongside built actions, UI, skills, workers, and migrations. Direct `bun build`
+commands compile the draft; the agent does not install it or execute its actions.
+Host shell access is unsandboxed, including during drafting.
+
+The skill ships `scripts/new-plugin.mjs` and a `template/` folder. Super Bot runs
+`bun <skill dir>/scripts/new-plugin.mjs <id> "<Name>" <action>` from its
+workspace to scaffold and build a new draft: one action, an example page
+(`src/ui.jsx`, `src/ui.css`), and a chat card for the action. The skill also
+teaches the page style (host `ctx.ui` components, scoped CSS, host color
+variables). `ensureBundledSkillFiles` copies
+those assets into the installed skill folder on every start.
+
+When the draft builds, Super Bot calls `submit_plugin_draft`. The tool runs
+`PluginService.describeLocalPlugin`, which validates the draft without the
+platform-admin check, and returns `type: "plugin_draft_ready"`. The web chat
+renders that result as `PluginDraftCard`. The card reads its state from the org
+plugin list and plugin agent access.
+
+A platform admin chooses **System → Plugins → Install from folder**, selects
+the active organization's Super Bot, and enters the draft ID. Preview shows the
+effective development version, digest, and files grouped by what runs. Open
+files to review the source and executable output, then confirm installation.
+Install does not require opening every file.
+
+Local review and installation use explicit organization/profile/draft IDs,
+never caller-supplied absolute paths. Only server-local Super Bot drafts in that
+organization are accepted. Symlinks, hard links, special files, oversized trees,
+runtime dependencies, and official plugin IDs are rejected.
+
+The review digest includes the two manifests, sources, and all included
+capability files. Installation publishes the same validated file map. Changed
+files require a new preview. No generated module, worker, migration, or package
+script runs during preview. File review responses contain encoded data, not
+executable HTML or JavaScript.
+
+Fresh installation selects the release for the named organization and leaves
+it disabled. First enable runs migrations and starts declared workers. Reinstall
+uses an immutable content-based development release and preserves the previous
+enabled/disabled state after success. Failed migrations leave the old release
+and database generation selected and disabled. Other organizations keep their
+selected releases. New actions still need profile assignment.
+
+Local releases show **Local**. Server-controlled provenance is stored outside
+the manifest; older releases retain **legacy** provenance. Backup/restore
+preserves provenance and leaves restored plugins disabled. Approved releases
+remain host-wide trusted packages. Human review is not a sandbox.
+
+## Published package layout
 
 ```text
 package.json
@@ -62,7 +129,9 @@ ui/assets/*
 migrations/*.sql
 ```
 
-Publish to the public npm registry. Put `nakama.plugin.json` beside `package.json`; their versions must match. Admins enter the npm package name and exact version. Tags, ranges, Git URLs, local paths, private registries, and archive uploads are not supported.
+Publish to the npm registry. Put `nakama.plugin.json` beside `package.json`; their versions must match. Admins enter the npm package name and exact version. The npm route does not accept tags, ranges, Git URLs, local paths, other registries, or archive uploads. Use the reviewed local-draft flow above for server-local drafts.
+
+A restricted package installs when the server has `NAKAMA_PLUGIN_NPM_TOKEN` set. The token is sent to `registry.npmjs.org` only, for preview, install and the update check. It is one token for the whole install, so use a read-only granular token limited to the plugin packages. Without it, a restricted package fails preview like a package that does not exist.
 
 Preview records the package digest and registry SHA-512 integrity. Installation rechecks both before publishing the release.
 

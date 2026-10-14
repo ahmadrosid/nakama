@@ -28,6 +28,7 @@ describe("promptForProviderConfig", () => {
         },
       ],
     });
+
     expect(config.providers[0]?.type).toBe("netra");
     expect(config.providers[0]?.customModels).toEqual([
       {
@@ -49,6 +50,7 @@ describe("promptForProviderConfig", () => {
         throw new Error("offline");
       },
     });
+
     expect(config.providers[0]?.customModels?.[0]?.id).toBe(
       "deepseek/deepseek-v4-flash-0731"
     );
@@ -83,6 +85,7 @@ describe("promptForProviderConfig", () => {
       "responses",
       "demo-thinker",
     ];
+
     const config = await promptForProviderConfig(scriptedPrompt(answers));
 
     expect(config.providers[0]?.wireApi).toBe("responses");

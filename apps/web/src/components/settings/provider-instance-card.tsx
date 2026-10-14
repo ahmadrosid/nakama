@@ -14,7 +14,7 @@ import {
 import type { ReactNode } from "react";
 import { CatalogProviderModelFields } from "@/components/CatalogProviderModelFields";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
-import type { CatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
+import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
 import { ShortlistBrowseProviderModelFields } from "@/components/ShortlistBrowseProviderModelFields";
 import {
@@ -89,9 +89,11 @@ function compatibleRemoteProvider(
   if (card.isOllama) {
     return "ollama";
   }
+
   if (card.providerType === "netra") {
     return "netra";
   }
+
   return "openai_compatible";
 }
 
@@ -102,9 +104,11 @@ function providerKeyActionLabel(
   if (card.isXaiOAuth) {
     return hasApiKey ? "Reconnect Grok" : "Connect Grok";
   }
+
   if (card.isChatgpt) {
     return hasApiKey ? "Reconnect ChatGPT" : "Connect ChatGPT";
   }
+
   return hasApiKey ? "Update key" : "Add key";
 }
 
@@ -235,14 +239,14 @@ function ProviderManageModelsFields({
           }
         />
       ) : null}
-      {card.isCatalogShortlist ? (
+      {isCatalogShortlistProvider(card.providerType) ? (
         <CatalogProviderModelFields
           catalogModels={card.catalogModelsForType}
           customModels={card.manageModels}
           disabled={card.busy}
           modelsError={card.dialogError}
           onCustomModelsChange={card.handleManageModelsChange}
-          provider={card.providerType as CatalogShortlistProvider}
+          provider={card.providerType}
           providerInstanceId={instance.id}
         />
       ) : null}
@@ -360,6 +364,7 @@ export function ProviderInstanceCard({
     onError,
     onUpdate,
   });
+
   const canManage = canManageProviderModels(card);
 
   return (

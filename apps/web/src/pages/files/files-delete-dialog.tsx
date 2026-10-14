@@ -71,6 +71,7 @@ export function FilesRename({
   const [name, setName] = useState("");
   const [revision, setRevision] = useState(0);
   const queryClient = useQueryClient();
+
   const mutation = useMutation({
     mutationFn: ({ path, newName }: { path: string; newName: string }) =>
       client.renameProfileWorkspaceEntry(profileId!, { newName, path }),
@@ -90,12 +91,14 @@ export function FilesRename({
       });
     },
   });
+
   function requestRename(path: string) {
     const normalized = path.replace(/\/$/, "");
     mutation.reset();
     setTarget(normalized);
     setName(artifactBasename(normalized));
   }
+
   return (
     <FileRenameContext.Provider value={profileId ? requestRename : null}>
       <Fragment key={revision}>{children}</Fragment>
@@ -115,6 +118,7 @@ export function FilesRename({
             className="space-y-4"
             onSubmit={(event) => {
               event.preventDefault();
+
               if (target && !mutation.isPending) {
                 mutation.mutate({ newName: name, path: target });
               }

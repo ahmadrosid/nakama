@@ -73,10 +73,12 @@ describe("skill instruction discovery", () => {
       scriptTools: [],
       skillFilePath: "/tmp/skills/bang-motion/SKILL.md",
     };
+
     const matched = matchSkillsForMessage(
       [skill],
       "Buatkan explainer tentang kereta Whoosh sekitar 1 menit\nstyle vector gunakan skill Bang-Motion"
     );
+
     expect(matched).toHaveLength(1);
     const prompt = composeMatchedSkillsPrompt(matched);
     expect(prompt).toContain(skill.skillFilePath);

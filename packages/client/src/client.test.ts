@@ -6,24 +6,458 @@ import { join } from "node:path";
 import { getUserConfigDir, saveUserConfig } from "@nakama/core";
 import { NakamaAuthExpiredError, NakamaClient } from "./index";
 
+const organizationRequests = [
+  {
+    body: null,
+    call: (client: NakamaClient) => client.getTool("tool/a?", "team/a?"),
+    method: "GET",
+    path: "/v1/tools/tool%2Fa%3F",
+    response: { tool: { id: "tool/a?", name: "Shared tool" } },
+  },
+  {
+    body: null,
+    call: (client: NakamaClient) =>
+      client.listPublishedSkillFiles("team/a?", "publication/a?"),
+    method: "GET",
+    path: "/v1/orgs/team%2Fa%3F/shared-resources/publication%2Fa%3F/skill/files",
+    response: {
+      files: [{ path: "references/guide.md", type: "file" }],
+      truncated: false,
+    },
+  },
+  {
+    body: null,
+    call: (client: NakamaClient) =>
+      client.readPublishedSkillFile(
+        "team/a?",
+        "publication/a?",
+        "references/a b?.md"
+      ),
+    method: "GET",
+    path: "/v1/orgs/team%2Fa%3F/shared-resources/publication%2Fa%3F/skill/file?path=references%2Fa+b%3F.md",
+    response: { content: "Shared reference", path: "references/a b?.md" },
+  },
+  {
+    body: null,
+    call: (client: NakamaClient) =>
+      client.getPublishedSkill("team/a?", "publication/a?"),
+    method: "GET",
+    path: "/v1/orgs/team%2Fa%3F/shared-resources/publication%2Fa%3F/skill",
+    response: {
+      skill: {
+        body: "Shared instructions",
+        id: "parent-skill",
+        publicationId: "publication/a?",
+      },
+    },
+  },
+  {
+    body: null,
+    call: (client: NakamaClient) => client.getOrganizationOverview("team/a?"),
+    method: "GET",
+    path: "/v1/orgs/team%2Fa%3F/overview",
+    response: { activeOrgId: "team/a?", sharedResources: [], teams: [] },
+  },
+  {
+    body: {
+      adminUserId: "user-2",
+      name: "Sales",
+      requestId: "retry-1",
+      slug: "sales",
+    },
+    call: (client: NakamaClient) =>
+      client.createTeam("team/a?", {
+        adminUserId: "user-2",
+        name: "Sales",
+        requestId: "retry-1",
+        slug: "sales",
+      }),
+    method: "POST",
+    path: "/v1/orgs/team%2Fa%3F/teams",
+    response: { organization: { id: "sales" } },
+  },
+  {
+    body: null,
+    call: (client: NakamaClient) => client.listOrgSharedResources("team/a?"),
+    method: "GET",
+    path: "/v1/orgs/team%2Fa%3F/shared-resources",
+    response: { resources: [] },
+  },
+  {
+    body: { resourceId: "provider::model", resourceKind: "model" },
+    call: (client: NakamaClient) =>
+      client.publishOrgSharedResource("team/a?", {
+        resourceId: "provider::model",
+        resourceKind: "model",
+      }),
+    method: "POST",
+    path: "/v1/orgs/team%2Fa%3F/shared-resources",
+    response: { publication: { id: "publication/a?" } },
+  },
+  {
+    body: null,
+    call: (client: NakamaClient) =>
+      client.unpublishOrgSharedResource("team/a?", "publication/a?"),
+    method: "DELETE",
+    path: "/v1/orgs/team%2Fa%3F/shared-resources/publication%2Fa%3F",
+    response: undefined,
+  },
+  {
+    body: null,
+    call: (client: NakamaClient) =>
+      client.createSharedAgentInstance("team/a?", "publication/a?"),
+    method: "POST",
+    path: "/v1/orgs/team%2Fa%3F/shared-agents/publication%2Fa%3F/instance",
+    response: { profile: { id: "team-agent" } },
+  },
+];
+
+const authScopeUser = {
+  activeOrgId: "team-a",
+  email: "user@example.com",
+  id: "user",
+  isPlatformAdmin: false,
+};
+
+const authScopeRequests = [
+  {
+    call: (client: NakamaClient) =>
+      client.login("user@example.com", "password"),
+    method: "POST",
+    path: "/v1/auth/login",
+    response: authScopeUser,
+  },
+  {
+    call: (client: NakamaClient) =>
+      client.setupUser({
+        admin: {
+          email: "user@example.com",
+          name: "User",
+          password: "password",
+        },
+        organization: { name: "Team A", slug: "team-a" },
+      }),
+    method: "POST",
+    path: "/v1/auth/setup",
+    response: authScopeUser,
+  },
+  {
+    call: (client: NakamaClient) =>
+      client.updateAuthProfile({ name: "Updated" }),
+    method: "PATCH",
+    path: "/v1/auth/me",
+    response: authScopeUser,
+  },
+  {
+    call: (client: NakamaClient) => client.acceptOrgInvite({ token: "invite" }),
+    method: "POST",
+    path: "/v1/auth/accept-invite",
+    response: {
+      email: "user@example.com",
+      orgId: "team-a",
+      role: "member" as const,
+    },
+  },
+];
+
+for (const action of authScopeRequests) {
+  test.each(["switch", "reset", "current"] as const)(
+    `${action.method} ${action.path} preserves client scope after %s`,
+    async (mode) => {
+      const pending = Promise.withResolvers<Response>();
+      const requests: Request[] = [];
+
+      const client = new NakamaClient({
+        baseUrl: "http://localhost",
+        fetch: async (input, init) => {
+          const request = new Request(input, init);
+          requests.push(request);
+          const path = new URL(request.url).pathname;
+
+          if (path === action.path) {
+            expect(request.method).toBe(action.method);
+
+            return await pending.promise;
+          }
+
+          if (path === "/v1/auth/active-org") {
+            return Response.json({ activeOrgId: "team-b", id: "user" });
+          }
+
+          return Response.json({ profiles: [] });
+        },
+        orgId: "original",
+      });
+
+      const updating = action.call(client);
+
+      if (mode === "switch") {
+        await client.setActiveOrg("team-b");
+      } else if (mode === "reset") {
+        client.setOrgId(null);
+      }
+
+      pending.resolve(Response.json(action.response));
+      expect(await updating).toEqual(action.response);
+      await client.listProfiles();
+      expect(requests.at(-1)?.headers.get("X-Org-Id")).toBe(
+        mode === "switch" ? "team-b" : mode === "reset" ? null : "team-a"
+      );
+    }
+  );
+}
+
+test.each(["switch", "reset"] as const)(
+  "a late identity read cannot replace client scope after %s",
+  async (mode) => {
+    const pending = Promise.withResolvers<Response>();
+    const requests: Request[] = [];
+
+    const client = new NakamaClient({
+      baseUrl: "http://localhost",
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        requests.push(request);
+
+        if (new URL(request.url).pathname === "/v1/auth/me") {
+          return await pending.promise;
+        }
+
+        if (new URL(request.url).pathname === "/v1/auth/active-org") {
+          return Response.json({ activeOrgId: "team-b", id: "user" });
+        }
+
+        return Response.json({ profiles: [] });
+      },
+      orgId: "team-a",
+    });
+
+    const identity = client.getMe();
+
+    if (mode === "switch") {
+      await client.setActiveOrg("team-b");
+    } else {
+      client.setOrgId(null);
+    }
+
+    pending.resolve(Response.json({ activeOrgId: "team-a", id: "user" }));
+    expect((await identity).activeOrgId).toBe("team-a");
+    await client.listProfiles();
+    expect(requests.at(-1)?.headers.get("X-Org-Id")).toBe(
+      mode === "switch" ? "team-b" : null
+    );
+  }
+);
+
+test("a delayed switch cannot restore a cleared client scope", async () => {
+  const pending = Promise.withResolvers<Response>();
+  const requests: Request[] = [];
+
+  const client = new NakamaClient({
+    baseUrl: "http://localhost",
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+
+      if (new URL(request.url).pathname === "/v1/auth/active-org") {
+        return await pending.promise;
+      }
+
+      return Response.json({ profiles: [] });
+    },
+  });
+
+  const switching = client.setActiveOrg("team-a");
+  client.setOrgId(null);
+  pending.resolve(Response.json({ activeOrgId: "team-a", id: "user" }));
+  expect((await switching).activeOrgId).toBe("team-a");
+  await client.listProfiles();
+  expect(requests.at(-1)?.headers.get("X-Org-Id")).toBeNull();
+});
+
+test("an unchanged identity read does not discard a pending team switch", async () => {
+  const pending = Promise.withResolvers<Response>();
+  const requests: Request[] = [];
+
+  const client = new NakamaClient({
+    baseUrl: "http://localhost",
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      const path = new URL(request.url).pathname;
+
+      if (path === "/v1/auth/active-org") {
+        return await pending.promise;
+      }
+
+      if (path === "/v1/auth/me") {
+        return Response.json({ activeOrgId: "team-a", id: "user" });
+      }
+
+      return Response.json({ profiles: [] });
+    },
+    orgId: "team-a",
+  });
+
+  const switching = client.setActiveOrg("team-b");
+  await client.getMe();
+  pending.resolve(Response.json({ activeOrgId: "team-b", id: "user" }));
+  await switching;
+  await client.listProfiles();
+  expect(requests.at(-1)?.headers.get("X-Org-Id")).toBe("team-b");
+});
+
+test("a current identity read still selects the server's active tenant", async () => {
+  const requests: Request[] = [];
+
+  const client = new NakamaClient({
+    baseUrl: "http://localhost",
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+
+      return Response.json(
+        new URL(request.url).pathname === "/v1/auth/me"
+          ? { activeOrgId: "team-b", id: "user" }
+          : { profiles: [] }
+      );
+    },
+    orgId: "team-a",
+  });
+
+  expect((await client.getMe()).activeOrgId).toBe("team-b");
+  await client.listProfiles();
+  expect(requests.at(-1)?.headers.get("X-Org-Id")).toBe("team-b");
+});
+
+test.each([false, true])(
+  "the newest switch owns client scope; newest response first=%s",
+  async (newestFirst) => {
+    const first = Promise.withResolvers<Response>();
+    const second = Promise.withResolvers<Response>();
+    const requests: Request[] = [];
+
+    const client = new NakamaClient({
+      baseUrl: "http://localhost",
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        requests.push(request);
+
+        if (new URL(request.url).pathname === "/v1/auth/active-org") {
+          const body = await request.json();
+
+          return await (body.orgId === "team-b"
+            ? first.promise
+            : second.promise);
+        }
+
+        return Response.json({ profiles: [] });
+      },
+      orgId: "team-a",
+    });
+
+    const switchingFirst = client.setActiveOrg("team-b");
+    const switchingSecond = client.setActiveOrg("team-c");
+
+    if (newestFirst) {
+      second.resolve(Response.json({ activeOrgId: "team-c", id: "user" }));
+      await switchingSecond;
+      first.resolve(Response.json({ activeOrgId: "team-b", id: "user" }));
+    } else {
+      first.resolve(Response.json({ activeOrgId: "team-b", id: "user" }));
+      await switchingFirst;
+      second.resolve(Response.json({ activeOrgId: "team-c", id: "user" }));
+    }
+
+    await Promise.all([switchingFirst, switchingSecond]);
+    await client.listProfiles();
+    expect(requests.at(-1)?.headers.get("X-Org-Id")).toBe("team-c");
+  }
+);
+
+test.each(organizationRequests)(
+  "$method $path uses explicit tenant context and preserves the response",
+  async ({ call, method, path, body, response }) => {
+    const requests: Request[] = [];
+
+    const client = new NakamaClient({
+      authToken: "test-token",
+      baseUrl: "https://nakama.example.com",
+      fetch: async (input, init) => {
+        requests.push(new Request(input, init));
+
+        return response === undefined
+          ? new Response(null, { status: 204 })
+          : Response.json(response);
+      },
+      orgId: "other-team",
+    });
+
+    expect<unknown>(await call(client)).toEqual(response);
+    expect(requests).toHaveLength(1);
+    const request = requests[0]!;
+    expect(request.url).toBe(`https://nakama.example.com${path}`);
+    expect(request.method).toBe(method);
+    expect(request.headers.get("X-Org-Id")).toBe("team/a?");
+    expect(request.headers.get("Authorization")).toBe("Bearer test-token");
+
+    if (body) {
+      expect(request.headers.get("Content-Type")).toBe("application/json");
+      expect(await request.json()).toEqual(body);
+    } else {
+      expect(await request.text()).toBe("");
+    }
+
+    await client.listOrgMembers("other-team");
+    expect(requests[1]?.headers.get("X-Org-Id")).toBe("other-team");
+  }
+);
+
+test.each(organizationRequests)(
+  "$method $path preserves denied access",
+  async ({ call }) => {
+    const client = new NakamaClient({
+      baseUrl: "https://nakama.example.com",
+      fetch: async () => Response.json({ error: "denied" }, { status: 403 }),
+    });
+
+    await expect(call(client)).rejects.toMatchObject({ status: 403 });
+  }
+);
+
 test.each(["http://localhost:4310", "https://nakama.example.com"])(
   "CLI images are uploaded in the request body to %s",
   async (baseUrl) => {
     const requests: Request[] = [];
+
     const client = new NakamaClient({
       authToken: "test-token",
       baseUrl,
       fetch: async (input, init) => {
         requests.push(new Request(input, init));
+
         return new Response('data: {"type":"done","reply":"ok"}\n\n', {
           headers: { "Content-Type": "text/event-stream" },
         });
       },
       orgId: "org-a",
     });
+
     const images = [{ data: "aW1hZ2U=", mediaType: "image/png" }];
     const session = client.createChatSession("session-1", "cli");
-    await session.sendStream({ images, message: "Describe this" }, () => {});
+
+    const whatsappMessage = {
+      chatJid: "chat@g.us",
+      fromMe: false,
+      isGroup: true,
+      senderJid: "sender@s.whatsapp.net",
+      senderJids: ["sender@s.whatsapp.net"],
+    };
+
+    await session.sendStream({ images, message: "Describe this" }, () => {}, {
+      whatsappContextToken: "internal-worker-token",
+      whatsappMessage,
+    });
     expect(requests).toHaveLength(1);
     const request = requests[0]!;
     expect(request.url).toBe(
@@ -31,24 +465,31 @@ test.each(["http://localhost:4310", "https://nakama.example.com"])(
     );
     expect(request.headers.get("Authorization")).toBe("Bearer test-token");
     expect(request.headers.get("X-Org-Id")).toBe("org-a");
+    expect(request.headers.get("X-Nakama-WhatsApp-Context-Token")).toBe(
+      "internal-worker-token"
+    );
     expect(await request.json()).toMatchObject({
       images,
       message: "Describe this",
       stream: true,
+      whatsappMessage,
     });
   }
 );
 
 test("scoped clients keep session requests in their original organization", async () => {
   const requests: Request[] = [];
+
   const client = new NakamaClient({
     authToken: "test-token",
     baseUrl: "http://localhost:4310",
-    fetch: (async (input, init) => {
+    fetch: async (input, init) => {
       requests.push(new Request(input, init));
+
       return Response.json({ messages: [] });
-    }) as typeof fetch,
+    },
   });
+
   const first = client.forOrg("org_a").createChatSession("first", "discord");
   const second = client.forOrg("org_b").createChatSession("second", "discord");
   client.setOrgId("org_c");
@@ -66,14 +507,17 @@ test("scoped clients keep session requests in their original organization", asyn
 
 test("plugin access requests retain their explicit organization", async () => {
   const requests: Request[] = [];
+
   const client = new NakamaClient({
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       requests.push(new Request(input, init));
+
       return Response.json({});
     },
     orgId: "org-other",
   });
+
   await client.getProfile("agent-a", "org-a");
   await client.listTools("org-a");
   await client.listSkills("org-a");
@@ -98,13 +542,16 @@ test("plugin access requests retain their explicit organization", async () => {
 
 test("official plugin reinstall sends revision and explicit organization", async () => {
   let request!: Request;
+
   const client = new NakamaClient({
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       request = new Request(input, init);
+
       return Response.json({ install: { lifecycleState: "enabled" } });
     },
   });
+
   await client.reinstallOfficialPlugin("workflows", 7, "org-a");
   expect(new URL(request.url).pathname).toBe(
     "/v1/plugins/official/workflows/reinstall"
@@ -114,22 +561,69 @@ test("official plugin reinstall sends revision and explicit organization", async
   expect(await request.json()).toEqual({ expectedRevision: 7 });
 });
 
+test("local draft transport pins the explicit organization, digest, revision, and review offset", async () => {
+  const requests: Request[] = [];
+
+  const client = new NakamaClient({
+    baseUrl: "http://localhost",
+    fetch: async (input, init) => {
+      requests.push(new Request(input, init));
+
+      return Response.json({});
+    },
+    orgId: "other-org",
+  });
+
+  const draft = { draftId: "notes", orgId: "reviewed-org", profileId: "super" };
+  await client.previewLocalPlugin(draft);
+  await client.readLocalPluginFile({
+    ...draft,
+    expectedDigest: "a".repeat(64),
+    offset: 1024,
+    path: "src/list.js",
+  });
+  await client.installLocalPlugin({
+    ...draft,
+    expectedDigest: "a".repeat(64),
+    expectedRevision: 7,
+  });
+  expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
+    "/v1/platform/plugins/preview-local",
+    "/v1/platform/plugins/local-file",
+    "/v1/platform/plugins/install-local",
+  ]);
+  expect(await requests[0]!.json()).toEqual(draft);
+  expect(await requests[1]!.json()).toMatchObject({
+    ...draft,
+    expectedDigest: "a".repeat(64),
+    offset: 1024,
+  });
+  expect(await requests[2]!.json()).toEqual({
+    ...draft,
+    expectedDigest: "a".repeat(64),
+    expectedRevision: 7,
+  });
+});
+
 test("chat stream request includes cookie CSRF protection", async () => {
-  const originalDocument = (
-    globalThis as typeof globalThis & { document?: { cookie: string } }
-  ).document;
-  (
-    globalThis as typeof globalThis & { document?: { cookie: string } }
-  ).document = {
-    cookie: "nakama_csrf=csrf-token-123; other=value",
-  };
+  const originalDocument = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "document"
+  );
+
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: { cookie: "nakama_csrf=csrf-token-123; other=value" },
+  });
 
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       return new Response('data: {"type":"done","reply":"ok"}\n\n', {
         headers: { "Content-Type": "text/event-stream" },
       });
@@ -148,34 +642,41 @@ test("chat stream request includes cookie CSRF protection", async () => {
     expect(headers.get("Content-Type")).toBe("application/json");
     expect(fetchCalls[0]!.init?.credentials).toBe("include");
     expect(
+      // SAFETY: The client adds Bun's idleTimeout option to this captured request.
       (fetchCalls[0]!.init as RequestInit & { idleTimeout?: number })
         .idleTimeout
     ).toBe(0);
   } finally {
-    (
-      globalThis as typeof globalThis & { document?: { cookie: string } }
-    ).document = originalDocument;
+    if (originalDocument) {
+      Object.defineProperty(globalThis, "document", originalDocument);
+    } else {
+      Reflect.deleteProperty(globalThis, "document");
+    }
   }
 });
 
 test("CSRF header prefers the host-bound cookie a sibling host cannot set", async () => {
-  const originalDocument = (
-    globalThis as typeof globalThis & { document?: { cookie: string } }
-  ).document;
+  const originalDocument = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "document"
+  );
+
   // An attacker-planted parent-domain cookie is still readable from JS, so the
   // client must send the host-bound one the server actually trusts.
-  (
-    globalThis as typeof globalThis & { document?: { cookie: string } }
-  ).document = {
-    cookie: "nakama_csrf=planted; __Host-nakama_csrf=host-bound",
-  };
+
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: { cookie: "nakama_csrf=planted; __Host-nakama_csrf=host-bound" },
+  });
 
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     baseUrl: "https://nakama.example.com",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       return new Response('data: {"type":"done","reply":"ok"}\n\n', {
         headers: { "Content-Type": "text/event-stream" },
       });
@@ -191,20 +692,24 @@ test("CSRF header prefers the host-bound cookie a sibling host cannot set", asyn
       "host-bound"
     );
   } finally {
-    (
-      globalThis as typeof globalThis & { document?: { cookie: string } }
-    ).document = originalDocument;
+    if (originalDocument) {
+      Object.defineProperty(globalThis, "document", originalDocument);
+    } else {
+      Reflect.deleteProperty(globalThis, "document");
+    }
   }
 });
 
 test("automation run requests disable Bun fetch idle timeout", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       return new Response(null, { status: 204 });
     },
   });
@@ -215,6 +720,7 @@ test("automation run requests disable Bun fetch idle timeout", async () => {
     "http://localhost:4310/v1/internal/automations/auto_1/run?orgId=org_1"
   );
   expect(
+    // SAFETY: The client adds Bun's idleTimeout option to this captured request.
     (fetchCalls[0]!.init as RequestInit & { idleTimeout?: number }).idleTimeout
   ).toBe(0);
 });
@@ -222,11 +728,13 @@ test("automation run requests disable Bun fetch idle timeout", async () => {
 test("clients send org context on authenticated requests", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       return Response.json({ profiles: [] });
     },
     orgId: "org_test",
@@ -242,11 +750,13 @@ test("clients send org context on authenticated requests", async () => {
 test("listProfiles takes an org id per call, overriding the client's", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       return Response.json({ profiles: [] });
     },
     orgId: "org_test",
@@ -261,11 +771,13 @@ test("listProfiles takes an org id per call, overriding the client's", async () 
 test("non-browser clients send local auth as a bearer token", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       return Response.json({ ok: true });
     },
   });
@@ -280,11 +792,13 @@ test("non-browser clients send local auth as a bearer token", async () => {
 test("data export downloads zip bytes with filename metadata", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       return new Response(new Uint8Array([1, 2, 3]), {
         headers: {
           "Content-Disposition":
@@ -310,11 +824,13 @@ test("data export downloads zip bytes with filename metadata", async () => {
 test("user data export scopes the download path to the requested user", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       return new Response(new Uint8Array([4, 5, 6]), {
         headers: {
           "Content-Disposition":
@@ -337,12 +853,14 @@ test("user data export scopes the download path to the requested user", async ()
 test("profile pack helpers export zip and upload base64 preview/import bodies", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
       const url = input.toString();
+
       if (url.includes("/pack/export")) {
         return new Response(new Uint8Array([9, 8, 7]), {
           headers: {
@@ -352,6 +870,7 @@ test("profile pack helpers export zip and upload base64 preview/import bodies", 
           },
         });
       }
+
       if (url.endsWith("/pack/import/preview")) {
         return Response.json({
           manifest: { kind: "nakama-profile-export" },
@@ -360,6 +879,7 @@ test("profile pack helpers export zip and upload base64 preview/import bodies", 
           topLevelPaths: ["SOUL.md"],
         });
       }
+
       return Response.json({
         manifest: { kind: "nakama-profile-export" },
         profileId: "profile_new",
@@ -385,10 +905,10 @@ test("profile pack helpers export zip and upload base64 preview/import bodies", 
     })
   ).resolves.toMatchObject({ profileId: "profile_new" });
 
-  expect(JSON.parse(fetchCalls[1]!.init?.body as string)).toEqual({
+  expect(JSON.parse(String(fetchCalls[1]!.init?.body))).toEqual({
     data: Buffer.from([1, 2, 3]).toString("base64"),
   });
-  expect(JSON.parse(fetchCalls[2]!.init?.body as string)).toEqual({
+  expect(JSON.parse(String(fetchCalls[2]!.init?.body))).toEqual({
     confirm: true,
     data: Buffer.from([4, 5, 6]).toString("base64"),
     name: "Bot Copy",
@@ -398,11 +918,13 @@ test("profile pack helpers export zip and upload base64 preview/import bodies", 
 test("readProfileArtifactContent fetches artifact bytes with inline query", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       return new Response("# Report", {
         headers: {
           "Content-Disposition": 'inline; filename="report.md"',
@@ -434,11 +956,13 @@ test("readProfileArtifactContent fetches artifact bytes with inline query", asyn
 test("hasProfileArtifact reads a 404 as deleted and rethrows other failures", async () => {
   const methods: Array<string | undefined> = [];
   let status = 200;
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
     fetch: async (_input, init) => {
       methods.push(init?.method);
+
       return new Response(null, { status });
     },
     orgId: "org_test",
@@ -457,11 +981,13 @@ test("hasProfileArtifact reads a 404 as deleted and rethrows other failures", as
 test("data import helpers upload base64 archive data", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       if (input.toString().endsWith("/preview")) {
         return Response.json({
           archiveFileCount: 1,
@@ -489,10 +1015,10 @@ test("data import helpers upload base64 archive data", async () => {
     client.restoreDataImport(new Uint8Array([4, 5, 6]), { confirm: true })
   ).resolves.toMatchObject({ restoredFileCount: 1 });
 
-  expect(JSON.parse(fetchCalls[0]!.init?.body as string)).toEqual({
+  expect(JSON.parse(String(fetchCalls[0]!.init?.body))).toEqual({
     data: "AQID",
   });
-  expect(JSON.parse(fetchCalls[1]!.init?.body as string)).toEqual({
+  expect(JSON.parse(String(fetchCalls[1]!.init?.body))).toEqual({
     confirm: true,
     data: "BAUG",
   });
@@ -525,11 +1051,13 @@ test("non-browser clients reload the local auth token once after a 401", async (
     );
 
     let attempts = 0;
+
     const client = new NakamaClient({
       authToken: "tc_local_stale",
       baseUrl: "http://localhost:4310",
       fetch: async () => {
         attempts += 1;
+
         if (attempts === 1) {
           return new Response(
             JSON.stringify({ error: "Authentication required" }),
@@ -544,7 +1072,7 @@ test("non-browser clients reload the local auth token once after a 401", async (
       },
     });
 
-    await expect(client.health()).resolves.toEqual({ ok: true });
+    await expect(client.health()).resolves.toMatchObject({ ok: true });
     expect(attempts).toBe(2);
   } finally {
     delete process.env.NAKAMA_CONFIG_DIR;
@@ -556,6 +1084,7 @@ test("non-browser clients throw NakamaAuthExpiredError when 401 token is unchang
   const configDir = await mkdtemp(
     join(tmpdir(), "nakama-client-auth-expired-")
   );
+
   process.env.NAKAMA_CONFIG_DIR = configDir;
 
   try {
@@ -594,6 +1123,7 @@ test("non-browser clients throw NakamaAuthExpiredError when 401 token is unchang
 test("notification destination client methods hit the expected routes", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
@@ -659,22 +1189,23 @@ test("notification destination client methods hit the expected routes", async ()
 
 function createPublishShareClient(options: {
   clientOrigin?: string;
-  response: Record<string, unknown>;
+  response: Record<string, string | boolean | null>;
 }) {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://127.0.0.1:4310",
-    ...(options.clientOrigin === undefined
-      ? {}
-      : { clientOrigin: options.clientOrigin }),
+    clientOrigin: options.clientOrigin,
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       return Response.json(options.response);
     },
     orgId: "org_test",
   });
+
   return { client, fetchCalls };
 }
 
@@ -697,7 +1228,7 @@ test("publishProfileArtifactShare includes clientOrigin when configured", async 
   expect(fetchCalls[0]!.input.toString()).toBe(
     "http://127.0.0.1:4310/v1/profiles/profile_1/artifacts/shares"
   );
-  expect(JSON.parse(fetchCalls[0]!.init?.body as string)).toEqual({
+  expect(JSON.parse(String(fetchCalls[0]!.init?.body))).toEqual({
     clientOrigin: "https://nakama.example.com",
     path: "report.md",
   });
@@ -717,20 +1248,23 @@ test("publishProfileArtifactShare omits clientOrigin when unset", async () => {
 
   await client.publishProfileArtifactShare("profile_1", "report.md");
 
-  expect(JSON.parse(fetchCalls[0]!.init?.body as string)).toEqual({
+  expect(JSON.parse(String(fetchCalls[0]!.init?.body))).toEqual({
     path: "report.md",
   });
 });
 
 test("listSessions asks for several channels and a page in one request", async () => {
   const urls: string[] = [];
+
   const client = new NakamaClient({
     baseUrl: "http://localhost:4310",
-    fetch: (async (input, init) => {
+    fetch: async (input, init) => {
       urls.push(new Request(input, init).url);
+
       return Response.json({ sessions: [] });
-    }) as typeof fetch,
+    },
   });
+
   await client.listSessions("agent-a");
   await client.listSessions("agent-a", ["web", "telegram"], {
     cursor: null,
@@ -752,6 +1286,7 @@ test("listSessions asks for several channels and a page in one request", async (
 test("artifact download budget stops declared and chunked oversize bodies", async () => {
   for (const declared of [undefined, "100", "1"]) {
     let cancelled = false;
+
     const body = new ReadableStream<Uint8Array>({
       cancel() {
         cancelled = true;
@@ -760,12 +1295,14 @@ test("artifact download budget stops declared and chunked oversize bodies", asyn
         controller.enqueue(new Uint8Array(5));
       },
     });
+
     const client = new NakamaClient({
-      fetch: (async () =>
+      fetch: async () =>
         new Response(body, {
           headers: declared ? { "Content-Length": declared } : {},
-        })) as unknown as typeof fetch,
+        }),
     });
+
     await expect(
       client.readProfileArtifactContent("profile", "report.csv", {
         maxBytes: 4,
@@ -773,9 +1310,11 @@ test("artifact download budget stops declared and chunked oversize bodies", asyn
     ).rejects.toThrow();
     expect(cancelled).toBe(true);
   }
+
   const client = new NakamaClient({
-    fetch: (async () => new Response("1234")) as unknown as typeof fetch,
+    fetch: async () => new Response("1234"),
   });
+
   expect(
     new TextDecoder().decode(
       (
@@ -791,9 +1330,11 @@ test("artifact download cancellation aborts a pending body read and forwards the
   const controller = new AbortController();
   let cancelled = false;
   let requestSignal: AbortSignal | null | undefined;
+
   const client = new NakamaClient({
-    fetch: (async (_input, init) => {
+    fetch: async (_input, init) => {
       requestSignal = init?.signal;
+
       return new Response(
         new ReadableStream({
           cancel() {
@@ -801,15 +1342,114 @@ test("artifact download cancellation aborts a pending body read and forwards the
           },
         })
       );
-    }) as typeof fetch,
+    },
   });
+
   const download = client.readProfileArtifactContent("profile", "report.csv", {
     maxBytes: 10,
     signal: controller.signal,
   });
+
   await new Promise((resolve) => setTimeout(resolve, 5));
   controller.abort();
   await expect(download).rejects.toThrow();
   expect(requestSignal).toBe(controller.signal);
   expect(cancelled).toBe(true);
+});
+
+test.each([
+  { contentType: "application/pdf", options: {}, query: "" },
+  {
+    contentType: "text/plain; charset=utf-8",
+    options: { render: "text" as const },
+    query: "?render=text",
+  },
+  { contentType: null, options: {}, query: "" },
+])(
+  "published document reads preserve bytes and explicit scope in case %#",
+  async ({ contentType, options, query }) => {
+    const bytes = new Uint8Array([0, 1, 127, 128, 255]);
+    const requests: Request[] = [];
+    const headers = new Headers();
+
+    if (contentType) {
+      headers.set("Content-Type", contentType);
+    }
+
+    const client = new NakamaClient({
+      authToken: "test-token",
+      baseUrl: "https://nakama.example.com",
+      fetch: async (input, init) => {
+        requests.push(new Request(input, init));
+
+        return new Response(bytes, { headers });
+      },
+      orgId: "other-team",
+    });
+
+    const document = await client.readPublishedKnowledgeBaseDocument(
+      "team/a?",
+      "publication/a?",
+      options
+    );
+
+    expect(document.contentType).toBe(
+      contentType ?? "application/octet-stream"
+    );
+    expect(new Uint8Array(document.data)).toEqual(bytes);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.url).toBe(
+      `https://nakama.example.com/v1/orgs/team%2Fa%3F/shared-resources/publication%2Fa%3F/content${query}`
+    );
+    expect(requests[0]?.method).toBe("GET");
+    expect(requests[0]?.headers.get("X-Org-Id")).toBe("team/a?");
+    expect(requests[0]?.headers.get("Authorization")).toBe("Bearer test-token");
+    expect(await requests[0]?.text()).toBe("");
+    await client.readPublishedKnowledgeBaseDocument(
+      "other-team",
+      "other-publication"
+    );
+    expect(requests[1]?.headers.get("X-Org-Id")).toBe("other-team");
+  }
+);
+
+test.each([403, 404])(
+  "published document reads preserve denial status %s",
+  async (status) => {
+    const client = new NakamaClient({
+      baseUrl: "https://nakama.example.com",
+      fetch: async () => Response.json({ error: "Unavailable" }, { status }),
+    });
+
+    await expect(
+      client.readPublishedKnowledgeBaseDocument("team-a", "publication-a")
+    ).rejects.toMatchObject({ status });
+    await expect(
+      client.readPublishedKnowledgeBaseDocument("team-a", "publication-a", {
+        render: "text",
+      })
+    ).rejects.toMatchObject({ status });
+  }
+);
+
+test("tool detail scope overrides one request and preserves the client default", async () => {
+  const requests: Request[] = [];
+
+  const client = new NakamaClient({
+    baseUrl: "https://nakama.example.com",
+    fetch: async (input, init) => {
+      requests.push(new Request(input, init));
+
+      return Response.json({ tool: { id: "tool" } });
+    },
+    orgId: "default-org",
+  });
+
+  await client.getTool("tool", "team-org");
+  await client.getTool("tool");
+  expect(requests.map((request) => request.headers.get("X-Org-Id"))).toEqual([
+    "team-org",
+    "default-org",
+  ]);
+  expect(requests.map((request) => request.method)).toEqual(["GET", "GET"]);
 });

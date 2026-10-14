@@ -11,11 +11,15 @@ declare const self: ServiceWorkerGlobalScope;
 
 /** Both are replaced by `scripts/build-sw.ts` at build time. */
 declare const __SW_VERSION__: string;
+
 declare const __SW_PRECACHE__: string[];
 
 const VERSION = __SW_VERSION__;
+
 const PRECACHE_URLS = __SW_PRECACHE__;
+
 const CACHE_NAME = cacheNameFor(VERSION);
+
 const SHELL_URL = "/";
 
 self.addEventListener("install", (event) => {
@@ -27,7 +31,7 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("message", (event) => {
-  if ((event.data as { type?: string } | null)?.type === "SKIP_WAITING") {
+  if (event.data?.type === "SKIP_WAITING") {
     void self.skipWaiting();
   }
 });
@@ -48,11 +52,13 @@ self.addEventListener("fetch", (event) => {
 
   if (strategy === "shell") {
     event.respondWith(shellFirst(event.request));
+
     return;
   }
 
   if (strategy === "immutable") {
     event.respondWith(cacheFirst(event.request));
+
     return;
   }
 
@@ -90,12 +96,15 @@ async function shellFirst(request: Request): Promise<Response> {
 
   try {
     const response = await fetch(request);
+
     if (shouldCacheResponse(response)) {
       await cache.put(SHELL_URL, response.clone());
     }
+
     return response;
   } catch {
     const cached = await cache.match(SHELL_URL);
+
     return cached ?? new Response("Offline", { status: 503 });
   }
 }
@@ -104,14 +113,17 @@ async function shellFirst(request: Request): Promise<Response> {
 async function cacheFirst(request: Request): Promise<Response> {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(request);
+
   if (cached) {
     return cached;
   }
 
   const response = await fetch(request);
+
   if (shouldCacheResponse(response)) {
     await cache.put(request, response.clone());
   }
+
   return response;
 }
 
@@ -125,15 +137,18 @@ async function staleWhileRevalidate(event: FetchEvent): Promise<Response> {
       if (shouldCacheResponse(response)) {
         await cache.put(event.request, response.clone());
       }
+
       return response;
     })
     .catch(() => undefined);
 
   if (cached) {
     event.waitUntil(refresh);
+
     return cached;
   }
 
   const response = await refresh;
+
   return response ?? Response.error();
 }

@@ -27,6 +27,7 @@ describe("attachment content helpers", () => {
       ],
       async (input) => {
         saved.push({ bytes: input.bytes, kind: input.kind });
+
         return {
           attachmentId: `att_${saved.length}`,
           size: input.bytes.byteLength,
@@ -67,6 +68,7 @@ describe("attachment content helpers", () => {
       ],
       async (input) => {
         saved.push(input.bytes);
+
         return { attachmentId: "att_1", size: input.bytes.byteLength };
       }
     );
@@ -82,6 +84,7 @@ describe("attachment content helpers", () => {
         [{ data: "!!!!", mediaType: "image/png", type: "image" }],
         async () => {
           saveCalls += 1;
+
           return { attachmentId: "att_1", size: 0 };
         }
       )
@@ -144,9 +147,12 @@ describe("attachment content helpers", () => {
       ],
       role: "user" as const,
     };
+
     const loaded: string[] = [];
+
     const load = async (attachmentId: string) => {
       loaded.push(attachmentId);
+
       return {
         bytes: Buffer.from("pdf"),
         filename: "report.pdf",
@@ -163,6 +169,7 @@ describe("attachment content helpers", () => {
       load
     );
 
+    // SAFETY: This fixture starts with a user message containing typed content parts.
     const parts = result[0]?.content as MessageContentPart[];
     expect(parts.some((part) => part.type === "document")).toBe(false);
     expect(parts[1]).toEqual({

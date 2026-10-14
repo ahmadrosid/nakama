@@ -65,6 +65,7 @@ export function VisionSettingsCard() {
     }
 
     const timeout = window.setTimeout(() => setSavedHint(null), 2500);
+
     return () => window.clearTimeout(timeout);
   }, [savedHint]);
 
@@ -106,6 +107,7 @@ export function VisionSettingsCard() {
             resolveModelVisionSupport(model, providerModelGroups) !== true
           ) {
             setFormError("Choose a vision-capable model.");
+
             return;
           }
 

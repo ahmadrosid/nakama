@@ -641,6 +641,33 @@
     @apply flex h-14 shrink-0 items-center border-b border-border/50;
   }
 
+  .desktop-title-bar {
+    @apply hidden;
+  }
+
+  /* Desktop app only: the bar is the window's drag area. macOS traffic lights
+     sit at the left, Windows min/max/close at the right. */
+  html[data-desktop] .desktop-title-bar {
+    -webkit-app-region: drag;
+    @apply relative flex h-10 shrink-0 items-center gap-0.5 border-border/50 border-b bg-sidebar px-2;
+  }
+
+  html[data-desktop="darwin"] .desktop-title-bar {
+    @apply pl-20;
+  }
+
+  html[data-desktop="win32"] .desktop-title-bar {
+    @apply pr-36;
+  }
+
+  .desktop-title-bar button {
+    -webkit-app-region: no-drag;
+  }
+
+  .desktop-title-bar-search {
+    @apply absolute left-1/2 flex h-7 w-full max-w-sm -translate-x-1/2 items-center gap-2 rounded-md border border-border/60 bg-background px-2.5 text-muted-foreground text-xs transition-colors hover:text-foreground;
+  }
+
   .sidebar-shell .app-shell-header {
     transition: none;
     @apply motion-reduce:transition-none;
@@ -839,16 +866,10 @@
   }
 
   .chat-markdown {
-    max-width: 68ch;
     font-family: var(--font-sans);
     font-size: 0.875rem;
     line-height: 1.55;
     letter-spacing: 0.01em;
-  }
-
-  .artifact-share-page .chat-markdown,
-  .artifact-preview-panel .chat-markdown {
-    max-width: none;
   }
 
   /* Streamdown code fences in chat — single compact block, no 200px placeholder */

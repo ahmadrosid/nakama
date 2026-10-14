@@ -10,6 +10,7 @@ import {
 } from "./store";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
+
 let tempConfigDir = "";
 
 afterEach(() => {

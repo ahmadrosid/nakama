@@ -35,7 +35,9 @@ interface ModelsBrowseListProps {
 }
 
 const MODEL_ROW_HEIGHT = 73;
+
 const MODEL_ROW_OVERSCAN = 6;
+
 const EMPTY_CONFIGURED_TYPES: ReadonlySet<string> = new Set();
 
 export function ModelsBrowseList({
@@ -56,19 +58,25 @@ export function ModelsBrowseList({
 
   const filtered = useMemo(() => {
     let result = sortedRows;
+
     if (openCodeZenConfigured) {
       result = result.filter((row) => !row.isZen);
     }
+
     if (costFilter === "free") {
       result = result.filter((row) => row.isFree);
     }
+
     if (hideDeprecated) {
       result = result.filter((row) => !row.deprecated);
     }
+
     if (provider) {
       result = result.filter((row) => row.nakamaProvider === provider);
     }
+
     const query = deferredSearch.trim().toLowerCase();
+
     if (query) {
       result = result.filter(
         (row) =>
@@ -77,6 +85,7 @@ export function ModelsBrowseList({
           row.modelId.toLowerCase().includes(query)
       );
     }
+
     return result;
   }, [
     sortedRows,
@@ -146,10 +155,13 @@ function compareModelRows(a: ModelsDevRow, b: ModelsDevRow): number {
   if (a.isFree !== b.isFree) {
     return a.isFree ? -1 : 1;
   }
+
   const byProvider = a.providerName.localeCompare(b.providerName);
+
   if (byProvider !== 0) {
     return byProvider;
   }
+
   return a.modelName.localeCompare(b.modelName);
 }
 
@@ -174,6 +186,7 @@ function VirtualModelList({
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
+
     if (!element) {
       return;
     }
@@ -183,27 +196,33 @@ function VirtualModelList({
 
     const observer = new ResizeObserver(updateHeight);
     observer.observe(element);
+
     return () => observer.disconnect();
   }, []);
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
+
     if (!element) {
       return;
     }
+
     element.scrollTop = 0;
   }, [rows]);
 
   const totalHeight = rows.length * MODEL_ROW_HEIGHT;
   const visibleCount = Math.ceil(viewportHeight / MODEL_ROW_HEIGHT);
+
   const startIndex = Math.max(
     0,
     Math.floor(scrollTop / MODEL_ROW_HEIGHT) - MODEL_ROW_OVERSCAN
   );
+
   const endIndex = Math.min(
     rows.length,
     startIndex + visibleCount + MODEL_ROW_OVERSCAN * 2
   );
+
   const visibleRows = rows.slice(startIndex, endIndex);
 
   return (

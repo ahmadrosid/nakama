@@ -22,6 +22,7 @@ const firstUsage: ChatUsage = {
   outputTokens: 10,
   totalTokens: 110,
 };
+
 const secondUsage: ChatUsage = {
   costUsd: 0.002,
   inputTokens: 200,
@@ -48,11 +49,14 @@ function providerWithUsage(): ProviderClient {
       usage: secondUsage,
     },
   ];
+
   const take = () => {
     const next = responses.shift();
+
     if (!next) {
       throw new Error("Unexpected provider call");
     }
+
     return next;
   };
 
@@ -62,9 +66,11 @@ function providerWithUsage(): ProviderClient {
     name: "openai",
     streamChat: (_input, handlers) => {
       const result = take();
+
       if (result.content) {
         handlers.onChunk(result.content);
       }
+
       return Promise.resolve(result);
     },
   };
@@ -73,9 +79,11 @@ function providerWithUsage(): ProviderClient {
 describe("per-call usage", () => {
   test("checks an organization quota before calling the provider", async () => {
     let calls = 0;
+
     const provider: ProviderClient = {
       generateChat: () => {
         calls += 1;
+
         return Promise.resolve({
           assistantMessage: { content: "Unexpected", role: "assistant" },
           content: "Unexpected",
@@ -86,6 +94,7 @@ describe("per-call usage", () => {
       name: "openai",
       streamChat: () => {
         calls += 1;
+
         return Promise.resolve({
           assistantMessage: { content: "Unexpected", role: "assistant" },
           content: "Unexpected",
@@ -93,6 +102,7 @@ describe("per-call usage", () => {
         });
       },
     };
+
     const session = createAgentChatSession(
       { provider, tools: [] },
       {
@@ -109,11 +119,120 @@ describe("per-call usage", () => {
     expect(calls).toBe(0);
   });
 
+  test("releases the quota reservation when the provider call fails", async () => {
+    let released = 0;
+
+    const session = createAgentChatSession(
+      {
+        provider: {
+          generateChat: () => Promise.reject(new Error("provider exploded")),
+          generateText: () => Promise.resolve({ content: "" }),
+          name: "openai",
+          streamChat: () => Promise.reject(new Error("provider exploded")),
+        },
+        tools: [],
+      },
+      {
+        toolContext: {
+          assertCanStartLlmTurn: () =>
+            Promise.resolve(() => {
+              released += 1;
+
+              return Promise.resolve();
+            }),
+        },
+      }
+    );
+
+    await expect(session.send("hi")).rejects.toThrow("provider exploded");
+    await expect(session.sendStream("hi", { onChunk() {} })).rejects.toThrow(
+      "provider exploded"
+    );
+    expect(released).toBe(2);
+  });
+
+  test("releases the quota reservation when a streaming call is cancelled", async () => {
+    const controller = new AbortController();
+    let released = 0;
+
+    const session = createAgentChatSession(
+      {
+        provider: {
+          ...providerWithUsage(),
+          streamChat: (input) => {
+            controller.abort();
+
+            return Promise.reject(input.signal?.reason);
+          },
+        },
+        tools: [],
+      },
+      {
+        toolContext: {
+          assertCanStartLlmTurn: () =>
+            Promise.resolve(() => {
+              released += 1;
+
+              return Promise.resolve();
+            }),
+        },
+      }
+    );
+
+    await expect(
+      session.sendStream("hi", { onChunk() {} }, { signal: controller.signal })
+    ).rejects.toThrow();
+    expect(released).toBe(1);
+  });
+
+  test("releases each call's reservation before its tools run", async () => {
+    const events: string[] = [];
+
+    const session = createAgentChatSession(
+      {
+        provider: providerWithUsage(),
+        tools: [
+          {
+            ...pingTool,
+            run: () => {
+              events.push("tool");
+
+              return Promise.resolve({ pong: true });
+            },
+          },
+        ],
+      },
+      {
+        toolContext: {
+          assertCanStartLlmTurn: () => {
+            events.push("reserve");
+
+            return Promise.resolve(() => {
+              events.push("release");
+
+              return Promise.resolve();
+            });
+          },
+        },
+      }
+    );
+
+    await session.send("hi");
+    expect(events).toEqual([
+      "reserve",
+      "release",
+      "tool",
+      "reserve",
+      "release",
+    ]);
+  });
+
   test("emits onUsage per LLM call and stores usage on history messages", async () => {
     const session = createAgentChatSession(
       { provider: providerWithUsage(), tools: [pingTool] },
       { enableToolLoop: true }
     );
+
     const seen: ChatUsage[] = [];
 
     await session.sendStream("hi", {
@@ -129,6 +248,7 @@ describe("per-call usage", () => {
       .map((message) =>
         message.role === "assistant" ? message.usage : undefined
       );
+
     expect(assistantUsages).toEqual([firstUsage, secondUsage]);
   });
   test("getTurnUsage totals the turn and keeps every call separate", async () => {
@@ -156,6 +276,7 @@ describe("per-call usage", () => {
       { provider: providerWithUsage(), tools: [pingTool] },
       { enableToolLoop: true }
     );
+
     await first.send("hi");
     expect(first.getTurnUsage()?.calls).toHaveLength(2);
 
@@ -163,6 +284,7 @@ describe("per-call usage", () => {
       { provider: providerWithUsage(), tools: [pingTool] },
       { enableToolLoop: true }
     );
+
     await second.send("hi");
     // Carrying the first session's totals over would bill that turn twice.
     expect(second.getTurnUsage()?.inputTokens).toBe(300);
@@ -185,6 +307,7 @@ describe("per-call usage", () => {
           toolCalls: [],
         }),
     };
+
     const session = createAgentChatSession({ provider: silent, tools: [] }, {});
 
     await session.send("hi");
@@ -196,9 +319,11 @@ describe("per-call usage", () => {
 
   test("a turn that fails after a billed call still reports it", async () => {
     let call = 0;
+
     const flaky: ProviderClient = {
       generateChat: () => {
         call += 1;
+
         if (call === 1) {
           return Promise.resolve({
             assistantMessage: {
@@ -211,12 +336,14 @@ describe("per-call usage", () => {
             usage: firstUsage,
           });
         }
+
         return Promise.reject(new Error("provider exploded"));
       },
       generateText: () => Promise.resolve({ content: "{}" }),
       name: "openai",
       streamChat: () => Promise.reject(new Error("provider exploded")),
     };
+
     const session = createAgentChatSession(
       { provider: flaky, tools: [pingTool] },
       { enableToolLoop: true }

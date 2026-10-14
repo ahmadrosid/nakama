@@ -38,10 +38,13 @@ function resolveProposer(
   if (!userId) {
     return null;
   }
+
   const member = members.find((entry) => entry.userId === userId);
+
   if (!member) {
     return shortenId(userId);
   }
+
   return member.name?.trim() || member.email;
 }
 
@@ -51,29 +54,37 @@ function proposalPreview(proposal: SkillProposal): string {
       const bytes = Uint8Array.from(atob(file.contentBase64), (char) =>
         char.charCodeAt(0)
       );
+
       try {
         return `\n\n--- ${file.path} ---\n${new TextDecoder("utf-8", { fatal: true }).decode(bytes)}`;
       } catch {
         return `\n\n--- ${file.path} (binary, ${bytes.length} bytes) ---`;
       }
     });
+
     return proposal.content + files.join("");
   }
+
   if (proposal.action === "edit" && proposal.content) {
     return proposal.content;
   }
+
   if (proposal.action === "patch") {
     return `Replace:\n${proposal.patchOldString ?? ""}\n\nWith:\n${proposal.patchNewString ?? ""}`;
   }
+
   if (proposal.action === "write_file") {
     return `Write ${proposal.relativePath ?? "?"}:\n${proposal.content ?? ""}`;
   }
+
   if (proposal.action === "approve_code") {
     return `Review ${proposal.relativePath ?? "?"}:\n${proposal.content ?? ""}`;
   }
+
   if (proposal.action === "remove_file") {
     return `Remove supporting file "${proposal.relativePath ?? "?"}" from skill "${proposal.skillName}"`;
   }
+
   return `Delete skill "${proposal.skillName}"`;
 }
 
@@ -81,21 +92,27 @@ function actionLabel(action: SkillProposal["action"]): string {
   if (action === "create") {
     return "Create";
   }
+
   if (action === "patch") {
     return "Patch";
   }
+
   if (action === "edit") {
     return "Edit";
   }
+
   if (action === "write_file") {
     return "Write file";
   }
+
   if (action === "approve_code") {
     return "Review code";
   }
+
   if (action === "remove_file") {
     return "Remove file";
   }
+
   return "Delete";
 }
 
@@ -282,6 +299,7 @@ export function SkillProposalsPanel({
     profileId,
     status: "pending",
   });
+
   const { data: membersData } = useOrgMembers(orgId);
   const { data: profiles = [] } = useProfilesQuery();
   const proposals = data?.proposals ?? [];

@@ -1,32 +1,44 @@
 export const SITE_NAME = "Nakama";
+
 const SITE_TAGLINE = "AI agents that work with your team.";
+
 export const SITE_DESCRIPTION =
   "Nakama is an open-source platform for teams to build and run AI agents with their own memory, tools, and workspaces. Self-host or use managed hosting.";
+
 export const SITE_URL =
   process.env.NAKAMA_DOCS_SITE_URL ?? "https://ahmadrosid.github.io/nakama";
+
 const AUTHOR_NAME = "Ahmad Rosid";
+
 const AUTHOR_ROLE = "Creator and maintainer of Nakama";
+
 export const OG_IMAGE_URL = `${SITE_URL}/nakama-demo.png`;
 
 export function slugToRelativePath(slug: string[]): string {
   if (slug.length === 1 && slug[0] === "docs") {
     return "docs/index.md";
   }
+
   if (slug.length === 0) {
     return "index.md";
   }
+
   const last = slug.at(-1)!;
+
   if (last === "index") {
     if (slug.length === 1) {
       return "index.md";
     }
+
     return `${slug.slice(0, -1).join("/")}/index.md`;
   }
+
   return `${slug.join("/")}.md`;
 }
 
 function getCanonicalUrl(relativePath: string) {
   const cleanPath = relativePath.replace(/index\.md$/, "").replace(/\.md$/, "");
+
   return cleanPath ? `${SITE_URL}/${cleanPath}` : `${SITE_URL}/`;
 }
 
@@ -64,7 +76,15 @@ export function buildJsonLd(
 }
 
 /** JSON.stringify does not HTML-escape; unicode-escape markup so `</script>` cannot break out. */
-export function serializeJsonForHtml(value: unknown): string {
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+export function serializeJsonForHtml(value: JsonValue): string {
   return JSON.stringify(value)
     .replace(/</g, "\\u003c")
     .replace(/>/g, "\\u003e")
@@ -84,6 +104,7 @@ export function buildPageMetadata(
 ) {
   const title =
     pageTitle === SITE_NAME ? SITE_NAME : `${pageTitle} | ${SITE_NAME}`;
+
   const description = pageDescription || SITE_DESCRIPTION;
   const canonicalUrl = getCanonicalUrl(relativePath);
   const markdownUrl = getMarkdownUrl(relativePath);

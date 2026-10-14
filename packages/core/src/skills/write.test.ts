@@ -28,6 +28,7 @@ import {
 } from "./write";
 
 const ORG_ID = "org_test";
+
 const PROFILE_ID = "profile_default";
 
 describe("createSkillFile", () => {
@@ -161,6 +162,7 @@ include-body-on-match: true
       "skills",
       "orphan"
     );
+
     await mkdir(directory, { recursive: true });
     await writeFile(
       join(directory, "SKILL.md"),
@@ -223,6 +225,7 @@ description: First write.
 
 Body.
 `;
+
     await writeRawProfileSkillMarkdown({
       content,
       orgId: ORG_ID,
@@ -385,6 +388,7 @@ describe("resolveProfileSkillDirectory", () => {
       PROFILE_ID,
       "skills"
     );
+
     const outside = join(configDir, "outside-secret");
     await mkdir(skillsRoot, { recursive: true });
     await mkdir(outside, { recursive: true });
@@ -415,6 +419,7 @@ describe("resolveProfileSkillDirectory", () => {
     async () => {
       configDir = await mkdtemp(join(tmpdir(), "nakama-skill-case-"));
       process.env.NAKAMA_CONFIG_DIR = configDir;
+
       const profileDir = join(
         configDir,
         "orgs",
@@ -422,6 +427,7 @@ describe("resolveProfileSkillDirectory", () => {
         "profiles",
         PROFILE_ID
       );
+
       await mkdir(join(profileDir, "skills", "notes"), { recursive: true });
 
       // NTFS opens each of these inside this profile's skills dir, so the
@@ -435,6 +441,7 @@ describe("resolveProfileSkillDirectory", () => {
           isPathWithinProfileSkillsDir(ORG_ID, PROFILE_ID, directory)
         ).toBe(true);
       }
+
       expect(
         isPathWithinProfileSkillsDir(
           ORG_ID,
@@ -513,6 +520,7 @@ Use staging first.
       profileId: PROFILE_ID,
       relativePath: "docs/checklist.md",
     });
+
     expect(written.relativePath).toBe("docs/checklist.md");
     expect(await readFile(written.absolutePath, "utf8")).toContain("- staging");
 
@@ -542,6 +550,7 @@ Use staging first.
         orgId: ORG_ID,
         profileId: PROFILE_ID,
       });
+
       const skillDir = resolveProfileSkillDirectory(
         ORG_ID,
         PROFILE_ID,
@@ -565,6 +574,7 @@ Use staging first.
           })
         ).rejects.toThrow(/alternate data stream/);
       }
+
       expect(await pathExists(join(skillDir, "tool.py"))).toBe(false);
       expect(await readFile(join(skillDir, "SKILL.md"), "utf8")).toContain(
         "Use staging first."
@@ -577,6 +587,7 @@ Use staging first.
         profileId: PROFILE_ID,
         relativePath: "docs/checklist.md",
       });
+
       expect(await readFile(written.absolutePath, "utf8")).toBe("- staging\n");
     }
   );

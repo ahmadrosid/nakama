@@ -26,26 +26,32 @@ export function precacheUrls(
 ): string[] {
   const urls = new Set<string>([SHELL_URL, ...extraUrls]);
   const visited = new Set<string>();
+
   const queue = Object.entries(manifest)
     .filter(([, entry]) => entry.isEntry === true)
     .map(([key]) => key);
 
   while (queue.length > 0) {
     const key = queue.shift();
+
     if (key === undefined || visited.has(key)) {
       continue;
     }
+
     visited.add(key);
 
     const entry = manifest[key];
+
     if (!entry) {
       continue;
     }
 
     urls.add(`/${entry.file}`);
+
     for (const css of entry.css ?? []) {
       urls.add(`/${css}`);
     }
+
     queue.push(...(entry.imports ?? []));
   }
 

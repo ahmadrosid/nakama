@@ -71,6 +71,7 @@ export function usePromptInputFileState({
 
       const fileType = f.type.split(";")[0]?.trim().toLowerCase() ?? "";
       const fileName = f.name.toLowerCase();
+
       const patterns = accept
         .split(",")
         .map((s) => s.trim())
@@ -81,6 +82,7 @@ export function usePromptInputFileState({
 
         if (pattern.endsWith("/*")) {
           const prefix = pattern.slice(0, -1);
+
           return fileType.startsWith(prefix);
         }
 
@@ -110,39 +112,48 @@ export function usePromptInputFileState({
                   ? error.message
                   : "Could not process the selected files.",
             });
+
             return;
           }
         }
 
         const accepted = incoming.filter((f) => matchesAccept(f));
+
         if (incoming.length && accepted.length === 0) {
           onError?.({
             code: "accept",
             message: "No files match the accepted types.",
           });
+
           return;
         }
+
         const withinSize = (f: File) =>
           maxFileSize ? f.size <= maxFileSize : true;
+
         const sized = accepted.filter(withinSize);
+
         if (accepted.length > 0 && sized.length === 0) {
           onError?.({
             code: "max_file_size",
             message: "All files exceed the maximum size.",
           });
+
           return;
         }
 
         const remainingCapacity =
-          typeof maxFiles === "number"
-            ? Math.max(0, maxFiles - filesRef.current.length)
-            : undefined;
+          maxFiles === undefined
+            ? undefined
+            : Math.max(0, maxFiles - filesRef.current.length);
+
         const capped =
-          typeof remainingCapacity === "number"
-            ? sized.slice(0, remainingCapacity)
-            : sized;
+          remainingCapacity === undefined
+            ? sized
+            : sized.slice(0, remainingCapacity);
+
         if (
-          typeof remainingCapacity === "number" &&
+          remainingCapacity !== undefined &&
           sized.length > remainingCapacity
         ) {
           onError?.({
@@ -153,6 +164,7 @@ export function usePromptInputFileState({
 
         setItems((prev) => {
           const next: (FileUIPart & { id: string })[] = [];
+
           for (const file of capped) {
             next.push({
               filename: file.name,
@@ -162,6 +174,7 @@ export function usePromptInputFileState({
               url: URL.createObjectURL(file),
             });
           }
+
           return [...prev, ...next];
         });
       })();
@@ -173,9 +186,11 @@ export function usePromptInputFileState({
     (id: string) =>
       setItems((prev) => {
         const found = prev.find((file) => file.id === id);
+
         if (found?.url) {
           URL.revokeObjectURL(found.url);
         }
+
         return prev.filter((file) => file.id !== id);
       }),
     []
@@ -197,37 +212,47 @@ export function usePromptInputFileState({
                   ? error.message
                   : "Could not process the selected files.",
             });
+
             return;
           }
         }
 
         const accepted = incoming.filter((f) => matchesAccept(f));
+
         if (incoming.length && accepted.length === 0) {
           onError?.({
             code: "accept",
             message: "No files match the accepted types.",
           });
+
           return;
         }
+
         const withinSize = (f: File) =>
           maxFileSize ? f.size <= maxFileSize : true;
+
         const sized = accepted.filter(withinSize);
+
         if (accepted.length > 0 && sized.length === 0) {
           onError?.({
             code: "max_file_size",
             message: "All files exceed the maximum size.",
           });
+
           return;
         }
 
         const currentCount = files.length;
+
         const capacity =
-          typeof maxFiles === "number"
-            ? Math.max(0, maxFiles - currentCount)
-            : undefined;
+          maxFiles === undefined
+            ? undefined
+            : Math.max(0, maxFiles - currentCount);
+
         const capped =
-          typeof capacity === "number" ? sized.slice(0, capacity) : sized;
-        if (typeof capacity === "number" && sized.length > capacity) {
+          capacity === undefined ? sized : sized.slice(0, capacity);
+
+        if (capacity !== undefined && sized.length > capacity) {
           onError?.({
             code: "max_files",
             message: "Too many files. Some were not added.",
@@ -260,6 +285,7 @@ export function usePromptInputFileState({
                 URL.revokeObjectURL(file.url);
               }
             }
+
             return [];
           }),
     [usingProvider, controller]
@@ -267,6 +293,7 @@ export function usePromptInputFileState({
 
   const add = usingProvider ? addWithProviderValidation : addLocal;
   const remove = usingProvider ? controller.attachments.remove : removeLocal;
+
   const openFileDialog = usingProvider
     ? controller.attachments.openFileDialog
     : openFileDialogLocal;
@@ -279,6 +306,7 @@ export function usePromptInputFileState({
     if (!usingProvider) {
       return;
     }
+
     controller.__registerFileInput(inputRef, () => inputRef.current?.click());
   }, [usingProvider, controller]);
 
@@ -290,9 +318,11 @@ export function usePromptInputFileState({
 
   useEffect(() => {
     const form = formRef.current;
+
     if (!form) {
       return;
     }
+
     if (globalDrop) {
       return;
     }
@@ -302,16 +332,20 @@ export function usePromptInputFileState({
         e.preventDefault();
       }
     };
+
     const onDrop = (e: DragEvent) => {
       if (e.dataTransfer?.types?.includes("Files")) {
         e.preventDefault();
       }
+
       if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
         add(e.dataTransfer.files);
       }
     };
+
     form.addEventListener("dragover", onDragOver);
     form.addEventListener("drop", onDrop);
+
     return () => {
       form.removeEventListener("dragover", onDragOver);
       form.removeEventListener("drop", onDrop);
@@ -328,16 +362,20 @@ export function usePromptInputFileState({
         e.preventDefault();
       }
     };
+
     const onDrop = (e: DragEvent) => {
       if (e.dataTransfer?.types?.includes("Files")) {
         e.preventDefault();
       }
+
       if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
         add(e.dataTransfer.files);
       }
     };
+
     document.addEventListener("dragover", onDragOver);
     document.addEventListener("drop", onDrop);
+
     return () => {
       document.removeEventListener("dragover", onDragOver);
       document.removeEventListener("drop", onDrop);
@@ -362,6 +400,7 @@ export function usePromptInputFileState({
       if (event.currentTarget.files) {
         add(event.currentTarget.files);
       }
+
       event.currentTarget.value = "";
     },
     [add]

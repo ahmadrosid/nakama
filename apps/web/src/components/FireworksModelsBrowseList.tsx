@@ -26,6 +26,7 @@ export function FireworksModelsBrowseList({
   onAddMany,
 }: FireworksModelsBrowseListProps) {
   const canFetch = Boolean(providerId?.trim() || apiKey?.trim());
+
   const { data, isLoading, error } = useFireworksDiscoverModels({
     apiKey,
     providerId,

@@ -1,10 +1,18 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { z } from "zod";
 import { NAKAMA_API_VERSION } from "./contract";
 import { resolveServerUrl } from "./runtime";
 
 const STARTUP_TIMEOUT_MS = 30_000;
+
 const POLL_INTERVAL_MS = 200;
+
+const ServerHealthSchema = z.object({
+  apiVersion: z.number().optional(),
+  builtinTools: z.array(z.string()).optional(),
+  ok: z.boolean().optional(),
+});
 
 export interface EnsureServerResult {
   serverUrl: string;
@@ -28,6 +36,7 @@ export async function ensureServerRunning(
 
   const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
   const serverEntry = join(projectRoot, "apps/server/src/index.ts");
+
   const child = Bun.spawn(["bun", "run", serverEntry], {
     cwd: projectRoot,
     env: process.env,
@@ -84,11 +93,7 @@ async function isServerHealthy(serverUrl: string): Promise<boolean> {
       return false;
     }
 
-    const payload = (await response.json()) as {
-      ok?: boolean;
-      apiVersion?: number;
-      builtinTools?: string[];
-    };
+    const payload = ServerHealthSchema.parse(await response.json());
 
     if (payload.ok !== true || payload.apiVersion !== NAKAMA_API_VERSION) {
       return false;

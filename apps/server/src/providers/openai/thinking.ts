@@ -63,9 +63,11 @@ export function openAIModelRejectsChatToolsWithReasoning(
   model: string
 ): boolean {
   const slug = model.trim().toLowerCase();
+
   if (slug.startsWith("gpt-6.1-sol")) {
     return false;
   }
+
   // gpt-5.4 … gpt-5.9, gpt-5.10+, gpt-5.6-luna, etc.
   return (
     /^gpt-5\.(?:[4-9]|\d{2,})/.test(slug) ||

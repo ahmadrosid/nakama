@@ -1,8 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { type ConfigureProviderRequest, NakamaApiError } from "@nakama/core";
+import {
+  type ConfigureProviderRequest,
+  type CreateProviderRequest,
+  NakamaApiError,
+} from "@nakama/core";
+import { asTestFetch } from "../../providers/test-helpers";
 import { buildProviderInstanceFromCreateRequest } from "../../services/provider-instance-helpers";
 import { setupTestConfigDir } from "../../test-config-dir";
-import type { ServerOptions } from "../context";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import { setupFreshInstallSession } from "../test-session-helpers";
 
@@ -16,7 +20,7 @@ describe("route error formatting", () => {
 
   beforeEach(() => {
     reported = [];
-    console.error = (first: unknown) => {
+    console.error = (first: string) => {
       reported.push(String(first));
     };
   });
@@ -27,14 +31,15 @@ describe("route error formatting", () => {
   });
 
   test("catalog fetch failure does not leak the upstream error's message", async () => {
-    globalThis.fetch = async () => {
+    globalThis.fetch = asTestFetch(async () => {
       throw new Error(
         "connect ETIMEDOUT 198.51.100.4:443 at TCPConnectWrap.afterConnect"
       );
-    };
+    });
 
     const { app, databaseAdapter } = createMinimalHonoApp();
     const session = await setupFreshInstallSession(app, databaseAdapter);
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/model-catalogs/openrouter", {
         headers: session.headers(),
@@ -57,9 +62,11 @@ describe("route error formatting", () => {
         startWorker: async () => {
           throw new Error("pm2 daemon is not reachable");
         },
-      } as unknown as ServerOptions["workerManager"],
+      },
     });
+
     const session = await setupFreshInstallSession(app, databaseAdapter);
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/workers/automation/start", {
         headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
@@ -84,10 +91,12 @@ describe("route error formatting", () => {
         },
       },
     });
+
     const session = await setupFreshInstallSession(app, databaseAdapter);
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/audio/transcribe", {
-        body: JSON.stringify({ data: "AAAA", mimeType: "audio/webm" }),
+        body: JSON.stringify({ data: "AAAA", mediaType: "audio/webm" }),
         headers: session.headers({
           "Content-Type": "application/json",
           "X-CSRF-Token": session.csrfToken,
@@ -116,7 +125,9 @@ describe("route error formatting", () => {
         }),
       },
     });
+
     const session = await setupFreshInstallSession(app, databaseAdapter);
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/sessions/session_1/messages", {
         body: JSON.stringify({ message: "hi" }),
@@ -140,6 +151,7 @@ describe("route error formatting", () => {
   test("a NakamaApiError is reported only when it is a 5xx", async () => {
     const send = async (error: NakamaApiError) => {
       reported = [];
+
       const { app, databaseAdapter } = createMinimalHonoApp({
         agent: {
           assertSessionProfileAccess: async () => undefined,
@@ -149,7 +161,9 @@ describe("route error formatting", () => {
           },
         },
       });
+
       const session = await setupFreshInstallSession(app, databaseAdapter);
+
       const response = await app.fetch(
         new Request("http://localhost:4310/v1/sessions/session_1/messages", {
           body: JSON.stringify({ message: "hi" }),
@@ -160,6 +174,7 @@ describe("route error formatting", () => {
           method: "POST",
         })
       );
+
       return { reported: [...reported], status: response.status };
     };
 
@@ -172,6 +187,7 @@ describe("route error formatting", () => {
     const broken = await send(
       new NakamaApiError("Database not configured.", 500)
     );
+
     expect(broken.status).toBe(500);
     expect(
       broken.reported.some((line) => line.startsWith("[nakama:http] server"))
@@ -188,7 +204,9 @@ describe("route error formatting", () => {
         },
       },
     });
+
     const session = await setupFreshInstallSession(app, databaseAdapter);
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/sessions/session_1/messages", {
         body: JSON.stringify({ message: "hi" }),
@@ -205,6 +223,72 @@ describe("route error formatting", () => {
       reported.some((line) => line.startsWith("[nakama:http] server"))
     ).toBe(true);
   });
+  test("provider routes reject invalid fields before service calls", async () => {
+    const calls: Array<CreateProviderRequest | ConfigureProviderRequest> = [];
+
+    const { app, databaseAdapter } = createMinimalHonoApp({
+      agent: {
+        createProvider: async (request: CreateProviderRequest) => {
+          calls.push(request);
+
+          return { ok: true };
+        },
+        configureProvider: async (request: ConfigureProviderRequest) => {
+          calls.push(request);
+
+          return { ok: true };
+        },
+      },
+    });
+
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+
+    for (const [path, method, field] of [
+      ["/v1/providers", "POST", "type"],
+      ["/v1/settings/provider", "PUT", "provider"],
+    ] as const) {
+      for (const body of [
+        {},
+        { [field]: "unknown" },
+        { [field]: 42 },
+        { [field]: "openai", apiKey: 42 },
+      ]) {
+        const response = await app.fetch(
+          new Request("http://localhost:4310" + path, {
+            body: JSON.stringify(body),
+            headers: session.headers({
+              "Content-Type": "application/json",
+              "X-CSRF-Token": session.csrfToken,
+            }),
+            method,
+          })
+        );
+
+        expect(response.status).toBe(400);
+      }
+
+      expect(calls).toHaveLength(0);
+
+      const response = await app.fetch(
+        new Request("http://localhost:4310" + path, {
+          body: JSON.stringify({ [field]: "ollama", model: "local-model" }),
+          headers: session.headers({
+            "Content-Type": "application/json",
+            "X-CSRF-Token": session.csrfToken,
+          }),
+          method,
+        })
+      );
+
+      expect(response.status).toBe(200);
+      expect(calls.pop()).toMatchObject({
+        [field]: "ollama",
+        apiKey: "",
+        model: "local-model",
+      });
+    }
+  });
+
   test("invalid provider settings answer 400 with the validation message", async () => {
     const { app, databaseAdapter } = createMinimalHonoApp({
       agent: {
@@ -223,7 +307,9 @@ describe("route error formatting", () => {
           ),
       },
     });
+
     const session = await setupFreshInstallSession(app, databaseAdapter);
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/settings/provider", {
         body: JSON.stringify({

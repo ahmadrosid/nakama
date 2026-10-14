@@ -5,7 +5,7 @@ description: "Shared, admin-curated facts for an organization — injected into 
 
 **Org memory** is shared context for the whole organization.
 
-Every non-viewer agent in the org sees a summary of pinned facts plus recent log entries in its system prompt. Org admins curate facts from **Control center → Workspace → Organization → Org Memory** and review agent proposals on the **Proposals** tab. Members can read and search; viewers are blocked entirely.
+Every agent in the org sees a summary of pinned facts plus recent log entries in its system prompt. Org admins curate facts from **Control center → Workspace → Organization → Org Memory** and review agent proposals on the **Proposals** tab. Members can read and search.
 
 Org memory is separate from [profile memory](/profiles#knowledge-base-and-memory). Profile `MEMORY.md` is per-bot continuity that agents update themselves. Org memory is team-wide facts that admins maintain.
 
@@ -49,7 +49,7 @@ Use this structure:
 
 ## Prompt injection
 
-After the profile soul stack and knowledge base catalog, Nakama appends a `## Org Memory` section for every role except **viewer**.
+After the profile soul stack and knowledge base catalog, Nakama appends a `## Org Memory` section for organization members.
 
 | Limit | Value |
 |-------|-------|
@@ -62,15 +62,16 @@ See [Agent prompts](/agent-prompt) for the full assembly order.
 
 ## Agent tools
 
-Three org memory tools are **automatically available on every profile**. They are not assigned from the dashboard like other builtins.
+The three org memory tools are added when a profile has at least one assigned
+or resolved tool. They are not attached to a profile with no tools, and you do
+not assign these three from the dashboard like other builtins.
 
 | Tool | Purpose |
 |------|---------|
 | `org_memory_search` | Search pinned, recent-log, and archived bullets |
 | `org_memory_list` | Return the current live org memory content |
 | `propose_org_memory` | Propose an org-wide fact for admin approval (member+) |
-
-Viewers cannot call these tools. Automations and sub-agents run with member-level org context.
+Automations and sub-agents run with member-level org context when the profile has tools available.
 
 Agents propose durable org facts via `propose_org_memory`; proposals land in a staging queue until an admin approves or rejects them in **Control center → Workspace → Organization → Org Memory → Proposals**. Admins can still add facts directly from the UI (bypasses the queue). Do not propose secrets, credentials, or PII.
 
@@ -121,15 +122,14 @@ Org admins can also manage memory via the REST API (`X-Org-Id` required):
 | `POST` | `/v1/orgs/{orgId}/memory/proposals/{id}/approve` | Approve a proposal |
 | `POST` | `/v1/orgs/{orgId}/memory/proposals/{id}/reject` | Reject a proposal |
 
-Members can read and search; viewers are blocked on all org memory routes.
+Members can read and search.
 
 ## Roles and access
 
 | Role | Read | Search | Write (UI/API) | Prompt injection | Agent tools |
 |------|------|--------|----------------|------------------|-------------|
-| **admin** | yes | yes | yes | yes | yes |
-| **member** | yes | yes | no | yes | yes |
-| **viewer** | no | no | no | no | no |
+| **admin** | yes | yes | yes | yes | yes, when the profile has tools |
+| **member** | yes | yes | no | yes | yes, when the profile has tools |
 
 Cross-org requests return **404** — the path `orgId` must match the active organization.
 
@@ -143,7 +143,6 @@ Cross-org requests return **404** — the path `orgId` must match the active org
 | **Who writes** | Org admins (UI/API); agents propose via `propose_org_memory` | Agent via `update-profile-memory` skill |
 | **Prompt injection** | Appended as `## Org Memory` | In soul stack as continuity |
 | **Active file limit** | 8192 bytes (live); 2048 bytes injected | 4096 bytes soft limit |
-| **Viewer access** | Blocked | Follows normal chat access |
 
 ## Next steps
 

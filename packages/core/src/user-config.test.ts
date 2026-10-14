@@ -39,9 +39,12 @@ describe("saveUserTimezone", () => {
         await saveUserTimezone(value);
         throw new Error("expected a rejection");
       } catch (error) {
-        expect(error).toBeInstanceOf(NakamaApiError);
-        expect((error as NakamaApiError).message).toBe(message);
-        expect((error as NakamaApiError).status).toBe(400);
+        if (!(error instanceof NakamaApiError)) {
+          throw error;
+        }
+
+        expect(error.message).toBe(message);
+        expect(error.status).toBe(400);
       }
     }
   });
@@ -103,11 +106,13 @@ describe("user config multi-provider", () => {
   test("round-trips Grok OAuth tokens without using the API key field", async () => {
     configDir = await mkdtemp(join(tmpdir(), "nakama-xai-oauth-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
+
     const oauth = {
       accessToken: "access",
       expiresAt: "2027-01-01T00:00:00.000Z",
       refreshToken: "refresh",
     };
+
     const instance = applyXaiOAuthToInstance(
       {
         apiKey: "",
@@ -118,6 +123,7 @@ describe("user config multi-provider", () => {
       },
       oauth
     );
+
     await saveUserConfig({
       defaultProviderId: instance.id,
       providers: [instance],
@@ -418,9 +424,11 @@ describe("chatgpt oauth helpers", () => {
         refreshToken: "test-refresh",
       }
     );
+
     const config = { defaultProviderId: provider.id, providers: [provider] };
 
     expect(isProviderConfigured(config, {})).toBe(true);
+
     for (const patch of [
       { chatgptRefreshToken: "" },
       { chatgptAccountId: "" },

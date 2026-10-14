@@ -42,23 +42,28 @@ export async function sendWhatsAppArtifactDocument(
       status: "failed",
     };
   }
+
   return new Promise((resolve) => {
     let settled = false;
+
     const finish = (result: SendWhatsAppArtifactDocumentResult) => {
       if (settled) {
         return;
       }
+
       settled = true;
       clearTimeout(timer);
       options.signal?.removeEventListener("abort", onAbort);
       resolve(result);
     };
+
     const onAbort = () =>
       finish({
         error: "Stopped during upload. Document delivery is unconfirmed.",
         ok: false,
         status: "unknown",
       });
+
     const timer = setTimeout(
       () =>
         finish({
@@ -69,11 +74,13 @@ export async function sendWhatsAppArtifactDocument(
         }),
       options.timeoutMs ?? 30_000
     );
+
     options.signal?.addEventListener("abort", onAbort, { once: true });
     // Baileys cannot cancel sendMessage. Late settlements are handled, never retried.
     Promise.resolve()
       .then(() => {
         options.signal?.throwIfAborted();
+
         return socket.sendMessage(jid, {
           document: Buffer.from(input.bytes),
           fileName: input.filename,

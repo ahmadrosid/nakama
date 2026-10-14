@@ -34,9 +34,13 @@ export function assertYearMonth(value: string): string {
 }
 
 /** Per-profile soul stack: ~/.nakama/orgs/{orgId}/profiles/{profileId}/ */
-export function getProfileSoulDir(orgId: string, profileId: string): string {
+export function getProfileSoulDir(
+  orgId: string,
+  profileId: string,
+  configDir = getUserConfigDir()
+): string {
   return join(
-    getUserConfigDir(),
+    configDir,
     "orgs",
     assertConfigPathSegment(orgId, "orgId"),
     "profiles",
@@ -70,6 +74,7 @@ export function getOrgMemoryDir(
       "configDir must be an absolute path; relative paths resolve against process.cwd() and break org isolation."
     );
   }
+
   return join(configDir, "orgs", assertConfigPathSegment(orgId, "orgId"));
 }
 
@@ -126,5 +131,6 @@ export async function resolveSoulStackForProfile(
     getProfileSoulDir(orgId, profileId),
     readMemory
   );
+
   return stack.loaded.length > 0 ? stack : null;
 }

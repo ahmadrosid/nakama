@@ -28,7 +28,16 @@ import type { WorkerManagerService } from "./worker-manager-service";
 
 export class SystemStatusService {
   constructor(
-    private readonly agent: AgentService,
+    private readonly agent: Pick<
+      AgentService,
+      | "providerConfigured"
+      | "getModels"
+      | "getUsageStatusFields"
+      | "getLlmUsageStats"
+      | "getLlmUsageStatsByModel"
+      | "getLlmUsageDailyStats"
+      | "getLlmUsageStatsByActor"
+    >,
     private readonly automationRunner: AutomationRunner,
     private readonly workerManager: WorkerManagerService,
     private readonly mcpService: McpService | null = null,
@@ -36,24 +45,37 @@ export class SystemStatusService {
     private readonly databaseAdapter: DatabaseAdapter | null = null
   ) {}
 
-  async getStatus(orgId: ChannelConfigScope): Promise<SystemStatusResponse> {
+  /**
+   * `includeUsageByActor` adds usage per agent and per user. It names who
+   * spent what, so only org admins and platform admins get it.
+   */
+  async getStatus(
+    orgId: ChannelConfigScope,
+    options: { includeUsageByActor?: boolean } = {}
+  ): Promise<SystemStatusResponse> {
     const providerConfigured = this.agent.providerConfigured;
     const models = await this.agent.getModels();
     const usageFields = this.agent.getUsageStatusFields();
 
     // Usage is a tenant ledger: read it with the same scope the request
     // already resolved, never install-wide, or one org reads another's spend.
-    const usageOrgId =
-      typeof orgId === "string" ? orgId : (orgId?.orgId ?? null);
-    const [usageStats, usageByModel] = await Promise.all([
-      this.agent.getLlmUsageStats(usageOrgId),
-      this.agent.getLlmUsageStatsByModel(usageOrgId),
-    ]);
+    const usageOrgId = isString(orgId) ? orgId : (orgId?.orgId ?? null);
+
+    const [usageStats, usageByModel, usageDaily, usageByActor] =
+      await Promise.all([
+        this.agent.getLlmUsageStats(usageOrgId),
+        this.agent.getLlmUsageStatsByModel(usageOrgId),
+        this.agent.getLlmUsageDailyStats(usageOrgId),
+        options.includeUsageByActor && usageOrgId
+          ? this.agent.getLlmUsageStatsByActor(usageOrgId)
+          : null,
+      ]);
 
     const statuses = await this.workerManager.getAllWorkerStatuses(orgId);
     const automationProcess = statuses.automation ?? null;
     const automationHeartbeat = await getAutomationWorkerHeartbeatStatus();
     const automationRunning = automationHeartbeat.running;
+
     const automationManagedOnline =
       automationProcess?.managed === true &&
       automationProcess.status === "online";
@@ -63,15 +85,17 @@ export class SystemStatusService {
       this.resolveWorkerStatus("whatsapp", statuses.whatsapp, orgId),
       this.resolveWorkerStatus("discord", statuses.discord, orgId),
     ]);
+
     // Typed on its own so SlackWorkerStatus stays exact; the shared helper
     // returns a union of every channel's status shape.
     const slackProcess = statuses.slack;
-    const slackStatus = {
-      ...(await getSlackWorkerStatus(orgId)),
-      ...(isChannelOwner(orgId) && slackProcess?.managed
-        ? { process: slackProcess, running: slackProcess.status === "online" }
-        : {}),
-    };
+
+    const slackStatus = await getSlackWorkerStatus(orgId);
+
+    if (isChannelOwner(orgId) && slackProcess?.managed) {
+      slackStatus.process = slackProcess;
+      slackStatus.running = slackProcess.status === "online";
+    }
 
     return {
       automationWorker: {
@@ -86,14 +110,18 @@ export class SystemStatusService {
       },
       checkedAt: new Date().toISOString(),
       discordWorker: discordStatus,
-      llmUsage: this.getLlmUsage(
-        models.provider,
-        usageFields.currentModel,
-        providerConfigured,
-        usageFields,
-        usageByModel,
-        usageStats
-      ),
+      llmUsage: {
+        ...this.getLlmUsage(
+          models.provider,
+          usageFields.currentModel,
+          providerConfigured,
+          usageFields,
+          usageByModel,
+          usageDaily,
+          usageStats
+        ),
+        ...(usageByActor ?? {}),
+      },
       mcp: this.mcpService
         ? await this.mcpService.getStatusSummary()
         : { assignedProfileCount: 0, connectedCount: 0, serverCount: 0 },
@@ -104,25 +132,47 @@ export class SystemStatusService {
     };
   }
 
+  private resolveWorkerStatus(
+    name: "telegram",
+    pm2Status: WorkerProcessInfo | null,
+    orgId: ChannelConfigScope
+  ): Promise<SystemStatusResponse["telegramWorker"]>;
+  private resolveWorkerStatus(
+    name: "whatsapp",
+    pm2Status: WorkerProcessInfo | null,
+    orgId: ChannelConfigScope
+  ): Promise<SystemStatusResponse["whatsappWorker"]>;
+  private resolveWorkerStatus(
+    name: "discord",
+    pm2Status: WorkerProcessInfo | null,
+    orgId: ChannelConfigScope
+  ): Promise<SystemStatusResponse["discordWorker"]>;
   private async resolveWorkerStatus(
     name: "telegram" | "whatsapp" | "discord",
     pm2Status: WorkerProcessInfo | null,
     orgId: ChannelConfigScope
-  ) {
+  ): Promise<
+    | SystemStatusResponse["telegramWorker"]
+    | SystemStatusResponse["whatsappWorker"]
+    | SystemStatusResponse["discordWorker"]
+  > {
     if (!isChannelOwner(orgId)) {
       return {
         configured: false,
         connected: false,
         ok: true,
         paired: false,
+        qrCode: null,
         running: false,
       };
     }
+
     if (pm2Status?.managed) {
       const running = pm2Status.status === "online";
 
       if (name === "telegram") {
         const heartbeat = await getTelegramWorkerStatus(orgId);
+
         return {
           ...heartbeat,
           process: pm2Status,
@@ -132,6 +182,7 @@ export class SystemStatusService {
 
       if (name === "discord") {
         const heartbeat = await getDiscordWorkerStatus(orgId);
+
         return {
           ...heartbeat,
           process: pm2Status,
@@ -140,6 +191,7 @@ export class SystemStatusService {
       }
 
       const heartbeat = await getWhatsAppWorkerStatus(orgId);
+
       return {
         ...heartbeat,
         process: pm2Status,
@@ -147,15 +199,18 @@ export class SystemStatusService {
       };
     }
 
+    // Keep the unmanaged info so the UI can show why PM2 failed.
+    const process = pm2Status ?? undefined;
+
     if (name === "telegram") {
-      return getTelegramWorkerStatus(orgId);
+      return { ...(await getTelegramWorkerStatus(orgId)), process };
     }
 
     if (name === "discord") {
-      return getDiscordWorkerStatus(orgId);
+      return { ...(await getDiscordWorkerStatus(orgId)), process };
     }
 
-    return getWhatsAppWorkerStatus(orgId);
+    return { ...(await getWhatsAppWorkerStatus(orgId)), process };
   }
 
   private getLlmUsage(
@@ -164,12 +219,14 @@ export class SystemStatusService {
     providerConfigured: boolean,
     usageFields: { displayName: string | null; costEstimated: boolean },
     models: LlmUsageStatus["models"],
+    daily: LlmUsageStatus["daily"],
     stats: LlmUsageStats
   ): LlmUsageStatus {
     return {
       ...stats,
       costEstimated: usageFields.costEstimated,
       currentModel,
+      daily,
       displayName: usageFields.displayName,
       models,
       provider,
@@ -194,4 +251,8 @@ export class SystemStatusService {
       version: getNakamaVersion(),
     };
   }
+}
+
+function isString<T>(value: T): value is T & string {
+  return Object.prototype.toString.call(value) === "[object String]";
 }

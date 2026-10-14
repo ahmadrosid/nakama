@@ -64,6 +64,8 @@ describe("omitUnavailableBuiltinTools", () => {
 describe("resolveToolsFromStorage sub_agent", () => {
   test("resolves registered sub_agent tool from storage", async () => {
     const db = createInMemoryDatabaseAdapter();
+
+    // SAFETY: The test fixture matches the contract used by this test.
     const subAgent = createSubAgentTool({
       runSubAgentPrompt: async () => ({
         output: "ok",
@@ -71,6 +73,7 @@ describe("resolveToolsFromStorage sub_agent", () => {
         summary: "ok",
       }),
     } as never);
+
     await upsertTool(db, {
       handlerType: "sub_agent",
       id: SUB_AGENT_TOOL_ID,
@@ -110,6 +113,7 @@ describe("resolveToolsFromStorage session", () => {
   test("resolves both registered session tools from storage", async () => {
     const db = createInMemoryDatabaseAdapter();
     await seedSessionToolRows(db);
+
     const names = (
       await resolveToolsFromStorage(await db.listTools(), db, [], {
         serverTools: { session: sessionTools() },
@@ -123,6 +127,7 @@ describe("resolveToolsFromStorage session", () => {
   test("resolves nothing when the tools were never registered", async () => {
     const db = createInMemoryDatabaseAdapter();
     await seedSessionToolRows(db);
+
     const names = (
       await resolveToolsFromStorage(await db.listTools(), db, [], {
         serverTools: { session: [] },
@@ -143,6 +148,7 @@ describe("resolveProfileStoredTools web_search", () => {
       await rm(configDir, { force: true, recursive: true });
       configDir = "";
     }
+
     delete process.env.NAKAMA_CONFIG_DIR;
   });
 

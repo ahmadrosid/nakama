@@ -11,6 +11,7 @@ import {
 } from "./profile-avatar";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
+
 const ORG_ID = "org_test";
 
 const tinyPngBase64 =

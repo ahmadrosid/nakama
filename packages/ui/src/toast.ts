@@ -3,7 +3,9 @@ import { useSyncExternalStore } from "react";
 type Toast = { id: number; message: string };
 
 let toasts: Toast[] = [];
+
 let nextId = 0;
+
 const listeners = new Set<() => void>();
 
 function notify() {
@@ -26,6 +28,7 @@ export function useToasts() {
   return useSyncExternalStore(
     (onStoreChange) => {
       listeners.add(onStoreChange);
+
       return () => listeners.delete(onStoreChange);
     },
     () => toasts,

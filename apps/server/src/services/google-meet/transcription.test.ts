@@ -6,15 +6,15 @@ import {
   formatTranscript,
   type TranscriptSegment,
 } from "@nakama/core/google-meet";
+import { asTestFetch } from "../../providers/test-helpers";
 import { connectTranscription, transcriptionConfig } from "./transcription";
 
 test("settings trim and validate the dedicated API key", () => {
   expect(transcriptionConfig({ apiKey: " secret " })).toEqual({
     apiKey: "secret",
   });
-  expect(() =>
-    transcriptionConfig({ apiKey: "secret", model: "gpt-4.1" })
-  ).toThrow();
+  const invalidConfig = { apiKey: "secret", model: "gpt-4.1" };
+  expect(() => transcriptionConfig(invalidConfig)).toThrow();
   expect(() => transcriptionConfig({ apiKey: " " })).toThrow();
 });
 
@@ -34,19 +34,25 @@ test("publishes before Stop, captures while request is pending, and reuses voice
   const audioDir = join(directory, "audio");
   const segments: TranscriptSegment[] = [];
   let release!: () => void;
+
   const pending = new Promise<void>((resolve) => {
     release = resolve;
   });
+
   let requests = 0;
+
   const request = spyOn(globalThis, "fetch").mockImplementation(
-    async (_url, init) => {
+    asTestFetch(async (_url, init) => {
+      // SAFETY: The transcription request always sends multipart form data.
       const form = init!.body as FormData;
       expect(form.get("model")).toBe("gpt-4o-transcribe-diarize");
       expect(form.get("response_format")).toBe("diarized_json");
+      // SAFETY: The multipart request includes a File named `file`.
       const file = form.get("file") as File;
       const bytes = Buffer.from(await file.arrayBuffer());
       expect(bytes.toString("ascii", 0, 4)).toBe("RIFF");
       const call = requests++;
+
       if (call === 0) {
         expect(bytes.length).toBe(720_044);
         expect(form.getAll("known_speaker_names[]")).toEqual([]);
@@ -57,6 +63,7 @@ test("publishes before Stop, captures while request is pending, and reuses voice
           "data:audio/wav;base64,"
         );
       }
+
       return Response.json({
         segments: [
           {
@@ -67,8 +74,9 @@ test("publishes before Stop, captures while request is pending, and reuses voice
           },
         ],
       });
-    }
+    })
   );
+
   const session = await connectTranscription({
     ...transcriptionConfig({ apiKey: "test" }),
     directory: audioDir,
@@ -76,6 +84,7 @@ test("publishes before Stop, captures while request is pending, and reuses voice
     onSegment: (segment) => segments.push(segment),
     signal: new AbortController().signal,
   });
+
   try {
     session.push(new Uint8Array(720_000));
     await Bun.sleep(5);
@@ -83,9 +92,11 @@ test("publishes before Stop, captures while request is pending, and reuses voice
     expect(readdirSync(audioDir)).toHaveLength(2);
     expect(segments).toHaveLength(0);
     release();
+
     for (let i = 0; i < 100 && !segments.length; i++) {
       await Bun.sleep(1);
     }
+
     expect(segments).toHaveLength(1);
     expect(segments[0]?.speakerName).toBe("Speaker 1");
     await session.finish();
@@ -117,13 +128,22 @@ test("reused anonymous labels across chunks do not merge voices and invalid resp
   const segments: TranscriptSegment[] = [];
   const failures: Error[] = [];
   let calls = 0;
-  const request = spyOn(globalThis, "fetch").mockImplementation(async () =>
-    Response.json({
-      segments: [
-        { end: ++calls === 3 ? -1 : 1, speaker: "A", start: 0, text: "hello" },
-      ],
-    })
+
+  const request = spyOn(globalThis, "fetch").mockImplementation(
+    asTestFetch(async () =>
+      Response.json({
+        segments: [
+          {
+            end: ++calls === 3 ? -1 : 1,
+            speaker: "A",
+            start: 0,
+            text: "hello",
+          },
+        ],
+      })
+    )
   );
+
   const session = await connectTranscription({
     ...transcriptionConfig({ apiKey: "test" }),
     directory: join(directory, "audio"),
@@ -131,6 +151,7 @@ test("reused anonymous labels across chunks do not merge voices and invalid resp
     onSegment: (segment) => segments.push(segment),
     signal: new AbortController().signal,
   });
+
   try {
     session.push(new Uint8Array(720_000 * 3));
     await expect(session.finish()).rejects.toThrow();
@@ -149,9 +170,11 @@ test("reused anonymous labels across chunks do not merge voices and invalid resp
 
 test("permanent provider errors are not retried and queued audio is cleaned", async () => {
   const directory = mkdtempSync(join(tmpdir(), "meet-error-"));
+
   const request = spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(null, { status: 401 })
   );
+
   const session = await connectTranscription({
     ...transcriptionConfig({ apiKey: "test" }),
     directory: join(directory, "audio"),
@@ -159,6 +182,7 @@ test("permanent provider errors are not retried and queued audio is cleaned", as
     onSegment: () => {},
     signal: new AbortController().signal,
   });
+
   try {
     expect(() => session.push(new Uint8Array(1))).toThrow();
     expect(() => session.push(new Uint8Array(301 * 48_000))).toThrow();
@@ -177,12 +201,15 @@ test("reference bank stays at four voices and retries do not duplicate turns", a
   const directory = mkdtempSync(join(tmpdir(), "meet-refs-"));
   const segments: TranscriptSegment[] = [];
   let calls = 0;
+
   const request = spyOn(globalThis, "fetch").mockImplementation(
-    async (_url, init) => {
+    asTestFetch(async (_url, init) => {
       calls++;
+
       if (calls === 1) {
         return new Response(null, { status: 503 });
       }
+
       if (calls === 2) {
         return Response.json({
           segments: ["A", "B", "C", "D", "E"].map((speaker, i) => ({
@@ -193,6 +220,8 @@ test("reference bank stays at four voices and retries do not duplicate turns", a
           })),
         });
       }
+
+      // SAFETY: The transcription request always sends multipart form data.
       const form = init!.body as FormData;
       expect(form.getAll("known_speaker_names[]")).toEqual([
         "speaker_1",
@@ -201,11 +230,13 @@ test("reference bank stays at four voices and retries do not duplicate turns", a
         "speaker_4",
       ]);
       expect(form.getAll("known_speaker_references[]")).toHaveLength(4);
+
       return Response.json({
         segments: [{ end: 2, speaker: "E", start: 0, text: "again" }],
       });
-    }
+    })
   );
+
   const session = await connectTranscription({
     ...transcriptionConfig({ apiKey: "test" }),
     directory: join(directory, "audio"),
@@ -213,6 +244,7 @@ test("reference bank stays at four voices and retries do not duplicate turns", a
     onSegment: (segment) => segments.push(segment),
     signal: new AbortController().signal,
   });
+
   try {
     session.push(new Uint8Array(720_000 + 96_000));
     await session.finish();
@@ -231,16 +263,20 @@ test("aborting an upload publishes no late segments and removes audio", async ()
   const audioDirectory = join(directory, "audio");
   const abort = new AbortController();
   const segments: TranscriptSegment[] = [];
+
   const request = spyOn(globalThis, "fetch").mockImplementation(
-    async (_url, init) =>
-      new Promise<Response>((_resolve, reject) => {
-        init!.signal!.addEventListener(
-          "abort",
-          () => reject(new Error("cancelled")),
-          { once: true }
-        );
-      })
+    asTestFetch(
+      async (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init!.signal!.addEventListener(
+            "abort",
+            () => reject(new Error("cancelled")),
+            { once: true }
+          );
+        })
+    )
   );
+
   const session = await connectTranscription({
     ...transcriptionConfig({ apiKey: "test" }),
     directory: audioDirectory,
@@ -248,6 +284,7 @@ test("aborting an upload publishes no late segments and removes audio", async ()
     onSegment: (segment) => segments.push(segment),
     signal: abort.signal,
   });
+
   try {
     session.push(new Uint8Array(720_000));
     await Bun.sleep(0);

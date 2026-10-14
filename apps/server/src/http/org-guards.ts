@@ -9,8 +9,8 @@ export function requireOrgAdmin(auth: RequestAuthContext): void {
   }
 }
 
-export function requireNotViewer(auth: RequestAuthContext): void {
-  if (!auth.orgRole || auth.orgRole === "viewer") {
+export function requireOrgMember(auth: RequestAuthContext): void {
+  if (auth.orgRole !== "admin" && auth.orgRole !== "member") {
     throw new NakamaApiError("Forbidden", 403);
   }
 }
@@ -26,6 +26,7 @@ export function requireOrgAdminFromContext(
 ): RequestAuthContext {
   const auth = getRequestAuth(c);
   requireOrgAdmin(auth);
+
   return auth;
 }
 
@@ -42,14 +43,62 @@ export function requireOrgAdminOrPlatformAdminFromContext(
 ): RequestAuthContext {
   const auth = getRequestAuth(c);
   requireOrgAdminOrPlatformAdmin(auth);
+
   return auth;
 }
 
-export function requireNotViewerFromContext(
+export function requireOrgMemberFromContext(
   c: Context<AppEnv>
 ): RequestAuthContext {
   const auth = getRequestAuth(c);
-  requireNotViewer(auth);
+  requireOrgMember(auth);
+
+  return auth;
+}
+
+interface ProfileOwnerLookup {
+  getProfile(
+    orgId: string,
+    profileId: string
+  ): Promise<{ profile: { isSuper: boolean; ownerUserId?: string | null } }>;
+}
+
+/**
+ * Platform admins manage every agent, and org admins too when `allowOrgAdmin`
+ * is set. Members manage only the agents they created.
+ */
+export async function requireProfileManageFromContext(
+  c: Context<AppEnv>,
+  agent: ProfileOwnerLookup,
+  options: { allowOrgAdmin?: boolean; profileId?: string } = {}
+): Promise<RequestAuthContext> {
+  const auth = getRequestAuth(c);
+
+  if (
+    auth.isPlatformAdmin ||
+    (options.allowOrgAdmin && auth.orgRole === "admin")
+  ) {
+    return auth;
+  }
+
+  requireOrgMember(auth);
+
+  // A missing agent answers 403 too, so members cannot probe which ids exist.
+  const found = await agent
+    .getProfile(
+      requireActiveOrgIdFromContext(c),
+      options.profileId ?? decodeURIComponent(c.req.param("profileId") ?? "")
+    )
+    .catch(() => null);
+
+  if (
+    !found ||
+    found.profile.isSuper ||
+    found.profile.ownerUserId !== auth.user.id
+  ) {
+    throw new NakamaApiError("Forbidden", 403);
+  }
+
   return auth;
 }
 
@@ -58,6 +107,7 @@ export function requirePlatformAdminFromContext(
 ): RequestAuthContext {
   const auth = getRequestAuth(c);
   requirePlatformAdmin(auth);
+
   return auth;
 }
 

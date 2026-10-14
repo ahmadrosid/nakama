@@ -11,25 +11,34 @@ async function flushTypingChain(): Promise<void> {
 
 function createFakeContext() {
   const calls: string[] = [];
-  const ctx = {
+
+  const fixture = {
     async replyWithChatAction(action: string) {
       calls.push(action);
     },
-  } as unknown as Context;
+  };
+
+  // SAFETY: The fixture implements the chat action method used by the typing loop.
+  const ctx = fixture as Context;
+
   return { calls, ctx };
 }
 
 function createBlockingContext() {
   const releases: Array<() => void> = [];
   let sendCount = 0;
-  const ctx = {
+
+  const fixture = {
     async replyWithChatAction() {
       sendCount += 1;
       await new Promise<void>((resolve) => {
         releases.push(resolve);
       });
     },
-  } as unknown as Context;
+  };
+
+  // SAFETY: The fixture implements the chat action method used by the typing loop.
+  const ctx = fixture as Context;
 
   return {
     ctx,

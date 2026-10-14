@@ -1,13 +1,17 @@
 import type { OrgRole, SetupAuthRequest } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
-import type { AuthService } from "../../services/auth-service";
+import type { AuthService } from "../services/auth-service";
 
 export const TEST_ORG_ID = "org_test";
+
 export const LOCAL_CLIENT_EMAIL = "local-client@nakama.internal";
 
 export function buildSetupAuthBody(
   email = "admin@example.com",
-  overrides: Partial<SetupAuthRequest> = {}
+  overrides: {
+    admin?: Partial<SetupAuthRequest["admin"]>;
+    organization?: Partial<SetupAuthRequest["organization"]>;
+  } = {}
 ): SetupAuthRequest {
   return {
     admin: {
@@ -49,14 +53,17 @@ export async function seedOrgForUser(
   role: OrgRole = "admin"
 ): Promise<string> {
   const user = await adapter.getUserByEmail(email);
+
   if (!user) {
     throw new Error(`User not found: ${email}`);
   }
 
   const now = new Date().toISOString();
+
   const existing =
     (await adapter.getOrganizationById(orgId)) ??
     (await adapter.getOrganizationBySlug("test-org"));
+
   const resolvedOrgId = existing?.id ?? orgId;
 
   if (!existing) {
@@ -79,10 +86,7 @@ export async function seedOrgForUser(
   return resolvedOrgId;
 }
 
-export function withOrgId(
-  headers: Record<string, string>,
-  orgId: string
-): Record<string, string> {
+export function withOrgId(headers: Record<string, string>, orgId: string) {
   return { ...headers, "X-Org-Id": orgId };
 }
 

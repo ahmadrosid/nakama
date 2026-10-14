@@ -11,10 +11,12 @@ afterEach(() => {
 
 describe("withChatLock rejection safety", () => {
   test("rejected predecessor does not cause unhandledRejection", async () => {
-    const rejections: unknown[] = [];
-    const onUnhandled = (reason: unknown) => {
+    const rejections: Error[] = [];
+
+    const onUnhandled = (reason: Error) => {
       rejections.push(reason);
     };
+
     process.on("unhandledRejection", onUnhandled);
 
     try {

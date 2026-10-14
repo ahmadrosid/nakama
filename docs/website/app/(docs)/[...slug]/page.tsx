@@ -25,6 +25,7 @@ interface PageProps {
 export default async function Page(props: PageProps) {
   const params = await props.params;
   const page = source.getPage(params.slug);
+
   if (!page) {
     notFound();
   }
@@ -32,11 +33,13 @@ export default async function Page(props: PageProps) {
   const MDX = page.data.body;
   const relativePath = slugToRelativePath(page.slugs);
   const markdownUrl = withBasePath(`/${relativePath}`);
+
   const metadata = buildPageMetadata(
     relativePath,
     page.data.title,
     page.data.description ?? ""
   );
+
   const jsonLd = buildJsonLd(
     relativePath,
     metadata.title,
@@ -80,11 +83,13 @@ export const dynamicParams = false;
 export async function generateMetadata(props: PageProps): Promise<Metadata> {
   const params = await props.params;
   const page = source.getPage(params.slug);
+
   if (!page) {
     notFound();
   }
 
   const relativePath = slugToRelativePath(page.slugs);
+
   return buildPageMetadata(
     relativePath,
     page.data.title,

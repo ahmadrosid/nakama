@@ -2,6 +2,7 @@ import type { CustomModelEntry } from "@nakama/core";
 import { formatHttpErrorBody } from "../shared";
 
 const FIREWORKS_GATEWAY_BASE_URL = "https://api.fireworks.ai/v1";
+
 const FIREWORKS_GATEWAY_ACCOUNT = "fireworks";
 
 interface MoneyAmount {
@@ -14,6 +15,11 @@ interface SkuInfo {
   amount?: MoneyAmount;
   sku?: string;
   unit?: string;
+}
+
+interface SkuPricing {
+  inputPerMillionUsd?: number;
+  outputPerMillionUsd?: number;
 }
 
 interface ServerlessMode {
@@ -57,10 +63,7 @@ function moneyToPerMillion(
   return units + nanos / 1_000_000_000;
 }
 
-function parseSkuPricing(modes: ServerlessMode[] | undefined): {
-  inputPerMillionUsd?: number;
-  outputPerMillionUsd?: number;
-} {
+function parseSkuPricing(modes: ServerlessMode[] | undefined): SkuPricing {
   const skuInfos = modes?.flatMap((mode) => mode.skuInfos ?? []) ?? [];
 
   let inputPerMillionUsd: number | undefined;
@@ -148,19 +151,22 @@ export function normalizeGatewayModel(
 
   const pricing = parseSkuPricing(model.serverlessModes);
 
-  return {
+  const entry: CustomModelEntry = {
     id,
     name: model.displayName?.trim() || id.split("/").pop() || id,
     supportsThinking: inferReasoning(model, id),
     supportsVision: model.supportsImageInput === true,
-    ...(pricing.inputPerMillionUsd !== undefined &&
-    pricing.outputPerMillionUsd !== undefined
-      ? {
-          inputPerMillionUsd: pricing.inputPerMillionUsd,
-          outputPerMillionUsd: pricing.outputPerMillionUsd,
-        }
-      : {}),
   };
+
+  if (
+    pricing.inputPerMillionUsd !== undefined &&
+    pricing.outputPerMillionUsd !== undefined
+  ) {
+    entry.inputPerMillionUsd = pricing.inputPerMillionUsd;
+    entry.outputPerMillionUsd = pricing.outputPerMillionUsd;
+  }
+
+  return entry;
 }
 
 export async function fetchFireworksGatewayModels(
@@ -180,6 +186,7 @@ export async function fetchFireworksGatewayModels(
     const url = new URL(
       `${FIREWORKS_GATEWAY_BASE_URL}/accounts/${FIREWORKS_GATEWAY_ACCOUNT}/models`
     );
+
     url.searchParams.set("filter", "supports_serverless=true");
     url.searchParams.set("pageSize", "200");
 
@@ -199,6 +206,7 @@ export async function fetchFireworksGatewayModels(
       throw new Error(formatHttpErrorBody("Fireworks", response.status, body));
     }
 
+    // SAFETY: The upstream payload is validated or constructed by the provider adapter before this conversion.
     const payload = (await response.json()) as ListModelsResponse;
     const models = payload.models ?? [];
 

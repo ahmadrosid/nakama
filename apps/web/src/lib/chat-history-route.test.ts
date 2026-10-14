@@ -41,11 +41,13 @@ describe("chat history route helpers", () => {
         setItem: (key: string, value: string) => store.set(key, value),
       },
     });
+
     try {
       const key = chatComposerDraftKey("alice", "org", "profile", "session");
       storeComposerDraft(key, "unfinished thought");
       expect(readComposerDraft(key)).toBe("unfinished thought");
       expect(readComposerDraft(key)).toBe("unfinished thought");
+
       for (const other of [
         chatComposerDraftKey("bob", "org", "profile", "session"),
         chatComposerDraftKey("alice", "other-org", "profile", "session"),
@@ -55,6 +57,7 @@ describe("chat history route helpers", () => {
       ]) {
         expect(readComposerDraft(other)).toBe("");
       }
+
       expect(
         chatComposerDraftKey(undefined, "org", "profile", null)
       ).toBeNull();
@@ -118,6 +121,7 @@ describe("chat history route helpers", () => {
       const keys = Array.from({ length: 20 }, (_, index) =>
         storeChatDraft(`draft-${index}`)
       );
+
       expect(new Set(keys).size).toBe(keys.length);
       expect(consumeStoredChatDraft(keys[0]!)).toBe("draft-0");
       expect(consumeStoredChatDraft(keys[1]!)).toBe("draft-1");

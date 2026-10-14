@@ -9,7 +9,9 @@ export const DEFAULT_BUNDLED_SKILL_NAMES = [
 ] as const;
 
 export const SUPER_BOT_BUNDLED_SKILL_NAMES = [
+  "create-plugin",
   "create-profile",
+  "create-skill",
   "coding-agent",
 ] as const;
 

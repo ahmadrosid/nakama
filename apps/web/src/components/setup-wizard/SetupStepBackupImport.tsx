@@ -51,14 +51,17 @@ async function previewBackupFile(
 
   try {
     const result = await previewImport(file);
+
     if (generation !== previewGenerationRef.current) {
       return;
     }
+
     setPreview(result);
   } catch (err) {
     if (generation !== previewGenerationRef.current) {
       return;
     }
+
     setError(formatError(err));
   }
 }
@@ -84,6 +87,7 @@ async function restoreBackupFile(
       confirm: true,
       file: selectedFile,
     });
+
     setRequiresRestart(Boolean(result.requiresRestart));
     setPhase("done");
   } catch (err) {
@@ -111,6 +115,7 @@ function startInitialBackupPreview({
 }): (() => void) | undefined {
   if (!initialFile) {
     initialPreviewStartedForRef.current = null;
+
     return;
   }
 
@@ -122,6 +127,7 @@ function startInitialBackupPreview({
   ) {
     return;
   }
+
   initialPreviewStartedForRef.current = initialFile;
   const generation = ++previewGenerationRef.current;
 
@@ -144,6 +150,7 @@ function startInitialBackupPreview({
 
   return () => {
     cancelled = true;
+
     if (
       shouldClearInitialPreviewDedupe(generation, previewGenerationRef.current)
     ) {
@@ -165,10 +172,12 @@ function runRestoreDoneEffect({
 }): () => void {
   if (phase !== "done") {
     setSuccessEntered(false);
+
     return () => {};
   }
 
   const enterFrame = requestAnimationFrame(() => setSuccessEntered(true));
+
   if (requiresRestart) {
     return () => {
       cancelAnimationFrame(enterFrame);
@@ -353,18 +362,24 @@ export function SetupStepBackupImport({
   const initialPreviewStartedForRef = useRef<File | null>(null);
   const previewGenerationRef = useRef(0);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
   const [preview, setPreview] = useState<DataImportPreviewResponse | null>(
     null
   );
+
   const [error, setError] = useState<string | null>(null);
   const [phase, setPhase] = useState<RestorePhase>("form");
   const [successEntered, setSuccessEntered] = useState(false);
   const [requiresRestart, setRequiresRestart] = useState(false);
+
   const { mutateAsync: previewImport, isPending: previewPending } =
     usePreviewSetupDataImport();
+
   const restoreMutation = useRestoreSetupDataImport();
+
   const isBusy =
     previewPending || restoreMutation.isPending || phase !== "form";
+
   const restoreAvailable = canRestoreDataImport({
     pending: restoreMutation.isPending || phase !== "form",
     previewReady: Boolean(preview),

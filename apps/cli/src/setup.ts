@@ -39,7 +39,7 @@ export class LoginForm implements Component, Focusable {
       serverUrl: string,
       email: string,
       password: string
-    ) => Promise<unknown>,
+    ) => Promise<void>,
     private readonly renderAgain: () => void,
     private readonly finish: (error?: Error) => void
   ) {
@@ -58,10 +58,12 @@ export class LoginForm implements Component, Focusable {
   render(width: number): string[] {
     this.server.focused = this.focused && this.field === 0;
     this.email.focused = this.focused && this.field === 1;
+
     const passwordMarker =
       this.focused && this.field === 2
         ? `${CURSOR_MARKER}\x1b[7m \x1b[27m`
         : "";
+
     return [
       "Connect to Nakama",
       ...(this.server.focused
@@ -84,6 +86,7 @@ export class LoginForm implements Component, Focusable {
     if (this.closed) {
       return;
     }
+
     if (matchesKey(data, "escape") || matchesKey(data, "ctrl+c")) {
       this.clear();
       this.closed = true;
@@ -103,24 +106,31 @@ export class LoginForm implements Component, Focusable {
     } else {
       [this.server, this.email, this.password][this.field].handleInput(data);
     }
+
     this.renderAgain();
   }
 
   private async submit(): Promise<void> {
     let serverUrl: string;
+
     try {
       serverUrl = normalizeServerUrl(this.server.getValue().trim());
     } catch {
       this.message =
         "Enter a valid HTTPS server URL (HTTP is allowed for localhost).";
       this.field = 0;
+
       return;
     }
+
     if (!(this.email.getValue().trim() && this.password.getValue())) {
       this.message = "Enter your email and password.";
+
       return;
     }
+
     this.busy = true;
+
     try {
       await this.authenticate(
         serverUrl,
@@ -138,6 +148,7 @@ export class LoginForm implements Component, Focusable {
           : "Could not log in. Check the server and credential store, then retry.";
     } finally {
       this.busy = false;
+
       if (!this.closed) {
         this.renderAgain();
       }
@@ -152,7 +163,7 @@ export async function promptRemoteLogin(
     email: string,
     password: string,
     signal?: AbortSignal
-  ) => Promise<unknown>,
+  ) => Promise<void>,
   signal?: AbortSignal
 ): Promise<void> {
   if (!(process.stdin.isTTY && process.stdout.isTTY)) {
@@ -160,25 +171,32 @@ export async function promptRemoteLogin(
       "Login requires an interactive terminal. Run the CLI login command first."
     );
   }
+
   signal?.throwIfAborted();
+
   // Login fields must not be captured by pi-tui's optional diagnostic logs.
   const logKeys = [
     "PI_TUI_WRITE_LOG",
     "PI_TUI_DEBUG",
     "PI_TUI_DEBUG_REDRAW",
   ] as const;
+
   const previousLogs = logKeys.map((key) => process.env[key]);
+
   for (const key of logKeys) {
     delete process.env[key];
   }
+
   const tui = new TuiAltScreen(new ProcessTerminal());
   const done = Promise.withResolvers<void>();
   const controller = new AbortController();
-  let pendingLogin: Promise<unknown> | undefined;
+  let pendingLogin: Promise<void> | undefined;
+
   const form = new LoginForm(
     serverUrl,
     (url, email, password) => {
       pendingLogin = authenticate(url, email, password, controller.signal);
+
       return pendingLogin;
     },
     () => tui.requestRender(),
@@ -190,8 +208,10 @@ export async function promptRemoteLogin(
       }
     }
   );
+
   const abort = () => done.reject(new Error("Login cancelled."));
   signal?.addEventListener("abort", abort, { once: true });
+
   try {
     tui.addChild(form);
     tui.setFocus(form);
@@ -203,8 +223,10 @@ export async function promptRemoteLogin(
     form.clear();
     tui.stop({ preserveScreen: true });
     signal?.removeEventListener("abort", abort);
+
     for (const [index, key] of logKeys.entries()) {
       const value = previousLogs[index];
+
       if (value === undefined) {
         delete process.env[key];
       } else {
@@ -219,8 +241,9 @@ export function readPassword(prompt: string): Promise<string> {
     const stdin = process.stdin;
     const stdout = process.stdout;
 
-    if (!stdin.isTTY || typeof stdin.setRawMode !== "function") {
+    if (!stdin.isTTY) {
       reject(new Error("Terminal does not support raw mode"));
+
       return;
     }
 
@@ -234,9 +257,11 @@ export function readPassword(prompt: string): Promise<string> {
         stdin.setRawMode(false);
         rawModeEnabled = false;
       }
+
       if (wasPaused) {
         stdin.pause();
       }
+
       stdin.removeListener("data", onData);
     };
 
@@ -249,6 +274,7 @@ export function readPassword(prompt: string): Promise<string> {
           restoreStdin();
           stdout.write("\n");
           resolve(password);
+
           return;
         }
 
@@ -302,6 +328,7 @@ export async function ensureUserConfiguredViaCli(
   });
 
   let email: string;
+
   try {
     email = await rl.question("Email: ");
   } finally {
@@ -313,11 +340,13 @@ export async function ensureUserConfiguredViaCli(
 
   if (password !== confirmPassword) {
     console.log("Passwords do not match.");
+
     return false;
   }
 
   if (password.length < 8) {
     console.log("Password must be at least 8 characters.");
+
     return false;
   }
 
@@ -325,10 +354,12 @@ export async function ensureUserConfiguredViaCli(
     const result = await client.setupUser(email, password);
     client.setAuthToken(result.token);
     console.log("Admin user created successfully.");
+
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     printLine(`Failed to create admin user: ${message}`);
+
     return false;
   }
 }
@@ -358,6 +389,7 @@ export async function ensureProviderConfiguredViaCli(
           apiKey,
           provider: "netra",
         });
+
         return response.models;
       },
       question: (prompt) => rl.question(prompt),
@@ -366,6 +398,7 @@ export async function ensureProviderConfiguredViaCli(
     });
 
     const instance = config.providers[0]!;
+
     const model =
       instance.customModels?.find((entry) => entry.default)?.id ??
       instance.customModels?.[0]?.id ??
@@ -401,6 +434,7 @@ function createModelHelpers(models: ProviderModelOption[]) {
       const providerModels = models.filter(
         (model) => model.provider === provider
       );
+
       return (
         providerModels.find((model) => model.default)?.id ??
         providerModels[0]?.id ??
@@ -422,43 +456,56 @@ export function isLocalServer(serverUrl: string): boolean {
 
 export function normalizeServerUrl(value: string): string {
   const url = new URL(value);
+
   if (url.username || url.password || url.search || url.hash) {
     throw new Error(
       "Server URL must not contain credentials, query parameters or a fragment."
     );
   }
+
   if (
     url.protocol !== "https:" &&
     !(url.protocol === "http:" && isLocalServer(url.href))
   ) {
     throw new Error("Remote servers require HTTPS.");
   }
+
   return url.href.replace(/\/$/, "");
 }
 
-export function parseConnectionArgs(argv = process.argv.slice(2)): {
-  command?: "login" | "logout";
-  serverUrl?: string;
-} {
+export function parseConnectionArgs(argv = process.argv.slice(2)) {
   let serverUrl: string | undefined;
+
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
+
     if (arg !== "--server" && !arg.startsWith("--server=")) {
       continue;
     }
+
     const value =
       arg === "--server" ? argv[index + 1] : arg.slice("--server=".length);
+
     if (arg === "--server") {
       index += 1;
     }
+
     if (!value || value.startsWith("--")) {
       throw new Error("Pass --server https://your-nakama-server.");
     }
+
     serverUrl = normalizeServerUrl(value);
   }
+
   const command =
     argv[0] === "login" || argv[0] === "logout" ? argv[0] : undefined;
-  return { command, serverUrl };
+
+  return { command, serverUrl } satisfies ParsedConnectionArgs;
+}
+
+interface ParsedConnectionArgs {
+  command: "login" | "logout" | undefined;
+  serverUrl: string | undefined;
 }
 
 export async function createRemoteConnection(
@@ -471,17 +518,21 @@ export async function createRemoteConnection(
   const baseUrl = normalizeServerUrl(serverUrl);
   const store = options.secretStore ?? Bun.secrets;
   const key = { name: baseUrl, service: "nakama-cli" };
+
   // HTTPS servers issue host-bound cookies and refuse the unprefixed pair, so
   // the scheme of the server URL decides the names the CLI replays (#1345).
   const schemeCookieNames = browserSessionCookieNames(
     new URL(baseUrl).protocol === "https:"
   );
+
   let tokens: {
     cookieNames: BrowserSessionCookieNames;
     csrf: string;
     session: string;
   } | null = null;
+
   let saved: string | null;
+
   try {
     saved = await store.get(key);
   } catch {
@@ -489,18 +540,21 @@ export async function createRemoteConnection(
       "Cannot access the OS credential store. Unlock your keychain or start your secret service, then retry."
     );
   }
+
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
+
       if (validCookieToken(parsed.session) && validCookieToken(parsed.csrf)) {
         // Entries stored before host-bound cookies carry no names; the server
         // scheme decides, and a wrong guess only costs one re-login.
         const stored = parsed.cookieNames;
+
         const cookieNames =
-          typeof stored?.session === "string" &&
-          typeof stored?.csrf === "string"
+          isStringValue(stored?.session) && isStringValue(stored?.csrf)
             ? { csrf: stored.csrf, session: stored.session }
             : schemeCookieNames;
+
         tokens = { cookieNames, csrf: parsed.csrf, session: parsed.session };
       }
     } catch {
@@ -510,27 +564,33 @@ export async function createRemoteConnection(
 
   const fetchImpl = options.fetch ?? fetch;
   let loginSignal: AbortSignal | undefined;
+
   const client = new NakamaClient({
     baseUrl,
+    // SAFETY: This wrapper preserves the Fetch request and response contract.
     fetch: (async (input, init) => {
       const url = new URL(
         input instanceof Request ? input.url : input.toString()
       );
+
       if (
         url.origin !== new URL(baseUrl).origin ||
         !url.href.startsWith(`${baseUrl}/`)
       ) {
         throw new Error("Refusing to send the session to another server.");
       }
+
       const headers = new Headers(init?.headers);
       headers.delete("Authorization");
       headers.delete("Cookie");
       headers.delete("X-CSRF-Token");
+
       if (tokens) {
         headers.set(
           "Cookie",
           `${tokens.cookieNames.session}=${tokens.session}; ${tokens.cookieNames.csrf}=${tokens.csrf}`
         );
+
         if (
           !["GET", "HEAD", "OPTIONS"].includes(
             (init?.method ?? "GET").toUpperCase()
@@ -539,6 +599,7 @@ export async function createRemoteConnection(
           headers.set("X-CSRF-Token", tokens.csrf);
         }
       }
+
       const response = await fetchImpl(input, {
         ...init,
         headers,
@@ -550,6 +611,7 @@ export async function createRemoteConnection(
             ? AbortSignal.timeout(30_000)
             : undefined),
       });
+
       if (response.status === 401 && tokens) {
         tokens = null;
         await store.delete(key);
@@ -559,6 +621,7 @@ export async function createRemoteConnection(
           url.pathname
         );
       }
+
       if (response.ok && url.pathname.endsWith("/v1/auth/login")) {
         const cookies = new Bun.CookieMap(
           response.headers
@@ -566,20 +629,26 @@ export async function createRemoteConnection(
             .map((cookie) => cookie.split(";")[0])
             .join("; ")
         );
+
         const hostSession = cookies.get(
           HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES.session
         );
+
         const hostCsrf = cookies.get(
           HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES.csrf
         );
+
         const session =
           hostSession ??
           cookies.get(PLAIN_BROWSER_SESSION_COOKIE_NAMES.session);
+
         const csrf =
           hostCsrf ?? cookies.get(PLAIN_BROWSER_SESSION_COOKIE_NAMES.csrf);
+
         if (!(validCookieToken(session) && validCookieToken(csrf))) {
           throw new Error("Server did not return a valid login session.");
         }
+
         tokens = {
           cookieNames: hostSession
             ? HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES
@@ -588,6 +657,7 @@ export async function createRemoteConnection(
           session,
         };
       }
+
       return response;
     }) as typeof fetch,
   });
@@ -599,11 +669,13 @@ export async function createRemoteConnection(
         ? AbortSignal.any([signal, AbortSignal.timeout(30_000)])
         : undefined;
       let user;
+
       try {
         user = await client.login(email, password);
       } finally {
         loginSignal = undefined;
       }
+
       try {
         signal?.throwIfAborted();
         await store.set({ ...key, value: JSON.stringify(tokens) });
@@ -616,6 +688,7 @@ export async function createRemoteConnection(
           "Could not save the session in the OS credential store. Login was cancelled."
         );
       }
+
       return user;
     },
     async logout() {
@@ -638,5 +711,9 @@ export async function createRemoteConnection(
 }
 
 function validCookieToken(value: unknown): value is string {
-  return typeof value === "string" && /^[A-Za-z0-9_-]+$/.test(value);
+  return isStringValue(value) && /^[A-Za-z0-9_-]+$/.test(value);
+}
+
+function isStringValue(value: unknown): value is string {
+  return Object.prototype.toString.call(value) === "[object String]";
 }

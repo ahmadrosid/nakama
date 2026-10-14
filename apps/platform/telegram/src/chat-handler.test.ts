@@ -13,6 +13,7 @@ import {
 } from "@nakama/core/channel-active-stream";
 import { ChannelSessionStore as SessionStore } from "@nakama/core/channel-session-store";
 import type { ChatMessage } from "@nakama/core/contract";
+import { listTelegramAccessRequests } from "@nakama/core/telegram-config";
 import {
   UNSUPPORTED_DOCUMENT_TYPES_REPLY,
   UNSUPPORTED_MEDIA_REPLY,
@@ -39,6 +40,12 @@ const TEST_CONFIG = {
   profileId: "default",
 };
 
+const PAIRING_CODE = "A1B2C3D4E5F60718293A4B5C6D7E8F90";
+
+const LIVE_CODE_EXPIRY = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+const WRONG_PAIRING_CODE = "0".repeat(32);
+
 // These handler tests run in ~0.2s locally but occasionally exceed the 5000ms
 // default under CI's concurrent all-workspace load. Give them more headroom.
 setDefaultTimeout(10_000);
@@ -59,11 +66,14 @@ async function createTestHandler(
   const authStore = new TelegramAuthStore(null);
   await authStore.reload();
   const mock = createMockClient(clientOptions);
+
   const sessionStore = new SessionStore(
     path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
   );
+
   const orgStore = createTestOrgStore(homeDir);
   await orgStore.load();
+
   const handler = createChatHandler({
     ...options,
     authStore,
@@ -71,6 +81,7 @@ async function createTestHandler(
     orgStore,
     sessionStore,
   });
+
   return { ...mock, authStore, handler, orgStore, sessionStore };
 }
 
@@ -137,6 +148,7 @@ describe("createChatHandler group chats", () => {
         expect(output).toContain("chatId=-100123");
       } finally {
         log.mockRestore();
+
         if (previousDebug === undefined) {
           delete process.env.NAKAMA_CH_DEBUG;
         } else {
@@ -208,6 +220,7 @@ describe("createChatHandler group chats", () => {
         text: "@mybot hello",
         userId: 42,
       });
+
       await handleMessage(topic10.ctx);
 
       const topic20 = createMessageContext({
@@ -218,6 +231,7 @@ describe("createChatHandler group chats", () => {
         text: "@mybot hello",
         userId: 42,
       });
+
       await handleMessage(topic20.ctx);
 
       expect(calls.createSession).toBe(2);
@@ -254,6 +268,7 @@ describe("createChatHandler group chats", () => {
         text: "/profile research",
         userId: 42,
       });
+
       await handleMessage(switchTopic10.ctx);
 
       const topic20 = createMessageContext({
@@ -264,6 +279,7 @@ describe("createChatHandler group chats", () => {
         text: "@mybot hello",
         userId: 42,
       });
+
       await handleMessage(topic20.ctx);
 
       expect(switchTopic10.replies).toEqual([
@@ -301,6 +317,7 @@ describe("createChatHandler group chats", () => {
         text: "/profile research",
         userId: 42,
       });
+
       await handleMessage(switchTopic10.ctx);
 
       const listTopic10 = createMessageContext({
@@ -310,6 +327,7 @@ describe("createChatHandler group chats", () => {
         text: "/profile",
         userId: 42,
       });
+
       await handleMessage(listTopic10.ctx);
 
       expect(listTopic10.replies.join("\n")).toContain("Current: Research Bot");
@@ -347,6 +365,7 @@ describe("createChatHandler group chats", () => {
         text: "/profile research",
         userId: 42,
       });
+
       await handleMessage(switchTopic10.ctx);
 
       const statusTopic10 = createMessageContext({
@@ -356,6 +375,7 @@ describe("createChatHandler group chats", () => {
         text: "/status",
         userId: 42,
       });
+
       await handleMessage(statusTopic10.ctx);
 
       const statusText = statusTopic10.replies.join("\n");
@@ -388,6 +408,7 @@ describe("createChatHandler group chats", () => {
         text: "/profile support",
         userId: 42,
       });
+
       await handleMessage(switchGroup.ctx);
 
       expect(getLastCreateSessionProfileId()).toBe("support");
@@ -405,6 +426,7 @@ describe("createChatHandler group chats", () => {
 
       const authStore = new TelegramAuthStore(null);
       await authStore.reload();
+
       const { client, calls } = createMockClient({
         orgs: createMultiTestOrgs(),
         profilesByOrgId: {
@@ -412,13 +434,16 @@ describe("createChatHandler group chats", () => {
           org_b: [{ id: "gary", isDefault: true, name: "Gary Vee" }],
         },
       });
+
       const sessionStore = new SessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
+
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
       orgStore.set("g:-100123", "org_a");
       await orgStore.save();
+
       const handleMessage = createChatHandler({
         authStore,
         client,
@@ -435,6 +460,7 @@ describe("createChatHandler group chats", () => {
         text: "/profile garry-vee",
         userId: 42,
       });
+
       await handleMessage(switchTopic.ctx);
 
       expect(switchTopic.replies).toEqual([
@@ -455,15 +481,19 @@ describe("createChatHandler group chats", () => {
 
       const authStore = new TelegramAuthStore(null);
       await authStore.reload();
+
       const { client, getStreamControls } = createMockClient({
         autoComplete: false,
         streaming: true,
       });
+
       const sessionStore = new SessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
+
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
+
       const handleMessage = createChatHandler({
         authStore,
         client,
@@ -481,6 +511,7 @@ describe("createChatHandler group chats", () => {
         text: "@mybot hello",
         userId: 42,
       });
+
       const topic10 = createMessageContext({
         chatId: -100_123,
         chatType: "supergroup",
@@ -510,6 +541,7 @@ describe("createChatHandler group chats", () => {
           text: "/stop",
           userId: 42,
         });
+
         await handleMessage(stopTopic10.ctx);
 
         expect(getStreamControls()[0]?.signal?.aborted).toBe(false);
@@ -547,6 +579,7 @@ describe("createChatHandler group chats", () => {
         text: "@mybot hello",
         userId: 42,
       });
+
       const chatPromise = handleMessage(chatAttempt.ctx);
 
       try {
@@ -561,6 +594,7 @@ describe("createChatHandler group chats", () => {
           text: "/stop",
           userId: 9999,
         });
+
         await handleMessage(stopAttempt.ctx);
 
         expect(getStreamControl()?.signal?.aborted).toBe(false);
@@ -577,7 +611,8 @@ describe("createChatHandler group chats", () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         botToken: "1234567890:TEST",
-        handshakeCode: "ABCD1234",
+        handshakeCode: PAIRING_CODE,
+        handshakeExpiresAt: LIVE_CODE_EXPIRY,
       });
 
       const {
@@ -636,7 +671,8 @@ describe("createChatHandler security", () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         botToken: "1234567890:TEST",
-        handshakeCode: "ABCD1234",
+        handshakeCode: PAIRING_CODE,
+        handshakeExpiresAt: LIVE_CODE_EXPIRY,
       });
 
       const { calls, handler: handleMessage } = await createTestHandler(
@@ -648,7 +684,7 @@ describe("createChatHandler security", () => {
       );
 
       const { ctx, replies } = createMessageContext({ text: "hello" });
-      delete (ctx as { from?: unknown }).from;
+      Object.assign(ctx, { from: undefined });
 
       await handleMessage(ctx);
 
@@ -661,7 +697,8 @@ describe("createChatHandler security", () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         botToken: "1234567890:TEST",
-        handshakeCode: "ABCD1234",
+        handshakeCode: PAIRING_CODE,
+        handshakeExpiresAt: LIVE_CODE_EXPIRY,
       });
 
       const { calls, handler: handleMessage } = await createTestHandler(
@@ -690,7 +727,8 @@ describe("createChatHandler security", () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         botToken: "1234567890:TEST",
-        handshakeCode: "ABCD1234",
+        handshakeCode: PAIRING_CODE,
+        handshakeExpiresAt: LIVE_CODE_EXPIRY,
       });
 
       const {
@@ -706,14 +744,14 @@ describe("createChatHandler security", () => {
       );
 
       const { ctx, replies } = createMessageContext({
-        text: "DEADBEEF",
+        text: WRONG_PAIRING_CODE,
         userId: 1001,
       });
 
       await handleMessage(ctx);
 
       expect(replies).toEqual([
-        "Invalid pairing code. Copy it from this agent’s Connections → Telegram and try again.",
+        "That pairing code did not work. Generate a new code in this agent’s Connections → Telegram and try again.",
       ]);
       expect(authStore.isAuthorized(1001)).toBe(false);
       expect(calls.sendStream).toBe(0);
@@ -724,7 +762,8 @@ describe("createChatHandler security", () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         botToken: "1234567890:TEST",
-        handshakeCode: "ABCD1234",
+        handshakeCode: PAIRING_CODE,
+        handshakeExpiresAt: LIVE_CODE_EXPIRY,
       });
 
       const {
@@ -740,9 +779,10 @@ describe("createChatHandler security", () => {
       );
 
       const pairAttempt = createMessageContext({
-        text: "ab cd 12 34",
+        text: PAIRING_CODE,
         userId: 1001,
       });
+
       await handleMessage(pairAttempt.ctx);
 
       expect(pairAttempt.replies).toEqual([
@@ -757,6 +797,7 @@ describe("createChatHandler security", () => {
         text: "hello agent",
         userId: 1001,
       });
+
       await handleMessage(chatAttempt.ctx);
 
       expect(calls.createSession).toBe(1);
@@ -769,7 +810,8 @@ describe("createChatHandler security", () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         botToken: "1234567890:TEST",
-        handshakeCode: "ABCD1234",
+        handshakeCode: PAIRING_CODE,
+        handshakeExpiresAt: LIVE_CODE_EXPIRY,
         profileId: "missing_profile",
       });
 
@@ -788,15 +830,17 @@ describe("createChatHandler security", () => {
       );
 
       const pairAttempt = createMessageContext({
-        text: "ABCD1234",
+        text: PAIRING_CODE,
         userId: 1001,
       });
+
       await handleMessage(pairAttempt.ctx);
 
       const chatAttempt = createMessageContext({
         text: "hello agent",
         userId: 1001,
       });
+
       await handleMessage(chatAttempt.ctx);
 
       expect(calls.createSession).toBe(1);
@@ -809,7 +853,8 @@ describe("createChatHandler security", () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         botToken: "1234567890:TEST",
-        handshakeCode: "ABCD1234",
+        handshakeCode: PAIRING_CODE,
+        handshakeExpiresAt: LIVE_CODE_EXPIRY,
       });
 
       const { authStore, handler: handleMessage } = await createTestHandler(
@@ -821,15 +866,17 @@ describe("createChatHandler security", () => {
       );
 
       const firstUser = createMessageContext({
-        text: "ABCD1234",
+        text: PAIRING_CODE,
         userId: 1001,
       });
+
       await handleMessage(firstUser.ctx);
 
       const secondUser = createMessageContext({
-        text: "ABCD1234",
+        text: PAIRING_CODE,
         userId: 2002,
       });
+
       await handleMessage(secondUser.ctx);
 
       expect(secondUser.replies[0]).toContain("not linked yet");
@@ -920,6 +967,7 @@ describe("createChatHandler security", () => {
         text: "hello agent",
         userId: 4242,
       });
+
       const stopAttempt = createMessageContext({
         text: "/stop",
         userId: 4242,
@@ -1103,6 +1151,7 @@ describe("createChatHandler security", () => {
         text: "hello agent",
         userId: 4242,
       });
+
       const stopAttempt = createMessageContext({
         text: "/stop",
         userId: 4242,
@@ -1244,7 +1293,8 @@ describe("createChatHandler security", () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         botToken: "1234567890:TEST",
-        handshakeCode: "ABCD1234",
+        handshakeCode: PAIRING_CODE,
+        handshakeExpiresAt: LIVE_CODE_EXPIRY,
       });
 
       const { calls, handler: handleMessage } = await createTestHandler(
@@ -1265,6 +1315,28 @@ describe("createChatHandler security", () => {
       expect(replies).toHaveLength(1);
       expect(replies[0]).toContain("Paste your pairing code");
       expect(calls.sendStream).toBe(0);
+    });
+  });
+
+  test("/start from an unlinked user queues an access request", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, { botToken: "1234567890:TEST" });
+
+      const { handler: handleMessage } = await createTestHandler(
+        homeDir,
+        { config: TEST_CONFIG },
+        {}
+      );
+
+      const { ctx } = createMessageContext({ text: "/start", userId: 1001 });
+
+      await handleMessage(ctx);
+
+      expect(
+        (await listTelegramAccessRequests(null)).map(
+          (request) => request.userId
+        )
+      ).toEqual([1001]);
     });
   });
 
@@ -1374,6 +1446,7 @@ describe("bridge API integration", () => {
         text: "hello",
         userId: 1001,
       });
+
       await handleMessage(ctx);
 
       expect(
@@ -1404,6 +1477,7 @@ describe("bridge API integration", () => {
         text: "hello",
         userId: 1001,
       });
+
       await handleMessage(ctx);
 
       expect(replies.join("\n")).toContain("Choose an organization");
@@ -1471,6 +1545,7 @@ describe("bridge API integration", () => {
         text: "/profile",
         userId: 1001,
       });
+
       await handleMessage(ctx);
 
       expect(replies.join("\n")).toContain("Choose a profile");
@@ -1503,6 +1578,7 @@ describe("bridge API integration", () => {
         text: "/profile",
         userId: 1001,
       });
+
       await handleMessage(ctx);
 
       const text = replies.join("\n");
@@ -1544,6 +1620,7 @@ describe("bridge API integration", () => {
         text: "/profile research",
         userId: 1001,
       });
+
       await handleMessage(switchProfile.ctx);
 
       expect(calls.createSession).toBe(2);
@@ -1564,6 +1641,7 @@ describe("bridge API integration", () => {
 
       const authStore = new TelegramAuthStore(null);
       await authStore.reload();
+
       const { client, getLastCreateSessionProfileId } = createMockClient({
         orgs: createMultiTestOrgs(),
         profilesByOrgId: {
@@ -1571,13 +1649,16 @@ describe("bridge API integration", () => {
           org_b: [{ id: "gary", isDefault: true, name: "Gary Vee" }],
         },
       });
+
       const sessionStore = new SessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
+
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
       orgStore.set("u:1001", "org_a");
       await orgStore.save();
+
       const handleMessage = createChatHandler({
         authStore,
         client,
@@ -1590,6 +1671,7 @@ describe("bridge API integration", () => {
         text: "/profile garry-vee",
         userId: 1001,
       });
+
       await handleMessage(switchProfile.ctx);
 
       expect(orgStore.get("u:1001")?.orgId).toBe("org_b");
@@ -1609,6 +1691,7 @@ describe("bridge API integration", () => {
 
       const authStore = new TelegramAuthStore(null);
       await authStore.reload();
+
       const { client, listProfilesOrgIds } = createMockClient({
         orgs: createMultiTestOrgs(),
         profilesByOrgId: {
@@ -1616,13 +1699,16 @@ describe("bridge API integration", () => {
           org_b: [{ id: "gary", isDefault: true, name: "Gary Vee" }],
         },
       });
+
       const sessionStore = new SessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
+
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
       orgStore.set("u:1001", "org_a");
       await orgStore.save();
+
       const handleMessage = createChatHandler({
         authStore,
         client,
@@ -1635,6 +1721,7 @@ describe("bridge API integration", () => {
         text: "/profile gary-vee",
         userId: 1001,
       });
+
       await handleMessage(switchProfile.ctx);
 
       // The cross-org scan names each org on its own request instead of
@@ -1655,6 +1742,7 @@ describe("bridge API integration", () => {
 
       const authStore = new TelegramAuthStore(null);
       await authStore.reload();
+
       const { client, getLastCreateSessionProfileId } = createMockClient({
         orgs: createMultiTestOrgs(),
         profilesByOrgId: {
@@ -1668,13 +1756,16 @@ describe("bridge API integration", () => {
           ],
         },
       });
+
       const sessionStore = new SessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
+
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
       orgStore.set("u:1001", "org_a");
       await orgStore.save();
+
       const handleMessage = createChatHandler({
         authStore,
         client,
@@ -1687,6 +1778,7 @@ describe("bridge API integration", () => {
         text: "/profile 2",
         userId: 1001,
       });
+
       await handleMessage(switchProfile.ctx);
 
       expect(orgStore.get("u:1001")?.orgId).toBe("org_a");
@@ -1712,19 +1804,20 @@ describe("createChatHandler document attachments", () => {
     caption?: string;
   }) {
     const base = createMessageContext({ userId: options.userId });
-    (base.ctx as { message: Record<string, unknown> }).message = {
-      caption: options.caption,
-      document: {
-        file_id: "doc-1",
-        file_name: options.fileName,
-        mime_type: options.mimeType,
+    Object.assign(base.ctx, {
+      message: {
+        caption: options.caption,
+        document: {
+          file_id: "doc-1",
+          file_name: options.fileName,
+          mime_type: options.mimeType,
+        },
       },
-    };
-    (base.ctx as { api: Record<string, unknown> }).api = {
-      ...((base.ctx as { api?: Record<string, unknown> }).api ?? {}),
+    });
+    Object.assign(base.ctx.api, {
       getFile: async () => ({ file_path: `documents/${options.fileName}` }),
       token: "test-token",
-    };
+    });
 
     return base;
   }
@@ -1745,11 +1838,14 @@ describe("createChatHandler document attachments", () => {
       const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls, getLastStreamInput } = createMockClient();
+
       const sessionStore = new SessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
+
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
+
       const handleMessage = createChatHandler({
         authStore,
         client,
@@ -1822,18 +1918,23 @@ describe("createChatHandler document attachments", () => {
 
       const authStore = new TelegramAuthStore(null);
       await authStore.reload();
+
       const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
         new Response(Buffer.from("voice-bytes"), {
           headers: { "content-type": "audio/ogg" },
           status: 200,
         })
       );
+
       const { client, calls, getLastStreamInput } = createMockClient();
+
       const sessionStore = new SessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
+
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
+
       const handleMessage = createChatHandler({
         authStore,
         client,
@@ -1843,14 +1944,11 @@ describe("createChatHandler document attachments", () => {
       });
 
       const { ctx, replies } = createMessageContext({ userId: 4242 });
-      (ctx as { message: Record<string, unknown> }).message = {
-        voice: { file_id: "voice-1" },
-      };
-      (ctx as { api: Record<string, unknown> }).api = {
-        ...((ctx as { api?: Record<string, unknown> }).api ?? {}),
+      Object.assign(ctx, { message: { voice: { file_id: "voice-1" } } });
+      Object.assign(ctx.api, {
         getFile: async () => ({ file_path: "voice/file.ogg" }),
         token: "test-token",
-      };
+      });
 
       await handleMessage(ctx);
 
@@ -1880,9 +1978,7 @@ describe("createChatHandler document attachments", () => {
       );
 
       const { ctx, replies } = createMessageContext({ userId: 4242 });
-      (ctx as { message: Record<string, unknown> }).message = {
-        sticker: { file_id: "sticker-1" },
-      };
+      Object.assign(ctx, { message: { sticker: { file_id: "sticker-1" } } });
 
       await handleMessage(ctx);
 
@@ -1950,12 +2046,15 @@ describe("createChatHandler artifact delivery", () => {
 
       const authStore = new TelegramAuthStore(null);
       await authStore.reload();
+
       const { client, calls } = createMockClient({
         messages: artifactMessages,
       });
+
       const sessionStore = new SessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
+
       await sessionStore.load();
       sessionStore.set("4242", {
         profileId: "default",
@@ -1965,6 +2064,7 @@ describe("createChatHandler artifact delivery", () => {
       await sessionStore.save();
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
+
       const handleMessage = createChatHandler({
         authStore,
         client,
@@ -1977,6 +2077,7 @@ describe("createChatHandler artifact delivery", () => {
         text: "thanks",
         userId: 4242,
       });
+
       await handleMessage(ctx);
 
       expect(calls.publishProfileArtifactShare).toBe(1);
@@ -1997,6 +2098,7 @@ describe("createChatHandler artifact delivery", () => {
 
       const authStore = new TelegramAuthStore(null);
       await authStore.reload();
+
       const { client, calls } = createMockClient({
         messages: [
           { content: "save", role: "user" },
@@ -2022,9 +2124,11 @@ describe("createChatHandler artifact delivery", () => {
           },
         ],
       });
+
       const sessionStore = new SessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
+
       await sessionStore.load();
       sessionStore.set("4242", {
         profileId: "default",
@@ -2034,6 +2138,7 @@ describe("createChatHandler artifact delivery", () => {
       await sessionStore.save();
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
+
       const handleMessage = createChatHandler({
         authStore,
         client,
@@ -2046,6 +2151,7 @@ describe("createChatHandler artifact delivery", () => {
         text: "thanks",
         userId: 4242,
       });
+
       await handleMessage(ctx);
 
       expect(calls.publishProfileArtifactShare).toBe(1);
@@ -2063,9 +2169,11 @@ describe("createChatHandler artifact delivery", () => {
       const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls } = createMockClient();
+
       const sessionStore = new SessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
+
       await sessionStore.load();
       sessionStore.set("4242", {
         deliverableArtifacts: [
@@ -2086,6 +2194,7 @@ describe("createChatHandler artifact delivery", () => {
       await sessionStore.save();
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
+
       const handleMessage = createChatHandler({
         authStore,
         client,
@@ -2095,15 +2204,19 @@ describe("createChatHandler artifact delivery", () => {
       });
 
       let sendDocumentCalls = 0;
+
       const { ctx } = createMessageContext({
         text: "send me the file",
         userId: 4242,
       });
-      (ctx.api as { sendDocument: typeof ctx.api.sendMessage }).sendDocument =
-        async () => {
+
+      Object.assign(ctx.api, {
+        sendDocument: async () => {
           sendDocumentCalls += 1;
+
           return { message_id: 99 };
-        };
+        },
+      });
 
       await handleMessage(ctx);
 
@@ -2123,15 +2236,19 @@ describe("stream cleanup", () => {
 
       const authStore = new TelegramAuthStore(null);
       await authStore.reload();
+
       const { client, getStreamControl } = createMockClient({
         autoComplete: false,
         streaming: true,
       });
+
       const sessionStore = new SessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
+
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
+
       const handleMessage = createChatHandler({
         authStore,
         client,
@@ -2144,6 +2261,7 @@ describe("stream cleanup", () => {
         text: "hello agent",
         userId: 4242,
       });
+
       const chatPromise = handleMessage(ctx);
 
       await waitForCondition(
@@ -2164,9 +2282,11 @@ describe("stream cleanup", () => {
 describe("withChatLock", () => {
   test("keeps the lock chain rejection-safe across a failed prior run", async () => {
     const rejections: unknown[] = [];
-    const onUnhandled = (reason: unknown) => {
+
+    const onUnhandled = (reason: Error) => {
       rejections.push(reason);
     };
+
     process.on("unhandledRejection", onUnhandled);
 
     try {
@@ -2203,9 +2323,11 @@ describe("createChatHandler session hot cache", () => {
       const authStore = new TelegramAuthStore(null);
       await authStore.reload();
       const { client, calls } = createMockClient();
+
       const sessionStore = new SessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
       );
+
       await sessionStore.load();
       sessionStore.set("4242", {
         profileId: "default",
@@ -2215,6 +2337,7 @@ describe("createChatHandler session hot cache", () => {
       await sessionStore.save();
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
+
       const handleMessage = createChatHandler({
         authStore,
         client,
@@ -2247,17 +2370,22 @@ test("owned connection discards foreign hot sessions and never switches or falls
     });
     const authStore = new TelegramAuthStore(null);
     await authStore.reload();
+
     const profiles = [
       { id: "agent_a", name: "A" },
       { id: "agent_b", isDefault: true, name: "B" },
     ];
+
     const { client, calls, getLastCreateSessionProfileId } = createMockClient({
       profiles,
     });
+
     client.listSessions = async () => ({ sessions: [] });
+
     const sessionStore = new SessionStore(
       path.join(homeDir, "owned-sessions.json")
     );
+
     sessionStore.set("42", {
       profileId: "agent_b",
       sessionId: "foreign",
@@ -2270,6 +2398,7 @@ test("owned connection discards foreign hot sessions and never switches or falls
     });
     const orgStore = createTestOrgStore(homeDir);
     await orgStore.load();
+
     const handle = createChatHandler({
       authStore,
       client,
@@ -2282,6 +2411,7 @@ test("owned connection discards foreign hot sessions and never switches or falls
       orgStore,
       sessionStore,
     });
+
     await handle(
       createMessageContext({ chatId: 42, text: "hello", userId: 42 }).ctx
     );

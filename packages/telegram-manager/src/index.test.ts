@@ -17,8 +17,10 @@ describe.skipIf(!process.env.TEST_TELEGRAM_DATABASE_URL)(
     const sql = postgres(
       process.env.TEST_TELEGRAM_DATABASE_URL ?? "postgresql://localhost/unused"
     );
+
     const calls: string[] = [];
     let fetchMock: ReturnType<typeof spyOn<typeof globalThis, "fetch">>;
+
     const options = {
       managerToken: "manager:secret",
       sql,
@@ -33,17 +35,21 @@ describe.skipIf(!process.env.TEST_TELEGRAM_DATABASE_URL)(
           const url = String(input);
           const method = url.split("/").at(-1)!;
           calls.push(method);
+
           if (method === "getMe") {
             return Response.json({
               ok: true,
               result: { can_manage_bots: true, username: "ManagerBot" },
             });
           }
+
           if (method === "sendMessage") {
             return Response.json({ ok: true, result: { message_id: 1 } });
           }
+
           expect(method).toBe("getManagedBotToken");
           expect(JSON.parse(String(init?.body))).toEqual({ user_id: 42 });
+
           return Response.json({ ok: true, result: "42:bot-secret" });
         }
       );
@@ -66,6 +72,8 @@ describe.skipIf(!process.env.TEST_TELEGRAM_DATABASE_URL)(
         options
       );
     }
+
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This helper must pass malformed webhook bodies to the request parser.
     function webhook(update: unknown, secret = "webhook-secret") {
       return handleTelegramWebhook(
         new Request("https://cloud.test/api/telegram/webhook", {
@@ -76,6 +84,7 @@ describe.skipIf(!process.env.TEST_TELEGRAM_DATABASE_URL)(
         options
       );
     }
+
     function startMessage(id: string, userId = 77) {
       return {
         message: {
@@ -85,6 +94,7 @@ describe.skipIf(!process.env.TEST_TELEGRAM_DATABASE_URL)(
         },
       };
     }
+
     function managed(username: string, userId = 77) {
       return {
         managed_bot: { bot: { id: 42, username }, user: { id: userId } },
@@ -120,9 +130,11 @@ describe.skipIf(!process.env.TEST_TELEGRAM_DATABASE_URL)(
           .status
       ).toBe("waiting");
       await webhook(managed(pairing.suggestedUsername));
+
       const status = await (
         await api("status", pairing.pairingId, pairing.secret)
       ).json();
+
       expect(status).toEqual({
         botUsername: pairing.suggestedUsername,
         ownerUserId: 77,
@@ -214,8 +226,10 @@ describe.skipIf(!process.env.TEST_TELEGRAM_DATABASE_URL)(
       expect(calls).toHaveLength(0);
       await sql`UPDATE telegram_pairings SET expires_at = now() - interval '1 second' WHERE suggested_username = 'test_1_bot'`;
       expect((await api("start")).status).toBe(200);
+
       const [{ count }] =
         await sql`SELECT count(*)::int AS count FROM telegram_pairings`;
+
       expect(count).toBe(1000);
     });
   }

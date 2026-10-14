@@ -12,10 +12,12 @@ function applyLoginShellPath(): void {
   }
 
   const shell = process.env.SHELL?.trim() || "/bin/zsh";
+
   const result = spawnSync(shell, ["-l", "-c", 'printf %s "$PATH"'], {
     encoding: "utf8",
     timeout: 3000,
   });
+
   const shellPath = result.stdout?.trim();
 
   if (result.status === 0 && shellPath) {
@@ -32,10 +34,7 @@ export function ensureProcessPath(): void {
   ensured = true;
 }
 
-function getBunGlobalPaths(home = homedir()): {
-  binDir: string;
-  globalDir: string;
-} {
+function getBunGlobalPaths(home = homedir()) {
   return {
     binDir: path.join(home, ".bun", "bin"),
     globalDir: path.join(home, ".bun", "install", "global"),

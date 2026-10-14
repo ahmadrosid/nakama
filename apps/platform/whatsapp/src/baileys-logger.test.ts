@@ -39,9 +39,11 @@ describe("Baileys logger", () => {
     const info = mock(() => {});
     const warn = mock(() => {});
     const consoleTarget = { info, warn };
+
     const session = {
       currentRatchet: { rootKey: Buffer.from("private-key-material") },
     };
+
     const restore = installBaileysConsoleRedaction(consoleTarget);
 
     consoleTarget.info("Closing session:", session);

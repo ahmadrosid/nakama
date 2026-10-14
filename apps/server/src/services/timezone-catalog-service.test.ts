@@ -3,18 +3,34 @@ import {
   getTimezoneCatalog,
   resetTimezoneCatalogCache,
 } from "./timezone-catalog-service";
+import { getTimezoneCityAliases } from "./timezone-city-aliases";
 
 afterEach(() => {
   setSystemTime();
   resetTimezoneCatalogCache();
 });
 
+test("city aliases ignore unknown keys and return independent arrays", () => {
+  for (const zone of ["unknown", "constructor", "toString", "__proto__"]) {
+    expect(getTimezoneCityAliases(zone)).toEqual([]);
+  }
+
+  const aliases = getTimezoneCityAliases("America/New_York");
+  aliases.push("Changed");
+
+  expect(aliases).toContain("NYC");
+  expect(getTimezoneCityAliases("America/New_York")).not.toContain("Changed");
+});
+
 test("groups IANA zones by tzdata country", async () => {
   const catalog = await getTimezoneCatalog();
+
   const unitedStates = catalog.groups.find(
     (group) => group.countryCode === "US"
   );
+
   const ids = new Set(unitedStates?.timezones.map((zone) => zone.id));
+
   const newYork = unitedStates?.timezones.find(
     (zone) => zone.id === "America/New_York"
   );
@@ -75,7 +91,7 @@ const seasonalTransitions = [
   },
 ] as const;
 
-test.each(seasonalTransitions)(
+test.each([...seasonalTransitions])(
   "refreshes New York seasonal fields on $name",
   async ({ firstInstant, secondInstant, first, second }) => {
     setSystemTime(new Date(firstInstant));

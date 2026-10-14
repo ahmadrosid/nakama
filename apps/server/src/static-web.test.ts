@@ -15,6 +15,7 @@ function createDist(): string {
   );
   writeFileSync(join(distDir, "assets", "index-abc123.js"), "export {};");
   writeFileSync(join(distDir, "icon-192.png"), "png");
+
   return distDir;
 }
 
@@ -23,9 +24,11 @@ function serve(distDir: string, pathname: string): Response {
     new Request(`http://localhost:4310${pathname}`),
     distDir
   );
+
   if (!response) {
     throw new Error(`no static response for ${pathname}`);
   }
+
   return response;
 }
 
@@ -45,6 +48,16 @@ describe("tryServeStaticWeb", () => {
       "text/javascript; charset=utf-8"
     );
     expect(response.headers.get("Cache-Control")).toBe("no-cache");
+  });
+
+  test("serves file types outside the explicit content type table", async () => {
+    const distDir = createDist();
+    const filePath = join(distDir, "notes.txt");
+    writeFileSync(filePath, "release notes");
+
+    const response = serve(distDir, "/notes.txt");
+    expect(response.headers.get("Content-Type")).toBe(Bun.file(filePath).type);
+    expect(await response.text()).toBe("release notes");
   });
 
   test("keeps the app shell revalidated so a new build is picked up", () => {
@@ -79,12 +92,14 @@ describe("tryServeStaticWeb", () => {
 
   test("still answers HEAD with the same headers and no body", async () => {
     const distDir = createDist();
+
     const response = tryServeStaticWeb(
       new Request("http://localhost:4310/manifest.webmanifest", {
         method: "HEAD",
       }),
       distDir
     );
+
     expect(response?.headers.get("Content-Type")).toBe(
       "application/manifest+json; charset=utf-8"
     );

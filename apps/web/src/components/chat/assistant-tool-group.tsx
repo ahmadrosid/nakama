@@ -1,7 +1,9 @@
 import { Button } from "@nakama/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
 import { useQuery } from "@tanstack/react-query";
 import {
+  AiBrain01Icon,
   ArrowDown01Icon,
   ArrowRight01Icon,
   Audit02Icon,
@@ -11,7 +13,6 @@ import {
   PropertySearchIcon,
   Rotate02Icon,
   TaskEdit01Icon,
-  Wrench01Icon,
 } from "hugeicons-react";
 import type { MouseEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -33,7 +34,9 @@ import thinkingStyles from "@/components/chat/ThinkingReasoning.module.css";
 import { WebFetchToolRow } from "@/components/chat/WebFetchToolRow";
 import { WebSearchToolRow } from "@/components/chat/WebSearchToolRow";
 import { WorkflowRunToolRow } from "@/components/chat/WorkflowRunToolRow";
+import { readString } from "@/components/chat/web-search.shared";
 import { WorkspaceFilePreview } from "@/components/chat/workspace-file-preview";
+import { CodingAgentCommandLogo } from "@/components/coding-agent-logos";
 import { PluginSurface } from "@/components/PluginSurface";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useAuth } from "@/context/use-auth";
@@ -52,6 +55,7 @@ import {
   isSubAgentTool,
   isToolResultError,
   parseSubAgentResult,
+  splitToolResultImages,
 } from "@/lib/chat-stream";
 import {
   isGenerateImageTool,
@@ -70,6 +74,7 @@ import { client, formatError } from "@/lib/client";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
 import { findPluginTool } from "@/lib/plugin-runtime";
 import { splitStreamingMarkdown } from "@/lib/streaming-markdown-seal";
+
 export function AssistantTurnSegmentView({
   segment,
   showThinking = true,
@@ -153,6 +158,7 @@ function AssistantTextContent({
   const { user } = useAuth();
   const streaming = Boolean(message.streaming && !message.thinkingStreaming);
   const content = useRafCoalescedValue(message.content, streaming);
+
   const citedProfileId =
     user?.isPlatformAdmin && onOpenFileCitation ? profileId : null;
 
@@ -161,16 +167,21 @@ function AssistantTextContent({
       event.target instanceof Element
         ? event.target.closest('a[href^="#file-citation?"]')
         : null;
+
     if (!(link && event.currentTarget.contains(link))) {
       return;
     }
+
     const query = new URLSearchParams(
       link.getAttribute("href")?.split("?")[1] ?? ""
     );
+
     const path = query.get("file");
+
     if (!path || query.get("profile") !== citedProfileId) {
       return;
     }
+
     event.preventDefault();
     onOpenFileCitation?.(path);
   }
@@ -210,6 +221,7 @@ function AssistantTextContent({
       content,
       citedProfileId
     );
+
     return (
       <div
         className="flex w-full min-w-0 flex-col gap-0"
@@ -248,13 +260,16 @@ export function LocalCitationPreview({
 }) {
   const { activeOrg } = useAuth();
   const folder = path.slice(0, path.lastIndexOf("/"));
+
   const { data, error } = useQuery({
     queryFn: () => client.listProfileWorkspaceFiles(profileId, folder),
     queryKey: ["citation-file", activeOrg?.id, profileId, folder],
   });
+
   const entry = data?.entries.find(
     (candidate) => candidate.kind === "file" && candidate.path === path
   );
+
   if (entry) {
     return (
       <WorkspaceFilePreview
@@ -265,6 +280,7 @@ export function LocalCitationPreview({
       />
     );
   }
+
   if (error || data) {
     return (
       <p className="text-destructive text-sm" role="alert">
@@ -272,6 +288,7 @@ export function LocalCitationPreview({
       </p>
     );
   }
+
   return null;
 }
 
@@ -283,6 +300,7 @@ function LocalCitationFooter({
   if (citations.length === 0) {
     return null;
   }
+
   return (
     <div
       aria-label="Sources"
@@ -312,14 +330,14 @@ function PluginToolRow({ message }: { message: ChatListItem }) {
   const { resolvedTheme } = useTheme();
   const plugin = match?.plugin;
   const fallback = <ToolTimelineItem message={message} />;
+
   if (
-    !(match && activeOrg) ||
-    activeOrg.role === "viewer" ||
-    !plugin?.ui ||
+    !(match && activeOrg && plugin?.ui) ||
     plugin.lifecycleState !== "enabled"
   ) {
     return fallback;
   }
+
   return (
     <PluginSurface
       fallback={fallback}
@@ -358,14 +376,35 @@ function AssistantWorkGroup({
     return null;
   }
 
+  const images = visibleTools.flatMap((tool) =>
+    toolItemImages(tool).images.map((src, index) => ({
+      key: `${tool.id}-${index}`,
+      src,
+    }))
+  );
+
   return (
-    <OtherWorkGroup
-      active={active}
-      modelLabel={modelLabel}
-      profileId={profileId}
-      thinking={thinking}
-      tools={visibleTools}
-    />
+    <>
+      <OtherWorkGroup
+        active={active}
+        modelLabel={modelLabel}
+        profileId={profileId}
+        thinking={thinking}
+        tools={visibleTools}
+      />
+      {images.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {images.map(({ key, src }) => (
+            <img
+              alt="Tool result"
+              className="max-h-40 max-w-full rounded-md border border-border object-contain"
+              key={key}
+              src={src}
+            />
+          ))}
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -454,8 +493,14 @@ function ToolOnlyWorkGroup({
   modelLabel?: string | null;
   profileId?: string | null;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(isWorkActive);
+  const [wasWorkActive, setWasWorkActive] = useState(isWorkActive);
   const elapsedSeconds = useWorkDuration(isWorkActive, tools);
+
+  if (wasWorkActive !== isWorkActive) {
+    setWasWorkActive(isWorkActive);
+    setOpen(isWorkActive);
+  }
 
   const done = !isWorkActive;
   const expanded = open;
@@ -596,10 +641,13 @@ function useWorkDuration(
     if (!active) {
       return;
     }
+
     setNow(Date.now());
     const intervalId = window.setInterval(() => setNow(Date.now()), 1000);
+
     return () => window.clearInterval(intervalId);
   }, [active]);
+
   return toolGroupElapsedSeconds(tools, now, active);
 }
 
@@ -685,9 +733,11 @@ function subAgentStatusTone(status: string | undefined): string {
   if (status === "fail") {
     return "text-red-600 dark:text-red-400";
   }
+
   if (status === "timeout") {
     return "text-amber-700 dark:text-amber-400";
   }
+
   return "text-muted-foreground";
 }
 
@@ -774,7 +824,7 @@ function SubAgentOutputSection({
       <div className="pl-6">
         <button
           aria-expanded={expanded}
-          className="flex w-full items-center gap-1 text-left text-muted-foreground text-sm transition-colors hover:text-foreground"
+          className="flex w-fit max-w-full items-center gap-1 text-left text-muted-foreground text-sm transition-colors hover:text-foreground"
           onClick={onToggle}
           type="button"
         >
@@ -816,14 +866,17 @@ function SubAgentToolRow({
 }) {
   const isRunning = message.toolStatus === "running";
   const elapsedSeconds = useElapsedSeconds(isRunning, message.createdAt);
+
   const parsed =
     message.toolStatus === "done"
       ? parseSubAgentResult(message.toolResult)
       : null;
+
   const output =
     message.toolStatus === "done"
       ? formatSubAgentToolResult(message.toolResult)
       : null;
+
   const [open, setOpen] = useState(false);
 
   return (
@@ -924,13 +977,32 @@ function SubAgentMark({
   );
 }
 
+/** Old sessions keep image bytes in the result; new ones send them apart. */
+function toolItemImages(message: ChatListItem) {
+  if (message.toolStatus !== "done") {
+    return { images: [] satisfies string[], rest: null };
+  }
+
+  const { images, rest } = splitToolResultImages(message.toolResult);
+
+  return {
+    images: [
+      ...images.map((image) => `data:${image.mimeType};base64,${image.data}`),
+      ...(message.toolImages ?? []).map((image) => image.url),
+    ],
+    rest,
+  };
+}
+
 function ToolTimelineOutput({
   command,
+  hasImages,
   isError,
   isRunning,
   output,
 }: {
   command: string | null;
+  hasImages: boolean;
   isError: boolean;
   isRunning: boolean;
   output: string | null;
@@ -953,7 +1025,7 @@ function ToolTimelineOutput({
     );
   }
 
-  if (command) {
+  if (command || hasImages) {
     return null;
   }
 
@@ -966,12 +1038,14 @@ function ToolTimelineOutput({
 
 function ToolTimelineDetails({
   command,
+  images,
   isError,
   isRunning,
   output,
   query,
 }: {
   command: string | null;
+  images: string[];
   isError: boolean;
   isRunning: boolean;
   output: string | null;
@@ -985,8 +1059,17 @@ function ToolTimelineDetails({
       {query ? (
         <DetailBlock content={query} label="Query" tone="command" />
       ) : null}
+      {images.map((image) => (
+        <img
+          alt="Tool result"
+          className="max-h-96 max-w-full rounded-md border border-border"
+          key={image}
+          src={image}
+        />
+      ))}
       <ToolTimelineOutput
         command={command}
+        hasImages={images.length > 0}
         isError={isError}
         isRunning={isRunning}
         output={output}
@@ -997,59 +1080,122 @@ function ToolTimelineDetails({
 
 function ToolTimelineItem({ message }: { message: ChatListItem }) {
   const isRunning = message.toolStatus === "running";
+
   const command =
     message.tool === "bash"
       ? formatToolCommand(message.tool, message.toolInput)
       : null;
+
+  const { images, rest } = toolItemImages(message);
+
   const output =
-    message.toolStatus === "done"
-      ? formatToolResult(message.tool, message.toolResult)
-      : null;
-  const query =
-    typeof message.toolInput?.query === "string"
-      ? message.toolInput.query.trim() || null
-      : null;
+    message.toolStatus === "done" ? formatToolResult(message.tool, rest) : null;
+
+  const queryValue = message.toolInput?.query;
+  const query = readString(queryValue);
+
   const isError =
     message.toolStatus === "done" &&
     isToolResultError(message.toolResult, output);
-  const hasDetails = Boolean(isRunning || command || query || output);
+
+  const hasDetails = Boolean(
+    isRunning || command || query || output || images.length > 0
+  );
+
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // Mount details on first open, then keep them so close can animate too.
+  const [detailsMounted, setDetailsMounted] = useState(false);
+
+  function toggleDetails(next: boolean) {
+    setDetailsMounted(true);
+    setDetailsOpen(next);
+  }
 
   return (
     <div>
-      <CollapsibleTrigger
-        className="pl-0"
-        disabled={!hasDetails}
-        label={formatToolActionLabel(message.tool, message.toolInput)}
-        labelClassName={isError ? "text-red-600 dark:text-red-400" : undefined}
-        onToggle={() => {
-          if (hasDetails) {
-            setDetailsOpen((current) => !current);
-          }
-        }}
-        open={detailsOpen}
-        tool={message.tool}
-      />
-      {detailsOpen && hasDetails ? (
-        <ToolTimelineDetails
+      <div className="flex items-center gap-3">
+        <CollapsibleTrigger
+          className="pl-0"
           command={command}
-          isError={isError}
-          isRunning={isRunning}
-          output={output}
-          query={query}
+          disabled={!hasDetails}
+          label={formatToolActionLabel(message.tool, message.toolInput)}
+          labelClassName={
+            isError ? "text-red-600 dark:text-red-400" : undefined
+          }
+          onToggle={() => {
+            if (hasDetails) {
+              toggleDetails(!detailsOpen);
+            }
+          }}
+          open={detailsOpen}
+          tool={message.tool}
         />
+        {images[0] ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  className={cn(
+                    "ml-auto shrink-0 transition-[opacity,visibility] duration-200",
+                    detailsOpen && "invisible opacity-0"
+                  )}
+                  onClick={() => toggleDetails(true)}
+                  type="button"
+                >
+                  <img
+                    alt="Tool result"
+                    className="h-8 w-12 rounded border border-border object-cover"
+                    src={images[0]}
+                  />
+                </button>
+              }
+            />
+            <TooltipContent
+              className="max-w-none bg-transparent p-0 [&>*:last-child]:hidden"
+              side="left"
+            >
+              <img
+                alt="Tool result preview"
+                className="max-h-80 w-96 max-w-[60vw] rounded-md border border-border bg-background object-contain shadow-lg"
+                src={images[0]}
+              />
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+      </div>
+      {detailsMounted && hasDetails ? (
+        <div
+          className={cn(
+            "grid starting:grid-rows-[0fr] starting:opacity-0 transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none",
+            detailsOpen
+              ? "grid-rows-[1fr] opacity-100"
+              : "grid-rows-[0fr] opacity-0"
+          )}
+          inert={!detailsOpen}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <ToolTimelineDetails
+              command={command}
+              images={images}
+              isError={isError}
+              isRunning={isRunning}
+              output={output}
+              query={query}
+            />
+          </div>
+        </div>
       ) : null}
     </div>
   );
 }
 
-const TOOL_ICONS: Record<string, typeof Wrench01Icon> = {
-  bash: ComputerTerminal01Icon,
-  edit_file: TaskEdit01Icon,
-  knowledge_base_search: PropertySearchIcon,
-  read_file: BookOpen01Icon,
-  search_files: Audit02Icon,
-};
+const TOOL_ICONS = new Map<string, typeof AiBrain01Icon>([
+  ["bash", ComputerTerminal01Icon],
+  ["edit_file", TaskEdit01Icon],
+  ["knowledge_base_search", PropertySearchIcon],
+  ["read_file", BookOpen01Icon],
+  ["search_files", Audit02Icon],
+]);
 
 function CollapsibleTrigger({
   open,
@@ -1058,8 +1204,10 @@ function CollapsibleTrigger({
   labelClassName,
   disabled = false,
   className,
+  command,
   tool,
 }: {
+  command?: string | null;
   open: boolean;
   onToggle: () => void;
   label: string;
@@ -1072,15 +1220,16 @@ function CollapsibleTrigger({
     tool?.includes("__") &&
     !tool.startsWith("plugin_") &&
     !tool.startsWith("composio__");
+
   const ToolIcon =
-    (tool ? TOOL_ICONS[tool] : undefined) ??
-    (isMcpTool ? McpServerIcon : Wrench01Icon);
+    (tool ? TOOL_ICONS.get(tool) : undefined) ??
+    (isMcpTool ? McpServerIcon : AiBrain01Icon);
 
   return (
     <button
       aria-expanded={disabled ? undefined : open}
       className={cn(
-        "flex w-full min-w-0 items-center gap-1.5 text-left text-muted-foreground text-sm transition-colors hover:text-foreground disabled:cursor-default disabled:hover:text-muted-foreground",
+        "flex w-fit min-w-0 max-w-full items-center gap-1.5 text-left text-muted-foreground text-sm transition-colors hover:text-foreground disabled:cursor-default disabled:hover:text-muted-foreground",
         className
       )}
       disabled={disabled}
@@ -1091,11 +1240,15 @@ function CollapsibleTrigger({
         aria-hidden="true"
         className="relative z-10 flex h-5 w-3.5 shrink-0 items-center justify-center bg-background"
       >
-        <ToolIcon className="size-3.5 text-muted-foreground opacity-50" />
+        <CodingAgentCommandLogo
+          className="size-3.5 text-foreground"
+          command={command ?? ""}
+          fallback={
+            <ToolIcon className="size-3.5 text-muted-foreground opacity-50" />
+          }
+        />
       </span>
-      <span className={cn("min-w-0 flex-1 truncate", labelClassName)}>
-        {label}
-      </span>
+      <span className={cn("min-w-0 truncate", labelClassName)}>{label}</span>
       {disabled ? null : (
         <ArrowDown01Icon
           aria-hidden

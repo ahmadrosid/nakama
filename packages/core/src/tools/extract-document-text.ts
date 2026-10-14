@@ -91,6 +91,7 @@ function resolveExtractFormat(
 
   const normalized = normalizeDocumentMediaType(mediaType, filename);
   const fromMeta = resolveAnydocFormat(normalized, filename);
+
   if (fromMeta && EXTRACTABLE_FORMATS.has(fromMeta)) {
     return fromMeta;
   }
@@ -107,7 +108,7 @@ export function extractDocumentTextParameters() {
 }
 
 export async function runExtractDocumentText(
-  input: unknown,
+  input: ExtractDocumentTextInput,
   context: ToolContext,
   dependencies: ExtractDocumentTextDependencies = {}
 ): Promise<ExtractDocumentTextResult> {
@@ -119,6 +120,7 @@ export async function runExtractDocumentText(
 
   try {
     const loaded = await context.loadAttachment?.(parsed.documentRef);
+
     if (loaded) {
       bytes = loaded.bytes;
       filename = loaded.filename ?? null;
@@ -126,6 +128,7 @@ export async function runExtractDocumentText(
     } else {
       const loadConfig = dependencies.loadConfig ?? loadEmailConfig;
       const config = await loadConfig();
+
       if (!isEmailConfigComplete(config)) {
         return {
           error:
@@ -135,6 +138,7 @@ export async function runExtractDocumentText(
 
       const mailboxConfig = toMailboxConfig(config);
       let reference;
+
       try {
         reference = verifyAttachmentReference(
           context,
@@ -152,14 +156,17 @@ export async function runExtractDocumentText(
 
       reader = (dependencies.createReader ?? createImapReader)(mailboxConfig);
       await reader.connect();
+
       const attachment = await reader.readAttachment(
         reference.folder,
         reference.uid,
         reference.attachmentId
       );
+
       if (!attachment) {
         return { error: "Document was not found." };
       }
+
       if (attachment.metadata.disposition === "inline") {
         return { error: "Inline documents are not supported." };
       }
@@ -172,16 +179,19 @@ export async function runExtractDocumentText(
     if (!bytes) {
       return { error: "Document was not found." };
     }
+
     if (bytes.length > MAX_DOCUMENT_BYTES) {
       return { error: `Document exceeds ${MAX_DOCUMENT_BYTES} bytes.` };
     }
 
     const safeFilename = filename?.trim() || "document";
+
     if (looksLikeOleDocument(bytes)) {
       return { error: LEGACY_DOC_UNSUPPORTED_MESSAGE };
     }
 
     const format = resolveExtractFormat(bytes, mediaType, safeFilename);
+
     if (!format) {
       return {
         error:
@@ -195,22 +205,29 @@ export async function runExtractDocumentText(
       maxOutputBytes: MAX_EMAIL_BODY_BYTES,
       mediaType,
     });
+
     const bounded = truncateMailBody(converted.text);
     const truncated = converted.truncated || bounded.truncated;
+
     const warnings = truncated
       ? [`Extracted text was truncated at ${MAX_EMAIL_BODY_BYTES} UTF-8 bytes.`]
       : bounded.text
         ? undefined
         : ["No extractable text was found. OCR is not supported."];
 
-    return {
+    const result: ExtractDocumentTextResult = {
       filename: safeFilename,
       mediaType: normalizeDocumentMediaType(mediaType, safeFilename),
       text: `${UNTRUSTED_DOCUMENT_GUIDANCE}\n\n${bounded.text}`,
       truncated,
       untrustedContent: true,
-      ...(warnings ? { warnings } : {}),
     };
+
+    if (warnings) {
+      result.warnings = warnings;
+    }
+
+    return result;
   } catch (error) {
     return { error: sanitizeMailError(error) };
   } finally {

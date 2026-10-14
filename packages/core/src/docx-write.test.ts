@@ -6,9 +6,11 @@ import { markdownToDocx } from "./docx-write";
 function runsOf(xml: string): Array<[string, boolean, boolean]> {
   return [...xml.matchAll(/<w:r>(.*?)<\/w:r>/gs)].map((match) => {
     const run = match[1] ?? "";
+
     const text = [...run.matchAll(/<w:t[^>]*>(.*?)<\/w:t>/gs)]
       .map((t) => t[1] ?? "")
       .join("");
+
     return [
       text,
       /<w:b\s*\/>|<w:b [^>]*\/>/.test(run),
@@ -20,9 +22,11 @@ function runsOf(xml: string): Array<[string, boolean, boolean]> {
 async function documentXml(markdown: string): Promise<string> {
   const bytes = await markdownToDocx(markdown);
   const entry = unzipSync(new Uint8Array(bytes))["word/document.xml"];
+
   if (!entry) {
     throw new Error("word/document.xml missing from the generated file");
   }
+
   return new TextDecoder().decode(entry);
 }
 
@@ -31,6 +35,7 @@ describe("markdownToDocx table cells", () => {
     const xml = await documentXml(
       "| Risk | Level |\n| --- | --- |\n| **Falling** from height | _high_ |\n"
     );
+
     const runs = runsOf(xml);
 
     // The bug shipped one run holding the literal source. The fix splits it.
@@ -44,6 +49,7 @@ describe("markdownToDocx table cells", () => {
     const xml = await documentXml(
       "| **Risk** level | Plain |\n| --- | --- |\n| a | b |\n"
     );
+
     const runs = runsOf(xml);
 
     // Bold arrives as inherited state, so nested emphasis must not drop it.

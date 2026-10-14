@@ -63,7 +63,7 @@ describe("sanitizeGeminiToolParameters", () => {
       },
       required: ["path"],
       type: "object",
-    } as never);
+    });
 
     expect(sanitized).toEqual({
       additionalProperties: false,
@@ -106,7 +106,7 @@ describe("buildGeminiChatConfig tool sanitization", () => {
                 path: { type: "string" },
               },
               type: "object",
-            } as never,
+            },
           },
         ],
       },
@@ -115,8 +115,15 @@ describe("buildGeminiChatConfig tool sanitization", () => {
     );
 
     const tools = config.tools ?? [];
-    const declarations = tools[0]?.functionDeclarations ?? [];
-    const parameters = declarations[0]?.parameters;
+    const functionTool = tools.find((tool) => "functionDeclarations" in tool);
+
+    if (!(functionTool && "functionDeclarations" in functionTool)) {
+      throw new Error("Expected function declarations");
+    }
+
+    const declarations = functionTool.functionDeclarations ?? [];
+    const parameters = declarations[0]?.parametersJsonSchema;
+    expect(declarations[0]?.parameters).toBeUndefined();
 
     expect(JSON.stringify(parameters)).not.toContain("exclusiveMinimum");
     expect(parameters).toMatchObject({

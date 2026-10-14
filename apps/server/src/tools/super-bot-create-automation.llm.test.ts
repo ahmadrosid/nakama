@@ -26,6 +26,7 @@ import {
   SUPER_BOT_SYSTEM_PROMPT,
   SUPER_BOT_TOOL_AUTHORING_RULES,
 } from "@nakama/db";
+import { z } from "zod";
 import { createProviderForInstance } from "../providers/create";
 import { AutomationRunner } from "../services/automation-runner";
 import { AutomationService } from "../services/automation-service";
@@ -37,17 +38,58 @@ import {
 import { createAutomationTools } from "./automation-tools";
 
 const cassetteName = "super-bot-create-automation";
+
+const AutomationTriggerResultSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("manual") }),
+  z.object({
+    cron: z.string(),
+    timezone: z.string().optional(),
+    type: z.literal("schedule"),
+  }),
+  z.object({
+    at: z.string(),
+    timezone: z.string().optional(),
+    type: z.literal("runAt"),
+  }),
+]);
+
+const CreateAutomationCallSchema = z.object({
+  delivery: z.unknown().optional(),
+  description: z.string().min(1),
+  name: z.string().min(1),
+  prompt: z.string().min(1),
+  trigger: AutomationTriggerResultSchema,
+});
+
+const CreatedAutomationSchema = z.object({
+  delivery: z.unknown(),
+  description: z.string(),
+  enabled: z.boolean(),
+  id: z.string(),
+  name: z.string(),
+  nextRunAt: z.string().nullable(),
+  prompt: z.string(),
+  trigger: AutomationTriggerResultSchema,
+});
+
 const modelId = "deepseek-v4-flash";
+
 const deepseekChatCompletionsUrl = "https://api.deepseek.com/chat/completions";
+
 const ORG_ID = "org_super_bot_automation_llm";
+
 const SESSION_ID = "session_super_bot_automation_llm";
+
 const USER_TIMEZONE = "Asia/Jakarta";
+
 const USER_ASK =
   "Remind me every Monday at 9am Asia/Jakarta to review open tasks. Just save the results — no delivery.";
+
 const MAX_TURNS = 5;
 
 async function resolveDeepseekInstance(): Promise<ProviderInstance | null> {
   const config = await loadUserConfig();
+
   const configured =
     config?.providers.find(
       (provider) => provider.type === "deepseek" && provider.apiKey.trim()
@@ -58,6 +100,7 @@ async function resolveDeepseekInstance(): Promise<ProviderInstance | null> {
   }
 
   const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
+
   if (!apiKey) {
     return null;
   }
@@ -73,6 +116,7 @@ async function resolveDeepseekInstance(): Promise<ProviderInstance | null> {
 
 async function buildSuperBotSystemPrompt(): Promise<string> {
   const skillBody = await readBundledSkillBody("create-automation");
+
   return [
     SUPER_BOT_SYSTEM_PROMPT.trim(),
     "",
@@ -129,20 +173,26 @@ test(
     const automationService = new AutomationService(db, {
       getUserTimezone: async () => USER_TIMEZONE,
     });
+
+    // SAFETY: This test only runs create_automation; its runner never invokes the agent.
     const automationRunner = new AutomationRunner(automationService, {
       runAutomationPrompt: async () => "ok",
     } as never);
+
     const tools = createAutomationTools(automationService, automationRunner);
     const toolDefs = tools.map(toLlmToolDefinition);
+
     const toolContext = {
       orgId: ORG_ID,
       orgRole: "admin" as const,
       profileId: SUPER_BOT_PROFILE_ID,
       sessionId: SESSION_ID,
     };
+
     const createAutomationTool = tools.find(
       (entry) => entry.name === "create_automation"
     );
+
     if (!createAutomationTool) {
       throw new Error("create_automation tool missing");
     }
@@ -182,6 +232,7 @@ test(
           const found = result.toolCalls?.find(
             (call) => call.name === "create_automation"
           );
+
           if (found) {
             createCall = found;
             break;
@@ -190,9 +241,11 @@ test(
           if (result.toolCalls?.length) {
             for (const call of result.toolCalls) {
               const tool = tools.find((entry) => entry.name === call.name);
+
               const output = tool
                 ? await tool.run(call.arguments, toolContext)
                 : { error: `Unknown tool: ${call.name}` };
+
               messages.push({
                 content: JSON.stringify(output),
                 name: call.name,
@@ -200,6 +253,7 @@ test(
                 toolCallId: call.id,
               });
             }
+
             continue;
           }
 
@@ -215,40 +269,42 @@ test(
 
         expect(createCall?.name).toBe("create_automation");
 
-        const args = createCall?.arguments ?? {};
-        expect(typeof args.name).toBe("string");
-        expect(String(args.name).trim().length).toBeGreaterThan(0);
-        expect(typeof args.description).toBe("string");
-        expect(typeof args.prompt).toBe("string");
-        expect(String(args.prompt).toLowerCase()).toMatch(/task|review/);
+        const parsedArgs = CreateAutomationCallSchema.safeParse(
+          createCall?.arguments
+        );
 
-        const trigger = args.trigger as Record<string, unknown> | undefined;
-        expect(trigger?.type).toBe("schedule");
-        expect(typeof trigger?.cron).toBe("string");
-        expect(String(trigger?.cron)).toMatch(/\b9\b|\b09\b/);
-        expect(String(trigger?.cron)).toMatch(/\b1\b/);
-        if (typeof trigger?.timezone === "string") {
+        if (!parsedArgs.success) {
+          throw new Error(
+            "Model returned invalid create_automation arguments."
+          );
+        }
+
+        const args = parsedArgs.data;
+        const trigger = args.trigger;
+        expect(args.prompt.toLowerCase()).toMatch(/task|review/);
+        expect(trigger.type).toBe("schedule");
+
+        if (trigger.type === "schedule") {
+          expect(trigger.cron).toMatch(/\b9\b|\b09\b/);
+          expect(trigger.cron).toMatch(/\b1\b/);
           expect(trigger.timezone).toBe(USER_TIMEZONE);
         }
+
         expect(args.delivery).toBeUndefined();
 
-        const created = (await createAutomationTool.run(args, toolContext)) as {
-          id: string;
-          name: string;
-          description: string;
-          prompt: string;
-          trigger: { type: string; cron?: string; timezone?: string };
-          delivery: unknown;
-          enabled: boolean;
-          nextRunAt: string | null;
-        };
+        const created = CreatedAutomationSchema.parse(
+          await createAutomationTool.run(args, toolContext)
+        );
 
         expect(created.id.startsWith("automation")).toBe(true);
         expect(created.name.trim().length).toBeGreaterThan(0);
         expect(created.prompt.toLowerCase()).toMatch(/task|review/);
         expect(created.trigger.type).toBe("schedule");
-        expect(typeof created.trigger.cron).toBe("string");
-        expect(created.trigger.timezone ?? USER_TIMEZONE).toBe(USER_TIMEZONE);
+
+        if (created.trigger.type === "schedule") {
+          expect(created.trigger.timezone ?? USER_TIMEZONE).toBe(USER_TIMEZONE);
+        }
+
         expect(created.delivery).toBeNull();
         expect(created.enabled).toBe(true);
         expect(created.nextRunAt).not.toBeNull();

@@ -9,35 +9,43 @@
 import { readdir } from "node:fs/promises";
 
 const port = Number(process.env.CASSETTE_VIEWER_PORT ?? 8766);
+
 const root = import.meta.dir;
 
 function contentType(pathname: string): string {
   if (pathname.endsWith(".html")) {
     return "text/html; charset=utf-8";
   }
+
   if (pathname.endsWith(".json")) {
     return "application/json; charset=utf-8";
   }
+
   if (pathname.endsWith(".js")) {
     return "text/javascript; charset=utf-8";
   }
+
   if (pathname.endsWith(".css")) {
     return "text/css; charset=utf-8";
   }
+
   return "application/octet-stream";
 }
 
 function resolvePath(pathname: string): string | null {
   const cleaned = pathname === "/" ? "/viewer.html" : pathname;
   const relative = cleaned.replace(/^\/+/, "");
+
   if (!relative || relative.includes("..") || relative.includes("\\")) {
     return null;
   }
+
   return `${root}/${relative}`;
 }
 
 async function listCassetteFiles(): Promise<string[]> {
   const entries = await readdir(root);
+
   return entries
     .filter((name) => name.endsWith(".json"))
     .sort((a, b) => a.localeCompare(b));
@@ -49,6 +57,7 @@ const server = Bun.serve({
 
     if (url.pathname === "/api/cassettes") {
       const cassettes = await listCassetteFiles();
+
       return Response.json(
         { cassettes },
         {
@@ -64,6 +73,7 @@ const server = Bun.serve({
     }
 
     const file = Bun.file(filePath);
+
     if (!(await file.exists())) {
       return new Response("Not found", { status: 404 });
     }
@@ -81,6 +91,7 @@ const server = Bun.serve({
 });
 
 const viewerUrl = `http://localhost:${server.port}/viewer.html`;
+
 console.log(`Cassette viewer: ${viewerUrl}`);
 
 if (process.platform === "darwin") {

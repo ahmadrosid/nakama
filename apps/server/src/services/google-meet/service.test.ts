@@ -8,14 +8,19 @@ import { GoogleMeetService } from "./service";
 import * as transcription from "./transcription";
 
 let root: string;
+
 let db: ReturnType<typeof createInMemoryDatabaseAdapter>;
+
 let service: GoogleMeetService;
+
 const admin = { id: "alice", role: "admin" } as const;
+
 const now = new Date().toISOString();
 
 beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), "meet-service-"));
   db = createInMemoryDatabaseAdapter();
+
   for (const id of ["a", "b"]) {
     await db.upsertOrganization({
       createdAt: now,
@@ -25,10 +30,12 @@ beforeEach(async () => {
       updatedAt: now,
     });
   }
+
   service = new GoogleMeetService(db, root, async () => ({
     text: "Recording",
   }));
 });
+
 afterEach(async () => {
   await service.close();
   rmSync(root, { force: true, recursive: true });
@@ -40,20 +47,24 @@ test("startup is idempotent and restart preserves settings while recovering unfi
     service.ensureOrganization("a"),
   ]);
   await service.invoke("a", "configure", { apiKey: "test" }, admin);
+
   const capture = await service.invoke(
     "a",
     "start-capture",
     { url: "https://meet.google.com/abc-defg-hij" },
     admin
   );
+
   await service.close();
   await service.reopen();
+
   const status = await service.invoke(
     "a",
     "status",
     { meetingId: capture.id },
     admin
   );
+
   expect(status.meeting.state).toBe("failed");
   expect((await service.invoke("a", "meetings", {}, admin)).configured).toBe(
     true
@@ -104,6 +115,7 @@ test("agent tools require current assignment and hide page captures without a pr
     { content: "UGFnZSBub3Rlcw==", filename: "page.md" },
     admin
   );
+
   const own = await service.invoke(
     "a",
     "upload",
@@ -112,26 +124,32 @@ test("agent tools require current assignment and hide page captures without a pr
     undefined,
     "profile"
   );
+
   const tool = service
     .tools()
     .find((item) => item.name === "google_meet_meetings")!;
+
   const context = {
     orgId: "a",
     orgRole: "admin" as const,
     profileId: "profile",
     userId: "alice",
   };
+
   await expect(tool.run({}, context)).rejects.toThrow();
   await db.assignToolToProfile("profile", "meet_a_meetings");
+
+  // SAFETY: The meetings tool returns the overview contract.
   const result = (await tool.run({}, context)) as {
     meetings: Array<{ id: string }>;
   };
+
   expect(result.meetings.map((meeting) => meeting.id)).toEqual([own.id]);
   await db.unassignToolFromProfile("profile", "meet_a_meetings");
   await expect(tool.run({}, context)).rejects.toThrow();
 });
 
-test("members cannot read another user's or another organization's meeting; viewers cannot read or write", async () => {
+test("members cannot read another user's or another organization's meeting; missing actors cannot read or write", async () => {
   const meeting = await service.invoke(
     "a",
     "upload",
@@ -141,6 +159,7 @@ test("members cannot read another user's or another organization's meeting; view
     },
     admin
   );
+
   await expect(
     service.invoke(
       "a",
@@ -153,14 +172,14 @@ test("members cannot read another user's or another organization's meeting; view
     service.invoke("b", "transcript", { meetingId: meeting.id }, admin)
   ).rejects.toThrow();
   await expect(
-    service.invoke("a", "meetings", {}, { id: "alice", role: "viewer" })
+    service.invoke("a", "meetings", {}, { id: "", role: "member" })
   ).rejects.toThrow();
   await expect(
     service.invoke(
       "a",
       "delete",
       { meetingId: meeting.id },
-      { id: "alice", role: "viewer" }
+      { id: "", role: "member" }
     )
   ).rejects.toThrow();
   const own = await service.invoke("a", "meetings", {}, admin);
@@ -169,12 +188,14 @@ test("members cannot read another user's or another organization's meeting; view
 
 test("queued capture blocks snapshots and disabling invalidates its token", async () => {
   await service.invoke("a", "configure", { apiKey: "test" }, admin);
+
   const capture = await service.invoke(
     "a",
     "start-capture",
     { durationMinutes: 1, url: "https://meet.google.com/abc-defg-hij" },
     admin
   );
+
   const address = capture.capture.url.replace(/^ws:/, "http:");
   expect((await fetch(address)).status).toBe(426);
   expect(
@@ -190,13 +211,16 @@ test("bounds simultaneous uploads and shutdown cancels a provider that ignores a
   await service.close();
   service = new GoogleMeetService(db, root, () => new Promise(() => {}));
   await service.ensureOrganization("a");
+
   const input = {
     content: Buffer.from("audio").toString("base64"),
     filename: "call.wav",
   };
+
   const pending = Array.from({ length: 4 }, () =>
     service.invoke("a", "upload", input, admin)
   );
+
   const settled = Promise.allSettled(pending);
   await expect(
     service.invoke("a", "upload", input, admin)
@@ -222,36 +246,44 @@ test("shared capture listener consumes tokens once and preserves protocol 2 fina
     },
     push() {},
   }));
+
   try {
     await service.invoke("a", "configure", { apiKey: "test" }, admin);
     await service.invoke("b", "configure", { apiKey: "test" }, admin);
+
     const first = await service.invoke(
       "a",
       "start-capture",
       { url: "https://meet.google.com/abc-defg-hij" },
       admin
     );
+
     const second = await service.invoke(
       "b",
       "start-capture",
       { url: "https://meet.google.com/xyz-abcd-efg" },
       admin
     );
+
     expect(new URL(first.capture.url).origin).toBe(
       new URL(second.capture.url).origin
     );
     const ws = new WebSocket(first.capture.url);
+
     const finalized = new Promise<void>((resolve, reject) => {
       const deadline = setTimeout(
         () => reject(new Error("Capture timed out")),
         2000
       );
+
       ws.addEventListener("message", (event) => {
         const message = JSON.parse(String(event.data));
+
         if (message.type === "ready") {
           ws.send(new Uint8Array(4800));
           ws.send(JSON.stringify({ protocol: 2, type: "stop" }));
         }
+
         if (message.type === "capture-finalized") {
           clearTimeout(deadline);
           resolve();
@@ -262,17 +294,20 @@ test("shared capture listener consumes tokens once and preserves protocol 2 fina
         reject(new Error("Socket failed"));
       });
     });
+
     await finalized;
     expect(
       (await fetch(first.capture.url.replace(/^ws:/, "http:"))).status
     ).toBe(401);
     await Bun.sleep(10);
+
     const transcript = await service.invoke(
       "a",
       "transcript",
       { meetingId: first.id },
       admin
     );
+
     expect(transcript.meeting.state).toBe("finished");
     expect(transcript.segments.map((segment) => segment.text)).toEqual([
       "Captured speech",

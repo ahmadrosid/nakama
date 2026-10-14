@@ -8,6 +8,7 @@ import { migrateDatabase } from "./migrate";
 
 test("upgrades remove key storage idempotently and retain private session markers", () => {
   const db = new Database(":memory:");
+
   try {
     migrateDatabase(db);
     db.exec(
@@ -41,6 +42,7 @@ test("retired sessions cannot be read, paged, mutated or resurrected, including 
   const database = await createSqliteDatabase(`file:${filename}`);
   const raw = new Database(filename);
   const db = database.adapter;
+
   try {
     raw.exec(
       "INSERT INTO organizations (id,name,slug,created_at,updated_at) VALUES ('o','Org','o','now','now')"
@@ -51,6 +53,7 @@ test("retired sessions cannot be read, paged, mutated or resurrected, including 
     raw.exec(
       "INSERT INTO users (id,email,password_hash,created_at,updated_at) VALUES ('u','test@example.com','unused','now','now')"
     );
+
     for (const [id, marker] of [
       ["private", "alice"],
       ["empty-marker", ""],
@@ -72,6 +75,7 @@ test("retired sessions cannot be read, paged, mutated or resurrected, including 
         )
         .run(`att-${id}`, id, id);
     }
+
     raw.exec(
       "INSERT INTO attachments (id,org_id,profile_id,session_id,channel,kind,media_type,size_bytes,storage_path,created_at,ephemeral) VALUES ('ephemeral','o','p',NULL,'web','image','image/png',1,'ephemeral','now',1)"
     );
@@ -80,16 +84,16 @@ test("retired sessions cannot be read, paged, mutated or resurrected, including 
       "normal",
     ]);
     expect(
-      (
-        await db.listSessionSummaries("p", ["web"], { limit: 1, orgId: "o" })
-      ).map((s) => s.id)
+      (await db.listSessionSummaries("p", ["web"], { limit: 1 })).map(
+        (s) => s.id
+      )
     ).toEqual(["normal"]);
     expect(
       await db.listSessionSummaries("p", ["web"], {
-        orgId: "o",
         query: "private",
       })
     ).toEqual([]);
+
     for (const id of ["private", "empty-marker"]) {
       expect(await db.getSession(id)).toBeNull();
       expect(await db.listMessagesForSession(id)).toEqual([]);
@@ -133,6 +137,7 @@ test("retired sessions cannot be read, paged, mutated or resurrected, including 
           .get(id)
       ).toEqual({ n: 1 });
     }
+
     expect(await db.getAttachment("att-normal")).not.toBeNull();
     expect((await db.listEphemeralAttachments()).map((a) => a.id)).toEqual([
       "ephemeral",

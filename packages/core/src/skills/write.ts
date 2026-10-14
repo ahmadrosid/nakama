@@ -25,6 +25,7 @@ import {
 } from "./paths";
 
 const bundledSkillNames = new Set<string>(BUNDLED_SKILL_NAMES);
+
 const SKILL_NAME_PATTERN = /^[a-z0-9-]{1,64}$/;
 
 function isResolvedWithinRoot(
@@ -33,6 +34,7 @@ function isResolvedWithinRoot(
 ): boolean {
   const root = comparablePath(resolvedRoot);
   const target = comparablePath(resolvedTarget);
+
   return target === root || target.startsWith(`${root}${path.sep}`);
 }
 
@@ -69,6 +71,7 @@ export function composeSkillMarkdown(options: {
   const scripts = (options.scripts ?? [])
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
+
   if (scripts.length > 0) {
     lines.push(`scripts: ${scripts.join(", ")}`);
   }
@@ -98,16 +101,27 @@ export function assertNotBundledSkillName(name: string): void {
   }
 }
 
+export interface ProfileSkillSummary {
+  description: string;
+  name: string;
+}
+
+export interface ProfileSkillSupportingPath {
+  absolutePath: string;
+  relativePath: string;
+}
+
 export function parseRawProfileSkillContent(
   content: string,
   orgId: string,
   profileId: string
-): { name: string; description: string } {
+): ProfileSkillSummary {
   const probePath = path.join(
     getProfileSkillsDir(orgId, profileId),
     "_probe",
     SKILL_FILE_NAME
   );
+
   const parsed = parseSkillMarkdown(content, probePath);
   const name = assertValidSkillName(parsed.frontmatter.name);
   assertNotBundledSkillName(name);
@@ -129,6 +143,7 @@ export function isPathWithinProfileSkillsDir(
 ): boolean {
   const skillsRoot = resolveWithRealpath(getProfileSkillsDir(orgId, profileId));
   const resolved = resolveWithRealpath(targetPath);
+
   return isResolvedWithinRoot(skillsRoot, resolved);
 }
 
@@ -195,11 +210,7 @@ export function assertSupportingFileAllowed(filePath: string): void {
     );
   }
 
-  if (
-    (SKILL_TOOL_FILES as readonly string[]).some(
-      (name) => name.toLowerCase() === lower
-    )
-  ) {
+  if (SKILL_TOOL_FILES.some((name) => name.toLowerCase() === lower)) {
     throw new Error(
       `Skill-local tools (${SKILL_TOOL_FILES.join(", ")}) cannot be written by agents.`
     );
@@ -211,13 +222,15 @@ async function assertSupportingPathIsNotSymlink(
 ): Promise<void> {
   try {
     const stats = await lstat(absolutePath);
+
     if (stats.isSymbolicLink()) {
       throw new Error("Supporting file path must not be a symbolic link.");
     }
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return;
     }
+
     throw error;
   }
 }
@@ -232,12 +245,14 @@ export function resolveProfileSkillSupportingFilePath(
   name: string,
   relativePath: string,
   allowSkillTool = false
-): { absolutePath: string; relativePath: string } {
+): ProfileSkillSupportingPath {
   const directory = resolveProfileSkillDirectory(orgId, profileId, name);
   const trimmed = relativePath.trim();
+
   if (!trimmed) {
     throw new Error("path is required.");
   }
+
   if (path.isAbsolute(trimmed)) {
     throw new Error("path must be relative to the skill directory.");
   }
@@ -245,19 +260,23 @@ export function resolveProfileSkillSupportingFilePath(
   const segments = trimmed
     .split(/[/\\]+/)
     .filter((segment) => segment.length > 0);
+
   if (segments.length === 0) {
     throw new Error("path is required.");
   }
+
   if (segments.some((segment) => segment === "." || segment === "..")) {
     throw new Error("path cannot contain '.' or '..' segments.");
   }
 
   const target = path.join(directory, ...segments);
+
   if (namesAlternateDataStream(target)) {
     throw new Error(
       "path cannot contain ':' on Windows, where it names an NTFS alternate data stream."
     );
   }
+
   // resolveProfileSkillDirectory already locked `directory` inside the profile
   // skills root; realpath containment under that skill dir is the remaining check.
   const skillRoot = resolveWithRealpath(directory);
@@ -270,6 +289,7 @@ export function resolveProfileSkillSupportingFilePath(
   if (!allowSkillTool) {
     assertSupportingFileAllowed(absolutePath);
   }
+
   return { absolutePath, relativePath: segments.join("/") };
 }
 
@@ -280,7 +300,7 @@ export async function writeProfileSkillSupportingFile(options: {
   relativePath: string;
   content: string | Uint8Array;
   overwrite?: boolean;
-}): Promise<{ absolutePath: string; relativePath: string }> {
+}): Promise<ProfileSkillSupportingPath> {
   const { absolutePath, relativePath } = resolveProfileSkillSupportingFilePath(
     options.orgId,
     options.profileId,
@@ -329,15 +349,18 @@ export async function createSkillFile(
   const description = options.description.trim();
   const orgId = options.orgId?.trim();
   const profileId = options.profileId?.trim();
+
   if (Boolean(orgId) !== Boolean(profileId)) {
     throw new Error(
       "createSkillFile requires both orgId and profileId for profile skills, or neither for global skills."
     );
   }
+
   const skillsRoot =
     orgId && profileId
       ? getProfileSkillsDir(orgId, profileId)
       : getGlobalSkillsDir();
+
   const directory = path.join(skillsRoot, name);
   const skillFilePath = path.join(directory, SKILL_FILE_NAME);
 
@@ -383,6 +406,7 @@ export async function writeRawProfileSkillMarkdown(options: {
     options.profileId,
     name
   );
+
   const skillFilePath = path.join(directory, SKILL_FILE_NAME);
   const exists = await pathExists(skillFilePath);
 
@@ -399,6 +423,7 @@ export async function writeRawProfileSkillMarkdown(options: {
   if (!exists) {
     await mkdir(directory, { recursive: true });
     await writeFile(skillFilePath, nextContent, "utf8");
+
     return {
       created: true,
       description,
@@ -415,6 +440,7 @@ export async function writeRawProfileSkillMarkdown(options: {
   }
 
   const finalParsed = parseSkillMarkdown(nextContent, skillFilePath);
+
   return {
     created: false,
     description: finalParsed.frontmatter.description,
@@ -443,6 +469,7 @@ export async function patchSkillFile(options: {
     options.profileId,
     options.name
   );
+
   // resolveProfileSkillDirectory already assertValidSkillName + assertNotBundledSkillName
   // and keeps the directory inside the profile skills root; SKILL.md under it cannot escape.
   const expectedName = options.name.trim().toLowerCase();

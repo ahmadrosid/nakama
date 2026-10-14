@@ -5,7 +5,6 @@ import {
   InputGroupInput,
 } from "@nakama/ui/input-group";
 import { ViewIcon, ViewOffIcon } from "hugeicons-react";
-import { SettingsRow } from "@/components/discord-settings-card.shared";
 import { DiscordSettingsPairingSection } from "@/components/discord-settings-pairing-section";
 import {
   ChannelAccessSettings,
@@ -13,12 +12,14 @@ import {
   ChannelSettings,
   ChannelSetupChecklist,
   IntegrationSettingsFooter,
+  SettingsRow,
 } from "@/components/integration-settings.shared";
 import { WorkerActionBar } from "@/components/WorkerActionBar";
-import {
-  DISCORD_DEVELOPER_PORTAL_URL,
-  DISCORD_SETUP_GUIDE_URL,
-} from "@/lib/integration-docs";
+
+const DISCORD_SETUP_GUIDE_URL = "https://ahmadrosid.github.io/nakama/discord";
+
+const DISCORD_DEVELOPER_PORTAL_URL =
+  "https://discord.com/developers/applications";
 
 function DiscordBotTokenFields({
   configured,
@@ -94,7 +95,9 @@ function DiscordBotTokenFields({
             if (configured) {
               return;
             }
+
             const token = event.clipboardData.getData("text").trim();
+
             if (token) {
               event.preventDefault();
               onBotTokenPaste(token);
@@ -149,9 +152,11 @@ function discordSetupStep(
   if (!configured) {
     return 0;
   }
+
   if (!(running && connected)) {
     return 1;
   }
+
   return hasLinkedUsers ? 3 : 2;
 }
 
@@ -194,7 +199,7 @@ export function DiscordSettingsCardContent({
   allowedUserSummary: string;
   onManageAllowedUsers: () => void;
   worker:
-    | { connected?: boolean; process?: { managed?: boolean } }
+    | { connected?: boolean; process?: { error?: string; managed?: boolean } }
     | null
     | undefined;
   statusLine: string | null;
@@ -223,6 +228,7 @@ export function DiscordSettingsCardContent({
     worker?.connected === true,
     hasLinkedUsers
   );
+
   const tokenEditor = (
     <DiscordBotTokenFields
       botToken={botToken}
@@ -235,14 +241,17 @@ export function DiscordSettingsCardContent({
       showBotToken={showBotToken}
     />
   );
+
   const workerActions = (
     <WorkerActionBar
       compact
+      pm2Error={worker?.process?.error}
       pm2Managed={worker?.process?.managed ?? false}
       running={running}
       workerName="discord"
     />
   );
+
   const pairing = (
     <DiscordSettingsPairingSection
       compact
@@ -258,6 +267,7 @@ export function DiscordSettingsCardContent({
       savePending={savePending}
     />
   );
+
   const footer = (
     <IntegrationSettingsFooter
       canSave={canSave}
@@ -294,6 +304,7 @@ export function DiscordSettingsCardContent({
       {footer}
     </ChannelSetupChecklist>
   );
+
   if (step < 3) {
     return checklist;
   }

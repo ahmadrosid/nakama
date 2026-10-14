@@ -4,9 +4,15 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { getUserConfigDir } from "../user-config";
 
-/** Agent-authored tool modules live under {configDir}/tools/. */
-export function getCustomToolsDir(): string {
-  return path.join(getUserConfigDir(), "tools");
+/**
+ * Agent-authored tool modules live under {configDir}/orgs/{orgId}/tools/.
+ * Without an org this is the legacy install-global {configDir}/tools/, which
+ * only holds modules of tools that predate org ownership.
+ */
+export function getCustomToolsDir(orgId?: string): string {
+  return orgId
+    ? path.join(getUserConfigDir(), "orgs", orgId, "tools")
+    : path.join(getUserConfigDir(), "tools");
 }
 
 // ---------------------------------------------------------------------------
@@ -14,6 +20,7 @@ export function getCustomToolsDir(): string {
 // ---------------------------------------------------------------------------
 
 const DEFAULT_MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+
 const SPECIAL_PATH_PREFIXES = ["/dev/", "/proc/", "/sys/"];
 
 // On Windows the JS realpathSync keeps the caller's casing and short names;
@@ -40,7 +47,9 @@ export function namesAlternateDataStream(absolutePath: string): boolean {
   if (process.platform !== "win32") {
     return false;
   }
+
   const { root } = path.parse(absolutePath);
+
   return absolutePath.slice(root.length).includes(":");
 }
 
@@ -80,6 +89,7 @@ export async function guardFilePath(
   const allowedOption = options.allowedDirs?.filter((dir) => dir.trim()) ?? [];
 
   let rawAllowedDirs: string[];
+
   if (allowedOption.length > 0) {
     rawAllowedDirs = allowedOption;
   } else if (cwdOption) {
@@ -125,6 +135,7 @@ export async function guardFilePath(
   }
 
   let realPath: string;
+
   try {
     realPath = await realpath(absolute);
   } catch {
@@ -141,6 +152,7 @@ export async function guardFilePath(
 /** Realpath when possible; otherwise realpath the deepest existing parent. */
 export function resolveWithRealpath(targetPath: string): string {
   const absolute = path.resolve(targetPath);
+
   try {
     return realpathOnDisk(absolute);
   } catch {
@@ -151,11 +163,13 @@ export function resolveWithRealpath(targetPath: string): string {
       try {
         const resolvedDir = realpathOnDisk(dir);
         const relativeDir = path.relative(dir, path.dirname(absolute));
+
         return path.resolve(resolvedDir, relativeDir, path.basename(absolute));
       } catch {
         if (dir === root) {
           return absolute;
         }
+
         dir = path.dirname(dir);
       }
     }
@@ -170,6 +184,7 @@ export async function resolveWorkspaceRoot(
       "workspaceRoot must be an absolute path; relative roots resolve against process.cwd() and break profile isolation."
     );
   }
+
   try {
     return await realpath(rawWorkspaceRoot);
   } catch {
@@ -193,9 +208,11 @@ function expandHome(filePath: string): string {
   if (filePath === "~") {
     return getUserHome();
   }
+
   if (filePath.startsWith("~/")) {
     return path.join(getUserHome(), filePath.slice(2));
   }
+
   return filePath;
 }
 
@@ -205,12 +222,15 @@ function getUserHome(): string {
 
 function isAllowedPath(target: string, dirs: string[]): boolean {
   const comparableTarget = comparablePath(target);
+
   const normalized = comparableTarget.endsWith(path.sep)
     ? comparableTarget
     : comparableTarget + path.sep;
+
   return dirs.some((rawDir) => {
     const dir = comparablePath(rawDir);
     const dirEnd = dir.endsWith(path.sep) ? dir : dir + path.sep;
+
     return normalized.startsWith(dirEnd);
   });
 }
@@ -223,13 +243,16 @@ function resolveSafeCwd(
   if (rawCwd == null || rawCwd.trim() === "") {
     return defaultCwd;
   }
+
   const expanded = expandHome(rawCwd.trim());
   const absolute = resolveWithRealpath(path.resolve(defaultCwd, expanded));
+
   if (!isAllowedPath(absolute, allowedDirs)) {
     throw new PathGuardError(
       "Working directory is outside allowed directories. Omit cwd to use the active profile workspace. To read a skill, pass its full instruction path as path and omit cwd.",
       "TRAVERSAL"
     );
   }
+
   return absolute;
 }

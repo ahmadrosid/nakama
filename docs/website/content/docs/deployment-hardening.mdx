@@ -184,8 +184,9 @@ MicroSandbox backend and understand the host dependency.
 
 In **Control center → Workspace → Settings → Multi-factor authentication**, register a passkey or
 authenticator app for privileged accounts and store backup codes offline. A
-platform admin can enable and enforce MFA for selected roles. Test a recovery
-login before making enforcement mandatory.
+platform admin can enable and enforce MFA for selected roles. Once enforcement
+is on, platform admins must use MFA whichever roles are selected. Test a
+recovery login before making enforcement mandatory.
 
 ## Back up for recovery, not just retention
 
@@ -243,7 +244,7 @@ curl --fail-with-body https://nakama.example.com/metrics
 
 Then verify operational controls rather than assuming them:
 
-- Sign in as a viewer and confirm mutation and agent actions are unavailable.
+- Sign in as a member and confirm organization settings require admin access.
 - Confirm an org member cannot select another organization by changing the URL,
   cookie, or `X-Org-Id` header.
 - Restore the latest backup into an isolated instance.

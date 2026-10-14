@@ -6,6 +6,7 @@ Agent platform built to work with your team — not replace them. Multi-tenant m
 
 **Before code**
 - Read [CONTRIBUTING.md, "Before you start building"](./CONTRIBUTING.md#before-you-start-building) first. Four questions, and a closed PR here usually failed one of them. You can produce a working change faster than anyone can decide it was the right one, so check the shape before the diff
+- Read the rest of [CONTRIBUTING.md](./CONTRIBUTING.md) before you pick work or open a PR: how to claim an issue, the checks to run, the PR body format, and [what happens to work that goes quiet](./CONTRIBUTING.md#when-work-goes-quiet). An issue assigned to someone else is not yours to build. A PR labelled `stale` is, with `Co-authored-by` for its author
 
 **Code**
 - Prefer edit over extract; no new package/file unless an existing module cannot hold the change. CI fails a new workspace unless the PR carries the `new-package` label
@@ -86,6 +87,15 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahm
 # Fresh start (removes container, volume, image)
 ./scripts/docker-destroy.sh
 ./scripts/docker-build-run.sh
+```
+
+Runtime dependencies are baked into the image from committed lockfiles, not resolved
+at build time. To change them, edit the manifest, regenerate the lockfile for both
+image architectures, and commit both files:
+
+```bash
+cd .docker/runtime-deps   # or .docker/meet-deps for the optional Meet build
+bun install --lockfile-only --os=linux --cpu='*'
 ```
 
 ## Multi-tenancy

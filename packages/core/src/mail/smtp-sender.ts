@@ -7,6 +7,14 @@ import type {
   MailSendResult,
 } from "./types";
 
+interface SmtpMessageOptions {
+  from: string;
+  html?: string;
+  subject: string;
+  text: string;
+  to: string;
+}
+
 export function createSmtpSender(config: MailboxConfig): MailSender {
   const transporter = nodemailer.createTransport({
     auth: {
@@ -26,13 +34,18 @@ export function createSmtpSender(config: MailboxConfig): MailSender {
   return {
     async send(input: MailSendInput): Promise<MailSendResult> {
       try {
-        const info = await transporter.sendMail({
+        const message: SmtpMessageOptions = {
           from: config.from,
           subject: input.subject,
           text: input.text,
           to: input.to,
-          ...(input.html ? { html: input.html } : {}),
-        });
+        };
+
+        if (input.html) {
+          message.html = input.html;
+        }
+
+        const info = await transporter.sendMail(message);
 
         return { messageId: info.messageId || "sent" };
       } catch (err) {

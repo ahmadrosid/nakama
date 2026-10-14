@@ -26,6 +26,7 @@ export function createEmailOutboundAdapter(): EmailOutboundAdapter {
         return { ok: true };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+
         return { error: message, ok: false };
       }
     },

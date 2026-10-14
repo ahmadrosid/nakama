@@ -7,9 +7,11 @@ import {
 } from "./document-content";
 
 const FIXTURES = join(import.meta.dir, "__fixtures__");
+
 const SAMPLE_PDF_B64 = readFileSync(join(FIXTURES, "sample.pdf")).toString(
   "base64"
 );
+
 const SAMPLE_XLSX_B64 = readFileSync(join(FIXTURES, "sample.xlsx")).toString(
   "base64"
 );
@@ -116,6 +118,11 @@ describe("resolveDocumentPartForProvider", () => {
     );
 
     expect(result.type).toBe("text");
+
+    if (result.type !== "text") {
+      throw new Error("Expected document text");
+    }
+
     expect(result.text).toStartWith("[File: report.pdf]\n");
     expect(result.text.toLowerCase()).toContain("dummy");
   });
@@ -132,6 +139,11 @@ describe("resolveDocumentPartForProvider", () => {
     );
 
     expect(result.type).toBe("text");
+
+    if (result.type !== "text") {
+      throw new Error("Expected document text");
+    }
+
     expect(result.text).toStartWith("[File: budget.xlsx]\n");
     expect(result.text).toContain("Widget");
   });

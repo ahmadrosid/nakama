@@ -15,6 +15,7 @@ import type { ServerOptions } from "./context";
 import { serializeHttpOpenApiSpec } from "./openapi";
 import { createOrgContextMiddleware } from "./org-middleware";
 import { createRateLimitMiddleware } from "./rate-limit-middleware";
+import { registerAcpMcpRoutes } from "./routes/acp-mcp";
 import { registerArtifactShareRoutes } from "./routes/artifact-shares";
 import { registerAuditEventRoutes } from "./routes/audit-events";
 import { registerAuthRoutes } from "./routes/auth";
@@ -66,11 +67,14 @@ import type { HonoApp } from "./types";
  * the two drift, which is the only thing keeping this constant honest.
  */
 const THEME_BOOTSTRAP_SCRIPT_HASH =
-  "sha256-rQ5OTxagyMHDDSQ6k5wlUK8gtuYxXBrpQGqjAcYBz2w=";
+  "sha256-HsiO8mtwNQyMUSzPhZ0Zgx52OUxlMda3rA2mB6m/SO0=";
+
 // Regular JSON can carry a 5 MiB attachment after base64 expansion. Full-data
 // imports accept a 100 MiB archive, which expands to roughly 134 MiB as base64.
 export const DEFAULT_HTTP_REQUEST_BODY_LIMIT_BYTES = 10 * 1024 * 1024;
+
 export const MAX_HTTP_REQUEST_BODY_LIMIT_BYTES = 140 * 1024 * 1024;
+
 const LARGE_BODY_ROUTES = new Set([
   "/v1/auth/setup/import/preview",
   "/v1/auth/setup/import/restore",
@@ -82,6 +86,7 @@ const LARGE_BODY_ROUTES = new Set([
 
 function readPositiveEnv(name: string): number | undefined {
   const parsed = Number(process.env[name]);
+
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
@@ -97,12 +102,15 @@ export function createHonoApp(options: ServerOptions) {
     async onBeforeDataRestore() {
       restoringData = true;
       const deadline = Date.now() + 30_000;
+
       while (activeDataRequests > 0 || sessionTurnRegistry.hasActiveTurns()) {
         if (Date.now() >= deadline) {
           throw new Error("Active requests must finish before restoring data.");
         }
+
         await Bun.sleep(25);
       }
+
       await beforeRestore?.();
     },
     onDataRestored: afterRestore
@@ -119,19 +127,24 @@ export function createHonoApp(options: ServerOptions) {
         503
       );
     }
+
     const isRestore =
       c.req.method === "POST" &&
       (c.req.path === "/v1/platform/data/import/restore" ||
         c.req.path === "/v1/auth/setup/import/restore");
+
     if (isRestore && restorePending) {
       return errorResponse("A data restore is already in progress.", 409);
     }
+
     if (isRestore) {
       restorePending = true;
     }
+
     if (!isRestore) {
       activeDataRequests += 1;
     }
+
     try {
       await next();
     } finally {
@@ -154,12 +167,15 @@ export function createHonoApp(options: ServerOptions) {
     await next();
     c.header("X-Request-Id", fields.requestId);
     const status = c.res.status;
+
     if (metricsEnabled) {
       requests += 1;
+
       if (status >= 500) {
         serverErrors += 1;
       }
     }
+
     if (status >= 500) {
       // Never log raw URLs: paths and queries can contain share/OAuth tokens.
       log("error", "http.response", {
@@ -175,6 +191,7 @@ export function createHonoApp(options: ServerOptions) {
       if (err.status >= 500) {
         void reportError(err, { kind: "http", source: "server" });
       }
+
       return errorResponse(
         err.message,
         err.status,
@@ -189,6 +206,7 @@ export function createHonoApp(options: ServerOptions) {
     // A NakamaApiError is a refusal the route chose. Anything that reaches here
     // is a bug the caller only sees as a generic 500, so the tracker must see it.
     void reportError(err, { kind: "http", source: "server" });
+
     return errorResponse(formatServerError(err), 500);
   });
 
@@ -197,27 +215,35 @@ export function createHonoApp(options: ServerOptions) {
       const headers = new Headers(response.headers);
       headers.set("X-Content-Type-Options", "nosniff");
       const isArtifactFrame = c.req.path === ARTIFACT_FRAME_PATH;
+
       if (!isArtifactFrame) {
         headers.set("X-Frame-Options", "DENY");
       }
+
       // Only set Referrer-Policy if it's not already set
       if (!headers.has("Referrer-Policy")) {
         headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
       }
+
       const isDocs = c.req.path === "/docs" || c.req.path === "/docs/";
+
       const docsScripts = isDocs
         ? ` ${DOCS_SCRIPT_URL} '${DOCS_SCRIPT_HASH}'`
         : "";
+
       const docsFonts = isDocs ? " https://fonts.scalar.com" : "";
+
       const docsConnections = isDocs
         ? " https://cdn.jsdelivr.net/sm/ https://api.scalar.com/vector/registry/"
         : "";
+
       headers.set(
         "Content-Security-Policy",
         isArtifactFrame
           ? ARTIFACT_FRAME_CSP
-          : `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'${docsScripts}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:${docsFonts}; connect-src 'self'${docsConnections};`
+          : `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'${docsScripts}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://logos.composio.dev; media-src 'self' blob:; object-src blob:; frame-src 'self' blob:; font-src 'self' data:${docsFonts}; connect-src 'self'${docsConnections};`
       );
+
       // Also true behind a TLS terminator, which is where HSTS matters most.
       if (isSecureRequest(c.req.raw)) {
         headers.set(
@@ -225,6 +251,7 @@ export function createHonoApp(options: ServerOptions) {
           "max-age=31536000; includeSubDomains"
         );
       }
+
       return new Response(response.body, {
         headers,
         status: response.status,
@@ -234,6 +261,7 @@ export function createHonoApp(options: ServerOptions) {
 
     if (options.webDistDir) {
       const staticResponse = tryServeStaticWeb(c.req.raw, options.webDistDir);
+
       if (staticResponse) {
         return applySecurityHeaders(staticResponse);
       }
@@ -248,19 +276,23 @@ export function createHonoApp(options: ServerOptions) {
 
   const rejectOversizedBody = () =>
     errorResponse("Request body is too large.", 413);
+
   const defaultBodyLimit = bodyLimit({
     maxSize: DEFAULT_HTTP_REQUEST_BODY_LIMIT_BYTES,
     onError: rejectOversizedBody,
   });
+
   const importBodyLimit = bodyLimit({
     maxSize: MAX_HTTP_REQUEST_BODY_LIMIT_BYTES,
     onError: rejectOversizedBody,
   });
+
   // Base64 expands a 20 MiB knowledge document to roughly 27 MiB.
   const knowledgeBodyLimit = bodyLimit({
     maxSize: 30 * 1024 * 1024,
     onError: rejectOversizedBody,
   });
+
   app.use("*", (c, next) => {
     if (
       c.req.method === "POST" &&
@@ -270,9 +302,11 @@ export function createHonoApp(options: ServerOptions) {
     ) {
       return knowledgeBodyLimit(c, next);
     }
+
     const limit = LARGE_BODY_ROUTES.has(c.req.path)
       ? importBodyLimit
       : defaultBodyLimit;
+
     return limit(c, next);
   });
 
@@ -281,12 +315,15 @@ export function createHonoApp(options: ServerOptions) {
   app.get("/healthz", (c) => c.json({ ok: true }));
   app.get("/readyz", async (c) => {
     c.header("Cache-Control", "no-store");
+
     try {
       if (!options.databaseAdapter) {
         return c.json({ ok: false }, 503);
       }
+
       // Startup/reopen run migrations before exposing the adapter.
       await options.databaseAdapter.checkHealth();
+
       return c.json({ ok: true });
     } catch {
       return c.json({ ok: false }, 503);
@@ -296,8 +333,10 @@ export function createHonoApp(options: ServerOptions) {
     if (!metricsEnabled) {
       return c.notFound();
     }
+
     c.header("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
     c.header("Cache-Control", "no-store");
+
     return c.body(
       [
         "# HELP nakama_http_requests_total HTTP responses served by this process.",
@@ -326,12 +365,15 @@ export function createHonoApp(options: ServerOptions) {
   registerInternalAutomationRoutes(app, options);
   registerInternalCuratorRoutes(app, options);
   registerNotificationWebhookRoutes(app, options);
+  registerAcpMcpRoutes(app);
   registerComposioOAuthRoutes(app, options);
   registerMcpOAuthRoutes(app, options);
   app.use("*", createOrgContextMiddleware(options));
+
   if (options.databaseAdapter) {
     app.use("*", createAuditLogMiddleware(options.databaseAdapter));
   }
+
   registerSystemRoutes(app, options);
   registerAuditEventRoutes(app, options);
   registerAuthRoutes(app, options);
@@ -364,6 +406,7 @@ export function createHonoApp(options: ServerOptions) {
 
   app.get("/openapi.json", (c) => {
     const serverUrl = new URL(c.req.url).origin;
+
     return new Response(serializeHttpOpenApiSpec(app, serverUrl), {
       headers: { "Content-Type": "application/json; charset=utf-8" },
     });

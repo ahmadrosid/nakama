@@ -37,6 +37,9 @@ It keeps one team's data separate from another team's data, including:
 
 A profile is an agent on your team — the bot users talk to.
 
+Each new organization starts with a **Default Bot** and a **Super Bot**.
+Additional profiles are created when you need another role or behavior.
+
 Each profile has a role. It defines:
 
 - The bot's identity
@@ -45,13 +48,15 @@ Each profile has a role. It defines:
 - Which tools it may call
 - Which knowledge base it can search
 
-If two profiles should behave differently, make two profiles.
+Profiles start with the standard builtin tools and default bundled skills. You
+can assign more tools, MCP servers, and skills for each profile.
 
 Org memory holds team-wide facts every profile shares; profile `MEMORY.md` holds per-bot continuity. See [Org memory](/org-memory) and [Profiles](/profiles#knowledge-base-and-memory).
 
 ### 3. Tool access
 
-Profiles do not automatically get every capability.
+Profiles start with a safe baseline of builtin tools and bundled skills, but do
+not automatically get every capability.
 
 You choose which tools a profile can use, such as:
 
@@ -75,6 +80,7 @@ The same Nakama profile can be used from different places:
 - Telegram
 - WhatsApp
 - Discord
+- Slack
 
 ## How to run Nakama
 

@@ -37,22 +37,35 @@ export function normalizeOrgMemoryDedupKey(bullet: string): string {
   return normalizeOrgMemoryBullet(bullet).toLowerCase();
 }
 
-export function detectOrgMemoryInjectionWarnings(bullet: string): string[] {
+export function detectOrgMemoryInjectionWarnings(
+  bullet: string,
+  { markup = true }: { markup?: boolean } = {}
+): string[] {
   const warnings: string[] = [];
+
   if (/ignore (all )?previous/i.test(bullet)) {
     warnings.push("Contains instruction-like phrasing.");
   }
+
   // The list marker is part of the evasion, not decoration: `- system:` reads to
   // a model exactly like `system:` and slipped past a bare `^system:` anchor.
   if (/^\s*(?:[-*+]\s+)?system:/im.test(bullet)) {
     warnings.push("Contains a system-style prefix.");
   }
+
+  // Skills are markdown documents, so headings and tags are normal there.
+  if (!markup) {
+    return warnings;
+  }
+
   if (/^##\s/m.test(bullet)) {
     warnings.push("Contains markdown headings.");
   }
+
   if (/<\/?[a-z][\s\S]*>/i.test(bullet)) {
     warnings.push("Contains HTML-like markup.");
   }
+
   return warnings;
 }
 
@@ -75,6 +88,7 @@ export function parseOrgMemoryContent(
     if (currentDate) {
       sections.push({ bullets: currentBullets, date: currentDate });
     }
+
     currentDate = null;
     currentBullets = [];
   };
@@ -84,15 +98,18 @@ export function parseOrgMemoryContent(
       if (phase === "dated") {
         flushSection();
       }
+
       phase = "pinned";
       continue;
     }
 
     const dateMatch = line.match(/^## (\d{4}-\d{2}-\d{2})$/);
+
     if (dateMatch) {
       if (phase === "dated") {
         flushSection();
       }
+
       phase = "dated";
       currentDate = dateMatch[1];
       currentBullets = [];
@@ -145,6 +162,7 @@ export function normalizeParsedOrgMemory(
       rescuedPinned.push(line.slice(2));
       continue;
     }
+
     preambleLines.push(line);
   }
 
@@ -164,6 +182,7 @@ export function rebuildOrgMemoryContent(parsed: ParsedOrgMemory): string {
 
   if (normalized.pinned.length > 0) {
     parts.push("", "## Pinned", "");
+
     for (const bullet of normalized.pinned) {
       parts.push(`- ${bullet}`);
     }
@@ -175,13 +194,16 @@ export function rebuildOrgMemoryContent(parsed: ParsedOrgMemory): string {
     if (section.bullets.length === 0) {
       continue;
     }
+
     parts.push("", `## ${section.date}`, "");
+
     for (const bullet of section.bullets) {
       parts.push(`- ${bullet}`);
     }
   }
 
   const content = parts.join("\n").replace(/\n+$/, "");
+
   return content.length > 0 ? `${content}\n` : content;
 }
 
@@ -220,11 +242,13 @@ function orgMemorySupersessionScore(
 ): number {
   const existingTokens = significantOrgMemoryTokens(existingBullet);
   const newTokens = significantOrgMemoryTokens(newBullet);
+
   if (existingTokens.length < 2 || newTokens.length < 2) {
     return 0;
   }
 
   const shared = newTokens.filter((token) => existingTokens.includes(token));
+
   return shared.length / Math.min(existingTokens.length, newTokens.length);
 }
 
@@ -233,6 +257,7 @@ function removeOrgMemoryBullet(
   predicate: (bullet: string) => boolean
 ): void {
   parsed.pinned = parsed.pinned.filter((bullet) => !predicate(bullet));
+
   for (const section of parsed.sections) {
     section.bullets = section.bullets.filter((bullet) => !predicate(bullet));
   }
@@ -247,6 +272,7 @@ function removeSupersededOrgMemoryBullets(
     if (normalizeOrgMemoryDedupKey(bullet) === newKey) {
       return false;
     }
+
     return orgMemorySupersessionScore(bullet, newBullet) >= 0.65;
   });
 }
@@ -289,11 +315,13 @@ export function applyApprovedOrgMemoryBullet(
       parsed.pinned.push(text);
     } else {
       let section = parsed.sections.find((entry) => entry.date === dateUtc);
+
       if (!section) {
         section = { bullets: [], date: dateUtc };
         parsed.sections.push(section);
         parsed.sections.sort((a, b) => a.date.localeCompare(b.date));
       }
+
       section.bullets.push(text);
     }
   }
@@ -315,6 +343,7 @@ export function collectRecentLogBullets(
   for (const section of sorted) {
     for (let index = section.bullets.length - 1; index >= 0; index -= 1) {
       collected.push(section.bullets[index]);
+
       if (collected.length >= limit) {
         return collected;
       }
@@ -334,23 +363,18 @@ export interface OrgMemorySummaryOptions {
 }
 
 /**
- * Append the org memory section to a system prompt, gated by org role.
- * Viewers never receive the section; everyone else gets it appended when
- * non-empty. Returns the unchanged `systemPrompt` when the section is empty
- * or the role is viewer.
+ * Append non-empty organization memory to a system prompt.
  */
 export function appendOrgMemorySection(
   systemPrompt: string,
-  summary: string,
-  orgRole?: string | null
+  summary: string
 ): string {
-  if (orgRole === "viewer") {
-    return systemPrompt;
-  }
   const trimmed = summary.trim();
+
   if (trimmed.length === 0) {
     return systemPrompt;
   }
+
   return `${systemPrompt.trim()}\n\n${trimmed}`;
 }
 
@@ -382,10 +406,12 @@ export function previewOrgMemoryAfterApprove(
   const pin = options.pin ?? false;
   const dateUtc = options.dateUtc ?? new Date().toISOString().slice(0, 10);
   const text = normalizeOrgMemoryBullet(bullet);
+
   const rebuilt = applyApprovedOrgMemoryBullet(liveContent, bullet, {
     dateUtc,
     pin,
   });
+
   const promptInjection = composeOrgMemorySummary(rebuilt, {
     byteCap: options.byteCap ?? 2048,
     recentLogLimit: options.recentLogLimit ?? 20,
@@ -408,11 +434,14 @@ export function composeOrgMemorySummary(
     recentLogLimit = 20,
     overflowHint = "Use the org_memory_search tool for the full history.",
   } = options;
+
   const parsed = parseOrgMemoryContent(content);
+
   const recentBullets = collectRecentLogBullets(
     parsed.sections,
     recentLogLimit
   );
+
   const bullets = [...parsed.pinned, ...recentBullets];
 
   if (bullets.length === 0) {
@@ -428,9 +457,11 @@ export function composeOrgMemorySummary(
   for (const bullet of bullets) {
     const candidate = `- ${bullet}`;
     const candidateBytes = utf8ByteLength(`${candidate}\n`);
+
     if (bytes + candidateBytes > byteCap) {
       break;
     }
+
     lines.push(candidate);
     bytes += candidateBytes;
     included += 1;

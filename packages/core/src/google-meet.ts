@@ -5,6 +5,7 @@ export type MeetingState =
   | "transcribing"
   | "finished"
   | "failed";
+
 export interface Meeting {
   actorId: string;
   createdAt: number;
@@ -44,6 +45,18 @@ export type MeetAction =
   | "leave"
   | "delete"
   | "configure";
+
+export interface MeetActionInput {
+  after?: number;
+  apiKey?: string;
+  content?: string;
+  enabled?: boolean;
+  fileId?: string;
+  filename?: string;
+  meetingId?: string;
+  messageId?: string;
+}
+
 export interface MeetOverview {
   canConfigure: boolean;
   captureProtocol: number;
@@ -51,6 +64,7 @@ export interface MeetOverview {
   enabled: boolean;
   meetings: Meeting[];
 }
+
 export interface MeetActionResults {
   configure: { configured: boolean; enabled: boolean };
   delete: { deleted: boolean };

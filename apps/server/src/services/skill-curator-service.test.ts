@@ -20,7 +20,9 @@ import { SkillProposalService } from "./skill-proposal-service";
 import { SkillsService } from "./skills-service";
 
 const ORG_ID = "org_curator";
+
 const DAY_MS = 24 * 60 * 60 * 1000;
+
 const NOW = new Date("2026-08-15T12:00:00.000Z");
 
 describe("SkillCuratorService", () => {
@@ -71,6 +73,7 @@ describe("SkillCuratorService", () => {
     body?: string;
   }): Promise<string> {
     const skillId = `skill_${input.name}`;
+
     const sourcePath =
       input.sourcePath ??
       join(
@@ -82,6 +85,7 @@ describe("SkillCuratorService", () => {
         "skills",
         input.name
       );
+
     const description = input.description ?? "Test.";
     await mkdir(sourcePath, { recursive: true });
     await writeFile(
@@ -124,6 +128,7 @@ describe("SkillCuratorService", () => {
     winnerName: string;
   }> {
     const winnerName = "deploy-helper";
+
     const winnerId = await addAssignedSkill({
       createdAt: "2026-01-01T00:00:00.000Z",
       createdBy: "agent",
@@ -131,6 +136,7 @@ describe("SkillCuratorService", () => {
       lastUsedAt: NOW.toISOString(),
       name: winnerName,
     });
+
     await db.incrementSkillUsage({
       orgId: ORG_ID,
       profileId,
@@ -138,6 +144,7 @@ describe("SkillCuratorService", () => {
       useDelta: 9,
       usedAt: NOW.toISOString(),
     });
+
     const loserId = await addAssignedSkill({
       createdAt: "2026-01-01T00:00:00.000Z",
       createdBy: "agent",
@@ -145,6 +152,7 @@ describe("SkillCuratorService", () => {
       lastUsedAt: NOW.toISOString(),
       name: "deploy-assistant",
     });
+
     return {
       loserId,
       loserLiveDir: join(
@@ -175,6 +183,7 @@ describe("SkillCuratorService", () => {
   ): SkillCuratorGenerateMarkdown {
     return async (input) => {
       onCall?.();
+
       return `---\nname: ${input.winner.name}\ndescription: Consolidated deploy checklist.\n---\n\nMerged body.\n`;
     };
   }
@@ -186,6 +195,7 @@ describe("SkillCuratorService", () => {
       lastUsedAt: new Date(NOW.getTime() - 95 * DAY_MS).toISOString(),
       name: "old-playbook",
     });
+
     const liveDir = join(
       configDir,
       "orgs",
@@ -223,10 +233,12 @@ describe("SkillCuratorService", () => {
     expect(stored?.sourcePath).toContain(
       join(SKILL_ARCHIVE_DIR_NAME, "old-playbook")
     );
+
     const report = await readFile(
       join(getOrgCuratorLogDir(ORG_ID), "run.json"),
       "utf8"
     );
+
     expect(JSON.parse(report).archived).toBe(1);
   });
 
@@ -237,6 +249,7 @@ describe("SkillCuratorService", () => {
       lastUsedAt: new Date(NOW.getTime() - 40 * DAY_MS).toISOString(),
       name: "warming-up",
     });
+
     const liveDir = join(
       configDir,
       "orgs",
@@ -306,6 +319,7 @@ describe("SkillCuratorService", () => {
       lastUsedAt: new Date(NOW.getTime() - 95 * DAY_MS).toISOString(),
       name: "cron-playbook",
     });
+
     await db.upsertAutomation({
       createdAt: NOW.toISOString(),
       definition: {
@@ -355,6 +369,7 @@ describe("SkillCuratorService", () => {
       lastUsedAt: new Date(NOW.getTime() - 95 * DAY_MS).toISOString(),
       name: "preview-me",
     });
+
     const liveDir = join(
       configDir,
       "orgs",
@@ -384,6 +399,7 @@ describe("SkillCuratorService", () => {
       lastUsedAt: new Date(NOW.getTime() - 95 * DAY_MS).toISOString(),
       name: "rollback-me",
     });
+
     const liveDir = join(
       configDir,
       "orgs",
@@ -393,6 +409,7 @@ describe("SkillCuratorService", () => {
       "skills",
       "rollback-me"
     );
+
     skillsService.unassignArchivedProfileSkill = async () => {
       throw new Error("db down");
     };
@@ -412,6 +429,7 @@ describe("SkillCuratorService", () => {
       lastUsedAt: new Date(NOW.getTime() - 95 * DAY_MS).toISOString(),
       name: "stuck-playbook",
     });
+
     const liveDir = join(
       configDir,
       "orgs",
@@ -421,6 +439,7 @@ describe("SkillCuratorService", () => {
       "skills",
       "stuck-playbook"
     );
+
     const archivedSkillMd = join(
       configDir,
       "orgs",
@@ -432,6 +451,7 @@ describe("SkillCuratorService", () => {
       "stuck-playbook",
       "SKILL.md"
     );
+
     skillsService.unassignArchivedProfileSkill = async () => {
       await mkdir(liveDir, { recursive: true });
       await writeFile(join(liveDir, "SKILL.md"), "collision\n");
@@ -450,9 +470,11 @@ describe("SkillCuratorService", () => {
     expect(await pathExists(archivedSkillMd)).toBe(true);
 
     const logDir = getOrgCuratorLogDir(ORG_ID);
+
     const runJson = JSON.parse(
       await readFile(join(logDir, "run.json"), "utf8")
     );
+
     expect(runJson.restoreMisses[0].skillId).toBe(skillId);
     const report = await readFile(join(logDir, "REPORT.md"), "utf8");
     expect(report).toContain(skillId);
@@ -467,15 +489,20 @@ describe("SkillCuratorService", () => {
       name: "once-only",
     });
     let release!: () => void;
+
     const hold = new Promise<void>((resolve) => {
       release = resolve;
     });
+
     let entered = 0;
+
     const original =
       skillsService.unassignArchivedProfileSkill.bind(skillsService);
+
     skillsService.unassignArchivedProfileSkill = async (...args) => {
       entered += 1;
       await hold;
+
       return original(...args);
     };
 
@@ -541,10 +568,12 @@ describe("SkillCuratorService", () => {
       skillsWriteApproval: true,
     });
     const cluster = await addOverlappingAgentCluster();
+
     const before = await readFile(
       join(cluster.winnerLiveDir, "SKILL.md"),
       "utf8"
     );
+
     const proposals = new SkillProposalService(db, skillsService);
     curator = new SkillCuratorService(db, skillsService, proposals, {
       generateMarkdown: stubGenerateMarkdown(),
@@ -584,10 +613,12 @@ describe("SkillCuratorService", () => {
     expect(result.consolidateApplied).toBe(1);
     expect(result.consolidateStaged).toBe(0);
     expect(await db.listSkillProposals(ORG_ID)).toHaveLength(0);
+
     const winnerMd = await readFile(
       join(cluster.winnerLiveDir, "SKILL.md"),
       "utf8"
     );
+
     expect(winnerMd).toContain("Merged body.");
     expect(await pathExists(cluster.loserLiveDir)).toBe(false);
     expect(
@@ -651,10 +682,12 @@ describe("SkillCuratorService", () => {
 
 async function bunWaitFor(predicate: () => boolean): Promise<void> {
   const deadline = Date.now() + 1000;
+
   while (!predicate()) {
     if (Date.now() > deadline) {
       throw new Error("timed out waiting for curator lock");
     }
+
     await Bun.sleep(5);
   }
 }

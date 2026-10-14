@@ -1,4 +1,7 @@
-import { join } from "node:path";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
 import { getToolExecutionEnv } from "../lib/ensure-process-path";
 
 export const CLI_SIGTERM_GRACE_MS = 2000;
@@ -14,6 +17,7 @@ const CLI_SETTLE_TIMEOUT_MS = 5000;
 
 function readPositiveEnvMs(name: string): number | undefined {
   const parsed = Number(process.env[name]);
+
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
@@ -21,6 +25,11 @@ export interface GlobalPackageInstallPlan {
   args: string[];
   command: string;
   displayCommand: string;
+  /**
+   * Child environment. Omitted means the shared tool-execution env, which is
+   * the whole server env; set it when the child runs code from a package.
+   */
+  env?: NodeJS.ProcessEnv;
 }
 
 export function detectNpmOrBun(): "npm" | "bun" {
@@ -54,8 +63,332 @@ export function buildGlobalPackageInstallPlan(
   };
 }
 
+const NPM_REGISTRY_URL = "https://registry.npmjs.org";
+
+/** An exact version. Ranges, dist-tags, and wildcards are refused. */
+const EXACT_PACKAGE_VERSION =
+  /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+
+/** Subresource Integrity with a hash length we accept (sha256 or stronger). */
+const PACKAGE_INTEGRITY = /^sha(?:256|384|512)-[A-Za-z0-9+/]+={0,2}$/;
+
+/** A registry that answers with more than this is not the registry we asked. */
+const MAX_PACKAGE_TARBALL_BYTES = 256 * 1024 * 1024;
+
+/**
+ * A package to install, named down to the exact version whose tarball hash we
+ * reviewed and pinned here. Install runs third-party lifecycle scripts with the
+ * server's privileges, so the artifact handed to the package manager is the one
+ * we checked rather than whatever the registry currently serves under a name.
+ */
+export interface PinnedNpmPackage {
+  /** `sha512-…` of the published tarball, as the registry reports it. */
+  integrity: string;
+  name: string;
+  /** Exact version. `latest`, `^1.2.3`, and `1.x` are refused. */
+  version: string;
+}
+
+export function assertPinnedNpmPackage(pkg: PinnedNpmPackage): void {
+  if (!EXACT_PACKAGE_VERSION.test(pkg.version)) {
+    throw new Error(
+      `${pkg.name} must be pinned to an exact version; "${pkg.version}" is a range or a dist-tag.`
+    );
+  }
+
+  if (!PACKAGE_INTEGRITY.test(pkg.integrity)) {
+    throw new Error(
+      `${pkg.name}@${pkg.version} is missing a sha256-or-stronger integrity hash.`
+    );
+  }
+}
+
+/**
+ * Plain HTTP is only acceptable to a registry on this host: that is a mirror
+ * the operator started, and it cannot be downgraded on the way there.
+ */
+function assertRegistryUrl(url: string, label: string): URL {
+  let parsed: URL;
+
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Pinned install ${label} URL is not a URL: ${url}`);
+  }
+
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(
+    parsed.hostname
+  );
+
+  if (parsed.protocol !== "https:" && !loopback) {
+    throw new Error(
+      `Pinned install ${label} must be served over https: ${url}`
+    );
+  }
+
+  return parsed;
+}
+
+export function buildPinnedPackageMetadataUrl(
+  pkg: PinnedNpmPackage,
+  registry: string = NPM_REGISTRY_URL
+): string {
+  assertPinnedNpmPackage(pkg);
+
+  const base = assertRegistryUrl(registry, "registry");
+  base.pathname = `${base.pathname.replace(/\/+$/, "")}/${encodeURIComponent(pkg.name)}/${encodeURIComponent(pkg.version)}`;
+
+  return base.toString();
+}
+
+/**
+ * Constant-time comparison: what the registry or the tarball actually produced
+ * is checked against the expected hash in full, never short-circuited on the
+ * first differing byte.
+ */
+function assertIntegrity(
+  actual: string,
+  expected: string,
+  message: string
+): void {
+  const actualBytes = Buffer.from(actual);
+  const expectedBytes = Buffer.from(expected);
+
+  if (
+    actualBytes.length !== expectedBytes.length ||
+    !timingSafeEqual(actualBytes, expectedBytes)
+  ) {
+    throw new Error(message);
+  }
+}
+
+export interface PinnedPackageDist {
+  integrity: string;
+  tarball: string;
+}
+
+/**
+ * Reads the tarball coordinates out of registry metadata, refusing anything
+ * that is not the exact package and hash we pinned. A compromised or
+ * misconfigured registry therefore cannot redirect the install to other code.
+ */
+export function readPinnedPackageDist<T>(
+  payload: T,
+  pkg: PinnedNpmPackage
+): PinnedPackageDist {
+  assertPinnedNpmPackage(pkg);
+
+  const record = readRecord(payload);
+  const name = record?.get("name");
+  const version = record?.get("version");
+  const dist = readRecord(record?.get("dist"));
+  const integrity = readString(dist?.get("integrity"));
+  const tarball = readString(dist?.get("tarball"));
+
+  if (name !== pkg.name || version !== pkg.version) {
+    throw new Error(
+      `Registry served ${String(name)}@${String(version)} for pinned ${pkg.name}@${pkg.version}.`
+    );
+  }
+
+  if (!(integrity && tarball)) {
+    throw new Error("Registry metadata is missing tarball integrity details.");
+  }
+
+  assertIntegrity(
+    integrity,
+    pkg.integrity,
+    `${pkg.name}@${pkg.version} registry integrity does not match the pinned hash.`
+  );
+
+  const tarballUrl = assertRegistryUrl(tarball, "tarball");
+
+  return { integrity, tarball: tarballUrl.toString() };
+}
+
+/**
+ * Subresource Integrity check over the bytes we are about to install, so a
+ * tampered or substituted tarball fails here instead of running.
+ */
+export function verifyPackageTarballIntegrity(
+  bytes: Uint8Array,
+  expectedIntegrity: string
+): void {
+  const separator = expectedIntegrity.indexOf("-");
+  const algorithm = expectedIntegrity.slice(0, separator);
+  const actual = `${algorithm}-${createHash(algorithm).update(bytes).digest("base64")}`;
+
+  assertIntegrity(
+    actual,
+    expectedIntegrity,
+    `Downloaded tarball failed its ${algorithm} integrity check.`
+  );
+}
+
+export interface PinnedPackageTarball {
+  /** Removes the temp copy. Safe to call more than once. */
+  cleanup: () => Promise<void>;
+  path: string;
+}
+
+/**
+ * Downloads the pinned tarball and returns its path only after the bytes match
+ * the pinned hash. Everything here runs before the package manager is invoked,
+ * so a mismatch means nothing is installed at all.
+ */
+export async function downloadPinnedPackageTarball(
+  pkg: PinnedNpmPackage,
+  options: {
+    onProgress?: (message: string) => void;
+    registry?: string;
+    signal?: AbortSignal;
+  } = {}
+): Promise<PinnedPackageTarball> {
+  const metadataUrl = buildPinnedPackageMetadataUrl(pkg, options.registry);
+  options.onProgress?.(`Resolving pinned ${pkg.name}@${pkg.version}.`);
+
+  const metadataResponse = await fetch(metadataUrl, {
+    headers: { accept: "application/json" },
+    signal: options.signal,
+  });
+
+  if (!metadataResponse.ok) {
+    throw new Error(
+      `Registry metadata request for ${pkg.name}@${pkg.version} failed (${metadataResponse.status}).`
+    );
+  }
+
+  const dist = readPinnedPackageDist(await metadataResponse.json(), pkg);
+  options.onProgress?.(`Downloading ${pkg.name}@${pkg.version}.`);
+
+  const tarballResponse = await fetch(dist.tarball, { signal: options.signal });
+
+  if (!tarballResponse.ok) {
+    throw new Error(
+      `Tarball download for ${pkg.name}@${pkg.version} failed (${tarballResponse.status}).`
+    );
+  }
+
+  const declaredLength = Number(tarballResponse.headers.get("content-length"));
+
+  if (
+    Number.isFinite(declaredLength) &&
+    declaredLength > MAX_PACKAGE_TARBALL_BYTES
+  ) {
+    throw new Error(
+      `Tarball for ${pkg.name}@${pkg.version} is larger than the ${MAX_PACKAGE_TARBALL_BYTES}-byte install limit.`
+    );
+  }
+
+  const bytes = new Uint8Array(await tarballResponse.arrayBuffer());
+
+  if (bytes.byteLength > MAX_PACKAGE_TARBALL_BYTES) {
+    throw new Error(
+      `Tarball for ${pkg.name}@${pkg.version} is larger than the ${MAX_PACKAGE_TARBALL_BYTES}-byte install limit.`
+    );
+  }
+
+  verifyPackageTarballIntegrity(bytes, dist.integrity);
+  options.onProgress?.(
+    `Verified ${pkg.name}@${pkg.version} against ${dist.integrity}.`
+  );
+
+  const dir = await mkdtemp(join(tmpdir(), "nakama-pinned-pkg-"));
+
+  const file = join(
+    dir,
+    `${pkg.name.replace(/[^A-Za-z0-9.-]/g, "+")}-${pkg.version}.tgz`
+  );
+
+  await writeFile(file, bytes);
+
+  return {
+    cleanup: () => rm(dir, { force: true, recursive: true }),
+    path: file,
+  };
+}
+
+/**
+ * The install child runs package lifecycle scripts, so it gets an environment
+ * of what a package installer needs and nothing else: in particular none of
+ * the server's provider keys, session secrets, or `npm_config_*` auth tokens.
+ */
+const INSTALL_ENV_PASSTHROUGH = new Set([
+  "all_proxy",
+  "bun_install",
+  "bun_install_bin",
+  "bun_install_global_dir",
+  "home",
+  "http_proxy",
+  "https_proxy",
+  "lang",
+  "lc_all",
+  "no_proxy",
+  "node_extra_ca_certs",
+  "npm_config_cache",
+  "npm_config_cafile",
+  "npm_config_prefix",
+  "npm_config_registry",
+  "npm_config_userconfig",
+  "path",
+  "shell",
+  "ssl_cert_dir",
+  "ssl_cert_file",
+  "temp",
+  "tmp",
+  "tmpdir",
+  "userprofile",
+  "xdg_cache_home",
+  "xdg_config_home",
+  "xdg_data_home",
+]);
+
+export function buildRestrictedInstallEnv(
+  env: NodeJS.ProcessEnv = getToolExecutionEnv()
+): NodeJS.ProcessEnv {
+  const restricted: NodeJS.ProcessEnv = {};
+
+  for (const [key, value] of Object.entries(env)) {
+    if (value !== undefined && INSTALL_ENV_PASSTHROUGH.has(key.toLowerCase())) {
+      restricted[key] = value;
+    }
+  }
+
+  return restricted;
+}
+
+/**
+ * Installs an already-verified tarball rather than a registry spec, so the
+ * package manager resolves nothing of its own. `bun` still needs `--trust` for
+ * this package's `postinstall` (it fetches the native launcher); trust here is
+ * scoped to the hash-checked tarball rather than to a name.
+ */
+export function buildPinnedPackageInstallPlan(
+  tarballPath: string,
+  packageManager: "npm" | "bun" = detectNpmOrBun()
+): GlobalPackageInstallPlan {
+  const tarball = basename(tarballPath);
+
+  if (packageManager === "bun") {
+    return {
+      args: ["install", "-g", "--trust", tarballPath],
+      command: "bun",
+      displayCommand: `bun install -g --trust ${tarball}`,
+      env: buildRestrictedInstallEnv(),
+    };
+  }
+
+  return {
+    args: ["install", "-g", tarballPath],
+    command: "npm",
+    displayCommand: `npm install -g ${tarball}`,
+    env: buildRestrictedInstallEnv(),
+  };
+}
+
 function extractCliVersion(stdout: string, stderr: string): string | null {
   const output = `${stdout}\n${stderr}`.trim();
+
   if (!output) {
     return null;
   }
@@ -68,6 +401,7 @@ export function summarizeInstallOutput(output: string): string {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
+
   const meaningful =
     lines.find((line) => /^error:/i.test(line)) ??
     lines.find((line) =>
@@ -76,6 +410,7 @@ export function summarizeInstallOutput(output: string): string {
     lines.find((line) => !/^bun (?:add|install) v/i.test(line)) ??
     lines[0] ??
     output.trim();
+
   return meaningful.length > 180
     ? `${meaningful.slice(0, 177)}...`
     : meaningful;
@@ -88,6 +423,7 @@ export async function probeCliVersion(command: string): Promise<{
 }> {
   const { spawn } = await import("node:child_process");
   const timeoutMs = readPositiveEnvMs("NAKAMA_CLI_PROBE_TIMEOUT_MS") ?? 5000;
+
   const sigtermGraceMs =
     readPositiveEnvMs("NAKAMA_CLI_SIGTERM_GRACE_MS") ?? CLI_SIGTERM_GRACE_MS;
 
@@ -106,6 +442,7 @@ export async function probeCliVersion(command: string): Promise<{
         missing: true,
         version: null,
       });
+
       return;
     }
 
@@ -130,7 +467,7 @@ export async function probeCliVersion(command: string): Promise<{
       clearTimeout(killTimeoutId);
       resolve({
         installed: false,
-        missing: (error as NodeJS.ErrnoException).code === "ENOENT",
+        missing: getNodeErrorCode(error) === "ENOENT",
         version: null,
       });
     });
@@ -175,10 +512,13 @@ export async function runTimedInstallCommand(
       // has no process groups, and a detached `.cmd` shim there loses its
       // piped stdout, so killTree uses taskkill instead.
       detached: process.platform !== "win32",
-      env: getToolExecutionEnv(),
+      // A plan that runs package code carries its own allowlisted env; every
+      // other plan keeps the shared tool-execution env.
+      env: plan.env ?? getToolExecutionEnv(),
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
+
     let stdout = "";
     let stderr = "";
     let timedOut = false;
@@ -228,13 +568,16 @@ export async function runTimedInstallCommand(
           ["/PID", String(child.pid), "/T", "/F"],
           { stdio: "ignore", windowsHide: true }
         );
+
         killer.once("error", () => child.kill("SIGKILL"));
+
         return;
       }
 
       if (child.pid) {
         try {
           process.kill(-child.pid, killSignal);
+
           return;
         } catch {
           // Group already reaped, fall through to the direct child.
@@ -255,6 +598,7 @@ export async function runTimedInstallCommand(
       // whatever the installer left running. There is nothing left to wait for.
       if (exited) {
         settleAsTimedOut();
+
         return;
       }
 
@@ -334,6 +678,7 @@ export async function runTimedInstallCommand(
       if (stdoutBuffer.trim()) {
         emitLine("stdout", stdoutBuffer.trim());
       }
+
       if (stderrBuffer.trim()) {
         emitLine("stderr", stderrBuffer.trim());
       }
@@ -352,6 +697,7 @@ export async function runTimedInstallCommand(
       if (stdoutBuffer.trim()) {
         emitLine("stdout", stdoutBuffer.trim());
       }
+
       if (stderrBuffer.trim()) {
         emitLine("stderr", stderrBuffer.trim());
       }
@@ -364,4 +710,27 @@ export async function runTimedInstallCommand(
       });
     });
   });
+}
+
+function readRecord<T>(value: T): Map<string, unknown> | undefined {
+  if (!(value instanceof Object) || Array.isArray(value)) {
+    return;
+  }
+
+  return new Map(Object.entries(value));
+}
+
+function readString<T>(value: T): string | undefined {
+  // SAFETY: The object tag check confirms that the input uses the string representation.
+  return Object.prototype.toString.call(value) === "[object String]"
+    ? (value as T & string)
+    : undefined;
+}
+
+function getNodeErrorCode<T>(error: T): string | undefined {
+  if (!(error instanceof Error && "code" in error)) {
+    return;
+  }
+
+  return readString(error.code);
 }

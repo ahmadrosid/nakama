@@ -12,6 +12,7 @@ interface WhatsAppSettingsCardProps {
 
 export function WhatsAppSettingsCard(props: WhatsAppSettingsCardProps) {
   const { activeOrg } = useAuth();
+
   return <WhatsAppSettingsCardForOrg key={activeOrg?.id} {...props} />;
 }
 
@@ -32,6 +33,7 @@ function WhatsAppSettingsCardForOrg({
 
   const allowedPhonesDialog = (
     <WhatsAppAllowedPhonesDialog
+      allowedPhoneDetails={card.allowedPhoneDetails}
       allowedPhones={card.allowedPhones}
       onAllowedPhonesChange={card.onAllowedPhonesChange}
       onError={card.onError}
@@ -51,10 +53,10 @@ function WhatsAppSettingsCardForOrg({
       bridgeStarting={card.bridgeStarting}
       canSave={card.canSave}
       configured={card.configured}
+      connected={card.connected}
       copied={card.copied}
       embedded={embedded}
       formError={card.formError}
-      headerSubtitle={card.headerSubtitle}
       linkedNumber={card.linkedNumber}
       linkingAfterScan={card.linkingAfterScan}
       loadError={card.loadError}
@@ -75,7 +77,6 @@ function WhatsAppSettingsCardForOrg({
       savePending={card.savePending}
       showQr={card.showQr}
       showReconnect={card.showReconnect}
-      statusBadge={card.statusBadge}
       statusLine={card.statusLine}
       worker={card.worker}
     />

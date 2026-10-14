@@ -28,6 +28,7 @@ describe("sendDiscordArtifactTool", () => {
       { path: "report.pdf" },
       { channel: "web", orgId: "org", profileId: "profile" }
     );
+
     expect(result).toEqual({
       error: "send_discord_artifact is only available in Discord chats.",
       ok: false,
@@ -64,19 +65,23 @@ describe("sendDiscordArtifactTool", () => {
 test("WhatsApp preparation validates scope and pins bounded file contents", async () => {
   const home = await mkdtemp(path.join(tmpdir(), "nakama-whatsapp-tool-"));
   process.env.NAKAMA_CONFIG_DIR = home;
+
   try {
     const context = {
       channel: "whatsapp" as const,
       orgId: "org",
       profileId: "profile",
     };
+
     const dir = getProfileArtifactsDir("org", "profile");
     await mkdir(dir, { recursive: true });
     await writeFile(path.join(dir, "report.csv"), "a,b\n1,2");
+
     const result = await sendWhatsAppArtifactTool.run(
       { path: "artifacts/report.csv" },
       context
     );
+
     expect(result).toMatchObject({
       ok: true,
       path: "report.csv",
@@ -84,6 +89,7 @@ test("WhatsApp preparation validates scope and pins bounded file contents", asyn
       sizeBytes: 7,
       status: "prepared",
     });
+
     for (const ctx of [
       {},
       { ...context, channel: "web" as const },
@@ -94,6 +100,7 @@ test("WhatsApp preparation validates scope and pins bounded file contents", asyn
         await sendWhatsAppArtifactTool.run({ path: "report.csv" }, ctx)
       ).toMatchObject({ ok: false });
     }
+
     for (const name of [
       "../report.csv",
       "/report.csv",
@@ -105,6 +112,7 @@ test("WhatsApp preparation validates scope and pins bounded file contents", asyn
         await sendWhatsAppArtifactTool.run({ path: name }, context)
       ).toMatchObject({ ok: false });
     }
+
     await writeFile(path.join(home, "secret.csv"), "secret");
     await symlink(path.join(home, "secret.csv"), path.join(dir, "escape.csv"));
     expect(

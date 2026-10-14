@@ -1,6 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { NakamaClient, StreamHandlers } from "@nakama/client";
+import type {
+  NakamaClient,
+  SendMessageArg,
+  SendStreamOptions,
+  StreamHandlers,
+} from "@nakama/client";
 import {
   assertBridgeClientMethods,
   parseListProfilesResponse,
@@ -48,6 +53,10 @@ export function createMockClient(
     getMessagesError?: Error;
   } = {}
 ) {
+  const profileIds: string[] = [];
+  const streamInputs: SendMessageArg[] = [];
+  const streamOptions: Array<SendStreamOptions | undefined> = [];
+
   const calls = {
     compact: 0,
     createChatSession: 0,
@@ -55,36 +64,41 @@ export function createMockClient(
     getMessages: 0,
     listProfiles: 0,
     listUserOrgs: 0,
-    profileIds: [] as string[],
+    profileIds,
     publishProfileArtifactShare: 0,
     readProfileArtifactContent: 0,
     sendStream: 0,
     setOrgId: 0,
-    streamInputs: [] as unknown[],
+    streamInputs,
+    streamOptions,
   };
+
   const orgIds: string[] = [];
 
   let streamControl: MockStreamControl | null = null;
 
   const sendStream = async (
-    _input: unknown,
-    handlers: unknown,
-    streamOptions?: { signal?: AbortSignal }
+    _input: SendMessageArg,
+    streamHandlers: StreamHandlers,
+    streamOptions?: SendStreamOptions
   ) => {
     calls.sendStream += 1;
     calls.streamInputs.push(_input);
+    calls.streamOptions.push(streamOptions);
 
-    const streamHandlers = handlers as StreamHandlers;
     if (!options.streaming) {
       for (const event of options.toolEvents ?? []) {
         streamHandlers.onToolEnd?.(event);
       }
+
       if (options.streamError) {
         throw options.streamError;
       }
+
       if (options.done !== false) {
         streamHandlers.onDone?.();
       }
+
       return options.reply ?? "Agent reply";
     }
 
@@ -96,6 +110,7 @@ export function createMockClient(
           if (settled) {
             return;
           }
+
           settled = true;
           streamHandlers.onDone?.();
           resolve(reply);
@@ -104,6 +119,7 @@ export function createMockClient(
           if (settled) {
             return;
           }
+
           settled = true;
           reject(error);
         },
@@ -118,6 +134,7 @@ export function createMockClient(
           if (settled) {
             return;
           }
+
           settled = true;
           reject(new DOMException("Aborted", "AbortError"));
         },
@@ -175,6 +192,7 @@ export function createMockClient(
     clear: async () => {},
     compact: async () => {
       calls.compact += 1;
+
       return {
         action: "summarized" as const,
         messagesAfter: 4,
@@ -184,9 +202,11 @@ export function createMockClient(
     createAutomation: async () => ({}),
     getMessages: async () => {
       calls.getMessages += 1;
+
       if (options.getMessagesError) {
         throw options.getMessagesError;
       }
+
       return options.messages ?? [];
     },
     id: "session_test",
@@ -197,14 +217,16 @@ export function createMockClient(
 
   const orgs = options.orgs ?? createDefaultTestOrgs();
 
-  const client = {
+  const clientFixture = {
     createChatSession: () => {
       calls.createChatSession += 1;
+
       return session;
     },
     createSession: async (_channel, options = {}) => {
       calls.createSession += 1;
       calls.profileIds.push(options.profileId ?? "default");
+
       return session;
     },
     forOrg: () => client,
@@ -218,16 +240,19 @@ export function createMockClient(
     health: async () => ({ ok: true, providerConfigured: false }),
     listProfiles: async () => {
       calls.listProfiles += 1;
+
       return parseListProfilesResponse({
         profiles: options.profiles ?? [createDefaultProfileSummary()],
       });
     },
     listUserOrgs: async () => {
       calls.listUserOrgs += 1;
+
       return parseListUserOrgsResponse({ orgs });
     },
     publishProfileArtifactShare: async () => {
       calls.publishProfileArtifactShare += 1;
+
       return {
         id: "share_test",
         refreshed: false,
@@ -239,6 +264,7 @@ export function createMockClient(
     },
     readProfileArtifactContent: async () => {
       calls.readProfileArtifactContent += 1;
+
       return {
         contentType: "text/markdown",
         data: new TextEncoder().encode("# Report").buffer,
@@ -248,7 +274,10 @@ export function createMockClient(
       calls.setOrgId += 1;
       orgIds.push(orgId ?? "");
     },
-  } as unknown as NakamaClient;
+  };
+
+  // SAFETY: Tests call only the client methods supplied by this mock.
+  const client = clientFixture as NakamaClient;
 
   assertBridgeClientMethods(client);
 
@@ -262,6 +291,7 @@ export function createMockClient(
 
 function createDefaultProfileSummary(): ProfileSummary {
   const now = new Date().toISOString();
+
   return {
     createdAt: now,
     hasAvatar: false,
@@ -282,6 +312,8 @@ export async function writeWhatsAppConfigIni(
     phoneNumber: string;
     profileId?: string;
     pairingCode?: string | null;
+    /** Defaults to a live window so a fixture code can actually be used. */
+    pairingCodeExpiresAt?: string | null;
     pairedJid?: string | null;
     allowedPhones?: string[];
     allowUnpairedGroupMembers?: boolean;
@@ -299,6 +331,10 @@ export async function writeWhatsAppConfigIni(
 
   if (config.pairingCode) {
     lines.push(`pairing_code=${config.pairingCode}`);
+  }
+
+  if (config.pairingCodeExpiresAt) {
+    lines.push(`pairing_code_expires_at=${config.pairingCodeExpiresAt}`);
   }
 
   if (config.pairedJid) {

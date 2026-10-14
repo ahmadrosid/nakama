@@ -192,16 +192,14 @@
   margin-top: 0;
 }
 
-.timelineWithReasoning::after {
+.thinkingMarker {
   position: absolute;
-  top: 7px;
+  top: 0;
   left: 7px;
-  width: 7px;
-  height: 7px;
-  content: "";
-  background: var(--muted-foreground);
-  border-radius: 50%;
-  opacity: 0.5;
+  width: 14px;
+  height: 14px;
+  color: var(--muted-foreground);
+  opacity: 0.8;
   transform: translateX(-50%);
 }
 

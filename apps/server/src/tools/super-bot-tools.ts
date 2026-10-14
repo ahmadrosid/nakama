@@ -3,6 +3,7 @@ import {
   emptyObjectSchema,
   getCustomToolsDir,
   getProfileSoulDir,
+  type JsonValue,
   loadSoulStack,
   type ToolContext,
   type ToolDefinition,
@@ -19,6 +20,7 @@ import {
   loadToolSetup,
   saveToolSetup,
 } from "../services/custom-tool-shared";
+import type { PluginService } from "../services/plugin-service";
 import type { ProfileService } from "../services/profile-service";
 import {
   PROFILE_UPDATE_CONFIRMATION_MESSAGE,
@@ -32,14 +34,19 @@ const SUPPORTED_SOUL_FILE_NAMES = [
   "INSTRUCTIONS.md",
   "MEMORY.md",
 ] as const;
+
 type SupportedSoulFileName = (typeof SUPPORTED_SOUL_FILE_NAMES)[number];
 
-const SOUL_STACK_KEY_TO_FILE_NAME = {
-  instructions: "INSTRUCTIONS.md",
-  memory: "MEMORY.md",
-  soul: "SOUL.md",
-  style: "STYLE.md",
-} as const;
+const SuperBotInputSchema = z.record(z.string(), z.json());
+
+type SuperBotInput = z.infer<typeof SuperBotInputSchema>;
+
+const SOUL_STACK_FILES = [
+  { fileName: "INSTRUCTIONS.md", key: "instructions" },
+  { fileName: "MEMORY.md", key: "memory" },
+  { fileName: "SOUL.md", key: "soul" },
+  { fileName: "STYLE.md", key: "style" },
+] as const;
 
 const soulFilesParameterSchema = {
   additionalProperties: false,
@@ -70,9 +77,58 @@ export function createSuperBotTools(
   resolveInheritedModel?: (
     model: string | null,
     context: ToolContext
-  ) => Promise<string | null>
+  ) => Promise<string | null>,
+  getPluginService?: () => PluginService | null
 ): ToolDefinition[] {
   return [
+    {
+      description:
+        "Show the plugin draft card in chat after plugin-drafts/<draftId> builds. The card tracks review, install, enable, and profile access for the admin. Call once per finished draft, then end the turn.",
+      name: "submit_plugin_draft",
+      parameters: {
+        additionalProperties: false,
+        properties: {
+          draftId: {
+            description: "Folder name under plugin-drafts/.",
+            type: "string",
+          },
+        },
+        required: ["draftId"],
+        type: "object",
+      },
+      async run(input, context) {
+        const orgId = requireOrgId(context);
+        const profileId = context.profileId?.trim();
+        const plugins = getPluginService?.();
+
+        if (!profileId) {
+          throw new Error("A profile is required to submit a plugin draft.");
+        }
+
+        if (!plugins) {
+          throw new Error("Plugins are not available on this server.");
+        }
+
+        const { draftId } = z
+          .object({ draftId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/) })
+          .strict()
+          .parse(input);
+
+        const draft = { draftId, orgId, profileId };
+        const preview = await plugins.describeLocalPlugin(draft);
+
+        return {
+          ...draft,
+          actions: preview.contributions.actionKeys,
+          digest: preview.digest,
+          fileCount: preview.fileCount,
+          name: preview.manifest.name,
+          pluginId: preview.manifest.id,
+          type: "plugin_draft_ready",
+          version: preview.manifest.version,
+        };
+      },
+    },
     {
       description:
         "Present a custom tool build plan for one-click approval, optional API key, and agent assignment. Call before writing code, then end the turn. Never accept API keys in tool inputs or chat. After approval, build and register with create_tool using the returned setupId. Works for any JavaScript or Python tool.",
@@ -99,9 +155,11 @@ export function createSuperBotTools(
       },
       async run(input, context) {
         const orgId = requireOrgId(context);
+
         if (!context.sessionId) {
           throw new Error("A chat session is required to propose a tool.");
         }
+
         const parsed = z
           .object({
             description: z.string().trim().min(1).max(2000),
@@ -112,16 +170,20 @@ export function createSuperBotTools(
           })
           .strict()
           .parse(input);
+
         if (parsed.profileId) {
           await profileService.getProfile(orgId, parsed.profileId);
         }
+
         const plan = {
           ...parsed,
           id: crypto.randomUUID(),
           sessionId: context.sessionId,
           status: "pending" as const,
         };
+
         await saveToolSetup(orgId, plan);
+
         return { orgId, setupId: plan.id, type: "tool_setup_required" };
       },
     },
@@ -147,8 +209,9 @@ export function createSuperBotTools(
         type: "object",
       },
       async run(input, context: ToolContext) {
+        const toolInput = SuperBotInputSchema.parse(input);
         const orgId = requireOrgId(context);
-        const profileId = readString(input, "profileId");
+        const profileId = readString(toolInput, "profileId");
 
         if (!profileId) {
           throw new Error("profileId is required.");
@@ -158,12 +221,11 @@ export function createSuperBotTools(
         const stack = await loadSoulStack(getProfileSoulDir(orgId, profileId));
         const soulFiles: Partial<Record<SupportedSoulFileName, string>> = {};
 
-        for (const [key, fileName] of Object.entries(
-          SOUL_STACK_KEY_TO_FILE_NAME
-        )) {
-          const content = stack.files[key as keyof typeof stack.files];
-          if (typeof content === "string") {
-            soulFiles[fileName as SupportedSoulFileName] = content;
+        for (const { fileName, key } of SOUL_STACK_FILES) {
+          const content = stack.files[key];
+
+          if (content) {
+            soulFiles[fileName] = content;
           }
         }
 
@@ -201,30 +263,33 @@ export function createSuperBotTools(
         type: "object",
       },
       async run(input, context: ToolContext) {
-        const name = readString(input, "name");
+        const toolInput = SuperBotInputSchema.parse(input);
+        const name = readString(toolInput, "name");
 
         if (!name) {
           throw new Error("name is required.");
         }
 
         const orgId = requireOrgId(context);
-        let model = readOptionalString(input, "model");
+        let model = readOptionalString(toolInput, "model");
+
         if (model === undefined && context.profileId) {
           const source = await profileService.getProfile(
             orgId,
             context.profileId
           );
+
           model = resolveInheritedModel
             ? await resolveInheritedModel(source.profile.model, context)
             : source.profile.model;
         }
 
         const result = await profileService.createProfile(orgId, {
-          isSuper: readBoolean(input, "isSuper") ?? false,
+          isSuper: readBoolean(toolInput, "isSuper") ?? false,
           model,
           name,
-          soulFiles: readSoulFiles(input),
-          systemPrompt: readString(input, "systemPrompt") ?? undefined,
+          soulFiles: readSoulFiles(toolInput),
+          systemPrompt: readString(toolInput, "systemPrompt") ?? undefined,
         });
 
         return {
@@ -255,9 +320,10 @@ export function createSuperBotTools(
         type: "object",
       },
       async run(input, context: ToolContext) {
-        const profileId = readString(input, "profileId");
-        const systemPrompt = readStringAllowEmpty(input, "systemPrompt");
-        const soulFiles = readSoulFiles(input);
+        const toolInput = SuperBotInputSchema.parse(input);
+        const profileId = readString(toolInput, "profileId");
+        const systemPrompt = readStringAllowEmpty(toolInput, "systemPrompt");
+        const soulFiles = readSoulFiles(toolInput);
 
         if (!profileId) {
           throw new Error("profileId is required.");
@@ -272,9 +338,11 @@ export function createSuperBotTools(
         }
 
         const request: UpdateProfileRequest = {};
+
         if (systemPrompt !== null) {
           request.systemPrompt = systemPrompt;
         }
+
         if (soulFiles !== undefined) {
           request.soulFiles = soulFiles;
         }
@@ -304,8 +372,9 @@ export function createSuperBotTools(
         type: "object",
       },
       async run(input, context: ToolContext) {
-        const profileId = readString(input, "profileId");
-        const toolId = readString(input, "toolId");
+        const toolInput = SuperBotInputSchema.parse(input);
+        const profileId = readString(toolInput, "profileId");
+        const toolId = readString(toolInput, "toolId");
 
         if (!(profileId && toolId)) {
           throw new Error("profileId and toolId are required.");
@@ -326,7 +395,9 @@ export function createSuperBotTools(
             source: "super_bot",
           }
         );
+
         sessionState.markToolAssigned(context.sessionId, toolId);
+
         return result;
       },
     },
@@ -336,9 +407,11 @@ export function createSuperBotTools(
       parameters: emptyObjectSchema(),
       async run(_input, context) {
         const orgId = context.orgId?.trim();
+
         if (!orgId) {
           return { tools: [] };
         }
+
         return profileService.listTools(orgId);
       },
     },
@@ -352,7 +425,7 @@ export function createSuperBotTools(
           description: { description: "What the tool does.", type: "string" },
           handlerConfig: {
             additionalProperties: true,
-            description: `Write the module with write_file using an absolute path under ${getCustomToolsDir()} before registering; omit cwd. modulePath: filename relative to that directory, ending in .js or .py. JavaScript (preferred): export async function run(input, context). Python: def run(input, context) plus a __main__ harness reading JSON from sys.stdin and writing JSON to sys.stdout. parameters: input JSON schema with properties and required fields; exported JS parameters are ignored. Validate inputs; return JSON-serializable results; log only to stderr. Profile files: context.workspaceRoot (JS) or NAKAMA_WORKSPACE_ROOT (Python). requiresApiKey: true only if needed; read NAKAMA_TOOL_API_KEY at runtime, never put keys in inputs/source/output. Direct users to the web chat Configure card, then retry.`,
+            description: `Write the module with write_file using an absolute path under ${getCustomToolsDir("{orgId}")} (substitute your organization id; a missing-module error from this tool states the exact path) before registering; omit cwd. modulePath: filename relative to that directory, ending in .js or .py. JavaScript (preferred): export async function run(input, context). Python: def run(input, context) plus a __main__ harness reading JSON from sys.stdin and writing JSON to sys.stdout. parameters: input JSON schema with properties and required fields; exported JS parameters are ignored. Validate inputs; return JSON-serializable results; log only to stderr. Profile files: context.workspaceRoot (JS) or NAKAMA_WORKSPACE_ROOT (Python). requiresApiKey: true only if needed; read NAKAMA_TOOL_API_KEY at runtime, never put keys in inputs/source/output. env: for other settings (base URL, account id, extra keys), list [{ name: "UPPER_SNAKE_CASE", secret: true|false }] and read process.env[name] (JS) or os.environ[name] (Python); names may not start with NAKAMA_, NODE_, PYTHON, LD_ or be PATH/HOME. An admin fills env values in the tool playground Configuration card. Direct users to the web chat Configure card, then retry.`,
             type: "object",
           },
           handlerType: {
@@ -370,10 +443,13 @@ export function createSuperBotTools(
         type: "object",
       },
       async run(input, context: ToolContext) {
-        const setupId = readString(input, "setupId");
+        const toolInput = SuperBotInputSchema.parse(input);
+        const setupId = readString(toolInput, "setupId");
+
         const setup = setupId
           ? await loadToolSetup(requireOrgId(context), setupId)
           : null;
+
         if (
           setup &&
           (setup.sessionId !== context.sessionId || setup.status === "pending")
@@ -382,6 +458,7 @@ export function createSuperBotTools(
             "Approve this tool's setup card in the original chat before building it."
           );
         }
+
         if (setup?.status === "ready") {
           return {
             profileId: setup.profileId,
@@ -389,15 +466,17 @@ export function createSuperBotTools(
             type: "tool_setup_ready",
           };
         }
-        const name = setup?.name ?? readString(input, "name");
+
+        const name = setup?.name ?? readString(toolInput, "name");
+
         const description =
-          setup?.description ?? readString(input, "description");
+          setup?.description ?? readString(toolInput, "description");
 
         if (!(name && description)) {
           throw new Error("name and description are required.");
         }
 
-        const requestedHandlerType = readString(input, "handlerType");
+        const requestedHandlerType = readString(toolInput, "handlerType");
         const handlerType = requestedHandlerType ?? "javascript";
 
         if (!isCustomToolType(handlerType)) {
@@ -407,40 +486,44 @@ export function createSuperBotTools(
         }
 
         const handler = CUSTOM_TOOL_HANDLERS[handlerType];
-        const rawHandlerConfig = readObject(input, "handlerConfig");
-        const handlerConfig =
-          rawHandlerConfig &&
-          typeof rawHandlerConfig === "object" &&
-          !Array.isArray(rawHandlerConfig)
-            ? ({ ...rawHandlerConfig } as Record<string, unknown>)
-            : {};
+        const rawHandlerConfig = readObject(toolInput, "handlerConfig");
+
+        const parsedHandlerConfig = z
+          .record(z.string(), z.json())
+          .safeParse(rawHandlerConfig);
+
+        const handlerConfig = parsedHandlerConfig.success
+          ? { ...parsedHandlerConfig.data }
+          : {};
+
         if (setup) {
           handlerConfig.requiresApiKey = setup.requiresApiKey;
         }
+
         const modulePath = readModulePath(handlerConfig);
 
         if (!modulePath?.endsWith(handler.extension)) {
           throw new Error(
-            `${handlerType} tools require handlerConfig.modulePath ending in "${handler.extension}". Write the module with write_file to ${getCustomToolsDir()} first.`
+            `${handlerType} tools require handlerConfig.modulePath ending in "${handler.extension}". Write the module with write_file to ${getCustomToolsDir(requireOrgId(context))} first.`
           );
         }
 
-        await handler.validateModule(modulePath);
+        await handler.validateModule(modulePath, requireOrgId(context));
 
         const tool = setup?.toolId
-          ? (await profileService.getTool(setup.toolId)).tool
-          : await profileService.createTool({
-              description,
-              handlerConfig,
-              handlerType,
-              name,
-            });
+          ? (await profileService.getTool(setup.toolId, requireOrgId(context)))
+              .tool
+          : await profileService.createTool(
+              { description, handlerConfig, handlerType, name },
+              requireOrgId(context)
+            );
 
         sessionState.markToolCreated(context.sessionId, tool.id);
 
         if (setup) {
           const orgId = requireOrgId(context);
           await saveToolSetup(orgId, { ...setup, toolId: tool.id });
+
           if (setup.profileId) {
             await profileService.assignTool(
               orgId,
@@ -452,7 +535,9 @@ export function createSuperBotTools(
               }
             );
           }
+
           await completeToolSetup(orgId, setup, tool.id);
+
           return {
             profileId: setup.profileId,
             tool,
@@ -461,9 +546,18 @@ export function createSuperBotTools(
           };
         }
 
+        const storedHandlerConfig = z
+          .record(z.string(), z.json())
+          .safeParse(tool.handlerConfig);
+
         if (
-          (tool.handlerConfig as Record<string, unknown>)?.requiresApiKey ===
-          true
+          z
+            .boolean()
+            .safeParse(
+              storedHandlerConfig.success
+                ? storedHandlerConfig.data.requiresApiKey
+                : undefined
+            ).data === true
         ) {
           return {
             orgId: requireOrgId(context),
@@ -473,62 +567,49 @@ export function createSuperBotTools(
             type: "tool_credentials_required",
           };
         }
+
         return { tool };
       },
     },
   ];
 }
 
-function readString(input: unknown, key: string): string | null {
+function readString(input: SuperBotInput, key: string): string | null {
   const value = readStringAllowEmpty(input, key);
+
   return value?.trim() ? value.trim() : null;
 }
 
-function readStringAllowEmpty(input: unknown, key: string): string | null {
-  if (typeof input !== "object" || input === null || !(key in input)) {
-    return null;
-  }
-
-  const value = (input as Record<string, unknown>)[key];
-  return typeof value === "string" ? value : null;
+function readStringAllowEmpty(
+  input: SuperBotInput,
+  key: string
+): string | null {
+  return z.string().safeParse(input[key]).data ?? null;
 }
 
 function readOptionalString(
-  input: unknown,
+  input: SuperBotInput,
   key: string
 ): string | null | undefined {
-  if (typeof input !== "object" || input === null || !(key in input)) {
-    return;
-  }
-
-  const value = (input as Record<string, unknown>)[key];
+  const value = input[key];
 
   if (value === null) {
     return null;
   }
 
-  return typeof value === "string" ? value : undefined;
+  return z.string().safeParse(value).data;
 }
 
-function readBoolean(input: unknown, key: string): boolean | null {
-  if (typeof input !== "object" || input === null || !(key in input)) {
-    return null;
-  }
-
-  const value = (input as Record<string, unknown>)[key];
-  return typeof value === "boolean" ? value : null;
+function readBoolean(input: SuperBotInput, key: string): boolean | null {
+  return z.boolean().safeParse(input[key]).data ?? null;
 }
 
-function readObject(input: unknown, key: string): unknown {
-  if (typeof input !== "object" || input === null || !(key in input)) {
-    return;
-  }
-
-  return (input as Record<string, unknown>)[key];
+function readObject(input: SuperBotInput, key: string): JsonValue | undefined {
+  return input[key];
 }
 
 function readSoulFiles(
-  input: unknown
+  input: SuperBotInput
 ):
   | CreateProfileRequest["soulFiles"]
   | UpdateProfileRequest["soulFiles"]
@@ -539,35 +620,31 @@ function readSoulFiles(
     return;
   }
 
-  if (typeof raw !== "object" || raw === null) {
-    throw new Error("soulFiles must be an object.");
-  }
-
   const allowed = new Set<string>(SUPPORTED_SOUL_FILE_NAMES);
   const result: NonNullable<CreateProfileRequest["soulFiles"]> = {};
+  const files = z.record(z.string(), z.string()).safeParse(raw);
 
-  for (const [key, value] of Object.entries(raw)) {
-    if (!allowed.has(key)) {
+  if (!files.success) {
+    throw new Error("soulFiles must be an object with string values.");
+  }
+
+  for (const [key, value] of Object.entries(files.data)) {
+    const supportedName = SUPPORTED_SOUL_FILE_NAMES.find(
+      (name) => name === key
+    );
+
+    if (!(supportedName && allowed.has(key))) {
       throw new Error(`Unsupported soul file: ${key}`);
     }
 
-    if (typeof value !== "string") {
-      throw new Error(`Soul file content must be a string: ${key}`);
-    }
-
-    result[key as SupportedSoulFileName] = value;
+    result[supportedName] = value;
   }
 
   return result;
 }
 
-function readModulePath(handlerConfig: unknown): string | null {
-  if (typeof handlerConfig !== "object" || handlerConfig === null) {
-    return null;
-  }
-
-  const modulePath = (handlerConfig as Record<string, unknown>).modulePath;
-  return typeof modulePath === "string" && modulePath.trim()
-    ? modulePath.trim()
-    : null;
+function readModulePath(
+  handlerConfig: Record<string, JsonValue>
+): string | null {
+  return readString(handlerConfig, "modulePath");
 }

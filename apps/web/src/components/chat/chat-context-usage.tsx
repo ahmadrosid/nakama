@@ -18,6 +18,7 @@ import { formatChatUsageCost } from "@/lib/chat-usage";
 
 /** Match BrainIcon / select chevron visual weight in the composer toolbar. */
 const RING_SIZE = 12;
+
 const STROKE_WIDTH = 1.75;
 
 function progressStrokeClass(ratio: number): string {
@@ -49,11 +50,14 @@ export function ChatContextUsageRing({
   const label = formatContextUsageLabel(usage);
   const sessionCost = sessionUsage ? formatChatUsageCost(sessionUsage) : null;
   const segments = contextUsageSegments(usage);
+
   const segmentTotal = segments.reduce(
     (sum, segment) => sum + segment.tokens,
     0
   );
+
   const fillRatio = ratio;
+
   const optimizedNote =
     usage.bytesKeptOut && usage.bytesProduced
       ? `${formatBytes(usage.bytesKeptOut)} of tool output saved (${Math.round((100 * usage.bytesKeptOut) / usage.bytesProduced)}%)`

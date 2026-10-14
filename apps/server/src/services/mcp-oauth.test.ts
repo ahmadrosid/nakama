@@ -2,12 +2,38 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { z } from "zod";
 import { McpClientManager } from "./mcp-client-manager";
 import { readMcpOAuthGrant } from "./mcp-oauth";
 import { McpService } from "./mcp-service";
 
 const ACCESS_TOKEN = "fake-access-token";
+
 const CALLBACK_BASE_URL = "http://127.0.0.1:4310";
+
+test("stored OAuth grants reject malformed values and preserve valid tokens", () => {
+  for (const config of [
+    undefined,
+    null,
+    [],
+    { oauth: "invalid" },
+    { oauth: { state: 7 } },
+    { oauth: { tokens: { access_token: 7 } } },
+  ]) {
+    expect(readMcpOAuthGrant(config)).toBeUndefined();
+  }
+
+  const grant = {
+    callbackBaseUrl: CALLBACK_BASE_URL,
+    codeVerifier: "verifier",
+    state: "pending",
+    tokens: { access_token: "token", token_type: "Bearer" },
+  };
+
+  expect(
+    readMcpOAuthGrant({ oauth: grant, url: "https://mcp.example.com" })
+  ).toEqual(grant);
+});
 
 /**
  * A remote MCP server that answers 401 until it sees a Bearer token, fronted by
@@ -26,6 +52,7 @@ function startOAuthProtectedMcpServer() {
       enableJsonResponse: true,
       sessionIdGenerator: undefined,
     });
+
     await mcp.connect(transport);
 
     return await transport.handleRequest(request);
@@ -57,9 +84,13 @@ function startOAuthProtectedMcpServer() {
       }
 
       if (url.pathname === "/register" && request.method === "POST") {
+        const registration = z
+          .record(z.string(), z.json())
+          .parse(await request.json());
+
         return Response.json(
           {
-            ...((await request.json()) as Record<string, unknown>),
+            ...registration,
             client_id: "fake-client-id",
           },
           { status: 201 }
@@ -157,7 +188,7 @@ describe("MCP browser authorization", () => {
     const completed = await service.completeOAuth(created.server.id, {
       callbackBaseUrl: CALLBACK_BASE_URL,
       code: "fake-auth-code",
-      state: state as string,
+      state: z.string().parse(state),
     });
 
     expect(completed.server.status).toBe("connected");
@@ -198,6 +229,7 @@ describe("MCP browser authorization", () => {
     const broken = await service.testServer("http", {
       url: "http://127.0.0.1:1/mcp",
     });
+
     expect(broken.ok).toBe(false);
     expect(broken.requiresAuthorization).toBeUndefined();
   });
@@ -212,16 +244,19 @@ describe("MCP browser authorization", () => {
       name: "stored-grant",
       transport: "http",
     });
+
     const stored = await db.getMcpServer(created.server.id);
 
     if (!stored) {
       throw new Error("expected a stored server");
     }
 
+    const storedConfig = z.record(z.string(), z.json()).parse(stored.config);
+
     await db.upsertMcpServer({
       ...stored,
       config: {
-        ...(stored.config as Record<string, unknown>),
+        ...storedConfig,
         oauth: { tokens: { access_token: ACCESS_TOKEN, token_type: "Bearer" } },
       },
     });

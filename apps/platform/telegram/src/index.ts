@@ -24,6 +24,7 @@ import { createBot } from "./bot";
 import { loadTelegramIdentities, type TelegramBridgeConfig } from "./config";
 
 installErrorHandlers("worker:telegram");
+
 void installErrorTrackingSink();
 
 type StartedIdentity = {
@@ -33,11 +34,14 @@ type StartedIdentity = {
 };
 
 let spawnedChild: Bun.Subprocess | null = null;
+
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
 const started: StartedIdentity[] = [];
 
 registerCleanupHandlers(async () => {
   await stopAll();
+
   if (hasActiveStreams()) {
     console.warn(
       "Leaving the spawned Nakama server running so in-flight agent turns can finish; the next worker start will reuse it."
@@ -49,18 +53,22 @@ registerCleanupHandlers(async () => {
 
 try {
   const identities = await loadTelegramIdentities();
+
   const { serverUrl, spawnedChild: child } = await ensureServerRunning({
     spawn: false,
   });
+
   spawnedChild = child;
 
   const authToken =
     (await loadLocalAuthToken("telegram@nakama.internal")) ?? undefined;
+
   const probe = new NakamaClient({
     authToken,
     baseUrl: serverUrl,
     clientOrigin: resolveWebPublicUrl(),
   });
+
   const health = await probe.health();
 
   try {
@@ -133,20 +141,24 @@ async function startIdentity(
   authToken: string | undefined
 ): Promise<{ running: Promise<void> } | null> {
   const label = config.orgId ? `org ${config.orgId}` : "install-wide config";
+
   const heartbeat = createTelegramWorkerHeartbeat(
     config.owner ?? config.orgId ?? null
   );
+
   const existing = await heartbeat.read();
 
   if (existing && existing.pid !== process.pid && isHeartbeatAlive(existing)) {
     console.error(
       `Another Nakama Telegram bridge already runs the ${label} bot (pid ${existing.pid}). Skipping it.`
     );
+
     return null;
   }
 
   await heartbeat.acquire();
   const configDir = getTelegramConfigDir(config.owner ?? config.orgId ?? null);
+
   const client = new NakamaClient({
     authToken,
     baseUrl: serverUrl,
@@ -157,6 +169,7 @@ async function startIdentity(
   const sessionStore = new ChannelSessionStore(
     join(configDir, "chat-sessions.json")
   );
+
   await sessionStore.load();
 
   const orgStore = new ChannelOrgStore(join(configDir, "org-selection.json"));
@@ -206,6 +219,7 @@ async function stopAll(): Promise<void> {
   await Promise.all(
     started.map((identity) => {
       identity.stop();
+
       return identity.clearHeartbeat();
     })
   );
@@ -218,6 +232,7 @@ function registerCleanupHandlers(cleanup: () => void | Promise<void>): void {
       process.exit(0);
     });
   }
+
   // pm2 stops Windows workers with a "shutdown" message instead of a signal.
   if (process.platform === "win32") {
     process.on("message", async (message) => {

@@ -17,11 +17,13 @@ const THINKING_FRAMES = [
   "⠇",
   "⠏",
 ] as const;
+
 const FRAME_INTERVAL_MS = 80;
 
 function formatThinkingIndicator(frameIndex: number): StyledLine {
   const frame =
     THINKING_FRAMES[frameIndex % THINKING_FRAMES.length] ?? THINKING_FRAMES[0];
+
   return styledLine(` ${frame} Thinking `, { dim: true });
 }
 
@@ -81,6 +83,7 @@ export class ThinkingIndicator {
     if (this.renderer?.isEnabled()) {
       this.renderer.setStatusLine(content);
       this.lineStarted = true;
+
       return;
     }
 

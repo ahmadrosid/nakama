@@ -9,7 +9,9 @@ import {
 const BOT_INFO = { id: "999000111222333444", username: "nakamabot" };
 
 const GUILD_ID = "guild_1";
+
 const BOT_ROLE_ID = "1525964112708894884";
+
 const OTHER_ROLE_ID = "role_other";
 
 function createGuildMessage(options: {
@@ -30,6 +32,7 @@ function createGuildMessage(options: {
     messages.set("reply_1", { author: { id: BOT_INFO.id } });
   }
 
+  // SAFETY: The test message contains every field this guild-message helper reads.
   return {
     author: { bot: false, id: "user_1" },
     channel: {

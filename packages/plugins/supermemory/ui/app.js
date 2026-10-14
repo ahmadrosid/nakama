@@ -179,7 +179,53 @@ function createItems(ctx) {
 }
 
 // src/ui-context.ts
-var errorText = (error) => error instanceof Error ? error.message : "Request failed";
+var errorText = (error) => error instanceof Error ? error.message : error;
+function asJsonRecord(value) {
+  return value instanceof Object && !Array.isArray(value) ? value : null;
+}
+function readJsonString(value) {
+  return value === String(value) ? value : null;
+}
+function readItem(value) {
+  const record = asJsonRecord(value);
+  const id = record && readJsonString(record.id);
+  const title = record && readJsonString(record.title);
+  const source = record && readJsonString(record.source);
+  const state = record && readJsonString(record.state);
+  if (!(id && title && source && state)) {
+    throw new Error("Invalid Supermemory item response");
+  }
+  const excerpt = readJsonString(record.excerpt);
+  const message = readJsonString(record.message);
+  const item = {
+    id,
+    message: message ?? undefined,
+    source,
+    state,
+    title
+  };
+  if (excerpt !== null) {
+    item.excerpt = excerpt;
+  }
+  return item;
+}
+function readItemList(value) {
+  const record = asJsonRecord(value);
+  if (!(record && Array.isArray(record.items))) {
+    throw new Error("Invalid Supermemory item list response");
+  }
+  return {
+    hasMore: record.hasMore === true,
+    items: record.items.map(readItem)
+  };
+}
+function readItemAction(value) {
+  const record = asJsonRecord(value);
+  if (record && Array.isArray(record.items)) {
+    return { items: record.items.map(readItem) };
+  }
+  return { item: readItem(value) };
+}
 
 // src/use-collection.ts
 function useCollection(ctx, agentId, kind) {
@@ -241,12 +287,12 @@ function useCollection(ctx, agentId, kind) {
       if (!current || ctx.signal.aborted) {
         return;
       }
-      const result = value;
+      const result = readItemList(value);
       setItems(result.items);
       setHasMore(!!result.hasMore);
     }).catch((reason) => {
       if (current) {
-        setError(errorText(reason));
+        setError(errorText(reason instanceof Error ? reason : "Request failed"));
         setItems([]);
       }
     }).finally(() => {
@@ -272,10 +318,10 @@ function useCollection(ctx, agentId, kind) {
         return;
       }
       try {
-        const item = await ctx.host.call("get_document", {
+        const item = readItem(await ctx.host.call("get_document", {
           agentId,
           id: pending.id
-        });
+        }));
         if (current) {
           setItems((previous) => previous.map((row) => row.id === item.id ? item : row));
         }
@@ -307,10 +353,10 @@ function useCollection(ctx, agentId, kind) {
       submission.current = { key: crypto.randomUUID(), payload };
     }
     try {
-      const result = await ctx.host.call(actions.save, {
+      const result = readItem(await ctx.host.call(actions.save, {
         ...JSON.parse(payload),
         submissionKey: submission.current.key
-      });
+      }));
       if (!alive.current || ctx.signal.aborted) {
         return;
       }
@@ -329,7 +375,7 @@ function useCollection(ctx, agentId, kind) {
       setRevision((value) => value + 1);
     } catch (reason) {
       if (alive.current) {
-        setError(errorText(reason));
+        setError(errorText(reason instanceof Error ? reason : "Request failed"));
       }
     } finally {
       if (alive.current) {
@@ -345,21 +391,24 @@ function useCollection(ctx, agentId, kind) {
     setError("");
     try {
       const action = remove ? actions.remove : actions.refresh;
-      const result = await ctx.host.call(action, {
+      const result = readItemAction(await ctx.host.call(action, {
         agentId,
         id: item.id
-      });
+      }));
       if (!alive.current || ctx.signal.aborted) {
         return;
       }
-      const updated = result.items?.[0] ?? result;
+      const updated = result.items?.[0] ?? result.item;
+      if (!updated) {
+        throw new Error("The action returned no item.");
+      }
       setItems((previous) => previous.flatMap((row) => row.id === item.id ? ["deleted", "forgotten"].includes(updated.state) ? [] : [updated] : [row]));
       if (updated.message) {
         setError(updated.message);
       }
     } catch (reason) {
       if (alive.current) {
-        setError(errorText(reason));
+        setError(errorText(reason instanceof Error ? reason : "Request failed"));
       }
     } finally {
       if (alive.current) {
@@ -521,11 +570,20 @@ function createBrowser(ctx) {
       let active = true;
       ctx.host.call("get_document", { agentId, id: documentId }).then((result) => {
         if (active) {
-          setDocument(result);
+          const document3 = asJsonRecord(result);
+          const title = document3 && readJsonString(document3.title);
+          const source = document3 && readJsonString(document3.source);
+          if (document3 && title && source) {
+            setDocument({
+              content: readJsonString(document3.content),
+              source,
+              title
+            });
+          }
         }
       }).catch((reason) => {
         if (active) {
-          setError(errorText(reason));
+          setError(errorText(reason instanceof Error ? reason : "Request failed"));
         }
       });
       return () => {
@@ -634,14 +692,14 @@ function createSettings(ctx) {
       let alive = true;
       ctx.host.call("get_settings").then((value) => {
         if (alive) {
-          const settings = value;
-          setManaged(!!settings.managed);
-          setUrl(settings.url ?? "");
+          const settings = asJsonRecord(value);
+          setManaged(settings?.managed === true);
+          setUrl((settings && readJsonString(settings.url)) ?? "");
           setLoaded(true);
         }
       }).catch((error) => {
         if (alive) {
-          setMessage(errorText(error));
+          setMessage(errorText(error instanceof Error ? error : "Request failed"));
         }
       });
       return () => {
@@ -660,7 +718,7 @@ function createSettings(ctx) {
         setToken("");
         saved();
       } catch (error) {
-        setMessage(errorText(error));
+        setMessage(errorText(error instanceof Error ? error : "Request failed"));
       } finally {
         setBusy(false);
       }
@@ -672,7 +730,7 @@ function createSettings(ctx) {
         await ctx.host.call("check_connection");
         setMessage("Connected to saved server");
       } catch (error) {
-        setMessage(errorText(error));
+        setMessage(errorText(error instanceof Error ? error : "Request failed"));
       } finally {
         setBusy(false);
       }
@@ -737,15 +795,27 @@ function usePage(ctx) {
         if (!alive || ctx.signal.aborted) {
           return;
         }
-        const result = value;
+        const result = asJsonRecord(value);
+        if (!(result && Array.isArray(result.profiles))) {
+          throw new Error("Invalid profile response");
+        }
+        const profiles2 = result.profiles.flatMap((profile) => {
+          const record = asJsonRecord(profile);
+          const id = record && readJsonString(record.id);
+          const name = record && readJsonString(record.name);
+          return id && name ? [{ id, name }] : [];
+        });
+        const workerRecord = result.worker && asJsonRecord(result.worker);
+        const workerState = workerRecord && readJsonString(workerRecord.state);
+        const workerMessage = workerRecord && readJsonString(workerRecord.message);
         setError("");
-        setWorker(result.worker ?? null);
-        setProfiles(result.profiles);
-        setConfigured(result.configured);
-        setCanConfigure(result.canConfigure);
+        setWorker(workerState ? { message: workerMessage ?? undefined, state: workerState } : null);
+        setProfiles(profiles2);
+        setConfigured(result.configured === true);
+        setCanConfigure(result.canConfigure === true);
       }).catch((reason) => {
         if (alive) {
-          setError(errorText(reason));
+          setError(errorText(reason instanceof Error ? reason : "Request failed"));
         }
       }).finally(() => {
         inFlight = false;

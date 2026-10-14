@@ -1,6 +1,6 @@
 const activeByChat = new Map<string, AbortController>();
 
-export function isAbortError(error: unknown): boolean {
+export function isAbortError<ErrorValue>(error: ErrorValue): boolean {
   return (
     (error instanceof DOMException && error.name === "AbortError") ||
     (error instanceof Error && error.name === "AbortError")
@@ -12,6 +12,7 @@ export function registerActiveStream(chatId: string): AbortSignal {
 
   const controller = new AbortController();
   activeByChat.set(chatId, controller);
+
   return controller.signal;
 }
 
@@ -29,7 +30,12 @@ export function stopActiveStream(chatId: string): boolean {
   }
 
   controller.abort();
+
   return true;
+}
+
+export function isStreamActive(chatId: string): boolean {
+  return activeByChat.has(chatId);
 }
 
 export function hasActiveStreams(): boolean {

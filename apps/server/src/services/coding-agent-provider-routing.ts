@@ -16,8 +16,11 @@ const OPENCODE_GO_CHAT_BASE_URL = "https://opencode.ai/zen/go/v1";
 import { resolveProfileProviderSelection } from "./provider-instance-helpers";
 
 const DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com";
+
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 
 export interface CodingAgentProviderRouting {
@@ -124,6 +127,7 @@ export function getProviderApiBaseUrl(
 
   if (instance.type === "ollama") {
     const hostMode = resolveOllamaHostMode(instance);
+
     return (override ?? defaultOllamaBaseUrl(hostMode)).replace(/\/$/, "");
   }
 
@@ -195,11 +199,13 @@ export function resolveCodingAgentProviderRouting(options: {
   }
 
   const { instance, model } = resolved;
+
   const providerLabel = normalizeProviderInstanceLabel(
     instance.type,
     instance.label,
     []
   );
+
   const compatible = isProviderCompatibleWithHarness(
     instance.type,
     options.harnessKind

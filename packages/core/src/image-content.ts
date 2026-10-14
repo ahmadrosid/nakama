@@ -8,7 +8,7 @@ export const IMAGE_DESCRIPTION_PREFIX = "[Image]\n";
 export function extractImageParts(
   content: string | MessageContentPart[]
 ): Extract<MessageContentPart, { type: "image" }>[] {
-  if (typeof content === "string") {
+  if (!Array.isArray(content)) {
     return [];
   }
 
@@ -38,7 +38,7 @@ export function replaceImagePartsWithDescriptions(
   content: string | MessageContentPart[],
   descriptions: string[]
 ): string | MessageContentPart[] {
-  if (typeof content === "string") {
+  if (!Array.isArray(content)) {
     if (descriptions.length === 0) {
       return content;
     }
@@ -80,7 +80,7 @@ export function replaceImagePartsWithDescriptions(
 export function resolveUserContentForNonVisionProvider(
   content: string | MessageContentPart[]
 ): string | MessageContentPart[] {
-  if (typeof content === "string") {
+  if (!Array.isArray(content)) {
     return content;
   }
 

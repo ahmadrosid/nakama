@@ -1,11 +1,13 @@
 import { rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { z } from "zod";
 import {
   assertChannelPath,
   type ChannelConfigScope,
   claimChannelIdentity,
-  generateHandshakeCode,
+  createPairingCodeSecret,
   getChannelConfigDir,
+  hasActiveHandshakeCode,
   isBotChannelUserAuthorized,
   isChannelOwner,
   listChannelOwners,
@@ -13,19 +15,29 @@ import {
   maskBotToken,
   releaseChannelClaims,
   resetChannelConversationState,
-  resolveHandshakeCodeOnSave,
+  resolveHandshakeOnSave,
   verifyAndPairBotChannelUser,
+  withPairingConfigLock,
   writeBotChannelIniConfig,
 } from "./channel-config-shared";
 import { readEnvValue } from "./config";
-import { ensureDir, pathExists, readDirectoryOrEmpty } from "./fs";
+import {
+  ensureDir,
+  pathExists,
+  readDirectoryOrEmpty,
+  readTextOrNull,
+  writeTextFile,
+} from "./fs";
 import { getUserConfigDir } from "./user-config";
 
 export {
-  generateHandshakeCode,
+  hasActiveHandshakeCode,
+  isPairingCodeActive,
+  looksLikePairingCode,
   maskBotToken,
-  normalizeHandshakeInput,
 } from "./channel-config-shared";
+
+export { generatePairingCode } from "./pairing-code";
 
 export const DEFAULT_TELEGRAM_PROFILE_ID = "default";
 
@@ -33,6 +45,7 @@ export interface TelegramConfigFile {
   allowedUserIds: number[];
   botToken: string;
   handshakeCode: string | null;
+  handshakeExpiresAt: string | null;
   pairedUserIds: number[];
   profileId: string;
 }
@@ -66,10 +79,12 @@ export function getTelegramConfigDir(orgId: TelegramConfigScope): string {
 
 export function getTelegramConfigPath(orgId: TelegramConfigScope): string {
   const path = join(getTelegramConfigDir(orgId), "config.ini");
+
   if (isChannelOwner(orgId)) {
     assertChannelPath(path);
     assertChannelPath(`${path}.tmp`);
   }
+
   return path;
 }
 
@@ -137,6 +152,7 @@ export async function resolveTelegramScopeForOrg(
   if (isChannelOwner(orgId)) {
     return orgId;
   }
+
   if (orgId === null) {
     return null;
   }
@@ -166,6 +182,7 @@ export async function claimLegacyTelegramConfig(
 
   await ensureDir(dirname(targetDir));
   await rename(legacyDir, targetDir);
+
   return true;
 }
 
@@ -187,7 +204,9 @@ export function toTelegramSettingsPublic(
     allowedUserIds: file.allowedUserIds,
     botTokenMasked: maskBotToken(file.botToken),
     configured: Boolean(file.botToken.trim()),
-    handshakeCode: file.handshakeCode,
+    // An expired code is worse than none: the dashboard would offer a secret
+    // that no longer works.
+    handshakeCode: hasActiveHandshakeCode(file) ? file.handshakeCode : null,
     pairedUserIds: file.pairedUserIds,
     profileId: file.profileId,
   };
@@ -254,6 +273,7 @@ function buildSavedTelegramConfig(
   }
 
   const allowedUserIds = resolveAllowedUserIdsInput(input, existing);
+
   const pairedUserIds =
     input.pairedUserIds === undefined
       ? (existing?.pairedUserIds ?? [])
@@ -262,7 +282,7 @@ function buildSavedTelegramConfig(
   return {
     allowedUserIds,
     botToken,
-    handshakeCode: resolveHandshakeCodeOnSave(existing, allowedUserIds),
+    ...resolveHandshakeOnSave(existing, allowedUserIds),
     pairedUserIds,
     profileId: resolveTelegramProfileId(input, existing),
   };
@@ -273,15 +293,20 @@ export async function saveTelegramConfig(
   input: UpdateTelegramSettingsInput
 ): Promise<TelegramSettingsPublic> {
   const existing = await loadTelegramConfigFile(orgId);
+
   const changed =
     existing &&
     input.botToken !== undefined &&
     existing.botToken !== input.botToken.trim();
+
   const next = buildSavedTelegramConfig(input, changed ? null : existing);
+
   if (isChannelOwner(orgId)) {
     next.profileId = orgId.profileId;
   }
+
   await assertTelegramTokenUnclaimed(orgId, next.botToken);
+
   const rollback = isChannelOwner(orgId)
     ? await claimChannelIdentity(
         "telegram",
@@ -289,18 +314,22 @@ export async function saveTelegramConfig(
         next.botToken.split(":")[0]!
       )
     : async () => {};
+
   try {
     if (changed && isChannelOwner(orgId)) {
       await resetChannelConversationState("telegram", orgId);
     }
+
     await writeTelegramConfigFile(orgId, next);
   } catch (error) {
     await rollback();
     throw error;
   }
+
   if (isChannelOwner(orgId)) {
     await releaseChannelClaims("telegram", orgId, next.botToken.split(":")[0]!);
   }
+
   return toTelegramSettingsPublic(next);
 }
 
@@ -342,12 +371,16 @@ export async function regenerateTelegramHandshake(
     throw new Error("Save a bot token before generating a pairing code.");
   }
 
+  const { code, expiresAt } = createPairingCodeSecret();
+
   const next: TelegramConfigFile = {
     ...existing,
-    handshakeCode: generateHandshakeCode(),
+    handshakeCode: code,
+    handshakeExpiresAt: expiresAt,
   };
 
   await writeTelegramConfigFile(orgId, next);
+
   return toTelegramSettingsPublic(next);
 }
 
@@ -357,6 +390,7 @@ export async function verifyAndPairTelegramUser(
   userId: number
 ): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
   return verifyAndPairBotChannelUser({
+    configDir: getTelegramConfigDir(orgId),
     handshakeInput,
     isAuthorized: isTelegramUserAuthorized,
     label: "Telegram",
@@ -366,12 +400,137 @@ export async function verifyAndPairTelegramUser(
   });
 }
 
+export interface TelegramAccessRequest {
+  requestedAt: string;
+  userId: number;
+  username: string | null;
+}
+
+const ACCESS_REQUEST_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** A bot token leaks easily; strangers must not be able to fill the owner's list. */
+const MAX_ACCESS_REQUESTS = 20;
+
+const accessRequestsSchema = z.array(
+  z.object({
+    requestedAt: z.string(),
+    userId: z.number().int(),
+    username: z.string().nullable(),
+  })
+);
+
+function getTelegramAccessRequestsPath(orgId: TelegramConfigScope): string {
+  const path = join(getTelegramConfigDir(orgId), "access-requests.json");
+
+  if (isChannelOwner(orgId)) {
+    assertChannelPath(path);
+  }
+
+  return path;
+}
+
+async function readTelegramAccessRequests(
+  orgId: TelegramConfigScope
+): Promise<TelegramAccessRequest[]> {
+  const raw = await readTextOrNull(getTelegramAccessRequestsPath(orgId));
+
+  if (!raw) {
+    return [];
+  }
+
+  let json: unknown;
+
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+
+  const parsed = accessRequestsSchema.safeParse(json);
+
+  if (!parsed.success) {
+    return [];
+  }
+
+  const cutoff = Date.now() - ACCESS_REQUEST_TTL_MS;
+
+  return parsed.data.filter((entry) => Date.parse(entry.requestedAt) > cutoff);
+}
+
+async function updateTelegramAccessRequests<T>(
+  orgId: TelegramConfigScope,
+  change: (requests: TelegramAccessRequest[]) => {
+    result: T;
+    requests: TelegramAccessRequest[];
+  }
+): Promise<T> {
+  return withPairingConfigLock(getTelegramConfigDir(orgId), async () => {
+    const { result, requests } = change(
+      await readTelegramAccessRequests(orgId)
+    );
+
+    await writeTextFile(
+      getTelegramAccessRequestsPath(orgId),
+      JSON.stringify(requests),
+      { ensureDir: getTelegramConfigDir(orgId) }
+    );
+
+    return result;
+  });
+}
+
+export function listTelegramAccessRequests(
+  orgId: TelegramConfigScope
+): Promise<TelegramAccessRequest[]> {
+  return readTelegramAccessRequests(orgId);
+}
+
+/** Returns false when the list is full and the request was dropped. */
+export function recordTelegramAccessRequest(
+  orgId: TelegramConfigScope,
+  request: { userId: number; username?: string | null }
+): Promise<boolean> {
+  return updateTelegramAccessRequests(orgId, (requests) => {
+    if (requests.some((entry) => entry.userId === request.userId)) {
+      return { requests, result: true };
+    }
+
+    if (requests.length >= MAX_ACCESS_REQUESTS) {
+      return { requests, result: false };
+    }
+
+    return {
+      requests: [
+        ...requests,
+        {
+          requestedAt: new Date().toISOString(),
+          userId: request.userId,
+          username: request.username?.trim() || null,
+        },
+      ],
+      result: true,
+    };
+  });
+}
+
+export function removeTelegramAccessRequest(
+  orgId: TelegramConfigScope,
+  userId: number
+): Promise<TelegramAccessRequest[]> {
+  return updateTelegramAccessRequests(orgId, (requests) => {
+    const remaining = requests.filter((entry) => entry.userId !== userId);
+
+    return { requests: remaining, result: remaining };
+  });
+}
+
 export function resolveTelegramConfigFromSources(options: {
   env?: Record<string, string | undefined>;
   file?: TelegramConfigFile | null;
 }): TelegramConfigFile | null {
   const env = options.env ?? process.env;
   const file = options.file ?? null;
+
   const botToken =
     readEnvValue(env, "TELEGRAM_BOT_TOKEN") || file?.botToken?.trim() || "";
 
@@ -387,6 +546,7 @@ export function resolveTelegramConfigFromSources(options: {
       : (file?.allowedUserIds ?? []),
     botToken,
     handshakeCode: file?.handshakeCode ?? null,
+    handshakeExpiresAt: file?.handshakeExpiresAt ?? null,
     pairedUserIds: file?.pairedUserIds ?? [],
     profileId:
       env.NAKAMA_TELEGRAM_PROFILE_ID?.trim() ||

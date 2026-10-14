@@ -13,7 +13,9 @@ import {
 import { SKILL_ARCHIVE_DIR_NAME } from "./paths";
 
 const ORG_ID = "org_test";
+
 const PROFILE_ID = "profile_default";
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe("classifySkillFreshness", () => {
@@ -118,6 +120,7 @@ describe("archiveSkillDirectory", () => {
       configDir ??
       (await mkdtemp(path.join(tmpdir(), "nakama-skill-archive-")));
     process.env.NAKAMA_CONFIG_DIR = configDir;
+
     const directory = path.join(
       configDir,
       "orgs",
@@ -127,11 +130,13 @@ describe("archiveSkillDirectory", () => {
       "skills",
       name
     );
+
     await mkdir(directory, { recursive: true });
     await writeFile(
       path.join(directory, "SKILL.md"),
       `---\nname: ${name}\ndescription: Test skill.\n---\n\n${body}\n`
     );
+
     return directory;
   }
 
@@ -151,20 +156,24 @@ describe("archiveSkillDirectory", () => {
     expect(
       await pathExists(path.join(result.archivedDirectory, "SKILL.md"))
     ).toBe(true);
+
     const content = await readFile(
       path.join(result.archivedDirectory, "SKILL.md"),
       "utf8"
     );
+
     expect(content).toContain("Still on disk.");
   });
 
   test("uses a timestamp suffix when the archive name already exists", async () => {
     const liveDir = await writeProfileSkill("old-playbook", "Newer copy.");
+
     const archiveDir = path.join(
       path.dirname(liveDir),
       SKILL_ARCHIVE_DIR_NAME,
       "old-playbook"
     );
+
     await mkdir(archiveDir, { recursive: true });
     await writeFile(
       path.join(archiveDir, "SKILL.md"),
@@ -172,6 +181,7 @@ describe("archiveSkillDirectory", () => {
     );
 
     const now = new Date("2026-08-15T12:00:00.000Z");
+
     const result = await archiveSkillDirectory({
       now,
       orgId: ORG_ID,
@@ -212,6 +222,7 @@ describe("archiveSkillDirectory", () => {
   test("refuses a skill that is already under .archive", async () => {
     configDir = await mkdtemp(path.join(tmpdir(), "nakama-skill-archive-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
+
     const archived = path.join(
       configDir,
       "orgs",
@@ -222,6 +233,7 @@ describe("archiveSkillDirectory", () => {
       SKILL_ARCHIVE_DIR_NAME,
       "old-playbook"
     );
+
     await mkdir(archived, { recursive: true });
     await writeFile(
       path.join(archived, "SKILL.md"),
@@ -266,6 +278,7 @@ describe("discoverSkills archive skip", () => {
       "skills",
       "live-skill"
     );
+
     const archivedDir = path.join(
       configDir,
       "orgs",
@@ -276,6 +289,7 @@ describe("discoverSkills archive skip", () => {
       SKILL_ARCHIVE_DIR_NAME,
       "archived-skill"
     );
+
     await mkdir(liveDir, { recursive: true });
     await mkdir(archivedDir, { recursive: true });
     await writeFile(

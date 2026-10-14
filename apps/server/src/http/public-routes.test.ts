@@ -48,4 +48,12 @@ describe("isPublicRouteRequest", () => {
     expect(isPublicRouteRequest("GET", "/v1/auth/me")).toBe(true);
     expect(isPublicRouteRequest("PATCH", "/v1/auth/me")).toBe(false);
   });
+
+  test("allows the ACP MCP bridge POST without a login, but not other ACP routes", () => {
+    expect(isPublicRouteRequest("POST", "/v1/acp-mcp/abc123token")).toBe(true);
+    expect(isPublicRouteRequest("GET", "/v1/acp-mcp/abc123token")).toBe(false);
+    expect(isPublicRouteRequest("POST", "/v1/profiles/p1/acp-settings")).toBe(
+      false
+    );
+  });
 });

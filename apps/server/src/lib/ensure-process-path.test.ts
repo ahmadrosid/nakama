@@ -10,6 +10,7 @@ const saved = {
 
 function restore(key: keyof typeof saved): void {
   const value = saved[key];
+
   if (value === undefined) {
     delete process.env[key];
   } else {

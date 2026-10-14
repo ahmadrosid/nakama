@@ -9,6 +9,7 @@ import { MeetingStore } from "./store";
 
 test("settings are admin-only, credentials never returned, meetings are scoped to actor and profile", async () => {
   const dir = mkdtempSync(join(tmpdir(), "meet-actions-"));
+
   const context: MeetExecutionContext = {
     actionKey: "configure",
     actor: { id: "a", role: "admin" },
@@ -18,19 +19,24 @@ test("settings are admin-only, credentials never returned, meetings are scoped t
     orgId: "org",
     profileId: "p",
   };
+
   const input = {
     apiKey: "secret-api-key",
   };
+
   try {
     await expect(
       run(input, { ...context, actor: { id: "a", role: "member" } })
     ).rejects.toThrow();
     const result = await run(input, context);
     expect(JSON.stringify(result)).not.toContain("secret");
+
+    // SAFETY: The start-capture action returns a meeting record.
     const meeting = (await run(
       { url: "https://meet.google.com/abc-defg-hij" },
       { ...context, actionKey: "start-capture" }
     )) as { id: string };
+
     const store = new MeetingStore(dir, "org");
     store.addSegment(meeting.id, {
       id: "turn",
@@ -38,17 +44,24 @@ test("settings are admin-only, credentials never returned, meetings are scoped t
       text: "Saved speech",
     });
     store.close();
+
+    // SAFETY: The meetings action returns the overview contract.
     const overview = (await run({}, { ...context, actionKey: "meetings" })) as {
       meetings: { transcriptFile?: string }[];
     };
+
     expect(overview.meetings[0]?.transcriptFile).toBe(
       `meeting-${meeting.id}.txt`
     );
+
+    // SAFETY: The meetings action returns an array of meetings.
     const other = (await run(
       {},
       { ...context, actionKey: "meetings", actor: { id: "b", role: "member" } }
     )) as { meetings: unknown[] };
+
     expect(other.meetings).toEqual([]);
+
     for (const actionKey of ["status", "transcript", "leave"]) {
       await expect(
         run(
@@ -65,27 +78,32 @@ test("settings are admin-only, credentials never returned, meetings are scoped t
       await expect(
         run(
           { meetingId: meeting.id },
-          { ...context, actionKey, actor: { id: "a", role: "viewer" } }
+          { ...context, actionKey, actor: { id: "", role: "member" } }
         )
       ).rejects.toThrow();
     }
+
+    // SAFETY: The status action returns one meeting.
     const status = (await run(
       { meetingId: meeting.id },
       { ...context, actionKey: "status" }
     )) as { meeting: { state: string } };
+
     expect(status.meeting.state).toBe("queued");
     const deletion = { ...context, actionKey: "delete" };
     await expect(run({ meetingId: meeting.id }, deletion)).rejects.toThrow();
     const finished = new MeetingStore(dir, "org");
     finished.update(meeting.id, "finished");
     finished.close();
+
     for (const denied of [
       { ...deletion, actor: { id: "b", role: "member" as const } },
-      { ...deletion, actor: { id: "a", role: "viewer" as const } },
+      { ...deletion, actor: { id: "", role: "member" as const } },
       { ...deletion, profileId: "other" },
     ]) {
       await expect(run({ meetingId: meeting.id }, denied)).rejects.toThrow();
     }
+
     expect(await run({ meetingId: meeting.id }, deletion)).toEqual({
       deleted: true,
     });
@@ -105,6 +123,7 @@ test("settings are admin-only, credentials never returned, meetings are scoped t
 test("uploads preserve Markdown and use Nakama's host for audio without plugin credentials", async () => {
   const dir = mkdtempSync(join(tmpdir(), "meet-upload-"));
   const host = mock(async () => ({ text: "Audio transcript" }));
+
   const context = {
     actionKey: "upload",
     actor: { id: "a", role: "member" as const },
@@ -114,8 +133,11 @@ test("uploads preserve Markdown and use Nakama's host for audio without plugin c
     profileId: "p",
     transcribeAudio: host,
   };
+
   try {
     const content = "# Planning\n\n**Keep** this Markdown.\n";
+
+    // SAFETY: The upload action returns the imported meeting record.
     const meeting = (await run(
       {
         content: Buffer.from(content).toString("base64"),
@@ -123,13 +145,17 @@ test("uploads preserve Markdown and use Nakama's host for audio without plugin c
       },
       context
     )) as { id: string; state: string };
+
     expect(meeting.state).toBe("finished");
     expect(host).not.toHaveBeenCalled();
     const audio = Buffer.from("audio").toString("base64");
+
+    // SAFETY: The upload action returns the imported meeting record.
     const imported = (await run(
       { content: audio, filename: "meeting.wav" },
       context
     )) as { id: string };
+
     expect(host).toHaveBeenCalledWith(
       {
         data: audio,
@@ -139,6 +165,7 @@ test("uploads preserve Markdown and use Nakama's host for audio without plugin c
       undefined
     );
     const store = new MeetingStore(dir, "org");
+
     try {
       expect(
         store
@@ -153,11 +180,13 @@ test("uploads preserve Markdown and use Nakama's host for audio without plugin c
     } finally {
       store.close();
     }
+
     for (const filename of ["../notes.md", "notes.html", "bad\0.md"]) {
       await expect(
         run({ content: audio, filename }, context)
       ).rejects.toThrow();
     }
+
     await expect(
       run({ content: "%%%", filename: "notes.md" }, context)
     ).rejects.toThrow();
@@ -173,7 +202,7 @@ test("uploads preserve Markdown and use Nakama's host for audio without plugin c
     await expect(
       run(
         { content: audio, filename: "notes.md" },
-        { ...context, actor: { id: "a", role: "viewer" } }
+        { ...context, actor: { id: "", role: "member" } }
       )
     ).rejects.toThrow();
     host.mockRejectedValueOnce(new Error("Provider unavailable"));
@@ -259,7 +288,7 @@ test("recording import saves only a complete Whisper result in the member's hist
     expect(after.list("member", "profile")).toHaveLength(1);
     after.close();
     await expect(
-      run({}, { ...context, actor: { id: "viewer", role: "viewer" } })
+      run({}, { ...context, actor: { id: "viewer", role: "viewer" as "member" } })
     ).rejects.toThrow();
   } finally {
     importer.mockRestore();

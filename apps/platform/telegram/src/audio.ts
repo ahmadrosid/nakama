@@ -27,11 +27,13 @@ export async function buildTelegramAudioInput(
   }
 
   const downloaded = await downloadTelegramFile(ctx, fileId, MAX_AUDIO_BYTES);
+
   const filename = inferAudioFilename(
     downloaded.filePath,
     Boolean(voice),
     audio?.file_name
   );
+
   const mediaType = inferAudioMediaType(
     downloaded.filePath,
     downloaded.contentType,
@@ -50,7 +52,7 @@ export async function buildTelegramAudioInput(
   return { message };
 }
 
-export function formatTelegramAudioError(error: unknown): string {
+export function formatTelegramAudioError(error: Error | string): string {
   if (error instanceof OversizedTelegramFileError) {
     return OVERSIZED_AUDIO_REPLY;
   }
@@ -59,7 +61,7 @@ export function formatTelegramAudioError(error: unknown): string {
     return error.message;
   }
 
-  return String(error);
+  return error;
 }
 
 function inferAudioFilename(

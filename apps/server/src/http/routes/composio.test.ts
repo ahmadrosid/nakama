@@ -13,7 +13,14 @@ import { loginUserSession, seedOrgAdmin } from "../test-session-helpers";
 
 const TEST_API_KEY = "ck_test";
 
-function createMockClient(): ComposioApiClient {
+function createMockClient(): Pick<
+  ComposioApiClient,
+  | "createProfileSession"
+  | "deleteConnectedAccount"
+  | "linkToolkitAccount"
+  | "listCatalogToolkits"
+  | "listSessionTools"
+> {
   return {
     async createProfileSession() {
       return {
@@ -51,14 +58,13 @@ async function createApp() {
   const authService = new AuthService();
   const composioService = new ComposioService(databaseAdapter, authService);
   composioService.reloadConfiguration();
-  (
-    composioService as unknown as {
-      apiClientCache: { key: string; client: ComposioApiClient } | null;
-    }
-  ).apiClientCache = {
-    client: createMockClient(),
-    key: TEST_API_KEY,
-  };
+
+  Object.assign(composioService, {
+    apiClientCache: {
+      client: createMockClient(),
+      key: TEST_API_KEY,
+    },
+  });
 
   return createMinimalHonoApp({
     agent: new AgentService(null, null, databaseAdapter),
@@ -71,10 +77,12 @@ async function createApp() {
 describe("composio routes", () => {
   test("org admin can enable toolkit and assign it to a profile", async () => {
     const { app, databaseAdapter } = await createApp();
+
     const { email, password, orgId, profileId } = await seedOrgAdmin(
       databaseAdapter,
       { profileId: "profile_test" }
     );
+
     const session = await loginUserSession(app, email, password, orgId);
 
     const enableResponse = await app.fetch(
@@ -89,10 +97,13 @@ describe("composio routes", () => {
     );
 
     expect(enableResponse.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const enabled = (await enableResponse.json()) as {
       toolkitSlug: string;
       id: string;
     };
+
     expect(enabled.toolkitSlug).toBe("gmail");
 
     const assignResponse = await app.fetch(
@@ -124,9 +135,11 @@ describe("composio routes", () => {
 
   test("org admin can connect an enabled toolkit with their user id", async () => {
     const { app, databaseAdapter } = await createApp();
+
     const { email, password, orgId } = await seedOrgAdmin(databaseAdapter, {
       profileId: "profile_test",
     });
+
     const session = await loginUserSession(app, email, password, orgId);
 
     const enableResponse = await app.fetch(
@@ -163,6 +176,7 @@ describe("composio routes", () => {
         orgId,
         "user_admin"
       );
+
     expect(connections).toHaveLength(1);
     expect(connections[0]?.userId).toBe("user_admin");
     expect(connections[0]?.status).toBe("oauth_in_progress");
@@ -170,9 +184,11 @@ describe("composio routes", () => {
 
   test("org member can list toolkits but cannot enable them", async () => {
     const { app, databaseAdapter } = await createApp();
+
     const { orgId } = await seedOrgAdmin(databaseAdapter, {
       profileId: "profile_test",
     });
+
     const now = new Date().toISOString();
     const authService = new AuthService();
 
@@ -196,6 +212,7 @@ describe("composio routes", () => {
       "password123",
       orgId
     );
+
     const listResponse = await app.fetch(
       new Request("http://localhost:4310/v1/composio/toolkits", {
         headers: session.headers(),

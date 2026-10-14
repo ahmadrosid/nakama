@@ -1,7 +1,6 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type {
   InitUserContextResponse,
-  UpdateUserContextRequest,
   UserContextStatusResponse,
 } from "@nakama/core";
 import type { ServerOptions } from "../context";
@@ -14,21 +13,26 @@ export function registerUserContextRoutes(
   options: ServerOptions
 ): void {
   const { agent } = options;
+
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
+
   const userContextStatusSchema = z
     .object({})
     .passthrough()
     .openapi("UserContextStatusResponse");
+
   const updateUserContextSchema = z
     .object({})
     .passthrough()
     .openapi("UpdateUserContextRequest");
+
   const initUserContextSchema = z
     .object({})
     .passthrough()
     .openapi("InitUserContextResponse");
+
   const contentQuerySchema = z.object({
     content: z.enum(["true", "false"]).optional(),
   });
@@ -99,6 +103,7 @@ export function registerUserContextRoutes(
     const auth = getRequestAuth(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const includeContent = c.req.query("content") === "true";
+
     return json<UserContextStatusResponse>(
       await agent.getUserContext(orgId, auth.user.id, includeContent)
     );
@@ -107,14 +112,21 @@ export function registerUserContextRoutes(
   app.put("/v1/user/context", async (c) => {
     const auth = getRequestAuth(c);
     const orgId = requireActiveOrgIdFromContext(c);
-    const body = await readJson<UpdateUserContextRequest>(c.req.raw);
+
+    const body = await readJson(
+      c.req.raw,
+      z.object({ content: z.string() }).strict()
+    );
+
     await agent.writeUserContext(orgId, auth.user.id, body);
+
     return new Response(null, { status: 204 });
   });
 
   app.post("/v1/user/context/init", async (c) => {
     const auth = getRequestAuth(c);
     const orgId = requireActiveOrgIdFromContext(c);
+
     return json<InitUserContextResponse>(
       await agent.initUserContext(orgId, auth.user.id),
       201

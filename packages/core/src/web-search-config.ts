@@ -51,7 +51,7 @@ export interface UpdateWebSearchSettingsInput {
 export function isWebSearchProvider(
   value: string | null | undefined
 ): value is WebSearchProvider {
-  return WEB_SEARCH_PROVIDERS.includes(value as WebSearchProvider);
+  return WEB_SEARCH_PROVIDERS.some((provider) => provider === value);
 }
 
 export function parseWebSearchProvider(
@@ -99,9 +99,7 @@ function parseWebSearchSection(
   };
 }
 
-function buildWebSearchSectionValues(
-  config: WebSearchConfigFile
-): Record<string, string> {
+function buildWebSearchSectionValues(config: WebSearchConfigFile) {
   return {
     api_key: config.apiKey,
     endpoint: config.endpoint,
@@ -182,6 +180,7 @@ function buildSavedWebSearchConfig(
   // Switching vendors must not inherit the previous vendor's endpoint.
   const carriedEndpoint =
     existing?.provider === provider ? existing.endpoint : undefined;
+
   const endpoint = resolveWebSearchEndpoint(
     provider,
     input.endpoint === undefined ? carriedEndpoint : input.endpoint
@@ -213,12 +212,14 @@ export async function saveWebSearchConfig(
   input: UpdateWebSearchSettingsInput
 ): Promise<WebSearchSettingsPublic> {
   const raw = await readTextOrNull(getUserConfigPath());
+
   const parsed =
     raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
 
   if (input.provider === null) {
     delete parsed.sections[WEB_SEARCH_SECTION];
     await writeParsedConfigIni(parsed.global, parsed.sections);
+
     return toWebSearchSettingsPublic(null);
   }
 
