@@ -368,9 +368,9 @@ function groupPluginIds(
   const builtIn = new Set(official.map((item) => item.id));
 
   const createdBySuperBot = new Set(
-    releases
-      .filter((item) => item.source === "local" || item.source === "agent")
-      .map((item) => item.pluginId)
+    releases.flatMap((item) =>
+      item.source === "local" || item.source === "agent" ? [item.pluginId] : []
+    )
   );
 
   const groups = [
