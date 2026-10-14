@@ -5,6 +5,7 @@ import type {
   PluginPackagePreviewResponse,
   PluginPackageRequest,
   PluginReleaseSummary,
+  PluginUsageOrg,
 } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { Checkbox } from "@nakama/ui/checkbox";
@@ -70,12 +71,14 @@ import {
   usePluginAgentAccess,
   usePluginReleases,
   usePluginUpdates,
+  usePluginUsage,
   usePreviewOrgPluginUpdate,
   usePreviewPluginPackage,
   useReinstallOfficialPlugin,
   useRemovePluginRelease,
   useSavePluginAgentAccess,
   useUninstallOrgPlugin,
+  useUnplugPlugin,
   useUpdateOrgPlugin,
 } from "@/hooks/use-plugins";
 import { usePinnedPlugins } from "@/hooks/use-sidebar-collapsed";
@@ -2076,6 +2079,10 @@ function PluginConfirmDialog({
   onPreview(source: PluginPackageRequest): void;
 }) {
   const title = dialogTitle(dialog);
+  const removing = dialog?.type === "remove-plugin" ? dialog.pluginId : null;
+  const usage = usePluginUsage(removing);
+  const usedBy = usage.data?.orgs ?? [];
+  const blocked = Boolean(removing) && (usage.isPending || usedBy.length > 0);
 
   return (
     <Dialog
@@ -2111,7 +2118,12 @@ function PluginConfirmDialog({
           />
         ) : (
           <>
-            {dialog ? <DialogBody dialog={dialog} /> : null}
+            {removing && usedBy.length > 0 ? (
+              <PluginUsageList orgs={usedBy} pluginId={removing} />
+            ) : null}
+            {dialog && !(removing && blocked) ? (
+              <DialogBody dialog={dialog} />
+            ) : null}
             <DialogFooter>
               <Button
                 disabled={busy}
@@ -2121,7 +2133,11 @@ function PluginConfirmDialog({
               >
                 Cancel
               </Button>
-              <Button disabled={busy} onClick={onConfirm} type="button">
+              <Button
+                disabled={busy || blocked}
+                onClick={onConfirm}
+                type="button"
+              >
                 {busy ? <Spinner className="size-4" /> : null}
                 {confirmLabel(dialog)}
               </Button>
@@ -2130,6 +2146,69 @@ function PluginConfirmDialog({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PluginUsageList({
+  orgs,
+  pluginId,
+}: {
+  orgs: PluginUsageOrg[];
+  pluginId: string;
+}) {
+  const unplug = useUnplugPlugin();
+
+  return (
+    <div className="min-w-0 space-y-3">
+      <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-amber-900 text-sm dark:text-amber-200">
+        Still in use. Unplug it from each organization below, then delete.
+      </p>
+      {unplug.error ? (
+        <p className="break-words text-destructive text-sm" role="alert">
+          {formatError(unplug.error)}
+        </p>
+      ) : null}
+      <ul className="divide-y divide-border rounded-xl border border-border">
+        {orgs.map((org) => (
+          <li className="flex flex-wrap items-center gap-3 p-3" key={org.orgId}>
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <p className="break-words font-medium text-sm">{org.name}</p>
+              {org.agents.length > 0 ? (
+                <ul
+                  aria-label="Agents using it"
+                  className="flex flex-wrap gap-1.5"
+                >
+                  {org.agents.map((agent) => (
+                    <li
+                      className="rounded-full bg-muted px-2 py-0.5 text-xs"
+                      key={agent.id}
+                    >
+                      {agent.name}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-muted-foreground text-xs">
+                  No agents use it
+                </p>
+              )}
+            </div>
+            <Button
+              disabled={unplug.isPending}
+              onClick={() => unplug.mutate({ org, pluginId })}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {unplug.isPending && unplug.variables?.org.orgId === org.orgId ? (
+                <Spinner className="size-4" />
+              ) : null}
+              Unplug and delete data
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -2187,8 +2266,11 @@ function DialogBody({
   if (dialog.type === "remove-plugin") {
     return (
       <p className="text-sm">
-        This deletes {dialog.pluginId} and all {dialog.versions.length}{" "}
-        {dialog.versions.length === 1 ? "version" : "versions"}.
+        This deletes {dialog.pluginId} and{" "}
+        {dialog.versions.length === 1
+          ? "its only version"
+          : `all ${dialog.versions.length} versions`}
+        .
       </p>
     );
   }

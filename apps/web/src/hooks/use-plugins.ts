@@ -6,6 +6,7 @@ import type {
   OrgPluginDetail,
   PluginPackagePreviewResponse,
   PluginPackageRequest,
+  PluginUsageOrg,
   ProfileDetail,
   SkillSummary,
   ToolSummary,
@@ -314,6 +315,61 @@ export function usePluginReleases(enabled: boolean) {
   return useQuery({
     ...pluginReleasesQueryOptions(),
     enabled,
+  });
+}
+
+export function usePluginUsage(pluginId: string | null) {
+  return useQuery({
+    enabled: Boolean(pluginId),
+    queryFn: () => client.getPluginUsage(pluginId ?? ""),
+    queryKey: queryKeys.plugins.usage(pluginId ?? ""),
+  });
+}
+
+/** Turns the plugin off in one organization, removes it, then deletes its saved data. */
+export function useUnplugPlugin() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      org,
+      pluginId,
+    }: {
+      org: PluginUsageOrg;
+      pluginId: string;
+    }) => {
+      let current = {
+        lifecycleState: org.lifecycleState,
+        revision: org.revision,
+      };
+
+      if (current.lifecycleState === "enabled") {
+        current = await client.disableOrgPlugin(
+          pluginId,
+          current.revision,
+          org.orgId
+        );
+      }
+
+      if (current.lifecycleState === "disabled") {
+        current = await client.uninstallOrgPlugin(
+          pluginId,
+          current.revision,
+          org.orgId
+        );
+      }
+
+      await client.deleteRetainedPluginData({
+        confirm: true,
+        expectedRevision: current.revision,
+        orgId: org.orgId,
+        pluginId,
+      });
+    },
+    onSettled: async (_data, _error, { org, pluginId }) => {
+      await invalidateOrgPlugins(queryClient, org.orgId);
+      await invalidateQueries(queryClient, queryKeys.plugins.usage(pluginId));
+    },
   });
 }
 

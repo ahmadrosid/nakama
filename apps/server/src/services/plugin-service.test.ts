@@ -256,6 +256,43 @@ describe("PluginService", () => {
     ).toBeDefined();
   });
 
+  test("usage lists organizations that hold a plugin and the agents using it", async () => {
+    const { db, draft, service, actor } = await localDraft();
+    expect(await service.listPluginUsage("notes")).toEqual([]);
+
+    const preview = await service.previewLocalPlugin(draft, actor);
+
+    const install = await service.installLocalPlugin(
+      { ...draft, expectedDigest: preview.digest, expectedRevision: null },
+      actor
+    );
+
+    const now = new Date().toISOString();
+    await db.upsertTool({
+      createdAt: now,
+      description: "List notes",
+      handlerConfig: {},
+      handlerType: "plugin",
+      id: "tool_notes_list",
+      name: "notes_list",
+      pluginId: "notes",
+      updatedAt: now,
+    });
+    await db.assignToolToProfile("super_local", "tool_notes_list");
+
+    expect(await service.listPluginUsage("notes")).toEqual([
+      {
+        agents: [{ id: "super_local", name: "Super" }],
+        lifecycleState: "disabled",
+        name: "Local",
+        orgId: "org_local",
+        revision: install.revision,
+        selectedVersion: install.selectedVersion,
+      },
+    ]);
+    expect(await service.listPluginUsage("other")).toEqual([]);
+  });
+
   test("local install rejects changed review files without publishing", async () => {
     const { db, draft, directory, service, actor } = await localDraft();
     const preview = await service.previewLocalPlugin(draft, actor);

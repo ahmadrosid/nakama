@@ -37,6 +37,7 @@ import {
   type PluginManifest,
   type PluginReleaseSummary,
   type PluginUiContribution,
+  type PluginUsageOrg,
   pathExists,
   resolvePluginReleaseEntry,
   validatePluginJsonInstance,
@@ -1642,6 +1643,52 @@ export class PluginService {
     pluginId?: string
   ): Promise<PluginReleaseSummary[]> {
     return this.db.listPluginReleases(pluginId);
+  }
+
+  /** Every organization that holds this plugin, with the agents there that use it. */
+  async listPluginUsage(pluginId: string): Promise<PluginUsageOrg[]> {
+    const installs = (await this.db.listOrgPlugins()).filter(
+      (install) => install.pluginId === pluginId
+    );
+
+    if (installs.length === 0) {
+      return [];
+    }
+
+    const profiles = await this.db.listProfiles();
+
+    return Promise.all(
+      installs.map(async (install) => {
+        const organization = await this.db.getOrganizationById(install.orgId);
+        const agents: PluginUsageOrg["agents"] = [];
+
+        for (const profile of profiles) {
+          if (profile.orgId !== install.orgId) {
+            continue;
+          }
+
+          const [tools, skills] = await Promise.all([
+            this.db.listToolsForProfile(profile.id),
+            this.db.listSkillsForProfile(profile.id),
+          ]);
+
+          if (
+            [...tools, ...skills].some((item) => item.pluginId === pluginId)
+          ) {
+            agents.push({ id: profile.id, name: profile.name });
+          }
+        }
+
+        return {
+          agents,
+          lifecycleState: install.lifecycleState,
+          name: organization?.name ?? install.orgId,
+          orgId: install.orgId,
+          revision: install.revision,
+          selectedVersion: install.selectedVersion,
+        };
+      })
+    );
   }
 
   /**

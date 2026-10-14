@@ -3447,6 +3447,21 @@ export interface ListPluginReleasesResponse {
   releases: PluginReleaseSummary[];
 }
 
+/** An organization that still holds a plugin, so its releases cannot be removed. */
+export interface PluginUsageOrg {
+  /** Agents in this organization with one of the plugin's tools or skills. */
+  agents: Array<{ id: string; name: string }>;
+  lifecycleState: OrgPluginLifecycleState;
+  name: string;
+  orgId: string;
+  revision: number;
+  selectedVersion: string | null;
+}
+
+export interface PluginUsageResponse {
+  orgs: PluginUsageOrg[];
+}
+
 /** A registry version newer than anything approved for this plugin. */
 export interface PluginUpdateSummary {
   packageName: string;

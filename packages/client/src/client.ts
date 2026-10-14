@@ -161,6 +161,7 @@ import type {
   PluginPackagePreviewResponse,
   PluginPackageRequest,
   PluginRevisionRequest,
+  PluginUsageResponse,
   PluginWorkerStatus,
   PreviewDataImportRequest,
   ProfilePackImportRequest,
@@ -3225,6 +3226,12 @@ export class NakamaClient {
   async listPluginUpdates(): Promise<ListPluginUpdatesResponse> {
     return this.request<ListPluginUpdatesResponse>(
       "/v1/platform/plugins/updates"
+    );
+  }
+
+  async getPluginUsage(pluginId: string): Promise<PluginUsageResponse> {
+    return this.request<PluginUsageResponse>(
+      `/v1/platform/plugins/${encodeURIComponent(pluginId)}/usage`
     );
   }
 
