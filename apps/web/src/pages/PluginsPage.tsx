@@ -326,12 +326,11 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
           pluginId: dialog.plugin.pluginId,
         });
       } else if (dialog.type === "remove-plugin") {
-        for (const version of dialog.versions) {
-          await removeRelease.mutateAsync({
-            pluginId: dialog.pluginId,
-            version,
-          });
-        }
+        await Promise.all(
+          dialog.versions.map((version) =>
+            removeRelease.mutateAsync({ pluginId: dialog.pluginId, version })
+          )
+        );
       } else {
         await removeRelease.mutateAsync({
           pluginId: dialog.pluginId,
@@ -398,6 +397,35 @@ function groupPluginIds(
   return groups.filter((group) => group.ids.length > 0);
 }
 
+function pluginMatchesQuery(
+  pluginId: string,
+  needle: string,
+  catalog: {
+    official: Array<{ description: string; id: string; name: string }>;
+    plugins: OrgPluginDetail[];
+    releases: PluginReleaseSummary[];
+  }
+) {
+  if (!needle) {
+    return true;
+  }
+
+  const plugin = catalog.plugins.find((item) => item.pluginId === pluginId);
+  const official = catalog.official.find((item) => item.id === pluginId);
+  const release = catalog.releases.find((item) => item.pluginId === pluginId);
+
+  return [
+    pluginId,
+    plugin?.name,
+    plugin?.description,
+    official?.name,
+    official?.description,
+    release?.manifest.name,
+    release?.manifest.description,
+    PLUGIN_DESCRIPTIONS.get(pluginId),
+  ].some((text) => text?.toLowerCase().includes(needle));
+}
+
 export function PluginsPage() {
   const { pluginId: selectedPluginId } = useParams<{ pluginId: string }>();
   const { user, activeOrg } = useAuth();
@@ -446,31 +474,13 @@ export function PluginsPage() {
     actionError ?? (queryError ? formatError(queryError) : null);
 
   const needle = query.trim().toLowerCase();
-
-  const matchesQuery = (pluginId: string) => {
-    if (!needle) {
-      return true;
-    }
-
-    const plugin = plugins.find((item) => item.pluginId === pluginId);
-    const catalog = official.find((item) => item.id === pluginId);
-    const release = releases.find((item) => item.pluginId === pluginId);
-
-    return [
-      pluginId,
-      plugin?.name,
-      plugin?.description,
-      catalog?.name,
-      catalog?.description,
-      release?.manifest.name,
-      release?.manifest.description,
-      PLUGIN_DESCRIPTIONS.get(pluginId),
-    ].some((text) => text?.toLowerCase().includes(needle));
-  };
+  const canInstallHere = canInstallPackages && Boolean(orgId);
 
   const visiblePluginIds = selectedPluginId
     ? pluginIds.filter((id) => id === selectedPluginId)
-    : pluginIds.filter(matchesQuery);
+    : pluginIds.filter((id) =>
+        pluginMatchesQuery(id, needle, { official, plugins, releases })
+      );
 
   const renderRow = (pluginId: string) => {
     const plugin = plugins.find((item) => item.pluginId === pluginId);
@@ -604,7 +614,7 @@ export function PluginsPage() {
     <div className="mx-auto min-w-0 max-w-4xl space-y-6">
       <PluginPageHeader
         busy={busy}
-        canInstall={canInstallPackages && Boolean(orgId)}
+        canInstall={canInstallHere}
         detail={Boolean(selectedPluginId)}
         error={dialog ? null : errorMessage}
         onInstall={(target) => {
@@ -616,7 +626,7 @@ export function PluginsPage() {
         onQueryChange={setQuery}
         query={query}
       />
-      {canInstallPackages && orgId ? (
+      {canInstallHere ? (
         <LocalPluginInstaller
           key={orgId}
           onOpenChange={setFolderOpen}
@@ -1033,6 +1043,69 @@ function LocalPluginDraftPicker({
   );
 }
 
+/** Reads a draft file in chunks. Returns null when a newer request took over. */
+async function readLocalPluginText(
+  preview: LocalPluginPreviewResponse,
+  path: string,
+  isCurrent: () => boolean
+): Promise<string | null> {
+  const chunks: Uint8Array[] = [];
+  let offset: number | null = 0;
+
+  while (offset !== null && isCurrent()) {
+    const value = await client.readLocalPluginFile({
+      ...preview.draft,
+      expectedDigest: preview.digest,
+      offset,
+      path,
+    });
+
+    chunks.push(
+      Uint8Array.from(atob(value.content), (character) =>
+        character.charCodeAt(0)
+      )
+    );
+    offset = value.nextOffset;
+  }
+
+  if (!isCurrent()) {
+    return null;
+  }
+
+  const data = new Uint8Array(
+    chunks.reduce((size, chunk) => size + chunk.length, 0)
+  );
+
+  let position = 0;
+
+  for (const chunk of chunks) {
+    data.set(chunk, position);
+    position += chunk.length;
+  }
+
+  const text = new TextDecoder().decode(data);
+
+  return path.endsWith(".json") ? formatJsonForReview(text) : text;
+}
+
+function LocalPluginInstallButton({
+  draft,
+  onClick,
+}: {
+  draft: boolean;
+  onClick(): void;
+}) {
+  return (
+    <Button
+      onClick={onClick}
+      size={draft ? "sm" : "default"}
+      variant={draft ? "default" : "outline"}
+    >
+      {draft ? "Review and install" : "Install from folder"}
+    </Button>
+  );
+}
+
 export function LocalPluginInstaller({
   draft,
   orgId,
@@ -1065,6 +1138,7 @@ export function LocalPluginInstaller({
   const generation = useRef(0);
 
   const install = useInstallLocalPlugin();
+  const busy = pending || install.isPending;
 
   function reset() {
     generation.current += 1;
@@ -1112,43 +1186,14 @@ export function LocalPluginInstaller({
     setError(null);
 
     try {
-      const chunks: Uint8Array[] = [];
-      let offset: number | null = 0;
+      const content = await readLocalPluginText(
+        preview,
+        path,
+        () => turn === generation.current
+      );
 
-      while (offset !== null && turn === generation.current) {
-        const value = await client.readLocalPluginFile({
-          ...preview.draft,
-          expectedDigest: preview.digest,
-          offset,
-          path,
-        });
-
-        chunks.push(
-          Uint8Array.from(atob(value.content), (character) =>
-            character.charCodeAt(0)
-          )
-        );
-        offset = value.nextOffset;
-      }
-
-      if (turn === generation.current) {
-        const data = new Uint8Array(
-          chunks.reduce((size, chunk) => size + chunk.length, 0)
-        );
-
-        let position = 0;
-
-        for (const chunk of chunks) {
-          data.set(chunk, position);
-          position += chunk.length;
-        }
-
-        const text = new TextDecoder().decode(data);
-
-        setFile({
-          content: path.endsWith(".json") ? formatJsonForReview(text) : text,
-          path,
-        });
+      if (content !== null) {
+        setFile({ content, path });
         setReviewed((previous) => new Set([...previous, path]));
       }
     } catch (failure) {
@@ -1195,7 +1240,8 @@ export function LocalPluginInstaller({
       open={open}
     >
       {onOpenChange ? null : (
-        <Button
+        <LocalPluginInstallButton
+          draft={Boolean(draft)}
           onClick={() => {
             reset();
             setOpen(true);
@@ -1204,11 +1250,7 @@ export function LocalPluginInstaller({
               void loadPreview();
             }
           }}
-          size={draft ? "sm" : "default"}
-          variant={draft ? "default" : "outline"}
-        >
-          {draft ? "Review and install" : "Install from folder"}
-        </Button>
+        />
       )}
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
@@ -1220,7 +1262,7 @@ export function LocalPluginInstaller({
           ) : null
         ) : (
           <LocalPluginDraftPicker
-            disabled={pending || install.isPending}
+            disabled={busy}
             draftId={draftId}
             error={error}
             onDraftChange={(value) => {
@@ -1252,7 +1294,7 @@ export function LocalPluginInstaller({
               </p>
             </div>
             <LocalPluginReviewFiles
-              disabled={pending || install.isPending}
+              disabled={busy}
               file={file}
               files={preview.files}
               onClose={() => setFile(null)}
@@ -1267,10 +1309,7 @@ export function LocalPluginInstaller({
                 <span className="text-muted-foreground text-sm tabular-nums">
                   {reviewed.size} of {preview.files.length} read
                 </span>
-                <Button
-                  disabled={pending || install.isPending}
-                  onClick={confirm}
-                >
+                <Button disabled={busy} onClick={confirm}>
                   {install.isPending ? "Installing…" : "Confirm installation"}
                 </Button>
               </div>
@@ -1495,24 +1534,7 @@ function PluginIdentity({
           ) : null}
         </h2>
         {detail ? (
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground text-xs">
-            <span className="inline-flex items-center gap-1.5 capitalize">
-              <span
-                className="size-1.5 rounded-full bg-muted-foreground/40 data-[state=enabled]:bg-emerald-500"
-                data-state={plugin?.lifecycleState}
-              />
-              {plugin?.lifecycleState === "enabled"
-                ? "On"
-                : plugin?.installed
-                  ? "Off"
-                  : "Not added"}
-            </span>
-            {official ? (
-              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">
-                Built-in
-              </span>
-            ) : null}
-          </div>
+          <PluginStatusLine official={official} plugin={plugin} />
         ) : (
           <p className="mt-0.5 line-clamp-1 break-words text-muted-foreground text-sm">
             {PLUGIN_DESCRIPTIONS.get(pluginId) ||
@@ -1522,6 +1544,36 @@ function PluginIdentity({
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+function PluginStatusLine({
+  official,
+  plugin,
+}: Pick<PluginRowProps, "official" | "plugin">) {
+  let status = "Not added";
+
+  if (plugin?.lifecycleState === "enabled") {
+    status = "On";
+  } else if (plugin?.installed) {
+    status = "Off";
+  }
+
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground text-xs">
+      <span className="inline-flex items-center gap-1.5">
+        <span
+          className="size-1.5 rounded-full bg-muted-foreground/40 data-[state=enabled]:bg-emerald-500"
+          data-state={plugin?.lifecycleState}
+        />
+        {status}
+      </span>
+      {official ? (
+        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">
+          Built-in
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -1634,6 +1686,30 @@ function PluginInstallButton({
   );
 }
 
+function pluginMenuActions({
+  official,
+  plugin,
+  releases,
+  updateVersion,
+}: Pick<PluginRowProps, "official" | "plugin" | "releases" | "updateVersion">) {
+  const actions = plugin ? pluginRowActions(plugin) : null;
+
+  const all = [
+    ["disable", "Turn off", actions?.disable],
+    ["update", "Update", actions?.update || Boolean(updateVersion)],
+    ["reinstall", "Reinstall", official && plugin?.installed],
+    ["uninstall", "Remove", actions?.uninstall],
+    ["purge", "Delete saved data", actions?.purge],
+    [
+      "remove-plugin",
+      "Delete plugin",
+      !(official || plugin?.installed) && releases.length > 0,
+    ],
+  ] as const;
+
+  return all.filter(([, , visible]) => visible);
+}
+
 function PluginRowMenu({
   detail,
   pluginId,
@@ -1661,20 +1737,6 @@ function PluginRowMenu({
   | "updateVersion"
 >) {
   const menuRef = useRef<HTMLButtonElement | null>(null);
-  const actions = plugin ? pluginRowActions(plugin) : null;
-
-  const secondaryActions = [
-    ["disable", "Turn off", actions?.disable],
-    ["update", "Update", actions?.update || Boolean(updateVersion)],
-    ["reinstall", "Reinstall", official && plugin?.installed],
-    ["uninstall", "Remove", actions?.uninstall],
-    ["purge", "Delete saved data", actions?.purge],
-    [
-      "remove-plugin",
-      "Delete plugin",
-      !(official || plugin?.installed) && releases.length > 0,
-    ],
-  ] as const;
 
   const { pinned, toggle: togglePin } = usePinnedPlugins();
   const canPin = plugin?.lifecycleState === "enabled" && plugin.ui !== null;
@@ -1683,7 +1745,7 @@ function PluginRowMenu({
     canManageAgentAccess && plugin?.lifecycleState === "enabled";
 
   const visibleSecondaryActions = canManage
-    ? secondaryActions.filter(([, , visible]) => visible)
+    ? pluginMenuActions({ official, plugin, releases, updateVersion })
     : [];
 
   const hasMenu =
@@ -2079,10 +2141,7 @@ function PluginConfirmDialog({
   onPreview(source: PluginPackageRequest): void;
 }) {
   const title = dialogTitle(dialog);
-  const removing = dialog?.type === "remove-plugin" ? dialog.pluginId : null;
-  const usage = usePluginUsage(removing);
-  const usedBy = usage.data?.orgs ?? [];
-  const blocked = Boolean(removing) && (usage.isPending || usedBy.length > 0);
+  const { blocked, inUse } = useRemovalBlockers(dialog);
 
   return (
     <Dialog
@@ -2118,12 +2177,8 @@ function PluginConfirmDialog({
           />
         ) : (
           <>
-            {removing && usedBy.length > 0 ? (
-              <PluginUsageList orgs={usedBy} pluginId={removing} />
-            ) : null}
-            {dialog && !(removing && blocked) ? (
-              <DialogBody dialog={dialog} />
-            ) : null}
+            {inUse ? <PluginUsageList {...inUse} /> : null}
+            {dialog && !blocked ? <DialogBody dialog={dialog} /> : null}
             <DialogFooter>
               <Button
                 disabled={busy}
@@ -2147,6 +2202,18 @@ function PluginConfirmDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+/** Organizations that still hold the plugin a delete dialog would remove. */
+function useRemovalBlockers(dialog: PluginDialog | null) {
+  const pluginId = dialog?.type === "remove-plugin" ? dialog.pluginId : null;
+  const usage = usePluginUsage(pluginId);
+  const orgs = usage.data?.orgs ?? [];
+
+  return {
+    blocked: Boolean(pluginId) && (usage.isPending || orgs.length > 0),
+    inUse: pluginId && orgs.length > 0 ? { orgs, pluginId } : null,
+  };
 }
 
 function PluginUsageList({
