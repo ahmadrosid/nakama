@@ -79,3 +79,6 @@ export const TOOL_ASSIGNMENT_CONFIRMATION_MESSAGE =
 
 export const PROFILE_UPDATE_CONFIRMATION_MESSAGE =
   "Wait for the user to confirm the draft in a later message before calling update_profile.";
+
+export const SKILL_ASSIGNMENT_CONFIRMATION_MESSAGE =
+  "Wait for the user to approve the plan in a later message before calling assign_skill_to_profile.";

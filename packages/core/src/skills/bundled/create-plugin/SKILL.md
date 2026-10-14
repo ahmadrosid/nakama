@@ -128,6 +128,7 @@ Always write `var(--primary)`, never the hex value. The hex values are for refer
 - Copy: one clear label per control. No subtitles or helper text unless a mistake would cause harm. Use `aria-label` on inputs without visible labels and on icon-only buttons.
 - Page actions: pass buttons to `renderHeaderActions(...)` to place them in the page header.
 - States: show a `Spinner` while loading, a short empty message, and errors in `--destructive` with `role="alert"`.
+- Conflicts: if the user asks for a page style that breaks these rules, follow the rules. Tell the user in one line which request you did not apply. Do not deliberate about it.
 - Narrow widths: the page also opens in the chat side panel, where the content is about 360px wide. Use `flex-wrap` or `repeat(auto-fit, minmax(100px, 1fr))` grids, not a fixed column count, and no fixed widths; three tiles then fit one row.
 - Tables: show at most four columns, and put the column the user cares about most right after the name column. Wrap the table in an `overflow-x: auto` box so extra width scrolls instead of breaking the page.
 - Do not: add a hero block, `h1`/`h2` headings, all-caps letter-spaced labels, taglines, numbered feature lists, pill shapes (`999px` radius), or bordered `div`s that copy `Card`. Nakama pages are plain work tools, not landing pages.

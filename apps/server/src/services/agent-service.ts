@@ -519,7 +519,13 @@ export class AgentService {
           ? `${selection.instance.id}::${selection.model}`
           : profileModel;
       },
-      () => this.pluginService
+      () => this.pluginService,
+      {
+        assignSkill: (orgId, profileId, request, meta) =>
+          this.assignSkill(orgId, profileId, request, meta),
+        getModels: () => this.getModels(),
+        listSkills: (orgId) => this.listSkills(orgId),
+      }
     );
     this.orgMemoryTools = createOrgMemoryTools(this.getOrgMemoryService());
     this._providerConfigured =

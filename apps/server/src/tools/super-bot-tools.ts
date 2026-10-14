@@ -1,15 +1,20 @@
 import {
+  type AssignSkillRequest,
   type CreateProfileRequest,
   emptyObjectSchema,
   getCustomToolsDir,
   getProfileSoulDir,
   type JsonValue,
+  type ListSkillsResponse,
   loadSoulStack,
+  type ModelsResponse,
+  type ProfileResponse,
   type ToolContext,
   type ToolDefinition,
   type UpdateProfileRequest,
 } from "@nakama/core";
 import { z } from "zod";
+import { modelSupportsVision } from "../providers/models";
 import {
   CUSTOM_TOOL_HANDLERS,
   customToolTypesLabel,
@@ -21,9 +26,11 @@ import {
   saveToolSetup,
 } from "../services/custom-tool-shared";
 import type { PluginService } from "../services/plugin-service";
+import type { ProfileChangeMeta } from "../services/profile-change-history";
 import type { ProfileService } from "../services/profile-service";
 import {
   PROFILE_UPDATE_CONFIRMATION_MESSAGE,
+  SKILL_ASSIGNMENT_CONFIRMATION_MESSAGE,
   type SuperBotSessionState,
   TOOL_ASSIGNMENT_CONFIRMATION_MESSAGE,
 } from "../services/super-bot-session-state";
@@ -78,8 +85,33 @@ export function createSuperBotTools(
     model: string | null,
     context: ToolContext
   ) => Promise<string | null>,
-  getPluginService?: () => PluginService | null
+  getPluginService?: () => PluginService | null,
+  services: {
+    assignSkill?: (
+      orgId: string,
+      profileId: string,
+      request: AssignSkillRequest,
+      meta: ProfileChangeMeta
+    ) => Promise<ProfileResponse>;
+    getModels?: () => Promise<ModelsResponse>;
+    listSkills?: (orgId: string) => Promise<ListSkillsResponse>;
+  } = {}
 ): ToolDefinition[] {
+  async function inheritModel(
+    orgId: string,
+    context: ToolContext
+  ): Promise<string | null> {
+    if (!context.profileId) {
+      return null;
+    }
+
+    const source = await profileService.getProfile(orgId, context.profileId);
+
+    return resolveInheritedModel
+      ? await resolveInheritedModel(source.profile.model, context)
+      : source.profile.model;
+  }
+
   return [
     {
       description:
@@ -243,6 +275,8 @@ export function createSuperBotTools(
             type: "boolean",
           },
           model: {
+            description:
+              "Model id from list_models (providerId::modelId). Omit to use your own model.",
             type: ["string", "null"],
           },
           name: {
@@ -274,14 +308,7 @@ export function createSuperBotTools(
         let model = readOptionalString(toolInput, "model");
 
         if (model === undefined && context.profileId) {
-          const source = await profileService.getProfile(
-            orgId,
-            context.profileId
-          );
-
-          model = resolveInheritedModel
-            ? await resolveInheritedModel(source.profile.model, context)
-            : source.profile.model;
+          model = await inheritModel(orgId, context);
         }
 
         const result = await profileService.createProfile(orgId, {
@@ -399,6 +426,121 @@ export function createSuperBotTools(
         sessionState.markToolAssigned(context.sessionId, toolId);
 
         return result;
+      },
+    },
+    {
+      description:
+        "Assign an existing skill to a profile, including a skill from an installed plugin. Use after the user approves the plan.",
+      name: "assign_skill_to_profile",
+      parameters: {
+        additionalProperties: false,
+        properties: {
+          profileId: { description: "Target profile id.", type: "string" },
+          skill: {
+            description:
+              "Skill id or skill name. A plugin skill's name is its manifest key.",
+            type: "string",
+          },
+        },
+        required: ["profileId", "skill"],
+        type: "object",
+      },
+      async run(input, context: ToolContext) {
+        const toolInput = SuperBotInputSchema.parse(input);
+        const profileId = readString(toolInput, "profileId");
+        const skill = readString(toolInput, "skill");
+
+        if (!(profileId && skill)) {
+          throw new Error("profileId and skill are required.");
+        }
+
+        if (!sessionState.canUpdateProfile(context.sessionId)) {
+          throw new Error(SKILL_ASSIGNMENT_CONFIRMATION_MESSAGE);
+        }
+
+        if (!services.listSkills) {
+          throw new Error("Skills are not available on this server.");
+        }
+
+        const orgId = requireOrgId(context);
+        const listed = await services.listSkills(orgId);
+
+        const candidates = [
+          ...listed.skills,
+          ...(listed.publishedSkills ?? []),
+        ];
+
+        const byId = candidates.find((item) => item.id === skill);
+
+        const matches = byId
+          ? [byId]
+          : candidates.filter((item) => item.name === skill);
+
+        const [match] = matches;
+
+        if (!match) {
+          throw new Error(`Skill "${skill}" was not found.`);
+        }
+
+        if (matches.length > 1) {
+          throw new Error(
+            `More than one skill is named "${skill}". Pass one of these ids: ${matches.map((item) => item.id).join(", ")}.`
+          );
+        }
+
+        const assign =
+          services.assignSkill ??
+          profileService.assignSkill.bind(profileService);
+
+        return assign(
+          orgId,
+          profileId,
+          { skillId: match.id },
+          {
+            actorUserId: context.userId ?? null,
+            source: "super_bot",
+          }
+        );
+      },
+    },
+    {
+      description:
+        "List configured providers and their models. Each model id is the value create_profile accepts as model. supportsVision tells which models can read images.",
+      name: "list_models",
+      parameters: emptyObjectSchema(),
+      async run(_input, context: ToolContext) {
+        if (!services.getModels) {
+          throw new Error("Models are not available on this server.");
+        }
+
+        const response = await services.getModels();
+        const orgId = context.orgId?.trim();
+
+        return {
+          defaultProviderId: response.currentProviderId,
+          inheritedModel: orgId ? await inheritModel(orgId, context) : null,
+          providers: response.providers.map((provider) => ({
+            default: provider.id === response.currentProviderId,
+            id: provider.id,
+            label: provider.label,
+            models: response.models
+              .filter((model) => model.providerId === provider.id)
+              .map((model) => ({
+                default: model.default === true,
+                id: `${provider.id}::${model.id}`,
+                name: model.name,
+                supportsVision:
+                  modelSupportsVision(
+                    model.id,
+                    provider.type,
+                    provider.customModels
+                  ) ??
+                  model.supportsVision ??
+                  null,
+              })),
+            type: provider.type,
+          })),
+        };
       },
     },
     {
