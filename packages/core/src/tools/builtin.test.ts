@@ -616,8 +616,13 @@ describe("file builtin tools", () => {
       { limit: 1, offset: 2, path: reference },
       context
     );
+    // The reference is absolute, so a stray cwd is ignored.
+    await runReadFile({ cwd: "/tmp", path: reference }, context);
 
-    expect(reads).toEqual([["publication/a", "references/a b.md"]]);
+    expect(reads).toEqual([
+      ["publication/a", "references/a b.md"],
+      ["publication/a", "references/a b.md"],
+    ]);
     expect(result).toMatchObject({
       bytesRead: 6,
       content: "Second",
@@ -648,7 +653,6 @@ describe("file builtin tools", () => {
     };
 
     for (const input of [
-      { cwd: "/tmp", path: "published-skill://pub/SKILL.md" },
       { path: "published-skill://pub" },
       { path: "published-skill://%zz/SKILL.md" },
       { path: "published-skill://pub/config.ini" },
@@ -1189,6 +1193,7 @@ describe("file builtin tools", () => {
 
     for (const input of [
       { path: skillPath },
+      { cwd: path.join(configDir, "agent"), path: skillPath },
       { cwd, path: "SKILL.md" },
       { cwd, path: "references/guide.md" },
     ]) {
