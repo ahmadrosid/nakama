@@ -64,7 +64,19 @@ export async function ensureBundledSkillsAssigned(
 ): Promise<void> {
   const profiles = await db.listProfiles();
 
+  // Only an org known to be archived is skipped: a profile whose org row is
+  // missing still gets its skills, as it did before.
+  const archivedOrgIds = new Set(
+    (await db.listOrganizations())
+      .filter((org) => org.archivedAt)
+      .map((org) => org.id)
+  );
+
   for (const profile of profiles) {
+    if (profile.orgId && archivedOrgIds.has(profile.orgId)) {
+      continue;
+    }
+
     await ensureProfileDefaultBundledSkills(db, profile.id);
 
     // Boot seeds Super Bots before skill rows sync, so a new skill lands here.
@@ -163,6 +175,10 @@ export async function ensureOrgSuperBotProfiles(
   const orgs = await db.listOrganizations();
 
   for (const org of orgs) {
+    if (org.archivedAt) {
+      continue;
+    }
+
     await seedOrgSuperBotProfile(db, org.id);
   }
 }
