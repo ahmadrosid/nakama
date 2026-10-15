@@ -37,8 +37,15 @@ Pull the prebuilt image and start Nakama:
 
 ```bash
 docker pull ghcr.io/ahmadrosid/nakama:latest
-docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahmadrosid/nakama:latest
+umask 077
+printf 'NAKAMA_SECRETS_KEY=%s\n' "$(openssl rand -base64 32)" > nakama-secrets.env
+docker run -d -p 4310:4310 -v nakama-data:/nakama/data \
+  --env-file nakama-secrets.env --name nakama ghcr.io/ahmadrosid/nakama:latest
 ```
+
+Keep `nakama-secrets.env` outside the data volume and back it up separately.
+Use the same file when you restart or upgrade this install.
+For Docker Compose, create this file beside `docker-compose.yaml` before starting it.
 
 Open `http://localhost:4310`. The container serves the API, web dashboard, and platform workers together.
 
@@ -73,6 +80,30 @@ NAKAMA_DATA_VOLUME=nakama-dev-data \
 ```
 
 ## Configuration
+
+### Saved secrets
+
+Nakama encrypts provider keys, web search keys, tool keys, the Composio key, and the email password in SQLite.
+The `NAKAMA_SECRETS_KEY` value unlocks them. Set it before upgrading an install that has those values in `config.ini`.
+Stop older Nakama processes before the upgrade. The new server moves the values from the files during startup.
+If the key is missing or wrong, startup stops before Nakama serves requests.
+
+Settings changes take effect for new work without a restart. Environment key changes need a restart.
+An environment value takes priority. Settings shows its source and blocks edits until you remove the override.
+If you remove an override, select a saved Settings key or enter a new one.
+
+In Kubernetes, mount the master key as a Secret-backed environment variable named `NAKAMA_SECRETS_KEY`.
+Keep it outside the Nakama data volume. Give every process that shares the database the same value.
+Set provider or integration overrides as separate Secret-backed variables or `_FILE` mounts.
+Back up the master key separately from data exports and volumes.
+
+To rotate the master key, stop every Nakama process and make a backup.
+Start the server once with the old `NAKAMA_SECRETS_KEY` and a new `NAKAMA_SECRETS_KEY_NEXT`.
+The process re-encrypts saved values and exits. Start Nakama with the new key.
+Keep the old key while older backups still need it.
+
+Host `bash`, custom host tools, and coding agents run with server file access.
+Use a separate sandbox or process identity when agent-run code must not read server secrets.
 
 The data root follows `NAKAMA_CONFIG_DIR` when set. If you set it, use an
 absolute path. Nakama rejects relative paths because they depend on the process

@@ -11,6 +11,7 @@ export function EmailSettingsFormFields({
   password,
   showPassword,
   passwordPlaceholder,
+  passwordManaged,
   imapHost,
   imapPort,
   imapSecure,
@@ -35,6 +36,7 @@ export function EmailSettingsFormFields({
   password: string;
   showPassword: boolean;
   passwordPlaceholder: string;
+  passwordManaged: boolean;
   imapHost: string;
   imapPort: string;
   imapSecure: boolean;
@@ -87,6 +89,7 @@ export function EmailSettingsFormFields({
             <Input
               autoComplete="new-password"
               className="min-w-0 flex-1"
+              disabled={passwordManaged}
               onChange={(event) => onPasswordChange(event.target.value)}
               placeholder={passwordPlaceholder}
               type={showPassword ? "text" : "password"}
@@ -94,6 +97,7 @@ export function EmailSettingsFormFields({
             />
             <Button
               aria-label={showPassword ? "Hide password" : "Show password"}
+              disabled={passwordManaged}
               onClick={onShowPasswordToggle}
               size="icon-sm"
               type="button"

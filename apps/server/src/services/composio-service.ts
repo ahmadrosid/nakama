@@ -119,6 +119,7 @@ export class ComposioService {
     this.apiClientCache = null;
     this.reachabilityCache = null;
     this.reachabilityInflight = null;
+    this.profileSessionCache.clear();
   }
 
   /**
@@ -1050,6 +1051,7 @@ export class ComposioService {
     return JSON.stringify({
       allowedToolsByToolkit,
       connectedAccountsByToolkit,
+      key: this.apiClientCache?.key,
       toolkits: [...enabledToolkits].sort(),
     });
   }

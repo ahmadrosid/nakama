@@ -1,4 +1,5 @@
 import { isValidBaseUrl } from "./compatible-provider-config";
+import { resolveManagedSecret } from "./config";
 import type { WebSearchProvider } from "./contract";
 import { readTextOrNull } from "./fs";
 import { maskTrailingSecret, REDACTED_SECRET_VALUE } from "./secret-mask";
@@ -93,7 +94,7 @@ function parseWebSearchSection(
   }
 
   return {
-    apiKey: values.api_key?.trim() ?? "",
+    apiKey: "",
     endpoint: resolveWebSearchEndpoint(provider, values.endpoint),
     provider,
   };
@@ -101,7 +102,6 @@ function parseWebSearchSection(
 
 function buildWebSearchSectionValues(config: WebSearchConfigFile) {
   return {
-    api_key: config.apiKey,
     endpoint: config.endpoint,
     provider: config.provider,
   };
@@ -116,7 +116,22 @@ export async function loadWebSearchConfig(): Promise<WebSearchConfigFile | null>
 
   const section = parseIniWithSections(raw).sections[WEB_SEARCH_SECTION];
 
-  return section ? parseWebSearchSection(section) : null;
+  const config = section ? parseWebSearchSection(section) : null;
+
+  if (!config) {
+    return null;
+  }
+
+  const envName =
+    config.provider === "exa" ? "EXA_API_KEY" : "FIRECRAWL_API_KEY";
+
+  return {
+    ...config,
+    apiKey:
+      (await resolveManagedSecret("global", `web-search:${config.provider}`, [
+        envName,
+      ])) ?? "",
+  };
 }
 
 export function toWebSearchSettingsPublic(
@@ -195,12 +210,6 @@ function buildSavedWebSearchConfig(
     existing?.provider === provider ? existing : null
   );
 
-  if (!apiKey) {
-    throw new Error(
-      `An API key is required for ${WEB_SEARCH_PROVIDER_LABELS[provider]}.`
-    );
-  }
-
   return {
     apiKey,
     endpoint: endpoint.trim(),
@@ -211,6 +220,10 @@ function buildSavedWebSearchConfig(
 export async function saveWebSearchConfig(
   input: UpdateWebSearchSettingsInput
 ): Promise<WebSearchSettingsPublic> {
+  if (input.apiKey?.trim() && input.apiKey !== REDACTED_SECRET_VALUE) {
+    throw new Error("Save the web search key through the secret settings API.");
+  }
+
   const raw = await readTextOrNull(getUserConfigPath());
 
   const parsed =
@@ -228,5 +241,5 @@ export async function saveWebSearchConfig(
   parsed.sections[WEB_SEARCH_SECTION] = buildWebSearchSectionValues(next);
   await writeParsedConfigIni(parsed.global, parsed.sections);
 
-  return toWebSearchSettingsPublic(next);
+  return toWebSearchSettingsPublic(await loadWebSearchConfig());
 }

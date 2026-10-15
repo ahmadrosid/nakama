@@ -232,6 +232,7 @@ describe("createOpenRouterProvider", () => {
 
   test("create, persist, update and clear routing through the instance factory", async () => {
     const previousDir = process.env.NAKAMA_CONFIG_DIR;
+    const previousKey = process.env.OPENROUTER_API_KEY;
     const directory = await mkdtemp(join(tmpdir(), "nakama-routing-"));
     const bodies: ProviderJsonRecord[] = [];
 
@@ -256,6 +257,7 @@ describe("createOpenRouterProvider", () => {
 
     server.listen({ onUnhandledRequest: "error" });
     process.env.NAKAMA_CONFIG_DIR = directory;
+    process.env.OPENROUTER_API_KEY = `sk-or-${"x".repeat(24)}`;
 
     try {
       const strict = {
@@ -363,6 +365,12 @@ describe("createOpenRouterProvider", () => {
         delete process.env.NAKAMA_CONFIG_DIR;
       } else {
         process.env.NAKAMA_CONFIG_DIR = previousDir;
+      }
+
+      if (previousKey === undefined) {
+        delete process.env.OPENROUTER_API_KEY;
+      } else {
+        process.env.OPENROUTER_API_KEY = previousKey;
       }
 
       await rm(directory, { force: true, recursive: true });

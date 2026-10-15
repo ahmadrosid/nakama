@@ -16,7 +16,7 @@ import {
   useProvidersQuery,
   useUpdateProviderMutation,
 } from "@/hooks/use-app-queries";
-import { formatError } from "@/lib/client";
+import { client, formatError } from "@/lib/client";
 import { ProviderInstanceCard } from "./provider-instance-card";
 
 interface ProviderSettingsCardProps {
@@ -28,13 +28,17 @@ export function ProviderSettingsCard({
   formError,
   onFormError,
 }: ProviderSettingsCardProps) {
-  const { data: providersResponse, isLoading: providersLoading } =
-    useProvidersQuery();
+  const {
+    data: providersResponse,
+    isLoading: providersLoading,
+    refetch: refetchProviders,
+  } = useProvidersQuery();
 
   const {
     data: catalogResponse,
     isLoading: catalogLoading,
     error: catalogQueryError,
+    refetch: refetchModels,
   } = useModelsQuery({
     enabled: (providersResponse?.providers.length ?? 0) > 0,
   });
@@ -108,6 +112,14 @@ export function ProviderSettingsCard({
                         onFormError(null);
                       }}
                       onError={onFormError}
+                      onManage={async (providerId, action) => {
+                        await client.manageProviderSecret(providerId, action);
+                        await Promise.all([
+                          refetchProviders(),
+                          refetchModels(),
+                        ]);
+                        onFormError(null);
+                      }}
                       onUpdate={async (providerId, request) => {
                         await updateProviderMutation.mutateAsync({
                           providerId,

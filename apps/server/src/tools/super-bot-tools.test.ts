@@ -13,13 +13,17 @@ import type {
   UpdateProfileRequest,
 } from "@nakama/core";
 import { runWriteFile } from "@nakama/core";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { z } from "zod";
+
 import {
   approveToolSetup,
   loadToolApiKey,
   loadToolSetup,
   saveToolSetup,
+  setToolSecrets,
 } from "../services/custom-tool-shared";
+import { ManagedSecrets } from "../services/managed-secrets";
 import type { ProfileService } from "../services/profile-service";
 import {
   PROFILE_UPDATE_CONFIRMATION_MESSAGE,
@@ -58,6 +62,12 @@ const ORG_ID = "org_test";
 const SESSION_ID = "session_test";
 
 describe("super bot create_tool", () => {
+  setToolSecrets(
+    new ManagedSecrets(
+      createInMemoryDatabaseAdapter(),
+      Buffer.alloc(32, 1).toString("base64")
+    )
+  );
   let tempConfigDir = "";
 
   afterEach(async () => {

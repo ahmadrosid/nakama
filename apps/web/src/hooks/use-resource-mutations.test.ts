@@ -564,7 +564,18 @@ for (const kind of [
         undefined
       );
 
-      const requests = [create, configure, update, remove, deleteTool];
+      const saveSecret = spyOn(client, "setProviderSecret").mockResolvedValue({
+        provider,
+      });
+
+      const requests = [
+        create,
+        configure,
+        update,
+        remove,
+        deleteTool,
+        saveSecret,
+      ];
 
       if (fails) {
         for (const request of requests) {
@@ -674,7 +685,18 @@ for (const kind of [
         );
 
         if (kind === "create") {
-          expect(create).toHaveBeenCalledWith(createInput);
+          expect(create).toHaveBeenCalledWith({
+            label: provider.label,
+            type: provider.type,
+          });
+          expect(saveSecret).toHaveBeenCalledTimes(fails ? 0 : 1);
+
+          if (!fails) {
+            expect(saveSecret).toHaveBeenCalledWith(
+              provider.id,
+              createInput.apiKey
+            );
+          }
         } else if (kind === "configure") {
           expect(configure).toHaveBeenCalledWith(configureInput);
         } else if (kind === "update") {

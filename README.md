@@ -79,7 +79,9 @@ enabling channel workers.
 ```bash
 # Pull and run the latest image
 docker pull ghcr.io/ahmadrosid/nakama:latest
-docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahmadrosid/nakama:latest
+umask 077
+printf 'NAKAMA_SECRETS_KEY=%s\n' "$(openssl rand -base64 32)" > nakama-secrets.env
+docker run -d -p 4310:4310 -v nakama-data:/nakama/data --env-file nakama-secrets.env --name nakama ghcr.io/ahmadrosid/nakama:latest
 ```
 
 **Build from source:**

@@ -1,5 +1,14 @@
 PRAGMA foreign_keys = ON;
 
+CREATE TABLE IF NOT EXISTS managed_secrets (
+  scope TEXT NOT NULL,
+  name TEXT NOT NULL,
+  source TEXT NOT NULL CHECK(source IN ('environment', 'settings')),
+  encrypted_value TEXT,
+  version INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (scope, name)
+);
+
 CREATE TABLE IF NOT EXISTS profiles (
   id TEXT PRIMARY KEY NOT NULL,
   name TEXT NOT NULL,

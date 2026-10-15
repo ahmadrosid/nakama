@@ -1063,7 +1063,7 @@ export class OrgService {
 
     // Keep the database row available for a safe retry if disk cleanup fails.
     await rm(getOrgConfigDir(orgId), { force: true, recursive: true });
-    await deleteOrgToolCredentials(orgId);
+    await deleteOrgToolCredentials(orgId, this.databaseAdapter);
     await rm(join(getUserConfigDir(), "retired-app-users", orgId), {
       force: true,
       recursive: true,
@@ -1334,7 +1334,10 @@ export class OrgService {
               force: true,
               recursive: true,
             });
-            await deleteOrgToolCredentials(organization.id);
+            await deleteOrgToolCredentials(
+              organization.id,
+              this.databaseAdapter
+            );
             await this.databaseAdapter.abortOrgTeamCreation(
               parentOrgId,
               request.requestId,

@@ -13,8 +13,11 @@ import {
   loadToolSetup,
   saveToolApiKey,
   saveToolSetup,
+  setToolSecrets,
 } from "../../services/custom-tool-shared";
+import { ManagedSecrets } from "../../services/managed-secrets";
 import { ProfileService } from "../../services/profile-service";
+
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
@@ -26,7 +29,7 @@ import {
 setupTestConfigDir("nakama-tools-route-test-");
 
 function createApp(agentOverrides: Partial<AgentService> = {}) {
-  return createMinimalHonoApp({
+  const result = createMinimalHonoApp({
     agent: {
       getTool: async (toolId: string) => ({
         tool: {
@@ -52,6 +55,15 @@ function createApp(agentOverrides: Partial<AgentService> = {}) {
       ...agentOverrides,
     },
   });
+
+  setToolSecrets(
+    new ManagedSecrets(
+      result.databaseAdapter,
+      Buffer.alloc(32, 1).toString("base64")
+    )
+  );
+
+  return result;
 }
 
 describe("tool playground routes", () => {
@@ -243,7 +255,10 @@ describe("tool playground routes", () => {
         ).status
       ).toBe(404);
       expect(before.status).toBe(200);
-      expect(await before.json()).toEqual({ configured: false });
+      expect(await before.json()).toMatchObject({
+        configured: false,
+        source: "missing",
+      });
 
       const saved = await app.fetch(
         new Request(url, {
@@ -267,7 +282,10 @@ describe("tool playground routes", () => {
         "parent-key"
       );
       const after = await status();
-      expect(await after.json()).toEqual({ configured: true });
+      expect(await after.json()).toMatchObject({
+        configured: true,
+        source: "settings",
+      });
       const ran = await run();
       expect(ran.status).toBe(200);
       const response = await ran.json();
@@ -449,10 +467,40 @@ describe("tool playground routes", () => {
     expect((await approve({ apiKey: "overwrite" })).status).toBe(200);
     expect(await loadToolApiKey(orgId, setupId)).toBe("private-key");
     expect((await loadToolSetup(orgId, setupId)).profileId).toBe("target");
+
+    const rejected = await app.fetch(
+      new Request(url, { headers, method: "DELETE" })
+    );
+
+    expect(rejected.status).toBe(200);
+    expect((await rejected.json()).status).toBe("rejected");
+    expect(await loadToolApiKey(orgId, setupId)).toBeUndefined();
     const status = await app.fetch(new Request(url, { headers }));
     expect(await status.text()).not.toContain("private-key");
     await expect(loadToolSetup("other-org", setupId)).rejects.toThrow();
     expect((await app.fetch(new Request(url))).status).toBe(401);
+
+    const expiresId = crypto.randomUUID();
+    await saveToolSetup(orgId, {
+      createdAt: "2020-01-01T00:00:00.000Z",
+      description: "Expired tool",
+      id: expiresId,
+      name: "expired_tool",
+      plan: "Connect",
+      requiresApiKey: true,
+      sessionId: "session",
+      status: "approved",
+    });
+    await saveToolApiKey(orgId, expiresId, "staged-key");
+
+    const expired = await app.fetch(
+      new Request(`http://localhost:4310/v1/tool-setups/${expiresId}`, {
+        headers,
+      })
+    );
+
+    expect((await expired.json()).status).toBe("rejected");
+    expect(await loadToolApiKey(orgId, expiresId)).toBeUndefined();
   });
   test("credential endpoint saves only for an admin's organization and never returns the key", async () => {
     let visibleOrg = "";
@@ -519,7 +567,10 @@ describe("tool playground routes", () => {
     );
 
     const status = await app.fetch(new Request(url, { headers }));
-    expect(await status.json()).toEqual({ configured: false });
+    expect(await status.json()).toMatchObject({
+      configured: false,
+      source: "missing",
+    });
 
     const saved = await app.fetch(
       new Request(url, {
@@ -530,12 +581,15 @@ describe("tool playground routes", () => {
     );
 
     expect(saved.status).toBe(200);
-    expect(await saved.json()).toEqual({ configured: true });
+    expect(await saved.json()).toMatchObject({
+      configured: true,
+      source: "settings",
+    });
     expect(await loadToolApiKey(orgId, "tool_key")).toBe("private-tool-key");
     expect(await loadToolApiKey("another_org", "tool_key")).toBeUndefined();
     expect(
       await (await app.fetch(new Request(url, { headers }))).json()
-    ).toEqual({ configured: true });
+    ).toMatchObject({ configured: true, source: "settings" });
 
     const invalid = await app.fetch(
       new Request(url, {
@@ -576,7 +630,7 @@ describe("tool playground routes", () => {
       await app.fetch(new Request(envUrl, { headers }))
     ).text();
 
-    expect(JSON.parse(envStatus)).toEqual({
+    expect(JSON.parse(envStatus)).toMatchObject({
       configured: false,
       env: [
         {

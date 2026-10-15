@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { z } from "zod";
+
 import { NakamaApiError } from "./api-error";
 import {
   isValidBaseUrl,
@@ -603,7 +604,12 @@ export async function saveUserConfig(config: UserConfig): Promise<void> {
 
   for (const provider of providers) {
     const sectionName = `${PROVIDER_SECTION_PREFIX}${provider.id}`;
-    sections[sectionName] = buildProviderSectionValues(provider);
+    // Keep a legacy file key until the server migration moves it into the
+    // secret store; the CLI can save the config before the server starts.
+    const legacyApiKey = existingParsed.sections[sectionName]?.api_key;
+    sections[sectionName] = legacyApiKey
+      ? { ...buildProviderSectionValues(provider), api_key: legacyApiKey }
+      : buildProviderSectionValues(provider);
   }
 
   await writeParsedConfigIni(global, sections);
@@ -612,11 +618,12 @@ export async function saveUserConfig(config: UserConfig): Promise<void> {
 export async function writeParsedConfigIni(
   global: Record<string, string | undefined>,
   sections: Record<string, Record<string, string>>,
-  patch: Record<string, string | undefined> = {}
+  patch: Record<string, string | undefined> = {},
+  targetPath = getUserConfigPath()
 ): Promise<void> {
   const lines = buildConfigIniLines(global, sections, patch);
-  await writeTextFile(getUserConfigPath(), lines.join("\n"), {
-    ensureDir: getUserConfigDir(),
+  await writeTextFile(targetPath, lines.join("\n"), {
+    ensureDir: dirname(targetPath),
   });
 }
 
@@ -719,7 +726,7 @@ function loadProvidersFromSections(
     }
 
     const label = normalizeProviderInstanceLabel(type, values.label, providers);
-    const apiKey = values.api_key ?? "";
+    const apiKey = "";
 
     const baseUrl = values.base_url?.trim()
       ? normalizeBaseUrl(values.base_url)
@@ -809,7 +816,6 @@ function buildProviderSectionValues(
   provider: ProviderInstance
 ): ProviderSectionValues {
   const values: ProviderSectionValues = {
-    api_key: provider.apiKey,
     created_at: provider.createdAt,
     label: normalizeProviderInstanceLabel(provider.type, provider.label, []),
     type: provider.type,

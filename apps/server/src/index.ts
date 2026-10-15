@@ -45,6 +45,7 @@ import {
   getUserConfigDir,
   loadConfig,
   NAKAMA_API_VERSION,
+  setManagedSecretResolver,
   writeRuntimeServerUrl,
 } from "@nakama/core";
 import {
@@ -69,9 +70,12 @@ import { AutomationService } from "./services/automation-service";
 import { resolveComposioCallbackBaseUrl } from "./services/composio-callback-url";
 import { ComposioService } from "./services/composio-service";
 import { claimLegacyCustomTools } from "./services/custom-tool-handlers";
+import { setToolSecrets } from "./services/custom-tool-shared";
+
 import { retireAppUserData } from "./services/data-portability";
 import { GoogleMeetService } from "./services/google-meet/service";
 import { LlmUsageTracker } from "./services/llm-usage-tracker";
+import { ManagedSecrets } from "./services/managed-secrets";
 import { McpClientManager } from "./services/mcp-client-manager";
 import {
   createMcpAwareEmailOutboundAdapter,
@@ -126,13 +130,17 @@ if (existingServerUrl) {
   process.exit(0);
 }
 
-const { provider, userConfig } = await ensureProviderConfigured();
-
 const config = loadConfig();
 
 const database = await createDatabase(config.databaseUrl, {
   baseDir: getUserConfigDir(),
 });
+
+if (process.env.NAKAMA_CHECK_SECRETS_KEY === "1") {
+  await new ManagedSecrets(database.adapter).checkIntegrity();
+  database.release();
+  process.exit(0);
+}
 
 const MAX_AUTOMATION_RUN_RESUMES = 2;
 
@@ -144,6 +152,46 @@ await retireAppUserData(
   getUserConfigDir(),
   resolveDatabasePath(config.databaseUrl, { baseDir: getUserConfigDir() })
 );
+
+let managedSecrets: ManagedSecrets;
+
+try {
+  managedSecrets = new ManagedSecrets(database.adapter);
+  await managedSecrets.migrateLegacyFiles();
+} catch (error) {
+  // Saved keys stay in config.ini until the migration succeeds, so print the
+  // fix instead of a stack trace and let the operator restart.
+  console.error(
+    `Nakama cannot start: ${error instanceof Error ? error.message : String(error)}`
+  );
+
+  if (!process.env.NAKAMA_SECRETS_KEY) {
+    console.error(
+      "Create a key with `openssl rand -base64 32`, set it as NAKAMA_SECRETS_KEY, and keep it with your backups."
+    );
+  }
+
+  database.release();
+  process.exit(1);
+}
+
+if (process.env.NAKAMA_SECRETS_KEY_NEXT) {
+  await managedSecrets.rotateKey(process.env.NAKAMA_SECRETS_KEY_NEXT);
+  database.release();
+  process.stdout.write(
+    "Nakama secrets key rotation complete. Start with the new NAKAMA_SECRETS_KEY.\n"
+  );
+  process.exit(0);
+}
+
+setToolSecrets(managedSecrets);
+
+setManagedSecretResolver(
+  async (scope, name, envNames) =>
+    (await managedSecrets.resolve(scope, name, envNames)).value
+);
+
+const { provider, userConfig } = await ensureProviderConfigured(managedSecrets);
 
 // Runs are only completed by the process that started them, so a crash or a
 // kill leaves rows claiming work nothing is doing. Settle them before serving.
@@ -175,7 +223,8 @@ const agent = new AgentService(
   userConfig,
   provider,
   database.adapter,
-  llmUsageTracker
+  llmUsageTracker,
+  managedSecrets
 );
 
 const googleMeetService = new GoogleMeetService(

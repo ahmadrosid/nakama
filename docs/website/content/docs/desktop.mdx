@@ -25,6 +25,11 @@ Cloud model providers still need an internet connection and credentials. Optiona
 
 Desktop keeps its own local accounts, conversations, and configuration. Existing web-server data is not imported automatically. Your data remains when you close or update the app.
 
+Desktop saves an encryption key in your operating-system credential store.
+Use **File → Export recovery key** before you move a full backup to another computer.
+Keep that key file separate from the backup. On the new computer, use **File → Import recovery key** before you restore the backup.
+Nakama checks the key against any saved encrypted secrets before it accepts the import, then restarts.
+
 The local server accepts connections only from your computer. Quitting the desktop app stops its server, automations, and channel workers. Keep the app open for background tasks to run.
 
 ## Use Nakama

@@ -42,7 +42,9 @@ import { AgentService } from "./agent-service";
 import { createDefaultProfile } from "./agent-service-test-fixtures";
 import { AuthService } from "./auth-service";
 import { LlmUsageTracker } from "./llm-usage-tracker";
+import { ManagedSecrets } from "./managed-secrets";
 import { OrgService } from "./org-service";
+
 import { resolveDefaultModelForInstance } from "./provider-instance-helpers";
 import { sessionTurnRegistry } from "./session-turn-registry";
 
@@ -1193,20 +1195,37 @@ describe("AgentService thinking provider options", () => {
 });
 
 test("rejects a Netra provider when the model endpoint rejects its API key", async () => {
+  const configDir = await mkdtemp(path.join(tmpdir(), "nakama-netra-secret-"));
+  process.env.NAKAMA_CONFIG_DIR = configDir;
+
   using fetchMock = spyOn(globalThis, "fetch").mockImplementation(
     asTestFetch(async () => new Response("invalid key", { status: 401 }))
   );
 
-  const service = new AgentService(null, null, createInMemoryDatabaseAdapter());
+  try {
+    const db = createInMemoryDatabaseAdapter();
 
-  await expect(
-    service.createProvider({
-      apiKey: "invalid-key",
+    const service = new AgentService(
+      null,
+      null,
+      db,
+      undefined,
+      new ManagedSecrets(db, Buffer.alloc(32, 1).toString("base64"))
+    );
+
+    const created = await service.createProvider({
       model: NETRA_AGENT_MODEL_ID,
       type: "netra",
-    })
-  ).rejects.toMatchObject({ status: 400 });
-  expect(fetchMock).toHaveBeenCalled();
+    });
+
+    await expect(
+      service.setProviderSecret(created.provider.id, "invalid-key")
+    ).rejects.toMatchObject({ status: 400 });
+    expect(fetchMock).toHaveBeenCalled();
+  } finally {
+    delete process.env.NAKAMA_CONFIG_DIR;
+    await rm(configDir, { force: true, recursive: true });
+  }
 });
 
 test("discovers the supported Netra model without a custom base URL", async () => {

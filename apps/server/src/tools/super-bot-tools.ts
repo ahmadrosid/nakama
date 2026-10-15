@@ -209,6 +209,7 @@ export function createSuperBotTools(
 
         const plan = {
           ...parsed,
+          createdAt: new Date().toISOString(),
           id: crypto.randomUUID(),
           sessionId: context.sessionId,
           status: "pending" as const,

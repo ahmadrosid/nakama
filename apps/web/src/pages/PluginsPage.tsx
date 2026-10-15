@@ -1533,25 +1533,46 @@ function PluginIdentity({
             </span>
           ) : null}
         </h2>
-        {detail ? (
-          <PluginStatusLine official={official} plugin={plugin} />
-        ) : (
-          <p className="mt-0.5 line-clamp-1 break-words text-muted-foreground text-sm">
-            {PLUGIN_DESCRIPTIONS.get(pluginId) ||
-              plugin?.description ||
-              catalogDescription ||
-              releases[0]?.manifest.description}
-          </p>
-        )}
+        <PluginIdentityMeta
+          catalogDescription={catalogDescription}
+          detail={detail}
+          official={official}
+          plugin={plugin}
+          pluginId={pluginId}
+          releases={releases}
+        />
       </div>
     </div>
   );
 }
 
-function PluginStatusLine({
+function PluginIdentityMeta({
+  catalogDescription,
+  detail,
   official,
   plugin,
-}: Pick<PluginRowProps, "official" | "plugin">) {
+  pluginId,
+  releases,
+}: Pick<
+  PluginRowProps,
+  | "catalogDescription"
+  | "detail"
+  | "official"
+  | "plugin"
+  | "pluginId"
+  | "releases"
+>) {
+  if (!detail) {
+    return (
+      <p className="mt-0.5 line-clamp-1 break-words text-muted-foreground text-sm">
+        {PLUGIN_DESCRIPTIONS.get(pluginId) ||
+          plugin?.description ||
+          catalogDescription ||
+          releases[0]?.manifest.description}
+      </p>
+    );
+  }
+
   let status = "Not added";
 
   if (plugin?.lifecycleState === "enabled") {

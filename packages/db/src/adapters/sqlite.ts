@@ -36,6 +36,7 @@ import type {
   StoredLlmUsageDailyStatsRecord,
   StoredLlmUsageModelStatsRecord,
   StoredLlmUsageStatsRecord,
+  StoredManagedSecret,
   StoredMcpServerRecord,
   StoredNotificationDestinationRecord,
   StoredOrganizationRecord,
@@ -678,6 +679,51 @@ export async function createSqliteDatabase(
 const NOTIFICATION_WEBHOOK_DELIVERY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
+  const getManagedSecretStmt = db.prepare(
+    "SELECT scope, name, source, encrypted_value, version FROM managed_secrets WHERE scope = ? AND name = ?"
+  );
+
+  const listManagedSecretsStmt = db.prepare(
+    "SELECT scope, name, source, encrypted_value, version FROM managed_secrets"
+  );
+
+  const putManagedSecretStmt = db.prepare(`
+    INSERT INTO managed_secrets (scope, name, source, encrypted_value)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(scope, name) DO UPDATE SET
+      source = excluded.source,
+      encrypted_value = excluded.encrypted_value,
+      version = managed_secrets.version + 1
+  `);
+
+  const deleteManagedSecretStmt = db.prepare(
+    "DELETE FROM managed_secrets WHERE scope = ? AND name = ?"
+  );
+
+  const replaceManagedSecretStmt = db.prepare(
+    "UPDATE managed_secrets SET encrypted_value = ?, version = version + 1 WHERE scope = ? AND name = ?"
+  );
+
+  const replaceManagedSecretsTransaction = db.transaction(
+    (
+      secrets: Array<
+        Pick<StoredManagedSecret, "scope" | "name" | "encryptedValue">
+      >
+    ) => {
+      for (const secret of secrets) {
+        if (
+          replaceManagedSecretStmt.run(
+            secret.encryptedValue,
+            secret.scope,
+            secret.name
+          ).changes !== 1
+        ) {
+          throw new Error("Managed secret changed during key rotation.");
+        }
+      }
+    }
+  );
+
   const listAutomationsStmt = db.prepare<AutomationRow, SQLQueryBindings[]>(
     "SELECT * FROM automations"
   );
@@ -4578,6 +4624,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
       return result.changes > 0;
     },
+    async deleteManagedSecret(scope, name) {
+      deleteManagedSecretStmt.run(scope, name);
+    },
 
     async deleteMcpServer(id) {
       const result = deleteMcpServerEverywhereTransaction(id);
@@ -4792,6 +4841,26 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const row = getLlmUsageStatsStmt.get(orgId, LLM_USAGE_STATS_ID);
 
       return row ? toLlmUsageStatsRecord(row) : null;
+    },
+    async getManagedSecret(scope, name) {
+      // SAFETY: managed_secrets columns and its source constraint match this row type.
+      const row = getManagedSecretStmt.get(scope, name) as {
+        scope: string;
+        name: string;
+        source: StoredManagedSecret["source"];
+        encrypted_value: string | null;
+        version: number;
+      } | null;
+
+      return row
+        ? {
+            encryptedValue: row.encrypted_value,
+            name: row.name,
+            scope: row.scope,
+            source: row.source,
+            version: row.version,
+          }
+        : null;
     },
 
     async getMcpServer(id) {
@@ -5402,6 +5471,24 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         .all(orgId)
         .map((row) => toLlmUsageModelStatsRecord(row));
     },
+    async listManagedSecrets() {
+      // SAFETY: managed_secrets columns and its source constraint match this row type.
+      const rows = listManagedSecretsStmt.all() as Array<{
+        scope: string;
+        name: string;
+        source: StoredManagedSecret["source"];
+        encrypted_value: string | null;
+        version: number;
+      }>;
+
+      return rows.map((row) => ({
+        encryptedValue: row.encrypted_value,
+        name: row.name,
+        scope: row.scope,
+        source: row.source,
+        version: row.version,
+      }));
+    },
 
     async listMcpServerProfileCounts() {
       const counts: Record<string, number> = {};
@@ -5724,6 +5811,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async publishOrgSharedResource(record) {
       return publishOrgSharedResourceTransaction(record);
     },
+    async putManagedSecret(secret) {
+      putManagedSecretStmt.run(
+        secret.scope,
+        secret.name,
+        secret.source,
+        secret.encryptedValue
+      );
+    },
 
     async releaseMonthlyLlmQuota(orgId, reservationId) {
       releaseMonthlyLlmQuotaStmt.run(reservationId, orgId);
@@ -5761,6 +5856,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const result = renameSessionTitleStmt.run(title, sessionId);
 
       return result.changes > 0;
+    },
+    async replaceManagedSecrets(secrets) {
+      replaceManagedSecretsTransaction(secrets);
     },
 
     async replaceMessagesForSession(sessionId, messages) {

@@ -60,13 +60,16 @@ import {
   saveToolApiKey,
   saveToolEnv,
   saveToolSetup,
+  setToolSecrets,
 } from "./custom-tool-shared";
 import {
   createNakamaDataExport,
   restoreNakamaDataImport,
 } from "./data-portability";
+import { ManagedSecrets } from "./managed-secrets";
 import { McpClientManager } from "./mcp-client-manager";
 import { McpService } from "./mcp-service";
+
 import { OrgService } from "./org-service";
 import { OrgUsageQuotaService } from "./org-usage-quota-service";
 import { ProfileService } from "./profile-service";
@@ -81,6 +84,9 @@ function createOrgService(
   getWebPublicUrl?: () => string | undefined
 ) {
   const databaseAdapter = createInMemoryDatabaseAdapter();
+  setToolSecrets(
+    new ManagedSecrets(databaseAdapter, Buffer.alloc(32, 1).toString("base64"))
+  );
   const authService = new AuthService();
 
   return {
@@ -1477,8 +1483,10 @@ describe("OrgService", () => {
 
     const raw = await readFile(getUserConfigPath(), "utf8");
     expect(raw).not.toContain("sk-deleted-org-secret");
+    expect(raw).not.toContain("sk-kept-org-secret");
     expect(raw).toContain("sk-keep-provider");
     expect(raw).toContain("sk-foreign-shape");
+
     expect(raw).toContain("web_public_url=https://acme.example.com");
     expect(await loadToolApiKey(kept.organization.id, "tool_kept_org")).toBe(
       "sk-kept-org-secret"
@@ -4548,7 +4556,7 @@ describe("OrgService shared resource publications", () => {
           await orgService.listSharedResources("org_team_b", "user_other")
         ).resources.find((item) => item.id === publication.id)?.readiness
       ).toBe("requires_setup");
-      await deleteOrgToolCredentials("org_team_a");
+      await deleteOrgToolCredentials("org_team_a", db);
       expect(
         (
           await orgService.listSharedResources("org_team_a", "user_other")

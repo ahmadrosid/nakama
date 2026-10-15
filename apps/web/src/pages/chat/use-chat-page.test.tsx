@@ -758,7 +758,7 @@ test("waits for the active org profile query before selecting a profile", async 
 
   // SAFETY: The deferred result supplies the profile rows asserted by this test.
   const listProfiles = spyOn(client, "listProfiles").mockImplementation(
-    () => profiles.promise as never
+    () => profiles.promise as ReturnType<typeof client.listProfiles>
   );
 
   // SAFETY: The page test reads only profile id, name, and skills.
