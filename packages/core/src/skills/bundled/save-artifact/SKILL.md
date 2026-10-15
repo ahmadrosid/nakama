@@ -23,11 +23,11 @@ These instructions are loaded directly when this skill is active. No additional 
 4. Use those tokens throughout the page. Give every color token a light and dark value, including chart colors and interaction states.
 5. Support both themes through `prefers-color-scheme`. If an existing design system provides an explicit theme signal, respect it.
 6. Choose typefaces deliberately. Pair fonts only when the pairing improves hierarchy, and keep a consistent type scale with readable fallback fonts.
-7. Use real content from the request or available sources. Do not invent facts, testimonials, or results. Label necessary assumptions and sample data.
+7. Use only facts from the request or available sources. Do not add dates, deadlines, team sizes, customers, quotes, or metrics that were not supplied; omit them. Label sample data where it appears.
 8. Write plain, direct copy. Use meaningful headings and labels; omit filler and placeholder sections.
 
-Avoid generic defaults: cream with terracotta accents, purple gradients, Inter for every subject, emoji section markers, and rounded cards around everything.
-Use spacing, alignment, rules, and typography to organize content. Keep an established brand's choices when they fit the request.
+Avoid generic defaults: cream with terracotta accents, purple gradients, Inter for every subject, emoji, and rows of rounded cards.
+Organize content with spacing, rules, and typography; show features and phases as ruled rows or a definition list. Keep an established brand's choices when they fit the request.
 
 ## Nakama style recipes
 
@@ -69,17 +69,19 @@ Load named fonts through Google Fonts or use the fallbacks. Artifacts do not inh
 }
 ```
 
-Use `--on-primary` on filled primary actions. Reserve amber for meaningful emphasis and `--radius` for contained controls or panels.
-Organize ordinary sections with spacing and rules, without shadows. Do not turn every recipe into a hero followed by three cards.
+Use `--on-primary` on filled primary actions. Reserve amber for meaningful emphasis and `--radius` for controls or panels. Use no shadows.
+Separate sections by at least `--gap`. Give ruled rows at least `.75rem` vertical padding.
 
 ## HTML requirements
 
 - Write a complete document with a doctype, language, UTF-8 charset, and viewport metadata.
 - Give `<title>` a real name of two to four words, such as `Project Atlas`, rather than a summary.
 - Use one main heading, semantic sections, labeled controls, visible keyboard focus, and readable contrast in both themes.
-- Support phone widths, including 320px, with at least 16px side gutters. The page must not scroll horizontally.
-- Let grids, text, tables, and charts adapt to the available width. Fix overflow rather than hiding clipped content.
-- Draw charts to scale. Label units and axes, disclose truncated axes, and preserve the proportions of the underlying data.
+- Support phone widths, including 320px, with 16px gutters on both sides. The page must not scroll horizontally; put tables in an `overflow-x: auto` wrapper inside the gutter.
+- Let grids, text, and charts adapt to the available width. Fix overflow rather than hiding clipped content.
+- Draw charts to scale: compute bars and axis ticks from the same maximum, start bars at zero, and label units.
+- Keep chart text at least 12px at 320px. SVG text shrinks with a scaled `viewBox`, so use HTML labels or CSS bars (`width: n%`) for simple charts.
+- Every link and button must work in the page: target an existing `#id`, toggle content, or show inline feedback. Never use `href="#"`; omit actions that cannot work.
 - Render all essential content on load. Do not hide it behind entrance animations or scroll effects. Respect reduced-motion preferences.
 - Keep the HTML at or below 16,000,000 UTF-8 bytes, including embedded assets. A tool or server may impose a lower limit; respect that limit.
 
