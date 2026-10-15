@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as core from "@nakama/core";
 import { getProfileArtifactsDir, writeArtifactFile } from "@nakama/core";
+import { MAX_HTML_ARTIFACT_BYTES } from "@nakama/core/artifact-mime";
 import {
   createInMemoryDatabaseAdapter,
   type DatabaseAdapter,
@@ -20,6 +21,11 @@ setupTestConfigDir("nakama-artifact-shares-test-");
 function createApp(databaseAdapter = createInMemoryDatabaseAdapter()) {
   return createMinimalHonoApp({
     agent: {
+      readProfileArtifact: (
+        orgId: string,
+        profileId: string,
+        filename: string
+      ) => core.readArtifactFile({ orgId, profileId, filename }),
       writeProfileArtifact: (
         orgId: string,
         profileId: string,
@@ -260,6 +266,100 @@ describe("artifact share routes", () => {
     expect(new Uint8Array(await publicResponse.arrayBuffer())).toEqual(
       new TextEncoder().encode("fake-mp4-bytes")
     );
+  });
+
+  test("HTML downloads use the frame policy and oversized HTML cannot be published", async () => {
+    const { app, databaseAdapter } = createApp();
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+    const orgId = session.orgId!;
+    const profileId = "profile_share_html";
+    const content = "x".repeat(MAX_HTML_ARTIFACT_BYTES);
+    await seedProfileArtifact({
+      content,
+      databaseAdapter,
+      filename: "page.html",
+      name: "HTML page",
+      orgId,
+      profileId,
+    });
+    const artifactUrl = `http://localhost:4310/v1/profiles/${profileId}/artifacts/content?path=page.html&inline=1`;
+
+    const response = await app.fetch(
+      new Request(artifactUrl, { headers: session.headers({}, orgId) })
+    );
+
+    expect(response.status).toBe(200);
+    expect((await response.arrayBuffer()).byteLength).toBe(
+      MAX_HTML_ARTIFACT_BYTES
+    );
+
+    const frame = await app.fetch(
+      new Request("http://localhost:4310/artifact-frame")
+    );
+
+    expect(response.headers.get("Content-Security-Policy")).toBe(
+      frame.headers.get("Content-Security-Policy")
+    );
+    expect(response.headers.get("Permissions-Policy")).toBe(
+      "camera=(), microphone=()"
+    );
+
+    const publish = () =>
+      app.fetch(
+        publishArtifactShareRequest({
+          body: { path: "page.html" },
+          orgId,
+          profileId,
+          session,
+        })
+      );
+
+    const publishedResponse = await publish();
+    expect(publishedResponse.status).toBe(201);
+    const published = await publishedResponse.json();
+
+    const publicResponse = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/public/artifact-shares/${published.token}`
+      )
+    );
+
+    expect(publicResponse.status).toBe(200);
+    expect(publicResponse.headers.get("Content-Type")).toBe(
+      "text/plain; charset=utf-8"
+    );
+    expect((await publicResponse.arrayBuffer()).byteLength).toBe(
+      MAX_HTML_ARTIFACT_BYTES
+    );
+    await writeFile(
+      join(getProfileArtifactsDir(orgId, profileId), "page.html"),
+      `${content}x`
+    );
+    expect(
+      (
+        await app.fetch(
+          new Request(artifactUrl, { headers: session.headers({}, orgId) })
+        )
+      ).status
+    ).toBe(413);
+    expect((await publish()).status).toBe(413);
+
+    const share = await databaseAdapter.getActiveArtifactShareByPath(
+      orgId,
+      profileId,
+      "page.html"
+    );
+
+    await writeFile(share!.storagePath, `${content}x`);
+    expect(
+      (
+        await app.fetch(
+          new Request(
+            `http://localhost:4310/v1/public/artifact-shares/${published.token}`
+          )
+        )
+      ).status
+    ).toBe(413);
   });
 
   test("publish refuses a clientOrigin off the request host", async () => {

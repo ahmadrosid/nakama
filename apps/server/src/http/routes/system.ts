@@ -49,13 +49,27 @@ const DOCS_HTML = `<!doctype html>
 /**
  * Host page for HTML artifact previews. A `srcdoc` frame inherits the app's
  * strict CSP, so artifact scripts (inline or CDN) never ran. This page carries
- * its own permissive CSP and writes the HTML the parent posts into itself; the
+ * its own artifact CSP and writes the HTML the parent posts into itself; the
  * web client still loads it sandboxed without `allow-same-origin`.
  */
 export const ARTIFACT_FRAME_PATH = "/artifact-frame";
 
-export const ARTIFACT_FRAME_CSP =
-  "default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'self'";
+export const ARTIFACT_FRAME_CSP = [
+  "default-src 'none'",
+  "script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com https://cdn.tailwindcss.com https://code.jquery.com",
+  "style-src 'unsafe-inline' data: https://fonts.googleapis.com",
+  "font-src https://fonts.gstatic.com",
+  "img-src data:",
+  "media-src data:",
+  "connect-src 'none'",
+  "frame-src 'none'",
+  "object-src 'none'",
+  "worker-src 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "sandbox allow-scripts",
+  "frame-ancestors 'self'",
+].join("; ");
 
 const ARTIFACT_FRAME_HTML = `<!doctype html>
 <script>

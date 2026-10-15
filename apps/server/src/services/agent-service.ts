@@ -4385,6 +4385,13 @@ export class AgentService {
     );
   }
 
+  async installSkillPythonPackages(orgId: string, skillId: string) {
+    return this.requireSkillsService().installSkillPythonPackages(
+      orgId,
+      skillId
+    );
+  }
+
   async readSkillFile(orgId: string, skillId: string, filePath: string) {
     return this.requireSkillsService().readSkillFile(orgId, skillId, filePath);
   }

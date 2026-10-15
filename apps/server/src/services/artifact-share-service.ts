@@ -96,6 +96,7 @@ export class ArtifactShareService {
       const storagePath = await writeArtifactShareSnapshot({
         bytes: artifact.bytes,
         filename,
+        mimeType,
         orgId: input.orgId,
         shareId,
       });
@@ -157,6 +158,7 @@ export class ArtifactShareService {
     const storagePath = await writeArtifactShareSnapshot({
       bytes: input.bytes,
       filename: `${crypto.randomUUID()}-${input.filename}`,
+      mimeType: input.mimeType,
       orgId: input.orgId,
       shareId: existing.id,
     });
@@ -313,7 +315,8 @@ export class ArtifactShareService {
 
     const bytes = await readArtifactShareSnapshot(
       share.orgId,
-      share.storagePath
+      share.storagePath,
+      resolveArtifactMimeType(share.mimeType, share.filename)
     );
 
     // Sidecars sometimes store application/octet-stream; resolve from the filename

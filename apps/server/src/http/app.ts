@@ -5,6 +5,7 @@ import {
   NakamaApiError,
   reportError,
 } from "@nakama/core";
+import { isHtmlArtifactMimeType } from "@nakama/core/artifact-mime";
 import { bodyLimit } from "hono/body-limit";
 import { requestId } from "hono/request-id";
 import { sessionTurnRegistry } from "../services/session-turn-registry";
@@ -76,6 +77,9 @@ export const DEFAULT_HTTP_REQUEST_BODY_LIMIT_BYTES = 10 * 1024 * 1024;
 export const MAX_HTTP_REQUEST_BODY_LIMIT_BYTES = 140 * 1024 * 1024;
 
 const LARGE_BODY_ROUTES = new Set([
+  // File tools validate decoded bytes; JSON escaping can exceed the normal cap.
+  "/v1/tools/tool_write_file/run",
+  "/v1/tools/tool_edit_file/run",
   "/v1/auth/setup/import/preview",
   "/v1/auth/setup/import/restore",
   "/v1/platform/data/import/preview",
@@ -216,8 +220,18 @@ export function createHonoApp(options: ServerOptions) {
       headers.set("X-Content-Type-Options", "nosniff");
       const isArtifactFrame = c.req.path === ARTIFACT_FRAME_PATH;
 
+      const isArtifactDocument =
+        isArtifactFrame ||
+        (/^\/v1\/profiles\/[^/]+\/artifacts\/content$/.test(c.req.path) &&
+          isHtmlArtifactMimeType(headers.get("Content-Type") ?? ""));
+
       if (!isArtifactFrame) {
         headers.set("X-Frame-Options", "DENY");
+      }
+
+      if (isArtifactDocument) {
+        headers.set("Permissions-Policy", "camera=(), microphone=()");
+        headers.set("Referrer-Policy", "no-referrer");
       }
 
       // Only set Referrer-Policy if it's not already set
@@ -239,7 +253,7 @@ export function createHonoApp(options: ServerOptions) {
 
       headers.set(
         "Content-Security-Policy",
-        isArtifactFrame
+        isArtifactDocument
           ? ARTIFACT_FRAME_CSP
           : `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'${docsScripts}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://logos.composio.dev; media-src 'self' blob:; object-src blob:; frame-src 'self' blob:; font-src 'self' data:${docsFonts}; connect-src 'self'${docsConnections};`
       );

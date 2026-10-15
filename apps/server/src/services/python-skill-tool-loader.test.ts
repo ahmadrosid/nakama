@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { DiscoveredSkill } from "@nakama/core";
+import { type DiscoveredSkill, getSkillPythonEnvBin } from "@nakama/core";
 import { loadPythonSkillTool } from "./python-skill-tool-loader";
 
 const BODY = `"""Add two numbers."""
@@ -61,6 +61,45 @@ test.each([
     await rm(directory, { force: true, recursive: true });
   }
 });
+
+// The interpreter a skill runs under is what makes its own packages importable,
+// so this checks which binary actually ran, not that a path was computed.
+test.skipIf(process.platform === "win32")(
+  "a skill with an installed environment runs under that environment's python",
+  async () => {
+    const previous = process.env.NAKAMA_CONFIG_DIR;
+    process.env.NAKAMA_CONFIG_DIR = await mkdtemp(
+      path.join(os.tmpdir(), "skill-env-")
+    );
+
+    const { directory, tool } = await toolFor(
+      'sys.stdin.read(); print(json.dumps({"env": __import__("os").environ.get("FROM_SKILL_ENV")}))'
+    );
+
+    try {
+      const bin = getSkillPythonEnvBin(directory);
+      await mkdir(path.dirname(bin), { recursive: true });
+      await writeFile(bin, '#!/bin/sh\nFROM_SKILL_ENV=yes exec python3 "$@"\n');
+      await chmod(bin, 0o755);
+
+      // SAFETY: The test fixture matches the contract used by this test.
+      const result = await tool?.run({}, {
+        signal: new AbortController().signal,
+      } as never);
+
+      expect(result).toEqual({ env: "yes" });
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+      await rm(process.env.NAKAMA_CONFIG_DIR, { force: true, recursive: true });
+
+      if (previous === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = previous;
+      }
+    }
+  }
+);
 
 test("a skill tool that never reads stdin is refused with a reason naming it", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "skill-tool-"));

@@ -16,6 +16,7 @@ import path from "node:path";
 import { z } from "zod";
 import { NakamaApiError } from "./api-error";
 import {
+  assertHtmlArtifactSize,
   inferArtifactMimeType,
   isDocxFile,
   isLegacyDocFile,
@@ -292,6 +293,9 @@ export async function readArtifactFile(input: {
 
   const filename = path.basename(filePath);
 
+  assertHtmlArtifactSize(input.filename, fileStat.size, metadata.mimeType);
+  assertHtmlArtifactSize(filePath, fileStat.size, metadata.mimeType);
+
   const isWordLike =
     isDocxFile(filename, metadata.mimeType) ||
     isLegacyDocFile(filename, metadata.mimeType);
@@ -308,6 +312,9 @@ export async function readArtifactFile(input: {
   }
 
   const bytes = await readFile(filePath);
+
+  assertHtmlArtifactSize(input.filename, bytes.byteLength, metadata.mimeType);
+  assertHtmlArtifactSize(filePath, bytes.byteLength, metadata.mimeType);
 
   if (input.render === "markdown" && isWordLike) {
     const markdown = await convertDocxToMarkdown(bytes);
@@ -359,6 +366,12 @@ export async function writeArtifactFile(input: {
     filePath,
     fileStat.size,
     fileStat.mtime.toISOString()
+  );
+
+  assertHtmlArtifactSize(
+    filePath,
+    Buffer.byteLength(input.content, "utf8"),
+    metadata.mimeType
   );
 
   if (!isMarkdownArtifactMimeType(metadata.mimeType)) {
@@ -559,6 +572,9 @@ export async function readWorkspaceFile(
   options: { render?: "markdown" } = {}
 ) {
   const file = await getWorkspaceEntry(orgId, profileId, filename);
+
+  assertHtmlArtifactSize(filename, file.entry.sizeBytes, file.contentType);
+  assertHtmlArtifactSize(file.filePath, file.entry.sizeBytes, file.contentType);
 
   if (file.entry.kind !== "file") {
     throw new NakamaApiError("File not found", 404);

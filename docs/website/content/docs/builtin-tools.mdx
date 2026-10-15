@@ -220,9 +220,9 @@ Search uploaded knowledge base documents for relevant facts. **Browse Files → 
 
 | Parameter | Type | Required | Notes |
 |-----------|------|----------|-------|
-| `query` | string | Yes | Keyword or regex pattern |
+| `query` | string | Yes | Keywords, or a regex pattern when `regex` is true |
 | `filename` | string | No | Filter to one source document (e.g. `report.pdf`) |
-| `regex` | boolean | No | Default true |
+| `regex` | boolean | No | Default false |
 | `maxResults` | number | No | Default 50, max 200 |
 
 **Returns:** `{ query, root, matches, matchCount, truncated }` — empty matches when no ready document matches the filter.

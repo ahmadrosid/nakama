@@ -51,6 +51,21 @@ describe("matchSkillsForMessage", () => {
     expect(matched).toEqual([]);
   });
 
+  test("matches a singular word against a plural description keyword", () => {
+    const artifactSkill: DiscoveredSkill = {
+      ...weatherSkill,
+      description: "Create or save artifacts and dashboards.",
+      name: "save-artifact",
+    };
+
+    expect(
+      matchSkillsForMessage(
+        [artifactSkill],
+        "can you make me a dashboard artifact for Q3?"
+      ).map((skill) => skill.name)
+    ).toEqual(["save-artifact"]);
+  });
+
   test("matches create-workflow on singular workflow", () => {
     const createWorkflow: DiscoveredSkill = {
       ...weatherSkill,

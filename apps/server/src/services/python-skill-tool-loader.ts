@@ -1,6 +1,15 @@
+import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { DiscoveredSkill, ToolDefinition } from "@nakama/core";
+import {
+  getSkillPythonEnvBin,
+  getSkillPythonEnvDir,
+  NakamaApiError,
+  pathExists,
+  SKILL_REQUIREMENTS_FILE,
+} from "@nakama/core";
 import { spawnJsonTool } from "./custom-tool-subprocess";
 import { resolvePythonBin } from "./python-tool-loader";
 
@@ -59,7 +68,7 @@ export async function loadPythonSkillTool(
       async run(input, context) {
         return spawnJsonTool({
           args: [modulePath],
-          bin: resolvePythonBin(),
+          bin: skillPythonBin(skill.directory),
           context,
           cwd: options.useWorkspaceCwd
             ? (context.workspaceRoot ?? path.dirname(modulePath))
@@ -145,7 +154,7 @@ export function createPythonSkillRunner(
 
       return spawnJsonTool({
         args: ["-c", RUNNER_SOURCE, skill.directory],
-        bin: resolvePythonBin(),
+        bin: skillPythonBin(skill.directory),
         context,
         cwd: workspaceRoot ?? skill.directory,
         input: { code },
@@ -157,6 +166,92 @@ export function createPythonSkillRunner(
       });
     },
   };
+}
+
+/** The skill's own environment once an admin has installed it, else the server's. */
+function skillPythonBin(skillDirectory: string): string {
+  const bin = getSkillPythonEnvBin(skillDirectory);
+
+  return existsSync(bin) ? bin : resolvePythonBin();
+}
+
+const INSTALL_TIMEOUT_MS = 10 * 60_000;
+
+/**
+ * Builds the skill's environment and installs its requirements.txt into it.
+ * Only ever called from an explicit admin action: pip runs package build code
+ * on the host, so this is at least as privileged as running the skill.
+ */
+export async function installSkillPythonPackages(
+  skillDirectory: string
+): Promise<{ output: string }> {
+  const requirements = path.join(skillDirectory, SKILL_REQUIREMENTS_FILE);
+
+  if (!(await pathExists(requirements))) {
+    throw new NakamaApiError(
+      `This skill has no ${SKILL_REQUIREMENTS_FILE}.`,
+      400
+    );
+  }
+
+  const python = getSkillPythonEnvBin(skillDirectory);
+  let output = "";
+
+  if (!existsSync(python)) {
+    output += await runInstallStep(resolvePythonBin(), [
+      "-m",
+      "venv",
+      getSkillPythonEnvDir(skillDirectory),
+    ]);
+  }
+
+  output += await runInstallStep(python, [
+    "-m",
+    "pip",
+    "install",
+    "--disable-pip-version-check",
+    "--no-input",
+    "-r",
+    requirements,
+  ]);
+
+  return { output: output.slice(-4000) };
+}
+
+function runInstallStep(bin: string, args: string[]): Promise<string> {
+  // The server's own env carries provider keys, and package build scripts run
+  // here, so pip gets only PATH and the proxy settings it needs to download.
+  const env: NodeJS.ProcessEnv = { PIP_NO_CACHE_DIR: "1" };
+
+  for (const name of ["PATH", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]) {
+    const value = process.env[name] ?? process.env[name.toLowerCase()];
+
+    if (value) {
+      env[name] = value;
+    }
+  }
+
+  return new Promise((resolve, reject) => {
+    execFile(
+      bin,
+      args,
+      { env, maxBuffer: 10_000_000, timeout: INSTALL_TIMEOUT_MS },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(
+            new NakamaApiError(
+              `Installing Python packages failed: ${`${stderr}${stdout}`.slice(-2000) || error.message}`,
+              422
+            )
+          );
+
+          return;
+        }
+
+        resolve(`${stdout}${stderr}`);
+      }
+    );
+  });
 }
 
 function isString<T>(value: T): value is T & string {

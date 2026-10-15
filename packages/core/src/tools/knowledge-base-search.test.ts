@@ -397,6 +397,96 @@ describe("knowledge_base_search tool", () => {
     expect(excluded.matches[0]?.text).toContain("rollback plan");
   });
 
+  test("points the snippet at the line that matched a stem", async () => {
+    await setupKnowledgeBase({
+      profile: {
+        body: "Office hours are nine to five.\nParking is free.\nTo change a password, open Settings.\nRefund rule from the password page.\n",
+        filename: "handbook.txt",
+        id: "kb_handbook",
+      },
+    });
+
+    const context = { orgId: ORG_ID, profileId: PROFILE_ID };
+
+    const stemmed = await runKnowledgeBaseSearch(
+      { query: "passwords" },
+      context
+    );
+
+    expect(stemmed.matches[0]?.line).toBe(7);
+
+    const excluded = await runKnowledgeBaseSearch(
+      { query: "password -refund" },
+      context
+    );
+
+    expect(excluded.matchCount).toBe(0);
+
+    const phrase = await runKnowledgeBaseSearch(
+      { query: '"password page"' },
+      context
+    );
+
+    expect(phrase.matches[0]?.line).toBe(8);
+  });
+
+  test("falls back to any term only when no document holds every term", async () => {
+    await setupKnowledgeBase({
+      additionalProfileDocuments: [
+        {
+          body: "Parking is free for staff.\n",
+          filename: "parking.txt",
+          id: "kb_parking",
+        },
+        {
+          body: "Change the password every quarter.\nRotate keys yearly.\n",
+          filename: "security.txt",
+          id: "kb_security",
+        },
+      ],
+      profile: {
+        body: "To change a password, open Settings and choose Security.\n",
+        filename: "handbook.txt",
+        id: "kb_handbook",
+      },
+    });
+
+    const context = { orgId: ORG_ID, profileId: PROFILE_ID };
+
+    const question = await runKnowledgeBaseSearch(
+      { query: "how do I change my password" },
+      context
+    );
+
+    expect(question.matches.map((match) => path.basename(match.file))).toEqual(
+      expect.arrayContaining([
+        "kb_handbook.extracted.txt",
+        "kb_security.extracted.txt",
+      ])
+    );
+    expect(question.matches.map((match) => match.file)).not.toContain(
+      path.join("knowledge-base", "kb_parking.extracted.txt")
+    );
+
+    const strict = await runKnowledgeBaseSearch(
+      { query: "password settings" },
+      context
+    );
+
+    expect(strict.matches.map((match) => path.basename(match.file))).toEqual([
+      "kb_handbook.extracted.txt",
+    ]);
+
+    const excluded = await runKnowledgeBaseSearch(
+      { query: "how to change password -quarter" },
+      context
+    );
+
+    expect(excluded.matches.map((match) => path.basename(match.file))).toEqual([
+      "kb_handbook.extracted.txt",
+    ]);
+  });
+
   test("reindexes a document after its content changes", async () => {
     await setupKnowledgeBase({
       profile: {
@@ -626,7 +716,9 @@ describe("knowledge_base_search tool", () => {
       { orgId: ORG_ID, profileId: PROFILE_ID }
     );
 
-    expect(result.matchCount).toBe(0);
+    expect(result.matches.map((match) => match.scope)).not.toContain(
+      "organization"
+    );
   });
 
   test("filters by source filename", async () => {

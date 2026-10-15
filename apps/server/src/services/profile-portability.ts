@@ -417,7 +417,6 @@ export async function importProfilePack(
   const entries = readProfilePackZip(archive);
   const manifest = readProfilePackManifest(entries);
   const name = options.name?.trim() || manifest.meta.name || "Imported profile";
-  const profileId = await resolveImportedProfileId(db, name);
   const now = (options.now ?? new Date()).toISOString();
 
   const ownerUserId = options.ownerUserId ?? null;
@@ -426,9 +425,10 @@ export async function importProfilePack(
     throw new NakamaApiError("Shared agents cannot be imported here.", 403);
   }
 
-  const profile: StoredProfileRecord = {
+  // Allocation and insertion are one atomic statement: a concurrent import may
+  // win the id, and we retry the next suffix instead of overwriting its row.
+  const profileId = await createImportedProfile(db, name, {
     createdAt: now,
-    id: profileId,
     isDefault: false,
     isSuper: false,
     model: manifest.meta.model,
@@ -445,9 +445,7 @@ export async function importProfilePack(
     thinkingEffort: manifest.meta.thinkingEffort,
     thinkingEnabled: manifest.meta.thinkingEnabled,
     updatedAt: now,
-  };
-
-  await db.upsertProfile(profile);
+  });
 
   let createdSkillIds: string[] = [];
   const createdCustomTools: CreatedCustomTool[] = [];
@@ -1555,7 +1553,7 @@ async function rollbackFailedImport(
   }
 
   try {
-    await db.deleteProfile(profileId);
+    await db.deleteProfileForOrg(profileId, orgId);
   } catch {
     // Best-effort cleanup only; the original error is what matters.
   }
@@ -1570,17 +1568,19 @@ async function rollbackFailedImport(
   }
 }
 
-async function resolveImportedProfileId(
+async function createImportedProfile(
   db: DatabaseAdapter,
-  name: string
+  name: string,
+  profile: Omit<StoredProfileRecord, "id">
 ): Promise<string> {
   const base = slugifyProfileName(name);
 
   for (let suffix = 1; suffix <= PROFILE_ID_ATTEMPTS; suffix++) {
-    const candidate = suffix === 1 ? base : `${base}-${suffix}`;
+    const id = suffix === 1 ? base : `${base}-${suffix}`;
+    const created = await db.createProfileIfAbsent({ ...profile, id });
 
-    if (!(await db.getProfile(candidate))) {
-      return candidate;
+    if (created) {
+      return id;
     }
   }
 

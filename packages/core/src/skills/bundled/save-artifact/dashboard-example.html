@@ -1,0 +1,327 @@
+<!doctype html>
+<!-- Reference layout for the save-artifact skill. Every label and number below is sample content: replace all of it. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1" name="viewport">
+    <title>Support Overview</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect">
+    <link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    >
+    <style>
+    :root {
+      --bg: #ffffff;
+      --text: #171717;
+      --muted: #71717a;
+      --line: #e5e5e5;
+      --grid: #f0f0f0;
+      --series-1: #171717;
+      --series-2: #d97706;
+      --good: #15803d;
+      --bad: #c2410c;
+      --sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+      --width: 64rem;
+      --gutter: clamp(1rem, 4vw, 2rem);
+      --gap: 1rem;
+      --pad: 1.25rem;
+      --radius: 0.75rem;
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0a0a0b;
+        --text: #fafafa;
+        --muted: #a1a1aa;
+        --line: #27272a;
+        --grid: #1c1c1f;
+        --series-1: #fafafa;
+        --series-2: #f59e0b;
+        --good: #4ade80;
+        --bad: #fb923c;
+        color-scheme: dark;
+      }
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      padding: 2rem var(--gutter);
+      margin: 0;
+      font: 400 0.9375rem / 1.5 var(--sans);
+      color: var(--text);
+      background: var(--bg);
+    }
+    main {
+      display: grid;
+      gap: var(--gap);
+      max-width: var(--width);
+      margin: 0 auto;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.625rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    header p {
+      margin: 0.25rem 0 0.5rem;
+      color: var(--muted);
+    }
+    h2 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+    .panel {
+      min-width: 0;
+      padding: var(--pad);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--gap);
+      margin: 0;
+    }
+    @media (min-width: 36rem) {
+      .stats {
+        grid-template-columns: none;
+        grid-auto-columns: minmax(0, 1fr);
+        grid-auto-flow: column;
+      }
+    }
+    .stats .panel {
+      padding: 1rem 1.125rem;
+    }
+    .stats dt {
+      font-size: 0.875rem;
+      color: var(--muted);
+    }
+    .stats dd {
+      margin: 0.25rem 0 0;
+      font-variant-numeric: tabular-nums;
+    }
+    .stats .value {
+      font-size: clamp(1.25rem, 3.2vw, 1.75rem);
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+    }
+    .stats .delta {
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+    .good {
+      color: var(--good);
+    }
+    .bad {
+      color: var(--bad);
+    }
+    .muted {
+      color: var(--muted);
+    }
+    .table-wrap {
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      margin-top: 0.75rem;
+      font-variant-numeric: tabular-nums;
+      border-collapse: collapse;
+    }
+    th {
+      padding: 0.625rem 0.5rem;
+      font-weight: 500;
+      color: var(--muted);
+      text-align: left;
+      white-space: nowrap;
+      border-bottom: 1px solid var(--line);
+    }
+    td {
+      padding: 0.75rem 0.5rem;
+      border-bottom: 1px solid var(--line);
+    }
+    tr:last-child td {
+      border-bottom: 0;
+    }
+    .num {
+      text-align: right;
+    }
+    td.num {
+      font-weight: 600;
+    }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Support Overview</h1>
+        <p>Email + Chat · Jul–Sep · vs Q3 goals in Zendesk</p>
+      </header>
+
+      <dl class="stats">
+        <div class="panel">
+          <dt>Tickets</dt>
+          <dd class="value">8,214</dd>
+          <dd class="delta muted">92% of forecast</dd>
+        </div>
+        <div class="panel">
+          <dt>First reply</dt>
+          <dd class="value">1h 12m</dd>
+          <dd class="delta good">−22% vs Q2</dd>
+        </div>
+        <div class="panel">
+          <dt>CSAT</dt>
+          <dd class="value">94%</dd>
+          <dd class="delta good">goal 90%</dd>
+        </div>
+        <div class="panel">
+          <dt>Backlog</dt>
+          <dd class="value">312</dd>
+          <dd class="delta bad">+15% vs goal</dd>
+        </div>
+      </dl>
+
+      <section aria-labelledby="chart-title" class="panel">
+        <h2 id="chart-title">Weekly tickets by channel</h2>
+        <ul class="legend" id="legend"></ul>
+        <div
+          aria-label="Weekly tickets: email rises from 520 to 610, chat rises from 180 to 650 and passes email in September."
+          class="chart"
+          id="chart"
+          role="img"
+        ></div>
+      </section>
+
+      <section aria-labelledby="table-title" class="panel">
+        <h2 id="table-title">Queues vs goal</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Queue</th>
+                <th>Channel</th>
+                <th class="num">CSAT</th>
+                <th class="num">vs goal</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Billing</td>
+                <td>Email</td>
+                <td class="num">97%</td>
+                <td class="num good">+8%</td>
+              </tr>
+              <tr>
+                <td>Onboarding</td>
+                <td>Chat</td>
+                <td class="num">95%</td>
+                <td class="num good">+6%</td>
+              </tr>
+              <tr>
+                <td>Bug reports</td>
+                <td>Email</td>
+                <td class="num">81%</td>
+                <td class="num bad">−10%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+    <script>
+    "use strict";
+    // Chart data: the only part to change. Pick 3-5 round ticks that cover every value; x labels mark period starts by index.
+    // The drawing code below sets every chart style itself; copy it unchanged.
+    const series = [
+      {
+        color: "var(--series-1)",
+        name: "Email",
+        values: [
+          520, 540, 530, 560, 550, 570, 580, 575, 590, 600, 595, 605, 610,
+        ],
+      },
+      {
+        color: "var(--series-2)",
+        name: "Chat",
+        values: [
+          180, 210, 250, 270, 320, 360, 400, 450, 500, 560, 600, 630, 650,
+        ],
+      },
+    ];
+    const yTicks = [0, 200, 400, 600, 800];
+    const xLabels = [
+      [0, "Jul"],
+      [4, "Aug"],
+      [8, "Sep"],
+    ];
+
+    const chart = document.getElementById("chart");
+    const legend = document.getElementById("legend");
+    legend.style.cssText =
+      "display:flex;flex-wrap:wrap;gap:1.25rem;margin:.5rem 0 1rem;padding:0;list-style:none;color:var(--muted);font-size:.875rem;";
+    const min = yTicks[0];
+    const max = yTicks[yTicks.length - 1];
+    const count = series[0].values.length;
+    const xPct = (i) => (i / (count - 1)) * 100;
+    const yPct = (v) => 100 - ((v - min) / (max - min)) * 100;
+    const svgNS = "http://www.w3.org/2000/svg";
+    const labelStyle =
+      "position:absolute;color:var(--muted);font-size:.8125rem;font-variant-numeric:tabular-nums;white-space:nowrap;";
+    chart.style.cssText =
+      "position:relative;height:16rem;margin:0 .5rem 1.75rem 2.75rem;";
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("viewBox", "0 0 100 100");
+    svg.setAttribute("preserveAspectRatio", "none");
+    svg.setAttribute("aria-hidden", "true");
+    svg.style.cssText =
+      "position:absolute;inset:0;width:100%;height:100%;overflow:visible;";
+    chart.append(svg);
+
+    for (const tick of yTicks) {
+      const line = document.createElementNS(svgNS, "line");
+      line.setAttribute("x1", 0);
+      line.setAttribute("x2", 100);
+      line.setAttribute("y1", yPct(tick));
+      line.setAttribute("y2", yPct(tick));
+      line.setAttribute("vector-effect", "non-scaling-stroke");
+      line.style.cssText = "stroke:var(--grid);stroke-width:1;";
+      svg.append(line);
+      const label = document.createElement("span");
+      label.style.cssText = `${labelStyle}right:calc(100% + .625rem);top:${yPct(tick)}%;transform:translateY(-50%);`;
+      label.textContent = tick.toLocaleString("en");
+      chart.append(label);
+    }
+
+    for (const [index, text] of xLabels) {
+      const label = document.createElement("span");
+      label.style.cssText = `${labelStyle}top:calc(100% + .5rem);left:${xPct(index)}%;transform:translateX(-50%);`;
+      label.textContent = text;
+      chart.append(label);
+    }
+
+    for (const { name, color, values } of series) {
+      const line = document.createElementNS(svgNS, "polyline");
+      line.setAttribute(
+        "points",
+        values.map((v, i) => `${xPct(i)},${yPct(v)}`).join(" ")
+      );
+      line.setAttribute("vector-effect", "non-scaling-stroke");
+      line.style.cssText = `fill:none;stroke:${color};stroke-width:2;stroke-linejoin:round;stroke-linecap:round;`;
+      svg.append(line);
+      const dot = document.createElement("span");
+      dot.style.cssText = `position:absolute;width:.625rem;height:.625rem;border-radius:50%;background:${color};left:${xPct(count - 1)}%;top:${yPct(values[count - 1])}%;transform:translate(-50%,-50%);`;
+      chart.append(dot);
+      const item = document.createElement("li");
+      const swatch = document.createElement("span");
+      swatch.style.cssText = `display:inline-block;width:.625rem;height:.625rem;margin-right:.375rem;border-radius:2px;background:${color};`;
+      item.append(swatch, name);
+      legend.append(item);
+    }
+    </script>
+  </body>
+</html>

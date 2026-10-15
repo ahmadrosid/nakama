@@ -3,6 +3,10 @@
  * serves artifact bytes) and the web app (which decides how to preview them).
  */
 
+import { NakamaApiError } from "./api-error";
+
+export const MAX_HTML_ARTIFACT_BYTES = 16_000_000;
+
 const UNKNOWN_MIME_TYPE = "application/octet-stream";
 
 export const DOCX_MEDIA_TYPE =
@@ -116,6 +120,23 @@ export function isHtmlArtifactMimeType(mimeType: string): boolean {
   const normalized = normalizeMimeType(mimeType);
 
   return normalized === "text/html" || normalized === "application/xhtml+xml";
+}
+
+export function assertHtmlArtifactSize(
+  filename: string,
+  sizeBytes: number,
+  mimeType = ""
+): void {
+  if (
+    sizeBytes > MAX_HTML_ARTIFACT_BYTES &&
+    (isHtmlArtifactMimeType(mimeType) ||
+      isHtmlArtifactMimeType(inferArtifactMimeType(filename)))
+  ) {
+    throw new NakamaApiError(
+      `HTML artifacts cannot exceed ${MAX_HTML_ARTIFACT_BYTES} bytes.`,
+      413
+    );
+  }
 }
 
 export function isMarkdownArtifactMimeType(mimeType: string): boolean {

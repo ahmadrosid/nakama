@@ -48,7 +48,7 @@ RUN bun install --frozen-lockfile --production --ignore-scripts \
 FROM oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52d95a519631e2fc61 AS runtime
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates sudo python3 \
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates sudo python3 python3-venv \
   && rm -rf /var/lib/apt/lists/*
 
 # Optional Google Meet audio-capture runtime. Chromium remains sandboxed and
