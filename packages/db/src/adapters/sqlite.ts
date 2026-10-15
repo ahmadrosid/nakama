@@ -1273,8 +1273,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     "SELECT * FROM sessions WHERE id = ? AND app_user_id IS NULL"
   );
 
-  // org_id is insert-only: the profile's org owns the row for its lifetime, so
-  // the conflict UPDATE never touches it and a backfilled row keeps its org.
+  // org_id follows the profile's org. The profile move path keeps it in sync.
   const upsertSessionStmt = db.prepare(`
     INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, app_user_id, user_id, model, org_id, pinned)
     VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
@@ -1282,7 +1281,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       profile_id = excluded.profile_id,
       channel = excluded.channel,
       user_id = COALESCE(excluded.user_id, sessions.user_id),
-      model = excluded.model
+      model = excluded.model,
+      org_id = excluded.org_id
     WHERE sessions.app_user_id IS NULL
   `);
 

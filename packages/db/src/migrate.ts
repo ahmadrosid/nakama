@@ -1536,6 +1536,9 @@ function migrateSessionOrgIds(db: Database): void {
       SELECT org_id FROM profiles WHERE profiles.id = sessions.profile_id
     )
     WHERE org_id IS NULL
+      AND EXISTS (
+        SELECT 1 FROM profiles WHERE profiles.id = sessions.profile_id
+      )
   `).run();
 }
 

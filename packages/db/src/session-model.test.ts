@@ -79,7 +79,7 @@ describe("SQLite session model persistence", () => {
     }
   });
 
-  test("writes the profile org on insert and keeps it on re-upsert", async () => {
+  test("writes the profile org on insert and follows a profile move on re-upsert", async () => {
     const root = mkdtempSync(join(tmpdir(), "session-org-"));
     const filename = join(root, "nakama.sqlite");
     const database = await createSqliteDatabase(`file:${filename}`);
@@ -87,24 +87,35 @@ describe("SQLite session model persistence", () => {
     const now = new Date().toISOString();
 
     try {
-      await database.adapter.upsertOrganization({
-        createdAt: now,
-        id: "org_test",
-        name: "Test",
-        slug: "test",
-        updatedAt: now,
-      });
-      await database.adapter.upsertProfile({
-        createdAt: now,
-        id: "profile_test",
-        isDefault: true,
-        isSuper: false,
-        model: null,
-        name: "Test",
-        orgId: "org_test",
-        systemPrompt: "Test",
-        updatedAt: now,
-      });
+      const org = (id: string) =>
+        database.adapter.upsertOrganization({
+          createdAt: now,
+          id,
+          name: `Org ${id}`,
+          slug: `org-${id}`,
+          updatedAt: now,
+        });
+
+      const profile = (id: string, orgId: string) =>
+        database.adapter.upsertProfile({
+          createdAt: now,
+          id,
+          isDefault: false,
+          isSuper: false,
+          model: null,
+          name: `Profile ${id}`,
+          orgId,
+          systemPrompt: "Test",
+          updatedAt: now,
+        });
+
+      await org("org_a");
+
+      await org("org_b");
+
+      await profile("profile_org_a", "org_a");
+
+      await profile("profile_org_b", "org_b");
 
       const record = {
         agentQuestionnaire: null,
@@ -113,7 +124,7 @@ describe("SQLite session model persistence", () => {
         createdAt: now,
         id: "session_test",
         model: "provider-1::chat-model",
-        profileId: "profile_test",
+        profileId: "profile_org_a",
         title: null,
         userId: null,
       };
@@ -122,13 +133,26 @@ describe("SQLite session model persistence", () => {
 
       expect(
         raw.query("SELECT org_id FROM sessions WHERE id = 'session_test'").get()
-      ).toEqual({ org_id: "org_test" });
+      ).toEqual({ org_id: "org_a" });
 
       await database.adapter.upsertSession(record);
 
       expect(
         raw.query("SELECT org_id FROM sessions WHERE id = 'session_test'").get()
-      ).toEqual({ org_id: "org_test" });
+      ).toEqual({ org_id: "org_a" });
+
+      await database.adapter.upsertSession({
+        ...record,
+        profileId: "profile_org_b",
+      });
+
+      expect(
+        raw
+          .query(
+            "SELECT profile_id, org_id FROM sessions WHERE id = 'session_test'"
+          )
+          .get()
+      ).toEqual({ org_id: "org_b", profile_id: "profile_org_b" });
     } finally {
       raw.close(true);
       database.release();
