@@ -257,6 +257,9 @@ const NAKAMA_STATE_PATTERN =
 
 const SHELL_WORD_DELIMITER = /[\s;|&<>()`]+/;
 
+const OTHER_WORKSPACE_REFUSAL =
+  "Refused: this command reaches into Nakama's org data outside this profile's workspace. Bash can only read this profile's own files. Use the Nakama tools assigned to this profile for anything else.";
+
 const NAKAMA_STATE_REFUSAL =
   "Refused: this command reads Nakama's internal state (local auth token, config.ini, credential keys, or server SQLite databases). The bash tool cannot call the Nakama API or read its databases. Use the Nakama tools assigned to this profile; if no tool fits, tell the user what is missing.";
 
@@ -286,15 +289,24 @@ function refuseNakamaStateAccess(
   ) {
     throw new Error(NAKAMA_STATE_REFUSAL);
   }
+
+  // Other orgs' and profiles' files hold no secret-shaped name, so the
+  // pattern gate above never sees them. Anything under orgs/ outside this
+  // profile's workspace is refused.
+  if (reachesNakamaConfigDir(normalized, cwd, workspaceDirs, "orgs")) {
+    throw new Error(OTHER_WORKSPACE_REFUSAL);
+  }
 }
 
 function reachesNakamaConfigDir(
   command: string,
   cwd: string,
-  workspaceDirs: string[]
+  workspaceDirs: string[],
+  subdir = ""
 ): boolean {
   const configDir = path.resolve(getUserConfigDir());
   const configRoots = [configDir, resolveWithRealpath(configDir)];
+  const scopes = configRoots.map((root) => path.join(root, subdir));
 
   const exemptDirs = workspaceDirs
     .flatMap((dir) => [path.resolve(dir), resolveWithRealpath(dir)])
@@ -302,8 +314,15 @@ function reachesNakamaConfigDir(
       configRoots.some((root) => isInsideDir(dir, root) && dir !== root)
     );
 
+  // With a subdir, a parent of it inside the config dir counts too:
+  // `grep -r x ~/.nakama` reads orgs/.
   const reachesState = (target: string) =>
     configRoots.some((root) => isInsideDir(target, root)) &&
+    scopes.some(
+      (scope) =>
+        isInsideDir(target, scope) ||
+        (subdir !== "" && isInsideDir(scope, target))
+    ) &&
     !exemptDirs.some((dir) => isInsideDir(target, dir));
 
   const homeRelative = path
