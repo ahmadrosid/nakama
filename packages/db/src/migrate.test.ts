@@ -1021,6 +1021,41 @@ describe("chat session schema", () => {
       db.close();
     }
   });
+
+  test("does not assign shared messaging chats to a platform admin", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+      db.exec(`
+        PRAGMA foreign_keys = OFF;
+        INSERT INTO profiles (id, name, created_at, updated_at)
+          VALUES ('p', 'Agent', 'now', 'now');
+        INSERT INTO users (id, email, password_hash, is_platform_admin, created_at, updated_at)
+          VALUES ('admin', 'admin@example.com', 'x', 1, 'now', 'now');
+      `);
+
+      for (const channel of ["discord", "slack", "telegram", "whatsapp"]) {
+        for (const owner of [null, "deleted_user"]) {
+          const id = `${channel}-${owner}`;
+          db.prepare(
+            "INSERT INTO sessions (id, profile_id, channel, user_id, created_at, updated_at) VALUES (?, 'p', ?, ?, 'now', 'now')"
+          ).run(id, channel, owner);
+        }
+      }
+
+      const owners = () =>
+        db.prepare("SELECT id, user_id FROM sessions ORDER BY id").all();
+
+      const before = owners();
+
+      migrateDatabase(db);
+      migrateDatabase(db);
+      expect(owners()).toEqual(before);
+    } finally {
+      db.close();
+    }
+  });
 });
 
 describe("browser session schema", () => {

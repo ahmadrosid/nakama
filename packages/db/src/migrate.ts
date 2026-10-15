@@ -87,7 +87,7 @@ export function migrateDatabase(db: Database): void {
 }
 
 /**
- * Chat history is private to the user who owns the session. Sessions from
+ * Chat history is private to the user who owns the session. Private sessions from
  * before that rule, or whose owner was deleted, go to the first platform
  * admin so they stay reachable. Before setup creates that admin there is
  * nobody to hand them to, and the next open tries again.
@@ -104,6 +104,8 @@ function migrateSessionOwners(db: Database): void {
       LIMIT 1
     )
     WHERE (user_id IS NULL OR user_id NOT IN (SELECT id FROM users))
+      -- Shared chats must not inherit the admin's tool execution permissions.
+      AND channel NOT IN ('discord', 'slack', 'telegram', 'whatsapp')
       AND EXISTS (SELECT 1 FROM users WHERE is_platform_admin = 1)
   `);
 

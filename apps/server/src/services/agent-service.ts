@@ -2388,9 +2388,15 @@ export class AgentService {
       access
     );
 
-    if (record.sessionId) {
-      await this.assertSessionProfileAccess(record.sessionId, orgId, access);
+    const sessionRecord = record.sessionId
+      ? await this.getSessionRecordForOrg(record.sessionId, orgId)
+      : this.ephemeralSessions.findByAttachmentId(attachmentId)?.record;
+
+    if (!sessionRecord) {
+      return null;
     }
+
+    assertSessionOwner(sessionRecord, access);
 
     return createAttachmentLoader(this.db, {
       orgId,
