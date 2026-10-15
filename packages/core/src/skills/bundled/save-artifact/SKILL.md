@@ -29,6 +29,49 @@ These instructions are loaded directly when this skill is active. No additional 
 Avoid generic defaults: cream with terracotta accents, purple gradients, Inter for every subject, emoji section markers, and rounded cards around everything.
 Use spacing, alignment, rules, and typography to organize content. Keep an established brand's choices when they fit the request.
 
+## Nakama style recipes
+
+When no other brand is supplied, use Nakama's neutral surfaces, amber accents, and clear typography.
+Choose one recipe; adapt it to the subject. These names are design guides, not labels to put on the page.
+
+| Style | Use and layout | Token overrides |
+| --- | --- | --- |
+| **Brief** | Plans and memos: one readable column, a clear decision, ruled action rows. Keep sections open. | Use the shared defaults. |
+| **Ledger** | Reports and dashboards: aligned tabular numbers, directly labeled charts, mono values. Amber highlights the main finding; neutral tones show context. | `--width: 64rem; --title: clamp(1.75rem, 4vw, 2.5rem);` |
+| **Feature** | Launch pages and explainers: a large heading beside one useful subject visual, then open sections. Stack columns on phones. | `--width: 72rem; --title: clamp(2.5rem, 7vw, 5rem);` |
+
+Use this shared token example, then apply only the chosen overrides. Every color alias follows the active theme.
+Inter is intentional for Nakama styling; use other typefaces when the subject calls for them.
+Load named fonts through Google Fonts or use the fallbacks. Artifacts do not inherit app fonts or CSS.
+
+```css
+:root {
+  color-scheme: light;
+  --bg: #ffffff; --text: #171717; --surface: #f5f5f5;
+  --muted: #52525b; --line: #e5e5e5;
+  --primary: #b45309; --on-primary: #ffffff;
+  --focus: var(--primary); --chart-focus: var(--primary);
+  --chart-context: var(--muted);
+  --sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  --small: .875rem; --body: 1rem; --section: 1.5rem;
+  --title: clamp(2rem, 5vw, 3rem); --width: 48rem;
+  --gutter: clamp(1rem, 4vw, 3rem); --gap: 2rem;
+  --radius: .625rem; --rule: 1px solid var(--line);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #0a0a0b; --text: #fafafa; --surface: #1f1f23;
+    --muted: #a1a1aa; --line: #27272a;
+    --primary: #f59e0b; --on-primary: #0a0a0b;
+  }
+}
+```
+
+Use `--on-primary` on filled primary actions. Reserve amber for meaningful emphasis and `--radius` for contained controls or panels.
+Organize ordinary sections with spacing and rules, without shadows. Do not turn every recipe into a hero followed by three cards.
+
 ## HTML requirements
 
 - Write a complete document with a doctype, language, UTF-8 charset, and viewport metadata.
