@@ -45,7 +45,8 @@ export const writeFileInputSchema = z
   .object({
     content: z
       .string({ error: "content is required." })
-      .regex(/\S/, "content is required."),
+      // Constrained decoders can match the entire string against this pattern.
+      .regex(/^[\s\S]*\S[\s\S]*$/, "content is required."),
     cwd: fileToolCwdSchema,
     path: requiredTrimmedString("path"),
   })

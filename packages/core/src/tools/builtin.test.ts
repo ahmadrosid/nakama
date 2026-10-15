@@ -24,6 +24,7 @@ import {
   runWriteDocx,
   runWriteFile,
   setDefaultFileGuardOptions,
+  writeFileTool,
 } from "./builtin";
 import { buildToolExecutionContext } from "./context";
 
@@ -160,6 +161,22 @@ describe("file builtin tools", () => {
 
     expect(await readFile(result.path, "utf8")).toBe(content);
     expect(result.bytesWritten).toBe(Buffer.byteLength(content, "utf8"));
+  });
+
+  test("write_file content pattern accepts full documents under constrained decoding", () => {
+    // SAFETY: writeFileInputSchema generates this string pattern for content.
+    const schema = writeFileTool.parameters as {
+      properties: { content: { pattern: string } };
+    };
+
+    const pattern = new RegExp(`^(?:${schema.properties.content.pattern})$`);
+
+    expect(
+      pattern.test("\n<!doctype html>\n<p>Harbor Launch — café</p>\n")
+    ).toBe(true);
+    expect(pattern.test("    first line\r\n    second line\r\n")).toBe(true);
+    expect(pattern.test(" \t\r\n")).toBe(false);
+    expect(pattern.test("")).toBe(false);
   });
 
   test("write_file still rejects whitespace-only content", async () => {

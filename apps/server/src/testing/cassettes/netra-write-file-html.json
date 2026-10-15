@@ -1,0 +1,100 @@
+{
+  "name": "netra-write-file-html",
+  "recordedAt": "2026-10-15T14:39:04.877Z",
+  "request": {
+    "body": {
+      "messages": [
+        {
+          "content": "Copy the complete file content without changes.",
+          "role": "system"
+        },
+        {
+          "content": "Call write_file once with path artifacts/probe.html and content exactly this complete string: \"<!doctype html>\\n<html><head><title>Harbor Launch</title></head>\\n<body><h1>Harbor Launch</h1><p>Research: 12 hours.</p></body></html>\\n\"",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek/deepseek-v4-flash-0731",
+      "reasoning": {
+        "enabled": false
+      },
+      "tool_choice": "auto",
+      "tools": [
+        {
+          "function": {
+            "description": "Write text content to a file in the active profile workspace. Creates parent directories if needed. Cannot produce Word documents — use write_docx for .docx.",
+            "name": "write_file",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "content": {
+                  "type": "string",
+                  "pattern": "^[\\s\\S]*\\S[\\s\\S]*$"
+                },
+                "cwd": {
+                  "description": "Optional. Omit it. Only used to resolve a relative path inside the workspace; ignored for absolute paths.",
+                  "type": "string",
+                  "minLength": 1
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": ["content", "path"],
+              "additionalProperties": false
+            }
+          },
+          "type": "function"
+        }
+      ]
+    },
+    "method": "POST",
+    "url": "https://api.netraruntime.com/v1/chat/completions"
+  },
+  "response": {
+    "body": {
+      "choices": [
+        {
+          "finish_reason": "tool_calls",
+          "index": 0,
+          "logprobs": null,
+          "matched_stop": null,
+          "message": {
+            "content": "",
+            "reasoning_content": null,
+            "role": "assistant",
+            "tool_calls": [
+              {
+                "function": {
+                  "arguments": "{\"content\": \"<!doctype html>\\n<html><head><title>Harbor Launch</title></head>\\n<body><h1>Harbor Launch</h1><p>Research: 12 hours.</p></body></html>\", \"path\": \"artifacts/probe.html\"}",
+                  "name": "write_file"
+                },
+                "id": "call_9e7853c0edda4da4930c1aaa",
+                "index": 0,
+                "type": "function"
+              }
+            ]
+          },
+          "native_finish_reason": "tool_calls"
+        }
+      ],
+      "created": 1792075145,
+      "id": "299044016c3a49a68c272bdb8cffd4af",
+      "model": "deepseek/deepseek-v4-flash-0731",
+      "object": "chat.completion",
+      "usage": {
+        "completion_tokens": 111,
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "prompt_tokens": 467,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 578
+      }
+    },
+    "status": 200
+  },
+  "version": 1
+}
