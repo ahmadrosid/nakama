@@ -198,7 +198,8 @@ export function createAgentChatSession(
   const channel = options.channel ?? "cli";
   const tools = options.tools ?? dependencies.tools ?? [];
   const enableToolLoop = options.enableToolLoop ?? tools.length > 0;
-  let activeTools = createTurnTools(tools);
+  const discoveredTools = new Set<string>();
+  let activeTools = createTurnTools(tools, discoveredTools);
 
   const systemPrompt = buildChatSystemPrompt(activeTools, {
     basePrompt: options.systemPrompt,
@@ -435,7 +436,8 @@ export function createAgentChatSession(
   return {
     clear() {
       history.length = 0;
-      activeTools = createTurnTools(tools);
+      discoveredTools.clear();
+      activeTools = createTurnTools(tools, discoveredTools);
       lastContextUsage = null;
       turnUsageCalls = [];
       bumpHistoryRevision();
@@ -463,7 +465,7 @@ export function createAgentChatSession(
       return aggregateTurnUsage();
     },
     async send(input, sendOptions) {
-      activeTools = createTurnTools(tools);
+      activeTools = createTurnTools(tools, discoveredTools);
       turnUsageCalls = [];
 
       return sendMessage(
@@ -489,7 +491,7 @@ export function createAgentChatSession(
       );
     },
     async sendStream(input, handlers, streamOptions) {
-      activeTools = createTurnTools(tools);
+      activeTools = createTurnTools(tools, discoveredTools);
       turnUsageCalls = [];
 
       return sendMessage(

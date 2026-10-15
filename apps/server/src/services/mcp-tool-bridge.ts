@@ -14,7 +14,12 @@ export function buildMcpToolDefinitions(
   mcpService: Pick<McpService, "callTool">,
   db: Pick<DatabaseAdapter, "getMcpServer">,
   orgId: string,
-  profileId: string
+  profileId: string,
+  discoveryAccess?: (
+    serverId: string,
+    toolName: string,
+    context: ToolContext
+  ) => Promise<boolean>
 ): ToolDefinition[] {
   const tools: ToolDefinition[] = [];
   const usedNames = new Set<string>();
@@ -34,14 +39,35 @@ export function buildMcpToolDefinitions(
       const inputSchema = toJsonSchema(cachedTool.inputSchema);
       const hasCurrentChatContext = isCurrentChatContext(inputSchema);
 
+      const canDiscover = discoveryAccess
+        ? async (context: ToolContext) => {
+            const current = await db.getMcpServer(server.id);
+
+            return Boolean(
+              current?.enabled &&
+                current.cachedTools.some(
+                  (tool) => tool.name === cachedTool.name
+                ) &&
+                (await discoveryAccess(server.id, cachedTool.name, context))
+            );
+          }
+        : undefined;
+
       tools.push({
+        canDiscover,
         description: cachedTool.description,
+        discoveryGroup: discoveryAccess ? server.name : undefined,
+        discoveryScope: discoveryAccess ? "session" : undefined,
         name,
         parameters: hasCurrentChatContext
           ? withoutNakamaContext(inputSchema)
           : inputSchema,
         async run(input, context) {
           try {
+            if (canDiscover && !(await canDiscover(context))) {
+              return { error: "MCP tool is unavailable." };
+            }
+
             const currentServer = await db.getMcpServer(server.id);
 
             if (!currentServer?.enabled) {

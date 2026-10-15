@@ -274,6 +274,20 @@ describe("seedOrgSuperBotProfile", () => {
   });
 });
 
+describe("seedOrgSuperBotProfile with bash turned off", () => {
+  test("a re-seed removes bash the Super Bot already had", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await ensureBuiltinToolDefinitions(db);
+    const profile = await seedOrgSuperBotProfile(db, "org_a");
+
+    await seedOrgSuperBotProfile(db, "org_a", { grantBash: false });
+
+    expect(
+      (await db.listToolsForProfile(profile.id)).map((tool) => tool.id)
+    ).not.toContain(BASH_TOOL_ID);
+  });
+});
+
 describe("ensureBundledSkillsAssigned", () => {
   test("does not assign super bot-only skills to ordinary profiles", async () => {
     const db = createInMemoryDatabaseAdapter();

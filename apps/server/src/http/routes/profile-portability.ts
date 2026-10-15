@@ -211,6 +211,7 @@ export function registerProfilePortabilityRoutes(
         orgId,
         decodeArchiveRequestData(body.data),
         {
+          allowPythonSkillTools: auth.isPlatformAdmin,
           isPlatformAdmin: auth.isPlatformAdmin,
           restoreCustomTools: auth.isPlatformAdmin,
         }
@@ -243,6 +244,7 @@ export function registerProfilePortabilityRoutes(
         decodeArchiveRequestData(body.data),
         {
           actorUserId: auth.user.id,
+          allowPythonSkillTools: auth.isPlatformAdmin,
           confirm: body.confirm,
           isPlatformAdmin: auth.isPlatformAdmin,
           name: body.name,

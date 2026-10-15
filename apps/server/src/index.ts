@@ -100,6 +100,7 @@ import {
   createAutomationRunHistoryTools,
   createAutomationTools,
 } from "./tools/automation-tools";
+import { isTenantBashEnabled } from "./tools/bash-config";
 import { createGenerateImageTool } from "./tools/generate-image-tool";
 import { createSessionTools } from "./tools/session-tools";
 import { createSubAgentTool } from "./tools/sub-agent-tool";
@@ -136,7 +137,7 @@ const database = await createDatabase(config.databaseUrl, {
 
 const MAX_AUTOMATION_RUN_RESUMES = 2;
 
-await seedDatabase(database.adapter);
+await seedDatabase(database.adapter, { grantBash: isTenantBashEnabled() });
 
 await claimLegacyCustomTools(database.adapter);
 

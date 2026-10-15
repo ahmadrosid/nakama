@@ -90,7 +90,10 @@ import {
   recordProfileChangeEvent,
   withAssignmentChange,
 } from "./profile-change-history";
-import { loadPythonSkillTool } from "./python-skill-tool-loader";
+import {
+  createPythonSkillRunner,
+  loadPythonSkillTool,
+} from "./python-skill-tool-loader";
 import { isSkillWriteApprovalRequired } from "./skill-write-approval";
 
 export interface SkillUsageRecordingContext {
@@ -2046,10 +2049,22 @@ export class SkillsService {
       ];
     });
 
+    // A profile that already holds a host shell gets a runner for each skill
+    // whose Python no harness reaches, so nothing runs here that the profile
+    // could not already run through bash. A shared skill executes for another
+    // org's profile, whose tools this one does not see, so it gets none.
+    const runners =
+      !sharedContext &&
+      (await this.db.listToolsForProfile(profileId)).some(
+        (tool) => tool.handlerType === "bash"
+      )
+        ? loadable.map((item) => createPythonSkillRunner(item.discovered))
+        : [];
+
     return [
       ...javascriptTools,
       ...refusals,
-      ...[...pythonTools, ...declaredTools].filter(
+      ...[...pythonTools, ...declaredTools, ...runners].filter(
         (tool): tool is ToolDefinition => tool !== null
       ),
     ];
