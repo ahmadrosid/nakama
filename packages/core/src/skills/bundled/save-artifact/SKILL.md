@@ -1,11 +1,11 @@
 ---
 name: save-artifact
-description: Create or save artifacts, HTML pages, reports, plans, memos, summaries, code snippets, and logs for later use.
+description: Create or save artifacts, HTML pages, dashboards, charts, reports, plans, memos, summaries, code snippets, and logs for later use.
 include-body-on-match: true
 ---
 
 Create complete deliverables that the user can revisit in the profile **Artifacts** tab.
-These instructions are loaded directly when this skill is active. No additional instruction file is required.
+These instructions are loaded directly when this skill is active. Read `dashboard-example.html` from this skill's directory only when you build a dashboard.
 
 ## Choose the output
 
@@ -26,7 +26,7 @@ These instructions are loaded directly when this skill is active. No additional 
 7. Use only facts from the request or available sources. Do not add dates, durations, team sizes, customers, quotes, metrics, integrations, or feature details that were not supplied; omit them. Label supplied sample data; a "sample" label does not permit invented content.
 8. Write plain, direct copy. Use meaningful headings and labels; omit filler and placeholder sections.
 
-Avoid generic defaults: cream with terracotta accents, purple gradients, Inter for every subject, emoji, and grids of boxed items.
+Avoid generic defaults: cream with terracotta accents, purple gradients, Inter for every subject, emoji, and grids of boxed items (a dashboard's stat-card row is the one exception).
 Organize content with spacing, rules, and typography; show features and phases as rows divided by `--rule`, without a per-item background or border. Keep an established brand's choices when they fit the request.
 
 ## Nakama style recipes
@@ -37,7 +37,7 @@ Choose one recipe; adapt it to the subject. These names are design guides, not l
 | Style | Use and layout | Token overrides |
 | --- | --- | --- |
 | **Brief** | Plans and memos: one readable column, a clear decision, ruled action rows. Keep sections open. | Use the shared defaults. |
-| **Ledger** | Reports and dashboards: aligned tabular numbers, directly labeled charts, mono values. Amber highlights the main finding; neutral tones show context. | `--width: 64rem; --title: clamp(1.75rem, 4vw, 2.5rem);` |
+| **Ledger** | Reports and dashboards: aligned tabular numbers, directly labeled charts, mono values. Dashboards follow **Dashboards** below. Amber highlights the main finding; neutral tones show context. | `--width: 64rem; --title: clamp(1.75rem, 4vw, 2.5rem);` |
 | **Feature** | Launch pages and explainers: a large heading beside one useful subject visual, then open sections. Stack columns on phones. | `--width: 72rem; --title: clamp(2.5rem, 7vw, 5rem);` |
 
 Use this shared token example, then apply only the chosen overrides. Every color alias follows the active theme.
@@ -72,6 +72,18 @@ body { margin: 0; padding-inline: var(--gutter); background: var(--bg); color: v
 
 Use `--on-primary` on filled primary actions. Reserve amber for meaningful emphasis and `--radius` for controls or panels. Use no shadows.
 Separate sections by at least `--gap`. Give ruled rows at least `.75rem` vertical padding.
+
+## Dashboards
+
+Use this layout when the user asks for a dashboard, KPI page, or performance report with metrics and a chart.
+
+1. Read `dashboard-example.html` from this skill's directory before you write the page. Copy its `<head>` and `<script>` exactly; they replace the shared token example and the **Ledger** recipe. In the script, change only the `series`, `yTicks`, and `xLabels` values; the drawing code sets all chart styles. In the body, change only the text, the stat cards, and the table rows. Replace every sample label and number with the user's data; sample content must never appear in the artifact.
+2. Order the page: title, a one-line subtitle with the channels, period, and comparison source exactly as the user named them (keep a named source, such as the CRM or sheet the targets come from), one row of 3–5 stat cards (two columns on phones; never leave one card alone on a row), the main chart, then the detail table. Put each block in a panel with a 1px border, `--radius`, and no background fill. Use no shadows.
+3. Stat card: a sentence-case label in `--muted`, a large value with tabular numbers, and one short delta line. Color the delta by meaning, not by sign: `--good` when the user's data shows it is better (a lower CPA is better), `--bad` when worse, `--muted` when unknown.
+4. Line chart: inline SVG with HTML labels, as in the example. Do not load a chart library. Draw 2px lines with no area fill and no point markers, except one dot on the last point of each series. Use 3–5 round y-axis ticks that cover the data (for example 200, 400, 600, 800) with light gridlines. Label the x-axis only at period starts, such as month names. Put the legend above the plot, at the left, with small square swatches.
+5. Series colors: `--series-1` (ink) for the first series and `--series-2` (amber) for the second. Add more series colors as tokens with light and dark values.
+6. Table: sentence-case headers in `--muted`, plain-text cells (no badges or pills), numeric columns right-aligned with `font-variant-numeric: tabular-nums`. Color only the change column, by meaning.
+7. Do not use uppercase labels, gradients, icons, or decorative badges. When the user supplies only approximate points (for example "from ~340 to ~650"), draw a smooth progression between them and do not print the in-between values. Before you save, check the series against every trend the user named: a crossing, peak, or dip must fall in the stated period. To put a crossing at index k, keep the first series higher at every index before k and the second series higher from k on.
 
 ## HTML requirements
 
@@ -110,4 +122,4 @@ Treat these as authoring requirements. Do not claim that Nakama enforces them me
 7. Return the saved path and state whether a browser preview ran. Never claim visual verification from a source review alone.
 
 Saving creates an artifact, not a public publication. Share or publish only when the user requests it and a supported action is available.
-Web chat shows saved artifacts as attachment chips with previews. Nakama derives the file type, size, and timestamp; do not create metadata files.
+Web chat shows saved artifacts as attachment chips with previews, so do not tell the user to open the file in a browser. Nakama derives the file type, size, and timestamp; do not create metadata files.
