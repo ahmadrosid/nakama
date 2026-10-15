@@ -29,69 +29,50 @@ import {
   readFileLimitSchema,
   readFileOffsetSchema,
   requiredTrimmedString,
-  trimmedOptionalString,
 } from "./schema";
 import { searchFilesTool } from "./search-files";
 import { sqliteTool } from "./sqlite";
 import { webFetchTool } from "./web-fetch";
 import { webSearchTool } from "./web-search";
 
-// Models fill in an undescribed cwd with guessed folders, so tell them to omit it.
-const fileToolCwdSchema = trimmedOptionalString.describe(
-  "Optional. Omit it. Only used to resolve a relative path inside the workspace; ignored for absolute paths."
-);
+// File tools take no cwd: models fill it with guessed folders and keep resending
+// it after errors. Unknown keys are stripped, so a stray cwd is ignored.
+export const writeFileInputSchema = z.object({
+  content: z
+    .string({ error: "content is required." })
+    // Constrained decoders can match the entire string against this pattern.
+    .regex(/^[\s\S]*\S[\s\S]*$/, "content is required."),
+  path: requiredTrimmedString("path"),
+});
 
-export const writeFileInputSchema = z
-  .object({
-    content: z
-      .string({ error: "content is required." })
-      // Constrained decoders can match the entire string against this pattern.
-      .regex(/^[\s\S]*\S[\s\S]*$/, "content is required."),
-    cwd: fileToolCwdSchema,
-    path: requiredTrimmedString("path"),
-  })
-  .strict();
+export const writeDocxInputSchema = z.object({
+  markdown: requiredTrimmedString("markdown"),
+  path: requiredTrimmedString("path"),
+});
 
-export const writeDocxInputSchema = z
-  .object({
-    cwd: fileToolCwdSchema,
-    markdown: requiredTrimmedString("markdown"),
-    path: requiredTrimmedString("path"),
-  })
-  .strict();
+export const deleteFileInputSchema = z.object({
+  path: requiredTrimmedString("path"),
+});
 
-export const deleteFileInputSchema = z
-  .object({
-    cwd: fileToolCwdSchema,
-    path: requiredTrimmedString("path"),
-  })
-  .strict();
+export const editFileInputSchema = z.object({
+  edits: z
+    .array(
+      z
+        .object({
+          newText: z.string({ error: "newText is required." }),
+          oldText: z.string({ error: "oldText is required." }).min(1),
+        })
+        .strict()
+    )
+    .min(1, "edits must contain at least one replacement."),
+  path: requiredTrimmedString("path"),
+});
 
-export const editFileInputSchema = z
-  .object({
-    cwd: fileToolCwdSchema,
-    edits: z
-      .array(
-        z
-          .object({
-            newText: z.string({ error: "newText is required." }),
-            oldText: z.string({ error: "oldText is required." }).min(1),
-          })
-          .strict()
-      )
-      .min(1, "edits must contain at least one replacement."),
-    path: requiredTrimmedString("path"),
-  })
-  .strict();
-
-export const readFileInputSchema = z
-  .object({
-    cwd: fileToolCwdSchema,
-    limit: readFileLimitSchema,
-    offset: readFileOffsetSchema,
-    path: requiredTrimmedString("path"),
-  })
-  .strict();
+export const readFileInputSchema = z.object({
+  limit: readFileLimitSchema,
+  offset: readFileOffsetSchema,
+  path: requiredTrimmedString("path"),
+});
 
 export type WriteFileInput = z.infer<typeof writeFileInputSchema>;
 
@@ -396,12 +377,10 @@ export async function runWriteFile(
   const guardOptions = buildFileGuardOptions(context, options);
   const artifactRoot = fileToolWorkspaceRoot(context, options);
 
-  const guarded = await guardFilePath(
-    parsed.path,
-    parsed.cwd ?? null,
-    contentBytes,
-    { ...guardOptions, cwd: artifactRoot }
-  );
+  const guarded = await guardFilePath(parsed.path, null, contentBytes, {
+    ...guardOptions,
+    cwd: artifactRoot,
+  });
 
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseMemoryFileWrite(
@@ -474,15 +453,10 @@ export async function runWriteDocx(
   const bytes = await markdownToDocx(parsed.markdown);
   const guardOptions = buildFileGuardOptions(context, options);
 
-  const guarded = await guardFilePath(
-    parsed.path,
-    parsed.cwd ?? null,
-    bytes.length,
-    {
-      ...guardOptions,
-      cwd: fileToolWorkspaceRoot(context, options),
-    }
-  );
+  const guarded = await guardFilePath(parsed.path, null, bytes.length, {
+    ...guardOptions,
+    cwd: fileToolWorkspaceRoot(context, options),
+  });
 
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseMemoryFileWrite(
@@ -524,7 +498,7 @@ export async function runDeleteFile(
 
   const guarded = await guardFilePath(
     parsed.path,
-    parsed.cwd ?? null,
+    null,
     undefined,
     guardOptions
   );
@@ -565,7 +539,7 @@ export async function runEditFile(
 
   const guarded = await guardFilePath(
     parsed.path,
-    parsed.cwd ?? null,
+    null,
     undefined,
     guardOptions
   );
@@ -667,12 +641,7 @@ export async function runEditFile(
   const outputContent = hasBom ? `\uFEFF${restored}` : restored;
   const bytesWritten = Buffer.byteLength(outputContent, "utf8");
 
-  await guardFilePath(
-    parsed.path,
-    parsed.cwd ?? null,
-    bytesWritten,
-    guardOptions
-  );
+  await guardFilePath(parsed.path, null, bytesWritten, guardOptions);
   await context.memoryFiles?.write(filePath, outputContent);
   await writeFile(filePath, outputContent, "utf8");
 
@@ -911,8 +880,6 @@ export async function runReadFile(
   const shared = parsed.path.startsWith("published-skill://");
 
   if (shared) {
-    // A published skill reference is absolute, so cwd is ignored like it is
-    // for absolute file paths.
     if (
       !(context.orgId && context.profileId && context.readPublishedSkillFile)
     ) {
@@ -949,7 +916,7 @@ export async function runReadFile(
   } else {
     const guarded = await guardFilePath(
       parsed.path,
-      parsed.cwd ?? null,
+      null,
       undefined,
       guardOptions
     );

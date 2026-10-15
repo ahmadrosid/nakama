@@ -713,8 +713,7 @@ describe("file builtin tools", () => {
       context
     );
 
-    // The reference is absolute, so a stray cwd is ignored.
-    await runReadFile({ cwd: "/tmp", path: reference }, context);
+    await runReadFile({ path: reference }, context);
 
     expect(reads).toEqual([
       ["publication/a", "references/a b.md"],
@@ -1275,24 +1274,10 @@ describe("file builtin tools", () => {
     await writeFile(skillPath, "instructions");
     await writeFile(path.join(skillDir, "references/guide.md"), "instructions");
     const options = { workspaceRoot: tempDir };
-    const cwd = await realpath(skillDir);
-
-    await expect(
-      runReadFile(
-        {
-          cwd: path.dirname(getGlobalSkillsDir()),
-          path: "skills/installer/SKILL.md",
-        },
-        PROFILE_CONTEXT,
-        options
-      )
-    ).rejects.toBeInstanceOf(PathGuardError);
 
     for (const input of [
       { path: skillPath },
-      { cwd: path.join(configDir, "agent"), path: skillPath },
-      { cwd, path: "SKILL.md" },
-      { cwd, path: "references/guide.md" },
+      { path: path.join(skillDir, "references/guide.md") },
     ]) {
       const result = await runReadFile(input, PROFILE_CONTEXT, options);
       expect(result.content).toBe("instructions");
@@ -1354,20 +1339,14 @@ describe("file builtin tools", () => {
     ).rejects.toThrow("orgId and profileId are required.");
   });
 
-  test("invalid cwd rejects writes without changing profile files", async () => {
+  test("write_file ignores a stray cwd and writes under the workspace", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-sec-"));
-    const targetPath = path.join(tempDir, "safe.txt");
-    await writeFile(targetPath, "original");
+    // Models send a guessed cwd even though the schema has none.
+    const input = { content: "OK", cwd: "/etc", path: "safe.txt" };
 
-    await expect(
-      runWriteFile(
-        { content: "OK", cwd: "/etc", path: "safe.txt" },
-        PROFILE_CONTEXT,
-        { workspaceRoot: tempDir }
-      )
-    ).rejects.toBeInstanceOf(PathGuardError);
+    await runWriteFile(input, PROFILE_CONTEXT, { workspaceRoot: tempDir });
 
-    expect(await readFile(targetPath, "utf8")).toBe("original");
+    expect(await readFile(path.join(tempDir, "safe.txt"), "utf8")).toBe("OK");
   });
 
   test("edit_file rejects oversized replacement result", async () => {
