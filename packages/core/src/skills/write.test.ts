@@ -28,6 +28,7 @@ import {
 } from "./write";
 
 const ORG_ID = "org_test";
+
 const PROFILE_ID = "profile_default";
 
 describe("createSkillFile", () => {
@@ -161,6 +162,7 @@ include-body-on-match: true
       "skills",
       "orphan"
     );
+
     await mkdir(directory, { recursive: true });
     await writeFile(
       join(directory, "SKILL.md"),
@@ -190,7 +192,7 @@ Old body.
     });
 
     expect(result.created).toBe(false);
-    expect(result.directory).toBe(realpathSync(directory));
+    expect(result.directory).toBe(realpathSync.native(directory));
   });
 
   test("refuses bundled skill names", async () => {
@@ -223,6 +225,7 @@ description: First write.
 
 Body.
 `;
+
     await writeRawProfileSkillMarkdown({
       content,
       orgId: ORG_ID,
@@ -358,7 +361,7 @@ describe("resolveProfileSkillDirectory", () => {
 
     expect(resolveProfileSkillDirectory(ORG_ID, PROFILE_ID, "ok-skill")).toBe(
       join(
-        realpathSync(configDir),
+        realpathSync.native(configDir),
         "orgs",
         ORG_ID,
         "profiles",
@@ -385,6 +388,7 @@ describe("resolveProfileSkillDirectory", () => {
       PROFILE_ID,
       "skills"
     );
+
     const outside = join(configDir, "outside-secret");
     await mkdir(skillsRoot, { recursive: true });
     await mkdir(outside, { recursive: true });
@@ -409,6 +413,44 @@ describe("resolveProfileSkillDirectory", () => {
       )
     ).toThrow(/outside the profile skills directory/);
   });
+
+  test.skipIf(process.platform !== "win32")(
+    "counts a differently cased path as inside the profile skills dir on Windows",
+    async () => {
+      configDir = await mkdtemp(join(tmpdir(), "nakama-skill-case-"));
+      process.env.NAKAMA_CONFIG_DIR = configDir;
+
+      const profileDir = join(
+        configDir,
+        "orgs",
+        ORG_ID,
+        "profiles",
+        PROFILE_ID
+      );
+
+      await mkdir(join(profileDir, "skills", "notes"), { recursive: true });
+
+      // NTFS opens each of these inside this profile's skills dir, so the
+      // member-authored code gate has to count them as this profile's own.
+      for (const directory of [
+        join(profileDir, "SKILLS", "notes"),
+        join(profileDir, "Skills", "NOT-YET-CREATED"),
+        join(profileDir, "skills", "notes").toUpperCase(),
+      ]) {
+        expect(
+          isPathWithinProfileSkillsDir(ORG_ID, PROFILE_ID, directory)
+        ).toBe(true);
+      }
+
+      expect(
+        isPathWithinProfileSkillsDir(
+          ORG_ID,
+          "profile_other",
+          join(profileDir, "SKILLS", "notes")
+        )
+      ).toBe(false);
+    }
+  );
 });
 
 describe("profile skill supporting files", () => {
@@ -478,6 +520,7 @@ Use staging first.
       profileId: PROFILE_ID,
       relativePath: "docs/checklist.md",
     });
+
     expect(written.relativePath).toBe("docs/checklist.md");
     expect(await readFile(written.absolutePath, "utf8")).toContain("- staging");
 
@@ -489,4 +532,63 @@ Use staging first.
     });
     expect(await pathExists(written.absolutePath)).toBe(false);
   });
+
+  test.skipIf(process.platform !== "win32")(
+    "refuses NTFS alternate data stream names on Windows",
+    async () => {
+      configDir = await mkdtemp(join(tmpdir(), "nakama-skill-ads-"));
+      process.env.NAKAMA_CONFIG_DIR = configDir;
+
+      await writeRawProfileSkillMarkdown({
+        content: `---
+name: deploy
+description: Deploy the service.
+---
+
+Use staging first.
+`,
+        orgId: ORG_ID,
+        profileId: PROFILE_ID,
+      });
+
+      const skillDir = resolveProfileSkillDirectory(
+        ORG_ID,
+        PROFILE_ID,
+        "deploy"
+      );
+
+      // `tool.py::$DATA` is tool.py's own content and `SKILL.md::$DATA` is
+      // SKILL.md's, so neither may slip past the basename refusals.
+      for (const relativePath of [
+        "tool.py::$DATA",
+        "SKILL.md::$DATA",
+        "docs/notes 10:30.md",
+      ]) {
+        await expect(
+          writeProfileSkillSupportingFile({
+            content: "print('run')\n",
+            name: "deploy",
+            orgId: ORG_ID,
+            profileId: PROFILE_ID,
+            relativePath,
+          })
+        ).rejects.toThrow(/alternate data stream/);
+      }
+
+      expect(await pathExists(join(skillDir, "tool.py"))).toBe(false);
+      expect(await readFile(join(skillDir, "SKILL.md"), "utf8")).toContain(
+        "Use staging first."
+      );
+
+      const written = await writeProfileSkillSupportingFile({
+        content: "- staging\n",
+        name: "deploy",
+        orgId: ORG_ID,
+        profileId: PROFILE_ID,
+        relativePath: "docs/checklist.md",
+      });
+
+      expect(await readFile(written.absolutePath, "utf8")).toBe("- staging\n");
+    }
+  );
 });

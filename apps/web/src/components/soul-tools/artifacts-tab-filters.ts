@@ -10,7 +10,7 @@ import {
   resolveArtifactMimeType,
 } from "@/lib/chat-artifacts";
 
-export const ARTIFACT_TYPE_FILTERS = [
+const ARTIFACT_TYPE_FILTERS = [
   "all",
   "markdown",
   "html",
@@ -85,6 +85,7 @@ export function availableArtifactTypeFilters(
   artifacts: ArtifactFile[]
 ): ArtifactTypeFilter[] {
   const present = new Set(artifacts.map(classifyArtifactType));
+
   return ARTIFACT_TYPE_FILTERS.filter(
     (filter) => filter === "all" || present.has(filter)
   );

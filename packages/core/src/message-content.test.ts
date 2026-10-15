@@ -96,6 +96,15 @@ describe("validateImageAttachments", () => {
       validateImageAttachments([{ data: huge, mediaType: "image/png" }])
     ).toThrow(NakamaApiError);
   });
+
+  test.each(["!!!!", "YQ", "====", "data:image/png;base64,!!!!"])(
+    "rejects invalid base64: %s",
+    (data) => {
+      expect(() =>
+        validateImageAttachments([{ data, mediaType: "image/png" }])
+      ).toThrow(NakamaApiError);
+    }
+  );
 });
 
 describe("validateDocumentAttachments", () => {
@@ -157,6 +166,18 @@ describe("validateDocumentAttachments", () => {
     ).toThrow(NakamaApiError);
   });
 
+  test("rejects invalid document base64", () => {
+    expect(() =>
+      validateDocumentAttachments([
+        {
+          data: "!!!!",
+          filename: "notes.txt",
+          mediaType: "text/plain",
+        },
+      ])
+    ).toThrow(NakamaApiError);
+  });
+
   test("rejects oversized excel the same way as other documents", () => {
     const huge = "A".repeat((6 * 1024 * 1024 * 4) / 3);
     expect(() =>
@@ -212,6 +233,7 @@ describe("stripImagesForCompaction", () => {
       role: "tool",
       toolCallId: "image",
     };
+
     const [stripped] = stripImagesForCompaction([message]);
     expect(stripped).toEqual({ ...message, attachments: undefined });
     expect(message.attachments).toHaveLength(1);
@@ -262,6 +284,7 @@ describe("parseDocumentDataUrl", () => {
       "data:text/markdown;charset=utf-8;base64,IyBRQSBkb2M=",
       "qa-test.md"
     );
+
     expect(doc).toEqual({
       data: "IyBRQSBkb2M=",
       filename: "qa-test.md",

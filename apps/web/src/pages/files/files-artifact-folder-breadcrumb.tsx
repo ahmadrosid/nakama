@@ -10,6 +10,7 @@ export function ArtifactFolderBreadcrumb({
   onNavigate: (prefix: string) => void;
 }) {
   const segments = artifactFolderSegments(prefix);
+
   if (segments.length === 0) {
     return null;
   }
@@ -30,6 +31,7 @@ export function ArtifactFolderBreadcrumb({
       </Button>
       {segments.map((segment, index) => {
         const isCurrent = index === segments.length - 1;
+
         return (
           <span
             className="flex min-w-0 items-center gap-0.5"

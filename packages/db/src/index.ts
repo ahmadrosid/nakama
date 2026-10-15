@@ -7,20 +7,28 @@ import {
 /** Same as `createSqliteMemoryAdapter` — kept for existing test imports. */
 export {
   createSqliteDatabase,
-  createSqliteMemoryAdapter,
   createSqliteMemoryAdapter as createInMemoryDatabaseAdapter,
 } from "./adapters/sqlite";
+
 export * from "./automation-store";
+
 export * from "./constants";
+
 export {
   type ResolveDatabasePathOptions,
   resolveDatabasePath,
 } from "./database-url";
+
 export * from "./local-client";
+
 export * from "./org-profiles";
+
 export * from "./seed";
+
 export * from "./types";
+
 export * from "./workflow-store";
+
 export * from "./workspace-settings";
 
 export type Database = SqliteDatabase;

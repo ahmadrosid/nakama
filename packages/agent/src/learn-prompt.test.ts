@@ -36,6 +36,7 @@ describe("expandLearnInLastUserMessage", () => {
       { content: "hello", role: "assistant" as const },
       { content: "/learn expense filing", role: "user" as const },
     ];
+
     const expanded = expandLearnInLastUserMessage(messages);
 
     expect(messages[2]?.content).toBe("/learn expense filing");
@@ -92,6 +93,7 @@ describe("expandLearnInLastUserMessage", () => {
       : null;
 
     expect(textPart?.type).toBe("text");
+
     if (textPart?.type === "text") {
       expect(textPart.text).toContain("[/learn]");
       expect(textPart.text).toContain(

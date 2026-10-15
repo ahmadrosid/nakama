@@ -1,144 +1,219 @@
+import { z } from "zod";
 import { NakamaApiError } from "./api-error";
 import type {
   CreateNotificationDestinationRequest,
+  NotificationDestinationChannel,
   NotificationWebhookLevel,
   NotificationWebhookRequest,
   TelegramNotificationDestinationConfig,
-  UpdateNotificationDestinationRequest,
 } from "./contract";
 
-function isNonZeroInteger(value: unknown): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value !== 0;
+const JsonValueSchema = z.json();
+
+const JsonObjectSchema = z.record(z.string(), JsonValueSchema);
+
+const NonZeroIntegerSchema = z
+  .number()
+  .int()
+  .refine((value) => value !== 0);
+
+const PositiveIntegerSchema = z.number().int().positive();
+
+const NotificationChannelSchema = z.enum(["telegram", "discord", "whatsapp"]);
+
+const WebhookLevelSchema = z.enum(["info", "success", "warning", "error"]);
+
+type JsonObject = z.infer<typeof JsonObjectSchema>;
+
+function readObject<Value>(value: Value): JsonObject | null {
+  const parsed = JsonObjectSchema.safeParse(value);
+
+  return parsed.success ? parsed.data : null;
 }
 
-function isPositiveInteger(value: unknown): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value > 0;
+function readTrimmedString(
+  value: JsonObject[string] | undefined
+): string | null {
+  const parsed = z.string().safeParse(value);
+
+  return parsed.success && parsed.data.trim() ? parsed.data.trim() : null;
 }
 
-function normalizeTelegramConfig(
-  value: unknown,
+function normalizeTelegramConfig<Value>(
+  value: Value,
   fieldName: string
 ): TelegramNotificationDestinationConfig {
-  if (typeof value !== "object" || value === null) {
+  const record = readObject(value);
+
+  if (!record) {
     throw new Error(`${fieldName} must be an object.`);
   }
 
-  const record = value as Record<string, unknown>;
-  const profileId =
-    typeof record.profileId === "string" ? record.profileId.trim() : undefined;
-  const chatId = record.chatId;
+  const profileId = readTrimmedString(record.profileId);
+  const chatId = NonZeroIntegerSchema.safeParse(record.chatId);
 
-  if (!isNonZeroInteger(chatId)) {
+  if (!chatId.success) {
     throw new Error(`${fieldName}.chatId must be a non-zero integer.`);
   }
 
-  const topicId = record.topicId;
-  if (topicId === undefined || topicId === null) {
-    return { chatId, profileId, topicId: null };
+  if (!profileId) {
+    throw new Error(`${fieldName}.profileId is required.`);
   }
 
-  if (!isPositiveInteger(topicId)) {
+  const topicId = record.topicId;
+
+  if (topicId === undefined || topicId === null) {
+    return { chatId: chatId.data, profileId, topicId: null };
+  }
+
+  const parsedTopicId = PositiveIntegerSchema.safeParse(topicId);
+
+  if (!parsedTopicId.success) {
     throw new Error(
       `${fieldName}.topicId must be a positive integer when provided.`
     );
   }
 
-  return { chatId, profileId, topicId };
+  return { chatId: chatId.data, profileId, topicId: parsedTopicId.data };
 }
 
-export function normalizeNotificationWebhookLevel(
-  value: unknown
+export function normalizeNotificationWebhookLevel<Value>(
+  value: Value
 ): NotificationWebhookLevel | undefined {
   if (value === undefined || value === null) {
     return;
   }
 
-  if (
-    value !== "info" &&
-    value !== "success" &&
-    value !== "warning" &&
-    value !== "error"
-  ) {
+  const level = WebhookLevelSchema.safeParse(value);
+
+  if (!level.success) {
     throw new Error('level must be "info", "success", "warning", or "error".');
   }
 
-  return value;
+  return level.data;
 }
 
-export function normalizeNotificationWebhookRequest(
-  value: unknown
+export function normalizeNotificationWebhookRequest<Value>(
+  value: Value
 ): NotificationWebhookRequest {
-  if (typeof value !== "object" || value === null) {
+  const record = readObject(value);
+
+  if (!record) {
     throw new NakamaApiError("notification payload must be an object.", 400);
   }
 
-  const record = value as Record<string, unknown>;
-  const body = record.body;
+  const body = readTrimmedString(record.body);
 
-  if (typeof body !== "string" || !body.trim()) {
+  if (!body) {
     throw new NakamaApiError("body must be a non-empty string.", 400);
   }
 
   const title = record.title;
-  if (title !== undefined && (typeof title !== "string" || !title.trim())) {
+
+  if (title !== undefined && !readTrimmedString(title)) {
     throw new NakamaApiError(
       "title must be a non-empty string when provided.",
       400
     );
   }
 
-  return {
-    body: body.trim(),
-    ...(typeof title === "string" && title.trim()
-      ? { title: title.trim() }
-      : {}),
-    ...(record.level === undefined
-      ? {}
-      : { level: normalizeNotificationWebhookLevel(record.level) }),
-  };
+  const request: NotificationWebhookRequest = { body };
+
+  if (title !== undefined) {
+    request.title = readTrimmedString(title) ?? undefined;
+  }
+
+  if (record.level !== undefined) {
+    request.level = normalizeNotificationWebhookLevel(record.level);
+  }
+
+  return request;
 }
 
-export function normalizeCreateNotificationDestinationRequest(
-  value: unknown
+export function normalizeCreateNotificationDestinationRequest<Value>(
+  value: Value
 ): CreateNotificationDestinationRequest {
-  if (typeof value !== "object" || value === null) {
+  const record = readObject(value);
+
+  if (!record) {
     throw new Error("destination request must be an object.");
   }
 
-  const record = value as Record<string, unknown>;
   const name = record.name;
+  const normalizedName = readTrimmedString(name);
 
-  if (typeof name !== "string" || !name.trim()) {
+  if (!normalizedName) {
     throw new Error("name must be a non-empty string.");
   }
 
-  if (record.channel !== "telegram") {
-    throw new Error('channel must be "telegram".');
+  const channel = NotificationChannelSchema.safeParse(record.channel);
+
+  if (!channel.success) {
+    throw new Error("Unsupported notification channel.");
+  }
+
+  const channelName = channel.data;
+
+  for (const key of ["telegram", "discord", "whatsapp"]) {
+    if (key !== channelName && record[key] !== undefined) {
+      throw new Error("Destination config must match its channel.");
+    }
+  }
+
+  if (channelName === "telegram") {
+    return {
+      channel: channelName,
+      name: normalizedName,
+      telegram: normalizeTelegramConfig(record.telegram, channelName),
+    };
+  }
+
+  const config = readObject(record[channelName]);
+
+  if (!config) {
+    throw new Error(`${channelName} must be an object.`);
+  }
+
+  const profileId = readTrimmedString(config.profileId) ?? "";
+
+  if (!profileId) {
+    throw new Error(`${channelName}.profileId is required.`);
+  }
+
+  if (channelName === "whatsapp") {
+    return {
+      channel: channelName,
+      name: normalizedName,
+      whatsapp: { profileId },
+    };
+  }
+
+  const channelId = readTrimmedString(config.channelId) ?? "";
+
+  if (!/^\d{17,20}$/.test(channelId)) {
+    throw new Error("discord.channelId must be a 17–20 digit string.");
   }
 
   return {
-    channel: "telegram",
-    name: name.trim(),
-    telegram: normalizeTelegramConfig(record.telegram, "telegram"),
+    channel: channelName,
+    discord: { channelId, profileId },
+    name: normalizedName,
   };
 }
 
-export function normalizeUpdateNotificationDestinationRequest(
-  value: unknown
-): UpdateNotificationDestinationRequest {
-  if (typeof value !== "object" || value === null) {
+export function normalizeUpdateNotificationDestinationRequest<Value>(
+  value: Value,
+  channel: NotificationDestinationChannel = "telegram"
+): CreateNotificationDestinationRequest {
+  const record = readObject(value);
+
+  if (!record) {
     throw new Error("destination request must be an object.");
   }
 
-  const record = value as Record<string, unknown>;
-  const name = record.name;
-
-  if (typeof name !== "string" || !name.trim()) {
-    throw new Error("name must be a non-empty string.");
+  if (record.channel !== undefined && record.channel !== channel) {
+    throw new Error("A destination's channel cannot be changed.");
   }
 
-  return {
-    name: name.trim(),
-    telegram: normalizeTelegramConfig(record.telegram, "telegram"),
-  };
+  return normalizeCreateNotificationDestinationRequest({ ...record, channel });
 }

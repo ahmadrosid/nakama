@@ -1,6 +1,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { NakamaClient, StreamHandlers } from "@nakama/client";
+import type {
+  NakamaClient,
+  SendMessageArg,
+  StreamHandlers,
+} from "@nakama/client";
 import {
   assertBridgeClientMethods,
   parseListProfilesResponse,
@@ -25,10 +29,10 @@ export const TEST_BOT_INFO: TelegramBotInfo = { id: 999, username: "mybot" };
 
 export interface MockMessageContext {
   ctx: Context;
-  editOptions: unknown[];
+  editOptions: Array<Parameters<Context["api"]["editMessageText"]>[3]>;
   edits: Array<{ chatId: number; messageId: number; text: string }>;
   replies: string[];
-  replyOptions: unknown[];
+  replyOptions: Array<Parameters<Context["reply"]>[1]>;
 }
 
 export function createMessageContext(options: {
@@ -44,10 +48,14 @@ export function createMessageContext(options: {
   messageThreadId?: number;
 }): MockMessageContext {
   const replies: string[] = [];
-  const replyOptions: unknown[] = [];
+  const replyOptions: Array<Parameters<Context["reply"]>[1]> = [];
   const edits: Array<{ chatId: number; messageId: number; text: string }> = [];
-  const editOptions: unknown[] = [];
+
+  const editOptions: Array<Parameters<Context["api"]["editMessageText"]>[3]> =
+    [];
+
   let nextMessageId = 1;
+
   const replyFrom =
     options.replyToBot || options.replyToBotId !== undefined
       ? {
@@ -55,13 +63,21 @@ export function createMessageContext(options: {
           is_bot: true as const,
         }
       : undefined;
+
+  const message = {
+    entities: options.entities,
+    message_thread_id: options.messageThreadId,
+    reply_to_message: replyFrom ? { from: replyFrom } : undefined,
+    text: options.text,
+  };
+
   const ctx = {
     api: {
       editMessageText: async (
         chatId: number,
         messageId: number,
         text: string,
-        editOptionsArg?: unknown
+        editOptionsArg?: Parameters<Context["api"]["editMessageText"]>[3]
       ) => {
         if (isHtmlParseMode(editOptionsArg) && options.failRichEdit) {
           throw new Error("Rich edit failed");
@@ -75,39 +91,40 @@ export function createMessageContext(options: {
       ? { id: options.chatId ?? -100, type: options.chatType }
       : { id: options.chatId ?? options.userId ?? 1, type: "private" as const },
     from: options.userId === undefined ? undefined : { id: options.userId },
-    message: {
-      ...(options.text === undefined ? {} : { text: options.text }),
-      ...(options.entities ? { entities: options.entities } : {}),
-      ...(options.messageThreadId === undefined
-        ? {}
-        : { message_thread_id: options.messageThreadId }),
-      ...(replyFrom ? { reply_to_message: { from: replyFrom } } : {}),
-    },
-    reply: async (text: string, replyOptionsArg?: unknown) => {
+    message,
+    reply: async (
+      text: string,
+      replyOptionsArg?: Parameters<Context["reply"]>[1]
+    ) => {
       if (isHtmlParseMode(replyOptionsArg) && options.failRichReply) {
         throw new Error("Rich reply failed");
       }
 
       replies.push(text);
       replyOptions.push(replyOptionsArg);
+
       return { message_id: nextMessageId++ };
     },
     replyWithChatAction: async () => {},
-  } as unknown as Context;
+  };
 
-  return { ctx, editOptions, edits, replies, replyOptions };
+  // SAFETY: This test context implements only fields exercised by the channel tests.
+  const typedContext = ctx as Context;
+
+  return { ctx: typedContext, editOptions, edits, replies, replyOptions };
 }
 
-function isHtmlParseMode(options: unknown): options is { parse_mode: "HTML" } {
+function isHtmlParseMode(
+  options:
+    | Parameters<Context["reply"]>[1]
+    | Parameters<Context["api"]["editMessageText"]>[3]
+): boolean {
   return Boolean(
-    options &&
-      typeof options === "object" &&
-      "parse_mode" in options &&
-      options.parse_mode === "HTML"
+    options && "parse_mode" in options && options.parse_mode === "HTML"
   );
 }
 
-export interface MockStreamControl {
+interface MockStreamControl {
   complete(reply?: string): void;
   fail(error?: Error): void;
   readonly signal: AbortSignal | undefined;
@@ -162,6 +179,7 @@ export function createMockClient(
     setOrgId: 0,
     transcribeAudio: 0,
   };
+
   const orgIds: string[] = [];
   const listProfilesOrgIds: Array<string | null> = [];
   let lastCreateSessionProfileId: string | undefined;
@@ -171,8 +189,8 @@ export function createMockClient(
   const streamControls: MockStreamControl[] = [];
 
   const sendStream = async (
-    input: unknown,
-    handlers: unknown,
+    input: SendMessageArg,
+    handlers: StreamHandlers,
     streamOptions?: { signal?: AbortSignal }
   ) => {
     calls.sendStream += 1;
@@ -182,7 +200,7 @@ export function createMockClient(
       return "Agent reply";
     }
 
-    const streamHandlers = handlers as StreamHandlers;
+    const streamHandlers = handlers;
 
     return new Promise<string>((resolve, reject) => {
       let settled = false;
@@ -192,6 +210,7 @@ export function createMockClient(
           if (settled) {
             return;
           }
+
           settled = true;
           resolve(reply);
         },
@@ -199,6 +218,7 @@ export function createMockClient(
           if (settled) {
             return;
           }
+
           settled = true;
           reject(error);
         },
@@ -214,6 +234,7 @@ export function createMockClient(
           if (settled) {
             return;
           }
+
           settled = true;
           reject(new DOMException("Aborted", "AbortError"));
         },
@@ -274,6 +295,7 @@ export function createMockClient(
     clear: async () => {},
     compact: async () => {
       calls.compact += 1;
+
       return {
         action: "summarized" as const,
         messagesAfter: 4,
@@ -283,6 +305,7 @@ export function createMockClient(
     createAutomation: async () => ({}),
     getMessages: async () => {
       calls.getMessages += 1;
+
       return options.messages ?? [];
     },
     id: "session_test",
@@ -298,11 +321,13 @@ export function createMockClient(
   const client = {
     createChatSession: () => {
       calls.createChatSession += 1;
+
       return session;
     },
     createSession: async (_channel: string, input?: { profileId?: string }) => {
       calls.createSession += 1;
       lastCreateSessionProfileId = input?.profileId;
+
       return session;
     },
     getModels: async () => ({
@@ -320,6 +345,7 @@ export function createMockClient(
       calls.listProfiles += 1;
       listProfilesOrgIds.push(orgId ?? null);
       const scopeOrgId = orgId ?? activeOrgId;
+
       const scopedProfiles =
         (scopeOrgId ? options.profilesByOrgId?.[scopeOrgId] : undefined) ??
         profiles;
@@ -336,10 +362,12 @@ export function createMockClient(
     },
     listUserOrgs: async () => {
       calls.listUserOrgs += 1;
+
       return parseListUserOrgsResponse({ orgs });
     },
     publishProfileArtifactShare: async () => {
       calls.publishProfileArtifactShare += 1;
+
       return {
         id: "share_test",
         refreshed: false,
@@ -351,6 +379,7 @@ export function createMockClient(
     },
     readProfileArtifactContent: async () => {
       calls.readProfileArtifactContent += 1;
+
       return {
         contentType: "text/markdown",
         data: new TextEncoder().encode("# Report").buffer,
@@ -363,15 +392,19 @@ export function createMockClient(
     },
     transcribeAudio: async () => {
       calls.transcribeAudio += 1;
+
       return { text: "Transcribed voice message" };
     },
-  } as unknown as NakamaClient;
+  };
 
-  assertBridgeClientMethods(client);
+  // SAFETY: Tests call only the client methods supplied by this mock.
+  const typedClient = client as NakamaClient;
+
+  assertBridgeClientMethods(typedClient);
 
   return {
     calls,
-    client,
+    client: typedClient,
     getLastCreateSessionProfileId: () => lastCreateSessionProfileId,
     getLastStreamInput: () => lastStreamInput,
     getStreamControl: () => streamControl,
@@ -387,6 +420,8 @@ export async function writeTelegramConfigIni(
     botToken: string;
     profileId?: string;
     handshakeCode?: string | null;
+    /** Defaults to a live window so a fixture code can actually be used. */
+    handshakeExpiresAt?: string | null;
     pairedUserIds?: number[];
     allowedUserIds?: number[];
   }
@@ -404,6 +439,10 @@ export async function writeTelegramConfigIni(
     lines.push(`handshake_code=${config.handshakeCode}`);
   }
 
+  if (config.handshakeExpiresAt) {
+    lines.push(`handshake_expires_at=${config.handshakeExpiresAt}`);
+  }
+
   if (config.pairedUserIds?.length) {
     lines.push(`paired_user_ids=${config.pairedUserIds.join(",")}`);
   }
@@ -416,7 +455,7 @@ export async function writeTelegramConfigIni(
   await writeFile(path.join(dir, "config.ini"), lines.join("\n"), "utf8");
 }
 
-export { createDefaultTestOrgs, createMultiTestOrgs };
+export { createMultiTestOrgs };
 
 export function createTestOrgStore(homeDir: string): ChannelOrgStore {
   return createSharedTestOrgStore(homeDir, "telegram");

@@ -22,7 +22,7 @@ A Slack connection belongs to one agent, like the other channels, and one Slack 
 
 The endpoints below back the connection card. They take the agent as \`?profileId=\` and need an org admin or platform admin.`;
 
-export function buildHttpOpenApiSpec(app: HonoApp, serverUrl?: string) {
+function buildHttpOpenApiSpec(app: HonoApp, serverUrl?: string) {
   return app.getOpenAPI31Document({
     info: {
       description: "HTTP API for the Nakama personal AI assistant.",

@@ -44,6 +44,7 @@ describe("chat-stream-resume", () => {
         toolStatus: "running",
       },
     ];
+
     const next = seedStreamingStateForActiveTurn(messages);
 
     expect(next.at(-1)?.role).toBe("assistant");
@@ -52,6 +53,7 @@ describe("chat-stream-resume", () => {
 
   test("createReplayAwareHandlers skips materialized tool events", () => {
     const seen: string[] = [];
+
     const handlers = createReplayAwareHandlers(
       {
         onChunk: () => {},

@@ -19,6 +19,7 @@ export function resolveRequestClientOrigin(
   explicitOrigin?: string
 ): string | undefined {
   const candidate = readClaimedOrigin(request, explicitOrigin);
+
   if (!candidate) {
     return;
   }
@@ -39,6 +40,7 @@ function readClaimedOrigin(
   explicitOrigin?: string
 ): string | undefined {
   const explicit = explicitOrigin?.trim();
+
   if (explicit) {
     return explicit.replace(/\/$/, "");
   }
@@ -48,11 +50,13 @@ function readClaimedOrigin(
   }
 
   const origin = request.headers.get("origin")?.trim();
+
   if (origin) {
     return origin.replace(/\/$/, "");
   }
 
   const referer = request.headers.get("referer")?.trim();
+
   if (referer) {
     try {
       return new URL(referer).origin;
@@ -70,6 +74,7 @@ function readClaimedOrigin(
  */
 function isAllowedClientOrigin(candidate: string, request?: Request): boolean {
   const configured = resolveWebPublicUrl();
+
   if (configured) {
     // The desktop app saves its loopback origin at setup and binds a new port
     // every launch, so a loopback URL vouches for loopback, not for one port.
@@ -116,9 +121,11 @@ function resolveRequestSelfOrigin(request?: Request): string | undefined {
   }
 
   const forwardedHost = request.headers.get("x-forwarded-host")?.trim();
+
   if (forwardedHost) {
     const proto = request.headers.get("x-forwarded-proto")?.trim() || "http";
     const forwarded = `${proto}://${forwardedHost}`;
+
     if (isValidBaseUrl(forwarded)) {
       return forwarded;
     }
@@ -126,14 +133,59 @@ function resolveRequestSelfOrigin(request?: Request): string | undefined {
 
   try {
     const url = new URL(request.url);
+
     return `${url.protocol}//${url.host}`;
   } catch {}
 }
 
-export async function persistWebPublicUrl(input: string): Promise<string> {
+/**
+ * The host a persisted callback base may name: the env override, the host the
+ * request landed on, or a loopback origin. The saved value is deliberately
+ * absent: it is the thing being checked, and a poisoned one would vouch for
+ * itself. Deployments that serve the web app from another host than the API
+ * set `NAKAMA_WEB_PUBLIC_URL`, which is what that override is for.
+ */
+function isDeploymentOrigin(candidate: string, request?: Request): boolean {
+  const envOverride =
+    process.env.NAKAMA_WEB_PUBLIC_URL?.trim() ||
+    process.env.NAKAMA_PUBLIC_URL?.trim();
+
+  if (envOverride && sameHost(candidate, envOverride)) {
+    return true;
+  }
+
+  if (isLoopbackComposioCallbackBaseUrl(candidate)) {
+    return true;
+  }
+
+  return (
+    Boolean(request) && sameHost(candidate, resolveRequestSelfOrigin(request))
+  );
+}
+
+/**
+ * Persist the install-wide callback/share base. The value lands in the
+ * `redirect_uri` an OAuth state is delivered to, so it only ever names the
+ * deployment's own origin.
+ */
+export async function persistWebPublicUrl(
+  input: string,
+  request?: Request
+): Promise<string> {
   const trimmed = input.trim();
+
   if (!(trimmed && isValidBaseUrl(trimmed))) {
-    throw new Error("webPublicUrl must be a valid http or https URL.");
+    throw new NakamaApiError(
+      "webPublicUrl must be a valid http or https URL.",
+      400
+    );
+  }
+
+  if (!isDeploymentOrigin(trimmed, request)) {
+    throw new NakamaApiError(
+      "webPublicUrl must use this deployment's own origin. Set NAKAMA_WEB_PUBLIC_URL to serve the web app from another host.",
+      400
+    );
   }
 
   return saveUserWebPublicUrl(normalizeBaseUrl(trimmed));
@@ -168,6 +220,7 @@ export function resolveComposioCallbackBaseUrl(
   );
 
   const configured = resolveWebPublicUrl();
+
   if (
     configured &&
     !(fromBrowser && isLoopbackComposioCallbackBaseUrl(configured))
@@ -193,11 +246,13 @@ export function resolveCallbackBaseUrlFromRedirect(request: Request): string {
 
 function fallbackCallbackBaseUrl(request?: Request): string {
   const self = resolveRequestSelfOrigin(request);
+
   if (self) {
     return self;
   }
 
   const webPort = process.env.NAKAMA_WEB_PORT?.trim() || "3003";
+
   return `http://127.0.0.1:${webPort}`;
 }
 
@@ -205,6 +260,7 @@ function fallbackCallbackBaseUrl(request?: Request): string {
 export function isLoopbackComposioCallbackBaseUrl(baseUrl: string): boolean {
   try {
     const { hostname } = new URL(baseUrl);
+
     return (
       hostname === "localhost" ||
       hostname === "127.0.0.1" ||

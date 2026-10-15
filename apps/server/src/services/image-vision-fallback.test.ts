@@ -12,6 +12,42 @@ describe("resolveVisionProviderSelection", () => {
     ).toBeNull();
   });
 
+  test("rejects missing vision models and preserves provider identity", () => {
+    const config: UserConfig = {
+      defaultProviderId: "first",
+      providers: ["first", "second"].map((id) => ({
+        apiKey: "private-key",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        customModels: [
+          { default: true, id: "same-model", supportsVision: true },
+        ],
+        id,
+        label: id,
+        type: "openai_compatible" as const,
+      })),
+      visionModel: "second::same-model",
+    };
+
+    expect(resolveVisionProviderSelection(config)?.instance.id).toBe("second");
+
+    for (const changed of [
+      { ...config, providers: [config.providers[0]!] },
+      { ...config, visionModel: "second::removed-model" },
+      { ...config, visionModel: "same-model" },
+    ]) {
+      let error: unknown;
+
+      try {
+        resolveVisionProviderSelection(changed);
+      } catch (caught) {
+        error = caught;
+      }
+
+      expect(error).toMatchObject({ status: 400 });
+      expect(JSON.stringify(error)).not.toContain("private-key");
+    }
+  });
+
   test("resolves configured vision-capable model", () => {
     const config: UserConfig = {
       defaultProviderId: "p-openai",

@@ -99,6 +99,7 @@ describe("resolveUserContentForNonVisionProvider", () => {
       mediaType: "image/png",
       type: "image",
     } as const;
+
     expect(resolveUserContentForNonVisionProvider([imagePart])).toEqual([
       imagePart,
     ]);

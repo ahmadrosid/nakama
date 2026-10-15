@@ -112,6 +112,7 @@ describe("buildStreamHandlers onThinking after tools", () => {
     ];
 
     const handlers = buildStreamHandlers((updater) => {
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This test updater supports both direct values and React state updater functions.
       messages = typeof updater === "function" ? updater(messages) : updater;
     });
 

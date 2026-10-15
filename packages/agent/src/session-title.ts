@@ -2,6 +2,7 @@ import type { ChatMessage, ProviderClient } from "@nakama/core";
 import { getUserMessageText } from "@nakama/core";
 
 const SNIPPET_MAX_LENGTH = 500;
+
 const FALLBACK_TITLE_MAX_LENGTH = 60;
 
 const SESSION_TITLE_SYSTEM = [
@@ -54,14 +55,12 @@ export function buildSessionTitlePrompt(
     (message) => message.role === "user"
   );
 
-  if (firstUserIndex === -1) {
+  const firstUser = messages[firstUserIndex];
+
+  if (!firstUser || firstUser.role !== "user") {
     return null;
   }
 
-  const firstUser = messages[firstUserIndex] as Extract<
-    ChatMessage,
-    { role: "user" }
-  >;
   const userSnippet = extractUserSnippet(firstUser);
 
   if (!userSnippet) {

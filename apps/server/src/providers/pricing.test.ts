@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { CustomModelEntry } from "@nakama/core";
 import {
   estimateUsageCostUsd,
   getExplicitModelPricing,
@@ -47,7 +48,47 @@ const moonshotInstance = {
   label: "Moonshot Kimi",
   type: "moonshot" as const,
 };
+
 describe("estimateUsageCostUsd", () => {
+  test("uses saved Netra rates and counts cached input once", () => {
+    const instance = {
+      apiKey: "netra-key",
+      createdAt: "2026-10-05T00:00:00.000Z",
+      customModels: [
+        {
+          cachedInputPerMillionUsd: 0.05,
+          id: "deepseek/deepseek-v4-flash-0731",
+          inputPerMillionUsd: 0.2,
+          outputPerMillionUsd: 0.5,
+        },
+      ],
+      id: "netra-1",
+      label: "Netra Runtime",
+      type: "netra" as const,
+    };
+
+    expect(
+      getModelPricing("deepseek/deepseek-v4-flash-0731", {
+        providerInstance: instance,
+      })
+    ).toEqual({
+      cachedInputPerMillionUsd: 0.05,
+      inputPerMillionUsd: 0.2,
+      outputPerMillionUsd: 0.5,
+    });
+    expect(
+      estimateUsageCostUsd(
+        "deepseek/deepseek-v4-flash-0731",
+        1200,
+        300,
+        { providerInstance: instance },
+        800
+      )
+    ).toBeCloseTo(0.000_27);
+    expect(
+      getModelPricing("deepseek/deepseek-v4.1-flash", { provider: "netra" })
+    ).toBeNull();
+  });
   test("prices shared model ids by provider, including subscription zero rates", () => {
     expect(
       estimateUsageCostUsd("gpt-5.5", 100_000, 20_000, {
@@ -87,6 +128,7 @@ describe("estimateUsageCostUsd", () => {
       1_000_000,
       1_000_000
     );
+
     expect(cost).toBe(18);
   });
 
@@ -292,11 +334,12 @@ describe("getExplicitModelPricing", () => {
     });
   });
 
-  test("returns the Images rates for gpt-image-2", () => {
-    expect(getExplicitModelPricing("gpt-image-2")).toEqual({
-      inputPerMillionUsd: 5,
-      outputPerMillionUsd: 30,
-    });
+  test("keeps the Images rates for gpt-image-2 on a compatible endpoint without its own rates", () => {
+    expect(
+      getExplicitModelPricing("gpt-image-2", {
+        providerInstance: compatibleInstance,
+      })
+    ).toEqual({ inputPerMillionUsd: 5, outputPerMillionUsd: 30 });
   });
 
   test("uses custom endpoint pricing even when the id exists in another catalog", () => {
@@ -315,7 +358,7 @@ describe("getExplicitModelPricing", () => {
 });
 
 describe("estimateUsageCostUsd with a cached prompt slice", () => {
-  const instanceWith = (model: Record<string, unknown>) => ({
+  const instanceWith = (model: CustomModelEntry) => ({
     providerInstance: {
       apiKey: "k",
       baseUrl: "http://localhost:1/v1",
@@ -340,6 +383,7 @@ describe("estimateUsageCostUsd with a cached prompt slice", () => {
       }),
       400_000
     );
+
     // 600k fresh at $10/1M plus 400k cached at $1/1M.
     expect(priced).toBeCloseTo(6.4, 6);
 
@@ -349,6 +393,7 @@ describe("estimateUsageCostUsd with a cached prompt slice", () => {
       inputPerMillionUsd: 10,
       outputPerMillionUsd: 30,
     });
+
     expect(estimateUsageCostUsd("m", 1_000_000, 0, noCachedRate, 400_000)).toBe(
       estimateUsageCostUsd("m", 1_000_000, 0, noCachedRate)
     );
@@ -361,6 +406,7 @@ describe("estimateUsageCostUsd with a cached prompt slice", () => {
       inputPerMillionUsd: 10,
       outputPerMillionUsd: 30,
     });
+
     // Unclamped this prices 999k tokens of "fresh" input negatively.
     expect(estimateUsageCostUsd("m", 1000, 0, ctx, 999_999)).toBeCloseTo(
       0.001,

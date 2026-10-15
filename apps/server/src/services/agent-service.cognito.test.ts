@@ -1,26 +1,23 @@
 import { describe, expect, test } from "bun:test";
 import { ensureBundledSkillFiles, type GenerateChatInput } from "@nakama/core";
 import { pathExists } from "@nakama/core/fs";
-import type { StoredProfileRecord } from "@nakama/db";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
+import { createDefaultProfile } from "./agent-service-test-fixtures";
 import { SkillsService } from "./skills-service";
 
 const ORG_ID = "org_test";
 
-function createDefaultProfile(): StoredProfileRecord {
-  const now = new Date().toISOString();
-  return {
-    createdAt: now,
-    id: "profile_default",
-    isDefault: true,
-    isSuper: false,
-    model: null,
-    name: "Default",
-    orgId: ORG_ID,
-    systemPrompt: "You are helpful.",
-    updatedAt: now,
+interface AgentTodoStateAccess {
+  agentTodoState: {
+    write(
+      id: string,
+      input: {
+        merge: boolean;
+        todos: Array<{ content: string; id: string; status: string }>;
+      }
+    ): Promise<void>;
   };
 }
 
@@ -31,6 +28,7 @@ function stubHarness(service: AgentService, reply = "Answered"): void {
     content: reply,
     toolCalls: [],
   };
+
   Object.assign(service, {
     _providerConfigured: true,
     createHarnessForProfile: () => ({
@@ -55,6 +53,7 @@ async function createService(): Promise<{
   await db.upsertProfile(createDefaultProfile());
   const service = new AgentService(null, null, db);
   stubHarness(service);
+
   return { db, service };
 }
 
@@ -103,6 +102,7 @@ describe("cognito sessions are never persisted", () => {
       "profile_default",
       null
     );
+
     const session = await service.resolveSession(sessionId, ORG_ID);
     await session?.send({ message: "hello" });
 
@@ -121,6 +121,7 @@ describe("cognito sessions are never persisted", () => {
       null,
       { cognito: true }
     );
+
     const session = await service.resolveSession(sessionId, ORG_ID);
     await session?.send({ message: "hello" });
 
@@ -137,6 +138,7 @@ describe("cognito sessions are never persisted", () => {
       ...createDefaultProfile(),
       model: "provider-1::profile-default",
     });
+
     const service = new AgentService(
       {
         defaultProviderId: "provider-1",
@@ -159,6 +161,7 @@ describe("cognito sessions are never persisted", () => {
       null,
       db
     );
+
     stubHarness(service);
 
     const sessionId = await service.createSession(
@@ -171,6 +174,7 @@ describe("cognito sessions are never persisted", () => {
         model: "provider-1::chat-model",
       }
     );
+
     const before = await service.resolveSession(sessionId, ORG_ID);
     await before?.send({ message: "hello" });
 
@@ -207,11 +211,14 @@ function stubHarnessCapturingTools(
     content: "ok",
     toolCalls: [],
   };
+
   const record = (input: GenerateChatInput) => {
     captured.names = (input.tools ?? []).map((tool) => tool.name);
     captured.system = input.system;
+
     return Promise.resolve(answer);
   };
+
   Object.assign(service, {
     _providerConfigured: true,
     createHarnessForProfile: () => ({
@@ -244,10 +251,13 @@ async function seedProfileWithSkillManage(
   const skills = new SkillsService(db);
   await ensureBundledSkillFiles();
   await skills.syncDiscoveredSkills();
+
   const manage = (await skills.listSkills()).skills.find(
     (skill) => skill.name === "manage-skills"
   );
+
   await db.assignSkillToProfile("profile_default", manage!.id);
+
   return skills;
 }
 
@@ -269,6 +279,7 @@ describe("cognito sessions never write back", () => {
       "user_1",
       { cognito: true, orgRole: "admin" }
     );
+
     const session = await service.resolveSession(sessionId, ORG_ID);
     await session?.send({ message: "what do you remember" });
 
@@ -293,6 +304,7 @@ describe("cognito sessions never write back", () => {
       "user_1",
       { orgRole: "admin" }
     );
+
     const session = await service.resolveSession(sessionId, ORG_ID);
     await session?.send({ message: "what do you remember" });
 
@@ -321,6 +333,7 @@ describe("cognito sessions never write back", () => {
       null,
       { cognito: true }
     );
+
     service.scheduleSessionTitleGeneration(cognitoId);
     service.schedulePostTurnSkillReview(cognitoId);
     expect(scheduled).toEqual([]);
@@ -331,6 +344,7 @@ describe("cognito sessions never write back", () => {
       "profile_default",
       null
     );
+
     service.scheduleSessionTitleGeneration(normalId);
     service.schedulePostTurnSkillReview(normalId);
     expect(scheduled).toEqual([`title:${normalId}`, `review:${normalId}`]);
@@ -360,6 +374,7 @@ describe("a cognito session still reads what an ordinary one reads", () => {
       "user_1",
       { cognito: true, orgRole: "admin" }
     );
+
     const session = await service.resolveSession(sessionId, ORG_ID);
     await session?.send({ message: "hello" });
 
@@ -412,6 +427,7 @@ describe("attachments left by a cognito session", () => {
       null,
       { cognito: true }
     );
+
     await sendImage(service, sessionId);
 
     const [attachment] = await db.listEphemeralAttachments();
@@ -433,6 +449,7 @@ describe("attachments left by a cognito session", () => {
       null,
       { cognito: true }
     );
+
     await sendImage(service, sessionId);
     const [attachment] = await db.listEphemeralAttachments();
 
@@ -453,6 +470,7 @@ describe("attachments left by a cognito session", () => {
       null,
       { cognito: true }
     );
+
     await sendImage(service, sessionId);
     const [attachment] = await db.listEphemeralAttachments();
 
@@ -472,6 +490,7 @@ describe("attachments left by a cognito session", () => {
       "profile_default",
       null
     );
+
     await sendImage(service, sessionId);
 
     const attachments = await db.listAttachmentsForSession(sessionId);
@@ -500,15 +519,17 @@ describe("cognito leaves no skill-usage trail", () => {
       "user_1",
       {
         orgRole: "admin",
-        ...(cognito ? { cognito: true } : {}),
+        ...(cognito && { cognito: true }),
       }
     );
+
     const session = await service.resolveSession(sessionId, ORG_ID);
     await session?.send({ message: "help me manage skills" });
     // The recorders are fired without await, so let them settle.
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     const usage = await db.listSkillUsageForProfile("profile_default");
+
     return usage.length;
   }
 
@@ -537,20 +558,10 @@ describe("cognito session state that is not the transcript", () => {
       { cognito: true }
     );
 
-    const state = (
-      service as unknown as {
-        agentTodoState: {
-          write(
-            id: string,
-            input: {
-              merge: boolean;
-              todos: Array<{ content: string; id: string; status: string }>;
-            }
-          ): Promise<unknown>;
-        };
-      }
-    ).agentTodoState;
-    await state.write(sessionId, {
+    // SAFETY: This test reads state created by the service under test.
+    const serviceState = Object.create(service) as AgentTodoStateAccess;
+
+    await serviceState.agentTodoState.write(sessionId, {
       merge: false,
       todos: [{ content: "draft the reply", id: "t1", status: "in_progress" }],
     });

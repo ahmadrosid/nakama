@@ -30,6 +30,7 @@ export function ProviderSettingsCard({
 }: ProviderSettingsCardProps) {
   const { data: providersResponse, isLoading: providersLoading } =
     useProvidersQuery();
+
   const {
     data: catalogResponse,
     isLoading: catalogLoading,
@@ -37,6 +38,7 @@ export function ProviderSettingsCard({
   } = useModelsQuery({
     enabled: (providersResponse?.providers.length ?? 0) > 0,
   });
+
   const updateProviderMutation = useUpdateProviderMutation();
   const deleteProviderMutation = useDeleteProviderMutation();
   const [addOpen, setAddOpen] = useState(false);
@@ -44,9 +46,11 @@ export function ProviderSettingsCard({
   const providers = providersResponse?.providers ?? [];
   const catalog = catalogResponse?.models ?? [];
   const isConfigured = providers.length > 0;
+
   const catalogError = catalogQueryError
     ? formatError(catalogQueryError)
     : null;
+
   const displayError = formError ?? catalogError;
 
   if (providersLoading || catalogLoading) {
@@ -153,7 +157,7 @@ export function ProviderSettingsCard({
       ) : null}
 
       <Dialog onOpenChange={setAddOpen} open={addOpen}>
-        <DialogContent className="w-[min(96vw,56rem)] sm:max-w-3xl">
+        <DialogContent className="w-[min(96vw,56rem)] grid-cols-[minmax(0,1fr)] sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Add provider</DialogTitle>
           </DialogHeader>

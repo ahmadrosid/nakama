@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { z } from "zod";
 import type {
   ListOrgMemoryHistoryResponse,
   OrgMemoryChangeLogEntry,
@@ -12,6 +13,24 @@ import {
 import { assertConfigPathSegment, getOrgMemoryHistoryDir } from "./resolve";
 
 export const ORG_MEMORY_HISTORY_MAX_ENTRIES = 50;
+
+const OrgMemoryChangeLogEntrySchema = z.object({
+  action: z.enum([
+    "edit",
+    "approve",
+    "add_fact",
+    "pin",
+    "unpin",
+    "archive",
+    "restore",
+  ]),
+  actorUserId: z.string().nullable(),
+  createdAt: z.string(),
+  id: z.string(),
+  label: z.string(),
+  orgId: z.string(),
+  restoredFromId: z.string().nullable().optional(),
+});
 
 const ORG_MEMORY_HISTORY_TRUNCATED_MARKER = "truncated.json";
 
@@ -50,6 +69,7 @@ export async function listOrgMemoryHistoryWithCap(
     listOrgMemoryHistory(orgId, limit, configDir),
     isOrgMemoryHistoryTruncated(orgId, configDir),
   ]);
+
   return {
     changes,
     maxEntries: ORG_MEMORY_HISTORY_MAX_ENTRIES,
@@ -87,6 +107,7 @@ let orgMemoryChangeSequence = 0;
 
 export function createOrgMemoryChangeId(): string {
   orgMemoryChangeSequence += 1;
+
   return `omh_${String(orgMemoryChangeSequence).padStart(8, "0")}_${crypto.randomUUID().replace(/-/g, "")}`;
 }
 
@@ -95,11 +116,12 @@ function parseOrgMemoryHistoryMetadata(
   revisionId: string
 ): OrgMemoryChangeLogEntry | null {
   try {
-    return JSON.parse(raw) as OrgMemoryChangeLogEntry;
+    return OrgMemoryChangeLogEntrySchema.parse(JSON.parse(raw));
   } catch {
     console.warn(
       `Skipping malformed org memory history metadata for revision ${revisionId}.`
     );
+
     return null;
   }
 }
@@ -130,11 +152,13 @@ export async function listOrgMemoryHistory(
   configDir?: string
 ): Promise<OrgMemoryChangeLogEntry[]> {
   const historyDir = getOrgMemoryHistoryDir(orgId, configDir);
+
   if (!(await pathExists(historyDir))) {
     return [];
   }
 
   const entries = await readDirectoryEntries(historyDir);
+
   const ids = entries
     .filter(
       (entry) =>
@@ -146,9 +170,11 @@ export async function listOrgMemoryHistory(
     .sort((left, right) => right.localeCompare(left));
 
   const records: OrgMemoryChangeLogEntry[] = [];
+
   for (const id of ids) {
     const raw = await readText(historyMetaPath(orgId, id, configDir));
     const record = parseOrgMemoryHistoryMetadata(raw, id);
+
     if (record) {
       records.push(record);
     }
@@ -156,11 +182,14 @@ export async function listOrgMemoryHistory(
 
   records.sort((left, right) => {
     const byCreatedAt = right.createdAt.localeCompare(left.createdAt);
+
     if (byCreatedAt !== 0) {
       return byCreatedAt;
     }
+
     return right.id.localeCompare(left.id);
   });
+
   return records.slice(0, limit);
 }
 
@@ -171,6 +200,7 @@ export async function getOrgMemoryHistoryEntry(
 ): Promise<OrgMemoryChangeLogRecord | null> {
   const metaPath = historyMetaPath(orgId, revisionId, configDir);
   const contentPath = historyContentPath(orgId, revisionId, configDir);
+
   if (!((await pathExists(metaPath)) && (await pathExists(contentPath)))) {
     return null;
   }
@@ -179,10 +209,13 @@ export async function getOrgMemoryHistoryEntry(
     await readText(metaPath),
     revisionId
   );
+
   if (!entry) {
     return null;
   }
+
   const content = await readText(contentPath);
+
   return { ...entry, content };
 }
 
@@ -192,6 +225,7 @@ export async function pruneOrgMemoryHistory(
   configDir?: string
 ): Promise<void> {
   const historyDir = getOrgMemoryHistoryDir(orgId, configDir);
+
   if (!(await pathExists(historyDir))) {
     return;
   }
@@ -201,12 +235,15 @@ export async function pruneOrgMemoryHistory(
     Number.MAX_SAFE_INTEGER,
     configDir
   );
+
   const stale = entries.slice(maxEntries);
+
   if (stale.length === 0) {
     return;
   }
 
   const { unlink } = await import("node:fs/promises");
+
   for (const entry of stale) {
     await unlink(historyMetaPath(orgId, entry.id, configDir)).catch(
       () => undefined
@@ -215,5 +252,6 @@ export async function pruneOrgMemoryHistory(
       () => undefined
     );
   }
+
   await markOrgMemoryHistoryTruncated(orgId, configDir);
 }

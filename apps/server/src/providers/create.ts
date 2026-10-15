@@ -15,7 +15,10 @@ import type {
   ChatgptOAuthCredentials,
   XaiOAuthCredentials,
 } from "@nakama/core/contract";
-import { defaultDiscoveryBaseUrl } from "@nakama/core/discovery-providers";
+import {
+  defaultDiscoveryBaseUrl,
+  NETRA_AGENT_MODEL_ID,
+} from "@nakama/core/discovery-providers";
 import { resolveDefaultModelForInstance } from "../services/provider-instance-helpers";
 import { createAnthropicProvider } from "./anthropic";
 import { CEREBRAS_CHAT_BASE_URL } from "./cerebras";
@@ -33,23 +36,34 @@ import { createOpenRouterProvider } from "./openrouter";
 import { createXaiProvider } from "./xai-oauth";
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
+
 const DEFAULT_DOUBAO_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3";
+
 const DEFAULT_TOGETHER_BASE_URL = "https://api.together.xyz/v1";
+
 const DEFAULT_XIAOMI_BASE_URL = "https://api.xiaomimimo.com/v1";
+
+const DEFAULT_META_BASE_URL = "https://api.meta.ai/v1";
+
 const DEFAULT_VERCEL_AI_GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh/v1";
+
 const DEFAULT_MISTRAL_BASE_URL = "https://api.mistral.ai/v1";
+
 const DEFAULT_QWEN_BASE_URL =
   "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
+
 const DEFAULT_QWEN_CN_BASE_URL =
   "https://dashscope.aliyuncs.com/compatible-mode/v1";
+
 const DEFAULT_PERPLEXITY_BASE_URL = "https://api.perplexity.ai";
+
 const DEFAULT_XAI_BASE_URL = "https://api.x.ai/v1";
 
-export interface CreateProviderOptions {
+interface CreateProviderOptions {
   apiKey: string;
   instance?: ProviderInstance | null;
   model?: string;
-  provider: ProviderName;
+  provider: Exclude<ProviderName, "chatgpt" | "xai_oauth">;
 }
 
 function createProvider(options: CreateProviderOptions): ProviderClient {
@@ -60,41 +74,80 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
   );
 
   const baseUrlOverride = options.instance?.baseUrl?.trim();
+
   const discoveryBaseUrl =
     defaultDiscoveryBaseUrl(options.provider) ?? undefined;
 
   switch (options.provider) {
-    case "openai":
-      return createOpenAIProvider({
+    case "openai": {
+      const providerOptions: Parameters<typeof createOpenAIProvider>[0] = {
         apiKey: options.apiKey,
-        model,
-        ...(baseUrlOverride ? { baseUrl: baseUrlOverride } : {}),
         customModels: options.instance?.customModels,
-      });
-    case "anthropic":
-      return createAnthropicProvider({
+        model,
+      };
+
+      if (baseUrlOverride) {
+        providerOptions.baseUrl = baseUrlOverride;
+      }
+
+      return createOpenAIProvider(providerOptions);
+    }
+
+    case "anthropic": {
+      const providerOptions: Parameters<typeof createAnthropicProvider>[0] = {
         apiKey: options.apiKey,
         model,
-        ...(baseUrlOverride ? { baseUrl: baseUrlOverride } : {}),
-      });
+      };
+
+      if (baseUrlOverride) {
+        providerOptions.baseUrl = baseUrlOverride;
+      }
+
+      return createAnthropicProvider(providerOptions);
+    }
+
     case "openrouter":
       return createOpenRouterProvider({
         apiKey: options.apiKey,
         customModels: options.instance?.customModels,
         model,
+        openRouterRouting: options.instance?.openRouterRouting,
       });
-    case "gemini":
-      return createGeminiProvider({
+    case "gemini": {
+      const providerOptions: Parameters<typeof createGeminiProvider>[0] = {
         apiKey: options.apiKey,
         model,
-        ...(baseUrlOverride ? { baseUrl: baseUrlOverride } : {}),
-      });
+      };
+
+      if (baseUrlOverride) {
+        providerOptions.baseUrl = baseUrlOverride;
+      }
+
+      return createGeminiProvider(providerOptions);
+    }
+
     case "deepseek":
       return createOpenAIProvider({
         apiKey: options.apiKey,
         baseUrl: baseUrlOverride ?? DEFAULT_DEEPSEEK_BASE_URL,
         model,
         providerName: "deepseek",
+      });
+    case "netra":
+      if (model !== NETRA_AGENT_MODEL_ID) {
+        throw new Error("This Netra model needs a verified tool-turn test.");
+      }
+
+      return createOpenAICompatibleProvider({
+        apiKey: options.apiKey,
+        baseUrl: discoveryBaseUrl!,
+        displayName: "Netra Runtime",
+        model,
+        providerName: "netra",
+        supportsThinking: compatibleModelSupportsThinking(
+          model,
+          options.instance?.customModels
+        ),
       });
     case "doubao":
       return createOpenAIProvider({
@@ -116,6 +169,13 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         baseUrl: baseUrlOverride ?? DEFAULT_XIAOMI_BASE_URL,
         model,
         providerName: "xiaomi",
+      });
+    case "meta":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? DEFAULT_META_BASE_URL,
+        model,
+        providerName: "meta",
       });
     case "vercel_ai_gateway":
       return createOpenAIProvider({
@@ -246,6 +306,7 @@ export function readApiKeyForInstance(
   }
 
   const envVar = apiKeyEnvVarForProvider(instance.type);
+
   if (!envVar) {
     return;
   }
@@ -276,40 +337,45 @@ export function createProviderForInstance(
       return null;
     }
 
-    return createXaiProvider({
+    const providerOptions: Parameters<typeof createXaiProvider>[0] = {
       getOAuth: () => {
         const latest = options?.resolveInstance
           ? options.resolveInstance(instance.id)
           : instance;
+
         return readXaiOAuthFromInstance(latest);
       },
       model,
-      ...(options?.onXaiTokenRefresh
-        ? {
-            onTokenRefresh: (oauth) =>
-              options.onXaiTokenRefresh!(instance.id, oauth),
-          }
-        : {}),
-    });
+    };
+
+    if (options?.onXaiTokenRefresh) {
+      providerOptions.onTokenRefresh = (oauth) =>
+        options.onXaiTokenRefresh!(instance.id, oauth);
+    }
+
+    return createXaiProvider(providerOptions);
   }
+
   if (instance.type === "chatgpt") {
     if (!isChatgptProviderConnected(instance)) {
       return null;
     }
 
-    return createChatgptProvider({
+    const providerOptions: Parameters<typeof createChatgptProvider>[0] = {
       getOAuth: () => {
         const latest = options?.resolveInstance?.(instance.id) ?? instance;
+
         return readChatgptOAuthFromInstance(latest);
       },
       model,
-      ...(options?.onChatgptTokenRefresh
-        ? {
-            onTokenRefresh: (oauth) =>
-              options.onChatgptTokenRefresh!(instance.id, oauth),
-          }
-        : {}),
-    });
+    };
+
+    if (options?.onChatgptTokenRefresh) {
+      providerOptions.onTokenRefresh = (oauth) =>
+        options.onChatgptTokenRefresh!(instance.id, oauth);
+    }
+
+    return createChatgptProvider(providerOptions);
   }
 
   const apiKey = readApiKeyForInstance(instance, env);

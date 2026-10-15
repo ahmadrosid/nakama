@@ -1,6 +1,4 @@
-import { createHash } from "node:crypto";
 import { isAbsolute, join } from "node:path";
-import { ensureDir } from "../fs";
 import { getUserConfigDir } from "../user-config";
 import { loadSoulStack } from "./load";
 import type { LoadedSoulStack } from "./types";
@@ -36,40 +34,18 @@ export function assertYearMonth(value: string): string {
 }
 
 /** Per-profile soul stack: ~/.nakama/orgs/{orgId}/profiles/{profileId}/ */
-export function getProfileSoulDir(orgId: string, profileId: string): string {
+export function getProfileSoulDir(
+  orgId: string,
+  profileId: string,
+  configDir = getUserConfigDir()
+): string {
   return join(
-    getUserConfigDir(),
+    configDir,
     "orgs",
     assertConfigPathSegment(orgId, "orgId"),
     "profiles",
     assertConfigPathSegment(profileId, "profileId")
   );
-}
-
-export function getAppUserSoulDir(
-  orgId: string,
-  profileId: string,
-  appUserId: string
-): string {
-  const trimmed = appUserId.trim();
-  if (!trimmed) {
-    throw new Error("Invalid appUserId.");
-  }
-  const digest = createHash("sha256").update(trimmed).digest("hex");
-  return join(getProfileSoulDir(orgId, profileId), "users", digest);
-}
-
-export async function ensureAppUserSoulDir(
-  orgId: string,
-  profileId: string,
-  appUserId: string
-): Promise<string> {
-  const target = getAppUserSoulDir(orgId, profileId, appUserId);
-  await ensureDir(target);
-
-  await ensureDir(join(target, "memory-archive"));
-  await ensureDir(join(target, "artifacts"));
-  return target;
 }
 
 export function getProfileArtifactsDir(
@@ -98,6 +74,7 @@ export function getOrgMemoryDir(
       "configDir must be an absolute path; relative paths resolve against process.cwd() and break org isolation."
     );
   }
+
   return join(configDir, "orgs", assertConfigPathSegment(orgId, "orgId"));
 }
 
@@ -154,5 +131,6 @@ export async function resolveSoulStackForProfile(
     getProfileSoulDir(orgId, profileId),
     readMemory
   );
+
   return stack.loaded.length > 0 ? stack : null;
 }

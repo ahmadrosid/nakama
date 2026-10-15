@@ -14,7 +14,8 @@ import {
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
-  requireOrgAdminOrPlatformAdminFromContext,
+  requireOrgMemberFromContext,
+  requireProfileManageFromContext,
 } from "../org-guards";
 import { errorResponse, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
@@ -26,12 +27,14 @@ export function registerProfilePortabilityRoutes(
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
+
   const importRequestSchema = z
     .object({
       data: z.string(),
       name: z.string().optional(),
     })
     .openapi("PreviewProfilePackImportRequest");
+
   const restoreRequestSchema = z
     .object({
       confirm: z.boolean(),
@@ -39,10 +42,12 @@ export function registerProfilePortabilityRoutes(
       name: z.string().optional(),
     })
     .openapi("ImportProfilePackRequest");
+
   const previewResponseSchema = z
     .object({})
     .passthrough()
     .openapi("ProfilePackPreviewResponse");
+
   const importResponseSchema = z
     .object({})
     .passthrough()
@@ -113,6 +118,10 @@ export function registerProfilePortabilityRoutes(
           content: { "application/json": { schema: errorSchema } },
           description: "Error",
         },
+        413: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Profile pack exceeds a decompression limit",
+        },
         500: {
           content: { "application/json": { schema: errorSchema } },
           description: "Error",
@@ -147,6 +156,10 @@ export function registerProfilePortabilityRoutes(
           content: { "application/json": { schema: errorSchema } },
           description: "Error",
         },
+        413: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Profile pack exceeds a decompression limit",
+        },
         500: {
           content: { "application/json": { schema: errorSchema } },
           description: "Error",
@@ -158,7 +171,10 @@ export function registerProfilePortabilityRoutes(
   );
 
   app.get("/v1/profiles/:profileId/pack/export", async (c) => {
-    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    const auth = await requireProfileManageFromContext(c, options.agent, {
+      allowOrgAdmin: true,
+    });
+
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const db = requireDatabase(options);
@@ -167,7 +183,8 @@ export function registerProfilePortabilityRoutes(
       const result = await createProfilePackExport(db, orgId, profileId, {
         includeCustomTools: auth.isPlatformAdmin,
       });
-      return new Response(result.data, {
+
+      return new Response(new Uint8Array(result.data), {
         headers: {
           "Content-Disposition": `attachment; filename="${result.filename}"`,
           "Content-Type": "application/zip",
@@ -179,9 +196,10 @@ export function registerProfilePortabilityRoutes(
   });
 
   app.post("/v1/profiles/pack/import/preview", async (c) => {
-    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const db = requireDatabase(options);
+
     const body = await readJson<{ data: string; name?: string }>(
       c.req.raw,
       importRequestSchema
@@ -192,8 +210,12 @@ export function registerProfilePortabilityRoutes(
         db,
         orgId,
         decodeArchiveRequestData(body.data),
-        { restoreCustomTools: auth.isPlatformAdmin }
+        {
+          isPlatformAdmin: auth.isPlatformAdmin,
+          restoreCustomTools: auth.isPlatformAdmin,
+        }
       );
+
       return json<ProfilePackPreviewResponse>(
         body.name?.trim()
           ? { ...preview, plannedName: body.name.trim() }
@@ -205,9 +227,10 @@ export function registerProfilePortabilityRoutes(
   });
 
   app.post("/v1/profiles/pack/import", async (c) => {
-    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const db = requireDatabase(options);
+
     const body = await readJson<ProfilePackImportRequest>(
       c.req.raw,
       restoreRequestSchema
@@ -221,10 +244,17 @@ export function registerProfilePortabilityRoutes(
         {
           actorUserId: auth.user.id,
           confirm: body.confirm,
+          isPlatformAdmin: auth.isPlatformAdmin,
           name: body.name,
+          // Members import for themselves: the agent is private and owned by them.
+          ownerUserId:
+            auth.isPlatformAdmin || auth.orgRole === "admin"
+              ? undefined
+              : auth.user.id,
           restoreCustomTools: auth.isPlatformAdmin,
         }
       );
+
       return json<ProfilePackImportResponse>(imported);
     } catch (error) {
       return formatPackError(error);
@@ -236,13 +266,15 @@ function requireDatabase(options: ServerOptions) {
   if (!options.databaseAdapter) {
     throw new NakamaApiError("Database is not configured.", 500);
   }
+
   return options.databaseAdapter;
 }
 
-function formatPackError(error: unknown): Response {
+function formatPackError<T>(error: T): Response {
   if (error instanceof NakamaApiError) {
     return errorResponse(error.message, error.status);
   }
+
   return errorResponse(
     error instanceof Error ? error.message : String(error),
     400

@@ -8,33 +8,26 @@ import {
 } from "../../../../packages/agent/src/history-compaction";
 import { createGeminiProvider, toGeminiContents } from "./gemini";
 import { createOpenAIProvider, toOpenAIMessages } from "./openai";
+import type { ProviderJsonRecord } from "./shared";
+import { asTestFetch, streamFromChunks } from "./test-helpers";
 
-const j = (value: unknown) => JSON.stringify(value);
+const j = <Value>(value: Value) => JSON.stringify(value);
 
 // Mirrors TOKEN_ESTIMATE_RATIO = 4 in history-compaction.ts.
 const estimateTokens = (text: string) => Math.ceil(text.length / 4);
 
 const REASONING = "The user wants last quarter invoices. ".repeat(20);
+
 const USER: ChatMessage = { content: "invoices last quarter", role: "user" };
 
 function eventStream(chunks: string[]): Response {
-  const encoder = new TextEncoder();
-
-  return new Response(
-    new ReadableStream<Uint8Array>({
-      start(controller) {
-        for (const chunk of chunks) {
-          controller.enqueue(encoder.encode(chunk));
-        }
-
-        controller.close();
-      },
-    }),
-    { headers: { "Content-Type": "text/event-stream" }, status: 200 }
-  );
+  return new Response(streamFromChunks(chunks), {
+    headers: { "Content-Type": "text/event-stream" },
+    status: 200,
+  });
 }
 
-const chunk = (delta: Record<string, unknown>) =>
+const chunk = (delta: ProviderJsonRecord) =>
   `data: ${j({ choices: [{ delta }] })}\n\n`;
 
 // deepseek, xai, minimax, zhipu, and opencode_go all reach createOpenAIProvider
@@ -48,8 +41,9 @@ async function chatCompletionsTurn(): Promise<ChatMessage> {
       "data: [DONE]\n\n",
     ])
   );
+
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = fetchMock as unknown as typeof fetch;
+  globalThis.fetch = asTestFetch(fetchMock);
 
   try {
     const provider = createOpenAIProvider({
@@ -58,6 +52,7 @@ async function chatCompletionsTurn(): Promise<ChatMessage> {
       model: "deepseek-reasoner",
       providerName: "deepseek",
     });
+
     const { assistantMessage } = await provider.streamChat(
       { messages: [USER], system: "" },
       { onChunk: () => undefined }
@@ -73,9 +68,11 @@ describe("history token estimate on the chat-completions path", () => {
   test("does not under-count a turn whose reasoning is replayed", async () => {
     const assistant = await chatCompletionsTurn();
     const replays = providerReplaysThinking("deepseek");
+
     const estimated =
       estimateHistoryTokens([USER, assistant], "", [], replays) -
       estimateHistoryTokens([USER], "", [], replays);
+
     const sent =
       estimateTokens(j(await toOpenAIMessages("", [USER, assistant]))) -
       estimateTokens(j(await toOpenAIMessages("", [USER])));
@@ -96,9 +93,11 @@ describe("history token estimate on the chat-completions path", () => {
     }
 
     let summarizeCalls = 0;
+
     const provider: ProviderClient = {
       generateChat() {
         summarizeCalls += 1;
+
         return Promise.resolve({
           assistantMessage: { content: "summary", role: "assistant" },
           content: "summary",
@@ -111,11 +110,13 @@ describe("history token estimate on the chat-completions path", () => {
       name: "deepseek",
       streamChat(input, handlers) {
         handlers.onChunk("summary");
+
         return this.generateChat(input);
       },
     };
 
     const sent = estimateTokens(j(await toOpenAIMessages("", history)));
+
     const result = await compactHistory({
       compaction: { contextWindow: 1000, maxOutputTokens: 100 },
       history,
@@ -149,6 +150,7 @@ async function geminiTurn(): Promise<ChatMessage> {
       },
     ],
   });
+
   const fetchMock = mock(
     async () =>
       new Response(body, {
@@ -156,14 +158,16 @@ async function geminiTurn(): Promise<ChatMessage> {
         status: 200,
       })
   );
+
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = fetchMock as unknown as typeof fetch;
+  globalThis.fetch = asTestFetch(fetchMock);
 
   try {
     const provider = createGeminiProvider({
       apiKey: "k",
       model: "gemini-3-pro",
     });
+
     const result = await provider.generateChat({
       messages: [USER],
       system: "",
@@ -180,9 +184,11 @@ describe("history token estimate on the Gemini path", () => {
     const assistant = await geminiTurn();
 
     const replays = providerReplaysThinking("gemini");
+
     const estimated =
       estimateHistoryTokens([USER, assistant], "", [], replays) -
       estimateHistoryTokens([USER], "", [], replays);
+
     const sent =
       estimateTokens(j(await toGeminiContents([USER, assistant]))) -
       estimateTokens(j(await toGeminiContents([USER])));
@@ -210,9 +216,11 @@ describe("history token estimate on the Gemini path", () => {
     }
 
     let summarizeCalls = 0;
+
     const provider: ProviderClient = {
       generateChat() {
         summarizeCalls += 1;
+
         return Promise.resolve({
           assistantMessage: { content: "summary", role: "assistant" },
           content: "summary",
@@ -225,11 +233,13 @@ describe("history token estimate on the Gemini path", () => {
       name: "gemini",
       streamChat(input, handlers) {
         handlers.onChunk("summary");
+
         return this.generateChat(input);
       },
     };
 
     const sent = estimateTokens(j(await toGeminiContents(history)));
+
     const result = await compactHistory({
       compaction: { contextWindow: 1000, maxOutputTokens: 100 },
       history,

@@ -1,0 +1,2 @@
+# Same lint as the CI Check job, so it fails here instead of on GitHub.
+bun run check:ci

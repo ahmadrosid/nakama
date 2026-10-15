@@ -94,9 +94,11 @@ export function ArtifactRowMenu({
 
 function FileRenameMenuItem({ path }: { path: string }) {
   const rename = useContext(FileRenameContext);
+
   if (!rename) {
     return null;
   }
+
   return (
     <DropdownMenuItem onClick={() => rename(path)}>
       <PencilEdit02Icon aria-hidden />
@@ -113,9 +115,11 @@ export function FileRenameMenu({
   filename: string;
 }) {
   const rename = useContext(FileRenameContext);
+
   if (!rename) {
     return null;
   }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger

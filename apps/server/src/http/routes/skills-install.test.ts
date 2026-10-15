@@ -3,11 +3,13 @@ import { readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { zipSync } from "fflate";
+import { asTestFetch } from "../../providers/test-helpers";
 import { SkillsService } from "../../services/skills-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
   loginUserSession,
+  seedOrgAdmin,
   setupFreshInstallSession,
 } from "../test-session-helpers";
 
@@ -29,18 +31,19 @@ Just a body.
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const skillsService = new SkillsService(databaseAdapter);
+
   return {
     ...createMinimalHonoApp({
       agent: {
+        listSkills: (orgId: string) => skillsService.listSkills(orgId),
         listSkillFiles: (orgId: string, skillId: string) =>
           skillsService.listSkillFiles(orgId, skillId),
         readSkillFile: (orgId: string, skillId: string, filePath: string) =>
           skillsService.readSkillFile(orgId, skillId, filePath),
-        installSkillFromGitHub: (orgId: string, request: unknown) =>
-          skillsService.installSkillFromGitHub(
-            orgId,
-            request as { profileId: string; url: string }
-          ),
+        installSkillFromGitHub: (
+          orgId: string,
+          request: Parameters<SkillsService["installSkillFromGitHub"]>[1]
+        ) => skillsService.installSkillFromGitHub(orgId, request),
         listProfiles: async () => ({ profiles: [] }),
       },
       databaseAdapter,
@@ -50,6 +53,140 @@ function createApp() {
 }
 
 const BASE = "http://localhost:4310";
+
+test("skill catalog permits tenant admins without exposing private tenant skills", async () => {
+  const { app, authService, databaseAdapter, skillsService } = createApp();
+
+  const admin = await seedOrgAdmin(databaseAdapter, {
+    authService,
+    email: "catalog-admin@example.com",
+    orgId: "catalog-parent",
+  });
+
+  const session = await loginUserSession(
+    app,
+    admin.email,
+    admin.password,
+    admin.orgId
+  );
+
+  const now = new Date().toISOString();
+  const skillIds = new Map<string, string>();
+
+  const { skill: globalSkill } = await skillsService.createSkill(admin.orgId, {
+    body: "Global instructions",
+    description: "Existing global skill",
+    name: "catalog-global",
+  });
+
+  for (const orgId of [
+    admin.orgId,
+    "catalog-team",
+    "catalog-sibling",
+    "catalog-other",
+  ]) {
+    if (orgId !== admin.orgId) {
+      await databaseAdapter.upsertOrganization({
+        createdAt: now,
+        id: orgId,
+        name: orgId,
+        parentOrgId: orgId === "catalog-other" ? null : admin.orgId,
+        slug: orgId,
+        updatedAt: now,
+      });
+    }
+
+    const profileId = `${orgId}-profile`;
+    await databaseAdapter.upsertProfile({
+      createdAt: now,
+      id: profileId,
+      isSuper: false,
+      model: null,
+      name: orgId,
+      orgId,
+      systemPrompt: "Private profile",
+      updatedAt: now,
+    });
+
+    const { skill } = await skillsService.createSkill(orgId, {
+      body: "Private instructions",
+      description: "Private skill",
+      name: orgId,
+      profileId,
+    });
+
+    skillIds.set(orgId, skill.id);
+  }
+
+  await databaseAdapter.upsertOrgMember({
+    createdAt: now,
+    orgId: "catalog-team",
+    role: "admin",
+    userId: admin.userId,
+  });
+
+  for (const orgId of [admin.orgId, "catalog-team"]) {
+    const response = await app.fetch(
+      new Request(`${BASE}/v1/skills`, {
+        headers: session.headers({}, orgId),
+      })
+    );
+
+    expect(response.status).toBe(200);
+
+    const result: Awaited<ReturnType<SkillsService["listSkills"]>> =
+      await response.json();
+
+    expect(
+      result.skills.filter((skill) => skill.orgId).map((skill) => skill.id)
+    ).toEqual([skillIds.get(orgId)!]);
+    expect(result.skills.map((skill) => skill.id)).toContain(globalSkill.id);
+    expect(result.publishedSkills).toEqual([]);
+  }
+
+  for (const orgId of ["catalog-sibling", "catalog-other"]) {
+    const response = await app.fetch(
+      new Request(`${BASE}/v1/skills`, {
+        headers: session.headers({}, orgId),
+      })
+    );
+
+    expect(response.status).toBe(404);
+  }
+
+  const write = await app.fetch(
+    new Request(`${BASE}/v1/skills`, {
+      body: "{}",
+      headers: session.headers(
+        {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        },
+        admin.orgId
+      ),
+      method: "POST",
+    })
+  );
+
+  expect(write.status).toBe(403);
+
+  for (const role of ["member"] as const) {
+    await databaseAdapter.upsertOrgMember({
+      createdAt: now,
+      orgId: admin.orgId,
+      role,
+      userId: admin.userId,
+    });
+
+    const response = await app.fetch(
+      new Request(`${BASE}/v1/skills`, {
+        headers: session.headers({}, admin.orgId),
+      })
+    );
+
+    expect(response.status).toBe(403);
+  }
+});
 
 describe("POST /v1/skills/install", () => {
   const originalFetch = globalThis.fetch;
@@ -63,25 +200,30 @@ describe("POST /v1/skills/install", () => {
   });
 
   test("platform admin installs a valid public SKILL.md and assigns it", async () => {
-    globalThis.fetch = mock(
-      async () =>
-        new Response(
-          zipSync({
-            "skills-main/weather/SKILL.md": new TextEncoder().encode(
-              VALID_SKILL
-            ),
-            "skills-main/weather/references/explainer.md":
-              new TextEncoder().encode("Explainer instructions"),
-          })
-        )
-    ) as unknown as typeof fetch;
+    // SAFETY: This test controls the fixture shape at this boundary.
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(
+            zipSync({
+              "skills-main/weather/SKILL.md": new TextEncoder().encode(
+                VALID_SKILL
+              ),
+              "skills-main/weather/references/explainer.md":
+                new TextEncoder().encode("Explainer instructions"),
+            })
+          )
+      )
+    );
 
     const { app, databaseAdapter, skillsService } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin@org.com"
     );
+
     const orgId = adminSession.orgId!;
     const profiles = await databaseAdapter.listProfilesForOrg(orgId);
     const profileId = profiles[0]!.id;
@@ -104,33 +246,42 @@ describe("POST /v1/skills/install", () => {
     );
 
     expect(response.status).toBe(201);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await response.json()) as {
       skill: { name: string; id: string; createdBy: string };
     };
+
     expect(body.skill.name).toBe("github-weather");
     expect(body.skill.createdBy).toBe("human");
+
     const filesResponse = await app.fetch(
       new Request(`${BASE}/v1/skills/${body.skill.id}/files`, {
         headers: adminSession.headers({}, orgId),
       })
     );
+
     expect(filesResponse.status).toBe(200);
     expect((await filesResponse.json()).files).toContainEqual({
       path: "references/explainer.md",
       type: "file",
     });
+
     const fileResponse = await app.fetch(
       new Request(
         `${BASE}/v1/skills/${body.skill.id}/file?path=references%2Fexplainer.md`,
         { headers: adminSession.headers({}, orgId) }
       )
     );
+
     expect(fileResponse.status).toBe(200);
     expect((await fileResponse.json()).content).toBe("Explainer instructions");
+
     const installed = await databaseAdapter.getSkillByName(
       "github-weather",
       orgId
     );
+
     expect(
       await readFile(
         join(installed!.sourcePath, "references/explainer.md"),
@@ -160,23 +311,29 @@ describe("POST /v1/skills/install", () => {
 
   test("installs a skill from an npx skills add command", async () => {
     let requestedUrl = "";
-    globalThis.fetch = mock(async (input) => {
-      requestedUrl = String(input);
-      return new Response(
-        zipSync({
-          "agent-skills-main/pdf/SKILL.md": new TextEncoder().encode(
-            VALID_SKILL.replace("github-weather", "pdf")
-          ),
-        })
-      );
-    }) as unknown as typeof fetch;
+    // SAFETY: This test controls the fixture shape at this boundary.
+    globalThis.fetch = asTestFetch(
+      mock(async (input) => {
+        requestedUrl = String(input);
+
+        return new Response(
+          zipSync({
+            "agent-skills-main/pdf/SKILL.md": new TextEncoder().encode(
+              VALID_SKILL.replace("github-weather", "pdf")
+            ),
+          })
+        );
+      })
+    );
 
     const { app, databaseAdapter } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin-command@org.com"
     );
+
     const orgId = adminSession.orgId!;
     const profileId = (await databaseAdapter.listProfilesForOrg(orgId))[0]!.id;
 
@@ -204,23 +361,28 @@ describe("POST /v1/skills/install", () => {
   });
 
   test("invalid frontmatter returns 400 and writes no skill", async () => {
-    globalThis.fetch = mock(
-      async () =>
-        new Response(
-          zipSync({
-            "skills-main/broken/SKILL.md": new TextEncoder().encode(
-              INVALID_SKILL
-            ),
-          })
-        )
-    ) as unknown as typeof fetch;
+    // SAFETY: This test controls the fixture shape at this boundary.
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(
+            zipSync({
+              "skills-main/broken/SKILL.md": new TextEncoder().encode(
+                INVALID_SKILL
+              ),
+            })
+          )
+      )
+    );
 
     const { app, databaseAdapter } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin@org.com"
     );
+
     const orgId = adminSession.orgId!;
     const profiles = await databaseAdapter.listProfilesForOrg(orgId);
     const profileId = profiles[0]!.id;
@@ -250,11 +412,13 @@ describe("POST /v1/skills/install", () => {
 
   test("non-GitHub URL returns 400", async () => {
     const { app, databaseAdapter } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin@org.com"
     );
+
     const orgId = adminSession.orgId!;
     const profiles = await databaseAdapter.listProfilesForOrg(orgId);
     const profileId = profiles[0]!.id;
@@ -277,17 +441,20 @@ describe("POST /v1/skills/install", () => {
     );
 
     expect(response.status).toBe(400);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await response.json()) as { error: string };
     expect(body.error).toMatch(/GitHub/i);
   });
 
   test("non-admin returns 403", async () => {
     const { app, databaseAdapter } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin@org.com"
     );
+
     const orgId = adminSession.orgId!;
 
     const memberResp = await app.fetch(
@@ -307,23 +474,29 @@ describe("POST /v1/skills/install", () => {
         method: "POST",
       })
     );
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const memberProvisioned = (await memberResp.json()) as {
       temporaryPassword: string;
     };
+
     const memberSession = await loginUserSession(
       app,
       "member@org.com",
       memberProvisioned.temporaryPassword,
       orgId
     );
+
     for (const suffix of ["files", "file?path=SKILL.md"]) {
       const result = await app.fetch(
         new Request(`${BASE}/v1/skills/any-skill/${suffix}`, {
           headers: memberSession.headers({}, orgId),
         })
       );
+
       expect(result.status).toBe(403);
     }
+
     const profiles = await databaseAdapter.listProfilesForOrg(orgId);
     const profileId = profiles[0]!.id;
 
@@ -349,11 +522,13 @@ describe("POST /v1/skills/install", () => {
 
   test("incomplete body returns 400, not 500", async () => {
     const { app, databaseAdapter } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin-malformed@org.com"
     );
+
     const orgId = adminSession.orgId!;
 
     const response = await app.fetch(
@@ -371,28 +546,34 @@ describe("POST /v1/skills/install", () => {
     );
 
     expect(response.status).toBe(400);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await response.json()) as { error: string };
     expect(body.error).toMatch(/GitHub URL.*ZIP file/i);
   });
 
   test("installing the same skill onto a second profile returns 409", async () => {
-    globalThis.fetch = mock(
-      async () =>
-        new Response(
-          zipSync({
-            "skills-main/weather/SKILL.md": new TextEncoder().encode(
-              VALID_SKILL
-            ),
-          })
-        )
-    ) as unknown as typeof fetch;
+    // SAFETY: This test controls the fixture shape at this boundary.
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(
+            zipSync({
+              "skills-main/weather/SKILL.md": new TextEncoder().encode(
+                VALID_SKILL
+              ),
+            })
+          )
+      )
+    );
 
     const { app, databaseAdapter } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin-dup@org.com"
     );
+
     const orgId = adminSession.orgId!;
     const profiles = await databaseAdapter.listProfilesForOrg(orgId);
     const firstProfileId = profiles[0]!.id;
@@ -413,6 +594,7 @@ describe("POST /v1/skills/install", () => {
         method: "POST",
       })
     );
+
     expect(first.status).toBe(201);
 
     const now = new Date().toISOString();
@@ -449,6 +631,7 @@ describe("POST /v1/skills/install", () => {
     );
 
     expect(second.status).toBe(409);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await second.json()) as { error: string };
     expect(body.error).toMatch(/already exists|cannot be attached/i);
   });

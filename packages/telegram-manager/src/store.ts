@@ -23,14 +23,18 @@ export async function createTelegramPairing(
     // ponytail: serialize admission up to 1,000 active pairings; partition if demand grows.
     await tx`SELECT pg_advisory_xact_lock(74839201)`;
     await tx`DELETE FROM telegram_pairings WHERE expires_at <= CURRENT_TIMESTAMP`;
+
     const [row] = await tx<
       { count: number }[]
     >`SELECT count(*)::int AS count FROM telegram_pairings`;
+
     if (row.count >= 1000) {
       return false;
     }
+
     await tx`INSERT INTO telegram_pairings (id, secret_hash, suggested_username, expires_at)
       VALUES (${pairing.id}, ${pairing.secretHash}, ${pairing.suggestedUsername}, ${pairing.expiresAt.toISOString()})`;
+
     return true;
   });
 }
@@ -42,6 +46,7 @@ export async function getTelegramPairing(
 ) {
   const [row] = await sql<Pairing[]>`SELECT * FROM telegram_pairings
     WHERE id = ${id} AND secret_hash = ${secretHash} AND expires_at > CURRENT_TIMESTAMP`;
+
   return row ?? null;
 }
 
@@ -63,6 +68,7 @@ export async function bindTelegramPairing(
   >`UPDATE telegram_pairings SET owner_user_id = ${ownerUserId}
     WHERE id = ${id} AND expires_at > CURRENT_TIMESTAMP AND bot_id IS NULL
       AND (owner_user_id IS NULL OR owner_user_id = ${ownerUserId}) RETURNING *`;
+
   return row ?? null;
 }
 

@@ -30,6 +30,7 @@ export function FileEntriesLayout({
       </ul>
     );
   }
+
   return (
     <div className="overflow-x-auto rounded-xl border border-border bg-card p-2">
       <table className="w-full table-fixed text-left text-sm">
@@ -97,7 +98,9 @@ export function FileEntry({
         viewMode={viewMode}
       />
     ) : null;
+
   const date = new Date(updatedAt);
+
   const modified = Number.isNaN(date.getTime())
     ? "—"
     : date.toLocaleDateString(undefined, {
@@ -105,10 +108,12 @@ export function FileEntry({
         month: "short",
         year: "numeric",
       });
+
   const type = directory
     ? "Folder"
     : artifactBasename(filename).split(".").slice(1).pop()?.toUpperCase() ||
       "File";
+
   const icon = directory ? (
     <Folder01Icon
       aria-hidden
@@ -121,6 +126,7 @@ export function FileEntry({
   ) : (
     <ArtifactIcon className="size-5" filename={filename} mimeType={mimeType} />
   );
+
   if (viewMode === "list") {
     return (
       <tr className="group/file hover:bg-muted/30">
@@ -153,6 +159,7 @@ export function FileEntry({
       </tr>
     );
   }
+
   return (
     <GridFileEntry
       actions={actions}
@@ -234,6 +241,7 @@ function ArtifactListFile({
     id: `files-page:${artifact.path || artifact.filename}`,
     profileId,
   });
+
   return (
     <FileEntry
       {...artifact}
@@ -309,6 +317,7 @@ function FilePinButton({
   pins: NonNullable<React.ContextType<typeof FilePinsContext>>;
 }) {
   const pinned = pins.paths.has(path);
+
   return (
     <Button
       aria-label={`${pinned ? "Unpin" : "Pin"} ${filename}`}
@@ -342,13 +351,16 @@ function FileEntryActions({
   viewMode: FilesViewMode;
 }) {
   const pins = useContext(FilePinsContext);
+
   const entryActions =
     actions ??
     (pinPath && <FileRenameMenu filename={filename} path={pinPath} />);
+
   const pinAction =
     pinPath && pins ? (
       <FilePinButton filename={filename} path={pinPath} pins={pins} />
     ) : null;
+
   return entryActions || pinAction ? (
     <div
       className={`flex gap-2 ${viewMode === "grid" ? "flex-col" : "items-center justify-end"}`}

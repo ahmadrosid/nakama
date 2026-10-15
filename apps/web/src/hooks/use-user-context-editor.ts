@@ -8,6 +8,7 @@ function readDraft(orgId: string | null | undefined): string | null {
   if (!orgId) {
     return null;
   }
+
   try {
     return localStorage.getItem(DRAFT_PREFIX + orgId);
   } catch {
@@ -22,6 +23,7 @@ export function writeUserContextDraft(
   if (!orgId) {
     return;
   }
+
   try {
     localStorage.setItem(DRAFT_PREFIX + orgId, content);
   } catch {}
@@ -31,6 +33,7 @@ export function clearUserContextDraft(orgId: string | null | undefined): void {
   if (!orgId) {
     return;
   }
+
   try {
     localStorage.removeItem(DRAFT_PREFIX + orgId);
   } catch {}
@@ -47,10 +50,13 @@ export function useUserContextEditor(input: {
   const savedContent = savedOverride ?? input.status?.content ?? "";
   const draft = savedContent === "" ? readDraft(input.orgId) : null;
   const name = input.defaultName?.trim() ?? "";
+
   const fallback =
     savedContent === "" && name !== ""
       ? renderUserContext({ name })
       : savedContent;
+
   const content = editedContent ?? draft ?? fallback;
+
   return { content, savedContent, setContent, setSavedContent };
 }

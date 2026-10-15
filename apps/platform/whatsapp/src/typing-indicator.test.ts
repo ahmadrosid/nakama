@@ -13,25 +13,34 @@ async function flushTypingChain(): Promise<void> {
 
 function createFakeSocket() {
   const calls: string[] = [];
-  const socket = {
+
+  const socketFixture = {
     async sendPresenceUpdate(presence: string) {
       calls.push(presence);
     },
-  } as unknown as WASocket;
+  };
+
+  // SAFETY: The typing loop calls only sendPresenceUpdate on this fixture.
+  const socket = socketFixture as WASocket;
+
   return { calls, socket };
 }
 
 function createBlockingSocket() {
   const releases: Array<() => void> = [];
   let sendCount = 0;
-  const socket = {
+
+  const socketFixture = {
     async sendPresenceUpdate() {
       sendCount += 1;
       await new Promise<void>((resolve) => {
         releases.push(resolve);
       });
     },
-  } as unknown as WASocket;
+  };
+
+  // SAFETY: The typing loop calls only sendPresenceUpdate on this fixture.
+  const socket = socketFixture as WASocket;
 
   return {
     getSendCount: () => sendCount,
@@ -47,6 +56,7 @@ function createBlockingSocket() {
 describe("createTypingLoop", () => {
   test("stop prevents later ping from sending presence", async () => {
     const { calls, socket } = createFakeSocket();
+
     const loop = createTypingLoop(async () => {
       await socket.sendPresenceUpdate("composing", JID);
     });
@@ -64,6 +74,7 @@ describe("createTypingLoop", () => {
 
   test("start replaces a previous interval without leaking", async () => {
     const { calls, socket } = createFakeSocket();
+
     const loop = createTypingLoop(async () => {
       await socket.sendPresenceUpdate("composing", JID);
     });
@@ -82,6 +93,7 @@ describe("createTypingLoop", () => {
 
   test("stop drops queued presence sends that have not started yet", async () => {
     const { getSendCount, releaseAll, socket } = createBlockingSocket();
+
     const loop = createTypingLoop(async () => {
       await socket.sendPresenceUpdate("composing", JID);
     });

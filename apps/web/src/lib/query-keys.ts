@@ -1,4 +1,11 @@
 export const queryKeys = {
+  acpAgentPresets: ["acpAgentPresets"] as const,
+  acpSettings: {
+    profile: (profileId: string, agentKey: string) =>
+      ["acpSettings", "profile", profileId, agentKey] as const,
+    session: (sessionId: string, agentKey: string) =>
+      ["acpSettings", "session", sessionId, agentKey] as const,
+  },
   agentBrowser: {
     settings: ["agentBrowser", "settings"] as const,
   },
@@ -35,6 +42,8 @@ export const queryKeys = {
     organization: (orgId: string) =>
       ["knowledgeBase", "organization", orgId] as const,
     profile: (profileId: string) => ["knowledgeBase", profileId] as const,
+    published: (orgId: string, publicationId: string) =>
+      ["knowledgeBase", "published", orgId, publicationId] as const,
   },
   mcp: {
     all: ["mcp", "servers"] as const,
@@ -42,11 +51,13 @@ export const queryKeys = {
   },
   models: ["models"] as const,
   modelsDev: ["modelsDev"] as const,
-  notificationDestinations: {
-    all: ["notificationDestinations"] as const,
-  },
+  notificationDestinations: (orgId: string) =>
+    ["notificationDestinations", orgId] as const,
   openRouterModels: ["openRouterModels"] as const,
-  orgApiKeys: (orgId: string) => ["orgApiKeys", orgId] as const,
+  organizationOverview: (parentOrgId: string, activeOrgId: string) =>
+    ["organizationOverview", parentOrgId, activeOrgId] as const,
+  organizationPublicationCatalog: (orgId: string, kind: string) =>
+    ["organizationPublicationCatalog", orgId, kind] as const,
   orgMembers: (orgId: string) => ["orgMembers", orgId] as const,
   orgMemory: (orgId: string) => ["orgMemory", orgId] as const,
   orgMemoryHistory: (orgId: string) => ["orgMemoryHistory", orgId] as const,
@@ -54,11 +65,17 @@ export const queryKeys = {
     ["orgMemoryHistoryRevision", orgId, revisionId] as const,
   orgMemoryProposals: (orgId: string, status?: string) =>
     ["orgMemoryProposals", orgId, status ?? "all"] as const,
+  orgParentMembers: (orgId: string) => ["orgParentMembers", orgId] as const,
   plugins: {
     all: (orgId: string) => ["plugins", orgId] as const,
     detail: (orgId: string, pluginId: string) =>
       ["plugins", orgId, pluginId] as const,
     releases: ["plugins", "releases"] as const,
+    // Under releases so approving a release refreshes the check too.
+    updates: ["plugins", "releases", "updates"] as const,
+    // Under releases so removing a release refreshes who still uses it.
+    usage: (pluginId: string) =>
+      ["plugins", "releases", "usage", pluginId] as const,
   },
   profiles: {
     all: ["profiles"] as const,
@@ -101,6 +118,8 @@ export const queryKeys = {
   skills: {
     all: ["skills"] as const,
     detail: (skillId: string) => ["skills", skillId] as const,
+    published: (orgId: string, publicationId: string) =>
+      ["skills", "published", orgId, publicationId] as const,
   },
   slack: {
     settings: ["slack", "settings"] as const,
@@ -110,6 +129,7 @@ export const queryKeys = {
   },
   systemStatus: ["systemStatus"] as const,
   telegram: {
+    requests: ["telegram", "requests"] as const,
     settings: ["telegram", "settings"] as const,
   },
   thinkingSettings: ["thinking", "settings"] as const,
@@ -120,6 +140,8 @@ export const queryKeys = {
   tools: {
     all: ["tools"] as const,
     detail: (toolId: string) => ["tools", toolId] as const,
+    published: (orgId: string, publicationId: string) =>
+      ["tools", "published", orgId, publicationId] as const,
     source: (toolId: string) => ["tools", toolId, "source"] as const,
   },
   transcriptionSettings: ["transcription", "settings"] as const,

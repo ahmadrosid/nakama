@@ -22,6 +22,7 @@ import { IMAGE_MODEL_REQUIRED_MESSAGE } from "../services/image-generation";
 import { resolveToolsFromStorage } from "../services/tool-resolver";
 import {
   createGenerateImageTool,
+  formatImageMentionContext,
   GENERATE_IMAGE_TOOL_NAME,
   runGenerateImageTool,
 } from "./generate-image-tool";
@@ -89,6 +90,7 @@ describe("generate_image tool seed and resolver (U3)", () => {
     const assignedIds = (await db.listToolsForProfile(superBot.id)).map(
       (tool) => tool.id
     );
+
     expect(assignedIds).not.toContain(GENERATE_IMAGE_TOOL_ID);
   });
 
@@ -116,6 +118,7 @@ describe("generate_image tool seed and resolver (U3)", () => {
       [],
       { serverTools: { generateImage: generateImageTool(db) } }
     );
+
     const tool = assigned.find(
       (entry) => entry.name === GENERATE_IMAGE_TOOL_NAME
     );
@@ -189,10 +192,12 @@ describe("generate_image tool persistence (U4)", () => {
       await rm(tempConfigDir, { force: true, recursive: true });
       tempConfigDir = "";
     }
+
     if (workspaceRoot) {
       await rm(workspaceRoot, { force: true, recursive: true });
       workspaceRoot = "";
     }
+
     if (originalConfigDir === undefined) {
       delete process.env.NAKAMA_CONFIG_DIR;
     } else {
@@ -206,10 +211,120 @@ describe("generate_image tool persistence (U4)", () => {
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
   }
 
+  test("forwards the turn's cancel signal to the provider call", async () => {
+    await setupWorkspace();
+    const turn = new AbortController();
+    let seen: AbortSignal | undefined;
+
+    await runGenerateImageTool(
+      { prompt: "a cat" },
+      {
+        orgId: "org_1",
+        profileId: "profile_1",
+        signal: turn.signal,
+        workspaceRoot,
+      },
+      {
+        db: createInMemoryDatabaseAdapter(),
+        ensureSettingsLoaded: async () => {},
+        generateImage: async (input) => {
+          seen = input.signal;
+
+          return {
+            data: PNG_BYTES,
+            mediaType: "image/png",
+            model: "gpt-image-2",
+            size: "1024x1024",
+          };
+        },
+        getUserConfig: () =>
+          openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
+      }
+    );
+
+    expect(seen).toBe(turn.signal);
+  });
+
+  test("sends the provider call to the compatible provider's baseUrl", async () => {
+    await setupWorkspace();
+    let seenBaseUrl: string | undefined;
+
+    await runGenerateImageTool(
+      { prompt: "a cat" },
+      { orgId: "org_1", profileId: "profile_1", workspaceRoot },
+      {
+        db: createInMemoryDatabaseAdapter(),
+        ensureSettingsLoaded: async () => {},
+        generateImage: async (input) => {
+          seenBaseUrl = input.baseUrl;
+
+          return {
+            data: PNG_BYTES,
+            mediaType: "image/png",
+            model: "gpt-image-2",
+            size: "1024x1024",
+          };
+        },
+        getUserConfig: () => ({
+          defaultProviderId: "p-local",
+          imageModel: "openai_compatible::gpt-image-2",
+          providers: [
+            {
+              apiKey: "local-key",
+              baseUrl: "http://127.0.0.1:8000/v1",
+              createdAt: "2026-01-01T00:00:00.000Z",
+              id: "p-local",
+              label: "Local",
+              type: "openai_compatible",
+            },
+          ],
+        }),
+      }
+    );
+
+    expect(seenBaseUrl).toBe("http://127.0.0.1:8000/v1");
+  });
+
+  test("records usage against the provider instance that served the call", async () => {
+    await setupWorkspace();
+    let pricedOn: string | undefined;
+
+    await runGenerateImageTool(
+      { prompt: "a cat" },
+      { orgId: "org_1", profileId: "profile_1", workspaceRoot },
+      {
+        db: createInMemoryDatabaseAdapter(),
+        ensureSettingsLoaded: async () => {},
+        generateImage: async () => ({
+          data: PNG_BYTES,
+          mediaType: "image/png",
+          model: "gpt-image-2",
+          size: "1024x1024",
+          usage: { inputTokens: 8, outputTokens: 200 },
+        }),
+        getUserConfig: () =>
+          openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
+        recordUsage: (_model, _input, _output, providerInstance) => {
+          pricedOn = providerInstance.id;
+        },
+      }
+    );
+
+    expect(pricedOn).toBe("p-openai");
+  });
+
   test("prompt saves only the image and returns an attachmentId", async () => {
     await setupWorkspace();
     const db = createInMemoryDatabaseAdapter();
-    const usage: Array<{ model: string; input: number; output: number }> = [];
+
+    const usage: Array<{
+      model: string;
+      input: number;
+      orgId: string;
+      output: number;
+      profileId: string;
+      userId?: string;
+    }> = [];
 
     const result = await runGenerateImageTool(
       { filename: "cat.png", prompt: "a cat" },
@@ -218,6 +333,7 @@ describe("generate_image tool persistence (U4)", () => {
         orgId: "org_1",
         profileId: "profile_1",
         sessionId: "session_1",
+        userId: "user_1",
         workspaceRoot,
       },
       {
@@ -232,8 +348,8 @@ describe("generate_image tool persistence (U4)", () => {
         }),
         getUserConfig: () =>
           openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
-        recordUsage: (model, input, output) => {
-          usage.push({ input, model, output });
+        recordUsage: (model, input, output, _instance, attribution) => {
+          usage.push({ input, model, output, ...attribution });
         },
       }
     );
@@ -244,9 +360,7 @@ describe("generate_image tool persistence (U4)", () => {
       path: "artifacts/cat.png",
       sizeBytes: PNG_BYTES.byteLength,
     });
-    expect(
-      "attachmentId" in result && typeof result.attachmentId === "string"
-    ).toBe(true);
+
     if (!("attachmentId" in result && result.attachmentId)) {
       throw new Error("expected attachmentId");
     }
@@ -265,7 +379,16 @@ describe("generate_image tool persistence (U4)", () => {
       sessionId: "session_1",
       sizeBytes: PNG_BYTES.byteLength,
     });
-    expect(usage).toEqual([{ input: 8, model: "gpt-image-2", output: 200 }]);
+    expect(usage).toEqual([
+      {
+        input: 8,
+        model: "gpt-image-2",
+        orgId: "org_1",
+        output: 200,
+        profileId: "profile_1",
+        userId: "user_1",
+      },
+    ]);
   });
 
   test("filename collision saves a unique image without overwriting the original", async () => {
@@ -299,9 +422,11 @@ describe("generate_image tool persistence (U4)", () => {
     );
 
     expect("path" in result).toBe(true);
+
     if (!("path" in result)) {
       throw new Error("expected success");
     }
+
     expect(result.path).not.toBe("artifacts/cat.png");
     expect(result.path.startsWith("artifacts/cat-")).toBe(true);
     expect(result.path.endsWith(".png")).toBe(true);
@@ -322,6 +447,7 @@ describe("generate_image tool persistence (U4)", () => {
     ["cat.png", "image/webp"],
   ])("filename %s matches generated type %s", async (filename, mediaType) => {
     await setupWorkspace();
+
     const result = await runGenerateImageTool(
       { filename, prompt: "a cat" },
       { orgId: "org_1", profileId: "profile_1", workspaceRoot },
@@ -338,9 +464,11 @@ describe("generate_image tool persistence (U4)", () => {
           openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
       }
     );
+
     if (!("path" in result)) {
       throw new Error("expected success");
     }
+
     expect(inferArtifactMimeType(result.path)).toBe(mediaType);
     expect(await readFile(path.join(workspaceRoot, result.path))).toEqual(
       Buffer.from(PNG_BYTES)
@@ -354,6 +482,7 @@ describe("generate_image tool persistence (U4)", () => {
     const originalInsert = db.insertAttachment.bind(db);
     db.insertAttachment = async (record) => {
       attachmentInserts += 1;
+
       return originalInsert(record);
     };
 
@@ -378,7 +507,7 @@ describe("generate_image tool persistence (U4)", () => {
 
     expect(result).toEqual({ error: IMAGE_MODEL_REQUIRED_MESSAGE });
     const artifactsDir = path.join(workspaceRoot, "artifacts");
-    const entries = await readdir(artifactsDir).catch(() => [] as string[]);
+    const entries = await readdir(artifactsDir).catch(() => []);
     expect(entries).toEqual([]);
     expect(attachmentInserts).toBe(0);
   });
@@ -390,6 +519,7 @@ describe("generate_image tool persistence (U4)", () => {
     const originalInsert = db.insertAttachment.bind(db);
     db.insertAttachment = async (record) => {
       attachmentInserts += 1;
+
       return originalInsert(record);
     };
 
@@ -414,10 +544,36 @@ describe("generate_image tool persistence (U4)", () => {
     );
 
     expect("error" in result).toBe(true);
+
     const entries = await readdir(path.join(workspaceRoot, "artifacts")).catch(
-      () => [] as string[]
+      () => []
     );
+
     expect(entries).toEqual([]);
     expect(attachmentInserts).toBe(0);
+  });
+});
+
+describe("formatImageMentionContext", () => {
+  const withTool = [GENERATE_IMAGE_TOOL_NAME];
+
+  test("asks for generate_image when the message is tagged @image", () => {
+    for (const message of ["@image a red fox", "draw this @image", "@IMAGE"]) {
+      expect(formatImageMentionContext(message, withTool)).toContain(
+        `Call ${GENERATE_IMAGE_TOOL_NAME}`
+      );
+    }
+  });
+
+  test("ignores emails, longer words and untagged messages", () => {
+    for (const message of ["me@image.dev", "@images please", "a red fox"]) {
+      expect(formatImageMentionContext(message, withTool)).toBe("");
+    }
+  });
+
+  test("explains the missing tool instead of asking for it", () => {
+    const context = formatImageMentionContext("@image a red fox", ["bash"]);
+    expect(context).toContain("not assigned to this agent");
+    expect(context).not.toContain(`Call ${GENERATE_IMAGE_TOOL_NAME}`);
   });
 });

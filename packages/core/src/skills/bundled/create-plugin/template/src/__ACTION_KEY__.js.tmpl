@@ -1,0 +1,10 @@
+// Replace this example with the real action. Keep the run signature.
+export async function run(input, context) {
+  const name = String(input?.name ?? "").trim();
+
+  if (!name) {
+    throw new Error("name is required");
+  }
+
+  return { message: `Hello, ${name}!`, pluginId: context.pluginId };
+}

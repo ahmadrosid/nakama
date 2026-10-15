@@ -1,27 +1,37 @@
 const STORAGE_PREFIX = "nakama:artifact-share:";
 
 export function artifactShareStorageKey(
+  userId: string,
   orgId: string,
   profileId: string,
   artifactPath: string
 ): string {
-  return `${STORAGE_PREFIX}${orgId}:${profileId}:${artifactPath}`;
+  return `${STORAGE_PREFIX}${userId}:${orgId}:${profileId}:${artifactPath}`;
 }
 
 export function readStoredArtifactShare(input: {
+  userId: string;
   orgId: string;
   profileId: string;
   artifactPath: string;
 }): { shareId: string; shareUrl: string } | null {
   try {
     const raw = localStorage.getItem(
-      artifactShareStorageKey(input.orgId, input.profileId, input.artifactPath)
+      artifactShareStorageKey(
+        input.userId,
+        input.orgId,
+        input.profileId,
+        input.artifactPath
+      )
     );
+
     if (!raw) {
       return null;
     }
 
+    // SAFETY: JSON.parse returns the values checked by the validation that follows.
     const parsed = JSON.parse(raw) as { shareId?: string; shareUrl?: string };
+
     if (!(parsed.shareId && parsed.shareUrl)) {
       return null;
     }
@@ -33,6 +43,7 @@ export function readStoredArtifactShare(input: {
 }
 
 export function writeStoredArtifactShare(input: {
+  userId: string;
   orgId: string;
   profileId: string;
   artifactPath: string;
@@ -40,17 +51,28 @@ export function writeStoredArtifactShare(input: {
   shareUrl: string;
 }): void {
   localStorage.setItem(
-    artifactShareStorageKey(input.orgId, input.profileId, input.artifactPath),
+    artifactShareStorageKey(
+      input.userId,
+      input.orgId,
+      input.profileId,
+      input.artifactPath
+    ),
     JSON.stringify({ shareId: input.shareId, shareUrl: input.shareUrl })
   );
 }
 
 export function clearStoredArtifactShare(input: {
+  userId: string;
   orgId: string;
   profileId: string;
   artifactPath: string;
 }): void {
   localStorage.removeItem(
-    artifactShareStorageKey(input.orgId, input.profileId, input.artifactPath)
+    artifactShareStorageKey(
+      input.userId,
+      input.orgId,
+      input.profileId,
+      input.artifactPath
+    )
   );
 }

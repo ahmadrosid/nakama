@@ -6,14 +6,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@nakama/ui/select";
-import { Spinner } from "@nakama/ui/spinner";
-import { Message01Icon, RefreshIcon } from "hugeicons-react";
+import { cn } from "@nakama/ui/utils";
+import { Message01Icon } from "hugeicons-react";
 import { AutomationDetailPanel } from "@/pages/automations/automation-detail-panel";
 import {
   AutomationDetailSkeleton,
+  AutomationExample,
   AutomationPanelPlaceholder,
   AutomationSearch,
-  AutomationsEmptyState,
 } from "@/pages/automations/automations-components";
 import { AutomationsListSidebar } from "@/pages/automations/automations-list-sidebar";
 import type { AutomationsPageState } from "@/pages/automations/use-automations-page";
@@ -27,7 +27,6 @@ export function AutomationsPageLayout(state: AutomationsPageState) {
     busy,
     searchQuery,
     setSearchQuery,
-    isSearching,
     loading,
     refreshing,
     initialLoading,
@@ -35,8 +34,9 @@ export function AutomationsPageLayout(state: AutomationsPageState) {
     filteredAutomations,
     error,
     goToCreateAutomation,
-    refresh,
   } = state;
+
+  const showEmptyState = !loading && automations.length === 0;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -50,7 +50,12 @@ export function AutomationsPageLayout(state: AutomationsPageState) {
       ) : null}
 
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="flex shrink-0 flex-col gap-3 border-border border-b p-4 lg:hidden">
+        <div
+          className={cn(
+            "flex shrink-0 flex-col gap-3 border-border border-b p-4 lg:hidden",
+            showEmptyState && "hidden"
+          )}
+        >
           <div className="flex flex-wrap items-center gap-3">
             <Select
               disabled={busy || refreshing || automations.length === 0}
@@ -85,52 +90,44 @@ export function AutomationsPageLayout(state: AutomationsPageState) {
               </SelectContent>
             </Select>
 
-            <div className="flex shrink-0 items-center gap-1">
-              <Button
-                aria-label="Refresh automations"
-                disabled={busy || refreshing}
-                onClick={() => void refresh()}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                {refreshing ? (
-                  <Spinner className="size-4" />
-                ) : (
-                  <RefreshIcon aria-hidden className="size-4" />
-                )}
-              </Button>
-              <Button onClick={goToCreateAutomation} size="sm" type="button">
-                <Message01Icon aria-hidden className="size-4" />
-                Create automation
-              </Button>
-            </div>
+            <Button
+              onClick={() => goToCreateAutomation()}
+              size="sm"
+              type="button"
+            >
+              <Message01Icon aria-hidden className="size-4" />
+              Create automation
+            </Button>
           </div>
 
           <AutomationSearch
             disabled={initialLoading || automations.length === 0 || busy}
-            isSearching={isSearching}
             onChange={setSearchQuery}
             onClear={() => setSearchQuery("")}
             value={searchQuery}
           />
         </div>
 
-        <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[240px_minmax(0,1fr)]">
-          <AutomationsListSidebar {...state} />
+        <div
+          className={cn(
+            "grid min-h-0 flex-1 gap-0",
+            !showEmptyState && "lg:grid-cols-[240px_minmax(0,1fr)]"
+          )}
+        >
+          {showEmptyState ? null : <AutomationsListSidebar {...state} />}
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-4 sm:p-5">
             {loading ? (
               <AutomationDetailSkeleton />
-            ) : automations.length === 0 ? (
+            ) : showEmptyState ? (
               <AutomationPanelPlaceholder>
-                <AutomationsEmptyState />
-                <Button onClick={goToCreateAutomation} size="sm" type="button">
-                  Create automation
-                </Button>
+                <AutomationExample
+                  onStartFromScratch={() => goToCreateAutomation()}
+                  onUse={goToCreateAutomation}
+                />
               </AutomationPanelPlaceholder>
             ) : selected ? (
-              <AutomationDetailPanel {...state} />
+              <AutomationDetailPanel key={selected.id} {...state} />
             ) : (
               <AutomationPanelPlaceholder>
                 Select an automation to view runs.

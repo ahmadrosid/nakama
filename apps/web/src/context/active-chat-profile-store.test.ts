@@ -16,6 +16,7 @@ function installMemoryStorage() {
       },
     },
   });
+
   return () => {
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,

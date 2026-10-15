@@ -11,6 +11,7 @@ setupTestConfigDir("nakama-member-removal-sessions-test-");
 describe("removing an org member", () => {
   test("revokes the removed member's browser sessions", async () => {
     const { app, authService, databaseAdapter } = createMinimalHonoApp();
+
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
@@ -34,11 +35,15 @@ describe("removing an org member", () => {
         method: "POST",
       })
     );
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const created = (await createResponse.json()) as {
       organization: { id: string };
       adminMember: { temporaryPassword: string };
     };
+
     const orgId = created.organization.id;
+
     const adminSession = await loginUserSession(
       app,
       "admin-offboard@acme.com",
@@ -60,10 +65,13 @@ describe("removing an org member", () => {
         method: "POST",
       })
     );
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const added = (await addResponse.json()) as {
       member: { userId: string };
       temporaryPassword: string;
     };
+
     const leaverSession = await loginUserSession(
       app,
       "leaver@acme.com",
@@ -78,6 +86,7 @@ describe("removing an org member", () => {
         headers: leaverSession.headers(),
       })
     );
+
     expect(beforeRemoval.status).toBe(200);
 
     const removeResponse = await app.fetch(
@@ -92,6 +101,7 @@ describe("removing an org member", () => {
         }
       )
     );
+
     expect(removeResponse.status).toBe(204);
 
     const afterRemoval = await app.fetch(
@@ -99,6 +109,7 @@ describe("removing an org member", () => {
         headers: leaverSession.headers(),
       })
     );
+
     expect(afterRemoval.status).toBe(401);
   });
 });

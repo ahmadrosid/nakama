@@ -6,15 +6,18 @@ import {
 
 describe("beginAttachmentPanelClose", () => {
   test("returns null when missing panel or onClose", () => {
+    // SAFETY: The test controls this fixture or mock and asserts the resulting behavior.
     const inFlight = { current: null as AttachmentPanelCloseInFlight };
     expect(beginAttachmentPanelClose(null, inFlight)).toBeNull();
     expect(beginAttachmentPanelClose({ id: "a" }, inFlight)).toBeNull();
   });
 
   test("awaits onClose once across rapid reuse", async () => {
+    // SAFETY: The test controls this fixture or mock and asserts the resulting behavior.
     const inFlight = { current: null as AttachmentPanelCloseInFlight };
     let closeCount = 0;
     let releaseClose!: () => void;
+
     const onClose = () =>
       new Promise<void>((resolve) => {
         closeCount += 1;

@@ -27,6 +27,7 @@ const LEGACY_SOUL_MARKERS = [
 
 export function isLegacySoulPlaceholder(content: string): boolean {
   const trimmed = content.trim();
+
   if (!trimmed) {
     return true;
   }
@@ -69,6 +70,7 @@ async function ensureSoulTemplateFile(
   }
 
   await writeTextFile(targetPath, content);
+
   return true;
 }
 

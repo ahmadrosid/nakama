@@ -10,6 +10,7 @@ export const CATALOG_SHORTLIST_PROVIDERS = [
   "doubao",
   "together",
   "xiaomi",
+  "meta",
   "vercel_ai_gateway",
   "mistral",
   "qwen",
@@ -24,5 +25,7 @@ export type CatalogShortlistProvider =
 export function isCatalogShortlistProvider(
   provider: SelectedProvider
 ): provider is CatalogShortlistProvider {
-  return (CATALOG_SHORTLIST_PROVIDERS as readonly string[]).includes(provider);
+  return CATALOG_SHORTLIST_PROVIDERS.some(
+    (candidate) => candidate === provider
+  );
 }

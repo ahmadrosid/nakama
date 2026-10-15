@@ -9,18 +9,38 @@ import {
   stopSpawnedServer,
 } from "@nakama/core/ensure-server";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
-import { AUTOMATION_POLL_INTERVAL_MS, loadConfig } from "./config";
 import { AutomationWorkerScheduler } from "./scheduler";
 
+const AUTOMATION_POLL_INTERVAL_MS = 5 * 60 * 1000;
+
+interface AutomationWorkerConfig {
+  heartbeatIntervalMs: number;
+  serverUrl: string;
+}
+
+function loadConfig(): AutomationWorkerConfig {
+  return {
+    heartbeatIntervalMs: Number.parseInt(
+      process.env.NAKAMA_AUTOMATION_HEARTBEAT_INTERVAL_MS ?? "15000",
+      10
+    ),
+    serverUrl: process.env.NAKAMA_SERVER_URL?.trim() || "http://127.0.0.1:4310",
+  };
+}
+
 let spawnedChild: Bun.Subprocess | null = null;
+
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
 let scheduler: AutomationWorkerScheduler | null = null;
 
 registerCleanupHandlers(async () => {
   scheduler?.stop();
+
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
   }
+
   await clearAutomationWorkerHeartbeat();
   stopSpawnedServer(spawnedChild);
 });
@@ -36,6 +56,7 @@ try {
   });
 
   const health = await client.health();
+
   if (!health.providerConfigured) {
     console.warn(
       "Server has no provider configured. Automations will run in offline mode until an API key is set."
@@ -47,11 +68,13 @@ try {
   });
 
   await scheduler.start();
+
   const workerSettings = await client
     .getAutomationWorkerSettings()
     .catch(() => ({
       pollIntervalMinutes: AUTOMATION_POLL_INTERVAL_MS / (60 * 1000),
     }));
+
   scheduler.beginPolling(workerSettings.pollIntervalMinutes * 60 * 1000);
 
   heartbeatTimer = setInterval(() => {
@@ -59,6 +82,7 @@ try {
       running: true,
       scheduledJobs: 0,
     };
+
     void writeAutomationWorkerHeartbeat(status.running, status.scheduledJobs);
   }, config.heartbeatIntervalMs);
 
@@ -78,6 +102,16 @@ function registerCleanupHandlers(cleanup: () => void | Promise<void>): void {
     process.on(signal, async () => {
       await cleanup();
       process.exit(0);
+    });
+  }
+
+  // pm2 stops Windows workers with a "shutdown" message instead of a signal.
+  if (process.platform === "win32") {
+    process.on("message", async (message) => {
+      if (message === "shutdown") {
+        await cleanup();
+        process.exit(0);
+      }
     });
   }
 }

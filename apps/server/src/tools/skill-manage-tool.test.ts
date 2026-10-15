@@ -4,16 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ToolContext } from "@nakama/core";
 import { pathExists, runWriteFile } from "@nakama/core";
-import {
-  createInMemoryDatabaseAdapter,
-  seedOrgDefaultProfile,
-} from "@nakama/db";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { zipSync } from "fflate";
 import { SkillProposalService } from "../services/skill-proposal-service";
 import { SkillsService } from "../services/skills-service";
+import {
+  ORG_ID,
+  seedSkillOrg as seedOrgProfile,
+} from "../services/skills-service-test-fixtures";
 import { createSkillManageTools } from "./skill-manage-tool";
 
-const ORG_ID = "org_test";
 const PROFILE_ID = "profile_default";
 
 const researchSkillMarkdown = `---
@@ -43,37 +43,12 @@ function skillManageTool(
     skillProposalService: skillProposalService ?? null,
     skillsService: service,
   });
+
   if (!tool) {
     throw new Error("skill_manage tool missing");
   }
-  return tool;
-}
 
-async function seedOrgProfile(
-  db: ReturnType<typeof createInMemoryDatabaseAdapter>,
-  options: {
-    orgSkillsWriteApproval?: boolean;
-    profileSkillsWriteApproval?: boolean | null;
-  } = {}
-) {
-  const now = new Date().toISOString();
-  await db.upsertOrganization({
-    createdAt: now,
-    id: ORG_ID,
-    name: "Test Org",
-    skillsWriteApproval: options.orgSkillsWriteApproval ?? false,
-    slug: "test-org",
-    updatedAt: now,
-  });
-  const profile = await seedOrgDefaultProfile(db, ORG_ID);
-  if (options.profileSkillsWriteApproval !== undefined) {
-    await db.upsertProfile({
-      ...profile,
-      skillsWriteApproval: options.profileSkillsWriteApproval,
-      updatedAt: now,
-    });
-  }
-  return profile;
+  return tool;
 }
 
 describe("skill_manage tool", () => {
@@ -81,6 +56,7 @@ describe("skill_manage tool", () => {
 
   afterEach(async () => {
     delete process.env.NAKAMA_CONFIG_DIR;
+
     if (configDir) {
       await rm(configDir, { force: true, recursive: true });
     }
@@ -91,6 +67,7 @@ describe("skill_manage tool", () => {
     process.env.NAKAMA_CONFIG_DIR = configDir;
     const db = createInMemoryDatabaseAdapter();
     const service = new SkillsService(db);
+
     return { db, service, tool: skillManageTool(service) };
   }
 
@@ -98,13 +75,16 @@ describe("skill_manage tool", () => {
     "install respects write approval = %s",
     async (approval) => {
       const { db, service } = await setup();
+
       const profile = await seedOrgProfile(db, {
         orgSkillsWriteApproval: approval,
       });
+
       const tool = skillManageTool(
         service,
         new SkillProposalService(db, service)
       );
+
       const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(
         Object.assign(
           async () =>
@@ -120,7 +100,9 @@ describe("skill_manage tool", () => {
           { preconnect: globalThis.fetch.preconnect }
         )
       );
+
       let invalidations = 0;
+
       try {
         const result = await tool.run(
           {
@@ -134,6 +116,7 @@ describe("skill_manage tool", () => {
             profileId: profile.id,
           })
         );
+
         expect(result).toMatchObject(
           approval
             ? { name: "research-paper", staged: true }
@@ -143,6 +126,7 @@ describe("skill_manage tool", () => {
           approval ? 0 : 1
         );
         expect(invalidations).toBe(approval ? 0 : 1);
+
         const skillPath = join(
           configDir,
           "orgs",
@@ -153,17 +137,22 @@ describe("skill_manage tool", () => {
           "research-paper",
           "SKILL.md"
         );
+
         expect(await pathExists(skillPath)).toBe(!approval);
+
         if (approval) {
           const proposals = new SkillProposalService(db, service);
+
           const pending = await db.getPendingSkillProposalForSkill(
             ORG_ID,
             profile.id,
             "research-paper"
           );
+
           expect(pending?.supportingFiles).toHaveLength(1);
           await proposals.approveProposal(ORG_ID, pending!.id, "admin");
         }
+
         expect(await readFile(skillPath, "utf8")).toBe(researchSkillMarkdown);
         expect(
           await readFile(
@@ -180,9 +169,10 @@ describe("skill_manage tool", () => {
   test("install rejects unauthorized requests before fetching", async () => {
     const { tool } = await setup();
     const fetchSpy = spyOn(globalThis, "fetch");
+
     try {
       for (const context of [
-        memberContext({ orgRole: "viewer" }),
+        memberContext({ orgRole: undefined }),
         memberContext({ channel: "telegram" }),
       ]) {
         await expect(
@@ -195,6 +185,7 @@ describe("skill_manage tool", () => {
           )
         ).rejects.toThrow();
       }
+
       expect(fetchSpy).not.toHaveBeenCalled();
     } finally {
       fetchSpy.mockRestore();
@@ -203,9 +194,11 @@ describe("skill_manage tool", () => {
 
   test("failed downloads do not install a skill", async () => {
     const { db, tool } = await setup();
+
     const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(null, { status: 500 })
     );
+
     try {
       await expect(
         tool.run(
@@ -243,6 +236,7 @@ describe("skill_manage tool", () => {
       )
     ).rejects.toThrow();
     expect(await db.listSkillsForProfile(profile.id)).toHaveLength(0);
+
     const directory = join(
       configDir,
       "orgs",
@@ -252,6 +246,7 @@ describe("skill_manage tool", () => {
       "skills",
       "research-paper"
     );
+
     expect(await pathExists(join(directory, "SKILL.md"))).toBe(false);
     expect(await pathExists(join(directory, "reference"))).toBe(false);
   });
@@ -279,10 +274,11 @@ describe("skill_manage tool", () => {
 
   test("create assigns skill and makes it matchable", async () => {
     const { db, service, tool } = await setup();
+    const profile = await seedOrgProfile(db);
 
     const result = await tool.run(
       { action: "create", content: researchSkillMarkdown },
-      memberContext()
+      memberContext({ profileId: profile.id })
     );
 
     expect(result).toMatchObject({
@@ -291,24 +287,27 @@ describe("skill_manage tool", () => {
       created: true,
       name: "research-paper",
     });
+    // SAFETY: SkillManageToolOutput exposes an optional match hint on action results.
     expect(String((result as { matchHint?: string }).matchHint)).toContain(
       "assigned"
     );
 
-    const assigned = await db.listSkillsForProfile(PROFILE_ID);
+    const assigned = await db.listSkillsForProfile(profile.id);
     expect(assigned.map((skill) => skill.name)).toContain("research-paper");
 
     const matched = await service.formatMatchedSkillsForPrompt(
       ORG_ID,
-      PROFILE_ID,
+      profile.id,
       "Please research a paper on transformers"
     );
+
     expect(matched).toContain("Active Skill: research-paper");
   });
 
   test("invalidates the current session catalog after live create and delete", async () => {
     const { tool } = await setup();
     let invalidations = 0;
+
     const context = memberContext({
       onSkillCatalogChange: () => {
         invalidations += 1;
@@ -326,6 +325,7 @@ describe("skill_manage tool", () => {
 
   test("create adopts an existing unassigned profile skill directory", async () => {
     const { db, tool } = await setup();
+
     const leftoverDir = join(
       configDir,
       "orgs",
@@ -335,6 +335,7 @@ describe("skill_manage tool", () => {
       "skills",
       "research-paper"
     );
+
     await mkdir(leftoverDir, { recursive: true });
     await writeFile(
       join(leftoverDir, "SKILL.md"),
@@ -395,11 +396,13 @@ describe("skill_manage tool", () => {
       ),
       "utf8"
     );
+
     expect(onDisk).toContain("methods, and limitations");
 
     const skill = (await db.listSkills()).find(
       (entry) => entry.name === "research-paper"
     );
+
     expect(skill?.description).toContain("Research a paper");
 
     const detail = await service.getSkill(skill!.id);
@@ -422,6 +425,7 @@ describe("skill_manage tool", () => {
       "skills",
       "research-paper"
     );
+
     expect(await pathExists(skillDir)).toBe(true);
 
     const result = await tool.run(
@@ -434,9 +438,11 @@ describe("skill_manage tool", () => {
       assigned: false,
       name: "research-paper",
     });
+    // SAFETY: SkillManageToolOutput exposes an optional match hint on action results.
     expect(String((result as { matchHint?: string }).matchHint)).toContain(
       "removed"
     );
+    // SAFETY: SkillManageToolOutput exposes an optional match hint on action results.
     expect(String((result as { matchHint?: string }).matchHint)).not.toContain(
       "is assigned for this profile"
     );
@@ -458,6 +464,7 @@ describe("skill_manage tool", () => {
       { action: "create", content: researchSkillMarkdown },
       memberContext()
     );
+
     expect(identical).toMatchObject({
       action: "create",
       assigned: true,
@@ -549,17 +556,6 @@ Profile body.
     ).rejects.toThrow(/different source path/);
   });
 
-  test("refuses viewer role", async () => {
-    const { tool } = await setup();
-
-    await expect(
-      tool.run(
-        { action: "create", content: researchSkillMarkdown },
-        memberContext({ orgRole: "viewer" })
-      )
-    ).rejects.toThrow("Viewers cannot manage skills.");
-  });
-
   test("refuses missing orgRole", async () => {
     const { tool } = await setup();
 
@@ -634,6 +630,7 @@ Profile body.
       assigned: true,
       name: "research-paper",
     });
+    // SAFETY: The response is the created-skill result and has no staged field.
     expect((result as { staged?: boolean }).staged).toBeUndefined();
   });
 
@@ -669,6 +666,7 @@ Profile body.
 
   test("write_file refuses skills/*/SKILL.md when forbidProfileSkillMarkdownWrites is set", async () => {
     await setup();
+
     const workspaceRoot = join(
       configDir,
       "orgs",
@@ -676,6 +674,7 @@ Profile body.
       "profiles",
       PROFILE_ID
     );
+
     await mkdir(join(workspaceRoot, "skills", "notes"), { recursive: true });
 
     await expect(
@@ -731,6 +730,7 @@ Use canary then prod.
       },
       memberContext()
     );
+
     expect(edited).toMatchObject({
       action: "edit",
       assigned: true,
@@ -746,6 +746,7 @@ Use canary then prod.
       },
       memberContext()
     );
+
     expect(written).toMatchObject({ action: "write_file", path: "notes.md" });
 
     await expect(
@@ -764,6 +765,7 @@ Use canary then prod.
       { action: "remove_file", name: "deploy", path: "notes.md" },
       memberContext()
     );
+
     expect(removed).toMatchObject({ action: "remove_file", path: "notes.md" });
 
     const detail = await service.getSkill(
@@ -771,6 +773,7 @@ Use canary then prod.
         (skill) => skill.name === "deploy"
       )!.id
     );
+
     expect(detail.skill.body).toContain("Use canary then prod.");
   });
 });

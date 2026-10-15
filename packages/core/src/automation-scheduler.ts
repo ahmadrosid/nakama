@@ -1,4 +1,5 @@
 import { Cron } from "croner";
+import { AUTOMATION_RUN_AT_GRACE_MS } from "./automation-validate";
 import type { AutomationSchedule } from "./contract";
 import { DEFAULT_TIMEZONE } from "./user-config";
 
@@ -22,9 +23,13 @@ export interface AutomationSchedulerStatus {
 export class AutomationScheduler {
   private readonly jobs = new Map<string, Cron>();
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly dispatchedRunAt = new Set<string>();
   private started = false;
 
-  constructor(private readonly delegate: AutomationSchedulerDelegate) {}
+  constructor(
+    private readonly delegate: AutomationSchedulerDelegate,
+    private readonly now: () => number = Date.now
+  ) {}
 
   async start(): Promise<void> {
     if (this.started) {
@@ -45,11 +50,36 @@ export class AutomationScheduler {
     }
 
     this.jobs.clear();
+    this.dispatchedRunAt.clear();
     this.timers.clear();
     this.started = false;
   }
 
   async reload(): Promise<void> {
+    // Load and build before clearing anything. A failed list call or one bad
+    // cron expression must leave the last good schedules running.
+    const automations = await this.delegate.listScheduledAutomations();
+    const defaultTimezone = await this.delegate.getDefaultTimezone();
+    const jobs = new Map<string, Cron>();
+
+    for (const automation of automations) {
+      if (automation.runAt || !automation.cron) {
+        continue;
+      }
+
+      const timezone =
+        automation.timezone ?? defaultTimezone ?? DEFAULT_TIMEZONE;
+
+      jobs.set(
+        automation.id,
+        // Paused, so a throw on a later entry leaves nothing ticking. No name:
+        // croner refuses a name that is still running, and the old job is.
+        new Cron(automation.cron, { paused: true, timezone }, () =>
+          this.dispatch(automation)
+        )
+      );
+    }
+
     for (const job of this.jobs.values()) {
       job.stop();
     }
@@ -61,31 +91,17 @@ export class AutomationScheduler {
     this.jobs.clear();
     this.timers.clear();
 
-    const automations = await this.delegate.listScheduledAutomations();
-    const defaultTimezone = await this.delegate.getDefaultTimezone();
+    for (const [id, job] of jobs) {
+      job.resume();
+      this.jobs.set(id, job);
+    }
+
+    const now = this.now();
 
     for (const automation of automations) {
       if (automation.runAt) {
-        this.scheduleRunAt(automation);
-        continue;
+        this.scheduleRunAt(automation, now);
       }
-
-      if (!automation.cron) {
-        continue;
-      }
-
-      const timezone =
-        automation.timezone ?? defaultTimezone ?? DEFAULT_TIMEZONE;
-      const job = new Cron(
-        automation.cron,
-        {
-          name: automation.id,
-          timezone,
-        },
-        () => this.dispatch(automation)
-      );
-
-      this.jobs.set(automation.id, job);
     }
   }
 
@@ -99,25 +115,45 @@ export class AutomationScheduler {
           );
         }
       })
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
+      .catch(<Failure>(cause: Failure) => {
+        const message = cause instanceof Error ? cause.message : String(cause);
         console.error(`Automation ${automation.id} run failed:`, message);
       });
   }
 
-  private scheduleRunAt(automation: AutomationSchedule): void {
+  private scheduleRunAt(automation: AutomationSchedule, now: number): void {
     const at = Date.parse(automation.runAt ?? "");
+
     if (!Number.isFinite(at)) {
       return;
     }
 
-    const delay = at - Date.now();
-    if (delay <= 0 || delay > MAX_TIMEOUT_MS) {
+    const dispatchKey = `${automation.id}:${automation.runAt}`;
+
+    if (this.dispatchedRunAt.has(dispatchKey)) {
+      return;
+    }
+
+    const delay = at - now;
+
+    if (delay > MAX_TIMEOUT_MS) {
+      return;
+    }
+
+    if (delay <= 0) {
+      if (delay < -AUTOMATION_RUN_AT_GRACE_MS) {
+        return;
+      }
+
+      this.dispatchedRunAt.add(dispatchKey);
+      this.dispatch(automation);
+
       return;
     }
 
     const timer = setTimeout(() => {
       this.timers.delete(automation.id);
+      this.dispatchedRunAt.add(dispatchKey);
       this.dispatch(automation);
     }, delay);
 

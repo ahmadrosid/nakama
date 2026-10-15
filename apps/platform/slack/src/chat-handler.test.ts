@@ -20,18 +20,22 @@ import {
 import type { SlackMessageEvent } from "./socket";
 
 const BOT = "UBOT0001";
+
 const OWNER = "UOWNER01";
 
 type Posted = { channel: string; text: string; threadTs?: string };
 
 const TEAM = "T0HOME01";
+
 const ORG = "org_test";
+
 const OWNER_AGENT = { orgId: ORG, profileId: "default" };
 
 type StreamHandlers = {
   onChunk: (delta: string) => void;
   onToolStart?: () => void;
 };
+
 type FakeStream = (
   handlers: StreamHandlers,
   signal: AbortSignal
@@ -46,13 +50,16 @@ function createHarness(
   const posted: Posted[] = [];
   const turns: string[] = [];
   const orgRequests: Array<string | null> = [];
+
   const slack: SlackApi = {
     addReaction: async () => {},
     getMember: async (userId) => {
       const member = members[userId];
+
       if (!member) {
         throw new Error("Slack users.info failed: user_not_found");
       }
+
       return member;
     },
     postMessage: async (channel, text, threadTs) => {
@@ -61,10 +68,13 @@ function createHarness(
     },
     removeReaction: async () => {},
   };
+
   let sessionCount = 0;
+
   const createSession = () => {
     sessionCount += 1;
     const id = `session_${sessionCount}`;
+
     return {
       clear: async () => {},
       getMessages: async () => [],
@@ -75,19 +85,25 @@ function createHarness(
         streamOptions?: { signal?: AbortSignal }
       ) => {
         turns.push(input.message);
+
         if (options.stream && streamOptions?.signal) {
           return options.stream(handlers, streamOptions.signal);
         }
+
         handlers.onChunk(`reply from ${id}`);
+
         return `reply from ${id}`;
       },
     };
   };
+
+  // SAFETY: The handler calls only the methods supplied by this mock.
   const client = {
     createChatSession: () => createSession(),
     createSession: async () => createSession(),
     forOrg: (orgId: string | null) => {
       orgRequests.push(orgId);
+
       return client;
     },
     health: async () => ({ ok: true, providerConfigured: true }),
@@ -96,7 +112,8 @@ function createHarness(
     }),
     listUserOrgs: async () => ({ orgs }),
     setOrgId: () => {},
-  } as unknown as NakamaClient;
+  } as NakamaClient;
+
   const sessionStore = new ChannelSessionStore(
     join(
       homeDir,
@@ -109,6 +126,7 @@ function createHarness(
       "chat-sessions.json"
     )
   );
+
   const handle = createChatHandler({
     botTeamId: TEAM,
     botUserId: BOT,
@@ -297,11 +315,13 @@ test("everyone in the workspace can chat, but guests and outsiders cannot", asyn
       appToken: "xapp-1-test",
       botToken: "xoxb-test",
     });
+
     const { handle, turns } = createHarness(homeDir, undefined, {
       UGUEST001: { is_restricted: true, team_id: TEAM },
       UMEMBER01: { team_id: TEAM },
       UOUTSIDE1: { team_id: "T0OTHER1" },
     });
+
     const mention = (user: string, ts: string) =>
       handle(message({ text: `<@${BOT}> hi`, ts, user }));
 
@@ -317,6 +337,7 @@ test("everyone in the workspace can chat, but guests and outsiders cannot", asyn
 test("the workspace gate stays shut until it is turned on", async () => {
   await withTempHome("nakama-slack-workspace-off-", async (homeDir) => {
     await saveTokens();
+
     const { handle, turns } = createHarness(homeDir, undefined, {
       UMEMBER01: { team_id: TEAM },
     });
@@ -333,9 +354,11 @@ test("!new stops a reply that is still streaming instead of waiting behind it", 
     // A turn that only ends when it is aborted, like a long tool run. It
     // reports when it starts, so the test never races the handler's setup.
     let markStarted = () => {};
+
     const started = new Promise<void>((resolve) => {
       markStarted = resolve;
     });
+
     const hang: FakeStream = (_handlers, signal) =>
       new Promise((_resolve, reject) => {
         markStarted();
@@ -345,6 +368,7 @@ test("!new stops a reply that is still streaming instead of waiting behind it", 
           reject(error);
         });
       });
+
     const { handle, posted } = createHarness(
       homeDir,
       undefined,
@@ -353,6 +377,7 @@ test("!new stops a reply that is still streaming instead of waiting behind it", 
         stream: hang,
       }
     );
+
     const dm = { channel: "D0NEWCMD", channel_type: "im" };
 
     const running = handle(message({ ...dm, text: "long job" }));
@@ -370,14 +395,17 @@ test("!new stops a reply that is still streaming instead of waiting behind it", 
 test("text written before each tool call is posted in order", async () => {
   await withTempHome("nakama-slack-order-", async (homeDir) => {
     await saveTokens(OWNER);
+
     const stream: FakeStream = async (handlers) => {
       handlers.onChunk("first");
       handlers.onToolStart?.();
       handlers.onChunk("second");
       handlers.onToolStart?.();
       handlers.onChunk("done");
+
       return "firstseconddone";
     };
+
     // The first post is the slowest, so parallel posts would land reversed.
     const { handle, posted } = createHarness(
       homeDir,

@@ -13,21 +13,16 @@ import {
   assertNotBundledSkillName,
   assertValidSkillName,
 } from "@nakama/core/skills/write";
-import type {
-  DatabaseAdapter,
-  SkillSuggestionAction,
-  StoredSkillSuggestion,
-} from "@nakama/db";
-import {
-  isSkillWriteApprovalRequired,
-  type SkillProposalService,
-} from "./skill-proposal-service";
+import type { DatabaseAdapter, StoredSkillSuggestion } from "@nakama/db";
+import type { SkillProposalService } from "./skill-proposal-service";
+import { isSkillWriteApprovalRequired } from "./skill-write-approval";
 import type { SkillsService } from "./skills-service";
 
 export function toSkillSuggestion(
   record: StoredSkillSuggestion
 ): SkillSuggestion {
   const { warnings, ...suggestion } = record;
+
   return warnings?.length ? { ...suggestion, warnings } : suggestion;
 }
 
@@ -76,6 +71,7 @@ export class SkillSuggestionService {
     assertNotBundledSkillName(name);
 
     const now = new Date().toISOString();
+
     const record: StoredSkillSuggestion = {
       action: outcome.action,
       appliedAt: null,
@@ -95,6 +91,7 @@ export class SkillSuggestionService {
     };
 
     await db.createSkillSuggestion(record);
+
     return record;
   }
 
@@ -117,9 +114,11 @@ export class SkillSuggestionService {
       orgId,
       id
     );
+
     if (!suggestion) {
       throw new NakamaApiError("Skill suggestion not found.", 404);
     }
+
     return suggestion;
   }
 
@@ -150,6 +149,7 @@ export class SkillSuggestionService {
 
     if (writeApprovalRequired) {
       const proposals = this.requireProposalService();
+
       const staged = await proposals.stageProposal({
         action: suggestion.action,
         content: suggestion.content ?? undefined,
@@ -173,11 +173,14 @@ export class SkillSuggestionService {
     }
 
     const skills = this.requireSkillsService();
+
     if (suggestion.action === "create") {
       const content = suggestion.content;
+
       if (!content?.trim()) {
         throw new NakamaApiError("Suggestion is missing content.", 400);
       }
+
       parseRawProfileSkillContent(content, orgId, suggestion.profileId);
       await skills.createAndAssignRawSkillToProfile(
         orgId,
@@ -187,9 +190,11 @@ export class SkillSuggestionService {
     } else {
       const oldString = suggestion.patchOldString;
       const newString = suggestion.patchNewString;
+
       if (oldString === null || oldString === "" || newString === null) {
         throw new NakamaApiError("Suggestion is missing patch fields.", 400);
       }
+
       await this.assertProfileOwnedSkill(
         orgId,
         suggestion.profileId,
@@ -221,15 +226,18 @@ export class SkillSuggestionService {
     const db = this.requireDatabase();
     const skillName = assertValidSkillName(name);
     const record = await db.getSkillByName(skillName, orgId);
+
     if (!record) {
       throw new NakamaApiError(`Skill "${skillName}" not found.`, 404);
     }
+
     if (isGlobalSkillSourcePath(record.sourcePath)) {
       throw new NakamaApiError(
         "Global skills cannot be modified by agents.",
         403
       );
     }
+
     if (!isPathWithinProfileSkillsDir(orgId, profileId, record.sourcePath)) {
       throw new NakamaApiError(
         `Skill "${skillName}" is not owned by this profile.`,
@@ -243,12 +251,18 @@ export class SkillSuggestionService {
   ): string[] | undefined {
     const warnings =
       outcome.action === "create"
-        ? detectOrgMemoryInjectionWarnings(outcome.content)
+        ? detectOrgMemoryInjectionWarnings(outcome.content, { markup: false })
         : [
-            ...detectOrgMemoryInjectionWarnings(outcome.oldString),
-            ...detectOrgMemoryInjectionWarnings(outcome.newString),
+            ...detectOrgMemoryInjectionWarnings(outcome.oldString, {
+              markup: false,
+            }),
+            ...detectOrgMemoryInjectionWarnings(outcome.newString, {
+              markup: false,
+            }),
           ];
+
     const unique = [...new Set(warnings)];
+
     return unique.length > 0 ? unique : undefined;
   }
 
@@ -256,6 +270,7 @@ export class SkillSuggestionService {
     if (!this.database) {
       throw new NakamaApiError("Database not configured.", 500);
     }
+
     return this.database;
   }
 
@@ -263,6 +278,7 @@ export class SkillSuggestionService {
     if (!this.skillsService) {
       throw new NakamaApiError("Skills service not configured.", 500);
     }
+
     return this.skillsService;
   }
 
@@ -270,8 +286,7 @@ export class SkillSuggestionService {
     if (!this.skillProposalService) {
       throw new NakamaApiError("Skill proposal service not configured.", 500);
     }
+
     return this.skillProposalService;
   }
 }
-
-export type { SkillSuggestionAction };

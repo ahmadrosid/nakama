@@ -15,7 +15,6 @@ import { client, formatError } from "@/lib/client";
 const roles: Array<{ label: string; value: OrgRole }> = [
   { label: "Admins", value: "admin" },
   { label: "Members", value: "member" },
-  { label: "Viewers", value: "viewer" },
 ];
 
 export function PlatformMfaSettingsCard() {
@@ -42,10 +41,12 @@ export function PlatformMfaSettingsCard() {
   }) {
     setBusy(true);
     setError(null);
+
     try {
       const nextPolicy = await client.updateMfaPolicy(input);
       setPolicy(nextPolicy);
       setDraftRoles(nextPolicy.enforcedRoles);
+
       if (input.enabled !== undefined) {
         toast(
           input.enabled
@@ -69,10 +70,11 @@ export function PlatformMfaSettingsCard() {
   }
 
   const selectedRoles = new Set(draftRoles);
+
   const selectedRoleLabels = roles
-    .filter(({ value }) => selectedRoles.has(value))
-    .map(({ label }) => label)
+    .flatMap(({ label, value }) => (selectedRoles.has(value) ? [label] : []))
     .join(", ");
+
   const allRolesSelected = draftRoles.length === roles.length;
 
   function toggleRole(role: OrgRole) {
@@ -82,6 +84,7 @@ export function PlatformMfaSettingsCard() {
           ? current
           : current.filter((value) => value !== role);
       }
+
       return [...current, role];
     });
   }
@@ -132,6 +135,7 @@ export function PlatformMfaSettingsCard() {
             </p>
             <p className="text-muted-foreground text-xs">
               Choose which organization roles must use an authenticator.
+              Platform admins always need MFA once enforcement is on.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -145,6 +149,7 @@ export function PlatformMfaSettingsCard() {
               <DropdownMenuContent className="w-64">
                 {roles.map(({ label, value }) => {
                   const selected = selectedRoles.has(value);
+
                   return (
                     <DropdownMenuItem
                       key={value}

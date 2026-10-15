@@ -22,10 +22,17 @@ describe("htmlForArtifactPreview", () => {
 
 // Parse real HTML without loading its subresources in the test process.
 const dom = new Window();
+
 const originalParser = globalThis.DOMParser;
+
 beforeEach(() => {
-  globalThis.DOMParser = dom.DOMParser as unknown as typeof DOMParser;
+  Object.defineProperty(globalThis, "DOMParser", {
+    configurable: true,
+    value: dom.DOMParser,
+    writable: true,
+  });
 });
+
 afterEach(() => {
   globalThis.DOMParser = originalParser;
 });
@@ -33,6 +40,7 @@ afterEach(() => {
 function assetReader(calls: string[]) {
   return async (path: string) => {
     calls.push(path);
+
     return {
       contentType: path.endsWith(".css") ? "text/css" : "image/png",
       data: new TextEncoder().encode(
@@ -48,6 +56,7 @@ describe("relative HTML artifact assets", () => {
   test("loads sibling and parent media from the HTML artifact directory", async () => {
     const calls: string[] = [];
     const controller = new AbortController();
+
     try {
       const html = await resolveArtifactHtmlAssets(
         '<img src="shot.png"><img src="../wide.png"><video src="../video/clip.mp4" poster="shot.png"><source src="../audio.wav"></video>',
@@ -55,6 +64,7 @@ describe("relative HTML artifact assets", () => {
         assetReader(calls),
         controller.signal
       );
+
       const document = new DOMParser().parseFromString(html, "text/html");
       expect(calls).toEqual([
         "project/shots/shot.png",
@@ -62,6 +72,7 @@ describe("relative HTML artifact assets", () => {
         "project/video/clip.mp4",
         "project/audio.wav",
       ]);
+
       for (const node of document.querySelectorAll("[src], [poster]")) {
         expect(
           node.getAttribute("src") ?? node.getAttribute("poster")
@@ -75,6 +86,7 @@ describe("relative HTML artifact assets", () => {
   test("resolves stylesheet dependencies, inline CSS, and responsive images", async () => {
     const calls: string[] = [];
     const controller = new AbortController();
+
     try {
       const html = await resolveArtifactHtmlAssets(
         '<link rel="stylesheet" href="css/site.css"><style>body{background:url(bg.png)}</style><img style="background:url(bg.png)" srcset="small.png 1x, large.png 2x">',
@@ -82,6 +94,7 @@ describe("relative HTML artifact assets", () => {
         assetReader(calls),
         controller.signal
       );
+
       expect(calls).toEqual([
         "project/css/site.css",
         "project/bg.png",
@@ -89,9 +102,11 @@ describe("relative HTML artifact assets", () => {
         "project/large.png",
       ]);
       const document = new DOMParser().parseFromString(html, "text/html");
+
       const css = await fetch(
         document.querySelector("link")!.getAttribute("href")!
       ).then((r) => r.text());
+
       expect(css).toContain('url("data:');
       expect(document.querySelector("style")!.textContent).toContain(
         'url("data:'
@@ -107,6 +122,7 @@ describe("relative HTML artifact assets", () => {
   test("blocks escapes and failed assets without breaking the rest of the document", async () => {
     const calls: string[] = [];
     const controller = new AbortController();
+
     try {
       const html = await resolveArtifactHtmlAssets(
         '<h1>Review</h1><img src="../../secret.png"><img src="%2e%2e/%2e%2e/secret.png"><img src="missing.png"><img src="https://example.com/image.png"><img src="data:image/png;base64,eA==">',
@@ -117,6 +133,7 @@ describe("relative HTML artifact assets", () => {
         },
         controller.signal
       );
+
       const document = new DOMParser().parseFromString(html, "text/html");
       expect(calls).toEqual(["project/missing.png"]);
       expect(
@@ -138,16 +155,19 @@ describe("relative HTML artifact assets", () => {
 test("cancelling a pending asset prevents further reads and asset embedding", async () => {
   const controller = new AbortController();
   const calls: string[] = [];
+
   const result = resolveArtifactHtmlAssets(
     '<img src="first.png"><img src="second.png">',
     "review.html",
     async (path) => {
       calls.push(path);
       controller.abort();
+
       return { contentType: "image/png", data: new ArrayBuffer(0) };
     },
     controller.signal
   );
+
   await expect(result).rejects.toThrow();
   expect(calls).toEqual(["first.png"]);
 });
@@ -155,12 +175,14 @@ test("cancelling a pending asset prevents further reads and asset embedding", as
 test("CSS import cycles terminate and imported assets keep their own directory", async () => {
   const controller = new AbortController();
   const calls: string[] = [];
+
   try {
     const html = await resolveArtifactHtmlAssets(
       '<link rel="stylesheet" href="styles/a.css">',
       "project/review.html",
       async (path) => {
         calls.push(path);
+
         return {
           contentType: "text/css",
           data: new TextEncoder().encode(
@@ -172,6 +194,7 @@ test("CSS import cycles terminate and imported assets keep their own directory",
       },
       controller.signal
     );
+
     expect(calls).toEqual([
       "project/styles/a.css",
       "project/styles/nested/b.css",
@@ -185,6 +208,7 @@ test("CSS import cycles terminate and imported assets keep their own directory",
 test("encoded filenames retain fragments without treating query strings as filenames", async () => {
   const controller = new AbortController();
   const calls: string[] = [];
+
   try {
     const html = await resolveArtifactHtmlAssets(
       '<video src="../clip%20one.mp4?v=2#t=1"><img srcset="data:image/png;base64,eA== 1x, photo.png 2x"></video>',
@@ -192,6 +216,7 @@ test("encoded filenames retain fragments without treating query strings as filen
       assetReader(calls),
       controller.signal
     );
+
     expect(calls).toEqual(["project/clip one.mp4", "project/shots/photo.png"]);
     expect(html).toContain("#t=1");
     expect(html).toContain("data:image/png;base64,eA== 1x, data:");
@@ -203,15 +228,18 @@ test("encoded filenames retain fragments without treating query strings as filen
 test("CSS comments and string content are not mistaken for asset requests", async () => {
   const calls: string[] = [];
   const controller = new AbortController();
+
   try {
     const css =
       '/* url(missing.png) */ p::after{content:"url(example.png)"} div{background:url(https://example.com/image.png)}';
+
     const html = await resolveArtifactHtmlAssets(
       `<style>${css}</style>`,
       "review.html",
       assetReader(calls),
       controller.signal
     );
+
     expect(calls).toEqual([]);
     expect(html).toContain(css);
   } finally {
@@ -222,6 +250,7 @@ test("CSS comments and string content are not mistaken for asset requests", asyn
 test("relative base directories resolve within the profile artifact root", async () => {
   const calls: string[] = [];
   const controller = new AbortController();
+
   try {
     await resolveArtifactHtmlAssets(
       '<base href="../"><img src="cover.png">',

@@ -10,6 +10,7 @@ import {
 import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import { DISCORD_ARTIFACT_ATTACHMENT_MAX_BYTES } from "@nakama/core/discord-attachment";
 import type { TextBasedChannel } from "discord.js";
+import { z } from "zod";
 import type { DiscordMessenger } from "./messenger";
 import { sendDiscordArtifactAttachment } from "./send-artifact-attachment";
 
@@ -27,6 +28,7 @@ async function uploadArtifactBytes(input: {
       input.profileId,
       input.path
     );
+
     const result = await sendDiscordArtifactAttachment(input.channel, {
       bytes: new Uint8Array(data),
       filename: input.filename,
@@ -36,6 +38,7 @@ async function uploadArtifactBytes(input: {
     if (!result.ok && result.error) {
       await input.onError?.(result.error);
     }
+
     return result.ok;
   } catch (error) {
     await input.onError?.(
@@ -43,6 +46,7 @@ async function uploadArtifactBytes(input: {
         ? error.message
         : "Failed to read the artifact for attachment."
     );
+
     return false;
   }
 }
@@ -54,10 +58,20 @@ export async function uploadDiscordArtifactFromToolResult(input: {
   profileId: string;
   result: unknown;
 }): Promise<boolean> {
-  const artifact = parseSendDiscordArtifactResult(input.result);
-  if (!artifact) {
+  const parsedResult = z
+    .object({
+      filename: z.string(),
+      mimeType: z.string(),
+      ok: z.literal(true),
+      path: z.string(),
+    })
+    .safeParse(input.result);
+
+  if (!parsedResult.success) {
     return false;
   }
+
+  const artifact = parsedResult.data;
 
   return uploadArtifactBytes({
     channel: input.channel,
@@ -68,35 +82,6 @@ export async function uploadDiscordArtifactFromToolResult(input: {
     path: artifact.path,
     profileId: input.profileId,
   });
-}
-
-function parseSendDiscordArtifactResult(result: unknown): {
-  filename: string;
-  mimeType: string;
-  path: string;
-} | null {
-  if (typeof result !== "object" || result === null) {
-    return null;
-  }
-
-  const record = result as Record<string, unknown>;
-  if (record.ok !== true) {
-    return null;
-  }
-
-  if (
-    typeof record.path !== "string" ||
-    typeof record.filename !== "string" ||
-    typeof record.mimeType !== "string"
-  ) {
-    return null;
-  }
-
-  return {
-    filename: record.filename,
-    mimeType: record.mimeType,
-    path: record.path,
-  };
 }
 
 export async function maybeSendRequestedDiscordArtifactAttachment(input: {
@@ -116,6 +101,7 @@ export async function maybeSendRequestedDiscordArtifactAttachment(input: {
   const registry = input.sessionStore.getDeliverableArtifacts(
     input.conversationKey
   );
+
   let listed: Awaited<
     ReturnType<NakamaClient["listProfileArtifacts"]>
   >["artifacts"] = [];
@@ -139,6 +125,7 @@ export async function maybeSendRequestedDiscordArtifactAttachment(input: {
 
   if (!artifact) {
     await input.messenger.send(formatMissingAttachArtifactMessage());
+
     return false;
   }
 

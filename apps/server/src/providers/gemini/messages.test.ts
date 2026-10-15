@@ -10,6 +10,28 @@ const tinyPngBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 describe("toGeminiContents", () => {
+  test.each(["image_ref", "document_ref"] as const)(
+    "rejects unresolved %s parts",
+    async (type) => {
+      await expect(
+        toGeminiContents([
+          {
+            content: [
+              {
+                attachmentId: "private-attachment",
+                filename: "report.pdf",
+                mediaType: "application/pdf",
+                size: 5,
+                type,
+              },
+            ],
+            role: "user",
+          },
+        ])
+      ).rejects.toThrow();
+    }
+  );
+
   test("maps user text and assistant tool calls", async () => {
     const messages: ChatMessage[] = [
       { content: "Hello", role: "user" },
@@ -125,6 +147,7 @@ describe("Gemini 2.5 function calls, which carry no id", () => {
     const [call] = parseGeminiFunctionCalls([
       { args: { query: "permit" }, name: "knowledge_base_search" },
     ]);
+
     const messages: ChatMessage[] = [
       { content: "cari", role: "user" },
       { content: "", role: "assistant", toolCalls: [call] },

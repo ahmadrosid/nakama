@@ -9,6 +9,7 @@ import type { UserOrgSummary } from "./contract";
 
 export function createDefaultTestOrgs(): UserOrgSummary[] {
   const now = new Date().toISOString();
+
   return [
     {
       createdAt: now,
@@ -23,6 +24,7 @@ export function createDefaultTestOrgs(): UserOrgSummary[] {
 
 export function createMultiTestOrgs(): UserOrgSummary[] {
   const now = new Date().toISOString();
+
   return [
     {
       createdAt: now,
@@ -59,9 +61,11 @@ export async function withTempHome<T>(
   run: (homeDir: string) => Promise<T>
 ): Promise<T> {
   let release!: () => void;
+
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
+
   const previous = tempHomeChains.get(prefix) ?? Promise.resolve();
   tempHomeChains.set(
     prefix,
@@ -87,4 +91,14 @@ export async function withTempHome<T>(
     await rm(homeDir, { force: true, recursive: true });
     release();
   }
+}
+
+type TestFetchHandler = (
+  ...args: Parameters<typeof fetch>
+) => ReturnType<typeof fetch>;
+
+export function asTestFetch<Fetch extends TestFetchHandler>(
+  fetchMock: Fetch
+): NoInfer<Fetch> & Pick<typeof fetch, "preconnect"> {
+  return Object.assign(fetchMock, { preconnect: () => {} });
 }

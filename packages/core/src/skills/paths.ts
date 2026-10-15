@@ -3,7 +3,9 @@ import { getProfileSoulDir } from "../soul/resolve";
 import { getUserConfigDir } from "../user-config";
 
 export const SKILL_FILE_NAME = "SKILL.md";
+
 export const SKILL_TOOL_FILES = ["tool.ts", "tool.js", "tool.py"] as const;
+
 export const SKILL_ARCHIVE_DIR_NAME = ".archive";
 
 export function getGlobalSkillsDir(): string {
@@ -29,6 +31,7 @@ export async function resolveSkillDiscoveryDirs(
 ): Promise<string[]> {
   const orgId = options.orgId?.trim();
   const profileId = options.profileId?.trim();
+
   if (Boolean(orgId) !== Boolean(profileId)) {
     throw new Error(
       "resolveSkillDiscoveryDirs requires both orgId and profileId, or neither."

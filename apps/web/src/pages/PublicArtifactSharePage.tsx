@@ -18,20 +18,19 @@ import {
   isVideoArtifactMimeType,
   resolveArtifactMimeType,
 } from "@/lib/chat-artifacts";
-import { client } from "@/lib/client";
+import { client, formatError } from "@/lib/client";
 import { buildPublicArtifactShareUrl } from "@/lib/public-artifact-share-url";
 
-function publicShareError(token: string, loadError: unknown): string | null {
+function publicShareError(
+  token: string,
+  loadError: string | null
+): string | null {
   if (!token) {
     return "Share link not found.";
   }
 
-  if (loadError instanceof Error) {
-    return loadError.message;
-  }
-
   if (loadError) {
-    return "Unable to load share.";
+    return loadError;
   }
 
   return null;
@@ -46,16 +45,21 @@ function deriveSharePreview(
   const mimeType = metadata
     ? resolveArtifactMimeType(metadata.mimeType, metadata.filename)
     : "";
+
   const isHtml = isHtmlArtifactMimeType(mimeType);
   const isImage = isImageArtifactMimeType(mimeType);
   const isVideo = isVideoArtifactMimeType(mimeType);
+
   const isWordDocument =
     metadata != null &&
     (isDocxFile(metadata.filename, mimeType) ||
       isLegacyDocFile(metadata.filename, mimeType));
+
   const isMarkdown = isMarkdownArtifactMimeType(mimeType) || isWordDocument;
+
   const isSpreadsheet =
     metadata != null && isDelimitedSpreadsheetFile(metadata.filename, mimeType);
+
   const canPreview =
     metadata != null &&
     (isHtml ||
@@ -132,6 +136,7 @@ function PublicArtifactPreview({
     isVideo,
     language,
   } = preview;
+
   if (isImage) {
     return (
       <ArtifactAttachmentPanelBody
@@ -258,7 +263,12 @@ export function PublicArtifactSharePage() {
   const { data, isLoading, error: loadError } = usePublicArtifactShare(token);
   const metadata = data?.metadata ?? null;
   const content = data?.content ?? null;
-  const error = publicShareError(token, loadError);
+
+  const error = publicShareError(
+    token,
+    loadError ? formatError(loadError) : null
+  );
+
   const loading = token.length > 0 && isLoading;
   const preview = deriveSharePreview(metadata);
 
@@ -281,17 +291,20 @@ export function PublicArtifactSharePage() {
     meta.name = "referrer";
     meta.content = "no-referrer";
     document.head.append(meta);
+
     return () => {
       meta.remove();
     };
   }, []);
 
   let downloadUrl: string | null = null;
+
   try {
     downloadUrl = buildPublicArtifactShareUrl(client.baseUrl, token);
   } catch {
     downloadUrl = null;
   }
+
   const fillViewport = preview.isHtml || preview.isSpreadsheet;
 
   return (

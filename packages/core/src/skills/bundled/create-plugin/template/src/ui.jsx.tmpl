@@ -1,0 +1,95 @@
+/** @jsxRuntime classic */
+/** @jsx React.createElement */
+/** @jsxFrag React.Fragment */
+// The host supplies React and Nakama's UI kit through ctx.
+// Never import react, react-dom, or @nakama/* packages here.
+import css from "./ui.css" with { type: "text" };
+
+export const inject = ["slots", "host", "styles", "ui"];
+
+// JSX compiles to React.createElement, so components anywhere in this file
+// need this binding. apply() sets it before the host renders anything.
+let React;
+
+/** @param {import("./nakama-plugin").PluginContext} ctx */
+export function apply(ctx) {
+  React = ctx.React;
+  const { Button, Card, CardContent, Input, Spinner } = ctx.ui;
+
+  ctx.styles(css);
+
+  function Result({ value }) {
+    const text =
+      typeof value?.message === "string"
+        ? value.message
+        : JSON.stringify(value, null, 2);
+
+    return <pre className="plugin-result">{text}</pre>;
+  }
+
+  // The plugin page. The host already shows the page title and padding.
+  function Page({ renderHeaderActions = (children) => children }) {
+    const [name, setName] = React.useState("");
+    const [result, setResult] = React.useState(null);
+    const [error, setError] = React.useState("");
+    const [busy, setBusy] = React.useState(false);
+
+    async function run(event) {
+      event.preventDefault();
+      setBusy(true);
+      setError("");
+
+      try {
+        setResult(await ctx.host.call("__ACTION_KEY__", { name: name.trim() }));
+      } catch (failure) {
+        setError(failure instanceof Error ? failure.message : String(failure));
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    return (
+      <div className="plugin-page">
+        {renderHeaderActions(
+          <Button onClick={() => setResult(null)} size="sm" variant="outline">
+            Clear
+          </Button>
+        )}
+        <Card>
+          <CardContent className="plugin-panel">
+            <form className="plugin-form" onSubmit={run}>
+              <Input
+                aria-label="Name"
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Name"
+                value={name}
+              />
+              <Button disabled={busy || !name.trim()} type="submit">
+                {busy ? <Spinner /> : null}
+                Run
+              </Button>
+            </form>
+            {error ? (
+              <p className="plugin-error" role="alert">
+                {error}
+              </p>
+            ) : null}
+            {result ? <Result value={result} /> : null}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Shown in chat when an agent calls the action as a tool.
+  function ToolCard({ result = null, status }) {
+    if (status === "running") {
+      return <p className="plugin-muted">Running…</p>;
+    }
+
+    return result ? <Result value={result} /> : null;
+  }
+
+  ctx.slots.register("page", Page);
+  ctx.slots.register("tool:__ACTION_KEY__", ToolCard);
+}

@@ -1,5 +1,11 @@
 export type SpreadsheetRows = string[][];
 
+export function isSpreadsheetNumericCell(value: string): boolean {
+  const trimmed = value.trim();
+
+  return trimmed.length > 0 && /^-?\d[\d,]*(\.\d+)?%?$/.test(trimmed);
+}
+
 function delimiterForFilename(filename: string): string {
   return filename.toLowerCase().endsWith(".tsv") ? "\t" : ",";
 }
@@ -26,6 +32,7 @@ function parseDelimitedSpreadsheet(
       } else {
         cell += char;
       }
+
       continue;
     }
 
@@ -72,9 +79,11 @@ function serializeDelimitedSpreadsheet(
       row
         .map((value) => {
           const cell = String(value ?? "");
+
           if (!(cell.includes(delimiter) || /["\r\n]/.test(cell))) {
             return cell;
           }
+
           return `"${cell.replace(/"/g, '""')}"`;
         })
         .join(delimiter)
@@ -86,7 +95,7 @@ export function parseSpreadsheetText(
   filename: string,
   content: string
 ): SpreadsheetRows {
-  return normalizeSpreadsheetShape(
+  return normalizeSpreadsheetRows(
     parseDelimitedSpreadsheet(content, delimiterForFilename(filename))
   );
 }
@@ -96,19 +105,26 @@ export function serializeSpreadsheetText(
   rows: SpreadsheetRows
 ): string {
   return serializeDelimitedSpreadsheet(
-    normalizeSpreadsheetShape(rows),
+    normalizeSpreadsheetRows(rows),
     delimiterForFilename(filename)
   );
 }
 
-export function normalizeSpreadsheetShape(
-  rows: SpreadsheetRows
-): SpreadsheetRows {
+function normalizeSpreadsheetRows(rows: SpreadsheetRows): SpreadsheetRows {
   const width = Math.max(1, ...rows.map((row) => row.length));
+
   const normalized = rows.map((row) =>
     Array.from({ length: width }, (_, index) => row[index] ?? "")
   );
+
   return normalized.length > 0 ? normalized : [[""]];
+}
+
+// oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- The spreadsheet editor imports this public helper.
+export function normalizeSpreadsheetShape(
+  rows: SpreadsheetRows
+): SpreadsheetRows {
+  return normalizeSpreadsheetRows(rows);
 }
 
 /** 0 → A, 25 → Z, 26 → AA */

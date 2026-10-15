@@ -1,12 +1,9 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type {
-  AssignMcpServerRequest,
-  CreateMcpServerRequest,
   ListMcpServersResponse,
   McpServerResponse,
   ProfileResponse,
   TestMcpServerResponse,
-  UpdateMcpServerRequest,
 } from "@nakama/core";
 import { NakamaApiError } from "@nakama/core";
 import {
@@ -83,40 +80,92 @@ function mcpOAuthPage(title: string, detail: string, status = 200): Response {
 
 export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
   const { agent, mcpService } = options;
+
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
+
   const serverIdParam = z.object({
     serverId: z.string().openapi({ param: { in: "path", name: "serverId" } }),
   });
+
   const profileServerParams = z.object({
     profileId: z.string().openapi({ param: { in: "path", name: "profileId" } }),
     serverId: z.string().openapi({ param: { in: "path", name: "serverId" } }),
   });
+
   const profileIdParam = z.object({
     profileId: z.string().openapi({ param: { in: "path", name: "profileId" } }),
   });
+
   const listServersSchema = z
     .object({})
     .passthrough()
     .openapi("ListMcpServersResponse");
+
   const serverSchema = z.object({}).passthrough().openapi("McpServerResponse");
+
   const testServerSchema = z
     .object({})
     .passthrough()
     .openapi("TestMcpServerResponse");
+
+  const transportSchema = z
+    .string()
+    .trim()
+    .toLowerCase()
+    .pipe(z.enum(["http", "stdio", "command"]))
+    .transform((transport) =>
+      transport === "command" ? ("stdio" as const) : transport
+    );
+
+  const configSchema = z.union([
+    z
+      .object({
+        url: z.string(),
+        headers: z.record(z.string(), z.string()).optional(),
+      })
+      .passthrough(),
+    z
+      .object({
+        command: z.string(),
+        args: z.array(z.string()).optional(),
+        env: z.record(z.string(), z.string()).optional(),
+      })
+      .passthrough(),
+  ]);
+
   const createServerSchema = z
-    .object({})
+    .object({
+      config: configSchema,
+      connect: z.boolean().optional(),
+      enabled: z.boolean().optional(),
+      name: z.string(),
+      serverId: z.string().optional(),
+      transport: transportSchema,
+    })
     .passthrough()
     .openapi("CreateMcpServerRequest");
+
+  const testServerRequestSchema = createServerSchema
+    .omit({ name: true })
+    .openapi("TestMcpServerRequest");
+
   const updateServerSchema = z
-    .object({})
+    .object({
+      config: configSchema.optional(),
+      enabled: z.boolean().optional(),
+      name: z.string().optional(),
+      transport: transportSchema.optional(),
+    })
     .passthrough()
     .openapi("UpdateMcpServerRequest");
+
   const assignServerSchema = z
-    .object({})
+    .object({ serverId: z.string() })
     .passthrough()
     .openapi("AssignMcpServerRequest");
+
   const profileSchema = z.object({}).passthrough().openapi("ProfileResponse");
 
   app.openAPIRegistry.registerPath(
@@ -166,7 +215,7 @@ export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
       path: "/v1/mcp/servers/test",
       request: {
         body: {
-          content: { "application/json": { schema: createServerSchema } },
+          content: { "application/json": { schema: testServerRequestSchema } },
           required: true,
         },
       },
@@ -239,7 +288,10 @@ export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
       method: "delete",
       operationId: "deleteMcpServer",
       path: "/v1/mcp/servers/{serverId}",
-      request: { params: serverIdParam },
+      request: {
+        params: serverIdParam,
+        query: z.object({ force: z.enum(["true", "false"]).optional() }),
+      },
       responses: {
         204: { description: "MCP server deleted" },
         409: {
@@ -344,12 +396,14 @@ export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
 
   app.get("/v1/mcp/servers", async (c) => {
     requirePlatformAdminFromContext(c);
+
     return json<ListMcpServersResponse>(await mcpService.listServers());
   });
 
   app.post("/v1/mcp/servers", async (c) => {
     requirePlatformAdminFromContext(c);
-    const body = await readJson<CreateMcpServerRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, createServerSchema);
+
     return json<McpServerResponse>(
       await mcpService.createServer(body, {
         callbackBaseUrl: resolveComposioCallbackBaseUrl({ request: c.req.raw }),
@@ -360,7 +414,8 @@ export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
 
   app.post("/v1/mcp/servers/test", async (c) => {
     requirePlatformAdminFromContext(c);
-    const body = await readJson<CreateMcpServerRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, testServerRequestSchema);
+
     return json<TestMcpServerResponse>(
       await mcpService.testServer(body.transport, body.config, body.serverId)
     );
@@ -368,6 +423,7 @@ export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
 
   app.post("/v1/mcp/servers/:serverId/connect", async (c) => {
     requirePlatformAdminFromContext(c);
+
     return json<McpServerResponse>(
       await mcpService.connectServer(
         decodeURIComponent(c.req.param("serverId")),
@@ -382,6 +438,7 @@ export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
 
   app.post("/v1/mcp/servers/:serverId/sync", async (c) => {
     requirePlatformAdminFromContext(c);
+
     return json<McpServerResponse>(
       await mcpService.syncServer(decodeURIComponent(c.req.param("serverId")), {
         callbackBaseUrl: resolveComposioCallbackBaseUrl({ request: c.req.raw }),
@@ -391,6 +448,7 @@ export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
 
   app.get("/v1/mcp/servers/:serverId", async (c) => {
     requirePlatformAdminFromContext(c);
+
     return json<McpServerResponse>(
       await mcpService.getServer(decodeURIComponent(c.req.param("serverId")))
     );
@@ -398,7 +456,8 @@ export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
 
   app.patch("/v1/mcp/servers/:serverId", async (c) => {
     requirePlatformAdminFromContext(c);
-    const body = await readJson<UpdateMcpServerRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, updateServerSchema);
+
     return json<McpServerResponse>(
       await mcpService.updateServer(
         decodeURIComponent(c.req.param("serverId")),
@@ -409,14 +468,19 @@ export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
 
   app.delete("/v1/mcp/servers/:serverId", async (c) => {
     requirePlatformAdminFromContext(c);
-    await mcpService.deleteServer(decodeURIComponent(c.req.param("serverId")));
+    await mcpService.deleteServer(
+      decodeURIComponent(c.req.param("serverId")),
+      c.req.query("force") === "true"
+    );
+
     return new Response(null, { status: 204 });
   });
 
   app.post("/v1/profiles/:profileId/mcp-servers", async (c) => {
     const auth = requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
-    const body = await readJson<AssignMcpServerRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, assignServerSchema);
+
     return json<ProfileResponse>(
       await agent.assignMcpServer(
         orgId,
@@ -430,6 +494,7 @@ export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
   app.delete("/v1/profiles/:profileId/mcp-servers/:serverId", async (c) => {
     const auth = requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
+
     return json<ProfileResponse>(
       await agent.unassignMcpServer(
         orgId,

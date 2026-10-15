@@ -1,4 +1,4 @@
-export const PUBLIC_ROUTES = new Set([
+const PUBLIC_ROUTES = new Set([
   "/health",
   "/artifact-frame",
   "/docs",
@@ -8,6 +8,7 @@ export const PUBLIC_ROUTES = new Set([
   "/v1/auth/setup/import/preview",
   "/v1/auth/setup/import/restore",
   "/v1/auth/login",
+  "/v1/auth/passkey/login/options",
   "/v1/auth/me",
   "/v1/auth/accept-invite",
   "/v1/auth/password-reset/request",
@@ -26,6 +27,9 @@ export function isPublicRouteRequest(
   return (
     PUBLIC_ROUTES.has(pathname) ||
     /^\/v1\/notify\/[^/]+$/.test(pathname) ||
+    // The stdio bridge an ACP agent starts has no login. The token in the path
+    // is the credential, and it reaches only that chat's Nakama tools.
+    (method === "POST" && /^\/v1\/acp-mcp\/[^/]+$/.test(pathname)) ||
     // OAuth provider redirect: it carries a single-use code and state, and the
     // browser arriving here has no Nakama session.
     (method === "GET" &&

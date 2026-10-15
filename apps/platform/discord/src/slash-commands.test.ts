@@ -17,6 +17,7 @@ describe("buildSlashCommands", () => {
     const userOption = allow!
       .toJSON()
       .options?.find((option: { name?: string }) => option.name === "user");
+
     expect(userOption).toMatchObject({
       name: "user",
       required: true,

@@ -25,6 +25,7 @@ function createMessage(options: {
   const attachments = new Collection<string, Attachment>();
 
   for (const [index, attachment] of (options.attachments ?? []).entries()) {
+    // SAFETY: The test only reads these four attachment fields from the collection.
     attachments.set(String(index + 1), {
       contentType: attachment.contentType ?? null,
       name: attachment.name ?? `image-${index + 1}.png`,
@@ -33,10 +34,11 @@ function createMessage(options: {
     } as Attachment);
   }
 
+  // SAFETY: The test exercises only content and attachments on this message.
   return {
     attachments,
     content: options.content ?? "",
-  } as unknown as Message;
+  } as Message;
 }
 
 describe("buildDiscordImageInput", () => {
@@ -242,10 +244,12 @@ describe("buildDiscordImageInput", () => {
     );
 
     expect(result?.kind).toBe("input");
+
     if (result?.kind === "input") {
       expect(result.input.images).toHaveLength(1);
       expect(result.input.images[0]?.mediaType).toBe("image/png");
     }
+
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 

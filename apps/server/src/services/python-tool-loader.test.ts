@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
-import { rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { resolveCustomToolModulePath } from "./custom-tool-shared";
 import {
@@ -10,8 +11,11 @@ import {
 import { loadPythonTool, resolvePythonBin } from "./python-tool-loader";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
+
 const originalPythonBin = process.env.NAKAMA_PYTHON_BIN;
+
 const setupToolsDir = setupCustomToolsDir;
+
 const makeRecord = (overrides = {}) =>
   makeCustomToolRecord({
     handlerConfig: { modulePath: "echo.py" },
@@ -28,7 +32,7 @@ describe("resolvePythonBin", () => {
     }
   });
 
-  test("defaults to python3", () => {
+  test.skipIf(process.platform === "win32")("defaults to python3", () => {
     delete process.env.NAKAMA_PYTHON_BIN;
     expect(resolvePythonBin()).toBe("python3");
   });
@@ -56,19 +60,130 @@ describe("resolvePythonBin", () => {
     ).toThrow(/allowlist/i);
   });
 
-  test("accepts Homebrew Cellar python and python@ paths by prefix", () => {
-    expect(
-      resolvePythonBin("/opt/homebrew/Cellar/python@3.12/3.12.0/bin/python3")
-    ).toBe("/opt/homebrew/Cellar/python@3.12/3.12.0/bin/python3");
-    expect(
-      resolvePythonBin("/opt/homebrew/Cellar/python/3.12.0/bin/python3")
-    ).toBe("/opt/homebrew/Cellar/python/3.12.0/bin/python3");
-  });
+  test.skipIf(process.platform === "win32")(
+    "accepts Homebrew Cellar python and python@ paths by prefix",
+    () => {
+      expect(
+        resolvePythonBin("/opt/homebrew/Cellar/python@3.12/3.12.0/bin/python3")
+      ).toBe("/opt/homebrew/Cellar/python@3.12/3.12.0/bin/python3");
+      expect(
+        resolvePythonBin("/opt/homebrew/Cellar/python/3.12.0/bin/python3")
+      ).toBe("/opt/homebrew/Cellar/python/3.12.0/bin/python3");
+    }
+  );
 
-  test("accepts /usr/bin/python3 when present", () => {
-    expect(resolvePythonBin("/usr/bin/python3")).toBe("/usr/bin/python3");
-  });
+  test.skipIf(process.platform === "win32")(
+    "accepts /usr/bin/python3 when present",
+    () => {
+      expect(resolvePythonBin("/usr/bin/python3")).toBe("/usr/bin/python3");
+    }
+  );
 });
+
+describe.skipIf(process.platform !== "win32")(
+  "resolvePythonBin on Windows",
+  () => {
+    const originalLocalAppData = process.env.LOCALAPPDATA;
+    const originalProgramFiles = process.env.ProgramFiles;
+    let tempDir = "";
+
+    afterEach(async () => {
+      process.env.LOCALAPPDATA = originalLocalAppData;
+      process.env.ProgramFiles = originalProgramFiles;
+
+      if (originalPythonBin === undefined) {
+        delete process.env.NAKAMA_PYTHON_BIN;
+      } else {
+        process.env.NAKAMA_PYTHON_BIN = originalPythonBin;
+      }
+
+      if (tempDir) {
+        await rm(tempDir, { force: true, recursive: true });
+        tempDir = "";
+      }
+    });
+
+    // Canonical, because a runner's tmpdir can be an 8.3 short path that the
+    // resolver expands before comparing.
+    async function useFakeInstallRoots(): Promise<void> {
+      tempDir = realpathSync.native(
+        await mkdtemp(path.join(os.tmpdir(), "nakama-python-bin-"))
+      );
+      process.env.LOCALAPPDATA = path.join(tempDir, "Local");
+      process.env.ProgramFiles = path.join(tempDir, "Program Files");
+    }
+
+    async function fakeInterpreter(...segments: string[]): Promise<string> {
+      const file = path.join(tempDir, ...segments);
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, "", "utf8");
+
+      return file;
+    }
+
+    test("defaults to python, because python3 is the Store stub", () => {
+      delete process.env.NAKAMA_PYTHON_BIN;
+      expect(resolvePythonBin()).toBe("python");
+    });
+
+    test("accepts an .exe suffix on bare names and nothing else", () => {
+      expect(resolvePythonBin("python.exe")).toBe("python.exe");
+      expect(resolvePythonBin("python3.13.exe")).toBe("python3.13.exe");
+      expect(() => resolvePythonBin("bash.exe")).toThrow(/bare name/i);
+      expect(() => resolvePythonBin("python.exe.bat")).toThrow(/bare name/i);
+    });
+
+    test("accepts python.org install roots read from the environment", async () => {
+      await useFakeInstallRoots();
+
+      const perUser = await fakeInterpreter(
+        "Local",
+        "Programs",
+        "Python",
+        "Python313",
+        "python.exe"
+      );
+
+      const allUsers = await fakeInterpreter(
+        "Program Files",
+        "Python313-arm64",
+        "python.exe"
+      );
+
+      expect(resolvePythonBin(perUser)).toBe(perUser);
+      expect(resolvePythonBin(allUsers)).toBe(allUsers);
+      // NTFS is case-insensitive, so the comparison must be too.
+      expect(resolvePythonBin(perUser.toUpperCase())).toBe(
+        perUser.toUpperCase()
+      );
+    });
+
+    test("rejects interpreters outside the install roots", async () => {
+      await useFakeInstallRoots();
+
+      const sibling = await fakeInterpreter(
+        "Local",
+        "Programs",
+        "Pythonic",
+        "python.exe"
+      );
+
+      const unversioned = await fakeInterpreter(
+        "Program Files",
+        "PythonTools",
+        "python.exe"
+      );
+
+      const elsewhere = await fakeInterpreter("bin", "python.exe");
+
+      expect(() => resolvePythonBin(sibling)).toThrow(/allowlist/i);
+      expect(() => resolvePythonBin(unversioned)).toThrow(/allowlist/i);
+      expect(() => resolvePythonBin(elsewhere)).toThrow(/allowlist/i);
+      // A drive-less POSIX path would spawn C:\usr\bin\python.exe here.
+      expect(() => resolvePythonBin("/usr/bin/python3")).toThrow(/allowlist/i);
+    });
+  }
+);
 
 describe("python tool loader", () => {
   let configDir = "";
@@ -79,6 +194,7 @@ describe("python tool loader", () => {
     } else {
       process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
     }
+
     if (originalPythonBin === undefined) {
       delete process.env.NAKAMA_PYTHON_BIN;
     } else {
@@ -115,10 +231,12 @@ if __name__ == "__main__":
     expect(tool?.name).toBe("echo");
     expect(tool?.parallelSafe).not.toBe(true);
 
+    // SAFETY: The test fixture matches the contract used by this test.
     const result = (await tool!.run(
       { message: "hello" },
-      { workspaceRoot: "/tmp/nakama-ws" }
+      { orgId: "org_a", workspaceRoot: "/tmp/nakama-ws" }
     )) as { echoed: string; root: string };
+
     expect(result.echoed).toBe("hello");
     // The loader must forward context.workspaceRoot to the child process as
     // NAKAMA_WORKSPACE_ROOT.
@@ -142,7 +260,9 @@ if __name__ == "__main__":
 
     process.env.NAKAMA_PYTHON_BIN = "/tmp/not-an-allowlisted-python";
     const tool = await loadPythonTool(makeRecord());
-    await expect(tool!.run({}, {})).rejects.toThrow(/allowlist/i);
+    await expect(tool!.run({}, { orgId: "org_a" })).rejects.toThrow(
+      /allowlist/i
+    );
   });
 
   test("returns an error tool when the module file is missing", async () => {
@@ -150,7 +270,11 @@ if __name__ == "__main__":
     configDir = dir;
 
     const tool = await loadPythonTool(makeRecord());
-    const result = (await tool!.run({}, {})) as { error: string };
+
+    // SAFETY: The test fixture matches the contract used by this test.
+    const result = (await tool!.run({}, { orgId: "org_a" })) as {
+      error: string;
+    };
 
     expect(result.error).toContain("echo.py");
   });
@@ -171,7 +295,11 @@ print("hi")
       makeRecord({ handlerConfig: { modulePath: "norun.py" }, name: "norun" })
     );
 
-    const result = (await tool!.run({}, {})) as { error: string };
+    // SAFETY: The test fixture matches the contract used by this test.
+    const result = (await tool!.run({}, { orgId: "org_a" })) as {
+      error: string;
+    };
+
     expect(result.error).toMatch(/run\s*\(/i);
   });
 
@@ -194,7 +322,11 @@ print("hi")
       })
     );
 
-    const result = (await tool!.run({}, {})) as { error: string };
+    // SAFETY: The test fixture matches the contract used by this test.
+    const result = (await tool!.run({}, { orgId: "org_a" })) as {
+      error: string;
+    };
+
     expect(result.error).toMatch(/__main__/i);
   });
 
@@ -222,10 +354,14 @@ if __name__ == "__main__":
 
     // A failed spawn must reject so the retry policy can retry transient
     // failures; executeToolCall turns the throw into `{ error }` for callers.
-    const err = await tool!.run({}, {}).catch((e: unknown) => e);
+    const err = await tool!
+      .run({}, { orgId: "org_a" })
+      .catch((error: Error) => error);
 
     expect(err).toBeInstanceOf(Error);
+    // SAFETY: The test fixture matches the contract used by this test.
     expect((err as Error).message).toMatch(/exit code/i);
+    // SAFETY: The test fixture matches the contract used by this test.
     expect((err as Error).message).toContain("kaboom");
   });
 
@@ -254,7 +390,9 @@ if __name__ == "__main__":
       })
     );
 
-    await expect(tool!.run({}, {})).rejects.toThrow(/non-json/i);
+    await expect(tool!.run({}, { orgId: "org_a" })).rejects.toThrow(
+      /non-json/i
+    );
   });
 
   test("returns an error tool when the module prints nothing to stdout", async () => {
@@ -283,7 +421,9 @@ if __name__ == "__main__":
       })
     );
 
-    await expect(tool!.run({}, {})).rejects.toThrow(/no output/i);
+    await expect(tool!.run({}, { orgId: "org_a" })).rejects.toThrow(
+      /no output/i
+    );
   });
 
   test("runs with cwd scoped to the tools directory, not the server checkout", async () => {
@@ -311,7 +451,8 @@ if __name__ == "__main__":
       })
     );
 
-    const result = (await tool!.run({}, {})) as { cwd: string };
+    // SAFETY: The test fixture matches the contract used by this test.
+    const result = (await tool!.run({}, { orgId: "org_a" })) as { cwd: string };
     expect(realpathSync(result.cwd)).toBe(realpathSync(toolsDir));
   });
 
@@ -341,8 +482,13 @@ if __name__ == "__main__":
     );
 
     process.env.NAKAMA_TEST_CANARY_SECRET = "canary-not-a-real-secret";
+
     try {
-      const result = (await tool!.run({}, {})) as { secret: string | null };
+      // SAFETY: The test fixture matches the contract used by this test.
+      const result = (await tool!.run({}, { orgId: "org_a" })) as {
+        secret: string | null;
+      };
+
       expect(result.secret).toBeNull();
     } finally {
       delete process.env.NAKAMA_TEST_CANARY_SECRET;
@@ -386,8 +532,11 @@ if __name__ == "__main__":
     );
 
     process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS = "200";
+
     try {
-      await expect(tool!.run({}, {})).rejects.toThrow(/timed out/i);
+      await expect(tool!.run({}, { orgId: "org_a" })).rejects.toThrow(
+        /timed out/i
+      );
     } finally {
       delete process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS;
     }
@@ -437,6 +586,7 @@ if __name__ == "__main__":
     );
 
     const { resolveToolsFromStorage } = await import("./tool-resolver");
+
     const tools = await resolveToolsFromStorage([
       {
         createdAt: new Date().toISOString(),
@@ -445,12 +595,15 @@ if __name__ == "__main__":
         handlerType: "python",
         id: "tool_adder_py",
         name: "adder_py",
+        orgId: "org_a",
         updatedAt: new Date().toISOString(),
       },
     ]);
 
     expect(tools).toHaveLength(1);
-    expect(await tools[0]!.run({ a: 2, b: 3 }, {})).toEqual({ sum: 5 });
+    expect(await tools[0]!.run({ a: 2, b: 3 }, { orgId: "org_a" })).toEqual({
+      sum: 5,
+    });
   });
 });
 
@@ -473,9 +626,12 @@ describe("agent-service playground dispatch", () => {
   test("runToolPlayground executes a python tool instead of its error stub", async () => {
     const { configDir: dir, toolsDir } = await setupToolsDir();
     configDir = dir;
+    await mkdir(path.join(configDir, "orgs", "org_playground", "tools"), {
+      recursive: true,
+    });
 
     await writeFile(
-      path.join(toolsDir, "shout.py"),
+      path.join(configDir, "orgs", "org_playground", "tools", "shout.py"),
       `import json, sys
 
 def run(input, context):
@@ -515,6 +671,7 @@ if __name__ == "__main__":
       handlerType: "python",
       id: "tool_shout",
       name: "shout",
+      orgId: "org_playground",
       updatedAt: now,
     });
     await databaseAdapter.assignToolToProfile(

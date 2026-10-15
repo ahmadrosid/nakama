@@ -1,4 +1,5 @@
 import type { ProfileDetail } from "@nakama/core/contract";
+import { Layers01Icon } from "hugeicons-react";
 import { ProfileOrgBooleanOverrideField } from "@/components/profiles/ProfileOrgBooleanOverrideField";
 
 export function ProfileSkillsCuratorConsolidateField({
@@ -10,13 +11,14 @@ export function ProfileSkillsCuratorConsolidateField({
 }) {
   return (
     <ProfileOrgBooleanOverrideField
-      description="Merge overlapping skills and simplify their instructions."
+      description="Combine similar skills and keep them short and clear."
       disabled={disabled}
       field="skillsCuratorConsolidateEnabled"
+      icon={<Layers01Icon size={18} />}
       id="profile-skills-curator-consolidate"
-      label="Skill consolidate"
+      label="Merge similar skills"
       profile={profile}
-      savedToast="Skill consolidate setting saved."
+      savedToast="Saved."
     />
   );
 }

@@ -4,6 +4,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+source "$(dirname "$0")/capture-common.sh"
 SCREENSHOT_DIR="$(cd "$(dirname "$0")/.." && pwd)/public/screenshots"
 TEMP_CONFIG="/tmp/nakama-docs-skills-screenshots-$$"
 COOKIE_JAR="/tmp/nakama-docs-skills-cookies-$$.txt"
@@ -14,13 +15,11 @@ SERVER_PID=""
 VIEWPORT_WIDTH=1280
 VIEWPORT_HEIGHT=720
 
-if command -v agent-browser >/dev/null 2>&1; then
-  AB="$(command -v agent-browser)"
-elif [[ -x "/Users/ahmadrosid/Library/pnpm/nodejs/22.23.1/bin/agent-browser" ]]; then
-  AB="/Users/ahmadrosid/Library/pnpm/nodejs/22.23.1/bin/agent-browser"
-else
-  AB="npx --yes agent-browser"
+if ! command -v agent-browser >/dev/null 2>&1; then
+  echo "agent-browser is required on PATH (npm i -g agent-browser && agent-browser install)" >&2
+  exit 1
 fi
+AB="$(command -v agent-browser)"
 
 stop_server() {
   if [[ -n "$SERVER_PID" ]]; then
@@ -56,6 +55,7 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$SCREENSHOT_DIR" "$TEMP_CONFIG"
+ensure_current_web_build "$ROOT"
 
 start_server
 

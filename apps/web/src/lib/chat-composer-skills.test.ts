@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import type { SkillSummary } from "@nakama/core/contract";
 import {
+  filterComposerMentionSuggestions,
   filterComposerSlashSuggestions,
   filterReservedSlashCommands,
   filterSkillsForSlashQuery,
   findActiveSkillSlashRange,
+  getLeadingCommand,
+  getMentionTokenRanges,
   getReservedCommandTokenRanges,
   getSkillTokenRanges,
   matchComposerAddCommand,
@@ -124,6 +127,7 @@ describe("filterComposerSlashSuggestions", () => {
     const commands = filterComposerSlashSuggestions([], query, {
       enableAddCommands: true,
     }).filter((item) => item.kind === "command");
+
     expect(commands.map((item) => item.command.name)).toEqual([name]);
     expect(filterComposerSlashSuggestions([], query)).toEqual([]);
   });
@@ -139,6 +143,7 @@ describe("filterComposerSlashSuggestions", () => {
       description: "",
       name,
     }));
+
     expect(
       filterReservedSlashCommands("atl", commands).map((c) => c.name)
     ).toEqual(["atlas", "add-tool"]);
@@ -168,6 +173,7 @@ describe("filterComposerSlashSuggestions", () => {
       [manageSkillsSkill, weatherSkill, deploySkill],
       "lea"
     );
+
     expect(
       suggestions.map((item) => item.kind === "command" && item.command.name)
     ).toEqual(["learn", "enable-learning-loop"]);
@@ -307,5 +313,94 @@ describe("getReservedCommandTokenRanges", () => {
     expect(getReservedCommandTokenRanges("tell me about /learn later")).toEqual(
       []
     );
+  });
+});
+
+describe("@ mentions", () => {
+  test("opens on @ at a word start, never inside an email", () => {
+    expect(findActiveSkillSlashRange("draw @im", 8, "@")).toEqual({
+      end: 8,
+      query: "im",
+      start: 5,
+    });
+    expect(findActiveSkillSlashRange("me@image.dev", 12, "@")).toBeNull();
+  });
+
+  test("offers @image and inserts it with a trailing space", () => {
+    const [suggestion] = filterComposerMentionSuggestions("im");
+    expect(suggestion).toMatchObject({
+      kind: "mention",
+      mention: { name: "image" },
+    });
+    expect(filterComposerMentionSuggestions("john")).toEqual([]);
+
+    const range = findActiveSkillSlashRange("@im", 3, "@");
+    expect(
+      replaceSlashRangeWithReservedCommand(
+        "@im",
+        range!,
+        { name: "image" },
+        "@"
+      )
+    ).toEqual({ cursorIndex: 7, value: "@image " });
+  });
+
+  test("highlights @image tokens only as whole words", () => {
+    expect(getMentionTokenRanges("@image a fox, then @image again")).toEqual([
+      { end: 6, name: "image", start: 0 },
+      { end: 25, name: "image", start: 19 },
+    ]);
+    expect(getMentionTokenRanges("me@image.dev @images")).toEqual([]);
+  });
+});
+
+describe("getLeadingCommand", () => {
+  test("finds a leading reserved command", () => {
+    const found = getLeadingCommand("/enable-learning-loop now", [
+      manageSkillsSkill,
+    ]);
+
+    expect(found?.range).toEqual({
+      end: 21,
+      name: "enable-learning-loop",
+      start: 0,
+    });
+  });
+
+  test("finds a leading skill token", () => {
+    const found = getLeadingCommand("/skill weather rain?", [weatherSkill]);
+
+    expect(found?.range.name).toBe("weather");
+    expect(found?.description).toBe(weatherSkill.description.trim());
+  });
+
+  test("keeps the first matching skill when names repeat", () => {
+    const duplicate = { ...weatherSkill, description: "Second skill" };
+
+    const found = getLeadingCommand("/skill weather", [
+      weatherSkill,
+      duplicate,
+    ]);
+
+    expect(found?.description).toBe(weatherSkill.description.trim());
+  });
+
+  test("ignores later skills when the leading skill is unavailable", () => {
+    expect(
+      getLeadingCommand("/skill missing /skill weather", [weatherSkill])
+    ).toBeNull();
+  });
+
+  test("finds a leading skill after whitespace and ignores later tokens", () => {
+    const found = getLeadingCommand("  /skill weather /skill missing", [
+      weatherSkill,
+    ]);
+
+    expect(found?.range).toEqual({ end: 16, name: "weather", start: 2 });
+    expect(found?.description).toBe(weatherSkill.description.trim());
+  });
+
+  test("ignores a command mid-sentence", () => {
+    expect(getLeadingCommand("run /skill weather", [weatherSkill])).toBeNull();
   });
 });

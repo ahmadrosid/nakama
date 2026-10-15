@@ -20,7 +20,7 @@ export interface ActiveChatProfileState {
 export const useActiveChatProfileStore = create<ActiveChatProfileState>(
   (set, get) => ({
     orgId: null,
-    profileId: readStoredActiveChatProfileId(),
+    profileId: null,
     setProfileId: (profileId) => {
       writeStoredActiveChatProfileId(profileId, get().orgId);
       set({ profileId });
@@ -29,6 +29,7 @@ export const useActiveChatProfileStore = create<ActiveChatProfileState>(
       const current = get();
       const orgChanged = current.orgId !== orgId;
       const stored = readStoredActiveChatProfileId(orgId);
+
       const resolved =
         pickKnownProfileId(
           profiles,
@@ -46,6 +47,7 @@ export const useActiveChatProfileStore = create<ActiveChatProfileState>(
       }
 
       set({ orgId, profileId: resolved });
+
       return resolved;
     },
   })

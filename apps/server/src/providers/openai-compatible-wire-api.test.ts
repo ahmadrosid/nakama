@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { createOpenAICompatibleProvider } from "./openai-compatible";
+import type { ProviderJsonRecord } from "./shared";
+import { asTestFetch } from "./test-helpers";
 
 const originalFetch = globalThis.fetch;
 
@@ -20,41 +22,46 @@ const RESPONSE_PAYLOAD = {
   usage: { input_tokens: 1, output_tokens: 1 },
 };
 
-function stubFetch(payload: unknown) {
-  const calls: Array<{ body: Record<string, unknown>; url: string }> = [];
+function stubFetch<Payload>(payload: Payload) {
+  const calls: Array<{ body: ProviderJsonRecord; url: string }> = [];
 
-  globalThis.fetch = mock(async (url: unknown, init?: RequestInit) => {
-    calls.push({
-      body: JSON.parse(String(init?.body ?? "{}")),
-      url: String(url),
-    });
+  globalThis.fetch = asTestFetch(
+    mock(async (url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({
+        body: JSON.parse(String(init?.body ?? "{}")),
+        url: String(url),
+      });
 
-    return new Response(JSON.stringify(payload), {
-      headers: { "Content-Type": "application/json" },
-      status: 200,
-    });
-  }) as unknown as typeof fetch;
+      return new Response(JSON.stringify(payload), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    })
+  );
 
   return calls;
 }
 
 function stubSseFetch(events: unknown[]) {
-  const calls: Array<{ body: Record<string, unknown>; url: string }> = [];
+  const calls: Array<{ body: ProviderJsonRecord; url: string }> = [];
+
   const sse = events
     .map((event) => `data: ${JSON.stringify(event)}\n\n`)
     .join("");
 
-  globalThis.fetch = mock(async (url: unknown, init?: RequestInit) => {
-    calls.push({
-      body: JSON.parse(String(init?.body ?? "{}")),
-      url: String(url),
-    });
+  globalThis.fetch = asTestFetch(
+    mock(async (url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({
+        body: JSON.parse(String(init?.body ?? "{}")),
+        url: String(url),
+      });
 
-    return new Response(sse, {
-      headers: { "Content-Type": "text/event-stream" },
-      status: 200,
-    });
-  }) as unknown as typeof fetch;
+      return new Response(sse, {
+        headers: { "Content-Type": "text/event-stream" },
+        status: 200,
+      });
+    })
+  );
 
   return calls;
 }
@@ -75,6 +82,7 @@ const CHAT_INPUT = {
 describe("openai-compatible wire API", () => {
   test("wireApi responses posts to /responses and keeps reasoning next to tools", async () => {
     const calls = stubFetch(RESPONSE_PAYLOAD);
+
     const provider = createOpenAICompatibleProvider({
       apiKey: "k",
       baseUrl: "https://endpoint.test/v1",
@@ -108,6 +116,7 @@ describe("openai-compatible wire API", () => {
         type: "response.output_item.done",
       },
     ]);
+
     const provider = createOpenAICompatibleProvider({
       apiKey: "k",
       baseUrl: "https://endpoint.test/v1",
@@ -130,6 +139,7 @@ describe("openai-compatible wire API", () => {
       choices: [{ message: { content: "ok", role: "assistant" } }],
       usage: { completion_tokens: 1, prompt_tokens: 1, total_tokens: 2 },
     });
+
     const provider = createOpenAICompatibleProvider({
       apiKey: "k",
       baseUrl: "https://endpoint.test/v1",

@@ -25,7 +25,14 @@ Also include a **tool plan**:
 - Server auto-assigns these basics on create when available: `read_file`, `write_file`, `edit_file`, `search_files`, `knowledge_base_search`, `web_fetch`, plus default bundled skills (including `update-profile-memory`).
 - Recommend optional extras from the available-tools context only when they clearly match the requested purpose.
 - Do not assign every available tool. Avoid powerful or externally visible tools unless the user asked for that capability.
-- Extra tools still need an explicit user ask after create (`assign_tool_to_profile`).
+- Assign extras only when the user asked for them or approved them in this plan.
+
+Model and plugin choices:
+
+- Call `list_models` for model ids. When the purpose needs images (receipts, photos, screenshots), pick a model with `supportsVision: true` and put its id in the plan. Omit `model` to use your own model.
+- To connect an installed plugin, put its tools and its skill in the plan. Use `list_tools` for the plugin's tool ids. The skill name is the plugin manifest skill key.
+- Read-only list calls (`list_models`, `list_tools`, `list_profiles`) are allowed before the user approves.
+- Never read server source, config files, databases, or auth tokens to find models, tools, or skills.
 
 Never set `isSuper: true` unless the user explicitly asked for a super profile. Prefer refusing agent-initiated super creation and directing them to the dashboard.
 
@@ -38,6 +45,8 @@ If the user edits the draft, revise the draft in chat and wait for confirmation 
 ## 4. Create only after OK
 
 After confirmation, call `create_profile` with `name` and `soulFiles` for `SOUL.md`, `STYLE.md`, `INSTRUCTIONS.md`, and empty `MEMORY.md`. Do not pass `id` — the server assigns one from the name.
+
+Then assign the approved extras: `assign_tool_to_profile` for each tool and `assign_skill_to_profile` for each skill.
 
 Then summarize:
 

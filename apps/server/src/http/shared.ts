@@ -1,59 +1,60 @@
 import type { AgentChatSession } from "@nakama/agent";
-import type { OrgRole } from "@nakama/core";
+import type { ImageAttachment, OrgRole } from "@nakama/core";
 import {
   AGENT_CHANNELS,
   type AgentChannel,
-  type AgentQuestionnaire,
-  type AgentTodo,
   type ApiErrorResponse,
   type ChatTurnUsage,
   type ChatUsage,
   formatServerError,
+  HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES,
   LOCAL_CLIENT_EMAIL,
   NakamaApiError,
+  PLAIN_BROWSER_SESSION_COOKIE_NAMES,
   reportError,
+  browserSessionCookieNames as resolveBrowserSessionCookieNames,
   resolveChatFirstTokenTimeoutMs,
   resolveChatStreamTimeoutMs,
   type SendMessageInput,
   type StreamEvent,
+  type ToolContext,
   verifyLocalAuthToken,
 } from "@nakama/core";
 import type {
   DatabaseAdapter,
-  StoredApiKeyRecord,
   StoredBrowserSessionRecord,
   StoredUserRecord,
 } from "@nakama/db";
 import { ensureLocalClientAccess } from "@nakama/db";
 import type { Context } from "hono";
-import type { ZodType } from "zod";
+import { type ZodType, z } from "zod";
 import type { AuthService } from "../services/auth-service";
 import { loadMfaPolicy } from "../services/mfa-config";
 import { sessionTurnRegistry } from "../services/session-turn-registry";
 import type { AppEnv } from "./types";
 
-const SESSION_COOKIE_NAME = "nakama_session";
-const CSRF_COOKIE_NAME = "nakama_csrf";
+const LEGACY_COOKIE_NAMES = PLAIN_BROWSER_SESSION_COOKIE_NAMES;
+
+const HOST_BOUND_COOKIE_NAMES = HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES;
+
 const CSRF_HEADER_NAME = "x-csrf-token";
+
 const SESSION_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
-function parseCookies(header: string | null): Record<string, string> {
-  if (!header) {
-    return {};
-  }
+function parseCookies(header: string | null) {
+  const cookies = new Map<string, string>();
 
-  const cookies: Record<string, string> = {};
-
-  for (const part of header.split(";")) {
+  for (const part of header?.split(";") ?? []) {
     const [name, ...rest] = part.trim().split("=");
+
     if (!name || rest.length === 0) {
       continue;
     }
 
-    cookies[name] = rest.join("=");
+    cookies.set(name, rest.join("="));
   }
 
-  return cookies;
+  return Object.fromEntries(cookies);
 }
 
 function buildCookie(
@@ -99,6 +100,7 @@ function getRequestTokenFromCookies(
   name: string
 ): string | null {
   const cookies = parseCookies(request.headers.get("Cookie"));
+
   return cookies[name]?.trim() || null;
 }
 
@@ -122,6 +124,7 @@ export function isSecureRequest(request: Request): boolean {
     .toLowerCase();
 
   let urlIsHttps = false;
+
   try {
     urlIsHttps = new URL(request.url).protocol === "https:";
   } catch {
@@ -134,7 +137,7 @@ export function isSecureRequest(request: Request): boolean {
 export interface RequestAuthContext {
   activeOrgId?: string;
   isPlatformAdmin: boolean;
-  mode: "api-key" | "browser-session" | "local-token";
+  mode: "browser-session" | "local-token";
   orgRole?: OrgRole;
   session?: StoredBrowserSessionRecord;
   user: Pick<StoredUserRecord, "id" | "email">;
@@ -146,6 +149,7 @@ function toAuthUser(user: StoredUserRecord): RequestAuthContext["user"] {
 
 export function getRequestAuth(c: Context<AppEnv>): RequestAuthContext {
   const auth = c.get("auth");
+
   if (!auth) {
     throw new NakamaApiError("Authentication required", 401);
   }
@@ -166,7 +170,9 @@ export function isPendingMfaAllowedRequest(
     (method === "POST" &&
       (pathname === "/v1/auth/logout" ||
         pathname === "/v1/auth/mfa/totp/start" ||
-        pathname === "/v1/auth/mfa/totp/verify"))
+        pathname === "/v1/auth/mfa/totp/verify" ||
+        pathname === "/v1/auth/mfa/passkey/start" ||
+        pathname === "/v1/auth/mfa/passkey/verify"))
   );
 }
 
@@ -179,30 +185,44 @@ export async function isPendingBrowserMfa(
     return false;
   }
 
+  const user = await databaseAdapter.getUserById(auth.user.id);
+
+  if (
+    !user ||
+    (user.mfaEnabled && user.mfaTotpSecretEnc) ||
+    (await databaseAdapter.listPasskeys(user.id)).length > 0
+  ) {
+    return false;
+  }
+
+  const policy = await loadMfaPolicy();
+
+  if (!(policy.enabled && policy.required)) {
+    return false;
+  }
+
+  // Platform-admin authority outlives every organization membership, so a
+  // required policy gates it on the account flag alone. Deriving this from the
+  // active org role instead let a non-member admin drive /v1/platform/*
+  // with nothing but a password.
+  if (auth.isPlatformAdmin) {
+    return true;
+  }
+
   const activeOrgId =
     orgId?.trim() ||
     auth.activeOrgId?.trim() ||
     auth.session?.activeOrgId?.trim();
-  if (!activeOrgId) {
-    return false;
-  }
 
-  const user = await databaseAdapter.getUserById(auth.user.id);
-  if (!user || (user.mfaEnabled && user.mfaTotpSecretEnc)) {
+  if (!activeOrgId) {
     return false;
   }
 
   const role =
     auth.orgRole ??
     (await databaseAdapter.getOrgMember(activeOrgId, auth.user.id))?.role;
-  if (!role) {
-    return false;
-  }
 
-  const policy = await loadMfaPolicy();
-  return (
-    policy.enabled && policy.required && policy.enforcedRoles.includes(role)
-  );
+  return role ? policy.enforcedRoles.includes(role) : false;
 }
 
 export async function authenticateRequest(
@@ -211,37 +231,22 @@ export async function authenticateRequest(
   databaseAdapter: DatabaseAdapter
 ): Promise<RequestAuthContext | null> {
   const authHeader = request.headers.get("Authorization");
+
   if (authHeader?.startsWith("Bearer ")) {
     const token = authHeader.slice(7).trim();
-    const apiKey = await resolveApiKey(token, authService, databaseAdapter);
-    if (apiKey) {
-      const user = await databaseAdapter.getUserById(apiKey.createdByUserId);
-      if (!user || user.disabledAt) {
-        return null;
-      }
-
-      await databaseAdapter.updateApiKeyLastUsedAt(
-        apiKey.id,
-        new Date().toISOString()
-      );
-      return {
-        activeOrgId: apiKey.orgId,
-        isPlatformAdmin: false,
-        mode: "api-key",
-        user: toAuthUser(user),
-      };
-    }
-
     const payload = await verifyLocalAuthToken(token);
+
     if (!payload) {
       return null;
     }
 
     let user = await databaseAdapter.getUserByEmail(payload.email);
+
     if (payload.email === LOCAL_CLIENT_EMAIL) {
       await ensureLocalClientAccess(databaseAdapter);
       user = await databaseAdapter.getUserByEmail(payload.email);
     }
+
     if (!user || user.disabledAt) {
       return null;
     }
@@ -253,7 +258,11 @@ export async function authenticateRequest(
     };
   }
 
-  const sessionToken = getRequestTokenFromCookies(request, SESSION_COOKIE_NAME);
+  const sessionToken = getRequestTokenFromCookies(
+    request,
+    resolveBrowserSessionCookieNames(isSecureRequest(request)).session
+  );
+
   if (!sessionToken) {
     const anthropicApiKey = request.headers.get("x-api-key")?.trim();
 
@@ -282,8 +291,10 @@ export async function authenticateRequest(
   }
 
   const sessionTokenHash = authService.hashToken(sessionToken);
+
   const session =
     await databaseAdapter.getBrowserSessionBySessionTokenHash(sessionTokenHash);
+
   if (!session || session.revokedAt) {
     return null;
   }
@@ -293,6 +304,7 @@ export async function authenticateRequest(
   }
 
   const user = await databaseAdapter.getUserById(session.userId);
+
   if (!user || user.disabledAt) {
     return null;
   }
@@ -310,29 +322,6 @@ export async function authenticateRequest(
   };
 }
 
-async function resolveApiKey(
-  token: string,
-  authService: AuthService,
-  databaseAdapter: DatabaseAdapter
-): Promise<StoredApiKeyRecord | null> {
-  const match = /^nk_(test|live)_([a-f0-9]{64})$/.exec(token);
-  if (!match) {
-    return null;
-  }
-
-  const keyPrefix = `nk_${match[1]}_${match[2].slice(0, 12)}`;
-  const record = await databaseAdapter.getApiKeyByPrefix(keyPrefix);
-  if (
-    !record ||
-    record.revokedAt ||
-    (record.expiresAt && new Date(record.expiresAt).getTime() <= Date.now())
-  ) {
-    return null;
-  }
-
-  return authService.hashToken(token) === record.secretHash ? record : null;
-}
-
 export function assertBrowserCsrf(
   request: Request,
   auth: RequestAuthContext,
@@ -342,7 +331,11 @@ export function assertBrowserCsrf(
     return;
   }
 
-  const csrfToken = getRequestTokenFromCookies(request, CSRF_COOKIE_NAME);
+  const csrfToken = getRequestTokenFromCookies(
+    request,
+    resolveBrowserSessionCookieNames(isSecureRequest(request)).csrf
+  );
+
   const csrfHeader = request.headers.get(CSRF_HEADER_NAME);
 
   if (!(csrfToken && csrfHeader) || csrfToken !== csrfHeader.trim()) {
@@ -360,15 +353,18 @@ function applyBrowserSessionCookies(
   csrfToken: string,
   request: Request
 ): void {
+  const secure = isSecureRequest(request);
+  const names = resolveBrowserSessionCookieNames(secure);
+
   const cookieBase = {
     path: "/",
     sameSite: "Lax" as const,
-    secure: isSecureRequest(request),
+    secure,
   };
 
   appendSetCookie(
     headers,
-    buildCookie(SESSION_COOKIE_NAME, sessionToken, {
+    buildCookie(names.session, sessionToken, {
       ...cookieBase,
       httpOnly: true,
       maxAge: SESSION_COOKIE_MAX_AGE_SECONDS,
@@ -377,10 +373,40 @@ function applyBrowserSessionCookies(
 
   appendSetCookie(
     headers,
-    buildCookie(CSRF_COOKIE_NAME, csrfToken, {
+    buildCookie(names.csrf, csrfToken, {
       ...cookieBase,
       maxAge: SESSION_COOKIE_MAX_AGE_SECONDS,
     })
+  );
+
+  if (secure) {
+    // Drop the pre-migration unprefixed cookies so a host-only legacy cookie
+    // stops shadowing the host-bound one after the upgrade.
+    clearLegacyBrowserSessionCookies(headers);
+  }
+}
+
+function clearLegacyBrowserSessionCookies(headers: Headers): void {
+  // A browser matches a clear by name, domain and path, so one Secure clear
+  // from an HTTPS response removes the cookie whichever Secure flag the
+  // pre-migration copy was stored with.
+  const cookieBase = {
+    maxAge: 0,
+    path: "/",
+    sameSite: "Lax" as const,
+    secure: true,
+  };
+
+  appendSetCookie(
+    headers,
+    buildCookie(LEGACY_COOKIE_NAMES.session, "", {
+      ...cookieBase,
+      httpOnly: true,
+    })
+  );
+  appendSetCookie(
+    headers,
+    buildCookie(LEGACY_COOKIE_NAMES.csrf, "", { ...cookieBase })
   );
 }
 
@@ -396,6 +422,7 @@ export async function createBrowserSessionResponse(
 }> {
   const now = new Date().toISOString();
   const session = authService.createBrowserSessionTokens();
+
   const record: StoredBrowserSessionRecord = {
     activeOrgId: options.activeOrgId ?? null,
     createdAt: now,
@@ -426,30 +453,40 @@ export async function createBrowserSessionResponse(
 }
 
 export function clearBrowserSessionCookies(headers: Headers): void {
-  const cookieBase = {
-    path: "/",
-    sameSite: "Lax" as const,
-  };
+  const cookieBase = { maxAge: 0, path: "/", sameSite: "Lax" as const };
+
+  // `__Host-` cookies are Secure by definition, and browsers ignore them on
+  // http:// origins, so these clears are emitted unconditionally.
+  appendSetCookie(
+    headers,
+    buildCookie(HOST_BOUND_COOKIE_NAMES.session, "", {
+      ...cookieBase,
+      httpOnly: true,
+      secure: true,
+    })
+  );
+  appendSetCookie(
+    headers,
+    buildCookie(HOST_BOUND_COOKIE_NAMES.csrf, "", {
+      ...cookieBase,
+      secure: true,
+    })
+  );
 
   // Clear both Secure and non-Secure variants so logout still works if the
   // Secure decision differs between login and logout (proxy header drift).
   for (const secure of [true, false] as const) {
     appendSetCookie(
       headers,
-      buildCookie(SESSION_COOKIE_NAME, "", {
+      buildCookie(LEGACY_COOKIE_NAMES.session, "", {
         ...cookieBase,
         httpOnly: true,
-        maxAge: 0,
         secure,
       })
     );
     appendSetCookie(
       headers,
-      buildCookie(CSRF_COOKIE_NAME, "", {
-        ...cookieBase,
-        maxAge: 0,
-        secure,
-      })
+      buildCookie(LEGACY_COOKIE_NAMES.csrf, "", { ...cookieBase, secure })
     );
   }
 }
@@ -476,20 +513,24 @@ export async function readJson<T>(
   schema?: ZodType<T>
 ): Promise<T> {
   try {
-    const body = (await request.json()) as unknown;
+    const body = await request.json();
+
     if (!schema) {
-      return body as T;
+      return body;
     }
 
     const parsed = schema.safeParse(body);
+
     if (!parsed.success) {
       throw new NakamaApiError("Invalid request body.", 400);
     }
+
     return parsed.data;
   } catch (err) {
     if (err instanceof SyntaxError) {
       throw new NakamaApiError("Invalid JSON in request body.", 400);
     }
+
     throw err;
   }
 }
@@ -501,31 +542,54 @@ export function parseOptionalQueryEnum<const T extends string>(
   if (value === undefined) {
     return undefined;
   }
-  if (allowed.includes(value as T)) {
-    return value as T;
+
+  const parsed = allowed.find((candidate) => candidate === value);
+
+  if (parsed !== undefined) {
+    return parsed;
   }
+
   throw new NakamaApiError("Invalid query parameter.", 400);
 }
 
 export async function readOptionalJson<T>(
   request: Request,
-  fallback: T
+  fallback: T,
+  schema?: ZodType<T>
 ): Promise<T> {
   const body = await request.text();
+
   if (!body.trim()) {
     return fallback;
   }
 
   try {
-    return JSON.parse(body) as T;
-  } catch {
-    throw new NakamaApiError("Invalid JSON in request body.", 400);
+    const value = JSON.parse(body);
+
+    if (!schema) {
+      return value;
+    }
+
+    const parsed = schema.safeParse(value);
+
+    if (!parsed.success) {
+      throw new NakamaApiError("Invalid request body.", 400);
+    }
+
+    return parsed.data;
+  } catch (err) {
+    if (err instanceof SyntaxError) {
+      throw new NakamaApiError("Invalid JSON in request body.", 400);
+    }
+
+    throw err;
   }
 }
 
 export function json<T>(body: T, status = 200, headers?: Headers): Response {
   const responseHeaders = new Headers(headers);
   responseHeaders.set("Content-Type", "application/json; charset=utf-8");
+
   return Response.json(body, { headers: responseHeaders, status });
 }
 
@@ -582,23 +646,23 @@ const CHANNEL_LIST = `${AGENT_CHANNELS.slice(0, -1).join(", ")}, or ${
 }`;
 
 export function parseChannel(value: string | undefined): AgentChannel {
-  if (value !== undefined && AGENT_CHANNELS.includes(value as AgentChannel)) {
-    return value as AgentChannel;
+  const channel = AGENT_CHANNELS.find((candidate) => candidate === value);
+
+  if (channel !== undefined) {
+    return channel;
   }
 
   throw new NakamaApiError(`Invalid channel. Expected ${CHANNEL_LIST}.`, 400);
 }
 
 const STREAM_TIMEOUT_MS = resolveChatStreamTimeoutMs();
+
 const FIRST_TOKEN_TIMEOUT_MS = resolveChatFirstTokenTimeoutMs();
 
 function createStreamSenders(
   sessionId: string,
   enqueue: (chunk: Uint8Array) => void
-): {
-  send: (event: StreamEvent) => void;
-  getTerminal: () => StreamEvent | null;
-} {
+) {
   let terminal: StreamEvent | null = null;
 
   const send = (event: StreamEvent) => {
@@ -636,8 +700,10 @@ function buildAgentStreamHandlers(send: (event: StreamEvent) => void) {
       toolCallId: string;
       tool: string;
       result: unknown;
+      images?: ImageAttachment[];
     }) => {
       send({
+        images: event.images,
         result: event.result,
         tool: event.tool,
         toolCallId: event.toolCallId,
@@ -646,18 +712,21 @@ function buildAgentStreamHandlers(send: (event: StreamEvent) => void) {
       });
 
       if (event.tool === "todo_write") {
-        const todos = readTodosFromToolResult(event.result);
+        const parsed = agentTodoResultSchema.safeParse(event.result);
 
-        if (todos) {
-          send({ todos, type: "todos_updated" });
+        if (parsed.success) {
+          send({ todos: parsed.data.todos, type: "todos_updated" });
         }
       }
 
       if (event.tool === "ask_user_question") {
-        const questionnaire = readQuestionnaireFromToolResult(event.result);
+        const parsed = questionnaireResultSchema.safeParse(event.result);
 
-        if (questionnaire) {
-          send({ questionnaire, type: "questionnaire_updated" });
+        if (parsed.success) {
+          send({
+            questionnaire: parsed.data.questionnaire,
+            type: "questionnaire_updated",
+          });
         }
       }
     },
@@ -680,7 +749,7 @@ function buildAgentStreamHandlers(send: (event: StreamEvent) => void) {
       toolGroupId?: string;
       toolCallId: string;
       tool: string;
-      input: Record<string, unknown>;
+      input: Extract<StreamEvent, { type: "tool_start" }>["input"];
     }) =>
       send({
         input: event.input,
@@ -720,6 +789,7 @@ export function streamTurnSubscribe(sessionId: string): Response | null {
 
       if (!subscription) {
         controller.close();
+
         return;
       }
 
@@ -745,14 +815,18 @@ export function streamTurnSubscribe(sessionId: string): Response | null {
 
 export function streamMessage(
   sessionId: string,
-  session: AgentChatSession,
+  session: Pick<
+    AgentChatSession,
+    "getContextUsage" | "getTurnUsage" | "sendStream"
+  >,
   input: SendMessageInput,
   onComplete?: (terminal: StreamEvent) => void,
   requestSignal?: AbortSignal,
   // Only tests pass these. The resolved values clamp to 60s and 5s minimums,
   // which are far too long to wait for in a suite.
   timeoutMs: number = STREAM_TIMEOUT_MS,
-  firstTokenTimeoutMs: number = FIRST_TOKEN_TIMEOUT_MS
+  firstTokenTimeoutMs: number = FIRST_TOKEN_TIMEOUT_MS,
+  whatsappMessage?: ToolContext["whatsappMessage"]
 ): Response {
   const encoder = new TextEncoder();
   const keepaliveIntervalMs = 4000;
@@ -762,6 +836,7 @@ export function streamMessage(
   // runs to completion and endTurn is late, which is what returned 409 to the next
   // message in the session.
   const turnAbort = new AbortController();
+
   const turnSignal = requestSignal
     ? AbortSignal.any([turnAbort.signal, requestSignal])
     : turnAbort.signal;
@@ -782,6 +857,7 @@ export function streamMessage(
       // keepalive below deliberately does not go through here: it is the
       // server's own ping and says nothing about whether the provider is alive.
       let sawProviderOutput = false;
+
       const send = (event: StreamEvent) => {
         sawProviderOutput = true;
         publish(event);
@@ -823,6 +899,7 @@ export function streamMessage(
         const raced: Promise<string>[] = [
           session.sendStream(input, buildAgentStreamHandlers(send), {
             signal: turnSignal,
+            whatsappMessage,
           }),
           failAfter(
             timeoutMs,
@@ -844,14 +921,24 @@ export function streamMessage(
 
         const contextUsage = session.getContextUsage() ?? undefined;
         const usage = session.getTurnUsage() ?? undefined;
-        send({
+
+        const doneEvent: Extract<StreamEvent, { type: "done" }> = {
           reply,
           type: "done",
-          ...(contextUsage ? { contextUsage } : {}),
-          ...(usage ? { usage } : {}),
-        });
+        };
+
+        if (contextUsage) {
+          doneEvent.contextUsage = contextUsage;
+        }
+
+        if (usage) {
+          doneEvent.usage = usage;
+        }
+
+        send(doneEvent);
       } catch (error) {
         const cancelled = turnSignal.aborted && !timedOut;
+
         // The first-token timeout is a NakamaApiError 504, and it is exactly the
         // failure an operator needs, so only a 4xx refusal is skipped.
         if (
@@ -863,29 +950,39 @@ export function streamMessage(
           // The stream already told the user; without this the operator never hears.
           void reportError(error, { kind: "turn", source: "server" });
         }
+
         // The provider charged for the calls that did land, so a failed turn
         // still reports them rather than billing silently. Wrapped because a
         // throw here would replace the real failure with a blank one.
         let spent: ChatTurnUsage | undefined;
+
         try {
           spent = session.getTurnUsage() ?? undefined;
         } catch {
           spent = undefined;
         }
-        send({
+
+        const errorEvent: Extract<StreamEvent, { type: "error" }> = {
           error: cancelled ? "Turn cancelled." : formatServerError(error),
           type: "error",
-          ...(spent ? { usage: spent } : {}),
-        });
+        };
+
+        if (spent) {
+          errorEvent.usage = spent;
+        }
+
+        send(errorEvent);
       } finally {
         // Every turn scheduled these. Left pending, a long-running server
         // accumulates live timers per turn for the whole timeout window.
         for (const handle of deadlines) {
           clearTimeout(handle);
         }
+
         clearInterval(keepalive);
 
         const observedTerminal = getTerminal();
+
         if (!observedTerminal) {
           console.warn(
             `Session ${sessionId}: Stream closed before the agent finished.`
@@ -900,11 +997,13 @@ export function streamMessage(
           } satisfies StreamEvent);
 
         sessionTurnRegistry.endTurn(sessionId, terminal);
+
         try {
           controller.close();
         } catch {
           // Already closed by the client cancelling the stream.
         }
+
         onComplete?.(terminal);
       }
     },
@@ -919,124 +1018,28 @@ export function streamMessage(
   });
 }
 
-function readTodosFromToolResult(result: unknown): AgentTodo[] | null {
-  if (typeof result !== "object" || result === null || !("todos" in result)) {
-    return null;
-  }
+const agentTodoResultSchema = z.object({
+  todos: z.array(
+    z.object({
+      content: z.string(),
+      id: z.string(),
+      status: z.enum(["pending", "in_progress", "completed", "cancelled"]),
+    })
+  ),
+});
 
-  const todos = (result as { todos?: unknown }).todos;
-
-  if (!Array.isArray(todos)) {
-    return null;
-  }
-
-  const parsed: AgentTodo[] = [];
-
-  for (const item of todos) {
-    if (typeof item !== "object" || item === null) {
-      return null;
-    }
-
-    const record = item as Record<string, unknown>;
-
-    if (
-      typeof record.id !== "string" ||
-      typeof record.content !== "string" ||
-      typeof record.status !== "string"
-    ) {
-      return null;
-    }
-
-    parsed.push({
-      content: record.content,
-      id: record.id,
-      status: record.status as AgentTodo["status"],
-    });
-  }
-
-  return parsed;
-}
-
-function readQuestionnaireFromToolResult(
-  result: unknown
-): AgentQuestionnaire | null {
-  if (
-    typeof result !== "object" ||
-    result === null ||
-    !("questionnaire" in result)
-  ) {
-    return null;
-  }
-
-  const questionnaire = (result as { questionnaire?: unknown }).questionnaire;
-
-  if (typeof questionnaire !== "object" || questionnaire === null) {
-    return null;
-  }
-
-  const record = questionnaire as Record<string, unknown>;
-
-  if (
-    typeof record.id !== "string" ||
-    typeof record.title !== "string" ||
-    !Array.isArray(record.questions)
-  ) {
-    return null;
-  }
-
-  const questions = record.questions.map((item) => {
-    if (typeof item !== "object" || item === null) {
-      return null;
-    }
-
-    const question = item as Record<string, unknown>;
-
-    if (
-      typeof question.id !== "string" ||
-      typeof question.prompt !== "string" ||
-      typeof question.allowCustomAnswer !== "boolean" ||
-      !Array.isArray(question.choices)
-    ) {
-      return null;
-    }
-
-    const choices = question.choices.map((choice) => {
-      if (typeof choice !== "object" || choice === null) {
-        return null;
-      }
-
-      const value = choice as Record<string, unknown>;
-
-      if (typeof value.id !== "string" || typeof value.label !== "string") {
-        return null;
-      }
-
-      return { id: value.id, label: value.label };
-    });
-
-    if (choices.some((choice) => choice === null)) {
-      return null;
-    }
-
-    return {
-      allowCustomAnswer: question.allowCustomAnswer,
-      choices: choices as AgentQuestionnaire["questions"][number]["choices"],
-      id: question.id,
-      placeholder:
-        typeof question.placeholder === "string"
-          ? question.placeholder
-          : undefined,
-      prompt: question.prompt,
-    };
-  });
-
-  if (questions.some((question) => question === null)) {
-    return null;
-  }
-
-  return {
-    id: record.id,
-    questions: questions as AgentQuestionnaire["questions"],
-    title: record.title,
-  };
-}
+const questionnaireResultSchema = z.object({
+  questionnaire: z.object({
+    id: z.string(),
+    questions: z.array(
+      z.object({
+        allowCustomAnswer: z.boolean(),
+        choices: z.array(z.object({ id: z.string(), label: z.string() })),
+        id: z.string(),
+        placeholder: z.string().optional(),
+        prompt: z.string(),
+      })
+    ),
+    title: z.string(),
+  }),
+});

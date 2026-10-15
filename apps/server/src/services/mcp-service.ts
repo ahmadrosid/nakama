@@ -21,7 +21,10 @@ import type {
   StoredProfileRecord,
 } from "@nakama/db";
 import {
+  isMcpReconnectableError,
+  type JsonValue,
   type McpClientManager,
+  type McpToolArguments,
   toCachedMcpToolSummaries,
 } from "./mcp-client-manager";
 import {
@@ -55,14 +58,19 @@ function buildOAuthProvider(
   options: McpConnectOptions,
   persist: (grant: McpOAuthGrant) => Promise<void>
 ): McpServerOAuthProvider | undefined {
-  if (server.transport !== "http" || !options.callbackBaseUrl) {
+  const grant = readMcpOAuthGrant(server.config);
+  // A reconnect has no request to read an origin from; the grant remembers the
+  // one it was issued for, and a token refresh needs no redirect anyway.
+  const callbackBaseUrl = options.callbackBaseUrl ?? grant?.callbackBaseUrl;
+
+  if (server.transport !== "http" || !callbackBaseUrl) {
     return;
   }
 
   const provider = new McpServerOAuthProvider(
     server.id,
-    options.callbackBaseUrl,
-    readMcpOAuthGrant(server.config),
+    callbackBaseUrl,
+    grant,
     persist
   );
 
@@ -73,12 +81,21 @@ function buildOAuthProvider(
   return provider;
 }
 
-function withOAuthGrant(config: unknown, grant?: McpOAuthGrant): unknown {
+function withOAuthGrant(
+  config: StoredMcpServerRecord["config"],
+  grant?: McpOAuthGrant
+) {
   if (!grant) {
     return config;
   }
 
-  return { ...(config as StoredMcpHttpConfig), oauth: grant };
+  const record = readUnknownRecord(config);
+
+  if (!record?.has("url")) {
+    throw new Error("OAuth grants require an HTTP MCP server config.");
+  }
+
+  return { ...Object.fromEntries(record), oauth: grant };
 }
 
 export class McpService {
@@ -93,7 +110,10 @@ export class McpService {
 
     return {
       servers: servers.map((server) =>
-        toMcpServerSummary(server, profileCounts[server.id] ?? 0)
+        toMcpServerSummary(
+          this.withLiveStatus(server),
+          profileCounts[server.id] ?? 0
+        )
       ),
     };
   }
@@ -102,7 +122,12 @@ export class McpService {
     const server = await this.requireServer(serverId);
     const profileCounts = await this.db.listMcpServerProfileCounts();
 
-    return { server: toMcpServerDetail(server, profileCounts[serverId] ?? 0) };
+    return {
+      server: toMcpServerDetail(
+        this.withLiveStatus(server),
+        profileCounts[serverId] ?? 0
+      ),
+    };
   }
 
   async createServer(
@@ -125,6 +150,7 @@ export class McpService {
     }
 
     const now = new Date().toISOString();
+
     let record: StoredMcpServerRecord = {
       cachedTools: [],
       config: request.config,
@@ -144,19 +170,23 @@ export class McpService {
       // A grant started here has no row to write to yet, so it is captured and
       // stored with the record below.
       let grant: McpOAuthGrant | undefined;
+
       const provider = buildOAuthProvider(record, options, async (next) => {
         grant = next;
       });
 
       try {
-        const cachedTools = await this.manager.connect(record, {
-          ...(provider ? { authProvider: provider } : {}),
-        });
+        const cachedTools = await this.manager.connect(
+          record,
+          provider ? { authProvider: provider } : undefined
+        );
+
         record = { ...record, cachedTools, status: "connected" };
       } catch (error) {
         if (!provider?.authorizationUrl) {
           const message =
             error instanceof Error ? error.message : String(error);
+
           throw new NakamaApiError(
             `Could not connect MCP server "${name}": ${message}`,
             422
@@ -207,7 +237,9 @@ export class McpService {
 
     const transportChanged =
       request.transport !== undefined && request.transport !== server.transport;
+
     const transport = request.transport ?? server.transport;
+
     const config = request.config
       ? transportChanged
         ? request.config
@@ -237,7 +269,9 @@ export class McpService {
       JSON.stringify(server.config) !== JSON.stringify(config) ||
       server.transport !== transport;
 
-    if (configChanged) {
+    const enabledChanged = updated.enabled !== server.enabled;
+
+    if (configChanged || enabledChanged) {
       await this.manager.disconnect(serverId);
       updated.status = "disconnected";
       updated.lastError = null;
@@ -248,7 +282,7 @@ export class McpService {
     return this.getServer(serverId);
   }
 
-  async deleteServer(serverId: string): Promise<void> {
+  async deleteServer(serverId: string, force = false): Promise<void> {
     const server = await this.requireServer(serverId);
 
     if (isPreinstalledMcpServerId(server.id)) {
@@ -259,7 +293,7 @@ export class McpService {
 
     const profiles = await this.db.listProfilesForMcpServer(serverId);
 
-    if (profiles.length > 0) {
+    if (profiles.length > 0 && !force) {
       const profileRefs = toProfileRefs(profiles);
       throw new NakamaApiError(
         formatMcpServerInUseMessage(profileRefs),
@@ -293,9 +327,11 @@ export class McpService {
     );
 
     try {
-      const cachedTools = await this.manager.connect(server, {
-        ...(provider ? { authProvider: provider } : {}),
-      });
+      const cachedTools = await this.manager.connect(
+        server,
+        provider ? { authProvider: provider } : undefined
+      );
+
       const updated: StoredMcpServerRecord = {
         ...server,
         cachedTools,
@@ -313,6 +349,7 @@ export class McpService {
       // Re-read: the provider persisted the pending grant during the attempt,
       // and the record this method started from predates it.
       const stored = (await this.db.getMcpServer(serverId)) ?? server;
+
       const updated: StoredMcpServerRecord = {
         ...stored,
         lastError: authorizationUrl ? null : message,
@@ -351,6 +388,7 @@ export class McpService {
     // repeat that redirect_uri verbatim.
     const pending = readMcpOAuthGrant(server.config);
     const callbackBaseUrl = pending?.callbackBaseUrl ?? options.callbackBaseUrl;
+
     const provider = buildOAuthProvider(server, { callbackBaseUrl }, (grant) =>
       this.saveOAuthGrant(serverId, grant)
     );
@@ -359,9 +397,11 @@ export class McpService {
       throw new NakamaApiError(INVALID_OAUTH_CALLBACK_MESSAGE, 400);
     }
 
+    const config = resolveMcpConfig("http", server.config);
+
     const result = await auth(provider, {
       authorizationCode: options.code,
-      serverUrl: (server.config as StoredMcpHttpConfig).url,
+      serverUrl: config.url,
     });
 
     if (result !== "AUTHORIZED") {
@@ -394,6 +434,7 @@ export class McpService {
   ): Promise<McpServerResponse> {
     await this.requireServer(serverId);
     await this.manager.disconnect(serverId);
+
     return this.connectServer(serverId, options);
   }
 
@@ -403,6 +444,7 @@ export class McpService {
     serverId?: string
   ): Promise<TestMcpServerResponse> {
     const normalizedTransport = normalizeTransport(transport);
+
     const resolvedConfig = serverId
       ? mergeMcpConfig(
           normalizedTransport,
@@ -429,25 +471,119 @@ export class McpService {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+
       const requiresAuthorization =
         normalizedTransport === "http" &&
-        (await serverAdvertisesOAuth((resolvedConfig as McpHttpConfig).url));
+        "url" in resolvedConfig &&
+        (await serverAdvertisesOAuth(resolvedConfig.url));
 
-      return {
+      const response: TestMcpServerResponse = {
         error: requiresAuthorization ? AUTHORIZATION_REQUIRED_MESSAGE : message,
         ok: false,
-        ...(requiresAuthorization ? { requiresAuthorization } : {}),
         toolCount: 0,
         tools: [],
       };
+
+      if (requiresAuthorization) {
+        response.requiresAuthorization = true;
+      }
+
+      return response;
     }
+  }
+
+  /**
+   * Calls a tool on a profile's server, connecting first when the connection is
+   * missing or has dropped. Retries once on a new connection when the server
+   * did not run the request (for example it restarted and lost the session).
+   */
+  async callTool(
+    server: StoredMcpServerRecord,
+    toolName: string,
+    input: McpToolArguments,
+    orgId: string | undefined,
+    profileId: string
+  ): Promise<JsonValue> {
+    const stdio = server.transport === "stdio";
+
+    for (let attempt = 1; ; attempt++) {
+      await this.ensureConnected(server, orgId, profileId);
+
+      try {
+        return await this.manager.callTool(
+          server.id,
+          server.transport,
+          toolName,
+          input,
+          stdio ? profileId : undefined,
+          stdio ? orgId : undefined
+        );
+      } catch (error) {
+        if (attempt > 1 || !isMcpReconnectableError(error)) {
+          throw error;
+        }
+
+        await this.manager.dropConnection(
+          server.id,
+          server.transport,
+          stdio ? profileId : undefined,
+          stdio ? orgId : undefined
+        );
+      }
+    }
+  }
+
+  private async ensureConnected(
+    server: StoredMcpServerRecord,
+    orgId: string | undefined,
+    profileId: string
+  ): Promise<void> {
+    if (server.transport === "stdio") {
+      if (!orgId) {
+        throw new Error("Profile organization is missing for stdio MCP.");
+      }
+
+      await this.manager.ensureConnected(server, orgId, profileId);
+
+      return;
+    }
+
+    if (this.manager.isConnected(server.id, server.transport)) {
+      return;
+    }
+
+    if (server.status === "needs_auth") {
+      throw new Error(
+        `MCP server "${server.name}" needs sign-in. Connect it on the MCP page.`
+      );
+    }
+
+    await this.connectServer(server.id, { reauthorize: false });
+  }
+
+  /**
+   * The stored status is written at connect time. An HTTP connection lives in
+   * memory, so a restart or a dropped stream leaves the row saying connected.
+   */
+  private withLiveStatus(server: StoredMcpServerRecord): StoredMcpServerRecord {
+    if (
+      server.transport === "http" &&
+      server.status === "connected" &&
+      !this.manager.isConnected(server.id, server.transport)
+    ) {
+      return { ...server, status: "disconnected" };
+    }
+
+    return server;
   }
 
   async connectEnabledServers(options: McpConnectOptions = {}): Promise<void> {
     const servers = await this.db.listMcpServers();
 
     for (const server of servers) {
-      if (!server.enabled) {
+      if (!server.enabled || server.transport === "stdio") {
+        // Stdio connections are profile-scoped; defer them until a profile
+        // calls a tool.
         continue;
       }
 
@@ -570,14 +706,43 @@ function formatMcpServerInUseMessage(profiles: ProfileRef[]): string {
 const REDACTED_SECRET_VALUE = "••••••••";
 
 function resolveMcpConfig(
+  transport: "http",
+  config: StoredMcpServerRecord["config"]
+): StoredMcpHttpConfig;
+function resolveMcpConfig(
+  transport: "stdio",
+  config: StoredMcpServerRecord["config"]
+): McpStdioConfig;
+function resolveMcpConfig(
   transport: McpTransport,
-  config: unknown
+  config: StoredMcpServerRecord["config"]
+): McpServerConfig;
+function resolveMcpConfig(
+  transport: McpTransport,
+  config: StoredMcpServerRecord["config"]
 ): McpServerConfig {
-  if (typeof config !== "object" || config === null) {
-    return transport === "http" ? { url: "" } : { command: "" };
+  const record = readUnknownRecord(config);
+
+  if (transport === "http") {
+    const resolved: StoredMcpHttpConfig = {
+      headers: readStringRecord(record?.get("headers")),
+      url: readString(record?.get("url")) ?? "",
+    };
+
+    const grant = readMcpOAuthGrant(config);
+
+    if (grant) {
+      resolved.oauth = grant;
+    }
+
+    return resolved;
   }
 
-  return config as McpServerConfig;
+  return {
+    args: readStringArray(record?.get("args")),
+    command: readString(record?.get("command")) ?? "",
+    env: readStringRecord(record?.get("env")),
+  };
 }
 
 function mergeMcpConfig(
@@ -585,14 +750,15 @@ function mergeMcpConfig(
   previous: McpServerConfig,
   next: McpServerConfig
 ): McpServerConfig {
-  if (transport === "http") {
-    return mergeMcpHttpConfig(previous as McpHttpConfig, next as McpHttpConfig);
+  if (transport === "http" && "url" in previous && "url" in next) {
+    return mergeMcpHttpConfig(previous, next);
   }
 
-  return mergeMcpStdioConfig(
-    previous as McpStdioConfig,
-    next as McpStdioConfig
-  );
+  if ("command" in previous && "command" in next) {
+    return mergeMcpStdioConfig(previous, next);
+  }
+
+  throw invalidMcpServerRequest("MCP server config does not match transport.");
 }
 
 function mergeMcpHttpConfig(
@@ -604,11 +770,16 @@ function mergeMcpHttpConfig(
   // moving the server somewhere else.
   const grant = url === previous.url ? readMcpOAuthGrant(previous) : undefined;
 
-  return {
+  const merged: StoredMcpHttpConfig = {
     headers: mergeRedactedStringRecord(previous.headers, next.headers),
     url,
-    ...(grant ? { oauth: grant } : {}),
   };
+
+  if (grant) {
+    merged.oauth = grant;
+  }
+
+  return merged;
 }
 
 function mergeMcpStdioConfig(
@@ -675,34 +846,31 @@ function normalizeStringArray(
   }
 
   const items = value.map((entry) => entry.trim()).filter(Boolean);
+
   return items.length > 0 ? items : undefined;
 }
 
-function redactMcpConfig(
+function redactMcpConfig<T>(
   transport: McpTransport,
-  config: unknown
+  config: T
 ): McpServerConfig {
-  if (transport === "stdio") {
-    const stdio =
-      typeof config === "object" && config !== null
-        ? (config as McpStdioConfig)
-        : { command: "" };
+  const parsed = resolveMcpConfig(transport, config);
 
+  if (transport === "stdio" && "command" in parsed) {
     return {
-      args: stdio.args,
-      command: stdio.command,
-      env: redactStringRecord(stdio.env),
+      args: parsed.args,
+      command: parsed.command,
+      env: redactStringRecord(parsed.env),
     };
   }
 
-  const http =
-    typeof config === "object" && config !== null
-      ? (config as McpHttpConfig)
-      : { url: "" };
+  if (!("url" in parsed)) {
+    return { command: "" };
+  }
 
   return {
-    headers: redactStringRecord(http.headers),
-    url: http.url,
+    headers: redactStringRecord(parsed.headers),
+    url: parsed.url,
   };
 }
 
@@ -746,17 +914,14 @@ function validateTransport(
   normalizeTransport(transport);
 }
 
-function validateConfig(transport: McpTransport, config: unknown): void {
-  if (typeof config !== "object" || config === null) {
-    throw invalidMcpServerRequest("MCP server config is required.");
-  }
-
-  const record = config as Record<string, unknown>;
-
+function validateConfig(
+  transport: McpTransport,
+  config: McpServerConfig
+): void {
   if (transport === "http") {
-    const url = record.url;
+    const url = "url" in config ? config.url : undefined;
 
-    if (typeof url !== "string" || !url.trim()) {
+    if (!(isString(url) && url.trim())) {
       throw invalidMcpServerRequest("HTTP MCP servers require config.url.");
     }
 
@@ -769,15 +934,66 @@ function validateConfig(transport: McpTransport, config: unknown): void {
     return;
   }
 
-  const command = record.command;
+  const command = "command" in config ? config.command : undefined;
 
-  if (typeof command !== "string" || !command.trim()) {
+  if (!(isString(command) && command.trim())) {
     throw invalidMcpServerRequest("stdio MCP servers require config.command.");
   }
+}
+
+function readUnknownRecord<T>(value: T): Map<string, unknown> | undefined {
+  if (!(value instanceof Object)) {
+    return;
+  }
+
+  return new Map(Object.entries(value));
+}
+
+function readString<T>(value: T): (T & string) | undefined {
+  // SAFETY: The object tag check confirms the input uses the string representation.
+  return Object.prototype.toString.call(value) === "[object String]"
+    ? (value as T & string)
+    : undefined;
+}
+
+function readStringRecord<T>(value: T): Record<string, string> | undefined {
+  const record = readUnknownRecord(value);
+
+  if (!record) {
+    return;
+  }
+
+  const result: Record<string, string> = {};
+
+  for (const [key, entry] of record) {
+    const parsed = readString(entry);
+
+    if (parsed !== undefined) {
+      result[key] = parsed;
+    }
+  }
+
+  return result;
+}
+
+function readStringArray<T>(value: T): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return;
+  }
+
+  return value.flatMap((entry) => {
+    const parsed = readString(entry);
+
+    return parsed === undefined ? [] : [parsed];
+  });
 }
 
 export function toMcpServerSummaries(
   servers: StoredMcpServerRecord[]
 ): McpServerSummary[] {
   return servers.map((server) => toMcpServerSummary(server));
+}
+
+function isString<T>(value: T): value is T & string {
+  return Object.prototype.toString.call(value) === "[object String]";
 }

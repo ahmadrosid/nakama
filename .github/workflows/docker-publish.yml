@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    # Desktop version bumps publish through desktop-v* tags instead.
+    paths-ignore: ['apps/desktop/package.json']
     tags:
       - "v*"
 
@@ -54,7 +56,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Download shared assets
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: build-assets
           path: build-assets
@@ -70,6 +72,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push ${{ matrix.arch }}
+        id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -79,6 +82,30 @@ jobs:
           tags: ghcr.io/${{ github.repository }}:build-${{ github.sha }}-${{ matrix.arch }}
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,scope=${{ matrix.arch }},mode=max
+          # Runtime dependencies install from the committed lockfile, so the
+          # image is describable: attach an SBOM attestation and keep the
+          # content digest beside it.
+          sbom: true
+          provenance: mode=max
+
+      - name: Publish SBOM and record the image digest
+        run: |
+          image="ghcr.io/${{ github.repository }}:build-${{ github.sha }}-${{ matrix.arch }}"
+          docker buildx imagetools inspect "$image" --format '{{ json .SBOM }}' \
+            > "sbom-${{ matrix.arch }}.json"
+          {
+            echo "### ${{ matrix.arch }}"
+            echo "- image: \`$image\`"
+            echo "- digest: \`${{ steps.build.outputs.digest }}\`"
+            echo "- SBOM: \`sbom-${{ matrix.arch }}.json\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom-${{ matrix.arch }}
+          path: sbom-${{ matrix.arch }}.json
+          if-no-files-found: error
 
   publish:
     needs: build-images
@@ -111,9 +138,17 @@ jobs:
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           args=()
+          tags=()
           while IFS= read -r tag; do
-            [ -z "$tag" ] || args+=(-t "$tag")
+            [ -z "$tag" ] || { args+=(-t "$tag"); tags+=("$tag"); }
           done <<< "$TAGS"
           docker buildx imagetools create "${args[@]}" \
             "$IMAGE:build-${{ github.sha }}-amd64" \
             "$IMAGE:build-${{ github.sha }}-arm64"
+          digest="$(docker buildx imagetools inspect "${tags[0]}" \
+            --format '{{ .Manifest.Digest }}')"
+          {
+            echo "### Published runtime image"
+            echo "- tags: \`${tags[*]}\`"
+            echo "- digest: \`$digest\`"
+          } >> "$GITHUB_STEP_SUMMARY"

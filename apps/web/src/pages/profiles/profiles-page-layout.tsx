@@ -1,5 +1,10 @@
+import { NakamaApiError } from "@nakama/core/api-error";
+import { Button } from "@nakama/ui/button";
+import { SquareLock02Icon } from "hugeicons-react";
+import { Link } from "react-router-dom";
 import { useAuth } from "@/context/use-auth";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
+import { PAGE_PATHS, teamDetailPath } from "@/lib/navigation";
 import { resolveSuperBotChatProfileId } from "@/lib/profiles";
 import { ProfileConfigTab } from "@/pages/profiles/profile-config-tab";
 import { PageState, ProfilesEmptyState } from "@/pages/profiles/profiles-ui";
@@ -13,6 +18,7 @@ function useProfilesPageLayoutMeta(state: ProfilesPageState) {
   const canPack = isOrgAdmin || canCreateProfile;
   const { navigateToNewChat } = useAppNavigation();
   const superBotProfileId = resolveSuperBotChatProfileId(profiles);
+
   const onAskSuperBot = superBotProfileId
     ? () => navigateToNewChat(superBotProfileId)
     : undefined;
@@ -56,6 +62,61 @@ function ProfilesPageError({
   );
 }
 
+function isForbiddenError(error: Error | null): boolean {
+  return error instanceof NakamaApiError && error.status === 403;
+}
+
+function ProfileForbiddenState() {
+  const { activeOrg } = useAuth();
+  const role = activeOrg?.role === "admin" ? "Admin" : "Member";
+
+  return (
+    <div
+      aria-labelledby="profile-forbidden-title"
+      className="flex min-h-[min(24rem,60dvh)] flex-col items-center justify-center gap-6 px-4 py-10 text-center sm:px-6"
+      role="status"
+    >
+      <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl border border-border bg-muted/40">
+        <SquareLock02Icon
+          aria-hidden
+          className="size-6 text-muted-foreground"
+        />
+      </div>
+
+      <div className="max-w-sm space-y-1.5">
+        <p
+          className="type-section-title font-medium text-foreground"
+          id="profile-forbidden-title"
+        >
+          You can't open this agent
+        </p>
+        <p className="type-body text-muted-foreground text-sm">
+          Your role in{" "}
+          <span className="font-medium text-foreground">
+            {activeOrg?.name ?? "this team"}
+          </span>{" "}
+          is {role}. Ask the owner or an admin to share it with you.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <Button render={<Link to={PAGE_PATHS.chat} />} type="button">
+          Back to chat
+        </Button>
+        {activeOrg ? (
+          <Button
+            render={<Link to={teamDetailPath(activeOrg.id)} />}
+            type="button"
+            variant="outline"
+          >
+            See admins
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function ProfilesMainSection({
   state,
   canCreateProfile,
@@ -75,7 +136,12 @@ function ProfilesMainSection({
     detailLoading,
     setCreateOpen,
     setImportOpen,
+    detailError,
   } = state;
+
+  if (selectedId && isForbiddenError(detailError)) {
+    return <ProfileForbiddenState />;
+  }
 
   if (profiles.length === 0) {
     return (
@@ -118,7 +184,15 @@ function ProfilesMainSection({
 }
 
 export function ProfilesPageLayout(state: ProfilesPageState) {
-  const { profiles, profilesLoading, error, selectedId, refetchDetail } = state;
+  const {
+    profiles,
+    profilesLoading,
+    error,
+    selectedId,
+    refetchDetail,
+    detailError,
+  } = state;
+
   const { canCreateProfile, canPack, onAskSuperBot } =
     useProfilesPageLayoutMeta(state);
 
@@ -129,7 +203,7 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
   return (
     <div className="space-y-4">
       <ProfilesPageError
-        error={error}
+        error={isForbiddenError(detailError) ? null : error}
         onRetry={() => void refetchDetail()}
         selectedId={selectedId}
       />

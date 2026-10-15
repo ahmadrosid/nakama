@@ -9,7 +9,7 @@ Nakama is a multi-tenant Bun + TypeScript platform for running AI agent teams (o
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) 1.3+
+- [Bun](https://bun.sh) 1.4+
 - git
 - [GitHub CLI](https://cli.github.com/) (`gh`) for opening PRs
 
@@ -44,13 +44,14 @@ See [AGENTS.md](./AGENTS.md) for Docker run/build scripts and deeper layout note
 
 ## Choosing an issue
 
-Three searches, depending on what you are after:
+Four searches, depending on what you are after:
 
 | Search | What is in it |
 |---|---|
 | [`good first issue`](https://github.com/ahmadrosid/nakama/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) | small and self-contained |
 | [`stage: now`](https://github.com/ahmadrosid/nakama/issues?q=is%3Aissue+is%3Aopen+label%3A%22stage%3A+now%22) | design settled, ready to build |
 | [`help wanted`, unassigned](https://github.com/ahmadrosid/nakama/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22+no%3Aassignee) | the team wants outside help, and it fits in one PR. Empty means everything labelled that way is already claimed |
+| [`stale` PRs](https://github.com/ahmadrosid/nakama/pulls?q=is%3Apr+is%3Aopen+label%3Astale) | reviewed, then the author went quiet. Anyone may finish one, see [When work goes quiet](#when-work-goes-quiet) |
 
 A triaged issue carries four labels, and each answers a different question:
 
@@ -64,6 +65,21 @@ A triaged issue carries four labels, and each answers a different question:
 Read `stage:` before you start. `stage: now` is ready. `stage: next` is sized but waits for a version cut. `stage: later` still has an open question in the thread, so ask there first, because a PR that guesses the answer usually gets closed.
 
 Hit a bug that has no issue? Open one with the [issue templates](https://github.com/ahmadrosid/nakama/issues/new/choose). A repro someone else can run beats a description.
+
+### Before you start building
+
+Four questions. Any answer of no is worth raising in the issue first, where it
+costs nothing.
+
+1. Is the issue's `stage:` label `now`? The table above says what the other two
+   values mean.
+2. Can an existing package hold the change? AGENTS.md asks for edit over extract,
+   and CI fails on a new workspace unless the PR carries the `new-package` label.
+3. Does it assume a folder, machine or service the server cannot reach at runtime?
+   A deployment is Docker, Kubernetes or the bundled desktop build, and those do
+   not see the same filesystem.
+4. Does the new abstraction have more than one caller today? A cache, a dedupe, a
+   guard or a factory with a single call site gets deleted in review.
 
 ## Workflow
 
@@ -103,7 +119,7 @@ git push -u origin HEAD
 gh pr create
 ```
 
-Put `Fixes #123` in the body so the issue closes on merge.
+Put `Fixes #123` in the body so the issue closes on merge. CI checks that a PR references an issue at all, because the issue thread is where direction gets settled and hearing "we are not doing that" there is much cheaper than hearing it after the code exists. `part of #123` counts when the PR does not close the issue. A change with genuinely no issue, such as a typo or a release, takes the `no-issue` label instead.
 
 5. PR body uses the ADHD PR format in [`.agents/skills/adhd-pr-description/SKILL.md`](./.agents/skills/adhd-pr-description/SKILL.md): outcome lead, Before/After, Why safe (≤3), residual risk, tight test plan. Agents opening PRs via `ce-commit-push-pr` must follow that skill.
 
@@ -112,6 +128,30 @@ Show the evidence: numbers for a behavior change, a before and after screenshot 
 6. CI must pass before merge, and green CI is not the same as reviewed. Reviews here arrive as plain comments rather than a formal approval, so read the thread instead of the badge. Answer every point, including the ones you disagree with, and push follow-up commits to the same branch rather than force-pushing, so the comments stay attached to the diff.
 
 Do not rewrite `AGENTS.md`, `README.md`, or `ARCHITECTURE.md` unless the change is specifically about those files.
+
+### When work goes quiet
+
+A PR or an assignment that nobody is moving still blocks the people who would
+have picked it up. Two limits keep work from sitting:
+
+- **A reviewed PR with no reply for 7 days gets the `stale` label.** A reply is a
+  comment or a commit from the author. Once the label is on, anyone may continue
+  the work: open a new PR that builds on the original branch, or rebases it, and
+  link the old one. The original author keeps the credit, through their own
+  commits or a `Co-authored-by` trailer when the history is squashed. An author
+  who comes back before someone else has started only needs to say so on the PR,
+  and the label comes off.
+- **An assigned issue with no PR after 7 days is unassigned.** It then shows up
+  again in the unassigned searches above. If you need longer, say so on the issue
+  before the week is up. If you lost it anyway, comment to be assigned again.
+
+A PR that is waiting for a review is not stale. The 7 days start when a reviewer
+has commented.
+
+A daily workflow, `.github/workflows/stale.yml`, applies both limits and leaves a
+comment when it does. It skips a PR whose latest review is an approval, because
+an approval asks for nothing. It only releases issues labelled `stage: now`, and
+never the repository owner's own assignments.
 
 ## Code style and checks
 

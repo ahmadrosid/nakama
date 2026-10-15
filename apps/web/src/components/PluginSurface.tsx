@@ -21,7 +21,10 @@ export function PluginSurface({
   theme,
   tool,
   fallback,
+  inlineHeaderActions = false,
 }: {
+  /** Panels have no page header, so header actions render inside the page. */
+  inlineHeaderActions?: boolean;
   orgId: string;
   plugin: OrgPluginDetail;
   theme: "dark" | "light";
@@ -31,20 +34,27 @@ export function PluginSurface({
   const [runtime, setRuntime] = useState<Awaited<
     ReturnType<typeof activatePlugin>
   > | null>(null);
+
   const [failed, setFailed] = useState(false);
   const { pluginId, revision, selectedVersion } = plugin;
   useEffect(() => {
     const controller = new AbortController();
+
     const timer = window.setTimeout(() => {
       controller.abort(new Error("Plugin startup timed out."));
       setFailed(true);
     }, 12_000);
+
     let dispose: (() => void) | undefined;
+
     const load = async () => {
       const url = pluginUiModuleUrl(orgId, pluginId, revision, selectedVersion);
+
+      // SAFETY: The plugin asset endpoint serves this module contract.
       const module = (await import(
         /* @vite-ignore */ url
       )) as PluginClientModule;
+
       const loadedRuntime = await activatePlugin(module, {
         host: {
           async call(action, input) {
@@ -55,6 +65,7 @@ export function PluginSurface({
               orgId,
               controller.signal
             );
+
             return response.result;
           },
         },
@@ -63,11 +74,15 @@ export function PluginSurface({
         signal: controller.signal,
         theme,
       });
+
       dispose = loadedRuntime.dispose;
+
       if (controller.signal.aborted) {
         dispose();
+
         return;
       }
+
       setRuntime({
         ...loadedRuntime,
         dispose() {
@@ -76,6 +91,7 @@ export function PluginSurface({
         },
       });
     };
+
     load()
       .catch(() => {
         if (!controller.signal.aborted) {
@@ -83,12 +99,14 @@ export function PluginSurface({
         }
       })
       .finally(() => window.clearTimeout(timer));
+
     return () => {
       window.clearTimeout(timer);
       controller.abort();
       dispose?.();
     };
   }, [orgId, pluginId, revision, selectedVersion, theme]);
+
   if (failed && !tool) {
     return (
       <p className="p-6" role="alert">
@@ -96,14 +114,19 @@ export function PluginSurface({
       </p>
     );
   }
+
   if (failed || !runtime) {
     return fallback;
   }
+
   const Renderer = tool ? runtime.tools.get(tool.action) : null;
+
   if (tool && !Renderer) {
     return fallback;
   }
+
   const Page = runtime.Page;
+
   return (
     <PluginRenderBoundary
       fallback={
@@ -129,9 +152,18 @@ export function PluginSurface({
           ) : (
             <Page
               renderHeaderActions={(children) => {
+                if (inlineHeaderActions) {
+                  return (
+                    <div className="flex items-center justify-end gap-2">
+                      {children}
+                    </div>
+                  );
+                }
+
                 const target = document.querySelector(
                   "[data-page-header-actions]"
                 );
+
                 return target
                   ? createPortal(
                       <div

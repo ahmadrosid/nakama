@@ -17,6 +17,7 @@ import {
 } from "../testing/plugin-package-fixture";
 import { AgentService } from "./agent-service";
 import { PluginService } from "./plugin-service";
+import { sessionTurnRegistry } from "./session-turn-registry";
 import { SkillsService } from "./skills-service";
 import {
   pluginActorFromContext,
@@ -83,6 +84,7 @@ describe("AgentService plugin capabilities", () => {
     } else {
       process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
     }
+
     await rm(configDir, { force: true, recursive: true });
   });
 
@@ -98,21 +100,26 @@ describe("AgentService plugin capabilities", () => {
 
     await plugins.installPluginPackage(bundle());
     const added = await plugins.addOrgPlugin(ORG_ID, "notes");
+
     const enabled = await plugins.enableOrgPlugin(
       ORG_ID,
       "notes",
       added.revision
     );
+
     const skill = (await db.listSkills()).find(
       (row) => row.pluginId === "notes"
     );
+
     const tool = (await db.listTools()).find((row) => row.pluginId === "notes");
     await agent.assignSkill(ORG_ID, profile.id, { skillId: skill!.id });
+
     const copyRoot = join(
       getProfileSoulDir(ORG_ID, profile.id),
       "skills",
       ".plugins"
     );
+
     const [copy] = await readdir(copyRoot);
     expect(await readFile(join(copyRoot, copy!, "SKILL.md"), "utf8")).toContain(
       "Plugin notes skill."
@@ -143,6 +150,7 @@ describe("AgentService plugin capabilities", () => {
       [],
       { pluginService: plugins }
     );
+
     expect(
       before.find((entry) => entry.name === tool!.name)?.discoveryGroup
     ).toBe("notes");
@@ -156,7 +164,11 @@ describe("AgentService plugin capabilities", () => {
     expect(await readdir(copyRoot)).toEqual(["keep.txt"]);
     const started = await agent.beginSessionTurn(sessionId, ORG_ID);
     expect(started).toBe(true);
-    const next = await agent.resolveSession(sessionId, ORG_ID);
+
+    const next = await agent.resolveSession(sessionId, ORG_ID).finally(() => {
+      sessionTurnRegistry.cancelTurn(sessionId);
+    });
+
     expect(next).not.toBe(first);
 
     const after = await resolveProfileStoredTools(
@@ -165,6 +177,7 @@ describe("AgentService plugin capabilities", () => {
       [],
       { pluginService: plugins }
     );
+
     expect(
       after.some((item) => item.name === derivePluginToolName("notes", "write"))
     ).toBe(false);
@@ -203,11 +216,14 @@ describe("AgentService plugin capabilities", () => {
       [],
       { pluginService: plugins }
     );
+
     const pluginTool = resolved.find(
       (item) => item.name === derivePluginToolName("notes", "write")
     );
+
     expect(pluginTool).toBeDefined();
 
+    // SAFETY: This test controls the fixture shape at this boundary.
     const web = (await pluginTool!.run(
       {},
       {
@@ -219,8 +235,10 @@ describe("AgentService plugin capabilities", () => {
         userId: "member_web",
       }
     )) as { actor: { id: string; role: string } };
+
     expect(web.actor).toEqual({ id: "member_web", role: "member" });
 
+    // SAFETY: This test controls the fixture shape at this boundary.
     const automation = (await pluginTool!.run(
       {},
       {
@@ -231,8 +249,10 @@ describe("AgentService plugin capabilities", () => {
         userId: undefined,
       }
     )) as { actor: { id: string; role: string } };
+
     expect(automation.actor.role).toBe("member");
 
+    // SAFETY: This test controls the fixture shape at this boundary.
     const messaging = (await pluginTool!.run(
       {},
       {
@@ -244,6 +264,7 @@ describe("AgentService plugin capabilities", () => {
         userId: "telegram_user",
       }
     )) as { actor: { id: string; role: string } };
+
     expect(messaging.actor).toEqual({ id: "telegram_user", role: "member" });
 
     expect(
@@ -275,6 +296,7 @@ describe("AgentService plugin capabilities", () => {
       task: "noop",
       userId: "sub_user",
     });
+
     expect(child.status).toBe("fail");
     expect(child.error).toContain("Provider is not configured");
   });

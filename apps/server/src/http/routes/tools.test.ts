@@ -1,10 +1,20 @@
-import { describe, expect, test } from "bun:test";
-import { NakamaApiError } from "@nakama/core";
+import { describe, expect, spyOn, test } from "bun:test";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import {
+  getCustomToolsDir,
+  getProfileSoulDir,
+  NakamaApiError,
+} from "@nakama/core";
+import { AgentService } from "../../services/agent-service";
+import { claimLegacyCustomTools } from "../../services/custom-tool-handlers";
 import {
   loadToolApiKey,
   loadToolSetup,
+  saveToolApiKey,
   saveToolSetup,
 } from "../../services/custom-tool-shared";
+import { ProfileService } from "../../services/profile-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
@@ -15,7 +25,7 @@ import {
 
 setupTestConfigDir("nakama-tools-route-test-");
 
-function createApp(agentOverrides: Record<string, unknown> = {}) {
+function createApp(agentOverrides: Partial<AgentService> = {}) {
   return createMinimalHonoApp({
     agent: {
       getTool: async (toolId: string) => ({
@@ -45,16 +55,340 @@ function createApp(agentOverrides: Record<string, unknown> = {}) {
 }
 
 describe("tool playground routes", () => {
+  test.each(["javascript", "python"])(
+    "published parent tool playground and credentials use the active team for %s",
+    async (handlerType) => {
+      let service: ProfileService;
+      let executor: AgentService;
+
+      const {
+        app,
+        authService,
+        databaseAdapter: db,
+      } = createApp({
+        listTools: (orgId) => service.listTools(orgId),
+        getTool: (toolId, orgId) => service.getTool(toolId, orgId),
+        getToolSource: (toolId, orgId) => service.getToolSource(toolId, orgId),
+        runToolPlayground: (toolId, parameters, context) =>
+          executor.runToolPlayground(toolId, parameters, context),
+        suggestToolPlaygroundParams: (toolId, prompt, orgId) =>
+          executor.suggestToolPlaygroundParams(toolId, prompt, orgId),
+        assignTool: (orgId, profileId, request, meta) =>
+          service.assignTool(orgId, profileId, request, meta),
+        listProfileTools: (orgId, profileId) =>
+          service.listProfileTools(orgId, profileId),
+        unassignTool: (orgId, profileId, toolId, meta) =>
+          service.unassignTool(orgId, profileId, toolId, meta),
+      });
+
+      service = new ProfileService(db);
+      executor = new AgentService(null, null, db);
+
+      const { orgId: parentOrgId, adminSession } = await createOrgAdminSession(
+        app,
+        authService,
+        db,
+        "shared-tools-team",
+        "shared-tools-admin@acme.com"
+      );
+
+      const now = new Date().toISOString();
+      const orgId = "tool_team";
+      await db.upsertOrganization({
+        id: orgId,
+        name: "Team",
+        slug: "tool-team",
+        parentOrgId,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const user = (await db.getUserByEmail("shared-tools-admin@acme.com"))!;
+      await db.upsertOrgMember({
+        orgId,
+        userId: user.id,
+        role: "admin",
+        createdAt: now,
+      });
+      await mkdir(getCustomToolsDir(parentOrgId), { recursive: true });
+      const profileId = "playground_team";
+      await db.upsertProfile({
+        id: profileId,
+        orgId,
+        name: "Playground",
+        model: null,
+        isSuper: false,
+        isDefault: false,
+        systemPrompt: "",
+        createdAt: now,
+        updatedAt: now,
+      });
+      const workspace = getProfileSoulDir(orgId, profileId);
+      await mkdir(workspace, { recursive: true });
+
+      const modulePath = join(
+        getCustomToolsDir(parentOrgId),
+        handlerType === "python" ? "published-http.py" : "published-http.js"
+      );
+
+      await writeFile(
+        modulePath,
+        handlerType === "python"
+          ? 'import os, json, sys\ndef run(input, context):\n    with open("playground.marker", "w") as handle:\n        handle.write("team")\n    return {"keyIsTeam": os.environ.get("NAKAMA_TOOL_API_KEY") == "team-key", "workspace": os.environ.get("NAKAMA_WORKSPACE_ROOT"), "cwd": os.getcwd(), "config": os.environ.get("NAKAMA_CONFIG_DIR")}\nif __name__ == "__main__":\n    print(json.dumps(run(json.loads(sys.stdin.read() or "{}"), {})))\n'
+          : 'import {writeFile} from "node:fs/promises"; export async function run(input, context) {await writeFile("playground.marker", "team"); return {keyIsTeam: process.env.NAKAMA_TOOL_API_KEY === "team-key", workspace: context.workspaceRoot, cwd: process.cwd(), config: process.env.NAKAMA_CONFIG_DIR ?? null};}'
+      );
+      await db.upsertTool({
+        id: "published_parent_tool",
+        orgId: parentOrgId,
+        name: "Published",
+        description: "Probe",
+        handlerType,
+        handlerConfig: { modulePath, requiresApiKey: true },
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const publication = await db.publishOrgSharedResource({
+        id: "tool_publication",
+        orgId: parentOrgId,
+        resourceKind: "tool",
+        resourceId: "published_parent_tool",
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await saveToolApiKey(parentOrgId, "published_parent_tool", "parent-key");
+
+      const url =
+        "http://localhost:4310/v1/tools/published_parent_tool/credentials";
+
+      const status = () =>
+        app.fetch(
+          new Request(url, { headers: adminSession.headers({}, orgId) })
+        );
+
+      const before = await status();
+
+      const headers = adminSession.headers(
+        {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": adminSession.csrfToken,
+        },
+        orgId
+      );
+
+      const run = () =>
+        app.fetch(
+          new Request(
+            "http://localhost:4310/v1/tools/published_parent_tool/run",
+            {
+              method: "POST",
+              headers,
+              body: JSON.stringify({ parameters: {} }),
+            }
+          )
+        );
+
+      const missing = await run();
+      expect(missing.status).toBe(200);
+      expect(await missing.json()).toMatchObject({
+        result: { type: "tool_credentials_required", orgId },
+      });
+      await expect(
+        readFile(join(workspace, "playground.marker"))
+      ).rejects.toThrow();
+
+      const assigned = await app.fetch(
+        new Request(`http://localhost:4310/v1/profiles/${profileId}/tools`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ toolId: "published_parent_tool" }),
+        })
+      );
+
+      expect(assigned.status).toBe(200);
+
+      const listed = await app.fetch(
+        new Request(`http://localhost:4310/v1/profiles/${profileId}/tools`, {
+          headers,
+        })
+      );
+
+      expect(listed.status).toBe(200);
+      expect(await listed.json()).toMatchObject({
+        tools: [{ id: "published_parent_tool", scope: "parent" }],
+      });
+      const detailUrl = "http://localhost:4310/v1/tools/published_parent_tool";
+
+      const detail = await app.fetch(
+        new Request(detailUrl, { headers: adminSession.headers({}, orgId) })
+      );
+
+      expect(detail.status).toBe(200);
+      const payload = await detail.json();
+      expect(payload).toMatchObject({
+        tool: {
+          id: "published_parent_tool",
+          scope: "parent",
+          publicationId: publication.id,
+        },
+      });
+      expect(JSON.stringify(payload)).not.toContain(modulePath);
+      expect(
+        (
+          await app.fetch(
+            new Request(`${detailUrl}/source`, {
+              headers: adminSession.headers({}, orgId),
+            })
+          )
+        ).status
+      ).toBe(404);
+      expect(before.status).toBe(200);
+      expect(await before.json()).toEqual({ configured: false });
+
+      const saved = await app.fetch(
+        new Request(url, {
+          method: "PUT",
+          headers: adminSession.headers(
+            {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": adminSession.csrfToken,
+            },
+            orgId
+          ),
+          body: JSON.stringify({ apiKey: "team-key" }),
+        })
+      );
+
+      expect(saved.status).toBe(200);
+      expect(await loadToolApiKey(orgId, "published_parent_tool")).toBe(
+        "team-key"
+      );
+      expect(await loadToolApiKey(parentOrgId, "published_parent_tool")).toBe(
+        "parent-key"
+      );
+      const after = await status();
+      expect(await after.json()).toEqual({ configured: true });
+      const ran = await run();
+      expect(ran.status).toBe(200);
+      const response = await ran.json();
+
+      expect(response).toMatchObject({
+        ok: true,
+        result: {
+          keyIsTeam: true,
+          workspace,
+          config: null,
+        },
+      });
+      expect(await realpath(response.result.cwd)).toBe(
+        await realpath(workspace)
+      );
+      expect(await readFile(join(workspace, "playground.marker"), "utf8")).toBe(
+        "team"
+      );
+      await writeFile(join(workspace, "playground.marker"), "unchanged");
+      const readPublications = db.listOrgSharedResources.bind(db);
+      let reads = 0;
+
+      const revoke = spyOn(db, "listOrgSharedResources").mockImplementation(
+        async (id) => {
+          if (++reads === 3) {
+            await db.deleteOrgSharedResource(parentOrgId, publication.id);
+          }
+
+          return readPublications(id);
+        }
+      );
+
+      try {
+        expect((await run()).status).toBe(404);
+        expect(reads).toBe(3);
+      } finally {
+        revoke.mockRestore();
+      }
+
+      expect((await run()).status).toBe(404);
+      expect(await readFile(join(workspace, "playground.marker"), "utf8")).toBe(
+        "unchanged"
+      );
+
+      const suggestion = await app.fetch(
+        new Request(
+          "http://localhost:4310/v1/tools/published_parent_tool/params/suggest",
+          { method: "POST", headers, body: JSON.stringify({ prompt: "Probe" }) }
+        )
+      );
+
+      expect(suggestion.status).toBe(404);
+
+      const removed = await app.fetch(
+        new Request(
+          `http://localhost:4310/v1/profiles/${profileId}/tools/published_parent_tool`,
+          { method: "DELETE", headers }
+        )
+      );
+
+      expect(removed.status).toBe(200);
+      expect(await db.listToolsForProfile(profileId)).toEqual([]);
+      expect(
+        (
+          await app.fetch(
+            new Request(detailUrl, { headers: adminSession.headers({}, orgId) })
+          )
+        ).status
+      ).toBe(404);
+      expect((await status()).status).toBe(404);
+
+      const denied = await app.fetch(
+        new Request(url, {
+          method: "PUT",
+          headers: adminSession.headers(
+            {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": adminSession.csrfToken,
+            },
+            orgId
+          ),
+          body: JSON.stringify({ apiKey: "replacement" }),
+        })
+      );
+
+      expect(denied.status).toBe(404);
+      expect(await loadToolApiKey(orgId, "published_parent_tool")).toBe(
+        "team-key"
+      );
+    }
+  );
   test("setup approval validates org and target, keeps keys private, and is idempotent", async () => {
     let visibleOrg = "";
+
     const { app, authService, databaseAdapter } = createApp({
       getProfile: async (orgId: string, profileId: string) => {
         if (orgId !== visibleOrg || profileId !== "target") {
           throw new NakamaApiError("Profile not found.", 404);
         }
-        return { profile: { id: profileId } };
+
+        return {
+          profile: {
+            createdAt: "2026-10-11T00:00:00.000Z",
+            hasAvatar: false,
+            id: profileId,
+            isSuper: false,
+            mcpServerCount: 0,
+            mcpServers: [],
+            model: null,
+            name: "Target",
+            skills: [],
+            soulActive: false,
+            systemPrompt: "",
+            toolCount: 0,
+            tools: [],
+            updatedAt: "2026-10-11T00:00:00.000Z",
+          },
+        };
       },
     });
+
     const { orgId, adminSession } = await createOrgAdminSession(
       app,
       authService,
@@ -62,6 +396,7 @@ describe("tool playground routes", () => {
       "setup-org",
       "setup-admin@acme.com"
     );
+
     visibleOrg = orgId;
     const setupId = crypto.randomUUID();
     await saveToolSetup(orgId, {
@@ -74,6 +409,7 @@ describe("tool playground routes", () => {
       status: "pending",
     });
     const url = `http://localhost:4310/v1/tool-setups/${setupId}`;
+
     const headers = adminSession.headers(
       {
         "Content-Type": "application/json",
@@ -81,7 +417,8 @@ describe("tool playground routes", () => {
       },
       orgId
     );
-    const approve = (body: unknown) =>
+
+    const approve = (body: { apiKey?: string; profileId?: string }) =>
       app.fetch(
         new Request(url, {
           method: "POST",
@@ -89,6 +426,7 @@ describe("tool playground routes", () => {
           body: JSON.stringify(body),
         })
       );
+
     expect(
       (await approve({ profileId: "foreign", apiKey: "secret" })).status
     ).toBe(404);
@@ -97,10 +435,12 @@ describe("tool playground routes", () => {
     expect(
       (await approve({ profileId: "target", apiKey: "bad\nkey" })).status
     ).toBe(400);
+
     const approved = await approve({
       profileId: "target",
       apiKey: "private-key",
     });
+
     expect(approved.status).toBe(200);
     expect(await approved.json()).toMatchObject({
       status: "approved",
@@ -116,21 +456,49 @@ describe("tool playground routes", () => {
   });
   test("credential endpoint saves only for an admin's organization and never returns the key", async () => {
     let visibleOrg = "";
+
     const { app, authService, databaseAdapter } = createApp({
       listTools: async (orgId: string) => ({
         tools:
           orgId === visibleOrg
             ? [
                 {
+                  createdAt: "2026-10-11T00:00:00.000Z",
+                  description: "Key tool",
+                  handlerConfig: {},
+                  handlerType: "javascript",
                   id: "tool_key",
                   name: "key_tool",
-                  handlerType: "javascript",
-                  handlerConfig: { requiresApiKey: true },
+                  updatedAt: "2026-10-11T00:00:00.000Z",
+                },
+                {
+                  createdAt: "2026-10-11T00:00:00.000Z",
+                  description: "Environment tool",
+                  handlerConfig: {
+                    env: [
+                      { name: "SERVICE_URL" },
+                      { name: "SERVICE_KEY", secret: true },
+                    ],
+                  },
+                  handlerType: "python",
+                  id: "tool_env",
+                  name: "env_tool",
+                  updatedAt: "2026-10-11T00:00:00.000Z",
+                },
+                {
+                  createdAt: "2026-10-11T00:00:00.000Z",
+                  description: "Built-in tool",
+                  handlerConfig: {},
+                  handlerType: "builtin",
+                  id: "tool_builtin",
+                  name: "builtin_tool",
+                  updatedAt: "2026-10-11T00:00:00.000Z",
                 },
               ]
             : [],
       }),
     });
+
     const { orgId, adminSession } = await createOrgAdminSession(
       app,
       authService,
@@ -138,8 +506,10 @@ describe("tool playground routes", () => {
       "credential-org",
       "credential-admin@acme.com"
     );
+
     visibleOrg = orgId;
     const url = "http://localhost:4310/v1/tools/tool_key/credentials";
+
     const headers = adminSession.headers(
       {
         "Content-Type": "application/json",
@@ -147,8 +517,10 @@ describe("tool playground routes", () => {
       },
       orgId
     );
+
     const status = await app.fetch(new Request(url, { headers }));
     expect(await status.json()).toEqual({ configured: false });
+
     const saved = await app.fetch(
       new Request(url, {
         method: "PUT",
@@ -156,6 +528,7 @@ describe("tool playground routes", () => {
         body: JSON.stringify({ apiKey: "private-tool-key" }),
       })
     );
+
     expect(saved.status).toBe(200);
     expect(await saved.json()).toEqual({ configured: true });
     expect(await loadToolApiKey(orgId, "tool_key")).toBe("private-tool-key");
@@ -163,6 +536,7 @@ describe("tool playground routes", () => {
     expect(
       await (await app.fetch(new Request(url, { headers }))).json()
     ).toEqual({ configured: true });
+
     const invalid = await app.fetch(
       new Request(url, {
         method: "PUT",
@@ -170,8 +544,61 @@ describe("tool playground routes", () => {
         body: JSON.stringify({ apiKey: "key\n[evil]" }),
       })
     );
+
     expect(invalid.status).toBe(400);
     expect(await loadToolApiKey(orgId, "tool_key")).toBe("private-tool-key");
+
+    const builtin = await app.fetch(
+      new Request(url.replace("tool_key", "tool_builtin"), {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ apiKey: "builtin-key" }),
+      })
+    );
+
+    expect(builtin.status).toBe(400);
+    expect(await loadToolApiKey(orgId, "tool_builtin")).toBeUndefined();
+    const envUrl = url.replace("tool_key", "tool_env");
+
+    const envSaved = await app.fetch(
+      new Request(envUrl, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          env: { SERVICE_KEY: "env-secret", SERVICE_URL: "https://svc.test" },
+        }),
+      })
+    );
+
+    expect(envSaved.status).toBe(200);
+
+    const envStatus = await (
+      await app.fetch(new Request(envUrl, { headers }))
+    ).text();
+
+    expect(JSON.parse(envStatus)).toEqual({
+      configured: false,
+      env: [
+        {
+          configured: true,
+          name: "SERVICE_URL",
+          secret: false,
+          value: "https://svc.test",
+        },
+        { configured: true, name: "SERVICE_KEY", secret: true },
+      ],
+    });
+    expect(envStatus).not.toContain("env-secret");
+
+    const undeclared = await app.fetch(
+      new Request(envUrl, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ env: { PATH: "/tmp/evil" } }),
+      })
+    );
+
+    expect(undeclared.status).toBe(400);
     visibleOrg = "other_org";
     expect(
       (
@@ -207,6 +634,7 @@ describe("tool playground routes", () => {
         path: "plugins/notes/write",
       }),
     });
+
     const { orgId, adminSession } = await createOrgAdminSession(
       app,
       authService,
@@ -220,6 +648,7 @@ describe("tool playground routes", () => {
         headers: adminSession.headers({}, orgId),
       })
     );
+
     expect(source.status).toBe(200);
     await expect(source.json()).resolves.toMatchObject({
       path: "plugins/notes/write",
@@ -228,6 +657,7 @@ describe("tool playground routes", () => {
 
   test("org admin can read tool detail", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const { orgId, adminSession } = await createOrgAdminSession(
       app,
       authService,
@@ -247,6 +677,7 @@ describe("tool playground routes", () => {
 
   test("org member cannot read tool detail", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const { orgId, adminSession } = await createOrgAdminSession(
       app,
       authService,
@@ -275,9 +706,12 @@ describe("tool playground routes", () => {
     );
 
     expect(addMemberResponse.status).toBe(201);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const memberProvisioned = (await addMemberResponse.json()) as {
       temporaryPassword: string;
     };
+
     const memberSession = await loginUserSession(
       app,
       "member@acme.com",
@@ -292,6 +726,7 @@ describe("tool playground routes", () => {
     );
 
     expect(response.status).toBe(403);
+
     for (const method of ["GET", "PUT"]) {
       const credentialResponse = await app.fetch(
         new Request("http://localhost:4310/v1/tools/tool_echo/credentials", {
@@ -303,13 +738,16 @@ describe("tool playground routes", () => {
             },
             orgId
           ),
-          ...(method === "PUT"
-            ? { body: JSON.stringify({ apiKey: "not-allowed" }) }
-            : {}),
+          body:
+            method === "PUT"
+              ? JSON.stringify({ apiKey: "not-allowed" })
+              : undefined,
         })
       );
+
       expect(credentialResponse.status).toBe(403);
     }
+
     for (const method of ["GET", "POST"]) {
       const response = await app.fetch(
         new Request(
@@ -323,18 +761,21 @@ describe("tool playground routes", () => {
               },
               orgId
             ),
-            ...(method === "POST"
-              ? { body: JSON.stringify({ apiKey: "secret" }) }
-              : {}),
+            body:
+              method === "POST"
+                ? JSON.stringify({ apiKey: "secret" })
+                : undefined,
           }
         )
       );
+
       expect(response.status).toBe(403);
     }
   });
 
   test("org admin can run a javascript tool", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
@@ -360,6 +801,7 @@ describe("tool playground routes", () => {
       })
     );
 
+    // SAFETY: This test controls the fixture shape at this boundary.
     const created = (await createResponse.json()) as {
       organization: { id: string };
       adminMember: { temporaryPassword: string };
@@ -387,6 +829,7 @@ describe("tool playground routes", () => {
     );
 
     expect(response.status).toBe(200);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await response.json()) as { ok: boolean; result: unknown };
     expect(body.ok).toBe(true);
     expect(body.result).toEqual({ echo: "hello" });
@@ -394,6 +837,7 @@ describe("tool playground routes", () => {
 
   test("org member cannot run a tool in the playground", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const { orgId, adminSession } = await createOrgAdminSession(
       app,
       authService,
@@ -422,9 +866,12 @@ describe("tool playground routes", () => {
     );
 
     expect(addMemberResponse.status).toBe(201);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const memberProvisioned = (await addMemberResponse.json()) as {
       temporaryPassword: string;
     };
+
     const memberSession = await loginUserSession(
       app,
       "member-run@acme.com",
@@ -457,6 +904,7 @@ describe("tool playground routes", () => {
         );
       },
     });
+
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
@@ -482,6 +930,7 @@ describe("tool playground routes", () => {
       })
     );
 
+    // SAFETY: This test controls the fixture shape at this boundary.
     const created = (await createResponse.json()) as {
       organization: { id: string };
       adminMember: { temporaryPassword: string };
@@ -519,6 +968,7 @@ describe("tool playground routes", () => {
         );
       },
     });
+
     const { orgId, adminSession } = await createOrgAdminSession(
       app,
       authService,
@@ -553,6 +1003,7 @@ describe("tool playground routes", () => {
         throw new NakamaApiError("Tool not found.", 404);
       },
     });
+
     const { orgId, adminSession } = await createOrgAdminSession(
       app,
       authService,
@@ -579,5 +1030,150 @@ describe("tool playground routes", () => {
     await expect(response.json()).resolves.toEqual({
       error: "Tool not found.",
     });
+  });
+});
+
+describe("custom tool tenant isolation (#1091)", () => {
+  async function setup() {
+    const { databaseAdapter: db } = createApp();
+    const service = new ProfileService(db);
+    const now = new Date().toISOString();
+
+    for (const id of ["iso_org_a", "iso_org_b"]) {
+      await db.upsertOrganization({
+        id,
+        name: id,
+        slug: id,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await mkdir(getCustomToolsDir(id), { recursive: true });
+    }
+
+    return { db, service };
+  }
+
+  const MODULE = "export async function run() { return 'org-a-secret'; }";
+
+  test("org B cannot read source or details of org A's tool", async () => {
+    const { service } = await setup();
+    await writeFile(
+      join(getCustomToolsDir("iso_org_a"), "iso-secret.js"),
+      MODULE
+    );
+
+    const { id } = await service.createTool(
+      {
+        description: "A tool",
+        handlerConfig: { modulePath: "iso-secret.js" },
+        handlerType: "javascript",
+        name: "iso_secret",
+      },
+      "iso_org_a"
+    );
+
+    await expect(service.getToolSource(id, "iso_org_a")).resolves.toMatchObject(
+      { content: MODULE }
+    );
+    await expect(service.getToolSource(id, "iso_org_b")).rejects.toThrow();
+    await expect(service.getTool(id, "iso_org_b")).rejects.toThrow();
+  });
+
+  test("org B cannot register a tool over org A's module file", async () => {
+    const { service } = await setup();
+    await writeFile(
+      join(getCustomToolsDir("iso_org_a"), "iso-a-module.js"),
+      MODULE
+    );
+
+    await expect(
+      service.createTool(
+        {
+          description: "B",
+          handlerConfig: {
+            modulePath: join(getCustomToolsDir("iso_org_a"), "iso-a-module.js"),
+          },
+          handlerType: "javascript",
+          name: "iso_b",
+        },
+        "iso_org_b"
+      )
+    ).rejects.toThrow();
+  });
+
+  test("an ownerless custom tool is hidden from every org", async () => {
+    const { db, service } = await setup();
+    const now = new Date().toISOString();
+    await db.upsertTool({
+      createdAt: now,
+      description: "legacy",
+      handlerConfig: { modulePath: "legacy.js" },
+      handlerType: "javascript",
+      id: "iso_legacy",
+      name: "iso_legacy",
+      updatedAt: now,
+    });
+
+    const { tools } = await service.listTools("iso_org_b");
+
+    expect(tools.some((tool) => tool.id === "iso_legacy")).toBe(false);
+    await expect(
+      service.getToolSource("iso_legacy", "iso_org_b")
+    ).rejects.toThrow();
+  });
+
+  test("legacy tools are claimed by the one org that uses them", async () => {
+    const { db, service } = await setup();
+    const now = new Date().toISOString();
+    await mkdir(getCustomToolsDir(), { recursive: true });
+
+    for (const file of ["legacy-one.js", "legacy-shared.js"]) {
+      await writeFile(join(getCustomToolsDir(), file), MODULE);
+    }
+
+    for (const id of ["iso_legacy_one", "iso_legacy_shared"]) {
+      await db.upsertTool({
+        createdAt: now,
+        description: id,
+        handlerConfig: {
+          modulePath: `${id.replace("iso_", "").replace("_", "-")}.js`,
+        },
+        handlerType: "javascript",
+        id,
+        name: id,
+        updatedAt: now,
+      });
+    }
+
+    for (const [profileId, orgId] of [
+      ["iso_profile_a", "iso_org_a"],
+      ["iso_profile_b", "iso_org_b"],
+    ] as const) {
+      await db.upsertProfile({
+        createdAt: now,
+        id: profileId,
+        isDefault: false,
+        isSuper: false,
+        model: null,
+        name: profileId,
+        orgId,
+        systemPrompt: "",
+        updatedAt: now,
+      });
+    }
+
+    await db.assignToolToProfile("iso_profile_a", "iso_legacy_one");
+    await db.assignToolToProfile("iso_profile_a", "iso_legacy_shared");
+    await db.assignToolToProfile("iso_profile_b", "iso_legacy_shared");
+
+    await claimLegacyCustomTools(db);
+
+    await expect(
+      service.getToolSource("iso_legacy_one", "iso_org_a")
+    ).resolves.toMatchObject({ content: MODULE });
+    await expect(
+      service.getToolSource("iso_legacy_one", "iso_org_b")
+    ).rejects.toThrow();
+    expect((await db.getTool("iso_legacy_shared"))?.orgId).toBeFalsy();
   });
 });

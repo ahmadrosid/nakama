@@ -29,6 +29,7 @@ describe("matchSkillsForMessage", () => {
       [weatherSkill],
       "What's the weather in Jakarta?"
     );
+
     expect(matched.map((skill) => skill.name)).toEqual(["weather"]);
   });
 
@@ -37,6 +38,7 @@ describe("matchSkillsForMessage", () => {
       [privateSkill],
       "Please /skill deploy now"
     );
+
     expect(matched.map((skill) => skill.name)).toEqual(["deploy"]);
   });
 
@@ -45,6 +47,7 @@ describe("matchSkillsForMessage", () => {
       [privateSkill],
       "deploy the app to production"
     );
+
     expect(matched).toEqual([]);
   });
 

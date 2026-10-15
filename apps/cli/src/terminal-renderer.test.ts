@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { PendingMessage } from "./message-queue";
-import { styledLine, styledLineWidth } from "./styled-text";
+import { styledLine, styledLineText, styledLineWidth } from "./styled-text";
 import { TerminalLayout } from "./terminal-layout";
 import {
   buildComposerLines,
@@ -15,6 +15,89 @@ function composerLine(text: string, width: number) {
 }
 
 describe("buildComposerLines", () => {
+  test("renders compact text markers in cyan beside the cursor", () => {
+    const lines = buildComposerLines(
+      {
+        composer: {
+          cursorVisible: true,
+          prefix: "> ",
+          selectedIndex: 0,
+          suggestions: [],
+          value: "[Text #1]",
+        },
+        pendingMessages: [],
+      },
+      40
+    );
+
+    expect(styledLineText(lines[1]!).trimEnd()).toBe("> [Text #1]▌");
+    expect(lines[1]!.segments).toContainEqual({
+      style: { background: "surface", color: "cyan" },
+      text: "[Text #1]",
+    });
+    expect(lines).toHaveLength(3);
+  });
+  test.each(["", "Describe this"])(
+    "shows numbered images inline with the draft: %j",
+    (value) => {
+      const lines = buildComposerLines(
+        {
+          composer: {
+            cursorVisible: true,
+            imageCount: 2,
+            prefix: "> ",
+            selectedIndex: 0,
+            suggestions: [],
+            value,
+          },
+          pendingMessages: [],
+        },
+        40
+      );
+
+      expect(lines).toHaveLength(3);
+      expect(styledLineText(lines[1]!).trimEnd()).toBe(
+        `> [Image #1] [Image #2] ${value}▌`
+      );
+      expect(lines[1]!.segments).toContainEqual({
+        style: { background: "surface", color: "cyan" },
+        text: "[Image #1]",
+      });
+    }
+  );
+  test("cursor blinking preserves wrapped input rows and indentation", () => {
+    for (const value of ["abcdefgh", "abcdefghijklmno\nqrstuvwxyz"]) {
+      const composer: ComposerState = {
+        cursorVisible: true,
+        imageCount: 2,
+        prefix: "› ",
+        selectedIndex: 0,
+        suggestions: [],
+        value,
+      };
+
+      const visible = buildComposerLines({ composer, pendingMessages: [] }, 10);
+
+      const hidden = buildComposerLines(
+        {
+          composer: { ...composer, cursorVisible: false },
+          pendingMessages: [],
+        },
+        10
+      );
+
+      expect(
+        visible.map((line) => styledLineText(line).replace("▌", " "))
+      ).toEqual(hidden.map(styledLineText));
+      expect(
+        visible
+          .slice(2, -1)
+          .every((line) => styledLineText(line).startsWith("  "))
+      ).toBe(true);
+      expect(visible.every((line) => styledLineWidth(line) === 10)).toBe(true);
+    }
+  });
+
   test("renders pending summaries, wrapped input, and selected suggestions", () => {
     const lines = buildComposerLines(
       {
@@ -68,6 +151,7 @@ describe("buildComposerLines", () => {
 
   test("keeps visible cursor within terminal width", () => {
     const width = 10;
+
     const lines = buildComposerLines(
       {
         composer: {
@@ -96,33 +180,43 @@ describe("TerminalRenderer", () => {
   let setReservedRowsSpy: ReturnType<
     typeof spyOn<TerminalLayout, "setReservedRows">
   > | null = null;
+
   let writeStatusLineSpy: ReturnType<
     typeof spyOn<TerminalLayout, "writeStatusLine">
   > | null = null;
+
   let clearStatusLineSpy: ReturnType<
     typeof spyOn<TerminalLayout, "clearStatusLine">
   > | null = null;
+
   let writeScrollSpy: ReturnType<
     typeof spyOn<TerminalLayout, "writeScroll">
   > | null = null;
+
   let writelnScrollSpy: ReturnType<
     typeof spyOn<TerminalLayout, "writelnScroll">
   > | null = null;
+
   let writelnBelowStatusSpy: ReturnType<
     typeof spyOn<TerminalLayout, "writelnBelowStatus">
   > | null = null;
+
   let beginMessageSpy: ReturnType<
     typeof spyOn<TerminalLayout, "beginMessage">
   > | null = null;
+
   let endMessageSpy: ReturnType<
     typeof spyOn<TerminalLayout, "endMessage">
   > | null = null;
+
   let beginStreamSpy: ReturnType<
     typeof spyOn<TerminalLayout, "beginStream">
   > | null = null;
+
   let endStreamSpy: ReturnType<
     typeof spyOn<TerminalLayout, "endStream">
   > | null = null;
+
   let originalColumns: number | undefined;
 
   beforeEach(() => {
@@ -158,6 +252,7 @@ describe("TerminalRenderer", () => {
   test("renders composer and pending state through the layout", () => {
     const layout = new TerminalLayout(null);
     const renderer = new TerminalRenderer(null, layout);
+
     const composerState: ComposerState = {
       cursorVisible: true,
       prefix: "> ",
@@ -165,6 +260,7 @@ describe("TerminalRenderer", () => {
       suggestions: [],
       value: "hello",
     };
+
     const pendingMessages: PendingMessage[] = [
       {
         line: "pending",

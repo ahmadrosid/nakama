@@ -19,10 +19,10 @@ export async function runRotateToken(): Promise<void> {
   );
 }
 
-export function formatRotateTokenError(error: unknown): string {
+export function formatRotateTokenError(error: Error | string): string {
   if (error instanceof LocalAuthTokenManagedExternallyError) {
     return error.message;
   }
 
-  return error instanceof Error ? error.message : String(error);
+  return error instanceof Error ? error.message : error;
 }

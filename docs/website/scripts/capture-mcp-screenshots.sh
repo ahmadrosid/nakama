@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+source "$(dirname "$0")/capture-common.sh"
 SCREENSHOT_DIR="$(cd "$(dirname "$0")/.." && pwd)/public/screenshots"
 TEMP_CONFIG="/tmp/nakama-docs-mcp-screenshots-$$"
 COOKIE_JAR="/tmp/nakama-docs-mcp-cookies-$$.txt"
@@ -12,13 +13,11 @@ SERVER_PID=""
 VIEWPORT_WIDTH=1280
 VIEWPORT_HEIGHT=900
 
-if command -v agent-browser >/dev/null 2>&1; then
-  AB="$(command -v agent-browser)"
-elif [[ -x "/Users/ahmadrosid/Library/pnpm/nodejs/22.23.1/bin/agent-browser" ]]; then
-  AB="/Users/ahmadrosid/Library/pnpm/nodejs/22.23.1/bin/agent-browser"
-else
-  AB="npx --yes agent-browser"
+if ! command -v agent-browser >/dev/null 2>&1; then
+  echo "agent-browser is required on PATH (npm i -g agent-browser && agent-browser install)" >&2
+  exit 1
 fi
+AB="$(command -v agent-browser)"
 
 cleanup() {
   $AB --session "$SESSION" close 2>/dev/null || true
@@ -31,6 +30,7 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$SCREENSHOT_DIR" "$TEMP_CONFIG"
+ensure_current_web_build "$ROOT"
 
 NAKAMA_CONFIG_DIR="$TEMP_CONFIG" NAKAMA_PORT="$PORT" \
   bun run "$ROOT/apps/server/src/index.ts" > /tmp/nakama-docs-mcp-screenshot-server.log 2>&1 &

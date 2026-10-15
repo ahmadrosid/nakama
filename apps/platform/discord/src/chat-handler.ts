@@ -8,6 +8,7 @@ import { formatClientError } from "@nakama/core/api-error";
 import {
   clearActiveStream,
   isAbortError,
+  isStreamActive,
   registerActiveStream,
   stopActiveStream,
 } from "@nakama/core/channel-active-stream";
@@ -28,7 +29,11 @@ import type {
   SendMessageInput,
   SessionSummary,
 } from "@nakama/core/contract";
-import { addDiscordAllowedUserId } from "@nakama/core/discord-config";
+import {
+  addDiscordAllowedUserId,
+  hasActiveHandshakeCode,
+  looksLikePairingCode,
+} from "@nakama/core/discord-config";
 import {
   filterProfilesForChatAccess,
   formatProfileSwitchConfirmation,
@@ -51,6 +56,7 @@ import {
   type TextBasedChannel,
   type ThreadChannel,
 } from "discord.js";
+import { z } from "zod";
 import type { DiscordAuthStore } from "./auth-store";
 import {
   deliverDiscordTurnArtifactShares,
@@ -66,7 +72,6 @@ import {
   explainGuildMessageHandling,
   isDiscordGuildMessage,
   isDiscordThreadMessage,
-  looksLikeHandshakeAttempt,
   parseTextCommand,
   resolveBotInfo,
   resolveChannelOrgKey,
@@ -76,7 +81,10 @@ import {
   stripBotMention,
 } from "./guild-message";
 import { buildDiscordImageInput, UNSUPPORTED_ATTACHMENT_REPLY } from "./images";
-import { isIgnorableInteractionError } from "./interaction-errors";
+import {
+  discordErrorSchema,
+  isIgnorableInteractionError,
+} from "./interaction-errors";
 import {
   createDiscordMessenger,
   createInteractionMessenger,
@@ -87,6 +95,7 @@ import type { ThreadStore } from "./thread-store";
 import { DiscordTodoStatusMessage } from "./todo-status-message";
 
 const chatLock = createChatLock({ waitMs: 15 * 60 * 1000 });
+
 const THREAD_OWNERSHIP_LOCK_KEY = "__discord_thread_ownership__";
 
 /**
@@ -131,6 +140,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   // Each event owns its API client. Concurrent threads must not borrow setOrgId.
   const scoped = () =>
     createScopedChatHandler({ ...deps, client: deps.client.forOrg(null) });
+
   return {
     handleMessage: (message: Message) => scoped().handleMessage(message),
     handleSelectionInteraction: (
@@ -178,6 +188,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     const botInfo = resolveBotInfo(message, getBotInfo());
     // Ownership is by thread id alone — partial parentId cannot flip this to foreign.
     const botOwnsThread = isThread ? threadStore.hasThreadId(channelId) : false;
+
     const groupDecision = isGuild
       ? explainGuildMessageHandling(message, botInfo, { botOwnsThread })
       : null;
@@ -190,6 +201,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
 
     if (groupDecision && !groupDecision.shouldHandle) {
       debugLog("[discord] skip", groupDecision.reason);
+
       return;
     }
 
@@ -201,22 +213,27 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     const resolvedParentId = isThread
       ? await resolveThreadParentChannelId(message)
       : undefined;
+
     const parentResolution = resolvedParentId
       ? { parentChannelId: resolvedParentId }
       : undefined;
+
     const parentChannelId = resolveOrgChannelId(
       message,
       channelId,
       isGuild,
       parentResolution
     );
+
     const parentOrgKey = resolveChannelOrgKey(parentChannelId, userId, isGuild);
+
     const conversationKey = resolveConversationKey(
       message,
       channelId,
       isGuild,
       parentResolution
     );
+
     const channelOrgKey = isThread ? conversationKey : parentOrgKey;
 
     // Auth reload + pairing under the conversation lock so concurrent DMs cannot
@@ -229,6 +246,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
 
       if (!isAuthorized) {
         debugLog(`[discord] unauthorized ${userId}`);
+
         if (isGuild) {
           return;
         }
@@ -237,6 +255,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
           await messenger.send(
             "Send your pairing code as text to link this chat."
           );
+
           return;
         }
 
@@ -250,12 +269,14 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
 
     await inheritThreadOrg(channelOrgKey, parentOrgKey);
 
-    if (isGuild && text && looksLikeHandshakeAttempt(text)) {
+    if (isGuild && text && looksLikePairingCode(text)) {
       await messenger.send(LINK_IN_PRIVATE_REPLY);
+
       return;
     }
 
     const command = text?.startsWith("/") ? parseTextCommand(text) : null;
+
     const bypassOrgGate =
       command === "/help" || command === "/start" || command === "/org";
 
@@ -265,8 +286,10 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
 
     if (!bypassOrgGate) {
       const orgReady = await ensureOrgReady(messenger, channelOrgKey);
+
       if (!orgReady) {
         debugLog(`[discord] skip org-gate ${channelOrgKey}`);
+
         return;
       }
     }
@@ -275,6 +298,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
 
     if (imageBuild?.kind === "reject") {
       await messenger.send(imageBuild.message);
+
       return;
     }
 
@@ -285,6 +309,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       await messenger.send(
         hasStickers ? UNSUPPORTED_ATTACHMENT_REPLY : "Text messages only."
       );
+
       return;
     }
 
@@ -299,6 +324,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
           messenger
         );
       });
+
       return;
     }
 
@@ -306,6 +332,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       await messenger.send(
         "Use slash commands from Discord's command menu for session control."
       );
+
       return;
     }
 
@@ -361,6 +388,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       ) {
         return;
       }
+
       await handleChatMessage(
         replyChannel,
         replyConversationKey,
@@ -380,6 +408,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     messageText: string
   ): Promise<ThreadChannel | null> {
     let thread: ThreadChannel;
+
     try {
       thread = await message.startThread({
         autoArchiveDuration: 1440,
@@ -390,10 +419,12 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         "Failed to create Discord thread; falling back to channel reply:",
         error
       );
+
       return null;
     }
 
     await trackOwnedThread(thread.id);
+
     return thread;
   }
 
@@ -405,6 +436,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     // Brief lock so concurrent ownership saves do not drop a newly created id.
     await withChatLock(THREAD_OWNERSHIP_LOCK_KEY, async () => {
       threadStore.add(threadId);
+
       try {
         await threadStore.save();
       } catch (error) {
@@ -425,11 +457,13 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
 
     if (!channel?.isThread()) {
       await messenger.send("Use /close inside a bot conversation thread.");
+
       return;
     }
 
     if (!threadStore.hasThreadId(channel.id)) {
       await messenger.send("I can only close threads I started.");
+
       return;
     }
 
@@ -462,6 +496,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
   ): Promise<void> {
     if (!authStore.isPaired(requesterId)) {
       await messenger.send(ALLOW_NOT_AUTHORIZED);
+
       return;
     }
 
@@ -469,6 +504,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
 
     if (!targetUser) {
       await messenger.send("Choose a Discord user to allow.");
+
       return;
     }
 
@@ -476,10 +512,12 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       targetUser.id,
       config.owner ?? null
     );
+
     await authStore.reload();
 
     if (!result.ok) {
       await messenger.send(result.message);
+
       return;
     }
 
@@ -487,6 +525,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       await messenger.send(
         `<@${result.userId}> is already on the allowed list.`
       );
+
       return;
     }
 
@@ -499,13 +538,15 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       | ButtonInteraction
       | StringSelectMenuInteraction
   ): Promise<void> {
-    // Caller (bot.ts) already deferred — do not wait on withChatLock here.
-    // Agent replies hold that lock for a long time and would leave commands stuck.
+    // Caller (bot.ts) already deferred. Do not wait on withChatLock while a
+    // stream is active: a reply holds that lock for minutes and the command
+    // would sit on "thinking" until it ends.
 
     const userId = interaction.user.id;
     const channelId = interaction.channelId;
     const isGuild = !interaction.channel?.isDMBased();
     const isThread = Boolean(interaction.channel?.isThread());
+
     let threadParentId =
       isGuild &&
       isThread &&
@@ -513,26 +554,37 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       "parentId" in interaction.channel
         ? (interaction.channel.parentId ?? undefined)
         : undefined;
+
     if (isGuild && isThread && !threadParentId && interaction.channel) {
       threadParentId = await hydrateThreadParentId(interaction.channel);
     }
+
     const orgChannelId =
       isGuild && isThread ? (threadParentId ?? channelId) : channelId;
+
     const parentOrgKey = resolveChannelOrgKey(orgChannelId, userId, isGuild);
+
     const conversationKey = isGuild
       ? isThread
         ? `g:${threadParentId ?? channelId}:t:${interaction.channel!.id}`
         : channelId
       : channelId;
+
     const channelOrgKey = isThread ? conversationKey : parentOrgKey;
+
     const selection =
       "customId" in interaction ? interaction.customId.split(":") : undefined;
+
     const commandName =
       "commandName" in interaction ? interaction.commandName : selection?.[1];
 
     const messenger = createInteractionMessenger(
-      (content) => interaction.followUp({ content: content.slice(0, 2000) }),
-      (content) => interaction.editReply({ content: content.slice(0, 2000) })
+      async (content) => {
+        await interaction.followUp({ content: content.slice(0, 2000) });
+      },
+      async (content) => {
+        await interaction.editReply({ content: content.slice(0, 2000) });
+      }
     );
 
     try {
@@ -540,26 +592,31 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
 
       if (commandName === "allow" && "commandName" in interaction) {
         await handleAllowCommand(interaction, messenger, userId);
+
         return;
       }
 
       if (!authStore.isAuthorized(userId)) {
         if (!interaction.channel?.isDMBased()) {
           await interaction.deleteReply().catch(() => {});
+
           return;
         }
 
         if (commandName === "start" || commandName === "help") {
           await handlePairingSlash(commandName, messenger);
+
           return;
         }
 
         await messenger.send(PAIRING_PROMPT);
+
         return;
       }
 
       if (commandName === "start" || commandName === "help") {
         await messenger.send(HELP_TEXT);
+
         return;
       }
 
@@ -569,11 +626,13 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         } else {
           await messenger.send("Nothing to stop.");
         }
+
         return;
       }
 
       if (commandName === "close" && "commandName" in interaction) {
         await handleCloseThread(interaction, conversationKey, messenger);
+
         return;
       }
 
@@ -583,8 +642,10 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
           (selection[0] !== "nakama" || selection[2] !== userId)
         ) {
           await messenger.send("Open your own /org or /profile picker.");
+
           return;
         }
+
         await withChatLock(conversationKey, async () => {
           await inheritThreadOrg(channelOrgKey, parentOrgKey);
           await handlePicker(
@@ -595,41 +656,69 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
             conversationKey
           );
         });
+
         return;
       }
 
       await inheritThreadOrg(channelOrgKey, parentOrgKey);
       const orgReady = await ensureOrgReady(messenger, channelOrgKey);
+
       if (!orgReady) {
         return;
       }
 
+      // Aborting a turn does not wait for it to unwind, so it would still write
+      // to the session these three rewrite. Refuse until /stop has landed.
+      if (
+        (commandName === "clear" ||
+          commandName === "compact" ||
+          commandName === "new") &&
+        isStreamActive(conversationKey)
+      ) {
+        await messenger.send(
+          "A response is still running here. Send /stop, then try again."
+        );
+
+        return;
+      }
+
+      // The lock covers the short parts of a turn outside the stream itself.
       switch (commandName) {
         case "clear": {
-          stopActiveStream(conversationKey);
-          const session = await resolveSession(conversationKey);
-          await session.clear();
-          await clearSessionArtifactState(conversationKey);
-          await messenger.send("History cleared.");
+          await withChatLock(conversationKey, async () => {
+            const session = await resolveSession(conversationKey);
+            await session.clear();
+            await clearSessionArtifactState(conversationKey);
+            await messenger.send("History cleared.");
+          });
+
           return;
         }
+
         case "compact": {
-          stopActiveStream(conversationKey);
-          const session = await resolveSession(conversationKey);
-          const result = await session.compact({ force: true });
-          await messenger.send(
-            `Compacted (${result.action}). Messages: ${result.messagesAfter}.`
-          );
+          await withChatLock(conversationKey, async () => {
+            const session = await resolveSession(conversationKey);
+            const result = await session.compact({ force: true });
+            await messenger.send(
+              `Compacted (${result.action}). Messages: ${result.messagesAfter}.`
+            );
+          });
+
           return;
         }
+
         case "new": {
-          stopActiveStream(conversationKey);
-          await createAndBindSession(conversationKey);
-          await messenger.send("Started a new conversation.");
+          await withChatLock(conversationKey, async () => {
+            await createAndBindSession(conversationKey);
+            await messenger.send("Started a new conversation.");
+          });
+
           return;
         }
+
         case "sessions":
           await handleSessionsPicker(interaction, conversationKey);
+
           return;
         case "resume":
           if ("options" in interaction) {
@@ -640,19 +729,27 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
               )
             );
           }
+
           return;
         case "status":
           await replyStatus(messenger, conversationKey);
+
           return;
         default:
           await messenger.send("Unknown command. Try /help");
       }
     } catch (error) {
       // Finalize the deferred reply so Discord does not stay on "thinking…".
-      if (isIgnorableInteractionError(error)) {
+      const discordError =
+        error instanceof Error
+          ? error
+          : (discordErrorSchema.safeParse(error).data ?? null);
+
+      if (isIgnorableInteractionError(discordError)) {
         console.warn(
           "Slash command interaction expired before reply could be sent."
         );
+
         return;
       }
 
@@ -668,25 +765,29 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
   ): Promise<void> {
     const command = parseTextCommand(text);
     const fileConfig = authStore.getConfig();
-    const hasHandshake = Boolean(fileConfig?.handshakeCode);
+    const hasHandshake = hasActiveHandshakeCode(fileConfig);
 
     if (command === "/help") {
       await replyChunks(messenger, `${PAIRING_PROMPT}\n\n${HELP_TEXT}`);
+
       return;
     }
 
     if (command === "/start") {
       await messenger.send(hasHandshake ? PAIRING_PROMPT : NO_CODE_PROMPT);
+
       return;
     }
 
     if (!hasHandshake) {
       await messenger.send(NO_CODE_PROMPT);
+
       return;
     }
 
-    if (!looksLikeHandshakeAttempt(text)) {
+    if (!looksLikePairingCode(text)) {
       await messenger.send(PAIRING_PROMPT);
+
       return;
     }
 
@@ -698,10 +799,11 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     command: string,
     messenger: DiscordMessenger
   ): Promise<void> {
-    const hasHandshake = Boolean(authStore.getConfig()?.handshakeCode);
+    const hasHandshake = hasActiveHandshakeCode(authStore.getConfig());
 
     if (command === "help") {
       await replyChunks(messenger, `${PAIRING_PROMPT}\n\n${HELP_TEXT}`);
+
       return;
     }
 
@@ -718,6 +820,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
   ): Promise<void> {
     if (command === "/org") {
       await handleOrgCommand(text, channelOrgKey, conversationKey, messenger);
+
       return;
     }
 
@@ -756,6 +859,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         profileId,
         sessionStore,
       });
+
       return;
     }
 
@@ -772,6 +876,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     const typingLoop = createTypingLoop(() => messenger.sendTyping(), {
       refreshMs: 8000,
     });
+
     const todoStatus = new DiscordTodoStatusMessage(messenger);
     const questionnaireStatus = new DiscordEditableMessage(messenger);
 
@@ -792,6 +897,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
           },
           onQuestionnaireUpdated: (questionnaire) => {
             typingLoop.ping();
+
             if (hasActiveAgentQuestionnaire(questionnaire)) {
               postedQuestionnaire = true;
               void questionnaireStatus.render(
@@ -808,6 +914,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
           },
           onToolEnd: (event) => {
             typingLoop.ping();
+
             if (!(profileId && event.tool === "send_discord_artifact")) {
               return;
             }
@@ -824,6 +931,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
           },
           onToolStart: () => {
             typingLoop.ping();
+
             if (earlyAck) {
               return;
             }
@@ -846,22 +954,27 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         }
 
         await messenger.send("Stopped.");
+
         return;
       }
     } catch (error) {
       await earlyAck;
+
       if (isAbortError(error)) {
         await todoStatus.stop();
+
         if (reply.trim()) {
           await messenger.send(reply);
         }
 
         await messenger.send("Stopped.");
+
         return;
       }
 
       await todoStatus.fail();
       await messenger.send(formatClientError(error));
+
       return;
     } finally {
       clearActiveStream(conversationKey, signal);
@@ -893,8 +1006,10 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
   ): Promise<boolean> {
     if (config.owner) {
       client.setOrgId(config.owner.orgId);
+
       return true;
     }
+
     const orgContext = await prepareChannelOrgContext({
       getSelectedOrgId: () => orgStore.get(channelOrgKey)?.orgId,
       listOrgs: () => client.listUserOrgs(),
@@ -906,6 +1021,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
 
     if (orgContext.status === "empty") {
       await messenger.send("No organizations are configured yet.");
+
       return false;
     }
 
@@ -913,6 +1029,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       await messenger.send(
         "Use /org from Discord's command menu to choose an organization."
       );
+
       return false;
     }
 
@@ -926,6 +1043,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     parentKey: string
   ): Promise<void> {
     const parent = orgStore.get(parentKey);
+
     if (key !== parentKey && !orgStore.get(key) && parent) {
       orgStore.set(key, parent.orgId);
       await orgStore.save();
@@ -947,42 +1065,60 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         components: [],
         content: `This connection belongs to agent ${config.owner.profileId}.`,
       });
+
       return;
     }
+
     const { orgs } = await client.listUserOrgs();
+
     const org = orgs.find(
       (entry) => entry.id === orgStore.get(channelOrgKey)?.orgId
     );
+
     const reply = (content: string) =>
       interaction.editReply({ components: [], content });
+
     const action = selection?.[3];
+
     if (action === "cancel") {
       await reply("Selection cancelled.");
+
       return;
     }
+
     if (orgs.length === 0) {
       await reply("No organizations are configured yet.");
+
       return;
     }
+
     if (kind === "profile" && !org) {
       await reply("Choose an organization with /org first.");
+
       return;
     }
+
     if (selection && kind === "profile" && selection[4] !== org?.id) {
       await reply("Organization changed. Open /profile again.");
+
       return;
     }
+
     if (org) {
       client.setOrgId(org.id);
     }
+
     const profiles = kind === "profile" ? await listSelectableProfiles() : [];
     const choices = kind === "org" ? orgs : profiles;
+
     if (choices.length === 0) {
       await reply("No profiles are available.");
+
       return;
     }
 
     let selectedId: string | undefined;
+
     if ("values" in interaction && interaction.values.length === 1) {
       selectedId = interaction.values[0];
     } else if (action === "apply" && "message" in interaction) {
@@ -999,18 +1135,24 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
             ) &&
             component.customId.split(":")[4] === selection?.[4]
         );
+
       if (menu?.type === ComponentType.StringSelect) {
         const selected = menu.options.filter((option) => option.default);
+
         if (selected.length === 1) {
           selectedId = selected[0]?.value;
         }
       }
     }
+
     const picked = choices.find((entry) => entry.id === selectedId);
+
     if (("values" in interaction || action === "apply") && !picked) {
       await reply("That choice is no longer available. Open the picker again.");
+
       return;
     }
+
     if (action === "apply" && picked) {
       if (kind === "org") {
         if (picked.id !== org?.id) {
@@ -1019,26 +1161,34 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
           await sessionStore.save();
           await orgStore.save();
         }
+
         await reply(`Using ${picked.name}.`);
       } else {
         const currentProfileId = await resolveSessionProfileId(conversationKey);
+
         if (picked.id !== currentProfileId) {
           await createAndBindSession(conversationKey, picked.id);
         }
+
         await reply(`Using ${org!.name} · ${picked.name}.`);
       }
+
       return;
     }
 
     const lastPage = Math.floor((choices.length - 1) / 25);
     const requestedPage = Number(selection?.[3] ?? 0);
+
     const page = Number.isSafeInteger(requestedPage)
       ? Math.max(0, Math.min(requestedPage, lastPage))
       : 0;
+
     const customId = (pageIndex: number | "apply" | "cancel") =>
       `nakama:${kind}:${interaction.user.id}:${pageIndex}${kind === "profile" ? `:${org!.id}` : ""}`;
+
     const currentId =
       kind === "org" ? org?.id : await resolveSessionProfileId(conversationKey);
+
     const menu = new StringSelectMenuBuilder()
       .setCustomId(customId(page))
       .setPlaceholder(
@@ -1051,10 +1201,12 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
           value: entry.id,
         }))
       );
+
     const components: Array<
       | ActionRowBuilder<StringSelectMenuBuilder>
       | ActionRowBuilder<ButtonBuilder>
     > = [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu)];
+
     if (lastPage > 0) {
       components.push(
         new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -1071,6 +1223,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         )
       );
     }
+
     components.push(
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
@@ -1098,12 +1251,15 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
   ): Promise<void> {
     if (config.owner) {
       await messenger.send("This connection serves a single organization.");
+
       return;
     }
+
     const { orgs } = await client.listUserOrgs();
 
     if (orgs.length === 0) {
       await messenger.send("No organizations are configured yet.");
+
       return;
     }
 
@@ -1113,6 +1269,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       await messenger.send(
         "Use /org from Discord's command menu to choose an organization."
       );
+
       return;
     }
 
@@ -1120,6 +1277,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
 
     if (!picked) {
       await messenger.send("Unknown organization. Send /org to see the list.");
+
       return;
     }
 
@@ -1147,14 +1305,18 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       await messenger.send(
         `This connection belongs to agent ${config.owner.profileId}.`
       );
+
       return;
     }
+
     const { orgs } = await client.listUserOrgs();
     const currentOrgId = orgStore.get(channelOrgKey)?.orgId;
     client.setOrgId(currentOrgId ?? null);
+
     const currentOrg = currentOrgId
       ? orgs.find((org) => org.id === currentOrgId)
       : undefined;
+
     const arg = text.trim().split(/\s+/).slice(1).join(" ");
     const currentProfileId = await resolveSessionProfileId(conversationKey);
 
@@ -1162,21 +1324,25 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       await messenger.send(
         "Use /profile from Discord's command menu to choose a profile."
       );
+
       return;
     }
 
     const currentOrgProfiles = currentOrgId
       ? await listSelectableProfiles()
       : [];
+
     const currentOrgNumericPick =
       currentOrgId &&
       isProfileSelectionIndexInput(arg, currentOrgProfiles.length)
         ? resolveProfileInput(currentOrgProfiles, arg)
         : undefined;
+
     const currentOrgProfilePick =
       currentOrgId && isThread
         ? resolveProfileInput(currentOrgProfiles, arg)
         : undefined;
+
     const resolved =
       currentOrgId && (currentOrgNumericPick || currentOrgProfilePick)
         ? {
@@ -1193,6 +1359,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
 
     if (!resolved) {
       await messenger.send("Unknown profile. Send /profile to see the list.");
+
       return;
     }
 
@@ -1200,6 +1367,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       await messenger.send(
         `That profile exists in multiple orgs (${resolved.ambiguous}). Send /org first, then /profile.`
       );
+
       return;
     }
 
@@ -1215,6 +1383,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
 
     if (picked.id === currentProfileId && scope.orgId === currentOrgId) {
       await messenger.send(`Already using ${picked.name}.`);
+
       return;
     }
 
@@ -1245,6 +1414,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
 
   async function listSelectableProfiles(orgId?: string) {
     const { profiles } = await client.listProfiles(orgId);
+
     return filterProfilesForChatAccess(profiles, { excludeSuperBot: true });
   }
 
@@ -1254,6 +1424,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
   ): Promise<void> {
     try {
       const health = await client.health();
+
       const lines = [
         `Server: ${health.ok ? "ok" : "degraded"}`,
         `Provider configured: ${health.providerConfigured ? "yes" : "no"}`,
@@ -1264,9 +1435,11 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         const profiles = await listSelectableProfiles();
         const profileId = await resolveSessionProfileId(chatId);
         const profile = profiles.find((entry) => entry.id === profileId);
+
         const modelLabel = profile?.model?.includes("::")
           ? profile.model.slice(profile.model.indexOf("::") + 2)
           : (profile?.model ?? "none");
+
         lines.push(`Profile: ${profile?.name ?? profileId}`);
         lines.push(`Provider: ${models.provider ?? "unknown"}`);
         lines.push(`Model: ${modelLabel}`);
@@ -1275,6 +1448,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       }
 
       const sessionId = sessionStore.get(chatId)?.sessionId;
+
       if (sessionId) {
         lines.push(`Session: ${shortSessionId(sessionId)}`);
       }
@@ -1289,11 +1463,13 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     if (config.owner) {
       await resolveSessionProfileId(chatId);
       const stored = sessionStore.get(chatId);
+
       if (stored) {
         const { sessions } = await client.listSessions(
           config.owner.profileId,
           "discord"
         );
+
         if (
           stored.profileId !== config.owner.profileId ||
           !sessions.some(
@@ -1307,10 +1483,12 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         }
       }
     }
+
     const existing = sessionStore.get(chatId);
 
     if (existing) {
       const hot = sessionStore.getHotSession<RemoteChatSession>(chatId);
+
       if (hot) {
         return hot;
       }
@@ -1320,6 +1498,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       try {
         await session.getMessages();
         sessionStore.setHotSession(chatId, session);
+
         return session;
       } catch {
         // Session missing on server; create a new one below
@@ -1336,6 +1515,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     const resolvedProfileId = config.owner
       ? await resolveSessionProfileId(chatId)
       : (profileId ?? (await resolveSessionProfileId(chatId)));
+
     const session = await client.createSession("discord", {
       profileId: resolvedProfileId,
     });
@@ -1357,6 +1537,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
   ): ChatSessionRecord {
     const existing = sessionStore.get(chatId);
     const known = existing ? (existing.sessionIds ?? [existing.sessionId]) : [];
+
     return {
       profileId,
       sessionId,
@@ -1372,28 +1553,36 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
   // lists all Discord sessions on the profile. Offer only this chat's own.
   async function listChatSessions(chatId: string): Promise<SessionSummary[]> {
     const record = sessionStore.get(chatId);
+
     if (!record) {
       return [];
     }
+
     const known = record.sessionIds ?? [record.sessionId];
+
     const { sessions } = await client.listSessions(
       await resolveSessionProfileId(chatId),
       "discord"
     );
+
     return sessions.filter((session) => known.includes(session.id));
   }
 
   async function resumeSession(chatId: string, input: string): Promise<string> {
     const id = input.trim();
+
     const matches = id
       ? (await listChatSessions(chatId)).filter((session) =>
           session.id.startsWith(id)
         )
       : [];
+
     if (matches.length > 1) {
       return "That ID matches more than one session. Copy more of it from /sessions.";
     }
+
     const picked = matches[0];
+
     if (!picked) {
       return "No session with that ID in this chat. Use /sessions to see the list.";
     }
@@ -1404,6 +1593,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       nextSessionRecord(chatId, picked.profileId, picked.id)
     );
     await sessionStore.save();
+
     return `Resumed ${sessionLabel(picked)} (${shortSessionId(picked.id)}).`;
   }
 
@@ -1419,19 +1609,23 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         components: [],
         content: await resumeSession(chatId, interaction.values[0] ?? ""),
       });
+
       return;
     }
 
     const sessions = await listChatSessions(chatId);
+
     if (sessions.length === 0) {
       await interaction.editReply({
         components: [],
         content: "No sessions in this chat yet. Send a message to start one.",
       });
+
       return;
     }
 
     const currentId = sessionStore.get(chatId)?.sessionId;
+
     const menu = new StringSelectMenuBuilder()
       .setCustomId(`nakama:sessions:${interaction.user.id}`)
       .setPlaceholder("Choose a session to resume")
@@ -1443,6 +1637,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
           value: session.id,
         }))
       );
+
     await interaction.editReply({
       components: [
         new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu),
@@ -1454,11 +1649,14 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
   async function resolveSessionProfileId(chatId: string): Promise<string> {
     if (config.owner) {
       const { profiles } = await client.listProfiles(config.owner.orgId);
+
       if (!profiles.some((profile) => profile.id === config.owner!.profileId)) {
         throw new Error("The connection owner is unavailable.");
       }
+
       return config.owner.profileId;
     }
+
     const profiles = await listSelectableProfiles();
     const storedProfileId = sessionStore.get(chatId)?.profileId;
 
@@ -1472,12 +1670,15 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
 
     // New thread sessions inherit the parent channel's /profile selection.
     const parentChannelId = parentChannelIdFromConversationKey(chatId);
+
     if (parentChannelId) {
       const parentProfileId = sessionStore.get(parentChannelId)?.profileId;
+
       if (parentProfileId) {
         const match = profiles.find(
           (profile) => profile.id === parentProfileId
         );
+
         if (match) {
           return match.id;
         }
@@ -1491,6 +1692,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     conversationKey: string
   ): Promise<void> {
     const existing = sessionStore.get(conversationKey);
+
     if (!existing) {
       return;
     }
@@ -1568,6 +1770,7 @@ function parentChannelIdFromConversationKey(
   chatId: string
 ): string | undefined {
   const match = /^g:(.+):t:(.+)$/.exec(chatId);
+
   return match?.[1];
 }
 
@@ -1591,23 +1794,22 @@ async function resolveThreadParentChannelId(
 }
 
 async function hydrateThreadParentId(
-  channel: TextBasedChannel | { fetch?: () => Promise<unknown>; id?: string }
+  channel: TextBasedChannel | { fetch?: () => Promise<object>; id?: string }
 ): Promise<string | undefined> {
-  if (typeof channel.fetch !== "function") {
+  if (!channel.fetch) {
     return;
   }
 
   try {
-    const fetched = await channel.fetch();
-    if (fetched && typeof fetched === "object" && "isThread" in fetched) {
-      const thread = fetched as ThreadChannel;
-      if (
-        typeof thread.isThread === "function" &&
-        thread.isThread() &&
-        thread.parentId
-      ) {
-        return thread.parentId;
-      }
+    const fetched = z
+      .object({
+        isThread: z.function().output(z.boolean()),
+        parentId: z.string().nullable(),
+      })
+      .safeParse(await channel.fetch());
+
+    if (fetched.success && fetched.data.isThread() && fetched.data.parentId) {
+      return fetched.data.parentId;
     }
   } catch (error) {
     const id = "id" in channel ? String(channel.id) : "unknown";

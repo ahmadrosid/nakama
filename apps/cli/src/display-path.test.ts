@@ -12,6 +12,7 @@ describe("isCliVerbose", () => {
 
 describe("formatCliDisplayPath", () => {
   const home = homedir();
+
   const soulDir = join(
     home,
     ".nakama",
@@ -20,6 +21,7 @@ describe("formatCliDisplayPath", () => {
     "profiles",
     "linus-torvalds"
   );
+
   const configPath = join(home, ".nakama", "config.ini");
 
   test("masks home, org id, and profile id by default", () => {

@@ -1,4 +1,4 @@
-import type { ProfileDetail, ToolSummary } from "@nakama/core/contract";
+import type { ProfileDetail } from "@nakama/core/contract";
 import { BUILTIN_TOOL_IDS } from "@nakama/core/tools/protected";
 import { Button } from "@nakama/ui/button";
 import { cn } from "@nakama/ui/utils";
@@ -6,7 +6,6 @@ import { Delete02Icon } from "hugeicons-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { EmailSettingsDialog } from "@/components/EmailSettingsDialog";
-import { ToolAssignDialog } from "@/components/ToolAssignDialog";
 import { useAuth } from "@/context/use-auth";
 import { groupPluginTools, isPluginOwned } from "@/hooks/use-plugins";
 import { canUseToolPlayground, toolPlaygroundPath } from "@/lib/navigation";
@@ -15,47 +14,26 @@ import type { RemoveAssignmentTarget } from "@/pages/profiles/profiles-page.shar
 export function ProfileToolsSection({
   detail,
   busy,
-  availableTools,
-  onAssign,
   onRemove,
 }: {
   detail: ProfileDetail;
   busy: boolean;
-  availableTools: ToolSummary[];
-  onAssign: (toolId: string) => void;
   onRemove: (target: RemoveAssignmentTarget) => void;
 }) {
   const { user, activeOrg } = useAuth();
   const canConfigureEmail = user?.isPlatformAdmin === true;
+
   const canOpenPlayground = canUseToolPlayground(
     user?.isPlatformAdmin === true,
     activeOrg?.role
   );
+
   const [emailConfigOpen, setEmailConfigOpen] = useState(false);
 
   const groups = groupPluginTools(detail.tools);
 
   return (
     <div className="pt-5">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="font-normal text-muted-foreground/55 text-sm">
-            Tools
-          </h3>
-          {detail.tools.length > 0 ? (
-            <p className="type-body mt-1 text-xs tabular-nums">
-              {groups.length} assigned
-            </p>
-          ) : null}
-        </div>
-        <ToolAssignDialog
-          disabled={busy}
-          groupPlugins
-          onAssign={onAssign}
-          tools={availableTools}
-        />
-      </div>
-
       {detail.tools.length === 0 ? (
         <p className="type-body text-pretty text-xs">No tools assigned.</p>
       ) : (
@@ -73,6 +51,7 @@ export function ProfileToolsSection({
                 ) : null}
               </div>
             );
+
             const onConfigure =
               canConfigureEmail && tool.id === BUILTIN_TOOL_IDS.email
                 ? () => setEmailConfigOpen(true)
@@ -137,6 +116,12 @@ export function ProfileToolsSection({
           })}
         </ul>
       )}
+
+      {detail.tools.length > 0 ? (
+        <p className="type-body mt-3 text-xs tabular-nums">
+          {groups.length} assigned
+        </p>
+      ) : null}
 
       {canConfigureEmail ? (
         <EmailSettingsDialog

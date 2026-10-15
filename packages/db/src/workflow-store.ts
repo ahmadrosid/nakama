@@ -6,11 +6,13 @@ export class DatabaseWorkflowStore {
 
   async listForOrg(orgId: string): Promise<StoredWorkflow[]> {
     const records = await this.db.listWorkflowsForOrg(orgId);
+
     return records.map(fromRecord);
   }
 
   async get(id: string): Promise<StoredWorkflow | null> {
     const record = await this.db.getWorkflow(id);
+
     return record ? fromRecord(record) : null;
   }
 
@@ -24,6 +26,7 @@ export class DatabaseWorkflowStore {
 }
 
 function fromRecord(record: StoredWorkflowRecord): StoredWorkflow {
+  // SAFETY: DatabaseAdapter stores this definition from a typed workflow input.
   const definition = record.definition as
     | Partial<WorkflowDefinition>
     | undefined;

@@ -9,6 +9,18 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 
 ## [Unreleased]
 
+### Removed
+
+- Organization backend API keys and app-user integration. External apps using these keys must stop using this API. Private session rows remain retired; files are retained in `retired-app-users` for operators. Back up the full database and config directory before upgrading; do not run old and new servers against the same data. Rollback requires restoring that full backup.
+
+### Changed
+
+- Error tracking posts Sentry envelopes to the DSN's `/envelope/` endpoint instead of the deprecated `/store/` one, so Rustrak works alongside Sentry, GlitchTip, and Bugsink
+
+### Fixed
+
+- Member-authored skill code stays inert until an admin reviews its exact files, and its subprocess no longer inherits the deployment config dir ([#1270]) *(in review)*
+
 ## [0.4.10] - 2026-09-08
 
 ### Added
@@ -1066,3 +1078,4 @@ First tagged release. The baseline it established:
 [#920]: https://github.com/ahmadrosid/nakama/pull/920
 [#921]: https://github.com/ahmadrosid/nakama/pull/921
 [#926]: https://github.com/ahmadrosid/nakama/pull/926
+[#1270]: https://github.com/ahmadrosid/nakama/issues/1270

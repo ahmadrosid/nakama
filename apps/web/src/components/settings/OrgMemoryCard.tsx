@@ -19,6 +19,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { OrgMemoryHistoryPanel } from "@/components/settings/OrgMemoryHistoryPanel";
 import { OrgMemoryProposalsPanel } from "@/components/settings/OrgMemoryProposalsPanel";
+import type { AuthContextValue } from "@/context/auth-context-shared";
 import { useAuth } from "@/context/use-auth";
 import { useOrgMemory, useUpdateOrgMemory } from "@/hooks/use-org-memory";
 import { useOrgMemoryProposals } from "@/hooks/use-org-memory-proposals";
@@ -41,11 +42,13 @@ function formatUpdatedLabel(timestampMs: number): string {
   }
 
   const minutes = Math.round(seconds / 60);
+
   if (minutes < 60) {
     return `${minutes}m ago`;
   }
 
   const hours = Math.round(minutes / 60);
+
   if (hours < 24) {
     return `${hours}h ago`;
   }
@@ -141,12 +144,15 @@ async function saveOrgMemoryDraft(
   setEditOpen: (value: boolean) => void
 ): Promise<void> {
   setFormError(null);
+
   if (draftBytes > MAX_BODY_BYTES) {
     setFormError(
       `Content is too large (${draftBytes} bytes; limit ${MAX_BODY_BYTES}).`
     );
+
     return;
   }
+
   try {
     await updateMutation.mutateAsync({ content: draft });
     setEditOpen(false);
@@ -158,22 +164,23 @@ async function saveOrgMemoryDraft(
 
 function orgMemoryStatusLine(
   formError: string | null,
-  loadError: unknown
+  loadError: Error | null
 ): string | null {
   if (formError) {
     return formError;
   }
+
   if (loadError) {
     return formatError(loadError);
   }
+
   return null;
 }
 
-function useOrgMemoryCard() {
-  const { activeOrg } = useAuth();
+function useOrgMemoryCard(org: AuthContextValue["activeOrg"]) {
   const [searchParams] = useSearchParams();
-  const orgId = activeOrg?.id ?? null;
-  const isAdmin = activeOrg?.role === "admin";
+  const orgId = org?.id ?? null;
+  const isAdmin = org?.role === "admin";
 
   const {
     data,
@@ -181,10 +188,12 @@ function useOrgMemoryCard() {
     error: loadError,
     dataUpdatedAt,
   } = useOrgMemory(isAdmin ? orgId : null);
+
   const { data: proposalsData } = useOrgMemoryProposals(
     isAdmin ? orgId : null,
     "pending"
   );
+
   const updateMutation = useUpdateOrgMemory(orgId ?? "");
 
   const [activeTab, setActiveTab] = useState<OrgMemoryTab>("live");
@@ -207,6 +216,7 @@ function useOrgMemoryCard() {
   const statusLine = orgMemoryStatusLine(formError, loadError);
   const busy = updateMutation.isPending;
   const dirty = draft !== liveContent;
+
   const showPinnedFooter =
     activeTab === "live" && !isLoading && pinnedFacts.length > 0;
 
@@ -374,7 +384,13 @@ function OrgMemoryEditDialog({
 }
 
 export function OrgMemoryCard() {
-  const card = useOrgMemoryCard();
+  const { activeOrg } = useAuth();
+
+  return <OrgMemoryCardForOrg key={activeOrg?.id} org={activeOrg} />;
+}
+
+function OrgMemoryCardForOrg({ org }: { org: AuthContextValue["activeOrg"] }) {
+  const card = useOrgMemoryCard(org);
 
   if (!card.isAdmin) {
     return null;
@@ -456,6 +472,7 @@ export function OrgMemoryCard() {
         onDraftChange={card.setDraft}
         onOpenChange={(open) => {
           card.setEditOpen(open);
+
           if (!open) {
             card.setDraft("");
             card.setFormError(null);

@@ -51,6 +51,7 @@ describe("parseMcpToolParameters", () => {
       required: ["target", "cursor"],
       type: "object",
     });
+
     const names = (declarationOrder: string[]) =>
       parseMcpToolParameters(schemaDeclaring(declarationOrder)).map(
         (parameter) => parameter.name

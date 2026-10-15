@@ -3,24 +3,13 @@ import { CEREBRAS_CHAT_BASE_URL } from "./cerebras";
 import { compatibleModelSupportsThinking } from "./compatible-models";
 import { FIREWORKS_INFERENCE_BASE_URL } from "./fireworks";
 import { createOpenAICompatibleProvider } from "./openai-compatible";
+import { asTestFetch, streamFromChunks } from "./test-helpers";
 
 const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
 });
-
-function streamFromChunks(chunks: string[]): ReadableStream<Uint8Array> {
-  const encoder = new TextEncoder();
-  return new ReadableStream({
-    start(controller) {
-      for (const chunk of chunks) {
-        controller.enqueue(encoder.encode(chunk));
-      }
-      controller.close();
-    },
-  });
-}
 
 const VENDORS = [
   {
@@ -59,18 +48,23 @@ for (const vendor of VENDORS) {
       const fetchMock = mock(
         async (input: RequestInfo | URL, init?: RequestInit) => {
           expect(String(input)).toBe(`${vendor.baseUrl}/chat/completions`);
+
+          // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
           const body = JSON.parse(String(init?.body ?? "{}")) as {
             reasoning_effort?: string;
             reasoning?: { effort?: string };
           };
+
           expect(body.reasoning_effort).toBe("high");
           expect(body.reasoning).toEqual({ effort: "high" });
+
           return Response.json({
             choices: [{ message: { content: "Answer", reasoning: "Plan" } }],
           });
         }
       );
-      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      globalThis.fetch = asTestFetch(fetchMock);
 
       const result = await createVendorProvider(vendor, true).generateChat({
         messages: [{ content: "Think then answer", role: "user" }],
@@ -84,16 +78,20 @@ for (const vendor of VENDORS) {
     test("omits reasoning_effort when the model does not support thinking", async () => {
       const fetchMock = mock(
         async (_input: RequestInfo | URL, init?: RequestInit) => {
+          // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
           const body = JSON.parse(String(init?.body ?? "{}")) as {
             reasoning_effort?: unknown;
           };
+
           expect(body.reasoning_effort).toBeUndefined();
+
           return Response.json({
             choices: [{ message: { content: "Answer" } }],
           });
         }
       );
-      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      globalThis.fetch = asTestFetch(fetchMock);
 
       await createVendorProvider(vendor, false).generateChat({
         messages: [{ content: "Answer", role: "user" }],
@@ -117,9 +115,11 @@ for (const vendor of VENDORS) {
             }
           )
       );
-      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      globalThis.fetch = asTestFetch(fetchMock);
 
       const thinkingChunks: string[] = [];
+
       const result = await createVendorProvider(vendor, true).streamChat(
         {
           messages: [{ content: "Think then answer", role: "user" }],

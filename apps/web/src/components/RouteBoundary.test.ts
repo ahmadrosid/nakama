@@ -27,6 +27,7 @@ describe("routeErrorStateFromResetKey", () => {
 describe("shouldReloadAfterRouteError", () => {
   test("reloads once for a stale lazy chunk error", () => {
     const values = new Map<string, string>();
+
     const storage = {
       getItem: (key: string) => values.get(key) ?? null,
       setItem: (key: string, value: string) => values.set(key, value),

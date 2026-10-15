@@ -5,7 +5,6 @@ import type {
   AgentQuestionnaire,
   AgentTodo,
   ChatContextUsage,
-  ThinkingEffort,
 } from "@nakama/core/contract";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -38,6 +37,7 @@ import {
   useBranchSessionMutation,
   useUpdateSessionMutation,
 } from "@/hooks/use-resource-mutations";
+import { acpAgentSettingsKey } from "@/lib/acp-settings";
 import type { FileUIPart } from "@/lib/ai-ui-types";
 import {
   buildChatBasePath,
@@ -84,16 +84,13 @@ import { client, formatError } from "@/lib/client";
 import { createClientId } from "@/lib/client-id";
 import {
   decodeModelSelection,
-  effectiveProfileModelSelection,
-  groupModelsByProvider,
   knownModelSelection,
-  resolveModelThinkingSupport,
   resolveModelVisionSupport,
 } from "@/lib/models";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 import {
   buildAutoEnableThinkingPayload,
-  DEFAULT_THINKING_EFFORT,
   shouldAutoEnableThinking,
   shouldShowThinkingEffort,
 } from "@/lib/thinking-settings";
@@ -108,6 +105,7 @@ import {
   planPromptBranch,
   releaseChatStream,
 } from "@/pages/chat/chat-page.shared";
+import { useChatComposerControls } from "@/pages/chat/use-chat-composer-controls";
 
 interface SendMessageOptions {
   initialMessages?: ChatListItem[];
@@ -143,11 +141,18 @@ function useChatComposerDraft({
       profileId,
     routeSession?.sessionId ?? null
   );
-  const [composerEntry, setComposerEntry] = useState(() => ({
+
+  const [composerEntry, setComposerEntry] = useState<{
+    initialInput: string;
+    placeholder?: string;
+    revision: number;
+    scopeKey: string | null;
+  }>(() => ({
     initialInput: readComposerDraft(composerDraftKey),
     revision: 0,
     scopeKey: composerDraftKey,
   }));
+
   if (composerEntry.scopeKey !== composerDraftKey) {
     setComposerEntry({
       initialInput: readComposerDraft(composerDraftKey),
@@ -155,8 +160,12 @@ function useChatComposerDraft({
       scopeKey: composerDraftKey,
     });
   }
+
   return { composerDraftKey, composerEntry, setComposerEntry };
 }
+
+const AUTOMATION_COMPOSER_PLACEHOLDER =
+  "Describe what to automate and when, e.g. every weekday at 9am, summarize new support emails.";
 
 export function useChatPage() {
   const queryClient = useQueryClient();
@@ -166,46 +175,60 @@ export function useChatPage() {
   const [searchParams] = useSearchParams();
   const routeSession = useMemo(() => parseChatRouteParams(params), [params]);
   const { health, models } = useAppContext();
-  const { user, activeOrg } = useAuth();
+  const { user, activeOrg, isLoading: authLoading } = useAuth();
   const canManageInstallSettings = user?.isPlatformAdmin === true;
+
   const {
+    orgId: storeOrgId,
     profileId: storeProfileId,
     setProfileId,
     syncForOrg,
   } = useActiveChatProfile();
-  const profilesQuery = useProfilesQuery();
+
+  const profilesQuery = useProfilesQuery(activeOrg?.id ?? null);
+
   const profiles = useMemo(
     () => profilesQuery.data ?? [],
     [profilesQuery.data]
   );
-  const profileId =
-    storeProfileId ??
-    readInitialDraftChatProfileId({
-      orgId: activeOrg?.id,
-      routeProfileId: parseChatRouteParams(params)?.profileId,
-      search: location.search,
-    });
+
+  const profileId = readInitialDraftChatProfileId({
+    currentOrgId: storeOrgId,
+    currentProfileId: storeProfileId,
+    orgId: activeOrg?.id,
+    routeProfileId: routeSession?.profileId,
+    search: location.search,
+  });
+
   const [session, setSession] = useState<RemoteChatSession | null>(null);
   const [cognito, setCognito] = useState(false);
   const [sessionModel, setSessionModel] = useState<string | null>(null);
   const [sessionChannel, setSessionChannel] = useState<AgentChannel>("web");
   const [messages, setMessages] = useState<ChatListItem[]>([]);
   const [agentTodos, setAgentTodos] = useState<AgentTodo[]>([]);
+
   const [agentQuestionnaire, setAgentQuestionnaire] =
     useState<AgentQuestionnaire | null>(null);
+
   const [contextUsage, setContextUsage] = useState<ChatContextUsage | null>(
     null
   );
+
   const [busy, setBusy] = useState(false);
+
   const [lastSuccessfulTurnAt, setLastSuccessfulTurnAt] = useState<
     number | null
   >(null);
+
   const [turnStartedAt, setTurnStartedAt] = useState<string | null>(null);
+
   const [branchingMessageId, setBranchingMessageId] = useState<string | null>(
     null
   );
+
   const [canStop, setCanStop] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const { composerDraftKey, composerEntry, setComposerEntry } =
     useChatComposerDraft({
       orgId: activeOrg?.id,
@@ -214,9 +237,11 @@ export function useChatPage() {
       search: location.search,
       userId: user?.id,
     });
+
   const [queuedMessages, setQueuedMessages] = useState<QueuedComposerMessage[]>(
     []
   );
+
   const streamAbortRef = useRef<AbortController | null>(null);
   // Set while a send stream is running: calling it stops the stream writing
   // into the page without touching the request that keeps the turn alive.
@@ -231,6 +256,8 @@ export function useChatPage() {
   // Read inside sendMessage, which is memoised on other deps.
   const cognitoRef = useRef(cognito);
   const sessionLoadRef = useRef(0);
+  const sessionOrgRef = useRef<string | null | undefined>(undefined);
+  const orgRouteResetRef = useRef(false);
 
   /**
    * Hand the current stream back before the page moves to another chat.
@@ -250,6 +277,7 @@ export function useChatPage() {
       abort: streamAbortRef.current,
       detach: detachStreamRef.current,
     });
+
     streamAbortRef.current = null;
     detachStreamRef.current = null;
 
@@ -290,6 +318,7 @@ export function useChatPage() {
       const routeKey = `${nextProfileId}:${sessionId}`;
       const targetPath = buildChatPath(nextProfileId, sessionId);
       loadedRouteRef.current = routeKey;
+
       if (location.pathname !== targetPath) {
         navigate(targetPath, { replace: true });
       }
@@ -305,8 +334,10 @@ export function useChatPage() {
   const showOfflineHint = health != null && !health.providerConfigured;
   const branchSessionMutation = useBranchSessionMutation();
   const updateSessionMutation = useUpdateSessionMutation();
+
   const { data: thinkingSettings, isLoading: thinkingSettingsLoading } =
     useThinkingSettings();
+
   const saveThinkingSettingsMutation = useSaveThinkingSettings();
   const thinkingAutoEnableRef = useRef(false);
   const activeProfileQuery = useProfileQuery(profileId || null);
@@ -315,12 +346,41 @@ export function useChatPage() {
     () => profiles.find((profile) => profile.id === profileId),
     [profiles, profileId]
   );
+
   const availableSkills = activeProfileQuery.data?.skills ?? [];
 
-  const providerModelGroups = useMemo(
-    () => groupModelsByProvider(models?.models ?? []),
-    [models?.models]
-  );
+  const readOnlySession = isReadOnlySessionChannel(sessionChannel);
+
+  // An ACP profile picks its model and effort from the agent. The composer
+  // controls hook chooses the agent's lists or the workspace's.
+  const composer = useChatComposerControls({
+    acpAgentKey: acpAgentSettingsKey(activeProfile?.acpAgent),
+    acpEnabled: Boolean(activeProfile?.acpAgent),
+    busy,
+    canManageInstallSettings,
+    currentProviderId: models?.currentProviderId,
+    models: models?.models,
+    profileId: profileId || null,
+    profileModel: activeProfile?.model,
+    readOnlySession,
+    saveThinkingPending: saveThinkingSettingsMutation.isPending,
+    sessionId: session?.id ?? null,
+    sessionModel,
+    thinkingSettingsEffort: thinkingSettings?.effort,
+    thinkingSettingsLoading,
+  });
+
+  const {
+    acpEnabled: acpProfile,
+    activeModelSupportsThinking,
+    currentModelSelection,
+    providerModelGroups,
+    thinkingEffort,
+    thinkingEffortDisabled,
+    thinkingEffortOptions,
+    thinkingEffortVisible,
+  } = composer;
+
   const providerModelGroupsRef = useRef(providerModelGroups);
 
   useEffect(() => {
@@ -338,30 +398,26 @@ export function useChatPage() {
     []
   );
 
-  const currentModelSelection = useMemo(
-    () =>
-      effectiveProfileModelSelection(
-        sessionModel ?? activeProfile?.model,
-        providerModelGroups
-      ),
-    [activeProfile?.model, providerModelGroups, sessionModel]
-  );
-
   const renderModelLabel = useCallback(
     (selection: string | null) => {
       if (!selection) {
         return "Select model";
       }
+
       const decoded = decodeModelSelection(selection);
+
       if (!decoded) {
         return selection;
       }
+
       if (decoded.providerId === "__unknown__") {
         return decoded.modelId;
       }
+
       const group = providerModelGroups.find(
         (entry) => entry.providerId === decoded.providerId
       );
+
       return (
         group?.models.find((model) => model.id === decoded.modelId)?.name ??
         decoded.modelId
@@ -370,32 +426,21 @@ export function useChatPage() {
     [providerModelGroups]
   );
 
-  const activeModelSupportsThinking = useMemo(
-    () =>
-      resolveModelThinkingSupport(currentModelSelection, providerModelGroups),
-    [currentModelSelection, providerModelGroups]
-  );
-
   const activeModelSupportsVision = useMemo(
     () => resolveModelVisionSupport(currentModelSelection, providerModelGroups),
     [currentModelSelection, providerModelGroups]
   );
 
-  const readOnlySession = isReadOnlySessionChannel(sessionChannel);
   const showThinking = shouldShowThinkingEffort(activeModelSupportsThinking);
-  const thinkingEffortVisible = shouldShowThinkingEffort(
-    activeModelSupportsThinking
-  );
-  const thinkingEffort = thinkingSettings?.effort ?? DEFAULT_THINKING_EFFORT;
-  const thinkingEffortDisabled =
-    !canManageInstallSettings ||
-    busy ||
-    thinkingSettingsLoading ||
-    saveThinkingSettingsMutation.isPending ||
-    readOnlySession;
 
   const handleModelChange = useCallback(
     (selection: string) => {
+      if (acpProfile) {
+        composer.setAcpModel(selection);
+
+        return;
+      }
+
       if (
         !(profileId && selection) ||
         busy ||
@@ -404,7 +449,9 @@ export function useChatPage() {
       ) {
         return;
       }
+
       const decoded = decodeModelSelection(selection);
+
       if (!decoded) {
         return;
       }
@@ -429,12 +476,15 @@ export function useChatPage() {
           if (activeSessionIdRef.current !== updatedSessionId) {
             return;
           }
+
           setSessionModel(previousModel);
           writeLastChatModel(profileId, previousStoredModel);
           setError(formatError(err));
         });
     },
     [
+      composer.setAcpModel,
+      acpProfile,
       busy,
       profileId,
       readOnlySession,
@@ -465,6 +515,7 @@ export function useChatPage() {
       setAgentTodos([]);
       setAgentQuestionnaire(null);
       setContextUsage(null);
+
       // Session routes remount ChatPage on /chat — pass profile in the query so it survives.
       // The ?new=1 handler then replaces the URL with bare /chat.
       if (location.pathname !== buildChatBasePath()) {
@@ -474,8 +525,59 @@ export function useChatPage() {
     [location.pathname, navigate, releaseActiveStream, restoreLastChatModel]
   );
 
+  useLayoutEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    const nextOrgId = activeOrg?.id ?? null;
+
+    if (sessionOrgRef.current === undefined) {
+      sessionOrgRef.current = nextOrgId;
+
+      return;
+    }
+
+    if (sessionOrgRef.current === nextOrgId) {
+      return;
+    }
+
+    sessionOrgRef.current = nextOrgId;
+    sessionLoadRef.current += 1;
+    loadedRouteRef.current = null;
+    orgRouteResetRef.current = Boolean(routeSession);
+    releaseActiveStream();
+    activeSessionIdRef.current = null;
+    messageQueueRef.current = [];
+    isSendingRef.current = false;
+    setQueuedMessages([]);
+    setSession(null);
+    setMessages([]);
+    setAgentTodos([]);
+    setAgentQuestionnaire(null);
+    setContextUsage(null);
+    setSessionModel(null);
+    setError(null);
+    setBusy(false);
+    setTurnStartedAt(null);
+
+    if (routeSession) {
+      navigate(buildChatBasePath(), { replace: true });
+    }
+  }, [activeOrg?.id, authLoading, navigate, releaseActiveStream, routeSession]);
+
   const handleThinkingEffortChange = useCallback(
-    (effort: ThinkingEffort) => {
+    (effort: string) => {
+      if (acpProfile) {
+        composer.setAcpEffort(effort);
+
+        return;
+      }
+
+      if (effort !== "low" && effort !== "medium" && effort !== "high") {
+        return;
+      }
+
       if (
         !(canManageInstallSettings && profileId) ||
         effort === thinkingEffort
@@ -487,6 +589,7 @@ export function useChatPage() {
         if (busy) {
           setError("Wait for the current response to finish.");
         }
+
         return;
       }
 
@@ -497,6 +600,8 @@ export function useChatPage() {
         });
     },
     [
+      composer.setAcpEffort,
+      acpProfile,
       canManageInstallSettings,
       profileId,
       thinkingEffort,
@@ -536,21 +641,26 @@ export function useChatPage() {
         if (cancelled) {
           return;
         }
+
         if (profileIdRef.current !== startedProfileId) {
           return;
         }
+
         if (busyRef.current || routeSession) {
           return;
         }
+
         if (activeModelSupportsThinking !== true) {
           return;
         }
+
         enterDraftChat(startedProfileId);
       })
       .catch((err) => {
         if (cancelled) {
           return;
         }
+
         thinkingAutoEnableRef.current = false;
         setError(formatError(err));
       });
@@ -578,10 +688,13 @@ export function useChatPage() {
       releaseActiveStream();
       activeSessionIdRef.current = sessionId;
       setBusy(true);
+      setTurnStartedAt(null);
       setError(null);
+
       try {
         localStorage.setItem(sessionStorageKey(nextProfileId), sessionId);
         skipNextProfileSessionRef.current = nextProfileId !== profileId;
+
         const {
           channel,
           messages: storedMessages,
@@ -591,11 +704,14 @@ export function useChatPage() {
           questionnaire,
           contextUsage: nextContextUsage,
         } = await client.getSessionMessages(sessionId);
+
         if (!isCurrentLoad()) {
           return;
         }
+
         const nextSession = client.createChatSession(sessionId, channel);
         let listItems = chatMessagesToListItems(storedMessages, messageMeta);
+
         const storedFailedTurn =
           channel === "web" ? readFailedChatTurn(sessionId) : null;
 
@@ -616,6 +732,7 @@ export function useChatPage() {
 
         if (channel === "web") {
           const status = await client.getSessionStatus(sessionId);
+
           if (!isCurrentLoad()) {
             return;
           }
@@ -642,14 +759,18 @@ export function useChatPage() {
             if (!isCurrentLoad()) {
               return;
             }
+
             const refreshed = await client.getSessionMessages(sessionId);
+
             if (!isCurrentLoad()) {
               return;
             }
+
             let refreshedItems = chatMessagesToListItems(
               refreshed.messages,
               refreshed.messageMeta
             );
+
             const failedAfterReconnect = readFailedChatTurn(sessionId);
 
             if (failedAfterReconnect && !reconnected) {
@@ -679,14 +800,17 @@ export function useChatPage() {
         if (!isCurrentLoad()) {
           return;
         }
+
         if (isAbortError(err)) {
           setMessages((current) => finalizeStreamingMessages(current));
+
           return;
         }
 
         setError(formatError(err));
       } finally {
         setBusy((current) => (isCurrentLoad() ? false : current));
+
         if (isCurrentLoad()) {
           streamAbortRef.current = null;
           setTurnStartedAt(null);
@@ -698,17 +822,20 @@ export function useChatPage() {
 
   const handleBranchMessage = useCallback(
     async (message: ChatListItem) => {
-      if (!(session && profileId) || typeof message.historyIndex !== "number") {
+      if (!(session && profileId) || message.historyIndex === undefined) {
         return;
       }
+
       setBranchingMessageId(message.id);
       setError(null);
+
       try {
         const result = await branchSessionMutation.mutateAsync({
           messageIndex: message.historyIndex,
           profileId,
           sessionId: session.id,
         });
+
         await resumeSession(profileId, result.sessionId);
       } catch (err) {
         setError(formatError(err));
@@ -764,6 +891,7 @@ export function useChatPage() {
       ) {
         return;
       }
+
       setProfileId(nextProfileId);
       enterDraftChat(nextProfileId);
     },
@@ -776,17 +904,21 @@ export function useChatPage() {
     if (searchParams.get("new") !== "1") {
       return;
     }
+
     const requestedProfile = searchParams.get("profile")?.trim() || null;
     const targetProfileId = requestedProfile || profileId;
+
     const targetDraftKey = chatComposerDraftKey(
       user?.id,
       activeOrg?.id,
       targetProfileId,
       null
     );
+
     if (!targetDraftKey) {
       return;
     }
+
     const inlineDraft = readRequestedDraftFromNewChatSearch(location.search);
     const draftKey = readRequestedDraftKeyFromNewChatSearch(location.search);
     const storedDraft = draftKey ? consumeStoredChatDraft(draftKey) : null;
@@ -797,6 +929,7 @@ export function useChatPage() {
     } catch {
       // Starting a new chat must still work when browser storage is disabled.
     }
+
     skipNextProfileSessionRef.current = true;
     loadedRouteRef.current = null;
     sessionLoadRef.current += 1;
@@ -822,10 +955,19 @@ export function useChatPage() {
       setProfileId(requestedProfile);
     }
 
+    const placeholder =
+      searchParams.get("intent") === "automation"
+        ? AUTOMATION_COMPOSER_PLACEHOLDER
+        : undefined;
+
     if (requestedDraft !== null) {
       storeComposerDraft(targetDraftKey, requestedDraft);
+    }
+
+    if (requestedDraft !== null || placeholder) {
       setComposerEntry((current) => ({
-        initialInput: requestedDraft,
+        initialInput: requestedDraft ?? current.initialInput,
+        placeholder,
         revision: current.revision + 1,
         scopeKey: targetDraftKey,
       }));
@@ -846,43 +988,90 @@ export function useChatPage() {
   ]);
 
   useEffect(() => {
-    if (!profileId || routeSession) {
+    if (
+      !profileId ||
+      authLoading ||
+      routeSession ||
+      (activeOrg?.id &&
+        !profilesQuery.data?.some((profile) => profile.id === profileId))
+    ) {
       return;
     }
+
     if (skipNextProfileSessionRef.current) {
       skipNextProfileSessionRef.current = false;
+
       return;
     }
+
     enterDraftChat(profileId);
-  }, [profileId, routeSession, enterDraftChat]);
+  }, [
+    profileId,
+    routeSession,
+    enterDraftChat,
+    profilesQuery.data,
+    activeOrg?.id,
+    authLoading,
+  ]);
 
   useEffect(() => {
     if (!routeSession) {
+      orgRouteResetRef.current = false;
+
       return;
     }
+
+    if (
+      authLoading ||
+      orgRouteResetRef.current ||
+      (activeOrg?.id &&
+        !profilesQuery.data?.some(
+          (profile) => profile.id === routeSession.profileId
+        ))
+    ) {
+      return;
+    }
+
     const routeKey = `${routeSession.profileId}:${routeSession.sessionId}`;
+
     if (loadedRouteRef.current === routeKey) {
       return;
     }
+
     loadedRouteRef.current = routeKey;
     skipNextProfileSessionRef.current = true;
     void resumeSession(routeSession.profileId, routeSession.sessionId);
-  }, [routeSession, resumeSession]);
+  }, [
+    routeSession,
+    resumeSession,
+    profilesQuery.data,
+    activeOrg?.id,
+    authLoading,
+  ]);
 
   useEffect(() => {
-    if (profilesQuery.error) {
-      setError(formatError(profilesQuery.error));
+    if (orgRouteResetRef.current) {
       return;
     }
+
+    if (profilesQuery.error) {
+      setError(formatError(profilesQuery.error));
+
+      return;
+    }
+
     const list = profilesQuery.data;
+
     if (!list || list.length === 0) {
       return;
     }
+
     const resolved = syncForOrg({
       orgId: activeOrg?.id ?? null,
       preferredProfileId: routeSession?.profileId,
       profiles: list,
     });
+
     if (routeSession && resolved && routeSession.profileId !== resolved) {
       enterDraftChat(resolved);
     }
@@ -930,7 +1119,9 @@ export function useChatPage() {
         mediaType: image.mediaType,
         url: `data:${image.mediaType};base64,${image.data}`,
       }));
+
       const useImageAttachments = activeModelSupportsVision === false;
+
       const outgoingOptions = {
         imageAttachments:
           useImageAttachments && displayImages.length > 0
@@ -960,6 +1151,7 @@ export function useChatPage() {
             model: sessionModel ?? undefined,
             profileId,
           });
+
           // A cognito session id is never stored or put in the URL: either
           // would survive the reload that is supposed to end the chat.
           if (!cognitoRef.current) {
@@ -968,16 +1160,16 @@ export function useChatPage() {
               activeSession.id
             );
           }
+
           activeSessionIdRef.current = activeSession.id;
           setSessionChannel("web");
           setSession(activeSession);
+
           // Neither the URL nor the history list may learn about a cognito
           // session: it is not in `sessions`, so there is nothing to refetch.
           if (!cognitoRef.current) {
             syncChatUrl(profileId, activeSession.id);
-            void queryClient.invalidateQueries({
-              queryKey: queryKeys.sessions(profileId),
-            });
+            void invalidateQueries(queryClient, queryKeys.sessions(profileId));
           }
         }
 
@@ -993,6 +1185,7 @@ export function useChatPage() {
         detachStreamRef.current = () => {
           detached = true;
         };
+
         setCanStop(true);
 
         const whileAttached =
@@ -1031,6 +1224,7 @@ export function useChatPage() {
           contextUsage: nextContextUsage,
           model: nextSessionModel,
         } = await client.getSessionMessages(activeSession.id);
+
         setMessages(chatMessagesToListItems(storedMessages, messageMeta));
         setAgentTodos(todos);
         setAgentQuestionnaire(questionnaire);
@@ -1042,6 +1236,7 @@ export function useChatPage() {
           setError(formatError(err));
           shouldDrainQueue = false;
           setMessages((current) => current.slice(0, -2));
+
           if (queueItem) {
             messageQueueRef.current.unshift(queueItem);
             setQueuedMessages((current) => [
@@ -1053,6 +1248,7 @@ export function useChatPage() {
               ...current,
             ]);
           }
+
           return;
         }
 
@@ -1060,6 +1256,7 @@ export function useChatPage() {
           if (!detached) {
             setMessages((current) => finalizeStreamingMessages(current));
           }
+
           return;
         }
 
@@ -1071,11 +1268,13 @@ export function useChatPage() {
           if (text.trim()) {
             storeFailedChatTurn(activeSession.id, { error: message, text });
           }
+
           return;
         }
 
         if (isActiveTurnConflictError(message) && activeSession) {
           setError("The agent is still responding to your last message.");
+
           return;
         }
 
@@ -1086,12 +1285,14 @@ export function useChatPage() {
               model: sessionModel ?? undefined,
               profileId,
             });
+
             if (!cognitoRef.current) {
               localStorage.setItem(
                 sessionStorageKey(profileId),
                 nextSession.id
               );
             }
+
             activeSessionIdRef.current = nextSession.id;
             setSessionChannel("web");
             setSession(nextSession);
@@ -1103,12 +1304,14 @@ export function useChatPage() {
               current.filter((message) => !message.streaming)
             );
             setAgentQuestionnaire(null);
+
             return;
           } catch (retryErr) {
             setError(formatError(retryErr));
             setMessages((current) =>
               current.filter((message) => !message.streaming)
             );
+
             return;
           }
         }
@@ -1116,21 +1319,24 @@ export function useChatPage() {
         // Turn failures live in the Failed bubble; composer error stays for
         // non-turn issues (attachments, session expired, validation, etc.).
         setError(null);
+
         if (activeSession && text.trim()) {
           storeFailedChatTurn(activeSession.id, { error: message, text });
         }
+
         setMessages((current) => markStreamingTurnFailed(current, message));
       } finally {
         // Detached or not, the turn is over once the stream settles.
         if (turnSessionId) {
           useRunningTurnsStore.getState().endTurn(turnSessionId);
         }
+
         // The sessions list still wants the new title and preview, but nothing
         // else here belongs to a detached turn: the page has moved on and
         // releaseActiveStream already cleared the flags and the queue.
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.sessions(profileId),
-        });
+        void invalidateQueries(queryClient, queryKeys.sessions(profileId));
+        // A turn can remove an artifact owned by any profile.
+        void invalidateQueries(queryClient, ["artifacts"]);
 
         if (!detached) {
           streamAbortRef.current = null;
@@ -1142,6 +1348,7 @@ export function useChatPage() {
           const next = shouldDrainQueue
             ? messageQueueRef.current.shift()
             : null;
+
           if (next) {
             setQueuedMessages((current) =>
               current.filter((item) => item.id !== next.id)
@@ -1201,6 +1408,7 @@ export function useChatPage() {
           options,
           text,
         };
+
         messageQueueRef.current.push(queuedItem);
         setQueuedMessages((current) => [
           ...current,
@@ -1210,6 +1418,7 @@ export function useChatPage() {
             text: queuedItem.text,
           },
         ]);
+
         return;
       }
 
@@ -1236,6 +1445,7 @@ export function useChatPage() {
         setError(
           "Chat session is unavailable. Please send a new message instead."
         );
+
         return;
       }
 
@@ -1252,6 +1462,7 @@ export function useChatPage() {
             profileId,
             sessionId: session.id,
           });
+
           retrySession = client.createChatSession(result.sessionId, "web");
           initialMessages = plan.initialMessages;
         } else {
@@ -1263,6 +1474,7 @@ export function useChatPage() {
         }
 
         setSession(retrySession);
+
         if (cognitoRef.current) {
           activeSessionIdRef.current = retrySession.id;
         } else {
@@ -1303,11 +1515,13 @@ export function useChatPage() {
 
         if (!prompt?.content.trim()) {
           setError("Could not find a prompt to retry.");
+
           return;
         }
 
         if (prompt.images?.length || prompt.documents?.length) {
           setError("Retry is available for text-only prompts.");
+
           return;
         }
 
@@ -1336,11 +1550,13 @@ export function useChatPage() {
 
       if (!prompt?.content.trim()) {
         setError("Could not find a prompt to try again.");
+
         return;
       }
 
       if (prompt.images?.length || prompt.documents?.length) {
         setError("Try again is available for text-only prompts.");
+
         return;
       }
 
@@ -1366,6 +1582,7 @@ export function useChatPage() {
       // check so an attachment or an unsent turn can never reach the branch.
       if (!isEditableUserMessage(message)) {
         setError("Editing is available for text-only messages already sent.");
+
         return;
       }
 
@@ -1375,6 +1592,7 @@ export function useChatPage() {
   );
 
   const isEmptyState = messages.length === 0 && !busy;
+
   const composerDisabled =
     !profileId || readOnlySession || updateSessionMutation.isPending;
 
@@ -1420,6 +1638,7 @@ export function useChatPage() {
     stopStreaming,
     thinkingEffort,
     thinkingEffortDisabled,
+    thinkingEffortOptions,
     thinkingEffortVisible,
     turnStartedAt,
   };

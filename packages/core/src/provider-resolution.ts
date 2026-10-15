@@ -9,6 +9,7 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "openrouter",
   "gemini",
   "deepseek",
+  "netra",
   "doubao",
   "mistral",
   "perplexity",
@@ -29,13 +30,13 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "xai",
   "together",
   "xiaomi",
+  "meta",
   "qwen",
   "qwen_cn",
   "vercel_ai_gateway",
 ] as const;
 
 export {
-  DISCOVERY_MODEL_PROVIDERS,
   defaultDiscoveryBaseUrl,
   isDiscoveryModelProvider,
 } from "./discovery-providers";
@@ -51,6 +52,7 @@ export function parseProviderName(
     normalized === "openrouter" ||
     normalized === "gemini" ||
     normalized === "deepseek" ||
+    normalized === "netra" ||
     normalized === "doubao" ||
     normalized === "mistral" ||
     normalized === "perplexity" ||
@@ -71,6 +73,7 @@ export function parseProviderName(
     normalized === "xai" ||
     normalized === "together" ||
     normalized === "xiaomi" ||
+    normalized === "meta" ||
     normalized === "qwen" ||
     normalized === "qwen_cn" ||
     normalized === "vercel_ai_gateway"
@@ -93,6 +96,8 @@ export function apiKeyEnvVarForProvider(
       return "GEMINI_API_KEY";
     case "deepseek":
       return null;
+    case "netra":
+      return "NETRA_API_KEY";
     case "doubao":
       return "DOUBAO_API_KEY";
     case "mistral":
@@ -134,6 +139,8 @@ export function apiKeyEnvVarForProvider(
       return "TOGETHER_API_KEY";
     case "xiaomi":
       return "XIAOMI_API_KEY";
+    case "meta":
+      return "META_API_KEY";
     case "qwen":
       return "QWEN_API_KEY";
     case "qwen_cn":
@@ -171,10 +178,12 @@ export function resolveProvider(
 
   const providersWithEnvKeys = USER_PROVIDER_NAMES.filter((provider) => {
     const envVar = apiKeyEnvVarForProvider(provider);
+
     return envVar && readEnvValue(env, envVar);
   });
 
   const [onlyProvider] = providersWithEnvKeys;
+
   if (providersWithEnvKeys.length === 1 && onlyProvider) {
     return onlyProvider;
   }

@@ -1,33 +1,34 @@
-import type {
-  AutomationRunRecord,
-  StoredAutomation,
-} from "@nakama/core/contract";
-import { useEffect, useMemo, useState } from "react";
+import uFuzzy from "@leeoniya/ufuzzy";
+import type { StoredAutomation } from "@nakama/core/contract";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
   useAutomationRunsQuery,
   useAutomationsQuery,
   useDeleteAutomationMutation,
-  useDeleteAutomationRunMutation,
   useMarkAutomationRunsReadMutation,
   useRunAutomationMutation,
   useUpdateAutomationMutation,
 } from "@/hooks/use-automations";
-import {
-  formatFutureRelativeTime,
-  formatSessionRelativeTime,
-} from "@/lib/chat-history";
 import { formatError } from "@/lib/client";
 import { findSuperBotProfile } from "@/lib/profiles";
-import { formatTrigger } from "@/pages/automations/automations-page.shared";
 
 const EMPTY_AUTOMATIONS: StoredAutomation[] = [];
+
 const EMPTY_UNREAD_BY_AUTOMATION_ID: Record<string, number> = {};
+
+const automationSearch = new uFuzzy({
+  compare: () => 0,
+  intraIns: Number.POSITIVE_INFINITY,
+});
 
 export function useAutomationsPage() {
   const { navigateToNewChat } = useAppNavigation();
+  const { profileId } = useActiveChatProfile();
+
   const {
     data: automationsData,
     isLoading: initialLoading,
@@ -35,42 +36,56 @@ export function useAutomationsPage() {
     error: automationsError,
     refetch: refetchAutomations,
   } = useAutomationsQuery(5000);
-  const automations = automationsData?.automations ?? EMPTY_AUTOMATIONS;
+
   const unreadByAutomationId =
     automationsData?.unread?.byAutomationId ?? EMPTY_UNREAD_BY_AUTOMATION_ID;
+
   const { data: profiles = [], isLoading: profilesLoading } =
     useProfilesQuery();
+
   const superBotProfile = findSuperBotProfile(profiles);
+
+  const automations = useMemo(() => {
+    const all = automationsData?.automations ?? EMPTY_AUTOMATIONS;
+
+    return profileId && profileId === superBotProfile?.id
+      ? all
+      : all.filter((automation) => automation.profileId === profileId);
+  }, [automationsData?.automations, profileId, superBotProfile?.id]);
+
   const [searchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const appliedUrlId = useRef<string | null>(null);
+
   const {
     data: runs = [],
+    dataUpdatedAt: runsUpdatedAt,
     isLoading: runsLoading,
     isSuccess: runsLoaded,
     refetch: refetchRuns,
   } = useAutomationRunsQuery(selectedId);
+
   const updateMutation = useUpdateAutomationMutation();
   const deleteMutation = useDeleteAutomationMutation();
-  const deleteRunMutation = useDeleteAutomationRunMutation();
   const runMutation = useRunAutomationMutation();
   const markReadMutation = useMarkAutomationRunsReadMutation();
+  const markingRead = useRef(new Set<string>());
   const [searchQuery, setSearchQuery] = useState("");
   const [runningId, setRunningId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
   const [deleteTarget, setDeleteTarget] = useState<StoredAutomation | null>(
     null
   );
-  const [deleteRunTarget, setDeleteRunTarget] =
-    useState<AutomationRunRecord | null>(null);
+
   const [editDraft, setEditDraft] = useState<StoredAutomation | null>(null);
 
-  const busy =
-    updateMutation.isPending ||
-    deleteMutation.isPending ||
-    deleteRunMutation.isPending;
+  const busy = updateMutation.isPending || deleteMutation.isPending;
+
   const trimmedSearch = searchQuery.trim();
   const isSearching = trimmedSearch.length > 0;
   const loading = initialLoading && automations.length === 0;
+
   const refreshing =
     automationsRefreshing || (runsLoading && Boolean(selectedId));
 
@@ -78,14 +93,23 @@ export function useAutomationsPage() {
     automations.find((automation) => automation.id === selectedId) ?? null;
 
   const filteredAutomations = useMemo(() => {
-    const query = trimmedSearch.toLowerCase();
-    return automations.filter(
-      (automation) =>
-        !query ||
-        automation.name.toLowerCase().includes(query) ||
-        automation.description.toLowerCase().includes(query) ||
-        automation.id.toLowerCase().includes(query)
+    const query = trimmedSearch.trim().toLowerCase();
+
+    if (!query) {
+      return automations;
+    }
+
+    const [indices, info, order] = automationSearch.search(
+      automations.map((automation) =>
+        [automation.name, automation.description, automation.id].join(" ")
+      ),
+      query
     );
+
+    const matches =
+      info && order ? order.map((index) => info.idx[index]) : indices;
+
+    return (matches ?? []).map((index) => automations[index]!);
   }, [automations, trimmedSearch]);
 
   const selectedRunSummary = useMemo(() => {
@@ -93,27 +117,27 @@ export function useAutomationsPage() {
     const failed = runs.filter((run) => run.status === "failed").length;
     const running = runs.filter((run) => run.status === "running").length;
     const unread = runs.filter((run) => run.read === false).length;
+
     return { completed, failed, running, unread };
   }, [runs]);
 
   useEffect(() => {
-    if (automationsError) {
-      setError(formatError(automationsError));
-    }
-  }, [automationsError]);
-
-  useEffect(() => {
     if (automations.length === 0) {
       setSelectedId(null);
+
       return;
     }
 
     const automationFromUrl = searchParams.get("automation");
+
     if (
       automationFromUrl &&
+      automationFromUrl !== appliedUrlId.current &&
       automations.some((automation) => automation.id === automationFromUrl)
     ) {
+      appliedUrlId.current = automationFromUrl;
       setSelectedId(automationFromUrl);
+
       return;
     }
 
@@ -128,23 +152,28 @@ export function useAutomationsPage() {
   }, [automations, selectedId, searchParams]);
 
   useEffect(() => {
-    if (!(selectedId && runsLoaded)) {
+    if (!(selectedId && runsLoaded) || markingRead.current.has(selectedId)) {
       return;
     }
 
     const hasUnreadRuns = runs.some((run) => run.read === false);
-    const hasListUnread = (unreadByAutomationId[selectedId] ?? 0) > 0;
-    if (!(hasUnreadRuns || hasListUnread)) {
+
+    if (!hasUnreadRuns) {
       return;
     }
 
-    void markReadMutation.mutate(selectedId);
+    // Keep the guard through invalidation, while cached runs can still be unread.
+    markingRead.current.add(selectedId);
+    void markReadMutation.mutateAsync(selectedId).then(
+      () => markingRead.current.delete(selectedId),
+      () => markingRead.current.delete(selectedId)
+    );
   }, [
     runs,
     runsLoaded,
+    runsUpdatedAt,
     selectedId,
-    unreadByAutomationId,
-    markReadMutation.mutate,
+    markReadMutation.mutateAsync,
   ]);
 
   async function handleSaveEdit() {
@@ -173,6 +202,34 @@ export function useAutomationsPage() {
     }
   }
 
+  async function handleToggleEnabled(
+    automation: StoredAutomation,
+    enabled: boolean
+  ) {
+    if (busy) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await updateMutation.mutateAsync({
+        automationId: automation.id,
+        input: {
+          delivery: automation.delivery ?? null,
+          description: automation.description,
+          enabled,
+          name: automation.name,
+          profileId: automation.profileId,
+          prompt: automation.prompt,
+          trigger: automation.trigger,
+        },
+      });
+    } catch (err) {
+      setError(formatError(err));
+    }
+  }
+
   async function handleDeleteConfirm() {
     if (!deleteTarget || busy) {
       return;
@@ -183,27 +240,10 @@ export function useAutomationsPage() {
     try {
       await deleteMutation.mutateAsync(deleteTarget.id);
       setDeleteTarget(null);
+
       if (editDraft?.id === deleteTarget.id) {
         setEditDraft(null);
       }
-    } catch (err) {
-      setError(formatError(err));
-    }
-  }
-
-  async function handleDeleteRunConfirm() {
-    if (!(selectedId && deleteRunTarget) || busy) {
-      return;
-    }
-
-    setError(null);
-
-    try {
-      await deleteRunMutation.mutateAsync({
-        automationId: selectedId,
-        runId: deleteRunTarget.id,
-      });
-      setDeleteRunTarget(null);
     } catch (err) {
       setError(formatError(err));
     }
@@ -246,48 +286,43 @@ export function useAutomationsPage() {
     ]);
   }
 
-  function goToCreateAutomation() {
-    if (!superBotProfile) {
-      setError("No super bot profile exists in this organization.");
+  function goToCreateAutomation(draft?: string) {
+    if (profileId) {
+      navigateToNewChat(profileId, { draft, intent: "automation" });
+
       return;
     }
 
-    navigateToNewChat(superBotProfile.id);
+    if (!superBotProfile) {
+      setError("No super bot profile exists in this organization.");
+
+      return;
+    }
+
+    navigateToNewChat(superBotProfile.id, {
+      draft,
+      intent: "automation",
+    });
   }
 
-  const runScheduleHint = selected
-    ? selected.nextRunAt
-      ? `Next run ${formatFutureRelativeTime(selected.nextRunAt)}`
-      : selected.lastRunAt
-        ? `Last run ${formatSessionRelativeTime(selected.lastRunAt)}`
-        : "Not run yet"
-    : "";
-
-  const selectedSubtitle = selected
-    ? [
-        profiles.find((p) => p.id === selected.profileId)?.name ??
-          selected.profileId,
-        formatTrigger(selected.trigger),
-        runScheduleHint,
-      ]
-        .filter(Boolean)
-        .join(" · ")
+  const selectedProfileName = selected
+    ? (profiles.find((p) => p.id === selected.profileId)?.name ??
+      selected.profileId)
     : "";
 
   return {
     automations,
     automationsRefreshing,
     busy,
-    deleteRunTarget,
     deleteTarget,
     editDraft,
-    error,
+    error: error ?? (automationsError ? formatError(automationsError) : null),
     filteredAutomations,
     goToCreateAutomation,
     handleDeleteConfirm,
-    handleDeleteRunConfirm,
     handleRun,
     handleSaveEdit,
+    handleToggleEnabled,
     initialLoading,
     isSearching,
     loading,
@@ -302,9 +337,8 @@ export function useAutomationsPage() {
     searchQuery,
     selected,
     selectedId,
+    selectedProfileName,
     selectedRunSummary,
-    selectedSubtitle,
-    setDeleteRunTarget,
     setDeleteTarget,
     setEditDraft,
     setSearchQuery,

@@ -29,7 +29,7 @@ describe("getDiscordErrorCode", () => {
 
   test("returns null without a numeric code", () => {
     expect(getDiscordErrorCode({ code: "10062" })).toBeNull();
-    expect(getDiscordErrorCode("nope")).toBeNull();
+    expect(getDiscordErrorCode(null)).toBeNull();
   });
 });
 
@@ -65,6 +65,7 @@ describe("deferSlashInteraction", () => {
 
   test("skips without user reply for ignorable interaction errors", async () => {
     const calls: string[] = [];
+
     const interaction = {
       commandName: "help",
       deferReply: async () => {
@@ -84,6 +85,7 @@ describe("deferSlashInteraction", () => {
 
   test("replies once when deferReply fails with a non-ignorable error", async () => {
     const calls: string[] = [];
+
     const interaction = {
       commandName: "help",
       deferReply: async () => {
@@ -103,6 +105,7 @@ describe("deferSlashInteraction", () => {
 
   test("falls back to editReply when reply also fails after defer error", async () => {
     const calls: string[] = [];
+
     const interaction = {
       commandName: "org",
       deferReply: async () => {

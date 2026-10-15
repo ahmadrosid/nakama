@@ -203,10 +203,12 @@ export function FilesArtifactViews({
   onOpenFolder: (prefix: string) => void;
 }) {
   const [visibleCount, setVisibleCount] = useState(30);
+
   const remainingCount = Math.max(
     folders.length + listingFiles.length - visibleCount,
     0
   );
+
   return (
     <div className="space-y-4">
       <FilesArtifactViewsBody

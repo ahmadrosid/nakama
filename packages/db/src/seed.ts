@@ -23,13 +23,16 @@ const LEGACY_BUILTIN_TOOL_NAMES = new Set([
   "delay",
   "search_workspace",
 ]);
+
 const DEPRECATED_BUILTIN_TOOL_NAMES = new Set([
   "archive_profile_memory",
   "update_profile_memory",
   "save_artifact",
   "create_skill",
 ]);
+
 const DEPRECATED_SERVER_TOOL_NAMES = new Set(["delegate_coding_task"]);
+
 const SUPPORTED_TOOL_HANDLER_TYPES = new Set([
   "builtin",
   "bash",
@@ -116,7 +119,9 @@ export async function ensureBuiltinToolDefinitions(
   const now = new Date().toISOString();
 
   for (const tool of builtinTools) {
-    const toolId = BUILTIN_TOOL_IDS[tool.name as keyof typeof BUILTIN_TOOL_IDS];
+    const toolId = Object.entries(BUILTIN_TOOL_IDS).find(
+      ([name]) => name === tool.name
+    )?.[1];
 
     if (!toolId) {
       continue;
@@ -179,7 +184,10 @@ export async function ensurePreinstalledMcpServers(
     await db.upsertMcpServer({
       cachedTools: existing?.cachedTools ?? [],
       config: existing
-        ? mergePreinstalledHttpConfig(server.config, existing.config)
+        ? mergePreinstalledHttpConfig(
+            server.config,
+            isExistingHttpConfig(existing.config) ? existing.config : {}
+          )
         : server.config,
       createdAt: existing?.createdAt ?? now,
       enabled: existing?.enabled ?? true,
@@ -193,9 +201,18 @@ export async function ensurePreinstalledMcpServers(
   }
 }
 
+interface ExistingHttpConfig {
+  headers?: object;
+  url?: unknown;
+}
+
+interface HttpHeaderMap {
+  [key: string]: string;
+}
+
 function mergePreinstalledHttpConfig(
   catalogConfig: McpHttpConfig | McpStdioConfig,
-  existingConfig: unknown
+  existingConfig: ExistingHttpConfig
 ): McpHttpConfig | McpStdioConfig {
   if (!("url" in catalogConfig)) {
     return catalogConfig;
@@ -215,36 +232,43 @@ function mergePreinstalledHttpConfig(
   return { headers, url: catalogConfig.url };
 }
 
-function readHttpUrl(config: unknown): string | undefined {
-  if (typeof config !== "object" || config === null) {
+function readHttpUrl(config: ExistingHttpConfig): string | undefined {
+  if (!isStringValue(config.url)) {
     return;
   }
 
-  const url = (config as Record<string, unknown>).url;
-
-  return typeof url === "string" && url.trim() ? url.trim() : undefined;
+  return config.url.trim() || undefined;
 }
 
-function readHttpHeaders(config: unknown): Record<string, string> {
-  if (typeof config !== "object" || config === null) {
+function readHttpHeaders(config: ExistingHttpConfig) {
+  if (!config.headers) {
     return {};
   }
 
-  const headers = (config as Record<string, unknown>).headers;
+  const result: HttpHeaderMap = {};
 
-  if (typeof headers !== "object" || headers === null) {
-    return {};
-  }
-
-  const result: Record<string, string> = {};
-
-  for (const [key, value] of Object.entries(headers)) {
-    if (typeof value === "string" && value.trim()) {
+  for (const [key, value] of Object.entries(config.headers)) {
+    if (isStringValue(value) && value.trim()) {
       result[key] = value;
     }
   }
 
   return result;
+}
+
+function isJsonObject(value: unknown): value is object {
+  return value instanceof Object && !Array.isArray(value);
+}
+
+function isExistingHttpConfig(value: unknown): value is ExistingHttpConfig {
+  return (
+    isJsonObject(value) &&
+    (!("headers" in value) || isJsonObject(value.headers))
+  );
+}
+
+function isStringValue(value: unknown): value is string {
+  return Object.prototype.toString.call(value) === "[object String]";
 }
 
 function firecrawlLegacyBearer(url: string | undefined): string | undefined {

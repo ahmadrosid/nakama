@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import {
   archiveSkillDirectory,
   detectOrgMemoryInjectionWarnings,
@@ -5,7 +6,6 @@ import {
   isPathWithinProfileSkillsDir,
   NakamaApiError,
   parseRawProfileSkillContent,
-  resolveProfileOrgBooleanOverride,
   resolveProfileSkillSupportingFilePath,
 } from "@nakama/core";
 import type { SkillProposal } from "@nakama/core/contract";
@@ -18,19 +18,22 @@ import type {
   SkillProposalAction,
   StoredSkillProposal,
 } from "@nakama/db";
+import { isSkillWriteApprovalRequired } from "./skill-write-approval";
 import type { SkillsService } from "./skills-service";
 
 export function toSkillProposal(
   record: StoredSkillProposal & { warnings?: string[] }
 ): SkillProposal {
   const { warnings, ...proposal } = record;
+
   return warnings?.length ? { ...proposal, warnings } : proposal;
 }
 
-export const MAX_SKILL_PATCH_FIELD_LENGTH = 500;
-export const MAX_SKILL_PROPOSAL_CONTENT_BYTES = 64 * 1024;
+const MAX_SKILL_PATCH_FIELD_LENGTH = 500;
 
-export type StageSkillProposalOutcome = "created" | "already_pending";
+const MAX_SKILL_PROPOSAL_CONTENT_BYTES = 64 * 1024;
+
+type StageSkillProposalOutcome = "created" | "already_pending";
 
 export interface StageSkillProposalInput {
   action: SkillProposalAction;
@@ -56,25 +59,6 @@ export interface StageSkillProposalResult {
   warnings?: string[];
 }
 
-export async function isSkillWriteApprovalRequired(
-  database: DatabaseAdapter,
-  orgId: string,
-  profileId: string
-): Promise<boolean> {
-  const org = await database.getOrganizationById(orgId);
-  if (!org) {
-    throw new NakamaApiError("Organization not found.", 404);
-  }
-  const profile = await database.getProfileForOrg(profileId, orgId);
-  if (!profile) {
-    throw new NakamaApiError("Profile not found.", 404);
-  }
-  return resolveProfileOrgBooleanOverride(
-    profile.skillsWriteApproval ?? null,
-    org.skillsWriteApproval ?? false
-  );
-}
-
 export class SkillProposalService {
   constructor(
     private readonly database: DatabaseAdapter | null = null,
@@ -97,25 +81,39 @@ export class SkillProposalService {
   ): Promise<StageSkillProposalResult> {
     const db = this.requireDatabase();
     const profile = await db.getProfileForOrg(input.profileId, input.orgId);
+
     if (!profile) {
       throw new NakamaApiError("Profile not found.", 404);
+    }
+
+    if (await db.getSharedAgentInstance(input.orgId, input.profileId)) {
+      throw new NakamaApiError("Shared agent skills are read-only.", 403);
     }
 
     if (input.action === "create") {
       return this.stageCreate(input);
     }
+
     if (input.action === "patch") {
       return this.stagePatch(input);
     }
+
     if (input.action === "edit") {
       return this.stageEdit(input);
     }
+
     if (input.action === "write_file") {
       return this.stageWriteFile(input);
     }
+
     if (input.action === "remove_file") {
       return this.stageRemoveFile(input);
     }
+
+    if (input.action === "approve_code") {
+      return this.stageApproveCode(input);
+    }
+
     return this.stageDelete(input);
   }
 
@@ -129,9 +127,11 @@ export class SkillProposalService {
   ): Promise<{ proposals: StoredSkillProposal[]; pendingCount: number }> {
     const db = this.requireDatabase();
     const proposals = await db.listSkillProposals(orgId, options);
+
     const pendingCount = options.sessionId
       ? proposals.filter((proposal) => proposal.status === "pending").length
       : await db.countPendingSkillProposals(orgId, options.profileId);
+
     return {
       pendingCount,
       proposals: proposals.map((proposal) => this.withWarnings(proposal)),
@@ -150,8 +150,13 @@ export class SkillProposalService {
     if (proposal.status === "approved") {
       return proposal;
     }
+
     if (proposal.status !== "pending") {
       throw new NakamaApiError("Only pending proposals can be approved.", 400);
+    }
+
+    if (await db.getSharedAgentInstance(orgId, proposal.profileId)) {
+      throw new NakamaApiError("Shared agent skills are read-only.", 403);
     }
 
     const changeMeta = {
@@ -161,9 +166,11 @@ export class SkillProposalService {
 
     if (proposal.action === "create") {
       const content = proposal.content;
+
       if (!content?.trim()) {
         throw new NakamaApiError("Create proposal is missing content.", 400);
       }
+
       parseRawProfileSkillContent(content, orgId, proposal.profileId);
       await skills.createAndAssignRawSkillToProfile(
         orgId,
@@ -180,12 +187,14 @@ export class SkillProposalService {
     } else if (proposal.action === "patch") {
       const oldString = proposal.patchOldString;
       const newString = proposal.patchNewString;
+
       if (oldString === null || oldString === "" || newString === null) {
         throw new NakamaApiError(
           "Patch proposal is missing patch fields.",
           400
         );
       }
+
       await skills.patchAssignedProfileSkill(
         orgId,
         proposal.profileId,
@@ -196,9 +205,11 @@ export class SkillProposalService {
       );
     } else if (proposal.action === "edit") {
       const content = proposal.content;
+
       if (!content?.trim()) {
         throw new NakamaApiError("Edit proposal is missing content.", 400);
       }
+
       await skills.editAssignedProfileSkill(
         orgId,
         proposal.profileId,
@@ -210,12 +221,14 @@ export class SkillProposalService {
     } else if (proposal.action === "write_file") {
       const content = proposal.content;
       const relativePath = proposal.relativePath;
+
       if (content === null || !relativePath?.trim()) {
         throw new NakamaApiError(
           "Write-file proposal is missing path or content.",
           400
         );
       }
+
       await skills.writeAssignedProfileSkillSupportingFile(
         orgId,
         proposal.profileId,
@@ -225,15 +238,32 @@ export class SkillProposalService {
       );
     } else if (proposal.action === "remove_file") {
       const relativePath = proposal.relativePath;
+
       if (!relativePath?.trim()) {
         throw new NakamaApiError("Remove-file proposal is missing path.", 400);
       }
+
       await skills.removeAssignedProfileSkillSupportingFile(
         orgId,
         proposal.profileId,
         proposal.skillName,
         relativePath
       );
+    } else if (proposal.action === "approve_code") {
+      const { absolutePath } = resolveProfileSkillSupportingFilePath(
+        orgId,
+        proposal.profileId,
+        proposal.skillName,
+        proposal.relativePath ?? "",
+        true
+      );
+
+      if ((await readFile(absolutePath, "utf8")) !== proposal.content) {
+        throw new NakamaApiError(
+          "Skill code changed since review was requested.",
+          409
+        );
+      }
     } else {
       await skills.deleteAssignedProfileSkill(
         orgId,
@@ -269,6 +299,7 @@ export class SkillProposalService {
     if (proposal.status === "rejected") {
       return proposal;
     }
+
     if (proposal.status !== "pending") {
       throw new NakamaApiError("Only pending proposals can be rejected.", 400);
     }
@@ -296,19 +327,24 @@ export class SkillProposalService {
     input: StageSkillProposalInput
   ): Promise<StageSkillProposalResult> {
     const content = input.content;
+
     if (!content?.trim()) {
       throw new NakamaApiError("content is required for create.", 400);
     }
+
     this.assertContentSize(content);
     let supportingBytes = 0;
+
     if ((input.supportingFiles?.length ?? 0) > 500) {
       throw new NakamaApiError("Too many supporting files.", 400);
     }
+
     const parsed = parseRawProfileSkillContent(
       content,
       input.orgId,
       input.profileId
     );
+
     for (const file of input.supportingFiles ?? []) {
       resolveProfileSkillSupportingFilePath(
         input.orgId,
@@ -318,6 +354,7 @@ export class SkillProposalService {
       );
       supportingBytes += Buffer.byteLength(file.contentBase64, "base64");
     }
+
     if (supportingBytes > 10 * 1024 * 1024) {
       throw new NakamaApiError("Skill supporting files are too large.", 400);
     }
@@ -326,6 +363,7 @@ export class SkillProposalService {
 
     const db = this.requireDatabase();
     const existingByName = await db.getSkillByName(name, input.orgId);
+
     if (
       existingByName &&
       !isPathWithinProfileSkillsDir(
@@ -345,6 +383,7 @@ export class SkillProposalService {
       input.profileId,
       name
     );
+
     if (pending) {
       return {
         message: `A pending proposal already exists for skill "${name}".`,
@@ -381,16 +420,20 @@ export class SkillProposalService {
 
     const oldString = input.oldString;
     const newString = input.newString;
+
     if (oldString === undefined || oldString === "") {
       throw new NakamaApiError("old_string is required for patch.", 400);
     }
+
     if (newString === undefined) {
       throw new NakamaApiError("new_string is required for patch.", 400);
     }
+
     this.assertPatchFieldSize(oldString);
     this.assertPatchFieldSize(newString);
 
     const db = this.requireDatabase();
+
     const pending = await db.getPendingSkillProposalForPatch(
       input.orgId,
       input.profileId,
@@ -398,6 +441,7 @@ export class SkillProposalService {
       oldString,
       newString
     );
+
     if (pending) {
       return {
         message: `An identical patch proposal for "${name}" is already pending.`,
@@ -411,6 +455,7 @@ export class SkillProposalService {
       input.profileId,
       name
     );
+
     if (conflicting) {
       return {
         message: `A pending proposal already exists for skill "${name}".`,
@@ -445,11 +490,13 @@ export class SkillProposalService {
     await this.assertProfileOwnedSkill(input.orgId, input.profileId, name);
 
     const db = this.requireDatabase();
+
     const pending = await db.getPendingSkillProposalForSkill(
       input.orgId,
       input.profileId,
       name
     );
+
     if (pending) {
       return {
         message: `A pending proposal already exists for skill "${name}".`,
@@ -483,9 +530,11 @@ export class SkillProposalService {
     await this.assertProfileOwnedSkill(input.orgId, input.profileId, name);
 
     const content = input.content;
+
     if (!content?.trim()) {
       throw new NakamaApiError("content is required for edit.", 400);
     }
+
     this.assertContentSize(content);
 
     const { name: parsedName } = parseRawProfileSkillContent(
@@ -493,6 +542,7 @@ export class SkillProposalService {
       input.orgId,
       input.profileId
     );
+
     if (parsedName !== name) {
       throw new NakamaApiError(
         `Frontmatter name "${parsedName}" must match skill name "${name}".`,
@@ -501,6 +551,7 @@ export class SkillProposalService {
     }
 
     const pending = await this.pendingForSkillOrAlready(input, name, content);
+
     if (pending) {
       return pending;
     }
@@ -532,13 +583,17 @@ export class SkillProposalService {
     await this.assertProfileOwnedSkill(input.orgId, input.profileId, name);
 
     const relativePath = input.relativePath?.trim();
+
     if (!relativePath) {
       throw new NakamaApiError("path is required for write_file.", 400);
     }
+
     const content = input.content;
+
     if (content === undefined) {
       throw new NakamaApiError("content is required for write_file.", 400);
     }
+
     this.assertContentSize(content);
 
     // Validate path containment / basename before staging.
@@ -550,6 +605,7 @@ export class SkillProposalService {
     );
 
     const pending = await this.pendingForSkillOrAlready(input, name);
+
     if (pending) {
       return pending;
     }
@@ -581,6 +637,7 @@ export class SkillProposalService {
     await this.assertProfileOwnedSkill(input.orgId, input.profileId, name);
 
     const relativePath = input.relativePath?.trim();
+
     if (!relativePath) {
       throw new NakamaApiError("path is required for remove_file.", 400);
     }
@@ -593,6 +650,7 @@ export class SkillProposalService {
     );
 
     const pending = await this.pendingForSkillOrAlready(input, name);
+
     if (pending) {
       return pending;
     }
@@ -615,33 +673,87 @@ export class SkillProposalService {
     };
   }
 
+  private async stageApproveCode(
+    input: StageSkillProposalInput
+  ): Promise<StageSkillProposalResult> {
+    const name = this.readSkillName(input);
+    await this.assertProfileOwnedSkill(input.orgId, input.profileId, name);
+    const relativePath = input.relativePath?.trim() ?? "";
+
+    if (!/\.(?:py|js|ts|mjs|cjs|jsx|tsx)$/i.test(relativePath)) {
+      throw new NakamaApiError("Choose a skill code file to review.", 400);
+    }
+
+    const { absolutePath } = resolveProfileSkillSupportingFilePath(
+      input.orgId,
+      input.profileId,
+      name,
+      relativePath,
+      true
+    );
+
+    const content = await readFile(absolutePath, "utf8");
+    this.assertContentSize(content);
+    const pending = await this.pendingForSkillOrAlready(input, name);
+
+    if (pending) {
+      return pending;
+    }
+
+    const proposal = await this.insertProposal({
+      ...input,
+      action: "approve_code",
+      content,
+      patchNewString: null,
+      patchOldString: null,
+      relativePath,
+      skillName: name,
+    });
+
+    return {
+      message: `Staged code review for skill "${name}" path "${relativePath}" (proposal ${proposal.id}). An org admin must approve before it can run.`,
+      outcome: "created",
+      proposalId: proposal.id,
+      relativePath,
+    };
+  }
+
   private async pendingForSkillOrAlready(
     input: StageSkillProposalInput,
     name: string,
     contentForWarnings?: string
   ): Promise<StageSkillProposalResult | null> {
     const db = this.requireDatabase();
+
     const pending = await db.getPendingSkillProposalForSkill(
       input.orgId,
       input.profileId,
       name
     );
+
     if (!pending) {
       return null;
     }
-    return {
+
+    const result: StageSkillProposalResult = {
       message: `A pending proposal already exists for skill "${name}".`,
       outcome: "already_pending",
       proposalId: pending.id,
       relativePath: pending.relativePath ?? undefined,
-      ...(contentForWarnings
-        ? { warnings: this.warningsForContent(contentForWarnings) }
-        : {}),
     };
+
+    if (contentForWarnings) {
+      result.warnings = this.warningsForContent(contentForWarnings);
+    }
+
+    return result;
   }
 
   private async insertProposal(
-    input: Omit<StageSkillProposalInput, "relativePath" | "content"> & {
+    input: Omit<
+      StageSkillProposalInput,
+      "relativePath" | "content" | "consolidateLoserSkillNames"
+    > & {
       skillName: string;
       content: string | null;
       consolidateLoserSkillNames?: string[] | null;
@@ -652,6 +764,7 @@ export class SkillProposalService {
   ): Promise<StoredSkillProposal> {
     const db = this.requireDatabase();
     const now = new Date().toISOString();
+
     const proposal: StoredSkillProposal = {
       action: input.action,
       consolidateLoserSkillNames: input.consolidateLoserSkillNames ?? null,
@@ -671,7 +784,9 @@ export class SkillProposalService {
       status: "pending",
       supportingFiles: input.supportingFiles ?? null,
     };
+
     await db.createSkillProposal(proposal);
+
     return proposal;
   }
 
@@ -680,6 +795,7 @@ export class SkillProposalService {
     proposal: StoredSkillProposal
   ): Promise<void> {
     const loserNames = proposal.consolidateLoserSkillNames ?? [];
+
     if (loserNames.length === 0) {
       return;
     }
@@ -691,17 +807,20 @@ export class SkillProposalService {
 
     for (const loserName of loserNames) {
       const skill = byName.get(loserName);
+
       if (!skill) {
         throw new NakamaApiError(
           `Consolidate loser skill "${loserName}" is not assigned to this profile.`,
           400
         );
       }
+
       const archived = await archiveSkillDirectory({
         orgId,
         profileId: proposal.profileId,
         skillName: loserName,
       });
+
       await skills.unassignArchivedProfileSkill(
         orgId,
         proposal.profileId,
@@ -717,9 +836,11 @@ export class SkillProposalService {
   ): Promise<StoredSkillProposal> {
     const db = this.requireDatabase();
     const proposal = await db.getSkillProposal(orgId, proposalId);
+
     if (!proposal) {
       throw new NakamaApiError("Skill proposal not found.", 404);
     }
+
     return proposal;
   }
 
@@ -731,15 +852,18 @@ export class SkillProposalService {
     const db = this.requireDatabase();
     // Callers pass names from readSkillName (already assertValidSkillName).
     const record = await db.getSkillByName(name, orgId);
+
     if (!record) {
       throw new NakamaApiError(`Skill "${name}" not found.`, 404);
     }
+
     if (isGlobalSkillSourcePath(record.sourcePath)) {
       throw new NakamaApiError(
         "Global skills cannot be modified by agents.",
         403
       );
     }
+
     if (!isPathWithinProfileSkillsDir(orgId, profileId, record.sourcePath)) {
       throw new NakamaApiError(
         `Skill "${name}" is not owned by this profile.`,
@@ -750,9 +874,11 @@ export class SkillProposalService {
 
   private readSkillName(input: StageSkillProposalInput): string {
     const name = input.skillName?.trim();
+
     if (!name) {
       throw new NakamaApiError("name is required.", 400);
     }
+
     return assertValidSkillName(name);
   }
 
@@ -772,7 +898,10 @@ export class SkillProposalService {
   }
 
   private warningsForContent(content: string): string[] | undefined {
-    const warnings = detectOrgMemoryInjectionWarnings(content);
+    const warnings = detectOrgMemoryInjectionWarnings(content, {
+      markup: false,
+    });
+
     return warnings.length > 0 ? warnings : undefined;
   }
 
@@ -781,9 +910,10 @@ export class SkillProposalService {
     newString: string
   ): string[] | undefined {
     const warnings = [
-      ...detectOrgMemoryInjectionWarnings(oldString),
-      ...detectOrgMemoryInjectionWarnings(newString),
+      ...detectOrgMemoryInjectionWarnings(oldString, { markup: false }),
+      ...detectOrgMemoryInjectionWarnings(newString, { markup: false }),
     ];
+
     return warnings.length > 0 ? [...new Set(warnings)] : undefined;
   }
 
@@ -797,8 +927,10 @@ export class SkillProposalService {
       proposal.content
     ) {
       const warnings = this.warningsForContent(proposal.content);
+
       return warnings ? { ...proposal, warnings } : proposal;
     }
+
     if (
       proposal.action === "patch" &&
       proposal.patchOldString !== null &&
@@ -808,8 +940,10 @@ export class SkillProposalService {
         proposal.patchOldString,
         proposal.patchNewString
       );
+
       return warnings ? { ...proposal, warnings } : proposal;
     }
+
     return proposal;
   }
 
@@ -817,6 +951,7 @@ export class SkillProposalService {
     if (!this.database) {
       throw new NakamaApiError("Database not configured.", 500);
     }
+
     return this.database;
   }
 
@@ -824,6 +959,7 @@ export class SkillProposalService {
     if (!this.skillsService) {
       throw new NakamaApiError("Skills service not configured.", 500);
     }
+
     return this.skillsService;
   }
 }

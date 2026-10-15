@@ -1,32 +1,41 @@
 import { join } from "node:path";
+import { z } from "zod";
 import {
   assertChannelPath,
   type ChannelConfigScope,
   claimChannelIdentity,
-  generateHandshakeCode,
+  createPairingCodeSecret,
   getChannelConfigDir,
+  hasActiveHandshakeCode,
   isBotChannelUserAuthorized,
   isChannelOwner,
   loadBotChannelIniConfig,
   maskBotToken,
   releaseChannelClaims,
   resetChannelConversationState,
-  resolveHandshakeCodeOnSave,
+  resolveHandshakeOnSave,
   verifyAndPairBotChannelUser,
   writeBotChannelIniConfig,
 } from "./channel-config-shared";
 import { readEnvValue } from "./config";
 
 export {
-  generateHandshakeCode,
+  hasActiveHandshakeCode,
+  isPairingCodeActive,
+  looksLikePairingCode,
   maskBotToken,
-  normalizeHandshakeInput,
 } from "./channel-config-shared";
+
+export { generatePairingCode } from "./pairing-code";
 
 export const DEFAULT_DISCORD_PROFILE_ID = "default";
 
 export const SNOWFLAKE_PATTERN = /^\d{17,20}$/;
+
 export const DISCORD_API_BASE_URL = "https://discord.com/api/v10";
+
+export const DISCORD_USER_AGENT =
+  "DiscordBot (https://github.com/ahmadrosid/nakama, 1.0)";
 
 export function isDiscordSnowflake(value: string): boolean {
   return SNOWFLAKE_PATTERN.test(value);
@@ -36,6 +45,7 @@ export interface DiscordConfigFile {
   allowedUserIds: string[];
   botToken: string;
   handshakeCode: string | null;
+  handshakeExpiresAt: string | null;
   pairedUserIds: string[];
   profileId: string;
 }
@@ -62,14 +72,17 @@ export function getDiscordConfigDir(scope: ChannelConfigScope = null): string {
 
 export function getDiscordConfigPath(scope: ChannelConfigScope = null): string {
   const path = join(getDiscordConfigDir(scope), "config.ini");
+
   if (isChannelOwner(scope)) {
     assertChannelPath(path);
     assertChannelPath(`${path}.tmp`);
   }
+
   return path;
 }
 
 const DISCORD_INVITE_PERMISSIONS = 101_376; // 68608 | 32768 (Attach Files)
+
 const DISCORD_INVITE_SCOPES = "bot applications.commands";
 
 const discordApplicationIdCache = new Map<string, string>();
@@ -121,14 +134,18 @@ export async function resolveDiscordApplicationId(
       return null;
     }
 
-    const payload = (await response.json()) as { id?: string };
-    const applicationId = payload.id?.trim();
+    const payload = z
+      .object({ id: z.string().optional() })
+      .safeParse(await response.json());
+
+    const applicationId = payload.success ? payload.data.id?.trim() : undefined;
 
     if (!(applicationId && SNOWFLAKE_PATTERN.test(applicationId))) {
       return null;
     }
 
     discordApplicationIdCache.set(token, applicationId);
+
     return applicationId;
   } catch {
     return null;
@@ -209,7 +226,9 @@ export function toDiscordSettingsPublic(
     allowedUserIds: file.allowedUserIds,
     botTokenMasked: maskBotToken(file.botToken),
     configured: Boolean(file.botToken.trim()),
-    handshakeCode: file.handshakeCode,
+    // An expired code is worse than none: the dashboard would offer a secret
+    // that no longer works.
+    handshakeCode: hasActiveHandshakeCode(file) ? file.handshakeCode : null,
     inviteUrl: null,
     pairedUserIds: file.pairedUserIds,
     profileId: file.profileId,
@@ -221,6 +240,7 @@ export async function loadDiscordSettingsPublic(
 ): Promise<DiscordSettingsPublic> {
   const file = await loadDiscordConfigFile(scope);
   const base = toDiscordSettingsPublic(file);
+
   return withDiscordInviteUrl(base, file?.botToken ?? null);
 }
 
@@ -281,7 +301,7 @@ function buildSavedDiscordConfig(
   return {
     allowedUserIds,
     botToken,
-    handshakeCode: resolveHandshakeCodeOnSave(existing, allowedUserIds),
+    ...resolveHandshakeOnSave(existing, allowedUserIds),
     pairedUserIds: existing?.pairedUserIds ?? [],
     profileId: resolveDiscordProfileId(input, existing),
   };
@@ -292,11 +312,14 @@ export async function saveDiscordConfig(
   scope: ChannelConfigScope = null
 ): Promise<DiscordSettingsPublic> {
   const existing = await loadDiscordConfigFile(scope);
+
   const changed =
     existing &&
     input.botToken !== undefined &&
     existing.botToken !== input.botToken.trim();
+
   const next = buildSavedDiscordConfig(input, changed ? null : existing);
+
   if (isChannelOwner(scope)) {
     next.profileId = scope.profileId;
   }
@@ -311,25 +334,31 @@ export async function saveDiscordConfig(
   const identity = isChannelOwner(scope)
     ? await resolveDiscordApplicationId(next.botToken)
     : null;
+
   if (isChannelOwner(scope) && !identity) {
     throw new Error("Invalid Discord bot token");
   }
+
   const rollback =
     isChannelOwner(scope) && identity
       ? await claimChannelIdentity("discord", scope, identity)
       : async () => {};
+
   try {
     if (changed && isChannelOwner(scope)) {
       await resetChannelConversationState("discord", scope);
     }
+
     await writeDiscordConfigFile(next, scope);
   } catch (error) {
     await rollback();
     throw error;
   }
+
   if (isChannelOwner(scope)) {
     await releaseChannelClaims("discord", scope, identity!);
   }
+
   return withDiscordInviteUrl(toDiscordSettingsPublic(next), next.botToken);
 }
 
@@ -386,12 +415,16 @@ export async function regenerateDiscordHandshake(
     throw new Error("Save a bot token before generating a pairing code.");
   }
 
+  const { code, expiresAt } = createPairingCodeSecret();
+
   const next: DiscordConfigFile = {
     ...existing,
-    handshakeCode: generateHandshakeCode(),
+    handshakeCode: code,
+    handshakeExpiresAt: expiresAt,
   };
 
   await writeDiscordConfigFile(next, scope);
+
   return withDiscordInviteUrl(toDiscordSettingsPublic(next), next.botToken);
 }
 
@@ -401,6 +434,7 @@ export async function verifyAndPairDiscordUser(
   scope: ChannelConfigScope = null
 ): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
   return verifyAndPairBotChannelUser({
+    configDir: getDiscordConfigDir(scope),
     handshakeInput,
     isAuthorized: isDiscordUserAuthorized,
     label: "Discord",
@@ -416,6 +450,7 @@ export function resolveDiscordConfigFromSources(options: {
 }): DiscordConfigFile | null {
   const env = options.env ?? process.env;
   const file = options.file ?? null;
+
   const botToken =
     readEnvValue(env, "DISCORD_BOT_TOKEN") || file?.botToken?.trim() || "";
 
@@ -431,6 +466,7 @@ export function resolveDiscordConfigFromSources(options: {
       : (file?.allowedUserIds ?? []),
     botToken,
     handshakeCode: file?.handshakeCode ?? null,
+    handshakeExpiresAt: file?.handshakeExpiresAt ?? null,
     pairedUserIds: file?.pairedUserIds ?? [],
     profileId:
       env.NAKAMA_DISCORD_PROFILE_ID?.trim() ||

@@ -641,6 +641,33 @@
     @apply flex h-14 shrink-0 items-center border-b border-border/50;
   }
 
+  .desktop-title-bar {
+    @apply hidden;
+  }
+
+  /* Desktop app only: the bar is the window's drag area. macOS traffic lights
+     sit at the left, Windows min/max/close at the right. */
+  html[data-desktop] .desktop-title-bar {
+    -webkit-app-region: drag;
+    @apply relative flex h-10 shrink-0 items-center gap-0.5 border-border/50 border-b bg-sidebar px-2;
+  }
+
+  html[data-desktop="darwin"] .desktop-title-bar {
+    @apply pl-20;
+  }
+
+  html[data-desktop="win32"] .desktop-title-bar {
+    @apply pr-36;
+  }
+
+  .desktop-title-bar button {
+    -webkit-app-region: no-drag;
+  }
+
+  .desktop-title-bar-search {
+    @apply absolute left-1/2 flex h-7 w-full max-w-sm -translate-x-1/2 items-center gap-2 rounded-md border border-border/60 bg-background px-2.5 text-muted-foreground text-xs transition-colors hover:text-foreground;
+  }
+
   .sidebar-shell .app-shell-header {
     transition: none;
     @apply motion-reduce:transition-none;
@@ -660,6 +687,24 @@
       background-color 150ms ease-out,
       color 150ms ease-out;
     @apply flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-13 text-muted-foreground motion-reduce:transition-none;
+  }
+
+  .sidebar-chat-title-clip {
+    container-type: inline-size;
+  }
+
+  .sidebar-chat-title {
+    transition: transform 300ms ease-out;
+  }
+
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    .group:hover .sidebar-chat-title,
+    .group:focus-within .sidebar-chat-title {
+      transform: translateX(min(0px, calc(100cqw - 100%)));
+      transition-delay: 300ms;
+      transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+      transition-duration: 1.4s;
+    }
   }
 
   .sidebar-nav-link--collapsed {
@@ -821,16 +866,10 @@
   }
 
   .chat-markdown {
-    max-width: 68ch;
     font-family: var(--font-sans);
     font-size: 0.875rem;
     line-height: 1.55;
     letter-spacing: 0.01em;
-  }
-
-  .artifact-share-page .chat-markdown,
-  .artifact-preview-panel .chat-markdown {
-    max-width: none;
   }
 
   /* Streamdown code fences in chat — single compact block, no 200px placeholder */
@@ -1314,4 +1353,182 @@
   --sidebar-accent-foreground: #fafafa;
   --sidebar-border: #27272a;
   --sidebar-ring: #f59e0b;
+}
+
+/* Google Meet */
+.meet-page {
+  display: grid;
+  gap: 32px;
+  width: 100%;
+  min-width: 0;
+  max-width: 768px;
+  margin: 0 auto;
+  font-size: 14px;
+}
+.meet-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.meet-card {
+  overflow: hidden;
+  box-shadow: none;
+}
+.meet-card-heading {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.meet-page h2,
+.meet-page h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+.meet-form {
+  display: grid;
+  gap: 12px;
+}
+.meet-form label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+.meet-form .meet-enable {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.meet-enable > img {
+  flex-shrink: 0;
+}
+.meet-enable-copy {
+  flex: 1;
+  min-width: 0;
+}
+.meet-list {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.meet-list li {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding: 10px 16px;
+}
+.meet-list li:hover {
+  background: color-mix(in oklab, var(--muted) 50%, transparent);
+}
+.meet-open::after {
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+  content: "";
+}
+.meet-open:focus-visible::after {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.meet-meeting .meet-row > .meet-open {
+  position: static;
+  transform: none;
+  scale: none;
+}
+.meet-action {
+  position: relative;
+  z-index: 1;
+}
+.meet-delete:hover {
+  color: var(--destructive);
+}
+.meet-list li + li {
+  border-top: 1px solid var(--border);
+}
+.meet-meeting {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+.meet-meta {
+  display: grid;
+  flex: 1 1 220px;
+  gap: 4px;
+  min-width: 0;
+}
+.meet-meeting .meet-row > button {
+  min-height: 40px;
+}
+.meet-status {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  overflow-wrap: anywhere;
+}
+.meet-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--muted-foreground);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.meet-empty {
+  padding: 32px 16px;
+  font-size: 14px;
+  color: var(--muted-foreground);
+  text-align: center;
+}
+.meet-page [role="alert"] {
+  font-size: 14px;
+  color: var(--destructive);
+  overflow-wrap: anywhere;
+}
+.meet-detail {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.meet-detail-heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+.meet-detail h2 {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.meet-document {
+  min-width: 0;
+  padding: 24px;
+}
+.meet-document-text {
+  margin: 0;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.meet-detail .meet-row > button {
+  min-height: 40px;
+}
+@media (max-width: 480px) {
+  .meet-document {
+    padding: 16px;
+  }
 }

@@ -22,6 +22,9 @@ import {
 } from "@nakama/core";
 import { canAccessSuperBotProfile } from "@nakama/core/profiles";
 import { type DatabaseAdapter, DatabaseAutomationStore } from "@nakama/db";
+import { z } from "zod";
+
+const DeliveryStatusSchema = z.enum(["sent", "failed", "skipped"]).nullish();
 
 /** Caller role context used to gate access to admin-only profiles (e.g. Super Bot). */
 export type ProfileAccess = Parameters<typeof canAccessSuperBotProfile>[0];
@@ -33,6 +36,10 @@ export interface AutomationServiceOptions {
 }
 
 export class AutomationService {
+  private readonly runProgress = new Map<
+    string,
+    Pick<AutomationRunRecord, "output" | "progress">
+  >();
   private readonly store: DatabaseAutomationStore;
   private readonly db: DatabaseAdapter;
   private readonly getUserTimezone: () => Promise<string>;
@@ -57,6 +64,7 @@ export class AutomationService {
   /** All automations — used by the scheduler across orgs. */
   async listAll(): Promise<StoredAutomation[]> {
     const automations = await this.store.list();
+
     const enabled = await Promise.all(
       automations.map(async (automation) =>
         (await this.isProfileAutomationEnabled(automation.profileId))
@@ -64,6 +72,7 @@ export class AutomationService {
           : null
       )
     );
+
     return Promise.all(
       enabled
         .filter(
@@ -81,9 +90,11 @@ export class AutomationService {
     unread?: AutomationUnreadSummary;
   }> {
     const automations = await this.store.listForOrg(orgId);
+
     const enriched = await Promise.all(
       automations.map((automation) => this.enrichAutomation(automation))
     );
+
     const unread = userId
       ? await this.getUnreadSummary(orgId, userId)
       : undefined;
@@ -93,6 +104,7 @@ export class AutomationService {
 
   async get(id: string, orgId?: string): Promise<StoredAutomation | null> {
     const automation = await this.store.get(id);
+
     if (!automation || (orgId && !automationBelongsToOrg(automation, orgId))) {
       return null;
     }
@@ -120,9 +132,14 @@ export class AutomationService {
       profileIdOverride ?? input.profileId,
       access
     );
+
     await this.assertProfileAutomationEnabled(profileId);
     const delivery = normalizeAutomationDelivery(input.delivery);
     await validateAutomationDelivery(delivery, {
+      access: {
+        isPlatformAdmin: access?.isPlatformAdmin,
+        orgRole: access?.orgRole,
+      },
       isEmailConfigured: this.canSendEmail
         ? () => this.canSendEmail!(profileId, orgId)
         : undefined,
@@ -131,7 +148,9 @@ export class AutomationService {
     });
 
     const now = new Date().toISOString();
+
     const automation: StoredAutomation = {
+      createdAt: now,
       description: input.description?.trim() || input.prompt.trim(),
       enabled: input.enabled ?? true,
       id: createId("automation"),
@@ -141,14 +160,17 @@ export class AutomationService {
       prompt: input.prompt.trim(),
       steps: [],
       trigger,
-      version: 1,
-      ...(delivery ? { delivery } : {}),
-      createdAt: now,
       updatedAt: now,
+      version: 1,
     };
+
+    if (delivery) {
+      automation.delivery = delivery;
+    }
 
     await this.store.save(automation);
     await this.notifyChange();
+
     return this.enrichAutomation(automation);
   }
 
@@ -165,6 +187,7 @@ export class AutomationService {
     }
 
     const userTimezone = await this.getUserTimezone();
+
     const trigger = input.trigger
       ? resolveScheduleTimezone(input.trigger, userTimezone)
       : existing.trigger;
@@ -181,6 +204,7 @@ export class AutomationService {
       if (!input.profileId.trim()) {
         throw new Error("Profile id is required.");
       }
+
       profileId = await this.resolveProfileId(orgId, input.profileId, access);
     }
 
@@ -193,10 +217,15 @@ export class AutomationService {
     }
 
     await validateAutomationDelivery(delivery, {
+      access: {
+        isPlatformAdmin: access?.isPlatformAdmin,
+        orgRole: access?.orgRole,
+      },
       isEmailConfigured: this.canSendEmail
         ? () => this.canSendEmail!(profileId, orgId)
         : undefined,
       orgId,
+      previousDelivery: existing.delivery,
       profileId,
     });
 
@@ -215,11 +244,13 @@ export class AutomationService {
 
     await this.store.save(updated);
     await this.notifyChange();
+
     return this.enrichAutomation(updated);
   }
 
   async delete(id: string, orgId: string): Promise<boolean> {
     const existing = await this.get(id, orgId);
+
     if (!existing) {
       return false;
     }
@@ -248,26 +279,35 @@ export class AutomationService {
     }
 
     const runs = await this.db.listAutomationRuns(automationId, limit);
+
     const readThroughAt =
       userId && orgId
         ? await this.db.getAutomationRunReadThrough(userId, orgId, automationId)
         : null;
 
-    return runs.map((run) => toRunRecord(run, readThroughAt));
+    return runs.map((run) => {
+      const record = toRunRecord(run, readThroughAt);
+
+      const progress =
+        run.status === "running" ? this.runProgress.get(run.id) : undefined;
+
+      if (progress) {
+        Object.assign(record, progress);
+      }
+
+      return record;
+    });
   }
 
-  async deleteRun(
-    automationId: string,
+  setRunProgress(
     runId: string,
-    orgId: string
-  ): Promise<boolean> {
-    const automation = await this.get(automationId, orgId);
-
-    if (!automation) {
-      throw new Error("Automation not found.");
+    progress?: Pick<AutomationRunRecord, "output" | "progress">
+  ): void {
+    if (progress === undefined) {
+      this.runProgress.delete(runId);
+    } else {
+      this.runProgress.set(runId, progress);
     }
-
-    return this.db.deleteAutomationRun(automationId, runId);
   }
 
   async markRunsRead(
@@ -288,6 +328,7 @@ export class AutomationService {
       automationId,
       readThroughAt
     );
+
     return { readThroughAt };
   }
 
@@ -296,6 +337,7 @@ export class AutomationService {
     userId: string
   ): Promise<AutomationUnreadSummary> {
     const counts = await this.db.countUnreadAutomationRunsByOrg(userId, orgId);
+
     return summarizeAutomationUnreadCounts(counts);
   }
 
@@ -303,6 +345,7 @@ export class AutomationService {
     automationId: string
   ): Promise<AutomationRunRecord | null> {
     const run = await this.db.getActiveAutomationRun(automationId);
+
     return run ? toRunRecord(run) : null;
   }
 
@@ -318,6 +361,7 @@ export class AutomationService {
     };
 
     await this.db.insertAutomationRun(run);
+
     return toRunRecord(run);
   }
 
@@ -326,22 +370,47 @@ export class AutomationService {
     automationId: string,
     result: { output?: string; error?: string }
   ): Promise<AutomationRunRecord> {
-    const active = await this.db.getActiveAutomationRun(automationId);
-    const run = active?.id === runId ? active : null;
+    const run = await this.db.getAutomationRun(automationId, runId);
 
-    if (!run) {
+    if (!run || run.status !== "running") {
       throw new Error("Automation run not found.");
+    }
+
+    const completedAt = new Date().toISOString();
+
+    const progress = this.runProgress.get(runId)?.progress?.map((message) =>
+      message.role === "tool" && !message.toolCompletedAt
+        ? {
+            ...message,
+            content: JSON.stringify({
+              error: "Run ended before this tool completed.",
+            }),
+            toolCompletedAt: Date.parse(completedAt),
+          }
+        : { ...message }
+    );
+
+    if (progress && result.output && !result.error) {
+      const last = progress.at(-1);
+
+      if (last?.role === "assistant" && !last.toolCalls) {
+        last.content = result.output;
+      } else {
+        progress.push({ content: result.output, role: "assistant" });
+      }
     }
 
     const updated = {
       ...run,
-      completedAt: new Date().toISOString(),
+      completedAt,
       error: result.error ?? null,
       output: result.output ?? null,
+      progress,
       status: result.error ? ("failed" as const) : ("completed" as const),
     };
 
     await this.db.updateAutomationRun(updated);
+
     return toRunRecord(updated);
   }
 
@@ -367,6 +436,7 @@ export class AutomationService {
     };
 
     await this.db.updateAutomationRun(updated);
+
     return toRunRecord(updated);
   }
 
@@ -386,6 +456,7 @@ export class AutomationService {
 
     if (trimmed) {
       const profile = await this.db.getProfileForOrg(trimmed, orgId);
+
       if (profile) {
         if (profile.isSuper && !canAccessSuperBotProfile(access ?? {})) {
           throw new NakamaApiError(
@@ -393,6 +464,7 @@ export class AutomationService {
             403
           );
         }
+
         return profile.id;
       }
 
@@ -400,6 +472,7 @@ export class AutomationService {
     }
 
     const defaultProfile = await this.db.getDefaultProfileForOrg(orgId);
+
     if (!defaultProfile) {
       throw new Error("No default profile exists for this organization.");
     }
@@ -425,6 +498,7 @@ export class AutomationService {
 
   async isProfileAutomationEnabled(profileId: string): Promise<boolean> {
     const profile = await this.db.getProfile(profileId);
+
     return profile?.automationsEnabled !== false;
   }
 
@@ -459,6 +533,7 @@ function toRunRecord(
     startedAt: string;
     completedAt: string | null;
     output: string | null;
+    progress?: AutomationRunRecord["progress"];
     error: string | null;
     deliveryStatus?: string | null;
     deliveryError?: string | null;
@@ -469,11 +544,11 @@ function toRunRecord(
     automationId: run.automationId,
     completedAt: run.completedAt,
     deliveryError: run.deliveryError ?? null,
-    deliveryStatus:
-      (run.deliveryStatus as AutomationRunRecord["deliveryStatus"]) ?? null,
+    deliveryStatus: DeliveryStatusSchema.parse(run.deliveryStatus) ?? null,
     error: run.error,
     id: run.id,
     output: run.output,
+    progress: run.progress,
     startedAt: run.startedAt,
     status: run.status,
   };

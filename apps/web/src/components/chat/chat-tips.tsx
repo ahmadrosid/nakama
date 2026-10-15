@@ -75,6 +75,7 @@ export function ChatTips({ className }: { className?: string }) {
     const id = setInterval(() => {
       setIndex((current) => (current + 1) % TIPS.length);
     }, TIP_INTERVAL_MS);
+
     return () => clearInterval(id);
   }, []);
 

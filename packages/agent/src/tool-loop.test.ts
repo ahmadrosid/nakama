@@ -25,6 +25,7 @@ const sampleTool: ToolDefinition = {
 describe("tool-loop", () => {
   test("canRunToolCallsInParallel requires more than one parallelSafe tool", () => {
     const parallelTool: ToolDefinition = { ...sampleTool, parallelSafe: true };
+
     const sequentialTool: ToolDefinition = {
       ...sampleTool,
       name: "sequential",
@@ -84,13 +85,56 @@ describe("tool-loop", () => {
     expect(result).toEqual({ error: "boom" });
   });
 
+  test("executeToolCall rejects non-JSON results before distillation", async () => {
+    const spy = spyOn(core, "distillToolResult");
+
+    const invalidTool: ToolDefinition = {
+      ...sampleTool,
+      async run() {
+        return { message: 1n };
+      },
+    };
+
+    try {
+      const result = await executeToolCall([invalidTool], {
+        arguments: {},
+        id: "invalid",
+        name: "sample",
+      });
+
+      expect(result).toHaveProperty("error");
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test("executeToolCall drops undefined fields like JSON serialization", async () => {
+    const optionalTool: ToolDefinition = {
+      ...sampleTool,
+      async run() {
+        return { message: "kept", placeholder: undefined };
+      },
+    };
+
+    const result = await executeToolCall([optionalTool], {
+      arguments: {},
+      id: "optional",
+      name: "sample",
+    });
+
+    expect(result).toEqual({ message: "kept" });
+  });
+
   test("executeToolCall returns raw result when distillToolResult throws", async () => {
     const payload = { message: "kept" };
+
     const spy = spyOn(core, "distillToolResult").mockImplementation(
       async () => {
         throw new Error("omni unavailable");
       }
     );
+
     const warnSpy = spyOn(console, "warn").mockImplementation(() => undefined);
 
     try {
@@ -111,6 +155,7 @@ describe("tool-loop", () => {
   test("executeToolCall re-throws the cancellation reason", async () => {
     const controller = new AbortController();
     const cancellation = new Error("cancelled");
+
     const cancellingTool: ToolDefinition = {
       description: "Cancels its turn",
       name: "cancel",
@@ -138,19 +183,31 @@ describe("tool-loop", () => {
 describe("createTurnTools", () => {
   test("discovery is bounded to assignments, validates input, and does not execute tools", async () => {
     let calls = 0;
+
     const plugin = {
       ...sampleTool,
       discoveryGroup: "notes",
       name: "plugin_notes__list",
       async run() {
         calls++;
+
         return {};
       },
     };
+
     const assigned = [sampleTool, plugin];
     const active = createTurnTools(assigned);
     const discovery = active.find((tool) => tool.name === "find_tools")!;
     expect(await discovery.run({}, {})).toHaveProperty("error");
+    expect(await discovery.run({ query: " ".repeat(501) }, {})).toHaveProperty(
+      "error"
+    );
+    expect(await discovery.run({ query: "x".repeat(501) }, {})).toHaveProperty(
+      "error"
+    );
+    expect(
+      await discovery.run({ extra: true, query: "notes" }, {})
+    ).toHaveProperty("error");
     expect(await discovery.run({ query: "unassigned" }, {})).toEqual({
       remaining: 0,
       tools: [],
@@ -170,11 +227,13 @@ describe("createTurnTools", () => {
   test("does not add discovery without deferred tools or shadow an assigned tool", () => {
     expect(createTurnTools([sampleTool])).toEqual([sampleTool]);
     const existing = { ...sampleTool, name: "find_tools" };
+
     const deferred = {
       ...sampleTool,
       discoveryGroup: "notes",
       name: "plugin_notes__list",
     };
+
     expect(
       createTurnTools([existing, deferred]).map((tool) => tool.name)
     ).toEqual(["find_tools", "find_tools_plugins"]);
@@ -189,12 +248,16 @@ test("plugin search supports multiple actions and paginates broad group queries"
       name: `plugin_workflows__${action}_workflow`,
     })
   );
+
   const active = createTurnTools(assigned);
   const discovery = active[0]!;
+
+  // SAFETY: This discovery input returns named tools in this test fixture.
   const result = (await discovery.run(
     { query: "list and run workflows" },
     {}
   )) as { tools: Array<{ name: string }> };
+
   expect(result.tools.map((tool) => tool.name)).toEqual([
     "plugin_workflows__list_workflow",
     "plugin_workflows__run_workflow",

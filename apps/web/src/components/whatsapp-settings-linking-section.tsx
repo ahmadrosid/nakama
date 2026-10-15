@@ -17,7 +17,7 @@ function pairingCodeDescription(
   paired: boolean
 ): string {
   if (pairingCode) {
-    return "Open Linked Devices in WhatsApp and enter this code.";
+    return "Open Linked Devices in WhatsApp and enter this code. It expires in 10 minutes.";
   }
 
   if (paired) {
@@ -307,6 +307,7 @@ export function WhatsAppSettingsLinkingSection({
   compact?: boolean;
 }) {
   const [relinkMethod, setRelinkMethod] = useState<"code" | "qr" | null>(null);
+
   return (
     <div className="divide-y divide-border border-border border-t">
       {relinkMethod ? (

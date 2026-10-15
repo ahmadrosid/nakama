@@ -1,11 +1,5 @@
 import { Button } from "@nakama/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@nakama/ui/dropdown-menu";
-import { toast } from "@nakama/ui/toast";
+import { ConfirmDialog } from "@nakama/ui/dialog";
 import { cn } from "@nakama/ui/utils";
 import {
   Loading03Icon,
@@ -15,7 +9,7 @@ import {
   StopIcon,
 } from "hugeicons-react";
 import { useState } from "react";
-import { WorkerLogDialog } from "@/components/WorkerLogDialog";
+import { WorkerLogDrawer } from "@/components/WorkerLogDrawer";
 import { useChannelProfileId } from "@/hooks/use-app-queries";
 import {
   useDisconnectChannel,
@@ -26,6 +20,7 @@ import {
 
 const glyphTransition =
   "absolute inset-0 size-3.5 transition-[opacity,transform,filter] duration-200 ease-[cubic-bezier(0.2,0,0,1)]";
+
 type ActionIcon = typeof PlayIcon;
 
 function ActionGlyph({
@@ -66,44 +61,155 @@ function ActionGlyph({
   );
 }
 
-function WorkerActionsMenu({
-  busy,
-  running,
-  showLogs,
-  onAction,
-  onViewLogs,
+function ToolbarButton({
+  busy = false,
+  destructive = false,
+  disabled,
+  icon,
+  label,
+  onClick,
 }: {
-  busy: boolean;
-  running: boolean;
-  showLogs: boolean;
-  onAction: () => void;
-  onViewLogs: () => void;
+  busy?: boolean;
+  destructive?: boolean;
+  disabled: boolean;
+  icon: ActionIcon;
+  label: string;
+  onClick: () => void;
 }) {
-  if (!(running || showLogs)) {
-    return null;
-  }
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={<Button disabled={busy} size="sm" variant="outline" />}
+    <Button
+      aria-busy={busy}
+      className={cn(
+        "px-4 text-sm",
+        destructive &&
+          "text-destructive hover:bg-destructive/10 hover:text-destructive"
+      )}
+      disabled={disabled}
+      onClick={onClick}
+      size="lg"
+      type="button"
+      variant="outline"
+    >
+      {busy ? <ActionGlyph busy icon={icon} /> : null}
+      {label}
+    </Button>
+  );
+}
+
+function Pm2Unavailable({
+  className,
+  error,
+}: {
+  className?: string;
+  error?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "max-w-xs truncate text-muted-foreground text-xs",
+        className
+      )}
+      title={error}
+    >
+      {error ? `PM2 not available: ${error}` : "PM2 not available"}
+    </span>
+  );
+}
+
+function RunningActions({
+  disabled,
+  onRestart,
+  onStop,
+  restarting,
+  stopping,
+}: {
+  disabled: boolean;
+  onRestart: () => void;
+  onStop: () => void;
+  restarting: boolean;
+  stopping: boolean;
+}) {
+  return (
+    <>
+      <Button
+        aria-busy={stopping}
+        className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+        disabled={disabled}
+        onClick={onStop}
+        size="sm"
+        type="button"
+        variant="outline"
       >
-        {busy ? "Working…" : "More"}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {running ? (
-          <DropdownMenuItem onClick={onAction}>Restart</DropdownMenuItem>
-        ) : null}
-        {showLogs ? (
-          <DropdownMenuItem onClick={onViewLogs}>View logs</DropdownMenuItem>
-        ) : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
+        <ActionGlyph busy={stopping} icon={StopIcon} />
+        Stop
+      </Button>
+      <Button
+        aria-busy={restarting}
+        disabled={disabled}
+        onClick={onRestart}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        <ActionGlyph busy={restarting} icon={Rotate02Icon} />
+        Restart
+      </Button>
+    </>
+  );
+}
+
+function StartAction({
+  compact,
+  disabled,
+  onStart,
+  starting,
+}: {
+  compact: boolean;
+  disabled: boolean;
+  onStart: () => void;
+  starting: boolean;
+}) {
+  return (
+    <Button
+      aria-busy={starting}
+      className={compact ? "px-4 text-sm" : undefined}
+      disabled={disabled}
+      onClick={onStart}
+      size={compact ? "lg" : "sm"}
+      type="button"
+      variant={compact ? "default" : "outline"}
+    >
+      {compact && !starting ? null : (
+        <ActionGlyph
+          busy={starting}
+          icon={PlayIcon}
+          iconClassName="translate-x-px"
+        />
+      )}
+      Start
+    </Button>
+  );
+}
+
+function ViewLogsButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button
+      className="ml-auto text-muted-foreground"
+      onClick={onClick}
+      size="sm"
+      type="button"
+      variant="ghost"
+    >
+      <ScrollIcon aria-hidden className="size-3.5" strokeWidth={2} />
+      View logs
+    </Button>
   );
 }
 
 export function WorkerActionBar({
   running,
   pm2Managed,
+  pm2Error,
   workerName,
   className,
   showLogs = true,
@@ -111,12 +217,15 @@ export function WorkerActionBar({
 }: {
   running: boolean;
   pm2Managed: boolean;
+  pm2Error?: string;
   workerName: string;
   className?: string;
   showLogs?: boolean;
   compact?: boolean;
 }) {
-  const [logDialogOpen, setLogDialogOpen] = useState(false);
+  const [logDrawerOpen, setLogDrawerOpen] = useState(false);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [confirmStop, setConfirmStop] = useState(false);
   const ownerProfileId = useChannelProfileId();
   const disconnect = useDisconnectChannel();
   const startWorker = useStartWorker();
@@ -128,111 +237,110 @@ export function WorkerActionBar({
   const restarting = restartWorker.isPending;
   const isBusy = starting || stopping || restarting || disconnect.isPending;
 
+  const channelName = workerName.charAt(0).toUpperCase() + workerName.slice(1);
+
   if (!pm2Managed) {
-    return (
-      <span className={cn("text-muted-foreground text-xs", className)}>
-        PM2 not available
-      </span>
-    );
+    return <Pm2Unavailable className={className} error={pm2Error} />;
   }
+
+  const toolbar = (
+    <div className={cn("flex flex-wrap items-center gap-2", className)}>
+      {running ? (
+        <ToolbarButton
+          busy={restarting}
+          disabled={isBusy}
+          icon={Rotate02Icon}
+          label="Restart"
+          onClick={() => restartWorker.mutate(workerName)}
+        />
+      ) : (
+        <StartAction
+          compact
+          disabled={isBusy}
+          onStart={() => startWorker.mutate(workerName)}
+          starting={starting}
+        />
+      )}
+      {showLogs ? (
+        <ToolbarButton
+          disabled={false}
+          icon={ScrollIcon}
+          label="View logs"
+          onClick={() => setLogDrawerOpen(true)}
+        />
+      ) : null}
+      {ownerProfileId ? (
+        <ToolbarButton
+          destructive
+          disabled={isBusy}
+          icon={StopIcon}
+          label="Disconnect"
+          onClick={() => setConfirmDisconnect(true)}
+        />
+      ) : null}
+    </div>
+  );
 
   return (
     <>
-      <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
-        {running ? (
-          compact ? null : (
-            <>
-              <Button
-                aria-busy={stopping}
-                className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                disabled={isBusy}
-                onClick={() => stopWorker.mutate(workerName)}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                <ActionGlyph busy={stopping} icon={StopIcon} />
-                Stop
-              </Button>
-              <Button
-                aria-busy={restarting}
-                disabled={isBusy}
-                onClick={() => restartWorker.mutate(workerName)}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                <ActionGlyph busy={restarting} icon={Rotate02Icon} />
-                Restart
-              </Button>
-            </>
-          )
-        ) : (
-          <Button
-            aria-busy={starting}
-            disabled={isBusy}
-            onClick={() =>
-              startWorker.mutate(workerName, {
-                onError: (error) => toast(error.message),
-              })
-            }
-            size="sm"
-            type="button"
-            variant={compact ? "default" : "outline"}
-          >
-            <ActionGlyph
-              busy={starting}
-              icon={PlayIcon}
-              iconClassName="translate-x-px"
+      {compact ? (
+        toolbar
+      ) : (
+        <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
+          {running ? (
+            <RunningActions
+              disabled={isBusy}
+              onRestart={() => restartWorker.mutate(workerName)}
+              onStop={() => setConfirmStop(true)}
+              restarting={restarting}
+              stopping={stopping}
             />
-            Start
-          </Button>
-        )}
-        {ownerProfileId ? (
-          <Button
-            disabled={isBusy}
-            onClick={() =>
-              disconnect.mutate(workerName, {
-                onError: (error) => toast(error.message),
-              })
-            }
-            size="sm"
-            variant="ghost"
-          >
-            Disconnect
-          </Button>
-        ) : null}
-        {compact ? (
-          <WorkerActionsMenu
-            busy={isBusy}
-            onAction={() => {
-              const mutation = running ? restartWorker : startWorker;
-              mutation.mutate(workerName, {
-                onError: (error) => toast(error.message),
-              });
-            }}
-            onViewLogs={() => setLogDialogOpen(true)}
-            running={running}
-            showLogs={showLogs}
-          />
-        ) : showLogs ? (
-          <Button
-            className="ml-auto"
-            onClick={() => setLogDialogOpen(true)}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            <ScrollIcon aria-hidden className="size-3.5" strokeWidth={2} />
-            View logs
-          </Button>
-        ) : null}
-      </div>
+          ) : (
+            <StartAction
+              compact={false}
+              disabled={isBusy}
+              onStart={() => startWorker.mutate(workerName)}
+              starting={starting}
+            />
+          )}
+          {ownerProfileId ? (
+            <Button
+              disabled={isBusy}
+              onClick={() => setConfirmDisconnect(true)}
+              size="sm"
+              variant="ghost"
+            >
+              Disconnect
+            </Button>
+          ) : null}
+          {showLogs ? (
+            <ViewLogsButton onClick={() => setLogDrawerOpen(true)} />
+          ) : null}
+        </div>
+      )}
       {showLogs ? (
-        <WorkerLogDialog
-          onOpenChange={setLogDialogOpen}
-          open={logDialogOpen}
+        <WorkerLogDrawer
+          onOpenChange={setLogDrawerOpen}
+          open={logDrawerOpen}
           workerName={workerName}
+        />
+      ) : null}
+      {confirmStop ? (
+        <ConfirmDialog
+          confirmLabel="Stop"
+          description="It stays offline until you start it again."
+          onClose={() => setConfirmStop(false)}
+          onConfirm={() => stopWorker.mutateAsync(workerName)}
+          title={`Stop ${channelName}?`}
+        />
+      ) : null}
+      {confirmDisconnect ? (
+        <ConfirmDialog
+          confirmLabel="Disconnect"
+          description={`Nobody can message this agent on ${channelName} until you connect it again.`}
+          onClose={() => setConfirmDisconnect(false)}
+          onConfirm={() => disconnect.mutateAsync(workerName)}
+          title={`Disconnect ${channelName}?`}
         />
       ) : null}
     </>
@@ -246,13 +354,13 @@ export function WorkerViewLogsButton({
   workerName: string;
   className?: string;
 }) {
-  const [logDialogOpen, setLogDialogOpen] = useState(false);
+  const [logDrawerOpen, setLogDrawerOpen] = useState(false);
 
   return (
     <>
       <Button
         className={cn("text-muted-foreground", className)}
-        onClick={() => setLogDialogOpen(true)}
+        onClick={() => setLogDrawerOpen(true)}
         size="sm"
         type="button"
         variant="ghost"
@@ -260,9 +368,9 @@ export function WorkerViewLogsButton({
         <ScrollIcon aria-hidden className="size-3.5" strokeWidth={2} />
         View logs
       </Button>
-      <WorkerLogDialog
-        onOpenChange={setLogDialogOpen}
-        open={logDialogOpen}
+      <WorkerLogDrawer
+        onOpenChange={setLogDrawerOpen}
+        open={logDrawerOpen}
         workerName={workerName}
       />
     </>

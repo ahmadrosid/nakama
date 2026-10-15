@@ -3,28 +3,58 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type {
+  AssignSkillRequest,
   CreateProfileRequest,
   CreateToolRequest,
+  ListSkillsResponse,
+  ModelsResponse,
   ProfileResponse,
   ToolDetail,
   UpdateProfileRequest,
 } from "@nakama/core";
 import { runWriteFile } from "@nakama/core";
+import { z } from "zod";
 import {
   approveToolSetup,
   loadToolApiKey,
   loadToolSetup,
+  saveToolSetup,
 } from "../services/custom-tool-shared";
 import type { ProfileService } from "../services/profile-service";
 import {
   PROFILE_UPDATE_CONFIRMATION_MESSAGE,
+  SKILL_ASSIGNMENT_CONFIRMATION_MESSAGE,
   SuperBotSessionState,
   TOOL_ASSIGNMENT_CONFIRMATION_MESSAGE,
 } from "../services/super-bot-session-state";
 import { createSuperBotTools } from "./super-bot-tools";
 
+type TestProfileService = Partial<
+  Pick<
+    ProfileService,
+    | "assignTool"
+    | "createProfile"
+    | "createTool"
+    | "getProfile"
+    | "getTool"
+    | "updateProfile"
+  >
+>;
+
+interface TestCreateProfileInput {
+  model?: string | null;
+  name: string;
+}
+
+interface TestHandlerConfig {
+  modulePath: string;
+  requiresApiKey?: boolean;
+}
+
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
+
 const ORG_ID = "org_test";
+
 const SESSION_ID = "session_test";
 
 describe("super bot create_tool", () => {
@@ -54,15 +84,20 @@ describe("super bot create_tool", () => {
       const assigned: string[] = [];
       let failAssignment = true;
       let stored: ToolDetail;
+
       const tools = createSuperBotTools(
-        {
+        asProfileService({
           async assignTool(orgId: string, profileId: string) {
             expect(orgId).toBe(ORG_ID);
+
             if (failAssignment) {
               failAssignment = false;
               throw new Error("Temporary assignment failure");
             }
+
             assigned.push(profileId);
+
+            return profileResponse({ id: profileId });
           },
           async createTool(request: CreateToolRequest) {
             created.push(request);
@@ -74,29 +109,38 @@ describe("super bot create_tool", () => {
               id: "tool_setup_test",
               updatedAt: "now",
             };
+
             return stored;
           },
           async getProfile() {
-            return { profile: { id: "target" } };
+            return profileResponse({ id: "target" });
           },
-          async getTool() {
+          async getTool(toolId, orgId) {
+            expect(toolId).toBe("tool_setup_test");
+            expect(orgId).toBe(ORG_ID);
+
             return { tool: stored };
           },
-        } as unknown as ProfileService,
+        }),
         new SuperBotSessionState()
       );
+
       const propose = tools.find((tool) => tool.name === "propose_tool")!;
       const create = tools.find((tool) => tool.name === "create_tool")!;
       const context = { orgId: ORG_ID, sessionId: SESSION_ID };
-      const proposal = (await propose.run(
-        {
-          description: "Echo",
-          name: "echo",
-          plan: "Return the supplied input.",
-          requiresApiKey,
-        },
-        context
-      )) as { setupId: string };
+
+      const proposal = z.object({ setupId: z.string() }).parse(
+        await propose.run(
+          {
+            description: "Echo",
+            name: "echo",
+            plan: "Return the supplied input.",
+            requiresApiKey,
+          },
+          context
+        )
+      );
+
       const input = {
         description: "ignored",
         handlerConfig: {
@@ -106,8 +150,10 @@ describe("super bot create_tool", () => {
         name: "ignored",
         setupId: proposal.setupId,
       };
+
       await expect(create.run(input, context)).rejects.toThrow();
       expect(created).toHaveLength(0);
+
       if (requiresApiKey) {
         await expect(
           approveToolSetup(ORG_ID, proposal.setupId, { profileId: "target" })
@@ -116,10 +162,12 @@ describe("super bot create_tool", () => {
           "pending"
         );
       }
+
       const approval = await approveToolSetup(ORG_ID, proposal.setupId, {
         apiKey: "private-key",
         profileId: "target",
       });
+
       expect(JSON.stringify(approval)).not.toContain("private-key");
       await expect(
         create.run(input, { ...context, sessionId: "other" })
@@ -127,9 +175,11 @@ describe("super bot create_tool", () => {
       await expect(
         create.run(input, { ...context, orgId: "other" })
       ).rejects.toThrow();
-      await mkdir(path.join(tempConfigDir, "tools"), { recursive: true });
+      await mkdir(path.join(tempConfigDir, "orgs", ORG_ID, "tools"), {
+        recursive: true,
+      });
       await writeFile(
-        path.join(tempConfigDir, "tools", "echo.js"),
+        path.join(tempConfigDir, "orgs", ORG_ID, "tools", "echo.js"),
         "export async function run(input) { return input; }"
       );
       await expect(create.run(input, context)).rejects.toThrow(
@@ -160,6 +210,58 @@ describe("super bot create_tool", () => {
     }
   );
 
+  test("setup retry rejects an unavailable tool before moving its key", async () => {
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-tool-setup-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+    const setupId = crypto.randomUUID();
+    await saveToolSetup(ORG_ID, {
+      description: "Parent tool",
+      id: setupId,
+      name: "parent_tool",
+      plan: "Read provider data",
+      requiresApiKey: true,
+      sessionId: SESSION_ID,
+      status: "pending",
+      toolId: "parent_tool_id",
+    });
+    await approveToolSetup(ORG_ID, setupId, { apiKey: "team-key" });
+    await mkdir(path.join(tempConfigDir, "orgs", ORG_ID, "tools"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(tempConfigDir, "orgs", ORG_ID, "tools", "echo.js"),
+      "export async function run(input) { return input; }"
+    );
+    let reads = 0;
+
+    const tools = createSuperBotTools(
+      asProfileService({
+        async getTool(toolId, orgId) {
+          reads += 1;
+          expect(toolId).toBe("parent_tool_id");
+          expect(orgId).toBe(ORG_ID);
+          throw new Error("Tool unavailable");
+        },
+      }),
+      new SuperBotSessionState()
+    );
+
+    const create = tools.find((tool) => tool.name === "create_tool")!;
+    await expect(
+      create.run(
+        { handlerConfig: { modulePath: "echo.js" }, setupId },
+        { orgId: ORG_ID, sessionId: SESSION_ID }
+      )
+    ).rejects.toThrow();
+    expect(reads).toBe(1);
+    expect((await loadToolSetup(ORG_ID, setupId)).status).toBe("approved");
+    expect(await loadToolApiKey(ORG_ID, setupId)).toBe("team-key");
+    expect(await loadToolApiKey(ORG_ID, "parent_tool_id")).toBeUndefined();
+    expect(
+      await loadToolApiKey("parent_org", "parent_tool_id")
+    ).toBeUndefined();
+  });
+
   test.each([false, true])(
     "defaults to javascript and returns credential setup when required: %s",
     async (requiresApiKey) => {
@@ -167,7 +269,7 @@ describe("super bot create_tool", () => {
         path.join(os.tmpdir(), "nakama-super-tool-")
       );
       process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
-      const toolsDir = path.join(tempConfigDir, "tools");
+      const toolsDir = path.join(tempConfigDir, "orgs", ORG_ID, "tools");
       await runWriteFile(
         {
           content: "export async function run(input) { return input; }",
@@ -178,8 +280,9 @@ describe("super bot create_tool", () => {
 
       const capturedRequests: CreateToolRequest[] = [];
       const sessionState = new SuperBotSessionState();
+
       const tools = createSuperBotTools(
-        {
+        asProfileService({
           async createTool(request: CreateToolRequest): Promise<ToolDetail> {
             capturedRequests.push(request);
 
@@ -193,21 +296,28 @@ describe("super bot create_tool", () => {
               updatedAt: "2026-01-01T00:00:00.000Z",
             };
           },
-        } as ProfileService,
+        }),
         sessionState
       );
+
       const createTool = tools.find((tool) => tool.name === "create_tool");
+
       if (!createTool) {
         throw new Error("create_tool was not registered");
+      }
+
+      const handlerConfig: TestHandlerConfig = {
+        modulePath: "echo.js",
+      };
+
+      if (requiresApiKey) {
+        handlerConfig.requiresApiKey = requiresApiKey;
       }
 
       const result = await createTool.run(
         {
           description: "Echo input",
-          handlerConfig: {
-            modulePath: "echo.js",
-            ...(requiresApiKey ? { requiresApiKey } : {}),
-          },
+          handlerConfig,
           name: "echo",
         },
         { orgId: ORG_ID, sessionId: SESSION_ID }
@@ -216,39 +326,37 @@ describe("super bot create_tool", () => {
       expect(capturedRequests[0]?.name).toBe("echo");
       expect(capturedRequests[0]?.description).toBe("Echo input");
       expect(capturedRequests[0]?.handlerType).toBe("javascript");
-      expect(capturedRequests[0]?.handlerConfig).toEqual({
-        modulePath: "echo.js",
-        ...(requiresApiKey ? { requiresApiKey } : {}),
-      });
-      expect(result).toEqual({
-        ...(requiresApiKey
-          ? {
-              orgId: ORG_ID,
-              toolId: "tool_echo",
-              toolName: "echo",
-              type: "tool_credentials_required",
-            }
-          : {}),
+      expect(capturedRequests[0]?.handlerConfig).toEqual(handlerConfig);
+
+      const expectedResult = {
         tool: {
           createdAt: "2026-01-01T00:00:00.000Z",
           description: "Echo input",
-          handlerConfig: {
-            modulePath: "echo.js",
-            ...(requiresApiKey ? { requiresApiKey } : {}),
-          },
+          handlerConfig,
           handlerType: "javascript",
           id: "tool_echo",
           name: "echo",
           updatedAt: "2026-01-01T00:00:00.000Z",
         },
-      });
+      };
+
+      if (requiresApiKey) {
+        expect(result).toMatchObject({
+          orgId: ORG_ID,
+          toolId: "tool_echo",
+          toolName: "echo",
+          type: "tool_credentials_required",
+        });
+      }
+
+      expect(result).toMatchObject(expectedResult);
     }
   );
 
   test("registers python tools when handlerType is python", async () => {
     tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-super-tool-"));
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
-    const toolsDir = path.join(tempConfigDir, "tools");
+    const toolsDir = path.join(tempConfigDir, "orgs", ORG_ID, "tools");
     await mkdir(toolsDir, { recursive: true });
 
     await writeFile(
@@ -291,7 +399,7 @@ if __name__ == "__main__":
         handlerType: "python",
         name: "echo_py",
       },
-      { sessionId: SESSION_ID }
+      { orgId: ORG_ID, sessionId: SESSION_ID }
     );
 
     expect(capturedRequests[0]?.handlerType).toBe("python");
@@ -310,7 +418,7 @@ if __name__ == "__main__":
   test("rejects python tools that lack a stdin/stdout harness", async () => {
     tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-super-tool-"));
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
-    const toolsDir = path.join(tempConfigDir, "tools");
+    const toolsDir = path.join(tempConfigDir, "orgs", ORG_ID, "tools");
     await mkdir(toolsDir, { recursive: true });
 
     await writeFile(
@@ -338,7 +446,7 @@ if __name__ == "__main__":
           handlerType: "python",
           name: "noharness",
         },
-        { sessionId: SESSION_ID }
+        { orgId: ORG_ID, sessionId: SESSION_ID }
       )
     );
 
@@ -364,7 +472,7 @@ if __name__ == "__main__":
           handlerType: "custom",
           name: "bad-tool",
         },
-        { sessionId: SESSION_ID }
+        { orgId: ORG_ID, sessionId: SESSION_ID }
       )
     );
 
@@ -375,7 +483,7 @@ if __name__ == "__main__":
   test("rejects missing javascript modules before storing the tool", async () => {
     tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-super-tool-"));
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
-    const toolsDir = path.join(tempConfigDir, "tools");
+    const toolsDir = path.join(tempConfigDir, "orgs", ORG_ID, "tools");
     await mkdir(toolsDir, { recursive: true });
 
     let createToolCalled = false;
@@ -394,7 +502,7 @@ if __name__ == "__main__":
           handlerConfig: { modulePath: "missing.js" },
           name: "missing",
         },
-        { sessionId: SESSION_ID }
+        { orgId: ORG_ID, sessionId: SESSION_ID }
       )
     );
 
@@ -416,24 +524,13 @@ describe("super bot assign_tool_to_profile", () => {
           _orgId: string,
           profileId: string
         ): Promise<ProfileResponse> {
-          return {
-            profile: {
-              createdAt: "2026-01-01T00:00:00.000Z",
-              hasAvatar: false,
-              id: profileId,
-              isSuper: false,
-              mcpServerCount: 0,
-              mcpServers: [],
-              model: null,
-              name: "Default Bot",
-              skills: [],
-              soulActive: false,
-              systemPrompt: "You are helpful.",
-              toolCount: 1,
-              tools: [],
-              updatedAt: "2026-01-01T00:00:00.000Z",
-            },
-          };
+          return profileResponse({
+            id: profileId,
+            name: "Default Bot",
+            soulActive: false,
+            systemPrompt: "You are helpful.",
+            toolCount: 1,
+          });
         },
       },
       sessionState
@@ -488,24 +585,13 @@ describe("super bot assign_tool_to_profile", () => {
         ): Promise<ProfileResponse> {
           assignCalls += 1;
 
-          return {
-            profile: {
-              createdAt: "2026-01-01T00:00:00.000Z",
-              hasAvatar: false,
-              id: profileId,
-              isSuper: false,
-              mcpServerCount: 0,
-              mcpServers: [],
-              model: null,
-              name: "Other Bot",
-              skills: [],
-              soulActive: false,
-              systemPrompt: "You are helpful.",
-              toolCount: 1,
-              tools: [],
-              updatedAt: "2026-01-01T00:00:00.000Z",
-            },
-          };
+          return profileResponse({
+            id: profileId,
+            name: "Other Bot",
+            soulActive: false,
+            systemPrompt: "You are helpful.",
+            toolCount: 1,
+          });
         },
       },
       sessionState
@@ -517,6 +603,214 @@ describe("super bot assign_tool_to_profile", () => {
     );
 
     expect(assignCalls).toBe(1);
+  });
+});
+
+describe("super bot list_models", () => {
+  test("returns profile model ids with vision support and no secrets", async () => {
+    const models: ModelsResponse = {
+      currentProviderId: "prov_main",
+      displayName: null,
+      models: [
+        {
+          default: true,
+          id: "text-model",
+          name: "Text Model",
+          provider: "openai_compatible",
+          providerId: "prov_main",
+        },
+        {
+          id: "vision-model",
+          name: "Vision Model",
+          provider: "openai_compatible",
+          providerId: "prov_main",
+        },
+      ],
+      provider: "openai_compatible",
+      providers: [
+        {
+          // A leaked secret on the summary must not reach the tool result.
+          ...{ apiKey: "sk-secret-value" },
+          createdAt: "2026-01-01T00:00:00.000Z",
+          customModels: [
+            { default: true, id: "text-model", supportsVision: false },
+            { id: "vision-model", supportsVision: true },
+          ],
+          hasApiKey: true,
+          id: "prov_main",
+          label: "Main",
+          modelCount: 2,
+          type: "openai_compatible",
+        },
+      ],
+    };
+
+    const tool = findTool(
+      createSuperBotTools(
+        asProfileService({
+          async getProfile() {
+            return profileResponse({ id: "super", model: null });
+          },
+        }),
+        new SuperBotSessionState(),
+        async () => "prov_main::text-model",
+        undefined,
+        { getModels: async () => models }
+      ),
+      "list_models"
+    );
+
+    const result = await tool.run(
+      {},
+      { orgId: ORG_ID, profileId: "super", sessionId: SESSION_ID }
+    );
+
+    expect(result).toEqual({
+      defaultProviderId: "prov_main",
+      inheritedModel: "prov_main::text-model",
+      providers: [
+        {
+          default: true,
+          id: "prov_main",
+          label: "Main",
+          models: [
+            {
+              default: true,
+              id: "prov_main::text-model",
+              name: "Text Model",
+              supportsVision: false,
+            },
+            {
+              default: false,
+              id: "prov_main::vision-model",
+              name: "Vision Model",
+              supportsVision: true,
+            },
+          ],
+          type: "openai_compatible",
+        },
+      ],
+    });
+    expect(JSON.stringify(result)).not.toContain("sk-secret-value");
+  });
+});
+
+describe("super bot assign_skill_to_profile", () => {
+  const skills: ListSkillsResponse = {
+    skills: [
+      skillSummary({ id: "skill_ledger", name: "use-finance-ledger" }),
+      skillSummary({ id: "skill_dup_a", name: "duplicate" }),
+      skillSummary({ id: "skill_dup_b", name: "duplicate" }),
+    ],
+  };
+
+  function setup(turns: number) {
+    const sessionState = new SuperBotSessionState();
+
+    for (let index = 0; index < turns; index += 1) {
+      sessionState.beginTurn(SESSION_ID);
+    }
+
+    const calls: { orgId: string; profileId: string; skillId: string }[] = [];
+    const listedOrgs: string[] = [];
+
+    const tool = findTool(
+      createSuperBotTools(
+        asProfileService({}),
+        sessionState,
+        undefined,
+        undefined,
+        {
+          async assignSkill(
+            orgId: string,
+            profileId: string,
+            request: AssignSkillRequest
+          ) {
+            calls.push({ orgId, profileId, skillId: request.skillId });
+
+            return profileResponse({ id: profileId });
+          },
+          async listSkills(orgId: string) {
+            listedOrgs.push(orgId);
+
+            return skills;
+          },
+        }
+      ),
+      "assign_skill_to_profile"
+    );
+
+    return { calls, listedOrgs, tool };
+  }
+
+  test("assigns a skill by name within the active org after approval", async () => {
+    const { calls, listedOrgs, tool } = setup(2);
+
+    await tool.run(
+      { profileId: "finance", skill: "use-finance-ledger" },
+      { orgId: ORG_ID, sessionId: SESSION_ID }
+    );
+
+    expect(listedOrgs).toEqual([ORG_ID]);
+    expect(calls).toEqual([
+      { orgId: ORG_ID, profileId: "finance", skillId: "skill_ledger" },
+    ]);
+  });
+
+  test("assigns a skill by id", async () => {
+    const { calls, tool } = setup(2);
+
+    await tool.run(
+      { profileId: "finance", skill: "skill_dup_b" },
+      { orgId: ORG_ID, sessionId: SESSION_ID }
+    );
+
+    expect(calls.map((call) => call.skillId)).toEqual(["skill_dup_b"]);
+  });
+
+  test("refuses on the first turn before the user approves", async () => {
+    const { calls, tool } = setup(1);
+
+    const error = await captureError(
+      tool.run(
+        { profileId: "finance", skill: "use-finance-ledger" },
+        { orgId: ORG_ID, sessionId: SESSION_ID }
+      )
+    );
+
+    expect(error?.message).toBe(SKILL_ASSIGNMENT_CONFIRMATION_MESSAGE);
+    expect(calls).toEqual([]);
+  });
+
+  test("requires an organization", async () => {
+    const { calls, tool } = setup(2);
+
+    const error = await captureError(
+      tool.run(
+        { profileId: "finance", skill: "use-finance-ledger" },
+        { sessionId: SESSION_ID }
+      )
+    );
+
+    expect(error).not.toBeNull();
+    expect(calls).toEqual([]);
+  });
+
+  test("does not assign an unknown or ambiguous skill name", async () => {
+    const { calls, tool } = setup(2);
+
+    for (const skill of ["missing-skill", "duplicate"]) {
+      const error = await captureError(
+        tool.run(
+          { profileId: "finance", skill },
+          { orgId: ORG_ID, sessionId: SESSION_ID }
+        )
+      );
+
+      expect(error).not.toBeNull();
+    }
+
+    expect(calls).toEqual([]);
   });
 });
 
@@ -555,11 +849,14 @@ describe("super bot create_profile", () => {
         updatedAt: "2026-01-01T00:00:00.000Z",
       },
     };
+
     let lookups = 0;
+
     const createProfile = getCreateProfileTool({
       async createProfile(orgId, request) {
         expect(orgId).toBe(ORG_ID);
         expect(request.model).toBe(expected);
+
         return {
           profile: {
             ...source.profile,
@@ -572,47 +869,41 @@ describe("super bot create_profile", () => {
         expect(orgId).toBe(ORG_ID);
         expect(profileId).toBe("super-bot");
         lookups++;
+
         return source;
       },
     });
 
-    await createProfile.run(
-      {
-        name: "New Bot",
-        ...(override === undefined ? {} : { model: override }),
-      },
-      { orgId: ORG_ID, profileId: "super-bot", sessionId: SESSION_ID }
-    );
+    const input: TestCreateProfileInput = {
+      name: "New Bot",
+    };
+
+    if (override !== undefined) {
+      input.model = override;
+    }
+
+    await createProfile.run(input, {
+      orgId: ORG_ID,
+      profileId: "super-bot",
+      sessionId: SESSION_ID,
+    });
     expect(lookups).toBe(override === undefined ? 1 : 0);
   });
 
   test("creates a profile on the first turn", async () => {
     const sessionState = new SuperBotSessionState();
     sessionState.beginTurn(SESSION_ID);
+
     const createProfile = getCreateProfileTool(
       {
         async createProfile(
           _orgId: string,
           request: CreateProfileRequest
         ): Promise<ProfileResponse> {
-          return {
-            profile: {
-              createdAt: "2026-01-01T00:00:00.000Z",
-              hasAvatar: false,
-              id: "gary",
-              isSuper: false,
-              mcpServerCount: 0,
-              mcpServers: [],
-              model: null,
-              name: request.name,
-              skills: [],
-              soulActive: true,
-              systemPrompt: "",
-              toolCount: 0,
-              tools: [],
-              updatedAt: "2026-01-01T00:00:00.000Z",
-            },
-          };
+          return profileResponse({
+            id: "gary",
+            name: request.name,
+          });
         },
       },
       sessionState
@@ -634,6 +925,7 @@ describe("super bot create_profile", () => {
     const sessionState = new SuperBotSessionState();
     sessionState.beginTurn(SESSION_ID);
     sessionState.beginTurn(SESSION_ID);
+
     const createProfile = getCreateProfileTool(
       {
         async createProfile(
@@ -641,24 +933,11 @@ describe("super bot create_profile", () => {
           request: CreateProfileRequest
         ): Promise<ProfileResponse> {
           capturedRequests.push(request);
-          return {
-            profile: {
-              createdAt: "2026-01-01T00:00:00.000Z",
-              hasAvatar: false,
-              id: "gary",
-              isSuper: false,
-              mcpServerCount: 0,
-              mcpServers: [],
-              model: null,
-              name: request.name,
-              skills: [],
-              soulActive: true,
-              systemPrompt: "",
-              toolCount: 0,
-              tools: [],
-              updatedAt: "2026-01-01T00:00:00.000Z",
-            },
-          };
+
+          return profileResponse({
+            id: "gary",
+            name: request.name,
+          });
         },
       },
       sessionState
@@ -687,24 +966,12 @@ describe("super bot create_profile", () => {
       ): Promise<ProfileResponse> {
         capturedRequests.push(request);
 
-        return {
-          profile: {
-            createdAt: "2026-01-01T00:00:00.000Z",
-            hasAvatar: false,
-            id: "support-bot",
-            isSuper: request.isSuper ?? false,
-            mcpServerCount: 0,
-            mcpServers: [],
-            model: request.model ?? null,
-            name: request.name,
-            skills: [],
-            soulActive: true,
-            systemPrompt: request.systemPrompt ?? "",
-            toolCount: 0,
-            tools: [],
-            updatedAt: "2026-01-01T00:00:00.000Z",
-          },
-        };
+        return profileResponse({
+          isSuper: request.isSuper ?? false,
+          model: request.model ?? null,
+          name: request.name,
+          systemPrompt: request.systemPrompt ?? "",
+        });
       },
     });
 
@@ -742,24 +1009,12 @@ describe("super bot create_profile", () => {
       ): Promise<ProfileResponse> {
         capturedRequests.push(request);
 
-        return {
-          profile: {
-            createdAt: "2026-01-01T00:00:00.000Z",
-            hasAvatar: false,
-            id: "support-bot",
-            isSuper: request.isSuper ?? false,
-            mcpServerCount: 0,
-            mcpServers: [],
-            model: request.model ?? null,
-            name: request.name,
-            skills: [],
-            soulActive: true,
-            systemPrompt: request.systemPrompt ?? "",
-            toolCount: 0,
-            tools: [],
-            updatedAt: "2026-01-01T00:00:00.000Z",
-          },
-        };
+        return profileResponse({
+          isSuper: request.isSuper ?? false,
+          model: request.model ?? null,
+          name: request.name,
+          systemPrompt: request.systemPrompt ?? "",
+        });
       },
     });
 
@@ -767,10 +1022,12 @@ describe("super bot create_profile", () => {
       additionalProperties: false,
       type: "object",
     });
-    expect(
-      (createProfile.parameters as { properties?: Record<string, unknown> })
-        .properties
-    ).not.toHaveProperty("id");
+
+    const parameters = z
+      .object({ properties: z.record(z.string(), z.json()).optional() })
+      .parse(createProfile.parameters);
+
+    expect(parameters.properties).not.toHaveProperty("id");
 
     await createProfile.run(
       {
@@ -786,6 +1043,7 @@ describe("super bot create_profile", () => {
 
   test("rejects unsupported soul file keys", async () => {
     let createProfileCalled = false;
+
     const createProfile = getCreateProfileTool({
       async createProfile(): Promise<ProfileResponse> {
         createProfileCalled = true;
@@ -813,6 +1071,7 @@ describe("super bot update_profile", () => {
     let updateProfileCalled = false;
     const sessionState = new SuperBotSessionState();
     sessionState.beginTurn(SESSION_ID);
+
     const updateProfile = getUpdateProfileTool(
       {
         async updateProfile(): Promise<ProfileResponse> {
@@ -840,9 +1099,11 @@ describe("super bot update_profile", () => {
       profileId: string;
       request: UpdateProfileRequest;
     }> = [];
+
     const sessionState = new SuperBotSessionState();
     sessionState.beginTurn(SESSION_ID);
     sessionState.beginTurn(SESSION_ID);
+
     const updateProfile = getUpdateProfileTool(
       {
         async updateProfile(
@@ -851,24 +1112,11 @@ describe("super bot update_profile", () => {
           request: UpdateProfileRequest
         ): Promise<ProfileResponse> {
           captured.push({ orgId, profileId, request });
-          return {
-            profile: {
-              createdAt: "2026-01-01T00:00:00.000Z",
-              hasAvatar: false,
-              id: profileId,
-              isSuper: false,
-              mcpServerCount: 0,
-              mcpServers: [],
-              model: null,
-              name: "Support Bot",
-              skills: [],
-              soulActive: true,
-              systemPrompt: request.systemPrompt ?? "",
-              toolCount: 0,
-              tools: [],
-              updatedAt: "2026-01-01T00:00:00.000Z",
-            },
-          };
+
+          return profileResponse({
+            id: profileId,
+            systemPrompt: request.systemPrompt ?? "",
+          });
         },
       },
       sessionState
@@ -891,6 +1139,7 @@ describe("super bot update_profile", () => {
 
   test("clears the stored system prompt when an empty string is passed", async () => {
     const captured: UpdateProfileRequest[] = [];
+
     const updateProfile = getUpdateProfileTool({
       async updateProfile(
         _orgId: string,
@@ -898,24 +1147,10 @@ describe("super bot update_profile", () => {
         request: UpdateProfileRequest
       ): Promise<ProfileResponse> {
         captured.push(request);
-        return {
-          profile: {
-            createdAt: "2026-01-01T00:00:00.000Z",
-            hasAvatar: false,
-            id: "support-bot",
-            isSuper: false,
-            mcpServerCount: 0,
-            mcpServers: [],
-            model: null,
-            name: "Support Bot",
-            skills: [],
-            soulActive: true,
-            systemPrompt: request.systemPrompt ?? "",
-            toolCount: 0,
-            tools: [],
-            updatedAt: "2026-01-01T00:00:00.000Z",
-          },
-        };
+
+        return profileResponse({
+          systemPrompt: request.systemPrompt ?? "",
+        });
       },
     });
 
@@ -929,6 +1164,7 @@ describe("super bot update_profile", () => {
 
   test("updates soul files after confirmation", async () => {
     const captured: UpdateProfileRequest[] = [];
+
     const updateProfile = getUpdateProfileTool({
       async updateProfile(
         _orgId: string,
@@ -936,24 +1172,10 @@ describe("super bot update_profile", () => {
         request: UpdateProfileRequest
       ): Promise<ProfileResponse> {
         captured.push(request);
-        return {
-          profile: {
-            createdAt: "2026-01-01T00:00:00.000Z",
-            hasAvatar: false,
-            id: "support-bot",
-            isSuper: false,
-            mcpServerCount: 0,
-            mcpServers: [],
-            model: null,
-            name: "Support Bot",
-            skills: [],
-            soulActive: true,
-            systemPrompt: "You are support.",
-            toolCount: 0,
-            tools: [],
-            updatedAt: "2026-01-01T00:00:00.000Z",
-          },
-        };
+
+        return profileResponse({
+          systemPrompt: "You are support.",
+        });
       },
     });
 
@@ -978,6 +1200,7 @@ describe("super bot update_profile", () => {
 
   test("rejects update_profile with neither systemPrompt nor soulFiles", async () => {
     let updateProfileCalled = false;
+
     const updateProfile = getUpdateProfileTool({
       async updateProfile(): Promise<ProfileResponse> {
         updateProfileCalled = true;
@@ -998,6 +1221,7 @@ describe("super bot update_profile", () => {
 
   test("rejects a missing profileId", async () => {
     let updateProfileCalled = false;
+
     const updateProfile = getUpdateProfileTool({
       async updateProfile(): Promise<ProfileResponse> {
         updateProfileCalled = true;
@@ -1017,6 +1241,35 @@ describe("super bot update_profile", () => {
   });
 });
 
+function profileResponse(
+  overrides: Partial<ProfileResponse["profile"]> = {}
+): ProfileResponse {
+  return {
+    profile: {
+      createdAt: "2026-01-01T00:00:00.000Z",
+      hasAvatar: false,
+      id: "support-bot",
+      isSuper: false,
+      mcpServerCount: 0,
+      mcpServers: [],
+      model: null,
+      name: "Support Bot",
+      skills: [],
+      soulActive: true,
+      systemPrompt: "",
+      toolCount: 0,
+      tools: [],
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      ...overrides,
+    },
+  };
+}
+
+function asProfileService(mock: TestProfileService): ProfileService {
+  // SAFETY: Each test provides every ProfileService method that its tool path invokes.
+  return mock as ProfileService;
+}
+
 function createTestTools(
   profileService: Partial<
     Pick<
@@ -1028,7 +1281,8 @@ function createTestTools(
   const sessionState = new SuperBotSessionState();
   sessionState.beginTurn(SESSION_ID);
   sessionState.beginTurn(SESSION_ID);
-  return createSuperBotTools(profileService as ProfileService, sessionState);
+
+  return createSuperBotTools(asProfileService(profileService), sessionState);
 }
 
 function getCreateToolTool(
@@ -1037,7 +1291,7 @@ function getCreateToolTool(
 ) {
   const tool = (
     sessionState
-      ? createSuperBotTools(profileService as ProfileService, sessionState)
+      ? createSuperBotTools(asProfileService(profileService), sessionState)
       : createTestTools(profileService)
   ).find((candidate) => candidate.name === "create_tool");
 
@@ -1054,13 +1308,14 @@ function getCreateProfileTool(
   sessionState?: SuperBotSessionState
 ) {
   const state = sessionState ?? new SuperBotSessionState();
+
   if (!sessionState) {
     state.beginTurn(SESSION_ID);
     state.beginTurn(SESSION_ID);
   }
 
   const tool = createSuperBotTools(
-    profileService as ProfileService,
+    asProfileService(profileService),
     state
   ).find((candidate) => candidate.name === "create_profile");
 
@@ -1076,13 +1331,14 @@ function getUpdateProfileTool(
   sessionState?: SuperBotSessionState
 ) {
   const state = sessionState ?? new SuperBotSessionState();
+
   if (!sessionState) {
     state.beginTurn(SESSION_ID);
     state.beginTurn(SESSION_ID);
   }
 
   const tool = createSuperBotTools(
-    profileService as ProfileService,
+    asProfileService(profileService),
     state
   ).find((candidate) => candidate.name === "update_profile");
 
@@ -1098,7 +1354,7 @@ function getAssignToolTool(
   sessionState: SuperBotSessionState
 ) {
   const tool = createSuperBotTools(
-    profileService as ProfileService,
+    asProfileService(profileService),
     sessionState
   ).find((candidate) => candidate.name === "assign_tool_to_profile");
 
@@ -1112,8 +1368,36 @@ function getAssignToolTool(
 async function captureError(promise: Promise<unknown>): Promise<Error | null> {
   try {
     await promise;
+
     return null;
   } catch (error) {
     return error instanceof Error ? error : new Error(String(error));
   }
+}
+
+function findTool(tools: ReturnType<typeof createSuperBotTools>, name: string) {
+  const tool = tools.find((candidate) => candidate.name === name);
+
+  if (!tool) {
+    throw new Error(`${name} was not registered`);
+  }
+
+  return tool;
+}
+
+function skillSummary(
+  overrides: Pick<ListSkillsResponse["skills"][number], "id" | "name">
+): ListSkillsResponse["skills"][number] {
+  return {
+    createdAt: "2026-01-01T00:00:00.000Z",
+    createdBy: "human",
+    description: "",
+    disableModelInvocation: false,
+    enabled: true,
+    hasTool: false,
+    orgId: ORG_ID,
+    sourcePath: `skills/${overrides.name}`,
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    ...overrides,
+  };
 }

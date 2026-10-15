@@ -8,6 +8,14 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { Header } from "tar";
 
+type JsonValue =
+  | boolean
+  | null
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
 export function pluginTarball(
   entries: Array<{
     name: string;
@@ -16,6 +24,7 @@ export function pluginTarball(
   }>
 ): Buffer {
   const chunks: Buffer[] = [];
+
   for (const entry of entries) {
     const data = Buffer.from(entry.data ?? []);
     const header = Buffer.alloc(512);
@@ -28,24 +37,41 @@ export function pluginTarball(
     }).encode(header);
     chunks.push(header, data, Buffer.alloc((512 - (data.length % 512)) % 512));
   }
+
   return gzipSync(Buffer.concat([...chunks, Buffer.alloc(1024)]));
 }
 
 const packages = new Map<
   string,
-  { source: PluginPackageRequest; archive: Buffer; integrity: string }
+  {
+    source: PluginPackageRequest;
+    archive: Buffer;
+    integrity: string;
+    tarball?: string;
+    token?: string;
+  }
 >();
+
 const registry = setupServer(
   http.get(/^https:\/\/registry\.npmjs\.org(?::80)?\//, ({ request }) => {
     const path = decodeURIComponent(new URL(request.url).pathname.slice(1));
     const fixture = packages.get(path.replace(/\/fixture\.tgz$/, ""));
-    if (!fixture) {
+
+    // npm answers 404, not 401, for a restricted package the caller cannot read.
+    if (
+      !fixture ||
+      (fixture.token &&
+        request.headers.get("authorization") !== `Bearer ${fixture.token}`)
+    ) {
       return new HttpResponse(null, { status: 404 });
     }
+
     if (path.endsWith("/fixture.tgz")) {
       return new HttpResponse(new Uint8Array(fixture.archive));
     }
+
     const { packageName: name, version } = fixture.source;
+
     return HttpResponse.json({
       "dist-tags": { latest: version },
       name,
@@ -53,7 +79,9 @@ const registry = setupServer(
         [version]: {
           dist: {
             integrity: fixture.integrity,
-            tarball: `https://registry.npmjs.org/${name}/fixture.tgz`,
+            tarball:
+              fixture.tarball ??
+              `https://registry.npmjs.org/${name}/fixture.tgz`,
           },
           name,
           version,
@@ -71,24 +99,31 @@ export function pluginPackage(
   files: Record<string, string | Uint8Array>,
   options: {
     archive?: Buffer;
-    packageJson?: Record<string, unknown>;
+    packageJson?: Record<string, JsonValue>;
     integrity?: string;
+    tarball?: string;
+    token?: string;
   } = {}
 ): PluginPackageRequest {
   // Other MSW servers can dispose the shared interceptors between test files.
   registry.close();
   registry.listen({ onUnhandledRequest: "bypass" });
   const hash = createHash("sha256");
+
   for (const [name, data] of Object.entries(files)) {
     hash.update(name).update(data);
   }
+
   if (options.archive) {
     hash.update(options.archive);
   }
+
   hash.update(JSON.stringify(options.packageJson ?? {}));
   hash.update(options.integrity ?? "");
+  hash.update(options.tarball ?? "").update(options.token ?? "");
   const packageName = `@nakama-test/fixture-${hash.digest("hex").slice(0, 24)}`;
   let version = "1.0.0";
+
   try {
     version =
       JSON.parse(Buffer.from(files["nakama.plugin.json"] ?? "{}").toString())
@@ -96,7 +131,9 @@ export function pluginPackage(
   } catch {
     /* Invalid manifest fixtures still need registry metadata. */
   }
+
   const source = { packageName, version };
+
   const archive =
     options.archive ??
     pluginTarball(
@@ -112,20 +149,48 @@ export function pluginPackage(
         name: `package/${name}`,
       }))
     );
+
   const integrity =
     options.integrity ??
     `sha512-${createHash("sha512").update(archive).digest("base64")}`;
-  packages.set(packageName, { archive, integrity, source });
+
+  packages.set(packageName, {
+    archive,
+    integrity,
+    source,
+    tarball: options.tarball,
+    token: options.token,
+  });
+
   return source;
+}
+
+/** Makes the registry answer with a newer latest version of a fixture package. */
+export function publishPluginPackageVersion(
+  packageName: string,
+  version: string
+) {
+  const fixture = packages.get(packageName);
+
+  if (!fixture) {
+    throw new Error("Unknown fixture");
+  }
+
+  packages.set(packageName, {
+    ...fixture,
+    source: { packageName, version },
+  });
 }
 
 export function approvedPluginPackage(
   source: PluginPackageRequest
 ): InstallPluginPackageRequest {
   const fixture = packages.get(source.packageName);
+
   if (!fixture) {
     throw new Error("Unknown fixture");
   }
+
   return {
     ...source,
     expectedDigest: createHash("sha256").update(fixture.archive).digest("hex"),

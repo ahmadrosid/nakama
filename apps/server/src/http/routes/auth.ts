@@ -9,6 +9,7 @@ import {
   type ListBrowserSessionsResponse,
   type ListUserOrgsResponse,
   LocalAuthTokenManagedExternallyError,
+  type PasskeyCredentialResponse,
   type RequestPasswordResetRequest,
   type RequestPasswordResetResponse,
   type ResetPasswordRequest,
@@ -17,14 +18,23 @@ import {
   rotateLocalAuthToken,
   type SetActiveOrgRequest,
   type SetupAuthRequest,
+  saveUserWebPublicUrl,
   type UpdateAuthProfileRequest,
 } from "@nakama/core";
 import { DEMO_LOGIN_EMAIL, DEMO_LOGIN_HOST } from "@nakama/core/demo-login";
 import { ORG_ROLES } from "@nakama/db";
+import type {
+  AuthenticationResponseJSON,
+  RegistrationResponseJSON,
+  VerifiedRegistrationResponse,
+} from "@simplewebauthn/server";
 import {
-  persistWebPublicUrl,
-  resolveRequestClientOrigin,
-} from "../../services/composio-callback-url";
+  generateAuthenticationOptions,
+  generateRegistrationOptions,
+  verifyAuthenticationResponse,
+  verifyRegistrationResponse,
+} from "@simplewebauthn/server";
+import { resolveRequestClientOrigin } from "../../services/composio-callback-url";
 import {
   ensureMfaEncryptionKey,
   getMfaEncryptionKey,
@@ -58,37 +68,140 @@ import type { HonoApp } from "../types";
 
 /**
  * A real bcrypt hash at the cost the app uses, kept only so a login for an
- * unknown email costs the same as one for a known email. Nothing verifies
- * against it successfully; it exists to be slow.
+ * unknown email costs the same as one for a known email.
  */
 const ABSENT_ACCOUNT_PASSWORD_HASH =
   "$2b$10$IJnCe7uf5MN2/Vo89wb4ReF6yVI5SNnLdjIbiZ4Uwj4/r7zcqrWLm";
 
+function passkeyVerificationErrorResponse<T>(error: T, status: 400 | 401) {
+  const detail = error instanceof Error ? error.message : String(error);
+  console.error("[passkey] verification failed", { error: detail });
+
+  return errorResponse(
+    process.env.NODE_ENV === "production"
+      ? "Passkey verification failed."
+      : `Passkey verification failed: ${detail}`,
+    status
+  );
+}
+
+function resolveWebAuthnContext(request: Request) {
+  const origin =
+    resolveRequestClientOrigin(request) ?? new URL(request.url).origin;
+
+  return { origin, rpID: new URL(origin).hostname };
+}
+
 export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
   const { authService, databaseAdapter, orgService } = options;
+
+  const issueBackupCodes = async (
+    userId: string,
+    createdAt: string,
+    replace = false
+  ) => {
+    if (!databaseAdapter) {
+      return [];
+    }
+
+    if (
+      !replace &&
+      (await databaseAdapter.countUnusedMfaBackupCodes(userId)) > 0
+    ) {
+      return [];
+    }
+
+    const backupCodes: string[] = [];
+
+    if (replace) {
+      await databaseAdapter.deleteMfaBackupCodes(userId);
+    }
+
+    const mfaEncryptionKey = getMfaEncryptionKey();
+
+    for (let index = 0; index < 10; index += 1) {
+      const code = randomBytes(5).toString("hex").toUpperCase();
+      backupCodes.push(code);
+      await databaseAdapter.createMfaBackupCode({
+        codeHash: hashBackupCode(code, mfaEncryptionKey),
+        createdAt,
+        id: crypto.randomUUID(),
+        usedAt: null,
+        userId,
+      });
+    }
+
+    return backupCodes;
+  };
+
+  const clearBackupCodesIfNoFactors = async (userId: string) => {
+    if (!databaseAdapter) {
+      return;
+    }
+
+    const user = await databaseAdapter.getUserById(userId);
+    const passkeys = await databaseAdapter.listPasskeys(userId);
+
+    if (!user?.mfaEnabled && passkeys.length === 0) {
+      await databaseAdapter.deleteMfaBackupCodes(userId);
+    }
+  };
+
+  const passkeyCredentialSchema = z
+    .object({
+      authenticatorAttachment: z.string().optional(),
+      clientExtensionResults: z.record(
+        z.string(),
+        // OpenAPI generation cannot traverse Zod's recursive JSON union.
+        z.json().openapi({
+          type: ["string", "number", "boolean", "null", "array", "object"],
+        })
+      ),
+      id: z.string(),
+      rawId: z.string(),
+      response: z
+        .object({
+          attestationObject: z.string().optional(),
+          authenticatorData: z.string().optional(),
+          clientDataJSON: z.string(),
+          signature: z.string().optional(),
+          transports: z.array(z.string()).optional(),
+          userHandle: z.string().optional(),
+        })
+        .passthrough(),
+      type: z.string(),
+    })
+    .passthrough();
+
   const authCredentialsSchema = z
     .object({
       backupCode: z.string().optional(),
       email: z.string(),
       mfaCode: z.string().optional(),
-      password: z.string(),
+      passkey: passkeyCredentialSchema.optional(),
+      passkeyChallenge: z.string().optional(),
+      password: z.string().optional(),
     })
     .openapi("AuthCredentialsRequest");
+
   const authUserSchema = z
     .object({
+      backupCodesEnabled: z.boolean().optional(),
       activeOrgId: z.string().nullable().optional(),
       email: z.string(),
       id: z.string(),
       isPlatformAdmin: z.boolean().optional(),
+      passkeyEnabled: z.boolean().optional(),
       mfaEnabled: z.boolean().optional(),
       mfaEnrolled: z.boolean().optional(),
       mfaRequired: z.boolean().optional(),
-      mode: z.enum(["api-key", "browser-session", "local-token"]).optional(),
+      mode: z.enum(["browser-session", "local-token"]).optional(),
       name: z.string().nullable().optional(),
       orgId: z.string().nullable().optional(),
       phone: z.string().nullable().optional(),
     })
     .openapi("AuthUserResponse");
+
   const updateAuthProfileSchema = z
     .object({
       currentPassword: z.string().optional(),
@@ -97,9 +210,11 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       phone: z.string().nullable().optional(),
     })
     .openapi("UpdateAuthProfileRequest");
+
   const loggedOutSchema = z.object({
     ok: z.boolean(),
   });
+
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
@@ -119,6 +234,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       webPublicUrl: z.string().optional(),
     })
     .openapi("SetupAuthRequest");
+
   const createOrganizationSchema = z.object({
     admin: z
       .object({
@@ -130,7 +246,9 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     name: z.string(),
     slug: z.string(),
   });
+
   const setActiveOrgSchema = z.object({ orgId: z.string() });
+
   const setupRoute = createRoute({
     method: "post",
     operationId: "setupAuth",
@@ -288,34 +406,40 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       token: z.string(),
     })
     .openapi("AcceptOrgInviteRequest");
+
   const acceptInviteResponseSchema = z
     .object({
       email: z.string(),
       orgId: z.string(),
-      role: z.enum(["admin", "member", "viewer"]),
+      role: z.enum(["admin", "member"]),
     })
     .openapi("AcceptOrgInviteResponse");
+
   const changePasswordSchema = z
     .object({
       currentPassword: z.string(),
       newPassword: z.string(),
     })
     .openapi("ChangePasswordRequest");
+
   const requestPasswordResetSchema = z
     .object({ email: z.string() })
     .openapi("RequestPasswordResetRequest");
+
   const requestPasswordResetResponseSchema = z
     .object({
       delivered: z.boolean(),
       token: z.string().nullable(),
     })
     .openapi("RequestPasswordResetResponse");
+
   const resetPasswordSchema = z
     .object({
       newPassword: z.string(),
       token: z.string(),
     })
     .openapi("ResetPasswordRequest");
+
   const changePasswordRoute = createRoute({
     method: "post",
     operationId: "changePassword",
@@ -353,6 +477,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     summary: "Change the current user's password",
     tags: ["Auth"],
   });
+
   const requestPasswordResetRoute = createRoute({
     method: "post",
     operationId: "requestPasswordReset",
@@ -384,6 +509,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     summary: "Request a password reset token",
     tags: ["Auth"],
   });
+
   const resetPasswordRoute = createRoute({
     method: "post",
     operationId: "resetPassword",
@@ -494,13 +620,17 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       return errorResponse("Authentication not configured", 500);
     }
 
+    assertJsonRequest(c.req.raw);
+
     const humanUserCount = await databaseAdapter.countHumanUsers();
+
     if (humanUserCount > 0) {
       return errorResponse("Admin user already exists", 409);
     }
 
     const body = await readJson<SetupAuthRequest>(c.req.raw, setupAuthSchema);
     const password = body.admin?.password?.trim() ?? "";
+
     if (
       !(
         body.organization?.name?.trim() &&
@@ -521,9 +651,14 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       c.req.raw,
       body.webPublicUrl
     );
+
     if (webPublicUrl) {
       try {
-        await persistWebPublicUrl(webPublicUrl);
+        // resolveRequestClientOrigin already vouched for this origin, and no
+        // user exists yet who could have planted the saved value it may have
+        // matched. The stricter check on a later edit would refuse a base
+        // provisioned in the config file when a proxy hides the public host.
+        await saveUserWebPublicUrl(webPublicUrl);
       } catch (error) {
         return errorResponse(
           error instanceof Error ? error.message : String(error),
@@ -554,6 +689,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
         request: c.req.raw,
       }
     );
+
     const authBody = await orgService.buildAuthUserResponse(
       user,
       response.session.id,
@@ -575,40 +711,128 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       backupCode?: string;
       email: string;
       mfaCode?: string;
-      password: string;
+      passkey?: PasskeyCredentialResponse;
+      passkeyChallenge?: string;
+      password?: string;
     }>(c.req.raw, authCredentialsSchema);
-    const user = await databaseAdapter.getUserByEmail(body.email);
-    if (!user) {
-      // Spend the same bcrypt work an existing account would, so the response
-      // time stops answering "does this email have an account here".
-      await authService.verifyPassword(
-        body.password?.trim() ?? "",
-        ABSENT_ACCOUNT_PASSWORD_HASH
-      );
-      return errorResponse("Invalid credentials", 401);
+
+    const passkeyLogin = Boolean(body.passkey && body.passkeyChallenge);
+
+    let user = passkeyLogin
+      ? null
+      : await databaseAdapter.getUserByEmail(body.email);
+
+    if (passkeyLogin) {
+      const stored = body.passkey
+        ? await databaseAdapter.getPasskeyByCredentialId(body.passkey.id)
+        : null;
+
+      if (stored) {
+        user = await databaseAdapter.getUserById(stored.userId);
+      }
     }
 
-    // Every path that sets a password trims it first, so login has to as well
-    // or a padded password can never be typed back in.
-    const valid = await authService.verifyPassword(
-      body.password?.trim() ?? "",
-      user.passwordHash
-    );
-    if (!valid) {
-      return errorResponse("Invalid credentials", 401);
+    if (!user) {
+      if (!passkeyLogin) {
+        // Spend the same bcrypt work an existing account would, so the response
+        // time stops answering "does this email have an account here".
+        await authService.verifyPassword(
+          body.password?.trim() ?? "",
+          ABSENT_ACCOUNT_PASSWORD_HASH
+        );
+      }
+
+      return errorResponse(
+        passkeyLogin ? "Passkey verification failed." : "Invalid credentials",
+        401
+      );
+    }
+
+    if (!passkeyLogin) {
+      // Every path that sets a password trims it first, so login has to as well
+      // or a padded password can never be typed back in.
+      const valid = await authService.verifyPassword(
+        body.password?.trim() ?? "",
+        user.passwordHash
+      );
+
+      if (!valid) {
+        return errorResponse("Invalid credentials", 401);
+      }
     }
 
     if (user.disabledAt) {
       return errorResponse("Account disabled", 403);
     }
-    if (user.mfaEnabled) {
-      let validMfa = false;
+
+    const passkeys = await databaseAdapter.listPasskeys(user.id);
+
+    if (passkeyLogin) {
+      const stored = body.passkey
+        ? await databaseAdapter.getPasskey(user.id, body.passkey.id)
+        : null;
+
+      if (!(stored && body.passkeyChallenge)) {
+        return errorResponse("Passkey verification failed.", 401);
+      }
+
+      const { origin, rpID } = resolveWebAuthnContext(c.req.raw);
+      let validPasskey = false;
+
+      try {
+        const verification = await verifyAuthenticationResponse({
+          credential: {
+            counter: stored.counter,
+            id: stored.credentialId,
+            publicKey: Buffer.from(stored.publicKey, "base64url"),
+            transports: stored.transports,
+          },
+          expectedChallenge: body.passkeyChallenge,
+          expectedOrigin: origin,
+          expectedRPID: rpID,
+          // SAFETY: The validated value satisfies the contract checked by this assertion.
+          response: body.passkey as AuthenticationResponseJSON,
+        });
+
+        if (verification.verified) {
+          validPasskey = await databaseAdapter.consumePasskeyChallenge(
+            body.passkeyChallenge,
+            user.id,
+            "authentication",
+            new Date().toISOString()
+          );
+
+          if (validPasskey) {
+            await databaseAdapter.updatePasskeyCounter(
+              user.id,
+              stored.credentialId,
+              verification.authenticationInfo.newCounter
+            );
+          }
+        }
+      } catch (error) {
+        return passkeyVerificationErrorResponse(error, 401);
+      }
+
+      if (!validPasskey) {
+        return errorResponse("Passkey verification failed.", 401);
+      }
+    } else if (passkeys.length > 0 && !(body.mfaCode || body.backupCode)) {
+      return errorResponse("Passkey verification required.", 401, {
+        totpEnabled: Boolean(user.mfaEnabled && user.mfaTotpSecretEnc),
+      });
+    }
+
+    let validMfa = false;
+
+    if (!passkeyLogin && (user.mfaEnabled || passkeys.length > 0)) {
       if (user.mfaTotpSecretEnc && body.mfaCode) {
         try {
           const step = findTotpStep(
             decryptTotpSecret(user.mfaTotpSecretEnc),
             body.mfaCode
           );
+
           validMfa =
             step !== null &&
             (await databaseAdapter.consumeMfaTotpStep(user.id, step));
@@ -616,6 +840,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
           validMfa = false;
         }
       }
+
       if (!validMfa && body.backupCode) {
         const mfaEncryptionKey = getMfaEncryptionKey();
         validMfa = await databaseAdapter.consumeMfaBackupCode(
@@ -624,14 +849,19 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
           new Date().toISOString()
         );
       }
-      if (!validMfa) {
-        return errorResponse(
-          body.backupCode
-            ? "Backup code is invalid or has already been used."
-            : "MFA verification required.",
-          401
-        );
-      }
+    }
+
+    if (
+      !passkeyLogin &&
+      (passkeys.length > 0 || user.mfaEnabled) &&
+      !validMfa
+    ) {
+      return errorResponse(
+        body.backupCode
+          ? "Backup code is invalid or has already been used."
+          : "MFA verification required.",
+        401
+      );
     }
 
     const response = await createBrowserSessionResponse(
@@ -642,32 +872,433 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
         request: c.req.raw,
       }
     );
+
     const authBody = await orgService.buildAuthUserResponse(
       user,
       response.session.id,
       response.session.activeOrgId
     );
+
     return json<AuthUserResponse>(authBody, 200, response.headers);
+  });
+  app.post("/v1/auth/mfa/backup-codes", async (c) => {
+    if (!(authService && databaseAdapter)) {
+      return errorResponse("Authentication not configured", 500);
+    }
+
+    const auth = getRequestAuth(c);
+
+    if (!auth.user) {
+      return errorResponse("Authentication required", 401);
+    }
+
+    assertBrowserCsrf(c.req.raw, auth, authService);
+
+    const body = await readJson<{
+      mfaCode?: string;
+      passkey?: PasskeyCredentialResponse;
+      passkeyChallenge?: string;
+    }>(
+      c.req.raw,
+      z.object({
+        mfaCode: z.string().trim().min(6).max(8).optional(),
+        passkey: passkeyCredentialSchema.optional(),
+        passkeyChallenge: z.string().optional(),
+      })
+    );
+
+    const user = await databaseAdapter.getUserById(auth.user.id);
+
+    if (!user) {
+      return errorResponse("Authentication required", 401);
+    }
+
+    const passkeys = await databaseAdapter.listPasskeys(user.id);
+    let authorized = false;
+
+    if (body.passkey && body.passkeyChallenge && passkeys.length > 0) {
+      const stored = await databaseAdapter.getPasskey(user.id, body.passkey.id);
+
+      if (stored) {
+        try {
+          const { origin, rpID } = resolveWebAuthnContext(c.req.raw);
+
+          const verification = await verifyAuthenticationResponse({
+            credential: {
+              counter: stored.counter,
+              id: stored.credentialId,
+              publicKey: Buffer.from(stored.publicKey, "base64url"),
+              transports: stored.transports,
+            },
+            expectedChallenge: body.passkeyChallenge,
+            expectedOrigin: origin,
+            expectedRPID: rpID,
+            // SAFETY: The validated value satisfies the contract checked by this assertion.
+            response: body.passkey as AuthenticationResponseJSON,
+          });
+
+          if (verification.verified) {
+            authorized = await databaseAdapter.consumePasskeyChallenge(
+              body.passkeyChallenge,
+              user.id,
+              "authentication",
+              new Date().toISOString()
+            );
+
+            if (authorized) {
+              await databaseAdapter.updatePasskeyCounter(
+                user.id,
+                stored.credentialId,
+                verification.authenticationInfo.newCounter
+              );
+            }
+          }
+        } catch {
+          authorized = false;
+        }
+      }
+    } else if (body.mfaCode && user.mfaEnabled && user.mfaTotpSecretEnc) {
+      try {
+        const step = findTotpStep(
+          decryptTotpSecret(user.mfaTotpSecretEnc),
+          body.mfaCode
+        );
+
+        authorized =
+          step !== null &&
+          (await databaseAdapter.consumeMfaTotpStep(user.id, step));
+      } catch {
+        authorized = false;
+      }
+    }
+
+    if (!authorized) {
+      return errorResponse("Reauthentication required.", 401);
+    }
+
+    return json({
+      backupCodes: await issueBackupCodes(
+        user.id,
+        new Date().toISOString(),
+        true
+      ),
+    });
   });
 
   app.get("/v1/settings/mfa", async (c) => {
     if (!getRequestAuth(c).user) {
       return errorResponse("Authentication required", 401);
     }
+
     return json(await loadMfaPolicy());
+  });
+
+  app.post("/v1/auth/passkey/login/options", async (c) => {
+    if (!databaseAdapter) {
+      return errorResponse("Authentication not configured", 500);
+    }
+
+    assertJsonRequest(c.req.raw);
+    const auth = c.get("auth");
+
+    const user = auth?.user
+      ? await databaseAdapter.getUserById(auth.user.id)
+      : null;
+
+    if (auth?.user) {
+      if (!authService) {
+        return errorResponse("Authentication not configured", 500);
+      }
+
+      assertBrowserCsrf(c.req.raw, auth, authService);
+    }
+
+    if (user) {
+      if (user.disabledAt) {
+        return errorResponse("Account disabled", 403);
+      }
+
+      const passkeys = await databaseAdapter.listPasskeys(user.id);
+
+      if (passkeys.length === 0) {
+        return errorResponse("Passkey verification failed.", 401);
+      }
+
+      const { rpID } = resolveWebAuthnContext(c.req.raw);
+
+      const options = await generateAuthenticationOptions({
+        allowCredentials: passkeys.map((passkey) => ({
+          id: passkey.credentialId,
+          transports: passkey.transports,
+        })),
+        rpID,
+        userVerification: "preferred",
+      });
+
+      await databaseAdapter.createPasskeyChallenge({
+        challenge: options.challenge,
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        type: "authentication",
+        userId: user.id,
+      });
+
+      return json({ challenge: options.challenge, options });
+    }
+
+    const { rpID } = resolveWebAuthnContext(c.req.raw);
+
+    const options = await generateAuthenticationOptions({
+      rpID,
+      userVerification: "preferred",
+    });
+
+    await databaseAdapter.createPasskeyChallenge({
+      challenge: options.challenge,
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      type: "authentication",
+      userId: null,
+    });
+
+    return json({ challenge: options.challenge, options });
+  });
+
+  app.post("/v1/auth/mfa/passkey/start", async (c) => {
+    if (!(authService && databaseAdapter)) {
+      return errorResponse("Authentication not configured", 500);
+    }
+
+    const auth = getRequestAuth(c);
+    assertBrowserCsrf(c.req.raw, auth, authService);
+    const user = await databaseAdapter.getUserById(auth.user.id);
+
+    if (!user) {
+      return errorResponse("Authentication required", 401);
+    }
+
+    const policy = await loadMfaPolicy();
+
+    if (!policy.enabled) {
+      return errorResponse("MFA is not enabled.", 400);
+    }
+
+    const { rpID } = resolveWebAuthnContext(c.req.raw);
+
+    const options = await generateRegistrationOptions({
+      attestationType: "none",
+      authenticatorSelection: {
+        residentKey: "required",
+        userVerification: "preferred",
+      },
+      excludeCredentials: (await databaseAdapter.listPasskeys(user.id)).map(
+        (passkey) => ({
+          id: passkey.credentialId,
+          transports: passkey.transports,
+        })
+      ),
+      rpID,
+      rpName: "Nakama",
+      userDisplayName: user.name ?? user.email,
+      userID: new TextEncoder().encode(user.id),
+      userName: user.email,
+    });
+
+    await databaseAdapter.createPasskeyChallenge({
+      challenge: options.challenge,
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      type: "registration",
+      userId: user.id,
+    });
+
+    return json({
+      challenge: options.challenge,
+      options,
+    });
+  });
+
+  app.post("/v1/auth/mfa/passkey/verify", async (c) => {
+    if (!(authService && databaseAdapter)) {
+      return errorResponse("Authentication not configured", 500);
+    }
+
+    const auth = getRequestAuth(c);
+    assertBrowserCsrf(c.req.raw, auth, authService);
+
+    const body = await readJson<{
+      challenge: string;
+      credential: PasskeyCredentialResponse;
+      name?: string;
+    }>(
+      c.req.raw,
+      z.object({
+        challenge: z.string().min(1),
+        credential: passkeyCredentialSchema,
+        name: z.string().trim().min(1).max(100).optional(),
+      })
+    );
+
+    const { origin, rpID } = resolveWebAuthnContext(c.req.raw);
+    let verification: VerifiedRegistrationResponse;
+
+    try {
+      verification = await verifyRegistrationResponse({
+        expectedChallenge: body.challenge,
+        expectedOrigin: origin,
+        expectedRPID: rpID,
+        // SAFETY: The validated value satisfies the contract checked by this assertion.
+        response: body.credential as RegistrationResponseJSON,
+      });
+    } catch (error) {
+      return passkeyVerificationErrorResponse(error, 400);
+    }
+
+    if (!verification.verified) {
+      return errorResponse("Passkey verification failed.", 400);
+    }
+
+    const consumed = await databaseAdapter.consumePasskeyChallenge(
+      body.challenge,
+      auth.user.id,
+      "registration",
+      new Date().toISOString()
+    );
+
+    if (!consumed) {
+      return errorResponse("Passkey setup has expired.", 400);
+    }
+
+    const credential = verification.registrationInfo.credential;
+
+    try {
+      await databaseAdapter.createPasskey({
+        counter: credential.counter,
+        createdAt: new Date().toISOString(),
+        credentialId: credential.id,
+        id: crypto.randomUUID(),
+        name: body.name ?? "Passkey",
+        publicKey: Buffer.from(credential.publicKey).toString("base64url"),
+        transports: credential.transports ?? [],
+        userId: auth.user.id,
+      });
+    } catch {
+      return errorResponse("Passkey is already registered.", 409);
+    }
+
+    const backupCodes = await issueBackupCodes(
+      auth.user.id,
+      new Date().toISOString()
+    );
+
+    return json({ backupCodes, enabled: true });
+  });
+
+  app.post("/v1/auth/mfa/passkey/disable", async (c) => {
+    if (!(authService && databaseAdapter)) {
+      return errorResponse("Authentication not configured", 500);
+    }
+
+    const auth = getRequestAuth(c);
+    assertBrowserCsrf(c.req.raw, auth, authService);
+
+    const body = await readJson<{
+      backupCode?: string;
+      challenge?: string;
+      credential?: PasskeyCredentialResponse;
+    }>(
+      c.req.raw,
+      z
+        .object({
+          backupCode: z.string().trim().min(1).optional(),
+          challenge: z.string().optional(),
+          credential: passkeyCredentialSchema.optional(),
+        })
+        .refine(
+          ({ backupCode, challenge, credential }) =>
+            Boolean(backupCode) || Boolean(challenge && credential),
+          "Provide a passkey or backup code."
+        )
+    );
+
+    const user = await databaseAdapter.getUserById(auth.user.id);
+    let authorized = false;
+
+    if (body.backupCode && user) {
+      authorized = await databaseAdapter.consumeMfaBackupCode(
+        user.id,
+        hashBackupCode(body.backupCode, getMfaEncryptionKey()),
+        new Date().toISOString()
+      );
+    } else if (body.challenge && body.credential && user) {
+      const stored = await databaseAdapter.getPasskey(
+        user.id,
+        body.credential.id
+      );
+
+      if (stored) {
+        const { origin, rpID } = resolveWebAuthnContext(c.req.raw);
+
+        try {
+          const verification = await verifyAuthenticationResponse({
+            credential: {
+              counter: stored.counter,
+              id: stored.credentialId,
+              publicKey: Buffer.from(stored.publicKey, "base64url"),
+              transports: stored.transports,
+            },
+            expectedChallenge: body.challenge,
+            expectedOrigin: origin,
+            expectedRPID: rpID,
+            // SAFETY: The validated value satisfies the contract checked by this assertion.
+            response: body.credential as AuthenticationResponseJSON,
+          });
+
+          if (verification.verified) {
+            authorized = await databaseAdapter.consumePasskeyChallenge(
+              body.challenge,
+              user.id,
+              "authentication",
+              new Date().toISOString()
+            );
+
+            if (authorized) {
+              await databaseAdapter.updatePasskeyCounter(
+                user.id,
+                stored.credentialId,
+                verification.authenticationInfo.newCounter
+              );
+            }
+          }
+        } catch (error) {
+          return passkeyVerificationErrorResponse(error, 401);
+        }
+      }
+    }
+
+    if (!authorized) {
+      return errorResponse("Reauthentication required.", 401);
+    }
+
+    await databaseAdapter.deletePasskeys(auth.user.id);
+    await clearBackupCodesIfNoFactors(auth.user.id);
+
+    return json({ enabled: false });
   });
 
   app.put("/v1/settings/mfa", async (c) => {
     const auth = requirePlatformAdminFromContext(c);
+
     if (
       new URL(c.req.url).hostname.toLowerCase() === DEMO_LOGIN_HOST ||
       auth.user.email.toLowerCase() === DEMO_LOGIN_EMAIL
     ) {
       return errorResponse("MFA policy is not available in the demo.", 403);
     }
+
     const body = await readJson<{
       enabled?: boolean;
-      enforcedRoles?: Array<"admin" | "member" | "viewer">;
+      enforcedRoles?: Array<"admin" | "member">;
       required?: boolean;
     }>(
       c.req.raw,
@@ -677,16 +1308,20 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
         required: z.boolean().optional(),
       })
     );
+
     const current = await loadMfaPolicy();
+
     if (body.enabled === true && !current.keyConfigured) {
       await ensureMfaEncryptionKey();
     }
+
     if (body.required === true && (body.enabled ?? current.enabled) !== true) {
       return errorResponse(
         "MFA must be enabled before it can be enforced.",
         400
       );
     }
+
     return json(
       await updateMfaPolicy({
         enabled: body.enabled,
@@ -697,18 +1332,27 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.post("/v1/auth/mfa/totp/start", async (c) => {
-    if (!databaseAdapter) {
+    if (!(authService && databaseAdapter)) {
       return errorResponse("Authentication not configured", 500);
     }
+
     const auth = getRequestAuth(c);
+
     if (!auth.user) {
       return errorResponse("Authentication required", 401);
     }
+
+    if (auth.mode !== "browser-session") {
+      return errorResponse("Browser session required", 403);
+    }
+
+    assertBrowserCsrf(c.req.raw, auth, authService);
     const policy = await loadMfaPolicy();
+
     if (!(policy.enabled && policy.keyConfigured)) {
       return errorResponse("MFA is not enabled.", 400);
     }
-    assertBrowserCsrf(c.req.raw, auth, authService);
+
     const secret = generateTotpSecret();
     await databaseAdapter.setPendingMfaSecret(
       auth.user.id,
@@ -716,6 +1360,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       new Date().toISOString()
     );
     const account = encodeURIComponent(auth.user.email);
+
     return json({
       secret,
       uri: `otpauth://totp/Nakama:${account}?secret=${secret}&issuer=Nakama&algorithm=SHA1&digits=6&period=30`,
@@ -723,23 +1368,35 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.post("/v1/auth/mfa/totp/verify", async (c) => {
-    if (!databaseAdapter) {
+    if (!(authService && databaseAdapter)) {
       return errorResponse("Authentication not configured", 500);
     }
+
     const auth = getRequestAuth(c);
+
     if (!auth.user) {
       return errorResponse("Authentication required", 401);
     }
+
+    if (auth.mode !== "browser-session") {
+      return errorResponse("Browser session required", 403);
+    }
+
     assertBrowserCsrf(c.req.raw, auth, authService);
+
     const body = await readJson<{ code: string }>(
       c.req.raw,
       z.object({ code: z.string().min(6).max(8) })
     );
+
     const user = await databaseAdapter.getUserById(auth.user.id);
+
     if (!user?.mfaTotpPendingSecretEnc) {
       return errorResponse("MFA setup has not started.", 400);
     }
+
     let step: number | null = null;
+
     try {
       step = findTotpStep(
         decryptTotpSecret(user.mfaTotpPendingSecretEnc),
@@ -748,45 +1405,51 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     } catch {
       step = null;
     }
+
     if (step === null) {
       return errorResponse("Invalid MFA code.", 400);
     }
+
     const now = new Date().toISOString();
+
     const activated = await databaseAdapter.activateUserMfa(
       auth.user.id,
       user.mfaTotpPendingSecretEnc,
       step,
       now
     );
+
     if (!activated) {
       return errorResponse("MFA setup has already been completed.", 400);
     }
-    const backupCodes: string[] = [];
-    await databaseAdapter.deleteMfaBackupCodes(auth.user.id);
-    const mfaEncryptionKey = getMfaEncryptionKey();
-    for (let index = 0; index < 10; index += 1) {
-      const code = randomBytes(5).toString("hex").toUpperCase();
-      backupCodes.push(code);
-      await databaseAdapter.createMfaBackupCode({
-        codeHash: hashBackupCode(code, mfaEncryptionKey),
-        createdAt: now,
-        id: crypto.randomUUID(),
-        usedAt: null,
-        userId: auth.user.id,
-      });
-    }
+
+    await databaseAdapter.revokeBrowserSessionsForUserExcept(
+      auth.user.id,
+      auth.mode === "browser-session" ? (auth.session?.id ?? null) : null,
+      now
+    );
+    const backupCodes = await issueBackupCodes(auth.user.id, now);
+
     return json({ backupCodes, enabled: true });
   });
 
   app.post("/v1/auth/mfa/disable", async (c) => {
-    if (!databaseAdapter) {
+    if (!(authService && databaseAdapter)) {
       return errorResponse("Authentication not configured", 500);
     }
+
     const auth = getRequestAuth(c);
+
     if (!auth.user) {
       return errorResponse("Authentication required", 401);
     }
+
+    if (auth.mode !== "browser-session") {
+      return errorResponse("Browser session required", 403);
+    }
+
     assertBrowserCsrf(c.req.raw, auth, authService);
+
     const body = await readJson<{ backupCode?: string; code?: string }>(
       c.req.raw,
       z
@@ -799,12 +1462,15 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
           "Provide a TOTP or backup code."
         )
     );
+
     const user = await databaseAdapter.getUserById(auth.user.id);
+
     if (!user?.mfaEnabled) {
       return errorResponse("MFA is not enabled.", 400);
     }
 
     let valid = false;
+
     if (body.backupCode) {
       valid = await databaseAdapter.consumeMfaBackupCode(
         user.id,
@@ -817,6 +1483,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
           decryptTotpSecret(user.mfaTotpSecretEnc),
           body.code ?? ""
         );
+
         valid =
           step !== null &&
           (await databaseAdapter.consumeMfaTotpStep(user.id, step));
@@ -824,6 +1491,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
         valid = false;
       }
     }
+
     if (!valid) {
       return errorResponse(
         body.backupCode
@@ -843,7 +1511,13 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       },
       new Date().toISOString()
     );
-    await databaseAdapter.deleteMfaBackupCodes(auth.user.id);
+    await databaseAdapter.revokeBrowserSessionsForUserExcept(
+      auth.user.id,
+      auth.mode === "browser-session" ? (auth.session?.id ?? null) : null,
+      new Date().toISOString()
+    );
+    await clearBackupCodesIfNoFactors(auth.user.id);
+
     return json({ enabled: false });
   });
   app.openapi(meRoute, async (c) => {
@@ -856,11 +1530,13 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       authService,
       databaseAdapter
     );
+
     if (!auth) {
       return c.json({ error: "Authentication required" }, 401);
     }
 
     const user = await databaseAdapter.getUserById(auth.user.id);
+
     if (!user) {
       return c.json({ error: "Authentication required" }, 401);
     }
@@ -868,8 +1544,9 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     const authBody = await orgService.buildAuthUserResponse(
       user,
       auth.session?.id,
-      auth.session?.activeOrgId
+      auth.session?.activeOrgId ?? auth.activeOrgId
     );
+
     // The builder answers from the user record, which describes whoever created
     // the credential. An API key is de-privileged whatever its owner is, and the
     // guards already read that, so reporting the owner's flag here told an
@@ -891,13 +1568,23 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     }
 
     const auth = getRequestAuth(c);
+
+    if (auth.mode !== "browser-session") {
+      return errorResponse(
+        "Sign in through the dashboard to update your profile.",
+        403
+      );
+    }
+
     assertBrowserCsrf(c.req.raw, auth, authService);
 
     const body = await readJson<UpdateAuthProfileRequest>(
       c.req.raw,
       updateAuthProfileSchema
     );
+
     const updated = await orgService.updateOwnProfile(auth.user.id, body);
+
     return json<AuthUserResponse>(updated);
   });
 
@@ -911,6 +1598,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       authService,
       databaseAdapter
     );
+
     if (!auth) {
       return c.json({ error: "Authentication required" }, 401);
     }
@@ -927,6 +1615,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
 
     const response = c.json({ ok: true }, 200);
     clearBrowserSessionCookies(response.headers);
+
     return response;
   });
 
@@ -943,6 +1632,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       c.req.raw,
       changePasswordSchema
     );
+
     await orgService.changePassword({
       currentPassword: body.currentPassword,
       newPassword: body.newPassword,
@@ -951,6 +1641,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
 
     const response = c.json({ ok: true }, 200);
     clearBrowserSessionCookies(response.headers);
+
     return response;
   });
 
@@ -964,15 +1655,19 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       c.req.raw,
       requestPasswordResetSchema
     );
+
     const auth = await authenticateRequest(
       c.req.raw,
       authService,
       databaseAdapter
     );
+
     const allowManualToken = auth?.isPlatformAdmin === true;
+
     if (allowManualToken && auth) {
       assertBrowserCsrf(c.req.raw, auth, authService);
     }
+
     return json<RequestPasswordResetResponse>(
       await orgService.requestPasswordReset(body.email, allowManualToken)
     );
@@ -988,7 +1683,9 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       c.req.raw,
       resetPasswordSchema
     );
+
     await orgService.resetPassword(body);
+
     return c.json({ ok: true }, 200);
   });
 
@@ -998,11 +1695,15 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       return errorResponse("Authentication not configured", 500);
     }
 
+    assertJsonRequest(c.req.raw);
+
     const body = await readJson<{ token: string; password?: string }>(
       c.req.raw,
       acceptInviteSchema
     );
+
     const accepted = await orgService.acceptInvite(body);
+
     const response = await createBrowserSessionResponse(
       authService,
       databaseAdapter,
@@ -1032,6 +1733,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       authService,
       databaseAdapter
     );
+
     if (!auth) {
       return errorResponse("Authentication required", 401);
     }
@@ -1048,6 +1750,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
 
     try {
       const token = await rotateLocalAuthToken();
+
       return json<RotateLocalAuthTokenResponse>({ token }, 200);
     } catch (error) {
       if (error instanceof LocalAuthTokenManagedExternallyError) {
@@ -1065,6 +1768,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
 
     const auth = getRequestAuth(c);
     const orgs = await orgService.listUserOrgs(auth.user.id);
+
     return json<ListUserOrgsResponse>(orgs);
   });
 
@@ -1080,7 +1784,9 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       c.req.raw,
       createOrganizationSchema
     );
+
     const result = await orgService.createOrganization(body, auth.user.id);
+
     return json<CreateOrganizationResponse>(result, 201);
   });
 
@@ -1096,6 +1802,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       c.req.raw,
       setActiveOrgSchema
     );
+
     await orgService.setActiveOrg({
       orgId: body.orgId,
       sessionId: auth.session?.id,
@@ -1103,6 +1810,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     });
 
     const user = await databaseAdapter.getUserById(auth.user.id);
+
     if (!user) {
       return errorResponse("Authentication required", 401);
     }
@@ -1112,6 +1820,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       auth.session?.id,
       body.orgId
     );
+
     return json<AuthUserResponse>(authBody);
   });
   app.get("/v1/auth/sessions", async (c) => {
@@ -1120,6 +1829,11 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     }
 
     const auth = getRequestAuth(c);
+
+    if (auth.mode !== "browser-session") {
+      return errorResponse("Browser session authentication required", 403);
+    }
+
     const records = await databaseAdapter.listBrowserSessionsForUser(
       auth.user.id,
       new Date().toISOString()
@@ -1142,9 +1856,15 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     }
 
     const auth = getRequestAuth(c);
+
+    if (auth.mode !== "browser-session") {
+      return errorResponse("Browser session authentication required", 403);
+    }
+
     assertBrowserCsrf(c.req.raw, auth, authService);
 
     const sessionId = c.req.param("sessionId");
+
     const revoked = await databaseAdapter.revokeBrowserSessionForUser(
       sessionId,
       auth.user.id,
@@ -1158,11 +1878,13 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     }
 
     const response = json<RevokeBrowserSessionsResponse>({ revoked: 1 });
+
     // Revoking the session you are on leaves the browser holding a cookie that
     // no longer authenticates, which reads as a broken app until a reload.
     if (sessionId === auth.session?.id) {
       clearBrowserSessionCookies(response.headers);
     }
+
     return response;
   });
 
@@ -1177,6 +1899,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
 
     const userId = c.req.param("userId");
     const user = await databaseAdapter.getUserById(userId);
+
     if (!user) {
       return errorResponse("User not found", 404);
     }
@@ -1187,11 +1910,13 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     );
 
     const response = json<RevokeBrowserSessionsResponse>({ revoked });
+
     // A platform admin revoking their own sessions is the breach-containment
     // case, and it has to log them out here too.
     if (userId === auth.user.id) {
       clearBrowserSessionCookies(response.headers);
     }
+
     return response;
   });
 }

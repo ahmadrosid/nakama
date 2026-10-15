@@ -1,10 +1,11 @@
 import { Tabs } from "@base-ui/react/tabs";
-import { BASH_TOOL_ID } from "@nakama/core/tools/protected";
+import { Button } from "@nakama/ui/button";
 import { Switch } from "@nakama/ui/switch";
+import { Add01Icon } from "hugeicons-react";
 import { useState } from "react";
 import { SkillProposalsPanel } from "@/components/profiles/SkillProposalsPanel";
+import { ToolAssignDialog } from "@/components/ToolAssignDialog";
 import { useAuth } from "@/context/use-auth";
-import { useAppNavigation } from "@/hooks/use-app-navigation";
 import {
   pluginAgentAccessState,
   useOrgPlugins,
@@ -14,10 +15,47 @@ import { useSkillProposals } from "@/hooks/use-skill-proposals";
 import { formatError } from "@/lib/client";
 import { pluginIcon } from "@/lib/navigation";
 import { ProfileComposioSection } from "@/pages/profiles/profile-composio-section";
-import { ProfileMcpSection } from "@/pages/profiles/profile-mcp-section";
-import { ProfileSkillsSection } from "@/pages/profiles/profile-skills-section";
 import { ProfileToolsSection } from "@/pages/profiles/profile-tools-section";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
+
+function ProfileCapabilityTabs({
+  appsConfigured,
+  isOrgAdmin,
+  pendingCount,
+}: {
+  appsConfigured: boolean;
+  isOrgAdmin: boolean;
+  pendingCount: number;
+}) {
+  return (
+    <Tabs.List
+      aria-label="Profile capabilities"
+      className="no-scrollbar flex min-w-0 flex-1 gap-0.5 overflow-x-auto rounded-xl bg-muted p-[3px]"
+    >
+      {[
+        { label: "Tools", value: "tools" },
+        { label: "Plugins", value: "plugins" },
+        ...(appsConfigured ? [{ label: "Apps", value: "apps" }] : []),
+        ...(isOrgAdmin
+          ? [
+              {
+                label: `Proposals${pendingCount ? ` (${pendingCount})` : ""}`,
+                value: "proposals",
+              },
+            ]
+          : []),
+      ].map(({ value, label }) => (
+        <Tabs.Tab
+          className="shrink-0 rounded-lg px-3.5 py-1.5 font-medium text-muted-foreground text-sm hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm"
+          key={value}
+          value={value}
+        >
+          {label}
+        </Tabs.Tab>
+      ))}
+    </Tabs.List>
+  );
+}
 
 export function ProfileConfigAssignmentsSection({
   state,
@@ -31,29 +69,28 @@ export function ProfileConfigAssignmentsSection({
     availableTools,
     handleAssignTool,
     setRemoveConfirm,
-    allMcpServers,
-    setMcpCreateOpen,
     composioToolkitsData,
     assignedComposioToolkits,
     availableComposioToolkits,
     handleAssignComposioToolkit,
-    allSkills,
-    assignedSkillIds,
-    setSkillCreateOpen,
-    setSkillInstallOpen,
-    handleAssignSkill,
-    handleDeleteSkill,
     selectedId,
   } = state;
-  const { navigateToSkillDetail } = useAppNavigation();
+
   const { activeOrg } = useAuth();
   const isOrgAdmin = activeOrg?.role === "admin";
   const [capability, setCapability] = useState("tools");
+  const [toolAssignOpen, setToolAssignOpen] = useState(false);
+
   const { data: proposals } = useSkillProposals(
     isOrgAdmin && selectedId ? activeOrg.id : null,
     { profileId: selectedId ?? undefined, status: "pending" }
   );
+
   const readOnly = busy || !canManageProfile;
+  const toolsToAdd = availableTools.filter((tool) => !tool.pluginId);
+
+  const activeCapability =
+    isOrgAdmin && state.detailTab === "proposals" ? "proposals" : capability;
 
   if (!detail) {
     return null;
@@ -67,42 +104,40 @@ export function ProfileConfigAssignmentsSection({
         if (value !== "proposals") {
           setCapability(String(value));
         }
+
         state.setDetailTab(value === "proposals" ? "proposals" : "profile");
       }}
-      value={
-        isOrgAdmin && state.detailTab === "proposals" ? "proposals" : capability
-      }
+      value={activeCapability}
     >
-      <Tabs.List
-        aria-label="Profile capabilities"
-        className="flex gap-4 overflow-x-auto border-border border-b"
-      >
-        {[
-          { label: "Tools", value: "tools" },
-          { label: "Plugins", value: "plugins" },
-          { label: "MCP", value: "mcp" },
-          { label: "Skills", value: "skills" },
-          ...(composioToolkitsData?.configured
-            ? [{ label: "Apps", value: "apps" }]
-            : []),
-          ...(isOrgAdmin
-            ? [
-                {
-                  label: `Proposals${proposals?.pendingCount ? ` (${proposals.pendingCount})` : ""}`,
-                  value: "proposals",
-                },
-              ]
-            : []),
-        ].map(({ value, label }) => (
-          <Tabs.Tab
-            className="shrink-0 border-transparent border-b-2 px-1 py-3 font-medium text-muted-foreground text-sm hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring data-[active]:border-foreground data-[active]:text-foreground"
-            key={value}
-            value={value}
+      <div className="flex items-center gap-2">
+        <ProfileCapabilityTabs
+          appsConfigured={composioToolkitsData?.configured === true}
+          isOrgAdmin={isOrgAdmin}
+          pendingCount={proposals?.pendingCount ?? 0}
+        />
+        {activeCapability === "tools" && toolsToAdd.length > 0 ? (
+          <Button
+            aria-label="Add tool"
+            className="shrink-0"
+            disabled={readOnly}
+            onClick={() => setToolAssignOpen(true)}
+            size="icon"
+            type="button"
+            variant="outline"
           >
-            {label}
-          </Tabs.Tab>
-        ))}
-      </Tabs.List>
+            <Add01Icon aria-hidden className="size-4" />
+          </Button>
+        ) : null}
+        <ToolAssignDialog
+          disabled={readOnly}
+          groupPlugins
+          hideTrigger
+          onAssign={handleAssignTool}
+          onOpenChange={setToolAssignOpen}
+          open={toolAssignOpen && canManageProfile}
+          tools={toolsToAdd}
+        />
+      </div>
       {isOrgAdmin && activeOrg ? (
         <Tabs.Panel className="pt-5" value="proposals">
           <SkillProposalsPanel orgId={activeOrg.id} profileId={detail.id} />
@@ -110,27 +145,16 @@ export function ProfileConfigAssignmentsSection({
       ) : null}
       <Tabs.Panel value="tools">
         <ProfileToolsSection
-          availableTools={availableTools.filter((tool) => !tool.pluginId)}
           busy={readOnly}
           detail={{
             ...detail,
             tools: detail.tools.filter((tool) => !tool.pluginId),
           }}
-          onAssign={handleAssignTool}
           onRemove={setRemoveConfirm}
         />
       </Tabs.Panel>
       <Tabs.Panel value="plugins">
         <ProfilePluginsSection state={state} />
-      </Tabs.Panel>
-      <Tabs.Panel value="mcp">
-        <ProfileMcpSection
-          allMcpServers={allMcpServers}
-          busy={readOnly}
-          detail={detail}
-          onCreateOpen={() => setMcpCreateOpen(true)}
-          onRemove={setRemoveConfirm}
-        />
       </Tabs.Panel>
       <Tabs.Panel value="apps">
         <ProfileComposioSection
@@ -142,28 +166,6 @@ export function ProfileConfigAssignmentsSection({
           onRemove={setRemoveConfirm}
         />
       </Tabs.Panel>
-      <Tabs.Panel value="skills">
-        <ProfileSkillsSection
-          allSkills={allSkills.filter((skill) => !skill.pluginId)}
-          assignedSkillIds={assignedSkillIds}
-          busy={readOnly}
-          detail={{
-            ...detail,
-            skills: detail.skills.filter((skill) => !skill.pluginId),
-          }}
-          onAssign={handleAssignSkill}
-          onAssignBash={() => handleAssignTool(BASH_TOOL_ID)}
-          onCreateOpen={() => setSkillCreateOpen(true)}
-          onDelete={handleDeleteSkill}
-          onInstallOpen={() => setSkillInstallOpen(true)}
-          onRemove={setRemoveConfirm}
-          onViewDetail={(skillId) => {
-            navigateToSkillDetail(skillId, {
-              profileId: selectedId ?? undefined,
-            });
-          }}
-        />
-      </Tabs.Panel>
     </Tabs.Root>
   );
 }
@@ -172,14 +174,17 @@ function ProfilePluginsSection({ state }: { state: ProfilesPageState }) {
   const plugins = useOrgPlugins();
   const save = useSavePluginAgentAccess();
   const { detail, allTools, allSkills, busy, canManageProfile } = state;
+
   if (!detail) {
     return null;
   }
+
   if (plugins.isLoading) {
     return (
       <p className="py-5 text-muted-foreground text-sm">Loading plugins…</p>
     );
   }
+
   if (plugins.error) {
     return (
       <p className="py-5 text-destructive text-sm" role="alert">
@@ -187,7 +192,9 @@ function ProfilePluginsSection({ state }: { state: ProfilesPageState }) {
       </p>
     );
   }
+
   const installed = (plugins.data ?? []).filter((plugin) => plugin.installed);
+
   return (
     <div className="pt-5">
       {save.error ? (
@@ -204,7 +211,9 @@ function ProfilePluginsSection({ state }: { state: ProfilesPageState }) {
             skills: allSkills,
             tools: allTools,
           });
+
           const Icon = pluginIcon(plugin.pluginId);
+
           return (
             <li
               className="flex items-center gap-3 px-4 py-3"

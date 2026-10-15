@@ -12,6 +12,7 @@
  */
 export function isSseResponse(response: Response): boolean {
   const contentType = response.headers.get("Content-Type") ?? "";
+
   return contentType.startsWith("text/event-stream");
 }
 
@@ -26,7 +27,8 @@ export function disableBunIdleTimeoutForSse(
 }
 
 /**
- * Automation run POSTs hold the socket until the agent finishes and write no
+ * ACP MCP tool calls write no bytes until the tool returns, so a long bash
+ * call would hit the 255 s limit. Automation run POSTs hold the socket until the agent finishes and write no
  * bytes until then. Disable idle timeout at request start, not after the
  * handler returns.
  */
@@ -36,6 +38,7 @@ export function isLongHeldAutomationRunRequest(request: Request): boolean {
   }
 
   const pathname = new URL(request.url).pathname;
+
   return /\/v1\/(?:internal\/)?automations\/[^/]+\/run\/?$/.test(pathname);
 }
 
@@ -48,7 +51,16 @@ export function disableBunIdleTimeoutForLongHeldRequest(
     /^\/v1\/plugins\/(?:[^/]+\/actions\/[^/]+|official\/[^/]+\/install)\/?$/.test(
       new URL(request.url).pathname
     );
-  if (isLongHeldAutomationRunRequest(request) || pluginRequest) {
+
+  const acpMcpRequest =
+    request.method === "POST" &&
+    /^\/v1\/acp-mcp\/[^/]+\/?$/.test(new URL(request.url).pathname);
+
+  if (
+    isLongHeldAutomationRunRequest(request) ||
+    pluginRequest ||
+    acpMcpRequest
+  ) {
     server.timeout(request, 0);
   }
 }

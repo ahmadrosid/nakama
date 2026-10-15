@@ -38,6 +38,7 @@ async function seedSession(adapter: DatabaseAdapter): Promise<void> {
 describe("replaceMessagesForSession bumps session updatedAt", () => {
   test("summary updatedAt advances past stale message createdAt", async () => {
     const database = await createSqliteDatabase(":memory:");
+
     try {
       await seedSession(database.adapter);
       const stale = "2020-06-01T00:00:00.000Z";
@@ -57,6 +58,7 @@ describe("replaceMessagesForSession bumps session updatedAt", () => {
         "profile_test",
         ["web"]
       );
+
       expect(summaries).toHaveLength(1);
       expect(summaries[0]!.updatedAt > stale).toBe(true);
       expect(summaries[0]!.updatedAt >= beforeReplace).toBe(true);
@@ -67,6 +69,7 @@ describe("replaceMessagesForSession bumps session updatedAt", () => {
 
   test("append after replace does not regress summary updatedAt", async () => {
     const database = await createSqliteDatabase(":memory:");
+
     try {
       await seedSession(database.adapter);
       const stale = "2020-06-01T00:00:00.000Z";
@@ -110,6 +113,7 @@ describe("replaceMessagesForSession bumps session updatedAt", () => {
 describe("appendMessagesForSession", () => {
   test("sqlite preserves prior state when a batch fails", async () => {
     const database = await createSqliteDatabase(":memory:");
+
     try {
       await seedSession(database.adapter);
       const createdAt = "2020-06-01T00:00:00.000Z";
@@ -156,6 +160,7 @@ describe("appendMessagesForSession", () => {
 describe("replaceMessagesForSession atomicity", () => {
   test("sqlite restores prior messages when a replacement batch fails", async () => {
     const database = await createSqliteDatabase(":memory:");
+
     try {
       await seedSession(database.adapter);
       const createdAt = "2020-06-01T00:00:00.000Z";

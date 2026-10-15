@@ -16,6 +16,7 @@ export function withDisabledFetchIdle(init?: RequestInit): BunFetchInit {
 
 export function withLlmFetchDeadline(init?: RequestInit): BunFetchInit {
   const deadline = AbortSignal.timeout(LLM_FETCH_TIMEOUT_MS);
+
   const signal = init?.signal
     ? AbortSignal.any([init.signal, deadline])
     : deadline;

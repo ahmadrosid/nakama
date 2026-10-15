@@ -13,11 +13,13 @@ import { TerminalRenderer } from "./terminal-renderer";
 test.each(["success", "failure", "interrupted", "thinking"])(
   "keeps completed tool batches on separate lines: %s",
   async (outcome) => {
+    // SAFETY: These fields cover every profile value read by this test.
     const selected = {
       id: "test",
       model: null,
       name: "Test",
     } as ProfileSummary;
+
     const client = new NakamaClient();
     const session = client.createChatSession("test", "cli");
     const ready = Promise.withResolvers<(chunk: string) => void>();
@@ -27,6 +29,7 @@ test.each(["success", "failure", "interrupted", "thinking"])(
     let status = "";
     const states: string[] = [];
     const completedBatches: string[][] = [];
+
     const spies = [
       spyOn(profile, "resolveStartupProfile").mockResolvedValue({
         profile: selected,
@@ -39,7 +42,9 @@ test.each(["success", "failure", "interrupted", "thinking"])(
       spyOn(TerminalRenderer.prototype, "anchorFromCursor").mockResolvedValue(),
       spyOn(TerminalRenderer.prototype, "appendToolLine").mockImplementation(
         (line) => {
-          lines.push(typeof line === "string" ? line : styledLineText(line));
+          lines.push(
+            line instanceof Object ? styledLineText(line) : String(line)
+          );
         }
       ),
       spyOn(TerminalRenderer.prototype, "setStatusLine").mockImplementation(
@@ -52,15 +57,17 @@ test.each(["success", "failure", "interrupted", "thinking"])(
       spyOn(TerminalInput.prototype, "onInput").mockImplementation(
         (listener) => {
           ready.resolve(listener);
+
           return () => {};
         }
       ),
       spyOn(process.stdout, "write").mockReturnValue(true),
       spyOn(session, "sendStream").mockImplementation(
         async (_input, handlers) => {
-          if (typeof handlers === "function") {
+          if (handlers instanceof Function) {
             throw new Error("Expected tool stream handlers");
           }
+
           handlers.onToolStart?.({
             input: { path: "src/chat.ts" },
             tool: "read_file",
@@ -83,6 +90,7 @@ test.each(["success", "failure", "interrupted", "thinking"])(
             toolCallId: "a",
           });
           states.push(status);
+
           if (outcome !== "interrupted") {
             handlers.onToolEnd?.({
               result:
@@ -93,7 +101,9 @@ test.each(["success", "failure", "interrupted", "thinking"])(
               toolCallId: "b",
             });
           }
+
           states.push(status);
+
           if (outcome === "thinking") {
             handlers.onThinking?.("Next step");
             completedBatches.push([...lines]);
@@ -112,20 +122,25 @@ test.each(["success", "failure", "interrupted", "thinking"])(
             handlers.onChunk?.("Done");
             completedBatches.push([...lines]);
           }
+
           finished.resolve();
+
           if (outcome === "interrupted") {
             throw new DOMException("Stopped", "AbortError");
           }
+
           return "Done";
         }
       ),
     ];
+
     const chat = runChat({
       channel: "cli",
       client,
       offline: true,
       signal: exit.signal,
     });
+
     try {
       const emit = await ready.promise;
       emit("hello");
@@ -139,6 +154,7 @@ test.each(["success", "failure", "interrupted", "thinking"])(
       expect(lines).toHaveLength(
         outcome === "failure" ? 3 : outcome === "thinking" ? 2 : 1
       );
+
       if (outcome === "thinking") {
         expect(completedBatches.map((batch) => batch.length)).toEqual([
           1, 1, 2,
@@ -146,6 +162,7 @@ test.each(["success", "failure", "interrupted", "thinking"])(
         expect(completedBatches[0]?.[0]).toStartWith("✓ 2 tools completed · ");
         expect(lines[1]).toStartWith("✓ 1 tool completed · ");
       }
+
       if (outcome === "failure") {
         expect(lines[0]).toStartWith("✗ bash bun test");
         expect(lines[1]).toContain("Test failed");
@@ -157,11 +174,13 @@ test.each(["success", "failure", "interrupted", "thinking"])(
             : "✗ 1 tool completed · 1 interrupted · "
         );
       }
+
       expect(lines.join("\n")).not.toContain("hidden output");
       expect(lines.join("\n")).not.toContain("raw arguments");
     } finally {
       exit.abort();
       await chat;
+
       for (const spy of spies) {
         spy.mockRestore();
       }
@@ -209,6 +228,7 @@ test.each([
       toolCount: 0,
       updatedAt: "",
     };
+
     const client = new NakamaClient();
     const session = client.createChatSession("test", "cli");
     const ready = Promise.withResolvers<(chunk: string) => void>();
@@ -229,25 +249,31 @@ test.each([
     let finalEnded = false;
     let pending: PendingMessage[] = [];
     const errors = spyOn(TerminalRenderer.prototype, "appendOutputLine");
+
     const getModels = spyOn(client, "getModels").mockRejectedValue(
       new Error("Offline")
     );
+
     const spies = [
       errors,
       getModels,
       spyOn(imageInput, "parseImageLine").mockImplementation((line) => {
         if (line === "boundary-arrival") {
           arrivalPreparing.resolve();
+
           // Return the held promise directly to control the admission microtask.
           return arrival.promise;
         }
+
         return delayedParsing ? parsed.promise : Promise.resolve(null);
       }),
       spyOn(clipboard, "readClipboardImage").mockImplementation(async () => {
         clipboardStarted.resolve();
+
         if (delayedPaste) {
           await clipboardRelease.promise;
         }
+
         return {
           data: Buffer.alloc(1024, pending.length).toString("base64"),
           mediaType: "image/png",
@@ -261,10 +287,12 @@ test.each([
       spyOn(client, "createSession").mockResolvedValue(session),
       spyOn(session, "sendStream").mockImplementation(
         async (input, _handlers, options) => {
-          sent.push(typeof input === "string" ? input : input.message);
+          sent.push(input instanceof Object ? input.message : input);
+
           if (sent.at(-1) === "boundary-arrival") {
             arrivalSent.resolve();
           }
+
           if (sent.length === 1) {
             options?.signal?.addEventListener(
               "abort",
@@ -276,13 +304,16 @@ test.each([
             aborted = options?.signal?.aborted ?? false;
             throw new DOMException("Stopped", "AbortError");
           }
+
           if (sent.length === 21) {
             finalStarted.resolve();
             await finalRelease.promise;
           }
+
           if (boundary !== "none") {
             return "Reply";
           }
+
           throw new Error("Provider failed");
         }
       ),
@@ -291,6 +322,7 @@ test.each([
         if (sent.length === 21) {
           finalEnded = true;
           finalTurnEnded.resolve();
+
           if (boundary === "endStream") {
             arrival.resolve(null);
           }
@@ -302,6 +334,7 @@ test.each([
       spyOn(TerminalInput.prototype, "onInput").mockImplementation(
         (listener) => {
           ready.resolve(listener);
+
           return () => {};
         }
       ),
@@ -310,12 +343,14 @@ test.each([
         "setPendingMessages"
       ).mockImplementation((messages) => {
         pending = messages;
+
         if (boundary === "emptyQueue" && finalEnded && messages.length === 0) {
           arrival.resolve(null);
         }
       }),
       spyOn(process.stdout, "write").mockReturnValue(true),
     ];
+
     const chat = runChat({
       channel: "cli",
       client,
@@ -325,25 +360,31 @@ test.each([
 
     try {
       const emit = await ready.promise;
+
       if (delayedPaste) {
         emit("/paste");
         emit("\r");
         await clipboardStarted.promise;
       }
+
       emit("first");
       emit("\r");
       await Bun.sleep(0);
+
       if (!delayedParsing) {
         await started.promise;
       }
+
       for (let index = 0; index < 21; index += 1) {
         if (withImages) {
           emit("\u0016");
         }
+
         emit(`queued-${index}`);
         emit("\r");
         await Bun.sleep(0);
       }
+
       parsed.resolve(null);
       await started.promise;
       await Bun.sleep(0);
@@ -351,15 +392,18 @@ test.each([
       expect(pending).toHaveLength(20);
       expect(sent).toEqual(["first"]);
       expect(errors).toHaveBeenCalledTimes(1);
+
       for (const message of pending) {
         expect(message.sendInput.images?.length ?? 0).toBe(withImages ? 1 : 0);
       }
+
       if (delayedPaste) {
         clipboardRelease.resolve();
         await Bun.sleep(0);
         expect(errors).toHaveBeenCalledTimes(2);
         expect(pending).toHaveLength(20);
       }
+
       emit("\u001b");
       await finalStarted.promise;
       expect(aborted).toBe(true);
@@ -367,22 +411,28 @@ test.each([
       emit("\r");
       await Bun.sleep(0);
       expect(getModels).not.toHaveBeenCalled();
+
       if (boundary !== "none") {
         emit("boundary-arrival");
         emit("\r");
         await arrivalPreparing.promise;
       }
+
       finalRelease.resolve();
+
       if (boundary !== "none") {
         await arrivalSent.promise;
       }
+
       await finalTurnEnded.promise;
       await Bun.sleep(0);
+
       const admitted = [
         "first",
         ...Array.from({ length: 20 }, (_, index) => `queued-${index}`),
         ...(boundary === "none" ? [] : ["boundary-arrival"]),
       ];
+
       expect(sent).toEqual(admitted);
       emit("after-drain");
       emit("\r");
@@ -400,6 +450,7 @@ test.each([
       finalRelease.resolve();
       exit.abort();
       await chat;
+
       for (const spy of spies) {
         spy.mockRestore();
       }
@@ -420,6 +471,7 @@ test("switches models without updating the profile", async () => {
     toolCount: 0,
     updatedAt: "",
   };
+
   const models: ModelsResponse = {
     currentProviderId: "provider-a",
     displayName: null,
@@ -434,23 +486,28 @@ test("switches models without updating the profile", async () => {
     provider: "openai",
     providers: [],
   };
+
   const client = new NakamaClient();
   const initialSession = client.createChatSession("initial", "cli");
   const switchedSession = client.createChatSession("switched", "cli");
   const ready = Promise.withResolvers<(chunk: string) => void>();
   const modelsRequested = Promise.withResolvers<void>();
   const exit = new AbortController();
+
   const createSession = spyOn(client, "createSession")
     .mockResolvedValueOnce(initialSession)
     .mockResolvedValueOnce(switchedSession);
+
   const updateProfile = spyOn(client, "updateProfile").mockRejectedValue(
     new Error("Forbidden")
   );
+
   const spies = [
     createSession,
     updateProfile,
     spyOn(client, "getModels").mockImplementation(async () => {
       modelsRequested.resolve();
+
       return models;
     }),
     spyOn(profile, "resolveStartupProfile").mockResolvedValue({
@@ -463,10 +520,12 @@ test("switches models without updating the profile", async () => {
     spyOn(TerminalInput.prototype, "stop").mockImplementation(() => {}),
     spyOn(TerminalInput.prototype, "onInput").mockImplementation((listener) => {
       ready.resolve(listener);
+
       return () => {};
     }),
     spyOn(process.stdout, "write").mockReturnValue(true),
   ];
+
   const chat = runChat({
     channel: "cli",
     client,
@@ -490,6 +549,7 @@ test("switches models without updating the profile", async () => {
   } finally {
     exit.abort();
     await chat;
+
     for (const spy of spies) {
       spy.mockRestore();
     }

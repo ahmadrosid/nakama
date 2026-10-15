@@ -3,43 +3,63 @@ import {
   buildReceiptBag,
   executeAssert,
   executeCompare,
+  parseWorkflowRecord,
+  parseWorkflowValue,
   resolveTemplateString,
   resolveWorkflowValue,
+  type WorkflowBag,
+  type WorkflowRecord,
+  type WorkflowValue,
 } from "./workflow-ops";
+
+type WorkflowRunResult = {
+  error?: string;
+  output?: string;
+  runId?: string;
+  skipped?: boolean;
+};
+
+type DataStepResult = {
+  error?: string;
+  input: WorkflowValue;
+  output: WorkflowValue;
+};
+
 export interface WorkflowHost {
   executeTool(
     profileId: string,
     name: string,
-    input: Record<string, unknown>,
+    input: WorkflowRecord,
     runId: string,
     workflowId: string
-  ): Promise<unknown>;
+  ): Promise<WorkflowValue>;
   runWorkflowSummarize(
     orgId: string,
     profileId: string,
     prompt: string,
-    bag: Record<string, unknown>
+    bag: WorkflowBag
   ): Promise<string>;
 }
 
 import type { WorkflowService } from "./workflow-service";
 
+type WorkflowRunnerService = Pick<
+  WorkflowService,
+  "completeRun" | "createRun" | "createRunStep" | "get" | "updateRunStep"
+>;
+
 export class WorkflowRunner {
   constructor(
-    private readonly workflowService: WorkflowService,
+    private readonly workflowService: WorkflowRunnerService,
     private readonly agentService: WorkflowHost
   ) {}
 
   async run(
     workflowId: string,
-    runtimeInput: Record<string, unknown> = {}
-  ): Promise<{
-    error?: string;
-    output?: string;
-    skipped?: boolean;
-    runId?: string;
-  }> {
+    runtimeInput: WorkflowRecord = {}
+  ): Promise<WorkflowRunResult> {
     const workflow = await this.workflowService.get(workflowId);
+
     if (!workflow) {
       throw new Error("Workflow not found.");
     }
@@ -49,6 +69,7 @@ export class WorkflowRunner {
     }
 
     const orgId = workflow.orgId?.trim();
+
     if (!orgId) {
       throw new Error("Workflow organization is missing.");
     }
@@ -62,17 +83,20 @@ export class WorkflowRunner {
         run.id,
         runtimeInput
       );
+
       const completedRun = await this.workflowService.completeRun(
         run.id,
         workflowId,
         { output }
       );
+
       return { output: completedRun.output ?? output, runId: run.id };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await this.workflowService.completeRun(run.id, workflowId, {
         error: message,
       });
+
       return { error: message, runId: run.id };
     }
   }
@@ -81,15 +105,17 @@ export class WorkflowRunner {
     orgId: string,
     workflow: StoredWorkflow,
     runId: string,
-    runtimeInput: Record<string, unknown>
+    runtimeInput: WorkflowRecord
   ): Promise<string> {
-    const stepOutputs: Record<string, unknown> = {};
+    const stepOutputs: WorkflowRecord = {};
     const bag = () => buildReceiptBag(runtimeInput, stepOutputs);
 
     for (const [position, step] of workflow.steps.entries()) {
       if (step.kind === "summarize") {
         continue;
       }
+
+      let failure: string | undefined;
 
       const stepRecord = await this.workflowService.createRunStep(
         runId,
@@ -103,12 +129,19 @@ export class WorkflowRunner {
           runId,
           workflowId: workflow.id,
         });
-        stepOutputs[step.id] = result.output;
+
         await this.workflowService.updateRunStep(runId, stepRecord.id, {
+          error: result.error,
           input: result.input,
           output: result.output,
-          status: "completed",
+          status: result.error ? "failed" : "completed",
         });
+
+        if (result.error) {
+          failure = result.error;
+        } else {
+          stepOutputs[step.id] = result.output;
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         await this.workflowService.updateRunStep(runId, stepRecord.id, {
@@ -117,11 +150,16 @@ export class WorkflowRunner {
         });
         throw new Error(message);
       }
+
+      if (failure) {
+        throw new Error(failure);
+      }
     }
 
     const summarizeStep = workflow.steps.find(
       (step) => step.kind === "summarize"
     );
+
     if (!summarizeStep || summarizeStep.kind !== "summarize") {
       throw new Error("Workflow summarize step is missing.");
     }
@@ -139,11 +177,13 @@ export class WorkflowRunner {
         summarizeStep.prompt,
         bag()
       );
+
       await this.workflowService.updateRunStep(runId, summarizeRecord.id, {
         input: { prompt: summarizeStep.prompt },
         output: { output },
         status: "completed",
       });
+
       return output;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -155,20 +195,20 @@ export class WorkflowRunner {
     }
   }
 
-  private async executeDataStep(
+  async executeDataStep(
     step: WorkflowStep,
-    bag: ReturnType<typeof buildReceiptBag>,
+    bag: WorkflowBag,
     context: {
       profileId: string;
       runId: string;
       workflowId: string;
     }
-  ): Promise<{ input: unknown; output: unknown }> {
+  ): Promise<DataStepResult> {
     if (step.kind === "tool") {
-      const input = resolveWorkflowValue(step.input, bag) as Record<
-        string,
-        unknown
-      >;
+      const input = parseWorkflowRecord(
+        resolveWorkflowValue(parseWorkflowValue(step.input), bag)
+      );
+
       const output = await this.agentService.executeTool(
         context.profileId,
         step.tool,
@@ -176,67 +216,84 @@ export class WorkflowRunner {
         context.runId,
         context.workflowId
       );
+
       const toolError = readToolError(output);
-      if (toolError) {
-        throw new Error(toolError);
-      }
-      return { input, output };
+
+      return toolError
+        ? { error: toolError, input, output }
+        : { input, output };
     }
 
     if (step.kind === "compare") {
       const left = resolveWorkflowValue(step.left, bag);
       const right = resolveWorkflowValue(step.right, bag);
+
       const result = executeCompare({
-        left,
+        left: parseWorkflowValue(left),
         op: step.op,
-        right,
+        right: parseWorkflowValue(right),
         tolerance: step.tolerance,
       });
+
+      const input = { left, op: step.op, right };
+
       if (!result.ok) {
-        throw new Error(
-          `Compare step ${step.id} failed: ${JSON.stringify(result)}`
-        );
+        return {
+          error: `Compare step ${step.id} failed: ${JSON.stringify(result)}`,
+          input,
+          output: result,
+        };
       }
-      return { input: { left, op: step.op, right }, output: result };
+
+      return { input, output: result };
     }
 
     if (step.kind === "assert") {
       const result = executeAssert({
         bag,
-        expected: step.expected,
+        expected: parseWorkflowValue(step.expected),
         path: step.path,
       });
+
+      const input = { expected: result.expected, path: step.path };
+
       if (!result.ok) {
-        throw new Error(
-          `Assert step ${step.id} failed: expected ${JSON.stringify(result.expected)}, got ${JSON.stringify(result.actual)}`
-        );
+        return {
+          error: `Assert step ${step.id} failed: expected ${JSON.stringify(result.expected)}, got ${JSON.stringify(result.actual)}`,
+          input,
+          output: result,
+        };
       }
-      return {
-        input: { expected: result.expected, path: step.path },
-        output: result,
-      };
+
+      return { input, output: result };
     }
 
     if (step.kind === "template") {
       const output = resolveTemplateString(step.template, bag);
+
       return { input: { template: step.template }, output };
     }
 
-    throw new Error(
-      `Unsupported workflow step kind: ${(step as WorkflowStep).kind}`
-    );
+    throw new Error("Unsupported workflow step kind.");
   }
 }
 
-function readToolError(output: unknown): string | null {
-  if (!output || typeof output !== "object" || Array.isArray(output)) {
+function readToolError(output: WorkflowValue): string | null {
+  if (!(output instanceof Object) || Array.isArray(output)) {
     return null;
   }
 
-  const record = output as Record<string, unknown>;
-  if (typeof record.error !== "string" || !record.error.trim()) {
+  const record = parseWorkflowRecord(output);
+  const error = record.error;
+
+  if (
+    error === undefined ||
+    error === null ||
+    error !== String(error) ||
+    !error.trim()
+  ) {
     return null;
   }
 
-  return Object.keys(record).length === 1 ? record.error : null;
+  return Object.keys(record).length === 1 ? error : null;
 }

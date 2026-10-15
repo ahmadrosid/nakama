@@ -1,6 +1,19 @@
+import { z } from "zod";
 import type { toMailboxConfig } from "../email-config";
 
+const MailAddressSchema = z.union([
+  z.string(),
+  z.object({ address: z.string().optional(), name: z.string().optional() }),
+]);
+
+export type MailAddressInput =
+  | string
+  | { address?: string; name?: string }
+  | null
+  | undefined;
+
 export const MAX_EMAIL_BODY_BYTES = 256 * 1024;
+
 export const MAX_EMAIL_MESSAGE_BYTES = 10 * 1024 * 1024;
 
 export interface MailAttachment {
@@ -60,32 +73,50 @@ export interface MailSender {
 
 export type MailboxConfig = ReturnType<typeof toMailboxConfig>;
 
-export function formatMailAddress(value: unknown): string {
-  if (typeof value === "string") {
-    return value.trim();
+export interface MailBodyPreview {
+  text: string;
+  truncated: boolean;
+}
+
+export function formatMailAddress(value: MailAddressInput): string {
+  if (value == null) {
+    return "";
   }
 
-  if (
-    typeof value === "object" &&
-    value !== null &&
-    "address" in value &&
-    typeof (value as { address?: unknown }).address === "string"
-  ) {
-    const entry = value as { name?: string; address: string };
-    const name = entry.name?.trim();
-    return name ? `${name} <${entry.address}>` : entry.address;
+  const parsed = MailAddressSchema.safeParse(value);
+
+  if (!parsed.success) {
+    return "";
   }
 
-  return "";
+  const text = z.string().safeParse(parsed.data);
+
+  if (text.success) {
+    return text.data.trim();
+  }
+
+  const entry = z
+    .object({ address: z.string().optional(), name: z.string().optional() })
+    .passthrough()
+    .safeParse(parsed.data);
+
+  if (!entry.success) {
+    return "";
+  }
+
+  if (!entry.data.address) {
+    return "";
+  }
+
+  const name = entry.data.name?.trim();
+
+  return name ? `${name} <${entry.data.address}>` : entry.data.address;
 }
 
 export function truncateMailBody(
   value: string,
   maxBytes = MAX_EMAIL_BODY_BYTES
-): {
-  text: string;
-  truncated: boolean;
-} {
+): MailBodyPreview {
   const bytes = Buffer.byteLength(value, "utf8");
 
   if (bytes <= maxBytes) {

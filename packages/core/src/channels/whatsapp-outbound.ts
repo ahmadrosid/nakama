@@ -41,6 +41,7 @@ export function createWhatsAppOutboundAdapter(
             ok: false,
           };
         }
+
         const owner = { orgId: input.orgId, profileId: input.profileId };
         const config = await loadWhatsAppConfigFile(owner);
 
@@ -51,20 +52,23 @@ export function createWhatsAppOutboundAdapter(
         if (!(config.outboundPort && config.outboundToken)) {
           return { error: "WhatsApp worker is not connected.", ok: false };
         }
+
         const port = resolveWhatsAppOutboundPort(config);
+        const headers = new Headers({ "Content-Type": "application/json" });
+
+        if (config.outboundToken) {
+          headers.set(WHATSAPP_OUTBOUND_TOKEN_HEADER, config.outboundToken);
+        }
+
         const response = await fetchImpl(`http://127.0.0.1:${port}/send`, {
           body: JSON.stringify({ text: input.text }),
-          headers: {
-            "Content-Type": "application/json",
-            ...(config.outboundToken
-              ? { [WHATSAPP_OUTBOUND_TOKEN_HEADER]: config.outboundToken }
-              : {}),
-          },
+          headers,
           method: "POST",
         });
 
         if (!response.ok) {
           const body = await response.text();
+
           return {
             error: `WhatsApp worker error (${response.status}): ${body.slice(0, 200)}`,
             ok: false,
@@ -74,6 +78,7 @@ export function createWhatsAppOutboundAdapter(
         return { ok: true };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+
         return { error: message, ok: false };
       }
     },

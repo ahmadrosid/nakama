@@ -117,7 +117,7 @@ function ArtifactAttachmentPreviewTrigger({
         {imagePreviewUrl ? (
           <img
             alt=""
-            className="aspect-[4/3] w-full rounded-md border border-border object-cover outline outline-1 outline-black/10 dark:outline-white/10"
+            className="h-auto w-full rounded-md border border-border outline outline-1 outline-black/10 dark:outline-white/10"
             src={imagePreviewUrl}
           />
         ) : (

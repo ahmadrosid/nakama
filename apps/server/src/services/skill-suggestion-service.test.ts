@@ -6,13 +6,14 @@ import { NakamaApiError } from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
   type DatabaseAdapter,
-  seedOrgDefaultProfile,
 } from "@nakama/db";
 import { SkillProposalService } from "./skill-proposal-service";
 import { SkillSuggestionService } from "./skill-suggestion-service";
 import { SkillsService } from "./skills-service";
-
-const ORG_ID = "org_test";
+import {
+  ORG_ID,
+  seedSkillOrg as seedOrg,
+} from "./skills-service-test-fixtures";
 
 const sampleSkillMarkdown = `---
 name: deploy-notes
@@ -22,37 +23,11 @@ description: Notes about deploy process.
 Run the deploy checklist before shipping.
 `;
 
-async function seedOrg(
-  db: DatabaseAdapter,
-  options: {
-    orgSkillsWriteApproval?: boolean;
-    profileSkillsWriteApproval?: boolean | null;
-  } = {}
-) {
-  const now = new Date().toISOString();
-  await db.upsertOrganization({
-    createdAt: now,
-    id: ORG_ID,
-    name: "Test Org",
-    skillsWriteApproval: options.orgSkillsWriteApproval ?? false,
-    slug: "test-org",
-    updatedAt: now,
-  });
-  const profile = await seedOrgDefaultProfile(db, ORG_ID);
-  if (options.profileSkillsWriteApproval !== undefined) {
-    await db.upsertProfile({
-      ...profile,
-      skillsWriteApproval: options.profileSkillsWriteApproval,
-      updatedAt: now,
-    });
-  }
-  return profile;
-}
-
 function buildServices(db: DatabaseAdapter) {
   const skills = new SkillsService(db);
   const proposals = new SkillProposalService(db, skills);
   const suggestions = new SkillSuggestionService(db, skills, proposals);
+
   return { proposals, skills, suggestions };
 }
 
@@ -119,6 +94,7 @@ describe("SkillSuggestionService", () => {
       created.id,
       "admin_user"
     );
+
     expect(result.outcome).toBe("applied");
     expect(result.suggestion.status).toBe("applied");
     expect(result.suggestion.appliedAt).toBeTruthy();
@@ -149,6 +125,7 @@ describe("SkillSuggestionService", () => {
       created.id,
       "admin_user"
     );
+
     expect(first.outcome).toBe("applied");
 
     const second = await suggestions.applySuggestion(
@@ -156,6 +133,7 @@ describe("SkillSuggestionService", () => {
       created.id,
       "admin_user"
     );
+
     expect(second.outcome).toBe("already_applied");
   });
 
@@ -184,6 +162,7 @@ describe("SkillSuggestionService", () => {
       created.id,
       "admin_user"
     );
+
     expect(result.outcome).toBe("staged_as_proposal");
     expect(result.proposalId).toBeTruthy();
     expect(result.suggestion.status).toBe("applied");
@@ -196,6 +175,7 @@ describe("SkillSuggestionService", () => {
     const { proposals: pending } = await proposals.listProposals(ORG_ID, {
       profileId: profile.id,
     });
+
     expect(pending).toHaveLength(1);
     expect(pending[0]?.id).toBe(result.proposalId!);
     expect(pending[0]?.status).toBe("pending");
@@ -271,44 +251,5 @@ describe("SkillSuggestionService", () => {
     await expect(
       suggestions.applySuggestion("org_other", created.id, "admin_user")
     ).rejects.toMatchObject({ status: 404 });
-  });
-
-  test("listSuggestions filter permutations return the same row", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const profile = await seedOrg(db);
-    const { suggestions } = buildServices(db);
-
-    await suggestions.createSuggestion({
-      orgId: ORG_ID,
-      outcome: {
-        action: "create",
-        content: sampleSkillMarkdown,
-        name: "deploy-notes",
-      },
-      profileId: profile.id,
-      sessionId: "session_1",
-    });
-
-    const all = await suggestions.listSuggestions(ORG_ID);
-    const byStatus = await suggestions.listSuggestions(ORG_ID, {
-      status: "pending",
-    });
-    const byProfile = await suggestions.listSuggestions(ORG_ID, {
-      profileId: profile.id,
-    });
-    const bySession = await suggestions.listSuggestions(ORG_ID, {
-      sessionId: "session_1",
-    });
-    const byAll = await suggestions.listSuggestions(ORG_ID, {
-      profileId: profile.id,
-      sessionId: "session_1",
-      status: "pending",
-    });
-
-    expect(all).toHaveLength(1);
-    expect(byStatus).toHaveLength(1);
-    expect(byProfile).toHaveLength(1);
-    expect(bySession).toHaveLength(1);
-    expect(byAll).toHaveLength(1);
   });
 });

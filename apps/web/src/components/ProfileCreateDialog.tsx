@@ -1,4 +1,9 @@
-import type { ToolSummary } from "@nakama/core/contract";
+import type {
+  AcpAgentPresetSummary,
+  ImageAttachment,
+  ToolSummary,
+} from "@nakama/core/contract";
+import { parseDataUrl } from "@nakama/core/message-content";
 import { Button } from "@nakama/ui/button";
 import {
   Dialog,
@@ -12,21 +17,32 @@ import { Spinner } from "@nakama/ui/spinner";
 import {
   type ChangeEvent,
   type FormEvent,
-  useEffect,
   useMemo,
   useReducer,
   useRef,
 } from "react";
-import { ProfileCreateDialogForm } from "@/components/profile-create-dialog-form";
+import {
+  BUILT_IN_AGENT,
+  ProfileCreateDialogForm,
+} from "@/components/profile-create-dialog-form";
 import {
   useAssignToolMutation,
   useCreateProfileMutation,
+  useCreateProfileWithSuperBotMutation,
+  useUpdateProfileMutation,
   useUploadProfileAvatarMutation,
 } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
-import { fileToImageAttachment } from "@/lib/profile-images";
+import { readFileAsDataUrl } from "../lib/read-file-as-data-url";
+
+const DEFAULT_TOOL_IDS = ["web_search", "web_fetch", "write_file"];
+
+function fileToImageAttachment(file: File): Promise<ImageAttachment | null> {
+  return readFileAsDataUrl(file).then(parseDataUrl, () => null);
+}
 
 interface ProfileCreateDialogProps {
+  agentPresets: AcpAgentPresetSummary[];
   onAskSuperBot?: () => void;
   onCreated: (profileId: string) => void;
   onOpenChange: (open: boolean) => void;
@@ -35,13 +51,28 @@ interface ProfileCreateDialogProps {
 }
 
 const defaultCreatePrompt = "You are a helpful assistant.";
+
+function nameFromPrompt(prompt: string) {
+  const words = prompt.trim().split(/\s+/).filter(Boolean).slice(0, 4);
+
+  if (words.length === 0) {
+    return "New agent";
+  }
+
+  const title = words.join(" ").replace(/[.,;:!?]+$/, "");
+
+  return title.charAt(0).toUpperCase() + title.slice(1);
+}
+
 const PROFILE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 
 type ProfileCreateFormState = {
   submitError: string | null;
   name: string;
+  prompt: string;
   profileId: string;
   avatarPreview: string | null;
+  agentId: string;
   toolIds: string[];
 };
 
@@ -57,12 +88,25 @@ type ProfileCreateFormAction =
     };
 
 const initialProfileCreateFormState: ProfileCreateFormState = {
+  agentId: BUILT_IN_AGENT,
   avatarPreview: null,
   name: "",
   profileId: "",
+  prompt: "",
   submitError: null,
   toolIds: [],
 };
+
+function initProfileCreateFormState(
+  tools: ToolSummary[]
+): ProfileCreateFormState {
+  const available = new Set(tools.map((tool) => tool.id));
+
+  return {
+    ...initialProfileCreateFormState,
+    toolIds: DEFAULT_TOOL_IDS.filter((id) => available.has(id)),
+  };
+}
 
 function profileCreateFormReducer(
   state: ProfileCreateFormState,
@@ -73,6 +117,7 @@ function profileCreateFormReducer(
       if (state.avatarPreview) {
         URL.revokeObjectURL(state.avatarPreview);
       }
+
       return initialProfileCreateFormState;
     case "patch":
       return { ...state, ...action.values };
@@ -80,6 +125,7 @@ function profileCreateFormReducer(
       if (!action.toolId || state.toolIds.includes(action.toolId)) {
         return state;
       }
+
       return { ...state, toolIds: [...state.toolIds, action.toolId] };
     case "remove-tool":
       return {
@@ -90,25 +136,17 @@ function profileCreateFormReducer(
       if (action.revokePrevious && state.avatarPreview) {
         URL.revokeObjectURL(state.avatarPreview);
       }
+
       return { ...state, avatarPreview: action.preview };
     }
+
     default:
       return state;
   }
 }
 
-function slugifyProfileName(name: string): string {
-  return (
-    name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 64) || "profile"
-  );
-}
-
 export function ProfileCreateDialog({
+  agentPresets,
   open,
   tools,
   onCreated,
@@ -119,6 +157,7 @@ export function ProfileCreateDialog({
     <Dialog onOpenChange={onOpenChange} open={open}>
       {open ? (
         <ProfileCreateDialogContent
+          agentPresets={agentPresets}
           onAskSuperBot={onAskSuperBot}
           onCreated={onCreated}
           onOpenChange={onOpenChange}
@@ -130,56 +169,52 @@ export function ProfileCreateDialog({
 }
 
 function ProfileCreateDialogContent({
+  agentPresets,
   tools,
   onCreated,
   onOpenChange,
   onAskSuperBot,
 }: {
+  agentPresets: AcpAgentPresetSummary[];
   tools: ToolSummary[];
   onCreated: (profileId: string) => void;
   onOpenChange: (open: boolean) => void;
   onAskSuperBot?: () => void;
 }) {
   const createMutation = useCreateProfileMutation();
+  const superBotCreateMutation = useCreateProfileWithSuperBotMutation();
   const uploadAvatarMutation = useUploadProfileAvatarMutation();
   const assignToolMutation = useAssignToolMutation();
+  const updateProfileMutation = useUpdateProfileMutation();
   const createAvatarInputRef = useRef<HTMLInputElement>(null);
+
   const [form, dispatch] = useReducer(
     profileCreateFormReducer,
-    initialProfileCreateFormState
+    tools,
+    initProfileCreateFormState
   );
-  const profileIdEditedRef = useRef(false);
+
   const avatarFileRef = useRef<File | null>(null);
 
   const busy =
     createMutation.isPending ||
+    superBotCreateMutation.isPending ||
     uploadAvatarMutation.isPending ||
-    assignToolMutation.isPending;
+    assignToolMutation.isPending ||
+    updateProfileMutation.isPending;
+
   const profileIdTrimmed = form.profileId.trim();
+
   const profileIdValid =
-    Boolean(profileIdTrimmed) && PROFILE_ID_PATTERN.test(profileIdTrimmed);
+    !profileIdTrimmed || PROFILE_ID_PATTERN.test(profileIdTrimmed);
+
   const profileIdHasValue = form.profileId.length > 0;
-  const profileIdHelpText =
-    !profileIdHasValue || profileIdValid
-      ? "From name. Letters, numbers, `_`, `-` only."
-      : "Agent id must start with a letter or number and only use letters, numbers, `_`, or `-`.";
+
+  const profileIdHelpText = profileIdValid
+    ? "Optional. Letters, numbers, `_`, `-` only."
+    : "Agent id must start with a letter or number and only use letters, numbers, `_`, or `-`.";
+
   const toolIdSet = useMemo(() => new Set(form.toolIds), [form.toolIds]);
-  const availableTools = tools.filter((tool) => !toolIdSet.has(tool.id));
-  const selectableTools = availableTools;
-  const selectedTools = tools.filter((tool) => toolIdSet.has(tool.id));
-
-  useEffect(() => {
-    if (profileIdEditedRef.current) {
-      return;
-    }
-
-    dispatch({
-      type: "patch",
-      values: {
-        profileId: form.name.trim() ? slugifyProfileName(form.name) : "",
-      },
-    });
-  }, [form.name]);
 
   function handleAvatarSelected(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -204,41 +239,45 @@ function ProfileCreateDialogContent({
     });
   }
 
-  function handleToolSelect(toolId: string) {
+  function handleToolToggle(toolId: string, checked: boolean) {
     dispatch({ type: "patch", values: { submitError: null } });
-    dispatch({ toolId, type: "add-tool" });
-  }
-
-  function handleRemoveTool(toolId: string) {
-    dispatch({ type: "patch", values: { submitError: null } });
-    dispatch({ toolId, type: "remove-tool" });
+    dispatch({ toolId, type: checked ? "add-tool" : "remove-tool" });
   }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
 
-    if (!(form.name.trim() && profileIdValid) || busy) {
+    if (!profileIdValid || busy) {
       dispatch({
         type: "patch",
         values: {
-          submitError: form.name.trim()
-            ? "Agent id must start with a letter or number and only use letters, numbers, `_`, or `-`."
-            : "Name is required.",
+          submitError:
+            "Agent id must start with a letter or number and only use letters, numbers, `_`, or `-`.",
         },
       });
+
       return;
     }
 
     dispatch({ type: "patch", values: { submitError: null } });
 
     try {
-      const response = await createMutation.mutateAsync({
-        id: profileIdTrimmed,
-        name: form.name.trim(),
-        systemPrompt: defaultCreatePrompt,
-      });
+      const prompt = form.prompt.trim();
+
+      const response =
+        prompt && !profileIdTrimmed
+          ? await superBotCreateMutation.mutateAsync({
+              name: form.name.trim() || undefined,
+              prompt,
+            })
+          : await createMutation.mutateAsync({
+              id: profileIdTrimmed || undefined,
+              name: form.name.trim() || nameFromPrompt(prompt),
+              systemPrompt: prompt || defaultCreatePrompt,
+            });
 
       const avatarFile = avatarFileRef.current;
+
       if (avatarFile) {
         const attachment = await fileToImageAttachment(avatarFile);
 
@@ -258,14 +297,23 @@ function ProfileCreateDialogContent({
         }
       }
 
-      await Promise.all(
-        form.toolIds.map((toolId) =>
-          assignToolMutation.mutateAsync({
-            profileId: response.profile.id,
-            toolId,
-          })
-        )
-      );
+      if (form.toolIds.length > 0) {
+        await assignToolMutation.mutateAsync({
+          profileId: response.profile.id,
+          toolId: form.toolIds,
+        });
+      }
+
+      const acpAgent = agentPresets.find(
+        (preset) => preset.id === form.agentId
+      )?.agent;
+
+      if (acpAgent) {
+        await updateProfileMutation.mutateAsync({
+          input: { acpAgent },
+          profileId: response.profile.id,
+        });
+      }
 
       onOpenChange(false);
       onCreated(response.profile.id);
@@ -275,41 +323,44 @@ function ProfileCreateDialogContent({
   }
 
   return (
-    <DialogContent className="flex max-h-[min(90dvh,42rem)] flex-col gap-5 overflow-hidden p-5 sm:max-w-2xl">
+    <DialogContent className="flex max-h-[min(90dvh,48rem)] flex-col gap-5 overflow-hidden p-5 sm:max-w-2xl">
       <form
         className="flex min-h-0 flex-1 flex-col gap-5"
         onSubmit={handleSubmit}
       >
         <DialogHeader className="gap-2">
-          <DialogTitle>Create agent</DialogTitle>
-          <DialogDescription>
-            Set name and agent id.
-            {onAskSuperBot ? (
-              <>
-                {" "}
-                Or{" "}
-                <button
-                  className="text-foreground underline underline-offset-2"
-                  disabled={busy}
-                  onClick={() => {
-                    onOpenChange(false);
-                    onAskSuperBot();
-                  }}
-                  type="button"
-                >
-                  ask Super Bot
-                </button>{" "}
-                to draft from chat.
-              </>
-            ) : null}
-          </DialogDescription>
+          <DialogTitle className="text-xl">
+            What do you need help with?
+          </DialogTitle>
+          {onAskSuperBot ? (
+            <DialogDescription>
+              Or{" "}
+              <button
+                className="text-foreground underline underline-offset-2"
+                disabled={busy}
+                onClick={() => {
+                  onOpenChange(false);
+                  onAskSuperBot();
+                }}
+                type="button"
+              >
+                ask Super Bot
+              </button>{" "}
+              to draft from chat.
+            </DialogDescription>
+          ) : null}
         </DialogHeader>
 
         <ProfileCreateDialogForm
+          agentId={form.agentId}
+          agentPresets={agentPresets}
           avatarInputRef={createAvatarInputRef}
           avatarPreview={form.avatarPreview}
           busy={busy}
           name={form.name}
+          onAgentChange={(agentId) => {
+            dispatch({ type: "patch", values: { agentId, submitError: null } });
+          }}
           onAvatarSelected={handleAvatarSelected}
           onClearAvatar={() => {
             dispatch({ type: "patch", values: { submitError: null } });
@@ -331,16 +382,23 @@ function ProfileCreateDialogContent({
               type: "patch",
               values: { profileId: value, submitError: null },
             });
-            profileIdEditedRef.current = true;
           }}
-          onRemoveTool={handleRemoveTool}
-          onToolSelect={handleToolSelect}
+          onPromptChange={(value) => {
+            dispatch({
+              type: "patch",
+              values: { prompt: value, submitError: null },
+            });
+          }}
+          onToolsChange={(toolIds) => {
+            dispatch({ type: "patch", values: { submitError: null, toolIds } });
+          }}
+          onToolToggle={handleToolToggle}
           profileId={form.profileId}
           profileIdHasValue={profileIdHasValue}
           profileIdHelpText={profileIdHelpText}
           profileIdValid={profileIdValid}
-          selectableTools={selectableTools}
-          selectedTools={selectedTools}
+          prompt={form.prompt}
+          selectedToolIds={toolIdSet}
           submitError={form.submitError}
           tools={tools}
         />
@@ -354,11 +412,8 @@ function ProfileCreateDialogContent({
           >
             Cancel
           </Button>
-          <Button
-            disabled={busy || !form.name.trim() || !profileIdValid}
-            type="submit"
-          >
-            {busy ? <Spinner className="size-4" /> : "Create"}
+          <Button disabled={busy || !profileIdValid} type="submit">
+            {busy ? <Spinner className="size-4" /> : "Create agent"}
           </Button>
         </DialogFooter>
       </form>

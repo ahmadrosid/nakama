@@ -1,4 +1,5 @@
 import type { CreateProviderResponse } from "@nakama/core/contract";
+import { defaultDiscoveryBaseUrl } from "@nakama/core/discovery-providers";
 import { ollamaRequiresApiKey } from "@nakama/core/ollama-provider-config";
 import { Button } from "@nakama/ui/button";
 import { FormField } from "@nakama/ui/form-field";
@@ -55,11 +56,13 @@ export function ProviderSetupForm({
   const form = useProviderSetupForm({ onSuccess });
   const [isBrowsing, setIsBrowsing] = useState(false);
   const ollamaKeyRequired = ollamaRequiresApiKey(form.ollamaHostMode);
+
   const apiKeyOptional =
     form.selectedProvider === "openai_compatible" ||
     form.selectedProvider === "chatgpt" ||
     form.selectedProvider === "xai_oauth" ||
     (form.selectedProvider === "ollama" && !ollamaKeyRequired);
+
   const canConnect =
     form.selectedProvider === "xai_oauth"
       ? Boolean(form.xaiOAuth)
@@ -80,7 +83,7 @@ export function ProviderSetupForm({
 
   return (
     <form
-      className={formSpacing}
+      className={`min-w-0 ${formSpacing}`}
       onSubmit={(event) => void form.handleSubmit(event)}
     >
       {showHeading ? (
@@ -102,6 +105,7 @@ export function ProviderSetupForm({
           onValueChange={(nextValue) => {
             if (nextValue === "__browse__") {
               setIsBrowsing(true);
+
               return;
             }
 
@@ -249,6 +253,8 @@ function OpenRouterModelFields({
       disabled={form.busy}
       modelsError={form.openRouterModelsError}
       onCustomModelsChange={form.handleOpenRouterModelsChange}
+      onRoutingChange={form.setOpenRouterRouting}
+      routing={form.openRouterRouting}
     />
   );
 }
@@ -356,6 +362,26 @@ function ProviderSetupExtraFields({
   density: "default" | "compact";
   form: ReturnType<typeof useProviderSetupForm>;
 }) {
+  if (form.selectedProvider === "netra") {
+    return (
+      <CustomProviderFields
+        apiKey={form.apiKey}
+        baseUrl={defaultDiscoveryBaseUrl("netra") ?? ""}
+        customModels={form.customModels}
+        density={density}
+        disabled={form.busy}
+        displayName="Netra Runtime"
+        hideIdentity
+        modelsError={form.modelsError}
+        onBaseUrlChange={form.setBaseUrl}
+        onCustomModelsChange={form.setCustomModels}
+        onDisplayNameChange={form.setDisplayName}
+        remoteProvider="netra"
+        showModelsEditor={canConnect}
+      />
+    );
+  }
+
   if (form.selectedProvider === "cloudflare") {
     return <CloudflareAccountIdField density={density} form={form} />;
   }

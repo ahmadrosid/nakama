@@ -35,3 +35,13 @@ mac:
       arch: [arm64]
     - target: zip
       arch: [arm64]
+win:
+  icon: ../web/public/icons/icon-512.png
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  artifactName: Nakama-${version}-${arch}-Setup.exe
+  oneClick: true
+  perMachine: false
+  deleteAppDataOnUninstall: false

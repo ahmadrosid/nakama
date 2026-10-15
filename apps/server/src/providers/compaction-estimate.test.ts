@@ -2,33 +2,37 @@ import { describe, expect, mock, test } from "bun:test";
 // estimateHistoryTokens is not exported from @nakama/agent, hence the deep path.
 import { estimateHistoryTokens } from "../../../../packages/agent/src/history-compaction";
 import { createAnthropicProvider, toAnthropicMessages } from "./anthropic";
+import { asTestFetch, streamFromChunks } from "./test-helpers";
 
-const j = (value: unknown) => JSON.stringify(value);
-const ev = (payload: { type: string }) =>
+test("fetch fixtures retain calls and provide offline preconnect", async () => {
+  const handler = mock(async () => new Response("ok"));
+  const fetcher = asTestFetch(handler);
+  fetcher.preconnect("https://example.invalid");
+  expect(handler).not.toHaveBeenCalled();
+  expect(await (await fetcher()).text()).toBe("ok");
+  expect(handler).toHaveBeenCalledTimes(1);
+});
+
+const j = <Value>(value: Value) => JSON.stringify(value);
+
+const ev = <Payload extends { type: string }>(payload: Payload) =>
   `event: ${payload.type}\r\ndata:${j(payload)}\r\n\r\n`;
 
 // Mirrors TOKEN_ESTIMATE_RATIO = 4 in history-compaction.ts.
 const estimateTokens = (text: string) => Math.ceil(text.length / 4);
 
 function eventStream(chunks: string[]): Response {
-  const encoder = new TextEncoder();
-  return new Response(
-    new ReadableStream<Uint8Array>({
-      start(controller) {
-        for (const chunk of chunks) {
-          controller.enqueue(encoder.encode(chunk));
-        }
-        controller.close();
-      },
-    }),
-    { headers: { "Content-Type": "text/event-stream" }, status: 200 }
-  );
+  return new Response(streamFromChunks(chunks), {
+    headers: { "Content-Type": "text/event-stream" },
+    status: 200,
+  });
 }
 
 function streamOf(options: { text: string; thinking?: string }): string[] {
   const chunks = [
     'event: message_start\r\ndata:{"type":"message_start","message":{"usage":{"input_tokens":10}}}\r\n\r\n',
   ];
+
   let index = 0;
 
   if (options.thinking) {
@@ -76,13 +80,15 @@ function streamOf(options: { text: string; thinking?: string }): string[] {
 
 async function ratioFor(options: { text: string; thinking?: string }) {
   const fetchMock = mock(async () => eventStream(streamOf(options)));
+
   const provider = createAnthropicProvider({
     apiKey: "sk-ant-test",
-    fetch: fetchMock as unknown as typeof fetch,
+    fetch: asTestFetch(fetchMock),
     model: "claude-sonnet-4-6",
   });
 
   const user = { content: "invoices last quarter", role: "user" } as const;
+
   const { assistantMessage } = await provider.streamChat(
     { messages: [user], system: "s" },
     { onChunk: () => undefined }
@@ -91,6 +97,7 @@ async function ratioFor(options: { text: string; thinking?: string }) {
   const estimated =
     estimateHistoryTokens([user, assistantMessage], "", []) -
     estimateHistoryTokens([user], "", []);
+
   const sent =
     estimateTokens(j(await toAnthropicMessages([user, assistantMessage]))) -
     estimateTokens(j(await toAnthropicMessages([user])));
@@ -99,6 +106,7 @@ async function ratioFor(options: { text: string; thinking?: string }) {
 }
 
 const LONG_TEXT = "Here is what I found in the invoice table. ".repeat(20);
+
 const LONG_THINKING = "The user wants last quarter invoices. ".repeat(20);
 
 describe("history token estimate", () => {
@@ -116,6 +124,7 @@ describe("history token estimate", () => {
       text: "Let me look that up.",
       thinking: LONG_THINKING,
     });
+
     expect({ estimated, sent, within10Percent: ratio >= 0.9 }).toEqual({
       estimated,
       sent,

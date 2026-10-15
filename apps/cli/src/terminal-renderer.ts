@@ -13,13 +13,14 @@ import type { TerminalInput } from "./terminal-input";
 import { getTerminalColumns, TerminalLayout } from "./terminal-layout";
 import { truncateText, visibleLength } from "./text-measure";
 
-export interface ComposerSuggestion {
+interface ComposerSuggestion {
   description: string;
   label: string;
 }
 
 export interface ComposerState {
   cursorVisible: boolean;
+  imageCount?: number;
   prefix: string;
   selectedIndex: number;
   suggestions: ComposerSuggestion[];
@@ -42,25 +43,47 @@ export function buildComposerLines(
   width = getTerminalColumns()
 ): StyledLine[] {
   const composerWidth = Math.max(1, width);
+
   const composerSurfaceLine = (content: string) => {
     const padding = " ".repeat(
       Math.max(0, composerWidth - visibleLength(content))
     );
-    return styledLine(`${content}${padding}`, { background: "surface" });
+
+    return {
+      segments: `${content}${padding}`
+        .split(/(\[(?:Text|Image) #\d+\])/)
+        .flatMap(
+          (part) =>
+            styledLine(part, {
+              background: "surface",
+              ...(/^\[(?:Text|Image) #\d+\]$/.test(part)
+                ? { color: "cyan" as const }
+                : undefined),
+            }).segments
+        ),
+    };
   };
+
   const pendingLines = formatPendingDisplayLines(
     state.pendingMessages,
     width
   ).map((line) => styledLine(line, { dim: true }));
-  const display = normalizePastedText(state.composer.value);
-  const inputWidth = state.composer.cursorVisible
-    ? Math.max(1, composerWidth - 1)
-    : composerWidth;
+
+  const images = Array.from(
+    { length: state.composer.imageCount ?? 0 },
+    (_, index) => `[Image #${index + 1}] `
+  ).join("");
+
+  const display = images + normalizePastedText(state.composer.value);
+  // Reserve cursor space during both blink phases so input never reflows.
+  const inputWidth = Math.max(1, composerWidth - 1);
+
   const inputLines = splitInputDisplayLines(
     display,
     state.composer.prefix.length,
     inputWidth
   );
+
   const continuationPrefix = " ".repeat(state.composer.prefix.length);
   const lines: StyledLine[] = [...pendingLines];
 
@@ -99,6 +122,7 @@ export function buildComposerLines(
   if (lines.length === 0) {
     const cursor = state.composer.cursorVisible ? "▌" : "";
     const content = `${state.composer.prefix}${cursor}`;
+
     return [
       composerSurfaceLine(""),
       composerSurfaceLine(content),
@@ -184,6 +208,7 @@ export class TerminalRenderer {
 
     if (text === null) {
       this.layout.clearStatusLine();
+
       return;
     }
 
@@ -224,6 +249,7 @@ export class TerminalRenderer {
     const lines = line.split("\n");
 
     this.layout.beginMessage("user");
+
     for (let index = 0; index < lines.length; index += 1) {
       const linePrefix = index === 0 ? prefix : " ".repeat(prefix.length);
       const text = `${linePrefix}${lines[index] ?? ""}`;
@@ -234,6 +260,7 @@ export class TerminalRenderer {
         this.layout.writelnScroll(text);
       }
     }
+
     this.layout.endMessage();
   }
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -16,6 +16,22 @@ import {
 const owner = { orgId: "org_a", profileId: "agent_a" };
 
 describe("normalizeAutomationDelivery", () => {
+  test.each(
+    [
+      false,
+      7,
+      "telegram",
+      [],
+      {},
+      { channel: "telegram", chatId: "1" },
+      { channel: "discord", channelId: 7 },
+      { channel: "email", to: 7 },
+      { channel: "telegram", notifyOn: "unknown" },
+    ].map((input) => ({ input }))
+  )("rejects malformed delivery input: %j", ({ input }) => {
+    expect(() => normalizeAutomationDelivery(input)).toThrow();
+  });
+
   test("returns undefined for missing delivery", () => {
     expect(normalizeAutomationDelivery(undefined)).toBeUndefined();
     expect(normalizeAutomationDelivery(null)).toBeUndefined();
@@ -35,13 +51,10 @@ describe("normalizeAutomationDelivery", () => {
 
   test("parses discord delivery with channelId", () => {
     expect(
-      normalizeAutomationDelivery(
-        {
-          channel: "discord",
-          channelId: "123456789012345678",
-        },
-        owner
-      )
+      normalizeAutomationDelivery({
+        channel: "discord",
+        channelId: "123456789012345678",
+      })
     ).toEqual({
       channel: "discord",
       channelId: "123456789012345678",
@@ -98,13 +111,10 @@ describe("normalizeAutomationDelivery", () => {
 
   test("rejects telegram payload with channelId", () => {
     expect(() =>
-      normalizeAutomationDelivery(
-        {
-          channel: "telegram",
-          channelId: "123456789012345678",
-        },
-        owner
-      )
+      normalizeAutomationDelivery({
+        channel: "telegram",
+        channelId: "123456789012345678",
+      })
     ).toThrow(
       "delivery.channelId is only valid when delivery.channel is discord."
     );
@@ -132,6 +142,7 @@ describe("shouldDeliverForRun", () => {
       channel: "telegram" as const,
       notifyOn: "both" as const,
     };
+
     expect(shouldDeliverForRun(delivery, "completed")).toBe(true);
     expect(shouldDeliverForRun(delivery, "failed")).toBe(true);
   });
@@ -155,6 +166,7 @@ describe("validateAutomationDelivery", () => {
   test("validates only the owning organization's WhatsApp connection", async () => {
     const configDir = await mkdtemp(join(tmpdir(), "nakama-wa-delivery-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
+
     try {
       await saveWhatsAppConfig({ profileId: "agent_a" }, owner);
       await syncWhatsAppOwnerPairing(
@@ -186,12 +198,6 @@ describe("validateAutomationDelivery", () => {
     }
   });
 
-  test("no-ops when delivery is omitted", async () => {
-    await expect(
-      validateAutomationDelivery(undefined)
-    ).resolves.toBeUndefined();
-  });
-
   test("rejects discord without a bot token", async () => {
     process.env.NAKAMA_CONFIG_DIR = await mkdtemp(
       join(tmpdir(), "nakama-discord-delivery-")
@@ -209,7 +215,6 @@ describe("validateAutomationDelivery", () => {
   test("rejects discord without pairing when channelId is omitted", async () => {
     const configDir = await mkdtemp(join(tmpdir(), "nakama-discord-delivery-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    const { mkdir } = await import("node:fs/promises");
     await mkdir(getDiscordConfigDir(owner), { recursive: true });
     await writeFile(
       getDiscordConfigPath(owner),
@@ -229,7 +234,6 @@ describe("validateAutomationDelivery", () => {
   test("accepts discord with token and pairing", async () => {
     const configDir = await mkdtemp(join(tmpdir(), "nakama-discord-delivery-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    const { mkdir } = await import("node:fs/promises");
     await mkdir(getDiscordConfigDir(owner), { recursive: true });
     await writeFile(
       getDiscordConfigPath(owner),
@@ -244,14 +248,13 @@ describe("validateAutomationDelivery", () => {
     await rm(configDir, { force: true, recursive: true });
   });
 
-  test("accepts discord with token and channelId without pairing", async () => {
+  test("rejects a member discord channelId even when users are paired", async () => {
     const configDir = await mkdtemp(join(tmpdir(), "nakama-discord-delivery-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    const { mkdir } = await import("node:fs/promises");
     await mkdir(getDiscordConfigDir(owner), { recursive: true });
     await writeFile(
       getDiscordConfigPath(owner),
-      "bot_token=test-token\n",
+      "bot_token=test-token\npaired_user_ids=123456789012345678\n",
       "utf8"
     );
 
@@ -259,11 +262,11 @@ describe("validateAutomationDelivery", () => {
       validateAutomationDelivery(
         {
           channel: "discord",
-          channelId: "123456789012345678",
+          channelId: "123456789012345679",
         },
-        owner
+        { ...owner, access: { orgRole: "member" } }
       )
-    ).resolves.toBeUndefined();
+    ).rejects.toMatchObject({ status: 403 });
 
     await rm(configDir, { force: true, recursive: true });
   });

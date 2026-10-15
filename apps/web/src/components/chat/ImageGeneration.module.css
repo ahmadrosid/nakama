@@ -13,7 +13,6 @@
   gap: 14px;
   align-items: flex-start;
   width: 100%;
-  max-width: 208px;
   font-family: var(--font-sans);
   color: var(--c-text);
 }
@@ -21,7 +20,7 @@
 .igCanvas {
   position: relative;
   width: 100%;
-  max-width: 208px;
+  max-width: 32rem;
   aspect-ratio: 1 / 1;
   overflow: hidden;
   background: var(--c-surface);
@@ -30,11 +29,12 @@
 }
 
 .igCanvasPortrait {
+  max-width: 24rem;
   aspect-ratio: 2 / 3;
 }
 
 .igCanvasLandscape {
-  max-width: 260px;
+  max-width: 40rem;
   aspect-ratio: 3 / 2;
 }
 
@@ -200,33 +200,6 @@
 .igLabel {
   font-size: 14px;
   font-weight: 550;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  background: linear-gradient(
-    90deg,
-    var(--c-text) 0%,
-    var(--c-text) 30%,
-    color-mix(in oklch, var(--c-text) 45%, transparent) 45%,
-    color-mix(in oklch, var(--c-text) 45%, transparent) 55%,
-    var(--c-text) 70%,
-    var(--c-text) 100%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  background-size: 300% 100%;
-  animation: ig-shine 2.25s cubic-bezier(0.25, 0.1, 0.25, 1) infinite;
-}
-
-@keyframes ig-shine {
-  0%,
-  18% {
-    background-position: 100% 0;
-  }
-
-  82%,
-  100% {
-    background-position: 0% 0;
-  }
 }
 
 .igPrompt {
@@ -272,13 +245,6 @@
 @media (prefers-reduced-motion: reduce) {
   .igGlow {
     opacity: 0.7;
-    animation: none;
-  }
-
-  .igLabel {
-    color: var(--c-text);
-    -webkit-text-fill-color: var(--c-text);
-    background: none;
     animation: none;
   }
 }

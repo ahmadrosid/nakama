@@ -9,7 +9,7 @@ import {
   toSkillSuggestion,
 } from "../../services/skill-suggestion-service";
 import type { ServerOptions } from "../context";
-import { requireNotViewerFromContext } from "../org-guards";
+import { requireOrgMemberFromContext } from "../org-guards";
 import { json, parseOptionalQueryEnum } from "../shared";
 import type { HonoApp } from "../types";
 
@@ -18,16 +18,20 @@ export function registerSkillSuggestionRoutes(
   options: ServerOptions
 ): void {
   const skillSuggestionService = options.skillSuggestionService;
+
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
+
   const orgIdParam = z.object({
     orgId: z.string().openapi({ param: { in: "path", name: "orgId" } }),
   });
+
   const listSkillSuggestionsResponseSchema = z
     .object({})
     .passthrough()
     .openapi("ListSkillSuggestionsResponse");
+
   const applySkillSuggestionResponseSchema = z
     .object({})
     .passthrough()
@@ -38,9 +42,11 @@ export function registerSkillSuggestionRoutes(
     authOrgId: string
   ): string {
     const orgId = decodeURIComponent(c.req.param("orgId"));
+
     if (authOrgId !== orgId) {
       throw new NakamaApiError("Not found", 404);
     }
+
     return orgId;
   }
 
@@ -48,6 +54,7 @@ export function registerSkillSuggestionRoutes(
     if (!skillSuggestionService) {
       throw new NakamaApiError("Skill suggestion service not configured", 500);
     }
+
     return skillSuggestionService;
   }
 
@@ -90,20 +97,24 @@ export function registerSkillSuggestionRoutes(
   );
 
   app.get("/v1/orgs/:orgId/skill-suggestions", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
     const sessionId = c.req.query("sessionId");
+
     const status = parseOptionalQueryEnum(c.req.query("status"), [
       "pending",
       "applied",
     ]);
+
     const profileId = c.req.query("profileId");
+
     const suggestions = await service.listSuggestions(orgId, {
       profileId: profileId || undefined,
       sessionId: sessionId || undefined,
       status,
     });
+
     return json<ListSkillSuggestionsResponse>({
       suggestions: suggestions.map(toSkillSuggestion),
     });
@@ -153,15 +164,17 @@ export function registerSkillSuggestionRoutes(
   app.post(
     "/v1/orgs/:orgId/skill-suggestions/:suggestionId/apply",
     async (c) => {
-      const auth = requireNotViewerFromContext(c);
+      const auth = requireOrgMemberFromContext(c);
       const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
       const suggestionId = decodeURIComponent(c.req.param("suggestionId"));
       const service = requireService();
+
       const result = await service.applySuggestion(
         orgId,
         suggestionId,
         auth.user.id
       );
+
       return json<ApplySkillSuggestionResponse>({
         outcome: result.outcome,
         proposalId: result.proposalId,

@@ -101,7 +101,7 @@ function ComposioSettingsSkeleton({
 
 function composioSettingsError(
   formError: string | null,
-  loadError: unknown
+  loadError: Error | null
 ): string | null {
   if (formError) {
     return formError;
@@ -133,9 +133,9 @@ function useComposioSettingsForm() {
     setFormError(null);
 
     try {
-      await saveMutation.mutateAsync({
-        ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
-      });
+      const trimmedApiKey = apiKey.trim();
+      const request = trimmedApiKey ? { apiKey: trimmedApiKey } : {};
+      await saveMutation.mutateAsync(request);
       setApiKey("");
     } catch (error) {
       setFormError(formatError(error));

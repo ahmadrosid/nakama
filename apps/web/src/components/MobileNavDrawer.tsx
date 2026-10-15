@@ -27,6 +27,7 @@ export function MobileNavDrawer({ className }: { className?: string }) {
   // the desktop sidebar after a rotation or a window resize.
   useEffect(() => {
     const desktop = window.matchMedia("(min-width: 640px)");
+
     const closeAboveSm = () => {
       if (desktop.matches) {
         setOpen(false);
@@ -35,6 +36,7 @@ export function MobileNavDrawer({ className }: { className?: string }) {
 
     closeAboveSm();
     desktop.addEventListener("change", closeAboveSm);
+
     return () => desktop.removeEventListener("change", closeAboveSm);
   }, []);
 
