@@ -1253,6 +1253,38 @@ describe("password reset schema", () => {
 });
 
 describe("organization schema migration", () => {
+  test("keeps the default profile a user chose in the first org", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      db.exec(`
+        INSERT INTO organizations (id, name, slug, created_at, updated_at)
+        VALUES ('org_a', 'A', 'a', '2026-06-21', '2026-06-21');
+
+        INSERT INTO profiles (id, name, org_id, is_default, created_at, updated_at)
+        VALUES
+          ('default', 'Buddy', 'org_a', 0, '2026-06-21', '2026-06-21'),
+          ('custom', 'Custom', 'org_a', 1, '2026-06-22', '2026-06-22'),
+          ('other', 'Other', 'org_a', 1, '2026-06-23', '2026-06-23');
+      `);
+
+      migrateDatabase(db);
+      migrateDatabase(db);
+
+      expect(
+        db.prepare("SELECT id, is_default FROM profiles ORDER BY id").all()
+      ).toEqual([
+        { id: "custom", is_default: 1 },
+        { id: "default", is_default: 0 },
+        { id: "other", is_default: 0 },
+      ]);
+    } finally {
+      db.close();
+    }
+  });
+
   test("creates org tables and allows org with admin member", () => {
     const db = new Database(":memory:");
 

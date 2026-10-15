@@ -1504,36 +1504,23 @@ function migrateProfileOrgColumns(db: Database): void {
       WHERE org_id IS NULL
     `).run(firstOrg.id);
 
-      db.prepare(`
-      UPDATE profiles
-      SET is_default = 0
-      WHERE org_id = ?
-    `).run(firstOrg.id);
-
+      // This step runs on every open. Keep a default the user already chose;
+      // else prefer 'default', then the oldest profile. One default per org.
       const defaultProfile = db
         .prepare<{ id: string }, SQLQueryBindings[]>(`
         SELECT id FROM profiles
-        WHERE org_id = ? AND id = 'default'
+        WHERE org_id = ?
+        ORDER BY is_default DESC, id = 'default' DESC, created_at ASC
         LIMIT 1
       `)
         .get(firstOrg.id);
 
       if (defaultProfile) {
         db.prepare(`
-        UPDATE profiles SET is_default = 1 WHERE id = ?
-      `).run(defaultProfile.id);
-      } else {
-        const anyProfile = db
-          .prepare<{ id: string }, SQLQueryBindings[]>(`
-          SELECT id FROM profiles WHERE org_id = ? ORDER BY created_at ASC LIMIT 1
-        `)
-          .get(firstOrg.id);
-
-        if (anyProfile) {
-          db.prepare(`
-          UPDATE profiles SET is_default = 1 WHERE id = ?
-        `).run(anyProfile.id);
-        }
+        UPDATE profiles
+        SET is_default = CASE WHEN id = ? THEN 1 ELSE 0 END
+        WHERE org_id = ?
+      `).run(defaultProfile.id, firstOrg.id);
       }
     }
     // With no organization yet, org-less profiles stay as they are. This step
