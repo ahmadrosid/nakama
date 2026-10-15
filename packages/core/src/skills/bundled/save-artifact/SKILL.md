@@ -1,6 +1,6 @@
 ---
 name: save-artifact
-description: Create or save artifacts, HTML pages, dashboards, charts, reports, plans, memos, summaries, code snippets, and logs for later use.
+description: Create or save artifacts, HTML pages, dashboards, charts, slides, a slide deck or decks, a presentation or presentations, reports, plans, memos, summaries, code snippets, and logs for later use.
 include-body-on-match: true
 ---
 
@@ -9,7 +9,7 @@ These instructions are loaded directly when this skill is active. Read `dashboar
 
 ## Choose the output
 
-- Use HTML for visual reports, plans, memos, landing pages, and browser games.
+- Use HTML for visual reports, plans, memos, slide decks, landing pages, and browser games.
 - Keep the format the user requests. Use Markdown for pages only when the user or another active skill requires it.
 - Keep code, logs, and structured data in their appropriate formats. Preserve existing formats when moving files or editing artifacts.
 - `write_file` writes UTF-8 text. Use a suitable tool or skill for binary formats; changing an extension does not create a PDF or image.
@@ -39,6 +39,7 @@ Choose one recipe; adapt it to the subject. These names are design guides, not l
 | **Brief** | Plans and memos: one readable column, a clear decision, ruled action rows. Keep sections open. | Use the shared defaults. |
 | **Ledger** | Reports and dashboards: aligned tabular numbers, directly labeled charts, mono values. Dashboards follow **Dashboards** below. Amber highlights the main finding; neutral tones show context. | `--width: 64rem; --title: clamp(1.75rem, 4vw, 2.5rem);` |
 | **Feature** | Launch pages and explainers: a large heading beside one useful subject visual, then open sections. Stack columns on phones. | `--width: 72rem; --title: clamp(2.5rem, 7vw, 5rem);` |
+| **Deck** | Slide decks and presentations: one 16:9 slide at a time. Follow **Slide decks** below. | Use the shared defaults; size slide text in `cqw`. |
 
 Use this shared token example, then apply only the chosen overrides. Every color alias follows the active theme.
 Inter is intentional for Nakama styling; use other typefaces when the subject calls for them.
@@ -85,6 +86,20 @@ Use this layout when the user asks for a dashboard, KPI page, or performance rep
 6. Table: sentence-case headers in `--muted`, plain-text cells (no badges or pills), numeric columns right-aligned with `font-variant-numeric: tabular-nums`. Color only the change column, by meaning.
 7. Do not use uppercase labels, gradients, icons, or decorative badges. When the user supplies only approximate points (for example "from ~340 to ~650"), draw a smooth progression between them and do not print the in-between values. Before you save, check the series against every trend the user named: a crossing, peak, or dip must fall in the stated period. To put a crossing at index k, keep the first series higher at every index before k and the second series higher from k on.
 
+## Slide decks
+
+1. Put each slide in a `<section>` with `aspect-ratio: 16 / 9` and `container-type: size`. Fit the frame to the viewport and size slide text in `cqw`, so every slide keeps the same shape and scale at any width.
+2. Show one slide at a time. Add previous and next buttons, Left/Right and Home/End keys, and an `n / N` counter. Keep every slide in the DOM.
+3. Print one slide per page: show all slides in `@media print`, use `@page { size: 16in 9in; margin: 0; }`, and `break-after: page`.
+4. Keep one idea per slide: a title near `5cqw`, body text at least `2.4cqw`, and at most four one-line points. Do not let content overflow the frame.
+5. Use the full slide width. Pad the slide by about `6cqw` on each side. Put a metric and its chart side by side in a two-column grid, or let a single block span the full width. Do not leave more than a third of the slide empty. When a slide holds only one sentence, set it as the slide's main text at about `6cqw`, not as a small line under a title.
+6. Show a metric as a large number with its change as a direct label, computed from the supplied values, such as `+25%` for 1.2M to 1.5M or `−0.8 pts` for 4% to 3.2%. Do not repeat the number in a sentence below it. When the user supplies a before and after value, put the metric beside a CSS bar chart of both values. Add a CSS bar chart only to compare supplied values. Set each bar height in an inline style as value / max × 100%, for example `style="height: 80%"` for 1.2 when the max is 1.5. Put each bar alone in a track with a fixed height, such as `.track { height: 18cqw; display: flex; align-items: flex-end; }`, and put the value and period labels outside the track, so the labels never shrink a bar or overlap other text.
+7. Use a title slide. Do not add an agenda, summary, closing, or thank-you slide unless the user asks for one.
+8. Give each supplied fact or topic its own slide, and show each fact on one slide only. When the facts fill fewer slides than the user asked for, make fewer slides and say so in your reply; do not split or repeat a fact to reach the count.
+9. Use only the words and facts the user supplied. When an item has no detail, such as "we shipped the new onboarding flow", give it only that sentence, set large as in rule 5. Do not add steps, features, dates, timelines, causes, or results.
+10. Write relative dates as the user wrote them, such as "Friday". Do not turn them into calendar dates.
+11. When the user requests a slide but supplies no content for it, do not fill it with invented items. Show its title, any supplied facts, and one `To add:` line that names what is missing. This is the only placeholder allowed. Name these gaps in your reply.
+
 ## HTML requirements
 
 - Write a complete document with a doctype, language, UTF-8 charset, and viewport metadata.
@@ -122,4 +137,4 @@ Treat these as authoring requirements. Do not claim that Nakama enforces them me
 7. Return the saved path and state whether a browser preview ran. Never claim visual verification from a source review alone.
 
 Saving creates an artifact, not a public publication. Share or publish only when the user requests it and a supported action is available.
-Web chat shows saved artifacts as attachment chips with previews, so do not tell the user to open the file in a browser. Nakama derives the file type, size, and timestamp; do not create metadata files.
+Web chat shows saved artifacts as attachment chips with previews, so do not tell the user to open the file in a browser. In your reply, name the artifact in plain text, such as "the Q3 team sync deck"; do not write Markdown links or link placeholders for it. Nakama derives the file type, size, and timestamp; do not create metadata files.
