@@ -144,6 +144,7 @@ export function createSessionTools(agent: AgentService): ToolDefinition[] {
           {
             isPlatformAdmin: context.isPlatformAdmin,
             orgRole: context.orgRole,
+            user: context.userId ? { id: context.userId } : undefined,
           }
         );
       },
@@ -181,6 +182,12 @@ export function createSessionTools(agent: AgentService): ToolDefinition[] {
         if (!sessionId) {
           throw new Error("sessionId is required.");
         }
+
+        await agent.assertSessionProfileAccess(sessionId, orgId, {
+          isPlatformAdmin: context.isPlatformAdmin,
+          orgRole: context.orgRole,
+          user: context.userId ? { id: context.userId } : undefined,
+        });
 
         const result = await agent.getSessionMessages(sessionId, orgId, {
           persistedOnly: true,

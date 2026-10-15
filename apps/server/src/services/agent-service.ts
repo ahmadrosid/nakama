@@ -423,6 +423,37 @@ type ChatProfileAccess = Pick<
   "excludeSuperBot" | "isPlatformAdmin" | "orgRole"
 > & { user?: { id: string } };
 
+/**
+ * Messaging-app chats are started by the channel worker's service user, not by
+ * a person in the org, so they stay visible to everyone who can use the agent.
+ */
+const SHARED_HISTORY_CHANNELS: readonly AgentChannel[] = [
+  "discord",
+  "slack",
+  "telegram",
+  "whatsapp",
+];
+
+/**
+ * Any other chat belongs to the user who started it. Platform admins may open
+ * any chat for support; everyone else gets the same 404 as a missing session,
+ * so holding another user's session id reveals nothing.
+ */
+function assertSessionOwner(
+  record: StoredSessionRecord,
+  access: ChatProfileAccess
+): void {
+  if (
+    access.isPlatformAdmin ||
+    SHARED_HISTORY_CHANNELS.some((channel) => channel === record.channel) ||
+    (access.user && record.userId === access.user.id)
+  ) {
+    return;
+  }
+
+  throw new NakamaApiError("Session not found", 404);
+}
+
 export class AgentService {
   private userConfig: UserConfig | null;
   private readonly db: DatabaseAdapter;
@@ -2337,6 +2368,7 @@ export class AgentService {
         await this.requireProfile(orgId, record.profileId),
         access
       );
+      assertSessionOwner(record, access);
     }
   }
 
@@ -2355,6 +2387,10 @@ export class AgentService {
       await this.requireProfile(orgId, record.profileId),
       access
     );
+
+    if (record.sessionId) {
+      await this.assertSessionProfileAccess(record.sessionId, orgId, access);
+    }
 
     return createAttachmentLoader(this.db, {
       orgId,
@@ -2700,6 +2736,10 @@ export class AgentService {
         // One row past the page tells whether another page follows.
         limit: page ? page.limit + 1 : undefined,
         query,
+        sharedChannels: SHARED_HISTORY_CHANNELS,
+        // Everyone, admins included, lists only their own chats. A caller
+        // with no user has none.
+        userId: access.user?.id ?? "",
       }
     );
 

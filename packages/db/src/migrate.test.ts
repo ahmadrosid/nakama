@@ -971,6 +971,56 @@ describe("chat session schema", () => {
       db.close();
     }
   });
+
+  test("gives chats without a live owner to the first platform admin", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+      db.exec(`
+        PRAGMA foreign_keys = OFF;
+        INSERT INTO profiles (id, name, created_at, updated_at)
+          VALUES ('p', 'Agent', 'now', 'now');
+        INSERT INTO users (id, email, password_hash, created_at, updated_at)
+          VALUES ('member', 'm@example.com', 'x', '2026-01-01', 'now');
+        INSERT INTO sessions (id, profile_id, channel, user_id, created_at, updated_at)
+          VALUES ('no_owner', 'p', 'web', NULL, 'now', 'now'),
+                 ('deleted_owner', 'p', 'web', 'gone', 'now', 'now'),
+                 ('owned', 'p', 'web', 'member', 'now', 'now');
+      `);
+
+      const owners = () =>
+        db
+          .prepare<{ id: string; user_id: string | null }, SQLQueryBindings[]>(
+            "SELECT id, user_id FROM sessions ORDER BY id"
+          )
+          .all();
+
+      // Before setup there is no platform admin to hand the chats to.
+      migrateDatabase(db);
+      expect(owners()).toEqual([
+        { id: "deleted_owner", user_id: "gone" },
+        { id: "no_owner", user_id: null },
+        { id: "owned", user_id: "member" },
+      ]);
+
+      db.exec(`
+        INSERT INTO users (id, email, password_hash, is_platform_admin, created_at, updated_at)
+          VALUES ('admin_new', 'new@example.com', 'x', 1, '2026-03-01', 'now'),
+                 ('admin_first', 'first@example.com', 'x', 1, '2026-02-01', 'now');
+      `);
+      migrateDatabase(db);
+      migrateDatabase(db);
+
+      expect(owners()).toEqual([
+        { id: "deleted_owner", user_id: "admin_first" },
+        { id: "no_owner", user_id: "admin_first" },
+        { id: "owned", user_id: "member" },
+      ]);
+    } finally {
+      db.close();
+    }
+  });
 });
 
 describe("browser session schema", () => {

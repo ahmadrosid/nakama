@@ -1479,6 +1479,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       WHERE s.profile_id = ?1
         AND s.channel IN (SELECT value FROM json_each(?2))
         AND (?8 IS NULL OR s.id = ?8)
+        AND (
+          ?10 IS NULL
+          OR s.user_id = ?10
+          OR s.channel IN (SELECT value FROM json_each(?11))
+        )
         AND s.app_user_id IS NULL
         -- Only message text is searched: content is a string or an array of
         -- parts, and matching the raw JSON would let "role" hit every chat.
@@ -5536,7 +5541,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async listSessionSummaries(profileId, channels, options = {}) {
-      const { after, limit, query, sessionId } = options;
+      const { after, limit, query, sessionId, sharedChannels, userId } =
+        options;
 
       return listSessionSummariesStmt
         .all(
@@ -5549,7 +5555,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           // SQLite reads a negative LIMIT as no limit.
           limit ?? -1,
           sessionId ?? null,
-          query ? likeContains(query) : null
+          query ? likeContains(query) : null,
+          userId ?? null,
+          JSON.stringify(sharedChannels ?? [])
         )
         .map((row) => toSessionSummaryRecord(row));
     },

@@ -7,6 +7,8 @@ import { sessionTurnRegistry } from "./session-turn-registry";
 
 const ORG_ID = "org_test";
 
+const USER = { id: "user_test" };
+
 async function createService(): Promise<{
   db: ReturnType<typeof createInMemoryDatabaseAdapter>;
   service: AgentService;
@@ -43,13 +45,14 @@ describe("listSessions reports the live turn", () => {
       ORG_ID,
       "web",
       "profile_default",
-      null
+      USER.id
     );
 
     await seedFirstMessage(db, sessionId);
 
     const idle = await service.listSessions(ORG_ID, "profile_default", "web", {
       isPlatformAdmin: true,
+      user: USER,
     });
 
     expect(idle.sessions.map((session) => session.active)).toEqual([false]);
@@ -61,7 +64,7 @@ describe("listSessions reports the live turn", () => {
         ORG_ID,
         "profile_default",
         "web",
-        { isPlatformAdmin: true }
+        { isPlatformAdmin: true, user: USER }
       );
 
       expect(running.sessions.map((session) => session.active)).toEqual([true]);
@@ -75,7 +78,7 @@ describe("listSessions reports the live turn", () => {
       ORG_ID,
       "profile_default",
       "web",
-      { isPlatformAdmin: true }
+      { isPlatformAdmin: true, user: USER }
     );
 
     expect(settled.sessions.map((session) => session.active)).toEqual([false]);
@@ -84,7 +87,7 @@ describe("listSessions reports the live turn", () => {
 
 describe("listSessions pages the merged history", () => {
   setupTestConfigDir("nakama-session-page-");
-  const ACCESS = { isPlatformAdmin: true };
+  const ACCESS = { isPlatformAdmin: true, user: USER };
   const CHANNELS = ["web", "telegram", "discord"] as const;
 
   async function seedHistory() {
@@ -102,7 +105,7 @@ describe("listSessions pages the merged history", () => {
         ORG_ID,
         channel,
         "profile_default",
-        null
+        USER.id
       );
 
       await seedFirstMessage(db, id);
@@ -226,7 +229,7 @@ describe("listSessions pages the merged history", () => {
 
 describe("listSessions searches titles and message text", () => {
   setupTestConfigDir("nakama-session-search-");
-  const ACCESS = { isPlatformAdmin: true };
+  const ACCESS = { isPlatformAdmin: true, user: USER };
   const CHANNELS = ["web", "telegram"] as const;
 
   async function seedChat(
@@ -240,7 +243,7 @@ describe("listSessions searches titles and message text", () => {
       ORG_ID,
       channel,
       "profile_default",
-      null
+      USER.id
     );
 
     await db.appendMessagesForSession(

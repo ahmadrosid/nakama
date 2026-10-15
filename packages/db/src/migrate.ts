@@ -83,6 +83,33 @@ export function migrateDatabase(db: Database): void {
     addNullableTextColumnIfMissing(database, "profiles", "owner_user_id")
   );
   atomic(migrateProfileSharedWithTeamColumn);
+  atomic(migrateSessionOwners);
+}
+
+/**
+ * Chat history is private to the user who owns the session. Sessions from
+ * before that rule, or whose owner was deleted, go to the first platform
+ * admin so they stay reachable. Before setup creates that admin there is
+ * nobody to hand them to, and the next open tries again.
+ */
+function migrateSessionOwners(db: Database): void {
+  addNullableTextColumnIfMissing(db, "sessions", "user_id");
+
+  db.exec(`
+    UPDATE sessions
+    SET user_id = (
+      SELECT id FROM users
+      WHERE is_platform_admin = 1
+      ORDER BY disabled_at IS NOT NULL, created_at ASC, id ASC
+      LIMIT 1
+    )
+    WHERE (user_id IS NULL OR user_id NOT IN (SELECT id FROM users))
+      AND EXISTS (SELECT 1 FROM users WHERE is_platform_admin = 1)
+  `);
+
+  db.exec(
+    "CREATE INDEX IF NOT EXISTS sessions_profile_user ON sessions (profile_id, user_id, channel)"
+  );
 }
 
 function migrateProfileSharedWithTeamColumn(db: Database): void {
