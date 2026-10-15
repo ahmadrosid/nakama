@@ -468,17 +468,26 @@ describe("microsandbox adapter cancellation", () => {
     }
   ) {
     const kill = mock(() => Promise.resolve());
-    const handle = {
+
+    // SAFETY: The fake implements only the kill and iterator members the runtime calls.
+    const handle: ExecHandle = {
       kill,
       [Symbol.asyncIterator]: events,
-    } as unknown as ExecHandle;
+    } as never;
+
     const execStreamWith = mock(() => Promise.resolve(handle));
-    const sandbox = { execStreamWith } as unknown as Sandbox;
+    // SAFETY: The runtime calls only execStreamWith on a connected sandbox.
+    const sandbox: Sandbox = { execStreamWith } as never;
     const connect = mock(() => Promise.resolve(sandbox));
-    const get = spyOn(Sandbox, "get").mockResolvedValue({
+
+    // SAFETY: connectSandbox reads only status and connect from the handle.
+    const sandboxHandle: SandboxHandle = {
       connect,
       status: "running",
-    } as unknown as SandboxHandle);
+    } as never;
+
+    const get = spyOn(Sandbox, "get").mockResolvedValue(sandboxHandle);
+
     return { connect, execStreamWith, get, handle, kill, sandbox };
   }
 
@@ -505,13 +514,16 @@ describe("microsandbox adapter cancellation", () => {
     sdk.connect.mockImplementation(async () => {
       entered.resolve();
       await connected.promise;
+
       return sdk.sandbox;
     });
     const controller = new AbortController();
+
     const execution = new MicrosandboxBashRuntime().exec({
       ...execArgs,
       signal: controller.signal,
     });
+
     await entered.promise;
     controller.abort();
     connected.resolve();
@@ -520,6 +532,7 @@ describe("microsandbox adapter cancellation", () => {
       () => "resolved",
       () => "rejected"
     );
+
     expect(sdk.execStreamWith).not.toHaveBeenCalled();
     expect(sdk.kill).not.toHaveBeenCalled();
     expect(outcome).toBe("rejected");
@@ -532,15 +545,18 @@ describe("microsandbox adapter cancellation", () => {
     sdk.execStreamWith.mockImplementation(async () => {
       entered.resolve();
       await created.promise;
+
       return sdk.handle;
     });
     const controller = new AbortController();
     const add = spyOn(controller.signal, "addEventListener");
     const remove = spyOn(controller.signal, "removeEventListener");
+
     const execution = new MicrosandboxBashRuntime().exec({
       ...execArgs,
       signal: controller.signal,
     });
+
     await entered.promise;
     controller.abort();
     created.resolve();
@@ -549,6 +565,7 @@ describe("microsandbox adapter cancellation", () => {
       () => "resolved",
       () => "rejected"
     );
+
     expect(sdk.execStreamWith).toHaveBeenCalledTimes(1);
     expect(sdk.kill).toHaveBeenCalledTimes(1);
     expect(outcome).toBe("rejected");
@@ -560,27 +577,35 @@ describe("microsandbox adapter cancellation", () => {
     async (ending) => {
       const streaming = Promise.withResolvers<void>();
       const finished = Promise.withResolvers<void>();
+
       const sdk = fakeSdk(async function* () {
         streaming.resolve();
         await finished.promise;
+
         if (ending === "error") {
           throw new Error("stream closed");
         }
+
         if (ending === "timeout") {
           throw new ExecTimeoutError("deadline", 1000);
         }
+
         yield { code: 0, kind: "exited" };
       });
+
       if (ending === "error") {
         sdk.kill.mockRejectedValue(new Error("already stopped"));
       }
+
       const controller = new AbortController();
       const add = spyOn(controller.signal, "addEventListener");
       const remove = spyOn(controller.signal, "removeEventListener");
+
       const execution = new MicrosandboxBashRuntime().exec({
         ...execArgs,
         signal: controller.signal,
       });
+
       await streaming.promise;
       controller.abort();
       expect(sdk.kill).toHaveBeenCalledTimes(1);
@@ -601,11 +626,14 @@ describe("microsandbox adapter cancellation", () => {
           kind: "stdout",
         };
         yield { data: new TextEncoder().encode("warning"), kind: "stderr" };
+
         if (timedOut) {
           throw new ExecTimeoutError("deadline", 1000);
         }
+
         yield { code: 7, kind: "exited" };
       });
+
       const controller = new AbortController();
       const add = spyOn(controller.signal, "addEventListener");
       const remove = spyOn(controller.signal, "removeEventListener");
@@ -632,15 +660,18 @@ describe("microsandbox adapter cancellation", () => {
     "SDK %s failure rejects without retry or leaked listeners",
     async (stage) => {
       const error = new Error("SDK unavailable");
+
       const sdk = fakeSdk(async function* () {
         yield { data: new TextEncoder().encode("partial"), kind: "stdout" };
         throw error;
       });
+
       if (stage === "connect") {
         sdk.connect.mockRejectedValue(error);
       } else if (stage === "create") {
         sdk.execStreamWith.mockRejectedValue(error);
       }
+
       const controller = new AbortController();
       const add = spyOn(controller.signal, "addEventListener");
       const remove = spyOn(controller.signal, "removeEventListener");
@@ -651,11 +682,13 @@ describe("microsandbox adapter cancellation", () => {
           signal: controller.signal,
         })
       ).rejects.toBeInstanceOf(Error);
+
       if (stage === "stream") {
         expect(remove).toHaveBeenCalledWith("abort", add.mock.calls[0]?.[1]);
       } else {
         expect(add).not.toHaveBeenCalled();
       }
+
       controller.abort();
       expect(sdk.kill).not.toHaveBeenCalled();
       expect(sdk.get).toHaveBeenCalledTimes(1);
