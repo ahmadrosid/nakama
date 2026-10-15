@@ -23,11 +23,11 @@ These instructions are loaded directly when this skill is active. No additional 
 4. Use those tokens throughout the page. Give every color token a light and dark value, including chart colors and interaction states.
 5. Support both themes through `prefers-color-scheme`. If an existing design system provides an explicit theme signal, respect it.
 6. Choose typefaces deliberately. Pair fonts only when the pairing improves hierarchy, and keep a consistent type scale with readable fallback fonts.
-7. Use only facts from the request or available sources. Do not add dates, deadlines, team sizes, customers, quotes, or metrics that were not supplied; omit them. Label sample data where it appears.
+7. Use only facts from the request or available sources. Do not add dates, durations, team sizes, customers, quotes, metrics, integrations, or feature details that were not supplied; omit them. Label supplied sample data; a "sample" label does not permit invented content.
 8. Write plain, direct copy. Use meaningful headings and labels; omit filler and placeholder sections.
 
-Avoid generic defaults: cream with terracotta accents, purple gradients, Inter for every subject, emoji, and rows of rounded cards.
-Organize content with spacing, rules, and typography; show features and phases as ruled rows or a definition list. Keep an established brand's choices when they fit the request.
+Avoid generic defaults: cream with terracotta accents, purple gradients, Inter for every subject, emoji, and grids of boxed items.
+Organize content with spacing, rules, and typography; show features and phases as rows divided by `--rule`, without a per-item background or border. Keep an established brand's choices when they fit the request.
 
 ## Nakama style recipes
 
@@ -67,6 +67,7 @@ Load named fonts through Google Fonts or use the fallbacks. Artifacts do not inh
     --primary: #f59e0b; --on-primary: #0a0a0b;
   }
 }
+body { margin: 0; padding-inline: var(--gutter); background: var(--bg); color: var(--text); font-family: var(--sans); }
 ```
 
 Use `--on-primary` on filled primary actions. Reserve amber for meaningful emphasis and `--radius` for controls or panels. Use no shadows.
