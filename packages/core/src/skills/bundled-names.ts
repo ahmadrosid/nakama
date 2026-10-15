@@ -27,6 +27,7 @@ export const RUNTIME_ONLY_BUNDLED_SKILL_NAMES = [
 export const OPT_IN_BUNDLED_SKILL_NAMES = [
   "agent-browser",
   "google-meet",
+  "knowledge-base-wiki",
 ] as const;
 
 export const BUNDLED_SKILL_NAMES = [

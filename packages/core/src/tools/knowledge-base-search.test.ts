@@ -8,6 +8,7 @@ import {
   getKnowledgeBaseExtractedPath,
   getOrgKnowledgeBaseDir,
 } from "../knowledge-base/paths";
+import { runWriteFile } from "./builtin";
 import { runKnowledgeBaseSearch } from "./knowledge-base-search";
 
 const ORG_ID = "org_test";
@@ -338,6 +339,32 @@ describe("knowledge_base_search tool", () => {
 
     expect(soulOnly.matchCount).toBe(0);
   });
+
+  test.each([true, false])(
+    "finds wiki pages the agent wrote into the knowledge base for regex=%s",
+    async (regex) => {
+      await setupTwoScopes();
+      const context = { orgId: ORG_ID, profileId: PROFILE_ID };
+
+      await runWriteFile(
+        {
+          content: `---\nsources: [${PRIVATE_DOCUMENT_ID}]\n---\n\n# Billing\n\nInvoices settle on the fifteenth.\n`,
+          path: "knowledge-base/wiki/billing.md",
+        },
+        context
+      );
+
+      const result = await runKnowledgeBaseSearch(
+        { query: "fifteenth", regex },
+        context
+      );
+
+      expect(result.matches).toHaveLength(1);
+      expect(result.matches[0]?.file).toEndWith(
+        path.join("knowledge-base", "wiki", "billing.md")
+      );
+    }
+  );
 
   test("matches stems and prefixes, and honors exclusions", async () => {
     await setupKnowledgeBase({

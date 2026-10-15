@@ -227,7 +227,7 @@ Search uploaded knowledge base documents for relevant facts. **Browse Files → 
 
 **Returns:** `{ query, root, matches, matchCount, truncated }` — empty matches when no ready document matches the filter.
 
-**Scope:** Extracted text files stored under `~/.nakama/orgs/{orgId}/profiles/{profileId}/knowledge-base/`.
+**Scope:** Extracted text files stored under `~/.nakama/orgs/{orgId}/profiles/{profileId}/knowledge-base/`, plus the `wiki/*.md` pages the `knowledge-base-wiki` skill writes there.
 
 **Availability:** When assigned **and** at least one uploaded document has `status: "ready"`. Inherited URL sources do not require `knowledge_base_search`; they require `web_fetch` or `web_search`.
 
