@@ -1621,6 +1621,10 @@ function migrateLegacyProfileIds(db: Database): void {
 
   try {
     for (const [legacyId, canonicalId] of pending) {
+      if (!canonicalIdIsFree(db, legacyId, canonicalId)) {
+        continue;
+      }
+
       copyProfileRow(db, legacyId, canonicalId);
       moveProfileReferences(db, legacyId, canonicalId);
       db.prepare("DELETE FROM profiles WHERE id = ?").run(legacyId);
@@ -1708,45 +1712,42 @@ export function migrateCodingDelegationSkillName(db: Database): void {
   }
 }
 
+// A canonical id owned by another org must not absorb this org's data. Keep
+// the legacy row in that case.
+function canonicalIdIsFree(
+  db: Database,
+  legacyId: string,
+  canonicalId: string
+): boolean {
+  const owners = db
+    .prepare<{ id: string; org_id: string | null }, SQLQueryBindings[]>(
+      "SELECT id, org_id FROM profiles WHERE id IN (?, ?)"
+    )
+    .all(legacyId, canonicalId);
+
+  const legacy = owners.find((row) => row.id === legacyId);
+  const canonical = owners.find((row) => row.id === canonicalId);
+
+  return !canonical || canonical.org_id === legacy?.org_id;
+}
+
 function copyProfileRow(
   db: Database,
   legacyId: string,
   canonicalId: string
 ): void {
-  db.prepare(`
-    INSERT INTO profiles (
-      id,
-      name,
-      system_prompt,
-      model,
-      thinking_enabled,
-      thinking_effort,
-      is_super,
-      org_id,
-      is_default,
-      automations_enabled,
-      skills_write_approval,
-      skills_post_turn_review,
-      skills_curator_consolidate_enabled,
-      created_at,
-      updated_at
+  const columns = db
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(profiles)"
     )
-    SELECT
-      ?,
-      name,
-      system_prompt,
-      model,
-      thinking_enabled,
-      thinking_effort,
-      is_super,
-      org_id,
-      is_default,
-      automations_enabled,
-      skills_write_approval,
-      skills_post_turn_review,
-      skills_curator_consolidate_enabled,
-      created_at,
-      updated_at
+    .all()
+    .map((column) => quoteSqliteIdentifier(column.name))
+    .filter((column) => column !== '"id"')
+    .join(", ");
+
+  db.prepare(`
+    INSERT INTO profiles (id, ${columns})
+    SELECT ?, ${columns}
     FROM profiles
     WHERE id = ?
     ON CONFLICT(id) DO NOTHING
@@ -1758,35 +1759,63 @@ function moveProfileReferences(
   legacyId: string,
   canonicalId: string
 ): void {
-  db.prepare("UPDATE automations SET profile_id = ? WHERE profile_id = ?").run(
-    canonicalId,
-    legacyId
-  );
-  db.prepare("UPDATE sessions SET profile_id = ? WHERE profile_id = ?").run(
-    canonicalId,
-    legacyId
-  );
-  moveProfileJoinReferences(
-    db,
-    "profile_tools",
-    "tool_id",
-    legacyId,
-    canonicalId
-  );
-  moveProfileJoinReferences(
-    db,
-    "profile_mcp_servers",
-    "server_id",
-    legacyId,
-    canonicalId
-  );
-  moveProfileJoinReferences(
-    db,
-    "profile_skills",
-    "skill_id",
-    legacyId,
-    canonicalId
-  );
+  const tables = db
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+    )
+    .all();
+
+  for (const { name } of tables) {
+    if (name === "profiles" || name in PROFILE_JOIN_TABLE_COLUMNS) {
+      continue;
+    }
+
+    const quotedTableName = quoteSqliteIdentifier(name);
+
+    const hasProfileId = db
+      .prepare<{ name: string }, SQLQueryBindings[]>(
+        `PRAGMA table_info(${quotedTableName})`
+      )
+      .all()
+      .some((column) => column.name === "profile_id");
+
+    if (!hasProfileId) {
+      continue;
+    }
+
+    // Rows that collide with a canonical row are duplicates; drop them.
+    db.prepare(
+      `UPDATE OR IGNORE ${quotedTableName} SET profile_id = ? WHERE profile_id = ?`
+    ).run(canonicalId, legacyId);
+    db.prepare(`DELETE FROM ${quotedTableName} WHERE profile_id = ?`).run(
+      legacyId
+    );
+  }
+
+  // These hold profile ids without a profile_id column. Move them before the
+  // legacy row is deleted, or the delete triggers remove them.
+  db.prepare(`
+    UPDATE OR IGNORE org_shared_resources
+    SET resource_id = ?
+    WHERE resource_kind = 'agent' AND resource_id = ?
+  `).run(canonicalId, legacyId);
+  db.prepare(`
+    UPDATE OR IGNORE shared_agent_instances
+    SET source_profile_id = ?
+    WHERE source_profile_id = ?
+  `).run(canonicalId, legacyId);
+
+  for (const [tableName, relatedColumn] of Object.entries(
+    PROFILE_JOIN_TABLE_COLUMNS
+  )) {
+    moveProfileJoinReferences(
+      db,
+      tableName,
+      relatedColumn,
+      legacyId,
+      canonicalId
+    );
+  }
 }
 
 export function moveProfileJoinReferences(

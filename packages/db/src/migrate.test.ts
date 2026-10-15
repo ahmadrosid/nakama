@@ -581,70 +581,110 @@ describe("legacy profile id migration", () => {
     }
   });
 
-  test("legacy profile rename preserves org and default profile settings", () => {
+  test("legacy profile rename keeps every profile column and reference", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      // org_a sorts first, so the org-default reset does not touch org_b.
+      db.exec(`
+        INSERT INTO organizations (id, name, slug, created_at, updated_at)
+        VALUES
+          ('org_a', 'A', 'a', '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z'),
+          ('org_b', 'B', 'b', '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z');
+
+        INSERT INTO profiles (
+          id, name, system_prompt, is_super, org_id, is_default,
+          automations_enabled, skills_write_approval, skills_post_turn_review,
+          skills_curator_consolidate_enabled, acp_agent, acp_settings,
+          owner_user_id, shared_with_team, created_at, updated_at
+        ) VALUES (
+          'profile_super_bot', 'Super', 'prompt', 1, 'org_b', 1,
+          0, 1, 0, 1, 'claude', '{"mode":"plan"}',
+          'user_1', 0, '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z'
+        );
+
+        INSERT INTO composio_toolkits (
+          id, org_id, toolkit_slug, display_name, status, created_at, updated_at
+        ) VALUES (
+          'tk_1', 'org_b', 'gmail', 'Gmail', 'active',
+          '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z'
+        );
+        INSERT INTO profile_composio_toolkits (profile_id, toolkit_id)
+        VALUES ('profile_super_bot', 'tk_1');
+
+        INSERT INTO org_shared_resources (
+          id, org_id, resource_kind, resource_id, created_at, updated_at
+        ) VALUES (
+          'pub_1', 'org_b', 'agent', 'profile_super_bot',
+          '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z'
+        );
+      `);
+
+      const columns = db
+        .prepare<{ name: string }, SQLQueryBindings[]>(
+          "PRAGMA table_info(profiles)"
+        )
+        .all()
+        .map((column) => column.name)
+        .filter((name) => name !== "id");
+
+      const selectProfile = db.prepare(
+        `SELECT ${columns.join(", ")} FROM profiles WHERE id = ?`
+      );
+
+      const expected = selectProfile.get("profile_super_bot");
+
+      migrateDatabase(db);
+      migrateDatabase(db);
+
+      expect(selectProfile.get("super_bot")).toEqual(expected);
+      expect(selectProfile.get("profile_super_bot")).toBeNull();
+      expect(
+        db.prepare("SELECT profile_id FROM profile_composio_toolkits").all()
+      ).toEqual([{ profile_id: "super_bot" }]);
+      expect(
+        db.prepare("SELECT resource_id FROM org_shared_resources").all()
+      ).toEqual([{ resource_id: "super_bot" }]);
+      expect(db.prepare("PRAGMA foreign_key_check").all()).toHaveLength(0);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("legacy profile is kept when another org owns the canonical id", () => {
     const db = new Database(":memory:");
 
     try {
       migrateDatabase(db);
 
       db.exec(`
-        INSERT INTO organizations (
-          id, name, slug, created_at, updated_at
-        ) VALUES (
-          'org_legacy', 'Legacy Org', 'legacy-org',
-          '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z'
-        );
+        INSERT INTO organizations (id, name, slug, created_at, updated_at)
+        VALUES
+          ('org_a', 'A', 'a', '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z'),
+          ('org_b', 'B', 'b', '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z');
 
-        INSERT INTO profiles (
-          id,
-          name,
-          system_prompt,
-          model,
-          thinking_enabled,
-          thinking_effort,
-          is_super,
-          org_id,
-          is_default,
-          automations_enabled,
-          skills_write_approval,
-          skills_post_turn_review,
-          skills_curator_consolidate_enabled,
-          created_at,
-          updated_at
-        ) VALUES (
-          'profile_default', 'Buddy', 'default prompt', NULL, NULL, NULL, 0,
-          'org_legacy', 1, 0, 1, 0, 1,
-          '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z'
-        );
+        INSERT INTO profiles (id, name, org_id, created_at, updated_at)
+        VALUES
+          ('default', 'A default', 'org_a', '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z'),
+          ('profile_default', 'B default', 'org_b', '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z');
+
+        INSERT INTO sessions (id, profile_id, channel, created_at, updated_at)
+        VALUES ('s_b', 'profile_default', 'web', '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z');
       `);
 
-      const expected = {
-        automations_enabled: 0,
-        id: "default",
-        is_default: 1,
-        org_id: "org_legacy",
-        skills_curator_consolidate_enabled: 1,
-        skills_post_turn_review: 0,
-        skills_write_approval: 1,
-      };
-      const selectMigratedProfile = `
-        SELECT
-          id,
-          org_id,
-          is_default,
-          automations_enabled,
-          skills_write_approval,
-          skills_post_turn_review,
-          skills_curator_consolidate_enabled
-        FROM profiles
-        WHERE id = 'default'
-      `;
-
       migrateDatabase(db);
-      expect(db.prepare(selectMigratedProfile).get()).toEqual(expected);
 
-      migrateDatabase(db);
-      expect(db.prepare(selectMigratedProfile).get()).toEqual(expected);
+      expect(
+        db.prepare("SELECT id, org_id FROM profiles ORDER BY id").all()
+      ).toEqual([
+        { id: "default", org_id: "org_a" },
+        { id: "profile_default", org_id: "org_b" },
+      ]);
+      expect(db.prepare("SELECT profile_id FROM sessions").all()).toEqual([
+        { profile_id: "profile_default" },
+      ]);
     } finally {
       db.close();
     }
