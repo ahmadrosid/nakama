@@ -1024,6 +1024,81 @@ function shortEffortLabel(effort: string, fullLabel: string): string {
   }
 }
 
+function resolveModelPickerState(props: ChatComposerFullProps) {
+  const effortOptions = props.thinkingEffortOptions ?? THINKING_EFFORT_OPTIONS;
+
+  const effort =
+    props.thinkingEffortVisible &&
+    props.thinkingEffort &&
+    props.onThinkingEffortChange
+      ? props.thinkingEffort
+      : null;
+
+  const effortLabel = effort
+    ? shortEffortLabel(
+        effort,
+        effortOptions.find((option) => option.value === effort)?.label ?? effort
+      )
+    : null;
+
+  const modelLabel = props.currentModelSelection
+    ? (props.renderModelLabel(props.currentModelSelection) ?? "Model")
+    : "Model";
+
+  return {
+    effort,
+    effortOptions,
+    hasModels: props.providerModelGroups.some(
+      (group) => group.models.length > 0
+    ),
+    showProfileModel:
+      Boolean(props.profileModelId) &&
+      !props.providerModelGroups.some((group) =>
+        group.models.some((model) => model.id === props.profileModelId)
+      ),
+    triggerLabel: effortLabel ? `${modelLabel} · ${effortLabel}` : modelLabel,
+  };
+}
+
+function ChatModelEffortRow({
+  disabled,
+  effort,
+  onEffortChange,
+  options,
+}: {
+  disabled?: boolean;
+  effort: string;
+  onEffortChange?: (effort: string) => void;
+  options: Array<{ label: string; value: string }>;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-border/60 border-t p-2 pl-3">
+      <span aria-hidden className="font-medium text-muted-foreground text-xs">
+        Thinking effort
+      </span>
+      <fieldset className="flex gap-0.5 rounded-lg bg-muted p-0.5">
+        <legend className="sr-only">Thinking effort</legend>
+        {options.map((option) => (
+          <button
+            aria-pressed={option.value === effort}
+            className={cn(
+              "h-7 rounded-md px-2.5 font-medium text-muted-foreground text-xs transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50",
+              option.value === effort &&
+                "bg-background text-foreground shadow-xs"
+            )}
+            disabled={disabled}
+            key={option.value}
+            onClick={() => onEffortChange?.(option.value)}
+            type="button"
+          >
+            {shortEffortLabel(option.value, option.label)}
+          </button>
+        ))}
+      </fieldset>
+    </div>
+  );
+}
+
 function ChatModelPicker({
   props,
   busy,
@@ -1049,33 +1124,8 @@ function ChatModelPicker({
     closeModelPicker();
   };
 
-  const effortOptions = props.thinkingEffortOptions ?? THINKING_EFFORT_OPTIONS;
-
-  const effort =
-    props.thinkingEffortVisible &&
-    props.thinkingEffort &&
-    props.onThinkingEffortChange
-      ? props.thinkingEffort
-      : null;
-
-  const effortLabel = effort
-    ? shortEffortLabel(
-        effort,
-        effortOptions.find((option) => option.value === effort)?.label ?? effort
-      )
-    : null;
-
-  const hasModels = props.providerModelGroups.some(
-    (group) => group.models.length > 0
-  );
-
-  const modelLabel = props.currentModelSelection
-    ? (props.renderModelLabel(props.currentModelSelection) ?? "Model")
-    : "Model";
-
-  const triggerLabel = effortLabel
-    ? `${modelLabel} · ${effortLabel}`
-    : modelLabel;
+  const { effort, effortOptions, hasModels, showProfileModel, triggerLabel } =
+    resolveModelPickerState(props);
 
   useEffect(() => {
     if (!(modelPickerOpen && modelList)) {
@@ -1139,10 +1189,7 @@ function ChatModelPicker({
             ) : null}
             <CommandList className="max-h-72 p-1" ref={setModelList}>
               <CommandEmpty>No model found.</CommandEmpty>
-              {props.profileModelId &&
-              !props.providerModelGroups.some((group) =>
-                group.models.some((model) => model.id === props.profileModelId)
-              ) ? (
+              {showProfileModel && props.profileModelId ? (
                 <CommandItem
                   data-checked={
                     props.currentModelSelection ===
@@ -1185,33 +1232,12 @@ function ChatModelPicker({
             </CommandList>
           </Command>
           {effort ? (
-            <div className="flex items-center justify-between gap-3 border-border/60 border-t p-2 pl-3">
-              <span
-                aria-hidden
-                className="font-medium text-muted-foreground text-xs"
-              >
-                Thinking effort
-              </span>
-              <fieldset className="flex gap-0.5 rounded-lg bg-muted p-0.5">
-                <legend className="sr-only">Thinking effort</legend>
-                {effortOptions.map((option) => (
-                  <button
-                    aria-pressed={option.value === effort}
-                    className={cn(
-                      "h-7 rounded-md px-2.5 font-medium text-muted-foreground text-xs transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50",
-                      option.value === effort &&
-                        "bg-background text-foreground shadow-xs"
-                    )}
-                    disabled={props.thinkingEffortDisabled}
-                    key={option.value}
-                    onClick={() => props.onThinkingEffortChange?.(option.value)}
-                    type="button"
-                  >
-                    {shortEffortLabel(option.value, option.label)}
-                  </button>
-                ))}
-              </fieldset>
-            </div>
+            <ChatModelEffortRow
+              disabled={props.thinkingEffortDisabled}
+              effort={effort}
+              onEffortChange={props.onThinkingEffortChange}
+              options={effortOptions}
+            />
           ) : null}
         </PopoverContent>
       </Popover>
