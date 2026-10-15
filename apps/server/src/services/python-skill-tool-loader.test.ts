@@ -92,3 +92,58 @@ test("a skill tool that never reads stdin is refused with a reason naming it", a
     await rm(directory, { force: true, recursive: true });
   }
 });
+
+test("a skill tool subprocess does not receive the deployment config dir", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "skill-tool-"));
+  const toolPath = path.join(directory, "tool.py");
+  await writeFile(
+    toolPath,
+    `import json
+import os
+import sys
+
+
+def run(payload, context):
+    return {"config_dir": os.environ.get("NAKAMA_CONFIG_DIR")}
+
+
+if __name__ == "__main__":
+    print(json.dumps(run(json.loads(sys.stdin.read() or "{}"), {})))
+`,
+    "utf8"
+  );
+  const previous = process.env.NAKAMA_CONFIG_DIR;
+
+  process.env.NAKAMA_CONFIG_DIR = directory;
+
+  try {
+    const tool = await loadPythonSkillTool({
+      body: "",
+      description: "Report the config dir",
+      directory,
+      disableModelInvocation: false,
+      hasTool: true,
+      includeBodyOnMatch: true,
+      name: "config_reader",
+      scriptIssues: [],
+      scriptTools: [],
+      skillFilePath: toolPath,
+      toolPath,
+    } satisfies DiscoveredSkill);
+
+    // SAFETY: The test fixture matches the contract used by this test.
+    const result = await tool?.run({}, {
+      signal: new AbortController().signal,
+    } as never);
+
+    expect(result).toEqual({ config_dir: null });
+  } finally {
+    if (previous === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = previous;
+    }
+
+    await rm(directory, { force: true, recursive: true });
+  }
+});
