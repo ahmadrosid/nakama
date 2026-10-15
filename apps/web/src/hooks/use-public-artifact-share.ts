@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { htmlForArtifactPreview } from "@/lib/artifact-html-preview";
 import {
   isHtmlArtifactMimeType,
   isImageArtifactMimeType,
@@ -73,7 +72,7 @@ async function loadPublicArtifactShare(
 
   if (isHtmlArtifactMimeType(contentType)) {
     return {
-      content: htmlForArtifactPreview(new TextDecoder().decode(bytes)),
+      content: new TextDecoder().decode(bytes),
       metadata,
     };
   }

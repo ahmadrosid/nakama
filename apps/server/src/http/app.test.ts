@@ -947,7 +947,70 @@ describe("createHonoApp", () => {
     expect(csp).toContain("'unsafe-inline'");
     expect(csp).toContain("frame-ancestors 'self'");
     expect(response.headers.get("X-Frame-Options")).toBeNull();
+
+    const directives = new Map(
+      csp.split(";").map((part) => {
+        const [name, ...values] = part.trim().split(/\s+/);
+
+        return [name, values];
+      })
+    );
+
+    expect(directives.get("script-src")).toEqual([
+      "'unsafe-inline'",
+      "https://cdnjs.cloudflare.com",
+      "https://cdn.jsdelivr.net",
+      "https://unpkg.com",
+      "https://cdn.tailwindcss.com",
+      "https://code.jquery.com",
+    ]);
+    expect(directives.get("style-src")).toEqual([
+      "'unsafe-inline'",
+      "data:",
+      "https://fonts.googleapis.com",
+    ]);
+    expect(directives.get("font-src")).toEqual(["https://fonts.gstatic.com"]);
+    expect(directives.get("img-src")).toEqual(["data:"]);
+    expect(directives.get("media-src")).toEqual(["data:"]);
+
+    for (const name of [
+      "default-src",
+      "connect-src",
+      "frame-src",
+      "object-src",
+      "worker-src",
+      "base-uri",
+      "form-action",
+    ]) {
+      expect(directives.get(name)).toEqual(["'none'"]);
+    }
+
+    expect(directives.get("sandbox")).toEqual(["allow-scripts"]);
+    expect(response.headers.get("Permissions-Policy")).toBe(
+      "camera=(), microphone=()"
+    );
+    expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");
   });
+
+  test.each(["tool_write_file", "tool_edit_file"])(
+    "allows HTML-sized playground requests for %s through the body gate",
+    async (toolId) => {
+      const app = createHonoApp(createServerOptions());
+
+      const response = await app.fetch(
+        new Request(`http://localhost:4310/v1/tools/${toolId}/run`, {
+          body: "{}",
+          headers: {
+            "Content-Length": "16001000",
+            "Content-Type": "application/json",
+          },
+          method: "POST",
+        })
+      );
+
+      expect(response.status).toBe(401);
+    }
+  );
 
   test.each(["/docs", "/docs/"])(
     "allows the docs scripts on %s",

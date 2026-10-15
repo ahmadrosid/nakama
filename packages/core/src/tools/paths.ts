@@ -2,6 +2,11 @@ import { realpathSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import {
+  inferArtifactMimeType,
+  isHtmlArtifactMimeType,
+  MAX_HTML_ARTIFACT_BYTES,
+} from "../artifact-mime";
 import { getUserConfigDir } from "../user-config";
 
 /**
@@ -59,6 +64,20 @@ export interface PathGuardOptions {
   maxFileBytes?: number;
 }
 
+export function fileSizeLimit(
+  filename: string,
+  options: PathGuardOptions = {}
+): number {
+  if (isHtmlArtifactMimeType(inferArtifactMimeType(filename))) {
+    return Math.min(
+      options.maxFileBytes ?? MAX_HTML_ARTIFACT_BYTES,
+      MAX_HTML_ARTIFACT_BYTES
+    );
+  }
+
+  return options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
+}
+
 export class PathGuardError extends Error {
   constructor(
     message: string,
@@ -99,19 +118,11 @@ export async function guardFilePath(
   }
 
   const allowedDirs = await resolveAllowedDirs(rawAllowedDirs);
-  const maxBytes = options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
   // rawAllowedDirs is non-empty: either allowedOption or [cwdOption] from above.
   const defaultCwd = await resolveDirectoryPath(cwdOption ?? rawAllowedDirs[0]);
 
   if (rawPath.includes("\0")) {
     throw new PathGuardError("Path contains null byte", "NULL_BYTE");
-  }
-
-  if (rawContentLength != null && rawContentLength > maxBytes) {
-    throw new PathGuardError(
-      `File content exceeds max ${maxBytes} bytes (got ${rawContentLength})`,
-      "TOO_LARGE"
-    );
   }
 
   const expanded = expandHome(rawPath);
@@ -148,6 +159,18 @@ export async function guardFilePath(
 
   if (!isAllowedPath(realPath, allowedDirs)) {
     throw new PathGuardError(WORKSPACE_TRAVERSAL_MESSAGE, "TRAVERSAL");
+  }
+
+  const maxBytes = Math.min(
+    fileSizeLimit(rawPath, options),
+    fileSizeLimit(realPath, options)
+  );
+
+  if (rawContentLength != null && rawContentLength > maxBytes) {
+    throw new PathGuardError(
+      `File content exceeds max ${maxBytes} bytes (got ${rawContentLength})`,
+      "TOO_LARGE"
+    );
   }
 
   return { allowed: true, resolved: realPath };

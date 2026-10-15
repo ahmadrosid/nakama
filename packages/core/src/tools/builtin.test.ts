@@ -12,6 +12,7 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { MAX_HTML_ARTIFACT_BYTES } from "../artifact-mime";
 import { convertDocxToMarkdown } from "../docx-text";
 import { getGlobalSkillsDir } from "../skills/paths";
 import { getProfileSoulDir } from "../soul/resolve";
@@ -67,6 +68,84 @@ describe("file builtin tools", () => {
     expect(result.path).toBe(await realpath(targetPath));
     expect(result.bytesWritten).toBe(11);
     expect(await readFile(targetPath, "utf8")).toBe("hello world");
+  });
+
+  test("HTML file tools accept the byte limit and reject growth without changing the file", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-html-limit-"));
+    const opts = { workspaceRoot: tempDir };
+    const target = "artifacts/page.html";
+    const content = `A${"é".repeat((MAX_HTML_ARTIFACT_BYTES - 2) / 2)}Z`;
+
+    const saved = await runWriteFile(
+      { content, path: target },
+      PROFILE_CONTEXT,
+      opts
+    );
+
+    expect(saved.bytesWritten).toBe(MAX_HTML_ARTIFACT_BYTES);
+    const read = await runReadFile({ path: target }, PROFILE_CONTEXT, opts);
+    expect(read.bytesRead).toBe(MAX_HTML_ARTIFACT_BYTES);
+    expect(read.content).toBe(content);
+
+    const edited = await runEditFile(
+      { edits: [{ newText: "B", oldText: "A" }], path: target },
+      PROFILE_CONTEXT,
+      opts
+    );
+
+    expect(edited.bytesWritten).toBe(MAX_HTML_ARTIFACT_BYTES);
+    await expect(
+      runEditFile(
+        { edits: [{ newText: "BB", oldText: "B" }], path: target },
+        PROFILE_CONTEXT,
+        opts
+      )
+    ).rejects.toThrow(PathGuardError);
+    expect(await readFile(saved.path, "utf8")).toBe(`B${content.slice(1)}`);
+    await expect(
+      runWriteFile(
+        { content: `${content}!`, path: target },
+        PROFILE_CONTEXT,
+        opts
+      )
+    ).rejects.toThrow(PathGuardError);
+    expect(await readdir(path.dirname(saved.path))).toEqual(["page.html"]);
+    await writeFile(saved.path, `${content}!`);
+    await expect(
+      runReadFile({ path: target }, PROFILE_CONTEXT, opts)
+    ).rejects.toThrow(PathGuardError);
+  });
+
+  test("HTML limits respect smaller settings and cannot be raised past 16MB", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-html-settings-"));
+    const opts = { workspaceRoot: tempDir };
+    setDefaultFileGuardOptions({ maxFileBytes: 10 });
+    await expect(
+      runWriteFile(
+        { content: "x".repeat(11), path: "page.htm" },
+        PROFILE_CONTEXT,
+        opts
+      )
+    ).rejects.toThrow(PathGuardError);
+    setDefaultFileGuardOptions({ maxFileBytes: MAX_HTML_ARTIFACT_BYTES + 100 });
+    await expect(
+      runWriteFile(
+        {
+          content: "x".repeat(MAX_HTML_ARTIFACT_BYTES + 1),
+          path: "page.xhtml",
+        },
+        PROFILE_CONTEXT,
+        opts
+      )
+    ).rejects.toThrow(PathGuardError);
+    setDefaultFileGuardOptions({});
+    await expect(
+      runWriteFile(
+        { content: "x".repeat(10 * 1024 * 1024 + 1), path: "notes.txt" },
+        PROFILE_CONTEXT,
+        opts
+      )
+    ).rejects.toThrow(PathGuardError);
   });
 
   test("write_file preserves indentation and boundary whitespace", async () => {

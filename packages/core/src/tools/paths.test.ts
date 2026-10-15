@@ -2,9 +2,30 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { MAX_HTML_ARTIFACT_BYTES } from "../artifact-mime";
 import { guardFilePath, PathGuardError } from "./paths";
 
 describe("guardFilePath", () => {
+  test("HTML aliases cannot bypass the limit through a different extension", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "nakama-html-alias-"));
+
+    try {
+      const options = { cwd: root, maxFileBytes: MAX_HTML_ARTIFACT_BYTES * 2 };
+      await Bun.write(path.join(root, "page.html"), "page");
+      await symlink(path.join(root, "page.html"), path.join(root, "alias.txt"));
+      await expect(
+        guardFilePath("alias.txt", null, MAX_HTML_ARTIFACT_BYTES + 1, options)
+      ).rejects.toMatchObject({ code: "TOO_LARGE" });
+      await Bun.write(path.join(root, "page.txt"), "page");
+      await symlink(path.join(root, "page.txt"), path.join(root, "alias.html"));
+      await expect(
+        guardFilePath("alias.html", null, MAX_HTML_ARTIFACT_BYTES + 1, options)
+      ).rejects.toMatchObject({ code: "TOO_LARGE" });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   test("allows a new directory beneath a symlinked parent without allowing siblings", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "nakama-new-tools-"));
 

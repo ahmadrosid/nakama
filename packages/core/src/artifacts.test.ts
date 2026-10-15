@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { z } from "zod";
+import { MAX_HTML_ARTIFACT_BYTES } from "./artifact-mime";
 import {
   listArtifacts,
   listArtifactsTool,
@@ -31,6 +32,43 @@ const SAMPLE_DOCX_PATH = path.join(
 const ORG_ID = "org_test";
 
 const PROFILE_ID = "profile_test";
+
+test("HTML artifact reads enforce actual bytes despite a misleading sidecar", async () => {
+  const content = "x".repeat(MAX_HTML_ARTIFACT_BYTES);
+  await writeArtifact("page.html", content);
+  const input = { filename: "page.html", orgId: ORG_ID, profileId: PROFILE_ID };
+  expect((await readArtifactFile(input)).bytes.byteLength).toBe(
+    MAX_HTML_ARTIFACT_BYTES
+  );
+  await writeArtifact("page.html", `${content}x`);
+  await writeArtifact(
+    "page.html.nakama-meta.json",
+    JSON.stringify({
+      mimeType: "text/plain",
+      savedAt: new Date().toISOString(),
+      sizeBytes: 1,
+    })
+  );
+  await expect(readArtifactFile(input)).rejects.toMatchObject({ status: 413 });
+  await expect(
+    readArtifactFile({ ...input, headOnly: true })
+  ).rejects.toMatchObject({ status: 413 });
+  await expect(
+    readWorkspaceFile(ORG_ID, PROFILE_ID, "artifacts/page.html")
+  ).rejects.toMatchObject({ status: 413 });
+  await writeArtifact("page.bin", `${content}x`);
+  await writeArtifact(
+    "page.bin.nakama-meta.json",
+    JSON.stringify({
+      mimeType: "text/html",
+      savedAt: new Date().toISOString(),
+      sizeBytes: 1,
+    })
+  );
+  await expect(
+    readArtifactFile({ ...input, filename: "page.bin" })
+  ).rejects.toMatchObject({ status: 413 });
+});
 
 test("workspace rename preserves files, folder contents and sidecars, and rolls back failed reference updates", async () => {
   await writeArtifact("notes/report.md", "report");

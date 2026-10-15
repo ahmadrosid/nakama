@@ -16,6 +16,7 @@ import { extractDocumentTextTool } from "./extract-document-text";
 import { knowledgeBaseSearchTool } from "./knowledge-base-search";
 import {
   comparablePath,
+  fileSizeLimit,
   getCustomToolsDir,
   guardFilePath,
   PathGuardError,
@@ -560,7 +561,6 @@ export async function runEditFile(
   refuseWordExtension(parsed.path);
 
   const guardOptions = buildFileGuardOptions(context, options);
-  const maxBytes = guardOptions.maxFileBytes ?? 10 * 1024 * 1024;
 
   const guarded = await guardFilePath(
     parsed.path,
@@ -577,6 +577,11 @@ export async function runEditFile(
   );
   refuseSkillLocalToolFileWrite(guarded.resolved);
   const filePath = guarded.resolved;
+
+  const maxBytes = Math.min(
+    fileSizeLimit(parsed.path, guardOptions),
+    fileSizeLimit(filePath, guardOptions)
+  );
 
   if (BLOCKED_READ_BASENAMES.includes(path.basename(filePath).toLowerCase())) {
     throw new PathGuardError(
@@ -897,7 +902,7 @@ export async function runReadFile(
   const parsed = parseToolInput(readFileInputSchema, input);
   const guardOptions = buildFileGuardOptions(context, options);
   guardOptions.allowedDirs!.push(getGlobalSkillsDir());
-  const maxBytes = guardOptions.maxFileBytes ?? 10 * 1024 * 1024;
+  let maxBytes = fileSizeLimit(parsed.path, guardOptions);
 
   let filePath: string;
   let contentPath: string;
@@ -949,6 +954,7 @@ export async function runReadFile(
     );
 
     filePath = guarded.resolved;
+    maxBytes = Math.min(maxBytes, fileSizeLimit(filePath, guardOptions));
 
     if (
       BLOCKED_READ_BASENAMES.includes(path.basename(filePath).toLowerCase())
