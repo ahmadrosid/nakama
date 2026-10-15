@@ -10,8 +10,7 @@ import {
   NETRA_AGENT_MODEL_ID,
 } from "@nakama/core/discovery-providers";
 import OpenAI from "openai";
-import type { ProviderModelOption } from "./models";
-import { AVAILABLE_MODELS } from "./models";
+import { AVAILABLE_MODELS, type ProviderModelOption } from "./model-catalog";
 import { openRouterSlugSupportsThinking } from "./openrouter/thinking";
 import {
   type ProviderJsonRecord,
@@ -172,6 +171,7 @@ export function catalogCustomModelsToCatalog(
       provider === "doubao" ||
       provider === "together" ||
       provider === "xiaomi" ||
+      provider === "meta" ||
       provider === "vercel_ai_gateway" ||
       provider === "mistral" ||
       provider === "qwen" ||
@@ -356,6 +356,7 @@ export function getModelsForProviderInstance(
     instance.type === "doubao" ||
     instance.type === "together" ||
     instance.type === "xiaomi" ||
+    instance.type === "meta" ||
     instance.type === "vercel_ai_gateway" ||
     instance.type === "mistral" ||
     instance.type === "qwen" ||

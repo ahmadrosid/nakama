@@ -38,6 +38,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("qwen_cn")).toBe("qwen_cn");
     expect(parseProviderName("vercel_ai_gateway")).toBe("vercel_ai_gateway");
     expect(parseProviderName("xiaomi")).toBe("xiaomi");
+    expect(parseProviderName("meta")).toBe("meta");
   });
 
   test("rejects unknown values", () => {

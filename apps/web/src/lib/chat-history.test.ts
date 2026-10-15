@@ -170,6 +170,32 @@ describe("chatMessagesToListItems", () => {
     });
   });
 
+  test("tool message image attachments become tool images", () => {
+    const items = chatMessagesToListItems([
+      {
+        attachments: [
+          { text: "Image output", type: "text" },
+          { data: "aW1hZ2U=", mediaType: "image/jpeg", type: "image" },
+          {
+            attachmentId: "att_1",
+            mediaType: "image/png",
+            size: 5,
+            type: "image_ref",
+          },
+        ],
+        content: '{"text":"[image/jpeg]"}',
+        name: "screenshot",
+        role: "tool",
+        toolCallId: "tool_1",
+      },
+    ]);
+
+    expect(items[0]?.toolImages).toEqual([
+      { mediaType: "image/jpeg", url: "data:image/jpeg;base64,aW1hZ2U=" },
+      { mediaType: "image/png", url: "/v1/attachments/att_1/content" },
+    ]);
+  });
+
   test("renders described images as attachments and keeps vision-native images inline", () => {
     const messages: ChatMessage[] = [
       {

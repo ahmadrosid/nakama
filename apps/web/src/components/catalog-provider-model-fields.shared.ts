@@ -10,6 +10,7 @@ export const CATALOG_SHORTLIST_PROVIDERS = [
   "doubao",
   "together",
   "xiaomi",
+  "meta",
   "vercel_ai_gateway",
   "mistral",
   "qwen",

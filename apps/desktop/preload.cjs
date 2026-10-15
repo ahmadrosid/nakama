@@ -4,6 +4,9 @@ const { ipcRenderer } = require("electron");
 
 // Observe the existing web preference without exposing native APIs to the page.
 window.addEventListener("DOMContentLoaded", () => {
+  // The web CSS reserves room for native window controls on this platform.
+  document.documentElement.dataset.desktop = process.platform;
+
   const syncTheme = () => {
     let theme = document.documentElement.dataset.theme;
 

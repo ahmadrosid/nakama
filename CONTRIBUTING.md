@@ -44,13 +44,14 @@ See [AGENTS.md](./AGENTS.md) for Docker run/build scripts and deeper layout note
 
 ## Choosing an issue
 
-Three searches, depending on what you are after:
+Four searches, depending on what you are after:
 
 | Search | What is in it |
 |---|---|
 | [`good first issue`](https://github.com/ahmadrosid/nakama/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) | small and self-contained |
 | [`stage: now`](https://github.com/ahmadrosid/nakama/issues?q=is%3Aissue+is%3Aopen+label%3A%22stage%3A+now%22) | design settled, ready to build |
 | [`help wanted`, unassigned](https://github.com/ahmadrosid/nakama/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22+no%3Aassignee) | the team wants outside help, and it fits in one PR. Empty means everything labelled that way is already claimed |
+| [`stale` PRs](https://github.com/ahmadrosid/nakama/pulls?q=is%3Apr+is%3Aopen+label%3Astale) | reviewed, then the author went quiet. Anyone may finish one, see [When work goes quiet](#when-work-goes-quiet) |
 
 A triaged issue carries four labels, and each answers a different question:
 
@@ -127,6 +128,30 @@ Show the evidence: numbers for a behavior change, a before and after screenshot 
 6. CI must pass before merge, and green CI is not the same as reviewed. Reviews here arrive as plain comments rather than a formal approval, so read the thread instead of the badge. Answer every point, including the ones you disagree with, and push follow-up commits to the same branch rather than force-pushing, so the comments stay attached to the diff.
 
 Do not rewrite `AGENTS.md`, `README.md`, or `ARCHITECTURE.md` unless the change is specifically about those files.
+
+### When work goes quiet
+
+A PR or an assignment that nobody is moving still blocks the people who would
+have picked it up. Two limits keep work from sitting:
+
+- **A reviewed PR with no reply for 7 days gets the `stale` label.** A reply is a
+  comment or a commit from the author. Once the label is on, anyone may continue
+  the work: open a new PR that builds on the original branch, or rebases it, and
+  link the old one. The original author keeps the credit, through their own
+  commits or a `Co-authored-by` trailer when the history is squashed. An author
+  who comes back before someone else has started only needs to say so on the PR,
+  and the label comes off.
+- **An assigned issue with no PR after 7 days is unassigned.** It then shows up
+  again in the unassigned searches above. If you need longer, say so on the issue
+  before the week is up. If you lost it anyway, comment to be assigned again.
+
+A PR that is waiting for a review is not stale. The 7 days start when a reviewer
+has commented.
+
+A daily workflow, `.github/workflows/stale.yml`, applies both limits and leaves a
+comment when it does. It skips a PR whose latest review is an approval, because
+an approval asks for nothing. It only releases issues labelled `stage: now`, and
+never the repository owner's own assignments.
 
 ## Code style and checks
 

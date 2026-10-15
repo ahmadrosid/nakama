@@ -1359,6 +1359,7 @@ export type StreamEvent =
       toolCallId: string;
       tool: string;
       result: unknown;
+      images?: ImageAttachment[];
     }
   | { type: "todos_updated"; todos: AgentTodo[] }
   | { type: "questionnaire_updated"; questionnaire: AgentQuestionnaire | null }
@@ -2929,6 +2930,7 @@ export type ProviderName =
   | "xai"
   | "together"
   | "xiaomi"
+  | "meta"
   | "qwen"
   | "qwen_cn"
   | "vercel_ai_gateway";
@@ -3119,6 +3121,7 @@ export interface StreamChatHandlers {
     toolCallId: string;
     tool: string;
     result: unknown;
+    images?: ImageAttachment[];
   }) => void;
   onToolInputDelta?: (event: {
     toolCallId: string;
@@ -3455,6 +3458,21 @@ export interface ListOrgPluginsResponse {
 
 export interface ListPluginReleasesResponse {
   releases: PluginReleaseSummary[];
+}
+
+/** An organization that still holds a plugin, so its releases cannot be removed. */
+export interface PluginUsageOrg {
+  /** Agents in this organization with one of the plugin's tools or skills. */
+  agents: Array<{ id: string; name: string }>;
+  lifecycleState: OrgPluginLifecycleState;
+  name: string;
+  orgId: string;
+  revision: number;
+  selectedVersion: string | null;
+}
+
+export interface PluginUsageResponse {
+  orgs: PluginUsageOrg[];
 }
 
 /** A registry version newer than anything approved for this plugin. */

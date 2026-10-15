@@ -2,10 +2,17 @@ import type { SkillProposal, SkillSuggestion } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
-import { Cancel01Icon, QuillWrite02Icon } from "hugeicons-react";
+import {
+  ArrowRight01Icon,
+  Cancel01Icon,
+  File01Icon,
+  QuillWrite02Icon,
+} from "hugeicons-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ChatComposerNotice } from "@/components/chat/chat-tips";
 import { skillSuggestionPreview } from "@/components/chat/skill-post-turn-review.shared";
+import { buildFileDiffRows, FileDiff } from "@/components/file-diff";
 import { orgSkillProposalsPath } from "@/lib/navigation";
 
 export type SuggestionApplyState =
@@ -102,6 +109,8 @@ export function SkillPostTurnReviewBanner({
   onApply,
   onDismiss,
 }: SkillPostTurnReviewBannerProps) {
+  const [openIds, setOpenIds] = useState<ReadonlySet<string>>(() => new Set());
+
   if (suggestions.length === 0 && pendingProposals.length === 0) {
     return null;
   }
@@ -127,13 +136,126 @@ export function SkillPostTurnReviewBanner({
           const applied = state === "applied" || state === "staged";
           const loading = state === "loading";
 
+          const status = (
+            <>
+              {error ? (
+                <p className="mt-2 text-destructive text-xs">{error}</p>
+              ) : null}
+              {state === "staged" ? (
+                <p className="mt-2 text-muted-foreground text-xs">
+                  Write approval is on — staged for admin review instead of
+                  writing immediately.
+                </p>
+              ) : null}
+            </>
+          );
+
+          const fileCard = suggestion.action === "create" && suggestion.content;
+
+          const applyButton = (
+            <Button
+              disabled={applied || loading}
+              onClick={() => onApply(suggestion.id)}
+              size={fileCard ? "default" : "sm"}
+              type="button"
+            >
+              {loading ? <Spinner className="mr-2" /> : null}
+              {applied ? (state === "staged" ? "Staged" : "Applied") : "Apply"}
+            </Button>
+          );
+
+          const dismissButton = (
+            <DismissButton
+              label={`Dismiss ${preview.title}`}
+              onDismiss={() => onDismiss(`suggestion:${suggestion.id}`)}
+            />
+          );
+
+          if (fileCard) {
+            const rows = buildFileDiffRows(null, suggestion.content);
+
+            const notes = (suggestion.warnings ?? []).map((warning) =>
+              warning.replace(/^Contains\s+/i, "").replace(/\.$/, "")
+            );
+
+            const open = openIds.has(suggestion.id);
+
+            return (
+              <div className="-mx-3 text-sm" key={suggestion.id}>
+                <div className="flex items-start gap-3 px-3 py-2">
+                  <File01Icon
+                    aria-hidden
+                    className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                    strokeWidth={1.5}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-foreground">
+                      New skill:{" "}
+                      <span className="font-mono">{suggestion.skillName}</span>
+                    </p>
+                    <p className="truncate text-muted-foreground text-xs">
+                      {preview.description}
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => onDismiss(`suggestion:${suggestion.id}`)}
+                    type="button"
+                    variant="ghost"
+                  >
+                    Dismiss
+                  </Button>
+                  {applyButton}
+                </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-border border-t bg-muted/40 px-3 py-1.5 text-muted-foreground text-xs">
+                  <button
+                    aria-expanded={open}
+                    className="-mx-1 inline-flex min-h-8 items-center gap-1 rounded px-1 font-medium text-foreground hover:bg-muted"
+                    onClick={() =>
+                      setOpenIds((ids) => {
+                        const next = new Set(ids);
+
+                        if (open) {
+                          next.delete(suggestion.id);
+                        } else {
+                          next.add(suggestion.id);
+                        }
+
+                        return next;
+                      })
+                    }
+                    type="button"
+                  >
+                    <ArrowRight01Icon
+                      aria-hidden
+                      className={cn(
+                        "size-3.5 transition-transform",
+                        open && "rotate-90"
+                      )}
+                      strokeWidth={2}
+                    />
+                    SKILL.md · {rows.length} lines
+                  </button>
+                  {notes.map((note) => (
+                    <span key={note}>{note}</span>
+                  ))}
+                </div>
+                {open ? (
+                  <FileDiff
+                    className="max-h-64 overflow-auto border-border border-t"
+                    rows={rows}
+                    wrap
+                  />
+                ) : null}
+                {error || state === "staged" ? (
+                  <div className="px-3 pb-2">{status}</div>
+                ) : null}
+              </div>
+            );
+          }
+
           return (
             <div className="relative py-2 pr-8 text-sm" key={suggestion.id}>
-              <DismissButton
-                className="absolute top-0.5 right-0"
-                label={`Dismiss ${preview.title}`}
-                onDismiss={() => onDismiss(`suggestion:${suggestion.id}`)}
-              />
+              <div className="absolute top-0.5 right-0">{dismissButton}</div>
               <p className="text-pretty font-medium text-foreground">
                 {preview.title}
               </p>
@@ -150,30 +272,8 @@ export function SkillPostTurnReviewBanner({
                   {suggestion.warnings.join(" ")}
                 </p>
               ) : null}
-              {error ? (
-                <p className="mt-2 text-destructive text-xs">{error}</p>
-              ) : null}
-              {state === "staged" ? (
-                <p className="mt-2 text-muted-foreground text-xs">
-                  Write approval is on — staged for admin review instead of
-                  writing immediately.
-                </p>
-              ) : null}
-              <div className="mt-2 flex items-center gap-2">
-                <Button
-                  disabled={applied || loading}
-                  onClick={() => onApply(suggestion.id)}
-                  size="sm"
-                  type="button"
-                >
-                  {loading ? <Spinner className="mr-2" /> : null}
-                  {applied
-                    ? state === "staged"
-                      ? "Staged"
-                      : "Applied"
-                    : "Apply"}
-                </Button>
-              </div>
+              {status}
+              <div className="mt-2 flex items-center gap-2">{applyButton}</div>
             </div>
           );
         })}

@@ -1,5 +1,5 @@
 import type { AgentChatSession } from "@nakama/agent";
-import type { OrgRole } from "@nakama/core";
+import type { ImageAttachment, OrgRole } from "@nakama/core";
 import {
   AGENT_CHANNELS,
   type AgentChannel,
@@ -700,8 +700,10 @@ function buildAgentStreamHandlers(send: (event: StreamEvent) => void) {
       toolCallId: string;
       tool: string;
       result: unknown;
+      images?: ImageAttachment[];
     }) => {
       send({
+        images: event.images,
         result: event.result,
         tool: event.tool,
         toolCallId: event.toolCallId,

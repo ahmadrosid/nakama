@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { discoverSkillDirectory } from "../discover";
 import { readBundledSkillMarkdown } from "./index";
 import { ensureBundledSkillFiles } from "./install";
 
@@ -37,6 +38,14 @@ describe("ensureBundledSkillFiles", () => {
 
   test("installs the create-plugin scaffold that writes a built draft", async () => {
     await ensureBundledSkillFiles();
+
+    const skill = await discoverSkillDirectory(
+      join(configDir, "agent", "skills", "create-plugin")
+    );
+
+    expect(skill).not.toBeNull();
+    expect(skill?.scriptIssues).toEqual([]);
+    expect(skill?.hasTool).toBe(false);
     const workspace = await mkdtemp(join(tmpdir(), "nakama-plugin-ws-"));
 
     const script = join(

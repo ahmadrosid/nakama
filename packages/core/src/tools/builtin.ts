@@ -35,19 +35,24 @@ import { sqliteTool } from "./sqlite";
 import { webFetchTool } from "./web-fetch";
 import { webSearchTool } from "./web-search";
 
+// Models fill in an undescribed cwd with guessed folders, so tell them to omit it.
+const fileToolCwdSchema = trimmedOptionalString.describe(
+  "Optional. Omit it. Only used to resolve a relative path inside the workspace; ignored for absolute paths."
+);
+
 export const writeFileInputSchema = z
   .object({
     content: z
       .string({ error: "content is required." })
       .regex(/\S/, "content is required."),
-    cwd: trimmedOptionalString,
+    cwd: fileToolCwdSchema,
     path: requiredTrimmedString("path"),
   })
   .strict();
 
 export const writeDocxInputSchema = z
   .object({
-    cwd: trimmedOptionalString,
+    cwd: fileToolCwdSchema,
     markdown: requiredTrimmedString("markdown"),
     path: requiredTrimmedString("path"),
   })
@@ -55,14 +60,14 @@ export const writeDocxInputSchema = z
 
 export const deleteFileInputSchema = z
   .object({
-    cwd: trimmedOptionalString,
+    cwd: fileToolCwdSchema,
     path: requiredTrimmedString("path"),
   })
   .strict();
 
 export const editFileInputSchema = z
   .object({
-    cwd: trimmedOptionalString,
+    cwd: fileToolCwdSchema,
     edits: z
       .array(
         z
@@ -79,7 +84,7 @@ export const editFileInputSchema = z
 
 export const readFileInputSchema = z
   .object({
-    cwd: trimmedOptionalString,
+    cwd: fileToolCwdSchema,
     limit: readFileLimitSchema,
     offset: readFileOffsetSchema,
     path: requiredTrimmedString("path"),
@@ -900,13 +905,12 @@ export async function runReadFile(
   const shared = parsed.path.startsWith("published-skill://");
 
   if (shared) {
+    // A published skill reference is absolute, so cwd is ignored like it is
+    // for absolute file paths.
     if (
-      !(context.orgId && context.profileId && context.readPublishedSkillFile) ||
-      parsed.cwd
+      !(context.orgId && context.profileId && context.readPublishedSkillFile)
     ) {
-      throw new Error(
-        "Published skill reads require profile context and no cwd."
-      );
+      throw new Error("Published skill reads require profile context.");
     }
 
     const reference = /^published-skill:\/\/([^/]+)\/(.+)$/.exec(parsed.path);

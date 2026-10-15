@@ -251,10 +251,14 @@ export class SkillSuggestionService {
   ): string[] | undefined {
     const warnings =
       outcome.action === "create"
-        ? detectOrgMemoryInjectionWarnings(outcome.content)
+        ? detectOrgMemoryInjectionWarnings(outcome.content, { markup: false })
         : [
-            ...detectOrgMemoryInjectionWarnings(outcome.oldString),
-            ...detectOrgMemoryInjectionWarnings(outcome.newString),
+            ...detectOrgMemoryInjectionWarnings(outcome.oldString, {
+              markup: false,
+            }),
+            ...detectOrgMemoryInjectionWarnings(outcome.newString, {
+              markup: false,
+            }),
           ];
 
     const unique = [...new Set(warnings)];

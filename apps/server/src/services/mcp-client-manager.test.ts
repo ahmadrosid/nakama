@@ -263,4 +263,77 @@ describe("McpClientManager", () => {
     expect(manager.getConnectedCount()).toBe(1);
     expect(clientConnectCount).toBe(2);
   });
+
+  test("tool images leave the text and fit the model limit", async () => {
+    const pixel = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+      "base64"
+    );
+
+    const screenshot = await new Bun.Image(pixel)
+      .resize(3000, 1000)
+      .png()
+      .toBase64();
+
+    using _connect = spyOn(Client.prototype, "connect").mockResolvedValue(
+      undefined
+    );
+
+    using _listTools = spyOn(Client.prototype, "listTools").mockResolvedValue({
+      tools: [],
+    });
+
+    using _callTool = spyOn(Client.prototype, "callTool").mockResolvedValue({
+      content: [
+        { data: screenshot, mimeType: "image/png", type: "image" },
+        { text: "Captured", type: "text" },
+      ],
+    });
+
+    using _close = spyOn(
+      StdioClientTransport.prototype,
+      "close"
+    ).mockResolvedValue(undefined);
+
+    const manager = new McpClientManager();
+    const server = fakeStdioServer("stdio-image");
+    await manager.ensureConnected(server, "org_1", "profile_1");
+
+    const result = await manager.callTool(
+      server.id,
+      "stdio",
+      "screenshot",
+      {},
+      "profile_1",
+      "org_1"
+    );
+
+    await manager.disconnectAll();
+
+    // SAFETY: the result shape is asserted field by field below.
+    const { content, images, text } = result as {
+      content: Array<{ data?: string; type: string }>;
+      images: Array<{ data: string; mediaType: string }>;
+      text: string;
+    };
+
+    expect(JSON.stringify({ content, text })).not.toContain(
+      screenshot.slice(0, 64)
+    );
+    expect(content.some((part) => part.type === "image" && !part.data)).toBe(
+      true
+    );
+    expect(images).toHaveLength(1);
+
+    const fitted = await new Bun.Image(
+      Buffer.from(images[0]?.data ?? "", "base64")
+    ).metadata();
+
+    expect({ height: fitted.height, width: fitted.width }).toEqual({
+      height: 667,
+      width: 2000,
+    });
+
+    expect(text).toContain("Captured");
+  });
 });

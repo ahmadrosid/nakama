@@ -19,6 +19,7 @@ import {
 } from "hugeicons-react";
 import {
   forwardRef,
+  type MouseEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -75,6 +76,27 @@ function followOutputBehavior(atBottom: boolean): false | "auto" {
 
 function shouldAutoscrollOnHeightGrowth(atBottom: boolean): boolean {
   return atBottom;
+}
+
+/** Growth right after a button click is the user expanding something: let it grow down, don't re-pin. */
+const USER_TOGGLE_PIN_PAUSE_MS = 600;
+
+function useUserTogglePinPause() {
+  const userToggleAtRef = useRef(0);
+
+  const onClickCapture = useCallback((event: MouseEvent<HTMLElement>) => {
+    if (event.target instanceof Element && event.target.closest("button")) {
+      userToggleAtRef.current = performance.now();
+    }
+  }, []);
+
+  const isPinPaused = useCallback(
+    () =>
+      performance.now() - userToggleAtRef.current <= USER_TOGGLE_PIN_PAUSE_MS,
+    []
+  );
+
+  return { isPinPaused, onClickCapture };
 }
 
 /** Top/bottom inset as Virtuoso Header/Footer — never put padding on the scroller. */
@@ -188,6 +210,8 @@ function ChatMessageListSession({
   const stickIntentRef = useRef(true);
   const lastListHeightRef = useRef(0);
   const didInitialPinRef = useRef(false);
+  const userTogglePinPause = useUserTogglePinPause();
+  const { isPinPaused } = userTogglePinPause;
   const [isAtBottom, setIsAtBottom] = useState(true);
   const canPreviewCitations = useOptionalChatAttachmentPanel() !== null;
 
@@ -296,12 +320,13 @@ function ChatMessageListSession({
 
       if (
         height > previous &&
-        shouldAutoscrollOnHeightGrowth(stickIntentRef.current)
+        shouldAutoscrollOnHeightGrowth(stickIntentRef.current) &&
+        !isPinPaused()
       ) {
         pinLatest("auto");
       }
     },
-    [pinLatest]
+    [isPinPaused, pinLatest]
   );
 
   const renderTurn = useCallback(
@@ -403,7 +428,10 @@ function ChatMessageListSession({
 
   return (
     <ConversationStickinessProvider value={stickiness}>
-      <Conversation className={cn("min-h-0 flex-1", className)}>
+      <Conversation
+        className={cn("min-h-0 flex-1", className)}
+        onClickCapture={userTogglePinPause.onClickCapture}
+      >
         <Virtuoso
           atBottomStateChange={handleAtBottomStateChange}
           atBottomThreshold={80}
@@ -900,26 +928,26 @@ function AssistantMessageActions({
 function UserMessageContent({ message }: { message: ChatListItem }) {
   if (message.questionnaireAnswers?.length) {
     return (
-      <div className="rounded-2xl border border-border/70 bg-muted/40 px-4 py-3">
-        <p className="mb-2 font-medium text-muted-foreground text-sm">
-          Answers
-        </p>
-        <div className="space-y-3">
-          {message.questionnaireAnswers.map((entry) => (
-            <div
-              className="space-y-1"
-              key={`${entry.questionId}:${entry.prompt}`}
-            >
-              <p className="whitespace-pre-wrap text-foreground">
+      <ol className="-my-1 divide-y divide-border">
+        {message.questionnaireAnswers.map((entry, index) => (
+          <li
+            className="flex gap-3 py-2.5"
+            key={`${entry.questionId}:${entry.prompt}`}
+          >
+            <span className="w-4 shrink-0 text-13 text-muted-foreground tabular-nums">
+              {index + 1}
+            </span>
+            <div className="min-w-0 space-y-0.5">
+              <p className="whitespace-pre-wrap text-13 text-muted-foreground">
                 {entry.prompt}
               </p>
-              <p className="whitespace-pre-wrap text-muted-foreground text-sm">
+              <p className="whitespace-pre-wrap font-medium text-[15px] text-foreground leading-snug">
                 {entry.answer}
               </p>
             </div>
-          ))}
-        </div>
-      </div>
+          </li>
+        ))}
+      </ol>
     );
   }
 

@@ -453,6 +453,13 @@ export const windowIcon = app.isPackaged
   ? undefined
   : join(import.meta.dirname, "../web/public/icons/icon-512.png");
 
+// The web app draws its own 40px title bar. Overlay colors follow its
+// --sidebar and --muted-foreground tokens so the native buttons blend in.
+const titleBarOverlay = () =>
+  nativeTheme.shouldUseDarkColors
+    ? { color: "#111113", height: 40, symbolColor: "#a1a1aa" }
+    : { color: "#fafafa", height: 40, symbolColor: "#737373" };
+
 export async function createWindow(url, { show = true } = {}) {
   const origin = new URL(serverUrl(url)).origin;
 
@@ -464,6 +471,14 @@ export async function createWindow(url, { show = true } = {}) {
     minWidth: 720,
     show,
     title: "Nakama",
+    ...(process.platform === "darwin" && {
+      titleBarStyle: "hiddenInset",
+      trafficLightPosition: { x: 14, y: 14 },
+    }),
+    ...(process.platform === "win32" && {
+      titleBarOverlay: titleBarOverlay(),
+      titleBarStyle: "hidden",
+    }),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -482,6 +497,14 @@ export async function createWindow(url, { show = true } = {}) {
       nativeTheme.themeSource = theme;
     }
   });
+
+  if (process.platform === "win32") {
+    const syncOverlay = () => window.setTitleBarOverlay(titleBarOverlay());
+
+    nativeTheme.on("updated", syncOverlay);
+    window.on("closed", () => nativeTheme.off("updated", syncOverlay));
+  }
+
   window.webContents.setWindowOpenHandler(({ url: target }) => {
     openInBrowser(target);
 

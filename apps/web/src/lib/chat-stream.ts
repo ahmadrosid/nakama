@@ -83,6 +83,73 @@ function formatDefaultToolResult(result: unknown): string | null {
   return String(result);
 }
 
+interface ToolResultImage {
+  data: string;
+  mimeType: string;
+}
+
+interface ToolResultImageSplit {
+  images: ToolResultImage[];
+  rest: unknown;
+}
+
+/** Pull MCP-style `{ type: "image" }` content out of a tool result; `rest` keeps the text parts. */
+export function splitToolResultImages(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
+  result: unknown
+): ToolResultImageSplit {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
+  if (typeof result !== "object" || result === null) {
+    return { images: [], rest: result };
+  }
+
+  // SAFETY: The enclosing parser checks the value before this conversion.
+  const { content } = result as { content?: unknown };
+
+  if (!Array.isArray(content)) {
+    return { images: [], rest: result };
+  }
+
+  const images: ToolResultImage[] = [];
+  const texts: string[] = [];
+  // The server now sends image bytes apart and leaves a `{ type: "image" }` stub.
+  let hasImagePart = false;
+
+  for (const item of content) {
+    // SAFETY: Each field is checked before use.
+    const { type, data, mimeType, text } = (item ?? {}) as {
+      type?: unknown;
+      data?: unknown;
+      mimeType?: unknown;
+      text?: unknown;
+    };
+
+    if (type === "image") {
+      hasImagePart = true;
+    }
+
+    if (
+      type === "image" &&
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
+      typeof data === "string" &&
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
+      typeof mimeType === "string" &&
+      /^image\/[\w.+-]+$/.test(mimeType)
+    ) {
+      images.push({ data, mimeType });
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
+    } else if (type === "text" && typeof text === "string" && text.trim()) {
+      texts.push(text.trim());
+    }
+  }
+
+  if (!hasImagePart) {
+    return { images, rest: result };
+  }
+
+  return { images, rest: texts.length > 0 ? texts.join("\n\n") : null };
+}
+
 export function formatToolResult(
   tool: string | undefined,
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
@@ -751,6 +818,10 @@ export function buildStreamHandlers(
                 subAgentActivity: undefined,
                 toolCompletedAt: Date.now(),
                 toolGroupId: event.toolGroupId ?? message.toolGroupId,
+                toolImages: event.images?.map((image) => ({
+                  mediaType: image.mediaType,
+                  url: `data:${image.mediaType};base64,${image.data}`,
+                })),
                 toolResult: event.result,
                 toolStatus: "done",
               }
@@ -909,12 +980,8 @@ export const composerIconButtonClass = cn(
 export const composerToolbarClass =
   "flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden @[22rem]/composer:gap-1.5";
 
-/** Ghost select trigger for composer model / thinking controls (no filled chip look). */
-export const composerSelectTriggerClass =
-  "h-7 w-auto max-w-full min-w-0 gap-1 rounded-md border-none bg-transparent px-1.5 text-xs font-medium text-muted-foreground shadow-none hover:bg-accent/60 hover:text-foreground aria-expanded:bg-accent/60 aria-expanded:text-foreground dark:bg-transparent dark:hover:bg-accent/60 *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate";
-
 const composerInputGroupBase =
-  "[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:flex-col [&_[data-slot=input-group]]:items-stretch [&_[data-slot=input-group]]:gap-0 [&_[data-slot=input-group]]:p-2.5 sm:[&_[data-slot=input-group]]:p-3";
+  "[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:flex-col [&_[data-slot=input-group]]:items-stretch [&_[data-slot=input-group]]:gap-0 [&_[data-slot=input-group]]:p-3 sm:[&_[data-slot=input-group]]:p-3.5";
 
 /** Chat composer InputGroup: solid face, no focus ring (streaming rim is the active cue). */
 export const composerInputGroupClass =
@@ -927,14 +994,14 @@ export function composerShelfPanelClass(
   edge: ComposerStackEdge = "start"
 ): string {
   return cn(
-    "relative z-0 w-full shrink-0 overflow-hidden border border-border border-b-0 bg-card shadow-xs",
-    edge === "start" ? "rounded-t-xl rounded-b-none" : "rounded-none"
+    "relative z-0 mx-auto w-[calc(100%-2.5rem)] shrink-0 overflow-hidden border border-border border-b-0 bg-card shadow-xs",
+    edge === "start" ? "rounded-t-2xl rounded-b-none" : "rounded-none"
   );
 }
 
 export const composerShellClass = cn(
   composerInputGroupBase,
-  "[&_[data-slot=input-group]]:rounded-xl [&_[data-slot=input-group]]:border [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:shadow-xs [&_[data-slot=input-group]]:transition-[box-shadow,border-color]"
+  "[&_[data-slot=input-group]]:rounded-3xl [&_[data-slot=input-group]]:border [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:shadow-xs [&_[data-slot=input-group]]:transition-[box-shadow,border-color]"
 );
 
 export const composerShellCompactClass =

@@ -58,13 +58,31 @@ describe("guardFilePath", () => {
 
       for (const cwd of [outside, path.join(workspace, "escape")]) {
         await expect(
-          guardFilePath(
-            path.join(workspace, "notes.md"),
-            cwd,
-            undefined,
-            options
-          )
+          guardFilePath("notes.md", cwd, undefined, options)
         ).rejects.toBeInstanceOf(PathGuardError);
+
+        // An absolute path does not use cwd, so a stray cwd cannot fail it.
+        const result = await guardFilePath(
+          path.join(workspace, "notes.md"),
+          cwd,
+          undefined,
+          options
+        );
+
+        expect(result.resolved).toBe(
+          path.join(await realpath(workspace), "notes.md")
+        );
+      }
+
+      for (const cwd of [undefined, workspace, outside]) {
+        for (const target of [
+          path.join(outside, "notes.md"),
+          path.join(workspace, "escape", "notes.md"),
+        ]) {
+          await expect(
+            guardFilePath(target, cwd, undefined, options)
+          ).rejects.toBeInstanceOf(PathGuardError);
+        }
       }
     } finally {
       await rm(root, { force: true, recursive: true });

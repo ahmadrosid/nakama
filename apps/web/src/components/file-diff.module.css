@@ -85,6 +85,18 @@
   white-space: pre-wrap;
 }
 
+.newFile .diffLines::before {
+  left: 32px;
+}
+
+.newFile .diffRow {
+  grid-template-columns: 32px 18px 1fr;
+}
+
+.newFile.wrap .diffRow {
+  grid-template-columns: 32px 18px minmax(0, 1fr);
+}
+
 .diffRow.add::before,
 .diffRow.del::before {
   position: absolute;

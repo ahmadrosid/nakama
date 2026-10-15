@@ -5,6 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
 import { GithubIcon } from "hugeicons-react";
 import { useEffect, useState } from "react";
+import { useAuth } from "@/context/use-auth";
 import { client, formatError } from "@/lib/client";
 
 /**
@@ -242,10 +243,15 @@ function savedPercent(bytesIn: number, bytesRemoved: number): number {
 }
 
 function TokenOptimizationHeader({
+  canManage,
   omni,
   saving,
   toggle,
 }: {
+  /** The flag is one setting for the whole install, so only platform admins
+   * may write it. The server rejects anyone else; this only spares them a
+   * switch that cannot move. */
+  canManage: boolean;
   omni: TokenOptimizationResponse["optimizers"][number] | undefined;
   saving: boolean;
   toggle: (next: boolean) => Promise<void>;
@@ -278,11 +284,16 @@ function TokenOptimizationHeader({
             </span>
           ))}
         </div>
+        {canManage ? null : (
+          <p className="mt-1.5 text-2xs text-muted-foreground">
+            One setting for the whole install. A platform admin changes it.
+          </p>
+        )}
       </div>
       <Switch
         aria-label={`Enable ${omni?.id ?? "omni"}`}
         checked={Boolean(omni?.enabled)}
-        disabled={saving}
+        disabled={saving || !canManage}
         onCheckedChange={toggle}
         size="sm"
       />
@@ -437,11 +448,13 @@ function TokenOptimizationStats({
 }
 
 function TokenOptimizationBody({
+  canManage,
   data,
   error,
   saving,
   toggle,
 }: {
+  canManage: boolean;
   data: TokenOptimizationResponse;
   error: string | null;
   saving: boolean;
@@ -456,7 +469,12 @@ function TokenOptimizationBody({
     <div className="tokenopt space-y-5">
       <style dangerouslySetInnerHTML={{ __html: CHART_STYLE }} />
 
-      <TokenOptimizationHeader omni={omni} saving={saving} toggle={toggle} />
+      <TokenOptimizationHeader
+        canManage={canManage}
+        omni={omni}
+        saving={saving}
+        toggle={toggle}
+      />
 
       {error ? <p className="text-destructive text-xs">{error}</p> : null}
 
@@ -506,7 +524,9 @@ function TokenOptimizationBody({
 }
 
 export function TokenOptimizationCard() {
+  const { user } = useAuth();
   const { data, error, saving, toggle } = useTokenOptimization();
+  const canManage = user?.isPlatformAdmin === true;
 
   if (error && !data) {
     return <p className="text-destructive text-sm">{error}</p>;
@@ -531,6 +551,7 @@ export function TokenOptimizationCard() {
 
   return (
     <TokenOptimizationBody
+      canManage={canManage}
       data={data}
       error={error}
       saving={saving}

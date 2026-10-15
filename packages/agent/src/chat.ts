@@ -7,6 +7,7 @@ import type {
   ChatTurnUsage,
   ChatUsage,
   CompactionResponse,
+  ImageAttachment,
   MessageContentPart,
   ProviderChatOptions,
   ProviderClient,
@@ -94,6 +95,7 @@ interface StreamHandlers {
     toolCallId: string;
     tool: string;
     result: unknown;
+    images?: ImageAttachment[];
   }) => void;
   onToolInputDelta?: (event: {
     toolGroupId?: string;
@@ -982,7 +984,7 @@ async function executeToolCalls(
           toolGroupId,
         });
 
-        const { result, attachments } = await prepareVisualToolResult(
+        const { result, attachments, images } = await prepareVisualToolResult(
           await executeToolCall(tools, call, contextForCall(call)),
           preprocessUserContent
         );
@@ -990,6 +992,7 @@ async function executeToolCalls(
         const toolCompletedAt = Date.now();
 
         handlers?.onToolEnd?.({
+          images,
           result,
           tool: call.name,
           toolCallId: call.id,
@@ -1043,7 +1046,7 @@ async function executeToolCalls(
       toolGroupId,
     });
 
-    const { result, attachments } = await prepareVisualToolResult(
+    const { result, attachments, images } = await prepareVisualToolResult(
       await executeToolCall(tools, call, contextForCall(call)),
       preprocessUserContent
     );
@@ -1051,6 +1054,7 @@ async function executeToolCalls(
     const toolCompletedAt = Date.now();
 
     handlers?.onToolEnd?.({
+      images,
       result,
       tool: call.name,
       toolCallId: call.id,
@@ -1078,7 +1082,12 @@ async function executeToolCalls(
 async function prepareVisualToolResult(
   result: ToolResult,
   preprocess?: AgentChatSessionOptions["preprocessUserContent"]
-): Promise<{ result: ToolResult; attachments?: MessageContentPart[] }> {
+): Promise<{
+  result: ToolResult;
+  attachments?: MessageContentPart[];
+  /** The tool's own images, so the chat UI can show them. */
+  images?: ImageAttachment[];
+}> {
   const parsed = VisualToolResultSchema.safeParse(result);
 
   if (!parsed.success) {
@@ -1111,10 +1120,12 @@ async function prepareVisualToolResult(
       attachments: Array.isArray(prepared)
         ? prepared
         : [{ text: prepared, type: "text" }],
+      images,
       result: metadata,
     };
   } catch (error) {
     return {
+      images,
       result: {
         ...metadata,
         content:

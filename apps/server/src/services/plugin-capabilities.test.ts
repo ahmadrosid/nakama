@@ -204,13 +204,26 @@ describe("plugin capabilities", () => {
     await db.assignSkillToProfile(profile.id, skill!.id);
     await db.assignToolToProfile(profile.id, tool!.id);
 
+    // Older hosts named copies by the full source hash; the next sync drops them.
+    const legacyCopy = join(
+      getProfileSoulDir(ORG_ID, profile.id),
+      "skills",
+      ".plugins",
+      "a".repeat(64)
+    );
+
+    await mkdir(legacyCopy, { recursive: true });
+    await writeFile(join(legacyCopy, "SKILL.md"), SKILL_MD);
+
     const catalog = await skills.composeCatalogForProfile(ORG_ID, profile.id);
     expect(catalog).toContain("notes");
     expect(catalog).toContain("**notes**");
 
     const workspaceRoot = getProfileSoulDir(ORG_ID, profile.id);
     const copyRoot = join(workspaceRoot, "skills", ".plugins");
-    const [copy] = await readdir(copyRoot);
+    const [copy, ...rest] = await readdir(copyRoot);
+    expect(rest).toEqual([]);
+    expect(copy).toMatch(/^notes\.notes\.[a-f0-9]{12}$/);
     const instructionPath = join(copyRoot, copy!, "SKILL.md");
     expect(catalog).toContain(JSON.stringify(instructionPath));
     const context = { orgId: ORG_ID, profileId: profile.id, workspaceRoot };

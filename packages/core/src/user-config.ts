@@ -108,6 +108,7 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   doubao: "Doubao (Volcengine)",
   fireworks: "Fireworks",
   gemini: "Gemini",
+  meta: "Meta Model API",
   minimax: "MiniMax",
   minimax_cn: "MiniMax (CN)",
   mistral: "Mistral",
@@ -885,6 +886,20 @@ function buildConfigIniLines(
     lines.push(
       `default_provider_id=${mergedGlobal.default_provider_id.trim()}`
     );
+  }
+
+  if (mergedGlobal.image_model?.trim()) {
+    lines.push(`image_model=${mergedGlobal.image_model.trim()}`);
+  }
+
+  if (mergedGlobal.transcription_model?.trim()) {
+    lines.push(
+      `transcription_model=${mergedGlobal.transcription_model.trim()}`
+    );
+  }
+
+  if (mergedGlobal.vision_model?.trim()) {
+    lines.push(`vision_model=${mergedGlobal.vision_model.trim()}`);
   }
 
   if (mergedGlobal.timezone?.trim()) {

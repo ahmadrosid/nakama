@@ -345,6 +345,7 @@ describe("firstAvailableProviderOption", () => {
           "doubao",
           "together",
           "xiaomi",
+          "meta",
           "vercel_ai_gateway",
           "mistral",
           "qwen",

@@ -114,9 +114,13 @@ export async function guardFilePath(
     );
   }
 
-  const cwd = resolveSafeCwd(rawCwd, allowedDirs, defaultCwd);
   const expanded = expandHome(rawPath);
-  const absolute = path.resolve(cwd, expanded);
+
+  // An absolute path does not depend on cwd, so a stray cwd must not fail it.
+  // The resolved path still goes through every check below.
+  const absolute = path.isAbsolute(expanded)
+    ? path.resolve(expanded)
+    : path.resolve(resolveSafeCwd(rawCwd, allowedDirs, defaultCwd), expanded);
 
   for (const prefix of SPECIAL_PATH_PREFIXES) {
     if (absolute === prefix.slice(0, -1) || absolute.startsWith(prefix)) {

@@ -105,6 +105,7 @@ export async function discoverSkillDirectory(
     const toolPath = await findSkillToolPath(directory);
 
     const scripts = await resolveSkillScripts({
+      body: parsed.body,
       declared: parsed.frontmatter.scripts ?? [],
       directory,
       skillName: parsed.frontmatter.name,

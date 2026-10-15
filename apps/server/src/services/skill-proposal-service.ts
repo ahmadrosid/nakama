@@ -898,7 +898,9 @@ export class SkillProposalService {
   }
 
   private warningsForContent(content: string): string[] | undefined {
-    const warnings = detectOrgMemoryInjectionWarnings(content);
+    const warnings = detectOrgMemoryInjectionWarnings(content, {
+      markup: false,
+    });
 
     return warnings.length > 0 ? warnings : undefined;
   }
@@ -908,8 +910,8 @@ export class SkillProposalService {
     newString: string
   ): string[] | undefined {
     const warnings = [
-      ...detectOrgMemoryInjectionWarnings(oldString),
-      ...detectOrgMemoryInjectionWarnings(newString),
+      ...detectOrgMemoryInjectionWarnings(oldString, { markup: false }),
+      ...detectOrgMemoryInjectionWarnings(newString, { markup: false }),
     ];
 
     return warnings.length > 0 ? [...new Set(warnings)] : undefined;
