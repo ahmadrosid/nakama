@@ -126,7 +126,8 @@ export async function seedOrgDefaultProfile(
 
 export async function seedOrgSuperBotProfile(
   db: DatabaseAdapter,
-  orgId: string
+  orgId: string,
+  options: SuperBotSeedOptions = {}
 ): Promise<StoredProfileRecord> {
   const existing = (await db.listProfilesForOrg(orgId)).find(
     (profile) => profile.isSuper
@@ -137,7 +138,7 @@ export async function seedOrgSuperBotProfile(
     await db.unassignToolFromProfile(existing.id, BUILTIN_TOOL_IDS.delete_file);
     await ensureProfileDefaultBundledSkills(db, existing.id);
     await ensureProfileSuperBotBundledSkills(db, existing.id);
-    await ensureSuperBotBashTool(db, existing.id);
+    await ensureSuperBotBashTool(db, existing.id, options.grantBash);
     await ensureSuperBotSessionTools(db, existing.id);
 
     return existing;
@@ -161,7 +162,7 @@ export async function seedOrgSuperBotProfile(
 
   await ensureProfileDefaultBuiltinTools(db, profile.id);
   await db.unassignToolFromProfile(profile.id, BUILTIN_TOOL_IDS.delete_file);
-  await ensureSuperBotBashTool(db, profile.id);
+  await ensureSuperBotBashTool(db, profile.id, options.grantBash);
   await ensureSuperBotSessionTools(db, profile.id);
   await ensureProfileDefaultBundledSkills(db, profile.id);
   await ensureProfileSuperBotBundledSkills(db, profile.id);
@@ -170,7 +171,8 @@ export async function seedOrgSuperBotProfile(
 }
 
 export async function ensureOrgSuperBotProfiles(
-  db: DatabaseAdapter
+  db: DatabaseAdapter,
+  options: SuperBotSeedOptions = {}
 ): Promise<void> {
   const orgs = await db.listOrganizations();
 
@@ -179,7 +181,7 @@ export async function ensureOrgSuperBotProfiles(
       continue;
     }
 
-    await seedOrgSuperBotProfile(db, org.id);
+    await seedOrgSuperBotProfile(db, org.id, options);
   }
 }
 
@@ -268,10 +270,21 @@ export async function ensureSuperBotSessionTools(
   await db.assignToolToProfile(profileId, READ_PROFILE_SESSION_TOOL_ID);
 }
 
+export interface SuperBotSeedOptions {
+  /** False when the deployment turned bash off (NAKAMA_TENANT_BASH=0). */
+  grantBash?: boolean;
+}
+
 export async function ensureSuperBotBashTool(
   db: DatabaseAdapter,
-  profileId: string
+  profileId: string,
+  grantBash = true
 ): Promise<void> {
   await ensureBashToolDefinition(db);
-  await db.assignToolToProfile(profileId, BASH_TOOL_ID);
+
+  if (grantBash) {
+    await db.assignToolToProfile(profileId, BASH_TOOL_ID);
+  } else {
+    await db.unassignToolFromProfile(profileId, BASH_TOOL_ID);
+  }
 }

@@ -884,6 +884,33 @@ describe("bash tool Nakama state guard", () => {
     expect(await readdir(profileWorkspace)).not.toContain("ran.txt");
   });
 
+  test("NAKAMA_TENANT_BASH=0 refuses every channel but the CLI", async () => {
+    await setupConfigDir();
+    const previousTenantBash = process.env.NAKAMA_TENANT_BASH;
+    process.env.NAKAMA_TENANT_BASH = "0";
+
+    try {
+      await expect(
+        runBash({ command: "touch ran.txt" }, context, { backend: "host" })
+      ).rejects.toThrow(/NAKAMA_TENANT_BASH=0/);
+      expect(await readdir(profileWorkspace)).not.toContain("ran.txt");
+
+      const cli = await runBash(
+        { command: "echo ok" },
+        { ...context, channel: "cli" },
+        { backend: "host" }
+      );
+
+      expect(cli.stdout.trim()).toBe("ok");
+    } finally {
+      if (previousTenantBash === undefined) {
+        delete process.env.NAKAMA_TENANT_BASH;
+      } else {
+        process.env.NAKAMA_TENANT_BASH = previousTenantBash;
+      }
+    }
+  });
+
   test("still runs ordinary commands in the profile workspace", async () => {
     await setupConfigDir();
     await writeFile(path.join(profileWorkspace, "notes.md"), "hello notes\n");

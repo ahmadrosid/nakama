@@ -24,9 +24,11 @@ import { mergeCodingAgentSpawnEnv } from "../services/coding-agent-spawn-env";
 import { killProcessTree } from "../services/custom-tool-subprocess";
 import {
   type BashBackendKind,
+  isTenantBashEnabled,
   resolveBashBackend,
   resolveBashSandboxImage,
   resolveBashSandboxNetwork,
+  TENANT_BASH_DISABLED,
 } from "./bash-config";
 import { buildBashSandboxEnv } from "./bash-sandbox-env";
 import {
@@ -170,6 +172,13 @@ export async function runBash(
 
   if (!orgId) {
     throw new Error("orgId is required.");
+  }
+
+  // Seeding and assignment also drop bash when it is off, but a profile can
+  // still hold it from before (or via clone), so this is the gate that counts.
+  // The CLI channel is the operator's own terminal.
+  if (context.channel !== "cli" && !isTenantBashEnabled()) {
+    throw new Error(TENANT_BASH_DISABLED);
   }
 
   const command = input.command.trim();
