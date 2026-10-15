@@ -369,14 +369,15 @@ test("a package installed in the skill's own environment is not reported, a miss
       path.join(directory, "requirements.txt"),
       "matplotlib\nreportlab\n"
     );
+
+    // A venv on Windows keeps packages in Lib/site-packages, with no version dir.
+    const sitePackages =
+      process.platform === "win32"
+        ? ["Lib", "site-packages"]
+        : ["lib", "python3.12", "site-packages"];
+
     await mkdir(
-      path.join(
-        getSkillPythonEnvDir(directory),
-        "lib",
-        "python3.12",
-        "site-packages",
-        "matplotlib"
-      ),
+      path.join(getSkillPythonEnvDir(directory), ...sitePackages, "matplotlib"),
       { recursive: true }
     );
 

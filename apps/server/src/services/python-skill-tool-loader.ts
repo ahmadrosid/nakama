@@ -169,7 +169,7 @@ export function createPythonSkillRunner(
 }
 
 /** The skill's own environment once an admin has installed it, else the server's. */
-export function skillPythonBin(skillDirectory: string): string {
+function skillPythonBin(skillDirectory: string): string {
   const bin = getSkillPythonEnvBin(skillDirectory);
 
   return existsSync(bin) ? bin : resolvePythonBin();
