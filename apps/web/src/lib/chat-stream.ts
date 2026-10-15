@@ -1001,7 +1001,7 @@ export function composerShelfPanelClass(
 
 export const composerShellClass = cn(
   composerInputGroupBase,
-  "[&_[data-slot=input-group]]:rounded-3xl [&_[data-slot=input-group]]:border [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:shadow-sm [&_[data-slot=input-group]]:transition-[box-shadow,border-color]"
+  "[&_[data-slot=input-group]]:rounded-3xl [&_[data-slot=input-group]]:border [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:shadow-xs [&_[data-slot=input-group]]:transition-[box-shadow,border-color]"
 );
 
 export const composerShellCompactClass =
