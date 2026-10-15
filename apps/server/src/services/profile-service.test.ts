@@ -560,6 +560,46 @@ describe("profile service createProfile", () => {
     ).rejects.toThrow(/already taken/i);
   });
 
+  test("create and clone refuse an id claimed after the taken check", async () => {
+    tempConfigDir = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-profile-claim-race-")
+    );
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+
+    const db = createInMemoryDatabaseAdapter();
+    const service = new ProfileService(db);
+    const source = await service.createProfile("org_second", { name: "Src" });
+
+    await db.createProfileIfAbsent({
+      createdAt: "2020-01-01T00:00:00.000Z",
+      id: "imported",
+      isSuper: false,
+      model: null,
+      name: "Imported",
+      orgId: "org_first",
+      systemPrompt: "first org prompt",
+    });
+
+    // The taken check runs before a concurrent import inserts its row.
+    const realGetProfile = db.getProfile.bind(db);
+    db.getProfile = async (id) =>
+      id === "imported" ? null : await realGetProfile(id);
+
+    await expect(
+      service.createProfile("org_second", { id: "imported", name: "Mine" })
+    ).rejects.toThrow(/already taken/i);
+
+    await expect(
+      service.cloneProfile("org_second", source.profile.id, { id: "imported" })
+    ).rejects.toThrow(/already taken/i);
+
+    expect(await realGetProfile("imported")).toMatchObject({
+      name: "Imported",
+      orgId: "org_first",
+      systemPrompt: "first org prompt",
+    });
+  });
+
   test("resolves legacy slug ids via getProfile and getProfileForOrg", async () => {
     tempConfigDir = await mkdtemp(
       path.join(os.tmpdir(), "nakama-profile-legacy-slug-")
