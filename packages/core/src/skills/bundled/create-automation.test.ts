@@ -160,6 +160,7 @@ describe("ensureBundledSkillFiles", () => {
     );
 
     expect(skill).not.toBeNull();
+
     const matched = matchSkillsForMessage(
       skill ? [skill] : [],
       "hey can you make me a slide deck for our team sync on friday? it's about Q3 results. keep it like 6-7 slides"
