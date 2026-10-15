@@ -198,21 +198,30 @@ instructions only. See [Profiles → Export and import a profile pack](/profiles
 
 ### What Python is available
 
-The published image ships `python3` and the standard library. There is no pip
-and no third-party package, so a script that imports one fails on its first call
-with `ModuleNotFoundError`.
+The published image ships `python3` and the standard library, with no
+third-party packages.
 
-To add packages, build a virtualenv on the host and point Nakama at its
-interpreter before starting the server:
+A skill that needs packages lists them in a `requirements.txt` in its folder.
+Until they are installed, the skill page names each missing package under
+**Script issues**, so nobody meets a `ModuleNotFoundError` on the first call.
+
+A platform admin installs them with **Install Python packages** on the skill
+page (`POST /v1/skills/<id>/python-packages`). That builds a virtualenv for this
+skill alone under `NAKAMA_CONFIG_DIR/python-envs/`, so it survives restarts and
+image upgrades, and runs `pip install -r requirements.txt` into it. The skill's
+`tool.py`, declared scripts and `_run_python` tool then run with that
+interpreter. Nothing is installed when a skill is created or when the server
+starts, because an agent can write skills and pip runs package build code on the
+host. Run the install again after editing `requirements.txt`.
+
+Python tools outside skills still use one interpreter for the whole install.
+Point `NAKAMA_PYTHON_BIN` at a virtualenv to give them packages:
 
 ```bash
 python3 -m venv /opt/nakama-python
 /opt/nakama-python/bin/pip install matplotlib
 export NAKAMA_PYTHON_BIN=/opt/nakama-python/bin/python3
 ```
-
-This is install-wide: every Python tool and every skill script in every
-organization uses that interpreter.
 
 ## How skills are used at runtime
 

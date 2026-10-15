@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { getSkillPythonEnvDir } from "./python-env";
 import { resolveSkillScripts } from "./script-tools";
 
 const BODY = "def hitung(b, h):\n    return b * h * h / 6\n";
@@ -338,4 +339,59 @@ test("a script that prints its result is accepted, not read as missing a harness
   expect(resolved.issues).toEqual([]);
   expect(resolved.tools).toHaveLength(1);
   await rm(directory, { force: true, recursive: true });
+});
+
+test("a package installed in the skill's own environment is not reported, a missing one names requirements.txt", async () => {
+  const previous = process.env.NAKAMA_CONFIG_DIR;
+  process.env.NAKAMA_CONFIG_DIR = await mkdtemp(
+    path.join(os.tmpdir(), "skill-env-")
+  );
+  const source = `"""Draw a chart."""\nimport matplotlib.pyplot as plt\nfrom reportlab.lib import colors\n${BODY}${HARNESS}`;
+
+  try {
+    const directory = await skillDir({
+      "SKILL.md": "---\n---\n",
+      "scripts/chart.py": source,
+    });
+
+    const scan = () =>
+      resolveSkillScripts({
+        declared: ["scripts/chart.py"],
+        directory,
+        skillName: "calc",
+        toolPath: null,
+      });
+
+    // No requirements.txt yet: the author is told where to list them.
+    expect((await scan()).issues[0]?.reason).toContain("requirements.txt");
+
+    await writeFile(
+      path.join(directory, "requirements.txt"),
+      "matplotlib\nreportlab\n"
+    );
+    await mkdir(
+      path.join(
+        getSkillPythonEnvDir(directory),
+        "lib",
+        "python3.12",
+        "site-packages",
+        "matplotlib"
+      ),
+      { recursive: true }
+    );
+
+    const reason = (await scan()).issues[0]?.reason ?? "";
+
+    expect(reason).toContain("reportlab");
+    expect(reason).not.toContain("matplotlib");
+    await rm(directory, { force: true, recursive: true });
+  } finally {
+    await rm(process.env.NAKAMA_CONFIG_DIR, { force: true, recursive: true });
+
+    if (previous === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = previous;
+    }
+  }
 });

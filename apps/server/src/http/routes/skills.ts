@@ -515,6 +515,19 @@ export function registerSkillRoutes(
     );
   });
 
+  // Installing runs package build code on the host, so it takes the same
+  // platform admin the skill files routes do, and never happens on its own.
+  app.post("/v1/skills/:skillId/python-packages", async (c) => {
+    requirePlatformAdminFromContext(c);
+
+    return json(
+      await agent.installSkillPythonPackages(
+        requireActiveOrgIdFromContext(c),
+        decodeURIComponent(c.req.param("skillId"))
+      )
+    );
+  });
+
   app.get("/v1/skills/:skillId/versions", async (c) => {
     requirePlatformAdminFromContext(c);
 

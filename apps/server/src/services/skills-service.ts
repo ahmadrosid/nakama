@@ -92,6 +92,7 @@ import {
 } from "./profile-change-history";
 import {
   createPythonSkillRunner,
+  installSkillPythonPackages,
   loadPythonSkillTool,
 } from "./python-skill-tool-loader";
 import { isSkillWriteApprovalRequired } from "./skill-write-approval";
@@ -1345,6 +1346,15 @@ export class SkillsService {
     await visit(root, "", 0);
 
     return { files, truncated };
+  }
+
+  async installSkillPythonPackages(
+    orgId: string,
+    skillId: string
+  ): Promise<{ output: string }> {
+    return installSkillPythonPackages(
+      await this.skillFilesRoot(orgId, skillId)
+    );
   }
 
   async readSkillFile(

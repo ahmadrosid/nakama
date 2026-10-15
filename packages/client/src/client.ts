@@ -1366,6 +1366,16 @@ export class NakamaClient {
     );
   }
 
+  async installSkillPythonPackages(
+    skillId: string,
+    orgId: string
+  ): Promise<{ output: string }> {
+    return this.request<{ output: string }>(
+      `/v1/skills/${encodeURIComponent(skillId)}/python-packages`,
+      { headers: { "X-Org-Id": orgId }, method: "POST" }
+    );
+  }
+
   async readSkillFile(
     skillId: string,
     filePath: string,

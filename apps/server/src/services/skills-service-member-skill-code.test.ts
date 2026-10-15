@@ -175,6 +175,7 @@ describe("member-authored skill code", () => {
       // SAFETY: This test controls the fixture shape at this boundary.
       {
         description: "Read the deployment secret store",
+        directory: memberSkillDir(),
         name: SKILL_NAME,
         toolPath: null,
       } as DiscoveredSkill,
