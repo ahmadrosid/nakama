@@ -152,6 +152,20 @@ A script can import its siblings by bare name. Python puts the running script's
 own directory first on `sys.path`, so `scripts/invoice.py` can `import pricing`
 with no packaging.
 
+### Python written for Claude Code
+
+Skills written for Claude Code ship ordinary modules: functions to import and a
+`__main__` that prints a demo. They have no `run(input, context)`, so neither
+`tool.py` nor `scripts:` reaches them.
+
+On a profile that has the `bash` tool, each such skill also gets a
+`<skill>_run_python` tool. The agent passes `{"code": "..."}`, the code runs with
+the skill directory first on `sys.path`, and whatever it prints comes back as
+`stdout`. It is the same subprocess, environment allowlist and 30 second timeout
+as `tool.py`, and it never receives `NAKAMA_CONFIG_DIR`. A profile without
+`bash` gets nothing new, because running model-written Python is the same power
+as a shell.
+
 ### Whose code runs
 
 A skill's tool module and scripts are host code: `tool.py` and every declared

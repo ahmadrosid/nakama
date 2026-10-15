@@ -87,6 +87,78 @@ export async function loadPythonSkillTool(
   }
 }
 
+// Prints are captured so a module's own output reaches the model as text
+// without the module knowing about the JSON transport.
+const RUNNER_SOURCE = `import contextlib, io, json, sys
+sys.path.insert(0, sys.argv[1])
+out = io.StringIO()
+with contextlib.redirect_stdout(out):
+    exec(compile(json.load(sys.stdin)["code"], "<code>", "exec"), {"__name__": "__nakama__"})
+print(json.dumps({"stdout": out.getvalue()}))`;
+
+/**
+ * Claude Code skills ship plain modules (functions plus a demo `__main__`) that
+ * no `run(input, context)` harness reaches. This tool runs model-written code
+ * with the skill directory first on `sys.path`, so the caller decides who gets
+ * it: it is arbitrary host code, exactly as much as `bash` is.
+ */
+export function createPythonSkillRunner(
+  skill: DiscoveredSkill
+): ToolDefinition | null {
+  const reached = new Set([
+    skill.toolPath,
+    ...skill.scriptTools.map((script) => script.path),
+  ]);
+
+  // Only skills that ship Python nothing else runs. A skill whose scripts all
+  // load through tool.py or `scripts:` keeps exactly the tools it had.
+  if (
+    !skill.scriptIssues.some(
+      (issue) =>
+        issue.path.endsWith(".py") &&
+        !reached.has(path.join(skill.directory, issue.path))
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    description: `Run Python against the modules shipped with the "${skill.name}" skill (${skill.description}). The skill directory is first on sys.path, so import its modules by name and call their functions. Pass {"code": "..."}; whatever the code prints comes back as stdout.`,
+    name: `${skill.name.replace(/[^A-Za-z0-9_-]+/gu, "_").slice(0, 53)}_run_python`,
+    parameters: {
+      additionalProperties: false,
+      properties: { code: { type: "string" } },
+      required: ["code"],
+      type: "object",
+    },
+    async run(input, context) {
+      // SAFETY: Checked as a string before use; anything else is refused.
+      const code = (input as { code?: unknown } | null)?.code;
+
+      if (!isString(code)) {
+        return { error: 'Pass the Python to run as {"code": "..."}.' };
+      }
+
+      const workspaceRoot = isString(context.workspaceRoot)
+        ? context.workspaceRoot
+        : undefined;
+
+      return spawnJsonTool({
+        args: ["-c", RUNNER_SOURCE, skill.directory],
+        bin: resolvePythonBin(),
+        context,
+        cwd: workspaceRoot ?? skill.directory,
+        input: { code },
+        label: "Python skill runner",
+        // Model-written code never learns where the secret store is, even
+        // for a server-shipped skill.
+        transport: { includeConfigDir: false },
+        workspaceRoot,
+      });
+    },
+  };
+}
+
 function isString<T>(value: T): value is T & string {
   return Object.prototype.toString.call(value) === "[object String]";
 }
