@@ -1269,13 +1269,6 @@ function ChatComposerFullFooter({
       >
         <ChatAttachmentButton disabled={disabled} />
 
-        {props.contextUsage ? (
-          <ChatContextUsageRing
-            sessionUsage={props.sessionUsage}
-            usage={props.contextUsage}
-          />
-        ) : null}
-
         {props.providerConfigured ? (
           <ChatModelPicker busy={busy} disabled={disabled} props={props} />
         ) : (
@@ -1288,9 +1281,16 @@ function ChatComposerFullFooter({
 
       <div
         aria-label="Composer actions"
-        className="ml-auto flex shrink-0 items-center gap-1"
+        className="ml-auto flex shrink-0 items-center gap-1.5"
         role="toolbar"
       >
+        {props.contextUsage ? (
+          <ChatContextUsageRing
+            sessionUsage={props.sessionUsage}
+            usage={props.contextUsage}
+          />
+        ) : null}
+
         <ChatComposerSubmitButton
           busy={busy}
           canStop={canStop}
