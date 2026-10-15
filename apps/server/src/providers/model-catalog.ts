@@ -258,20 +258,19 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
   // https://api-docs.deepseek.com/quick_start/pricing
   // Flat estimates use peak uncached rates; off-peak is half. Cache discounts
   // and time-of-use billing are not represented. Legacy IDs still serve V4.1.
-  ...[
-    "deepseek-flash",
-    "deepseek-v4-flash",
-    "deepseek-v4-flash-vision-exp",
-  ].map((id) => ({
+  ...(
+    [
+      ["deepseek-flash", "DeepSeek V4.1 Flash"],
+      ["deepseek-v4-flash", "DeepSeek V4.1 Flash Legacy"],
+      ["deepseek-v4-flash-vision-exp", "DeepSeek V4.1 Flash Vision"],
+    ] as const
+  ).map(([id, name]) => ({
     contextWindow: 1_000_000,
     default: id === "deepseek-flash",
     id,
     inputPerMillionUsd: 0.3,
     maxOutputTokens: 384_000,
-    name:
-      id === "deepseek-flash"
-        ? "DeepSeek V4.1 Flash"
-        : `DeepSeek V4.1 Flash (${id})`,
+    name,
     outputPerMillionUsd: 1.2,
     provider: "deepseek" as const,
     supportsThinking: true,
@@ -281,7 +280,7 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
     id: "deepseek-v4-pro",
     inputPerMillionUsd: 1.32,
     maxOutputTokens: 384_000,
-    name: "DeepSeek V4 Pro0813",
+    name: "DeepSeek V4 Pro",
     outputPerMillionUsd: 3.96,
     provider: "deepseek",
     supportsThinking: true,
