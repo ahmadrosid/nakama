@@ -24,7 +24,7 @@ export function ChatComposerNotice({
     <div className="px-4">
       <div
         className={cn(
-          "relative overflow-hidden rounded-t-xl border-border border-x border-t bg-card/75 px-3 py-2",
+          "relative overflow-hidden rounded-t-xl border-border border-x border-t bg-card/75 px-3 py-1.5",
           className
         )}
         role={role}

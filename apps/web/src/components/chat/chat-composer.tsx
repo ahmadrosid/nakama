@@ -278,7 +278,7 @@ function ChatComposerWorkStack({
 }
 
 const FULL_TEXTAREA_CLASS =
-  "max-h-36 min-h-11 px-1 py-1.5 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-10 sm:text-sm";
+  "max-h-36 min-h-9 px-1 py-1 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-8 sm:text-sm";
 
 const MINIMAL_TEXTAREA_CLASS =
   "max-h-32 min-h-10 px-1 py-1.5 text-sm leading-relaxed placeholder:text-muted-foreground";
@@ -358,7 +358,7 @@ function ChatComposerStackedPrompt({
         <PromptInputFooter
           className={cn(
             "w-full border-0 px-0 py-0",
-            "flex-nowrap items-center gap-1.5 pt-2.5",
+            "flex-nowrap items-center gap-1.5 pt-1",
             footerClassName
           )}
         >
@@ -463,7 +463,7 @@ function ChatComposerBarePrompt({
             "w-full border-0 px-0 py-0",
             isMinimal
               ? "justify-end pt-1.5"
-              : "flex-nowrap items-center gap-1.5 pt-2.5",
+              : "flex-nowrap items-center gap-1.5 pt-1",
             footerClassName
           )}
         >
@@ -631,7 +631,7 @@ function ChatComposerCommandBanner({
   }
 
   return (
-    <PromptInputHeader className="-mx-3 -mt-3 mb-1.5 w-auto flex-nowrap items-center gap-2 rounded-t-3xl border-border border-b bg-muted/60 px-5 py-2 text-sm sm:-mx-3.5 sm:-mt-3.5">
+    <PromptInputHeader className="-mx-3 -mt-3 mb-1.5 w-auto flex-nowrap items-center gap-2 rounded-t-xl border-border border-b bg-muted/60 px-5 py-2 text-sm sm:-mx-3.5 sm:-mt-3.5">
       <span className="shrink-0 font-semibold text-foreground">{prefix}</span>
       <span className="min-w-0 flex-1 truncate text-muted-foreground">
         {command.description}
@@ -1164,7 +1164,7 @@ function ChatModelPicker({
       >
         <PopoverTrigger
           aria-label="Select model and effort"
-          className="flex h-8 max-w-full items-center overflow-hidden rounded-full bg-muted px-3 font-medium text-foreground text-sm transition-[background-color,opacity] hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 aria-expanded:bg-accent"
+          className="flex h-7 max-w-full items-center overflow-hidden rounded-full bg-muted px-2.5 font-medium text-foreground text-xs transition-[background-color,opacity] hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 aria-expanded:bg-accent"
           disabled={disabled || !(hasModels || effort)}
           title={triggerLabel}
           type="button"
@@ -1303,10 +1303,10 @@ function ChatComposerFullFooter({
   );
 }
 
-/** Visible 36px face; ≥40px hit via pseudo. Keep transform in transition for press scale. */
+/** Visible 32px face; ≥40px hit via pseudo. Keep transform in transition for press scale. */
 const composerSubmitButtonClassName = cn(
   composerHitTargetClass,
-  "size-9 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-[color,background-color,transform,opacity] hover:bg-primary/90 active:scale-[0.96] disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
+  "size-8 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-[color,background-color,transform,opacity] hover:bg-primary/90 active:scale-[0.96] disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
 );
 
 const composerAttachmentRemoveClassName = cn(
@@ -1501,14 +1501,14 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
                   aria-label="Add attachment"
                   className={cn(
                     composerIconButtonClass,
-                    "size-9 bg-transparent text-foreground hover:bg-muted"
+                    "size-8 bg-transparent text-foreground hover:bg-muted"
                   )}
                   disabled={disabled}
                   size="icon-sm"
                   type="button"
                   variant="ghost"
                 >
-                  <Add01Icon className="size-5" />
+                  <Add01Icon className="size-4" />
                 </Button>
               }
             />

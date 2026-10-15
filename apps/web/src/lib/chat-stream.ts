@@ -981,7 +981,7 @@ export const composerToolbarClass =
   "flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden @[22rem]/composer:gap-1.5";
 
 const composerInputGroupBase =
-  "[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:flex-col [&_[data-slot=input-group]]:items-stretch [&_[data-slot=input-group]]:gap-0 [&_[data-slot=input-group]]:p-3 sm:[&_[data-slot=input-group]]:p-3.5";
+  "[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:flex-col [&_[data-slot=input-group]]:items-stretch [&_[data-slot=input-group]]:gap-0 [&_[data-slot=input-group]]:p-2 sm:[&_[data-slot=input-group]]:p-2.5";
 
 /** Chat composer InputGroup: solid face, no focus ring (streaming rim is the active cue). */
 export const composerInputGroupClass =
@@ -1001,7 +1001,7 @@ export function composerShelfPanelClass(
 
 export const composerShellClass = cn(
   composerInputGroupBase,
-  "[&_[data-slot=input-group]]:rounded-3xl [&_[data-slot=input-group]]:border [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:shadow-xs [&_[data-slot=input-group]]:transition-[box-shadow,border-color]"
+  "[&_[data-slot=input-group]]:rounded-xl [&_[data-slot=input-group]]:border [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:shadow-xs [&_[data-slot=input-group]]:transition-[box-shadow,border-color]"
 );
 
 export const composerShellCompactClass =
