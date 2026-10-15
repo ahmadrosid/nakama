@@ -627,6 +627,7 @@ describe("legacy profile id migration", () => {
         skills_post_turn_review: 0,
         skills_write_approval: 1,
       };
+
       const selectMigratedProfile = `
         SELECT
           id,
