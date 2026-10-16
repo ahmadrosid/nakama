@@ -35,6 +35,7 @@ export function isChannelDebugEnabled(): boolean {
 export interface WhatsAppSocketDeps {
   onConnected?: (me: { id: string; lid?: string | null }) => void;
   onDisconnected?: () => void;
+  onLinkRejected?: (message: string) => void;
   onMessage: (data: WhatsAppInboundChat) => Promise<void>;
   onQr?: (qr: string) => void;
   orgId?: ChannelConfigScope;
@@ -204,6 +205,9 @@ export async function createWhatsAppSocket(
               await retireSocket(next);
               socket = null;
               console.error("WhatsApp account could not be claimed", error);
+              deps.onLinkRejected?.(
+                error instanceof Error ? error.message : String(error)
+              );
             }
           }
         }

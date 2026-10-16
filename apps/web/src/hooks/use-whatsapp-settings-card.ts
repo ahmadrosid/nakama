@@ -47,6 +47,7 @@ function resolveWhatsAppStatusLine(
 function resolveWhatsAppLinkingState({
   configured,
   connected,
+  linkError,
   paired,
   pairingCode,
   profileId,
@@ -57,6 +58,7 @@ function resolveWhatsAppLinkingState({
 }: {
   configured: boolean;
   connected: boolean;
+  linkError: string | null;
   paired: boolean;
   pairingCode: string | null;
   profileId: string;
@@ -65,7 +67,7 @@ function resolveWhatsAppLinkingState({
   running: boolean;
   settingsProfileId?: string;
 }) {
-  const useQrLinking = !pairingCode;
+  const useQrLinking = !(pairingCode || linkError);
   const showQr = configured && running && Boolean(qrCode) && useQrLinking;
 
   const awaitingQr =
@@ -180,6 +182,8 @@ export function useWhatsAppSettingsCard({
   const running = worker?.running === true;
   const connected = worker?.connected === true;
   const qrCode = worker?.qrCode ?? null;
+  const linkError = worker?.linkError ?? null;
+  const shownError = formError ?? linkError;
   const paired = Boolean(worker?.paired || settings?.pairedJid);
   const pairingCode = settings?.pairingCode ?? null;
   const copied = copiedCode !== null && copiedCode === pairingCode;
@@ -224,6 +228,7 @@ export function useWhatsAppSettingsCard({
   const linking = resolveWhatsAppLinkingState({
     configured,
     connected,
+    linkError,
     paired,
     pairingCode,
     profileId,
@@ -378,7 +383,7 @@ export function useWhatsAppSettingsCard({
     configured,
     connected,
     copied,
-    formError,
+    formError: shownError,
     isLoading,
     linkedNumber: settings?.phoneNumberMasked ?? null,
     linkingAfterScan: linking.linkingAfterScan,
@@ -410,7 +415,7 @@ export function useWhatsAppSettingsCard({
     savePending: saveMutation.isPending || startWorkerMutation.isPending,
     showQr: linking.showQr,
     showReconnect: linking.showReconnect,
-    statusLine: resolveWhatsAppStatusLine(hint, formError, loadError),
+    statusLine: resolveWhatsAppStatusLine(hint, shownError, loadError),
     worker,
   };
 }

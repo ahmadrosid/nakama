@@ -15,6 +15,7 @@ import {
 
 export interface WhatsAppWorkerHeartbeat extends WorkerHeartbeatBase {
   connected?: boolean;
+  linkError?: string;
 }
 
 const QR_CODE_FILENAME = "worker-qr.txt";
@@ -26,7 +27,10 @@ export function createWhatsAppWorkerHeartbeat(
     getDir: () => getWhatsAppConfigDir(orgId),
     parse: (value, base) => {
       const parsed = z
-        .object({ connected: z.boolean().optional() })
+        .object({
+          connected: z.boolean().optional(),
+          linkError: z.string().optional(),
+        })
         .safeParse(value);
 
       return parsed.success ? { ...base, ...parsed.data } : null;
@@ -93,5 +97,14 @@ export async function getWhatsAppWorkerStatus(
   const qrCode = await readWhatsAppQrCode(orgId);
   const connected = heartbeat?.connected === true;
 
-  return resolveWhatsAppWorkerStatus(settings, running, qrCode, connected);
+  const status = resolveWhatsAppWorkerStatus(
+    settings,
+    running,
+    qrCode,
+    connected
+  );
+
+  return running && heartbeat?.linkError
+    ? { ...status, linkError: heartbeat.linkError }
+    : status;
 }

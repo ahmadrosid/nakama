@@ -48,6 +48,8 @@ let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
 let bridgeConnected = false;
 
+let linkError: string | undefined;
+
 const orgId = channelOwnerFromEnv();
 
 const heartbeat = createWhatsAppWorkerHeartbeat(orgId);
@@ -55,6 +57,7 @@ const heartbeat = createWhatsAppWorkerHeartbeat(orgId);
 function persistWorkerHeartbeat(): void {
   void heartbeat.write({
     connected: bridgeConnected,
+    linkError,
     pid: process.pid,
     updatedAt: new Date().toISOString(),
   });
@@ -154,6 +157,7 @@ try {
   const socket = await createWhatsAppSocket({
     onConnected: (me) => {
       bridgeConnected = true;
+      linkError = undefined;
       persistWorkerHeartbeat();
       log("info", "worker.connected", { worker: "whatsapp" });
       void clearWhatsAppQrCode(orgId);
@@ -168,6 +172,13 @@ try {
     onDisconnected: () => {
       bridgeConnected = false;
       persistWorkerHeartbeat();
+      // A closed socket's QR code can no longer be scanned.
+      void clearWhatsAppQrCode(orgId);
+    },
+    onLinkRejected: (message) => {
+      linkError = message;
+      persistWorkerHeartbeat();
+      void clearWhatsAppQrCode(orgId);
     },
     onMessage: handleMessage,
     onQr: (qr) => {
@@ -208,6 +219,7 @@ try {
 
   await heartbeat.write({
     connected: bridgeConnected,
+    linkError,
     pid: process.pid,
     updatedAt: new Date().toISOString(),
   });

@@ -14,6 +14,10 @@ import {
   saveWhatsAppConfig,
   syncWhatsAppOwnerPairing,
 } from "./whatsapp-config";
+import {
+  createWhatsAppWorkerHeartbeat,
+  getWhatsAppWorkerStatus,
+} from "./whatsapp-worker";
 
 describe("organization isolation", () => {
   test("isolates settings and reconnects between organizations", async () => {
@@ -41,6 +45,33 @@ describe("organization isolation", () => {
       expect((await loadWhatsAppConfigFile("org_b"))?.pairedJid).toBe(
         "628222222222@s.whatsapp.net"
       );
+    });
+  });
+});
+
+describe("getWhatsAppWorkerStatus", () => {
+  test("reports a rejected link only while the worker runs", async () => {
+    await withTempHomedir("nakama-wa-link-error-", async () => {
+      await saveWhatsAppConfig({ profileId: "finance" }, "org_a");
+      const heartbeat = createWhatsAppWorkerHeartbeat("org_a");
+
+      await heartbeat.write({
+        connected: false,
+        linkError: "in use",
+        pid: process.pid,
+        updatedAt: new Date().toISOString(),
+      });
+      expect((await getWhatsAppWorkerStatus("org_a")).linkError).toBe("in use");
+
+      await heartbeat.write({
+        connected: false,
+        linkError: "in use",
+        pid: process.pid,
+        updatedAt: new Date(0).toISOString(),
+      });
+      expect(
+        (await getWhatsAppWorkerStatus("org_a")).linkError
+      ).toBeUndefined();
     });
   });
 });
