@@ -3,6 +3,7 @@ import {
   type MeetAction,
   type MeetActionInput,
   type MeetActionResults,
+  type MeetImportProgress,
   type Meeting,
   type MeetOverview as Overview,
   type TranscriptSegment,
@@ -30,6 +31,7 @@ import {
   Search01Icon,
   Settings01Icon,
   StopIcon,
+  Tick02Icon,
   Upload01Icon,
   Video01Icon,
 } from "hugeicons-react";
@@ -41,7 +43,8 @@ import { client, formatError } from "@/lib/client";
 
 type MeetCall = <Action extends MeetAction>(
   action: Action,
-  input?: MeetActionInput
+  input?: MeetActionInput,
+  signal?: AbortSignal
 ) => Promise<MeetActionResults[Action]>;
 
 function meetingStatus(meeting: Meeting) {
@@ -612,34 +615,102 @@ function recordingLabel(recording: {
   size: number;
 }) {
   const match =
-    /^(.*?)\s*\((\d{4}-\d{2}-\d{2}[^)]*)\)(?:\s*[-–]\s*Recording)?(?:\.\w+)?$/i.exec(
+    /^(.*?)\s*\((\d{4}-\d{2}-\d{2})[ T]?(\d{2}:\d{2})?[^)]*\)(?:\s*[-–]\s*Recording)?(?:\.\w+)?$/i.exec(
       recording.name
     );
 
   const base = match?.[1]?.trim() || recording.name;
   const code = /^[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(base);
-  const timestamp = Date.parse(recording.date ?? "");
 
-  const when = Number.isNaN(timestamp)
-    ? match?.[2]
-    : new Date(timestamp).toLocaleString(undefined, {
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        month: "short",
-        weekday: "short",
-      });
+  const timestamp = Date.parse(
+    recording.date || (match ? `${match[2]}T${match[3] ?? "00:00"}` : "")
+  );
+
+  const date = Number.isNaN(timestamp) ? null : new Date(timestamp);
 
   return {
+    day: date ? String(date.getDate()) : "",
     details: [
+      date?.toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+      }),
       code ? base : null,
-      when,
       `${Math.ceil(recording.size / 1024 / 1024)} MB`,
     ]
       .filter(Boolean)
       .join(" · "),
+    month: date
+      ? date.toLocaleDateString(undefined, { month: "short" }).toUpperCase()
+      : "",
     title: code ? "Instant meeting" : base,
   };
+}
+
+function RecordingTile({
+  recording,
+}: {
+  recording: MeetActionResults["recordings"]["recordings"][number];
+}) {
+  const label = recordingLabel(recording);
+
+  return (
+    <>
+      <span aria-hidden="true" className="meet-date-tile">
+        {label.month ? (
+          <>
+            <span>{label.month}</span>
+            <strong>{label.day}</strong>
+          </>
+        ) : (
+          <Video01Icon size={18} />
+        )}
+      </span>
+      <span className="meet-meta">
+        <strong>{label.title}</strong>
+        <span className="meet-status">{label.details}</span>
+      </span>
+    </>
+  );
+}
+
+const IMPORT_STEPS = [
+  { label: "Download from Drive", step: "download" },
+  { label: "Extract audio", step: "extract" },
+  { label: "Transcribe with Whisper", step: "transcribe" },
+  { label: "Save to meeting history", step: "save" },
+] as const;
+
+function ImportSteps({ progress }: { progress: MeetImportProgress | null }) {
+  const current = IMPORT_STEPS.findIndex(
+    ({ step }) => step === (progress?.step ?? "download")
+  );
+
+  return (
+    <ol aria-label="Import steps" className="meet-import-steps">
+      {IMPORT_STEPS.map(({ label, step }, index) => {
+        const state =
+          index < current ? "done" : index === current ? "active" : "pending";
+
+        return (
+          <li data-state={state} key={step}>
+            <span aria-hidden="true" className="meet-step-mark">
+              {state === "done" && <Tick02Icon size={14} />}
+            </span>
+            <span>{label}</span>
+            {state === "active" &&
+              step === "transcribe" &&
+              progress?.parts &&
+              progress.parts > 1 && (
+                <span className="meet-status">
+                  Part {progress.part} of {progress.parts}
+                </span>
+              )}
+          </li>
+        );
+      })}
+    </ol>
+  );
 }
 
 function readUploadContent(file: File) {
@@ -784,6 +855,13 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
 
   const [error, setError] = React.useState("");
   const [importing, setImporting] = React.useState(false);
+
+  const [progress, setProgress] = React.useState<MeetImportProgress | null>(
+    null
+  );
+
+  const importAbort = React.useRef<AbortController | null>(null);
+
   const [selected, setSelected] = React.useState("");
   const [connecting, setConnecting] = React.useState("");
   const { user } = useAuth();
@@ -808,19 +886,43 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
     };
   }, [call]);
 
+  React.useEffect(() => {
+    if (!importing) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      call("import-progress").then(
+        (value) => setProgress(value.progress),
+        () => undefined
+      );
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [call, importing]);
+
+  React.useEffect(() => () => importAbort.current?.abort(), []);
+
   async function importRecording(recording: Recording) {
+    const abort = new AbortController();
+    importAbort.current = abort;
     setImporting(true);
+    setProgress(null);
     setError("");
 
     try {
-      await call("import-recording", {
-        fileId: recording.fileId,
-        messageId: recording.messageId,
-      });
+      await call(
+        "import-recording",
+        { fileId: recording.fileId, messageId: recording.messageId },
+        abort.signal
+      );
       close();
     } catch (reason) {
-      setError(formatError(reason));
+      if (!abort.signal.aborted) {
+        setError(formatError(reason));
+      }
     } finally {
+      importAbort.current = null;
       setImporting(false);
     }
   }
@@ -881,7 +983,9 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
     >
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Import recording</DialogTitle>
+          <DialogTitle>
+            {importing ? "Importing recording" : "Import recording"}
+          </DialogTitle>
         </DialogHeader>
         {error && <p role="alert">{error}</p>}
         {!(result || error) && <p role="status">Finding recordings…</p>}
@@ -933,9 +1037,18 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
             ))}
           </ul>
         )}
+        {importing && picked && (
+          <div className="meet-import">
+            <div className="meet-import-recording">
+              <RecordingTile recording={picked} />
+            </div>
+            <ImportSteps progress={progress} />
+          </div>
+        )}
         {ready &&
+          !importing &&
           (recordings.length ? (
-            <fieldset className="meet-recordings" disabled={importing}>
+            <fieldset className="meet-recordings">
               <legend className="sr-only">Recording</legend>
               {recordings.map((recording) => (
                 <label key={recordingKey(recording)}>
@@ -945,14 +1058,9 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
                     onChange={() => setSelected(recordingKey(recording))}
                     type="radio"
                   />
-                  <span aria-hidden="true" className="meet-tile-icon">
-                    <Video01Icon size={18} />
-                  </span>
-                  <span className="meet-meta">
-                    <strong>{recordingLabel(recording).title}</strong>
-                    <span className="meet-status">
-                      {recordingLabel(recording).details}
-                    </span>
+                  <RecordingTile recording={recording} />
+                  <span aria-hidden="true" className="meet-check">
+                    <Tick02Icon size={14} />
                   </span>
                 </label>
               ))}
@@ -960,25 +1068,26 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
           ) : (
             <p>No Meet recording emails found.</p>
           ))}
-        {importing && (
-          <p role="status">Transcribing with Whisper… keep this page open.</p>
-        )}
-        <DialogFooter>
+        <DialogFooter className="meet-import-footer">
+          {importing && (
+            <p className="meet-status" role="status">
+              Keep this page open.
+            </p>
+          )}
           <Button
-            disabled={importing}
-            onClick={close}
+            onClick={() => (importing ? importAbort.current?.abort() : close())}
             type="button"
             variant="outline"
           >
-            Cancel
+            {importing ? "Cancel import" : "Cancel"}
           </Button>
-          {ready && recordings.length > 0 && (
+          {ready && recordings.length > 0 && !importing && (
             <Button
-              disabled={importing || !picked}
+              disabled={!picked}
               onClick={() => picked && void importRecording(picked)}
               type="button"
             >
-              {importing ? "Importing…" : "Import"}
+              Import
             </Button>
           )}
         </DialogFooter>
@@ -1258,7 +1367,8 @@ function OrganizationMeetPage({ orgId }: { orgId: string }) {
     setScope({
       call: async <Action extends MeetAction>(
         action: Action,
-        input?: MeetActionInput
+        input?: MeetActionInput,
+        signal?: AbortSignal
       ): Promise<MeetActionResults[Action]> => {
         abort.signal.throwIfAborted();
 
@@ -1266,7 +1376,7 @@ function OrganizationMeetPage({ orgId }: { orgId: string }) {
           action,
           input,
           orgId,
-          abort.signal
+          signal ? AbortSignal.any([abort.signal, signal]) : abort.signal
         );
 
         abort.signal.throwIfAborted();

@@ -1551,6 +1551,120 @@
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
+.meet-date-tile {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 1px;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  background: var(--muted);
+  border-radius: 12px;
+}
+.meet-date-tile span {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  letter-spacing: 0.06em;
+}
+.meet-date-tile strong {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+}
+.meet-recordings label:has(:checked) .meet-date-tile span {
+  color: var(--primary);
+}
+.meet-check {
+  display: inline-flex;
+  visibility: hidden;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--primary-foreground);
+  background: var(--primary);
+  border-radius: 999px;
+}
+.meet-recordings label:has(:checked) .meet-check {
+  visibility: visible;
+}
+.meet-import {
+  display: grid;
+  gap: 16px;
+}
+.meet-import-recording {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  min-width: 0;
+  padding: 12px;
+  background: color-mix(in oklab, var(--muted) 60%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.meet-import-steps {
+  display: grid;
+  gap: 4px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.meet-import-steps li {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 36px;
+}
+.meet-import-steps li[data-state="pending"] {
+  color: var(--muted-foreground);
+}
+.meet-import-steps li[data-state="active"] {
+  font-weight: 500;
+}
+.meet-import-steps li .meet-status {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.meet-step-mark {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+}
+li[data-state="done"] .meet-step-mark {
+  color: #fff;
+  background: #16a34a;
+  border-color: #16a34a;
+}
+li[data-state="active"] .meet-step-mark {
+  border: 2.5px solid var(--border);
+  border-top-color: var(--primary);
+  animation: meet-spin 0.9s linear infinite;
+}
+@keyframes meet-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  li[data-state="active"] .meet-step-mark {
+    border-color: var(--primary);
+    animation: none;
+  }
+}
+.meet-import-footer > p {
+  align-self: center;
+  margin: 0 auto 0 0;
+}
 .meet-recordings input {
   position: absolute;
   pointer-events: none;

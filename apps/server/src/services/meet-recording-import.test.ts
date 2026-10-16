@@ -81,14 +81,18 @@ test("recorded video becomes a Whisper transcript and temporary media is removed
     // oxlint-disable-next-line anti-slop/no-known-value-widening -- The explicit type names the shape this helper exposes.
     file = { url: "http://127.0.0.1/private" };
     await expect(importRecording()).rejects.toThrow();
-
     // oxlint-disable-next-line anti-slop/no-known-value-widening -- The explicit type names the shape this helper exposes.
-    file = { url: "https://storage.googleapis.com/recording.mp4" };
+    file = { url: "https://10.0.0.8/private" };
+    await expect(importRecording()).rejects.toThrow();
+
+    // Presigned storage can sit on any public host, not only a fixed list.
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- The explicit type names the shape this helper exposes.
+    file = { url: "https://142.250.1.1/recording.mp4" };
     const transcribe = globalThis.fetch;
     // SAFETY: The surrounding code checked this value before the assertion.
     globalThis.fetch = (async (url, options) => {
-      if (String(url) === "https://storage.googleapis.com/recording.mp4") {
-        expect(options?.redirect).toBe("error");
+      if (String(url) === "https://142.250.1.1/recording.mp4") {
+        expect(options?.redirect).toBe("manual");
 
         return new Response(await readFile(video));
       }

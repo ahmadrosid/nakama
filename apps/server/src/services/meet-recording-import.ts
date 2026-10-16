@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
-import { transcribeAudio } from "@nakama/core";
+import { fetchPublicHttps, transcribeAudio } from "@nakama/core";
+import type { MeetImportProgress } from "@nakama/core/google-meet";
 import type { ComposioService } from "./composio-service";
 
 const exec = promisify(execFile);
@@ -84,28 +85,6 @@ function fileSource(value: unknown): { url?: string; base64?: string } {
   };
 }
 
-function safeDownloadUrl(raw: string): URL {
-  const url = new URL(raw);
-  const hostname = url.hostname.toLowerCase();
-
-  if (
-    url.protocol !== "https:" ||
-    url.port ||
-    url.username ||
-    url.password ||
-    !(
-      hostname === "storage.googleapis.com" ||
-      hostname.endsWith(".amazonaws.com") ||
-      hostname.endsWith(".composio.dev") ||
-      hostname.endsWith(".composio.ai")
-    )
-  ) {
-    throw new Error("Unsupported recording download location.");
-  }
-
-  return url;
-}
-
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Composio tool payloads are untyped JSON that this function inspects structurally.
 async function saveDownload(value: unknown, path: string, signal: AbortSignal) {
   const source = fileSource(value);
@@ -132,8 +111,7 @@ async function saveDownload(value: unknown, path: string, signal: AbortSignal) {
     throw new Error("Composio returned no recording data.");
   }
 
-  const url = safeDownloadUrl(source.url);
-  const response = await fetch(url, { redirect: "error", signal });
+  const response = await fetchPublicHttps(source.url, signal);
   const { body } = response;
 
   if (!(response.ok && body)) {
@@ -177,8 +155,11 @@ export async function importMeetRecording(
     messageId: string;
     fileId: string;
   },
-  signal: AbortSignal
+  signal: AbortSignal,
+  onProgress: (progress: MeetImportProgress) => void = () => undefined
 ): Promise<{ filename: string; text: string }> {
+  onProgress({ step: "download" });
+
   const { recording, file } = await composio.downloadMeetRecording(
     input.orgId,
     input.userId,
@@ -193,6 +174,7 @@ export async function importMeetRecording(
   try {
     const video = join(directory, "recording");
     await saveDownload(file, video, signal);
+    onProgress({ step: "extract" });
 
     const { stdout } = await exec(
       "ffprobe",
@@ -252,8 +234,9 @@ export async function importMeetRecording(
 
     const transcript: string[] = [];
 
-    for (const part of parts) {
+    for (const [index, part] of parts.entries()) {
       signal.throwIfAborted();
+      onProgress({ part: index + 1, parts: parts.length, step: "transcribe" });
       const path = join(directory, part);
       const { size } = await stat(path);
 

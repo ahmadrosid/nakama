@@ -2,6 +2,7 @@ import { expect, mock, spyOn, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { MeetImportProgress } from "@nakama/core/google-meet";
 import * as recordingImport from "../meet-recording-import";
 import type { MeetExecutionContext } from "./actions";
 import { openaiProviderKey, run } from "./actions";
@@ -309,6 +310,73 @@ test("recording import saves only a complete Whisper result in the member's hist
         { ...context, actor: { id: "viewer", role: "viewer" as "member" } }
       )
     ).rejects.toThrow();
+  } finally {
+    importer.mockRestore();
+    rmSync(dir, { force: true, recursive: true });
+  }
+});
+
+test("recording import progress is readable while it runs and cleared after", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "meet-import-progress-"));
+  let release!: () => void;
+  let started!: () => void;
+
+  const running = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+
+  const importer = spyOn(
+    recordingImport,
+    "importMeetRecording"
+  ).mockImplementation(async (_composio, _input, _signal, onProgress) => {
+    onProgress?.({ part: 1, parts: 2, step: "transcribe" });
+    started();
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    return { filename: "Sprint.mp4", text: "Decision." };
+  });
+
+  let saved: MeetImportProgress | null = null;
+
+  const context: MeetExecutionContext = {
+    actionKey: "import-progress",
+    actor: { id: "member", role: "member" },
+    composio: {
+      downloadMeetRecording: mock(async () => {
+        throw new Error("Unexpected download");
+      }),
+      listMeetRecordings: mock(async () => {
+        throw new Error("Unexpected list");
+      }),
+    },
+    dataDir: dir,
+    importProgress: {
+      get: () => saved,
+      set: (progress) => {
+        saved = progress;
+      },
+    },
+    openaiKey: () => "test-key",
+    orgId: "org",
+  };
+
+  try {
+    expect(await run({}, context)).toEqual({ progress: null });
+
+    const imported = run(
+      { fileId: "drive_file_123", messageId: "msg_1" },
+      { ...context, actionKey: "import-recording" }
+    );
+
+    await running;
+    expect(await run({}, context)).toEqual({
+      progress: { part: 1, parts: 2, step: "transcribe" },
+    });
+    release();
+    await imported;
+    expect(await run({}, context)).toEqual({ progress: null });
   } finally {
     importer.mockRestore();
     rmSync(dir, { force: true, recursive: true });

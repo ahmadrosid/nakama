@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { UserConfig } from "@nakama/core";
+import type { MeetImportProgress } from "@nakama/core/google-meet";
 import { z } from "zod";
 import type { ComposioService } from "../composio-service";
 import { importMeetRecording } from "../meet-recording-import";
@@ -36,6 +37,7 @@ export const meetingActionSchemas = {
     })
     .strict(),
   delete: z.object({ meetingId: z.string() }).strict(),
+  "import-progress": z.object({}).strict(),
   "import-recording": z
     .object({
       fileId: z.string().regex(/^[A-Za-z0-9_-]{10,128}$/),
@@ -76,6 +78,10 @@ export interface MeetExecutionContext {
   >;
   createCapture?(meeting: Meeting): { token: string; url: string };
   dataDir: string;
+  importProgress?: {
+    get(): MeetImportProgress | null;
+    set(progress: MeetImportProgress | null): void;
+  };
   openaiKey?(): string | null;
   orgId: string;
   profileId?: string;
@@ -112,6 +118,7 @@ export async function run(
     .enum([
       "configure",
       "delete",
+      "import-progress",
       "import-recording",
       "leave",
       "meetings",
@@ -279,6 +286,10 @@ export async function run(
       );
     }
 
+    if (action === "import-progress") {
+      return { progress: context.importProgress?.get() ?? null };
+    }
+
     if (action === "recordings" || action === "import-recording") {
       if (!context.composio) {
         throw new Error("Recording import is unavailable");
@@ -295,32 +306,41 @@ export async function run(
         throw new Error(OPENAI_PROVIDER_REQUIRED_MESSAGE);
       }
 
-      const result = await importMeetRecording(
-        context.composio,
-        {
-          apiKey: openaiKey,
-          // SAFETY: The surrounding code checked this value before the assertion.
-          fileId: input.fileId as string,
-          // SAFETY: The surrounding code checked this value before the assertion.
-          messageId: input.messageId as string,
-          orgId: context.orgId,
-          userId: context.actor.id,
-        },
-        context.signal ?? AbortSignal.timeout(20 * 60_000)
-      );
+      const progress = context.importProgress;
 
-      context.signal?.throwIfAborted();
+      try {
+        const result = await importMeetRecording(
+          context.composio,
+          {
+            apiKey: openaiKey,
+            // SAFETY: The surrounding code checked this value before the assertion.
+            fileId: input.fileId as string,
+            // SAFETY: The surrounding code checked this value before the assertion.
+            messageId: input.messageId as string,
+            orgId: context.orgId,
+            userId: context.actor.id,
+          },
+          context.signal ?? AbortSignal.timeout(20 * 60_000),
+          (step) => progress?.set(step)
+        );
 
-      if (!result.text.trim()) {
-        throw new Error("Recording transcription returned no speech");
+        context.signal?.throwIfAborted();
+
+        if (!result.text.trim()) {
+          throw new Error("Recording transcription returned no speech");
+        }
+
+        progress?.set({ step: "save" });
+
+        return store.importFile(
+          result.filename,
+          result.text,
+          context.actor.id,
+          context.profileId
+        );
+      } finally {
+        progress?.set(null);
       }
-
-      return store.importFile(
-        result.filename,
-        result.text,
-        context.actor.id,
-        context.profileId
-      );
     }
 
     const meeting = store.get(String(input.meetingId ?? ""));

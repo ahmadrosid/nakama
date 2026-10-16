@@ -37,6 +37,7 @@ export interface TranscriptSegment {
 export type MeetAction =
   | "recordings"
   | "import-recording"
+  | "import-progress"
   | "upload"
   | "start-capture"
   | "meetings"
@@ -56,6 +57,12 @@ export interface MeetActionInput {
   messageId?: string;
 }
 
+export interface MeetImportProgress {
+  part?: number;
+  parts?: number;
+  step: "download" | "extract" | "transcribe" | "save";
+}
+
 export interface MeetOverview {
   canConfigure: boolean;
   captureProtocol: number;
@@ -67,6 +74,7 @@ export interface MeetOverview {
 export interface MeetActionResults {
   configure: { configured: boolean; enabled: boolean };
   delete: { deleted: boolean };
+  "import-progress": { progress: MeetImportProgress | null };
   "import-recording": Meeting;
   leave: Meeting & { stopRequested: number };
   meetings: MeetOverview;

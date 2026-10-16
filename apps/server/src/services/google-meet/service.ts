@@ -10,6 +10,7 @@ import {
 import type {
   MeetAction,
   MeetActionResults,
+  MeetImportProgress,
   Meeting,
 } from "@nakama/core/google-meet";
 import type { DatabaseAdapter } from "@nakama/db";
@@ -68,6 +69,8 @@ export class GoogleMeetService {
   private readonly sessions = new Map<string, Capture>();
   private readonly sockets = new Set<ServerWebSocket<SocketData>>();
   private readonly activeActions = new Map<string, number>();
+  // Latest step of each member's running recording import, keyed by org and member.
+  private readonly importProgress = new Map<string, MeetImportProgress>();
   private readonly tasks = new Map<Promise<unknown>, string>();
   private readonly blockedOrganizations = new Set<string>();
   private abort = new AbortController();
@@ -304,6 +307,16 @@ export class GoogleMeetService {
         composio: this.composio,
         createCapture: (meeting) => this.createCapture(orgId, meeting),
         dataDir: this.directory(orgId),
+        importProgress: {
+          get: () => this.importProgress.get(`${orgId}:${actor.id}`) ?? null,
+          set: (progress) => {
+            if (progress) {
+              this.importProgress.set(`${orgId}:${actor.id}`, progress);
+            } else {
+              this.importProgress.delete(`${orgId}:${actor.id}`);
+            }
+          },
+        },
         openaiKey: this.openaiKey,
         orgId,
         profileId,
