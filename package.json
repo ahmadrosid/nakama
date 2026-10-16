@@ -53,7 +53,7 @@
     "jscpd": "4.3.0",
     "knip": "6.38.0",
     "oxlint": "1.87.0",
-    "react-doctor": "0.9.14",
+    "react-doctor": "0.9.18",
     "ultracite": "7.11.0"
   },
   "patchedDependencies": {
