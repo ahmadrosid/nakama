@@ -135,7 +135,7 @@ Profile workspace / soul dir: `~/.nakama/orgs/{orgId}/profiles/{profileId}/` (`g
 | Tool / skill | Notes |
 |---|---|
 | `update-profile-memory` / `archive-profile-memory` | MEMORY.md ↔ memory-archive/ |
-| `save-artifact` | Persist under `artifacts/` |
+| `save_artifact` / `artifact-design` | Persist under `artifacts/`; skill holds design rules |
 | `knowledge_base_search` / `web_search` / `email` | KB, web, mailbox |
 | `search_files` / `ripgrep` | File/content search |
 | `bash` | Profile workspace shell — assign per profile; Super Bot by default |

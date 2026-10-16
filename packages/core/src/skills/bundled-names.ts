@@ -4,7 +4,7 @@ export const DEFAULT_BUNDLED_SKILL_NAMES = [
   "skill-installer",
   "update-profile-memory",
   "archive-profile-memory",
-  "save-artifact",
+  "artifact-design",
   "composio-integrations",
 ] as const;
 

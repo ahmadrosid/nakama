@@ -233,9 +233,14 @@ export function buildChatSystemPrompt(
 
     if (tools.some((tool) => tool.name === saveTool)) {
       sections.push(
-        "Skills are workflow instructions, not callable tools — never invoke the save-artifact skill (or other skills) as a tool.",
-        `When the user wants output kept or mentions artifacts, use ${saveTool} to save under artifacts/ (follow the save-artifact skill when active). Durable deliverables such as reports, slide decks, and exports belong under artifacts/, not the profile workspace root. Save only the deliverable; Nakama derives the file type, size, and timestamp automatically.`,
-        "Do not use artifacts/ for soul files or MEMORY.md."
+        "Skills are workflow instructions, not callable tools — never invoke the artifact-design skill (or other skills) as a tool.",
+        `When the user wants output kept or mentions artifacts, use ${saveTool} to save under artifacts/ (follow the artifact-design skill when active for layout and styling). Durable deliverables such as reports, slide decks, and exports belong under artifacts/, not the profile workspace root. Save only the deliverable; Nakama derives the file type, size, and timestamp automatically, so do not create metadata files.`,
+        "Use a short filename such as artifacts/project-atlas.html; use subdirectories to group related files. Existing names receive a date suffix automatically; use the returned path.",
+        `${saveTool} writes UTF-8 text. Use a suitable tool or skill for binary formats; changing an extension does not create a PDF or image.`,
+        "When the user requests an edit to an existing artifact, read it and use edit_file to update it. Preserve unrelated content.",
+        "Saving creates an artifact, not a public publication. Share or publish only when the user requests it and a supported action is available.",
+        'Web chat shows saved artifacts as attachment chips with previews, so do not tell the user to open the file in a browser. In your reply, name the artifact in plain text, such as "the Q3 team sync deck"; do not write Markdown links or link placeholders for it. State whether a browser preview ran.',
+        "Do not use artifacts/ for soul files, MEMORY.md, or knowledge-base uploads."
       );
     }
 

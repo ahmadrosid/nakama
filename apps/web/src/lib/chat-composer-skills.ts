@@ -46,7 +46,7 @@ const HIDDEN_SLASH_SKILL_NAMES = new Set<string>([
   "manage-skills",
   "update-profile-memory",
   "archive-profile-memory",
-  "save-artifact",
+  "artifact-design",
 ]);
 
 /** Composer slash tokens that are not skill names (must not become `/skill …`). */

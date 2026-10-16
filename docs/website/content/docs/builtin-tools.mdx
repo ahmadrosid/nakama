@@ -72,7 +72,7 @@ Good starting patterns:
 - **Simple chat bot**: no extra tools
 - **Research bot**: `web_search`, `web_fetch`, `knowledge_base_search`, optionally `sub_agent` for parallel deep dives
 - **Knowledge bot**: `knowledge_base_search`, file tools, bundled system skills
-- **Ops bot**: file tools, bundled `save-artifact` skill, `email`
+- **Ops bot**: file tools, bundled `artifact-design` skill, `email`
 - **Delegation bot**: `sub_agent` for in-process research/review/planning subtasks
 - **Coding agent (Super Bot or custom)**: `bash` + `coding-agent` skill
 
@@ -91,7 +91,7 @@ Active `MEMORY.md` has a **4096-byte** soft limit. Default and super-bot profile
 
 Artifacts are files your agent creates and saves for you: reports, summaries, generated text, Word documents, and other outputs you can preview or download later from **Browse Files → Artifacts** or from web chat.
 
-Agents save text artifacts with `save_artifact`, guided by the `save-artifact` bundled skill. Word documents use `write_docx`, and images use `generate_image`. Nakama derives the file type, size, and timestamp automatically.
+Agents save text artifacts with `save_artifact`. The bundled `artifact-design` skill sets how HTML pages, dashboards, and decks look. Word documents use `write_docx`, and images use `generate_image`. Nakama derives the file type, size, and timestamp automatically.
 
 `save_artifact` and `generate_image` also record which user made the file. **Browse Files → Artifacts** shows this in the **Created by** column. Files saved before this, or written by `bash` or a coding agent, show no owner.
 
@@ -585,7 +585,7 @@ File tools (`read_file`, `write_file`, `edit_file`, `delete_file`) are scoped to
 - **Profile workspace:** `~/.nakama/orgs/{orgId}/profiles/{profileId}/` (soul files, knowledge base, `artifacts/`, etc.)
 - **Custom tools directory:** `~/.nakama/tools/` (follows `NAKAMA_CONFIG_DIR` if set)
 
-Agents save artifact files under `artifacts/` with `save_artifact`, guided by the `save-artifact` bundled skill.
+Agents save artifact files under `artifacts/` with `save_artifact`. The bundled `artifact-design` skill sets their layout and styling.
 
 Path guards enforce:
 
