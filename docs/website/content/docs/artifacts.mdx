@@ -17,7 +17,7 @@ Open **Chat → Browse Files**. The **Files** page is the primary surface for fi
 
 ![The Browse Files page, with a markdown artifact open in the preview panel](/screenshots/artifact-markdown-toc.png)
 
-The page follows your active chat profile. If that profile isn't available, it selects the organization default. The **Files** page is restricted to platform administrators; other roles can't browse or manage workspace files, artifacts, or knowledge documents from this surface.
+The page follows your active chat profile. If that profile isn't available, it selects the organization default. Platform administrators see all three views. Org members and org admins see only **Artifacts**, and only the files they made with the agent; they can preview, download, share, and delete those files. Members can't browse workspace files or knowledge documents.
 
 **All files** and **Artifacts** show one folder at a time. Artifact search searches all artifacts and shows full paths. The dashboard initially renders 30 folders and files, then **Show more** reveals another 30. Its API request returns the full matching metadata list rather than sending `limit` or `offset`; an API caller that supplies `limit` must use 1–100 with a non-negative `offset`.
 
@@ -25,7 +25,7 @@ The **Knowledge** view accepts TXT, Markdown, CSV, and PDF files up to 20 MB eac
 
 ![The Browse Files page grouping nested coding-agent-runs logs into a folder](/screenshots/files-artifacts-after-folders.png)
 
-Each file shows its inferred type, size, and last modified time. Nakama infers type from the extension. Files with unknown extensions are checked for valid UTF-8 when previewed, so a `Dockerfile` or `notes.abc` can preview as text instead of being treated as binary.
+Each file shows its inferred type, size, last modified time, and, in the list view, who created it. **Created by** is empty for files saved before Nakama recorded owners and for files written by `bash` or a coding agent. Nakama infers type from the extension. Files with unknown extensions are checked for valid UTF-8 when previewed, so a `Dockerfile` or `notes.abc` can preview as text instead of being treated as binary.
 
 ## Preview files
 

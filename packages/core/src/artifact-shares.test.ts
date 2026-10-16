@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import crypto from "node:crypto";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { MAX_HTML_ARTIFACT_BYTES } from "./artifact-mime";
 import {
   buildArtifactSharePath,
   deleteArtifactShareSnapshot,
@@ -52,5 +53,39 @@ describe("artifact shares", () => {
     expect(storagePath.startsWith(getArtifactSharesDir(orgId))).toBe(true);
     expect(await readArtifactShareSnapshot(orgId, storagePath)).toEqual(bytes);
     await deleteArtifactShareSnapshot(orgId, storagePath);
+  });
+
+  test("rejects oversized HTML snapshots without replacing the saved copy", async () => {
+    process.env.NAKAMA_CONFIG_DIR = TEST_CONFIG_DIR;
+
+    const input = {
+      bytes: Buffer.alloc(MAX_HTML_ARTIFACT_BYTES, "x"),
+      filename: "page.bin",
+      mimeType: "text/html",
+      orgId: "org_test",
+      shareId: "share_html",
+    };
+
+    const storagePath = await writeArtifactShareSnapshot(input);
+    expect(
+      (
+        await readArtifactShareSnapshot(
+          input.orgId,
+          storagePath,
+          input.mimeType
+        )
+      ).byteLength
+    ).toBe(MAX_HTML_ARTIFACT_BYTES);
+    const oversized = Buffer.alloc(MAX_HTML_ARTIFACT_BYTES + 1, "x");
+    await expect(
+      writeArtifactShareSnapshot({ ...input, bytes: oversized })
+    ).rejects.toMatchObject({ status: 413 });
+    expect((await readFile(storagePath)).byteLength).toBe(
+      MAX_HTML_ARTIFACT_BYTES
+    );
+    await writeFile(storagePath, oversized);
+    await expect(
+      readArtifactShareSnapshot(input.orgId, storagePath, input.mimeType)
+    ).rejects.toMatchObject({ status: 413 });
   });
 });

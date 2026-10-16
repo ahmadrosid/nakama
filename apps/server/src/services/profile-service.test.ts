@@ -12,9 +12,11 @@ import os from "node:os";
 import path from "node:path";
 import { getProfileSoulDir, writeArtifactShareSnapshot } from "@nakama/core";
 import type { UpdateProfileRequest } from "@nakama/core/contract";
+import { BASH_TOOL_ID } from "@nakama/core/tools/protected";
 import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
+  ensureBashToolDefinition,
   ensureBuiltinToolDefinitions,
 } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
@@ -558,6 +560,46 @@ describe("profile service createProfile", () => {
     await expect(
       service.createProfile("org_second", { id: "support", name: "Support 2" })
     ).rejects.toThrow(/already taken/i);
+  });
+
+  test("create and clone refuse an id claimed after the taken check", async () => {
+    tempConfigDir = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-profile-claim-race-")
+    );
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+
+    const db = createInMemoryDatabaseAdapter();
+    const service = new ProfileService(db);
+    const source = await service.createProfile("org_second", { name: "Src" });
+
+    await db.createProfileIfAbsent({
+      createdAt: "2020-01-01T00:00:00.000Z",
+      id: "imported",
+      isSuper: false,
+      model: null,
+      name: "Imported",
+      orgId: "org_first",
+      systemPrompt: "first org prompt",
+    });
+
+    // The taken check runs before a concurrent import inserts its row.
+    const realGetProfile = db.getProfile.bind(db);
+    db.getProfile = async (id) =>
+      id === "imported" ? null : await realGetProfile(id);
+
+    await expect(
+      service.createProfile("org_second", { id: "imported", name: "Mine" })
+    ).rejects.toThrow(/already taken/i);
+
+    await expect(
+      service.cloneProfile("org_second", source.profile.id, { id: "imported" })
+    ).rejects.toThrow(/already taken/i);
+
+    expect(await realGetProfile("imported")).toMatchObject({
+      name: "Imported",
+      orgId: "org_first",
+      systemPrompt: "first org prompt",
+    });
   });
 
   test("resolves legacy slug ids via getProfile and getProfileForOrg", async () => {
@@ -1964,5 +2006,41 @@ describe("profile organization transfer", () => {
       raw.close(true);
       database.close();
     }
+  });
+});
+
+describe("profile service with bash turned off", () => {
+  const originalTenantBash = process.env.NAKAMA_TENANT_BASH;
+
+  afterEach(() => {
+    if (originalConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    }
+
+    if (originalTenantBash === undefined) {
+      delete process.env.NAKAMA_TENANT_BASH;
+    } else {
+      process.env.NAKAMA_TENANT_BASH = originalTenantBash;
+    }
+  });
+
+  test("refuses to assign bash to a profile", async () => {
+    process.env.NAKAMA_CONFIG_DIR = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-bash-off-")
+    );
+    process.env.NAKAMA_TENANT_BASH = "0";
+    const db = createInMemoryDatabaseAdapter();
+    await ensureBuiltinToolDefinitions(db);
+    await ensureBashToolDefinition(db);
+    const service = new ProfileService(db);
+    const { profile } = await service.createProfile(ORG_ID, { name: "Ops" });
+
+    await expect(
+      service.assignTool(ORG_ID, profile.id, { toolId: BASH_TOOL_ID })
+    ).rejects.toMatchObject({ status: 403 });
+
+    await rm(process.env.NAKAMA_CONFIG_DIR, { force: true, recursive: true });
   });
 });

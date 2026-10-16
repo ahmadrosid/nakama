@@ -16,6 +16,7 @@ import {
 } from "@nakama/core";
 import {
   type ChannelConfigScope,
+  type ChannelOwner,
   isChannelOwner,
 } from "@nakama/core/channel-config-shared";
 import { getSlackWorkerStatus } from "@nakama/core/slack-worker";
@@ -51,7 +52,10 @@ export class SystemStatusService {
    */
   async getStatus(
     orgId: ChannelConfigScope,
-    options: { includeUsageByActor?: boolean } = {}
+    options: {
+      includeUsageByActor?: boolean;
+      viewer?: { isPlatformAdmin: boolean; userId: string };
+    } = {}
   ): Promise<SystemStatusResponse> {
     const providerConfigured = this.agent.providerConfigured;
     const models = await this.agent.getModels();
@@ -128,8 +132,46 @@ export class SystemStatusService {
       server: await this.getServerStatus(),
       slackWorker: slackStatus,
       telegramWorker: telegramStatus,
-      whatsappWorker: whatsappStatus,
+      whatsappWorker: await this.nameWhatsAppLinkOwner(
+        whatsappStatus,
+        options.viewer
+      ),
     };
+  }
+
+  /**
+   * Orgs are tenants: name the agent that holds a rejected number only for a
+   * viewer who belongs to its org or runs the platform.
+   */
+  private async nameWhatsAppLinkOwner(
+    status: SystemStatusResponse["whatsappWorker"] & {
+      linkOwnerIds?: ChannelOwner;
+    },
+    viewer: { isPlatformAdmin: boolean; userId: string } | undefined
+  ): Promise<SystemStatusResponse["whatsappWorker"]> {
+    const { linkOwnerIds, ...rest } = status;
+    const db = this.databaseAdapter;
+
+    if (!(linkOwnerIds && viewer && db)) {
+      return rest;
+    }
+
+    const canSee =
+      viewer.isPlatformAdmin ||
+      (await db.getOrgMember(linkOwnerIds.orgId, viewer.userId)) !== null;
+
+    if (!canSee) {
+      return rest;
+    }
+
+    const [org, profile] = await Promise.all([
+      db.getOrganizationById(linkOwnerIds.orgId),
+      db.getProfileForOrg(linkOwnerIds.profileId, linkOwnerIds.orgId),
+    ]);
+
+    return org && profile
+      ? { ...rest, linkOwner: { agentName: profile.name, orgName: org.name } }
+      : rest;
   }
 
   private resolveWorkerStatus(

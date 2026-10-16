@@ -12,6 +12,7 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { MAX_HTML_ARTIFACT_BYTES } from "../artifact-mime";
 import { convertDocxToMarkdown } from "../docx-text";
 import { getGlobalSkillsDir } from "../skills/paths";
 import { getProfileSoulDir } from "../soul/resolve";
@@ -23,6 +24,7 @@ import {
   runWriteDocx,
   runWriteFile,
   setDefaultFileGuardOptions,
+  writeFileTool,
 } from "./builtin";
 import { buildToolExecutionContext } from "./context";
 
@@ -69,6 +71,84 @@ describe("file builtin tools", () => {
     expect(await readFile(targetPath, "utf8")).toBe("hello world");
   });
 
+  test("HTML file tools accept the byte limit and reject growth without changing the file", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-html-limit-"));
+    const opts = { workspaceRoot: tempDir };
+    const target = "artifacts/page.html";
+    const content = `A${"é".repeat((MAX_HTML_ARTIFACT_BYTES - 2) / 2)}Z`;
+
+    const saved = await runWriteFile(
+      { content, path: target },
+      PROFILE_CONTEXT,
+      opts
+    );
+
+    expect(saved.bytesWritten).toBe(MAX_HTML_ARTIFACT_BYTES);
+    const read = await runReadFile({ path: target }, PROFILE_CONTEXT, opts);
+    expect(read.bytesRead).toBe(MAX_HTML_ARTIFACT_BYTES);
+    expect(read.content).toBe(content);
+
+    const edited = await runEditFile(
+      { edits: [{ newText: "B", oldText: "A" }], path: target },
+      PROFILE_CONTEXT,
+      opts
+    );
+
+    expect(edited.bytesWritten).toBe(MAX_HTML_ARTIFACT_BYTES);
+    await expect(
+      runEditFile(
+        { edits: [{ newText: "BB", oldText: "B" }], path: target },
+        PROFILE_CONTEXT,
+        opts
+      )
+    ).rejects.toThrow(PathGuardError);
+    expect(await readFile(saved.path, "utf8")).toBe(`B${content.slice(1)}`);
+    await expect(
+      runWriteFile(
+        { content: `${content}!`, path: target },
+        PROFILE_CONTEXT,
+        opts
+      )
+    ).rejects.toThrow(PathGuardError);
+    expect(await readdir(path.dirname(saved.path))).toEqual(["page.html"]);
+    await writeFile(saved.path, `${content}!`);
+    await expect(
+      runReadFile({ path: target }, PROFILE_CONTEXT, opts)
+    ).rejects.toThrow(PathGuardError);
+  });
+
+  test("HTML limits respect smaller settings and cannot be raised past 16MB", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-html-settings-"));
+    const opts = { workspaceRoot: tempDir };
+    setDefaultFileGuardOptions({ maxFileBytes: 10 });
+    await expect(
+      runWriteFile(
+        { content: "x".repeat(11), path: "page.htm" },
+        PROFILE_CONTEXT,
+        opts
+      )
+    ).rejects.toThrow(PathGuardError);
+    setDefaultFileGuardOptions({ maxFileBytes: MAX_HTML_ARTIFACT_BYTES + 100 });
+    await expect(
+      runWriteFile(
+        {
+          content: "x".repeat(MAX_HTML_ARTIFACT_BYTES + 1),
+          path: "page.xhtml",
+        },
+        PROFILE_CONTEXT,
+        opts
+      )
+    ).rejects.toThrow(PathGuardError);
+    setDefaultFileGuardOptions({});
+    await expect(
+      runWriteFile(
+        { content: "x".repeat(10 * 1024 * 1024 + 1), path: "notes.txt" },
+        PROFILE_CONTEXT,
+        opts
+      )
+    ).rejects.toThrow(PathGuardError);
+  });
+
   test("write_file preserves indentation and boundary whitespace", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-write-"));
     const content = "    caf\u00e9\r\n    second line\r\n\r\n";
@@ -81,6 +161,22 @@ describe("file builtin tools", () => {
 
     expect(await readFile(result.path, "utf8")).toBe(content);
     expect(result.bytesWritten).toBe(Buffer.byteLength(content, "utf8"));
+  });
+
+  test("write_file content pattern accepts full documents under constrained decoding", () => {
+    // SAFETY: writeFileInputSchema generates this string pattern for content.
+    const schema = writeFileTool.parameters as {
+      properties: { content: { pattern: string } };
+    };
+
+    const pattern = new RegExp(`^(?:${schema.properties.content.pattern})$`);
+
+    expect(
+      pattern.test("\n<!doctype html>\n<p>Harbor Launch — café</p>\n")
+    ).toBe(true);
+    expect(pattern.test("    first line\r\n    second line\r\n")).toBe(true);
+    expect(pattern.test(" \t\r\n")).toBe(false);
+    expect(pattern.test("")).toBe(false);
   });
 
   test("write_file still rejects whitespace-only content", async () => {
@@ -617,7 +713,12 @@ describe("file builtin tools", () => {
       context
     );
 
-    expect(reads).toEqual([["publication/a", "references/a b.md"]]);
+    await runReadFile({ path: reference }, context);
+
+    expect(reads).toEqual([
+      ["publication/a", "references/a b.md"],
+      ["publication/a", "references/a b.md"],
+    ]);
     expect(result).toMatchObject({
       bytesRead: 6,
       content: "Second",
@@ -648,7 +749,6 @@ describe("file builtin tools", () => {
     };
 
     for (const input of [
-      { cwd: "/tmp", path: "published-skill://pub/SKILL.md" },
       { path: "published-skill://pub" },
       { path: "published-skill://%zz/SKILL.md" },
       { path: "published-skill://pub/config.ini" },
@@ -1174,23 +1274,10 @@ describe("file builtin tools", () => {
     await writeFile(skillPath, "instructions");
     await writeFile(path.join(skillDir, "references/guide.md"), "instructions");
     const options = { workspaceRoot: tempDir };
-    const cwd = await realpath(skillDir);
-
-    await expect(
-      runReadFile(
-        {
-          cwd: path.dirname(getGlobalSkillsDir()),
-          path: "skills/installer/SKILL.md",
-        },
-        PROFILE_CONTEXT,
-        options
-      )
-    ).rejects.toBeInstanceOf(PathGuardError);
 
     for (const input of [
       { path: skillPath },
-      { cwd, path: "SKILL.md" },
-      { cwd, path: "references/guide.md" },
+      { path: path.join(skillDir, "references/guide.md") },
     ]) {
       const result = await runReadFile(input, PROFILE_CONTEXT, options);
       expect(result.content).toBe("instructions");
@@ -1252,20 +1339,14 @@ describe("file builtin tools", () => {
     ).rejects.toThrow("orgId and profileId are required.");
   });
 
-  test("invalid cwd rejects writes without changing profile files", async () => {
+  test("write_file ignores a stray cwd and writes under the workspace", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-sec-"));
-    const targetPath = path.join(tempDir, "safe.txt");
-    await writeFile(targetPath, "original");
+    // Models send a guessed cwd even though the schema has none.
+    const input = { content: "OK", cwd: "/etc", path: "safe.txt" };
 
-    await expect(
-      runWriteFile(
-        { content: "OK", cwd: "/etc", path: "safe.txt" },
-        PROFILE_CONTEXT,
-        { workspaceRoot: tempDir }
-      )
-    ).rejects.toBeInstanceOf(PathGuardError);
+    await runWriteFile(input, PROFILE_CONTEXT, { workspaceRoot: tempDir });
 
-    expect(await readFile(targetPath, "utf8")).toBe("original");
+    expect(await readFile(path.join(tempDir, "safe.txt"), "utf8")).toBe("OK");
   });
 
   test("edit_file rejects oversized replacement result", async () => {

@@ -109,7 +109,7 @@ export function ChatContextUsageRing({
         }
       />
       <PopoverContent
-        align="start"
+        align="end"
         className="w-80 min-w-80 p-3.5"
         side="top"
         sideOffset={8}

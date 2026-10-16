@@ -91,6 +91,7 @@ export function SetupStepProvider({ onNext, onSkip }: SetupStepProviderProps) {
             density="compact"
             onSuccess={(result) => void finishSetup(result)}
             showHeading={false}
+            showModelPicker={false}
             submitLabel="Continue"
           />
           <div className="flex justify-end border-border border-t pt-4">

@@ -27,6 +27,7 @@ import { actorMayInvoke, PluginHostError } from "./plugin-service";
 export type ServerToolOverrides = {
   googleMeet?: ToolDefinition[];
   generateImage?: ToolDefinition | null;
+  saveArtifact?: ToolDefinition | null;
   session?: ToolDefinition[];
   subAgent?: ToolDefinition | null;
 };
@@ -133,6 +134,7 @@ async function resolveStoredTool(
     record.handlerType === "bash" ||
     record.handlerType === "sub_agent" ||
     record.handlerType === "generate_image" ||
+    record.handlerType === "save_artifact" ||
     record.handlerType === "session"
   ) {
     return serverTools.get(record.name) ?? null;
@@ -169,6 +171,10 @@ function buildServerTools(
 
   if (overrides.generateImage) {
     map.set(overrides.generateImage.name, overrides.generateImage);
+  }
+
+  if (overrides.saveArtifact) {
+    map.set(overrides.saveArtifact.name, overrides.saveArtifact);
   }
 
   for (const tool of overrides.session ?? []) {

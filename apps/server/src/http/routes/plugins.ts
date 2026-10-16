@@ -10,6 +10,7 @@ import {
   type PluginContributionChangePreview,
   type PluginExecutionActor,
   type PluginPackagePreviewResponse,
+  type PluginUsageResponse,
 } from "@nakama/core";
 import type { Context } from "hono";
 import {
@@ -131,6 +132,7 @@ export function registerPluginRoutes(
   const installResponseSchema = openapiBag("InstallPluginPackageResponse");
   const listReleasesSchema = openapiBag("ListPluginReleasesResponse");
   const listUpdatesSchema = openapiBag("ListPluginUpdatesResponse");
+  const usageSchema = openapiBag("PluginUsageResponse");
   const listOrgPluginsSchema = openapiBag("ListOrgPluginsResponse");
   const orgPluginSchema = openapiBag("OrgPluginDetail");
 
@@ -302,6 +304,16 @@ export function registerPluginRoutes(
     operationId: "listPluginReleases",
     path: "/v1/platform/plugins/releases",
     summary: "List approved plugin releases",
+    tags: platform,
+  });
+  pluginPath({
+    extra: { 403: errorResponse },
+    method: "get",
+    ok: jsonOk(usageSchema, "Organizations and agents using the plugin"),
+    operationId: "getPluginUsage",
+    path: "/v1/platform/plugins/{pluginId}/usage",
+    request: { params: pluginIdParam },
+    summary: "List organizations and agents that still use a plugin",
     tags: platform,
   });
   pluginPath({
@@ -583,6 +595,17 @@ export function registerPluginRoutes(
 
     return json<ListPluginUpdatesResponse>({
       updates: await plugins.listPluginUpdates(),
+    });
+  });
+
+  app.get("/v1/platform/plugins/:pluginId/usage", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const plugins = requirePluginService(options);
+
+    return json<PluginUsageResponse>({
+      orgs: await plugins.listPluginUsage(
+        decodeURIComponent(c.req.param("pluginId"))
+      ),
     });
   });
 

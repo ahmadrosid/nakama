@@ -417,6 +417,55 @@ async function sendImage(
 describe("attachments left by a cognito session", () => {
   setupTestConfigDir("nakama-cognito-attachments-");
 
+  test("only the owner or a platform admin can read the image", async () => {
+    const { db, service } = await createService();
+
+    const sessionId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      "owner",
+      { cognito: true }
+    );
+
+    await sendImage(service, sessionId);
+    const [attachment] = await db.listEphemeralAttachments();
+    const attachmentId = attachment!.id;
+
+    for (const access of [
+      { user: { id: "owner" } },
+      { isPlatformAdmin: true, user: { id: "admin" } },
+    ]) {
+      const image = await service.readChatImageAttachment(
+        ORG_ID,
+        attachmentId,
+        access
+      );
+
+      expect(Buffer.from(image!.bytes)).toEqual(
+        Buffer.from(TINY_PNG, "base64")
+      );
+    }
+
+    for (const orgRole of ["member", "admin"] as const) {
+      await expect(
+        service.readChatImageAttachment(ORG_ID, attachmentId, {
+          orgRole,
+          user: { id: "teammate" },
+        })
+      ).rejects.toMatchObject({ status: 404 });
+    }
+
+    // A restart loses the session map before the attachment sweep runs.
+    const restarted = new AgentService(null, null, db);
+    expect(
+      await restarted.readChatImageAttachment(ORG_ID, attachmentId, {
+        user: { id: "owner" },
+      })
+    ).toBeNull();
+    await service.purgeSession(sessionId, ORG_ID);
+  });
+
   test("are marked ephemeral and reference no session", async () => {
     const { db, service } = await createService();
 

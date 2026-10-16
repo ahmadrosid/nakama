@@ -218,6 +218,7 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
     case "moonshot_cn":
     case "zhipu":
     case "zhipu_cn":
+    case "groq":
       return createOpenAIProvider({
         apiKey: options.apiKey,
         baseUrl: baseUrlOverride ?? discoveryBaseUrl,

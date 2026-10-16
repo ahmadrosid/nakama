@@ -13,7 +13,9 @@ import {
   ensureBashToolDefinition,
   ensureGenerateImageToolDefinition,
   ensureOrgSuperBotProfiles,
+  ensureSaveArtifactToolDefinition,
   ensureSessionToolDefinitions,
+  type SuperBotSeedOptions,
 } from "./org-profiles";
 import type { DatabaseAdapter } from "./types";
 
@@ -40,11 +42,15 @@ const SUPPORTED_TOOL_HANDLER_TYPES = new Set([
   "python",
   "sub_agent",
   "generate_image",
+  "save_artifact",
   "session",
   "plugin",
 ]);
 
-export async function seedDatabase(db: DatabaseAdapter): Promise<void> {
+export async function seedDatabase(
+  db: DatabaseAdapter,
+  options: SuperBotSeedOptions = {}
+): Promise<void> {
   await removeLegacyBuiltinTools(db);
   await removeDeprecatedBuiltinTools(db);
   await removeDeprecatedServerTools(db);
@@ -54,9 +60,10 @@ export async function seedDatabase(db: DatabaseAdapter): Promise<void> {
   await ensureSessionToolDefinitions(db);
   await ensureBashToolDefinition(db);
   await ensureGenerateImageToolDefinition(db);
+  await ensureSaveArtifactToolDefinition(db);
   await ensurePreinstalledMcpServers(db);
   await ensureLocalClientAccess(db);
-  await ensureOrgSuperBotProfiles(db);
+  await ensureOrgSuperBotProfiles(db, options);
 }
 
 async function removeToolsMatching(

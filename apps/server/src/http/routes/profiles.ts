@@ -86,6 +86,40 @@ export function registerProfileRoutes(
     return requireProfileManage(c);
   };
 
+  /**
+   * Null for an owner or admin, who sees every artifact. Any other org member
+   * gets their own user id back and sees only the artifacts they made (#1816).
+   */
+  const artifactCreatorScope = async (
+    c: Context<AppEnv>
+  ): Promise<string | null> => {
+    try {
+      await requireProfileManage(c);
+
+      return null;
+    } catch (error) {
+      if (!(error instanceof NakamaApiError && error.status === 403)) {
+        throw error;
+      }
+
+      const auth = requireOrgMemberFromContext(c);
+
+      // Same answer as the manage guard for a missing agent: no probing ids.
+      const found = await agent
+        .getProfile(
+          requireActiveOrgIdFromContext(c),
+          decodeURIComponent(c.req.param("profileId") ?? "")
+        )
+        .catch(() => null);
+
+      if (!found) {
+        throw error;
+      }
+
+      return auth.user.id;
+    }
+  };
+
   const artifactShares =
     options.databaseAdapter && options.authService
       ? new ArtifactShareService(options.databaseAdapter, options.authService)
@@ -1593,7 +1627,7 @@ export function registerProfileRoutes(
   });
 
   app.get("/v1/profiles/:profileId/artifacts", async (c) => {
-    await requireProfileManage(c);
+    const createdByUserId = await artifactCreatorScope(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const limitRaw = c.req.query("limit");
@@ -1621,11 +1655,12 @@ export function registerProfileRoutes(
     }
 
     return json<ListArtifactsResponse>(
-      await agent.listProfileArtifacts(orgId, profileId, {
-        folder: c.req.query("folder"),
-        limit,
-        offset,
-      })
+      await agent.listProfileArtifacts(
+        orgId,
+        profileId,
+        { folder: c.req.query("folder"), limit, offset },
+        createdByUserId ?? undefined
+      )
     );
   });
 
@@ -1694,7 +1729,7 @@ export function registerProfileRoutes(
   });
 
   app.delete("/v1/profiles/:profileId/artifacts", async (c) => {
-    await requireProfileManage(c);
+    const createdByUserId = await artifactCreatorScope(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const artifactPath = c.req.query("path");
@@ -1704,7 +1739,12 @@ export function registerProfileRoutes(
     }
 
     return json<DeleteArtifactResponse>(
-      await agent.deleteProfileArtifact(orgId, profileId, artifactPath)
+      await agent.deleteProfileArtifact(
+        orgId,
+        profileId,
+        artifactPath,
+        createdByUserId ?? undefined
+      )
     );
   });
 

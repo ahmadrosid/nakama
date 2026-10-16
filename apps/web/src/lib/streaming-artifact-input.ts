@@ -8,7 +8,11 @@ const ARTIFACT_META_SUFFIX = ".nakama-meta.json";
  */
 const ARTIFACT_META_PREFIX = ".nak";
 
-const ARTIFACT_WRITE_TOOLS = new Set(["write_file", "write_docx"]);
+const ARTIFACT_WRITE_TOOLS = new Set([
+  "save_artifact",
+  "write_file",
+  "write_docx",
+]);
 
 export interface StreamingArtifactToolInput {
   content: string | null;
@@ -50,7 +54,7 @@ function isArtifactRelativePath(relativePath: string): boolean {
 }
 
 function contentFieldForTool(tool: string): "content" | "markdown" | null {
-  if (tool === "write_file") {
+  if (tool === "write_file" || tool === "save_artifact") {
     return "content";
   }
 

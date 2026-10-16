@@ -2,7 +2,7 @@ import type { ArtifactFile, WorkspaceEntry } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { WorkspaceFilePreview } from "@/components/chat/workspace-file-preview";
 import {
   ARTIFACT_TYPE_FILTER_LABELS,
@@ -27,6 +27,7 @@ import {
   resolveFilesProfileId,
   setStoredFilesViewMode,
 } from "@/lib/files-page.shared";
+import { canAccessOrganizationPage } from "@/lib/navigation";
 import { ArtifactFolderBreadcrumb } from "@/pages/files/files-artifact-folder-breadcrumb";
 import {
   artifactBasename,
@@ -54,6 +55,8 @@ export function FilesPage() {
   const profileId = resolveFilesProfileId({ activeProfileId, profiles });
   const { user, activeOrg } = useAuth();
   const canViewFiles = user?.isPlatformAdmin === true;
+  // Everyone else in the org sees only the artifacts they made (#1816).
+  const canViewOwnArtifacts = canAccessOrganizationPage(false, activeOrg?.role);
   const pins = useFilePins(profileId, canViewFiles);
   const [searchParams, setSearchParams] = useSearchParams();
   const view = searchParams.get("view") ?? "workspace";
@@ -70,6 +73,10 @@ export function FilesPage() {
 
       return next;
     });
+  }
+
+  if (!(canViewFiles || canViewOwnArtifacts)) {
+    return <Navigate replace to="/chat" />;
   }
 
   return (
@@ -143,9 +150,7 @@ export function FilesPage() {
                 )}
               </div>
             ) : (
-              <p className="text-muted-foreground text-sm">
-                Workspace files are available to platform administrators.
-              </p>
+              <FilesArtifactsPage key={profileId} profileId={profileId} />
             )}
           </div>
         </FilePinsContext.Provider>

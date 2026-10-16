@@ -47,8 +47,8 @@ function resolveWhatsAppStatusLine(
 function resolveWhatsAppLinkingState({
   configured,
   connected,
+  linkError,
   paired,
-  pairingCode,
   profileId,
   qrCode,
   qrWasVisible,
@@ -57,15 +57,15 @@ function resolveWhatsAppLinkingState({
 }: {
   configured: boolean;
   connected: boolean;
+  linkError: string | null;
   paired: boolean;
-  pairingCode: string | null;
   profileId: string;
   qrCode: string | null;
   qrWasVisible: boolean;
   running: boolean;
   settingsProfileId?: string;
 }) {
-  const useQrLinking = !pairingCode;
+  const useQrLinking = !linkError;
   const showQr = configured && running && Boolean(qrCode) && useQrLinking;
 
   const awaitingQr =
@@ -77,9 +77,6 @@ function resolveWhatsAppLinkingState({
     !qrWasVisible &&
     useQrLinking;
 
-  const bridgeStarting =
-    configured && !paired && running && !connected && Boolean(pairingCode);
-
   const linkingAfterScan =
     configured &&
     !paired &&
@@ -90,7 +87,6 @@ function resolveWhatsAppLinkingState({
 
   return {
     awaitingQr,
-    bridgeStarting,
     canSave: !configured || profileId !== settingsProfileId,
     linkingAfterScan,
     showQr,
@@ -180,6 +176,7 @@ export function useWhatsAppSettingsCard({
   const running = worker?.running === true;
   const connected = worker?.connected === true;
   const qrCode = worker?.qrCode ?? null;
+  const linkError = worker?.linkError ?? null;
   const paired = Boolean(worker?.paired || settings?.pairedJid);
   const pairingCode = settings?.pairingCode ?? null;
   const copied = copiedCode !== null && copiedCode === pairingCode;
@@ -224,8 +221,8 @@ export function useWhatsAppSettingsCard({
   const linking = resolveWhatsAppLinkingState({
     configured,
     connected,
+    linkError,
     paired,
-    pairingCode,
     profileId,
     qrCode,
     qrWasVisible,
@@ -373,15 +370,16 @@ export function useWhatsAppSettingsCard({
     allowedPhonesOpen,
     allowUnpairedGroupMembers,
     awaitingQr: linking.awaitingQr,
-    bridgeStarting: linking.bridgeStarting,
     canSave: linking.canSave,
     configured,
     connected,
     copied,
     formError,
     isLoading,
+    linkError,
     linkedNumber: settings?.phoneNumberMasked ?? null,
     linkingAfterScan: linking.linkingAfterScan,
+    linkOwner: worker?.linkOwner ?? null,
     loadError,
     onAllowedPhonesChange: setAllowedPhones,
     onAllowedPhonesOpenChange: setAllowedPhonesOpen,

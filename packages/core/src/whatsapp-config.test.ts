@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { ChannelIdentityInUseError } from "./channel-config-shared";
 import { withTempHomedir } from "./testing/channel-config-fixtures";
 import {
   generatePairingCode,
@@ -14,6 +15,10 @@ import {
   saveWhatsAppConfig,
   syncWhatsAppOwnerPairing,
 } from "./whatsapp-config";
+import {
+  createWhatsAppWorkerHeartbeat,
+  getWhatsAppWorkerStatus,
+} from "./whatsapp-worker";
 
 describe("organization isolation", () => {
   test("isolates settings and reconnects between organizations", async () => {
@@ -41,6 +46,33 @@ describe("organization isolation", () => {
       expect((await loadWhatsAppConfigFile("org_b"))?.pairedJid).toBe(
         "628222222222@s.whatsapp.net"
       );
+    });
+  });
+});
+
+describe("getWhatsAppWorkerStatus", () => {
+  test("reports a rejected link only while the worker runs", async () => {
+    await withTempHomedir("nakama-wa-link-error-", async () => {
+      await saveWhatsAppConfig({ profileId: "finance" }, "org_a");
+      const heartbeat = createWhatsAppWorkerHeartbeat("org_a");
+
+      await heartbeat.write({
+        connected: false,
+        linkError: "in use",
+        pid: process.pid,
+        updatedAt: new Date().toISOString(),
+      });
+      expect((await getWhatsAppWorkerStatus("org_a")).linkError).toBe("in use");
+
+      await heartbeat.write({
+        connected: false,
+        linkError: "in use",
+        pid: process.pid,
+        updatedAt: new Date(0).toISOString(),
+      });
+      expect(
+        (await getWhatsAppWorkerStatus("org_a")).linkError
+      ).toBeUndefined();
     });
   });
 });
@@ -583,6 +615,27 @@ describe("syncWhatsAppOwnerPairing", () => {
       expect(
         results.filter((result) => result.status === "rejected")
       ).toHaveLength(1);
+    });
+  });
+
+  test("a rejected claim names the owner that holds the JID", async () => {
+    await withTempHomedir("nakama-whatsapp-claim-owner-", async () => {
+      const first = { orgId: "org_a", profileId: "a" };
+      const second = { orgId: "org_b", profileId: "b" };
+      await saveWhatsAppConfig({ profileId: "a" }, first);
+      await saveWhatsAppConfig({ profileId: "b" }, second);
+      await syncWhatsAppOwnerPairing(
+        { ownerJid: "6281379292556@s.whatsapp.net" },
+        first
+      );
+
+      const rejected = syncWhatsAppOwnerPairing(
+        { ownerJid: "6281379292556@s.whatsapp.net" },
+        second
+      );
+
+      await expect(rejected).rejects.toBeInstanceOf(ChannelIdentityInUseError);
+      await expect(rejected).rejects.toMatchObject({ owner: first });
     });
   });
 });

@@ -120,9 +120,7 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
   }
 
   async exec(args: BashSandboxExecArgs): Promise<BashSandboxExecResult> {
-    if (args.signal?.aborted) {
-      throw new Error("The operation was aborted");
-    }
+    args.signal?.throwIfAborted();
 
     let sandbox: Sandbox;
 
@@ -136,6 +134,8 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
         `MicroSandbox backend unavailable: ${message}. No host fallback.`
       );
     }
+
+    args.signal?.throwIfAborted();
 
     const handle = await sandbox.execStreamWith("/bin/sh", (opts) =>
       opts
@@ -156,6 +156,12 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
     let exitCode: number | null = null;
 
     try {
+      // An abort during execStreamWith cannot kill until the handle arrives.
+      if (args.signal?.aborted) {
+        onAbort();
+        args.signal.throwIfAborted();
+      }
+
       // Stream events so a timeout still returns output buffered before the deadline
       // (same I/O contract as host bash).
       for await (const event of handle) {
@@ -168,6 +174,8 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
         }
       }
 
+      args.signal?.throwIfAborted();
+
       return {
         exitCode,
         stderr: stderr.read(),
@@ -175,6 +183,8 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
         timedOut: false,
       };
     } catch (error) {
+      args.signal?.throwIfAborted();
+
       if (error instanceof ExecTimeoutError) {
         return {
           exitCode: null,
@@ -182,10 +192,6 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
           stdout: stdout.read(),
           timedOut: true,
         };
-      }
-
-      if (args.signal?.aborted) {
-        throw new Error("The operation was aborted");
       }
 
       throw error;

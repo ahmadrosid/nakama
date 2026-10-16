@@ -4,7 +4,7 @@ export const DEFAULT_BUNDLED_SKILL_NAMES = [
   "skill-installer",
   "update-profile-memory",
   "archive-profile-memory",
-  "save-artifact",
+  "artifact-design",
   "composio-integrations",
 ] as const;
 
@@ -27,6 +27,7 @@ export const RUNTIME_ONLY_BUNDLED_SKILL_NAMES = [
 export const OPT_IN_BUNDLED_SKILL_NAMES = [
   "agent-browser",
   "google-meet",
+  "knowledge-base-wiki",
 ] as const;
 
 export const BUNDLED_SKILL_NAMES = [

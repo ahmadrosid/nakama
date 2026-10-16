@@ -31,7 +31,6 @@ import { cn } from "@nakama/ui/utils";
 import {
   Add01Icon,
   Alert02Icon,
-  ArrowDown01Icon,
   ArrowUp02Icon,
   Cancel01Icon,
   File01Icon,
@@ -68,7 +67,6 @@ import { ChatAddCapabilitiesDialogs } from "@/components/chat/chat-add-capabilit
 import { ChatContextUsageRing } from "@/components/chat/chat-context-usage";
 import { ChatSkillPicker } from "@/components/chat/chat-skill-picker";
 import { ChatSkillTokenOverlay } from "@/components/chat/chat-skill-token-overlay";
-import { ChatThinkingEffortControl } from "@/components/chat/chat-thinking-effort-control";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import { useAuth } from "@/context/use-auth";
@@ -99,7 +97,6 @@ import {
   composerHitTargetClass,
   composerIconButtonClass,
   composerInputGroupClass,
-  composerSelectTriggerClass,
   composerShellClass,
   composerShellCompactClass,
   composerToolbarClass,
@@ -111,6 +108,7 @@ import {
   isPastedTextDocument,
   LONG_PASTE_WORD_THRESHOLD,
 } from "@/lib/pasted-text";
+import { THINKING_EFFORT_OPTIONS } from "@/lib/thinking-settings";
 import { composerActions } from "./chat-composer.shared";
 import { ChatComposerError, ChatTips } from "./chat-tips";
 
@@ -280,7 +278,7 @@ function ChatComposerWorkStack({
 }
 
 const FULL_TEXTAREA_CLASS =
-  "max-h-36 min-h-11 px-1 py-1.5 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-10 sm:text-sm";
+  "max-h-36 min-h-9 px-1 py-1 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-8 sm:text-sm";
 
 const MINIMAL_TEXTAREA_CLASS =
   "max-h-32 min-h-10 px-1 py-1.5 text-sm leading-relaxed placeholder:text-muted-foreground";
@@ -360,7 +358,7 @@ function ChatComposerStackedPrompt({
         <PromptInputFooter
           className={cn(
             "w-full border-0 px-0 py-0",
-            "flex-nowrap items-center gap-1.5 pt-1.5",
+            "flex-nowrap items-center gap-1.5 pt-1",
             footerClassName
           )}
         >
@@ -465,7 +463,7 @@ function ChatComposerBarePrompt({
             "w-full border-0 px-0 py-0",
             isMinimal
               ? "justify-end pt-1.5"
-              : "flex-nowrap items-center gap-1.5 pt-1.5",
+              : "flex-nowrap items-center gap-1.5 pt-1",
             footerClassName
           )}
         >
@@ -633,7 +631,7 @@ function ChatComposerCommandBanner({
   }
 
   return (
-    <PromptInputHeader className="-mx-2.5 -mt-2.5 mb-1.5 w-auto flex-nowrap items-center gap-2 rounded-t-xl border-border border-b bg-muted/60 px-4 py-2 text-sm sm:-mx-3 sm:-mt-3">
+    <PromptInputHeader className="-mx-3 -mt-3 mb-1.5 w-auto flex-nowrap items-center gap-2 rounded-t-xl border-border border-b bg-muted/60 px-5 py-2 text-sm sm:-mx-3.5 sm:-mt-3.5">
       <span className="shrink-0 font-semibold text-foreground">{prefix}</span>
       <span className="min-w-0 flex-1 truncate text-muted-foreground">
         {command.description}
@@ -1013,6 +1011,94 @@ function ChatComposerTextarea({
   );
 }
 
+function shortEffortLabel(effort: string, fullLabel: string): string {
+  switch (effort) {
+    case "high":
+      return "High";
+    case "low":
+      return "Low";
+    case "medium":
+      return "Med";
+    default:
+      return fullLabel;
+  }
+}
+
+function resolveModelPickerState(props: ChatComposerFullProps) {
+  const effortOptions = props.thinkingEffortOptions ?? THINKING_EFFORT_OPTIONS;
+
+  const effort =
+    props.thinkingEffortVisible &&
+    props.thinkingEffort &&
+    props.onThinkingEffortChange
+      ? props.thinkingEffort
+      : null;
+
+  const effortLabel = effort
+    ? shortEffortLabel(
+        effort,
+        effortOptions.find((option) => option.value === effort)?.label ?? effort
+      )
+    : null;
+
+  const modelLabel = props.currentModelSelection
+    ? (props.renderModelLabel(props.currentModelSelection) ?? "Model")
+    : "Model";
+
+  return {
+    effort,
+    effortOptions,
+    hasModels: props.providerModelGroups.some(
+      (group) => group.models.length > 0
+    ),
+    showProfileModel:
+      Boolean(props.profileModelId) &&
+      !props.providerModelGroups.some((group) =>
+        group.models.some((model) => model.id === props.profileModelId)
+      ),
+    triggerLabel: effortLabel ? `${modelLabel} · ${effortLabel}` : modelLabel,
+  };
+}
+
+function ChatModelEffortRow({
+  disabled,
+  effort,
+  onEffortChange,
+  options,
+}: {
+  disabled?: boolean;
+  effort: string;
+  onEffortChange?: (effort: string) => void;
+  options: Array<{ label: string; value: string }>;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-border/60 border-t p-2 pl-3">
+      <span aria-hidden className="font-medium text-muted-foreground text-xs">
+        Thinking effort
+      </span>
+      <fieldset className="flex gap-0.5 rounded-lg bg-muted p-0.5">
+        <legend className="sr-only">Thinking effort</legend>
+        {options.map((option) => (
+          <button
+            aria-pressed={option.value === effort}
+            className={cn(
+              "h-7 rounded-md px-2.5 font-medium text-muted-foreground text-xs transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50",
+              option.value === effort &&
+                "bg-background text-foreground shadow-xs"
+            )}
+            disabled={disabled}
+            key={option.value}
+            onClick={() => onEffortChange?.(option.value)}
+            type="button"
+          >
+            {shortEffortLabel(option.value, option.label)}
+          </button>
+        ))}
+      </fieldset>
+    </div>
+  );
+}
+
 function ChatModelPicker({
   props,
   busy,
@@ -1037,6 +1123,9 @@ function ChatModelPicker({
     void props.onModelChange(value);
     closeModelPicker();
   };
+
+  const { effort, effortOptions, hasModels, showProfileModel, triggerLabel } =
+    resolveModelPickerState(props);
 
   useEffect(() => {
     if (!(modelPickerOpen && modelList)) {
@@ -1074,31 +1163,13 @@ function ChatModelPicker({
         open={modelPickerOpen}
       >
         <PopoverTrigger
-          aria-label="Select model"
-          className={cn(
-            composerSelectTriggerClass,
-            "flex max-w-full items-center justify-start overflow-hidden",
-            props.contextUsage && "pl-1"
-          )}
-          disabled={
-            busy ||
-            disabled ||
-            !props.providerModelGroups.some((group) => group.models.length > 0)
-          }
-          title={
-            props.currentModelSelection
-              ? (props.renderModelLabel(props.currentModelSelection) ??
-                undefined)
-              : undefined
-          }
+          aria-label="Select model and effort"
+          className="flex h-7 max-w-full items-center overflow-hidden rounded-full bg-muted px-2.5 font-medium text-foreground text-xs transition-[background-color,opacity] hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 aria-expanded:bg-accent"
+          disabled={disabled || !(hasModels || effort)}
+          title={triggerLabel}
           type="button"
         >
-          <span className="min-w-0 truncate">
-            {props.currentModelSelection
-              ? (props.renderModelLabel(props.currentModelSelection) ?? "Model")
-              : "Model"}
-          </span>
-          <ArrowDown01Icon aria-hidden className="size-3.5 shrink-0" />
+          <span className="min-w-0 truncate">{triggerLabel}</span>
         </PopoverTrigger>
         <PopoverContent
           align="start"
@@ -1118,15 +1189,13 @@ function ChatModelPicker({
             ) : null}
             <CommandList className="max-h-72 p-1" ref={setModelList}>
               <CommandEmpty>No model found.</CommandEmpty>
-              {props.profileModelId &&
-              !props.providerModelGroups.some((group) =>
-                group.models.some((model) => model.id === props.profileModelId)
-              ) ? (
+              {showProfileModel && props.profileModelId ? (
                 <CommandItem
                   data-checked={
                     props.currentModelSelection ===
                     encodeModelSelection("__unknown__", props.profileModelId)
                   }
+                  disabled={busy}
                   onSelect={() =>
                     selectModel(
                       encodeModelSelection("__unknown__", props.profileModelId!)
@@ -1149,6 +1218,7 @@ function ChatModelPicker({
                     return (
                       <CommandItem
                         data-checked={props.currentModelSelection === value}
+                        disabled={busy}
                         key={`${providerId}:${model.id}`}
                         onSelect={() => selectModel(value)}
                         value={`${group.providerLabel} ${model.name} ${model.id}`}
@@ -1161,6 +1231,14 @@ function ChatModelPicker({
               ))}
             </CommandList>
           </Command>
+          {effort ? (
+            <ChatModelEffortRow
+              disabled={props.thinkingEffortDisabled}
+              effort={effort}
+              onEffortChange={props.onThinkingEffortChange}
+              options={effortOptions}
+            />
+          ) : null}
         </PopoverContent>
       </Popover>
     </div>
@@ -1189,43 +1267,29 @@ function ChatComposerFullFooter({
         className={composerToolbarClass}
         role="toolbar"
       >
+        <ChatAttachmentButton disabled={disabled} />
+
+        {props.providerConfigured ? (
+          <ChatModelPicker busy={busy} disabled={disabled} props={props} />
+        ) : (
+          <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-amber-500/10 px-3 font-medium text-amber-800 text-sm dark:text-amber-200">
+            <WifiOff01Icon aria-hidden className="size-3.5 shrink-0" />
+            Offline
+          </span>
+        )}
+      </div>
+
+      <div
+        aria-label="Composer actions"
+        className="ml-auto flex shrink-0 items-center gap-1.5"
+        role="toolbar"
+      >
         {props.contextUsage ? (
           <ChatContextUsageRing
             sessionUsage={props.sessionUsage}
             usage={props.contextUsage}
           />
         ) : null}
-
-        {props.providerConfigured ? (
-          <ChatModelPicker busy={busy} disabled={disabled} props={props} />
-        ) : (
-          <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/10 px-2.5 font-medium text-amber-800 text-xs dark:text-amber-200">
-            <WifiOff01Icon aria-hidden className="size-3.5 shrink-0" />
-            Offline
-          </span>
-        )}
-
-        {props.thinkingEffortVisible &&
-        props.thinkingEffort &&
-        props.onThinkingEffortChange ? (
-          <ChatThinkingEffortControl
-            disabled={props.thinkingEffortDisabled}
-            effort={props.thinkingEffort}
-            onEffortChange={props.onThinkingEffortChange}
-            options={props.thinkingEffortOptions}
-            visible
-          />
-        ) : null}
-      </div>
-
-      <div
-        aria-label="Composer actions"
-        className="ml-auto flex shrink-0 items-center gap-1"
-        role="toolbar"
-      >
-        <ChatAttachmentButton disabled={disabled} />
-
-        <span aria-hidden className="h-4 w-px bg-border" />
 
         <ChatComposerSubmitButton
           busy={busy}
@@ -1239,10 +1303,10 @@ function ChatComposerFullFooter({
   );
 }
 
-/** Visible 28px face; ≥40px hit via pseudo. Keep transform in transition for press scale. */
+/** Visible 32px face; ≥40px hit via pseudo. Keep transform in transition for press scale. */
 const composerSubmitButtonClassName = cn(
   composerHitTargetClass,
-  "size-7 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-[color,background-color,transform,opacity] hover:bg-primary/90 disabled:opacity-50"
+  "size-8 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-[color,background-color,transform,opacity] hover:bg-primary/90 active:scale-[0.96] disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
 );
 
 const composerAttachmentRemoveClassName = cn(
@@ -1298,7 +1362,7 @@ function ChatComposerSubmitButton({
           disabled
           status={chatStatus}
         >
-          <ArrowUp02Icon className="size-3.5" />
+          <ArrowUp02Icon className="size-4" />
         </PromptInputSubmit>
       )
     );
@@ -1313,7 +1377,7 @@ function ChatComposerSubmitButton({
         disabled={disabled}
         status={chatStatus}
       >
-        <ArrowUp02Icon className="size-3.5" />
+        <ArrowUp02Icon className="size-4" />
       </PromptInputSubmit>
     </div>
   );
@@ -1435,13 +1499,16 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
               render={
                 <Button
                   aria-label="Add attachment"
-                  className={composerIconButtonClass}
+                  className={cn(
+                    composerIconButtonClass,
+                    "size-8 bg-transparent text-foreground hover:bg-muted"
+                  )}
                   disabled={disabled}
                   size="icon-sm"
                   type="button"
                   variant="ghost"
                 >
-                  <Add01Icon className="size-3.5" />
+                  <Add01Icon className="size-4" />
                 </Button>
               }
             />
@@ -1449,7 +1516,7 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
         />
         <TooltipContent side="top">Add attachment</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="end" className="min-w-40">
+      <DropdownMenuContent align="start" className="min-w-40">
         <DropdownMenuItem
           disabled={disabled}
           onClick={() => openPicker(IMAGE_ACCEPT)}
@@ -1473,7 +1540,7 @@ function StopIcon() {
   return (
     <span
       aria-hidden
-      className="inline-block size-2.5 shrink-0 rounded-[2px] bg-current"
+      className="inline-block size-3 shrink-0 rounded-[3px] bg-current"
     />
   );
 }

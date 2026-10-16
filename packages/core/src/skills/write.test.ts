@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathExists } from "../fs";
+import { getSkillPythonEnvDir } from "./python-env";
 import {
   assertPathWithinProfileSkillsDir,
   assertSupportingFileAllowed,
@@ -93,9 +94,13 @@ describe("createSkillFile", () => {
       profileId: PROFILE_ID,
     });
 
+    const envDir = getSkillPythonEnvDir(directory);
+    await mkdir(join(envDir, "bin"), { recursive: true });
+
     await deleteSkillDirectory(directory);
 
     expect(await pathExists(directory)).toBe(false);
+    expect(await pathExists(envDir)).toBe(false);
   });
 });
 

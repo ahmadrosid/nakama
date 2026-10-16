@@ -138,6 +138,32 @@ export async function listChannelOwners(
   return owners;
 }
 
+/** Thrown when another agent already holds the channel account. */
+export class ChannelIdentityInUseError extends Error {
+  readonly owner: ChannelOwner | null;
+
+  constructor(owner: ChannelOwner | null) {
+    super("This channel account is already in use by another agent.");
+    this.name = "ChannelIdentityInUseError";
+    this.owner = owner;
+  }
+}
+
+const claimOwnerSchema = z.tuple([z.string(), z.string()]);
+
+function parseClaimOwner(value: string): ChannelOwner | null {
+  try {
+    const parsed = claimOwnerSchema.safeParse(JSON.parse(value));
+
+    return parsed.success
+      ? { orgId: parsed.data[0], profileId: parsed.data[1] }
+      : null;
+  } catch {
+    // An unreadable claim still blocks the account; the owner is unknown.
+    return null;
+  }
+}
+
 /** Exclusive creation makes duplicate account claims atomic across server processes. */
 export async function claimChannelIdentity(
   platform: ChannelPlatform,
@@ -170,10 +196,10 @@ export async function claimChannelIdentity(
       throw error;
     }
 
-    if ((await readFile(path, "utf8")) !== value) {
-      throw new Error(
-        "This channel account is already in use by another agent."
-      );
+    const existing = await readFile(path, "utf8");
+
+    if (existing !== value) {
+      throw new ChannelIdentityInUseError(parseClaimOwner(existing));
     }
 
     return async () => {};

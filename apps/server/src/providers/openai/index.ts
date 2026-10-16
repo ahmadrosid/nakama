@@ -174,6 +174,10 @@ function providerLabel(providerName: ProviderName): string {
     return "Meta Model API";
   }
 
+  if (providerName === "groq") {
+    return "Groq";
+  }
+
   if (providerName === "vercel_ai_gateway") {
     return "Vercel AI Gateway";
   }

@@ -49,6 +49,16 @@ export class EphemeralSessionStore {
     return entry;
   }
 
+  findByAttachmentId(attachmentId: string): EphemeralSession | undefined {
+    for (const entry of this.entries.values()) {
+      if (entry.attachmentIds.has(attachmentId)) {
+        return entry;
+      }
+    }
+
+    return undefined;
+  }
+
   clear(): void {
     this.entries.clear();
   }

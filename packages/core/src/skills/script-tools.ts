@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathExists } from "../fs";
 import { SKILL_FILE_NAME, SKILL_TOOL_FILES } from "./paths";
+import { listSkillPythonModules, SKILL_REQUIREMENTS_FILE } from "./python-env";
 
 /** Extensions a skill can ship that some loader might be able to run. */
 const SCRIPT_EXTENSIONS = [".py", ".js", ".ts", ".mjs"] as const;
@@ -262,6 +263,12 @@ export async function resolveSkillScripts(input: {
       .map((script) => path.basename(script, ".py"))
   );
 
+  const installed = await listSkillPythonModules(input.directory);
+
+  const hasRequirements = await pathExists(
+    path.join(input.directory, SKILL_REQUIREMENTS_FILE)
+  );
+
   for (const relative of input.declared) {
     const segments = relative.split(/[/\\]+/u).filter(Boolean);
 
@@ -297,15 +304,20 @@ export async function resolveSkillScripts(input: {
     }
 
     reachable.add(full);
-    const third = thirdPartyImports(source, localModules);
 
-    if (third.length > 0) {
-      // Not a failure, a dependency the runtime may not carry. Said here so the
-      // author hears it at discovery rather than from inside a tool result on
-      // the first call.
+    const missing = thirdPartyImports(source, localModules).filter(
+      (name) => !installed.has(name)
+    );
+
+    if (missing.length > 0) {
+      // Not a failure, a dependency the skill's environment does not carry yet.
+      // Said here so the author hears it at discovery rather than from inside
+      // a tool result on the first call.
       issues.push({
         path: relative,
-        reason: `needs ${third.join(", ")} installed in the Python runtime; nothing here checks that it is`,
+        reason: hasRequirements
+          ? `needs ${missing.join(", ")}, not installed yet: a platform admin installs ${SKILL_REQUIREMENTS_FILE} from the skill page`
+          : `needs ${missing.join(", ")}: list it in ${SKILL_REQUIREMENTS_FILE} so a platform admin can install it for this skill`,
       });
     }
 

@@ -76,8 +76,10 @@ import {
   MAX_KNOWLEDGE_ZIP_BYTES,
 } from "@nakama/core/message-content";
 import {
+  BASH_TOOL_ID,
   BUILTIN_TOOL_IDS,
   isProtectedToolId,
+  SAVE_ARTIFACT_TOOL_ID,
 } from "@nakama/core/tools/protected";
 import type {
   DatabaseAdapter,
@@ -90,6 +92,10 @@ import {
 } from "@nakama/db";
 import { unzipSync } from "fflate";
 import { z } from "zod";
+import {
+  isTenantBashEnabled,
+  TENANT_BASH_DISABLED,
+} from "../tools/bash-config";
 import {
   CUSTOM_TOOL_HANDLERS,
   type CustomToolType,
@@ -217,6 +223,7 @@ const BASIC_PROFILE_TOOL_IDS = [
   BUILTIN_TOOL_IDS.search_files,
   BUILTIN_TOOL_IDS.knowledge_base_search,
   BUILTIN_TOOL_IDS.web_fetch,
+  SAVE_ARTIFACT_TOOL_ID,
 ] as const;
 
 const SOUL_FILE_KEY_BY_NAME = {
@@ -383,7 +390,7 @@ export class ProfileService {
       updatedAt: now,
     };
 
-    await this.db.upsertProfile(profile);
+    await this.insertNewProfile(profile);
     const soulDir = getProfileSoulDir(orgId, profile.id);
     await initSoulDirectory(soulDir);
     await writeGeneratedSoulFiles(soulDir, request.soulFiles);
@@ -415,7 +422,7 @@ export class ProfileService {
     const profileId = await this.resolveNewProfileId(request.id);
     const now = new Date().toISOString();
 
-    await this.db.upsertProfile({
+    await this.insertNewProfile({
       automationsEnabled: source.automationsEnabled !== false,
       createdAt: now,
       id: profileId,
@@ -467,7 +474,19 @@ export class ProfileService {
     }
 
     await this.db.replaceProfileComposioToolkits(profileId, []);
-    await this.db.deleteProfile(profileId);
+    await this.db.deleteProfileForOrg(profileId, orgId);
+  }
+
+  // resolveNewProfileId checks the id before this runs, so a concurrent import
+  // or create can claim it in between. The insert is the real claim; an upsert
+  // here would rewrite the other org's row.
+  private async insertNewProfile(profile: StoredProfileRecord): Promise<void> {
+    if (!(await this.db.createProfileIfAbsent(profile))) {
+      throw new NakamaApiError(
+        `Profile id "${profile.id}" is already taken.`,
+        409
+      );
+    }
   }
 
   private async copyProfileSoul(
@@ -1008,6 +1027,10 @@ export class ProfileService {
 
     if (!tool) {
       throw new NakamaApiError("Tool not found.", 404);
+    }
+
+    if (tool.id === BASH_TOOL_ID && !isTenantBashEnabled()) {
+      throw new NakamaApiError(TENANT_BASH_DISABLED, 403);
     }
 
     const assigned = await this.db.listToolsForProfile(profileId);

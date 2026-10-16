@@ -23,6 +23,7 @@ import type {
   OrgMemoryProposalStatus,
   PluginPublishResult,
   PublishOrgPluginReleaseInput,
+  StoredArtifactOwnerRecord,
   StoredArtifactShareRecord,
   StoredAttachmentRecord,
   StoredAuditEvent,
@@ -542,6 +543,17 @@ interface SkillSuggestionRow {
   warnings: string | null;
 }
 
+interface ArtifactOwnerRow {
+  channel: string | null;
+  created_at: string;
+  filename: string;
+  org_id: string;
+  profile_id: string;
+  session_id: string | null;
+  user_id: string | null;
+  user_name: string | null;
+}
+
 interface ArtifactShareRow {
   created_at: string;
   created_by_user_id: string;
@@ -996,40 +1008,68 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       updated_at = excluded.updated_at
   `);
 
+  const insertProfileIfAbsentStmt = db.prepare(`
+    INSERT INTO profiles (
+      id,
+      name,
+      system_prompt,
+      model,
+      thinking_enabled,
+      thinking_effort,
+      is_super,
+      org_id,
+      is_default,
+      automations_enabled,
+      skills_write_approval,
+      skills_post_turn_review,
+      skills_curator_consolidate_enabled,
+      acp_agent,
+      acp_settings,
+      owner_user_id,
+      shared_with_team,
+      created_at,
+      updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO NOTHING
+  `);
+
+  const profileInsertArgs = (record: StoredProfileRecord) => [
+    record.id,
+    record.name,
+    record.systemPrompt,
+    record.model,
+    record.thinkingEnabled == null ? null : record.thinkingEnabled ? 1 : 0,
+    record.thinkingEffort ?? null,
+    record.isSuper ? 1 : 0,
+    record.orgId ?? null,
+    record.isDefault ? 1 : 0,
+    record.automationsEnabled === false ? 0 : 1,
+    record.skillsWriteApproval == null
+      ? null
+      : record.skillsWriteApproval
+        ? 1
+        : 0,
+    record.skillsPostTurnReview == null
+      ? null
+      : record.skillsPostTurnReview
+        ? 1
+        : 0,
+    record.skillsCuratorConsolidateEnabled == null
+      ? null
+      : record.skillsCuratorConsolidateEnabled
+        ? 1
+        : 0,
+    record.acpAgent ? JSON.stringify(record.acpAgent) : null,
+    record.acpSettings ? JSON.stringify(record.acpSettings) : null,
+    record.ownerUserId ?? null,
+    record.sharedWithTeam === false ? 0 : 1,
+    record.createdAt,
+    record.updatedAt ?? record.createdAt,
+  ];
+
   const runUpsertProfileStmt = (record: StoredProfileRecord) => {
-    upsertProfileStmt.run(
-      record.id,
-      record.name,
-      record.systemPrompt,
-      record.model,
-      record.thinkingEnabled == null ? null : record.thinkingEnabled ? 1 : 0,
-      record.thinkingEffort ?? null,
-      record.isSuper ? 1 : 0,
-      record.orgId ?? null,
-      record.isDefault ? 1 : 0,
-      record.automationsEnabled === false ? 0 : 1,
-      record.skillsWriteApproval == null
-        ? null
-        : record.skillsWriteApproval
-          ? 1
-          : 0,
-      record.skillsPostTurnReview == null
-        ? null
-        : record.skillsPostTurnReview
-          ? 1
-          : 0,
-      record.skillsCuratorConsolidateEnabled == null
-        ? null
-        : record.skillsCuratorConsolidateEnabled
-          ? 1
-          : 0,
-      record.acpAgent ? JSON.stringify(record.acpAgent) : null,
-      record.acpSettings ? JSON.stringify(record.acpSettings) : null,
-      record.ownerUserId ?? null,
-      record.sharedWithTeam === false ? 0 : 1,
-      record.createdAt,
-      record.updatedAt ?? record.createdAt
-    );
+    upsertProfileStmt.run(...profileInsertArgs(record));
   };
 
   const upsertDefaultProfileTransaction = db.transaction(
@@ -1194,6 +1234,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   );
 
   const deleteProfileStmt = db.prepare("DELETE FROM profiles WHERE id = ?");
+
+  const deleteProfileForOrgStmt = db.prepare(
+    "DELETE FROM profiles WHERE id = ? AND org_id = ?"
+  );
 
   const listToolsStmt = db.prepare<ToolRow, SQLQueryBindings[]>(
     "SELECT * FROM tools"
@@ -1479,6 +1523,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       WHERE s.profile_id = ?1
         AND s.channel IN (SELECT value FROM json_each(?2))
         AND (?8 IS NULL OR s.id = ?8)
+        AND (
+          ?10 IS NULL
+          OR s.user_id = ?10
+          OR s.channel IN (SELECT value FROM json_each(?11))
+        )
         AND s.app_user_id IS NULL
         -- Only message text is searched: content is a string or an array of
         -- parts, and matching the raw JSON would let "role" hit every chat.
@@ -1844,6 +1893,25 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   >(`
     SELECT id, plugin_key FROM tools
     WHERE org_id = ? AND plugin_id = ?
+  `);
+
+  const listProfilesWithPluginAssignmentCountStmt = db.prepare<
+    { profile_id: string },
+    SQLQueryBindings[]
+  >(`
+    SELECT profile_id FROM (
+      SELECT profile_tools.profile_id AS profile_id
+      FROM profile_tools
+      INNER JOIN tools ON tools.id = profile_tools.tool_id
+      WHERE tools.org_id = ? AND tools.plugin_id = ?
+      UNION ALL
+      SELECT profile_skills.profile_id AS profile_id
+      FROM profile_skills
+      INNER JOIN skills ON skills.id = profile_skills.skill_id
+      WHERE skills.org_id = ? AND skills.plugin_id = ?
+    )
+    GROUP BY profile_id
+    HAVING COUNT(*) = ?
   `);
 
   const findToolNameCollisionStmt = db.prepare(`
@@ -3370,6 +3438,34 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     ORDER BY created_at DESC
   `);
 
+  const upsertArtifactRecordStmt = db.prepare(`
+    INSERT INTO artifacts (
+      org_id, profile_id, filename, session_id, user_id, channel, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (org_id, profile_id, filename) DO UPDATE SET
+      session_id = excluded.session_id,
+      user_id = excluded.user_id,
+      channel = excluded.channel,
+      created_at = excluded.created_at
+  `);
+
+  const listArtifactRecordsStmt = db.prepare<
+    ArtifactOwnerRow,
+    SQLQueryBindings[]
+  >(`
+    SELECT
+      a.org_id, a.profile_id, a.filename, a.session_id, a.user_id,
+      a.channel, a.created_at,
+      COALESCE(NULLIF(u.name, ''), u.email) AS user_name
+    FROM artifacts a
+    LEFT JOIN users u ON u.id = a.user_id
+    WHERE a.org_id = ? AND a.profile_id = ?
+  `);
+
+  const deleteArtifactRecordStmt = db.prepare(`
+    DELETE FROM artifacts WHERE org_id = ? AND profile_id = ? AND filename = ?
+  `);
+
   const createArtifactShareStmt = db.prepare(`
     INSERT INTO artifact_shares (
       id, org_id, profile_id, source_path, filename, mime_type, size_bytes,
@@ -4014,14 +4110,34 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         );
       }
 
+      const ownedSkills = listOwnedSkillIdsStmt.all(
+        input.orgId,
+        input.pluginId
+      );
+
+      const ownedTools = listOwnedToolIdsStmt.all(input.orgId, input.pluginId);
+      const ownedCount = ownedSkills.length + ownedTools.length;
+
+      // Profiles that held every tool and skill of the previous release keep
+      // full access when the new release adds tools or skills.
+      const fullAccessProfileIds =
+        ownedCount === 0
+          ? []
+          : listProfilesWithPluginAssignmentCountStmt
+              .all(
+                input.orgId,
+                input.pluginId,
+                input.orgId,
+                input.pluginId,
+                ownedCount
+              )
+              .map((row) => row.profile_id);
+
       const incomingSkillKeys = new Set(
         input.contributions.skills.map((skill) => skill.pluginKey)
       );
 
-      for (const row of listOwnedSkillIdsStmt.all(
-        input.orgId,
-        input.pluginId
-      )) {
+      for (const row of ownedSkills) {
         if (!incomingSkillKeys.has(row.plugin_key)) {
           unassignSkillFromAllProfilesStmt.run(row.id);
           deleteSkillStmt.run(row.id);
@@ -4051,13 +4167,19 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           skill.createdAt,
           skill.updatedAt
         );
+
+        if (!owned) {
+          for (const profileId of fullAccessProfileIds) {
+            assignSkillStmt.run(profileId, id);
+          }
+        }
       }
 
       const incomingToolKeys = new Set(
         input.contributions.tools.map((tool) => tool.pluginKey)
       );
 
-      for (const row of listOwnedToolIdsStmt.all(input.orgId, input.pluginId)) {
+      for (const row of ownedTools) {
         if (!incomingToolKeys.has(row.plugin_key)) {
           unassignToolFromAllProfilesStmt.run(row.id);
           deleteToolStmt.run(row.id);
@@ -4084,6 +4206,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           tool.createdAt,
           tool.updatedAt
         );
+
+        if (!owned) {
+          for (const profileId of fullAccessProfileIds) {
+            assignToolStmt.run(profileId, id);
+          }
+        }
       }
 
       const published = getOrgPluginStmt.get(input.orgId, input.pluginId);
@@ -4474,6 +4602,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
+    async createProfileIfAbsent(record) {
+      const result = insertProfileIfAbsentStmt.run(
+        ...profileInsertArgs(record)
+      );
+
+      return result.changes > 0;
+    },
+
     async createSharedAgentInstance(
       teamOrgId,
       publicationId,
@@ -4555,6 +4691,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async createUser(record) {
       runCreateUserStmt(record);
     },
+    async deleteArtifactRecord(orgId, profileId, filename) {
+      deleteArtifactRecordStmt.run(orgId, profileId, filename);
+    },
 
     async deleteAttachment(id) {
       const result = deleteAttachmentStmt.run(id);
@@ -4628,6 +4767,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async deleteProfile(id) {
       const result = deleteProfileStmt.run(id);
+
+      return result.changes > 0;
+    },
+
+    async deleteProfileForOrg(id, orgId) {
+      const result = deleteProfileForOrgStmt.run(id, orgId);
 
       return result.changes > 0;
     },
@@ -5280,6 +5425,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.position
       );
     },
+    async listArtifactRecords(orgId, profileId) {
+      return listArtifactRecordsStmt
+        .all(orgId, profileId)
+        .map((row) => toArtifactOwnerRecord(row));
+    },
 
     async listArtifactSharesForProfile(orgId, profileId) {
       return listArtifactSharesForProfileStmt
@@ -5536,7 +5686,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async listSessionSummaries(profileId, channels, options = {}) {
-      const { after, limit, query, sessionId } = options;
+      const { after, limit, query, sessionId, sharedChannels, userId } =
+        options;
 
       return listSessionSummariesStmt
         .all(
@@ -5549,7 +5700,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           // SQLite reads a negative LIMIT as no limit.
           limit ?? -1,
           sessionId ?? null,
-          query ? likeContains(query) : null
+          query ? likeContains(query) : null,
+          userId ?? null,
+          JSON.stringify(sharedChannels ?? [])
         )
         .map((row) => toSessionSummaryRecord(row));
     },
@@ -6012,6 +6165,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.error,
         record.completedAt,
         record.id
+      );
+    },
+    async upsertArtifactRecord(record) {
+      upsertArtifactRecordStmt.run(
+        record.orgId,
+        record.profileId,
+        record.filename,
+        record.sessionId,
+        record.userId,
+        record.channel,
+        record.createdAt
       );
     },
 
@@ -7224,6 +7388,21 @@ function toSkillSuggestionRecord(
     status: row.status as StoredSkillSuggestion["status"],
     // SAFETY: The adapter writes this row value through its typed contract.
     warnings: row.warnings ? (JSON.parse(row.warnings) as string[]) : null,
+  };
+}
+
+function toArtifactOwnerRecord(
+  row: ArtifactOwnerRow
+): StoredArtifactOwnerRecord {
+  return {
+    channel: row.channel,
+    createdAt: row.created_at,
+    filename: row.filename,
+    orgId: row.org_id,
+    profileId: row.profile_id,
+    sessionId: row.session_id,
+    userId: row.user_id,
+    userName: row.user_name,
   };
 }
 

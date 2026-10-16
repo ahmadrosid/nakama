@@ -53,7 +53,18 @@ function messageMatchesSkill(message: string, skill: DiscoveredSkill): boolean {
 
   const keywords = extractKeywords(skill.description);
 
-  return keywords.some((keyword) => containsWord(normalized, keyword));
+  return keywords.some(
+    (keyword) =>
+      containsWord(normalized, keyword) ||
+      containsWord(normalized, singularize(keyword))
+  );
+}
+
+/** Descriptions list plurals ("artifacts"); users often type the singular. */
+function singularize(word: string): string {
+  return word.length > 4 && word.endsWith("s") && !word.endsWith("ss")
+    ? word.slice(0, -1)
+    : word;
 }
 
 function extractKeywords(description: string): string[] {

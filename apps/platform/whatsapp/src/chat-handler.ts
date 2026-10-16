@@ -619,6 +619,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
               if (
                 event.tool === "write_file" ||
                 event.tool === "write_docx" ||
+                event.tool === "save_artifact" ||
                 event.tool === "edit_file"
               ) {
                 writeCalls.add(event.toolCallId);

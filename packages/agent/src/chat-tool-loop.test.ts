@@ -1373,6 +1373,79 @@ describe("agent chat tool loop", () => {
 
 describe("plugin tool discovery", () => {
   test.each(["send", "stream"])(
+    "keeps session-scoped discoveries across turns and clears them on reset (%s)",
+    async (mode) => {
+      const snapshots: string[][] = [];
+      let runs = 0;
+
+      const mcp: ToolDefinition = {
+        ...sampleTool,
+        discoveryGroup: "filesystem",
+        discoveryScope: "session",
+        name: "filesystem__read_file",
+        async run() {
+          runs += 1;
+
+          return { ok: true };
+        },
+      };
+
+      const replies = [
+        toolTurn([
+          {
+            arguments: { query: "read filesystem" },
+            id: "discover",
+            name: "find_tools",
+          },
+        ]),
+        toolTurn([{ arguments: {}, id: "read", name: mcp.name }]),
+        textReply("Done"),
+        toolTurn([{ arguments: {}, id: "read_again", name: mcp.name }]),
+        textReply("Done again"),
+        textReply("Reset"),
+      ];
+
+      const generate = (input: GenerateChatInput) => {
+        snapshots.push(input.tools?.map((tool) => tool.name) ?? []);
+
+        return Promise.resolve(replies.shift()!);
+      };
+
+      const provider: ProviderClient = {
+        generateChat: generate,
+        generateText: async () => ({ content: "" }),
+        name: "openai",
+        async streamChat(input, handlers) {
+          const result = await generate(input);
+          handlers.onChunk(result.content);
+
+          return result;
+        },
+      };
+
+      const session = createAgentChatSession({
+        provider,
+        tools: [sampleTool, mcp],
+      });
+
+      if (mode === "stream") {
+        await session.sendStream("Read the file", { onChunk() {} });
+      } else {
+        await session.send("Read the file");
+      }
+
+      await session.send("Read again");
+      expect(snapshots[0]).toEqual(["sample", "find_tools"]);
+      expect(snapshots[1]).toContain(mcp.name);
+      expect(snapshots[3]).toContain(mcp.name);
+      expect(runs).toBe(2);
+      session.clear();
+      await session.send("Hello");
+      expect(snapshots[5]).toEqual(snapshots[0]);
+    }
+  );
+
+  test.each(["send", "stream"])(
     "loads only requested definitions and resets next turn (%s)",
     async (mode) => {
       const snapshots: string[][] = [];

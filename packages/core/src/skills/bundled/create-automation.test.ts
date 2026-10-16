@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { discoverSkillDirectory } from "../discover";
+import { matchSkillsForMessage } from "../match";
 import { readBundledSkillMarkdown } from "./index";
 import { ensureBundledSkillFiles } from "./install";
 
@@ -26,7 +27,7 @@ describe("ensureBundledSkillFiles", () => {
     expect(created).toContain("manage-skills");
     expect(created).toContain("update-profile-memory");
     expect(created).toContain("archive-profile-memory");
-    expect(created).toContain("save-artifact");
+    expect(created).toContain("artifact-design");
     expect(created).toContain("create-profile");
     expect(created).toContain("coding-agent");
     expect(created).toContain("coding-backend-codex");
@@ -137,18 +138,49 @@ describe("ensureBundledSkillFiles", () => {
     expect(content).not.toContain("description: stale");
   });
 
-  test("refreshes an installed save-artifact skill on startup", async () => {
-    const directory = join(configDir, "agent", "skills", "save-artifact");
+  test("refreshes an installed artifact-design skill on startup", async () => {
+    const directory = join(configDir, "agent", "skills", "artifact-design");
     const skillPath = join(directory, "SKILL.md");
     await mkdir(directory, { recursive: true });
     await Bun.write(skillPath, "outdated bundled skill");
 
     const refreshed = await ensureBundledSkillFiles();
 
-    expect(refreshed).toContain("save-artifact");
+    expect(refreshed).toContain("artifact-design");
     expect(await readFile(skillPath, "utf8")).toBe(
-      await readBundledSkillMarkdown("save-artifact")
+      await readBundledSkillMarkdown("artifact-design")
     );
+  });
+
+  test("moves an installed save-artifact skill to artifact-design", async () => {
+    const skillsDir = join(configDir, "agent", "skills");
+    const legacyDir = join(skillsDir, "save-artifact");
+    await mkdir(legacyDir, { recursive: true });
+    await Bun.write(join(legacyDir, "SKILL.md"), "legacy skill");
+
+    await ensureBundledSkillFiles();
+
+    expect(await readdir(skillsDir)).not.toContain("save-artifact");
+    expect(
+      await readFile(join(skillsDir, "artifact-design", "SKILL.md"), "utf8")
+    ).toBe(await readBundledSkillMarkdown("artifact-design"));
+  });
+
+  test("matches artifact-design for a casual slide deck request", async () => {
+    await ensureBundledSkillFiles();
+
+    const skill = await discoverSkillDirectory(
+      join(configDir, "agent", "skills", "artifact-design")
+    );
+
+    expect(skill).not.toBeNull();
+
+    const matched = matchSkillsForMessage(
+      skill ? [skill] : [],
+      "hey can you make me a slide deck for our team sync on friday? it's about Q3 results. keep it like 6-7 slides"
+    );
+
+    expect(matched.map((entry) => entry.name)).toEqual(["artifact-design"]);
   });
 
   test("refreshes an installed memory archive skill on startup", async () => {

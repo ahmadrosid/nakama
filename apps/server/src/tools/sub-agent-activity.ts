@@ -102,7 +102,11 @@ export function formatToolActivityLabel(
     }
   }
 
-  if (tool === "write_file" || tool === "write_docx") {
+  if (
+    tool === "write_file" ||
+    tool === "write_docx" ||
+    tool === "save_artifact"
+  ) {
     const path = readString(details, "path");
 
     if (path) {

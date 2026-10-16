@@ -90,7 +90,11 @@ import {
   recordProfileChangeEvent,
   withAssignmentChange,
 } from "./profile-change-history";
-import { loadPythonSkillTool } from "./python-skill-tool-loader";
+import {
+  createPythonSkillRunner,
+  installSkillPythonPackages,
+  loadPythonSkillTool,
+} from "./python-skill-tool-loader";
 import { isSkillWriteApprovalRequired } from "./skill-write-approval";
 
 export interface SkillUsageRecordingContext {
@@ -99,6 +103,11 @@ export interface SkillUsageRecordingContext {
 }
 
 const bundledSkillNames = new Set<string>(BUNDLED_SKILL_NAMES);
+
+// `<pluginId>.<skillKey>.<hash>` under skills/.plugins/. Plugin ids and skill
+// keys cannot contain ".", so the parts never run into each other.
+const PLUGIN_SKILL_COPY_NAME =
+  /^[a-z][a-z0-9-]*\.[a-z][a-z0-9_-]*\.[a-f0-9]{12}$/;
 
 function isPluginOwnedSkill(record: StoredSkillRecord): boolean {
   return Boolean(record.pluginId && record.pluginKey);
@@ -1339,6 +1348,15 @@ export class SkillsService {
     return { files, truncated };
   }
 
+  async installSkillPythonPackages(
+    orgId: string,
+    skillId: string
+  ): Promise<{ output: string }> {
+    return installSkillPythonPackages(
+      await this.skillFilesRoot(orgId, skillId)
+    );
+  }
+
   async readSkillFile(
     orgId: string,
     skillId: string,
@@ -2041,10 +2059,22 @@ export class SkillsService {
       ];
     });
 
+    // A profile that already holds a host shell gets a runner for each skill
+    // whose Python no harness reaches, so nothing runs here that the profile
+    // could not already run through bash. A shared skill executes for another
+    // org's profile, whose tools this one does not see, so it gets none.
+    const runners =
+      !sharedContext &&
+      (await this.db.listToolsForProfile(profileId)).some(
+        (tool) => tool.handlerType === "bash"
+      )
+        ? loadable.map((item) => createPythonSkillRunner(item.discovered))
+        : [];
+
     return [
       ...javascriptTools,
       ...refusals,
-      ...[...pythonTools, ...declaredTools].filter(
+      ...[...pythonTools, ...declaredTools, ...runners].filter(
         (tool): tool is ToolDefinition => tool !== null
       ),
     ];
@@ -2189,11 +2219,23 @@ export class SkillsService {
 
     // Releases are immutable. A new release gets a new copy, and concurrent
     // readers only see complete bundles. Nesting prevents standalone discovery.
-    const version = createHash("sha256").update(source).digest("hex");
+    // The name is short and readable so models copy it correctly; the source
+    // hash suffix keeps each release in its own directory.
+    const version = createHash("sha256")
+      .update(source)
+      .digest("hex")
+      .slice(0, 12);
+
+    const name = `${record.pluginId}.${record.pluginKey}.${version}`;
+
+    if (!PLUGIN_SKILL_COPY_NAME.test(name)) {
+      return null;
+    }
+
     const workspace = getProfileSoulDir(orgId, profileId);
     await mkdir(workspace, { mode: 0o700, recursive: true });
     const parent = path.join(workspace, "skills", ".plugins");
-    const directory = path.join(parent, version);
+    const directory = path.join(parent, name);
     await guardFilePath(directory, null, undefined, { cwd: workspace });
     await guardFilePath(
       path.join(directory, SKILL_FILE_NAME),
@@ -2502,7 +2544,11 @@ export class SkillsService {
       const directory = path.join(parent, entry);
 
       // Only delete host-generated release copies, never unrelated files.
-      if (/^[a-f0-9]{64}$/.test(entry) && !retained.has(directory)) {
+      // Older installs named copies by the full 64-char source hash.
+      if (
+        (PLUGIN_SKILL_COPY_NAME.test(entry) || /^[a-f0-9]{64}$/.test(entry)) &&
+        !retained.has(directory)
+      ) {
         await guardFilePath(directory, null, undefined, { cwd: workspace });
         await rm(directory, { force: true, recursive: true });
       }

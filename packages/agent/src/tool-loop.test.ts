@@ -181,6 +181,50 @@ describe("tool-loop", () => {
 });
 
 describe("createTurnTools", () => {
+  test("checks discovery access before loading a tool and cancels without widening the session", async () => {
+    const discovered = new Set<string>();
+    let checked = 0;
+    const controller = new AbortController();
+
+    const assigned: ToolDefinition[] = [
+      {
+        ...sampleTool,
+        async canDiscover() {
+          checked += 1;
+
+          return false;
+        },
+        discoveryGroup: "office",
+        discoveryScope: "session",
+        name: "office__read",
+      },
+      {
+        ...sampleTool,
+        async canDiscover() {
+          controller.abort();
+
+          return true;
+        },
+        discoveryGroup: "office",
+        discoveryScope: "session",
+        name: "office__write",
+      },
+    ];
+
+    const active = createTurnTools(assigned, discovered);
+    const search = active[0]!;
+    expect(await search.run({ query: "read office" }, {})).toEqual({
+      remaining: 0,
+      tools: [],
+    });
+    expect(checked).toBe(1);
+    await expect(
+      search.run({ query: "write office" }, { signal: controller.signal })
+    ).rejects.toThrow();
+    expect(discovered.size).toBe(0);
+    expect(active.map((tool) => tool.name)).toEqual(["find_tools"]);
+  });
+
   test("discovery is bounded to assignments, validates input, and does not execute tools", async () => {
     let calls = 0;
 

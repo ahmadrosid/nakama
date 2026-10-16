@@ -509,7 +509,9 @@ export function formatToolActionLabel(
   }
 
   if (
-    (tool === "write_file" || tool === "write_docx") &&
+    (tool === "write_file" ||
+      tool === "write_docx" ||
+      tool === "save_artifact") &&
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     typeof input?.path === "string"
   ) {
@@ -980,12 +982,8 @@ export const composerIconButtonClass = cn(
 export const composerToolbarClass =
   "flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden @[22rem]/composer:gap-1.5";
 
-/** Ghost select trigger for composer model / thinking controls (no filled chip look). */
-export const composerSelectTriggerClass =
-  "h-7 w-auto max-w-full min-w-0 gap-1 rounded-md border-none bg-transparent px-1.5 text-xs font-medium text-muted-foreground shadow-none hover:bg-accent/60 hover:text-foreground aria-expanded:bg-accent/60 aria-expanded:text-foreground dark:bg-transparent dark:hover:bg-accent/60 *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate";
-
 const composerInputGroupBase =
-  "[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:flex-col [&_[data-slot=input-group]]:items-stretch [&_[data-slot=input-group]]:gap-0 [&_[data-slot=input-group]]:p-2.5 sm:[&_[data-slot=input-group]]:p-3";
+  "[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:flex-col [&_[data-slot=input-group]]:items-stretch [&_[data-slot=input-group]]:gap-0 [&_[data-slot=input-group]]:p-2 sm:[&_[data-slot=input-group]]:p-2.5";
 
 /** Chat composer InputGroup: solid face, no focus ring (streaming rim is the active cue). */
 export const composerInputGroupClass =
@@ -998,8 +996,8 @@ export function composerShelfPanelClass(
   edge: ComposerStackEdge = "start"
 ): string {
   return cn(
-    "relative z-0 w-full shrink-0 overflow-hidden border border-border border-b-0 bg-card shadow-xs",
-    edge === "start" ? "rounded-t-xl rounded-b-none" : "rounded-none"
+    "relative z-0 mx-auto w-[calc(100%-2.5rem)] shrink-0 overflow-hidden border border-border border-b-0 bg-card shadow-xs",
+    edge === "start" ? "rounded-t-2xl rounded-b-none" : "rounded-none"
   );
 }
 

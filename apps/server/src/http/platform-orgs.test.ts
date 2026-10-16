@@ -39,6 +39,7 @@ describe("platform org routes", () => {
       adminMember: {
         member: {
           createdAt: expect.any(String),
+          disabledAt: null,
           email: "platform@example.com",
           name: null,
           phone: null,

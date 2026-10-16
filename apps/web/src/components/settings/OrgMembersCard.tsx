@@ -23,6 +23,7 @@ import {
   useInviteOrgMember,
   useOrgMembers,
   useRemoveOrgMember,
+  useSetOrgMemberDisabled,
   useUpdateOrgMember,
 } from "@/hooks/use-org-members";
 import { formatError } from "@/lib/client";
@@ -322,6 +323,7 @@ export function OrgMembersCard() {
   );
 
   const actions = useOrgMemberActions(orgId ?? "", state, dispatch);
+  const setDisabled = useSetOrgMemberDisabled(orgId ?? "");
 
   if (!activeOrg || activeOrg.role !== "admin") {
     return null;
@@ -417,10 +419,23 @@ export function OrgMembersCard() {
               <div>
                 <OrgMembersTable
                   currentUserEmail={user?.email}
+                  disablePending={setDisabled.isPending}
                   isLoading={isLoading}
                   members={members}
                   onEdit={(member) => dispatch({ member, type: "open-edit" })}
                   onRemove={handleRemove}
+                  onToggleDisabled={
+                    user?.isPlatformAdmin
+                      ? (member) =>
+                          setDisabled.mutate(
+                            {
+                              disabled: !member.disabledAt,
+                              userId: member.userId,
+                            },
+                            { onError: (error) => toast(formatError(error)) }
+                          )
+                      : undefined
+                  }
                   removePending={removeMutation.isPending}
                   updatePending={updateMemberMutation.isPending}
                 />

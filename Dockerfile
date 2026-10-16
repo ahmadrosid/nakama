@@ -6,7 +6,7 @@
 # Verify each proposed multi-arch digest with: docker buildx imagetools inspect <image>
 
 # --- Build architecture-independent web and JavaScript bundles once ---
-FROM --platform=$BUILDPLATFORM oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52d95a519631e2fc61 AS web-builder
+FROM --platform=$BUILDPLATFORM oven/bun:1.4.3-slim@sha256:14a223fa35747ec728bce300ef85888bc5f7958164d15bbba6a54b22b52a3288 AS web-builder
 WORKDIR /app
 
 COPY package.json bun.lock ./
@@ -36,7 +36,7 @@ COPY --from=web-builder /app/apps/platform/slack/dist /app/apps/platform/slack/d
 # Production runtime dependencies are installed from a committed manifest and
 # lockfile. Re-resolving version ranges at image build time let two builds of
 # the same commit ship different transitive bytes, so the lockfile is the input.
-FROM oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52d95a519631e2fc61 AS runtime-deps
+FROM oven/bun:1.4.3-slim@sha256:14a223fa35747ec728bce300ef85888bc5f7958164d15bbba6a54b22b52a3288 AS runtime-deps
 WORKDIR /runtime-deps
 
 COPY .docker/runtime-deps/package.json .docker/runtime-deps/bun.lock ./
@@ -62,10 +62,10 @@ RUN set -eu; \
   chmod +x /ffmpeg /ffprobe
 
 # --- Production runtime (server + workspace packages + built static assets) ---
-FROM oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52d95a519631e2fc61 AS runtime
+FROM oven/bun:1.4.3-slim@sha256:14a223fa35747ec728bce300ef85888bc5f7958164d15bbba6a54b22b52a3288 AS runtime
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates sudo python3 \
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates sudo python3 python3-venv \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=ffmpeg-binaries /ffmpeg /ffprobe /usr/local/bin/
 

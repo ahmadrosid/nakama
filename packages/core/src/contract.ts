@@ -192,6 +192,10 @@ export interface SlackWorkerStatus {
 export interface WhatsAppWorkerStatus {
   configured: boolean;
   connected: boolean;
+  /** Set when WhatsApp linked an account this agent may not use. */
+  linkError?: string;
+  /** The agent that holds that account, when the viewer may see its org. */
+  linkOwner?: { agentName: string; orgName: string };
   ok: boolean;
   paired: boolean;
   process?: WorkerProcessInfo;
@@ -835,6 +839,8 @@ export interface SetActiveOrgRequest {
 
 export interface OrgMemberSummary {
   createdAt: string;
+  /** Set while the account is disabled; disabling is install-wide, not per org. */
+  disabledAt?: string | null;
   email: string;
   name: string | null;
   phone: string | null;
@@ -2682,7 +2688,16 @@ export interface UpdateSoulFileRequest {
   content: string;
 }
 
+/** Who saved an artifact. Absent when no owner was recorded (older files, shell writes). */
+export interface ArtifactCreator {
+  channel: string | null;
+  createdAt: string;
+  userId: string | null;
+  userName: string | null;
+}
+
 export interface ArtifactFile {
+  createdBy?: ArtifactCreator;
   filename: string;
   mimeType: string;
   path: string;
@@ -2915,6 +2930,7 @@ export type ProviderName =
   | "zhipu"
   | "zhipu_cn"
   | "xai"
+  | "groq"
   | "together"
   | "xiaomi"
   | "meta"
@@ -3162,6 +3178,12 @@ export interface ToolContext {
   /** Emits concise live status lines while a sub-agent child loop runs (parent web UI). */
   emitSubAgentActivity?: (label: string) => void;
   /**
+   * When true (save_artifact is in the session tool list), write_file refuses paths
+   * under artifacts/ so every saved artifact goes through save_artifact and gets an
+   * owner row.
+   */
+  forbidArtifactFileWrites?: boolean;
+  /**
    * When true (a cognito session), write_file / write_docx / edit_file / delete_file
    * refuse MEMORY.md and memory-archive/YYYY-MM.md under the profile workspace, so a
    * chat that leaves no trace cannot leave one through the file tools either.
@@ -3259,9 +3281,13 @@ export interface ToolContext {
 }
 
 export interface ToolDefinition<Input = unknown, Output = unknown> {
+  /** Rechecked before a deferred tool is returned by discovery. */
+  canDiscover?: (context: ToolContext) => Promise<boolean>;
   description: string;
-  /** Assigned plugin tools in this group are discovered per user turn. */
+  /** Assigned tools in this group are loaded through discovery. */
   discoveryGroup?: string;
+  /** Plugins default to one turn; MCP discoveries can last for the session. */
+  discoveryScope?: "session";
   /**
    * When true, the LLM provider runs this tool itself and `run` is never
    * called. Only `web_search` uses it today: the built-in stub is hosted, a
@@ -3445,6 +3471,21 @@ export interface ListOrgPluginsResponse {
 
 export interface ListPluginReleasesResponse {
   releases: PluginReleaseSummary[];
+}
+
+/** An organization that still holds a plugin, so its releases cannot be removed. */
+export interface PluginUsageOrg {
+  /** Agents in this organization with one of the plugin's tools or skills. */
+  agents: Array<{ id: string; name: string }>;
+  lifecycleState: OrgPluginLifecycleState;
+  name: string;
+  orgId: string;
+  revision: number;
+  selectedVersion: string | null;
+}
+
+export interface PluginUsageResponse {
+  orgs: PluginUsageOrg[];
 }
 
 /** A registry version newer than anything approved for this plugin. */

@@ -161,6 +161,7 @@ import type {
   PluginPackagePreviewResponse,
   PluginPackageRequest,
   PluginRevisionRequest,
+  PluginUsageResponse,
   PluginWorkerStatus,
   PreviewDataImportRequest,
   ProfilePackImportRequest,
@@ -1361,6 +1362,16 @@ export class NakamaClient {
   ): Promise<SkillResponse> {
     return this.request<SkillResponse>(
       `/v1/skills/${encodeURIComponent(skillId)}/versions/${encodeURIComponent(versionId)}/restore`,
+      { headers: { "X-Org-Id": orgId }, method: "POST" }
+    );
+  }
+
+  async installSkillPythonPackages(
+    skillId: string,
+    orgId: string
+  ): Promise<{ output: string }> {
+    return this.request<{ output: string }>(
+      `/v1/skills/${encodeURIComponent(skillId)}/python-packages`,
       { headers: { "X-Org-Id": orgId }, method: "POST" }
     );
   }
@@ -3228,6 +3239,12 @@ export class NakamaClient {
     );
   }
 
+  async getPluginUsage(pluginId: string): Promise<PluginUsageResponse> {
+    return this.request<PluginUsageResponse>(
+      `/v1/platform/plugins/${encodeURIComponent(pluginId)}/usage`
+    );
+  }
+
   async removePluginRelease(pluginId: string, version: string): Promise<void> {
     await this.request(
       `/v1/platform/plugins/releases/${encodeURIComponent(pluginId)}/${encodeURIComponent(version)}`,
@@ -3461,6 +3478,17 @@ export class NakamaClient {
     return this.request<ListOrgMembersResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/members`,
       { headers: { "X-Org-Id": orgId } }
+    );
+  }
+
+  async setPlatformOrgMemberDisabled(
+    orgId: string,
+    userId: string,
+    disabled: boolean
+  ): Promise<void> {
+    await this.request<void>(
+      `/v1/platform/orgs/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}/${disabled ? "disable" : "enable"}`,
+      { method: "POST" }
     );
   }
 

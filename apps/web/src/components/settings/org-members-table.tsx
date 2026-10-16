@@ -7,7 +7,13 @@ import {
   DropdownMenuTrigger,
 } from "@nakama/ui/dropdown-menu";
 import { Spinner } from "@nakama/ui/spinner";
-import { Delete02Icon, Edit03Icon, MoreHorizontalIcon } from "hugeicons-react";
+import {
+  Delete02Icon,
+  Edit03Icon,
+  MoreHorizontalIcon,
+  UserBlock01Icon,
+  UserCheck01Icon,
+} from "hugeicons-react";
 
 const JOINED_FORMAT = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
@@ -29,17 +35,22 @@ export function OrgMembersTable({
   isLoading,
   updatePending,
   removePending,
+  disablePending = false,
   onEdit,
   onRemove,
+  onToggleDisabled,
 }: {
   members: OrgMemberSummary[];
   currentUserEmail?: string;
   isLoading: boolean;
   updatePending: boolean;
   removePending: boolean;
+  disablePending?: boolean;
   /** Without both handlers the table is read-only and has no actions column. */
   onEdit?: (member: OrgMemberSummary) => void;
   onRemove?: (member: OrgMemberSummary) => void;
+  /** Platform admins only: disabling an account is install-wide. */
+  onToggleDisabled?: (member: OrgMemberSummary) => void;
 }) {
   const editable = Boolean(onEdit && onRemove);
 
@@ -88,6 +99,11 @@ export function OrgMembersTable({
                   {isSelf ? (
                     <span className="ml-1.5 text-muted-foreground">(you)</span>
                   ) : null}
+                  {member.disabledAt ? (
+                    <span className="ml-1.5 rounded-full bg-muted px-2 py-0.5 text-muted-foreground text-xs">
+                      Disabled
+                    </span>
+                  ) : null}
                 </p>
                 {member.name ? (
                   <p className="truncate text-muted-foreground">
@@ -125,6 +141,20 @@ export function OrgMembersTable({
                           <Edit03Icon aria-hidden />
                           Edit
                         </DropdownMenuItem>
+                        {onToggleDisabled ? (
+                          <DropdownMenuItem
+                            aria-label={`${member.disabledAt ? "Enable" : "Disable"} ${displayName}`}
+                            disabled={disablePending}
+                            onClick={() => onToggleDisabled(member)}
+                          >
+                            {member.disabledAt ? (
+                              <UserCheck01Icon aria-hidden />
+                            ) : (
+                              <UserBlock01Icon aria-hidden />
+                            )}
+                            {member.disabledAt ? "Enable" : "Disable"}
+                          </DropdownMenuItem>
+                        ) : null}
                         <DropdownMenuItem
                           aria-label={`Remove ${displayName}`}
                           disabled={removePending}

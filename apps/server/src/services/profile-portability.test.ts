@@ -10,8 +10,17 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { getCustomToolsDir, slugifyProfileName } from "@nakama/core";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import {
+  discoverSkillDirectory,
+  getCustomToolsDir,
+  pathExists,
+  slugifyProfileName,
+} from "@nakama/core";
+import {
+  createInMemoryDatabaseAdapter,
+  type DatabaseAdapter,
+  type StoredProfileRecord,
+} from "@nakama/db";
 import { unzipSync, zipSync } from "fflate";
 import { AuthService } from "./auth-service";
 import {
@@ -33,6 +42,48 @@ const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 const ORG = "org_test";
 
 const DEST = "org_dest";
+
+const OTHER = "org_other";
+
+const OTHER_DEST = "org_other_dest";
+
+const CONTESTED_NAME = "Contested Bot";
+
+/**
+ * Parks the first attempt to claim `id` until a second attempt has already
+ * claimed one, so concurrent imports deterministically collide on the same
+ * slug instead of depending on timing.
+ */
+function holdFirstClaimOf(db: DatabaseAdapter, id: string): DatabaseAdapter {
+  let claims = 0;
+  let releaseFirst: () => void = () => {};
+
+  const firstMayClaim = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+
+  return {
+    ...db,
+    async createProfileIfAbsent(record: StoredProfileRecord) {
+      if (record.id !== id) {
+        return db.createProfileIfAbsent(record);
+      }
+
+      claims += 1;
+
+      if (claims === 1) {
+        await firstMayClaim;
+
+        return db.createProfileIfAbsent(record);
+      }
+
+      const created = await db.createProfileIfAbsent(record);
+      releaseFirst();
+
+      return created;
+    },
+  };
+}
 
 const VICTIM = "org_victim";
 
@@ -463,6 +514,127 @@ describe("profile portability", () => {
     });
     await db.assignSkillToProfile(profileId, id);
   }
+
+  async function writePythonSkill(
+    db: DatabaseAdapter,
+    orgId: string,
+    profileId: string
+  ) {
+    const name = "python-skill";
+    const dir = path.join(soul(orgId, profileId), "skills", name);
+    await mkdir(path.join(dir, "scripts"), { recursive: true });
+    await writeFile(
+      path.join(dir, "SKILL.md"),
+      `---\nname: ${name}\ndescription: ${name}.\nscripts: scripts/extra.py\n---\n\nBody.\n`,
+      "utf8"
+    );
+
+    const source = [
+      "import json",
+      "import sys",
+      "",
+      "",
+      "def run(payload, context):",
+      "    return payload",
+      "",
+      "",
+      'if __name__ == "__main__":',
+      '    print(json.dumps(run(json.loads(sys.stdin.read() or "{}"), {})))',
+      "",
+    ].join("\n");
+
+    await writeFile(path.join(dir, "tool.py"), source, "utf8");
+    await writeFile(path.join(dir, "scripts", "extra.py"), source, "utf8");
+    const id = `skill_${name}`;
+    await db.upsertSkill({
+      createdAt: now(),
+      createdBy: "human",
+      description: `${name}.`,
+      disableModelInvocation: false,
+      enabled: true,
+      hasTool: true,
+      id,
+      name,
+      orgId,
+      sourcePath: dir,
+      updatedAt: now(),
+    });
+    await db.assignSkillToProfile(profileId, id);
+
+    return name;
+  }
+
+  // A packed skill's Python runs as a subprocess on the host, so only a
+  // platform admin may install it, exactly like custom tool source.
+  test("packed python skill scripts install only with platform admin approval", async () => {
+    const { db, service } = await setup();
+
+    const { profile } = await service.createProfile(ORG, {
+      name: "Python Bot",
+    });
+
+    const name = await writePythonSkill(db, ORG, profile.id);
+
+    const exported = await createProfilePackExport(db, ORG, profile.id);
+
+    const orgAdminDb = createInMemoryDatabaseAdapter();
+
+    const preview = await previewProfilePackImport(
+      orgAdminDb,
+      DEST,
+      exported.data
+    );
+
+    const blocked = preview.skippedAssignments
+      .filter((item) => item.reason.includes("platform admin"))
+      .map((item) => item.path);
+
+    expect(blocked).toContain(`skills/${name}/tool.py`);
+    expect(blocked).toContain(`skills/${name}/scripts/extra.py`);
+
+    const orgAdminImport = await importProfilePack(
+      orgAdminDb,
+      DEST,
+      exported.data,
+      { confirm: true }
+    );
+
+    const orgAdminDir = path.join(
+      soul(DEST, orgAdminImport.profileId),
+      "skills",
+      name
+    );
+
+    expect(await pathExists(path.join(orgAdminDir, "tool.py"))).toBe(false);
+    const orgAdminSkill = await discoverSkillDirectory(orgAdminDir);
+    expect(orgAdminSkill?.hasTool).toBe(false);
+    expect(orgAdminSkill?.scriptTools).toEqual([]);
+    expect(
+      (await orgAdminDb.listSkillsForProfile(orgAdminImport.profileId)).map(
+        (skill) => skill.name
+      )
+    ).toContain(name);
+
+    const platformDb = createInMemoryDatabaseAdapter();
+
+    const platformImport = await importProfilePack(
+      platformDb,
+      DEST,
+      exported.data,
+      { allowPythonSkillTools: true, confirm: true }
+    );
+
+    const platformDir = path.join(
+      soul(DEST, platformImport.profileId),
+      "skills",
+      name
+    );
+
+    expect(await pathExists(path.join(platformDir, "tool.py"))).toBe(true);
+    const platformSkill = await discoverSkillDirectory(platformDir);
+    expect(platformSkill?.hasTool).toBe(true);
+    expect(platformSkill?.scriptTools).toHaveLength(1);
+  });
 
   /** Re-zips a real pack with attacker-chosen entries grafted in. */
   function repack(archive: Buffer, extra: Record<string, string>): Buffer {
@@ -1213,6 +1385,88 @@ describe("profile portability", () => {
         p.name.includes("Rollback")
       )
     ).toBe(false);
+  });
+
+  test("concurrent imports of the same name never take over each other's row", async () => {
+    const { db, service } = await setup();
+
+    const sourceA = await service.createProfile(ORG, {
+      id: "source-a-bot",
+      name: CONTESTED_NAME,
+      systemPrompt: "prompt A",
+    });
+
+    const sourceB = await service.createProfile(OTHER, {
+      id: "source-b-bot",
+      name: CONTESTED_NAME,
+      systemPrompt: "prompt B",
+    });
+
+    const packA = await createProfilePackExport(db, ORG, sourceA.profile.id);
+    const packB = await createProfilePackExport(db, OTHER, sourceB.profile.id);
+
+    const gated = holdFirstClaimOf(db, "contested-bot");
+
+    const [first, second] = await Promise.all([
+      importProfilePack(gated, DEST, packA.data, { confirm: true }),
+      importProfilePack(gated, OTHER_DEST, packB.data, { confirm: true }),
+    ]);
+
+    expect(first.profileId).not.toBe(second.profileId);
+
+    // Neither import may rewrite the other's row, settings included.
+    const [rowA, rowB] = await Promise.all([
+      db.getProfileForOrg(first.profileId, DEST),
+      db.getProfileForOrg(second.profileId, OTHER_DEST),
+    ]);
+
+    expect(rowA?.systemPrompt).toBe("prompt A");
+    expect(rowB?.systemPrompt).toBe("prompt B");
+    expect(await db.listProfilesForOrg(DEST)).toHaveLength(1);
+    expect(await db.listProfilesForOrg(OTHER_DEST)).toHaveLength(1);
+  });
+
+  test("failed import rollback spares a profile that left the importing org", async () => {
+    const { db, service } = await setup();
+
+    const { profile } = await service.createProfile(ORG, {
+      name: "Handoff Rollback Bot",
+    });
+
+    await db.upsertTool({
+      createdAt: now(),
+      description: "Boom",
+      handlerConfig: {},
+      handlerType: "builtin",
+      id: "tool_handoff_boom",
+      name: "handoff-boom-tool",
+      updatedAt: now(),
+    });
+    await db.assignToolToProfile(profile.id, "tool_handoff_boom");
+    const exported = await createProfilePackExport(db, ORG, profile.id);
+
+    let handedOff = "";
+    const assignTool = db.assignToolToProfile.bind(db);
+    // An admin hands the freshly allocated profile to another org while the
+    // import is still in flight; rollback must not delete it.
+    db.assignToolToProfile = async (profileId: string) => {
+      handedOff = profileId;
+      const current = await db.getProfile(profileId);
+
+      if (current) {
+        await db.upsertProfile({ ...current, orgId: OTHER });
+      }
+
+      throw new Error("forced assignment failure");
+    };
+
+    await expect(
+      importProfilePack(db, DEST, exported.data, { confirm: true })
+    ).rejects.toThrow("forced assignment failure");
+    db.assignToolToProfile = assignTool;
+
+    expect((await db.getProfileForOrg(handedOff, OTHER))?.id).toBe(handedOff);
+    expect(await db.listProfilesForOrg(DEST)).toEqual([]);
   });
 
   test("a pack carrying a skill-local tool.js is refused, not installed", async () => {

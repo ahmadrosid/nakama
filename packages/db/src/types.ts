@@ -768,6 +768,23 @@ export interface StoredSkillSuggestion {
   warnings: string[] | null;
 }
 
+/** Owner of a file under a profile's artifacts/ folder. */
+export interface StoredArtifactRecord {
+  channel: string | null;
+  createdAt: string;
+  /** Relative to the profile's artifacts/ folder, with `/` separators. */
+  filename: string;
+  orgId: string;
+  profileId: string;
+  sessionId: string | null;
+  userId: string | null;
+}
+
+export interface StoredArtifactOwnerRecord extends StoredArtifactRecord {
+  /** The owner's name, or email when the name is empty. Null for channel users. */
+  userName: string | null;
+}
+
 export interface StoredArtifactShareRecord {
   createdAt: string;
   createdByUserId: string;
@@ -929,6 +946,13 @@ export interface DatabaseAdapter {
 
   /** Append-only insert. Adapters must not expose update/delete for this table. */
   createProfileChangeEvent(record: StoredProfileChangeEvent): Promise<void>;
+
+  /**
+   * Inserts a profile only when its id is still free. Resolves to `false`,
+   * leaving the existing row untouched, when the id is already taken, so
+   * allocation and insertion stay atomic for concurrent callers.
+   */
+  createProfileIfAbsent(record: StoredProfileRecord): Promise<boolean>;
   createSharedAgentInstance(
     teamOrgId: string,
     publicationId: string,
@@ -945,6 +969,11 @@ export interface DatabaseAdapter {
     record: Omit<StoredSkillVersion, "version">
   ): Promise<StoredSkillVersion>;
   createUser(record: StoredUserRecord): Promise<void>;
+  deleteArtifactRecord(
+    orgId: string,
+    profileId: string,
+    filename: string
+  ): Promise<void>;
   deleteAttachment(id: string): Promise<boolean>;
   deleteAutomation(id: string): Promise<boolean>;
   deleteComposioToolkit(id: string): Promise<boolean>;
@@ -964,6 +993,8 @@ export interface DatabaseAdapter {
   deletePasskeys(userId: string): Promise<void>;
   deletePluginRelease(pluginId: string, version: string): Promise<boolean>;
   deleteProfile(id: string): Promise<boolean>;
+  /** Org-scoped delete: resolves to `false` when the profile belongs elsewhere. */
+  deleteProfileForOrg(id: string, orgId: string): Promise<boolean>;
   deleteSession(id: string): Promise<boolean>;
   deleteSkill(id: string): Promise<boolean>;
   deleteTool(id: string): Promise<boolean>;
@@ -1216,6 +1247,10 @@ export interface DatabaseAdapter {
   insertWorkflowRun(record: StoredWorkflowRunRecord): Promise<void>;
   insertWorkflowRunStep(record: StoredWorkflowRunStepRecord): Promise<void>;
 
+  listArtifactRecords(
+    orgId: string,
+    profileId: string
+  ): Promise<StoredArtifactOwnerRecord[]>;
   listArtifactSharesForProfile(
     orgId: string,
     profileId: string
@@ -1317,7 +1352,8 @@ export interface DatabaseAdapter {
   listProfilesForOrg(orgId: string): Promise<StoredProfileRecord[]>;
   /**
    * Newest first, pinned ahead. `after` is the last row of the previous page;
-   * `sessionId` narrows the list to that one session.
+   * `sessionId` narrows the list to that one session. `userId` keeps the
+   * sessions that user owns, plus every session on a `sharedChannels` channel.
    */
   listSessionSummaries(
     profileId: string,
@@ -1331,6 +1367,8 @@ export interface DatabaseAdapter {
       /** Keeps the sessions whose title or user/assistant text contains it. */
       query?: string;
       sessionId?: string;
+      sharedChannels?: readonly string[];
+      userId?: string;
     }
   ): Promise<StoredSessionSummaryRecord[]>;
 
@@ -1561,6 +1599,8 @@ export interface DatabaseAdapter {
   ): Promise<void>;
   updateWorkflowRun(record: StoredWorkflowRunRecord): Promise<void>;
   updateWorkflowRunStep(record: StoredWorkflowRunStepRecord): Promise<void>;
+  /** A new file at a path whose old row survived (e.g. removed by a shell) replaces that row. */
+  upsertArtifactRecord(record: StoredArtifactRecord): Promise<void>;
   upsertAutomation(record: StoredAutomationRecord): Promise<void>;
   upsertAutomationRunReadThrough(
     userId: string,

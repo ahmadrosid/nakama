@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   artifactCodeLanguage,
+  assertHtmlArtifactSize,
   inferArtifactMimeType,
   isDelimitedSpreadsheetFile,
   isHtmlArtifactMimeType,
@@ -10,8 +11,33 @@ import {
   isUnknownArtifactMimeType,
   isVideoArtifactMimeType,
   looksLikeUtf8Text,
+  MAX_HTML_ARTIFACT_BYTES,
   resolveArtifactMimeType,
 } from "./artifact-mime";
+
+test.each([
+  ["page.html", ""],
+  ["page.HTM", "text/plain"],
+  ["page.xhtml", "application/octet-stream"],
+  ["page.bin", "Text/HTML; charset=utf-8"],
+])("limits HTML by extension or declared type: %s", (filename, mimeType) => {
+  expect(() =>
+    assertHtmlArtifactSize(filename, MAX_HTML_ARTIFACT_BYTES, mimeType)
+  ).not.toThrow();
+  expect(() =>
+    assertHtmlArtifactSize(filename, MAX_HTML_ARTIFACT_BYTES + 1, mimeType)
+  ).toThrow(expect.objectContaining({ status: 413 }));
+});
+
+test("does not impose the HTML limit on other formats", () => {
+  expect(() =>
+    assertHtmlArtifactSize(
+      "movie.mp4",
+      MAX_HTML_ARTIFACT_BYTES + 1,
+      "video/mp4"
+    )
+  ).not.toThrow();
+});
 
 describe("inferArtifactMimeType", () => {
   test("falls back to binary for unknown or extensionless names", () => {
