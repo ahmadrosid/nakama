@@ -90,7 +90,7 @@ jobs:
 
       # Hand-off only: publishing runs in a separate job without signing access.
       - name: Upload signed build
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nakama-desktop-mac
           path: |
@@ -199,7 +199,7 @@ jobs:
           bun run --cwd apps/desktop test:runtime
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload Windows installer
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nakama-windows-installer
           path: |
@@ -259,7 +259,7 @@ jobs:
           $env:NAKAMA_DESKTOP_TEST_RUNTIME = Join-Path $PWD 'apps/desktop/dist/electron/win-unpacked/resources/runtime'
           bun run --cwd apps/desktop test:runtime
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nakama-windows-store
           path: apps/desktop/dist/electron/*.msix
