@@ -6,6 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   addOrgIdColumnIfMissing,
+  migrateArtifactDesignSkillName,
   migrateCodingDelegationSkillName,
   migrateDatabase,
   moveProfileJoinReferences,
@@ -706,6 +707,84 @@ describe("legacy profile id migration", () => {
       ]);
       expect(db.prepare("SELECT profile_id FROM sessions").all()).toEqual([
         { profile_id: "profile_default" },
+      ]);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("save-artifact skill rename migration", () => {
+  const insertSkill = (db: Database, id: string, name: string) =>
+    db
+      .prepare(
+        `INSERT INTO skills (
+          id, name, description, source_path, has_tool,
+          disable_model_invocation, enabled, created_at, updated_at
+        ) VALUES (?, ?, '', ?, 0, 0, 1, '2026-10-16T00:00:00.000Z', '2026-10-16T00:00:00.000Z')`
+      )
+      .run(id, name, `/tmp/.nakama/agent/skills/${name}/SKILL.md`);
+
+  const insertProfile = (db: Database, id: string) =>
+    db
+      .prepare(
+        `INSERT INTO profiles (id, name, system_prompt, model, is_super, created_at, updated_at)
+        VALUES (?, ?, '', NULL, 0, '2026-10-16T00:00:00.000Z', '2026-10-16T00:00:00.000Z')`
+      )
+      .run(id, id);
+
+  test("renames save-artifact skill records to artifact-design", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+      insertSkill(db, "skill_artifact", "save-artifact");
+
+      migrateArtifactDesignSkillName(db);
+
+      expect(
+        db
+          .prepare("SELECT name, source_path FROM skills WHERE id = ?")
+          .get("skill_artifact")
+      ).toEqual({
+        name: "artifact-design",
+        source_path: "/tmp/.nakama/agent/skills/artifact-design/SKILL.md",
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  test("moves profile assignments to artifact-design without duplicates", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+      insertProfile(db, "ops");
+      insertProfile(db, "both");
+      insertSkill(db, "skill_legacy", "save-artifact");
+      insertSkill(db, "skill_canonical", "artifact-design");
+      db.exec(`
+        INSERT INTO profile_skills (profile_id, skill_id) VALUES
+          ('ops', 'skill_legacy'),
+          ('both', 'skill_legacy'),
+          ('both', 'skill_canonical');
+      `);
+
+      migrateArtifactDesignSkillName(db);
+
+      expect(
+        db.prepare("SELECT id FROM skills WHERE name LIKE '%artifact%'").all()
+      ).toEqual([{ id: "skill_canonical" }]);
+      expect(
+        db
+          .prepare(
+            "SELECT profile_id, skill_id FROM profile_skills ORDER BY profile_id"
+          )
+          .all()
+      ).toEqual([
+        { profile_id: "both", skill_id: "skill_canonical" },
+        { profile_id: "ops", skill_id: "skill_canonical" },
       ]);
     } finally {
       db.close();

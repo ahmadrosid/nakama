@@ -283,7 +283,7 @@ Profiles receive bundled skills for common workflows:
 - `manage-skills` — create, patch, edit, and delete profile-scoped skills (and supporting files under a skill directory) with the `skill_manage` tool (file tools still inspect skills; they cannot write under `skills/*/` when `skill_manage` is present)
 - `update-profile-memory` — record facts in active `MEMORY.md` via file tools
 - `archive-profile-memory` — move facts from active `MEMORY.md` into `memory-archive/` without deleting them
-- `save-artifact` — save files the agent produces (reports, documents, generated text) under `artifacts/` via `write_file`
+- `artifact-design` — design rules for the HTML pages, dashboards, and slide decks the agent saves under `artifacts/`
 - `coding-agent` — invoke a coding agent for repo work via `bash` (Super Bot by default; see [Coding agent](/coding-agent))
 - `agent-browser` — interactive browser automation via `bash` (opt-in; see [Agent browser](/agent-browser))
 
@@ -299,15 +299,15 @@ Org admins can enable **Ask me before a bot saves a skill** under **Control cent
 
 ### Bundled system skills
 
-`update-profile-memory`, `archive-profile-memory`, and `save-artifact` replace older dedicated builtins. They teach the agent how to use generic file tools safely:
+`update-profile-memory` and `archive-profile-memory` replace older dedicated builtins. They teach the agent how to use generic file tools safely:
 
 - **Memory write path:** read or create `MEMORY.md`, append a dated `- bullet` under the user's timezone date, keep the `# Memory Log` preamble, stay under 4096 bytes
 - **Archive path:** copy exact bullets to `memory-archive/YYYY-MM.md`, then remove them from `MEMORY.md`
-- **Artifact path:** save the file the agent produced with `write_file` or `write_docx` under `artifacts/{filename}` with the correct file extension. Nakama derives the file type, size, and timestamp automatically. Use `write_file` for text, Markdown, HTML, JSON, and code; use `write_docx` when the user wants a real Word document.
+- **Artifact path** (chat prompt rules): save the file the agent produced with `save_artifact` or `write_docx` under `artifacts/{filename}` with the correct file extension. Nakama derives the file type, size, and timestamp automatically. Use `save_artifact` for text, Markdown, HTML, JSON, and code; use `write_docx` when the user wants a real Word document.
 
-These skills use `include-body-on-match: true`, so the full procedure loads when the user's message matches the skill description. The chat wrapper also mentions memory skills when `read_file` and `edit_file` are available, and `save-artifact` when `write_file` is available.
+These skills use `include-body-on-match: true`, so the full procedure loads when the user's message matches the skill description. The chat wrapper also mentions memory skills when `read_file` and `edit_file` are available, and the artifact save rules when `save_artifact` or `write_file` is available.
 
-They are hidden from the `/skill` slash picker (like `create-automation` and `manage-skills`) because they are system workflows, not user-authored skills. Agents can still invoke them explicitly with `/skill update-profile-memory`, `/skill archive-profile-memory`, or `/skill save-artifact`.
+They are hidden from the `/skill` slash picker (like `create-automation` and `manage-skills`) because they are system workflows, not user-authored skills. Agents can still invoke them explicitly with `/skill update-profile-memory`, `/skill archive-profile-memory`, or `/skill artifact-design`.
 
 ### Coding agent
 
@@ -387,7 +387,7 @@ Skill management is a platform-admin operation in the dashboard and API.
 - Use **`archive-profile-memory`** when the user wants to forget, tidy, or free space in active memory without deleting history
 - Use the **main profile prompt** for always-on behavior and identity
 - Use a **builtin tool** for a native capability like web search or file access
-- Use **`save-artifact`** with **`write_file`** or **`write_docx`** when the agent should save a file for you (reports, summaries, generated text, Word documents) under `artifacts/`
+- Use **`save_artifact`** or **`write_docx`** when the agent should save a file for you (reports, summaries, generated text, Word documents) under `artifacts/`; **`artifact-design`** sets how HTML pages, dashboards, and decks look
 - Use **`coding-agent`** with **`bash`** when repo work is better handled by a dedicated coding agent ([setup](/coding-agent))
 - Use **`agent-browser`** with **`bash`** for login walls, forms, and interactive browsing ([setup](/agent-browser))
 - Use an **MCP server** for external tool integrations

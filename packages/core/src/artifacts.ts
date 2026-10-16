@@ -198,7 +198,7 @@ async function readArtifactMeta(
 
     return artifactMetaSchema.parse(JSON.parse(raw));
   } catch {
-    // Artifacts written straight to disk (no `save-artifact` sidecar) still need
+    // Artifacts written straight to disk (no `save_artifact` sidecar) still need
     // an accurate type, otherwise the UI cannot preview them.
     return {
       mimeType: inferArtifactMimeType(path.basename(filePath)),

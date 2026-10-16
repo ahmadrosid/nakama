@@ -55,7 +55,7 @@ The chat runtime then wraps the profile prompt with general chat instructions:
 - The user's timezone
 - Tool-use guidance for assigned tools
 - Memory and skill rules when `read_file` and `edit_file` are available (bundled `update-profile-memory` and `archive-profile-memory` skills)
-- Artifact guidance when `write_file` is available (bundled `save-artifact` skill)
+- Artifact save rules when `save_artifact` or `write_file` is available (the bundled `artifact-design` skill adds layout and styling)
 - Word-document guidance when `write_docx` is available (use Markdown input; never target `.docx` paths with `write_file`)
 - Coding-agent harness context when `coding-agent` matches ([Coding agent](/coding-agent))
 - Telegram or WhatsApp behavior when the message comes from those channels
@@ -93,7 +93,7 @@ Profiles do not use dedicated memory or artifact builtins. The chat wrapper nudg
 |-------|-------------|---------|
 | `update-profile-memory` | `read_file` + `edit_file` | Append facts and preferences to active `MEMORY.md` |
 | `archive-profile-memory` | `read_file` + `edit_file` | Move bullets from `MEMORY.md` into `memory-archive/` without deleting them |
-| `save-artifact` | `write_file` or `write_docx` | Save files the agent produces under `artifacts/` with metadata for the dashboard; on web chat, paired saves also show as message attachment chips with in-chat preview |
+| `artifact-design` | `save_artifact` or `write_file` | Design rules for HTML pages, dashboards, and slide decks the agent saves under `artifacts/`; on web chat, saved files show as message attachment chips with in-chat preview |
 
 The skills catalog is always visible. When a user message matches a skill description, Nakama can attach the full skill body for that turn (`include-body-on-match: true`).
 

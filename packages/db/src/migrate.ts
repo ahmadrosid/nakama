@@ -54,6 +54,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migratePasswordResetTokensTable);
   migrateLegacyProfileIds(db);
   atomic(migrateCodingDelegationSkillName);
+  atomic(migrateArtifactDesignSkillName);
   atomic(migrateWorkspaceSettingsTable);
   atomic(migrateLlmUsageOrgScope);
   atomic(migrateToolOutputSavingsTable);
@@ -1667,11 +1668,25 @@ function migrateLegacyProfileIds(db: Database): void {
 }
 
 export function migrateCodingDelegationSkillName(db: Database): void {
+  renameSkillRecords(db, "coding-delegation", "coding-agent");
+}
+
+export function migrateArtifactDesignSkillName(db: Database): void {
+  renameSkillRecords(db, "save-artifact", "artifact-design");
+}
+
+// Points profile_skills at the new name without duplicates, then drops the
+// old rows. With no new row yet, the old rows take the new name and path.
+function renameSkillRecords(
+  db: Database,
+  oldName: string,
+  newName: string
+): void {
   const legacyRows = db
     .prepare<{ id: string; source_path: string }, SQLQueryBindings[]>(
       "SELECT id, source_path FROM skills WHERE name = ?"
     )
-    .all("coding-delegation");
+    .all(oldName);
 
   if (legacyRows.length === 0) {
     return;
@@ -1681,7 +1696,7 @@ export function migrateCodingDelegationSkillName(db: Database): void {
     .prepare<{ id: string }, SQLQueryBindings[]>(
       "SELECT id FROM skills WHERE name = ?"
     )
-    .get("coding-agent");
+    .get(newName);
 
   if (canonical) {
     const reassignProfileSkill = db.prepare(`
@@ -1721,8 +1736,8 @@ export function migrateCodingDelegationSkillName(db: Database): void {
 
   for (const row of legacyRows) {
     update.run(
-      "coding-agent",
-      row.source_path.replaceAll("coding-delegation", "coding-agent"),
+      newName,
+      row.source_path.replaceAll(oldName, newName),
       now,
       row.id
     );

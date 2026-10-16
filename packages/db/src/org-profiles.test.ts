@@ -77,7 +77,7 @@ describe("seedOrgDefaultProfile", () => {
     await upsertSkill(db, "skill-installer");
     await upsertSkill(db, "update-profile-memory");
     await upsertSkill(db, "archive-profile-memory");
-    await upsertSkill(db, "save-artifact");
+    await upsertSkill(db, "artifact-design");
     await upsertSkill(db, "create-profile");
 
     const profile = await seedOrgDefaultProfile(db, "org_a");
@@ -90,7 +90,7 @@ describe("seedOrgDefaultProfile", () => {
     expect(skillNames).toContain("skill-installer");
     expect(skillNames).toContain("update-profile-memory");
     expect(skillNames).toContain("archive-profile-memory");
-    expect(skillNames).toContain("save-artifact");
+    expect(skillNames).toContain("artifact-design");
     expect(skillNames).not.toContain("create-profile");
   });
 });
@@ -245,7 +245,7 @@ describe("seedOrgSuperBotProfile", () => {
     const profile = await seedOrgSuperBotProfile(db, "org_a");
     await upsertSkill(db, "update-profile-memory");
     await upsertSkill(db, "archive-profile-memory");
-    await upsertSkill(db, "save-artifact");
+    await upsertSkill(db, "artifact-design");
 
     await seedOrgSuperBotProfile(db, "org_a");
 
@@ -255,7 +255,7 @@ describe("seedOrgSuperBotProfile", () => {
 
     expect(skillNames).toContain("update-profile-memory");
     expect(skillNames).toContain("archive-profile-memory");
-    expect(skillNames).toContain("save-artifact");
+    expect(skillNames).toContain("artifact-design");
   });
 
   test("backfills super bot bundled skills on existing super bot", async () => {

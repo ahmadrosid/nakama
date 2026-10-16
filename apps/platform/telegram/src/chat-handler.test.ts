@@ -2037,7 +2037,7 @@ describe("createChatHandler artifact delivery", () => {
     { content: "Saved the report.", role: "assistant" },
   ];
 
-  test("posts a publish share link after a paired save-artifact turn", async () => {
+  test("posts a publish share link after a paired save_artifact turn", async () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         botToken: "1234567890:TEST",

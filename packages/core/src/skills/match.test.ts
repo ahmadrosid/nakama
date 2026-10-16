@@ -55,7 +55,7 @@ describe("matchSkillsForMessage", () => {
     const artifactSkill: DiscoveredSkill = {
       ...weatherSkill,
       description: "Create or save artifacts and dashboards.",
-      name: "save-artifact",
+      name: "artifact-design",
     };
 
     expect(
@@ -63,7 +63,7 @@ describe("matchSkillsForMessage", () => {
         [artifactSkill],
         "can you make me a dashboard artifact for Q3?"
       ).map((skill) => skill.name)
-    ).toEqual(["save-artifact"]);
+    ).toEqual(["artifact-design"]);
   });
 
   test("matches create-workflow on singular workflow", () => {
