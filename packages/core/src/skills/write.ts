@@ -23,6 +23,7 @@ import {
   SKILL_FILE_NAME,
   SKILL_TOOL_FILES,
 } from "./paths";
+import { getSkillPythonEnvDir } from "./python-env";
 
 const bundledSkillNames = new Set<string>(BUNDLED_SKILL_NAMES);
 
@@ -542,5 +543,10 @@ export async function deleteSkillDirectory(directory: string): Promise<void> {
     throw new Error("Skill directory is outside the allowed skills path.");
   }
 
+  // The env key hashes the skill's realpath, so resolve it before the
+  // directory is gone.
+  const envDir = getSkillPythonEnvDir(directory);
+
   await rm(directory, { force: true, recursive: true });
+  await rm(envDir, { force: true, recursive: true });
 }
