@@ -19,6 +19,7 @@ import {
   DialogTitle,
   Switch,
 } from "@nakama/ui";
+import { buttonVariants } from "@nakama/ui/button-variants";
 import {
   AlertCircleIcon,
   ArrowRight01Icon,
@@ -30,6 +31,7 @@ import {
   Settings01Icon,
   StopIcon,
   Upload01Icon,
+  Video01Icon,
 } from "hugeicons-react";
 import * as React from "react";
 import { useAuth } from "@/context/use-auth";
@@ -583,17 +585,18 @@ function ConnectionStatus({
     );
   }
 
-  let message =
-    "Open the Chrome extension on this page and choose Connect this Nakama tab.";
+  let message = "Extension not connected";
+  let tone = "muted";
 
   if (!overview.configured) {
-    message = "Add an OpenAI provider to transcribe meetings.";
+    message = "Needs an OpenAI provider";
+    tone = "warning";
   } else if (!overview.enabled) {
-    message = "Google Meet is disabled.";
+    message = "Disabled";
   }
 
   return (
-    <span className="meet-connection" data-tone="muted" role="status">
+    <span className="meet-connection" data-tone={tone} role="status">
       {message}
     </span>
   );
@@ -974,13 +977,6 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
           />
         </div>
         <div className="meet-row">
-          <Button
-            disabled={!(overview?.enabled && overview.configured)}
-            onClick={() => setRecordingPicker(true)}
-            variant="outline"
-          >
-            Import recording
-          </Button>
           <input
             accept=".md,.markdown,.mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm"
             aria-label="Upload audio or Markdown"
@@ -1005,6 +1001,13 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
             <Upload01Icon aria-hidden="true" size={16} />
             {uploading ? "Importing…" : "Upload file"}
           </Button>
+          <Button
+            disabled={!(overview?.enabled && overview.configured)}
+            onClick={() => setRecordingPicker(true)}
+          >
+            <Video01Icon aria-hidden="true" size={16} />
+            Import recording
+          </Button>
           {overview?.canConfigure && (
             <Button
               aria-label="Settings"
@@ -1019,13 +1022,25 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
         </div>
       </header>
       {overview && !extensionConnected && (
-        <a
-          className="meet-extension-link"
-          download
-          href="/google-meet-extension.zip"
-        >
-          Download Chrome extension
-        </a>
+        <section aria-label="Live capture setup" className="meet-setup">
+          <span aria-hidden="true" className="meet-setup-icon">
+            <Mic01Icon size={18} />
+          </span>
+          <div className="meet-setup-copy">
+            <strong>Record live calls</strong>
+            <span>
+              Install the Chrome extension, then choose Connect this Nakama tab.
+            </span>
+          </div>
+          <a
+            className={buttonVariants({ variant: "outline" })}
+            download
+            href="/google-meet-extension.zip"
+          >
+            <Download01Icon aria-hidden="true" size={16} />
+            Download extension
+          </a>
+        </section>
       )}
       {error && <p role="alert">{error}</p>}
       {live.map((meeting) => (

@@ -1445,7 +1445,7 @@
 .meet-connection {
   white-space: normal;
 }
-.meet-connection[data-tone="success"]::before {
+.meet-connection::before {
   width: 6px;
   height: 6px;
   content: "";
@@ -1461,11 +1461,35 @@
 .meet-page [data-tone="danger"] {
   --meet-tone: #dc2626;
 }
-.meet-extension-link {
-  justify-self: start;
-  font-weight: 500;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+.meet-setup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 14px;
+  align-items: center;
+  padding: 16px;
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.meet-setup-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.meet-setup-copy {
+  display: grid;
+  flex: 1 1 240px;
+  gap: 2px;
+  min-width: 0;
+}
+.meet-setup-copy span {
+  color: var(--muted-foreground);
 }
 .meet-live-heading {
   display: flex;
