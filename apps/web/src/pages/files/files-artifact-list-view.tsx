@@ -19,9 +19,11 @@ import { FilePinsContext, toChatArtifactRef } from "@/pages/files/files-shared";
 export function FileEntriesLayout({
   viewMode,
   children,
+  showCreatedBy = false,
 }: {
   viewMode: FilesViewMode;
   children: ReactNode;
+  showCreatedBy?: boolean;
 }) {
   if (viewMode === "grid") {
     return (
@@ -51,6 +53,14 @@ export function FileEntriesLayout({
             >
               Size
             </th>
+            {showCreatedBy ? (
+              <th
+                className="hidden w-40 px-3 py-2.5 font-normal lg:table-cell"
+                scope="col"
+              >
+                Created by
+              </th>
+            ) : null}
             <th
               className="hidden w-36 px-3 py-2.5 font-normal lg:table-cell"
               scope="col"
@@ -78,7 +88,9 @@ export function FileEntry({
   onOpen,
   actions,
   pinPath,
+  createdBy,
 }: {
+  createdBy?: string | null;
   filename: string;
   mimeType?: string;
   sizeBytes?: number;
@@ -152,6 +164,11 @@ export function FileEntry({
         <td className="hidden px-3 py-3 text-muted-foreground tabular-nums sm:table-cell">
           {directory ? "—" : formatBytes(sizeBytes)}
         </td>
+        {createdBy === undefined ? null : (
+          <td className="hidden truncate px-3 py-3 text-muted-foreground lg:table-cell">
+            {createdBy ?? "—"}
+          </td>
+        )}
         <td className="hidden px-3 py-3 text-muted-foreground tabular-nums lg:table-cell">
           {modified}
         </td>
@@ -253,6 +270,7 @@ function ArtifactListFile({
           profileId={profileId}
         />
       }
+      createdBy={artifactCreatorLabel(artifact)}
       filename={
         showFullPath ? artifact.filename : artifactBasename(artifact.filename)
       }
@@ -281,9 +299,10 @@ export function ArtifactListView({
   onOpenFolder: (prefix: string) => void;
 }) {
   return (
-    <FileEntriesLayout viewMode="list">
+    <FileEntriesLayout showCreatedBy viewMode="list">
       {folders.map((folder) => (
         <FileEntry
+          createdBy={null}
           directory
           filename={folder.name}
           key={folder.prefix}
@@ -305,6 +324,24 @@ export function ArtifactListView({
       ))}
     </FileEntriesLayout>
   );
+}
+
+function artifactCreatorLabel(artifact: ArtifactFile): string | null {
+  const creator = artifact.createdBy;
+
+  if (!creator) {
+    return null;
+  }
+
+  if (creator.userName) {
+    return creator.userName;
+  }
+
+  const channel = creator.channel;
+
+  return channel
+    ? `${channel[0]?.toUpperCase()}${channel.slice(1)} user`
+    : null;
 }
 
 function FilePinButton({

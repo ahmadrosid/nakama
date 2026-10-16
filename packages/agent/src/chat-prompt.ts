@@ -227,10 +227,14 @@ export function buildChatSystemPrompt(
       );
     }
 
-    if (tools.some((tool) => tool.name === "write_file")) {
+    const saveTool = tools.some((tool) => tool.name === "save_artifact")
+      ? "save_artifact"
+      : "write_file";
+
+    if (tools.some((tool) => tool.name === saveTool)) {
       sections.push(
-        "Skills are workflow instructions, not callable tools — never invoke save-artifact (or other skills) as a tool.",
-        "When the user wants output kept or mentions artifacts, use write_file to save under artifacts/ (follow the save-artifact skill when active). Durable deliverables such as reports, slide decks, and exports belong under artifacts/, not the profile workspace root. Save only the deliverable; Nakama derives the file type, size, and timestamp automatically.",
+        "Skills are workflow instructions, not callable tools — never invoke the save-artifact skill (or other skills) as a tool.",
+        `When the user wants output kept or mentions artifacts, use ${saveTool} to save under artifacts/ (follow the save-artifact skill when active). Durable deliverables such as reports, slide decks, and exports belong under artifacts/, not the profile workspace root. Save only the deliverable; Nakama derives the file type, size, and timestamp automatically.`,
         "Do not use artifacts/ for soul files or MEMORY.md."
       );
     }

@@ -394,6 +394,16 @@ export async function runWriteFile(
   const normalizedPath = normalizeArtifactPath(parsed.path);
 
   if (
+    context.forbidArtifactFileWrites &&
+    (isArtifactPath(parsed.path) ||
+      isArtifactPath(path.relative(workspaceRoot, filePath)))
+  ) {
+    throw new Error(
+      "write_file cannot save files under artifacts/. Use save_artifact to save an artifact; use edit_file to change an existing one."
+    );
+  }
+
+  if (
     normalizedPath.endsWith(ARTIFACT_META_SUFFIX) &&
     normalizedPath.startsWith("artifacts/")
   ) {

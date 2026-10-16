@@ -23,6 +23,7 @@ import type {
   OrgMemoryProposalStatus,
   PluginPublishResult,
   PublishOrgPluginReleaseInput,
+  StoredArtifactOwnerRecord,
   StoredArtifactShareRecord,
   StoredAttachmentRecord,
   StoredAuditEvent,
@@ -540,6 +541,17 @@ interface SkillSuggestionRow {
   source: string;
   status: string;
   warnings: string | null;
+}
+
+interface ArtifactOwnerRow {
+  channel: string | null;
+  created_at: string;
+  filename: string;
+  org_id: string;
+  profile_id: string;
+  session_id: string | null;
+  user_id: string | null;
+  user_name: string | null;
 }
 
 interface ArtifactShareRow {
@@ -3407,6 +3419,34 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     ORDER BY created_at DESC
   `);
 
+  const upsertArtifactRecordStmt = db.prepare(`
+    INSERT INTO artifacts (
+      org_id, profile_id, filename, session_id, user_id, channel, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (org_id, profile_id, filename) DO UPDATE SET
+      session_id = excluded.session_id,
+      user_id = excluded.user_id,
+      channel = excluded.channel,
+      created_at = excluded.created_at
+  `);
+
+  const listArtifactRecordsStmt = db.prepare<
+    ArtifactOwnerRow,
+    SQLQueryBindings[]
+  >(`
+    SELECT
+      a.org_id, a.profile_id, a.filename, a.session_id, a.user_id,
+      a.channel, a.created_at,
+      COALESCE(NULLIF(u.name, ''), u.email) AS user_name
+    FROM artifacts a
+    LEFT JOIN users u ON u.id = a.user_id
+    WHERE a.org_id = ? AND a.profile_id = ?
+  `);
+
+  const deleteArtifactRecordStmt = db.prepare(`
+    DELETE FROM artifacts WHERE org_id = ? AND profile_id = ? AND filename = ?
+  `);
+
   const createArtifactShareStmt = db.prepare(`
     INSERT INTO artifact_shares (
       id, org_id, profile_id, source_path, filename, mime_type, size_bytes,
@@ -4600,6 +4640,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async createUser(record) {
       runCreateUserStmt(record);
     },
+    async deleteArtifactRecord(orgId, profileId, filename) {
+      deleteArtifactRecordStmt.run(orgId, profileId, filename);
+    },
 
     async deleteAttachment(id) {
       const result = deleteAttachmentStmt.run(id);
@@ -5330,6 +5373,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.completedAt,
         record.position
       );
+    },
+    async listArtifactRecords(orgId, profileId) {
+      return listArtifactRecordsStmt
+        .all(orgId, profileId)
+        .map((row) => toArtifactOwnerRecord(row));
     },
 
     async listArtifactSharesForProfile(orgId, profileId) {
@@ -6066,6 +6114,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.error,
         record.completedAt,
         record.id
+      );
+    },
+    async upsertArtifactRecord(record) {
+      upsertArtifactRecordStmt.run(
+        record.orgId,
+        record.profileId,
+        record.filename,
+        record.sessionId,
+        record.userId,
+        record.channel,
+        record.createdAt
       );
     },
 
@@ -7278,6 +7337,21 @@ function toSkillSuggestionRecord(
     status: row.status as StoredSkillSuggestion["status"],
     // SAFETY: The adapter writes this row value through its typed contract.
     warnings: row.warnings ? (JSON.parse(row.warnings) as string[]) : null,
+  };
+}
+
+function toArtifactOwnerRecord(
+  row: ArtifactOwnerRow
+): StoredArtifactOwnerRecord {
+  return {
+    channel: row.channel,
+    createdAt: row.created_at,
+    filename: row.filename,
+    orgId: row.org_id,
+    profileId: row.profile_id,
+    sessionId: row.session_id,
+    userId: row.user_id,
+    userName: row.user_name,
   };
 }
 

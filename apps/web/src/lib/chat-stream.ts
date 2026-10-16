@@ -509,7 +509,9 @@ export function formatToolActionLabel(
   }
 
   if (
-    (tool === "write_file" || tool === "write_docx") &&
+    (tool === "write_file" ||
+      tool === "write_docx" ||
+      tool === "save_artifact") &&
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     typeof input?.path === "string"
   ) {

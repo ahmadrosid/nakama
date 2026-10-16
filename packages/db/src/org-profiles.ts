@@ -9,6 +9,7 @@ import {
   GENERATE_IMAGE_TOOL_ID,
   LIST_PROFILE_SESSIONS_TOOL_ID,
   READ_PROFILE_SESSION_TOOL_ID,
+  SAVE_ARTIFACT_TOOL_ID,
 } from "@nakama/core/tools/protected";
 import { SUPER_BOT_SYSTEM_PROMPT } from "./constants";
 import type { DatabaseAdapter, StoredProfileRecord } from "./types";
@@ -30,6 +31,10 @@ export async function ensureProfileDefaultBuiltinTools(
     }
 
     await db.assignToolToProfile(profileId, toolId);
+  }
+
+  if (await db.getTool(SAVE_ARTIFACT_TOOL_ID)) {
+    await db.assignToolToProfile(profileId, SAVE_ARTIFACT_TOOL_ID);
   }
 }
 
@@ -114,11 +119,7 @@ export async function seedOrgDefaultProfile(
   };
 
   await db.upsertProfile(profile);
-
-  for (const toolId of DEFAULT_BUILTIN_TOOL_IDS) {
-    await db.assignToolToProfile(profile.id, toolId);
-  }
-
+  await ensureProfileDefaultBuiltinTools(db, profile.id);
   await ensureProfileDefaultBundledSkills(db, profile.id);
 
   return profile;
@@ -219,6 +220,38 @@ export async function ensureGenerateImageToolDefinition(
     name: "generate_image",
     updatedAt: now,
   });
+}
+
+export async function ensureSaveArtifactToolDefinition(
+  db: DatabaseAdapter
+): Promise<void> {
+  const now = new Date().toISOString();
+  const existing = await db.getTool(SAVE_ARTIFACT_TOOL_ID);
+
+  await db.upsertTool({
+    createdAt: existing?.createdAt ?? now,
+    description:
+      "Save a text deliverable under artifacts/ and record which user made it.",
+    handlerConfig: {},
+    handlerType: "save_artifact",
+    id: SAVE_ARTIFACT_TOOL_ID,
+    name: "save_artifact",
+    updatedAt: now,
+  });
+
+  if (existing) {
+    return;
+  }
+
+  // Once, when the tool first appears: every profile that can write files can save
+  // artifacts. Later boots skip this, so an admin can unassign it.
+  for (const profile of await db.listProfiles()) {
+    const tools = await db.listToolsForProfile(profile.id);
+
+    if (tools.some((tool) => tool.id === BUILTIN_TOOL_IDS.write_file)) {
+      await db.assignToolToProfile(profile.id, SAVE_ARTIFACT_TOOL_ID);
+    }
+  }
 }
 
 /**

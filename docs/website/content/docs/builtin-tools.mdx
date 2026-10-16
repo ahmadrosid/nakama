@@ -47,6 +47,7 @@ Nakama includes these builtins:
 | Tool | `default` / `super_bot` | New custom profiles | Notes |
 |------|-------------------------|---------------------|-------|
 | `write_file` | Yes | Yes | |
+| `save_artifact` | Yes | Yes | Saves a file under `artifacts/` and records who made it |
 | `write_docx` | Yes | No | Create real `.docx` files from Markdown |
 | `delete_file` | Yes | No | |
 | `edit_file` | Yes | Yes | |
@@ -62,7 +63,7 @@ Nakama includes these builtins:
 | `list_profile_sessions` | Super Bot only | No | Opt-in: read another profile's session list (see below) |
 | `read_profile_session` | Super Bot only | No | Opt-in: read another profile's stored transcript (see below) |
 
-**New custom profiles** receive `read_file`, `write_file`, `edit_file`, `search_files`, `knowledge_base_search`, and `web_fetch` until a platform admin assigns additional tools. Memory writes, archives, and artifact saves use bundled skills with those file tools — see [Skills](/skills#bundled-system-skills). Word documents use `write_docx` (system profiles only by default). Coding-agent workflows use `bash` with the `coding-agent` skill — see [Coding agent](/coding-agent). Interactive browser automation (login walls, forms, clicks) uses `bash` with the opt-in `agent-browser` skill — see [Agent browser](/agent-browser). The `sub_agent` tool is seeded but **not** auto-assigned — platform admins opt in per profile. System profiles (`default`, `super_bot`) get the full seeded builtin set; Super Bot also receives `bash`, `list_profile_sessions`, and `read_profile_session`. The two session readers are seeded like `sub_agent` and assigned per profile; Super Bot receives them at seed time, and that assignment is re-applied on every boot.
+**New custom profiles** receive `read_file`, `write_file`, `save_artifact`, `edit_file`, `search_files`, `knowledge_base_search`, and `web_fetch` until a platform admin assigns additional tools. Memory writes, archives, and artifact saves use bundled skills with those file tools — see [Skills](/skills#bundled-system-skills). Word documents use `write_docx` (system profiles only by default). Coding-agent workflows use `bash` with the `coding-agent` skill — see [Coding agent](/coding-agent). Interactive browser automation (login walls, forms, clicks) uses `bash` with the opt-in `agent-browser` skill — see [Agent browser](/agent-browser). The `sub_agent` tool is seeded but **not** auto-assigned — platform admins opt in per profile. System profiles (`default`, `super_bot`) get the full seeded builtin set; Super Bot also receives `bash`, `list_profile_sessions`, and `read_profile_session`. The two session readers are seeded like `sub_agent` and assigned per profile; Super Bot receives them at seed time, and that assignment is re-applied on every boot.
 
 ## Choosing tools for a profile
 
@@ -90,9 +91,13 @@ Active `MEMORY.md` has a **4096-byte** soft limit. Default and super-bot profile
 
 Artifacts are files your agent creates and saves for you: reports, summaries, generated text, Word documents, and other outputs you can preview or download later from **Browse Files → Artifacts** or from web chat.
 
-They are not a separate builtin. Agents use `write_file` or `write_docx` with the `save-artifact` bundled skill under `artifacts/`. Nakama derives the file type, size, and timestamp automatically.
+Agents save text artifacts with `save_artifact`, guided by the `save-artifact` bundled skill. Word documents use `write_docx`, and images use `generate_image`. Nakama derives the file type, size, and timestamp automatically.
 
-On web chat, `write_file` and `write_docx` saves under `artifacts/` appear as attachment chips on the assistant message. Click a chip to open a resizable preview panel with copy, download, and fullscreen:
+`save_artifact` and `generate_image` also record which user made the file. **Browse Files → Artifacts** shows this in the **Created by** column. Files saved before this, or written by `bash` or a coding agent, show no owner.
+
+When a profile has `save_artifact`, `write_file` refuses new files under `artifacts/` and points the agent to `save_artifact`. `edit_file` still changes existing artifacts. When you upgrade, every profile that has `write_file` gets `save_artifact` once. You can remove it from a profile, and the next restart does not add it back.
+
+On web chat, `save_artifact`, `write_file`, and `write_docx` saves under `artifacts/` appear as attachment chips on the assistant message. Click a chip to open a resizable preview panel with copy, download, and fullscreen:
 
 On **Telegram**, **Discord**, and **WhatsApp**, the same saves post a Publish share link after the agent reply; ask to “send the file” when you want a native attachment. See [Telegram](/telegram/chat#saved-artifacts-and-share-links), [Discord](/discord#saved-artifacts-and-share-links), and [WhatsApp](/whatsapp#saved-artifacts-and-share-links).
 
@@ -126,7 +131,20 @@ Write text to a file in the profile workspace.
 
 **Scope:** `~/.nakama/orgs/{orgId}/profiles/{profileId}/` and `~/.nakama/tools/` (custom JS modules)
 
-**Restrictions:** Rejects `.docx` and `.doc` paths — a `.docx` is a ZIP archive, not UTF-8 text. Use `write_docx` instead.
+**Restrictions:** Rejects `.docx` and `.doc` paths — a `.docx` is a ZIP archive, not UTF-8 text. Use `write_docx` instead. When the profile has `save_artifact`, rejects paths under `artifacts/`.
+
+### `save_artifact`
+
+Save a text deliverable under `artifacts/` and record who made it.
+
+| Parameter | Type | Required | Notes |
+|-----------|------|----------|-------|
+| `path` | string | Yes | Must be under `artifacts/`, for example `artifacts/q3-report.html` |
+| `content` | string | Yes | Text to write |
+
+**Returns:** `{ path, bytesWritten }`
+
+An existing name gets a date suffix; the agent uses the returned path. The owner comes from the chat session, not from the tool input.
 
 **Availability:** When assigned to the profile.
 
@@ -567,7 +585,7 @@ File tools (`read_file`, `write_file`, `edit_file`, `delete_file`) are scoped to
 - **Profile workspace:** `~/.nakama/orgs/{orgId}/profiles/{profileId}/` (soul files, knowledge base, `artifacts/`, etc.)
 - **Custom tools directory:** `~/.nakama/tools/` (follows `NAKAMA_CONFIG_DIR` if set)
 
-Agents save artifact files under `artifacts/` via the `save-artifact` bundled skill and `write_file`, not a dedicated builtin.
+Agents save artifact files under `artifacts/` with `save_artifact`, guided by the `save-artifact` bundled skill.
 
 Path guards enforce:
 

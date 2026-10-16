@@ -79,6 +79,7 @@ import {
   BASH_TOOL_ID,
   BUILTIN_TOOL_IDS,
   isProtectedToolId,
+  SAVE_ARTIFACT_TOOL_ID,
 } from "@nakama/core/tools/protected";
 import type {
   DatabaseAdapter,
@@ -222,6 +223,7 @@ const BASIC_PROFILE_TOOL_IDS = [
   BUILTIN_TOOL_IDS.search_files,
   BUILTIN_TOOL_IDS.knowledge_base_search,
   BUILTIN_TOOL_IDS.web_fetch,
+  SAVE_ARTIFACT_TOOL_ID,
 ] as const;
 
 const SOUL_FILE_KEY_BY_NAME = {

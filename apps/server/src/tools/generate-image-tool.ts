@@ -293,6 +293,16 @@ export async function runGenerateImageTool(
     }
   }
 
+  await deps.db.upsertArtifactRecord({
+    channel: channel ?? null,
+    createdAt: new Date().toISOString(),
+    filename: path.relative(artifactsDir, targetPath).split(path.sep).join("/"),
+    orgId,
+    profileId,
+    sessionId: sessionId || null,
+    userId: context.userId?.trim() || null,
+  });
+
   if (result.usage && deps.recordUsage) {
     deps.recordUsage(
       result.model,

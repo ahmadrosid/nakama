@@ -59,7 +59,9 @@ function isWriteFileTool(message: ChatListItem): boolean {
   // an artifact chip too.
   return (
     message.role === "tool" &&
-    (message.tool === "write_file" || message.tool === "write_docx")
+    (message.tool === "write_file" ||
+      message.tool === "write_docx" ||
+      message.tool === "save_artifact")
   );
 }
 

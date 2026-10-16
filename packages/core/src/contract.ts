@@ -2682,7 +2682,16 @@ export interface UpdateSoulFileRequest {
   content: string;
 }
 
+/** Who saved an artifact. Absent when no owner was recorded (older files, shell writes). */
+export interface ArtifactCreator {
+  channel: string | null;
+  createdAt: string;
+  userId: string | null;
+  userName: string | null;
+}
+
 export interface ArtifactFile {
+  createdBy?: ArtifactCreator;
   filename: string;
   mimeType: string;
   path: string;
@@ -3161,6 +3170,12 @@ export interface ToolContext {
   >;
   /** Emits concise live status lines while a sub-agent child loop runs (parent web UI). */
   emitSubAgentActivity?: (label: string) => void;
+  /**
+   * When true (save_artifact is in the session tool list), write_file refuses paths
+   * under artifacts/ so every saved artifact goes through save_artifact and gets an
+   * owner row.
+   */
+  forbidArtifactFileWrites?: boolean;
   /**
    * When true (a cognito session), write_file / write_docx / edit_file / delete_file
    * refuse MEMORY.md and memory-archive/YYYY-MM.md under the profile workspace, so a

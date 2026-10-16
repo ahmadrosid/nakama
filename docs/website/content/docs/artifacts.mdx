@@ -25,7 +25,7 @@ The **Knowledge** view accepts TXT, Markdown, CSV, and PDF files up to 20 MB eac
 
 ![The Browse Files page grouping nested coding-agent-runs logs into a folder](/screenshots/files-artifacts-after-folders.png)
 
-Each file shows its inferred type, size, and last modified time. Nakama infers type from the extension. Files with unknown extensions are checked for valid UTF-8 when previewed, so a `Dockerfile` or `notes.abc` can preview as text instead of being treated as binary.
+Each file shows its inferred type, size, last modified time, and, in the list view, who created it. **Created by** is empty for files saved before Nakama recorded owners and for files written by `bash` or a coding agent. Nakama infers type from the extension. Files with unknown extensions are checked for valid UTF-8 when previewed, so a `Dockerfile` or `notes.abc` can preview as text instead of being treated as binary.
 
 ## Preview files
 

@@ -13,6 +13,7 @@ import {
   ensureBashToolDefinition,
   ensureGenerateImageToolDefinition,
   ensureOrgSuperBotProfiles,
+  ensureSaveArtifactToolDefinition,
   ensureSessionToolDefinitions,
   type SuperBotSeedOptions,
 } from "./org-profiles";
@@ -41,6 +42,7 @@ const SUPPORTED_TOOL_HANDLER_TYPES = new Set([
   "python",
   "sub_agent",
   "generate_image",
+  "save_artifact",
   "session",
   "plugin",
 ]);
@@ -58,6 +60,7 @@ export async function seedDatabase(
   await ensureSessionToolDefinitions(db);
   await ensureBashToolDefinition(db);
   await ensureGenerateImageToolDefinition(db);
+  await ensureSaveArtifactToolDefinition(db);
   await ensurePreinstalledMcpServers(db);
   await ensureLocalClientAccess(db);
   await ensureOrgSuperBotProfiles(db, options);

@@ -68,6 +68,11 @@ const GENERATE_IMAGE_SOURCE = {
   filePath: path.join(serverSrcDir, "tools/generate-image-tool.ts"),
 };
 
+const SAVE_ARTIFACT_SOURCE = {
+  displayPath: "apps/server/src/tools/save-artifact-tool.ts",
+  filePath: path.join(serverSrcDir, "tools/save-artifact-tool.ts"),
+};
+
 const SESSION_SOURCE = {
   displayPath: "apps/server/src/tools/session-tools.ts",
   filePath: path.join(serverSrcDir, "tools/session-tools.ts"),
@@ -90,6 +95,10 @@ export async function readToolSource(
 
   if (record.handlerType === "generate_image") {
     return readFixedToolSource(GENERATE_IMAGE_SOURCE, "typescript");
+  }
+
+  if (record.handlerType === "save_artifact") {
+    return readFixedToolSource(SAVE_ARTIFACT_SOURCE, "typescript");
   }
 
   if (record.handlerType === "session") {

@@ -278,6 +278,7 @@ import {
   createOrgMemoryTools,
   PROPOSE_ORG_MEMORY_TOOL_NAME,
 } from "../tools/org-memory-tools";
+import { SAVE_ARTIFACT_TOOL_NAME } from "../tools/save-artifact-tool";
 import {
   createSendDiscordArtifactTools,
   sendWhatsAppArtifactTool,
@@ -4779,7 +4780,33 @@ export class AgentService {
   ): Promise<ListArtifactsResponse> {
     await this.requireProfile(orgId, profileId);
 
-    return listArtifacts(orgId, profileId, options);
+    const listed = await listArtifacts(orgId, profileId, options);
+
+    const owners = new Map(
+      (await this.db.listArtifactRecords(orgId, profileId)).map((record) => [
+        record.filename,
+        record,
+      ])
+    );
+
+    return {
+      ...listed,
+      artifacts: listed.artifacts.map((artifact) => {
+        const owner = owners.get(artifact.filename);
+
+        return owner
+          ? {
+              ...artifact,
+              createdBy: {
+                channel: owner.channel,
+                createdAt: owner.createdAt,
+                userId: owner.userId,
+                userName: owner.userName,
+              },
+            }
+          : artifact;
+      }),
+    };
   }
 
   async readProfileArtifact(
@@ -4820,7 +4847,11 @@ export class AgentService {
   ): Promise<DeleteArtifactResponse> {
     await this.requireProfile(orgId, profileId);
 
-    return deleteArtifactFile({ filename, orgId, profileId });
+    const deleted = await deleteArtifactFile({ filename, orgId, profileId });
+
+    await this.db.deleteArtifactRecord(orgId, profileId, deleted.filename);
+
+    return deleted;
   }
 
   async getUserContext(
@@ -5683,6 +5714,9 @@ export class AgentService {
       channel,
       ...this.knowledgeToolContext(orgId, profileId),
       codingWorkspaceRoot,
+      forbidArtifactFileWrites: tools.some(
+        (tool) => tool.name === SAVE_ARTIFACT_TOOL_NAME
+      ),
       forbidMemoryWrites: cognito ? true : undefined,
       forbidProfileSkillMarkdownWrites: hasSkillManage,
       isPlatformAdmin: isPlatformAdmin || undefined,

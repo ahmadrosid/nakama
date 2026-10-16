@@ -388,6 +388,28 @@ test("adds automation transcripts to existing databases idempotently", () => {
   }
 });
 
+test("adds the artifacts owner table to existing databases", () => {
+  const db = new Database(":memory:");
+
+  try {
+    migrateDatabase(db);
+    db.exec("DROP TABLE artifacts");
+    migrateDatabase(db);
+    migrateDatabase(db);
+
+    const columns = db
+      .query<{ name: string }, SQLQueryBindings[]>(
+        "PRAGMA table_info(artifacts)"
+      )
+      .all()
+      .map((column) => column.name);
+
+    expect(columns).toContain("user_id");
+  } finally {
+    db.close();
+  }
+});
+
 describe("legacy profile id migration", () => {
   test("renames legacy default and super bot profiles and preserves references", () => {
     const db = new Database(":memory:");

@@ -12,7 +12,7 @@ These instructions are loaded directly when this skill is active. Read `dashboar
 - Use HTML for visual reports, plans, memos, slide decks, landing pages, and browser games.
 - Keep the format the user requests. Use Markdown for pages only when the user or another active skill requires it.
 - Keep code, logs, and structured data in their appropriate formats. Preserve existing formats when moving files or editing artifacts.
-- `write_file` writes UTF-8 text. Use a suitable tool or skill for binary formats; changing an extension does not create a PDF or image.
+- `save_artifact` writes UTF-8 text. Use a suitable tool or skill for binary formats; changing an extension does not create a PDF or image.
 - Save under `artifacts/`, relative to the profile workspace. Do not put soul files, memory, or knowledge-base uploads there.
 
 ## Design the page
@@ -131,7 +131,7 @@ Treat these as authoring requirements. Do not claim that Nakama enforces them me
 1. Choose the output format and a short filename, such as `artifacts/project-atlas.html`. Use subdirectories when grouping related files.
 2. For HTML, define the CSS tokens, then build the complete page. Keep the design plan in the CSS; do not create a separate planning artifact.
 3. Check the source against the requirements above. Remove placeholder content, unsupported actions, and unapproved resource URLs before saving.
-4. For a new artifact, use `write_file` to save the content. Existing names receive a date suffix automatically; use the returned path.
+4. For a new artifact, use `save_artifact` to save the content; it records which user made the file. If `save_artifact` is not available, use `write_file`. Existing names receive a date suffix automatically; use the returned path.
 5. When the user requests an edit, read the existing artifact and use `edit_file` to update it. Preserve unrelated content.
 6. If browser preview is explicitly requested and available, preview once. Check phone width, both themes, and the requested interactions; fix visible problems.
 7. Return the saved path and state whether a browser preview ran. Never claim visual verification from a source review alone.
