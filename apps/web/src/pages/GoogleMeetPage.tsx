@@ -34,7 +34,9 @@ import {
   Video01Icon,
 } from "hugeicons-react";
 import * as React from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/use-auth";
+import { isAllowedComposioRedirectUrl } from "@/hooks/use-composio";
 import { client, formatError } from "@/lib/client";
 
 type MeetCall = <Action extends MeetAction>(
@@ -745,6 +747,8 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
   const [error, setError] = React.useState("");
   const [importing, setImporting] = React.useState(false);
   const [selected, setSelected] = React.useState("");
+  const [connecting, setConnecting] = React.useState("");
+  const { user } = useAuth();
   React.useEffect(() => {
     let mounted = true;
     call("recordings").then(
@@ -783,6 +787,25 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
     }
   }
 
+  async function connect(toolkitSlug: string) {
+    setConnecting(toolkitSlug);
+    setError("");
+
+    try {
+      const { redirectUrl } =
+        await client.connectMeetRecordingSource(toolkitSlug);
+
+      if (!isAllowedComposioRedirectUrl(redirectUrl)) {
+        throw new Error("Blocked an unexpected Composio redirect URL.");
+      }
+
+      window.location.href = redirectUrl;
+    } catch (reason) {
+      setError(formatError(reason));
+      setConnecting("");
+    }
+  }
+
   const recordings = result?.recordings ?? [];
 
   const recordingKey = (recording: Recording) =>
@@ -793,11 +816,17 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
     recordings[0];
 
   const connections = result && [
-    { connected: result.gmailConnected, logo: "gmail", name: "Gmail" },
+    {
+      connected: result.gmailConnected,
+      logo: "gmail",
+      name: "Gmail",
+      slug: "gmail",
+    },
     {
       connected: result.driveConnected,
       logo: "google-drive",
       name: "Google Drive",
+      slug: "googledrive",
     },
   ];
 
@@ -818,9 +847,22 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
         </DialogHeader>
         {error && <p role="alert">{error}</p>}
         {!(result || error) && <p role="status">Finding recordings…</p>}
-        {connections && !ready && (
+        {result && !result.composioConfigured && (
+          <p>
+            {user?.isPlatformAdmin ? (
+              <>
+                Set up Composio in{" "}
+                <a href="/integrations?section=composio">Integrations</a> to
+                import recordings.
+              </>
+            ) : (
+              "Ask your platform admin to set up Composio to import recordings."
+            )}
+          </p>
+        )}
+        {result?.composioConfigured && connections && !ready && (
           <ul className="meet-connections">
-            {connections.map(({ connected, logo, name }) => (
+            {connections.map(({ connected, logo, name, slug }) => (
               <li key={name}>
                 <span className="meet-tile-icon">
                   <img
@@ -840,12 +882,14 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
                   </span>
                 </span>
                 {!connected && (
-                  <a
-                    className={buttonVariants({ size: "sm" })}
-                    href="/customize/connections/composio"
+                  <Button
+                    disabled={!!connecting}
+                    onClick={() => void connect(slug)}
+                    size="sm"
+                    type="button"
                   >
-                    Connect
-                  </a>
+                    {connecting === slug ? "Connecting…" : "Connect"}
+                  </Button>
                 )}
               </li>
             ))}
@@ -919,7 +963,25 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
   const [deleting, setDeleting] = React.useState<Meeting | null>(null);
   const [selected, setSelected] = React.useState<Meeting | null>(null);
   const [uploading, setUploading] = React.useState(false);
-  const [recordingPicker, setRecordingPicker] = React.useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Composio OAuth returns here with ?import=recording to resume the import.
+  const [recordingPicker, setRecordingPicker] = React.useState(
+    () => searchParams.get("import") === "recording"
+  );
+
+  React.useEffect(() => {
+    if (searchParams.has("import")) {
+      setSearchParams(
+        (params) => {
+          params.delete("import");
+
+          return params;
+        },
+        { replace: true }
+      );
+    }
+  }, [searchParams, setSearchParams]);
   const uploadInput = React.useRef<HTMLInputElement>(null);
 
   async function upload(file: File) {

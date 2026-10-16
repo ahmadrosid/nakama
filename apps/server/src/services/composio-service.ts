@@ -58,9 +58,14 @@ interface ComposioOAuthStatePayload {
   connectionId: string;
   nonce: string;
   orgId: string;
+  returnTo?: string;
   toolkitId: string;
   userId: string;
 }
+
+const MEET_RECORDING_TOOLKITS = new Set(["gmail", "googledrive"]);
+
+const MEET_RETURN_PATH = "/google-meet?import=recording";
 
 function toOrgToolkitSummary(
   record: StoredComposioToolkitRecord
@@ -148,23 +153,26 @@ export class ComposioService {
   }
 
   async listMeetRecordings(orgId: string, userId: string) {
-    const accounts = await this.meetAccounts(orgId, userId);
+    const client = await this.getApiClient();
 
-    if (!(accounts.gmail && accounts.drive)) {
+    if (!client) {
       return {
-        driveConnected: !!accounts.drive,
-        gmailConnected: !!accounts.gmail,
+        composioConfigured: false,
+        driveConnected: false,
+        gmailConnected: false,
         recordings: [],
       };
     }
 
-    const client = await this.getApiClient();
+    const accounts = await this.meetAccounts(orgId, userId);
 
-    if (!client) {
-      throw new NakamaApiError(
-        "Configure Composio before importing recordings.",
-        400
-      );
+    if (!(accounts.gmail && accounts.drive)) {
+      return {
+        composioConfigured: true,
+        driveConnected: !!accounts.drive,
+        gmailConnected: !!accounts.gmail,
+        recordings: [],
+      };
     }
 
     const result = unwrapMeetToolResult(
@@ -269,7 +277,12 @@ export class ComposioService {
       }
     }
 
-    return { driveConnected: true, gmailConnected: true, recordings };
+    return {
+      composioConfigured: true,
+      driveConnected: true,
+      gmailConnected: true,
+      recordings,
+    };
   }
 
   async downloadMeetRecording(
@@ -685,11 +698,41 @@ export class ComposioService {
     }
   }
 
-  async connectToolkit(
+  /**
+   * Meet's Import recording needs Gmail and Google Drive. One click enables the
+   * toolkit for the org when needed, then starts the member's OAuth, which
+   * returns to the Google Meet page instead of Integrations.
+   */
+  async connectMeetRecordingSource(
     orgId: string,
     userId: string,
     toolkitSlug: string,
     callbackBaseUrl: string
+  ): Promise<ComposioConnectResponse> {
+    if (!MEET_RECORDING_TOOLKITS.has(toolkitSlug)) {
+      throw new NakamaApiError("Unsupported recording source.", 400);
+    }
+
+    const existing = await this.databaseAdapter.getComposioToolkitBySlug(
+      orgId,
+      toolkitSlug
+    );
+
+    if (existing?.status !== "enabled") {
+      await this.enableToolkit(orgId, { toolkitSlug });
+    }
+
+    return this.connectToolkit(orgId, userId, toolkitSlug, callbackBaseUrl, {
+      returnTo: MEET_RETURN_PATH,
+    });
+  }
+
+  async connectToolkit(
+    orgId: string,
+    userId: string,
+    toolkitSlug: string,
+    callbackBaseUrl: string,
+    options: { returnTo?: string } = {}
   ): Promise<ComposioConnectResponse> {
     const actingUserId = await this.resolveComposioActingUserId(orgId, userId);
     const apiClient = await this.requireAvailable();
@@ -718,6 +761,7 @@ export class ComposioService {
         connectionId,
         nonce: oauthNonce,
         orgId,
+        returnTo: options.returnTo,
         toolkitId: orgToolkit.id,
         userId: actingUserId,
       } satisfies ComposioOAuthStatePayload)
@@ -756,7 +800,7 @@ export class ComposioService {
   async completeOAuth(
     state: string,
     options: { connectedAccountId?: string | null } = {}
-  ): Promise<{ orgId: string; toolkitSlug: string }> {
+  ): Promise<{ orgId: string; returnTo?: string; toolkitSlug: string }> {
     await this.requireAvailable();
 
     let payload: ComposioOAuthStatePayload;
@@ -767,6 +811,7 @@ export class ComposioService {
           connectionId: z.string(),
           nonce: z.string(),
           orgId: z.string(),
+          returnTo: z.literal(MEET_RETURN_PATH).optional(),
           toolkitId: z.string(),
           userId: z.string(),
         })
@@ -822,7 +867,11 @@ export class ComposioService {
       orgToolkit.toolkitSlug
     );
 
-    return { orgId: payload.orgId, toolkitSlug: orgToolkit.toolkitSlug };
+    return {
+      orgId: payload.orgId,
+      returnTo: payload.returnTo,
+      toolkitSlug: orgToolkit.toolkitSlug,
+    };
   }
 
   async disconnectToolkit(

@@ -71,6 +71,7 @@ export interface MeetActionResults {
   leave: Meeting & { stopRequested: number };
   meetings: MeetOverview;
   recordings: {
+    composioConfigured: boolean;
     driveConnected: boolean;
     gmailConnected: boolean;
     recordings: {

@@ -2735,6 +2735,26 @@ export class NakamaClient {
     );
   }
 
+  async connectMeetRecordingSource(
+    toolkitSlug: string
+  ): Promise<ComposioConnectResponse> {
+    const body: ComposioConnectRequest = {};
+
+    const callbackOrigin = readBrowserOrigin();
+
+    if (callbackOrigin) {
+      body.callbackOrigin = callbackOrigin;
+    }
+
+    return this.request<ComposioConnectResponse>(
+      `/v1/composio/meet/${encodeURIComponent(toolkitSlug)}/connect`,
+      {
+        body: JSON.stringify(body),
+        method: "POST",
+      }
+    );
+  }
+
   async disconnectComposioToolkit(
     toolkitSlug: string
   ): Promise<ComposioToolkitSummary> {

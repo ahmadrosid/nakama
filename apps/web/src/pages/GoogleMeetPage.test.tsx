@@ -6,6 +6,7 @@ import type {
 } from "@nakama/core/google-meet";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
 import {
   AuthContext,
   type AuthContextValue,
@@ -99,9 +100,11 @@ async function mountPage() {
 
   await act(async () => {
     root.render(
-      <AuthContext.Provider value={auth}>
-        <GoogleMeetPage />
-      </AuthContext.Provider>
+      <MemoryRouter initialEntries={["/google-meet"]}>
+        <AuthContext.Provider value={auth}>
+          <GoogleMeetPage />
+        </AuthContext.Provider>
+      </MemoryRouter>
     );
     await Bun.sleep(20);
   });

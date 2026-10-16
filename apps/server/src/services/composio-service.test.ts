@@ -652,6 +652,92 @@ describe("ComposioService", () => {
     }
   });
 
+  test("Meet connect enables the toolkit and OAuth returns to Google Meet", async () => {
+    const { db, service, restore } = await createConfiguredService();
+    let callbackUrl = "";
+
+    injectMockComposioClient(service, {
+      async createProfileSession() {
+        return {
+          headers: {},
+          sessionId: "session_meet",
+          url: "https://mcp.composio.dev/session_meet",
+        };
+      },
+      async linkToolkitAccount(_userId, _toolkitSlug, url) {
+        callbackUrl = url;
+
+        return {
+          connectedAccountId: "ca_1",
+          redirectUrl: "https://example.com/oauth",
+        };
+      },
+    });
+
+    try {
+      await seedOrgWithAdmin(db);
+      await expect(
+        service.connectMeetRecordingSource(
+          ORG_ID,
+          USER_ID,
+          "slack",
+          "http://localhost:4310"
+        )
+      ).rejects.toThrow();
+
+      const response = await service.connectMeetRecordingSource(
+        ORG_ID,
+        USER_ID,
+        "gmail",
+        "http://localhost:4310"
+      );
+
+      expect(response.redirectUrl).toBe("https://example.com/oauth");
+      const toolkit = await db.getComposioToolkitBySlug(ORG_ID, "gmail");
+      expect(toolkit?.status).toBe("enabled");
+
+      const state = new URL(callbackUrl).searchParams.get("state") ?? "";
+      const result = await service.completeOAuth(state);
+
+      expect(result).toEqual({
+        orgId: ORG_ID,
+        returnTo: "/google-meet?import=recording",
+        toolkitSlug: "gmail",
+      });
+      const listed = await service.listToolkits(ORG_ID, USER_ID);
+      expect(listed.userConnections[0]?.status).toBe("connected");
+    } finally {
+      restore();
+    }
+  });
+
+  test("Meet recordings report when Composio is not configured", async () => {
+    const previous = process.env.NAKAMA_CONFIG_DIR;
+    process.env.NAKAMA_CONFIG_DIR = await mkdtemp(
+      join(tmpdir(), "nakama-composio-unset-")
+    );
+
+    try {
+      const service = new ComposioService(
+        createInMemoryDatabaseAdapter(),
+        new AuthService()
+      );
+
+      expect(await service.listMeetRecordings(ORG_ID, USER_ID)).toEqual({
+        composioConfigured: false,
+        driveConnected: false,
+        gmailConnected: false,
+        recordings: [],
+      });
+    } finally {
+      if (previous === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = previous;
+      }
+    }
+  });
+
   test("listToolkits surfaces catalogError when catalog fetch fails", async () => {
     const { service, restore } = await createConfiguredService();
 
