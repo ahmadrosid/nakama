@@ -35,7 +35,7 @@ jobs:
 
       # Keep the score status; sharing this job avoids a second React Doctor row.
       - name: React Doctor
-        uses: millionco/react-doctor@013f7373f91a3b9e68bd1dc7d4d354f4b041b117 # v2.2.9
+        uses: millionco/react-doctor@695e46eee203a5d1855020191aa7e9c010a1250e # v2.4.0
         with:
           commit-status: true
 

@@ -195,6 +195,12 @@ Platform administrators can open **Browse Files → Knowledge** and add a ZIP fi
 
 The result shows documents that were added, already present, unreadable, or unsupported. Nakama keeps existing documents when a ZIP has duplicates. An invalid or oversized ZIP adds no documents. The agent can search documents marked **ready**.
 
+### Knowledge base wiki
+
+The opt-in `knowledge-base-wiki` skill compiles a profile's ready documents into markdown pages under `knowledge-base/wiki/`, plus a `wiki/SCHEMA.md` that lists the pages. Assign the skill to the profile, then ask the agent to compile the wiki, or run that request from an automation. Nothing compiles on upload.
+
+Each page lists the document ids it was written from in a `sources:` frontmatter field. The next compile rewrites a page whose source was replaced or deleted and removes a page with no source left. `knowledge_base_search` returns wiki pages alongside the documents. The wiki is derived from the documents, so deleting `wiki/` and compiling again rebuilds it. Only the profile knowledge base is compiled; shared organization documents are not.
+
 Active `MEMORY.md` has a **4096-byte** soft limit. When it is full, the agent should archive old bullets before adding new ones.
 
 Org memory has separate limits: **8192 bytes** for the live file and **2048 bytes** for the injected summary. See [Org memory](/org-memory).

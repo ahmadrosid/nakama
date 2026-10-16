@@ -250,8 +250,8 @@ type SearchTarget = {
   unreadable: string[];
   publishedDocuments?: PublishedKnowledgeBaseDocument[];
 } & (
-  | { kind: "dir"; root: string; glob: string; scope: KnowledgeBaseScope }
-  | { kind: "file"; root: string; glob: null; scope: KnowledgeBaseScope }
+  | { kind: "dir"; root: string; globs: string[]; scope: KnowledgeBaseScope }
+  | { kind: "file"; root: string; globs: null; scope: KnowledgeBaseScope }
   | { kind: "missing"; root: string; scope: KnowledgeBaseScope }
 );
 
@@ -329,7 +329,11 @@ async function resolveProfileSearchTarget(
     getKnowledgeBaseDir(orgId, profileId),
     "profile",
     await listKnowledgeBaseDocuments(orgId, profileId),
-    filename
+    filename,
+    // Pages the knowledge-base-wiki skill compiles from these documents. The
+    // leading **/ is needed: ripgrep matches a glob holding a slash against the
+    // absolute path, and Bun.Glob.scan drops brace sets that hold one.
+    ["**/wiki/*.md"]
   );
 }
 
@@ -364,7 +368,8 @@ function pickSearchTarget(
   root: string,
   scope: KnowledgeBaseScope,
   documents: { filename: string; id: string; status: string }[],
-  filename: string | null
+  filename: string | null,
+  extraGlobs: string[] = []
 ): SearchTarget {
   const unreadable = unreadableFilenames(documents, filename);
 
@@ -378,10 +383,12 @@ function pickSearchTarget(
     }
 
     return {
-      glob:
+      globs: [
         ids.length === 1
           ? `${ids[0]}${KNOWLEDGE_BASE_EXTRACTED_SUFFIX}`
           : `{${ids.map((id) => `${id}${KNOWLEDGE_BASE_EXTRACTED_SUFFIX}`).join(",")}}`,
+        ...extraGlobs,
+      ],
       kind: "dir",
       root,
       scope,
@@ -402,7 +409,7 @@ function pickSearchTarget(
   }
 
   return {
-    glob: null,
+    globs: null,
     kind: "file",
     root: getKnowledgeBaseExtractedPath(root, document.id),
     scope,
@@ -452,7 +459,7 @@ async function runSearchTarget(
 
   const result = await runRipgrep(
     buildRipgrepArgs({
-      glob: target.glob,
+      glob: target.globs,
       maxResults: probeLimit,
       query: parsed.query,
       regex: parsed.regex,
@@ -522,10 +529,10 @@ async function runLexicalSearchTargets(
             removeCollection(db, target.scope);
           }
 
-          const pattern =
-            target.kind === "file" ? basename(target.root) : target.glob;
+          const patterns =
+            target.kind === "file" ? [basename(target.root)] : target.globs;
 
-          const paths = await syncCollection(db, target.scope, root, pattern);
+          const paths = await syncCollection(db, target.scope, root, patterns);
 
           return paths.length > 0 ? { paths, target } : null;
         })
@@ -599,7 +606,7 @@ function removeCollection(db: Database, collection: string): void {
 }
 
 /**
- * Brings the index up to date for the files `pattern` matches under `root` and
+ * Brings the index up to date for the files `patterns` match under `root` and
  * returns their relative paths. Rows for files that no longer exist are
  * dropped; rows for files outside this pattern stay, so alternating filename
  * filters do not rebuild the index.
@@ -608,12 +615,14 @@ async function syncCollection(
   db: Database,
   collection: string,
   root: string,
-  pattern: string
+  patterns: string[]
 ): Promise<string[]> {
   const paths: string[] = [];
 
-  for await (const path of new Bun.Glob(pattern).scan({ cwd: root })) {
-    paths.push(path);
+  for (const pattern of patterns) {
+    for await (const path of new Bun.Glob(pattern).scan({ cwd: root })) {
+      paths.push(path);
+    }
   }
 
   const known = new Map(

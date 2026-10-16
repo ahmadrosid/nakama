@@ -177,6 +177,10 @@ function skillPythonBin(skillDirectory: string): string {
 
 const INSTALL_TIMEOUT_MS = 10 * 60_000;
 
+// Two pip runs into one venv corrupt it. One server process owns the envs, so
+// an in-memory set is enough.
+const installingEnvDirs = new Set<string>();
+
 /**
  * Builds the skill's environment and installs its requirements.txt into it.
  * Only ever called from an explicit admin action: pip runs package build code
@@ -194,28 +198,43 @@ export async function installSkillPythonPackages(
     );
   }
 
-  const python = getSkillPythonEnvBin(skillDirectory);
-  let output = "";
+  const envDir = getSkillPythonEnvDir(skillDirectory);
 
-  if (!existsSync(python)) {
-    output += await runInstallStep(resolvePythonBin(), [
-      "-m",
-      "venv",
-      getSkillPythonEnvDir(skillDirectory),
-    ]);
+  if (installingEnvDirs.has(envDir)) {
+    throw new NakamaApiError(
+      "Packages for this skill are already being installed.",
+      409
+    );
   }
 
-  output += await runInstallStep(python, [
-    "-m",
-    "pip",
-    "install",
-    "--disable-pip-version-check",
-    "--no-input",
-    "-r",
-    requirements,
-  ]);
+  installingEnvDirs.add(envDir);
 
-  return { output: output.slice(-4000) };
+  try {
+    const python = getSkillPythonEnvBin(skillDirectory);
+    let output = "";
+
+    if (!existsSync(python)) {
+      output += await runInstallStep(resolvePythonBin(), [
+        "-m",
+        "venv",
+        envDir,
+      ]);
+    }
+
+    output += await runInstallStep(python, [
+      "-m",
+      "pip",
+      "install",
+      "--disable-pip-version-check",
+      "--no-input",
+      "-r",
+      requirements,
+    ]);
+
+    return { output: output.slice(-4000) };
+  } finally {
+    installingEnvDirs.delete(envDir);
+  }
 }
 
 function runInstallStep(bin: string, args: string[]): Promise<string> {

@@ -3,7 +3,10 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { type DiscoveredSkill, getSkillPythonEnvBin } from "@nakama/core";
-import { loadPythonSkillTool } from "./python-skill-tool-loader";
+import {
+  installSkillPythonPackages,
+  loadPythonSkillTool,
+} from "./python-skill-tool-loader";
 
 const BODY = `"""Add two numbers."""
 import json
@@ -186,3 +189,57 @@ if __name__ == "__main__":
     await rm(directory, { force: true, recursive: true });
   }
 });
+
+test.skipIf(process.platform === "win32")(
+  "a second install of the same skill is refused while the first runs",
+  async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "nakama-pip-lock-"));
+    const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+    const previousPythonBin = process.env.NAKAMA_PYTHON_BIN;
+    const previousPath = process.env.PATH;
+    const skillDirectory = path.join(root, "skill");
+    // A path NAKAMA_PYTHON_BIN would need the server allowlist, so the slow
+    // fake is found as bare python3 on PATH instead.
+    const slowPython = path.join(root, "slow", "python3");
+
+    await mkdir(skillDirectory, { recursive: true });
+    await mkdir(path.dirname(slowPython), { recursive: true });
+    await writeFile(path.join(skillDirectory, "requirements.txt"), "six\n");
+    await writeFile(slowPython, "#!/bin/sh\nsleep 1\n");
+    await chmod(slowPython, 0o755);
+    process.env.NAKAMA_CONFIG_DIR = path.join(root, "config");
+    delete process.env.NAKAMA_PYTHON_BIN;
+    process.env.PATH = `${path.dirname(slowPython)}${path.delimiter}${previousPath}`;
+
+    try {
+      const [first, second] = await Promise.allSettled([
+        installSkillPythonPackages(skillDirectory),
+        installSkillPythonPackages(skillDirectory),
+      ]);
+
+      expect(second).toMatchObject({ reason: { status: 409 } });
+      expect(first).not.toMatchObject({ reason: { status: 409 } });
+
+      // The lock is released once the first install settles, whatever it did.
+      const [third] = await Promise.allSettled([
+        installSkillPythonPackages(skillDirectory),
+      ]);
+
+      expect(third).not.toMatchObject({ reason: { status: 409 } });
+    } finally {
+      for (const [name, value] of [
+        ["NAKAMA_CONFIG_DIR", previousConfigDir],
+        ["NAKAMA_PYTHON_BIN", previousPythonBin],
+        ["PATH", previousPath],
+      ] as const) {
+        if (value === undefined) {
+          delete process.env[name];
+        } else {
+          process.env[name] = value;
+        }
+      }
+
+      await rm(root, { force: true, recursive: true });
+    }
+  }
+);

@@ -212,7 +212,9 @@ image upgrades, and runs `pip install -r requirements.txt` into it. The skill's
 `tool.py`, declared scripts and `_run_python` tool then run with that
 interpreter. Nothing is installed when a skill is created or when the server
 starts, because an agent can write skills and pip runs package build code on the
-host. Run the install again after editing `requirements.txt`.
+host. Run the install again after editing `requirements.txt`. A second install
+for the same skill while one is running returns 409, and deleting the skill
+removes its virtualenv.
 
 Python tools outside skills still use one interpreter for the whole install.
 Point `NAKAMA_PYTHON_BIN` at a virtualenv to give them packages:

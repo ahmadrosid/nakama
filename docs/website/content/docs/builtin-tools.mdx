@@ -227,9 +227,7 @@ Search uploaded knowledge base documents for relevant facts. **Browse Files → 
 
 **Returns:** `{ query, root, matches, matchCount, truncated }` — empty matches when no ready document matches the filter.
 
-**Keyword search:** word forms match (`password` finds `passwords`), `"quoted words"` match as a phrase, and `-word` drops documents that contain it. By default a match must hold every word. When no document holds every word, the search returns documents that hold some of them, best match first, so a question such as `how do I change my password` still finds the password page. Each match shows the lines where the words occur.
-
-**Scope:** Extracted text files stored under `~/.nakama/orgs/{orgId}/profiles/{profileId}/knowledge-base/`.
+**Scope:** Extracted text files stored under `~/.nakama/orgs/{orgId}/profiles/{profileId}/knowledge-base/`, plus the `wiki/*.md` pages the `knowledge-base-wiki` skill writes there.
 
 **Availability:** When assigned **and** at least one uploaded document has `status: "ready"`. Inherited URL sources do not require `knowledge_base_search`; they require `web_fetch` or `web_search`.
 
