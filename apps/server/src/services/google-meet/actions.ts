@@ -143,9 +143,13 @@ export async function run(
 
   const store = new MeetingStore(context.dataDir, context.orgId);
 
+  // An agent sees its profile's meetings plus its member's own page meetings,
+  // which have no profile.
   const canAccess = (meeting: Meeting) =>
     (context.actor.role === "admin" || meeting.actorId === context.actor.id) &&
-    (!context.profileId || meeting.profileId === context.profileId);
+    (!context.profileId ||
+      meeting.profileId === context.profileId ||
+      (meeting.profileId === null && meeting.actorId === context.actor.id));
 
   try {
     const action = context.actionKey ?? "";
@@ -185,7 +189,8 @@ export async function run(
         meetings: enabled
           ? store.list(
               context.actor.role === "admin" ? null : context.actor.id,
-              context.profileId ?? null
+              context.profileId ?? null,
+              context.actor.id
             )
           : [],
       };

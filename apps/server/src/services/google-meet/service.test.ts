@@ -45,6 +45,16 @@ afterEach(async () => {
 });
 
 test("startup is idempotent and restart preserves settings while recovering unfinished capture", async () => {
+  await db.upsertTool({
+    createdAt: now,
+    description: "",
+    handlerConfig: { name: "google_meet_delete" },
+    handlerType: "builtin",
+    id: "meet_a_delete",
+    name: "google_meet_delete",
+    orgId: "a",
+    updatedAt: now,
+  });
   await Promise.all([
     service.ensureOrganization("a"),
     service.ensureOrganization("a"),
@@ -78,16 +88,17 @@ test("startup is idempotent and restart preserves settings while recovering unfi
     false
   );
   const tools = (await db.listTools()).filter((tool) => tool.orgId === "a");
-  expect(tools).toHaveLength(8);
-  expect(
-    tools.every(
-      (tool) =>
-        tool.handlerType === "builtin" && tool.name.startsWith("google_meet_")
-    )
-  ).toBe(true);
+  expect(tools.map((tool) => tool.name).sort()).toEqual([
+    "google_meet_meetings",
+    "google_meet_transcript",
+  ]);
+  expect(service.tools().map((tool) => tool.name)).toEqual([
+    "google_meet_meetings",
+    "google_meet_transcript",
+  ]);
 });
 
-test("agent tools require current assignment and hide page captures without a profile", async () => {
+test("agent tools require current assignment and see only their profile and their member's page meetings", async () => {
   await db.createUser({
     createdAt: now,
     email: "alice@example.com",
@@ -111,11 +122,28 @@ test("agent tools require current assignment and hide page captures without a pr
     systemPrompt: "",
     updatedAt: now,
   });
-  await service.invoke(
+
+  const page = await service.invoke(
     "a",
     "upload",
     { content: "UGFnZSBub3Rlcw==", filename: "page.md" },
     admin
+  );
+
+  await service.invoke(
+    "a",
+    "upload",
+    { content: "Qm9iIG5vdGVz", filename: "bob.md" },
+    { id: "bob", role: "member" }
+  );
+
+  await service.invoke(
+    "a",
+    "upload",
+    { content: "T3RoZXIgbm90ZXM=", filename: "other.md" },
+    admin,
+    undefined,
+    "other-profile"
   );
 
   const own = await service.invoke(
@@ -146,7 +174,9 @@ test("agent tools require current assignment and hide page captures without a pr
     meetings: Array<{ id: string }>;
   };
 
-  expect(result.meetings.map((meeting) => meeting.id)).toEqual([own.id]);
+  expect(result.meetings.map((meeting) => meeting.id).sort()).toEqual(
+    [own.id, page.id].sort()
+  );
   await db.unassignToolFromProfile("profile", "meet_a_meetings");
   await expect(tool.run({}, context)).rejects.toThrow();
 });
