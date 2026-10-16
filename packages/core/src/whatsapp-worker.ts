@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { z } from "zod";
-import type { ChannelConfigScope } from "./channel-config-shared";
+import type { ChannelConfigScope, ChannelOwner } from "./channel-config-shared";
 import type { WhatsAppWorkerStatus } from "./contract";
 import { pathExists, readTextOrNull, removeFile, writeTextFile } from "./fs";
 import {
@@ -16,6 +16,7 @@ import {
 export interface WhatsAppWorkerHeartbeat extends WorkerHeartbeatBase {
   connected?: boolean;
   linkError?: string;
+  linkOwner?: ChannelOwner;
 }
 
 const QR_CODE_FILENAME = "worker-qr.txt";
@@ -30,6 +31,9 @@ export function createWhatsAppWorkerHeartbeat(
         .object({
           connected: z.boolean().optional(),
           linkError: z.string().optional(),
+          linkOwner: z
+            .object({ orgId: z.string(), profileId: z.string() })
+            .optional(),
         })
         .safeParse(value);
 
@@ -88,9 +92,10 @@ export async function readWhatsAppQrCode(
   return raw?.trim() || null;
 }
 
+/** Worker status plus the raw ids of the agent that holds a rejected number. */
 export async function getWhatsAppWorkerStatus(
   orgId: ChannelConfigScope = null
-): Promise<WhatsAppWorkerStatus> {
+): Promise<WhatsAppWorkerStatus & { linkOwnerIds?: ChannelOwner }> {
   const settings = await loadWhatsAppSettingsPublic(orgId);
   const heartbeat = await createWhatsAppWorkerHeartbeat(orgId).read();
   const running = isWhatsAppHeartbeatAlive(heartbeat);
@@ -104,7 +109,15 @@ export async function getWhatsAppWorkerStatus(
     connected
   );
 
-  return running && heartbeat?.linkError
-    ? { ...status, linkError: heartbeat.linkError }
-    : status;
+  if (!(running && heartbeat?.linkError)) {
+    return status;
+  }
+
+  return heartbeat.linkOwner
+    ? {
+        ...status,
+        linkError: heartbeat.linkError,
+        linkOwnerIds: heartbeat.linkOwner,
+      }
+    : { ...status, linkError: heartbeat.linkError };
 }

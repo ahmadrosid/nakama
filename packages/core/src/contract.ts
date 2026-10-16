@@ -194,6 +194,8 @@ export interface WhatsAppWorkerStatus {
   connected: boolean;
   /** Set when WhatsApp linked an account this agent may not use. */
   linkError?: string;
+  /** The agent that holds that account, when the viewer may see its org. */
+  linkOwner?: { agentName: string; orgName: string };
   ok: boolean;
   paired: boolean;
   process?: WorkerProcessInfo;

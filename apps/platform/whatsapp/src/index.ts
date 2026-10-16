@@ -6,7 +6,10 @@ import {
   log,
 } from "@nakama/core";
 import { hasActiveStreams } from "@nakama/core/channel-active-stream";
-import { channelOwnerFromEnv } from "@nakama/core/channel-config-shared";
+import {
+  type ChannelOwner,
+  channelOwnerFromEnv,
+} from "@nakama/core/channel-config-shared";
 import { ChannelOrgStore } from "@nakama/core/channel-org";
 import { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import {
@@ -50,6 +53,8 @@ let bridgeConnected = false;
 
 let linkError: string | undefined;
 
+let linkOwner: ChannelOwner | undefined;
+
 const orgId = channelOwnerFromEnv();
 
 const heartbeat = createWhatsAppWorkerHeartbeat(orgId);
@@ -58,6 +63,7 @@ function persistWorkerHeartbeat(): void {
   void heartbeat.write({
     connected: bridgeConnected,
     linkError,
+    linkOwner,
     pid: process.pid,
     updatedAt: new Date().toISOString(),
   });
@@ -158,6 +164,7 @@ try {
     onConnected: (me) => {
       bridgeConnected = true;
       linkError = undefined;
+      linkOwner = undefined;
       persistWorkerHeartbeat();
       log("info", "worker.connected", { worker: "whatsapp" });
       void clearWhatsAppQrCode(orgId);
@@ -175,8 +182,9 @@ try {
       // A closed socket's QR code can no longer be scanned.
       void clearWhatsAppQrCode(orgId);
     },
-    onLinkRejected: (message) => {
+    onLinkRejected: (message, owner) => {
       linkError = message;
+      linkOwner = owner ?? undefined;
       persistWorkerHeartbeat();
       void clearWhatsAppQrCode(orgId);
     },
@@ -220,6 +228,7 @@ try {
   await heartbeat.write({
     connected: bridgeConnected,
     linkError,
+    linkOwner,
     pid: process.pid,
     updatedAt: new Date().toISOString(),
   });

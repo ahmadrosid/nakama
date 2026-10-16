@@ -379,6 +379,7 @@ export function useWhatsAppSettingsCard({
     linkError,
     linkedNumber: settings?.phoneNumberMasked ?? null,
     linkingAfterScan: linking.linkingAfterScan,
+    linkOwner: worker?.linkOwner ?? null,
     loadError,
     onAllowedPhonesChange: setAllowedPhones,
     onAllowedPhonesOpenChange: setAllowedPhonesOpen,

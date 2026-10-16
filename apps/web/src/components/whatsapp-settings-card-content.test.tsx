@@ -61,6 +61,7 @@ function renderCard(
     linkError: null,
     linkedNumber: "+62***1234",
     linkingAfterScan: false,
+    linkOwner: null,
     loadError: null,
     onAllowUnpairedGroupMembersChange: mock(),
     onCopyPairingCode: mock(),
@@ -396,4 +397,19 @@ test("a pending pairing code does not hide the QR code before linking", () => {
   expect(
     container.querySelector("ol[aria-label='Steps to connect WhatsApp']")
   ).not.toBeNull();
+});
+
+test("rejected link names the agent and org that hold the number", () => {
+  const { container } = renderCard({
+    linkError: "This channel account is already in use by another agent.",
+    linkOwner: { agentName: "Sales Bot", orgName: "Org B" },
+    paired: false,
+  });
+
+  const names = Array.from(
+    container.querySelectorAll(`${LINK_CARD} [role='alert'] strong`),
+    (item) => item.textContent
+  );
+
+  expect(names).toEqual(["Sales Bot", "Org B"]);
 });

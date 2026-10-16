@@ -288,6 +288,10 @@ export function registerSystemRoutes(
         profileId && orgId ? { orgId, profileId } : orgId,
         {
           includeUsageByActor: auth.orgRole === "admin" || auth.isPlatformAdmin,
+          viewer: {
+            isPlatformAdmin: auth.isPlatformAdmin,
+            userId: auth.user.id,
+          },
         }
       ),
       200

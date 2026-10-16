@@ -30,6 +30,7 @@ export function WhatsAppSettingsCardContent({
   linkingAfterScan,
   awaitingQr,
   linkError,
+  linkOwner,
   showReconnect,
   onReconnect,
   reconnectPending,
@@ -63,6 +64,7 @@ export function WhatsAppSettingsCardContent({
   linkingAfterScan: boolean;
   awaitingQr: boolean;
   linkError: string | null;
+  linkOwner: { agentName: string; orgName: string } | null;
   showReconnect: boolean;
   onReconnect: () => void;
   reconnectPending: boolean;
@@ -138,6 +140,7 @@ export function WhatsAppSettingsCardContent({
         footer={statusLine || canSave || savePending ? footer : null}
         linkError={linkError}
         linkingAfterScan={linkingAfterScan}
+        linkOwner={linkOwner}
         onReconnect={onReconnect}
         qrCode={qrCode}
         reconnectPending={reconnectPending}

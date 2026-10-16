@@ -630,7 +630,7 @@ describe("usage by agent and user is for admins only", () => {
       });
 
       expect(response.status).toBe(200);
-      expect(requested).toEqual([{ includeUsageByActor: expected }]);
+      expect(requested).toMatchObject([{ includeUsageByActor: expected }]);
     });
   }
 });

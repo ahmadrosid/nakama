@@ -8,6 +8,8 @@ import {
   type WorkerProcessInfo,
   writeAutomationWorkerHeartbeat,
 } from "@nakama/core";
+import { saveWhatsAppConfig } from "@nakama/core/whatsapp-config";
+import { createWhatsAppWorkerHeartbeat } from "@nakama/core/whatsapp-worker";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AgentService } from "./agent-service";
 import { LlmUsageTracker } from "./llm-usage-tracker";
@@ -35,6 +37,7 @@ function createService(
   automationProcess: WorkerProcessInfo | null,
   extras?: {
     composioService?: { isReachable: () => Promise<boolean> } | null;
+    databaseAdapter?: ReturnType<typeof createInMemoryDatabaseAdapter>;
     llmUsageTracker?: LlmUsageTracker;
   }
 ) {
@@ -84,7 +87,8 @@ function createService(
     } as any,
     null,
     // SAFETY: The test fixture matches the contract used by this test.
-    extras?.composioService as any
+    extras?.composioService as any,
+    extras?.databaseAdapter
   );
 }
 
@@ -177,6 +181,71 @@ describe("SystemStatusService", () => {
       { id: "user_1", name: "Ana", requestCount: 1 },
       { id: null, name: null, requestCount: 1 },
     ]);
+  });
+
+  test("names the agent holding a rejected WhatsApp number only for its org members", async () => {
+    await withConfigDir();
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+    await db.upsertOrganization({
+      createdAt: now,
+      id: "org_b",
+      name: "Org B",
+      slug: "org-b",
+      updatedAt: now,
+    });
+    await db.upsertProfile({
+      createdAt: now,
+      id: "sales_bot",
+      isSuper: false,
+      model: null,
+      name: "Sales Bot",
+      orgId: "org_b",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+    await db.upsertOrgMember({
+      createdAt: now,
+      orgId: "org_b",
+      role: "member",
+      userId: "member_b",
+    });
+
+    const scope = { orgId: "org_a", profileId: "agent_a" };
+    await saveWhatsAppConfig({ profileId: "agent_a" }, scope);
+    await createWhatsAppWorkerHeartbeat(scope).write({
+      connected: false,
+      linkError: "in use",
+      linkOwner: { orgId: "org_b", profileId: "sales_bot" },
+      pid: process.pid,
+      updatedAt: now,
+    });
+
+    const service = createService(null, { databaseAdapter: db });
+
+    const member = await service.getStatus(scope, {
+      viewer: { isPlatformAdmin: false, userId: "member_b" },
+    });
+
+    expect(member.whatsappWorker.linkOwner).toEqual({
+      agentName: "Sales Bot",
+      orgName: "Org B",
+    });
+    expect(member.whatsappWorker).not.toHaveProperty("linkOwnerIds");
+
+    const outsider = await service.getStatus(scope, {
+      viewer: { isPlatformAdmin: false, userId: "outsider" },
+    });
+
+    expect(outsider.whatsappWorker.linkError).toBe("in use");
+    expect(outsider.whatsappWorker).not.toHaveProperty("linkOwner");
+    expect(outsider.whatsappWorker).not.toHaveProperty("linkOwnerIds");
+
+    const admin = await service.getStatus(scope, {
+      viewer: { isPlatformAdmin: true, userId: "outsider" },
+    });
+
+    expect(admin.whatsappWorker.linkOwner?.agentName).toBe("Sales Bot");
   });
 
   test("reports automation worker from PM2 status plus fresh heartbeat", async () => {

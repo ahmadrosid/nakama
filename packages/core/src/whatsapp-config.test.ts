@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { ChannelIdentityInUseError } from "./channel-config-shared";
 import { withTempHomedir } from "./testing/channel-config-fixtures";
 import {
   generatePairingCode,
@@ -614,6 +615,27 @@ describe("syncWhatsAppOwnerPairing", () => {
       expect(
         results.filter((result) => result.status === "rejected")
       ).toHaveLength(1);
+    });
+  });
+
+  test("a rejected claim names the owner that holds the JID", async () => {
+    await withTempHomedir("nakama-whatsapp-claim-owner-", async () => {
+      const first = { orgId: "org_a", profileId: "a" };
+      const second = { orgId: "org_b", profileId: "b" };
+      await saveWhatsAppConfig({ profileId: "a" }, first);
+      await saveWhatsAppConfig({ profileId: "b" }, second);
+      await syncWhatsAppOwnerPairing(
+        { ownerJid: "6281379292556@s.whatsapp.net" },
+        first
+      );
+
+      const rejected = syncWhatsAppOwnerPairing(
+        { ownerJid: "6281379292556@s.whatsapp.net" },
+        second
+      );
+
+      await expect(rejected).rejects.toBeInstanceOf(ChannelIdentityInUseError);
+      await expect(rejected).rejects.toMatchObject({ owner: first });
     });
   });
 });

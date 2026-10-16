@@ -342,8 +342,14 @@ function resolveWhatsAppLinkView({
   return "idle";
 }
 
+interface WhatsAppLinkOwner {
+  agentName: string;
+  orgName: string;
+}
+
 function WhatsAppLinkBody({
   linkError,
+  linkOwner,
   onReconnect,
   qrCode,
   reconnectPending,
@@ -352,6 +358,7 @@ function WhatsAppLinkBody({
   view,
 }: {
   linkError: string | null;
+  linkOwner: WhatsAppLinkOwner | null;
   onReconnect: () => void;
   qrCode: string | null;
   reconnectPending: boolean;
@@ -387,9 +394,19 @@ function WhatsAppLinkBody({
           <h2 className="font-semibold text-base">
             Could not link this number
           </h2>
-          <p className="text-pretty text-muted-foreground text-sm">
-            {linkError} Scan again with a different WhatsApp number.
-          </p>
+          {linkOwner ? (
+            <p className="text-pretty text-muted-foreground text-sm">
+              <strong className="text-foreground">{linkOwner.agentName}</strong>{" "}
+              in{" "}
+              <strong className="text-foreground">{linkOwner.orgName}</strong>{" "}
+              already uses this number. Scan with a different number, or unlink
+              it from {linkOwner.agentName} first.
+            </p>
+          ) : (
+            <p className="text-pretty text-muted-foreground text-sm">
+              {linkError} Scan again with a different WhatsApp number.
+            </p>
+          )}
           <Button
             className="mt-2"
             disabled={reconnectPending || savePending}
@@ -465,6 +482,7 @@ export function WhatsAppLinkStatusCard({
   configured,
   footer,
   linkError,
+  linkOwner,
   linkingAfterScan,
   onReconnect,
   qrCode,
@@ -478,6 +496,7 @@ export function WhatsAppLinkStatusCard({
   configured: boolean;
   footer: ReactNode;
   linkError: string | null;
+  linkOwner: WhatsAppLinkOwner | null;
   linkingAfterScan: boolean;
   onReconnect: () => void;
   qrCode: string | null;
@@ -519,6 +538,7 @@ export function WhatsAppLinkStatusCard({
       </div>
       <WhatsAppLinkBody
         linkError={linkError}
+        linkOwner={linkOwner}
         onReconnect={onReconnect}
         qrCode={qrCode}
         reconnectPending={reconnectPending}

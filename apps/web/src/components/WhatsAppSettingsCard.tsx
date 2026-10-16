@@ -58,6 +58,7 @@ function WhatsAppSettingsCardForOrg({
       linkError={card.linkError}
       linkedNumber={card.linkedNumber}
       linkingAfterScan={card.linkingAfterScan}
+      linkOwner={card.linkOwner}
       loadError={card.loadError}
       onAllowUnpairedGroupMembersChange={card.onAllowUnpairedGroupMembersChange}
       onCopyPairingCode={card.onCopyPairingCode}
