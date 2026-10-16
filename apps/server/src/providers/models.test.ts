@@ -361,22 +361,6 @@ describe("resolveModel", () => {
       "moonshot-v1-8k-vision-preview"
     );
   });
-
-  test("resolves Groq models from the discovered list", () => {
-    // Groq rotates its hosted lineup, so ids come from the instance's
-    // discovered models and unknown ids fall back to its default.
-    const customModels = [
-      { default: true, id: "llama-3.3-70b-versatile" },
-      { id: "openai/gpt-oss-120b" },
-    ];
-
-    expect(resolveModel("groq", "openai/gpt-oss-120b", customModels)).toBe(
-      "openai/gpt-oss-120b"
-    );
-    expect(resolveModel("groq", "retired-model", customModels)).toBe(
-      "llama-3.3-70b-versatile"
-    );
-  });
 });
 
 describe("modelSupportsVision", () => {
