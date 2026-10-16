@@ -1,5 +1,6 @@
 import { afterEach, beforeEach } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -41,7 +42,7 @@ export function setupTestConfigDir(prefix = "nakama-server-test-"): void {
     process.env.NAKAMA_CONFIG_DIR = testConfigDir;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     if (originalConfigDir === undefined) {
       delete process.env.NAKAMA_CONFIG_DIR;
     } else {
@@ -49,8 +50,35 @@ export function setupTestConfigDir(prefix = "nakama-server-test-"): void {
     }
 
     if (testConfigDir) {
-      rmSync(testConfigDir, { force: true, recursive: true });
+      await removeTestDir(testConfigDir);
       testConfigDir = "";
     }
   });
+}
+
+/**
+ * Windows refuses to delete a folder a just-killed child still holds as its
+ * cwd. Bun 1.4 parses rm's maxRetries/retryDelay but does not apply them.
+ */
+export async function removeTestDir(dir: string): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await rm(dir, { force: true, recursive: true });
+
+      return;
+    } catch (error) {
+      if (
+        process.platform !== "win32" ||
+        attempt >= 5 ||
+        !["EBUSY", "EPERM", "ENOTEMPTY"].includes(
+          // SAFETY: Bun file-system busy errors expose Node's standard errno code.
+          (error as NodeJS.ErrnoException).code ?? ""
+        )
+      ) {
+        throw error;
+      }
+
+      await Bun.sleep(100 * (attempt + 1));
+    }
+  }
 }

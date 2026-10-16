@@ -13,6 +13,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { getProfileSoulDir, PathGuardError } from "@nakama/core";
+import { removeTestDir } from "../test-config-dir";
 import { resolveHostBash, runBash } from "./bash";
 
 describe("host Bash discovery", () => {
@@ -160,27 +161,7 @@ describe("bash tool", () => {
 
   afterEach(async () => {
     if (workspaceRoot) {
-      // Bun 1.4 parses rm's maxRetries/retryDelay but does not apply them.
-      for (let attempt = 0; ; attempt++) {
-        try {
-          await rm(workspaceRoot, { force: true, recursive: true });
-          break;
-        } catch (error) {
-          if (
-            process.platform !== "win32" ||
-            attempt >= 5 ||
-            !["EBUSY", "EPERM", "ENOTEMPTY"].includes(
-              // SAFETY: Bun file-system busy errors expose Node's standard errno code.
-              (error as NodeJS.ErrnoException).code ?? ""
-            )
-          ) {
-            throw error;
-          }
-
-          await Bun.sleep(100 * (attempt + 1));
-        }
-      }
-
+      await removeTestDir(workspaceRoot);
       workspaceRoot = "";
     }
   });
