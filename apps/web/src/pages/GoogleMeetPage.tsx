@@ -604,6 +604,44 @@ function ConnectionStatus({
   );
 }
 
+// Drive names Meet recordings "<event title> (<date> <zone>) - Recording".
+// Instant meetings have no event, so Google uses the meeting code instead.
+function recordingLabel(recording: {
+  date?: string;
+  name: string;
+  size: number;
+}) {
+  const match =
+    /^(.*?)\s*\((\d{4}-\d{2}-\d{2}[^)]*)\)(?:\s*[-–]\s*Recording)?(?:\.\w+)?$/i.exec(
+      recording.name
+    );
+
+  const base = match?.[1]?.trim() || recording.name;
+  const code = /^[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(base);
+  const timestamp = Date.parse(recording.date ?? "");
+
+  const when = Number.isNaN(timestamp)
+    ? match?.[2]
+    : new Date(timestamp).toLocaleString(undefined, {
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        month: "short",
+        weekday: "short",
+      });
+
+  return {
+    details: [
+      code ? base : null,
+      when,
+      `${Math.ceil(recording.size / 1024 / 1024)} MB`,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    title: code ? "Instant meeting" : base,
+  };
+}
+
 function readUploadContent(file: File) {
   const markdown = /\.(md|markdown)$/i.test(file.name);
 
@@ -841,7 +879,7 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
       }}
       open
     >
-      <DialogContent>
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Import recording</DialogTitle>
         </DialogHeader>
@@ -911,14 +949,9 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
                     <Video01Icon size={18} />
                   </span>
                   <span className="meet-meta">
-                    <strong>{recording.name}</strong>
+                    <strong>{recordingLabel(recording).title}</strong>
                     <span className="meet-status">
-                      {[
-                        recording.date,
-                        `${Math.ceil(recording.size / 1024 / 1024)} MB`,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
+                      {recordingLabel(recording).details}
                     </span>
                   </span>
                 </label>
