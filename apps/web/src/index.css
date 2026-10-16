@@ -1577,6 +1577,60 @@
 .meet-recordings label:has(:checked) .meet-date-tile span {
   color: var(--primary);
 }
+.meet-loading-bar {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  overflow: hidden;
+  background: var(--muted);
+}
+.meet-loading-bar::after {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  content: "";
+  background: var(--primary);
+  animation: meet-loading-slide 1.3s ease-in-out infinite;
+}
+@keyframes meet-loading-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .meet-loading-bar::after {
+    width: 100%;
+    opacity: 0.5;
+    animation: none;
+  }
+}
+.meet-recordings-placeholder {
+  display: grid;
+  gap: 8px;
+  opacity: 0.5;
+}
+.meet-recordings-placeholder > span {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1.5px dashed var(--border);
+  border-radius: 12px;
+}
+.meet-recordings-placeholder > span > span:last-child {
+  display: grid;
+  flex: 1;
+  gap: 10px;
+}
+.meet-recordings-placeholder > span > span:last-child span {
+  display: block;
+  height: 11px;
+  background: var(--muted);
+  border-radius: 6px;
+}
 .meet-check {
   display: inline-flex;
   visibility: hidden;

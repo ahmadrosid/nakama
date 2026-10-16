@@ -982,13 +982,33 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
       open
     >
       <DialogContent className="sm:max-w-xl">
+        {!(result || error) && (
+          <span aria-hidden="true" className="meet-loading-bar" />
+        )}
         <DialogHeader>
           <DialogTitle>
             {importing ? "Importing recording" : "Import recording"}
           </DialogTitle>
+          {!(result || error) && (
+            <p className="meet-status" role="status">
+              Finding recordings…
+            </p>
+          )}
         </DialogHeader>
         {error && <p role="alert">{error}</p>}
-        {!(result || error) && <p role="status">Finding recordings…</p>}
+        {!(result || error) && (
+          <div aria-hidden="true" className="meet-recordings-placeholder">
+            {["48%", "40%", "54%"].map((width) => (
+              <span key={width}>
+                <span className="meet-date-tile" />
+                <span>
+                  <span style={{ width }} />
+                  <span style={{ width: "30%" }} />
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
         {result && !result.composioConfigured && (
           <p>
             {user?.isPlatformAdmin ? (
