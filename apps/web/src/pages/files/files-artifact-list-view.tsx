@@ -88,9 +88,9 @@ export function FileEntry({
   onOpen,
   actions,
   pinPath,
-  createdBy,
+  creatorLabel,
 }: {
-  createdBy?: string | null;
+  creatorLabel?: string | null;
   filename: string;
   mimeType?: string;
   sizeBytes?: number;
@@ -164,9 +164,9 @@ export function FileEntry({
         <td className="hidden px-3 py-3 text-muted-foreground tabular-nums sm:table-cell">
           {directory ? "—" : formatBytes(sizeBytes)}
         </td>
-        {createdBy === undefined ? null : (
+        {creatorLabel === undefined ? null : (
           <td className="hidden truncate px-3 py-3 text-muted-foreground lg:table-cell">
-            {createdBy ?? "—"}
+            {creatorLabel ?? "—"}
           </td>
         )}
         <td className="hidden px-3 py-3 text-muted-foreground tabular-nums lg:table-cell">
@@ -270,7 +270,7 @@ function ArtifactListFile({
           profileId={profileId}
         />
       }
-      createdBy={artifactCreatorLabel(artifact)}
+      creatorLabel={artifactCreatorLabel(artifact)}
       filename={
         showFullPath ? artifact.filename : artifactBasename(artifact.filename)
       }
@@ -302,7 +302,7 @@ export function ArtifactListView({
     <FileEntriesLayout showCreatedBy viewMode="list">
       {folders.map((folder) => (
         <FileEntry
-          createdBy={null}
+          creatorLabel={null}
           directory
           filename={folder.name}
           key={folder.prefix}
