@@ -2,6 +2,7 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import type {
   MeetAction,
   MeetActionInput,
+  MeetActionResults,
   Meeting,
 } from "@nakama/core/google-meet";
 import { act } from "react";
@@ -58,7 +59,7 @@ const auth = {
   user: { email: "admin@example.com", id: "admin", isPlatformAdmin: false },
 } as AuthContextValue;
 
-async function mountPage() {
+async function mountPage(recordings?: MeetActionResults["recordings"]) {
   // SAFETY: each branch returns the result shape of the action it handles.
   const invoke = spyOn(client, "invokeGoogleMeet").mockImplementation(((
     action: MeetAction,
@@ -89,6 +90,10 @@ async function mountPage() {
               }))
             : [],
       });
+    }
+
+    if (action === "recordings") {
+      return Promise.resolve(recordings);
     }
 
     return Promise.resolve(meetings[0]);
@@ -178,4 +183,59 @@ test("history lists only finished meetings and filters by search", async () => {
   await type(search, "customer");
 
   expect(rows()).toEqual(["Customer call"]);
+});
+
+test("recording picker imports the selected recording", async () => {
+  const { container, invoke } = await mountPage({
+    composioConfigured: true,
+    driveConnected: true,
+    gmailConnected: true,
+    recordings: [
+      {
+        date: "2026-10-16",
+        fileId: "first",
+        messageId: "one",
+        name: "First.mp4",
+        size: 100,
+      },
+      {
+        date: "2026-10-17",
+        fileId: "second",
+        messageId: "two",
+        name: "Second.mp4",
+        size: 200,
+      },
+    ],
+  });
+
+  await act(async () => {
+    [...container.querySelectorAll("button")]
+      .find((button) => button.textContent?.includes("Import recording"))
+      ?.click();
+    await Bun.sleep(10);
+  });
+
+  const choices = [
+    ...document.querySelectorAll<HTMLInputElement>('input[name="recording"]'),
+  ];
+
+  expect(choices).toHaveLength(2);
+  expect(choices[0]?.checked).toBe(true);
+
+  await act(async () => choices[1]?.click());
+  expect(choices[1]?.checked).toBe(true);
+
+  await act(async () => {
+    [...document.querySelectorAll("button")]
+      .find((button) => button.textContent === "Import")
+      ?.click();
+    await Bun.sleep(10);
+  });
+
+  expect(invoke).toHaveBeenCalledWith(
+    "import-recording",
+    { fileId: "second", messageId: "two" },
+    "org-a",
+    expect.anything()
+  );
 });

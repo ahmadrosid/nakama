@@ -47,6 +47,8 @@ type MeetCall = <Action extends MeetAction>(
   signal?: AbortSignal
 ) => Promise<MeetActionResults[Action]>;
 
+type Recording = MeetActionResults["recordings"]["recordings"][number];
+
 function meetingStatus(meeting: Meeting) {
   if (
     ["queued", "joining", "recording", "transcribing"].includes(meeting.state)
@@ -898,9 +900,144 @@ function useExtensionBridge(
   }, [call, signal, setConnected, setSelected]);
 }
 
-function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
-  type Recording = MeetActionResults["recordings"]["recordings"][number];
+function RecordingSources({
+  result,
+  isPlatformAdmin,
+  connecting,
+  onConnect,
+}: {
+  result: MeetActionResults["recordings"] | null;
+  isPlatformAdmin: boolean;
+  connecting: string;
+  onConnect(slug: string): void;
+}) {
+  if (!result?.composioConfigured) {
+    return result ? (
+      <p>
+        {isPlatformAdmin ? (
+          <>
+            Set up Composio in{" "}
+            <a href="/integrations?section=composio">Integrations</a> to import
+            recordings.
+          </>
+        ) : (
+          "Ask your platform admin to set up Composio to import recordings."
+        )}
+      </p>
+    ) : null;
+  }
 
+  if (result.gmailConnected && result.driveConnected) {
+    return null;
+  }
+
+  const connections = [
+    {
+      connected: result.gmailConnected,
+      logo: "gmail",
+      name: "Gmail",
+      slug: "gmail",
+    },
+    {
+      connected: result.driveConnected,
+      logo: "google-drive",
+      name: "Google Drive",
+      slug: "googledrive",
+    },
+  ];
+
+  return (
+    <ul className="meet-connections">
+      {connections.map(({ connected, logo, name, slug }) => (
+        <li key={name}>
+          <span className="meet-tile-icon">
+            <img alt="" height={20} src={`/icons/${logo}.svg`} width={20} />
+          </span>
+          <span className="meet-meta">
+            <strong>{name}</strong>
+            <span
+              className="meet-connection"
+              data-tone={connected ? "success" : "muted"}
+            >
+              {connected ? "Connected" : "Not connected"}
+            </span>
+          </span>
+          {!connected && (
+            <Button
+              disabled={!!connecting}
+              onClick={() => onConnect(slug)}
+              size="sm"
+              type="button"
+            >
+              {connecting === slug ? "Connecting…" : "Connect"}
+            </Button>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function RecordingChoices({
+  importing,
+  picked,
+  progress,
+  ready,
+  recordings,
+  onSelect,
+}: {
+  importing: boolean;
+  picked: Recording | undefined;
+  progress: MeetImportProgress | null;
+  ready: boolean;
+  recordings: Recording[];
+  onSelect(key: string): void;
+}) {
+  if (importing && picked) {
+    return (
+      <div className="meet-import">
+        <div className="meet-import-recording">
+          <RecordingTile recording={picked} />
+        </div>
+        <ImportSteps progress={progress} />
+      </div>
+    );
+  }
+
+  if (!(ready && !importing)) {
+    return null;
+  }
+
+  if (recordings.length === 0) {
+    return <p>No Meet recording emails found.</p>;
+  }
+
+  return (
+    <fieldset className="meet-recordings">
+      <legend className="sr-only">Recording</legend>
+      {recordings.map((recording) => {
+        const key = `${recording.messageId}:${recording.fileId}`;
+
+        return (
+          <label key={key}>
+            <input
+              checked={recording === picked}
+              name="recording"
+              onChange={() => onSelect(key)}
+              type="radio"
+            />
+            <RecordingTile recording={recording} />
+            <span aria-hidden="true" className="meet-check">
+              <Tick02Icon size={14} />
+            </span>
+          </label>
+        );
+      })}
+    </fieldset>
+  );
+}
+
+function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
   const [result, setResult] = React.useState<
     MeetActionResults["recordings"] | null
   >(null);
@@ -1007,22 +1144,8 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
     recordings.find((recording) => recordingKey(recording) === selected) ??
     recordings[0];
 
-  const connections = result && [
-    {
-      connected: result.gmailConnected,
-      logo: "gmail",
-      name: "Gmail",
-      slug: "gmail",
-    },
-    {
-      connected: result.driveConnected,
-      logo: "google-drive",
-      name: "Google Drive",
-      slug: "googledrive",
-    },
-  ];
-
-  const ready = result?.gmailConnected && result.driveConnected;
+  const ready = Boolean(result?.gmailConnected && result.driveConnected);
+  const loading = !(result || error);
 
   return (
     <Dialog
@@ -1034,21 +1157,19 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
       open
     >
       <DialogContent className="sm:max-w-xl">
-        {!(result || error) && (
-          <span aria-hidden="true" className="meet-loading-bar" />
-        )}
+        {loading && <span aria-hidden="true" className="meet-loading-bar" />}
         <DialogHeader>
           <DialogTitle>
             {importing ? "Importing recording" : "Import recording"}
           </DialogTitle>
-          {!(result || error) && (
+          {loading && (
             <p className="meet-status meet-shimmer" role="status">
               Finding recordings…
             </p>
           )}
         </DialogHeader>
         {error && <p role="alert">{error}</p>}
-        {!(result || error) && (
+        {loading && (
           <div aria-hidden="true" className="meet-recordings-placeholder">
             {["48%", "40%", "54%"].map((width) => (
               <span key={width}>
@@ -1061,85 +1182,20 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
             ))}
           </div>
         )}
-        {result && !result.composioConfigured && (
-          <p>
-            {user?.isPlatformAdmin ? (
-              <>
-                Set up Composio in{" "}
-                <a href="/integrations?section=composio">Integrations</a> to
-                import recordings.
-              </>
-            ) : (
-              "Ask your platform admin to set up Composio to import recordings."
-            )}
-          </p>
-        )}
-        {result?.composioConfigured && connections && !ready && (
-          <ul className="meet-connections">
-            {connections.map(({ connected, logo, name, slug }) => (
-              <li key={name}>
-                <span className="meet-tile-icon">
-                  <img
-                    alt=""
-                    height={20}
-                    src={`/icons/${logo}.svg`}
-                    width={20}
-                  />
-                </span>
-                <span className="meet-meta">
-                  <strong>{name}</strong>
-                  <span
-                    className="meet-connection"
-                    data-tone={connected ? "success" : "muted"}
-                  >
-                    {connected ? "Connected" : "Not connected"}
-                  </span>
-                </span>
-                {!connected && (
-                  <Button
-                    disabled={!!connecting}
-                    onClick={() => void connect(slug)}
-                    size="sm"
-                    type="button"
-                  >
-                    {connecting === slug ? "Connecting…" : "Connect"}
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-        {importing && picked && (
-          <div className="meet-import">
-            <div className="meet-import-recording">
-              <RecordingTile recording={picked} />
-            </div>
-            <ImportSteps progress={progress} />
-          </div>
-        )}
-        {ready &&
-          !importing &&
-          (recordings.length ? (
-            <fieldset className="meet-recordings">
-              <legend className="sr-only">Recording</legend>
-              {recordings.map((recording) => (
-                <label key={recordingKey(recording)}>
-                  <input
-                    checked={recording === picked}
-                    name="recording"
-                    onChange={() => setSelected(recordingKey(recording))}
-                    type="radio"
-                  />
-                  <RecordingTile recording={recording} />
-                  <span aria-hidden="true" className="meet-check">
-                    <Tick02Icon size={14} />
-                  </span>
-                </label>
-              ))}
-            </fieldset>
-          ) : (
-            <p>No Meet recording emails found.</p>
-          ))}
+        <RecordingSources
+          connecting={connecting}
+          isPlatformAdmin={user?.isPlatformAdmin === true}
+          onConnect={(slug) => void connect(slug)}
+          result={result}
+        />
+        <RecordingChoices
+          importing={importing}
+          onSelect={setSelected}
+          picked={picked}
+          progress={progress}
+          ready={ready}
+          recordings={recordings}
+        />
         <DialogFooter className="meet-import-footer">
           {importing && (
             <p className="meet-status" role="status">
@@ -1165,6 +1221,35 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function MeetingDeleteDialog({
+  call,
+  meeting,
+  onClose,
+  onDeleted,
+}: {
+  call: MeetCall;
+  meeting: Meeting | null;
+  onClose(): void;
+  onDeleted(id: string): void;
+}) {
+  if (!meeting) {
+    return null;
+  }
+
+  return (
+    <ConfirmDialog
+      confirmLabel="Delete meeting"
+      description={`This permanently deletes the meeting from ${new Date(meeting.createdAt).toLocaleString()} and its transcript. You can’t undo this.`}
+      onClose={onClose}
+      onConfirm={async () => {
+        await call("delete", { meetingId: meeting.id });
+        onDeleted(meeting.id);
+      }}
+      title="Delete meeting?"
+    />
   );
 }
 
@@ -1268,26 +1353,24 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
   const meetings = overview?.meetings ?? [];
   const live = meetings.filter(isActive);
 
-  const deleteDialog = deleting && (
-    <ConfirmDialog
-      confirmLabel="Delete meeting"
-      description={`This permanently deletes the meeting from ${new Date(deleting.createdAt).toLocaleString()} and its transcript. You can’t undo this.`}
+  const deleteDialog = (
+    <MeetingDeleteDialog
+      call={call}
+      meeting={deleting}
       onClose={() => setDeleting(null)}
-      onConfirm={async () => {
-        await call("delete", { meetingId: deleting.id });
+      onDeleted={(id) => {
         setSelected(null);
         setOverview((previous) =>
           previous
             ? {
                 ...previous,
                 meetings: previous.meetings.filter(
-                  (meeting) => meeting.id !== deleting.id
+                  (meeting) => meeting.id !== id
                 ),
               }
             : previous
         );
       }}
-      title="Delete meeting?"
     />
   );
 
