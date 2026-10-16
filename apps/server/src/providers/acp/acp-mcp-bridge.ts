@@ -14,6 +14,11 @@ const url = process.env.NAKAMA_ACP_MCP_URL;
 createInterface({ input: process.stdin }).on("line", async (line) => {
   if (!line.trim()) return;
 
+  const fail = (message) => {
+    const id = (() => { try { return JSON.parse(line).id ?? null; } catch { return null; } })();
+    process.stdout.write(JSON.stringify({ error: { code: -32603, message }, id, jsonrpc: "2.0" }) + "\\n");
+  };
+
   try {
     const response = await fetch(url, {
       body: line,
@@ -24,11 +29,13 @@ createInterface({ input: process.stdin }).on("line", async (line) => {
     if (response.status === 202 || response.status === 204) return;
 
     const text = (await response.text()).trim();
+
+    // A non-JSON-RPC body is dropped by the agent's MCP client, which then
+    // waits out its connect timeout and reports that instead of the cause.
+    if (!response.ok) return fail("Nakama MCP endpoint answered " + response.status + ": " + text);
     if (text) process.stdout.write(text + "\\n");
   } catch (error) {
-    const id = (() => { try { return JSON.parse(line).id ?? null; } catch { return null; } })();
-    const message = error instanceof Error ? error.message : String(error);
-    process.stdout.write(JSON.stringify({ error: { code: -32603, message }, id, jsonrpc: "2.0" }) + "\\n");
+    fail(error instanceof Error ? error.message : String(error));
   }
 });
 `;

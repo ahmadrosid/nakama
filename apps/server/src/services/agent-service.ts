@@ -1821,7 +1821,6 @@ export class AgentService {
 
     const userTimezone = await this.getUserTimezone();
     const userContext = await this.loadUserContextForUser(orgId, undefined);
-    const harness = this.createHarnessForProfile(profile);
 
     const toolContext = buildToolExecutionContext({
       assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
@@ -1834,6 +1833,14 @@ export class AgentService {
       recordToolOutputSavings: this.savingsRecorderFor(orgId),
       recordTurnUsage: this.turnUsageRecorderFor(orgId),
     });
+
+    const harness = this.createHarnessForProfile(
+      profile,
+      profile.model,
+      undefined,
+      undefined,
+      { context: toolContext, tools }
+    );
 
     const savedSteps = automationRunId
       ? await this.db.listAutomationRunSteps(automationRunId)
@@ -2148,10 +2155,26 @@ export class AgentService {
       input.userId
     );
 
+    const toolContext = buildToolExecutionContext({
+      agentDepth: input.agentDepth,
+      ...this.knowledgeToolContext(input.orgId, input.profileId),
+      assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(input.orgId),
+      clientOrigin: input.clientOrigin,
+      orgId: input.orgId,
+      orgRole: input.orgRole,
+      profileId: input.profileId,
+      recordToolOutputSavings: this.savingsRecorderFor(input.orgId),
+      recordTurnUsage: this.turnUsageRecorderFor(input.orgId),
+      sessionId: input.sessionId,
+      userId: input.userId,
+    });
+
     const harness = this.createHarnessForProfile(
       profile,
       profile.model,
-      input.userId
+      input.userId,
+      undefined,
+      { context: toolContext, tools }
     );
 
     const prompt = buildSubAgentPrompt(task, input.context);
@@ -2161,19 +2184,7 @@ export class AgentService {
       enableToolLoop: true,
       soul: soulActive,
       systemPrompt: childSystemPrompt,
-      toolContext: buildToolExecutionContext({
-        agentDepth: input.agentDepth,
-        ...this.knowledgeToolContext(input.orgId, input.profileId),
-        assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(input.orgId),
-        clientOrigin: input.clientOrigin,
-        orgId: input.orgId,
-        orgRole: input.orgRole,
-        profileId: input.profileId,
-        recordToolOutputSavings: this.savingsRecorderFor(input.orgId),
-        recordTurnUsage: this.turnUsageRecorderFor(input.orgId),
-        sessionId: input.sessionId,
-        userId: input.userId,
-      }),
+      toolContext,
       tools,
       userContext,
       userTimezone,
@@ -6083,15 +6094,26 @@ export class AgentService {
     profile: StoredProfileRecord,
     selectedModel: string | null = profile.model,
     userId?: string | null,
-    acpSessionKey?: string
+    acpSessionKey?: string,
+    acpTools?: { context: ToolContext; tools: ToolDefinition[] }
   ): AgentDependencies {
     if (profile.acpAgent && profile.orgId) {
+      const sessionKey = acpSessionKey ?? `${profile.id}:${randomUUID()}`;
+
+      // A chat registers its tools under its own key. A one-shot run
+      // (automation, sub-agent, plugin summary) has nobody else to do it, and
+      // an unregistered key leaves the agent's MCP connect hanging for 30s.
+      if (!acpSessionKey) {
+        setAcpToolAccess(
+          sessionKey,
+          acpTools?.tools ?? [],
+          acpTools?.context ?? {}
+        );
+      }
+
       // ACP agents run their own model loop, so the profile's LLM provider is unused.
       const provider = createAcpProvider(
-        acpOptionsForProfile(
-          profile,
-          acpSessionKey ?? `${profile.id}:${randomUUID()}`
-        )
+        acpOptionsForProfile(profile, sessionKey)
       );
 
       return this.createHarness({

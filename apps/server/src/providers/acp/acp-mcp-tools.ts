@@ -92,7 +92,9 @@ export function isNakamaToolPermission(
   );
 }
 
-// The ACP agent brings its own file, shell, search and web tools.
+// The ACP agent brings its own file, shell and search tools. Web tools stay:
+// the permission handler in acp-provider.ts refuses the agent's own WebFetch
+// and WebSearch, so Nakama's are the only web access the agent has.
 const ACP_NATIVE_TOOL_NAMES = new Set([
   "bash",
   "delete_file",
@@ -100,8 +102,6 @@ const ACP_NATIVE_TOOL_NAMES = new Set([
   "read_file",
   "ripgrep",
   "search_files",
-  "web_fetch",
-  "web_search",
   "write_file",
 ]);
 

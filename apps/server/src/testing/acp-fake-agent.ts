@@ -4,6 +4,7 @@
  *
  * Prompt text picks the behavior:
  *   - "tool"  sends a tool_call and a completed tool_call_update first
+ *   - "mcp-url" reports the Nakama MCP endpoint the session was given
  *   - "mcp"   reports how many MCP servers the session was created with
  *   - "thought" sends a thought chunk before the reply
  *   - anything else echoes the prompt back
@@ -41,6 +42,7 @@ function initialConfigOptions(): acp.SessionConfigOption[] {
 
 class FakeAgent implements acp.Agent {
   private mcpServerCount = 0;
+  private mcpUrl = "";
   private configOptions = initialConfigOptions();
   private readonly sessionIds: string[] = [];
 
@@ -58,6 +60,11 @@ class FakeAgent implements acp.Agent {
     params: acp.NewSessionRequest
   ): Promise<acp.NewSessionResponse> {
     this.mcpServerCount = params.mcpServers.length;
+    this.mcpUrl =
+      params.mcpServers
+        .flatMap((server) => ("env" in server ? server.env : []))
+        .find((variable) => variable.name === "NAKAMA_ACP_MCP_URL")?.value ??
+      "";
     const sessionId = `session-${this.sessionIds.length + 1}`;
     this.sessionIds.push(sessionId);
 
@@ -116,9 +123,11 @@ class FakeAgent implements acp.Agent {
 
     const modelTag = this.currentModel() === "fake-smart" ? "[smart] " : "";
 
-    const reply = text.includes("mcp")
-      ? `mcp servers: ${this.mcpServerCount}`
-      : `${modelTag}fake: ${text}`;
+    const reply = text.includes("mcp-url")
+      ? `mcp url: ${this.mcpUrl}`
+      : text.includes("mcp")
+        ? `mcp servers: ${this.mcpServerCount}`
+        : `${modelTag}fake: ${text}`;
 
     await this.send(params.sessionId, {
       content: { text: reply, type: "text" },
