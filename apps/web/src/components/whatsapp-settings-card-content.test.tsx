@@ -53,13 +53,12 @@ function renderCard(
     allowedPhoneSummary: "2 numbers",
     allowUnpairedGroupMembers: false,
     awaitingQr: false,
-    bridgeStarting: false,
     canSave: false,
     configured: true,
     connected: true,
     copied: false,
-    embedded: true,
     formError: null,
+    linkError: null,
     linkedNumber: "+62***1234",
     linkingAfterScan: false,
     loadError: null,
@@ -110,6 +109,8 @@ function renderCard(
   return { container, props };
 }
 
+const LINK_CARD = "section[aria-label='WhatsApp link status']";
+
 function button(container: HTMLElement, label: string) {
   const result = Array.from(container.querySelectorAll("button")).find(
     (item) => item.textContent?.trim() === label
@@ -120,29 +121,23 @@ function button(container: HTMLElement, label: string) {
   return result!;
 }
 
-for (const embedded of [true, false]) {
-  test(`linked account shows management once (embedded=${embedded})`, () => {
-    const { container, props } = renderCard({ embedded });
-    expect(
-      container.querySelector("ol[aria-label='WhatsApp setup progress']")
-    ).toBeNull();
-    expect(container.textContent).toContain("Connected");
-    expect(container.textContent).toContain("+62***1234");
-    expect(container.querySelectorAll("p[role='status']")).toHaveLength(1);
-    const settings = container.querySelector("details.group");
-    expect(settings?.hasAttribute("open")).toBe(false);
-    act(() => button(container, "Edit").click());
-    expect(props.onManageAllowedPhones).toHaveBeenCalledTimes(1);
-  });
-}
+test("linked account shows management once", () => {
+  const { container, props } = renderCard();
+  expect(container.querySelector(LINK_CARD)).toBeNull();
+  expect(container.textContent).toContain("Connected");
+  expect(container.textContent).toContain("+62***1234");
+  expect(container.querySelectorAll("p[role='status']")).toHaveLength(1);
+  const settings = container.querySelector("details.group");
+  expect(settings?.hasAttribute("open")).toBe(false);
+  act(() => button(container, "Edit").click());
+  expect(props.onManageAllowedPhones).toHaveBeenCalledTimes(1);
+});
 
 for (const running of [true, false]) {
   test(`linked offline account retains access and recovery (running=${running})`, () => {
     const { container } = renderCard({ connected: false, running });
     expect(container.textContent).toContain("Offline");
-    expect(
-      container.querySelector("ol[aria-label='WhatsApp setup progress']")
-    ).toBeNull();
+    expect(container.querySelector(LINK_CARD)).toBeNull();
     expect(button(container, "Edit").disabled).toBe(false);
     expect(button(container, "Scan a new QR code").disabled).toBe(false);
   });
@@ -150,9 +145,7 @@ for (const running of [true, false]) {
 
 test("saved pairing code alone does not return a linked account to setup", () => {
   const { container, props } = renderCard({ pairingCode: "12345678" });
-  expect(
-    container.querySelector("ol[aria-label='WhatsApp setup progress']")
-  ).toBeNull();
+  expect(container.querySelector(LINK_CARD)).toBeNull();
   act(() => button(container, "Copy").click());
   expect(props.onCopyPairingCode).toHaveBeenCalledTimes(1);
 });
@@ -163,26 +156,18 @@ for (const state of [
     configured: false,
     paired: false,
     running: false,
-    step: "Start connection",
+    status: "Not set up",
   },
-  { paired: false, running: false, step: "Start connection" },
-  { awaitingQr: true, paired: false, step: "Link account" },
-  {
-    bridgeStarting: true,
-    paired: false,
-    pairingCode: "12345678",
-    step: "Link account",
-  },
-  { linkingAfterScan: true, paired: false, step: "Link account" },
-  { paired: false, running: true, step: "Link account" },
-  { paired: true, qrCode: "test-qr", showQr: true, step: "Link account" },
+  { paired: false, running: false, status: "Offline" },
+  { awaitingQr: true, paired: false, status: "Getting QR code" },
+  { linkingAfterScan: true, paired: false, status: "Linking" },
+  { paired: false, running: true, status: "Not linked" },
+  { paired: true, qrCode: "test-qr", showQr: true, status: "Waiting for scan" },
 ]) {
-  test(`setup selects ${state.step}: ${JSON.stringify(state)}`, () => {
-    const { step, ...overrides } = state;
+  test(`setup shows ${state.status}: ${JSON.stringify(state)}`, () => {
+    const { status, ...overrides } = state;
     const { container } = renderCard(overrides);
-    expect(
-      container.querySelector("li[aria-current='step'] h2")?.textContent
-    ).toBe(step);
+    expect(container.querySelector(LINK_CARD)?.textContent).toContain(status);
     expect(container.querySelectorAll("p[role='status']")).toHaveLength(1);
 
     if (overrides.showQr) {
@@ -342,4 +327,73 @@ test("first connection uses the existing save handler", () => {
 
   act(() => button(container, "Connect WhatsApp").click());
   expect(props.onSave).toHaveBeenCalledTimes(1);
+});
+
+test("rejected link shows the error and scans again without a QR code", () => {
+  const { container, props } = renderCard({
+    linkError: "This channel account is already in use by another agent.",
+    paired: false,
+    qrCode: "stale-qr",
+    showQr: false,
+  });
+
+  expect(container.querySelector(`${LINK_CARD} [role='alert']`)).not.toBeNull();
+  expect(
+    container.querySelector("ol[aria-label='Steps to connect WhatsApp']")
+  ).toBeNull();
+  act(() => button(container, "Scan with another number").click());
+  expect(props.onReconnect).toHaveBeenCalledTimes(1);
+});
+
+test("a pending pairing code does not hide the QR code before linking", () => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+
+  queryClient.setQueryData(
+    [...queryKeys.whatsapp.settings, null, "profile-a"],
+    {
+      allowedPhoneDetails: {},
+      allowedPhones: [],
+      allowUnpairedGroupMembers: false,
+      configured: true,
+      pairedJid: null,
+      pairingCode: "12345678",
+      profileId: "profile-a",
+      requireGroupMention: true,
+    }
+  );
+  queryClient.setQueryData([...queryKeys.systemStatus, null, "profile-a"], {
+    whatsappWorker: {
+      connected: false,
+      paired: false,
+      qrCode: "test-qr",
+      running: true,
+    },
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  cleanups.push(() => {
+    act(() => root.unmount());
+    container.remove();
+    queryClient.clear();
+  });
+  act(() =>
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <AuthContext.Provider value={authContextForTest(null)}>
+          <ChannelProfileContext.Provider value="profile-a">
+            <WhatsAppSettingsCard embedded />
+          </ChannelProfileContext.Provider>
+        </AuthContext.Provider>
+      </QueryClientProvider>
+    )
+  );
+
+  expect(
+    container.querySelector("ol[aria-label='Steps to connect WhatsApp']")
+  ).not.toBeNull();
 });

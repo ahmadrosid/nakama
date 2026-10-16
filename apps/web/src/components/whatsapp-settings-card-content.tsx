@@ -4,15 +4,16 @@ import { Switch } from "@nakama/ui/switch";
 import {
   ChannelConnectionStep,
   ChannelSettings,
-  ChannelSetupChecklist,
   IntegrationSettingsFooter,
   SettingsRow,
 } from "@/components/integration-settings.shared";
 import { WorkerActionBar } from "@/components/WorkerActionBar";
-import { WhatsAppSettingsLinkingSection } from "@/components/whatsapp-settings-linking-section";
+import {
+  WhatsAppLinkStatusCard,
+  WhatsAppSettingsLinkingSection,
+} from "@/components/whatsapp-settings-linking-section";
 
 export function WhatsAppSettingsCardContent({
-  embedded,
   connected,
   configured,
   paired,
@@ -27,8 +28,8 @@ export function WhatsAppSettingsCardContent({
   regeneratePending,
   qrCode,
   linkingAfterScan,
-  bridgeStarting,
   awaitingQr,
+  linkError,
   showReconnect,
   onReconnect,
   reconnectPending,
@@ -46,7 +47,6 @@ export function WhatsAppSettingsCardContent({
   onAllowUnpairedGroupMembersChange,
   onSave,
 }: {
-  embedded: boolean;
   connected: boolean;
   configured: boolean;
   paired: boolean;
@@ -61,8 +61,8 @@ export function WhatsAppSettingsCardContent({
   regeneratePending: boolean;
   qrCode: string | null;
   linkingAfterScan: boolean;
-  bridgeStarting: boolean;
   awaitingQr: boolean;
+  linkError: string | null;
   showReconnect: boolean;
   onReconnect: () => void;
   reconnectPending: boolean;
@@ -87,22 +87,16 @@ export function WhatsAppSettingsCardContent({
 
   const linking = (
     <WhatsAppSettingsLinkingSection
-      awaitingQr={awaitingQr}
-      bridgeStarting={bridgeStarting}
-      compact={!embedded}
       copied={copied}
-      linkingAfterScan={linkingAfterScan}
       onCopyPairingCode={onCopyPairingCode}
       onReconnect={onReconnect}
       onRegeneratePairingCode={onRegeneratePairingCode}
       paired={paired}
       pairingCode={pairingCode}
-      qrCode={qrCode}
       reconnectPending={reconnectPending}
       regeneratePending={regeneratePending}
       rowClassName={paneItemClass}
       savePending={savePending}
-      showQr={showQr}
       showReconnect={showReconnect}
     />
   );
@@ -121,19 +115,7 @@ export function WhatsAppSettingsCardContent({
     />
   );
 
-  let step = running ? 1 : 0;
-
-  if (paired) {
-    step = 2;
-  }
-
-  if (showQr || awaitingQr || bridgeStarting || linkingAfterScan) {
-    step = 1;
-  }
-
-  if (!configured) {
-    step = 0;
-  }
+  const linkingInProgress = showQr || awaitingQr || linkingAfterScan;
 
   const isConnected = running && connected;
   const managed = worker?.process?.managed === true;
@@ -148,29 +130,32 @@ export function WhatsAppSettingsCardContent({
     />
   );
 
-  const checklist = (
-    <ChannelSetupChecklist
-      label="WhatsApp setup progress"
-      step={step}
-      steps={["Start connection", "Link account"]}
-    >
-      {step === 0 && configured ? (
-        <ChannelConnectionStep
-          managed={managed}
-          platform="whatsapp"
-          running={running}
-          starting={savePending}
-        >
-          {workerActions}
-        </ChannelConnectionStep>
-      ) : null}
-      {step === 1 ? linking : null}
-      {footer}
-    </ChannelSetupChecklist>
-  );
-
-  if (step < 2) {
-    return checklist;
+  if (!(configured && paired) || linkingInProgress) {
+    return (
+      <WhatsAppLinkStatusCard
+        awaitingQr={awaitingQr}
+        configured={configured}
+        footer={statusLine || canSave || savePending ? footer : null}
+        linkError={linkError}
+        linkingAfterScan={linkingAfterScan}
+        onReconnect={onReconnect}
+        qrCode={qrCode}
+        reconnectPending={reconnectPending}
+        running={running}
+        savePending={savePending}
+        showQr={showQr}
+        startConnection={
+          <ChannelConnectionStep
+            managed={managed}
+            platform="whatsapp"
+            running={running}
+            starting={savePending}
+          >
+            {workerActions}
+          </ChannelConnectionStep>
+        }
+      />
+    );
   }
 
   return (

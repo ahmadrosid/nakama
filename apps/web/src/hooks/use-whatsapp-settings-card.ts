@@ -49,7 +49,6 @@ function resolveWhatsAppLinkingState({
   connected,
   linkError,
   paired,
-  pairingCode,
   profileId,
   qrCode,
   qrWasVisible,
@@ -60,14 +59,13 @@ function resolveWhatsAppLinkingState({
   connected: boolean;
   linkError: string | null;
   paired: boolean;
-  pairingCode: string | null;
   profileId: string;
   qrCode: string | null;
   qrWasVisible: boolean;
   running: boolean;
   settingsProfileId?: string;
 }) {
-  const useQrLinking = !(pairingCode || linkError);
+  const useQrLinking = !linkError;
   const showQr = configured && running && Boolean(qrCode) && useQrLinking;
 
   const awaitingQr =
@@ -79,9 +77,6 @@ function resolveWhatsAppLinkingState({
     !qrWasVisible &&
     useQrLinking;
 
-  const bridgeStarting =
-    configured && !paired && running && !connected && Boolean(pairingCode);
-
   const linkingAfterScan =
     configured &&
     !paired &&
@@ -92,7 +87,6 @@ function resolveWhatsAppLinkingState({
 
   return {
     awaitingQr,
-    bridgeStarting,
     canSave: !configured || profileId !== settingsProfileId,
     linkingAfterScan,
     showQr,
@@ -183,7 +177,6 @@ export function useWhatsAppSettingsCard({
   const connected = worker?.connected === true;
   const qrCode = worker?.qrCode ?? null;
   const linkError = worker?.linkError ?? null;
-  const shownError = formError ?? linkError;
   const paired = Boolean(worker?.paired || settings?.pairedJid);
   const pairingCode = settings?.pairingCode ?? null;
   const copied = copiedCode !== null && copiedCode === pairingCode;
@@ -230,7 +223,6 @@ export function useWhatsAppSettingsCard({
     connected,
     linkError,
     paired,
-    pairingCode,
     profileId,
     qrCode,
     qrWasVisible,
@@ -378,13 +370,13 @@ export function useWhatsAppSettingsCard({
     allowedPhonesOpen,
     allowUnpairedGroupMembers,
     awaitingQr: linking.awaitingQr,
-    bridgeStarting: linking.bridgeStarting,
     canSave: linking.canSave,
     configured,
     connected,
     copied,
-    formError: shownError,
+    formError,
     isLoading,
+    linkError,
     linkedNumber: settings?.phoneNumberMasked ?? null,
     linkingAfterScan: linking.linkingAfterScan,
     loadError,
@@ -415,7 +407,7 @@ export function useWhatsAppSettingsCard({
     savePending: saveMutation.isPending || startWorkerMutation.isPending,
     showQr: linking.showQr,
     showReconnect: linking.showReconnect,
-    statusLine: resolveWhatsAppStatusLine(hint, shownError, loadError),
+    statusLine: resolveWhatsAppStatusLine(hint, formError, loadError),
     worker,
   };
 }
