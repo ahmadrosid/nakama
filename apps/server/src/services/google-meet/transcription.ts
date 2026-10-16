@@ -15,16 +15,6 @@ export interface TranscriptionSession {
   push(audio: Uint8Array): void;
 }
 
-const transcriptionConfigSchema = z
-  .object({ apiKey: z.string().trim().min(1).max(4096) })
-  .strict();
-
-export function transcriptionConfig(
-  value: z.input<typeof transcriptionConfigSchema>
-) {
-  return transcriptionConfigSchema.parse(value);
-}
-
 const BYTES_PER_SECOND = 48_000;
 
 const CHUNK_BYTES = 15 * BYTES_PER_SECOND;

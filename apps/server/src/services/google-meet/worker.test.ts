@@ -3,7 +3,6 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { asTestFetch } from "../../providers/test-helpers";
-import { privateJson } from "./actions";
 import { MeetingStore } from "./store";
 import * as transcription from "./transcription";
 import { createStreamMeeting, generateNextMeetingTitle } from "./worker";
@@ -28,8 +27,6 @@ test.each([true, false])(
     );
 
     try {
-      privateJson(join(directory, "settings.json"), { apiKey: "test" });
-
       const meeting = store.create(
         "https://meet.google.com/abc-defg-hij",
         "user",
@@ -44,19 +41,19 @@ test.each([true, false])(
       });
       await generateNextMeetingTitle(
         store,
-        directory,
+        "test",
         new AbortController().signal
       );
       expect(request).not.toHaveBeenCalled();
       store.update(meeting.id, "finished");
       await generateNextMeetingTitle(
         store,
-        directory,
+        "test",
         new AbortController().signal
       );
       await generateNextMeetingTitle(
         store,
-        directory,
+        "test",
         new AbortController().signal
       );
       expect(request).toHaveBeenCalledTimes(1);
@@ -90,8 +87,6 @@ test("streams PCM frames to OpenAI and persists the final transcript", async () 
   const connect = spyOn(transcription, "connectTranscription");
 
   try {
-    privateJson(join(directory, "settings.json"), { apiKey: "test" });
-
     const meeting = store.create(
       "https://meet.google.com/abc-defg-hij",
       "user",
@@ -118,6 +113,7 @@ test("streams PCM frames to OpenAI and persists the final transcript", async () 
       meeting,
       store,
       directory,
+      "test",
       new AbortController().signal
     );
 
@@ -150,8 +146,6 @@ test("Stop acknowledges captured audio while final transcription drains and reje
   let finishes = 0;
 
   try {
-    privateJson(join(directory, "settings.json"), { apiKey: "test" });
-
     const meeting = store.create(
       "https://meet.google.com/abc-defg-hij",
       "user",
@@ -178,6 +172,7 @@ test("Stop acknowledges captured audio while final transcription drains and reje
       meeting,
       store,
       directory,
+      "test",
       new AbortController().signal
     );
 

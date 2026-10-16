@@ -81,6 +81,7 @@ export class GoogleMeetService {
       request: { data: string; filename: string; mediaType: string },
       signal?: AbortSignal
     ) => Promise<{ text: string }>,
+    private readonly openaiKey: () => string | null,
     private readonly composio?: Pick<
       ComposioService,
       "listMeetRecordings" | "downloadMeetRecording"
@@ -303,6 +304,7 @@ export class GoogleMeetService {
         composio: this.composio,
         createCapture: (meeting) => this.createCapture(orgId, meeting),
         dataDir: this.directory(orgId),
+        openaiKey: this.openaiKey,
         orgId,
         profileId,
         signal: combined,
@@ -364,7 +366,7 @@ export class GoogleMeetService {
 
     const task = generateNextMeetingTitle(
       store,
-      this.directory(orgId),
+      this.openaiKey(),
       this.abort.signal,
       meetingId
     )
@@ -538,6 +540,7 @@ export class GoogleMeetService {
             meeting,
             store,
             directory,
+            this.openaiKey(),
             AbortSignal.any([this.abort.signal, ws.data.abort.signal])
           );
 

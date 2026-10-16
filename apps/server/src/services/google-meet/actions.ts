@@ -1,30 +1,37 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { UserConfig } from "@nakama/core";
 import { z } from "zod";
 import type { ComposioService } from "../composio-service";
 import { importMeetRecording } from "../meet-recording-import";
 import { type Meeting, MeetingStore } from "./store";
-import { transcriptionConfig } from "./transcription";
 
-export function privateJson(
-  path: string,
-  data: { apiKey: string } | { enabled: boolean }
-) {
+export const OPENAI_PROVIDER_REQUIRED_MESSAGE =
+  "Add an OpenAI provider in AI Providers first.";
+
+// Meet calls OpenAI directly, so it takes the key from the AI provider settings:
+// the default provider when it is OpenAI, otherwise the first OpenAI provider.
+export function openaiProviderKey(config: UserConfig | null) {
+  const providers = (config?.providers ?? []).filter(
+    (provider) => provider.type === "openai" && provider.apiKey.trim()
+  );
+
+  const provider =
+    providers.find(({ id }) => id === config?.defaultProviderId) ??
+    providers[0];
+
+  return provider?.apiKey.trim() || null;
+}
+
+function privateJson(path: string, data: { enabled: boolean }) {
   const temporary = `${path}.${crypto.randomUUID()}.tmp`;
   writeFileSync(temporary, JSON.stringify(data), { mode: 0o600 });
   renameSync(temporary, path);
 }
 
-export function readSettings(directory: string) {
-  return transcriptionConfig(
-    JSON.parse(readFileSync(join(directory, "settings.json"), "utf8"))
-  );
-}
-
 export const meetingActionSchemas = {
   configure: z
     .object({
-      apiKey: z.string().max(4096).optional(),
       enabled: z.boolean().optional(),
     })
     .strict(),
@@ -69,6 +76,7 @@ export interface MeetExecutionContext {
   >;
   createCapture?(meeting: Meeting): { token: string; url: string };
   dataDir: string;
+  openaiKey?(): string | null;
   orgId: string;
   profileId?: string;
   signal?: AbortSignal;
@@ -80,7 +88,6 @@ export interface MeetExecutionContext {
 
 export interface MeetActionInput {
   after?: number;
-  apiKey?: string;
   content?: string;
   durationMinutes?: number;
   enabled?: boolean;
@@ -135,18 +142,11 @@ export async function run(
 
   try {
     const action = context.actionKey ?? "";
-    const settingsPath = join(context.dataDir, "settings.json");
+    const openaiKey = context.openaiKey?.() ?? null;
 
     if (action === "configure") {
       if (context.actor.role !== "admin") {
         throw new Error("Admin access required");
-      }
-
-      if (input.apiKey !== undefined) {
-        privateJson(
-          settingsPath,
-          transcriptionConfig({ apiKey: input.apiKey })
-        );
       }
 
       if (input.enabled !== undefined) {
@@ -156,7 +156,7 @@ export async function run(
       }
 
       return {
-        configured: existsSync(settingsPath),
+        configured: Boolean(openaiKey),
         enabled: meetEnabled(context.dataDir),
       };
     }
@@ -173,7 +173,7 @@ export async function run(
       return {
         canConfigure: context.actor.role === "admin",
         captureProtocol: 2,
-        configured: existsSync(settingsPath),
+        configured: Boolean(openaiKey),
         enabled,
         meetings: enabled
           ? store.list(
@@ -185,7 +185,9 @@ export async function run(
     }
 
     if (action === "start-capture") {
-      readSettings(context.dataDir);
+      if (!openaiKey) {
+        throw new Error(OPENAI_PROVIDER_REQUIRED_MESSAGE);
+      }
 
       if (!(context.captureUrl && context.createCapture)) {
         throw new Error("Capture service unavailable");
@@ -289,10 +291,14 @@ export async function run(
         );
       }
 
+      if (!openaiKey) {
+        throw new Error(OPENAI_PROVIDER_REQUIRED_MESSAGE);
+      }
+
       const result = await importMeetRecording(
         context.composio,
         {
-          dataDir: context.dataDir,
+          apiKey: openaiKey,
           // SAFETY: The surrounding code checked this value before the assertion.
           fileId: input.fileId as string,
           // SAFETY: The surrounding code checked this value before the assertion.

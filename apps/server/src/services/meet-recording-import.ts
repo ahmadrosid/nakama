@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { createWriteStream, readFileSync } from "node:fs";
+import { createWriteStream } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -171,29 +171,14 @@ async function saveDownload(value: unknown, path: string, signal: AbortSignal) {
 export async function importMeetRecording(
   composio: Pick<ComposioService, "downloadMeetRecording">,
   input: {
+    apiKey: string;
     orgId: string;
     userId: string;
-    dataDir: string;
     messageId: string;
     fileId: string;
   },
   signal: AbortSignal
 ): Promise<{ filename: string; text: string }> {
-  let settings: { apiKey?: unknown };
-
-  try {
-    settings = JSON.parse(
-      readFileSync(join(input.dataDir, "settings.json"), "utf8")
-    );
-  } catch {
-    throw new Error("Set an OpenAI key in Google Meet Settings first.");
-  }
-
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Composio tool payloads are untyped JSON narrowed here by shape.
-  if (typeof settings.apiKey !== "string" || !settings.apiKey.trim()) {
-    throw new Error("Set an OpenAI key in Google Meet Settings first.");
-  }
-
   const { recording, file } = await composio.downloadMeetRecording(
     input.orgId,
     input.userId,
@@ -283,7 +268,7 @@ export async function importMeetRecording(
           mediaType: "audio/mpeg",
         },
         model: "whisper-1",
-        provider: { apiKey: settings.apiKey, type: "openai" },
+        provider: { apiKey: input.apiKey, type: "openai" },
         signal,
       });
 

@@ -548,7 +548,8 @@ describe("createHonoApp", () => {
     const googleMeetService = new GoogleMeetService(
       options.databaseAdapter,
       root,
-      async () => ({ text: "Speech" })
+      async () => ({ text: "Speech" }),
+      () => null
     );
 
     try {

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { execFile } from "node:child_process";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -35,10 +35,6 @@ test("recorded video becomes a Whisper transcript and temporary media is removed
       "aac",
       video,
     ]);
-    await writeFile(
-      join(directory, "settings.json"),
-      JSON.stringify({ apiKey: "test-key" })
-    );
     // oxlint-disable-next-line anti-slop/no-known-value-widening -- The explicit type names the shape this helper exposes.
     let file: unknown = { base64: (await readFile(video)).toString("base64") };
 
@@ -49,7 +45,7 @@ test("recorded video becomes a Whisper transcript and temporary media is removed
     };
 
     const input = {
-      dataDir: directory,
+      apiKey: "test-key",
       fileId: "drive_file_123",
       messageId: "msg_1",
       orgId: "org",

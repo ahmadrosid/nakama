@@ -14,7 +14,7 @@ There is no bot participant joining the call.
 ## What you need
 
 - An organization admin who can configure Google Meet
-- An OpenAI key for transcription. This is a secret key from OpenAI that pays for turning speech into text.
+- An OpenAI provider in **AI Providers**. Google Meet uses its key to turn speech into text.
 - Google Chrome with the Nakama extension installed
 - A Google Meet call that you are allowed to record and transcribe
 
@@ -26,9 +26,9 @@ Always tell participants before transcription starts. Follow your organization's
 
 Open **Control center → Workspace → Google Meet**. It is included in Nakama. An organization admin can enable or disable it in **Google Meet → Settings**.
 
-### 2. Add the OpenAI key
+### 2. Add an OpenAI provider
 
-Open **Google Meet → Settings**, enter the OpenAI key, and save it. This key is used only for meeting transcription and is billed separately from a ChatGPT subscription.
+Open **Control center → Agent tools → AI Providers** and add an OpenAI provider with an API key. Google Meet uses the default provider when it is OpenAI, otherwise the first OpenAI provider. OpenAI bills this usage separately from a ChatGPT subscription.
 
 ### 3. Install the Chrome extension
 
@@ -68,11 +68,11 @@ Ask questions such as:
 
 Assign the Google Meet tools and skill to the profile you want to use. The agent only sees meetings owned by that profile and permitted for the current user. Captures started from the page have no profile assigned; read those transcripts on the page.
 
-You can also upload a Markdown transcript (up to 1 MiB) or audio file (up to 7 MiB). Audio uploads use the organization's regular transcription settings; live capture uses the key saved in Google Meet settings.
+You can also upload a Markdown transcript (up to 1 MiB) or audio file (up to 7 MiB). Audio uploads use the organization's regular transcription settings; live capture uses the OpenAI provider from **AI Providers**.
 
 ## Import a recorded meeting
 
-If a Meet call was recorded, connect **Gmail** and **Google Drive** in **Customize → Connections**. Ask an organization admin to save an OpenAI key in **Google Meet → Settings**.
+If a Meet call was recorded, connect **Gmail** and **Google Drive** in **Customize → Connections**. Ask an organization admin to add an OpenAI provider in **AI Providers**.
 
 Open **Google Meet → Meeting history**, choose **Import recording**, and select the video from your Meet recording email. Keep the page open while Nakama downloads the video and sends its audio to OpenAI Whisper. The finished transcript appears in meeting history. To save it to an agent’s history, ask that agent to import the recording using its assigned Google Meet tools.
 
@@ -124,7 +124,7 @@ organization and one meeting.
 
 ### The meeting is ready but no transcript appears
 
-- Check that the OpenAI key is saved in **Google Meet → Settings**.
+- Check that an OpenAI provider with an API key exists in **AI Providers**.
 - Check that Google Meet is enabled in **Google Meet → Settings**. Capture starts automatically; there is no separate worker to start.
 - Confirm that Chrome allowed microphone access.
 - Confirm that participants are speaking in the Meet tab being captured.

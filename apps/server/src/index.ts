@@ -70,6 +70,7 @@ import { resolveComposioCallbackBaseUrl } from "./services/composio-callback-url
 import { ComposioService } from "./services/composio-service";
 import { claimLegacyCustomTools } from "./services/custom-tool-handlers";
 import { retireAppUserData } from "./services/data-portability";
+import { openaiProviderKey } from "./services/google-meet/actions";
 import { GoogleMeetService } from "./services/google-meet/service";
 import { LlmUsageTracker } from "./services/llm-usage-tracker";
 import { McpClientManager } from "./services/mcp-client-manager";
@@ -189,6 +190,7 @@ const googleMeetService = new GoogleMeetService(
   database.adapter,
   getUserConfigDir(),
   (request, signal) => agent.transcribeAudio(request, signal),
+  () => openaiProviderKey(agent.getUserConfig()),
   composioService
 );
 

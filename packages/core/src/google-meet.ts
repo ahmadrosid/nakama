@@ -48,7 +48,6 @@ export type MeetAction =
 
 export interface MeetActionInput {
   after?: number;
-  apiKey?: string;
   content?: string;
   enabled?: boolean;
   fileId?: string;

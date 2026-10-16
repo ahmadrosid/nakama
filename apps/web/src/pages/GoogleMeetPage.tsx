@@ -17,7 +17,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  Input,
   Switch,
 } from "@nakama/ui";
 import {
@@ -178,7 +177,6 @@ function Settings({
   call: MeetCall;
 }) {
   const [enabled, setEnabled] = React.useState(initialEnabled);
-  const [apiKey, setApiKey] = React.useState("");
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
@@ -188,11 +186,7 @@ function Settings({
     setError("");
 
     try {
-      await call("configure", {
-        apiKey: apiKey.trim() || undefined,
-        enabled,
-      });
-      setApiKey("");
+      await call("configure", { enabled });
       close();
     } catch (reason) {
       setError(formatError(reason));
@@ -229,39 +223,13 @@ function Settings({
               onCheckedChange={setEnabled}
             />
           </label>
-          <div className="meet-row" style={{ justifyContent: "space-between" }}>
-            <label htmlFor="meet-api-key">OpenAI API key</label>
-            <a
-              href="https://platform.openai.com/api-keys"
-              rel="noreferrer"
-              style={{
-                fontSize: 14,
-                textDecoration: "underline",
-                textUnderlineOffset: 3,
-              }}
-              target="_blank"
-            >
-              Get an API key ↗
-            </a>
-          </div>
-          <Input
-            aria-describedby="meet-api-key-note"
-            autoComplete="off"
-            disabled={busy}
-            id="meet-api-key"
-            onChange={(event) => setApiKey(event.target.value)}
-            placeholder={
-              configured
-                ? "Paste a new key to replace it"
-                : "Paste your key here"
-            }
-            type="password"
-            value={apiKey}
-          />
-          {configured && <p className="meet-status">A key is already saved.</p>}
-          <p className="meet-status" id="meet-api-key-note">
-            OpenAI charges for transcription separately from ChatGPT.
-          </p>
+          {!configured && (
+            <p className="meet-status">
+              Add an OpenAI provider in{" "}
+              <a href="/customize/providers">AI Providers</a> to transcribe
+              meetings.
+            </p>
+          )}
           {error && <p role="alert">{error}</p>}
           <DialogFooter>
             <Button
@@ -273,11 +241,7 @@ function Settings({
               Cancel
             </Button>
             <Button disabled={busy} type="submit">
-              {busy
-                ? "Saving…"
-                : enabled
-                  ? "Enable transcription"
-                  : "Save changes"}
+              {busy ? "Saving…" : "Save changes"}
             </Button>
           </DialogFooter>
         </form>
@@ -623,7 +587,7 @@ function ConnectionStatus({
     "Open the Chrome extension on this page and choose Connect this Nakama tab.";
 
   if (!overview.configured) {
-    message = "Set a transcription API key in Settings.";
+    message = "Add an OpenAI provider to transcribe meetings.";
   } else if (!overview.enabled) {
     message = "Google Meet is disabled.";
   }
@@ -718,7 +682,6 @@ function useExtensionBridge(
 
       const input: MeetActionInput = {
         after: "after" in incoming ? Number(incoming.after) : undefined,
-        apiKey: "apiKey" in incoming ? String(incoming.apiKey) : undefined,
         content: "content" in incoming ? String(incoming.content) : undefined,
         enabled: "enabled" in incoming ? incoming.enabled === true : undefined,
         filename:

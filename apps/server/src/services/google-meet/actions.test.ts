@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as recordingImport from "../meet-recording-import";
 import type { MeetExecutionContext } from "./actions";
-import { run } from "./actions";
+import { openaiProviderKey, run } from "./actions";
 import { MeetingStore } from "./store";
 
 test("settings are admin-only, credentials never returned, meetings are scoped to actor and profile", async () => {
@@ -16,20 +16,26 @@ test("settings are admin-only, credentials never returned, meetings are scoped t
     captureUrl: async () => "ws://localhost/capture",
     createCapture: () => ({ token: "test", url: "ws://localhost/capture" }),
     dataDir: dir,
+    openaiKey: () => "secret-api-key",
     orgId: "org",
     profileId: "p",
   };
 
-  const input = {
-    apiKey: "secret-api-key",
-  };
+  const input = { enabled: true };
 
   try {
     await expect(
       run(input, { ...context, actor: { id: "a", role: "member" } })
     ).rejects.toThrow();
     const result = await run(input, context);
+    expect(result).toEqual({ configured: true, enabled: true });
     expect(JSON.stringify(result)).not.toContain("secret");
+    await expect(
+      run(
+        { url: "https://meet.google.com/abc-defg-hij" },
+        { ...context, actionKey: "start-capture", openaiKey: () => null }
+      )
+    ).rejects.toThrow();
 
     // SAFETY: The start-capture action returns a meeting record.
     const meeting = (await run(
@@ -252,6 +258,7 @@ test("recording import saves only a complete Whisper result in the member's hist
     actor: { id: "member", role: "member" },
     composio,
     dataDir: dir,
+    openaiKey: () => "test-key",
     orgId: "org",
     profileId: "profile",
   };
@@ -306,4 +313,45 @@ test("recording import saves only a complete Whisper result in the member's hist
     importer.mockRestore();
     rmSync(dir, { force: true, recursive: true });
   }
+});
+
+test("Meet takes the OpenAI key from AI provider settings", () => {
+  const provider = (
+    id: string,
+    type: "openai" | "anthropic",
+    apiKey: string
+  ) => ({
+    apiKey,
+    createdAt: "",
+    id,
+    label: id,
+    type,
+  });
+
+  expect(openaiProviderKey(null)).toBeNull();
+  expect(
+    openaiProviderKey({
+      defaultProviderId: "claude",
+      providers: [provider("claude", "anthropic", "anthropic-key")],
+    })
+  ).toBeNull();
+  expect(
+    openaiProviderKey({
+      defaultProviderId: "claude",
+      providers: [
+        provider("claude", "anthropic", "anthropic-key"),
+        provider("empty", "openai", " "),
+        provider("first", "openai", "first-key"),
+      ],
+    })
+  ).toBe("first-key");
+  expect(
+    openaiProviderKey({
+      defaultProviderId: "second",
+      providers: [
+        provider("first", "openai", "first-key"),
+        provider("second", "openai", "second-key"),
+      ],
+    })
+  ).toBe("second-key");
 });
