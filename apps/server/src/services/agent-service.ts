@@ -250,6 +250,7 @@ import {
 } from "../providers";
 import {
   acpMcpServerFor,
+  clearAcpToolAccess,
   setAcpToolAccess,
 } from "../providers/acp/acp-mcp-tools";
 import {
@@ -258,6 +259,7 @@ import {
   createAcpProvider,
   getAcpConfigOptions,
   setAcpConfigOption,
+  stopAcpSession,
 } from "../providers/acp/acp-provider";
 import { toAcpSessionSettings } from "../providers/acp/acp-session-settings";
 import {
@@ -1834,11 +1836,13 @@ export class AgentService {
       recordTurnUsage: this.turnUsageRecorderFor(orgId),
     });
 
+    const acpKey = oneShotAcpKey(profile);
+
     const harness = this.createHarnessForProfile(
       profile,
       profile.model,
       undefined,
-      undefined,
+      acpKey,
       { context: toolContext, tools }
     );
 
@@ -1910,10 +1914,14 @@ export class AgentService {
       userTimezone,
     });
 
-    return session.sendStream(
-      replay.length ? RESUME_AUTOMATION_PROMPT : prompt,
-      stepHandlers ?? { onChunk() {} }
-    );
+    try {
+      return await session.sendStream(
+        replay.length ? RESUME_AUTOMATION_PROMPT : prompt,
+        stepHandlers ?? { onChunk() {} }
+      );
+    } finally {
+      endOneShotAcp(acpKey);
+    }
   }
 
   /**
@@ -2073,7 +2081,15 @@ export class AgentService {
 
     const userTimezone = await this.getUserTimezone();
     const userContext = await this.loadUserContextForUser(orgId, undefined);
-    const harness = this.createHarnessForProfile(profile);
+    const acpKey = oneShotAcpKey(profile);
+
+    const harness = this.createHarnessForProfile(
+      profile,
+      profile.model,
+      undefined,
+      acpKey,
+      { context: {}, tools: [] }
+    );
 
     const userMessage = [
       "Workflow receipts (only source of truth — do not invent values):",
@@ -2102,7 +2118,15 @@ export class AgentService {
       userTimezone,
     });
 
-    return session.sendStream(userMessage, { onChunk() {} }, { signal });
+    try {
+      return await session.sendStream(
+        userMessage,
+        { onChunk() {} },
+        { signal }
+      );
+    } finally {
+      endOneShotAcp(acpKey);
+    }
   }
 
   async runSubAgentPrompt(input: SubAgentRunInput): Promise<SubAgentRunResult> {
@@ -2169,11 +2193,13 @@ export class AgentService {
       userId: input.userId,
     });
 
+    const acpKey = oneShotAcpKey(profile);
+
     const harness = this.createHarnessForProfile(
       profile,
       profile.model,
       input.userId,
-      undefined,
+      acpKey,
       { context: toolContext, tools }
     );
 
@@ -2230,7 +2256,11 @@ export class AgentService {
       setTimeout(() => resolve({ kind: "timeout" }), timeoutMs);
     });
 
-    const outcome = await Promise.race([sendPromise, timeoutPromise]);
+    // A timed-out sub-agent's ACP process is stopped here too, not left running.
+    const outcome = await Promise.race([sendPromise, timeoutPromise]).finally(
+      () => endOneShotAcp(acpKey)
+    );
+
     const durationMs = Date.now() - startedAt;
 
     if (outcome.kind === "timeout") {
@@ -6100,15 +6130,11 @@ export class AgentService {
     if (profile.acpAgent && profile.orgId) {
       const sessionKey = acpSessionKey ?? `${profile.id}:${randomUUID()}`;
 
-      // A chat registers its tools under its own key. A one-shot run
-      // (automation, sub-agent, plugin summary) has nobody else to do it, and
-      // an unregistered key leaves the agent's MCP connect hanging for 30s.
-      if (!acpSessionKey) {
-        setAcpToolAccess(
-          sessionKey,
-          acpTools?.tools ?? [],
-          acpTools?.context ?? {}
-        );
+      // A chat registers its tools under its own key later. A one-shot run
+      // passes them here: an unregistered key leaves the agent's MCP connect
+      // hanging for 30s.
+      if (acpTools) {
+        setAcpToolAccess(sessionKey, acpTools.tools, acpTools.context);
       }
 
       // ACP agents run their own model loop, so the profile's LLM provider is unused.
@@ -6296,6 +6322,22 @@ function acpOptionsForProfile(
     mcpServers: [acpMcpServerFor(sessionKey)],
     sessionKey,
   };
+}
+
+/**
+ * A one-shot run (automation, sub-agent, plugin summary) gets its own ACP
+ * agent. Its key is never reused, so the agent is stopped when the run ends
+ * instead of idling for ten minutes.
+ */
+function oneShotAcpKey(profile: StoredProfileRecord): string | undefined {
+  return profile.acpAgent ? `${profile.id}:${randomUUID()}` : undefined;
+}
+
+function endOneShotAcp(sessionKey: string | undefined): void {
+  if (sessionKey) {
+    stopAcpSession(sessionKey);
+    clearAcpToolAccess(sessionKey);
+  }
 }
 
 /** Key for the agent that holds a profile's draft settings until its first chat starts. */

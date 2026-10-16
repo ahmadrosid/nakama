@@ -4,7 +4,7 @@
  *
  * Prompt text picks the behavior:
  *   - "tool"  sends a tool_call and a completed tool_call_update first
- *   - "mcp-url" reports the Nakama MCP endpoint the session was given
+ *   - "mcp-tools" asks the Nakama MCP endpoint for its tools and reports them
  *   - "mcp"   reports how many MCP servers the session was created with
  *   - "thought" sends a thought chunk before the reply
  *   - anything else echoes the prompt back
@@ -93,6 +93,26 @@ class FakeAgent implements acp.Agent {
     return model?.type === "select" ? String(model.currentValue) : "";
   }
 
+  /** What a real agent sees: the tool list its MCP endpoint serves. */
+  private async listMcpTools(): Promise<string> {
+    const response = await fetch(this.mcpUrl, {
+      body: JSON.stringify({ id: 1, jsonrpc: "2.0", method: "tools/list" }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      return `mcp error: ${response.status}`;
+    }
+
+    // SAFETY: A 2xx tools/list reply is { result: { tools } }.
+    const body = (await response.json()) as {
+      result: { tools: { name: string }[] };
+    };
+
+    return `mcp tools: ${body.result.tools.map((tool) => tool.name).join(",")}`;
+  }
+
   async prompt(params: acp.PromptRequest): Promise<acp.PromptResponse> {
     const text = params.prompt
       .map((block) => (block.type === "text" ? block.text : ""))
@@ -123,8 +143,8 @@ class FakeAgent implements acp.Agent {
 
     const modelTag = this.currentModel() === "fake-smart" ? "[smart] " : "";
 
-    const reply = text.includes("mcp-url")
-      ? `mcp url: ${this.mcpUrl}`
+    const reply = text.includes("mcp-tools")
+      ? await this.listMcpTools()
       : text.includes("mcp")
         ? `mcp servers: ${this.mcpServerCount}`
         : `${modelTag}fake: ${text}`;

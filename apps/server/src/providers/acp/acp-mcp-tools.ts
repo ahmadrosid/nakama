@@ -117,6 +117,16 @@ export function setAcpToolAccess(
   });
 }
 
+/** Forget a finished run's token and tools, so the endpoint stops serving them. */
+export function clearAcpToolAccess(sessionKey: string): void {
+  const token = tokenBySessionKey.get(sessionKey);
+
+  if (token) {
+    accessByToken.delete(token);
+    tokenBySessionKey.delete(sessionKey);
+  }
+}
+
 /**
  * A draft's agent keeps the token it was created with. When the draft becomes
  * a chat, the chat takes that token, so the agent's MCP calls still resolve.
