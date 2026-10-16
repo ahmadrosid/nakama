@@ -20,10 +20,10 @@ const ENFORCED_ROLES_KEY = "mfa_enforced_roles";
 const ENCRYPTION_KEY = "mfa_encryption_key";
 
 type CachedMfaEncryptionKey = {
-  ino: number;
-  mtimeMs: number;
+  ino: bigint;
+  mtimeMs: bigint;
   path: string;
-  size: number;
+  size: bigint;
   value: string;
 };
 
@@ -109,7 +109,8 @@ type MfaConfigMetadata = Pick<
 
 function readMfaConfigMetadata(configPath: string): MfaConfigMetadata {
   try {
-    const { ino, mtimeMs, size } = statSync(configPath);
+    // NTFS file ids pass 2^53, so a number ino can match a different file.
+    const { ino, mtimeMs, size } = statSync(configPath, { bigint: true });
 
     return { ino, mtimeMs, size };
   } catch (error) {
