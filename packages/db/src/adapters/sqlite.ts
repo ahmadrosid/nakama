@@ -1895,6 +1895,25 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE org_id = ? AND plugin_id = ?
   `);
 
+  const listProfilesWithPluginAssignmentCountStmt = db.prepare<
+    { profile_id: string },
+    SQLQueryBindings[]
+  >(`
+    SELECT profile_id FROM (
+      SELECT profile_tools.profile_id AS profile_id
+      FROM profile_tools
+      INNER JOIN tools ON tools.id = profile_tools.tool_id
+      WHERE tools.org_id = ? AND tools.plugin_id = ?
+      UNION ALL
+      SELECT profile_skills.profile_id AS profile_id
+      FROM profile_skills
+      INNER JOIN skills ON skills.id = profile_skills.skill_id
+      WHERE skills.org_id = ? AND skills.plugin_id = ?
+    )
+    GROUP BY profile_id
+    HAVING COUNT(*) = ?
+  `);
+
   const findToolNameCollisionStmt = db.prepare(`
     SELECT id FROM tools
     WHERE name = ? AND org_id = ?
@@ -4091,14 +4110,34 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         );
       }
 
+      const ownedSkills = listOwnedSkillIdsStmt.all(
+        input.orgId,
+        input.pluginId
+      );
+
+      const ownedTools = listOwnedToolIdsStmt.all(input.orgId, input.pluginId);
+      const ownedCount = ownedSkills.length + ownedTools.length;
+
+      // Profiles that held every tool and skill of the previous release keep
+      // full access when the new release adds tools or skills.
+      const fullAccessProfileIds =
+        ownedCount === 0
+          ? []
+          : listProfilesWithPluginAssignmentCountStmt
+              .all(
+                input.orgId,
+                input.pluginId,
+                input.orgId,
+                input.pluginId,
+                ownedCount
+              )
+              .map((row) => row.profile_id);
+
       const incomingSkillKeys = new Set(
         input.contributions.skills.map((skill) => skill.pluginKey)
       );
 
-      for (const row of listOwnedSkillIdsStmt.all(
-        input.orgId,
-        input.pluginId
-      )) {
+      for (const row of ownedSkills) {
         if (!incomingSkillKeys.has(row.plugin_key)) {
           unassignSkillFromAllProfilesStmt.run(row.id);
           deleteSkillStmt.run(row.id);
@@ -4128,13 +4167,19 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           skill.createdAt,
           skill.updatedAt
         );
+
+        if (!owned) {
+          for (const profileId of fullAccessProfileIds) {
+            assignSkillStmt.run(profileId, id);
+          }
+        }
       }
 
       const incomingToolKeys = new Set(
         input.contributions.tools.map((tool) => tool.pluginKey)
       );
 
-      for (const row of listOwnedToolIdsStmt.all(input.orgId, input.pluginId)) {
+      for (const row of ownedTools) {
         if (!incomingToolKeys.has(row.plugin_key)) {
           unassignToolFromAllProfilesStmt.run(row.id);
           deleteToolStmt.run(row.id);
@@ -4161,6 +4206,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           tool.createdAt,
           tool.updatedAt
         );
+
+        if (!owned) {
+          for (const profileId of fullAccessProfileIds) {
+            assignToolStmt.run(profileId, id);
+          }
+        }
       }
 
       const published = getOrgPluginStmt.get(input.orgId, input.pluginId);

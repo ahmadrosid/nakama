@@ -756,6 +756,63 @@ describe("plugin lifecycle", () => {
     expect(await db.listToolsForProfile("profile_1")).toHaveLength(1);
   });
 
+  test("update grants new tools to profiles with full plugin access only", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new PluginService(db, configDir);
+    await service.installPluginPackage(v1Bundle());
+    const addedRow = await added(service, "org_a", "notes");
+
+    const enabled = await service.enableOrgPlugin(
+      "org_a",
+      "notes",
+      addedRow.revision
+    );
+
+    const [tool] = (await db.listTools()).filter(
+      (item) => item.orgId === "org_a" && item.pluginId === "notes"
+    );
+
+    const [skill] = (await db.listSkills()).filter(
+      (item) => item.orgId === "org_a" && item.pluginId === "notes"
+    );
+
+    for (const id of ["profile_full", "profile_partial"]) {
+      await db.upsertProfile({
+        createdAt: new Date().toISOString(),
+        id,
+        isSuper: false,
+        model: null,
+        name: id,
+        orgId: "org_a",
+        systemPrompt: "",
+        updatedAt: new Date().toISOString(),
+      });
+      await db.assignToolToProfile(id, tool?.id ?? "");
+    }
+
+    await db.assignSkillToProfile("profile_full", skill?.id ?? "");
+
+    const disabled = await service.disableOrgPlugin(
+      "org_a",
+      "notes",
+      enabled.revision
+    );
+
+    await service.installPluginPackage(v2Bundle({ extraAction: true }));
+    await service.updateOrgPlugin("org_a", "notes", "1.1.0", disabled.revision);
+
+    const fullTools = await db.listToolsForProfile("profile_full");
+    const partialTools = await db.listToolsForProfile("profile_partial");
+
+    expect(fullTools.map((item) => item.name).sort()).toEqual([
+      "plugin_notes__extra",
+      "plugin_notes__write",
+    ]);
+    expect(partialTools.map((item) => item.name)).toEqual([
+      "plugin_notes__write",
+    ]);
+  });
+
   test("purging retained data blocks reinstall until cleanup finishes", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new PluginService(db, configDir);
