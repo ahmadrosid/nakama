@@ -183,7 +183,6 @@ export const STANDALONE_PAGES: Partial<Record<PageId, NavItem>> = {
 export const SETUP_PATH = "/setup";
 
 const PLATFORM_ADMIN_PAGE_IDS: ReadonlySet<PageId> = new Set([
-  "files",
   "soul",
   "mcp",
   "providers",
@@ -233,7 +232,7 @@ export function visibleNavGroups(access: {
         return canAccessIntegrationsPage(access.orgRole);
       }
 
-      if (item.id === "organization") {
+      if (item.id === "organization" || item.id === "files") {
         return canAccessOrganizationPage(
           access.isPlatformAdmin,
           access.orgRole
@@ -243,7 +242,6 @@ export function visibleNavGroups(access: {
       if (
         item.id === "usage" ||
         item.id === "plugin-management" ||
-        item.id === "files" ||
         item.id === "tools" ||
         item.id === "soul" ||
         item.id === "workers"

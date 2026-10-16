@@ -63,14 +63,14 @@ describe("visibleNavGroups", () => {
     expect(ids).toContain("usage");
   });
 
-  test("members can access Organization without system destinations", () => {
+  test("members can access Organization and Files without system destinations", () => {
     const member = pageIdsFor(false, "member");
     expect(member).not.toContain("integrations");
     expect(member).not.toContain("tools");
     expect(member).not.toContain("mcp");
     expect(member).toContain("organization");
     expect(member).not.toContain("workers");
-    expect(member).not.toContain("files");
+    expect(member).toContain("files");
     expect(member).not.toContain("plugin-management");
     expect(member).not.toContain("usage");
   });

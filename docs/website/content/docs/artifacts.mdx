@@ -17,7 +17,7 @@ Open **Chat → Browse Files**. The **Files** page is the primary surface for fi
 
 ![The Browse Files page, with a markdown artifact open in the preview panel](/screenshots/artifact-markdown-toc.png)
 
-The page follows your active chat profile. If that profile isn't available, it selects the organization default. The **Files** page is restricted to platform administrators; other roles can't browse or manage workspace files, artifacts, or knowledge documents from this surface.
+The page follows your active chat profile. If that profile isn't available, it selects the organization default. Platform administrators see all three views. Org members and org admins see only **Artifacts**, and only the files they made with the agent; they can preview, download, share, and delete those files. Members can't browse workspace files or knowledge documents.
 
 **All files** and **Artifacts** show one folder at a time. Artifact search searches all artifacts and shows full paths. The dashboard initially renders 30 folders and files, then **Show more** reveals another 30. Its API request returns the full matching metadata list rather than sending `limit` or `offset`; an API caller that supplies `limit` must use 1–100 with a non-negative `offset`.
 

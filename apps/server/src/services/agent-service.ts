@@ -4773,14 +4773,23 @@ export class AgentService {
     );
   }
 
+  /**
+   * `createdByUserId` limits the list to the files that user saved, for a member
+   * who cannot manage the agent. Paging then applies to that shorter list.
+   */
   async listProfileArtifacts(
     orgId: string,
     profileId: string,
-    options: ListArtifactsOptions = {}
+    options: ListArtifactsOptions = {},
+    createdByUserId?: string
   ): Promise<ListArtifactsResponse> {
     await this.requireProfile(orgId, profileId);
 
-    const listed = await listArtifacts(orgId, profileId, options);
+    const listed = await listArtifacts(
+      orgId,
+      profileId,
+      createdByUserId ? { folder: options.folder } : options
+    );
 
     const owners = new Map(
       (await this.db.listArtifactRecords(orgId, profileId)).map((record) => [
@@ -4789,23 +4798,42 @@ export class AgentService {
       ])
     );
 
+    const artifacts = listed.artifacts.map((artifact) => {
+      const owner = owners.get(artifact.filename);
+
+      return owner
+        ? {
+            ...artifact,
+            createdBy: {
+              channel: owner.channel,
+              createdAt: owner.createdAt,
+              userId: owner.userId,
+              userName: owner.userName,
+            },
+          }
+        : artifact;
+    });
+
+    if (!createdByUserId) {
+      return { ...listed, artifacts };
+    }
+
+    const own = artifacts.filter(
+      (artifact) => artifact.createdBy?.userId === createdByUserId
+    );
+
+    if (options.limit === undefined) {
+      return { ...listed, artifacts: own, total: own.length };
+    }
+
+    const offset = options.offset ?? 0;
+
     return {
       ...listed,
-      artifacts: listed.artifacts.map((artifact) => {
-        const owner = owners.get(artifact.filename);
-
-        return owner
-          ? {
-              ...artifact,
-              createdBy: {
-                channel: owner.channel,
-                createdAt: owner.createdAt,
-                userId: owner.userId,
-                userName: owner.userName,
-              },
-            }
-          : artifact;
-      }),
+      artifacts: own.slice(offset, offset + options.limit),
+      limit: options.limit,
+      offset,
+      total: own.length,
     };
   }
 
@@ -4843,9 +4871,21 @@ export class AgentService {
   async deleteProfileArtifact(
     orgId: string,
     profileId: string,
-    filename: string
+    filename: string,
+    createdByUserId?: string
   ): Promise<DeleteArtifactResponse> {
     await this.requireProfile(orgId, profileId);
+
+    // Exact match on the stored name, so no path trick reaches another file.
+    if (
+      createdByUserId &&
+      !(await this.db.listArtifactRecords(orgId, profileId)).some(
+        (record) =>
+          record.filename === filename && record.userId === createdByUserId
+      )
+    ) {
+      throw new NakamaApiError("Forbidden", 403);
+    }
 
     const deleted = await deleteArtifactFile({ filename, orgId, profileId });
 

@@ -217,9 +217,7 @@ function AppShell() {
                   <Route element={<PlatformAdminGuard allowOrgAdmin />}>
                     <Route element={<LlmUsageTab />} path={PAGE_PATHS.usage} />
                   </Route>
-                  <Route element={<PlatformAdminGuard allowOrgAdmin />}>
-                    <Route element={<FilesPage />} path="/files" />
-                  </Route>
+                  <Route element={<FilesPage />} path="/files" />
                   <Route
                     element={<ToolPlaygroundPage />}
                     path="/system/playground/:toolId"

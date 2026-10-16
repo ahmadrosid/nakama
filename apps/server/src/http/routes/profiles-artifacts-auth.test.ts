@@ -246,6 +246,8 @@ function createApp() {
   const listCalls: Array<{ folder?: string; limit?: number; offset?: number }> =
     [];
 
+  const scopeCalls: Array<string | undefined> = [];
+
   const readCalls: Array<{
     headOnly?: boolean;
     render?: "markdown";
@@ -264,17 +266,28 @@ function createApp() {
         profileId,
       };
     },
-    deleteProfileArtifact: async () => ({
-      deleted: true,
-      filename: "report.md",
-      profileId: "profile_1",
-    }),
+    deleteProfileArtifact: async (
+      _orgId: string,
+      _profileId: string,
+      _filename: string,
+      createdByUserId?: string
+    ) => {
+      scopeCalls.push(createdByUserId);
+
+      return {
+        deleted: true,
+        filename: "report.md",
+        profileId: "profile_1",
+      };
+    },
     listProfileArtifacts: async (
       _orgId: string,
       _profileId: string,
-      options: { folder?: string; limit?: number; offset?: number } = {}
+      options: { folder?: string; limit?: number; offset?: number } = {},
+      createdByUserId?: string
     ) => {
       listCalls.push(options);
+      scopeCalls.push(createdByUserId);
 
       return {
         artifacts: [],
@@ -324,6 +337,7 @@ function createApp() {
     ...createMinimalHonoApp({ agent }),
     readCalls,
     listCalls,
+    scopeCalls,
     writeCalls,
   };
 }
@@ -490,8 +504,8 @@ describe("profile artifact content auth", () => {
     expect(readCalls.at(-1)?.render).toBeUndefined();
   });
 
-  test("org member cannot list artifacts", async () => {
-    const { app, authService, databaseAdapter } = createApp();
+  test("org member lists and deletes only their own artifacts", async () => {
+    const { app, authService, databaseAdapter, scopeCalls } = createApp();
 
     const { orgId, adminSession } = await createOrgAdminSession(
       app,
@@ -534,13 +548,41 @@ describe("profile artifact content auth", () => {
       orgId
     );
 
+    const memberId = (await databaseAdapter.getUserByEmail(
+      "member-artifact@acme.com"
+    ))!.id;
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/profiles/profile_1/artifacts", {
         headers: memberSession.headers({}, orgId),
       })
     );
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(200);
+
+    const deleteResponse = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/profiles/profile_1/artifacts?path=report.md",
+        {
+          headers: memberSession.headers(
+            { "X-CSRF-Token": memberSession.csrfToken },
+            orgId
+          ),
+          method: "DELETE",
+        }
+      )
+    );
+
+    expect(deleteResponse.status).toBe(200);
+    expect(scopeCalls).toEqual([memberId, memberId]);
+
+    const unknownAgent = await app.fetch(
+      new Request("http://localhost:4310/v1/profiles/profile_2/artifacts", {
+        headers: memberSession.headers({}, orgId),
+      })
+    );
+
+    expect(unknownAgent.status).toBe(403);
 
     for (const endpoint of ["workspace", "workspace/content?path=SOUL.md"]) {
       const workspaceResponse = await app.fetch(
@@ -553,8 +595,8 @@ describe("profile artifact content auth", () => {
     }
   });
 
-  test("platform admin can still list artifacts", async () => {
-    const { app, databaseAdapter } = createApp();
+  test("platform admin can still list every artifact", async () => {
+    const { app, databaseAdapter, scopeCalls } = createApp();
     const adminSession = await setupFreshInstallSession(app, databaseAdapter);
 
     const response = await app.fetch(
@@ -564,6 +606,7 @@ describe("profile artifact content auth", () => {
     );
 
     expect(response.status).toBe(200);
+    expect(scopeCalls).toEqual([undefined]);
   });
 });
 

@@ -219,6 +219,92 @@ describe("save_artifact", () => {
   });
 });
 
+describe("member artifact scope (#1816)", () => {
+  const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
+  let configDir = "";
+  let db: Db;
+
+  beforeEach(async () => {
+    configDir = await mkdtemp(path.join(tmpdir(), "nakama-member-artifact-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+    db = createInMemoryDatabaseAdapter();
+    await seedScope(db);
+  });
+
+  afterEach(async () => {
+    if (originalConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    }
+
+    await rm(configDir, { force: true, recursive: true });
+  });
+
+  test("a member sees only their own artifacts, paged and counted", async () => {
+    for (const name of ["a", "b", "c"]) {
+      await runSaveArtifactTool(
+        { content: name, path: `artifacts/${name}.md` },
+        context,
+        { db }
+      );
+    }
+
+    await runSaveArtifactTool(
+      { content: "bo", path: "artifacts/bo.md" },
+      { ...context, userId: "user_bo" },
+      { db }
+    );
+
+    const agent = new AgentService(null, null, db);
+
+    const page = await agent.listProfileArtifacts(
+      "org_a",
+      "profile_a",
+      { limit: 2, offset: 0 },
+      "user_bo"
+    );
+
+    expect(page.total).toBe(1);
+    expect(page.artifacts.map((artifact) => artifact.filename)).toEqual([
+      "bo.md",
+    ]);
+
+    const ana = await agent.listProfileArtifacts(
+      "org_a",
+      "profile_a",
+      { limit: 2, offset: 0 },
+      "user_ana"
+    );
+
+    expect(ana.total).toBe(3);
+    expect(ana.artifacts).toHaveLength(2);
+  });
+
+  test("a member cannot delete an artifact someone else made", async () => {
+    await runSaveArtifactTool(
+      { content: "x", path: "artifacts/ana.md" },
+      context,
+      { db }
+    );
+
+    const agent = new AgentService(null, null, db);
+
+    await expect(
+      agent.deleteProfileArtifact("org_a", "profile_a", "ana.md", "user_bo")
+    ).rejects.toThrow("Forbidden");
+
+    await agent.deleteProfileArtifact(
+      "org_a",
+      "profile_a",
+      "ana.md",
+      "user_ana"
+    );
+
+    expect(await db.listArtifactRecords("org_a", "profile_a")).toHaveLength(0);
+  });
+});
+
 describe("write_file under artifacts/", () => {
   const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
   let configDir = "";
