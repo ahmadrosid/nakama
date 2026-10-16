@@ -2575,6 +2575,7 @@ function toOrgMemberSummary(
 ): OrgMemberSummary {
   return {
     createdAt,
+    disabledAt: user.disabledAt ?? null,
     email: user.email,
     name: user.name ?? null,
     phone: user.phone ?? null,

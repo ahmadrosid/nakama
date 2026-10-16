@@ -835,6 +835,8 @@ export interface SetActiveOrgRequest {
 
 export interface OrgMemberSummary {
   createdAt: string;
+  /** Set while the account is disabled; disabling is install-wide, not per org. */
+  disabledAt?: string | null;
   email: string;
   name: string | null;
   phone: string | null;

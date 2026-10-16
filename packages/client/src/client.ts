@@ -3481,6 +3481,17 @@ export class NakamaClient {
     );
   }
 
+  async setPlatformOrgMemberDisabled(
+    orgId: string,
+    userId: string,
+    disabled: boolean
+  ): Promise<void> {
+    await this.request<void>(
+      `/v1/platform/orgs/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}/${disabled ? "disable" : "enable"}`,
+      { method: "POST" }
+    );
+  }
+
   async listParentOrgMembers(orgId: string): Promise<ListOrgMembersResponse> {
     return this.request<ListOrgMembersResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/parent-members`
