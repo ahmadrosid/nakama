@@ -744,6 +744,7 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
 
   const [error, setError] = React.useState("");
   const [importing, setImporting] = React.useState(false);
+  const [selected, setSelected] = React.useState("");
   React.useEffect(() => {
     let mounted = true;
     call("recordings").then(
@@ -782,6 +783,26 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
     }
   }
 
+  const recordings = result?.recordings ?? [];
+
+  const recordingKey = (recording: Recording) =>
+    `${recording.messageId}:${recording.fileId}`;
+
+  const picked =
+    recordings.find((recording) => recordingKey(recording) === selected) ??
+    recordings[0];
+
+  const connections = result && [
+    { connected: result.gmailConnected, logo: "gmail", name: "Gmail" },
+    {
+      connected: result.driveConnected,
+      logo: "google-drive",
+      name: "Google Drive",
+    },
+  ];
+
+  const ready = result?.gmailConnected && result.driveConnected;
+
   return (
     <Dialog
       onOpenChange={(open) => {
@@ -797,47 +818,93 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
         </DialogHeader>
         {error && <p role="alert">{error}</p>}
         {!(result || error) && <p role="status">Finding recordings…</p>}
-        {result && !(result.gmailConnected && result.driveConnected) && (
-          <p>
-            Connect Gmail and Google Drive in{" "}
-            <a href="/customize/connections/composio">
-              Customize → Connections
-            </a>
-            .
-          </p>
+        {connections && !ready && (
+          <ul className="meet-connections">
+            {connections.map(({ connected, logo, name }) => (
+              <li key={name}>
+                <span className="meet-tile-icon">
+                  <img
+                    alt=""
+                    height={20}
+                    src={`/icons/${logo}.svg`}
+                    width={20}
+                  />
+                </span>
+                <span className="meet-meta">
+                  <strong>{name}</strong>
+                  <span
+                    className="meet-connection"
+                    data-tone={connected ? "success" : "muted"}
+                  >
+                    {connected ? "Connected" : "Not connected"}
+                  </span>
+                </span>
+                {!connected && (
+                  <a
+                    className={buttonVariants({ size: "sm" })}
+                    href="/customize/connections/composio"
+                  >
+                    Connect
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
         )}
-        {result?.gmailConnected &&
-          result.driveConnected &&
-          (result.recordings.length ? (
-            <ul className="meet-list">
-              {result.recordings.map((recording) => (
-                <li
-                  className="meet-meeting"
-                  key={`${recording.messageId}:${recording.fileId}`}
-                >
+        {ready &&
+          (recordings.length ? (
+            <fieldset className="meet-recordings" disabled={importing}>
+              <legend className="sr-only">Recording</legend>
+              {recordings.map((recording) => (
+                <label key={recordingKey(recording)}>
+                  <input
+                    checked={recording === picked}
+                    name="recording"
+                    onChange={() => setSelected(recordingKey(recording))}
+                    type="radio"
+                  />
+                  <span aria-hidden="true" className="meet-tile-icon">
+                    <Video01Icon size={18} />
+                  </span>
                   <span className="meet-meta">
                     <strong>{recording.name}</strong>
                     <span className="meet-status">
-                      {recording.date ||
-                        `${Math.ceil(recording.size / 1024 / 1024)} MB`}
+                      {[
+                        recording.date,
+                        `${Math.ceil(recording.size / 1024 / 1024)} MB`,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </span>
                   </span>
-                  <Button
-                    disabled={importing}
-                    onClick={() => void importRecording(recording)}
-                    size="sm"
-                  >
-                    {importing ? "Importing…" : "Import"}
-                  </Button>
-                </li>
+                </label>
               ))}
-            </ul>
+            </fieldset>
           ) : (
             <p>No Meet recording emails found.</p>
           ))}
         {importing && (
           <p role="status">Transcribing with Whisper… keep this page open.</p>
         )}
+        <DialogFooter>
+          <Button
+            disabled={importing}
+            onClick={close}
+            type="button"
+            variant="outline"
+          >
+            Cancel
+          </Button>
+          {ready && recordings.length > 0 && (
+            <Button
+              disabled={importing || !picked}
+              onClick={() => picked && void importRecording(picked)}
+              type="button"
+            >
+              {importing ? "Importing…" : "Import"}
+            </Button>
+          )}
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

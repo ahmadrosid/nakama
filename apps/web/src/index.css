@@ -1491,6 +1491,77 @@
 .meet-setup-copy span {
   color: var(--muted-foreground);
 }
+.meet-tile-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: var(--muted);
+  border-radius: 10px;
+}
+.meet-connections {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.meet-connections li {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 14px;
+}
+.meet-connections li + li {
+  border-top: 1px solid var(--border);
+}
+.meet-connections .meet-connection {
+  justify-self: start;
+}
+.meet-recordings {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  max-height: 320px;
+  padding: 0;
+  margin: 0;
+  overflow-y: auto;
+  border: 0;
+}
+.meet-recordings label {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  min-width: 0;
+  padding: 10px 12px;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+}
+.meet-recordings label:hover {
+  background: color-mix(in oklab, var(--muted) 60%, transparent);
+}
+.meet-recordings label:has(:checked) {
+  background: color-mix(in oklab, var(--muted) 60%, transparent);
+  border-color: var(--primary);
+}
+.meet-recordings label:has(:focus-visible) {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.meet-recordings input {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+}
+.meet-recordings strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+  white-space: nowrap;
+}
 .meet-live-heading {
   display: flex;
   flex-wrap: wrap;
