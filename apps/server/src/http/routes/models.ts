@@ -32,6 +32,7 @@ import {
   type UpdateProviderResponse,
   type UpdateSlackSettingsRequest,
   type VisionSettingsResponse,
+  WEB_SEARCH_PROVIDERS,
   type WebSearchSettingsResponse,
   type WhatsAppSettingsResponse,
 } from "@nakama/core";
@@ -368,7 +369,9 @@ export function registerModelRoutes(
     .object({
       apiKey: z.string().optional(),
       endpoint: z.string().optional(),
-      provider: z.enum(["exa", "firecrawl"]).nullable().optional(),
+      // Derived from the vendor list so a back-end the tool supports cannot be
+      // refused here.
+      provider: z.enum(WEB_SEARCH_PROVIDERS).nullable().optional(),
     })
     .openapi("UpdateWebSearchSettingsRequest");
 

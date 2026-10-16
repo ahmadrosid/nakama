@@ -11,20 +11,23 @@ import {
 export const WEB_SEARCH_SECTION = "web_search";
 
 /** Search back-ends that can replace the provider-hosted `web_search` tool. */
-export const WEB_SEARCH_PROVIDERS: readonly WebSearchProvider[] = [
+export const WEB_SEARCH_PROVIDERS = [
   "exa",
   "firecrawl",
-];
+  "serply",
+] as const satisfies readonly WebSearchProvider[];
 
 export const WEB_SEARCH_PROVIDER_ENDPOINTS: Record<WebSearchProvider, string> =
   {
     exa: "https://api.exa.ai/search",
     firecrawl: "https://api.firecrawl.dev/v2/search",
+    serply: "https://api.serply.io/v1/search",
   };
 
 export const WEB_SEARCH_PROVIDER_LABELS: Record<WebSearchProvider, string> = {
   exa: "Exa",
   firecrawl: "Firecrawl",
+  serply: "Serply",
 };
 
 export interface WebSearchConfigFile {
