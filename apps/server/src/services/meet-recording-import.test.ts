@@ -4,6 +4,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import type { MeetImportProgress } from "@nakama/core/google-meet";
 import { importMeetRecording } from "./meet-recording-import";
 
 test("recorded video becomes a Whisper transcript and temporary media is removed", async () => {
@@ -99,7 +100,24 @@ test("recorded video becomes a Whisper transcript and temporary media is removed
 
       return transcribe(url, options);
     }) as typeof fetch;
-    expect(await importRecording()).toEqual(result);
+    const steps: MeetImportProgress[] = [];
+    expect(
+      await importMeetRecording(
+        composio,
+        input,
+        new AbortController().signal,
+        (progress) => steps.push(progress)
+      )
+    ).toEqual(result);
+    const videoBytes = (await readFile(video)).length;
+    // The test response has no content-length and the listing no size.
+    expect(steps[1]).toEqual({ bytes: videoBytes, step: "download" });
+    expect(steps.map(({ step }) => step)).toEqual([
+      "download",
+      "download",
+      "extract",
+      "transcribe",
+    ]);
 
     for (const response of [
       new Response("too large", {

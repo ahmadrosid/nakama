@@ -85,8 +85,13 @@ function fileSource(value: unknown): { url?: string; base64?: string } {
   };
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Composio tool payloads are untyped JSON that this function inspects structurally.
-async function saveDownload(value: unknown, path: string, signal: AbortSignal) {
+async function saveDownload(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Composio tool payloads are untyped JSON that this function inspects structurally.
+  value: unknown,
+  path: string,
+  signal: AbortSignal,
+  onBytes: (bytes: number, totalBytes: number) => void
+) {
   const source = fileSource(value);
 
   if (source.base64) {
@@ -125,10 +130,17 @@ async function saveDownload(value: unknown, path: string, signal: AbortSignal) {
   }
 
   let size = 0;
+  let reported = 0;
+  const total = declared > 0 ? declared : 0;
   await pipeline(
     async function* () {
       for await (const chunk of body) {
         size += chunk.byteLength;
+
+        if (size - reported >= 1024 * 1024) {
+          reported = size;
+          onBytes(size, total);
+        }
 
         if (size > MAX_VIDEO_BYTES) {
           throw new Error("Recording is too large.");
@@ -144,6 +156,7 @@ async function saveDownload(value: unknown, path: string, signal: AbortSignal) {
     createWriteStream(path, { mode: 0o600 }),
     { signal }
   );
+  onBytes(size, total);
 }
 
 export async function importMeetRecording(
@@ -173,7 +186,13 @@ export async function importMeetRecording(
 
   try {
     const video = join(directory, "recording");
-    await saveDownload(file, video, signal);
+    await saveDownload(file, video, signal, (bytes, totalBytes) =>
+      onProgress({
+        bytes,
+        step: "download",
+        totalBytes: totalBytes || recording.size || undefined,
+      })
+    );
     onProgress({ step: "extract" });
 
     const { stdout } = await exec(

@@ -1668,10 +1668,74 @@
   list-style: none;
 }
 .meet-import-steps li {
+  display: grid;
+  gap: 8px;
+  align-content: center;
+  min-height: 36px;
+}
+.meet-import-step {
   display: flex;
   gap: 12px;
   align-items: center;
-  min-height: 36px;
+}
+.meet-shimmer {
+  -webkit-text-fill-color: transparent;
+  background:
+    linear-gradient(
+      90deg,
+      currentcolor 0%,
+      currentcolor 40%,
+      color-mix(in oklab, currentcolor 35%, transparent) 50%,
+      currentcolor 60%,
+      currentcolor 100%
+    )
+    0 0 / 250% 100%;
+  background-clip: text;
+  animation: meet-shimmer 2s linear infinite;
+}
+@keyframes meet-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .meet-shimmer {
+    -webkit-text-fill-color: currentcolor;
+    background: none;
+    animation: none;
+  }
+}
+.meet-step-progress {
+  position: relative;
+  display: block;
+  height: 6px;
+  margin-left: 34px;
+  overflow: hidden;
+  background: var(--muted);
+  border-radius: 999px;
+}
+.meet-step-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  border-radius: inherit;
+  transition: width 0.4s ease;
+}
+.meet-step-progress[data-indeterminate] > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  animation: meet-loading-slide 1.3s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .meet-step-progress[data-indeterminate] > span {
+    width: 100%;
+    opacity: 0.5;
+    animation: none;
+  }
 }
 .meet-import-steps li[data-state="pending"] {
   color: var(--muted-foreground);

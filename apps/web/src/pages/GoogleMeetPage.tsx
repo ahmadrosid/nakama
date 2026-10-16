@@ -681,10 +681,40 @@ const IMPORT_STEPS = [
   { label: "Save to meeting history", step: "save" },
 ] as const;
 
+// A measured fraction when the server reports one, otherwise null for a
+// sliding bar, so a long phase never looks frozen.
+function stepProgress(progress: MeetImportProgress | null) {
+  const megabytes = (bytes: number) => Math.round(bytes / 1024 / 1024);
+
+  if (progress?.step === "download" && progress.totalBytes && progress.bytes) {
+    return {
+      detail: `${megabytes(progress.bytes)} of ${megabytes(progress.totalBytes)} MB`,
+      fraction: Math.min(progress.bytes / progress.totalBytes, 1),
+    };
+  }
+
+  if (progress?.step === "transcribe" && progress.parts && progress.part) {
+    return {
+      detail:
+        progress.parts > 1 ? `Part ${progress.part} of ${progress.parts}` : "",
+      fraction:
+        progress.parts > 1 ? (progress.part - 1) / progress.parts : null,
+    };
+  }
+
+  return {
+    detail:
+      progress && progress.step !== "download" ? "" : "Preparing in Drive",
+    fraction: null,
+  };
+}
+
 function ImportSteps({ progress }: { progress: MeetImportProgress | null }) {
   const current = IMPORT_STEPS.findIndex(
     ({ step }) => step === (progress?.step ?? "download")
   );
+
+  const active = stepProgress(progress);
 
   return (
     <ol aria-label="Import steps" className="meet-import-steps">
@@ -694,18 +724,40 @@ function ImportSteps({ progress }: { progress: MeetImportProgress | null }) {
 
         return (
           <li data-state={state} key={step}>
-            <span aria-hidden="true" className="meet-step-mark">
-              {state === "done" && <Tick02Icon size={14} />}
-            </span>
-            <span>{label}</span>
-            {state === "active" &&
-              step === "transcribe" &&
-              progress?.parts &&
-              progress.parts > 1 && (
-                <span className="meet-status">
-                  Part {progress.part} of {progress.parts}
-                </span>
+            <span className="meet-import-step">
+              <span aria-hidden="true" className="meet-step-mark">
+                {state === "done" && <Tick02Icon size={14} />}
+              </span>
+              <span className={state === "active" ? "meet-shimmer" : undefined}>
+                {label}
+              </span>
+              {state === "active" && active.detail && (
+                <span className="meet-status">{active.detail}</span>
               )}
+            </span>
+            {state === "active" && (
+              <span
+                aria-label={label}
+                aria-valuemax={100}
+                aria-valuemin={0}
+                aria-valuenow={
+                  active.fraction === null
+                    ? undefined
+                    : Math.round(active.fraction * 100)
+                }
+                className="meet-step-progress"
+                data-indeterminate={active.fraction === null || undefined}
+                role="progressbar"
+              >
+                <span
+                  style={
+                    active.fraction === null
+                      ? undefined
+                      : { width: `${Math.max(active.fraction * 100, 2)}%` }
+                  }
+                />
+              </span>
+            )}
           </li>
         );
       })}
@@ -990,7 +1042,7 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
             {importing ? "Importing recording" : "Import recording"}
           </DialogTitle>
           {!(result || error) && (
-            <p className="meet-status" role="status">
+            <p className="meet-status meet-shimmer" role="status">
               Finding recordings…
             </p>
           )}

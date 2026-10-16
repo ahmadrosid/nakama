@@ -58,9 +58,12 @@ export interface MeetActionInput {
 }
 
 export interface MeetImportProgress {
+  /** Bytes of the recording downloaded so far. */
+  bytes?: number;
   part?: number;
   parts?: number;
   step: "download" | "extract" | "transcribe" | "save";
+  totalBytes?: number;
 }
 
 export interface MeetOverview {
