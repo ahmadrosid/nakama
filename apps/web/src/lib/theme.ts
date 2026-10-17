@@ -54,6 +54,12 @@ export function ditherLogoSrc(resolvedTheme: ResolvedTheme): string {
     : "/nakama-logo-dither.png";
 }
 
+export function markLogoSrc(resolvedTheme: ResolvedTheme): string {
+  return resolvedTheme === "light"
+    ? "/nakama-mark.svg"
+    : "/nakama-mark-white.svg";
+}
+
 function applyFavicon(resolved: ResolvedTheme): void {
   const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
 
@@ -61,8 +67,7 @@ function applyFavicon(resolved: ResolvedTheme): void {
     return;
   }
 
-  const href =
-    resolved === "light" ? "/nakama-mark.svg" : "/nakama-mark-white.svg";
+  const href = markLogoSrc(resolved);
 
   if (favicon.getAttribute("href") !== href) {
     favicon.setAttribute("href", href);

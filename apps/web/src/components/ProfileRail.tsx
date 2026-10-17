@@ -13,7 +13,7 @@ import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
 import { useSelectProfile } from "@/hooks/use-select-profile";
 import { PAGE_PATHS, pathForPage, profilePath } from "@/lib/navigation";
-import { ditherLogoSrc } from "@/lib/theme";
+import { markLogoSrc } from "@/lib/theme";
 
 // Members create plain agents; tools and host-run agents stay with admins.
 const NO_PRESETS: AcpAgentPresetSummary[] = [];
@@ -39,7 +39,7 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
     syncForOrg({ orgId: activeOrg?.id ?? null, profiles });
   }, [activeOrg?.id, profiles, syncForOrg]);
 
-  const logoSrc = ditherLogoSrc(resolvedTheme);
+  const logoSrc = markLogoSrc(resolvedTheme);
 
   const orderedProfiles = profiles.toSorted(
     (left, right) => Number(right.isSuper) - Number(left.isSuper)
@@ -61,11 +61,7 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
         href="/chat"
         title="Nakama"
       >
-        <img
-          alt=""
-          className="size-8 rounded-lg object-contain"
-          src={logoSrc}
-        />
+        <img alt="" className="size-7 object-contain" src={logoSrc} />
       </a>
 
       <div className="no-scrollbar flex min-h-0 flex-1 flex-col items-center gap-1.5 overflow-y-auto px-1 py-1">
