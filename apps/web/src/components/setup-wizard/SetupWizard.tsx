@@ -87,22 +87,18 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
   }, [currentStep, goSkip, handleComplete]);
 
   const heading =
-    currentStep === 1
-      ? "Create your admin account"
-      : currentStep === 2
-        ? "Create your organization"
-        : currentStep === 3
-          ? "Welcome to Nakama"
-          : "Tell us about yourself";
+    currentStep === 2
+      ? "Create your organization"
+      : currentStep === 3
+        ? "Welcome to Nakama"
+        : "Tell us about yourself";
 
   const subtitle =
-    currentStep === 1
-      ? "Set up your admin account to secure the dashboard, or restore a backup ZIP from a previous install."
-      : currentStep === 2
-        ? "Every workspace lives inside an organization. Name yours to finish setup."
-        : currentStep === 3
-          ? "Add an AI provider now, or skip it and add one from Settings later."
-          : "Help the agent understand your preferences. Optional.";
+    currentStep === 2
+      ? "Every workspace lives inside an organization. Name yours to finish setup."
+      : currentStep === 3
+        ? "Add an AI provider now, or skip it and add one from Settings later."
+        : "Help the agent understand your preferences. Optional.";
 
   function renderStep(): ReactNode {
     switch (currentStep) {
@@ -145,6 +141,11 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
       default:
         throw new Error(`Unexpected setup step: ${currentStep}`);
     }
+  }
+
+  // The account step draws its own compact card, heading and progress dots.
+  if (currentStep === 1) {
+    return renderStep();
   }
 
   return (
