@@ -39,7 +39,7 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
     syncForOrg({ orgId: activeOrg?.id ?? null, profiles });
   }, [activeOrg?.id, profiles, syncForOrg]);
 
-  const logoSrc = markLogoSrc(resolvedTheme);
+  const logoSrc = markLogoSrc(resolvedTheme === "light" ? "dark" : "light");
 
   const orderedProfiles = profiles.toSorted(
     (left, right) => Number(right.isSuper) - Number(left.isSuper)
@@ -57,11 +57,15 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
     >
       <a
         aria-label="Nakama"
-        className="flex size-9 shrink-0 items-center justify-center rounded-xl transition-opacity hover:opacity-80"
+        className="flex size-7 shrink-0 items-center justify-center rounded-md bg-foreground transition-opacity hover:opacity-80"
         href="/chat"
         title="Nakama"
       >
-        <img alt="" className="size-7 object-contain" src={logoSrc} />
+        <img
+          alt=""
+          className="size-5 -translate-y-px object-contain"
+          src={logoSrc}
+        />
       </a>
 
       <div className="no-scrollbar flex min-h-0 flex-1 flex-col items-center gap-1.5 overflow-y-auto px-1 py-1">
@@ -74,9 +78,7 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
               aria-label={profile.name}
               className={cn(
                 "group relative flex size-7 shrink-0 items-center justify-center rounded-md transition-all duration-150",
-                active
-                  ? "ring-1 ring-foreground/20 ring-offset-2 ring-offset-sidebar"
-                  : "hover:bg-muted/40"
+                !active && "hover:bg-muted/40"
               )}
               onClick={() => handleSelectProfile(profile.id)}
               title={profile.name}
@@ -89,7 +91,7 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
                     location.pathname.startsWith(`${PAGE_PATHS.chat}/`))
                 }
                 className={cn(
-                  "size-7 rounded-md transition-all duration-150",
+                  "size-7 rounded-md outline-none transition-all duration-150",
                   active
                     ? "opacity-100 saturate-100"
                     : "opacity-45 grayscale group-hover:opacity-70 group-hover:grayscale-0"
