@@ -36,6 +36,14 @@ bun <skill directory>/scripts/new-plugin.mjs <plugin-id> "<Plugin Name>" <action
 
 The script writes `plugin-drafts/<plugin-id>/` with a manifest, package.json, `src/<action-key>.js`, an example page in `src/ui.jsx` and `src/ui.css`, `src/nakama-plugin.d.ts` (types for `ctx`), `src/BUILD.md`, and the built `actions/<action-key>.js` and `ui/app.js`. It refuses an existing draft; edit that draft instead. Then replace the example action, page, description, and input schema with the real ones, and rebuild.
 
+If the plugin stores records and its page shows them (contacts, books, tickets, expenses), use the data template instead:
+
+```sh
+bun <skill directory>/scripts/new-plugin.mjs <plugin-id> "<Plugin Name>" --data
+```
+
+It adds a SQLite migration with an `items` table, `list_items` and `save_item` actions, and the data page described under "Data pages". Rename the table, columns, and actions to the real ones, and keep the page structure.
+
 Check `bun --version` with bash. If Bun or a needed library is absent, report the prerequisite. Do not install dependencies or coding tools silently. An assigned bash tool is required. A coding-agent CLI is optional. If delegating, explicitly request local-only drafting: no host repository edits, push, PR, npm publishing, installation, or activation.
 
 Use direct commands such as:
@@ -95,7 +103,7 @@ UI: declare `ui: {entryModule:"ui/app.js",assetsDir:"ui",pageLabel:"Greeting"}`.
 
 Make the page look like the rest of Nakama. Start from the template page.
 
-- Components: use `ctx.ui` for every control: `Button` (variants `default`, `outline`, `ghost`, `secondary`, `destructive`, `link`; size `sm` in dense rows), `Input`, `Textarea`, `Select` parts, `Switch`, `Checkbox`, `Dialog` parts, `DropdownMenu` parts, `Tooltip`, `Spinner`. Do not build look-alike buttons or inputs from plain elements.
+- Components: use `ctx.ui` for every control: `Button` (variants `default`, `outline`, `ghost`, `secondary`, `destructive`, `link`; size `sm` in dense rows), `Input`, `Textarea`, `Select` parts, `Switch`, `Checkbox`, `Dialog` parts, `DropdownMenu` parts, `Tooltip`, `Spinner`, and `Table` parts for records. Do not build look-alike buttons, inputs, or tables from plain elements.
 - Read `src/nakama-plugin.d.ts` before you use a component. It lists every `ctx`, `ctx.React`, and `ctx.ui` export with its props. Anything not listed is not available: no `toast()`, no `cn()`, no icons.
 - Grouping: use `Card`, `CardHeader`, `CardTitle`, and `CardContent` for boxes such as stat tiles. The template CSS removes the card shadow; never set `box-shadow` yourself. `CardHeader` and `CardContent` pad 24px, so pass a class with `--n-space-4` padding for small tiles.
 - Styling: Tailwind classes do not work in plugins. Put CSS in `src/ui.css`, import it as text, pass it to `ctx.styles(css)`, and nest every rule under `[data-plugin-id="<plugin-id>"]`.
@@ -130,9 +138,23 @@ Always write `var(--primary)`, never the hex value. The hex values are for refer
 - States: show a `Spinner` while loading, a short empty message, and errors in `--destructive` with `role="alert"`.
 - Conflicts: if the user asks for a page style that breaks these rules, follow the rules. Tell the user in one line which request you did not apply. Do not deliberate about it.
 - Narrow widths: the page also opens in the chat side panel, where the content is about 360px wide. Use `flex-wrap` or `repeat(auto-fit, minmax(100px, 1fr))` grids, not a fixed column count, and no fixed widths; three tiles then fit one row.
-- Tables: show at most four columns, and put the column the user cares about most right after the name column. Wrap the table in an `overflow-x: auto` box so extra width scrolls instead of breaking the page.
+- Tables: use `Table`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, and `TableCell`; `Table` already scrolls sideways. Show at most six columns. Put the column the user cares about most right after the name column. Give the less important columns the `plugin-optional` class so they hide in the narrow side panel. Right-align dates and numbers with `plugin-number`. Keep names and short text on one line: the name cell takes `plugin-strong`, and every company, category, or status cell takes `plugin-nowrap`, also when it has other classes. Long text (notes, email) may wrap.
 - Do not: add a hero block, `h1`/`h2` headings, all-caps letter-spaced labels, taglines, numbered feature lists, pill shapes (`999px` radius), or bordered `div`s that copy `Card`. Nakama pages are plain work tools, not landing pages.
 - A request for a nicer or better page means these rules applied with more care. It does not mean more decoration.
+
+## Data pages
+
+A page that shows stored records follows the data template, in this order from top to bottom:
+
+1. Header actions: the create button (`New <thing>`) through `renderHeaderActions`. No other buttons there unless the user asks.
+2. One filter `Input` that filters rows on the client. No Search button.
+3. The `Table` with the rows. The name cell is a `Button variant="link"` with the `plugin-row-link` class that opens the edit dialog. Add no button columns: a wide table scrolls, and a button at the right edge scrolls out of view. Open details or history from that dialog, not in a side card.
+4. Create, edit, and delete share one `Dialog` with `FormField` labels. Delete is a `destructive` button with the `plugin-footer-start` class in that dialog's footer, shown only for a saved record, and it asks with `ConfirmDialog` first. Never put an always-visible form card next to the table.
+
+Dialogs render outside the page, so plugin CSS does not reach them by default. Give every `DialogContent` the prop `data-plugin-id={ctx.pluginId}`.
+5. Loading shows `Spinner`; no rows shows one short line ("No contacts yet."); no filter matches shows "No matches."
+
+Put due or overdue work (follow-ups, reminders) as a column such as "Next follow-up", not as a separate card. Show overdue values in `--destructive`.
 
 Skills: declare `skills: [{key:"use-greeting",directory:"skills/use-greeting"}]` and include that directory's SKILL.md with name and description.
 

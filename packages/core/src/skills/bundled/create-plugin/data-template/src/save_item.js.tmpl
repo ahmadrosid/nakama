@@ -1,0 +1,27 @@
+// Creates an item, or updates it when input.id is set. Keep the run signature.
+import { Database } from "bun:sqlite";
+
+export async function run(input, context) {
+  const name = String(input?.name ?? "").trim();
+  const notes = String(input?.notes ?? "").trim();
+  const id = String(input?.id ?? "").trim() || crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  if (!name) {
+    throw new Error("name is required");
+  }
+
+  const db = new Database(context.databasePath);
+
+  try {
+    db.query(
+      `INSERT INTO items (id, name, notes, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?4)
+       ON CONFLICT(id) DO UPDATE SET name = ?2, notes = ?3, updated_at = ?4`
+    ).run(id, name, notes, now);
+
+    return { item: db.query("SELECT * FROM items WHERE id = ?").get(id) };
+  } finally {
+    db.close();
+  }
+}

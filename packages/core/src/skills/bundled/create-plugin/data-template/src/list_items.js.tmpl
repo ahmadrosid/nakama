@@ -1,0 +1,21 @@
+// Replace "items" with the real table. Keep the run signature.
+import { Database } from "bun:sqlite";
+
+export async function run(input, context) {
+  const query = String(input?.query ?? "").trim();
+  const db = new Database(context.databasePath, { readonly: true });
+
+  try {
+    const items = query
+      ? db
+          .query(
+            "SELECT * FROM items WHERE name LIKE ?1 OR notes LIKE ?1 ORDER BY updated_at DESC"
+          )
+          .all(`%${query}%`)
+      : db.query("SELECT * FROM items ORDER BY updated_at DESC").all();
+
+    return { items };
+  } finally {
+    db.close();
+  }
+}
