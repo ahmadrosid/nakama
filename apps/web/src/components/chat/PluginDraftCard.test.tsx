@@ -141,8 +141,10 @@ test("does not offer the panel before the plugin is enabled", async () => {
 
 test("opens the plugin page in the side panel after enable", async () => {
   const enableCall = spyOn(client, "enableOrgPlugin").mockResolvedValue(
+    // SAFETY: The test controls this fixture or mock and asserts the resulting behavior.
     {} as OrgPluginDetail
   );
+
   cleanups.push(() => enableCall.mockRestore());
 
   const { enable, shown } = await renderDraft("disabled", "admin");

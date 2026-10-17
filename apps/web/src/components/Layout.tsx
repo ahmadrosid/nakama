@@ -209,12 +209,14 @@ function AppShellHeader({
   const showCustomizeBack =
     page !== "notifications" && !SIDEBAR_PAGE_IDS.includes(page);
 
+  // SAFETY: PageId is a string union; the lookup falls back when the key is absent.
   const backLabel =
     {
       customize: "Back to Chat",
       plugins: "Back to Plugins",
     }[page as string] ?? "Back to Control center";
 
+  // SAFETY: PageId is a string union; the lookup falls back when the key is absent.
   const backPath =
     {
       customize: PAGE_PATHS.chat,
