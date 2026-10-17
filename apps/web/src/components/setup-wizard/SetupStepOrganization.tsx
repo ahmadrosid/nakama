@@ -1,7 +1,7 @@
 import { Button } from "@nakama/ui/button";
-import { Card } from "@nakama/ui/card";
 import { Input } from "@nakama/ui/input";
 import { useRef, useState } from "react";
+import { SetupStepCard } from "@/components/setup-wizard/SetupStepCard";
 import type { SetupAccountDraft } from "@/components/setup-wizard/setup-wizard.shared";
 import { useAuth } from "@/context/use-auth";
 
@@ -86,7 +86,7 @@ export function SetupStepOrganization({
   };
 
   return (
-    <Card className="p-6">
+    <SetupStepCard currentStep={2} heading="Create your organization">
       <form className="space-y-4" onSubmit={handleSubmit}>
         <div>
           <label
@@ -96,6 +96,7 @@ export function SetupStepOrganization({
             Organization name
           </label>
           <Input
+            className="h-10"
             id="setup-org-name"
             onChange={(event) => handleNameChange(event.target.value)}
             placeholder="Acme Corp"
@@ -111,6 +112,7 @@ export function SetupStepOrganization({
             Slug
           </label>
           <Input
+            className="h-10"
             id="setup-org-slug"
             onChange={(event) => {
               slugEditedRef.current = true;
@@ -132,18 +134,18 @@ export function SetupStepOrganization({
         )}
         <div className="flex gap-3">
           <Button
-            className="flex-1"
+            className="h-10 flex-1"
             onClick={onBack}
             type="button"
             variant="outline"
           >
             Back
           </Button>
-          <Button className="flex-1" disabled={isSubmitting} type="submit">
+          <Button className="h-10 flex-1" disabled={isSubmitting} type="submit">
             {isSubmitting ? "Creating..." : "Create Organization"}
           </Button>
         </div>
       </form>
-    </Card>
+    </SetupStepCard>
   );
 }

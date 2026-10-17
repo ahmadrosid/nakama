@@ -1,6 +1,7 @@
 import { Button } from "@nakama/ui/button";
 import { Spinner } from "@nakama/ui/spinner";
 import { useEffect, useState } from "react";
+import { SetupStepCard } from "@/components/setup-wizard/SetupStepCard";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
 import { UserContextForm } from "@/components/UserContextForm";
 import { useAuth } from "@/context/use-auth";
@@ -100,104 +101,97 @@ function SetupUserContextSession({
   }
 
   return (
-    <form
-      className="space-y-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void handleNext();
-      }}
-    >
-      <div className="rounded-md border border-border bg-card px-4 py-4">
-        <h2 className="mb-4 font-semibold text-base text-foreground">
-          About you
-        </h2>
+    <SetupStepCard currentStep={4} heading="Tell us about yourself">
+      <form
+        className="space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleNext();
+        }}
+      >
+        <div>
+          {isLoading ? (
+            <div className="flex min-h-32 items-center justify-center">
+              <Spinner />
+            </div>
+          ) : (
+            <UserContextForm
+              disabled={busy}
+              idPrefix="setup-user-context"
+              onChange={(next) => {
+                setContent(next);
 
-        {isLoading ? (
-          <div className="flex min-h-32 items-center justify-center">
-            <Spinner />
+                if (formError) {
+                  setFormError(null);
+                }
+              }}
+              value={content}
+            />
+          )}
+        </div>
+
+        <div>
+          <div className="space-y-2">
+            <label
+              className="font-medium text-foreground text-sm"
+              htmlFor="setup-timezone"
+            >
+              Timezone
+            </label>
+            <TimezoneSelect
+              disabled={saveTimezoneMutation.isPending}
+              emptyLabel="Select timezone"
+              id="setup-timezone"
+              onValueChange={(nextTimezone) => {
+                if (nextTimezone) {
+                  setTimezone(nextTimezone);
+                  saveTimezoneMutation.mutate(nextTimezone);
+                }
+              }}
+              value={timezone}
+            />
           </div>
-        ) : (
-          <UserContextForm
-            disabled={busy}
-            idPrefix="setup-user-context"
-            onChange={(next) => {
-              setContent(next);
-
-              if (formError) {
-                setFormError(null);
-              }
-            }}
-            value={content}
-          />
-        )}
-      </div>
-
-      <div className="rounded-md border border-border bg-card px-4 py-3">
-        <div className="space-y-2">
-          <label
-            className="font-medium text-foreground text-sm"
-            htmlFor="setup-timezone"
-          >
-            Timezone
-          </label>
-          <TimezoneSelect
-            disabled={saveTimezoneMutation.isPending}
-            emptyLabel="Select timezone"
-            id="setup-timezone"
-            onValueChange={(nextTimezone) => {
-              if (nextTimezone) {
-                setTimezone(nextTimezone);
-                saveTimezoneMutation.mutate(nextTimezone);
-              }
-            }}
-            value={timezone}
-          />
         </div>
-      </div>
 
-      {formError || loadError ? (
-        <p className="text-destructive text-sm" role="alert">
-          {formError ?? formatError(loadError)}
-        </p>
-      ) : null}
+        {formError || loadError ? (
+          <p className="text-destructive text-sm" role="alert">
+            {formError ?? formatError(loadError)}
+          </p>
+        ) : null}
 
-      <div className="flex items-center justify-between">
-        <Button
-          disabled={busy}
-          onClick={onBack}
-          size="sm"
-          type="button"
-          variant="ghost"
-        >
-          Back
-        </Button>
-
-        <div className="flex items-center gap-3">
-          <button
-            className="text-muted-foreground text-sm underline underline-offset-4 transition-colors hover:text-foreground"
-            disabled={busy}
-            onClick={handleSkip}
-            type="button"
-          >
-            Set up later
-          </button>
-
+        <div className="flex items-center justify-between">
           <Button
-            disabled={busy || isLoading || !!loadError}
-            size="sm"
-            type="submit"
+            disabled={busy}
+            onClick={onBack}
+            type="button"
+            variant="ghost"
           >
-            {busy ? (
-              <>
-                <Spinner className="mr-2" />
-                Saving…
-              </>
-            ) : (
-              "Finish"
-            )}
+            Back
           </Button>
+
+          <div className="flex items-center gap-3">
+            <button
+              className="text-muted-foreground text-sm underline underline-offset-4 transition-colors hover:text-foreground"
+              disabled={busy}
+              onClick={handleSkip}
+              type="button"
+            >
+              Set up later
+            </button>
+
+            <Button disabled={busy || isLoading || !!loadError} type="submit">
+              {busy ? (
+                <>
+                  <Spinner className="mr-2" />
+                  Saving…
+                </>
+              ) : (
+                "Finish"
+              )}
+            </Button>
+          </div>
         </div>
-      </div>
-    </form>
+      </form>
+    </SetupStepCard>
   );
 }

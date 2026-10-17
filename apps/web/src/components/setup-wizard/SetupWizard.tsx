@@ -4,7 +4,6 @@ import { SetupStepAccount } from "@/components/setup-wizard/SetupStepAccount";
 import { SetupStepOrganization } from "@/components/setup-wizard/SetupStepOrganization";
 import { SetupStepProvider } from "@/components/setup-wizard/SetupStepProvider";
 import { SetupStepUserContext } from "@/components/setup-wizard/SetupStepUserContext";
-import { SetupWizardStepper } from "@/components/setup-wizard/SetupWizardStepper";
 import type {
   SetupAccountDraft,
   SetupStepId,
@@ -86,20 +85,6 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
     }
   }, [currentStep, goSkip, handleComplete]);
 
-  const heading =
-    currentStep === 2
-      ? "Create your organization"
-      : currentStep === 3
-        ? "Welcome to Nakama"
-        : "Tell us about yourself";
-
-  const subtitle =
-    currentStep === 2
-      ? "Every workspace lives inside an organization. Name yours to finish setup."
-      : currentStep === 3
-        ? "Add an AI provider now, or skip it and add one from Settings later."
-        : "Help the agent understand your preferences. Optional.";
-
   function renderStep(): ReactNode {
     switch (currentStep) {
       case 1:
@@ -143,21 +128,5 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
     }
   }
 
-  // The account step draws its own compact card, heading and progress dots.
-  if (currentStep === 1) {
-    return renderStep();
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="space-y-1">
-        <h1 className="font-semibold text-foreground text-xl">{heading}</h1>
-        <p className="text-muted-foreground text-sm">{subtitle}</p>
-      </div>
-
-      <SetupWizardStepper currentStep={currentStep} />
-
-      <div key={currentStep}>{renderStep()}</div>
-    </div>
-  );
+  return <div key={currentStep}>{renderStep()}</div>;
 }

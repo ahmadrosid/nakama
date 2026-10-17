@@ -2,6 +2,7 @@ import type { CreateProviderResponse } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { useState } from "react";
 import { ProviderSetupForm } from "@/components/ProviderSetupForm";
+import { SetupStepCard } from "@/components/setup-wizard/SetupStepCard";
 import { useUpdateProfileMutation } from "@/hooks/use-resource-mutations";
 import { client, formatError } from "@/lib/client";
 import { encodeModelSelection } from "@/lib/models";
@@ -69,7 +70,7 @@ export function SetupStepProvider({ onNext, onSkip }: SetupStepProviderProps) {
   }
 
   return (
-    <div className="rounded-md border border-border bg-card p-6">
+    <SetupStepCard currentStep={3} heading="Connect a model provider">
       {provider ? (
         <div className="space-y-3">
           {error ? (
@@ -105,6 +106,6 @@ export function SetupStepProvider({ onNext, onSkip }: SetupStepProviderProps) {
           </div>
         </div>
       )}
-    </div>
+    </SetupStepCard>
   );
 }
