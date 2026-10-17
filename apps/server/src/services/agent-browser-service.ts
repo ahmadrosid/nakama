@@ -40,6 +40,8 @@ const KERNEL_API_URL = "https://api.onkernel.com";
 
 const KERNEL_REQUEST_TIMEOUT_MS = 30_000;
 
+const AGENT_BROWSER_MAX_OUTPUT_CHARS = 20_000;
+
 /** Idle time, counting live view use, before Kernel stops and saves the browser. */
 const KERNEL_BROWSER_IDLE_SECONDS = 600;
 
@@ -411,6 +413,9 @@ export async function enrichAgentBrowserBashInput(
   return {
     ...input,
     env: {
+      // One LinkedIn snapshot runs past 30k characters; uncapped, a few of
+      // them crowd out the rest of the conversation.
+      AGENT_BROWSER_MAX_OUTPUT: String(AGENT_BROWSER_MAX_OUTPUT_CHARS),
       ...input.env,
       AGENT_BROWSER_CDP: browser.cdp_ws_url,
       // A new Kernel browser gets a new daemon session, so agent-browser never

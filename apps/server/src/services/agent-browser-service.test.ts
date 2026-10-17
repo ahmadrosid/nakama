@@ -516,6 +516,7 @@ describe("Kernel browser runtime", () => {
     );
     expect(first.env?.KERNEL_API_KEY).toBe("");
     expect(first.env).not.toHaveProperty("AGENT_BROWSER_PROVIDER");
+    expect(Number(first.env?.AGENT_BROWSER_MAX_OUTPUT)).toBeGreaterThan(0);
     expect(second.env).toEqual(first.env);
     expect(
       requests.filter((request) => request.url === "/browsers")
@@ -526,6 +527,20 @@ describe("Kernel browser runtime", () => {
       headless: false,
       profile: { name: "nakama-org-a-agent-1", save_changes: true },
     });
+  });
+
+  test("keeps an output cap the caller sets", async () => {
+    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+
+    const enriched = await enrichAgentBrowserBashInput(
+      {
+        command: "agent-browser snapshot",
+        env: { AGENT_BROWSER_MAX_OUTPUT: "500" },
+      },
+      context
+    );
+
+    expect(enriched.env?.AGENT_BROWSER_MAX_OUTPUT).toBe("500");
   });
 
   test("uses the Kernel key from the host env", async () => {

@@ -20,7 +20,15 @@ The **agent-browser** skill is assigned (see Available Agent Skills). Skills are
     options.cloudBrowser
       ? `
 
-Cloud browser is on: every \`agent-browser\` command in this chat drives one Kernel browser, and the user sees it live in the chat's Browser panel. Use agent-browser for sites that need the user's login. When a site asks for a login, open its login page and ask the user to sign in in the Browser panel, then continue after they reply. Never ask for passwords. Logins are saved for your next runs, so check whether you are already signed in first.`
+Cloud browser is on: every \`agent-browser\` command in this chat drives one Kernel browser, and the user sees it live in the chat's Browser panel. Use agent-browser for sites that need the user's login. When a site asks for a login, open its login page and ask the user to sign in in the Browser panel, then continue after they reply. Never ask for passwords. Logins are saved for your next runs, so check whether you are already signed in first.
+
+Working in the cloud browser:
+- To read what a page says (posts, messages, results), use \`agent-browser get text <selector>\` such as \`get text main\`, or \`agent-browser read\` when the CLI has it. \`snapshot -i\` lists only buttons, links and inputs; use it to find refs before you act, scoped when you can: \`snapshot -i -c -s main\`.
+- Wait for the thing you need: \`wait --text "..."\`, a selector, or \`wait 2000\`. Do not use \`wait --load networkidle\` on apps like LinkedIn; it never resolves.
+- Scroll in pixels (\`scroll down 2000\`), then read again. Do not chain many default scrolls with a snapshot after each.
+- Do not pipe output through grep, sed or awk; narrow with selectors instead.
+- Leave the browser open when the task ends; do not run \`agent-browser close\`.
+- Before you send a message, connection request, post, comment, or anything else other people will see, show the user the exact text and target and wait for a clear yes in chat. Then send it once.`
       : ""
   }`;
 }
