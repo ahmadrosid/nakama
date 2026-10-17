@@ -6296,8 +6296,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async upsertSession(record) {
       requireWritableSession(record.id);
 
-      // The owning org is the profile's org at insert time; callers do not
-      // pass one, so it cannot drift from the profile the session points to.
+      // org_id comes from the session's current profile on every upsert;
+      // callers do not pass one, so it cannot drift from that profile.
       const orgId = getProfileStmt.get(record.profileId)?.org_id ?? null;
 
       upsertSessionStmt.run(
