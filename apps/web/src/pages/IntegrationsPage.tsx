@@ -1,15 +1,21 @@
 import { Spinner } from "@nakama/ui/spinner";
-import { cn } from "@nakama/ui/utils";
-import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  Navigate,
+  useMatch,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { CodingAgentsSettingsCard } from "@/components/CodingAgentsSettingsCard";
 import { ComposioConnectionsCard } from "@/components/ComposioConnectionsCard";
-import { ComposioSettingsCard } from "@/components/ComposioSettingsCard";
 import { ErrorTrackingSettingsCard } from "@/components/ErrorTrackingSettingsCard";
 import { NotificationDestinationsCard } from "@/components/NotificationDestinationsCard";
 import { TokenOptimizationCard } from "@/components/TokenOptimizationCard";
 import { useAuth } from "@/context/use-auth";
 import {
   type IntegrationSectionId,
+  integrationSectionPath,
+  PAGE_PATHS,
   visibleIntegrationSections,
 } from "@/lib/navigation";
 
@@ -30,11 +36,9 @@ function resolveSection(value: string | null): IntegrationSectionId {
 function IntegrationSectionPanel({
   canUseOrgIntegrations,
   section,
-  isPlatformAdmin,
 }: {
   canUseOrgIntegrations: boolean;
   section: IntegrationSectionId;
-  isPlatformAdmin: boolean;
 }) {
   if (section === "optimization") {
     return <TokenOptimizationCard />;
@@ -45,14 +49,9 @@ function IntegrationSectionPanel({
   }
 
   if (section === "composio") {
-    return (
-      <div className={cn(isPlatformAdmin && "space-y-4")}>
-        {isPlatformAdmin ? <ComposioSettingsCard embedded /> : null}
-        {canUseOrgIntegrations ? (
-          <ComposioConnectionsCard bordered embedded />
-        ) : null}
-      </div>
-    );
+    return canUseOrgIntegrations ? (
+      <ComposioConnectionsCard bordered embedded />
+    ) : null;
   }
 
   if (section === "notifications") {
@@ -68,7 +67,9 @@ function IntegrationSectionPanel({
 
 export function IntegrationsPage() {
   const [searchParams] = useSearchParams();
-  const { section } = useParams();
+  const params = useParams();
+  const onConnectors = useMatch(PAGE_PATHS.composio) !== null;
+  const section = onConnectors ? "composio" : params.section;
   const { activeOrg, isLoading, user } = useAuth();
   const isPlatformAdmin = user?.isPlatformAdmin === true;
 
@@ -88,9 +89,13 @@ export function IntegrationsPage() {
     return (
       <Navigate
         replace
-        to={`/customize/connections/${target}${remaining.size ? `?${remaining}` : ""}`}
+        to={`${integrationSectionPath(target)}${remaining.size ? `?${remaining}` : ""}`}
       />
     );
+  }
+
+  if (!onConnectors && section === "composio") {
+    return <Navigate replace to={integrationSectionPath("composio")} />;
   }
 
   const selected = visibleIntegrationSections(
@@ -104,16 +109,19 @@ export function IntegrationsPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <Link
-        className="block w-fit text-muted-foreground text-sm hover:text-foreground"
-        to="/customize"
-      >
-        ← Back to Control center
-      </Link>
-      <h1 className="font-medium text-xl">{selected.label}</h1>
+      {onConnectors ? null : (
+        <Link
+          className="block w-fit text-muted-foreground text-sm hover:text-foreground"
+          to="/customize"
+        >
+          ← Back to Control center
+        </Link>
+      )}
+      {onConnectors ? null : (
+        <h1 className="font-medium text-xl">{selected.label}</h1>
+      )}
       <IntegrationSectionPanel
         canUseOrgIntegrations={Boolean(activeOrg)}
-        isPlatformAdmin={isPlatformAdmin}
         section={selected.id}
       />
     </div>

@@ -13,6 +13,7 @@ import { useOrgPlugins } from "@/hooks/use-plugins";
 import { client, formatError } from "@/lib/client";
 import {
   enabledPluginNavEntries,
+  integrationSectionPath,
   navHrefForPage,
   pluginIcon,
   profilePath,
@@ -93,7 +94,7 @@ export function CustomizePage() {
       user?.isPlatformAdmin === true,
       activeOrg?.role
     ).map((item) => ({
-      href: `/customize/connections/${item.id}`,
+      href: integrationSectionPath(item.id),
       icon: item.icon,
       label: item.label,
     })),

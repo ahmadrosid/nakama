@@ -916,8 +916,7 @@ function RecordingSources({
       <p>
         {isPlatformAdmin ? (
           <>
-            Set up Composio in{" "}
-            <a href="/integrations?section=composio">Integrations</a> to import
+            Set up Composio in <a href="/connectors">Connectors</a> to import
             recordings.
           </>
         ) : (

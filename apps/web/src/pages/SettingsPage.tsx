@@ -13,6 +13,7 @@ import { Spinner } from "@nakama/ui/spinner";
 import { Switch } from "@nakama/ui/switch";
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { ComposioSettingsCard } from "@/components/ComposioSettingsCard";
 import { LocalAuthTokenCard } from "@/components/LocalAuthTokenCard";
 import { BrowserSessionsCard } from "@/components/settings/BrowserSessionsCard";
 import { DataPortabilityPanel } from "@/components/settings/DataPortabilityPanel";
@@ -224,6 +225,12 @@ export function SettingsPage() {
 
         <MfaSettingsCard />
         {!isDemo && isPlatformAdmin ? <PlatformMfaSettingsCard /> : null}
+
+        {isPlatformAdmin ? (
+          <section id="composio">
+            <ComposioSettingsCard />
+          </section>
+        ) : null}
 
         {isPlatformAdmin ? (
           <Card className="w-full overflow-hidden shadow-none">

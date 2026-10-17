@@ -33,6 +33,7 @@ describe("visibleNavGroups", () => {
     expect(pageIdsFor(true, "admin")).toEqual([
       "automations",
       "chat",
+      "composio",
       "customize",
       "files",
       "google-meet",

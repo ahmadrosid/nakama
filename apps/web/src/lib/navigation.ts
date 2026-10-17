@@ -24,6 +24,7 @@ type NavIcon = typeof SharedWifiIcon;
 export type PageId =
   | "google-meet"
   | "chat"
+  | "composio"
   | "customize"
   | "usage"
   | "files"
@@ -91,6 +92,7 @@ const NAV_GROUPS: NavGroup[] = [
         SharedWifiIcon
       ),
       navItem("plugin-management", "Plugins", "Manage plugins", PackageIcon),
+      navItem("composio", "Connectors", "Connect apps", Plug01Icon),
     ],
     label: "Chat",
   },
@@ -167,6 +169,7 @@ export const SIDEBAR_PAGE_IDS: readonly PageId[] = [
   "chat",
   "profiles",
   "plugin-management",
+  "composio",
   "automations",
   "customize",
 ];
@@ -230,6 +233,12 @@ export function visibleNavGroups(access: {
     const items = group.items.filter((item) => {
       if (item.id === "google-meet") {
         return canAccessIntegrationsPage(access.orgRole);
+      }
+
+      if (item.id === "composio") {
+        return (
+          access.isPlatformAdmin || canAccessIntegrationsPage(access.orgRole)
+        );
       }
 
       if (item.id === "organization" || item.id === "files") {
@@ -424,6 +433,7 @@ export function teamDetailPath(teamId: string): string {
 export const PAGE_PATHS: Record<PageId, string> = {
   automations: "/automations",
   chat: "/chat",
+  composio: "/connectors",
   customize: "/customize",
   files: "/files",
   "google-meet": "/google-meet",
@@ -443,6 +453,7 @@ export const PAGE_PATHS: Record<PageId, string> = {
 };
 
 const PREFIX_PAGE_IDS: readonly [string, PageId][] = [
+  [PAGE_PATHS.composio, "composio"],
   ["/customize/connections", "customize"],
   [PAGE_PATHS["plugin-management"], "plugin-management"],
   [PAGE_PATHS.chat, "chat"],
@@ -530,6 +541,12 @@ const INTEGRATION_SECTIONS = [
 ] as const;
 
 export type IntegrationSectionId = (typeof INTEGRATION_SECTIONS)[number]["id"];
+
+export function integrationSectionPath(id: IntegrationSectionId): string {
+  return id === "composio"
+    ? PAGE_PATHS.composio
+    : `/customize/connections/${id}`;
+}
 
 export function visibleIntegrationSections(
   isPlatformAdmin: boolean,
