@@ -50,7 +50,7 @@ export function SetupStepCard({
             );
           })}
         </ol>
-        <h1 className="mt-4 mb-6 font-semibold text-foreground text-xl">
+        <h1 className="mt-5 mb-6 font-bold text-2xl text-foreground tracking-tight">
           {heading}
         </h1>
         {children}

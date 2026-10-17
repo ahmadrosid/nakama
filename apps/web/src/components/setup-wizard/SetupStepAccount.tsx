@@ -1,7 +1,7 @@
 import { Button } from "@nakama/ui/button";
 import { Input } from "@nakama/ui/input";
 import { cn } from "@nakama/ui/utils";
-import { Upload04Icon, ViewIcon, ViewOffIcon } from "hugeicons-react";
+import { ViewIcon, ViewOffIcon } from "hugeicons-react";
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { SetupStepBackupImport } from "@/components/setup-wizard/SetupStepBackupImport";
@@ -14,7 +14,29 @@ interface SetupStepAccountProps {
 
 type SetupAccountMode = "account" | "backup";
 
-const STRENGTH_LABELS = ["Too short", "Weak", "Fair", "Good", "Strong"];
+const STRENGTH = [
+  { bar: "bg-border", label: "Too short", text: "text-muted-foreground" },
+  {
+    bar: "bg-red-600",
+    label: "Weak password",
+    text: "text-red-700 dark:text-red-400",
+  },
+  {
+    bar: "bg-amber-500",
+    label: "Fair password",
+    text: "text-amber-700 dark:text-amber-400",
+  },
+  {
+    bar: "bg-green-700",
+    label: "Strong password",
+    text: "text-green-700 dark:text-green-400",
+  },
+  {
+    bar: "bg-green-700",
+    label: "Very strong password",
+    text: "text-green-700 dark:text-green-400",
+  },
+];
 
 /** 0 = under 8 characters, 4 = long with mixed character kinds. */
 export function passwordStrength(password: string): number {
@@ -90,7 +112,8 @@ export function SetupStepAccount({ onNext }: SetupStepAccountProps) {
     <SetupStepCard
       currentStep={1}
       footer={
-        <div className="flex justify-center">
+        <p className="text-center text-muted-foreground text-sm">
+          Moving from another install?{" "}
           <input
             accept=".zip,application/zip"
             aria-label="Choose a backup file"
@@ -109,16 +132,14 @@ export function SetupStepAccount({ onNext }: SetupStepAccountProps) {
             ref={backupInputRef}
             type="file"
           />
-          <Button
+          <button
+            className="font-medium text-primary underline underline-offset-4 hover:text-primary/80"
             onClick={() => backupInputRef.current?.click()}
-            size="sm"
             type="button"
-            variant="ghost"
           >
-            <Upload04Icon aria-hidden className="size-3.5" />
             Restore a backup
-          </Button>
-        </div>
+          </button>
+        </p>
       }
       heading="Create your admin account"
     >
@@ -181,15 +202,13 @@ export function SetupStepAccount({ onNext }: SetupStepAccountProps) {
             />
           </div>
         ) : (
-          <Button
-            className="-ml-2"
+          <button
+            className="flex min-h-11 items-center font-medium text-primary text-sm hover:text-primary/80"
             onClick={() => setShowPhone(true)}
-            size="sm"
             type="button"
-            variant="ghost"
           >
             + Add phone
-          </Button>
+          </button>
         )}
         <div>
           <label
@@ -228,14 +247,17 @@ export function SetupStepAccount({ onNext }: SetupStepAccountProps) {
                   <span
                     className={cn(
                       "h-1 rounded-full",
-                      level <= strength ? "bg-primary" : "bg-border"
+                      level <= strength ? STRENGTH[strength].bar : "bg-border"
                     )}
                     key={level}
                   />
                 ))}
               </div>
-              <p aria-live="polite" className="text-muted-foreground text-xs">
-                {STRENGTH_LABELS[strength]}
+              <p
+                aria-live="polite"
+                className={cn("text-sm", STRENGTH[strength].text)}
+              >
+                {STRENGTH[strength].label}
               </p>
             </div>
           ) : null}
