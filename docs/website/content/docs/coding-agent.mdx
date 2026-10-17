@@ -26,7 +26,7 @@ Dedicated coding agents are built for that job. Nakama adds this feature so you 
 
 - **Nakama** stays the conversation owner, permission boundary, and summarizer
 - **Coding agent** (Codex, Claude Code, OpenCode, pi, or Cursor Agent) runs the heavy repo work on the server
-- **Super Bot** is the default profile with `bash` and the `coding-agent` skill; other profiles can opt in
+- **Super Nakama** is the default profile with `bash` and the `coding-agent` skill; other profiles can opt in
 
 ## How the pieces fit together
 
@@ -63,7 +63,7 @@ Nakama supports CLI-backed backends on the machine running the server:
 
 ### 1. Assign tools and skills to the profile
 
-| Requirement | Super Bot | Other profiles |
+| Requirement | Super Nakama | Other profiles |
 |-------------|-----------|----------------|
 | `bash` | Assigned by default | Assign manually |
 | `coding-agent` skill | Assigned by default | Assign manually |
@@ -190,5 +190,5 @@ Tool and skill assignment remain per profile.
 
 - [Builtin tools](/builtin-tools) — `bash` parameters and scope
 - [Skills](/skills) — bundled skills catalog, including `coding-agent`
-- [Profiles](/profiles) — Super Bot and per-profile tool access
+- [Profiles](/profiles) — Super Nakama and per-profile tool access
 - [Agent prompts](/agent-prompt) — how matched skills and harness context join the system prompt

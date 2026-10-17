@@ -429,7 +429,7 @@ const versionSourceLabels: Record<
   dashboard: "Dashboard",
   pack_import: "Pack import",
   skill_manage: "Agent",
-  super_bot: "Super Bot",
+  super_nakama: "Super Nakama",
 };
 
 function versionAuthor(version: SkillVersion): string {

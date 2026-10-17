@@ -1,13 +1,13 @@
 import type { ProfileSummary } from "@nakama/core/contract";
 
-export function findSuperBotProfile(
+export function findSuperNakamaProfile(
   profiles: ProfileSummary[]
 ): ProfileSummary | undefined {
   return profiles.find((profile) => profile.isSuper);
 }
 
-/** Profile id to open for Super Bot chat CTAs, or null when none exists. */
-export function resolveSuperBotChatProfileId(
+/** Profile id to open for Super Nakama chat CTAs, or null when none exists. */
+export function resolveSuperNakamaChatProfileId(
   profiles: Array<Pick<ProfileSummary, "id" | "isSuper">>
 ): string | null {
   return profiles.find((profile) => profile.isSuper)?.id ?? null;

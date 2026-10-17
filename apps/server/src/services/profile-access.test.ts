@@ -3,7 +3,7 @@ import { NakamaApiError } from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
   seedOrgDefaultProfile,
-  seedOrgSuperBotProfile,
+  seedOrgSuperNakamaProfile,
 } from "@nakama/db";
 import { AutomationService } from "./automation-service";
 
@@ -20,7 +20,7 @@ async function seed() {
     updatedAt: now,
   });
   const defaultProfile = await seedOrgDefaultProfile(db, ORG_ID);
-  const superProfile = await seedOrgSuperBotProfile(db, ORG_ID);
+  const superProfile = await seedOrgSuperNakamaProfile(db, ORG_ID);
 
   return { db, defaultId: defaultProfile.id, superId: superProfile.id };
 }
@@ -32,8 +32,8 @@ const automationInput = {
   trigger: { type: "manual" as const },
 };
 
-describe("profile access: binding an automation to Super Bot is admin-only", () => {
-  test("member cannot bind an automation to the Super Bot profile", async () => {
+describe("profile access: binding an automation to Super Nakama is admin-only", () => {
+  test("member cannot bind an automation to the Super Nakama profile", async () => {
     const { db, superId } = await seed();
 
     const service = new AutomationService(db, {
@@ -49,7 +49,7 @@ describe("profile access: binding an automation to Super Bot is admin-only", () 
     await expect(attempt).rejects.toMatchObject({ status: 403 });
   });
 
-  test("admin can bind an automation to the Super Bot profile", async () => {
+  test("admin can bind an automation to the Super Nakama profile", async () => {
     const { db, superId } = await seed();
 
     const service = new AutomationService(db, {
@@ -69,7 +69,7 @@ describe("profile access: binding an automation to Super Bot is admin-only", () 
     expect(automation.profileId).toBe(superId);
   });
 
-  test("omitted access fail-closes Super Bot bind on create", async () => {
+  test("omitted access fail-closes Super Nakama bind on create", async () => {
     const { db, superId } = await seed();
 
     const service = new AutomationService(db, {
@@ -83,7 +83,7 @@ describe("profile access: binding an automation to Super Bot is admin-only", () 
     await expect(attempt).rejects.toMatchObject({ status: 403 });
   });
 
-  test("member cannot rebind an automation to Super Bot", async () => {
+  test("member cannot rebind an automation to Super Nakama", async () => {
     const { db, defaultId, superId } = await seed();
 
     const service = new AutomationService(db, {
@@ -112,7 +112,7 @@ describe("profile access: binding an automation to Super Bot is admin-only", () 
     );
   });
 
-  test("admin can rebind an automation to Super Bot", async () => {
+  test("admin can rebind an automation to Super Nakama", async () => {
     const { db, defaultId, superId } = await seed();
 
     const service = new AutomationService(db, {

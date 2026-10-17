@@ -73,7 +73,7 @@ import {
   ORG_INVITE_EXPIRY_DAYS,
   ORG_ROLES,
   seedOrgDefaultProfile,
-  seedOrgSuperBotProfile,
+  seedOrgSuperNakamaProfile,
 } from "@nakama/db";
 import { isTenantBashEnabled } from "../tools/bash-config";
 import type { AuthService } from "./auth-service";
@@ -2393,13 +2393,13 @@ export class OrgService {
 
     await initSoulDirectory(getProfileSoulDir(orgId, defaultProfile.id));
 
-    const superBotProfile = await seedOrgSuperBotProfile(
+    const superNakamaProfile = await seedOrgSuperNakamaProfile(
       this.databaseAdapter,
       orgId,
       { grantBash: isTenantBashEnabled() }
     );
 
-    await initSoulDirectory(getProfileSoulDir(orgId, superBotProfile.id));
+    await initSoulDirectory(getProfileSoulDir(orgId, superNakamaProfile.id));
   }
 }
 

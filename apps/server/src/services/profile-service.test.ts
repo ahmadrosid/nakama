@@ -1118,18 +1118,18 @@ describe("profile service cloneProfile", () => {
     }
   );
 
-  test("refuses to clone Super Bot and writes nothing", async () => {
+  test("refuses to clone Super Nakama and writes nothing", async () => {
     const { db, service } = await setup();
 
-    const superBot = await service.createProfile(ORG_ID, {
+    const superNakama = await service.createProfile(ORG_ID, {
       isSuper: true,
-      name: "Super Bot",
+      name: "Super Nakama",
     });
 
     const countBefore = (await db.listProfilesForOrg(ORG_ID)).length;
 
     await expect(
-      service.cloneProfile(ORG_ID, superBot.profile.id, {})
+      service.cloneProfile(ORG_ID, superNakama.profile.id, {})
     ).rejects.toThrow(/cannot be cloned/i);
 
     expect(await db.listProfilesForOrg(ORG_ID)).toHaveLength(countBefore);
@@ -1332,12 +1332,12 @@ describe("profile service deleteProfile", () => {
     );
   });
 
-  test("does not promote Super Bot as the new default", async () => {
+  test("does not promote Super Nakama as the new default", async () => {
     const { db, service } = await setup();
     const first = await service.createProfile(ORG_ID, { name: "Default Bot" });
     await service.createProfile(ORG_ID, {
       isSuper: true,
-      name: "Super Bot",
+      name: "Super Nakama",
     });
     const third = await service.createProfile(ORG_ID, { name: "Writer" });
     await markDefault(db, first.profile.id);

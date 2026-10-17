@@ -456,7 +456,7 @@ export class PluginService {
     };
   }
 
-  /** Super Bot's handoff: validates its own draft without approving it. */
+  /** Super Nakama's handoff: validates its own draft without approving it. */
   async describeLocalPlugin(draft: LocalPluginDraftRequest) {
     const inspected = await this.inspectLocalPlugin(draft);
 
@@ -645,7 +645,7 @@ export class PluginService {
 
     const { id, minNakamaVersion } = validated.manifest;
 
-    // HTTP maps only the code; the reason lets Super Bot fix its own draft.
+    // HTTP maps only the code; the reason lets Super Nakama fix its own draft.
     const failures: Array<[boolean, string]> = [
       [
         packageJson.version !== validated.manifest.version,

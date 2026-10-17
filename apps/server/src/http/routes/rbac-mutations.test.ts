@@ -196,7 +196,7 @@ describe("RBAC: removed member cannot reach state-changing automation/session ro
 
 describe("RBAC: admin can still reach the same routes (not a 403)", () => {
   test.each(["admin", "member"] as const)(
-    "messaging Super Bot sessions enforce the authenticated %s role",
+    "messaging Super Nakama sessions enforce the authenticated %s role",
     async (role) => {
       const databaseAdapter = createInMemoryDatabaseAdapter();
       const agent = new AgentService(null, null, databaseAdapter);

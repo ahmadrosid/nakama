@@ -16,7 +16,7 @@ import { AddSkillDialog } from "@/components/SkillInstallDialog";
 import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
 import { useAuth } from "@/context/use-auth";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
-import { resolveSuperBotChatProfileId } from "@/lib/profiles";
+import { resolveSuperNakamaChatProfileId } from "@/lib/profiles";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
 
 function cloneProfileDescription(name?: string): string {
@@ -324,17 +324,17 @@ export function ProfilesDialogs(state: ProfilesPageState) {
   } = state;
 
   const { navigateToNewChat } = useAppNavigation();
-  const superBotProfileId = resolveSuperBotChatProfileId(profiles);
+  const superNakamaProfileId = resolveSuperNakamaChatProfileId(profiles);
 
-  const onAskSuperBot = superBotProfileId
-    ? () => navigateToNewChat(superBotProfileId)
+  const onAskSuperNakama = superNakamaProfileId
+    ? () => navigateToNewChat(superNakamaProfileId)
     : undefined;
 
   return (
     <>
       <ProfileCreateDialog
         agentPresets={acpAgentPresets}
-        onAskSuperBot={onAskSuperBot}
+        onAskSuperNakama={onAskSuperNakama}
         onCreated={(profileId) => setSelectedId(profileId)}
         onOpenChange={handleCreateOpenChange}
         open={createOpen}

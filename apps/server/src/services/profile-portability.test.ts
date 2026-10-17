@@ -1293,20 +1293,20 @@ describe("profile portability", () => {
     ).toEqual(["mcp_prod"]);
   });
 
-  test("guards: Super Bot, confirm, preview-only, and kind mismatch", async () => {
+  test("guards: Super Nakama, confirm, preview-only, and kind mismatch", async () => {
     const { db, service } = await setup();
     const normal = await service.createProfile(ORG, { name: "Bot" });
 
-    const superBot = await service.createProfile(ORG, {
+    const superNakama = await service.createProfile(ORG, {
       isSuper: true,
-      name: "Super Bot",
+      name: "Super Nakama",
     });
 
     const exported = await createProfilePackExport(db, ORG, normal.profile.id);
 
     await expect(
-      createProfilePackExport(db, ORG, superBot.profile.id)
-    ).rejects.toThrow(/super bot cannot be exported/i);
+      createProfilePackExport(db, ORG, superNakama.profile.id)
+    ).rejects.toThrow(/super nakama cannot be exported/i);
     await expect(
       importProfilePack(db, DEST, exported.data, { confirm: false })
     ).rejects.toThrow(/confirmation is required/i);

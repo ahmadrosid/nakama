@@ -363,7 +363,7 @@ describe("OrgService", () => {
 
     expect(
       profiles.some(
-        (profile) => profile.isSuper && profile.name === "Super Bot"
+        (profile) => profile.isSuper && profile.name === "Super Nakama"
       )
     ).toBe(true);
   });

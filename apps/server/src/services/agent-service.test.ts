@@ -827,8 +827,8 @@ import { SkillsService } from "./skills-service";
 
 const ORG_ID = "org_test";
 
-interface AgentServiceSuperBotToolsAccess {
-  superBotTools: ToolDefinition[];
+interface AgentServiceSuperNakamaToolsAccess {
+  superNakamaTools: ToolDefinition[];
 }
 
 interface AgentServiceCodingContextAccess {
@@ -872,7 +872,7 @@ function privateServiceAccess<T>(service: AgentService): T {
   return Object.create(service) as T;
 }
 
-describe("Super Bot provider inheritance", () => {
+describe("Super Nakama provider inheritance", () => {
   setupTestConfigDir("nakama-inherited-provider-");
 
   test.each(["server default", "profile", "session"] as const)(
@@ -916,9 +916,9 @@ describe("Super Bot provider inheritance", () => {
       );
 
       // SAFETY: This test checks the private tool built from its profile fixture.
-      const tool = privateServiceAccess<AgentServiceSuperBotToolsAccess>(
+      const tool = privateServiceAccess<AgentServiceSuperNakamaToolsAccess>(
         service
-      ).superBotTools.find((entry) => entry.name === "create_profile");
+      ).superNakamaTools.find((entry) => entry.name === "create_profile");
 
       expect(tool).toBeDefined();
 

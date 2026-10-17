@@ -29,12 +29,12 @@ function profile(
 }
 
 const sampleProfiles = [
-  profile({ id: "super_bot", isSuper: true, name: "Super Bot" }),
+  profile({ id: "super_nakama", isSuper: true, name: "Super Nakama" }),
   profile({ id: "profile_default", isDefault: true, name: "Default Bot" }),
   profile({ id: "profile_custom", name: "Research Bot" }),
 ];
 
-test("startup defaults to Super Bot and respects saved and explicit choices", async () => {
+test("startup defaults to Super Nakama and respects saved and explicit choices", async () => {
   const configDir = await mkdtemp(join(tmpdir(), "nakama-cli-profile-"));
   const previous = process.env.NAKAMA_CONFIG_DIR;
   process.env.NAKAMA_CONFIG_DIR = configDir;
@@ -46,9 +46,9 @@ test("startup defaults to Super Bot and respects saved and explicit choices", as
 
   try {
     expect((await resolveStartupProfile(client, {})).profileId).toBe(
-      "super_bot"
+      "super_nakama"
     );
-    expect(await loadSavedCliProfileId()).toBe("super_bot");
+    expect(await loadSavedCliProfileId()).toBe("super_nakama");
     await saveCliProfileId("profile_custom");
     expect((await resolveStartupProfile(client, {})).profileId).toBe(
       "profile_custom"
@@ -59,7 +59,7 @@ test("startup defaults to Super Bot and respects saved and explicit choices", as
     ).toBe("profile_default");
     await saveCliProfileId("deleted_profile");
     expect((await resolveStartupProfile(client, {})).profileId).toBe(
-      "super_bot"
+      "super_nakama"
     );
   } finally {
     if (previous === undefined) {
@@ -77,8 +77,8 @@ describe("parseCliProfileArgs", () => {
     expect(parseCliProfileArgs(["--profile", "profile_custom"])).toEqual({
       profileId: "profile_custom",
     });
-    expect(parseCliProfileArgs(["-p", "super_bot"])).toEqual({
-      profileId: "super_bot",
+    expect(parseCliProfileArgs(["-p", "super_nakama"])).toEqual({
+      profileId: "super_nakama",
     });
   });
 
@@ -101,8 +101,8 @@ describe("resolveProfileInput", () => {
     expect(resolveProfileInput(sampleProfiles, "profile_custom")?.name).toBe(
       "Research Bot"
     );
-    expect(resolveProfileInput(sampleProfiles, "Super Bot")?.id).toBe(
-      "super_bot"
+    expect(resolveProfileInput(sampleProfiles, "Super Nakama")?.id).toBe(
+      "super_nakama"
     );
     expect(resolveProfileInput(sampleProfiles, "1")?.id).toBe(
       "profile_default"

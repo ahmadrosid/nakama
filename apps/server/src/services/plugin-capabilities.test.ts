@@ -837,7 +837,7 @@ Standalone body.
     expect(existsSync("/tmp/nakama-plugin-skill-imported")).toBe(false);
   });
 
-  test("tool invoke uses trusted context actor and org, never Super Bot platform elevation", async () => {
+  test("tool invoke uses trusted context actor and org, never Super Nakama platform elevation", async () => {
     const db = createInMemoryDatabaseAdapter();
     const profile = await seedOrgDefaultProfile(db, ORG_ID);
     await db.upsertProfile({ ...profile, isSuper: true });

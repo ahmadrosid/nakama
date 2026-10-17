@@ -171,7 +171,7 @@ test("uploaded avatars retain their organization and revision URL", async () => 
   expect(url.searchParams.get("v")).toBe(profile.updatedAt);
 });
 
-test("Super Bot keeps its default image and uploaded images take precedence", async () => {
+test("Super Nakama keeps its default image and uploaded images take precedence", async () => {
   const image = await renderAvatar({
     active: true,
     profile: { ...profile, isSuper: true },

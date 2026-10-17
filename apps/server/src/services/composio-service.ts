@@ -632,7 +632,7 @@ export class ComposioService {
   /**
    * Enabling a toolkit assigns it to the org's default profile, so a fresh
    * setup is usable without a second trip to Profiles. Other profiles stay an
-   * explicit choice: Super Bot and channel-facing profiles should not gain a
+   * explicit choice: Super Nakama and channel-facing profiles should not gain a
    * member's Gmail because an admin enabled it for the org.
    */
   private async assignToDefaultProfile(

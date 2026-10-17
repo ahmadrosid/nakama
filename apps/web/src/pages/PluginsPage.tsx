@@ -361,7 +361,7 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
   };
 }
 
-/** Built-in (official catalog), Super Bot drafts (local releases), then the rest. */
+/** Built-in (official catalog), Super Nakama drafts (local releases), then the rest. */
 function groupPluginIds(
   pluginIds: string[],
   official: Array<{ id: string }>,
@@ -369,7 +369,7 @@ function groupPluginIds(
 ) {
   const builtIn = new Set(official.map((item) => item.id));
 
-  const createdBySuperBot = new Set(
+  const createdBySuperNakama = new Set(
     releases.flatMap((item) =>
       item.source === "local" || item.source === "agent" ? [item.pluginId] : []
     )
@@ -382,13 +382,13 @@ function groupPluginIds(
     },
     {
       ids: pluginIds.filter(
-        (id) => !builtIn.has(id) && createdBySuperBot.has(id)
+        (id) => !builtIn.has(id) && createdBySuperNakama.has(id)
       ),
       title: "Created by you",
     },
     {
       ids: pluginIds.filter(
-        (id) => !(builtIn.has(id) || createdBySuperBot.has(id))
+        (id) => !(builtIn.has(id) || createdBySuperNakama.has(id))
       ),
       title: "From other sources",
     },
@@ -762,7 +762,7 @@ function PluginPageHeader({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
             <DropdownMenuItem onClick={onInstallFromFolder}>
-              Made by Super Bot
+              Made by Super Nakama
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onInstall(installRef.current)}>
               From npm package
@@ -1007,8 +1007,8 @@ function LocalPluginDraftPicker({
         }}
         value={profileId}
       >
-        <SelectTrigger aria-label="Super Bot">
-          <SelectValue placeholder="Super Bot" />
+        <SelectTrigger aria-label="Super Nakama">
+          <SelectValue placeholder="Super Nakama" />
         </SelectTrigger>
         <SelectContent>
           {(profiles.data?.profiles ?? [])
@@ -1254,7 +1254,7 @@ export function LocalPluginInstaller({
       )}
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Install a plugin made by Super Bot</DialogTitle>
+          <DialogTitle>Install a plugin made by Super Nakama</DialogTitle>
         </DialogHeader>
         {draft ? (
           error ? (
@@ -1356,7 +1356,7 @@ function PluginReleasesList({
               {release.source === "local" || release.source === "agent" ? (
                 <span className="text-xs">
                   {release.source === "agent"
-                    ? "Made by Super Bot"
+                    ? "Made by Super Nakama"
                     : "From a folder"}
                 </span>
               ) : null}

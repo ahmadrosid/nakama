@@ -153,7 +153,7 @@ Org roles are `admin`, `member`, and `viewer`. A platform admin uses `/v1/platfo
 
 `AgentService` in [`agent-service.ts`](./apps/server/src/services/agent-service.ts) assembles the agent runtime.
 
-The service loads the profile, the soul, the provider, and the model. The service attaches builtin tools, custom JS tools, custom Python tools, MCP tools, and enabled plugin tools. The service attaches Composio tools and org-memory tools when they apply. Super Bot gets extra tools when the profile permits them. The service also attaches questionnaire, todo, and attachments. Discord sessions get Discord artifact tools.
+The service loads the profile, the soul, the provider, and the model. The service attaches builtin tools, custom JS tools, custom Python tools, MCP tools, and enabled plugin tools. The service attaches Composio tools and org-memory tools when they apply. Super Nakama gets extra tools when the profile permits them. The service also attaches questionnaire, todo, and attachments. Discord sessions get Discord artifact tools.
 
 Prompt layers:
 
@@ -185,7 +185,7 @@ Per-turn context can include todos, matched skills, and Composio connections. A 
 | Composio | `composio-tool-bridge.ts` |
 | Plugins | `plugin-service.ts` |
 
-Tool definitions are shared; `profile_tools` controls which custom tools a profile can use. Super Bot can get extra runtime tools when the profile permits them.
+Tool definitions are shared; `profile_tools` controls which custom tools a profile can use. Super Nakama can get extra runtime tools when the profile permits them.
 
 ## Workers and automations
 

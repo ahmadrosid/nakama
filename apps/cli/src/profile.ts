@@ -147,12 +147,12 @@ export async function resolveStartupProfile(
     }
   }
 
-  const superBot = profiles.find((profile) => profile.isSuper);
+  const superNakama = profiles.find((profile) => profile.isSuper);
 
-  if (superBot) {
-    await saveCliProfileId(superBot.id);
+  if (superNakama) {
+    await saveCliProfileId(superNakama.id);
 
-    return { profile: superBot, profileId: superBot.id };
+    return { profile: superNakama, profileId: superNakama.id };
   }
 
   if (!(process.stdin.isTTY && process.stdout.isTTY)) {

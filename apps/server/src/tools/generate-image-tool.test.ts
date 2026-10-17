@@ -15,7 +15,7 @@ import {
   createInMemoryDatabaseAdapter,
   ensureGenerateImageToolDefinition,
   seedDatabase,
-  seedOrgSuperBotProfile,
+  seedOrgSuperNakamaProfile,
 } from "@nakama/db";
 import { IMAGE_GENERATION_SELECTION } from "../providers/models";
 import { IMAGE_MODEL_REQUIRED_MESSAGE } from "../services/image-generation";
@@ -72,7 +72,7 @@ describe("generate_image tool seed and resolver (U3)", () => {
     expect(tool?.handlerType).toBe("generate_image");
   });
 
-  test("seedDatabase includes generate_image and Super Bot is not auto-assigned", async () => {
+  test("seedDatabase includes generate_image and Super Nakama is not auto-assigned", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertOrganization({
       createdAt: new Date().toISOString(),
@@ -83,11 +83,11 @@ describe("generate_image tool seed and resolver (U3)", () => {
     });
 
     await seedDatabase(db);
-    const superBot = await seedOrgSuperBotProfile(db, "org_a");
+    const superNakama = await seedOrgSuperNakamaProfile(db, "org_a");
 
     expect(await db.getTool(GENERATE_IMAGE_TOOL_ID)).not.toBeNull();
 
-    const assignedIds = (await db.listToolsForProfile(superBot.id)).map(
+    const assignedIds = (await db.listToolsForProfile(superNakama.id)).map(
       (tool) => tool.id
     );
 

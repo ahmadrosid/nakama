@@ -1,6 +1,6 @@
 import type { OrgRole, ProfileSummary } from "./contract";
 
-export function canAccessSuperBotProfile(options: {
+export function canAccessSuperNakamaProfile(options: {
   orgRole?: OrgRole | null;
   isPlatformAdmin?: boolean;
 }): boolean {
@@ -12,7 +12,7 @@ export function filterProfilesForChatAccess(
   options: {
     orgRole?: OrgRole | null;
     isPlatformAdmin?: boolean;
-    excludeSuperBot?: boolean;
+    excludeSuperNakama?: boolean;
     userId?: string;
   } = {}
 ): ProfileSummary[] {
@@ -25,7 +25,7 @@ export function filterProfilesForChatAccess(
             profile.ownerUserId === options.userId)
       );
 
-  if (options.excludeSuperBot || !canAccessSuperBotProfile(options)) {
+  if (options.excludeSuperNakama || !canAccessSuperNakamaProfile(options)) {
     return visible.filter((profile) => !profile.isSuper);
   }
 
@@ -77,18 +77,22 @@ export function resolveProfileInput(
 
   const lower = trimmed.toLowerCase();
 
-  const superBotAliases = new Set([
+  const superNakamaAliases = new Set([
+    "super_nakama",
+    "super-nakama",
+    "supernakama",
+    "super nakama",
     "super_bot",
     "super-bot",
     "superbot",
     "super bot",
   ]);
 
-  if (superBotAliases.has(lower)) {
-    const superBots = profiles.filter((profile) => profile.isSuper);
+  if (superNakamaAliases.has(lower)) {
+    const superNakamas = profiles.filter((profile) => profile.isSuper);
 
-    if (superBots.length === 1) {
-      return superBots[0];
+    if (superNakamas.length === 1) {
+      return superNakamas[0];
     }
   }
 

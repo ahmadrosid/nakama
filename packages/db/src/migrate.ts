@@ -55,6 +55,7 @@ export function migrateDatabase(db: Database): void {
   migrateLegacyProfileIds(db);
   atomic(migrateCodingDelegationSkillName);
   atomic(migrateArtifactDesignSkillName);
+  atomic(migrateSuperNakamaNaming);
   atomic(migrateWorkspaceSettingsTable);
   atomic(migrateLlmUsageOrgScope);
   atomic(migrateToolOutputSavingsTable);
@@ -1673,6 +1674,14 @@ export function migrateCodingDelegationSkillName(db: Database): void {
 
 export function migrateArtifactDesignSkillName(db: Database): void {
   renameSkillRecords(db, "save-artifact", "artifact-design");
+}
+
+// Only the stock name moves; a renamed super profile keeps its name.
+export function migrateSuperNakamaNaming(db: Database): void {
+  db.exec(`
+    UPDATE profiles SET name = 'Super Nakama' WHERE is_super = 1 AND name = 'Super Bot';
+    UPDATE profile_change_events SET source = 'super_nakama' WHERE source = 'super_bot';
+  `);
 }
 
 // Points profile_skills at the new name without duplicates, then drops the

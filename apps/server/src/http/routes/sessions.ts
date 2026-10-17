@@ -51,7 +51,7 @@ export function registerSessionRoutes(
 ): void {
   const { agent } = options;
 
-  // createSession refuses Super Bot to non-admins. Every route that names an
+  // createSession refuses Super Nakama to non-admins. Every route that names an
   // existing session repeats the check, or holding the ID would be enough.
   const requireSessionAccess = async (
     c: Parameters<typeof requireActiveOrgIdFromContext>[0]
@@ -711,7 +711,7 @@ export function registerSessionRoutes(
       {
         cognito: body.cognito,
         codingWorkspaceRoot: body.codingWorkspaceRoot,
-        excludeSuperBot: auth.mode === "local-token" && channel !== "cli",
+        excludeSuperNakama: auth.mode === "local-token" && channel !== "cli",
         isPlatformAdmin: auth.isPlatformAdmin,
         model: body.model,
         orgRole: auth.orgRole,

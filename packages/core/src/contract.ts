@@ -790,7 +790,7 @@ export interface OrgUsageLeader {
 }
 
 export interface OrgUsageSummaryResponse {
-  /** Every agent by requests, Super Bot excluded. */
+  /** Every agent by requests, Super Nakama excluded. */
   agents: OrgUsageLeader[];
   /** Estimated spend over the last 30 UTC days. */
   costUsd30d: number;
@@ -2495,7 +2495,7 @@ export interface ProfileResponse {
   profile: ProfileDetail;
 }
 
-export interface CreateProfileWithSuperBotRequest {
+export interface CreateProfileWithSuperNakamaRequest {
   name?: string;
   prompt: string;
 }
@@ -2536,7 +2536,7 @@ export interface UpdateProfileRequest {
 
 export type ProfileChangeSource =
   | "dashboard"
-  | "super_bot"
+  | "super_nakama"
   | "skill_manage"
   | "pack_import";
 
@@ -3194,7 +3194,7 @@ export interface ToolContext {
    * refuse paths matching skills/<name>/SKILL.md under the profile workspace.
    */
   forbidProfileSkillMarkdownWrites?: boolean;
-  /** Platform admin flag for Super Bot bind checks (same as HTTP ProfileAccess). */
+  /** Platform admin flag for Super Nakama bind checks (same as HTTP ProfileAccess). */
   isPlatformAdmin?: boolean;
   listPublishedKnowledgeDocuments?: () => Promise<
     PublishedKnowledgeBaseDocument[]

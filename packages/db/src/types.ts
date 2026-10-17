@@ -658,7 +658,7 @@ export type OrgMemoryProposalStatus = "pending" | "approved" | "rejected";
 
 export type ProfileChangeSource =
   | "dashboard"
-  | "super_bot"
+  | "super_nakama"
   | "skill_manage"
   | "pack_import";
 

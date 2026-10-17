@@ -8,7 +8,7 @@ export const DEFAULT_BUNDLED_SKILL_NAMES = [
   "composio-integrations",
 ] as const;
 
-export const SUPER_BOT_BUNDLED_SKILL_NAMES = [
+export const SUPER_NAKAMA_BUNDLED_SKILL_NAMES = [
   "create-plugin",
   "create-profile",
   "create-skill",
@@ -32,7 +32,7 @@ export const OPT_IN_BUNDLED_SKILL_NAMES = [
 
 export const BUNDLED_SKILL_NAMES = [
   ...DEFAULT_BUNDLED_SKILL_NAMES,
-  ...SUPER_BOT_BUNDLED_SKILL_NAMES,
+  ...SUPER_NAKAMA_BUNDLED_SKILL_NAMES,
   ...RUNTIME_ONLY_BUNDLED_SKILL_NAMES,
   ...OPT_IN_BUNDLED_SKILL_NAMES,
 ] as const;

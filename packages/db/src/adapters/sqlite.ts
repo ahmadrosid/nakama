@@ -1098,7 +1098,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       }
 
       if (profile.is_super) {
-        throw new NakamaApiError("Super Bot cannot be moved.", 400);
+        throw new NakamaApiError("Super Nakama cannot be moved.", 400);
       }
 
       const target = db

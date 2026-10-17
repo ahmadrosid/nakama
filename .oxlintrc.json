@@ -130,7 +130,7 @@
         "apps/server/src/tools/org-memory-tools.test.ts",
         "apps/server/src/tools/skill-manage-tool.test.ts",
         "apps/server/src/tools/sub-agent-tool.test.ts",
-        "apps/server/src/tools/super-bot-tools.test.ts",
+        "apps/server/src/tools/super-nakama-tools.test.ts",
         "apps/server/src/tools/todo-tools.llm.test.ts",
         "apps/web/src/components/CommandPalette.test.tsx",
         "apps/web/src/components/NotificationDestinationsCard.test.tsx",

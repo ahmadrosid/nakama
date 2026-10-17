@@ -62,7 +62,7 @@ curl -sf -b "$COOKIE_JAR" -X POST "${BASE_URL}/v1/providers" \
   -H "X-CSRF-Token: ${CSRF_VAL}" \
   -d '{"type":"ollama","apiKey":"","hostMode":"local","model":"llama3.2"}' >/dev/null
 
-# Seed one extra profile so the new profile rail shows a small set (default + super_bot + 1).
+# Seed one extra profile so the new profile rail shows a small set (default + super_nakama + 1).
 curl -sf -b "$COOKIE_JAR" -X POST "${BASE_URL}/v1/profiles" \
   -H 'Content-Type: application/json' \
   -H "X-CSRF-Token: ${CSRF_VAL}" \

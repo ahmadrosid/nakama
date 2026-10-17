@@ -44,7 +44,7 @@ Parallel execution speeds up multi-file research and lets a parent agent delegat
 
 Nakama includes these builtins:
 
-| Tool | `default` / `super_bot` | New custom profiles | Notes |
+| Tool | `default` / `super_nakama` | New custom profiles | Notes |
 |------|-------------------------|---------------------|-------|
 | `write_file` | Yes | Yes | |
 | `save_artifact` | Yes | Yes | Saves a file under `artifacts/` and records who made it |
@@ -60,10 +60,10 @@ Nakama includes these builtins:
 | `extract_document_text` | Yes | No | Extracts text from PDF, Word, or Excel attachments returned by `email` |
 | `bash` | When assigned | No | Run shell commands in the profile workspace |
 | `sub_agent` | No | No | Opt-in: delegate to a same-profile sub-agent (see below) |
-| `list_profile_sessions` | Super Bot only | No | Opt-in: read another profile's session list (see below) |
-| `read_profile_session` | Super Bot only | No | Opt-in: read another profile's stored transcript (see below) |
+| `list_profile_sessions` | Super Nakama only | No | Opt-in: read another profile's session list (see below) |
+| `read_profile_session` | Super Nakama only | No | Opt-in: read another profile's stored transcript (see below) |
 
-**New custom profiles** receive `read_file`, `write_file`, `save_artifact`, `edit_file`, `search_files`, `knowledge_base_search`, and `web_fetch` until a platform admin assigns additional tools. Memory writes, archives, and artifact saves use bundled skills with those file tools — see [Skills](/skills#bundled-system-skills). Word documents use `write_docx` (system profiles only by default). Coding-agent workflows use `bash` with the `coding-agent` skill — see [Coding agent](/coding-agent). Interactive browser automation (login walls, forms, clicks) uses `bash` with the opt-in `agent-browser` skill — see [Agent browser](/agent-browser). The `sub_agent` tool is seeded but **not** auto-assigned — platform admins opt in per profile. System profiles (`default`, `super_bot`) get the full seeded builtin set; Super Bot also receives `bash`, `list_profile_sessions`, and `read_profile_session`. The two session readers are seeded like `sub_agent` and assigned per profile; Super Bot receives them at seed time, and that assignment is re-applied on every boot.
+**New custom profiles** receive `read_file`, `write_file`, `save_artifact`, `edit_file`, `search_files`, `knowledge_base_search`, and `web_fetch` until a platform admin assigns additional tools. Memory writes, archives, and artifact saves use bundled skills with those file tools — see [Skills](/skills#bundled-system-skills). Word documents use `write_docx` (system profiles only by default). Coding-agent workflows use `bash` with the `coding-agent` skill — see [Coding agent](/coding-agent). Interactive browser automation (login walls, forms, clicks) uses `bash` with the opt-in `agent-browser` skill — see [Agent browser](/agent-browser). The `sub_agent` tool is seeded but **not** auto-assigned — platform admins opt in per profile. System profiles (`default`, `super_nakama`) get the full seeded builtin set; Super Nakama also receives `bash`, `list_profile_sessions`, and `read_profile_session`. The two session readers are seeded like `sub_agent` and assigned per profile; Super Nakama receives them at seed time, and that assignment is re-applied on every boot.
 
 ## Choosing tools for a profile
 
@@ -74,7 +74,7 @@ Good starting patterns:
 - **Knowledge bot**: `knowledge_base_search`, file tools, bundled system skills
 - **Ops bot**: file tools, bundled `artifact-design` skill, `email`
 - **Delegation bot**: `sub_agent` for in-process research/review/planning subtasks
-- **Coding agent (Super Bot or custom)**: `bash` + `coding-agent` skill
+- **Coding agent (Super Nakama or custom)**: `bash` + `coding-agent` skill
 
 ## Memory workflows
 
@@ -85,7 +85,7 @@ Profile memory is not a separate builtin. Agents use `read_file`, `write_file`, 
 | `update-profile-memory` | Append facts and preferences to active `MEMORY.md` |
 | `archive-profile-memory` | Move bullets to `memory-archive/` without deleting them |
 
-Active `MEMORY.md` has a **4096-byte** soft limit. Default and super-bot profiles receive these skills when bundled skills are installed on the server. See [Bundled system skills](/skills#bundled-system-skills) for the full workflow.
+Active `MEMORY.md` has a **4096-byte** soft limit. Default and super-nakama profiles receive these skills when bundled skills are installed on the server. See [Bundled system skills](/skills#bundled-system-skills) for the full workflow.
 
 ## Artifact saves
 
@@ -162,7 +162,7 @@ Create a real Microsoft Word (`.docx`) document from Markdown content. Headings,
 
 **Scope:** Profile workspace only. Under `artifacts/`, existing files are not silently overwritten — Nakama picks a unique filename instead.
 
-**Availability:** When assigned to the profile. Assigned to system profiles (`default`, `super_bot`) by default; assign manually to custom profiles when needed.
+**Availability:** When assigned to the profile. Assigned to system profiles (`default`, `super_nakama`) by default; assign manually to custom profiles when needed.
 
 ### `delete_file`
 
@@ -342,7 +342,7 @@ Run a one-off shell command starting in the profile workspace and return stdout,
 
 **Execution backend:** By default bash runs on the Nakama **host** (`NAKAMA_BASH_BACKEND=host`). Set `NAKAMA_BASH_BACKEND=microsandbox` to run each profile in its own warm MicroSandbox microVM (1 profile → 1 sandbox) with the profile workspace bind-mounted. Defaults: public network **off** (`NAKAMA_BASH_SANDBOX_NETWORK=off|public`), image `alpine` (`NAKAMA_BASH_SANDBOX_IMAGE`). If MicroSandbox is selected but unavailable, the tool **fails closed** — it does not fall back to host. `codingAgent: true` / harness CLI runs are **unsupported** under `microsandbox` (use `host` for coding-agent). Stock Docker without `/dev/kvm` cannot enable MicroSandbox — see [Docker](/docker).
 
-**Turning bash off:** bash is on by default, and Super Bot gets it. When the people who are org admins are not the operator, set `NAKAMA_TENANT_BASH=0`. On the next start Super Bot loses `bash`, assigning it to a profile returns 403, and any profile that still holds it gets a refusal instead of a shell. The CLI is not affected.
+**Turning bash off:** bash is on by default, and Super Nakama gets it. When the people who are org admins are not the operator, set `NAKAMA_TENANT_BASH=0`. On the next start Super Nakama loses `bash`, assigning it to a profile returns 403, and any profile that still holds it gets a refusal instead of a shell. The CLI is not affected.
 
 #### Choose a MicroSandbox image
 
@@ -375,7 +375,7 @@ Use the same image name when starting Nakama. For a Docker deployment, publish t
 
 Do not use `bash` to create persistent tools or `.sh` wrappers — register JavaScript tools under `~/.nakama/tools/` instead.
 
-**Availability:** When assigned to the profile. Super Bot receives `bash` by default. Required for the [coding agent](/coding-agent) workflow and the opt-in [agent-browser](/agent-browser) skill. Interactive browser runs inherit host `AGENT_BROWSER_EXECUTABLE_PATH` / `AGENT_BROWSER_ARGS` when you opt into Cloak.
+**Availability:** When assigned to the profile. Super Nakama receives `bash` by default. Required for the [coding agent](/coding-agent) workflow and the opt-in [agent-browser](/agent-browser) skill. Interactive browser runs inherit host `AGENT_BROWSER_EXECUTABLE_PATH` / `AGENT_BROWSER_ARGS` when you opt into Cloak.
 
 ### `sub_agent`
 
@@ -420,7 +420,7 @@ List the chat sessions of **another agent profile in the same organization**, ne
 - Sessions with no messages are not listed
 - One channel per call; there is no merged view
 
-**Availability:** When assigned to the profile. Super Bot receives it at seed time.
+**Availability:** When assigned to the profile. Super Nakama receives it at seed time.
 
 ### `read_profile_session`
 
@@ -440,7 +440,7 @@ Read the stored transcript of a session belonging to **another agent profile in 
 - Read-only. It cannot compact, branch, or delete another profile's session
 - Persisted messages only. A session with a turn still running is returned as of its last completed turn
 
-**Availability:** When assigned to the profile. Super Bot receives it at seed time.
+**Availability:** When assigned to the profile. Super Nakama receives it at seed time.
 
 ### `org_memory_search`
 
@@ -515,11 +515,11 @@ Neither handler inherits the server's full environment. The child process only g
 
 Some custom tools call a paid or private API. They need a key, and often a base URL or an account ID. Nakama keeps these values out of chat, out of the model, and out of the tool's source.
 
-When Super Bot builds such a tool, it lists the settings the tool needs, for example `WEATHER_API_URL` and a secret `WEATHER_API_KEY`. Org admins fill them in:
+When Super Nakama builds such a tool, it lists the settings the tool needs, for example `WEATHER_API_URL` and a secret `WEATHER_API_KEY`. Org admins fill them in:
 
 - **Tool playground** — open the tool. The **Configuration** card shows one field per setting. Enter the values, then **Save**. Use **Update** to change them later. A blank secret field keeps the saved value.
 - **Configure card in chat** — shown when a tool runs before its settings are saved. It opens the playground.
-- **Super Bot setup card** — for a tool that only needs one API key, the approval card asks for it.
+- **Super Nakama setup card** — for a tool that only needs one API key, the approval card asks for it.
 
 ![The tool playground with saved settings and a successful run](/screenshots/tool-playground-api-key.png)
 

@@ -9,6 +9,7 @@ import {
   migrateArtifactDesignSkillName,
   migrateCodingDelegationSkillName,
   migrateDatabase,
+  migrateSuperNakamaNaming,
   moveProfileJoinReferences,
   resolveSchemaPath,
 } from "./migrate";
@@ -708,6 +709,42 @@ describe("legacy profile id migration", () => {
       expect(db.prepare("SELECT profile_id FROM sessions").all()).toEqual([
         { profile_id: "profile_default" },
       ]);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("super nakama naming migration", () => {
+  test("renames the stock super profile and its change events only", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+      db.exec(`
+        INSERT INTO organizations (id, name, slug, created_at, updated_at)
+        VALUES ('org_a', 'A', 'a', '2026-10-16T00:00:00.000Z', '2026-10-16T00:00:00.000Z');
+        INSERT INTO profiles (id, name, system_prompt, model, is_super, org_id, created_at, updated_at)
+        VALUES
+          ('p_stock', 'Super Bot', '', NULL, 1, 'org_a', '2026-10-16T00:00:00.000Z', '2026-10-16T00:00:00.000Z'),
+          ('p_custom', 'Atlas', '', NULL, 1, 'org_a', '2026-10-16T00:00:00.000Z', '2026-10-16T00:00:00.000Z'),
+          ('p_regular', 'Super Bot', '', NULL, 0, 'org_a', '2026-10-16T00:00:00.000Z', '2026-10-16T00:00:00.000Z');
+        INSERT INTO profile_change_events (id, org_id, profile_id, source, field, created_at)
+        VALUES ('e1', 'org_a', 'p_stock', 'super_bot', 'system_prompt', '2026-10-16T00:00:00.000Z');
+      `);
+
+      migrateSuperNakamaNaming(db);
+
+      expect(
+        db.prepare("SELECT id, name FROM profiles ORDER BY id").all()
+      ).toEqual([
+        { id: "p_custom", name: "Atlas" },
+        { id: "p_regular", name: "Super Bot" },
+        { id: "p_stock", name: "Super Nakama" },
+      ]);
+      expect(
+        db.prepare("SELECT source FROM profile_change_events").get()
+      ).toEqual({ source: "super_nakama" });
     } finally {
       db.close();
     }

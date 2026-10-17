@@ -2224,10 +2224,10 @@ export function registerModelRoutes(
     const { profile } = await agent.getProfile(orgId, profileId);
 
     // A channel worker talks to the server as the local client, and the server
-    // refuses that client for Super Bot, so such a bridge can never answer.
+    // refuses that client for Super Nakama, so such a bridge can never answer.
     if (profile.isSuper) {
       throw new NakamaApiError(
-        "Super Bot cannot be connected to a channel. Choose another agent.",
+        "Super Nakama cannot be connected to a channel. Choose another agent.",
         400
       );
     }

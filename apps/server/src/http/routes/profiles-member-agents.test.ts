@@ -132,12 +132,12 @@ describe("member-owned agents", () => {
     expect(await listNames(other)).not.toContain("Mine");
   }, 20_000);
 
-  test("a member's describe-it request creates a private agent without Super Bot", async () => {
+  test("a member's describe-it request creates a private agent without Super Nakama", async () => {
     const { addMember, listNames, request } = await setup();
     const owner = await addMember("owner3@example.com");
     const other = await addMember("other3@example.com");
 
-    const created = await request(owner, "/v1/profiles/with-super-bot", {
+    const created = await request(owner, "/v1/profiles/with-super-nakama", {
       body: { prompt: "Draft clear short emails from my notes" },
       method: "POST",
     });

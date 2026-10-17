@@ -1570,7 +1570,7 @@ test.each([
         template("agent-b", "Writer"),
         template("agent", "Already published"),
         { ...template("default", "Default Bot"), isDefault: true },
-        { ...template("super", "Super Bot"), isSuper: true },
+        { ...template("super", "Super Nakama"), isSuper: true },
         {
           ...template("instance", "Shared instance"),
           sharedAgent: {

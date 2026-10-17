@@ -29,15 +29,15 @@ The same note you create on the page is the one the agent reads. Another organiz
 
 **5. Update or remove (org admin).** Choose **Update** to move to a newer approved release. A platform admin also sees an **Update** tag on a plugin when the registry has a version nobody approved yet. Choosing **Update** there opens the same package review as the first install, then updates the plugin, so the package name is typed only once. An enabled plugin is switched off for the update and back on afterwards, so its tools are unavailable for a moment. To remove a plugin, uninstall it. Uninstall keeps the organization's plugin data until you confirm a separate delete.
 
-## Create a plugin with Super Bot
+## Create a plugin with Super Nakama
 
-Ask Super Bot to create a plugin when your team needs a custom page or agent
-tool. Super Bot starts from a template, prepares source files and built output,
+Ask Super Nakama to create a plugin when your team needs a custom page or agent
+tool. Super Nakama starts from a template, prepares source files and built output,
 and shows a plugin card in the chat. The draft stays uninstalled.
 
 ### What to ask for
 
-A clear request gives a draft that needs fewer changes. Tell Super Bot:
+A clear request gives a draft that needs fewer changes. Tell Super Nakama:
 
 - **What it does.** One sentence for each action, with the inputs it needs.
 - **Who can run it.** Every member, or admins only.
@@ -53,7 +53,7 @@ For example:
 > picker, a text box, a Save button, and today's notes. Let profiles use
 > `list_notes` as a tool.
 
-To change a draft, ask Super Bot in the same chat, for example "add a delete
+To change a draft, ask Super Nakama in the same chat, for example "add a delete
 button to each note". It updates and rebuilds the same draft, then shows a
 new card. Review and install from the new card.
 
@@ -69,7 +69,7 @@ only to the people who can do it, and the card updates as each step finishes.
 6. Ask one of those profiles to run the tool.
 
 You can also review a draft from **System → Plugins → Install from folder**:
-select the Super Bot, enter the draft ID, and choose **Preview draft**.
+select the Super Nakama, enter the draft ID, and choose **Preview draft**.
 
 First installation stays disabled. First enable runs migrations and starts
 workers. Reinstall resumes a previously enabled plugin after a successful
@@ -77,7 +77,7 @@ update. If migration fails, the plugin stays disabled with its previous data.
 Changes to reviewed files require another preview.
 
 Only platform admins can review or install local drafts. Plugin code has full
-host access. Approve only code you trust. Super Bot needs an assigned shell tool
+host access. Approve only code you trust. Super Nakama needs an assigned shell tool
 and Bun on the server to build; it reports missing prerequisites.
 
 ## Supermemory
