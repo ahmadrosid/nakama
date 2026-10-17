@@ -636,41 +636,66 @@ function ComposioToolkitList({
           </section>
 
           {isOrgAdmin ? (
-            <section className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="font-medium text-sm">Add an app</h2>
-                <Button
-                  className="h-auto p-0"
-                  onClick={() => setShowAllApps((current) => !current)}
-                  type="button"
-                  variant="link"
-                >
-                  {showAllApps
-                    ? "Show popular apps"
-                    : `Show all ${data.catalog.length} apps`}
-                </Button>
-              </div>
-              {data.catalog.length === 0 ? (
-                <p className="text-muted-foreground text-sm">
-                  No toolkits available yet.
-                </p>
-              ) : (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-2.5">
-                  {addRows.map((row) => (
-                    <ComposioToolkitTile
-                      busy={busy}
-                      catalog={row.catalog}
-                      key={row.catalog.slug}
-                      onEnable={onEnable}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
+            <ComposioAddSection
+              addRows={addRows}
+              busy={busy}
+              catalogSize={data.catalog.length}
+              onEnable={onEnable}
+              onToggleShowAll={() => setShowAllApps((current) => !current)}
+              showAllApps={showAllApps}
+            />
           ) : null}
         </>
       )}
     </div>
+  );
+}
+
+function ComposioAddSection({
+  addRows,
+  busy,
+  catalogSize,
+  onEnable,
+  onToggleShowAll,
+  showAllApps,
+}: {
+  addRows: ToolkitRowModel[];
+  busy: ComposioToolkitListProps["busy"];
+  catalogSize: number;
+  onEnable: ComposioToolkitListProps["onEnable"];
+  onToggleShowAll: () => void;
+  showAllApps: boolean;
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-medium text-sm">Add an app</h2>
+        <Button
+          className="h-auto p-0"
+          onClick={() => onToggleShowAll()}
+          type="button"
+          variant="link"
+        >
+          {showAllApps ? "Show popular apps" : `Show all ${catalogSize} apps`}
+        </Button>
+      </div>
+      {catalogSize === 0 ? (
+        <p className="text-muted-foreground text-sm">
+          No toolkits available yet.
+        </p>
+      ) : (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-2.5">
+          {addRows.map((row) => (
+            <ComposioToolkitTile
+              busy={busy}
+              catalog={row.catalog}
+              key={row.catalog.slug}
+              onEnable={onEnable}
+            />
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

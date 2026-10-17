@@ -331,9 +331,11 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
       } else if (dialog.type === "force-delete") {
         const usage = await client.getPluginUsage(dialog.pluginId);
 
-        for (const org of usage.orgs) {
-          await unplug.mutateAsync({ org, pluginId: dialog.pluginId });
-        }
+        await Promise.all(
+          usage.orgs.map((org) =>
+            unplug.mutateAsync({ org, pluginId: dialog.pluginId })
+          )
+        );
 
         await Promise.all(
           dialog.versions.map((version) =>
@@ -2347,6 +2349,17 @@ function DialogBody({
     );
   }
 
+  return <RemovalDialogBody dialog={dialog} />;
+}
+
+function RemovalDialogBody({
+  dialog,
+}: {
+  dialog: Exclude<
+    PluginDialog,
+    { type: "package-entry" | "official-install" | "package" | "update" }
+  >;
+}) {
   if (dialog.type === "purge") {
     return (
       <p className="text-sm">
