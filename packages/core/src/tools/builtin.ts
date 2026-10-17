@@ -728,14 +728,14 @@ function normalizeForEditMatch(value: string): string {
     .replace(/[\u00A0\u2002-\u200A\u202F\u205F\u3000]/g, " ");
 }
 
-const JSON_ESCAPES: Record<string, string> = {
-  "'": "'",
-  '"': '"',
-  "\\": "\\",
-  n: "\n",
-  r: "\r",
-  t: "\t",
-};
+const JSON_ESCAPES = new Map([
+  ["'", "'"],
+  ['"', '"'],
+  ["\\", "\\"],
+  ["n", "\n"],
+  ["r", "\r"],
+  ["t", "\t"],
+]);
 
 // Ignored by loose matching: the characters models drop or add when they get
 // the JSON escapes in oldText wrong.
@@ -763,7 +763,11 @@ function recoverMangledEdit(
   }
 
   const unescapeJson = (value: string) =>
-    value.replace(/\\(["'\\nrt])/g, (_, char: string) => JSON_ESCAPES[char]);
+    value.replace(
+      /\\(["'\\nrt])/g,
+      (_, char: string) => JSON_ESCAPES.get(char) ?? char
+    );
+
   const oldText = unescapeJson(edit.oldText);
 
   if (oldText !== edit.oldText && content.split(oldText).length === 2) {
@@ -779,6 +783,7 @@ function recoverMangledEdit(
   // A bare "n" after punctuation and before indentation is a newline that lost
   // its backslash, as in `);n  try {n`.
   const restored = oldText.replace(/(?<=[^\w\s])n(?=[ \t])/g, "\n");
+
   const span =
     findLooseSpan(content, oldText, edit.newText) ??
     findLooseSpan(content, restored, edit.newText);

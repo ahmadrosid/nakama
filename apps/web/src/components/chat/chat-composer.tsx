@@ -509,6 +509,7 @@ function resolveChatComposerLayout(
   const questionnaire = props.questionnaire ?? null;
   const queuedMessages = props.queuedMessages ?? EMPTY_QUEUED_MESSAGES;
   const hasQueuedMessages = queuedMessages.length > 0;
+
   // Ask only once every turn is done: no stream in flight, nothing queued.
   const hasQuestionnaire =
     hasActiveAgentQuestionnaire(questionnaire) &&

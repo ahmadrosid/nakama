@@ -210,9 +210,11 @@ describe("read_file folding", () => {
     tempDir = await mkdtemp(join(tmpdir(), "nakama-omni-"));
     const bin = join(tempDir, "bin");
     await mkdir(bin);
+
     const output = JSON.stringify({
       hookSpecificOutput: { updatedToolOutput: { stdout } },
     });
+
     await writeFile(
       join(bin, "omni"),
       `#!/bin/sh\ncat >/dev/null\ncat <<'EOF'\n${output}\nEOF\n`,

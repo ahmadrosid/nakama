@@ -571,8 +571,10 @@ describe("file builtin tools", () => {
   test("edit_file recovers CSS whose attribute quotes were dropped", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
     const targetPath = path.join(tempDir, "ui.css");
+
     const rule =
       '[data-plugin-id="personal-crm"] .crm-history-row span { margin-left: 4px; }';
+
     await writeFile(targetPath, `.a { color: red; }\n${rule}\n`, "utf8");
 
     await runEditFile(
@@ -617,8 +619,10 @@ describe("file builtin tools", () => {
   test("edit_file still rejects a loose match that is ambiguous", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
     const targetPath = path.join(tempDir, "ui.css");
+
     const source =
       "[data-id=\"a\"] .row { gap: 1px; }\n[data-id='a'] .row { gap: 1px; }\n";
+
     await writeFile(targetPath, source, "utf8");
 
     await expect(
