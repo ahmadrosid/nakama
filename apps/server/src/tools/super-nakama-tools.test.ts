@@ -24,10 +24,10 @@ import type { ProfileService } from "../services/profile-service";
 import {
   PROFILE_UPDATE_CONFIRMATION_MESSAGE,
   SKILL_ASSIGNMENT_CONFIRMATION_MESSAGE,
-  SuperBotSessionState,
+  SuperNakamaSessionState,
   TOOL_ASSIGNMENT_CONFIRMATION_MESSAGE,
-} from "../services/super-bot-session-state";
-import { createSuperBotTools } from "./super-bot-tools";
+} from "../services/super-nakama-session-state";
+import { createSuperNakamaTools } from "./super-nakama-tools";
 
 type TestProfileService = Partial<
   Pick<
@@ -57,7 +57,7 @@ const ORG_ID = "org_test";
 
 const SESSION_ID = "session_test";
 
-describe("super bot create_tool", () => {
+describe("super nakama create_tool", () => {
   let tempConfigDir = "";
 
   afterEach(async () => {
@@ -85,7 +85,7 @@ describe("super bot create_tool", () => {
       let failAssignment = true;
       let stored: ToolDetail;
 
-      const tools = createSuperBotTools(
+      const tools = createSuperNakamaTools(
         asProfileService({
           async assignTool(orgId: string, profileId: string) {
             expect(orgId).toBe(ORG_ID);
@@ -122,7 +122,7 @@ describe("super bot create_tool", () => {
             return { tool: stored };
           },
         }),
-        new SuperBotSessionState()
+        new SuperNakamaSessionState()
       );
 
       const propose = tools.find((tool) => tool.name === "propose_tool")!;
@@ -234,7 +234,7 @@ describe("super bot create_tool", () => {
     );
     let reads = 0;
 
-    const tools = createSuperBotTools(
+    const tools = createSuperNakamaTools(
       asProfileService({
         async getTool(toolId, orgId) {
           reads += 1;
@@ -243,7 +243,7 @@ describe("super bot create_tool", () => {
           throw new Error("Tool unavailable");
         },
       }),
-      new SuperBotSessionState()
+      new SuperNakamaSessionState()
     );
 
     const create = tools.find((tool) => tool.name === "create_tool")!;
@@ -275,13 +275,13 @@ describe("super bot create_tool", () => {
           content: "export async function run(input) { return input; }",
           path: path.join(toolsDir, "echo.js"),
         },
-        { orgId: ORG_ID, profileId: "super_bot" }
+        { orgId: ORG_ID, profileId: "super_nakama" }
       );
 
       const capturedRequests: CreateToolRequest[] = [];
-      const sessionState = new SuperBotSessionState();
+      const sessionState = new SuperNakamaSessionState();
 
-      const tools = createSuperBotTools(
+      const tools = createSuperNakamaTools(
         asProfileService({
           async createTool(request: CreateToolRequest): Promise<ToolDetail> {
             capturedRequests.push(request);
@@ -511,8 +511,8 @@ if __name__ == "__main__":
   });
 });
 
-describe("super bot assign_tool_to_profile", () => {
-  const sessionState = new SuperBotSessionState();
+describe("super nakama assign_tool_to_profile", () => {
+  const sessionState = new SuperNakamaSessionState();
 
   test("allows the first assignment for a tool created this turn", async () => {
     sessionState.beginTurn(SESSION_ID);
@@ -606,7 +606,7 @@ describe("super bot assign_tool_to_profile", () => {
   });
 });
 
-describe("super bot list_models", () => {
+describe("super nakama list_models", () => {
   test("returns profile model ids with vision support and no secrets", async () => {
     const models: ModelsResponse = {
       currentProviderId: "prov_main",
@@ -646,13 +646,13 @@ describe("super bot list_models", () => {
     };
 
     const tool = findTool(
-      createSuperBotTools(
+      createSuperNakamaTools(
         asProfileService({
           async getProfile() {
             return profileResponse({ id: "super", model: null });
           },
         }),
-        new SuperBotSessionState(),
+        new SuperNakamaSessionState(),
         async () => "prov_main::text-model",
         undefined,
         { getModels: async () => models }
@@ -695,7 +695,7 @@ describe("super bot list_models", () => {
   });
 });
 
-describe("super bot assign_skill_to_profile", () => {
+describe("super nakama assign_skill_to_profile", () => {
   const skills: ListSkillsResponse = {
     skills: [
       skillSummary({ id: "skill_ledger", name: "use-finance-ledger" }),
@@ -705,7 +705,7 @@ describe("super bot assign_skill_to_profile", () => {
   };
 
   function setup(turns: number) {
-    const sessionState = new SuperBotSessionState();
+    const sessionState = new SuperNakamaSessionState();
 
     for (let index = 0; index < turns; index += 1) {
       sessionState.beginTurn(SESSION_ID);
@@ -715,7 +715,7 @@ describe("super bot assign_skill_to_profile", () => {
     const listedOrgs: string[] = [];
 
     const tool = findTool(
-      createSuperBotTools(
+      createSuperNakamaTools(
         asProfileService({}),
         sessionState,
         undefined,
@@ -814,7 +814,7 @@ describe("super bot assign_skill_to_profile", () => {
   });
 });
 
-describe("super bot create_profile", () => {
+describe("super nakama create_profile", () => {
   test.each([
     [
       "inherits provider and model",
@@ -835,12 +835,12 @@ describe("super bot create_profile", () => {
       profile: {
         createdAt: "2026-01-01T00:00:00.000Z",
         hasAvatar: false,
-        id: "super-bot",
+        id: "super-nakama",
         isSuper: true,
         mcpServerCount: 0,
         mcpServers: [],
         model: sourceModel,
-        name: "Super Bot",
+        name: "Super Nakama",
         skills: [],
         soulActive: true,
         systemPrompt: "",
@@ -867,7 +867,7 @@ describe("super bot create_profile", () => {
       },
       async getProfile(orgId, profileId) {
         expect(orgId).toBe(ORG_ID);
-        expect(profileId).toBe("super-bot");
+        expect(profileId).toBe("super-nakama");
         lookups++;
 
         return source;
@@ -884,14 +884,14 @@ describe("super bot create_profile", () => {
 
     await createProfile.run(input, {
       orgId: ORG_ID,
-      profileId: "super-bot",
+      profileId: "super-nakama",
       sessionId: SESSION_ID,
     });
     expect(lookups).toBe(override === undefined ? 1 : 0);
   });
 
   test("creates a profile on the first turn", async () => {
-    const sessionState = new SuperBotSessionState();
+    const sessionState = new SuperNakamaSessionState();
     sessionState.beginTurn(SESSION_ID);
 
     const createProfile = getCreateProfileTool(
@@ -922,7 +922,7 @@ describe("super bot create_profile", () => {
 
   test("creates after a later user turn", async () => {
     const capturedRequests: CreateProfileRequest[] = [];
-    const sessionState = new SuperBotSessionState();
+    const sessionState = new SuperNakamaSessionState();
     sessionState.beginTurn(SESSION_ID);
     sessionState.beginTurn(SESSION_ID);
 
@@ -1066,10 +1066,10 @@ describe("super bot create_profile", () => {
   });
 });
 
-describe("super bot update_profile", () => {
+describe("super nakama update_profile", () => {
   test("refuses update_profile on the first turn", async () => {
     let updateProfileCalled = false;
-    const sessionState = new SuperBotSessionState();
+    const sessionState = new SuperNakamaSessionState();
     sessionState.beginTurn(SESSION_ID);
 
     const updateProfile = getUpdateProfileTool(
@@ -1100,7 +1100,7 @@ describe("super bot update_profile", () => {
       request: UpdateProfileRequest;
     }> = [];
 
-    const sessionState = new SuperBotSessionState();
+    const sessionState = new SuperNakamaSessionState();
     sessionState.beginTurn(SESSION_ID);
     sessionState.beginTurn(SESSION_ID);
 
@@ -1278,20 +1278,20 @@ function createTestTools(
     >
   >
 ) {
-  const sessionState = new SuperBotSessionState();
+  const sessionState = new SuperNakamaSessionState();
   sessionState.beginTurn(SESSION_ID);
   sessionState.beginTurn(SESSION_ID);
 
-  return createSuperBotTools(asProfileService(profileService), sessionState);
+  return createSuperNakamaTools(asProfileService(profileService), sessionState);
 }
 
 function getCreateToolTool(
   profileService: Pick<ProfileService, "createTool">,
-  sessionState?: SuperBotSessionState
+  sessionState?: SuperNakamaSessionState
 ) {
   const tool = (
     sessionState
-      ? createSuperBotTools(asProfileService(profileService), sessionState)
+      ? createSuperNakamaTools(asProfileService(profileService), sessionState)
       : createTestTools(profileService)
   ).find((candidate) => candidate.name === "create_tool");
 
@@ -1305,16 +1305,16 @@ function getCreateToolTool(
 function getCreateProfileTool(
   profileService: Pick<ProfileService, "createProfile"> &
     Partial<Pick<ProfileService, "getProfile">>,
-  sessionState?: SuperBotSessionState
+  sessionState?: SuperNakamaSessionState
 ) {
-  const state = sessionState ?? new SuperBotSessionState();
+  const state = sessionState ?? new SuperNakamaSessionState();
 
   if (!sessionState) {
     state.beginTurn(SESSION_ID);
     state.beginTurn(SESSION_ID);
   }
 
-  const tool = createSuperBotTools(
+  const tool = createSuperNakamaTools(
     asProfileService(profileService),
     state
   ).find((candidate) => candidate.name === "create_profile");
@@ -1328,16 +1328,16 @@ function getCreateProfileTool(
 
 function getUpdateProfileTool(
   profileService: Pick<ProfileService, "updateProfile">,
-  sessionState?: SuperBotSessionState
+  sessionState?: SuperNakamaSessionState
 ) {
-  const state = sessionState ?? new SuperBotSessionState();
+  const state = sessionState ?? new SuperNakamaSessionState();
 
   if (!sessionState) {
     state.beginTurn(SESSION_ID);
     state.beginTurn(SESSION_ID);
   }
 
-  const tool = createSuperBotTools(
+  const tool = createSuperNakamaTools(
     asProfileService(profileService),
     state
   ).find((candidate) => candidate.name === "update_profile");
@@ -1351,9 +1351,9 @@ function getUpdateProfileTool(
 
 function getAssignToolTool(
   profileService: Pick<ProfileService, "assignTool">,
-  sessionState: SuperBotSessionState
+  sessionState: SuperNakamaSessionState
 ) {
-  const tool = createSuperBotTools(
+  const tool = createSuperNakamaTools(
     asProfileService(profileService),
     sessionState
   ).find((candidate) => candidate.name === "assign_tool_to_profile");
@@ -1375,7 +1375,10 @@ async function captureError(promise: Promise<unknown>): Promise<Error | null> {
   }
 }
 
-function findTool(tools: ReturnType<typeof createSuperBotTools>, name: string) {
+function findTool(
+  tools: ReturnType<typeof createSuperNakamaTools>,
+  name: string
+) {
   const tool = tools.find((candidate) => candidate.name === name);
 
   if (!tool) {

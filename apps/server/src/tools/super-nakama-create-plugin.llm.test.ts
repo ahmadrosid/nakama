@@ -14,7 +14,7 @@ import {
 import { writeFileTool } from "@nakama/core/tools";
 import {
   createInMemoryDatabaseAdapter,
-  SUPER_BOT_SYSTEM_PROMPT,
+  SUPER_NAKAMA_SYSTEM_PROMPT,
 } from "@nakama/db";
 import { z } from "zod";
 import { createProviderForInstance } from "../providers/create";
@@ -23,7 +23,7 @@ import { withMswCassette } from "../testing/llm-msw-cassette";
 import { bashTool, runBash } from "./bash";
 
 test(
-  "Super Bot creates a compiled local draft from chat without installing or executing it",
+  "Super Nakama creates a compiled local draft from chat without installing or executing it",
   async () => {
     const config =
       process.env.LLM_VCR_MODE?.trim().toLowerCase() === "record"
@@ -76,7 +76,7 @@ test(
 
     try {
       await withMswCassette(
-        "super-bot-create-plugin",
+        "super-nakama-create-plugin",
         async () => {
           const provider = createProviderForInstance(
             instance,
@@ -99,7 +99,7 @@ test(
             const result = await provider.generateChat({
               messages,
               system: [
-                SUPER_BOT_SYSTEM_PROMPT,
+                SUPER_NAKAMA_SYSTEM_PROMPT,
                 "# Active skill: create-plugin",
                 await readBundledSkillBody("create-plugin"),
               ].join("\n"),

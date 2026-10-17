@@ -4,7 +4,7 @@ interface TurnState {
   turnIndex: number;
 }
 
-export class SuperBotSessionState {
+export class SuperNakamaSessionState {
   private readonly turns = new Map<string, TurnState>();
 
   beginTurn(sessionId: string): void {

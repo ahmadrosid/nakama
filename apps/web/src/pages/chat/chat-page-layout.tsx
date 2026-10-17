@@ -237,7 +237,7 @@ export function ChatWelcome({
       </div>
       <div className="flex items-center gap-2 self-start">
         <span className="type-body text-muted-foreground text-sm">
-          Select profile
+          Select agent
         </span>
         <ChatProfileSwitcher
           activeProfile={profile}

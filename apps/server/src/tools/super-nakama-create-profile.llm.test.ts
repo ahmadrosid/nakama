@@ -1,15 +1,15 @@
 /**
- * Live LLM cassette test: Super Bot create-profile end-to-end.
+ * Live LLM cassette test: Super Nakama create-profile end-to-end.
  *
- * Starts from a one-line user ask (real Super Bot confirm-first flow), then
+ * Starts from a one-line user ask (real Super Nakama confirm-first flow), then
  * continues briefly until `create_profile` is called. Asserts defaults after
  * executing the tool.
  *
  * Record (needs DeepSeek key in ~/.nakama config, or DEEPSEEK_API_KEY):
- *   LLM_VCR_MODE=record bun test src/tools/super-bot-create-profile.llm.test.ts
+ *   LLM_VCR_MODE=record bun test src/tools/super-nakama-create-profile.llm.test.ts
  *
  * Replay (default when cassette exists; CI-safe):
- *   bun test src/tools/super-bot-create-profile.llm.test.ts
+ *   bun test src/tools/super-nakama-create-profile.llm.test.ts
  */
 
 import { afterEach, expect, test } from "bun:test";
@@ -28,29 +28,29 @@ import {
 import {
   createInMemoryDatabaseAdapter,
   ensureBuiltinToolDefinitions,
-  SUPER_BOT_SYSTEM_PROMPT,
-  SUPER_BOT_TOOL_AUTHORING_RULES,
+  SUPER_NAKAMA_SYSTEM_PROMPT,
+  SUPER_NAKAMA_TOOL_AUTHORING_RULES,
 } from "@nakama/db";
 import { z } from "zod";
 import { createProviderForInstance } from "../providers/create";
 import { ProfileService } from "../services/profile-service";
-import { SuperBotSessionState } from "../services/super-bot-session-state";
+import { SuperNakamaSessionState } from "../services/super-nakama-session-state";
 import {
   cassetteFilePath,
   loadCassette,
   withMswCassette,
 } from "../testing/llm-msw-cassette";
-import { createSuperBotTools } from "./super-bot-tools";
+import { createSuperNakamaTools } from "./super-nakama-tools";
 
-const cassetteName = "super-bot-create-profile";
+const cassetteName = "super-nakama-create-profile";
 
 const modelId = "deepseek-v4-flash";
 
 const deepseekChatCompletionsUrl = "https://api.deepseek.com/chat/completions";
 
-const ORG_ID = "org_super_bot_llm";
+const ORG_ID = "org_super_nakama_llm";
 
-const SESSION_ID = "session_super_bot_llm";
+const SESSION_ID = "session_super_nakama_llm";
 
 const USER_ASK = "Create a Refund Support Bot for customer refund questions.";
 
@@ -150,13 +150,13 @@ async function seedDefaultBundledSkills(
   }
 }
 
-async function buildSuperBotSystemPrompt(): Promise<string> {
+async function buildSuperNakamaSystemPrompt(): Promise<string> {
   const skillBody = await readBundledSkillBody("create-profile");
 
   return [
-    SUPER_BOT_SYSTEM_PROMPT.trim(),
+    SUPER_NAKAMA_SYSTEM_PROMPT.trim(),
     "",
-    SUPER_BOT_TOOL_AUTHORING_RULES.trim(),
+    SUPER_NAKAMA_TOOL_AUTHORING_RULES.trim(),
     "",
     "# Active Skill: create-profile",
     skillBody.trim(),
@@ -164,7 +164,7 @@ async function buildSuperBotSystemPrompt(): Promise<string> {
 }
 
 test(
-  "Super Bot prompt + create-profile skill creates a profile with defaults",
+  "Super Nakama prompt + create-profile skill creates a profile with defaults",
   async () => {
     const cassettePath = cassetteFilePath(cassetteName);
     const existing = await loadCassette(cassettePath);
@@ -173,13 +173,13 @@ test(
 
     if (!existing && mode !== "record" && !instance) {
       throw new Error(
-        "Missing DeepSeek credentials to record super-bot-create-profile cassette. Set DEEPSEEK_API_KEY or configure a DeepSeek provider, then run with LLM_VCR_MODE=record."
+        "Missing DeepSeek credentials to record super-nakama-create-profile cassette. Set DEEPSEEK_API_KEY or configure a DeepSeek provider, then run with LLM_VCR_MODE=record."
       );
     }
 
     previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
     tempConfigDir = await mkdtemp(
-      join(tmpdir(), "nakama-super-bot-create-profile-")
+      join(tmpdir(), "nakama-super-nakama-create-profile-")
     );
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
@@ -188,10 +188,10 @@ test(
     await seedDefaultBundledSkills(db, tempConfigDir);
 
     const profileService = new ProfileService(db);
-    const sessionState = new SuperBotSessionState();
+    const sessionState = new SuperNakamaSessionState();
     sessionState.beginTurn(SESSION_ID);
     sessionState.beginTurn(SESSION_ID);
-    const tools = createSuperBotTools(profileService, sessionState);
+    const tools = createSuperNakamaTools(profileService, sessionState);
     const toolDefs = tools.map(toLlmToolDefinition);
     const toolContext = { orgId: ORG_ID, sessionId: SESSION_ID };
 
@@ -221,7 +221,7 @@ test(
           throw new Error("Failed to construct DeepSeek provider.");
         }
 
-        const system = await buildSuperBotSystemPrompt();
+        const system = await buildSuperNakamaSystemPrompt();
         const messages: ChatMessage[] = [{ content: USER_ASK, role: "user" }];
         let createCall: ToolCall | null = null;
         let confirmed = false;

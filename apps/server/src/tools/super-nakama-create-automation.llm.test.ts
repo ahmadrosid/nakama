@@ -1,15 +1,15 @@
 /**
- * Live LLM cassette test: Super Bot create-automation end-to-end.
+ * Live LLM cassette test: Super Nakama create-automation end-to-end.
  *
  * Starts from a one-line user ask (confirm-schedule skill flow), then
  * continues briefly until `create_automation` is called. Asserts the saved
  * automation after executing the tool.
  *
  * Record (needs DeepSeek key in ~/.nakama config, or DEEPSEEK_API_KEY):
- *   LLM_VCR_MODE=record bun test src/tools/super-bot-create-automation.llm.test.ts
+ *   LLM_VCR_MODE=record bun test src/tools/super-nakama-create-automation.llm.test.ts
  *
  * Replay (default when cassette exists; CI-safe):
- *   bun test src/tools/super-bot-create-automation.llm.test.ts
+ *   bun test src/tools/super-nakama-create-automation.llm.test.ts
  */
 import { expect, test } from "bun:test";
 import {
@@ -22,9 +22,9 @@ import {
 } from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
-  SUPER_BOT_PROFILE_ID,
-  SUPER_BOT_SYSTEM_PROMPT,
-  SUPER_BOT_TOOL_AUTHORING_RULES,
+  SUPER_NAKAMA_PROFILE_ID,
+  SUPER_NAKAMA_SYSTEM_PROMPT,
+  SUPER_NAKAMA_TOOL_AUTHORING_RULES,
 } from "@nakama/db";
 import { z } from "zod";
 import { createProviderForInstance } from "../providers/create";
@@ -37,7 +37,7 @@ import {
 } from "../testing/llm-msw-cassette";
 import { createAutomationTools } from "./automation-tools";
 
-const cassetteName = "super-bot-create-automation";
+const cassetteName = "super-nakama-create-automation";
 
 const AutomationTriggerResultSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("manual") }),
@@ -76,9 +76,9 @@ const modelId = "deepseek-v4-flash";
 
 const deepseekChatCompletionsUrl = "https://api.deepseek.com/chat/completions";
 
-const ORG_ID = "org_super_bot_automation_llm";
+const ORG_ID = "org_super_nakama_automation_llm";
 
-const SESSION_ID = "session_super_bot_automation_llm";
+const SESSION_ID = "session_super_nakama_automation_llm";
 
 const USER_TIMEZONE = "Asia/Jakarta";
 
@@ -114,20 +114,20 @@ async function resolveDeepseekInstance(): Promise<ProviderInstance | null> {
   };
 }
 
-async function buildSuperBotSystemPrompt(): Promise<string> {
+async function buildSuperNakamaSystemPrompt(): Promise<string> {
   const skillBody = await readBundledSkillBody("create-automation");
 
   return [
-    SUPER_BOT_SYSTEM_PROMPT.trim(),
+    SUPER_NAKAMA_SYSTEM_PROMPT.trim(),
     "",
-    SUPER_BOT_TOOL_AUTHORING_RULES.trim(),
+    SUPER_NAKAMA_TOOL_AUTHORING_RULES.trim(),
     "",
     "# Active Skill: create-automation",
     skillBody.trim(),
   ].join("\n");
 }
 
-async function seedOrgAndSuperBot(
+async function seedOrgAndSuperNakama(
   db: ReturnType<typeof createInMemoryDatabaseAdapter>
 ): Promise<void> {
   const now = new Date().toISOString();
@@ -135,26 +135,26 @@ async function seedOrgAndSuperBot(
   await db.upsertOrganization({
     createdAt: now,
     id: ORG_ID,
-    name: "Super Bot Automation Org",
-    slug: "super-bot-automation-org",
+    name: "Super Nakama Automation Org",
+    slug: "super-nakama-automation-org",
     updatedAt: now,
   });
 
   await db.upsertProfile({
     createdAt: now,
-    id: SUPER_BOT_PROFILE_ID,
+    id: SUPER_NAKAMA_PROFILE_ID,
     isDefault: false,
     isSuper: true,
     model: null,
-    name: "Super Bot",
+    name: "Super Nakama",
     orgId: ORG_ID,
-    systemPrompt: SUPER_BOT_SYSTEM_PROMPT,
+    systemPrompt: SUPER_NAKAMA_SYSTEM_PROMPT,
     updatedAt: now,
   });
 }
 
 test(
-  "Super Bot prompt + create-automation skill creates a Monday schedule",
+  "Super Nakama prompt + create-automation skill creates a Monday schedule",
   async () => {
     const cassettePath = cassetteFilePath(cassetteName);
     const existing = await loadCassette(cassettePath);
@@ -163,12 +163,12 @@ test(
 
     if (!existing && mode !== "record" && !instance) {
       throw new Error(
-        "Missing DeepSeek credentials to record super-bot-create-automation cassette. Set DEEPSEEK_API_KEY or configure a DeepSeek provider, then run with LLM_VCR_MODE=record."
+        "Missing DeepSeek credentials to record super-nakama-create-automation cassette. Set DEEPSEEK_API_KEY or configure a DeepSeek provider, then run with LLM_VCR_MODE=record."
       );
     }
 
     const db = createInMemoryDatabaseAdapter();
-    await seedOrgAndSuperBot(db);
+    await seedOrgAndSuperNakama(db);
 
     const automationService = new AutomationService(db, {
       getUserTimezone: async () => USER_TIMEZONE,
@@ -185,7 +185,7 @@ test(
     const toolContext = {
       orgId: ORG_ID,
       orgRole: "admin" as const,
-      profileId: SUPER_BOT_PROFILE_ID,
+      profileId: SUPER_NAKAMA_PROFILE_ID,
       sessionId: SESSION_ID,
     };
 
@@ -215,7 +215,7 @@ test(
           throw new Error("Failed to construct DeepSeek provider.");
         }
 
-        const system = await buildSuperBotSystemPrompt();
+        const system = await buildSuperNakamaSystemPrompt();
         const messages: ChatMessage[] = [{ content: USER_ASK, role: "user" }];
         let createCall: ToolCall | null = null;
         let confirmed = false;
@@ -312,7 +312,7 @@ test(
         const listed = await automationService.listForOrg(ORG_ID);
         expect(listed.automations).toHaveLength(1);
         expect(listed.automations[0]?.id).toBe(created.id);
-        expect(listed.automations[0]?.profileId).toBe(SUPER_BOT_PROFILE_ID);
+        expect(listed.automations[0]?.profileId).toBe(SUPER_NAKAMA_PROFILE_ID);
       },
       { url: deepseekChatCompletionsUrl }
     );

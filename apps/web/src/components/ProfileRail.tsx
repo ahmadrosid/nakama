@@ -39,7 +39,7 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
     syncForOrg({ orgId: activeOrg?.id ?? null, profiles });
   }, [activeOrg?.id, profiles, syncForOrg]);
 
-  const logoSrc = markLogoSrc(resolvedTheme === "light" ? "dark" : "light");
+  const logoSrc = markLogoSrc(resolvedTheme);
 
   const orderedProfiles = profiles.toSorted(
     (left, right) => Number(right.isSuper) - Number(left.isSuper)
@@ -57,13 +57,13 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
     >
       <a
         aria-label="Nakama"
-        className="flex size-7 shrink-0 items-center justify-center rounded-md bg-foreground transition-opacity hover:opacity-80"
+        className="flex size-7 shrink-0 items-center justify-center rounded-md transition-opacity hover:opacity-80"
         href="/chat"
         title="Nakama"
       >
         <img
           alt=""
-          className="size-5 -translate-y-px object-contain"
+          className="size-7 -translate-y-px object-contain"
           src={logoSrc}
         />
       </a>

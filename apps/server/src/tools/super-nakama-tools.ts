@@ -31,9 +31,9 @@ import type { ProfileService } from "../services/profile-service";
 import {
   PROFILE_UPDATE_CONFIRMATION_MESSAGE,
   SKILL_ASSIGNMENT_CONFIRMATION_MESSAGE,
-  type SuperBotSessionState,
+  type SuperNakamaSessionState,
   TOOL_ASSIGNMENT_CONFIRMATION_MESSAGE,
-} from "../services/super-bot-session-state";
+} from "../services/super-nakama-session-state";
 
 const SUPPORTED_SOUL_FILE_NAMES = [
   "SOUL.md",
@@ -44,9 +44,9 @@ const SUPPORTED_SOUL_FILE_NAMES = [
 
 type SupportedSoulFileName = (typeof SUPPORTED_SOUL_FILE_NAMES)[number];
 
-const SuperBotInputSchema = z.record(z.string(), z.json());
+const SuperNakamaInputSchema = z.record(z.string(), z.json());
 
-type SuperBotInput = z.infer<typeof SuperBotInputSchema>;
+type SuperNakamaInput = z.infer<typeof SuperNakamaInputSchema>;
 
 const SOUL_STACK_FILES = [
   { fileName: "INSTRUCTIONS.md", key: "instructions" },
@@ -78,9 +78,9 @@ function requireOrgId(context: ToolContext): string {
   return orgId;
 }
 
-export function createSuperBotTools(
+export function createSuperNakamaTools(
   profileService: ProfileService,
-  sessionState: SuperBotSessionState,
+  sessionState: SuperNakamaSessionState,
   resolveInheritedModel?: (
     model: string | null,
     context: ToolContext
@@ -241,7 +241,7 @@ export function createSuperBotTools(
         type: "object",
       },
       async run(input, context: ToolContext) {
-        const toolInput = SuperBotInputSchema.parse(input);
+        const toolInput = SuperNakamaInputSchema.parse(input);
         const orgId = requireOrgId(context);
         const profileId = readString(toolInput, "profileId");
 
@@ -271,7 +271,7 @@ export function createSuperBotTools(
         additionalProperties: false,
         properties: {
           isSuper: {
-            description: "Whether this profile is a super bot.",
+            description: "Whether this profile is a super nakama.",
             type: "boolean",
           },
           model: {
@@ -297,7 +297,7 @@ export function createSuperBotTools(
         type: "object",
       },
       async run(input, context: ToolContext) {
-        const toolInput = SuperBotInputSchema.parse(input);
+        const toolInput = SuperNakamaInputSchema.parse(input);
         const name = readString(toolInput, "name");
 
         if (!name) {
@@ -347,7 +347,7 @@ export function createSuperBotTools(
         type: "object",
       },
       async run(input, context: ToolContext) {
-        const toolInput = SuperBotInputSchema.parse(input);
+        const toolInput = SuperNakamaInputSchema.parse(input);
         const profileId = readString(toolInput, "profileId");
         const systemPrompt = readStringAllowEmpty(toolInput, "systemPrompt");
         const soulFiles = readSoulFiles(toolInput);
@@ -380,7 +380,7 @@ export function createSuperBotTools(
           request,
           {
             actorUserId: context.userId ?? null,
-            source: "super_bot",
+            source: "super_nakama",
           }
         );
       },
@@ -399,7 +399,7 @@ export function createSuperBotTools(
         type: "object",
       },
       async run(input, context: ToolContext) {
-        const toolInput = SuperBotInputSchema.parse(input);
+        const toolInput = SuperNakamaInputSchema.parse(input);
         const profileId = readString(toolInput, "profileId");
         const toolId = readString(toolInput, "toolId");
 
@@ -419,7 +419,7 @@ export function createSuperBotTools(
           },
           {
             actorUserId: context.userId ?? null,
-            source: "super_bot",
+            source: "super_nakama",
           }
         );
 
@@ -446,7 +446,7 @@ export function createSuperBotTools(
         type: "object",
       },
       async run(input, context: ToolContext) {
-        const toolInput = SuperBotInputSchema.parse(input);
+        const toolInput = SuperNakamaInputSchema.parse(input);
         const profileId = readString(toolInput, "profileId");
         const skill = readString(toolInput, "skill");
 
@@ -498,7 +498,7 @@ export function createSuperBotTools(
           { skillId: match.id },
           {
             actorUserId: context.userId ?? null,
-            source: "super_bot",
+            source: "super_nakama",
           }
         );
       },
@@ -585,7 +585,7 @@ export function createSuperBotTools(
         type: "object",
       },
       async run(input, context: ToolContext) {
-        const toolInput = SuperBotInputSchema.parse(input);
+        const toolInput = SuperNakamaInputSchema.parse(input);
         const setupId = readString(toolInput, "setupId");
 
         const setup = setupId
@@ -623,7 +623,7 @@ export function createSuperBotTools(
 
         if (!isCustomToolType(handlerType)) {
           throw new Error(
-            `Super Bot can only create ${customToolTypesLabel()} tools. Use handlerType ${customToolTypesLabel()}.`
+            `Super Nakama can only create ${customToolTypesLabel()} tools. Use handlerType ${customToolTypesLabel()}.`
           );
         }
 
@@ -673,7 +673,7 @@ export function createSuperBotTools(
               { toolId: tool.id },
               {
                 actorUserId: context.userId ?? null,
-                source: "super_bot",
+                source: "super_nakama",
               }
             );
           }
@@ -716,21 +716,21 @@ export function createSuperBotTools(
   ];
 }
 
-function readString(input: SuperBotInput, key: string): string | null {
+function readString(input: SuperNakamaInput, key: string): string | null {
   const value = readStringAllowEmpty(input, key);
 
   return value?.trim() ? value.trim() : null;
 }
 
 function readStringAllowEmpty(
-  input: SuperBotInput,
+  input: SuperNakamaInput,
   key: string
 ): string | null {
   return z.string().safeParse(input[key]).data ?? null;
 }
 
 function readOptionalString(
-  input: SuperBotInput,
+  input: SuperNakamaInput,
   key: string
 ): string | null | undefined {
   const value = input[key];
@@ -742,16 +742,19 @@ function readOptionalString(
   return z.string().safeParse(value).data;
 }
 
-function readBoolean(input: SuperBotInput, key: string): boolean | null {
+function readBoolean(input: SuperNakamaInput, key: string): boolean | null {
   return z.boolean().safeParse(input[key]).data ?? null;
 }
 
-function readObject(input: SuperBotInput, key: string): JsonValue | undefined {
+function readObject(
+  input: SuperNakamaInput,
+  key: string
+): JsonValue | undefined {
   return input[key];
 }
 
 function readSoulFiles(
-  input: SuperBotInput
+  input: SuperNakamaInput
 ):
   | CreateProfileRequest["soulFiles"]
   | UpdateProfileRequest["soulFiles"]

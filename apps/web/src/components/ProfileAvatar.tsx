@@ -13,6 +13,7 @@ type ProfileAvatarProfile = Pick<
   Partial<Pick<ProfileSummary, "createdAt">>;
 
 const SUPER_AGENT_DEFAULT_AVATAR = "/super-agent.png";
+const SUPER_AGENT_LIGHT_AVATAR = "/super-agent-light.png";
 
 /** Profiles created before Moodstone shipped keep their Hashvatar look. */
 const MOODSTONE_SINCE = Date.parse("2026-10-10T00:00:00Z");
@@ -144,14 +145,35 @@ export function ProfileAvatar({
     );
   }
 
-  return (
+  const image = (
     <img
       alt=""
-      className={cn(surfaceClass, "object-cover")}
+      className={cn(
+        surfaceClass,
+        "object-cover",
+        src === SUPER_AGENT_DEFAULT_AVATAR && "hidden dark:block"
+      )}
       height={sizePixels[size]}
       onError={() => setFailedUrl(avatarUrl)}
       src={src}
       width={sizePixels[size]}
     />
+  );
+
+  if (src !== SUPER_AGENT_DEFAULT_AVATAR) {
+    return image;
+  }
+
+  return (
+    <>
+      {image}
+      <img
+        alt=""
+        className={cn(surfaceClass, "object-cover dark:hidden")}
+        height={sizePixels[size]}
+        src={SUPER_AGENT_LIGHT_AVATAR}
+        width={sizePixels[size]}
+      />
+    </>
   );
 }
