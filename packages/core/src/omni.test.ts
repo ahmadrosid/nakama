@@ -239,19 +239,23 @@ describe("read_file folding", () => {
     expect(await distillToolResult("read_file", result, CTX)).toBe(result);
   });
 
-  test("still folds a file the agent has already been shown in full", async () => {
-    await fakeOmni(
-      "[OMNI: identical to the 120 lines already shown, omni retrieve fbd68152cc29f74b]\n"
-    );
-    const result = { content: SOURCE, path: "src/nakama-plugin.d.ts" };
+  // The stand-in binary is a shell script, and OMNI has no Windows build.
+  test.skipIf(process.platform === "win32")(
+    "still folds a file the agent has already been shown in full",
+    async () => {
+      await fakeOmni(
+        "[OMNI: identical to the 120 lines already shown, omni retrieve fbd68152cc29f74b]\n"
+      );
+      const result = { content: SOURCE, path: "src/nakama-plugin.d.ts" };
 
-    expect(await distillToolResult("read_file", result, CTX)).toEqual({
-      content:
-        "[OMNI: identical to the 120 lines already shown, omni retrieve fbd68152cc29f74b]\n",
-      omniDistilled: true,
-      path: "src/nakama-plugin.d.ts",
-    });
-  });
+      expect(await distillToolResult("read_file", result, CTX)).toEqual({
+        content:
+          "[OMNI: identical to the 120 lines already shown, omni retrieve fbd68152cc29f74b]\n",
+        omniDistilled: true,
+        path: "src/nakama-plugin.d.ts",
+      });
+    }
+  );
 });
 
 describe("omni fails open", () => {
