@@ -57,7 +57,14 @@ export function CustomizePage() {
 
   const sections = [
     {
-      pages: ["organization", "usage", "workers", "google-meet", "settings"],
+      pages: [
+        "organization",
+        "files",
+        "usage",
+        "workers",
+        "google-meet",
+        "settings",
+      ],
       title: "Workspace",
     },
     {

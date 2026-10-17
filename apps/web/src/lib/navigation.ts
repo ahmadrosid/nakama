@@ -90,12 +90,7 @@ const NAV_GROUPS: NavGroup[] = [
         "Capture and read meeting transcripts",
         SharedWifiIcon
       ),
-      navItem(
-        "files",
-        "Browse Files",
-        "Manage profile artifacts",
-        Folder01Icon
-      ),
+      navItem("plugin-management", "Plugins", "Manage plugins", PackageIcon),
     ],
     label: "Chat",
   },
@@ -134,7 +129,12 @@ const NAV_GROUPS: NavGroup[] = [
     id: "system",
     items: [
       navItem("usage", "Usage", "View token usage and costs", Coins01Icon),
-      navItem("plugin-management", "Plugins", "Manage plugins", PackageIcon),
+      navItem(
+        "files",
+        "Browse Files",
+        "Manage profile artifacts",
+        Folder01Icon
+      ),
       navItem(
         "workers",
         "Workers",
@@ -166,7 +166,7 @@ const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
 export const SIDEBAR_PAGE_IDS: readonly PageId[] = [
   "chat",
   "profiles",
-  "files",
+  "plugin-management",
   "automations",
   "customize",
 ];

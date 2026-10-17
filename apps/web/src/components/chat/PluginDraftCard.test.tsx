@@ -24,7 +24,10 @@ afterEach(() => {
   }
 });
 
-async function renderDraft(lifecycleState: "enabled" | "disabled") {
+async function renderDraft(
+  lifecycleState: "enabled" | "disabled",
+  role = "member"
+) {
   const plugin: OrgPluginDetail = {
     actions: [],
     availableVersions: ["0.1.0"],
@@ -61,7 +64,7 @@ async function renderDraft(lifecycleState: "enabled" | "disabled") {
 
   // SAFETY: The card reads only the active org and platform admin flag.
   const auth = {
-    activeOrg: { id: "org-a", role: "member" },
+    activeOrg: { id: "org-a", role },
     user: { isPlatformAdmin: false },
   } as AuthContextValue;
 
@@ -113,7 +116,11 @@ async function renderDraft(lifecycleState: "enabled" | "disabled") {
     (button) => button.textContent === "Open"
   );
 
-  return { open, shown };
+  const enable = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Enable plugin"
+  );
+
+  return { enable, open, shown };
 }
 
 test("opens an enabled plugin page in the side panel", async () => {
@@ -130,4 +137,21 @@ test("does not offer the panel before the plugin is enabled", async () => {
   const { open } = await renderDraft("disabled");
 
   expect(open).toBeUndefined();
+});
+
+test("opens the plugin page in the side panel after enable", async () => {
+  const enableCall = spyOn(client, "enableOrgPlugin").mockResolvedValue(
+    {} as OrgPluginDetail
+  );
+  cleanups.push(() => enableCall.mockRestore());
+
+  const { enable, shown } = await renderDraft("disabled", "admin");
+
+  await act(async () => {
+    enable?.click();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+
+  expect(enableCall).toHaveBeenCalledWith("notes", 1, "org-a");
+  expect(shown.map(({ id }) => id)).toEqual(["plugin:notes"]);
 });

@@ -123,7 +123,8 @@ type PluginDialog =
   | { plugin: OrgPluginDetail; type: "uninstall" }
   | { plugin: OrgPluginDetail; type: "purge" }
   | { pluginId: string; type: "remove-release"; version: string }
-  | { pluginId: string; type: "remove-plugin"; versions: string[] };
+  | { pluginId: string; type: "remove-plugin"; versions: string[] }
+  | { pluginId: string; type: "force-delete"; versions: string[] };
 
 function usePluginCatalog(canInstallPackages: boolean) {
   const { data: plugins = [], isLoading, error } = useOrgPlugins();
@@ -171,6 +172,7 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
   const updateOrg = useUpdateOrgPlugin();
   const uninstallOrg = useUninstallOrgPlugin();
   const purgeData = useDeleteRetainedPluginData();
+  const unplug = useUnplugPlugin();
   const reinstallOfficial = useReinstallOfficialPlugin();
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const [dialog, setDialog] = useState<PluginDialog | null>(null);
@@ -192,6 +194,7 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
     updateOrg,
     uninstallOrg,
     purgeData,
+    unplug,
     reinstallOfficial,
     installOfficial,
   ].some((mutation) => mutation.isPending);
@@ -325,6 +328,18 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
           orgId,
           pluginId: dialog.plugin.pluginId,
         });
+      } else if (dialog.type === "force-delete") {
+        const usage = await client.getPluginUsage(dialog.pluginId);
+
+        for (const org of usage.orgs) {
+          await unplug.mutateAsync({ org, pluginId: dialog.pluginId });
+        }
+
+        await Promise.all(
+          dialog.versions.map((version) =>
+            removeRelease.mutateAsync({ pluginId: dialog.pluginId, version })
+          )
+        );
       } else if (dialog.type === "remove-plugin") {
         await Promise.all(
           dialog.versions.map((version) =>
@@ -538,7 +553,7 @@ export function PluginsPage() {
             return;
           }
 
-          if (type === "remove-plugin") {
+          if (type === "remove-plugin" || type === "force-delete") {
             setDialog({
               pluginId,
               type,
@@ -1400,7 +1415,8 @@ interface PluginRowProps {
         >
       | "reinstall"
       | "access"
-      | "remove-plugin",
+      | "remove-plugin"
+      | "force-delete",
     target: HTMLElement | null
   ): void;
   onRemove(release: PluginReleaseSummary, event: MouseEvent<HTMLElement>): void;
@@ -1705,6 +1721,15 @@ function pluginMenuActions({
       "Delete plugin",
       !(official || plugin?.installed) && releases.length > 0,
     ],
+    [
+      "force-delete",
+      "Force delete",
+      !official &&
+        plugin?.installed &&
+        releases.some(
+          (item) => item.source === "local" || item.source === "agent"
+        ),
+    ],
   ] as const;
 
   return all.filter(([, , visible]) => visible);
@@ -1803,7 +1828,8 @@ function PluginRowMenu({
             variant={
               type === "purge" ||
               type === "uninstall" ||
-              type === "remove-plugin"
+              type === "remove-plugin" ||
+              type === "force-delete"
                 ? "destructive"
                 : "default"
             }
@@ -2330,6 +2356,16 @@ function DialogBody({
     );
   }
 
+  if (dialog.type === "force-delete") {
+    return (
+      <p className="text-sm">
+        This removes {dialog.pluginId} from every organization, deletes its
+        saved data, and deletes all {dialog.versions.length} version
+        {dialog.versions.length === 1 ? "" : "s"}. You cannot undo this.
+      </p>
+    );
+  }
+
   if (dialog.type === "remove-plugin") {
     return (
       <p className="text-sm">
@@ -2400,6 +2436,10 @@ function dialogTitle(dialog: PluginDialog | null): string {
     return "Delete saved data?";
   }
 
+  if (dialog.type === "force-delete") {
+    return "Force delete this plugin?";
+  }
+
   if (dialog.type === "remove-plugin") {
     return "Delete this plugin?";
   }
@@ -2438,6 +2478,10 @@ function confirmLabel(dialog: PluginDialog | null): string {
 
   if (dialog.type === "purge") {
     return "Delete saved data";
+  }
+
+  if (dialog.type === "force-delete") {
+    return "Force delete";
   }
 
   if (dialog.type === "remove-plugin") {
