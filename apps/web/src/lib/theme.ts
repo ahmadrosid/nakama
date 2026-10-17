@@ -61,7 +61,8 @@ function applyFavicon(resolved: ResolvedTheme): void {
     return;
   }
 
-  const href = ditherLogoSrc(resolved);
+  const href =
+    resolved === "light" ? "/nakama-mark.svg" : "/nakama-mark-white.svg";
 
   if (favicon.getAttribute("href") !== href) {
     favicon.setAttribute("href", href);
