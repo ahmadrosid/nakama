@@ -333,7 +333,14 @@ export async function distillToolResult(
 
   // Never accept a "shorter" version that is longer, and never accept an empty
   // one: both mean the contract changed under us.
-  if (!replacement || replacement.length >= text.length) {
+  // A file read is the agent asking for that file. OMNI's Read arm can fold some
+  // lines of a file it has never shown in full, which hid the component list of
+  // a 7 KB plugin `.d.ts` behind "⋮" lines. Only a fold of the whole file, one
+  // marker line, is safe to accept.
+  const partialFileFold =
+    toolName === "read_file" && replacement.trim().includes("\n");
+
+  if (!replacement || replacement.length >= text.length || partialFileFold) {
     report(CONTROL_ID, text.length);
 
     return result;

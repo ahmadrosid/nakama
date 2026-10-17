@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { distillToolResult, isOmniEnabled, omniRetrieveTool } from "./omni";
 
 const CTX = { orgId: "org_test", sessionId: "sess_test" };
@@ -181,6 +184,71 @@ describe("omni result passthrough", () => {
     expect(await distillToolResult("bash", null, CTX)).toBe(null);
     const noField = { exitCode: 1 };
     expect(await distillToolResult("bash", noField, CTX)).toBe(noField);
+  });
+});
+
+describe("read_file folding", () => {
+  const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
+  let tempDir = "";
+
+  afterEach(async () => {
+    if (originalConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    }
+
+    if (tempDir) {
+      await rm(tempDir, { force: true, recursive: true });
+      tempDir = "";
+    }
+  });
+
+  // A stand-in binary, so the test does not depend on OMNI being installed or
+  // on which lines a given OMNI version decides to fold.
+  async function fakeOmni(stdout: string) {
+    tempDir = await mkdtemp(join(tmpdir(), "nakama-omni-"));
+    const bin = join(tempDir, "bin");
+    await mkdir(bin);
+    const output = JSON.stringify({
+      hookSpecificOutput: { updatedToolOutput: { stdout } },
+    });
+    await writeFile(
+      join(bin, "omni"),
+      `#!/bin/sh\ncat >/dev/null\ncat <<'EOF'\n${output}\nEOF\n`,
+      { mode: 0o755 }
+    );
+    process.env.NAKAMA_OMNI = "1";
+    process.env.NAKAMA_CONFIG_DIR = join(tempDir, "config");
+    process.env.PATH = `${bin}:${REAL_PATH}`;
+  }
+
+  const SOURCE = Array.from(
+    { length: 120 },
+    (_, index) => `  Component${index}: Component<Html>;`
+  ).join("\n");
+
+  test("keeps a source file whole when only some lines would be folded", async () => {
+    await fakeOmni(
+      "[OMNI: 49 lines not shown here, omni retrieve 54c9755a6cefd17c]\n⋮\n⋮\n  Component119: Component<Html>;\n"
+    );
+    const result = { content: SOURCE, path: "src/nakama-plugin.d.ts" };
+
+    expect(await distillToolResult("read_file", result, CTX)).toBe(result);
+  });
+
+  test("still folds a file the agent has already been shown in full", async () => {
+    await fakeOmni(
+      "[OMNI: identical to the 120 lines already shown, omni retrieve fbd68152cc29f74b]\n"
+    );
+    const result = { content: SOURCE, path: "src/nakama-plugin.d.ts" };
+
+    expect(await distillToolResult("read_file", result, CTX)).toEqual({
+      content:
+        "[OMNI: identical to the 120 lines already shown, omni retrieve fbd68152cc29f74b]\n",
+      omniDistilled: true,
+      path: "src/nakama-plugin.d.ts",
+    });
   });
 });
 

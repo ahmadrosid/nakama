@@ -610,10 +610,12 @@ export async function runEditFile(
   const lineEnding = detectLineEnding(content);
   const normalizedContent = normalizeToLF(content);
 
-  const edits = parsed.edits.map((edit) => ({
-    newText: normalizeToLF(edit.newText),
-    oldText: normalizeToLF(edit.oldText),
-  }));
+  const edits = parsed.edits.map((edit) =>
+    recoverMangledEdit(normalizedContent, {
+      newText: normalizeToLF(edit.newText),
+      oldText: normalizeToLF(edit.oldText),
+    })
+  );
 
   const fuzzyMatches = edits.filter(
     (edit) =>
@@ -724,6 +726,116 @@ function normalizeForEditMatch(value: string): string {
     .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
     .replace(/[\u2010-\u2015\u2212]/g, "-")
     .replace(/[\u00A0\u2002-\u200A\u202F\u205F\u3000]/g, " ");
+}
+
+const JSON_ESCAPES: Record<string, string> = {
+  "'": "'",
+  '"': '"',
+  "\\": "\\",
+  n: "\n",
+  r: "\r",
+  t: "\t",
+};
+
+// Ignored by loose matching: the characters models drop or add when they get
+// the JSON escapes in oldText wrong.
+const LOOSE_IGNORED = /[\s"'\\]/;
+
+// Short loose needles match by accident; past this they name one place.
+const MIN_LOOSE_MATCH_CHARS = 12;
+
+/**
+ * Some models get the JSON escapes in oldText wrong while newText is fine: a
+ * newline arrives as a literal "\n", as a bare "n", or not at all, and `\"`
+ * loses its quotes. When neither exact nor normalized matching finds oldText,
+ * swap in the one span of the file it was meant to be. Matching stays exact
+ * after that, so ambiguity and overlap checks still apply.
+ */
+function recoverMangledEdit(
+  content: string,
+  edit: EditFileInput["edits"][number]
+): EditFileInput["edits"][number] {
+  if (
+    content.includes(edit.oldText) ||
+    normalizeForEditMatch(content).includes(normalizeForEditMatch(edit.oldText))
+  ) {
+    return edit;
+  }
+
+  const unescapeJson = (value: string) =>
+    value.replace(/\\(["'\\nrt])/g, (_, char: string) => JSON_ESCAPES[char]);
+  const oldText = unescapeJson(edit.oldText);
+
+  if (oldText !== edit.oldText && content.split(oldText).length === 2) {
+    // The model double-escaped; newText then carries the same mistake unless
+    // it already has real newlines.
+    const newText = edit.newText.includes("\n")
+      ? edit.newText
+      : unescapeJson(edit.newText);
+
+    return { newText, oldText };
+  }
+
+  // A bare "n" after punctuation and before indentation is a newline that lost
+  // its backslash, as in `);n  try {n`.
+  const restored = oldText.replace(/(?<=[^\w\s])n(?=[ \t])/g, "\n");
+  const span =
+    findLooseSpan(content, oldText, edit.newText) ??
+    findLooseSpan(content, restored, edit.newText);
+
+  return span ? { ...edit, oldText: span } : edit;
+}
+
+/** The one span of content that equals oldText once LOOSE_IGNORED is removed. */
+function findLooseSpan(
+  content: string,
+  oldText: string,
+  newText: string
+): string | undefined {
+  const needle = [...oldText].filter((char) => !LOOSE_IGNORED.test(char));
+
+  if (needle.length < MIN_LOOSE_MATCH_CHARS) {
+    return;
+  }
+
+  const positions: number[] = [];
+  let haystack = "";
+
+  for (let index = 0; index < content.length; index += 1) {
+    if (!LOOSE_IGNORED.test(content[index])) {
+      haystack += content[index];
+      positions.push(index);
+    }
+  }
+
+  const search = needle.join("");
+  const at = haystack.indexOf(search);
+
+  if (at === -1 || haystack.indexOf(search, at + 1) !== -1) {
+    return;
+  }
+
+  let start = positions[at];
+  let end = positions[at + search.length - 1] + 1;
+
+  // A quote dropped at either edge of oldText is still in the file. Take it
+  // along when newText has one there, or the edit would leave two.
+  if (/^["']/.test(newText.trimStart()) && /["']/.test(content[start - 1])) {
+    start -= 1;
+  }
+
+  if (/["']$/.test(newText.trimEnd()) && /["']/.test(content[end])) {
+    end += 1;
+  }
+
+  // Keep the indentation oldText asked for, so newText does not double it.
+  if (/^[ \t]/.test(oldText)) {
+    while (start > 0 && /[ \t]/.test(content[start - 1])) {
+      start -= 1;
+    }
+  }
+
+  return content.slice(start, end);
 }
 
 function applyEditsPreservingLines(

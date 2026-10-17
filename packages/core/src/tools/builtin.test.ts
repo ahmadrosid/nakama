@@ -481,6 +481,159 @@ describe("file builtin tools", () => {
     expect(await readFile(targetPath, "utf8")).toBe("ALPHA\nbeta\n");
   });
 
+  // The oldText values below are copied from a real session where the model
+  // mangled the JSON escapes in oldText but not in newText.
+  const REMINDER_SOURCE = [
+    "  const db = new Database(context.databasePath);",
+    "  try {",
+    '    if (!db.query(`SELECT id FROM contacts WHERE id = ?`).get(contactId)) throw new Error("contact not found");',
+    "    const id = crypto.randomUUID();",
+    "",
+  ].join("\n");
+
+  const REMINDER_NEW_TEXT = [
+    "  const db = new Database(context.databasePath);",
+    "  try {",
+    "    db.exec(`CREATE TABLE IF NOT EXISTS reminders (id TEXT)`);",
+    '    if (!db.query(`SELECT id FROM contacts WHERE id = ?`).get(contactId)) throw new Error("contact not found");',
+  ].join("\n");
+
+  const REMINDER_RESULT = [
+    REMINDER_NEW_TEXT,
+    "    const id = crypto.randomUUID();",
+    "",
+  ].join("\n");
+
+  test.each([
+    {
+      name: "newlines arrive as a bare n and quotes are dropped",
+      oldText:
+        "  const db = new Database(context.databasePath);n  try {n    if (!db.query(`SELECT id FROM contacts WHERE id = ?`).get(contactId)) throw new Error(contact not found);",
+    },
+    {
+      name: "newlines are dropped and quotes are dropped",
+      oldText:
+        "  const db = new Database(context.databasePath);  try {    if (!db.query(`SELECT id FROM contacts WHERE id = ?`).get(contactId)) throw new Error(contact not found);",
+    },
+    {
+      name: "escapes arrive double-escaped",
+      oldText:
+        '  const db = new Database(context.databasePath);\\n  try {\\n    if (!db.query(`SELECT id FROM contacts WHERE id = ?`).get(contactId)) throw new Error(\\"contact not found\\");',
+    },
+  ])("edit_file recovers oldText when $name", async ({ oldText }) => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
+    const targetPath = path.join(tempDir, "create_reminder.js");
+    await writeFile(targetPath, REMINDER_SOURCE, "utf8");
+
+    const result = await runEditFile(
+      {
+        edits: [{ newText: REMINDER_NEW_TEXT, oldText }],
+        path: targetPath,
+      },
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir }
+    );
+
+    expect(result.replacements).toBe(1);
+    expect(await readFile(targetPath, "utf8")).toBe(REMINDER_RESULT);
+  });
+
+  test("edit_file recovers SQL whose newline was dropped", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
+    const targetPath = path.join(tempDir, "001_initial.sql");
+    await writeFile(
+      targetPath,
+      "CREATE INDEX a_idx ON interactions(contact_id);\nCREATE INDEX b_idx ON contacts(updated_at);\n",
+      "utf8"
+    );
+
+    await runEditFile(
+      {
+        edits: [
+          {
+            newText:
+              "CREATE INDEX a_idx ON interactions(contact_id);\nCREATE INDEX b_idx ON contacts(updated_at);\n\nCREATE TABLE reminders (id TEXT);",
+            oldText:
+              "CREATE INDEX a_idx ON interactions(contact_id);CREATE INDEX b_idx ON contacts(updated_at);",
+          },
+        ],
+        path: targetPath,
+      },
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir }
+    );
+
+    expect(await readFile(targetPath, "utf8")).toBe(
+      "CREATE INDEX a_idx ON interactions(contact_id);\nCREATE INDEX b_idx ON contacts(updated_at);\n\nCREATE TABLE reminders (id TEXT);\n"
+    );
+  });
+
+  test("edit_file recovers CSS whose attribute quotes were dropped", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
+    const targetPath = path.join(tempDir, "ui.css");
+    const rule =
+      '[data-plugin-id="personal-crm"] .crm-history-row span { margin-left: 4px; }';
+    await writeFile(targetPath, `.a { color: red; }\n${rule}\n`, "utf8");
+
+    await runEditFile(
+      {
+        edits: [
+          {
+            newText: `${rule}\n[data-plugin-id="personal-crm"] .crm-reminder { gap: 4px; }`,
+            oldText:
+              "[data-plugin-id=personal-crm] .crm-history-row span { margin-left: 4px; }",
+          },
+        ],
+        path: targetPath,
+      },
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir }
+    );
+
+    expect(await readFile(targetPath, "utf8")).toBe(
+      `.a { color: red; }\n${rule}\n[data-plugin-id="personal-crm"] .crm-reminder { gap: 4px; }\n`
+    );
+  });
+
+  test("edit_file unescapes newText when oldText was double-escaped", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
+    const targetPath = path.join(tempDir, "note.txt");
+    await writeFile(targetPath, 'one\nsay "hi"\nthree\n', "utf8");
+
+    await runEditFile(
+      {
+        edits: [
+          { newText: 'two\\nsay \\"bye\\"', oldText: 'one\\nsay \\"hi\\"' },
+        ],
+        path: targetPath,
+      },
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir }
+    );
+
+    expect(await readFile(targetPath, "utf8")).toBe('two\nsay "bye"\nthree\n');
+  });
+
+  test("edit_file still rejects a loose match that is ambiguous", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
+    const targetPath = path.join(tempDir, "ui.css");
+    const source =
+      "[data-id=\"a\"] .row { gap: 1px; }\n[data-id='a'] .row { gap: 1px; }\n";
+    await writeFile(targetPath, source, "utf8");
+
+    await expect(
+      runEditFile(
+        {
+          edits: [{ newText: "x", oldText: "[data-id=a] .row { gap: 1px; }" }],
+          path: targetPath,
+        },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir }
+      )
+    ).rejects.toThrow();
+    expect(await readFile(targetPath, "utf8")).toBe(source);
+  });
+
   test("edit_file preserves a UTF-8 BOM", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
     const targetPath = path.join(tempDir, "note.txt");
