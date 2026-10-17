@@ -26,8 +26,8 @@ import {
   reportError,
 } from "@nakama/core";
 import {
-  getSessionBrowser,
-  stopSessionBrowser,
+  getUserBrowser,
+  stopUserBrowser,
 } from "../../services/agent-browser-service";
 import { resolveRequestClientOrigin } from "../../services/composio-callback-url";
 import { sessionTurnRegistry } from "../../services/session-turn-registry";
@@ -883,9 +883,10 @@ export function registerSessionRoutes(
     return json<AcpSessionSettingsResponse>(response);
   });
 
-  // The live view controls the browser, so viewers get none of these.
+  // The live view controls the browser, so viewers get none of these, and
+  // each caller only ever gets their own browser, even in someone else's chat.
   app.get("/v1/sessions/:sessionId/browser", async (c) => {
-    requireOrgMemberFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const { orgId, sessionId } = await requireSessionAccess(c);
 
     if (!(await agent.getSessionSummary(sessionId, orgId))) {
@@ -893,12 +894,12 @@ export function registerSessionRoutes(
     }
 
     return json<SessionBrowserResponse>(
-      await getSessionBrowser(orgId, sessionId)
+      await getUserBrowser(orgId, auth.user.id)
     );
   });
 
   app.delete("/v1/sessions/:sessionId/browser", async (c) => {
-    requireOrgMemberFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const { orgId, sessionId } = await requireSessionAccess(c);
 
     if (!(await agent.getSessionSummary(sessionId, orgId))) {
@@ -906,7 +907,7 @@ export function registerSessionRoutes(
     }
 
     try {
-      await stopSessionBrowser(orgId, sessionId);
+      await stopUserBrowser(orgId, auth.user.id);
     } catch (error) {
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);

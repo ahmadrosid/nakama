@@ -20,7 +20,7 @@ The **agent-browser** skill is assigned (see Available Agent Skills). Skills are
     options.cloudBrowser
       ? `
 
-Cloud browser is on: every \`agent-browser\` command in this chat drives one Kernel browser, and the user sees it live in the chat's Browser panel. Use agent-browser for sites that need the user's login. When a site asks for a login, open its login page and ask the user to sign in in the Browser panel, then continue after they reply. Never ask for passwords. Logins are saved for your next runs, so check whether you are already signed in first.
+Cloud browser is on: every \`agent-browser\` command drives this user's own Kernel browser, shared by all their chats, and the user sees it live in the chat's Browser panel. Use agent-browser for sites that need the user's login. When a site asks for a login, open its login page and ask the user to sign in in the Browser panel, then continue after they reply. Never ask for passwords. The user may already be signed in from an earlier chat, so open the page and check first.
 
 Working in the cloud browser:
 - To read what a page says (posts, messages, results), use \`agent-browser get text <selector>\` such as \`get text main\`, or \`agent-browser read\` when the CLI has it. \`snapshot -i\` lists only buttons, links and inputs; use it to find refs before you act, scoped when you can: \`snapshot -i -c -s main\`.

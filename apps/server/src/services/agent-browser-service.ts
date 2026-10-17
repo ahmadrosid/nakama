@@ -115,7 +115,7 @@ async function loadAgentBrowserConfig(): Promise<AgentBrowserConfig | null> {
  * Host env wins over the saved settings, so Docker and Kubernetes deployments
  * can set Kernel up with `NAKAMA_BROWSER_PROVIDER=kernel` and `KERNEL_API_KEY`.
  * Not `AGENT_BROWSER_PROVIDER`: agent-browser reads that name itself, and a
- * provider wins over the CDP URL that points it at the session's browser.
+ * provider wins over the CDP URL that points it at the user's browser.
  */
 async function resolveAgentBrowserConfig(
   env: Record<string, string | undefined> = process.env
@@ -281,30 +281,30 @@ async function getKernelBrowser(
   return kernelBrowserSchema.parse(await response.json());
 }
 
-interface SessionBrowserScope {
-  orgId: string;
-  profileId: string;
-  sessionId: string;
+function userBrowserName(orgId: string, userId: string): string {
+  return kernelName(orgId, "user", userId);
 }
 
 /**
- * One Kernel browser per chat session, found again by its name, so every tool
- * call and the live view in the web UI drive the same browser. The Kernel
- * profile belongs to the agent: logins a user makes in the live view are saved
- * when the browser stops, and the agent's next browser starts signed in.
+ * One Kernel browser per user in each org, found again by its name, so every
+ * chat and agent of that user and the live view in the web UI share it. A
+ * login the user makes once is there in the next chat. Kernel saves the
+ * browser into the user's profile when it stops, so a later browser starts
+ * signed in too. Other users never get it: their logins are their own.
  */
 async function ensureKernelBrowser(
   apiKey: string,
-  scope: SessionBrowserScope
+  orgId: string,
+  userId: string
 ): Promise<KernelBrowser> {
-  const name = kernelName(scope.orgId, scope.sessionId);
+  const name = userBrowserName(orgId, userId);
   const existing = await getKernelBrowser(apiKey, name);
 
   if (existing) {
     return existing;
   }
 
-  const profileName = kernelName(scope.orgId, scope.profileId);
+  const profileName = name;
 
   const profile = await kernelRequest(apiKey, "POST", "/profiles", {
     name: profileName,
@@ -352,9 +352,9 @@ function toSessionBrowserResponse(
   return { liveViewUrl: browser?.browser_live_view_url ?? null };
 }
 
-export async function getSessionBrowser(
+export async function getUserBrowser(
   orgId: string,
-  sessionId: string
+  userId: string
 ): Promise<SessionBrowserResponse> {
   const config = await resolveAgentBrowserConfig();
 
@@ -363,19 +363,19 @@ export async function getSessionBrowser(
   }
 
   return toSessionBrowserResponse(
-    await getKernelBrowser(config.apiKey, kernelName(orgId, sessionId))
+    await getKernelBrowser(config.apiKey, userBrowserName(orgId, userId))
   );
 }
 
 /** Deleting the Kernel browser is what saves its cookies to the profile. */
-export async function stopSessionBrowser(
+export async function stopUserBrowser(
   orgId: string,
-  sessionId: string
+  userId: string
 ): Promise<void> {
   const response = await kernelRequest(
     await requireKernelApiKey(),
     "DELETE",
-    `/browsers/${encodeURIComponent(kernelName(orgId, sessionId))}`
+    `/browsers/${encodeURIComponent(userBrowserName(orgId, userId))}`
   );
 
   if (!(response.ok || response.status === 404)) {
@@ -384,9 +384,10 @@ export async function stopSessionBrowser(
 }
 
 /**
- * Connects agent-browser commands to the chat session's Kernel browser over
+ * Connects agent-browser commands to the chat user's Kernel browser over
  * CDP. The API key stays on the server: the shell only gets the CDP URL of
- * that one browser.
+ * that one browser. Runs with no user, such as automations, keep the local
+ * browser rather than borrow someone's signed-in one.
  */
 export async function enrichAgentBrowserBashInput(
   input: BashInput,
@@ -397,18 +398,14 @@ export async function enrichAgentBrowserBashInput(
   }
 
   const orgId = context.orgId?.trim();
-  const profileId = context.profileId?.trim();
+  const userId = context.userId?.trim();
   const config = await resolveAgentBrowserConfig();
 
-  if (!(config?.apiKey && orgId && profileId)) {
+  if (!(config?.apiKey && orgId && userId)) {
     return input;
   }
 
-  const browser = await ensureKernelBrowser(config.apiKey, {
-    orgId,
-    profileId,
-    sessionId: context.sessionId?.trim() || profileId,
-  });
+  const browser = await ensureKernelBrowser(config.apiKey, orgId, userId);
 
   return {
     ...input,

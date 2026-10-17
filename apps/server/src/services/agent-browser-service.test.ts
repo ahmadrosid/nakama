@@ -11,10 +11,10 @@ import {
   enrichAgentBrowserBashInput,
   getAgentBrowserInstallCommand,
   getAgentBrowserStatus,
-  getSessionBrowser,
+  getUserBrowser,
   installAgentBrowser,
   saveAgentBrowserConfig,
-  stopSessionBrowser,
+  stopUserBrowser,
 } from "../services/agent-browser-service";
 import { AgentService } from "../services/agent-service";
 import { AuthService } from "../services/auth-service";
@@ -417,7 +417,12 @@ describe("Kernel browser runtime", () => {
   let requests: Array<{ body: unknown; method: string; url: string }> = [];
   let browsers: Map<string, Record<string, string>>;
 
-  const context = { orgId: "org-a", profileId: "agent-1", sessionId: "chat-1" };
+  const context = {
+    orgId: "org-a",
+    profileId: "agent-1",
+    sessionId: "chat-1",
+    userId: "user-1",
+  };
 
   beforeEach(async () => {
     configDir = await mkdtemp(join(tmpdir(), "nakama-kernel-config-"));
@@ -496,6 +501,28 @@ describe("Kernel browser runtime", () => {
     expect(requests).toHaveLength(0);
   });
 
+  test("keeps another user off the first user's browser", async () => {
+    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await enrichAgentBrowserBashInput(
+      { command: "agent-browser open x" },
+      context
+    );
+
+    expect((await getUserBrowser("org-a", "user-2")).liveViewUrl).toBeNull();
+  });
+
+  test("keeps runs with no user on the local browser", async () => {
+    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    const input = { command: "agent-browser open https://example.com" };
+
+    expect(
+      await enrichAgentBrowserBashInput(input, {
+        ...context,
+        userId: undefined,
+      })
+    ).toEqual(input);
+  });
+
   test("leaves other bash commands alone when Kernel is set up", async () => {
     await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
     const input = { command: "ls agent-browser-notes" };
@@ -504,15 +531,20 @@ describe("Kernel browser runtime", () => {
     expect(requests).toHaveLength(0);
   });
 
-  test("connects agent-browser to one Kernel browser per chat session", async () => {
+  test("shares one Kernel browser across a user's chats and agents", async () => {
     await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
     const input = { command: "agent-browser open https://www.linkedin.com" };
 
     const first = await enrichAgentBrowserBashInput(input, context);
-    const second = await enrichAgentBrowserBashInput(input, context);
+
+    const second = await enrichAgentBrowserBashInput(input, {
+      ...context,
+      profileId: "agent-2",
+      sessionId: "chat-2",
+    });
 
     expect(first.env?.AGENT_BROWSER_CDP).toBe(
-      "wss://cdp.onkernel.com/nakama-org-a-chat-1"
+      "wss://cdp.onkernel.com/nakama-org-a-user-user-1"
     );
     expect(first.env?.KERNEL_API_KEY).toBe("");
     expect(first.env).not.toHaveProperty("AGENT_BROWSER_PROVIDER");
@@ -525,7 +557,7 @@ describe("Kernel browser runtime", () => {
       requests.find((request) => request.url === "/browsers")?.body
     ).toMatchObject({
       headless: false,
-      profile: { name: "nakama-org-a-agent-1", save_changes: true },
+      profile: { name: "nakama-org-a-user-user-1", save_changes: true },
     });
   });
 
@@ -586,10 +618,10 @@ describe("Kernel browser runtime", () => {
       context
     );
 
-    expect((await getSessionBrowser("org-a", "chat-1")).liveViewUrl).toBe(
-      "https://live.onkernel.com/nakama-org-a-chat-1"
+    expect((await getUserBrowser("org-a", "user-1")).liveViewUrl).toBe(
+      "https://live.onkernel.com/nakama-org-a-user-user-1"
     );
-    expect((await getSessionBrowser("org-b", "chat-1")).liveViewUrl).toBeNull();
+    expect((await getUserBrowser("org-b", "user-1")).liveViewUrl).toBeNull();
   });
 
   test("stops the session browser", async () => {
@@ -599,8 +631,8 @@ describe("Kernel browser runtime", () => {
       context
     );
 
-    await stopSessionBrowser("org-a", "chat-1");
+    await stopUserBrowser("org-a", "user-1");
 
-    expect((await getSessionBrowser("org-a", "chat-1")).liveViewUrl).toBeNull();
+    expect((await getUserBrowser("org-a", "user-1")).liveViewUrl).toBeNull();
   });
 });

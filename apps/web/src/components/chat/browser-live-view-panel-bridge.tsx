@@ -37,7 +37,7 @@ function stopBrowser(sessionId: string) {
 }
 
 /**
- * Shows the chat session's Kernel browser in the side panel after the agent
+ * Shows the user's Kernel browser in the side panel after the agent
  * drives it, so the user can watch and sign in when a site asks for a login.
  */
 export function BrowserLiveViewPanelBridge({

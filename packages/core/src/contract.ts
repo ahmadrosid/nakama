@@ -1965,7 +1965,7 @@ export interface AgentBrowserStatusResponse {
   version: string | null;
 }
 
-/** Live view of the chat session's cloud browser; null when none is running. */
+/** Live view of the caller's cloud browser; null when none is running. */
 export interface SessionBrowserResponse {
   liveViewUrl: string | null;
 }

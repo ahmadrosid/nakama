@@ -138,14 +138,15 @@ The `agent-browser` CLI must still be installed on the server. Chrome does not h
 
 How a Kernel run works:
 
-1. The agent runs `agent-browser` in a chat. Nakama starts one Kernel browser for that chat.
+1. The agent runs `agent-browser` in your chat. Nakama starts your Kernel browser, or reuses it when it is already running.
 2. The **Browser** panel opens in the chat with the live browser.
 3. If the site asks for a login, sign in in the panel. Then tell the agent to continue.
-4. Select **Stop browser** when you are done. Kernel saves the cookies to the agent's browser profile. Kernel also stops and saves the browser after 10 minutes with no activity.
+4. Your other chats use the same browser, with any agent, so you do not sign in again.
+5. Select **Stop browser** when you are done. Kernel saves the cookies to your browser profile. Kernel also stops and saves the browser after 10 minutes with no activity. The next browser starts signed in.
 
 Before the agent sends a message, a connection request, a post, or a comment, it shows you the exact text and waits for your yes in chat.
 
-Each agent has its own browser profile in each organization. Every chat with that agent uses the same saved logins. Only org members who can open the chat see its browser panel. Viewers cannot.
+Each user has their own browser and browser profile in each organization. Other members never see or use your logins: the Browser panel always shows the browser of the person who looks at it. Viewers get no panel. Automations have no user, so they use the browser on the Nakama server, not Kernel.
 
 ### 5. Try it in chat
 
