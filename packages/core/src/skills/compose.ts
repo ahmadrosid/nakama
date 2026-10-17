@@ -3,7 +3,8 @@ import type { DiscoveredSkill } from "./types";
 export const AGENT_BROWSER_SKILL_NAME = "agent-browser";
 
 export function composeAgentBrowserCapabilityPrompt(
-  skills: Pick<DiscoveredSkill, "name">[]
+  skills: Pick<DiscoveredSkill, "name">[],
+  options: { cloudBrowser?: boolean } = {}
 ): string {
   const skill = skills.find((entry) => entry.name === AGENT_BROWSER_SKILL_NAME);
 
@@ -15,7 +16,21 @@ export function composeAgentBrowserCapabilityPrompt(
 
 The **agent-browser** skill is assigned (see Available Agent Skills). Skills are workflow instructions, not callable tools — run this one with \`bash\` + the agent-browser CLI. For login walls, forms, clicks, screenshots, and dynamic pages; prefer \`web_fetch\` for plain public text.
 
-\`agent-browser open <url>\` → act or \`screenshot artifacts/<file>.png\` → \`close\`. Full workflow: follow the skill when matched or \`/skill agent-browser\`. Missing CLI → tell the operator to install it. Host \`AGENT_BROWSER_EXECUTABLE_PATH\` / \`AGENT_BROWSER_ARGS\` (optional Cloak stealth Chromium) are inherited by bash; if unset, stock Chrome from \`agent-browser install\` is correct.`;
+\`agent-browser open <url>\` → act or \`screenshot artifacts/<file>.png\` → \`close\`. Full workflow: follow the skill when matched or \`/skill agent-browser\`. Missing CLI → tell the operator to install it. Host \`AGENT_BROWSER_EXECUTABLE_PATH\` / \`AGENT_BROWSER_ARGS\` (optional Cloak stealth Chromium) are inherited by bash; if unset, stock Chrome from \`agent-browser install\` is correct.${
+    options.cloudBrowser
+      ? `
+
+Cloud browser is on: every \`agent-browser\` command drives this user's own Kernel browser, shared by all their chats, and the user sees it live in the chat's Browser panel. Use agent-browser for sites that need the user's login. When a site asks for a login, open its login page and ask the user to sign in in the Browser panel, then continue after they reply. Never ask for passwords. The user may already be signed in from an earlier chat, so open the page and check first.
+
+Working in the cloud browser:
+- To read what a page says (posts, messages, results), use \`agent-browser get text <selector>\` such as \`get text main\`, or \`agent-browser read\` when the CLI has it. \`snapshot -i\` lists only buttons, links and inputs; use it to find refs before you act, scoped when you can: \`snapshot -i -c -s main\`.
+- Wait for the thing you need: \`wait --text "..."\`, a selector, or \`wait 2000\`. Do not use \`wait --load networkidle\` on apps like LinkedIn; it never resolves.
+- Apps like LinkedIn scroll an inner container, not the window, so a plain \`scroll down\` does nothing there. Scroll the container: \`scroll down 3000 --selector main\`, then \`wait 1500\` for new items. Scroll a few times, then read once; page output is capped at 20,000 characters per command.
+- Do not pipe output through grep, sed or awk; narrow with selectors instead.
+- Leave the browser open when the task ends; do not run \`agent-browser close\`.
+- Before you send a message, connection request, post, comment, or anything else other people will see, show the user the exact text and target and wait for a clear yes in chat. Then send it once.`
+      : ""
+  }`;
 }
 
 /**

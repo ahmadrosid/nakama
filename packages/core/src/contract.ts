@@ -1950,13 +1950,30 @@ export interface SendEmailTestResponse {
   to: string;
 }
 
+/** Cloud browser that agent-browser connects to instead of local Chrome. */
+export type AgentBrowserProvider = "kernel";
+
 export interface AgentBrowserStatusResponse {
+  apiKeyMasked: string | null;
   installCommand: string;
   installed: boolean;
   nextStep: "install" | null;
+  /** null means agent-browser launches Chrome on the Nakama host. */
+  provider: AgentBrowserProvider | null;
   ready: boolean;
   statusMessage: string | null;
   version: string | null;
+}
+
+/** Live view of the caller's cloud browser; null when none is running. */
+export interface SessionBrowserResponse {
+  liveViewUrl: string | null;
+}
+
+export interface UpdateAgentBrowserSettingsRequest {
+  apiKey?: string;
+  /** null restores local Chrome. */
+  provider?: AgentBrowserProvider | null;
 }
 
 export type AgentBrowserInstallEvent =

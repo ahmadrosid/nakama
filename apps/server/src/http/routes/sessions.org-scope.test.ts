@@ -103,6 +103,8 @@ const CROSS_ORG_ROUTES: Array<{
   { method: "DELETE", path: (id) => `/v1/sessions/${id}?purge=true` },
   { method: "DELETE", path: (id) => `/v1/sessions/${id}` },
   { method: "POST", path: (id) => `/v1/sessions/${id}/compact` },
+  { method: "GET", path: (id) => `/v1/sessions/${id}/browser` },
+  { method: "DELETE", path: (id) => `/v1/sessions/${id}/browser` },
   {
     body: { messageIndex: 0 },
     method: "POST",

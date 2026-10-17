@@ -109,7 +109,46 @@ The stealth argument list lives in Cloak's [agent-browser integration](https://g
 
 Docker: the official image does not include Cloak. Bind-mount the Cloak binary into the container and pass the same env vars, or run Nakama on the host. See [Docker](/docker).
 
-### 4. Try it in chat
+### 4. Optional: Kernel cloud browser
+
+[Kernel](https://www.kernel.sh) runs the browser in the cloud instead of on the Nakama server. Use it when you want to watch the agent, sign in to a site yourself, and keep that login for later runs. One example is a LinkedIn task: you log in once, and the agent uses the saved login after that.
+
+Why use Kernel:
+
+- No Chrome on the Nakama server
+- You see the live browser in the chat side panel, and you can type and click in it
+- Logins you make in the live browser are saved for the agent, so the next run starts signed in
+
+Set it up (platform admins):
+
+1. Open **Control center → Agent tools → AI Providers**.
+2. In **Browser runtime**, select **Kernel**.
+3. Paste a Kernel API key from the [Kernel dashboard](https://dashboard.onkernel.com) and select **Save**.
+
+Docker and Kubernetes can set the same thing with host env. Env values take priority over the saved key:
+
+```bash
+NAKAMA_BROWSER_PROVIDER=kernel
+KERNEL_API_KEY=your-kernel-api-key
+```
+
+Do not set `AGENT_BROWSER_PROVIDER` on the server. It skips the Nakama session browser, so no live view shows in chat.
+
+The `agent-browser` CLI must still be installed on the server. Chrome does not have to be.
+
+How a Kernel run works:
+
+1. The agent runs `agent-browser` in your chat. Nakama starts your Kernel browser, or reuses it when it is already running.
+2. The **Browser** panel opens in the chat with the live browser.
+3. If the site asks for a login, sign in in the panel. Then tell the agent to continue.
+4. Your other chats use the same browser, with any agent, so you do not sign in again.
+5. Select **Stop browser** when you are done. Kernel saves the cookies to your browser profile. If you do not, Kernel stops and saves the browser about 12 minutes after the agent's last browser command, when nobody has the live view open. The next browser starts signed in.
+
+Before the agent sends a message, a connection request, a post, or a comment, it shows you the exact text and waits for your yes in chat.
+
+Each user has their own browser and browser profile in each organization. Other members never see or use your logins: the Browser panel always shows the browser of the person who looks at it. Viewers get no panel. Automations have no user, so they use the browser on the Nakama server, not Kernel.
+
+### 5. Try it in chat
 
 Ask the profile for a task that needs a real browser. Example:
 
@@ -133,7 +172,7 @@ In **one** chat turn or automation run:
 4. **Screenshot** (optional) under the profile workspace `artifacts/` directory.
 5. **Close** the browser when the task ends.
 
-Across runs, sessions are **fresh** by default. The product does not keep sticky cookies or a restored login state. The agent logs in again in the run when the task needs it.
+With local Chrome, sessions are **fresh** across runs. The product does not keep sticky cookies or a restored login state. The agent logs in again in the run when the task needs it. With [Kernel](#4-optional-kernel-cloud-browser), the agent's saved logins carry over to the next run.
 
 ## Credentials and safety
 
