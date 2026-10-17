@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/nakama-logo-dither-dark.png" />
-    <img alt="Nakama logo" src="assets/nakama-logo-dither-light.png" width="188" />
+    <source media="(prefers-color-scheme: dark)" srcset="assets/nakama-logo-white.svg" />
+    <img alt="Nakama logo" src="assets/nakama-logo.svg" width="220" />
   </picture>
 </p>
 
@@ -24,9 +24,16 @@ It was built for teams from day one: one server, many orgs, invites and roles, a
 
 Coming from [OpenClaw](https://github.com/openclaw/openclaw) or [Hermes Agent](https://github.com/nousresearch/hermes-agent)? Same class of capability, without the setup maze, and not limited to one operator on one machine.
 
-<img alt="Tour of the redesigned Nakama dashboard: agent selection, Agent config, weekly automations, Customize, and Integrations" src="assets/nakama-demo.gif" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/chat-dark.png" />
+  <img alt="Nakama dashboard: start a chat with an agent, with the agent rail, navigation, and recent chats on the left" src="assets/screenshots/chat-light.png" />
+</picture>
 
-A quick tour of the redesigned dashboard: pick an agent, explore its instructions and memory, check a weekly automation, then open Customize and Integrations.
+Pick an agent from the rail on the left and start a chat. Every agent has its own prompt files, tools, skills, and memory.
+
+| Agent | Control center |
+|---|---|
+| <img alt="Agent page with the system prompt, SOUL, STYLE, INSTRUCTIONS and MEMORY files, and tabs for channels, tools, MCP and skills" src="assets/screenshots/agent.png" /> | <img alt="Control center with workspace settings, AI providers, tools, skills, MCP, plugins and integrations" src="assets/screenshots/control-center.png" /> |
 
 Open [ARCHITECTURE.md](./ARCHITECTURE.md) for the system design.
 Open the [docs site](https://ahmadrosid.github.io/nakama/) for the full guide.
