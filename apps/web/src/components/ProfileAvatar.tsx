@@ -13,6 +13,7 @@ type ProfileAvatarProfile = Pick<
   Partial<Pick<ProfileSummary, "createdAt">>;
 
 const SUPER_AGENT_DEFAULT_AVATAR = "/super-agent.png";
+
 const SUPER_AGENT_LIGHT_AVATAR = "/super-agent-light.png";
 
 /** Profiles created before Moodstone shipped keep their Hashvatar look. */
