@@ -508,12 +508,15 @@ function resolveChatComposerLayout(
   const todos = props.todos ?? EMPTY_TODOS;
   const questionnaire = props.questionnaire ?? null;
   const queuedMessages = props.queuedMessages ?? EMPTY_QUEUED_MESSAGES;
-  const hasQuestionnaire = hasActiveAgentQuestionnaire(questionnaire);
+  const hasQueuedMessages = queuedMessages.length > 0;
+  // Ask only once every turn is done: no stream in flight, nothing queued.
+  const hasQuestionnaire =
+    hasActiveAgentQuestionnaire(questionnaire) &&
+    !props.busy &&
+    !hasQueuedMessages;
 
   const showTodos =
     hasActiveAgentTodos(todos) && !hasQuestionnaire && !displayError;
-
-  const hasQueuedMessages = queuedMessages.length > 0;
 
   const queueStackEdge: ComposerStackEdge =
     hasQuestionnaire || showTodos ? "continue" : "start";
