@@ -63,7 +63,7 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
       >
         <img
           alt=""
-          className="size-7 -translate-y-px object-contain"
+          className="size-5.5 -translate-y-px object-contain"
           src={logoSrc}
         />
       </a>
