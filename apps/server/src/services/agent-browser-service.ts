@@ -42,6 +42,8 @@ const KERNEL_REQUEST_TIMEOUT_MS = 30_000;
 
 const AGENT_BROWSER_MAX_OUTPUT_CHARS = 20_000;
 
+const AGENT_BROWSER_DAEMON_IDLE_MS = 120_000;
+
 /** Idle time, counting live view use, before Kernel stops and saves the browser. */
 const KERNEL_BROWSER_IDLE_SECONDS = 600;
 
@@ -415,6 +417,10 @@ export async function enrichAgentBrowserBashInput(
       AGENT_BROWSER_MAX_OUTPUT: String(AGENT_BROWSER_MAX_OUTPUT_CHARS),
       ...input.env,
       AGENT_BROWSER_CDP: browser.cdp_ws_url,
+      // The daemon holds its CDP connection open, and Kernel counts that as
+      // activity: without this the browser never idles out, so it never saves
+      // the user's logins to the profile and keeps billing.
+      AGENT_BROWSER_IDLE_TIMEOUT_MS: String(AGENT_BROWSER_DAEMON_IDLE_MS),
       // A new Kernel browser gets a new daemon session, so agent-browser never
       // reuses a CDP connection to a browser that already timed out.
       AGENT_BROWSER_SESSION: `kernel-${browser.session_id}`,

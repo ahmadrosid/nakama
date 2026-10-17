@@ -25,7 +25,7 @@ Cloud browser is on: every \`agent-browser\` command drives this user's own Kern
 Working in the cloud browser:
 - To read what a page says (posts, messages, results), use \`agent-browser get text <selector>\` such as \`get text main\`, or \`agent-browser read\` when the CLI has it. \`snapshot -i\` lists only buttons, links and inputs; use it to find refs before you act, scoped when you can: \`snapshot -i -c -s main\`.
 - Wait for the thing you need: \`wait --text "..."\`, a selector, or \`wait 2000\`. Do not use \`wait --load networkidle\` on apps like LinkedIn; it never resolves.
-- Scroll in pixels (\`scroll down 2000\`), then read again. Do not chain many default scrolls with a snapshot after each.
+- Apps like LinkedIn scroll an inner container, not the window, so a plain \`scroll down\` does nothing there. Scroll the container: \`scroll down 3000 --selector main\`, then \`wait 1500\` for new items. Scroll a few times, then read once; page output is capped at 20,000 characters per command.
 - Do not pipe output through grep, sed or awk; narrow with selectors instead.
 - Leave the browser open when the task ends; do not run \`agent-browser close\`.
 - Before you send a message, connection request, post, comment, or anything else other people will see, show the user the exact text and target and wait for a clear yes in chat. Then send it once.`

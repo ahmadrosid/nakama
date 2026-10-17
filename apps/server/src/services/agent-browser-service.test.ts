@@ -549,6 +549,7 @@ describe("Kernel browser runtime", () => {
     expect(first.env?.KERNEL_API_KEY).toBe("");
     expect(first.env).not.toHaveProperty("AGENT_BROWSER_PROVIDER");
     expect(Number(first.env?.AGENT_BROWSER_MAX_OUTPUT)).toBeGreaterThan(0);
+    expect(Number(first.env?.AGENT_BROWSER_IDLE_TIMEOUT_MS)).toBeGreaterThan(0);
     expect(second.env).toEqual(first.env);
     expect(
       requests.filter((request) => request.url === "/browsers")
