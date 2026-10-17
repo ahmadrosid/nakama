@@ -52,7 +52,9 @@ export function BrowserLiveViewPanelBridge({
   const activeIdRef = useRef(activeId);
   const dismissedUrlRef = useRef<string | null>(null);
 
-  activeIdRef.current = activeId;
+  useEffect(() => {
+    activeIdRef.current = activeId;
+  }, [activeId]);
 
   useEffect(() => {
     if (!(sessionId && call)) {
@@ -81,6 +83,8 @@ export function BrowserLiveViewPanelBridge({
               className="min-h-0 w-full flex-1 border-0 bg-background"
               key={liveViewUrl}
               referrerPolicy="no-referrer"
+              // oxlint-disable-next-line react-doctor/iframe-missing-sandbox -- The live view is Kernel's own origin and stays dark without same-origin; cross-origin, it cannot reach this page.
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
               src={liveViewUrl}
               title="Browser"
             />
