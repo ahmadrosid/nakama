@@ -6,6 +6,7 @@ import {
   getProfileSoulDir,
   getUserConfigDir,
   PLUGIN_MANIFEST_API_VERSION,
+  readApiErrorMessage,
 } from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
@@ -841,6 +842,55 @@ describe("plugin HTTP API", () => {
     await expect(allowed.json()).resolves.toMatchObject({
       result: { input: { q: "n" }, ok: true },
     });
+  });
+
+  test("an action error reaches the caller while host failures stay generic", async () => {
+    const { app, authService, databaseAdapter, pluginService } = createApp();
+    const admin = await setupFreshInstallSession(app, databaseAdapter);
+
+    const platform = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+
+    await installRelease(
+      app,
+      platform,
+      pluginBundle("1.0.0", {
+        "actions/list.js":
+          'export async function run() { throw new Error("contract_end must be an ISO-8601 date"); }',
+        "actions/wipe.js":
+          'export async function run(input, context) { await context.host({ type: "missing" }); return null; }',
+      })
+    );
+    await pluginService.addOrgPlugin(admin.orgId!, "notes");
+    const added = await pluginService.getOrgPluginDetail(admin.orgId!, "notes");
+    await pluginService.enableOrgPlugin(admin.orgId!, "notes", added!.revision);
+
+    const rejected = await jsonRequest(
+      app,
+      "/v1/plugins/notes/actions/list",
+      admin,
+      { body: JSON.stringify({ input: {} }), method: "POST" }
+    );
+
+    expect(rejected.status).toBe(422);
+    expect(await readApiErrorMessage(rejected)).toBe(
+      "contract_end must be an ISO-8601 date"
+    );
+
+    const hostFailure = await jsonRequest(
+      app,
+      "/v1/plugins/notes/actions/wipe",
+      admin,
+      { body: JSON.stringify({ input: {} }), method: "POST" }
+    );
+
+    expect(hostFailure.status).toBe(500);
+    expect(await readApiErrorMessage(hostFailure)).toBe(
+      "An unexpected server error occurred."
+    );
   });
 
   test("cookie-authenticated mutations require CSRF including npm package installs", async () => {

@@ -30,6 +30,16 @@ const { input, context } = envelope;
 
 const pending = new Map();
 
+// Host failures keep their 500 path even when the action rethrows them.
+const hostErrors = new WeakSet();
+
+const hostError = (message) => {
+  const error = new Error(message);
+  hostErrors.add(error);
+
+  return error;
+};
+
 process.on("message", (message) => {
   if (message?.type !== "nakama-host-result") {
     return;
@@ -44,7 +54,7 @@ process.on("message", (message) => {
   pending.delete(message.id);
 
   if (message.error) {
-    call.reject(new Error(message.error));
+    call.reject(hostError(message.error));
   } else {
     call.resolve(message.result);
   }
@@ -53,7 +63,7 @@ process.on("message", (message) => {
 context.host = (request) =>
   new Promise((resolve, reject) => {
     if (!process.send) {
-      reject(new Error("Plugin host capabilities are unavailable."));
+      reject(hostError("Plugin host capabilities are unavailable."));
 
       return;
     }
@@ -63,6 +73,7 @@ context.host = (request) =>
     process.send({ id, request, type: "nakama-host-request" }, (error) => {
       if (error) {
         pending.delete(id);
+        hostErrors.add(error);
         reject(error);
       }
     });
@@ -78,8 +89,20 @@ if (!(run instanceof Function)) {
 }
 
 try {
-  const result = await run(input, context);
-  process.stdout.write(JSON.stringify(result));
+  let output;
+
+  try {
+    output = { ok: true, result: await run(input, context) };
+  } catch (error) {
+    if (!(error instanceof Error) || hostErrors.has(error)) {
+      throw error;
+    }
+
+    // Only the message crosses the boundary; the stack stays in the child.
+    output = { error: error.message, ok: false };
+  }
+
+  process.stdout.write(JSON.stringify(output));
 } finally {
   if (process.connected) {
     process.disconnect();

@@ -78,6 +78,34 @@ const pluginJsonSchema = z.json();
 
 type PluginJsonValue = z.infer<typeof pluginJsonSchema>;
 
+const pluginRunnerOutputSchema = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), result: pluginJsonSchema }),
+  z.object({ error: z.string(), ok: z.literal(false) }),
+]);
+
+const MAX_ACTION_ERROR_CHARS = 500;
+
+// Plugin authors write these messages for people, so they can leak a host
+// path from a template string. Redact absolute paths and cap the length.
+const ABSOLUTE_PATH_PATTERN =
+  /(?<=^|[\s"'(=])(?:file:\/\/)?(?:[A-Za-z]:)?[\\/](?:[^\s\\/:"'`]+[\\/])+[^\s\\/:"'`]*/g;
+
+function safeActionErrorMessage(message: string): string {
+  const cleaned = message
+    .replace(ABSOLUTE_PATH_PATTERN, "[path]")
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned) {
+    return "Plugin action failed.";
+  }
+
+  return cleaned.length > MAX_ACTION_ERROR_CHARS
+    ? `${cleaned.slice(0, MAX_ACTION_ERROR_CHARS - 1)}…`
+    : cleaned;
+}
+
 export class PluginHostError extends Error {
   constructor(
     readonly code: string,
@@ -2220,7 +2248,16 @@ export class PluginService {
       workspaceRoot: input.context.workspaceRoot,
     });
 
-    return pluginJsonSchema.parse(result);
+    const output = pluginRunnerOutputSchema.parse(result);
+
+    if (!output.ok) {
+      throw new PluginHostError(
+        "action_failed",
+        safeActionErrorMessage(output.error)
+      );
+    }
+
+    return output.result;
   }
 
   private withOrgPluginMutation<T>(
