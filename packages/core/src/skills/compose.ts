@@ -3,7 +3,8 @@ import type { DiscoveredSkill } from "./types";
 export const AGENT_BROWSER_SKILL_NAME = "agent-browser";
 
 export function composeAgentBrowserCapabilityPrompt(
-  skills: Pick<DiscoveredSkill, "name">[]
+  skills: Pick<DiscoveredSkill, "name">[],
+  options: { cloudBrowser?: boolean } = {}
 ): string {
   const skill = skills.find((entry) => entry.name === AGENT_BROWSER_SKILL_NAME);
 
@@ -15,7 +16,13 @@ export function composeAgentBrowserCapabilityPrompt(
 
 The **agent-browser** skill is assigned (see Available Agent Skills). Skills are workflow instructions, not callable tools — run this one with \`bash\` + the agent-browser CLI. For login walls, forms, clicks, screenshots, and dynamic pages; prefer \`web_fetch\` for plain public text.
 
-\`agent-browser open <url>\` → act or \`screenshot artifacts/<file>.png\` → \`close\`. Full workflow: follow the skill when matched or \`/skill agent-browser\`. Missing CLI → tell the operator to install it. Host \`AGENT_BROWSER_EXECUTABLE_PATH\` / \`AGENT_BROWSER_ARGS\` (optional Cloak stealth Chromium) are inherited by bash; if unset, stock Chrome from \`agent-browser install\` is correct.`;
+\`agent-browser open <url>\` → act or \`screenshot artifacts/<file>.png\` → \`close\`. Full workflow: follow the skill when matched or \`/skill agent-browser\`. Missing CLI → tell the operator to install it. Host \`AGENT_BROWSER_EXECUTABLE_PATH\` / \`AGENT_BROWSER_ARGS\` (optional Cloak stealth Chromium) are inherited by bash; if unset, stock Chrome from \`agent-browser install\` is correct.${
+    options.cloudBrowser
+      ? `
+
+Cloud browser is on: every \`agent-browser\` command in this chat drives one Kernel browser, and the user sees it live in the chat's Browser panel. Use agent-browser for sites that need the user's login. When a site asks for a login, open its login page and ask the user to sign in in the Browser panel, then continue after they reply. Never ask for passwords. Logins are saved for your next runs, so check whether you are already signed in first.`
+      : ""
+  }`;
 }
 
 /**

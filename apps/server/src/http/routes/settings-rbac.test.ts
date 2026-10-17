@@ -236,6 +236,11 @@ const INSTALL_WRITES: { body?: unknown; method: string; path: string }[] = [
   { method: "POST", path: "/v1/settings/email/test" },
   { method: "POST", path: "/v1/settings/agent-browser/install" },
   {
+    body: { apiKey: "kernel-key", provider: "kernel" },
+    method: "PUT",
+    path: "/v1/settings/agent-browser",
+  },
+  {
     body: { providerPassthroughEnabled: false },
     method: "PUT",
     path: "/v1/settings/coding-harnesses",

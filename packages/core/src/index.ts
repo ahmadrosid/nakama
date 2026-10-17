@@ -125,6 +125,8 @@ export * from "./provider-setup-prompt";
 
 export * from "./runtime";
 
+export * from "./secret-mask";
+
 export * from "./skills";
 
 export * from "./soul";

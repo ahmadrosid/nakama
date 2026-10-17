@@ -83,6 +83,7 @@ import type {
   StoredSkillRecord,
   StoredSkillUsageRecord,
 } from "@nakama/db";
+import { isCloudBrowserRuntime } from "./agent-browser-service";
 import { loadJavascriptSkillTool } from "./javascript-tool-loader";
 import type { PluginService } from "./plugin-service";
 import {
@@ -1579,7 +1580,9 @@ export class SkillsService {
 
     return [
       composeSkillsCatalog(discovered),
-      composeAgentBrowserCapabilityPrompt(discovered),
+      composeAgentBrowserCapabilityPrompt(discovered, {
+        cloudBrowser: await isCloudBrowserRuntime(),
+      }),
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -1595,7 +1598,8 @@ export class SkillsService {
       : await this.getAssignedDiscoveredSkills(orgId, profileId);
 
     return composeAgentBrowserCapabilityPrompt(
-      assigned.map((item) => item.discovered)
+      assigned.map((item) => item.discovered),
+      { cloudBrowser: await isCloudBrowserRuntime() }
     );
   }
 

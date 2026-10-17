@@ -196,6 +196,7 @@ import type {
   SendErrorTrackingTestResponse,
   SendMessageRequest,
   SendMessageResponse,
+  SessionBrowserResponse,
   SessionMessagesResponse,
   SessionStatusResponse,
   SessionSummary,
@@ -238,6 +239,7 @@ import type {
   TranscriptionSettings,
   TranscriptionSettingsResponse,
   UnpinOrgMemoryRequest,
+  UpdateAgentBrowserSettingsRequest,
   UpdateArtifactRequest,
   UpdateArtifactResponse,
   UpdateAuthProfileRequest,
@@ -857,6 +859,19 @@ export class NakamaClient {
   async getSessionStatus(sessionId: string): Promise<SessionStatusResponse> {
     return this.request<SessionStatusResponse>(
       `/v1/sessions/${encodeURIComponent(sessionId)}/status`
+    );
+  }
+
+  async getSessionBrowser(sessionId: string): Promise<SessionBrowserResponse> {
+    return this.request<SessionBrowserResponse>(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/browser`
+    );
+  }
+
+  async stopSessionBrowser(sessionId: string): Promise<void> {
+    await this.request<void>(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/browser`,
+      { method: "DELETE" }
     );
   }
 
@@ -2832,6 +2847,18 @@ export class NakamaClient {
   async getAgentBrowserStatus(): Promise<AgentBrowserStatusResponse> {
     return this.request<AgentBrowserStatusResponse>(
       "/v1/settings/agent-browser"
+    );
+  }
+
+  async setAgentBrowserSettings(
+    request: UpdateAgentBrowserSettingsRequest
+  ): Promise<AgentBrowserStatusResponse> {
+    return this.request<AgentBrowserStatusResponse>(
+      "/v1/settings/agent-browser",
+      {
+        body: JSON.stringify(request),
+        method: "PUT",
+      }
     );
   }
 

@@ -8,6 +8,7 @@ import {
 import { useMemo, useState } from "react";
 import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
 import { ArtifactStreamingPanelBridge } from "@/components/chat/artifact-streaming-panel-bridge";
+import { BrowserLiveViewPanelBridge } from "@/components/chat/browser-live-view-panel-bridge";
 import { ChatCognitoControl } from "@/components/chat/chat-cognito-control";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
@@ -178,6 +179,7 @@ export function ChatPageContent(state: ChatPageState) {
   ) : (
     <ChatAttachmentPanelProvider key={session?.id ?? "new"}>
       <ArtifactStreamingPanelBridge messages={messages} profileId={profileId} />
+      <BrowserLiveViewPanelBridge messages={messages} sessionId={session?.id} />
       <ChatPageColumn cognito={cognito}>
         {cognitoControl}
         <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
