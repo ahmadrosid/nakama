@@ -32,6 +32,7 @@
     "agent-prompt",
     "---Extend---",
     "builtin-tools",
+    "tool-reference",
     "skills",
     "integrations",
     "image-generation",

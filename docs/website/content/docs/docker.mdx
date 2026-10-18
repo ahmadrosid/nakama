@@ -27,9 +27,6 @@ Three things raise the figure and are not in the table:
   heaviest of the three. Size for them separately if you enable them.
 - **A configured provider.** The numbers above come from offline mode, so no
   model traffic passed through the container.
-- **The MicroSandbox bash backend**, which needs a working hypervisor at
-  `/dev/kvm`. Most small VPS plans do not expose it. See
-  [MicroSandbox bash backend](#optional-microsandbox-bash-backend).
 
 ## Quick run
 
@@ -155,13 +152,9 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data \
 
 See [Agent browser](/agent-browser#3-optional-cloakbrowser-for-antibot-sites).
 
-## Optional: MicroSandbox bash backend
+## Bash in Docker
 
-Stock `docker run` / `./scripts/docker-build-run.sh` does **not** pass `/dev/kvm` (or nested virtualization). Keep `NAKAMA_BASH_BACKEND=host` (the default) inside Docker unless you deliberately add hypervisor access.
-
-In Docker, host Bash runs inside the Nakama container with the server process's OS permissions. It can access mounted data outside the active profile workspace, including other profiles' files when permissions allow. The shared container does not isolate profiles from each other. Assign host Bash only to trusted profiles.
-
-If you set `NAKAMA_BASH_BACKEND=microsandbox` without a working MicroSandbox runtime / KVM device, **every** `bash` tool call fails closed — there is no silent host fallback. Coding-agent harness runs require `host` for now. See [Choose a MicroSandbox image](/builtin-tools#choose-a-microsandbox-image) for custom image setup.
+In Docker, Bash runs inside the Nakama container with the server process's OS permissions. It can access mounted data outside the active profile workspace, including other profiles' files when permissions allow. The shared container does not isolate profiles from each other. Assign Bash only to trusted profiles.
 
 ## Next steps
 

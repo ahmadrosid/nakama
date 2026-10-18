@@ -16,7 +16,7 @@ The mental model:
 
 There is no separate delegate builtin for **repo coding work**. That workflow is **`bash` + the `coding-agent` skill**. Setup happens in chat: the agent can install missing npm-based CLIs (or tell you to install Cursor Agent yourself) and asks which backend to use when more than one is available.
 
-For **general in-process delegation** (research, review, planning), Nakama also offers the optional [`sub_agent`](/builtin-tools#sub_agent) tool — a same-profile sub-agent that returns a structured result. It does not spawn external CLIs and is not a substitute for dedicated coding CLIs on large repo changes.
+For **general in-process delegation** (research, review, planning), Nakama also offers the optional [`sub_agent`](/tool-reference#sub_agent) tool — a same-profile sub-agent that returns a structured result. It does not spawn external CLIs and is not a substitute for dedicated coding CLIs on large repo changes.
 
 ## Why use a coding agent
 
@@ -81,7 +81,7 @@ When the user's message looks like a code-change request, the skill matcher atta
 - **One CLI installed** — context includes that backend's command template
 - **Multiple CLIs installed** — the agent asks which one to use (per conversation) before running
 
-Use an appropriate `bash` `timeoutMs` (often 10–30 minutes for large tasks; see [bash](/builtin-tools#bash)).
+Use an appropriate `bash` `timeoutMs` (often 10–30 minutes for large tasks; see [bash](/tool-reference#bash)).
 
 ### Provider passthrough
 
