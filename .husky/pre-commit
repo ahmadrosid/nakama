@@ -28,3 +28,12 @@ fi
 
 echo "✨ Files formatted by Ultracite"
 # ultracite end
+
+# React Doctor: only when staged changes touch React code. Any warning blocks,
+# so the score stays at 100.
+REACT_FILES=$(git diff --cached --name-only --diff-filter=ACMR |
+  grep -E '\.(tsx|jsx)$|^(apps/web|packages/ui|packages/plugins)/.*\.(ts|js)$' || true)
+if [ -n "$REACT_FILES" ]; then
+  bun x react-doctor --staged -y --no-supply-chain --blocking warning \
+    --project @nakama/web,@nakama/ui,@nakama/plugin-supermemory || exit 1
+fi

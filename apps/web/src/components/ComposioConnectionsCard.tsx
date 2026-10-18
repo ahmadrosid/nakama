@@ -17,14 +17,9 @@ import { Search01Icon } from "hugeicons-react";
 import { useDeferredValue, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  addableToolkitRows,
-  buildToolkitRows,
   type ComposioToolkitListProps,
   ComposioToolkitRowList,
   ComposioToolkitTile,
-  inUseToolkitRows,
-  searchToolkitRows,
-  type ToolkitRowModel,
 } from "@/components/ComposioToolkitRows";
 import { IntegrationCardShell } from "@/components/integration-settings.shared";
 import { useAuth } from "@/context/use-auth";
@@ -41,6 +36,13 @@ import {
   useUpdateProfileComposioToolkitsMutation,
 } from "@/hooks/use-composio";
 import { formatError } from "@/lib/client";
+import {
+  addableToolkitRows,
+  buildToolkitRows,
+  inUseToolkitRows,
+  searchToolkitRows,
+  type ToolkitRowModel,
+} from "@/lib/composio-toolkit-rows";
 
 const EMPTY_PROFILES: ProfileSummary[] = [];
 
