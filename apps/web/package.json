@@ -5,6 +5,7 @@
   "scripts": {
     "build": "tsc --noEmit && vite build && bun run scripts/build-sw.ts",
     "dev": "bun run scripts/dev.ts",
+    "perf": "bun run scripts/perf/run.ts",
     "preview": "vite preview",
     "start": "vite preview",
     "test": "bun test"

@@ -25,5 +25,5 @@
       ]
     }
   },
-  "include": ["src", "scripts/test-setup.ts"]
+  "include": ["src", "scripts/test-setup.ts", "scripts/perf"]
 }

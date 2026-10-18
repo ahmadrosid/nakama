@@ -1,0 +1,101 @@
+{
+  "baseline": "/tmp/nakama-perf-baseline",
+  "builds": [
+    {
+      "dist": "/tmp/nakama-perf-baseline",
+      "runtimeSha256": "3bad205864fca143825285a1809b4a4582481ea446a56caeef091bfeb1fdeb1f"
+    },
+    {
+      "dist": "/workspace/nakama/apps/web/dist",
+      "runtimeSha256": "3bad205864fca143825285a1809b4a4582481ea446a56caeef091bfeb1fdeb1f"
+    }
+  ],
+  "bun": "1.4.3",
+  "candidate": "/workspace/nakama/apps/web/dist",
+  "chromium": "Chromium 154.0.8037.57 built on Debian GNU/Linux 13 (trixie)",
+  "cpu": "INTEL(R) XEON(R) PLATINUM 8573C",
+  "fixture": {
+    "chunks": 120,
+    "intervalMs": 30,
+    "turns": 300
+  },
+  "mode": "commit-diagnostics",
+  "platform": "linux/x64",
+  "results": [
+    {
+      "label": "baseline",
+      "round": 1,
+      "commits": 7,
+      "scenario": "cross-chat",
+      "streams": {
+        "cancelled": 0,
+        "completed": 1,
+        "emitted": 120,
+        "started": 1
+      }
+    },
+    {
+      "label": "baseline",
+      "round": 1,
+      "commits": 291,
+      "scenario": "typing",
+      "streams": {
+        "cancelled": 0,
+        "completed": 1,
+        "emitted": 120,
+        "started": 1
+      }
+    },
+    {
+      "label": "baseline",
+      "round": 1,
+      "commits": 96,
+      "scenario": "switch",
+      "streams": {
+        "cancelled": 0,
+        "completed": 0,
+        "emitted": 0,
+        "started": 0
+      }
+    },
+    {
+      "label": "candidate",
+      "round": 1,
+      "commits": 6,
+      "scenario": "cross-chat",
+      "streams": {
+        "cancelled": 0,
+        "completed": 1,
+        "emitted": 120,
+        "started": 1
+      }
+    },
+    {
+      "label": "candidate",
+      "round": 1,
+      "commits": 326,
+      "scenario": "typing",
+      "streams": {
+        "cancelled": 0,
+        "completed": 1,
+        "emitted": 120,
+        "started": 1
+      }
+    },
+    {
+      "label": "candidate",
+      "round": 1,
+      "commits": 102,
+      "scenario": "switch",
+      "streams": {
+        "cancelled": 0,
+        "completed": 0,
+        "emitted": 0,
+        "started": 0
+      }
+    }
+  ],
+  "rounds": 1,
+  "summary": [],
+  "viewport": "1440x1000@1"
+}
