@@ -21,6 +21,7 @@ import {
   ComposioToolkitRowList,
   ComposioToolkitTile,
 } from "@/components/ComposioToolkitRows";
+import { IntegrationsTabs } from "@/components/IntegrationsTabs";
 import { IntegrationCardShell } from "@/components/integration-settings.shared";
 import { useAuth } from "@/context/use-auth";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
@@ -83,15 +84,15 @@ function ComposioToolkitList({
 
   return (
     <div className="space-y-10">
-      <header className="flex flex-wrap items-center gap-4">
-        <div className="relative min-w-56 flex-1">
+      <IntegrationsTabs>
+        <div className="relative w-full sm:w-72">
           <Search01Icon
             aria-hidden
             className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
           />
           <Input
             aria-label="Search apps"
-            className="h-10 pl-9"
+            className="pl-9"
             onChange={(event) => setSearch(event.target.value)}
             placeholder={
               isOrgAdmin
@@ -102,7 +103,7 @@ function ComposioToolkitList({
             value={search}
           />
         </div>
-      </header>
+      </IntegrationsTabs>
 
       {isSearching ? (
         <section className="space-y-3">

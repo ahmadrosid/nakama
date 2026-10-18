@@ -20,10 +20,8 @@ import type { ChatListItem } from "@/lib/chat-history";
 import { formatError } from "@/lib/client";
 import { canAccessSystemPage } from "@/lib/navigation";
 import { findPluginTool } from "@/lib/plugin-runtime";
-import {
-  LocalPluginInstaller,
-  PluginAgentAccessDialog,
-} from "@/pages/PluginsPage";
+import { LocalPluginInstaller } from "@/pages/plugins/local-plugin-installer";
+import { PluginAgentAccessDialog } from "@/pages/plugins/plugin-agent-access-dialog";
 
 interface PluginDraft {
   actions: string[];

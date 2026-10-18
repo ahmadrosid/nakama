@@ -36,7 +36,6 @@ import {
   SIDEBAR_PAGE_IDS,
   sidebarPageId,
 } from "@/lib/navigation";
-import { IntegrationsTabs } from "@/pages/IntegrationsPage";
 
 export function Layout() {
   const shell = useAppShell();
@@ -66,10 +65,6 @@ export function Layout() {
             />
             <AppShellError error={shell.error} />
             <main className={appShellMainClassName(shell.page, shell.pathname)}>
-              {shell.pathname === PAGE_PATHS.composio ||
-              shell.pathname === PAGE_PATHS["plugin-management"] ? (
-                <IntegrationsTabs />
-              ) : null}
               <RouteBoundary resetKey={shell.pathname}>
                 <Outlet />
               </RouteBoundary>
