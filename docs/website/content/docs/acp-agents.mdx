@@ -43,7 +43,7 @@ In chat, the composer shows the model and reasoning choices that the selected AC
 
 The ACP agent runs as a child process on the machine that runs Nakama. The server image includes the Claude and Codex ACP packages. The agent may still need its own provider credentials or sign-in on that machine before it can answer.
 
-Keep the server able to start child processes. In Docker deployments, configure credentials for the container, not only for the host. Follow the selected agent's instructions for authentication and model access.
+Keep the server able to start child processes. In Docker deployments, configure credentials for the container, not only for the host. The default Docker image does not include the Claude and Codex binaries. See [Docker](/docker#claude-and-codex-agents). Follow the selected agent's instructions for authentication and model access.
 
 An ACP agent uses the profile's workspace as its working directory. Nakama gives it access only to tools assigned to that profile. Review those tools before you enable an ACP agent for a profile.
 

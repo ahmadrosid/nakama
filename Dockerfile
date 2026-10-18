@@ -39,10 +39,17 @@ COPY --from=web-builder /app/apps/platform/slack/dist /app/apps/platform/slack/d
 FROM oven/bun:1.4.3-slim@sha256:14a223fa35747ec728bce300ef85888bc5f7958164d15bbba6a54b22b52a3288 AS runtime-deps
 WORKDIR /runtime-deps
 
+# The Codex and Claude Code binaries are about 670 MB, half the image. The
+# default image drops them; the -full tag keeps them. Without them, the ACP
+# agents use CODEX_PATH / CLAUDE_CODE_EXECUTABLE.
+ARG INSTALL_CODING_AGENTS=false
 COPY .docker/runtime-deps/package.json .docker/runtime-deps/bun.lock ./
 RUN bun install --frozen-lockfile --production --ignore-scripts \
   # The runtime is Debian (glibc); the SDK never picks its musl binary here.
-  && rm -rf node_modules/@anthropic-ai/claude-agent-sdk-linux-x64-musl
+  && rm -rf node_modules/@anthropic-ai/claude-agent-sdk-linux-*-musl \
+  && if [ "$INSTALL_CODING_AGENTS" != "true" ]; then \
+       rm -rf node_modules/@anthropic-ai/claude-agent-sdk-linux-* node_modules/@openai/codex-linux-*; \
+     fi
 
 # Keep FFmpeg's video libraries out of the runtime image. These pinned static
 # binaries cover both published architectures without Debian's GUI dependencies.
