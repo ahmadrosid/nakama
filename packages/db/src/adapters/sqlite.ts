@@ -580,8 +580,12 @@ export function openPrivateDatabase(databasePath: string): Database {
 
   if (databasePath !== ":memory:") {
     chmodSync(databasePath, PRIVATE_FILE_MODE);
-    // DELETE journal removal must sync its directory before a commit is acknowledged.
-    db.exec("PRAGMA synchronous = EXTRA");
+    // WAL lets readers run beside the writer. FULL syncs the log on every commit,
+    // so an acknowledged write still survives power loss; EXTRA only added a
+    // directory sync for the DELETE journal, which WAL never unlinks.
+    db.exec(
+      "PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA busy_timeout = 5000;"
+    );
   }
 
   return db;
