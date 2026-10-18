@@ -32,12 +32,23 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
+          # React Doctor diffs against the PR's base SHA, which goes stale as
+          # main moves. On the merge commit, main's newer files look like PR
+          # changes it cannot place, so it drops the baseline. The PR head
+          # matches that base.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       # Keep the score status; sharing this job avoids a second React Doctor row.
       - name: React Doctor
         uses: millionco/react-doctor@695e46eee203a5d1855020191aa7e9c010a1250e # v2.4.0
         with:
           commit-status: true
+
+      - name: Check out the merge result for Knip
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags origin "$GITHUB_SHA"
+          git checkout --detach "$GITHUB_SHA"
 
       - name: Set up Bun
         if: github.event_name == 'pull_request'
