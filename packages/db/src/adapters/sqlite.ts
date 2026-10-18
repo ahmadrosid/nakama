@@ -2965,7 +2965,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         "llm_usage_model_stats",
         "mcp_servers",
         "skills",
-        "tool_output_savings",
         "tools",
         "workspace_settings",
       ]) {

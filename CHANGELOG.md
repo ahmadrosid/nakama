@@ -11,7 +11,7 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 
 ### Removed
 
-- The built-in token optimiser and its Context savings panel. Tool results reach the model unshortened, the image no longer ships the `omni` binary, and `NAKAMA_OMNI` and `NAKAMA_OMNI_AUTO_INSTALL` are ignored. Existing data is left in place ([#1888]) *(in review)*
+- The built-in token optimiser and its Context savings panel. Tool results reach the model unshortened, the image no longer ships the `omni` binary, and `NAKAMA_OMNI` and `NAKAMA_OMNI_AUTO_INSTALL` are ignored. Upgrading drops the `tool_output_savings` table and the `token_optimizer_enabled` setting ([#1888]) *(in review)*
 - Organization backend API keys and app-user integration. External apps using these keys must stop using this API. Private session rows remain retired; files are retained in `retired-app-users` for operators. Back up the full database and config directory before upgrading; do not run old and new servers against the same data. Rollback requires restoring that full backup.
 
 ### Changed

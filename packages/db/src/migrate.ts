@@ -59,7 +59,9 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateSuperNakamaNaming);
   atomic(migrateWorkspaceSettingsTable);
   atomic(migrateLlmUsageOrgScope);
-  atomic(migrateToolOutputSavingsTable);
+  atomic((database) =>
+    database.exec("DROP TABLE IF EXISTS tool_output_savings")
+  );
   atomic(migrateLlmTurnUsageTable);
   atomic(migrateLlmUsageActorStatsTable);
   atomic(migrateLlmUsageDailyStatsTable);
@@ -801,43 +803,6 @@ function migrateLlmUsageDailyStatsTable(db: Database): void {
       updated_at TEXT NOT NULL,
       PRIMARY KEY (org_id, day, model_id, provider)
     );
-  `);
-}
-
-// Unused since the token optimiser was removed (#1888). Kept so an existing
-// install needs no migration to upgrade.
-function migrateToolOutputSavingsTable(db: Database): void {
-  // The first cut of this table had no `bucket`, and CREATE TABLE IF NOT EXISTS
-  // will not add one. It is a counter with no history worth keeping and it has
-  // never shipped, so recreating is cheaper and clearer than an ALTER dance.
-  const columns = db
-    .prepare<{ name: string }, SQLQueryBindings[]>(
-      "PRAGMA table_info(tool_output_savings)"
-    )
-    .all();
-
-  if (
-    columns.length > 0 &&
-    !columns.some((column) => column.name === "bucket")
-  ) {
-    db.exec("DROP TABLE tool_output_savings;");
-  }
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS tool_output_savings (
-      org_id TEXT NOT NULL,
-      bucket TEXT NOT NULL,
-      optimizer TEXT NOT NULL,
-      tool TEXT NOT NULL,
-      calls INTEGER NOT NULL DEFAULT 0,
-      bytes_in INTEGER NOT NULL DEFAULT 0,
-      bytes_out INTEGER NOT NULL DEFAULT 0,
-      tracked_since TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      PRIMARY KEY (org_id, bucket, optimizer, tool)
-    );
-    CREATE INDEX IF NOT EXISTS tool_output_savings_org_bucket
-      ON tool_output_savings (org_id, bucket);
   `);
 }
 
@@ -1995,13 +1960,11 @@ function migrateWorkspaceSettingsTable(db: Database): void {
     `);
   }
 
-  // Null means "not chosen here", which falls back to the NAKAMA_OMNI env var.
-  // A tri-state rather than a boolean so an operator who set the env var does
-  // not have it silently overridden by a default row.
-  if (!columnNames.has("token_optimizer_enabled")) {
-    db.exec(`
-      ALTER TABLE workspace_settings ADD COLUMN token_optimizer_enabled INTEGER;
-    `);
+  // Left by the token optimiser removed in #1888.
+  if (columnNames.has("token_optimizer_enabled")) {
+    db.exec(
+      "ALTER TABLE workspace_settings DROP COLUMN token_optimizer_enabled;"
+    );
   }
 
   if (!columnNames.has("coding_agent_provider_passthrough")) {

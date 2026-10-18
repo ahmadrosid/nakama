@@ -2283,3 +2283,33 @@ test("llm quota reservations: an upgrade drops the old counter table and its fal
     db.close();
   }
 });
+
+test("upgrades drop the removed token optimiser table and column", () => {
+  const db = new Database(":memory:");
+
+  try {
+    migrateDatabase(db);
+    db.exec(
+      "CREATE TABLE tool_output_savings (org_id TEXT); ALTER TABLE workspace_settings ADD COLUMN token_optimizer_enabled INTEGER"
+    );
+    migrateDatabase(db);
+    migrateDatabase(db);
+    expect(
+      db
+        .query(
+          "SELECT name FROM sqlite_master WHERE name = 'tool_output_savings'"
+        )
+        .get()
+    ).toBeNull();
+    expect(
+      db
+        .query<{ name: string }, SQLQueryBindings[]>(
+          "PRAGMA table_info(workspace_settings)"
+        )
+        .all()
+        .map((column) => column.name)
+    ).not.toContain("token_optimizer_enabled");
+  } finally {
+    db.close();
+  }
+});
