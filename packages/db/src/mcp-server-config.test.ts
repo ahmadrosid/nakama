@@ -55,11 +55,15 @@ describe("MCP server config at rest", () => {
 
     await database.adapter.upsertMcpServer(record);
 
-    const raw = new Database(sqlitePath, { readonly: true })
+    const sqlite = new Database(sqlitePath, { readonly: true });
+
+    const raw = sqlite
       .query<{ config: string }, [string]>(
         "SELECT config FROM mcp_servers WHERE id = ?"
       )
       .get("mcp-1");
+
+    sqlite.close();
 
     expect(raw?.config).not.toContain(SECRET);
     expect(raw?.config).not.toContain("mcp.example.com");
@@ -79,9 +83,13 @@ describe("MCP server config at rest", () => {
     const record = serverRecord("mcp-legacy");
 
     await database.adapter.upsertMcpServer(record);
-    new Database(sqlitePath)
+
+    const sqlite = new Database(sqlitePath);
+    sqlite
       .query("UPDATE mcp_servers SET config = ? WHERE id = ?")
       .run(JSON.stringify(record.config), "mcp-legacy");
+
+    sqlite.close();
 
     expect((await database.adapter.getMcpServer("mcp-legacy"))?.config).toEqual(
       record.config
@@ -103,6 +111,8 @@ describe("MCP server config at rest", () => {
         "UPDATE mcp_servers SET config = (SELECT config FROM mcp_servers WHERE id = 'mcp-a') WHERE id = 'mcp-b'"
       )
       .run();
+
+    sqlite.close();
 
     await expect(database.adapter.getMcpServer("mcp-b")).rejects.toThrow();
 
