@@ -110,13 +110,6 @@ for the complete cleanup scope.
 
 Open the dashboard at http://localhost:4310.
 
-The image carries [omni](https://github.com/fajarhide/omni), which shortens `bash`
-and `read_file` output before it reaches the model. It is on by default; switch it
-off under Integrations, or with `NAKAMA_OMNI=0`. Build with
-`--build-arg OMNI_VERSION=` to leave the binary out; the server then downloads it,
-checksum verified, the first time the toggle is switched on. Set
-`NAKAMA_OMNI_AUTO_INSTALL=0` to forbid that download.
-
 ### Integrations
 
 Nakama connects to **Telegram**, **WhatsApp**, **Discord**, **Slack**, and

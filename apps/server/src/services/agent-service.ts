@@ -566,12 +566,6 @@ export class AgentService {
       isProviderConfigured(userConfig) && provider !== null;
   }
 
-  /**
-   * Binds a savings recorder to one org. Fire and forget on purpose: a counter
-   * for a dashboard must never delay a tool result or fail a turn, so the write
-   * is not awaited and a rejection is swallowed.
-   */
-  /** Same fire-and-forget shape as the savings recorder, for provider tokens. */
   private llmTurnQuotaCheckerFor(orgId: string | undefined) {
     if (!orgId?.trim()) {
       return;
@@ -586,6 +580,10 @@ export class AgentService {
       );
   }
 
+  /**
+   * Fire and forget on purpose: a usage counter must never fail a turn, so the
+   * write is not awaited and a rejection is swallowed.
+   */
   private turnUsageRecorderFor(orgId: string | undefined) {
     if (!orgId?.trim()) {
       return;
@@ -596,34 +594,10 @@ export class AgentService {
     return (turn: {
       estimated: boolean;
       inputTokens: number;
-      optimized: boolean;
       outputTokens: number;
     }): void => {
       void this.db
         .incrementLlmTurnUsage(scopedOrgId, turn)
-        .catch(() => undefined);
-    };
-  }
-
-  private savingsRecorderFor(orgId: string | undefined) {
-    if (!orgId?.trim()) {
-      return;
-    }
-
-    const scopedOrgId = orgId.trim();
-
-    return (saving: {
-      bytesIn: number;
-      bytesOut: number;
-      optimizer: string;
-      tool: string;
-    }): void => {
-      void this.db
-        .incrementToolOutputSavings(
-          scopedOrgId,
-          saving,
-          new Date().toISOString()
-        )
         .catch(() => undefined);
     };
   }
@@ -1833,7 +1807,6 @@ export class AgentService {
       orgId,
       orgRole: "member",
       profileId,
-      recordToolOutputSavings: this.savingsRecorderFor(orgId),
       recordTurnUsage: this.turnUsageRecorderFor(orgId),
     });
 
@@ -2053,7 +2026,6 @@ export class AgentService {
       orgId,
       orgRole: "member",
       profileId: context.profileId,
-      recordToolOutputSavings: this.savingsRecorderFor(orgId),
       recordTurnUsage: this.turnUsageRecorderFor(orgId),
       workflowId: context.workflowId,
       workflowRunId: context.runId,
@@ -2111,7 +2083,6 @@ export class AgentService {
         orgId,
         orgRole: "member",
         profileId,
-        recordToolOutputSavings: this.savingsRecorderFor(orgId),
         recordTurnUsage: this.turnUsageRecorderFor(orgId),
       }),
       tools: [],
@@ -2188,7 +2159,6 @@ export class AgentService {
       orgId: input.orgId,
       orgRole: input.orgRole,
       profileId: input.profileId,
-      recordToolOutputSavings: this.savingsRecorderFor(input.orgId),
       recordTurnUsage: this.turnUsageRecorderFor(input.orgId),
       sessionId: input.sessionId,
       userId: input.userId,
@@ -5673,14 +5643,6 @@ export class AgentService {
       false
     );
 
-    // Install-wide override for the tool-output optimiser, read from the single
-    // `workspace_settings` row: one flag governs every org on this host, which
-    // is why only platform admins can write it. Undefined leaves the decision
-    // to the server's env var, so an operator who never opened the UI keeps
-    // whatever they configured.
-    const tokenOptimizerEnabled = (await this.db.getWorkspaceSettings())
-      ?.tokenOptimizerEnabled;
-
     const resolvedSystemPrompt = profile.isSuper
       ? `${systemPrompt.trim()}\n\n${SUPER_NAKAMA_TOOL_AUTHORING_RULES}`
       : systemPrompt;
@@ -5767,10 +5729,8 @@ export class AgentService {
       orgId,
       orgRole: orgRole ?? undefined,
       profileId,
-      recordToolOutputSavings: this.savingsRecorderFor(orgId),
       recordTurnUsage: this.turnUsageRecorderFor(orgId),
       sessionId,
-      tokenOptimizerEnabled: tokenOptimizerEnabled ?? undefined,
       trackEphemeralAttachment,
       userId: userId ?? undefined,
     });
@@ -6430,7 +6390,6 @@ const REPLAYABLE_AUTOMATION_TOOLS = new Set([
   "knowledge_base_search",
   "list_artifacts",
   "list_profile_sessions",
-  "omni_retrieve",
   "read_file",
   "read_profile_session",
   "read_session_history",

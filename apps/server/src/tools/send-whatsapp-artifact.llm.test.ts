@@ -94,7 +94,6 @@ for (const scenario of cases) {
             channel: "whatsapp",
             orgId,
             profileId,
-            tokenOptimizerEnabled: false,
             workspaceRoot: getProfileSoulDir(orgId, profileId),
           },
           tools: [

@@ -10,7 +10,6 @@ import { CodingAgentsSettingsCard } from "@/components/CodingAgentsSettingsCard"
 import { ComposioConnectionsCard } from "@/components/ComposioConnectionsCard";
 import { ErrorTrackingSettingsCard } from "@/components/ErrorTrackingSettingsCard";
 import { NotificationDestinationsCard } from "@/components/NotificationDestinationsCard";
-import { TokenOptimizationCard } from "@/components/TokenOptimizationCard";
 import { useAuth } from "@/context/use-auth";
 import {
   type IntegrationSectionId,
@@ -23,7 +22,6 @@ function resolveSection(value: string | null): IntegrationSectionId {
   if (
     value === "notifications" ||
     value === "composio" ||
-    value === "optimization" ||
     value === "error-tracking" ||
     value === "coding-agents"
   ) {
@@ -40,10 +38,6 @@ function IntegrationSectionPanel({
   canUseOrgIntegrations: boolean;
   section: IntegrationSectionId;
 }) {
-  if (section === "optimization") {
-    return <TokenOptimizationCard />;
-  }
-
   if (section === "coding-agents") {
     return <CodingAgentsSettingsCard />;
   }

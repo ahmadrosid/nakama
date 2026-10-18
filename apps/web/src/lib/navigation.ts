@@ -4,7 +4,6 @@ import {
   Building03Icon,
   CodeIcon,
   Coins01Icon,
-  CpuChargeIcon,
   DashboardSquare01Icon,
   Folder01Icon,
   LayoutGridIcon,
@@ -527,11 +526,6 @@ const INTEGRATION_SECTIONS = [
     icon: CodeIcon,
     id: "coding-agents",
     label: "Coding agents",
-  },
-  {
-    icon: CpuChargeIcon,
-    id: "optimization",
-    label: "Context savings",
   },
   {
     icon: Bug01Icon,

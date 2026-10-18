@@ -77,5 +77,3 @@ Organization members can create or change automations. A caller-supplied `profil
 | `GET` | `/v1/automations/:automationId/runs` |
 | `POST` | `/v1/automations/:automationId/runs/mark-read` |
 | `POST` | `/v1/automations/draft` |
-
-Automation runs carry a run id rather than a session id. Anything scoped per conversation, such as the [token optimiser](/token-optimiser) ledger, scopes to that run.

@@ -107,10 +107,6 @@ export * from "./notification-destinations";
 
 export * from "./ollama-provider-config";
 
-export * from "./omni";
-
-export * from "./omni-install";
-
 export * from "./openrouter-model-slug";
 
 export * from "./plugins";

@@ -8,7 +8,6 @@ import { convertDocxToMarkdown } from "../docx-text";
 import { markdownToDocx } from "../docx-write";
 import { pathExists } from "../fs";
 import { MAX_IMAGE_BYTES } from "../message-content";
-import { isOmniEnabled, omniRetrieveTool } from "../omni";
 import { getGlobalSkillsDir } from "../skills/paths";
 import { getProfileSoulDir } from "../soul/resolve";
 import { emailTool } from "./email";
@@ -1161,10 +1160,6 @@ export const builtinTools: ToolDefinition[] = [
   webFetchTool,
   emailTool,
   extractDocumentTextTool,
-  // Gated on the server-wide env var, not the per-org toggle: the toggle says
-  // whether an org folds, and publishing the expander per-org would let an org
-  // flip folding on with no way to read back what was folded until a restart.
-  ...(isOmniEnabled() ? [omniRetrieveTool] : []),
 ];
 
 export { PathGuardError };

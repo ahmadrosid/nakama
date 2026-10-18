@@ -10,7 +10,6 @@ import {
   type ChatContextUsage,
   contextUsageRatio,
   contextUsageSegments,
-  formatBytes,
   formatContextUsageLabel,
   formatTokenCountDetailed,
 } from "@/lib/chat-context-usage";
@@ -57,11 +56,6 @@ export function ChatContextUsageRing({
   );
 
   const fillRatio = ratio;
-
-  const optimizedNote =
-    usage.bytesKeptOut && usage.bytesProduced
-      ? `${formatBytes(usage.bytesKeptOut)} of tool output saved (${Math.round((100 * usage.bytesKeptOut) / usage.bytesProduced)}%)`
-      : null;
 
   return (
     <Popover>
@@ -174,12 +168,9 @@ export function ChatContextUsageRing({
           ) : null}
         </ul>
 
-        {usage.source === "estimate" || optimizedNote ? (
+        {usage.source === "estimate" ? (
           <div className="mt-3 space-y-1 text-muted-foreground text-xs">
-            {usage.source === "estimate" ? (
-              <p>Estimated from prompt size</p>
-            ) : null}
-            {optimizedNote ? <p>{optimizedNote}</p> : null}
+            <p>Estimated from prompt size</p>
           </div>
         ) : null}
       </PopoverContent>

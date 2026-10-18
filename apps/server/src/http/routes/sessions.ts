@@ -247,8 +247,6 @@ export function registerSessionRoutes(
           toolDefinitions: z.number(),
         })
         .optional(),
-      bytesKeptOut: z.number().optional(),
-      bytesProduced: z.number().optional(),
       contextWindow: z.number(),
       source: z.enum(["provider", "estimate"]),
       usableContextTokens: z.number(),

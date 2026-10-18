@@ -228,8 +228,6 @@ import type {
   ThinkingSettings,
   ThinkingSettingsResponse,
   TimezoneSettingsResponse,
-  TokenOptimizationResponse,
-  TokenOptimizationUpdateResponse,
   ToolCredentialStatus,
   ToolResponse,
   ToolSetupPlan,
@@ -391,22 +389,6 @@ export class NakamaClient {
   async getSystemStatus(profileId?: string): Promise<SystemStatusResponse> {
     return this.request<SystemStatusResponse>(
       `/v1/system/status?profileId=${encodeURIComponent(profileId ?? "")}`
-    );
-  }
-
-  async getTokenOptimization(): Promise<TokenOptimizationResponse> {
-    return this.request<TokenOptimizationResponse>("/v1/token-optimization");
-  }
-
-  async setTokenOptimization(
-    enabled: boolean
-  ): Promise<TokenOptimizationUpdateResponse> {
-    return this.request<TokenOptimizationUpdateResponse>(
-      "/v1/token-optimization",
-      {
-        body: JSON.stringify({ enabled }),
-        method: "PUT",
-      }
     );
   }
 

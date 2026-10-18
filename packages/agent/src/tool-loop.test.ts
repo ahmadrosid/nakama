@@ -1,6 +1,5 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { ToolDefinition } from "@nakama/core";
-import * as core from "@nakama/core";
 import {
   canRunToolCallsInParallel,
   createTurnTools,
@@ -85,9 +84,7 @@ describe("tool-loop", () => {
     expect(result).toEqual({ error: "boom" });
   });
 
-  test("executeToolCall rejects non-JSON results before distillation", async () => {
-    const spy = spyOn(core, "distillToolResult");
-
+  test("executeToolCall rejects non-JSON results", async () => {
     const invalidTool: ToolDefinition = {
       ...sampleTool,
       async run() {
@@ -95,18 +92,13 @@ describe("tool-loop", () => {
       },
     };
 
-    try {
-      const result = await executeToolCall([invalidTool], {
-        arguments: {},
-        id: "invalid",
-        name: "sample",
-      });
+    const result = await executeToolCall([invalidTool], {
+      arguments: {},
+      id: "invalid",
+      name: "sample",
+    });
 
-      expect(result).toHaveProperty("error");
-      expect(spy).not.toHaveBeenCalled();
-    } finally {
-      spy.mockRestore();
-    }
+    expect(result).toHaveProperty("error");
   });
 
   test("executeToolCall drops undefined fields like JSON serialization", async () => {
@@ -124,32 +116,6 @@ describe("tool-loop", () => {
     });
 
     expect(result).toEqual({ message: "kept" });
-  });
-
-  test("executeToolCall returns raw result when distillToolResult throws", async () => {
-    const payload = { message: "kept" };
-
-    const spy = spyOn(core, "distillToolResult").mockImplementation(
-      async () => {
-        throw new Error("omni unavailable");
-      }
-    );
-
-    const warnSpy = spyOn(console, "warn").mockImplementation(() => undefined);
-
-    try {
-      const result = await executeToolCall([sampleTool], {
-        arguments: payload,
-        id: "call_4",
-        name: "sample",
-      });
-
-      expect(result).toEqual(payload);
-      expect(warnSpy).toHaveBeenCalled();
-    } finally {
-      spy.mockRestore();
-      warnSpy.mockRestore();
-    }
   });
 
   test("executeToolCall re-throws the cancellation reason", async () => {

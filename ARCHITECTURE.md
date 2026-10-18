@@ -137,7 +137,7 @@ The HTTP app does these steps in this order:
 
 These route groups run before org middleware: `internal-automations`, `internal-curator`, `notification-webhooks`, Composio OAuth, MCP OAuth.
 
-These route groups run after org middleware: `system`, `audit-events`, `auth`, `setup-import`, `workers`, `models`, `user-context`, `sessions`, `profiles`, `profile-portability`, `artifact-shares`, `mcp`, `skills`, `tools`, `plugins`, `automations`, `notification-destinations`, `token-optimization`, `automation-worker-settings`, `coding-harnesses`, `composio`, `platform-orgs`, `data-portability`, `org-members`, `org-memory`, `org-curator`, `skill-proposals`, `skill-suggestions`.
+These route groups run after org middleware: `system`, `audit-events`, `auth`, `setup-import`, `workers`, `models`, `user-context`, `sessions`, `profiles`, `profile-portability`, `artifact-shares`, `mcp`, `skills`, `tools`, `plugins`, `automations`, `notification-destinations`, `automation-worker-settings`, `coding-harnesses`, `composio`, `platform-orgs`, `data-portability`, `org-members`, `org-memory`, `org-curator`, `skill-proposals`, `skill-suggestions`.
 
 ## Multi-tenancy
 
