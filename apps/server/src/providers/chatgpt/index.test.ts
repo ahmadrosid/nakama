@@ -50,14 +50,13 @@ function textStreamResponse(text: string) {
 }
 
 describe("createChatgptProvider", () => {
-  test.each([
-    { enabled: false, streaming: false },
-    { enabled: true, streaming: false },
-    { enabled: false, streaming: true },
-    { enabled: true, streaming: true },
-  ])(
-    "sends GPT-6.1 Sol tools through OAuth Responses (stream: $streaming, thinking: $enabled)",
-    async ({ enabled, streaming }) => {
+  test("sends GPT-6.1 Sol tools through OAuth Responses", async () => {
+    for (const { enabled, streaming } of [
+      { enabled: false, streaming: false },
+      { enabled: true, streaming: false },
+      { enabled: false, streaming: true },
+      { enabled: true, streaming: true },
+    ]) {
       const bodies: ProviderJsonRecord[] = [];
       globalThis.fetch = asTestFetch(
         async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -115,16 +114,15 @@ describe("createChatgptProvider", () => {
 
       expect(bodies[0]?.reasoning_effort).toBeUndefined();
     }
-  );
+  });
 
-  test.each([
-    { kind: "pdf", streaming: false },
-    { kind: "pdf", streaming: true },
-    { kind: "png", streaming: false },
-    { kind: "png", streaming: true },
-  ])(
-    "sends stored $kind bytes to ChatGPT (stream: $streaming)",
-    async ({ kind, streaming }) => {
+  test("sends stored PDF and PNG bytes to ChatGPT", async () => {
+    for (const { kind, streaming } of [
+      { kind: "pdf", streaming: false },
+      { kind: "pdf", streaming: true },
+      { kind: "png", streaming: false },
+      { kind: "png", streaming: true },
+    ]) {
       const pdf = readFileSync(
         new URL(
           "../../../../../packages/core/src/__fixtures__/sample.pdf",
@@ -238,11 +236,10 @@ describe("createChatgptProvider", () => {
             },
       ]);
     }
-  );
+  });
 
-  test.each(["gpt-5.4", "gpt-6.1-sol"])(
-    "%s generateText streams a Responses chat turn",
-    async (model) => {
+  test("generateText streams a Responses chat turn for ChatGPT models", async () => {
+    for (const model of ["gpt-5.4", "gpt-6.1-sol"]) {
       const fetchMock = mock(
         async (input: RequestInfo | URL, init?: RequestInit) => {
           expect(String(input)).toBe(`${CHATGPT_CODEX_BASE_URL}/responses`);
@@ -286,7 +283,7 @@ describe("createChatgptProvider", () => {
       });
       expect(fetchMock).toHaveBeenCalledTimes(1);
     }
-  );
+  });
 
   test("generateText asks for JSON in the system prompt by default", async () => {
     const fetchMock = mock(

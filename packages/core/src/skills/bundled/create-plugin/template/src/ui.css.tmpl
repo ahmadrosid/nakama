@@ -27,6 +27,64 @@
     color: var(--foreground);
     font-size: var(--n-text-base);
     line-height: 1.5;
+    container-type: inline-size;
+  }
+
+  /* Pages built around a Table. */
+  .plugin-page-wide {
+    max-width: 960px;
+  }
+
+  .plugin-dialog-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--n-space-4);
+  }
+
+  .plugin-loading {
+    display: flex;
+    align-items: center;
+    gap: var(--n-space-2);
+  }
+
+  /* A destructive button on the left of a DialogFooter. */
+  .plugin-footer-start {
+    margin-inline-end: auto;
+  }
+
+  /* Table cells. Names and short text stay on one line. */
+  .plugin-strong {
+    font-weight: var(--n-weight-medium);
+    white-space: nowrap;
+  }
+
+  .plugin-nowrap {
+    white-space: nowrap;
+  }
+
+  .plugin-secondary {
+    color: var(--muted-foreground);
+  }
+
+  .plugin-number {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The name in each row is a link Button that opens the edit dialog. */
+  .plugin-row-link {
+    height: auto;
+    padding: 0;
+    color: var(--foreground);
+    font-weight: var(--n-weight-medium);
+  }
+
+  /* The chat side panel is about 360px wide: drop the least useful columns. */
+  @container (max-width: 520px) {
+    .plugin-optional {
+      display: none;
+    }
   }
 
   /* ctx.ui Card ships a shadow; plugin pages use borders only. */

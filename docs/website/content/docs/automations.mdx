@@ -8,7 +8,7 @@ Automations run scheduled prompts. The optional Workflows plugin runs saved reci
 - **Automations** are a saved prompt plus a trigger. They run themselves, on a schedule or at a time you name, and can deliver the result to a channel.
 - **Workflows** are a declared step recipe you run on demand. Each data step stores a receipt; the final summarize step only sees those receipts.
 
-To schedule a workflow, install the Workflows plugin and assign its workflow tools to the automation’s agent. Ask Super Bot to create an automation with a prompt like `Run my "Morning brief" workflow (id wf_123)`, using that agent.
+To schedule a workflow, install the Workflows plugin and assign its workflow tools to the automation’s agent. Ask Super Nakama to create an automation with a prompt like `Run my "Morning brief" workflow (id wf_123)`, using that agent.
 
 See [Workflows](/workflows) for the step kinds and receipt model.
 
@@ -22,7 +22,7 @@ An automation is a name, a prompt, a profile, and one trigger:
 | `schedule` | 5-field cron plus a timezone | Runs each time the cron matches |
 | `runAt` | an ISO timestamp plus a timezone | Tries to run once at that instant, then disables itself |
 
-The **profile** is which agent soul, tools, and skills the run uses. Edit an automation to pick a different profile; the detail view shows the bound profile name. Creating from the API without a `profileId` uses the org default profile. Creating from chat without a `profileId` uses the chat profile. Members cannot bind Super Bot.
+The **profile** is which agent soul, tools, and skills the run uses. Edit an automation to pick a different profile; the detail view shows the bound profile name. Creating from the API without a `profileId` uses the org default profile. Creating from chat without a `profileId` uses the chat profile. Members cannot bind Super Nakama.
 
 Cron is validated on save, so a malformed expression is rejected rather than silently never firing. The timezone defaults to the one in your user config. `nextRunAt` is computed from the cron and shown in the list, which is the fastest way to check that a schedule means what you think it means.
 
@@ -65,7 +65,7 @@ Delivery configuration is validated on save against the channels the instance ha
 
 ## Permissions
 
-Organization members can create or change automations. A caller-supplied `profileId` on create or update is checked against what that caller may use, so a member cannot bind an automation to the `bash`-capable Super Bot profile. See [Multi-tenancy](/multi-tenancy) for the role model.
+Organization members can create or change automations. A caller-supplied `profileId` on create or update is checked against what that caller may use, so a member cannot bind an automation to the `bash`-capable Super Nakama profile. See [Multi-tenancy](/multi-tenancy) for the role model.
 
 ## API
 
@@ -77,5 +77,3 @@ Organization members can create or change automations. A caller-supplied `profil
 | `GET` | `/v1/automations/:automationId/runs` |
 | `POST` | `/v1/automations/:automationId/runs/mark-read` |
 | `POST` | `/v1/automations/draft` |
-
-Automation runs carry a run id rather than a session id. Anything scoped per conversation, such as the [token optimiser](/token-optimiser) ledger, scopes to that run.

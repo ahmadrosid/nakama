@@ -30,7 +30,7 @@ import type {
   ConfigureProviderRequest,
   ConfigureProviderResponse,
   CreateProfileRequest,
-  CreateProfileWithSuperBotRequest,
+  CreateProfileWithSuperNakamaRequest,
   CreateProviderRequest,
   CreateProviderResponse,
   CreateSkillRequest,
@@ -223,7 +223,7 @@ import {
   NETRA_AGENT_MODEL_ID,
 } from "@nakama/core/discovery-providers";
 import { readTextIfExists } from "@nakama/core/fs";
-import { canAccessSuperBotProfile } from "@nakama/core/profiles";
+import { canAccessSuperNakamaProfile } from "@nakama/core/profiles";
 import {
   type DatabaseAdapter,
   mergeWorkspaceSettings,
@@ -232,7 +232,7 @@ import {
   type StoredSessionRecord,
   type StoredSessionSummaryRecord,
   type StoredToolRecord,
-  SUPER_BOT_TOOL_AUTHORING_RULES,
+  SUPER_NAKAMA_TOOL_AUTHORING_RULES,
 } from "@nakama/db";
 import { z } from "zod";
 import {
@@ -298,7 +298,7 @@ import {
   type SubAgentRunResult,
 } from "../tools/sub-agent-shared";
 import { SUB_AGENT_TOOL_NAME } from "../tools/sub-agent-tool";
-import { createSuperBotTools } from "../tools/super-bot-tools";
+import { createSuperNakamaTools } from "../tools/super-nakama-tools";
 import { createTodoTools } from "../tools/todo-tools";
 import { getAgentBrowserStatus } from "./agent-browser-service";
 import { AgentQuestionnaireState } from "./agent-questionnaire-state";
@@ -389,7 +389,7 @@ import { SkillPostTurnReviewService } from "./skill-post-turn-review-service";
 import type { SkillProposalService } from "./skill-proposal-service";
 import type { SkillSuggestionService } from "./skill-suggestion-service";
 import type { SkillsService } from "./skills-service";
-import { SuperBotSessionState } from "./super-bot-session-state";
+import { SuperNakamaSessionState } from "./super-nakama-session-state";
 import { telegramManagedBotPairing } from "./telegram-managed-bot-pairing";
 import {
   resolveProfileStoredTools,
@@ -415,7 +415,7 @@ interface CognitoSessionOptions {
 export interface CreateSessionOptions {
   codingWorkspaceRoot?: string;
   cognito?: boolean;
-  excludeSuperBot?: boolean;
+  excludeSuperNakama?: boolean;
   isPlatformAdmin?: boolean;
   model?: string | null;
   orgRole?: OrgRole | null;
@@ -423,7 +423,7 @@ export interface CreateSessionOptions {
 
 type ChatProfileAccess = Pick<
   CreateSessionOptions,
-  "excludeSuperBot" | "isPlatformAdmin" | "orgRole"
+  "excludeSuperNakama" | "isPlatformAdmin" | "orgRole"
 > & { user?: { id: string } };
 
 /**
@@ -461,10 +461,10 @@ export class AgentService {
   private userConfig: UserConfig | null;
   private readonly db: DatabaseAdapter;
   private readonly profileService: ProfileService;
-  private readonly superBotSessionState = new SuperBotSessionState();
+  private readonly superNakamaSessionState = new SuperNakamaSessionState();
   private readonly agentTodoState: AgentTodoState;
   private readonly agentQuestionnaireState: AgentQuestionnaireState;
-  private readonly superBotTools: ToolDefinition[];
+  private readonly superNakamaTools: ToolDefinition[];
   private readonly orgMemoryTools: ToolDefinition[];
   private automationTools: ToolDefinition[] = [];
   private automationRunHistoryTools: ToolDefinition[] = [];
@@ -528,9 +528,9 @@ export class AgentService {
       this.agentQuestionnaireState
     );
     this.todoTools = createTodoTools(this.agentTodoState);
-    this.superBotTools = createSuperBotTools(
+    this.superNakamaTools = createSuperNakamaTools(
       this.profileService,
-      this.superBotSessionState,
+      this.superNakamaSessionState,
       async (profileModel, context) => {
         const session =
           context.sessionId && context.orgId
@@ -566,12 +566,6 @@ export class AgentService {
       isProviderConfigured(userConfig) && provider !== null;
   }
 
-  /**
-   * Binds a savings recorder to one org. Fire and forget on purpose: a counter
-   * for a dashboard must never delay a tool result or fail a turn, so the write
-   * is not awaited and a rejection is swallowed.
-   */
-  /** Same fire-and-forget shape as the savings recorder, for provider tokens. */
   private llmTurnQuotaCheckerFor(orgId: string | undefined) {
     if (!orgId?.trim()) {
       return;
@@ -586,6 +580,10 @@ export class AgentService {
       );
   }
 
+  /**
+   * Fire and forget on purpose: a usage counter must never fail a turn, so the
+   * write is not awaited and a rejection is swallowed.
+   */
   private turnUsageRecorderFor(orgId: string | undefined) {
     if (!orgId?.trim()) {
       return;
@@ -596,34 +594,10 @@ export class AgentService {
     return (turn: {
       estimated: boolean;
       inputTokens: number;
-      optimized: boolean;
       outputTokens: number;
     }): void => {
       void this.db
         .incrementLlmTurnUsage(scopedOrgId, turn)
-        .catch(() => undefined);
-    };
-  }
-
-  private savingsRecorderFor(orgId: string | undefined) {
-    if (!orgId?.trim()) {
-      return;
-    }
-
-    const scopedOrgId = orgId.trim();
-
-    return (saving: {
-      bytesIn: number;
-      bytesOut: number;
-      optimizer: string;
-      tool: string;
-    }): void => {
-      void this.db
-        .incrementToolOutputSavings(
-          scopedOrgId,
-          saving,
-          new Date().toISOString()
-        )
         .catch(() => undefined);
     };
   }
@@ -1833,7 +1807,6 @@ export class AgentService {
       orgId,
       orgRole: "member",
       profileId,
-      recordToolOutputSavings: this.savingsRecorderFor(orgId),
       recordTurnUsage: this.turnUsageRecorderFor(orgId),
     });
 
@@ -2053,7 +2026,6 @@ export class AgentService {
       orgId,
       orgRole: "member",
       profileId: context.profileId,
-      recordToolOutputSavings: this.savingsRecorderFor(orgId),
       recordTurnUsage: this.turnUsageRecorderFor(orgId),
       workflowId: context.workflowId,
       workflowRunId: context.runId,
@@ -2111,7 +2083,6 @@ export class AgentService {
         orgId,
         orgRole: "member",
         profileId,
-        recordToolOutputSavings: this.savingsRecorderFor(orgId),
         recordTurnUsage: this.turnUsageRecorderFor(orgId),
       }),
       tools: [],
@@ -2188,7 +2159,6 @@ export class AgentService {
       orgId: input.orgId,
       orgRole: input.orgRole,
       profileId: input.profileId,
-      recordToolOutputSavings: this.savingsRecorderFor(input.orgId),
       recordTurnUsage: this.turnUsageRecorderFor(input.orgId),
       sessionId: input.sessionId,
       userId: input.userId,
@@ -2452,10 +2422,10 @@ export class AgentService {
   ): void {
     if (
       profile.isSuper &&
-      (access.excludeSuperBot || !canAccessSuperBotProfile(access))
+      (access.excludeSuperNakama || !canAccessSuperNakamaProfile(access))
     ) {
       throw new NakamaApiError(
-        "Super Bot is only available to org admins.",
+        "Super Nakama is only available to org admins.",
         403
       );
     }
@@ -2478,7 +2448,7 @@ export class AgentService {
     entry: EphemeralSession
   ): Promise<void> {
     entry.session.clear();
-    this.superBotSessionState.clearSession(entry.record.id);
+    this.superNakamaSessionState.clearSession(entry.record.id);
     this.agentTodoState.clearSession(entry.record.id);
     this.agentQuestionnaireState.clearSession(entry.record.id);
 
@@ -2866,7 +2836,7 @@ export class AgentService {
     discardInFlightSessionWrites(sessionId);
     this.sessions.get(sessionId)?.session.clear();
     this.sessions.delete(sessionId);
-    this.superBotSessionState.clearSession(sessionId);
+    this.superNakamaSessionState.clearSession(sessionId);
     this.agentTodoState.clearSession(sessionId);
     this.agentQuestionnaireState.clearSession(sessionId);
     await deleteSessionHistoryArchive(orgId, sessionId);
@@ -4088,16 +4058,16 @@ export class AgentService {
     return this.profileService.createProfile(orgId, request, owner);
   }
 
-  async createProfileWithSuperBot(
+  async createProfileWithSuperNakama(
     orgId: string,
-    request: CreateProfileWithSuperBotRequest
+    request: CreateProfileWithSuperNakamaRequest
   ): Promise<ProfileResponse> {
-    const superBot = (await this.db.listProfilesForOrg(orgId)).find(
+    const superNakama = (await this.db.listProfilesForOrg(orgId)).find(
       (profile) => profile.isSuper
     );
 
-    if (!superBot) {
-      throw new Error("Super Bot is not available in this organization.");
+    if (!superNakama) {
+      throw new Error("Super Nakama is not available in this organization.");
     }
 
     const nameLine = request.name
@@ -4108,7 +4078,7 @@ export class AgentService {
 
     await this.runAutomationPrompt(
       orgId,
-      superBot.id,
+      superNakama.id,
       [
         "Create one new agent for the request below. Do not ask for confirmation. Call create_profile exactly once with name and soulFiles (SOUL.md and INSTRUCTIONS.md), then stop.",
         nameLine,
@@ -4137,7 +4107,7 @@ export class AgentService {
     );
 
     if (!createdProfileId) {
-      throw new Error("Super Bot did not create an agent.");
+      throw new Error("Super Nakama did not create an agent.");
     }
 
     return this.profileService.getProfile(orgId, createdProfileId);
@@ -5583,7 +5553,7 @@ export class AgentService {
     }
 
     if (profile.isSuper) {
-      resolved = [...resolved, ...this.superBotTools];
+      resolved = [...resolved, ...this.superNakamaTools];
     }
 
     if (hasOwnTools) {
@@ -5673,16 +5643,8 @@ export class AgentService {
       false
     );
 
-    // Install-wide override for the tool-output optimiser, read from the single
-    // `workspace_settings` row: one flag governs every org on this host, which
-    // is why only platform admins can write it. Undefined leaves the decision
-    // to the server's env var, so an operator who never opened the UI keeps
-    // whatever they configured.
-    const tokenOptimizerEnabled = (await this.db.getWorkspaceSettings())
-      ?.tokenOptimizerEnabled;
-
     const resolvedSystemPrompt = profile.isSuper
-      ? `${systemPrompt.trim()}\n\n${SUPER_BOT_TOOL_AUTHORING_RULES}`
+      ? `${systemPrompt.trim()}\n\n${SUPER_NAKAMA_TOOL_AUTHORING_RULES}`
       : systemPrompt;
 
     // A cognito session has nothing stored to load. On a model change it is
@@ -5767,10 +5729,8 @@ export class AgentService {
       orgId,
       orgRole: orgRole ?? undefined,
       profileId,
-      recordToolOutputSavings: this.savingsRecorderFor(orgId),
       recordTurnUsage: this.turnUsageRecorderFor(orgId),
       sessionId,
-      tokenOptimizerEnabled: tokenOptimizerEnabled ?? undefined,
       trackEphemeralAttachment,
       userId: userId ?? undefined,
     });
@@ -5984,7 +5944,7 @@ export class AgentService {
 
     const persistedSession = wrapPersistedSession(sessionId, session, this.db, {
       onBeginTurn: (id) => {
-        this.superBotSessionState.beginTurn(id);
+        this.superNakamaSessionState.beginTurn(id);
         void this.agentQuestionnaireState.clear(id);
       },
     });
@@ -6430,7 +6390,6 @@ const REPLAYABLE_AUTOMATION_TOOLS = new Set([
   "knowledge_base_search",
   "list_artifacts",
   "list_profile_sessions",
-  "omni_retrieve",
   "read_file",
   "read_profile_session",
   "read_session_history",

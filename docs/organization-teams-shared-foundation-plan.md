@@ -93,7 +93,7 @@ Do not copy arbitrary source files or use `cloneProfile()` to bypass source tena
 Reject publication when the template requires unpublished tenant resources or unsupported parent MCP connections.
 Block team edits to template-owned fields through profile, soul, assignment, clone, and import APIs.
 Keep local agents separate. Do not silently convert a shared instance into a local agent.
-Exclude Super Bot and the built-in Default Bot from publication.
+Exclude Super Nakama and the built-in Default Bot from publication.
 
 Availability does not automatically assign every tool or skill to every agent.
 Use existing profile assignment controls. Reject assignments that the source publication no longer permits.
@@ -345,7 +345,7 @@ Slice log (one row per commit):
 | 2026-10-11 | 1a | Parent schema and idempotent migration; repaired existing database type errors | Fresh and upgrade migration, reference constraints; 145 database tests passed | Parent adapter persistence and archive guards |
 | 2026-10-11 | 1b | Persist parent relationships; reject reparenting, nested teams, inactive parents, unsafe archive and deletion | Lookups, memberships, ordinary updates, lifecycle guards; 147 database tests passed | Publication records and migration |
 | 2026-10-11 | 1c | Publication and shared agent source-link tables; repeatable migration | Five resource kinds, uniqueness, references, revocation survival, cleanup; 149 database tests passed | Publication adapter operations |
-| 2026-10-11 | 1d | Scoped publication reads and writes; idempotent publish; SQL ownership checks and source-deletion triggers | Active root, wrong scope, retry, default/Super Bot rejection, SQL ownership and deletion; 151 database tests passed | Agent source-link operations and atomic team creation |
+| 2026-10-11 | 1d | Scoped publication reads and writes; idempotent publish; SQL ownership checks and source-deletion triggers | Active root, wrong scope, retry, default/Super Nakama rejection, SQL ownership and deletion; 151 database tests passed | Agent source-link operations and atomic team creation |
 | 2026-10-11 | 1e | Atomic shared agent profile/source-link creation; scoped reads and explicit reconnection | Concurrent selection, sibling isolation, revocation, retained sessions, source deletion, injected rollback; 154 database tests passed | Atomic team creation and request idempotency |
 | 2026-10-11 | 1f | Durable team requests; atomic child/admin insertion, completion, and guarded cleanup | Retry identity, pending visibility, admin checks, archive ordering, migration replay, injected member/request failures; 160 database tests passed | OrgService team setup, compensation, and permission checks |
 | 2026-10-11 | 1g | Team setup, permission checks, retry, and compensation | 221 focused service, HTTP, and database tests passed | Publication source validation |
@@ -372,7 +372,7 @@ Stage 1 remains incomplete. Next: publication adapter operations and source vali
 
 2026-10-11: Slice 1d adds publication operations to the existing database adapter.
 Writes check active root status and SQL source ownership inside one transaction.
-Agent publication excludes default and Super Bot profiles. Skill publication excludes disabled and foreign skills.
+Agent publication excludes default and Super Nakama profiles. Skill publication excludes disabled and foreign skills.
 Global tools keep global access. Publication removal does not delete source resources.
 Deletion triggers invalidate agent, skill, and tool publications, including when foreign-key enforcement is disabled.
 Knowledge-file validation, configured-model validation, profile skill paths, and agent dependencies remain for OrgService.
@@ -392,7 +392,7 @@ Stage 1 remains incomplete. Next: atomic team creation and request idempotency.
 2026-10-11: Slice 1f adds durable request records for team creation.
 The immediate write transaction checks the parent, creator authority, and first admin before inserting the child, membership, and request.
 Pending requests produce derived `setupPending` state. Membership lists hide incomplete teams until setup completes.
-Completion requires active parent/team records, the assigned admin, and seeded default/Super Bot profiles.
+Completion requires active parent/team records, the assigned admin, and seeded default/Super Nakama profiles.
 Guarded cleanup deletes only an incomplete matching request and child. Completed requests survive team deletion and prevent duplicate creation on retry.
 The existing foreign-key deletion guard now serves normal deletion and failed-setup compensation.
 Checks: all 160 database tests passed; database type check and `bun x ultracite check` passed.
@@ -992,13 +992,13 @@ The complete server check still reports 10 existing errors. No commit, push, PR,
 Evidence: `/tmp/nakama-skill-proposal-input-tests.log`, `/tmp/nakama-skill-proposal-input-types.log`, `/tmp/nakama-skill-proposal-input-lint.log`.
 Next: continue authorized server type repairs before committing feature slice 1g.
 
-2026-10-11: Super Bot type repairs reduced server type errors from 10 to 7, with no new diagnostics.
+2026-10-11: Super Nakama type repairs reduced server type errors from 10 to 7, with no new diagnostics.
 JsonSchema accepts a string or string array for type, matching the existing nullable model schema. Runtime schemas did not change.
 Tool setup fixtures return full profile responses through the existing fixture helper. Assignment retry and credential isolation remain covered.
 Checks: all 106 focused tests passed across four files; two Windows tests skipped on macOS; complete core and agent type checks passed.
 Lint passed all 1532 files; `git diff --check` passed. The complete server check still reports seven existing errors.
 No commit, push, PR, browser check, or external provider call ran.
-Evidence: `/tmp/nakama-super-bot-types-tests.log`, `/tmp/nakama-super-bot-schema-tests.log`, `/tmp/nakama-super-bot-types-{server,core,agent}.log`, `/tmp/nakama-super-bot-types-lint.log`.
+Evidence: `/tmp/nakama-super-nakama-types-tests.log`, `/tmp/nakama-super-nakama-schema-tests.log`, `/tmp/nakama-super-nakama-types-{server,core,agent}.log`, `/tmp/nakama-super-nakama-types-lint.log`.
 Next: continue authorized server type repairs before committing feature slice 1g.
 
 2026-10-11: Bash tool type repair reduced server type errors from seven to six, with no new diagnostics.
@@ -1083,7 +1083,7 @@ Next: validate shared agent templates and their permitted assignments in the exi
 Evidence: `/tmp/nakama-model-publication-tests-final.log`, `/tmp/nakama-model-publication-types.log`, `/tmp/nakama-model-publication-lint.log`.
 
 2026-10-11: Slice 1k completes step 1 with agent publication source and dependency checks.
-Templates exclude foreign, Default Bot, and Super Bot profiles. Tenant tools, skills, and attached knowledge require valid current publications.
+Templates exclude foreign, Default Bot, and Super Nakama profiles. Tenant tools, skills, and attached knowledge require valid current publications.
 Global tools, skills, configured models, and global MCP servers retain existing access. Conflicting tool and skill names, disabled skills, private profile knowledge, and unsupported parent integrations block publication.
 The existing knowledge reference reader now exports its read-only operation. Guarded reference reads preserve source layout and avoid legacy migration during publication checks.
 Publication and template checks reuse one source validator. Missing source files and invalid model selections fail without replacing the template record or source configuration.
@@ -1989,8 +1989,8 @@ No new file, package, dependency, browser check, paid provider call, full-suite 
 Evidence: /tmp/nakama-remaining-lint-baseline.log, /tmp/nakama-http-boundary-fix.log, /tmp/nakama-http-boundary-focused.log, /tmp/nakama-http-boundary-types.log, /tmp/nakama-http-boundary-lint-check.log, and /tmp/nakama-http-boundary-oxlint.log.
 
 ### Slice 2bw — shared agent support spacing repaired
-Removed all 16 readable-spacing errors from skill proposals, image vision fallback, and Super Bot tests with the existing fixer. The diff adds blank lines only: git diff --ignore-blank-lines produces no changes for these five files. No shared-source write guard, model authorization, approval action, profile creation restriction, runtime branch, or test assertion changed. Existing behavior tests provide regression coverage; no new test was needed for spacing alone.
-Checks passed: 163 skill proposal, image vision fallback, Super Bot, and OrgService tests across four files, with 1328 assertions; complete server type check; scoped anti-slop check; Ultracite across 1532 files; and git diff --check. No verification repair was needed, and no lint rule was disabled.
+Removed all 16 readable-spacing errors from skill proposals, image vision fallback, and Super Nakama tests with the existing fixer. The diff adds blank lines only: git diff --ignore-blank-lines produces no changes for these five files. No shared-source write guard, model authorization, approval action, profile creation restriction, runtime branch, or test assertion changed. Existing behavior tests provide regression coverage; no new test was needed for spacing alone.
+Checks passed: 163 skill proposal, image vision fallback, Super Nakama, and OrgService tests across four files, with 1328 assertions; complete server type check; scoped anti-slop check; Ultracite across 1532 files; and git diff --check. No verification repair was needed, and no lint rule was disabled.
 The commit contains only these five agent support files and this Progress entry. Other authorized type cleanup remains unstaged. Type verification uses the current worktree, including that cleanup; committed HEAD alone remains unverified.
 Steps 2 and 3 and delivery stage 2 remain unchecked. The repository-wide lint gate remains open outside these files and was not rerun here. Next: repair remaining compatibility lint errors and commit their inspected type corrections, then repeat the full delivery gate before starting the Organization UI.
 No new file, package, dependency, abstraction, browser check, paid provider call, full-suite rerun, build, push, or PR ran. Full web tests and release builds remain unverified.
@@ -2228,7 +2228,7 @@ All 19 component tests passed with 118 assertions. New tests cover lazy catalog 
 Evidence: /tmp/nakama-knowledge-publication-{focused,types,oxlint,lint,doctor}.log and /tmp/nakama-create-team-doctor.log.
 
 ### Slice 3f — Skill and agent publication selectors completed
-Extended the existing knowledge publication dialog for three actual resource rows, without copying its controls. Parent admins can manage Skills and Agents through the same selector, publish, unpublish, pending, error, and retry states. Skills come from the explicitly scoped catalog and must be enabled and owned by the parent; global and foreign entries remain outside publication selection. Agents come from the explicitly scoped parent profile catalog. The selector excludes Default Bot, Super Bot, and managed shared instances. The existing server retains source-path, assignment, integration, and template validation.
+Extended the existing knowledge publication dialog for three actual resource rows, without copying its controls. Parent admins can manage Skills and Agents through the same selector, publish, unpublish, pending, error, and retry states. Skills come from the explicitly scoped catalog and must be enabled and owned by the parent; global and foreign entries remain outside publication selection. Agents come from the explicitly scoped parent profile catalog. The selector excludes Default Bot, Super Nakama, and managed shared instances. The existing server retains source-path, assignment, integration, and template validation.
 The catalog query key includes the source organization and resource kind. It loads only when its dialog opens. Duplicate labels include stable IDs to distinguish choices; private skill paths are not shown. Publication changes also invalidate these source catalogs and existing skill queries. Knowledge publication tests remain green after the shared dialog change. No new file, package, dependency, or server operation was added.
 All 23 component tests passed with 148 assertions. New tests cover stable skill and profile IDs, parent scope, lazy queries, source exclusions, duplicate labels, both publication actions, catalog retry, and denial of private catalogs to team admins. The complete web type check, scoped anti-slop, Ultracite across 1533 files, and git diff --check passed. React Doctor stayed at 91/100 with no issues. No verification repair was needed. This commit contains the component, its tests, the existing query hook and key modules, and this entry. Steps 2, 4, and 5 and delivery stage 3 remain open. Next: add tool and model publication selectors, then authorized resource actions and shared-agent selection. No browser check, paid call, full test run, build, push, or PR ran. Tool and model controls, template selection into a team chat, and final delivery checks remain incomplete.
 Evidence: /tmp/nakama-skill-agent-publication-{focused,types,oxlint,lint,doctor}.log and /tmp/nakama-knowledge-publication-doctor.log.

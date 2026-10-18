@@ -22,6 +22,7 @@
     "./select": "./src/select.tsx",
     "./spinner": "./src/spinner.tsx",
     "./switch": "./src/switch.tsx",
+    "./table": "./src/table.tsx",
     "./textarea": "./src/textarea.tsx",
     "./toast": "./src/toast.ts",
     "./toaster": "./src/toaster.tsx",

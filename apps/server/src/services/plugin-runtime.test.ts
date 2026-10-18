@@ -61,6 +61,12 @@ export async function run() {
 }
 `;
 
+const leakyThrowJs = `
+export async function run() {
+  throw new Error("cannot read /srv/nakama/orgs/a/data.db " + "x".repeat(2000));
+}
+`;
+
 const badJsonJs = `
 export async function run() {
   process.stdout.write("not-json");
@@ -504,6 +510,33 @@ describe("plugin runtime", () => {
     ).toBe("still-works");
   });
 
+  test("action errors keep the message but drop paths and excess length", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new PluginService(db, configDir);
+    await service.installPluginPackage(bundle("leaky-throw", leakyThrowJs));
+    await enablePlugin(db, "org_a", "leaky-throw", "1.0.0");
+
+    const failure = await service
+      .invokePluginAction({
+        access: "ui",
+        actionKey: "echo",
+        actor: { id: "user_1", role: "member" },
+        input: {},
+        orgId: "org_a",
+        pluginId: "leaky-throw",
+      })
+      .catch((error: Error) => error);
+
+    if (!(failure instanceof PluginHostError)) {
+      throw new Error("Expected a plugin action failure.");
+    }
+
+    expect(failure.code).toBe("action_failed");
+    expect(failure.message.startsWith("cannot read [path] xxx")).toBe(true);
+    expect(failure.message).not.toContain("/srv/");
+    expect(failure.message.length).toBeLessThanOrEqual(500);
+  });
+
   test("missing bundled dependency fails without automatic network install", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new PluginService(db, configDir);
@@ -568,7 +601,7 @@ describe("plugin runtime", () => {
 
       expect(exitCode).toBe(0);
       expect(stderr).toBe("");
-      expect(JSON.parse(stdout).input).toEqual({ message: "outside" });
+      expect(JSON.parse(stdout).result.input).toEqual({ message: "outside" });
     } finally {
       await rm(elsewhere, { force: true, recursive: true });
     }

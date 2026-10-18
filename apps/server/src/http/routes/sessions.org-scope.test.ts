@@ -2,7 +2,7 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { deleteAttachmentBytes } from "@nakama/core/attachments/store";
 import {
   createInMemoryDatabaseAdapter,
-  seedOrgSuperBotProfile,
+  seedOrgSuperNakamaProfile,
 } from "@nakama/db";
 import { asTestFetch } from "../../providers/test-helpers";
 import { AgentService } from "../../services/agent-service";
@@ -103,6 +103,8 @@ const CROSS_ORG_ROUTES: Array<{
   { method: "DELETE", path: (id) => `/v1/sessions/${id}?purge=true` },
   { method: "DELETE", path: (id) => `/v1/sessions/${id}` },
   { method: "POST", path: (id) => `/v1/sessions/${id}/compact` },
+  { method: "GET", path: (id) => `/v1/sessions/${id}/browser` },
+  { method: "DELETE", path: (id) => `/v1/sessions/${id}/browser` },
   {
     body: { messageIndex: 0 },
     method: "POST",
@@ -507,8 +509,8 @@ describe("session routes are scoped to the caller's active org", () => {
   });
 });
 
-describe("Super Bot sessions stay admin-only after they are created", () => {
-  async function createSuperBotScenario() {
+describe("Super Nakama sessions stay admin-only after they are created", () => {
+  async function createSuperNakamaScenario() {
     const scenario = await createScenario();
     await seedOrgAdmin(scenario.databaseAdapter, {
       email: "member@example.com",
@@ -518,7 +520,7 @@ describe("Super Bot sessions stay admin-only after they are created", () => {
       userId: "user_member",
     });
 
-    const superProfile = await seedOrgSuperBotProfile(
+    const superProfile = await seedOrgSuperNakamaProfile(
       scenario.databaseAdapter,
       VICTIM_ORG
     );
@@ -556,9 +558,9 @@ describe("Super Bot sessions stay admin-only after they are created", () => {
     };
   }
 
-  test("Super Bot images use the same profile access guard as chat history", async () => {
+  test("Super Nakama images use the same profile access guard as chat history", async () => {
     const { app, databaseAdapter, member, superProfileId, superSessionId } =
-      await createSuperBotScenario();
+      await createSuperNakamaScenario();
 
     const saved = await createAttachmentSaver(databaseAdapter, {
       channel: "web",
@@ -594,7 +596,7 @@ describe("Super Bot sessions stay admin-only after they are created", () => {
   for (const route of CROSS_ORG_ROUTES) {
     test(`${route.method} ${route.path(":id")} -> 403 for a member`, async () => {
       const { app, databaseAdapter, member, superSessionId } =
-        await createSuperBotScenario();
+        await createSuperNakamaScenario();
 
       const response = await app.fetch(
         new Request(`http://localhost:4310${route.path(superSessionId)}`, {
@@ -611,9 +613,9 @@ describe("Super Bot sessions stay admin-only after they are created", () => {
     });
   }
 
-  test("a member cannot list Super Bot sessions, an admin still can", async () => {
+  test("a member cannot list Super Nakama sessions, an admin still can", async () => {
     const { app, member, superProfileId, superSessionId } =
-      await createSuperBotScenario();
+      await createSuperNakamaScenario();
 
     const admin = await loginUserSession(
       app,

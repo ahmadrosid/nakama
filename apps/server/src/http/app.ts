@@ -54,7 +54,6 @@ import {
   DOCS_SCRIPT_URL,
   registerSystemRoutes,
 } from "./routes/system";
-import { registerTokenOptimizationRoutes } from "./routes/token-optimization";
 import { registerToolRoutes } from "./routes/tools";
 import { registerUserContextRoutes } from "./routes/user-context";
 import { registerWorkerRoutes } from "./routes/workers";
@@ -68,7 +67,7 @@ import type { HonoApp } from "./types";
  * the two drift, which is the only thing keeping this constant honest.
  */
 const THEME_BOOTSTRAP_SCRIPT_HASH =
-  "sha256-HsiO8mtwNQyMUSzPhZ0Zgx52OUxlMda3rA2mB6m/SO0=";
+  "sha256-ccmZA+DQW+fCYJWBEiKXptNNdt/GBPFOLMhetVtPmLA=";
 
 // Regular JSON can carry a 5 MiB attachment after base64 expansion. Full-data
 // imports accept a 100 MiB archive, which expands to roughly 134 MiB as base64.
@@ -255,7 +254,7 @@ export function createHonoApp(options: ServerOptions) {
         "Content-Security-Policy",
         isArtifactDocument
           ? ARTIFACT_FRAME_CSP
-          : `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'${docsScripts}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://logos.composio.dev; media-src 'self' blob:; object-src blob:; frame-src 'self' blob:; font-src 'self' data:${docsFonts}; connect-src 'self'${docsConnections};`
+          : `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'${docsScripts}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://logos.composio.dev; media-src 'self' blob:; object-src blob:; frame-src 'self' blob: https://*.kernel.sh:* https://*.onkernel.com:*; font-src 'self' data:${docsFonts}; connect-src 'self'${docsConnections};`
       );
 
       // Also true behind a TLS terminator, which is where HSTS matters most.
@@ -406,7 +405,6 @@ export function createHonoApp(options: ServerOptions) {
   registerGoogleMeetRoutes(app, options);
   registerAutomationRoutes(app, options);
   registerNotificationDestinationRoutes(app, options);
-  registerTokenOptimizationRoutes(app, options);
   registerAutomationWorkerSettingsRoutes(app, options);
   registerCodingHarnessSettingsRoutes(app, options);
   registerComposioRoutes(app, options);

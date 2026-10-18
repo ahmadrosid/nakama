@@ -585,7 +585,7 @@ describe("Discord selection pickers", () => {
     });
   });
 
-  test("profile picker excludes Super Bot and rejects stale or unavailable choices", async () => {
+  test("profile picker excludes Super Nakama and rejects stale or unavailable choices", async () => {
     await withTempHome(async (homeDir) => {
       const handler = await createPairedHandler(homeDir, {
         orgs: createMultiTestOrgs(),

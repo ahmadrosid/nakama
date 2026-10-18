@@ -35,11 +35,11 @@ const profiles: ProfileSummary[] = [
   },
   {
     ...profileDefaults,
-    id: "super_bot",
+    id: "super_nakama",
     isDefault: false,
     isSuper: true,
     model: null,
-    name: "Super Bot",
+    name: "Super Nakama",
   },
 ];
 
@@ -50,9 +50,13 @@ describe("resolveProfileInput", () => {
     expect(resolveProfileInput(profiles, "2")?.id).toBe("profile_b");
   });
 
-  test("matches super bot aliases", () => {
-    expect(resolveProfileInput(profiles, "super_bot")?.id).toBe("super_bot");
-    expect(resolveProfileInput(profiles, "super-bot")?.id).toBe("super_bot");
+  test("matches super nakama aliases", () => {
+    expect(resolveProfileInput(profiles, "super_nakama")?.id).toBe(
+      "super_nakama"
+    );
+    expect(resolveProfileInput(profiles, "super-nakama")?.id).toBe(
+      "super_nakama"
+    );
   });
 
   test("returns undefined for ambiguous input", () => {
@@ -78,7 +82,7 @@ describe("resolveProfileInput", () => {
 });
 
 describe("filterProfilesForChatAccess", () => {
-  test("hides super bot from org members and channel bridges", () => {
+  test("hides super nakama from org members and channel bridges", () => {
     expect(
       filterProfilesForChatAccess(profiles, { orgRole: "member" }).map(
         (profile) => profile.id
@@ -86,18 +90,18 @@ describe("filterProfilesForChatAccess", () => {
     ).toEqual(["profile_b", "profile_a"]);
     expect(
       filterProfilesForChatAccess(profiles, {
-        excludeSuperBot: true,
+        excludeSuperNakama: true,
         orgRole: "admin",
       }).map((profile) => profile.id)
     ).toEqual(["profile_b", "profile_a"]);
   });
 
-  test("keeps super bot for org admins", () => {
+  test("keeps super nakama for org admins", () => {
     expect(
       filterProfilesForChatAccess(profiles, { orgRole: "admin" }).map(
         (profile) => profile.id
       )
-    ).toEqual(["profile_b", "profile_a", "super_bot"]);
+    ).toEqual(["profile_b", "profile_a", "super_nakama"]);
   });
 });
 

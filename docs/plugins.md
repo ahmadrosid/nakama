@@ -66,15 +66,15 @@ With `useHostLlm: true`, the host writes the active provider’s type, API key, 
 
 `GET /v1/workers/plugins` lists workers for the active organization. Organization admins and platform admins can use the existing worker control/log endpoints for those returned names. The Workers page exposes the same controls.
 
-## Local drafts from Super Bot
+## Local drafts from Super Nakama
 
-Super Bot's bundled `create-plugin` skill writes a draft beneath its profile
+Super Nakama's bundled `create-plugin` skill writes a draft beneath its profile
 workspace's `plugin-drafts/<pluginId>/` directory. It keeps sources in `src/`
 alongside built actions, UI, skills, workers, and migrations. Direct `bun build`
 commands compile the draft; the agent does not install it or execute its actions.
 Host shell access is unsandboxed, including during drafting.
 
-The skill ships `scripts/new-plugin.mjs` and a `template/` folder. Super Bot runs
+The skill ships `scripts/new-plugin.mjs` and a `template/` folder. Super Nakama runs
 `bun <skill dir>/scripts/new-plugin.mjs <id> "<Name>" <action>` from its
 workspace to scaffold and build a new draft: one action, an example page
 (`src/ui.jsx`, `src/ui.css`), and a chat card for the action. The skill also
@@ -82,20 +82,20 @@ teaches the page style (host `ctx.ui` components, scoped CSS, host color
 variables). `ensureBundledSkillFiles` copies
 those assets into the installed skill folder on every start.
 
-When the draft builds, Super Bot calls `submit_plugin_draft`. The tool runs
+When the draft builds, Super Nakama calls `submit_plugin_draft`. The tool runs
 `PluginService.describeLocalPlugin`, which validates the draft without the
 platform-admin check, and returns `type: "plugin_draft_ready"`. The web chat
 renders that result as `PluginDraftCard`. The card reads its state from the org
 plugin list and plugin agent access.
 
 A platform admin chooses **System → Plugins → Install from folder**, selects
-the active organization's Super Bot, and enters the draft ID. Preview shows the
+the active organization's Super Nakama, and enters the draft ID. Preview shows the
 effective development version, digest, and files grouped by what runs. Open
 files to review the source and executable output, then confirm installation.
 Install does not require opening every file.
 
 Local review and installation use explicit organization/profile/draft IDs,
-never caller-supplied absolute paths. Only server-local Super Bot drafts in that
+never caller-supplied absolute paths. Only server-local Super Nakama drafts in that
 organization are accepted. Symlinks, hard links, special files, oversized trees,
 runtime dependencies, and official plugin IDs are rejected.
 
@@ -168,7 +168,7 @@ Spoofed org, role, or path fields in input are stripped. Use `bun:sqlite` agains
 
 Actions can call `await context.host(request)` sequentially through the invocation's IPC channel. The host supplies organization and actor identity, checks profile access, and only executes tools assigned to the requested profile. Host work is cancelled when the action ends, times out, or is disabled. Calls to other plugin tools are excluded to prevent recursive subprocess chains.
 
-Supported operations: `profiles`; `tools` with `agentId`; `execute_tool` with `agentId`, `name`, and `input`; and `summarize` with `agentId`, `prompt`, and a `bag` of step results. A summary has no tools. Requests cannot choose the organization or actor. Viewers and cross-organization profiles are rejected; Super Bot requires an admin.
+Supported operations: `profiles`; `tools` with `agentId`; `execute_tool` with `agentId`, `name`, and `input`; and `summarize` with `agentId`, `prompt`, and a `bag` of step results. A summary has no tools. Requests cannot choose the organization or actor. Viewers and cross-organization profiles are rejected; Super Nakama requires an admin.
 
 The official Workflows plugin additionally uses host operations to read its legacy data for import and inspect the existing organization SQLite tool data. Legacy import is admin-only and read-only at the source. Its plugin database records completion so reinstalling does not resurrect deleted workflows.
 

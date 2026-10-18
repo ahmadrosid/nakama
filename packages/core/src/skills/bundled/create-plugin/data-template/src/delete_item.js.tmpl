@@ -1,0 +1,24 @@
+// Deletes one item by id. Keep the run signature.
+import { Database } from "bun:sqlite";
+
+export async function run(input, context) {
+  const id = String(input?.id ?? "").trim();
+
+  if (!id) {
+    throw new Error("id is required");
+  }
+
+  const db = new Database(context.databasePath);
+
+  try {
+    const { changes } = db.query("DELETE FROM items WHERE id = ?").run(id);
+
+    if (!changes) {
+      throw new Error(`item ${id} not found`);
+    }
+
+    return { deleted: id };
+  } finally {
+    db.close();
+  }
+}

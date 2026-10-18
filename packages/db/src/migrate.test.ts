@@ -9,6 +9,7 @@ import {
   migrateArtifactDesignSkillName,
   migrateCodingDelegationSkillName,
   migrateDatabase,
+  migrateSuperNakamaNaming,
   moveProfileJoinReferences,
   resolveSchemaPath,
 } from "./migrate";
@@ -714,6 +715,42 @@ describe("legacy profile id migration", () => {
   });
 });
 
+describe("super nakama naming migration", () => {
+  test("renames the stock super profile and its change events only", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+      db.exec(`
+        INSERT INTO organizations (id, name, slug, created_at, updated_at)
+        VALUES ('org_a', 'A', 'a', '2026-10-16T00:00:00.000Z', '2026-10-16T00:00:00.000Z');
+        INSERT INTO profiles (id, name, system_prompt, model, is_super, org_id, created_at, updated_at)
+        VALUES
+          ('p_stock', 'Super Bot', '', NULL, 1, 'org_a', '2026-10-16T00:00:00.000Z', '2026-10-16T00:00:00.000Z'),
+          ('p_custom', 'Atlas', '', NULL, 1, 'org_a', '2026-10-16T00:00:00.000Z', '2026-10-16T00:00:00.000Z'),
+          ('p_regular', 'Super Bot', '', NULL, 0, 'org_a', '2026-10-16T00:00:00.000Z', '2026-10-16T00:00:00.000Z');
+        INSERT INTO profile_change_events (id, org_id, profile_id, source, field, created_at)
+        VALUES ('e1', 'org_a', 'p_stock', 'super_bot', 'system_prompt', '2026-10-16T00:00:00.000Z');
+      `);
+
+      migrateSuperNakamaNaming(db);
+
+      expect(
+        db.prepare("SELECT id, name FROM profiles ORDER BY id").all()
+      ).toEqual([
+        { id: "p_custom", name: "Atlas" },
+        { id: "p_regular", name: "Super Bot" },
+        { id: "p_stock", name: "Super Nakama" },
+      ]);
+      expect(
+        db.prepare("SELECT source FROM profile_change_events").get()
+      ).toEqual({ source: "super_nakama" });
+    } finally {
+      db.close();
+    }
+  });
+});
+
 describe("save-artifact skill rename migration", () => {
   const insertSkill = (db: Database, id: string, name: string) =>
     db
@@ -1081,6 +1118,42 @@ describe("skill org id backfill", () => {
       } else {
         process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
       }
+    }
+  });
+});
+
+describe("session org id backfill", () => {
+  test("recovers the owning org from the profile and leaves orphan sessions alone", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      // Rows as every pre-fix install has them: org_id never written.
+      db.exec(`
+        INSERT INTO organizations (id, name, slug, created_at, updated_at)
+          VALUES ('org_a', 'Org A', 'org-a', 'now', 'now');
+        INSERT INTO profiles (id, name, org_id, created_at, updated_at)
+          VALUES ('profile_a', 'Agent A', 'org_a', 'now', 'now');
+      `);
+      db.exec("PRAGMA foreign_keys = OFF");
+      db.exec(`
+        INSERT INTO sessions (id, profile_id, channel, created_at, updated_at)
+          VALUES ('session_a', 'profile_a', 'web', 'now', 'now'),
+                 ('session_orphan', 'profile_gone', 'web', 'now', 'now');
+      `);
+      db.exec("PRAGMA foreign_keys = ON");
+
+      migrateDatabase(db);
+
+      expect(
+        db.query("SELECT id, org_id FROM sessions ORDER BY id").all()
+      ).toEqual([
+        { id: "session_a", org_id: "org_a" },
+        { id: "session_orphan", org_id: null },
+      ]);
+    } finally {
+      db.close();
     }
   });
 });
@@ -2206,6 +2279,36 @@ test("llm quota reservations: an upgrade drops the old counter table and its fal
     expect(
       db.query("SELECT COUNT(*) AS held FROM org_llm_quota_reservations").get()
     ).toEqual({ held: 0 });
+  } finally {
+    db.close();
+  }
+});
+
+test("upgrades drop the removed token optimiser table and column", () => {
+  const db = new Database(":memory:");
+
+  try {
+    migrateDatabase(db);
+    db.exec(
+      "CREATE TABLE tool_output_savings (org_id TEXT); ALTER TABLE workspace_settings ADD COLUMN token_optimizer_enabled INTEGER"
+    );
+    migrateDatabase(db);
+    migrateDatabase(db);
+    expect(
+      db
+        .query(
+          "SELECT name FROM sqlite_master WHERE name = 'tool_output_savings'"
+        )
+        .get()
+    ).toBeNull();
+    expect(
+      db
+        .query<{ name: string }, SQLQueryBindings[]>(
+          "PRAGMA table_info(workspace_settings)"
+        )
+        .all()
+        .map((column) => column.name)
+    ).not.toContain("token_optimizer_enabled");
   } finally {
     db.close();
   }

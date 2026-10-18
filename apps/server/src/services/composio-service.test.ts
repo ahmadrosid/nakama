@@ -575,7 +575,7 @@ describe("ComposioService", () => {
         isDefault: false,
         isSuper: true,
         model: null,
-        name: "Super Bot",
+        name: "Super Nakama",
         orgId: ORG_ID,
         systemPrompt: "",
         updatedAt: new Date().toISOString(),
@@ -588,7 +588,7 @@ describe("ComposioService", () => {
       const assigned = await db.listProfileComposioToolkits("profile_default");
       expect(assigned.map((entry) => entry.toolkitId)).toEqual([toolkit.id]);
 
-      // Super Bot and channel-facing profiles stay an explicit choice.
+      // Super Nakama and channel-facing profiles stay an explicit choice.
       expect(await db.listProfileComposioToolkits("profile_super")).toEqual([]);
     } finally {
       restore();

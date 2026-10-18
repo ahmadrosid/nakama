@@ -16,7 +16,7 @@ The mental model:
 
 There is no separate delegate builtin for **repo coding work**. That workflow is **`bash` + the `coding-agent` skill**. Setup happens in chat: the agent can install missing npm-based CLIs (or tell you to install Cursor Agent yourself) and asks which backend to use when more than one is available.
 
-For **general in-process delegation** (research, review, planning), Nakama also offers the optional [`sub_agent`](/builtin-tools#sub_agent) tool — a same-profile sub-agent that returns a structured result. It does not spawn external CLIs and is not a substitute for dedicated coding CLIs on large repo changes.
+For **general in-process delegation** (research, review, planning), Nakama also offers the optional [`sub_agent`](/tool-reference#sub_agent) tool — a same-profile sub-agent that returns a structured result. It does not spawn external CLIs and is not a substitute for dedicated coding CLIs on large repo changes.
 
 ## Why use a coding agent
 
@@ -26,7 +26,7 @@ Dedicated coding agents are built for that job. Nakama adds this feature so you 
 
 - **Nakama** stays the conversation owner, permission boundary, and summarizer
 - **Coding agent** (Codex, Claude Code, OpenCode, pi, or Cursor Agent) runs the heavy repo work on the server
-- **Super Bot** is the default profile with `bash` and the `coding-agent` skill; other profiles can opt in
+- **Super Nakama** is the default profile with `bash` and the `coding-agent` skill; other profiles can opt in
 
 ## How the pieces fit together
 
@@ -63,7 +63,7 @@ Nakama supports CLI-backed backends on the machine running the server:
 
 ### 1. Assign tools and skills to the profile
 
-| Requirement | Super Bot | Other profiles |
+| Requirement | Super Nakama | Other profiles |
 |-------------|-----------|----------------|
 | `bash` | Assigned by default | Assign manually |
 | `coding-agent` skill | Assigned by default | Assign manually |
@@ -81,7 +81,7 @@ When the user's message looks like a code-change request, the skill matcher atta
 - **One CLI installed** — context includes that backend's command template
 - **Multiple CLIs installed** — the agent asks which one to use (per conversation) before running
 
-Use an appropriate `bash` `timeoutMs` (often 10–30 minutes for large tasks; see [bash](/builtin-tools#bash)).
+Use an appropriate `bash` `timeoutMs` (often 10–30 minutes for large tasks; see [bash](/tool-reference#bash)).
 
 ### Provider passthrough
 
@@ -190,5 +190,5 @@ Tool and skill assignment remain per profile.
 
 - [Builtin tools](/builtin-tools) — `bash` parameters and scope
 - [Skills](/skills) — bundled skills catalog, including `coding-agent`
-- [Profiles](/profiles) — Super Bot and per-profile tool access
+- [Profiles](/profiles) — Super Nakama and per-profile tool access
 - [Agent prompts](/agent-prompt) — how matched skills and harness context join the system prompt

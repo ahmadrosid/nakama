@@ -77,7 +77,6 @@ describe("OrgUsageQuotaService", () => {
     await db.incrementLlmTurnUsage("org_limited", {
       estimated: false,
       inputTokens: 1,
-      optimized: false,
       outputTokens: 1,
     });
 
@@ -109,7 +108,6 @@ describe("OrgUsageQuotaService", () => {
       await db.incrementLlmTurnUsage("org_warning", {
         estimated: false,
         inputTokens: 1,
-        optimized: false,
         outputTokens: 1,
       });
     }
@@ -135,7 +133,6 @@ describe("OrgUsageQuotaService", () => {
     await db.incrementLlmTurnUsage("org_token_limited", {
       estimated: false,
       inputTokens: 75,
-      optimized: false,
       outputTokens: 25,
     });
 
@@ -162,13 +159,11 @@ describe("OrgUsageQuotaService", () => {
     await db.incrementLlmTurnUsage(orgId, {
       estimated: false,
       inputTokens: 100,
-      optimized: false,
       outputTokens: 50,
     });
     await db.incrementLlmTurnUsage(orgId, {
       estimated: false,
       inputTokens: 100,
-      optimized: false,
       outputTokens: 50,
     });
 
@@ -248,7 +243,6 @@ describe("OrgUsageQuotaService", () => {
     await db.incrementLlmTurnUsage("org_charged", {
       estimated: false,
       inputTokens: 60_000,
-      optimized: false,
       outputTokens: 40_000,
     });
     await release();

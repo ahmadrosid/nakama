@@ -57,7 +57,11 @@ import {
   fetchXaiOAuthModels,
   startXaiOAuthDeviceSession,
 } from "../../providers/xai-oauth/oauth";
-import { installAgentBrowser } from "../../services/agent-browser-service";
+import {
+  getAgentBrowserStatus,
+  installAgentBrowser,
+  saveAgentBrowserConfig,
+} from "../../services/agent-browser-service";
 import {
   getExternalModelCatalog,
   isExternalModelCatalogId,
@@ -379,6 +383,13 @@ export function registerModelRoutes(
     .object({})
     .passthrough()
     .openapi("AgentBrowserStatusResponse");
+
+  const updateAgentBrowserRequestSchema = z
+    .object({
+      apiKey: z.string().optional(),
+      provider: z.enum(["kernel"]).nullable().optional(),
+    })
+    .openapi("UpdateAgentBrowserSettingsRequest");
 
   const agentBrowserInstallEventSchema = z
     .object({})
@@ -1520,6 +1531,37 @@ export function registerModelRoutes(
   );
   app.openAPIRegistry.registerPath(
     createRoute({
+      method: "put",
+      operationId: "setAgentBrowserSettings",
+      path: "/v1/settings/agent-browser",
+      request: {
+        body: {
+          content: {
+            "application/json": { schema: updateAgentBrowserRequestSchema },
+          },
+          required: true,
+        },
+      },
+      responses: {
+        200: {
+          content: { "application/json": { schema: agentBrowserStatusSchema } },
+          description: "Agent-browser status",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Forbidden",
+        },
+      },
+      summary: "Set the agent-browser runtime",
+      tags: ["Models"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
       method: "post",
       operationId: "installAgentBrowser",
       path: "/v1/settings/agent-browser/install",
@@ -2078,6 +2120,23 @@ export function registerModelRoutes(
     );
   });
 
+  app.put("/v1/settings/agent-browser", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const body = await readJson(c.req.raw, updateAgentBrowserRequestSchema);
+
+    try {
+      await saveAgentBrowserConfig(body);
+
+      return json<AgentBrowserStatusResponse>(await getAgentBrowserStatus());
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      throw error;
+    }
+  });
+
   app.post("/v1/settings/agent-browser/install", async (c) => {
     requirePlatformAdminFromContext(c);
 
@@ -2227,10 +2286,10 @@ export function registerModelRoutes(
     const { profile } = await agent.getProfile(orgId, profileId);
 
     // A channel worker talks to the server as the local client, and the server
-    // refuses that client for Super Bot, so such a bridge can never answer.
+    // refuses that client for Super Nakama, so such a bridge can never answer.
     if (profile.isSuper) {
       throw new NakamaApiError(
-        "Super Bot cannot be connected to a channel. Choose another agent.",
+        "Super Nakama cannot be connected to a channel. Choose another agent.",
         400
       );
     }

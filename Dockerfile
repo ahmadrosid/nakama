@@ -39,10 +39,17 @@ COPY --from=web-builder /app/apps/platform/slack/dist /app/apps/platform/slack/d
 FROM oven/bun:1.4.3-slim@sha256:14a223fa35747ec728bce300ef85888bc5f7958164d15bbba6a54b22b52a3288 AS runtime-deps
 WORKDIR /runtime-deps
 
+# The Codex and Claude Code binaries are about 670 MB, half the image. The
+# default image drops them; the -full tag keeps them. Without them, the ACP
+# agents use CODEX_PATH / CLAUDE_CODE_EXECUTABLE.
+ARG INSTALL_CODING_AGENTS=false
 COPY .docker/runtime-deps/package.json .docker/runtime-deps/bun.lock ./
 RUN bun install --frozen-lockfile --production --ignore-scripts \
   # The runtime is Debian (glibc); the SDK never picks its musl binary here.
-  && rm -rf node_modules/@anthropic-ai/claude-agent-sdk-linux-x64-musl
+  && rm -rf node_modules/@anthropic-ai/claude-agent-sdk-linux-*-musl \
+  && if [ "$INSTALL_CODING_AGENTS" != "true" ]; then \
+       rm -rf node_modules/@anthropic-ai/claude-agent-sdk-linux-* node_modules/@openai/codex-linux-*; \
+     fi
 
 # Keep FFmpeg's video libraries out of the runtime image. These pinned static
 # binaries cover both published architectures without Debian's GUI dependencies.
@@ -65,7 +72,7 @@ RUN set -eu; \
 FROM oven/bun:1.4.3-slim@sha256:14a223fa35747ec728bce300ef85888bc5f7958164d15bbba6a54b22b52a3288 AS runtime
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates sudo python3 python3-venv \
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl sudo python3 python3-venv \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=ffmpeg-binaries /ffmpeg /ffprobe /usr/local/bin/
 
@@ -81,31 +88,6 @@ RUN if [ "$INSTALL_MEET_DEPS" = "true" ]; then \
       && rm -rf /var/lib/apt/lists/* \
       && cd /opt/nakama-meet \
       && bun install --frozen-lockfile --production --ignore-scripts; \
-    fi
-
-# Tool-output optimiser, on by default so the dashboard toggle works on a fresh
-# image without a rebuild. Just under 10 MB unpacked. Build with
-# --build-arg OMNI_VERSION= to leave it out; the server then fetches it on demand
-# when the toggle is switched on, unless NAKAMA_OMNI_AUTO_INSTALL=0.
-# The release is a static musl build, which runs on this glibc base, and the
-# published checksum is verified rather than the download trusted.
-ARG OMNI_VERSION="0.7.9"
-RUN if [ -n "$OMNI_VERSION" ]; then \
-      set -eu; \
-      apt-get update && apt-get install -y --no-install-recommends curl ca-certificates; \
-      case "$(dpkg --print-architecture)" in \
-        amd64) target=x86_64-unknown-linux-musl ;; \
-        arm64) target=aarch64-unknown-linux-musl ;; \
-        *) echo "no omni build for $(dpkg --print-architecture)" >&2; exit 1 ;; \
-      esac; \
-      base="https://github.com/fajarhide/omni/releases/download/v${OMNI_VERSION}"; \
-      archive="omni-v${OMNI_VERSION}-${target}.tar.gz"; \
-      curl -fsSL -o "/tmp/${archive}" "${base}/${archive}"; \
-      curl -fsSL -o /tmp/SHA256SUMS "${base}/SHA256SUMS"; \
-      (cd /tmp && grep " ${archive}\$" SHA256SUMS | sha256sum -c -); \
-      tar -xzf "/tmp/${archive}" -C /usr/local/bin omni; \
-      rm -rf "/tmp/${archive}" /tmp/SHA256SUMS /var/lib/apt/lists/*; \
-      omni --version; \
     fi
 
 RUN mkdir -p /nakama/data \

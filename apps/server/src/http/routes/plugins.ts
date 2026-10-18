@@ -938,6 +938,7 @@ function contentTypeFor(filePath: string, isDocument: boolean): string {
 
 const PLUGIN_ERROR_STATUS = new Map(
   Object.entries({
+    action_failed: 422,
     archive_too_large: 413,
     busy: 429,
     digest_mismatch: 400,
@@ -964,7 +965,7 @@ const PLUGIN_ERROR_STATUS = new Map(
 function throwPluginHttpError<T>(error: T): never {
   if (error instanceof PluginHostError) {
     throw new NakamaApiError(
-      error.code,
+      error.code === "action_failed" ? error.message : error.code,
       PLUGIN_ERROR_STATUS.get(error.code) ?? 409
     );
   }

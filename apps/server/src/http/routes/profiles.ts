@@ -1381,7 +1381,7 @@ export function registerProfileRoutes(
     );
   });
 
-  app.post("/v1/profiles/with-super-bot", async (c) => {
+  app.post("/v1/profiles/with-super-nakama", async (c) => {
     const auth = requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
 
@@ -1393,7 +1393,7 @@ export function registerProfileRoutes(
       })
     );
 
-    // Super Bot has host tools, so members never route their text through it.
+    // Super Nakama has host tools, so members never route their text through it.
     // Their description becomes the agent's prompt and the agent stays private.
     if (!auth.isPlatformAdmin) {
       return json<ProfileResponse>(
@@ -1412,7 +1412,7 @@ export function registerProfileRoutes(
     }
 
     return json<ProfileResponse>(
-      await agent.createProfileWithSuperBot(orgId, body),
+      await agent.createProfileWithSuperNakama(orgId, body),
       201
     );
   });

@@ -273,6 +273,7 @@ function AppShell() {
                     path="/tasks"
                   />
                   <Route element={<IntegrationsPage />} path="/integrations" />
+                  <Route element={<IntegrationsPage />} path="/connectors" />
                   <Route
                     element={<IntegrationsPage />}
                     path="/customize/connections/:section"

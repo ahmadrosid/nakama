@@ -46,7 +46,7 @@ export function buildNewChatPath(profileId?: string | null): string {
   return `${buildChatBasePath()}?${params.toString()}`;
 }
 
-/** Profile id from `?new=1&profile=…` when opening a new chat (e.g. Super Bot from Tools). */
+/** Profile id from `?new=1&profile=…` when opening a new chat (e.g. Super Nakama from Tools). */
 export function readRequestedProfileFromNewChatSearch(
   search: string
 ): string | null {

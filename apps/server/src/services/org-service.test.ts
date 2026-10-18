@@ -363,7 +363,7 @@ describe("OrgService", () => {
 
     expect(
       profiles.some(
-        (profile) => profile.isSuper && profile.name === "Super Bot"
+        (profile) => profile.isSuper && profile.name === "Super Nakama"
       )
     ).toBe(true);
   });
@@ -1917,7 +1917,6 @@ describe("OrgService shared agent selection", () => {
       await db.incrementLlmTurnUsage("org_parent", {
         estimated: false,
         inputTokens: 1,
-        optimized: false,
         outputTokens: 1,
       });
       const parentUsage = await db.listLlmTurnUsage("org_parent");

@@ -181,6 +181,13 @@ export interface PluginUi {
     size?: "default" | "sm";
     "aria-label"?: string;
   }>;
+  /** Use for every list of records. It scrolls sideways inside its own border. */
+  Table: Component<Html & { "aria-label": string }>;
+  TableHeader: Component<Html>;
+  TableBody: Component<Html>;
+  TableRow: Component<Html & { onClick?: (event: unknown) => void }>;
+  TableHead: Component<Html & { scope?: "col" | "row" }>;
+  TableCell: Component<Html & { colSpan?: number }>;
   Textarea: Component<Field & { rows?: number }>;
   /** The host already mounts one. Plugins cannot raise toasts. */
   Toaster: Component;

@@ -510,7 +510,7 @@ describe("create_automation tool", () => {
     expect(created.profileId).toBe(otherId);
   });
 
-  test("denies Super Bot profileId for members", async () => {
+  test("denies Super Nakama profileId for members", async () => {
     const db = await createTestDb();
     const now = new Date().toISOString();
     const superId = "profile_super";
@@ -520,7 +520,7 @@ describe("create_automation tool", () => {
       isDefault: false,
       isSuper: true,
       model: null,
-      name: "Super Bot",
+      name: "Super Nakama",
       orgId: ORG_ID,
       systemPrompt: "",
       updatedAt: now,

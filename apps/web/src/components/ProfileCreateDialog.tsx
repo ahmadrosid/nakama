@@ -28,7 +28,7 @@ import {
 import {
   useAssignToolMutation,
   useCreateProfileMutation,
-  useCreateProfileWithSuperBotMutation,
+  useCreateProfileWithSuperNakamaMutation,
   useUpdateProfileMutation,
   useUploadProfileAvatarMutation,
 } from "@/hooks/use-resource-mutations";
@@ -43,7 +43,7 @@ function fileToImageAttachment(file: File): Promise<ImageAttachment | null> {
 
 interface ProfileCreateDialogProps {
   agentPresets: AcpAgentPresetSummary[];
-  onAskSuperBot?: () => void;
+  onAskSuperNakama?: () => void;
   onCreated: (profileId: string) => void;
   onOpenChange: (open: boolean) => void;
   open: boolean;
@@ -151,14 +151,14 @@ export function ProfileCreateDialog({
   tools,
   onCreated,
   onOpenChange,
-  onAskSuperBot,
+  onAskSuperNakama,
 }: ProfileCreateDialogProps) {
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       {open ? (
         <ProfileCreateDialogContent
           agentPresets={agentPresets}
-          onAskSuperBot={onAskSuperBot}
+          onAskSuperNakama={onAskSuperNakama}
           onCreated={onCreated}
           onOpenChange={onOpenChange}
           tools={tools}
@@ -173,16 +173,16 @@ function ProfileCreateDialogContent({
   tools,
   onCreated,
   onOpenChange,
-  onAskSuperBot,
+  onAskSuperNakama,
 }: {
   agentPresets: AcpAgentPresetSummary[];
   tools: ToolSummary[];
   onCreated: (profileId: string) => void;
   onOpenChange: (open: boolean) => void;
-  onAskSuperBot?: () => void;
+  onAskSuperNakama?: () => void;
 }) {
   const createMutation = useCreateProfileMutation();
-  const superBotCreateMutation = useCreateProfileWithSuperBotMutation();
+  const superNakamaCreateMutation = useCreateProfileWithSuperNakamaMutation();
   const uploadAvatarMutation = useUploadProfileAvatarMutation();
   const assignToolMutation = useAssignToolMutation();
   const updateProfileMutation = useUpdateProfileMutation();
@@ -198,7 +198,7 @@ function ProfileCreateDialogContent({
 
   const busy =
     createMutation.isPending ||
-    superBotCreateMutation.isPending ||
+    superNakamaCreateMutation.isPending ||
     uploadAvatarMutation.isPending ||
     assignToolMutation.isPending ||
     updateProfileMutation.isPending;
@@ -266,7 +266,7 @@ function ProfileCreateDialogContent({
 
       const response =
         prompt && !profileIdTrimmed
-          ? await superBotCreateMutation.mutateAsync({
+          ? await superNakamaCreateMutation.mutateAsync({
               name: form.name.trim() || undefined,
               prompt,
             })
@@ -332,7 +332,7 @@ function ProfileCreateDialogContent({
           <DialogTitle className="text-xl">
             What do you need help with?
           </DialogTitle>
-          {onAskSuperBot ? (
+          {onAskSuperNakama ? (
             <DialogDescription>
               Or{" "}
               <button
@@ -340,11 +340,11 @@ function ProfileCreateDialogContent({
                 disabled={busy}
                 onClick={() => {
                   onOpenChange(false);
-                  onAskSuperBot();
+                  onAskSuperNakama();
                 }}
                 type="button"
               >
-                ask Super Bot
+                ask Super Nakama
               </button>{" "}
               to draft from chat.
             </DialogDescription>

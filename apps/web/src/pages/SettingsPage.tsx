@@ -13,7 +13,9 @@ import { Spinner } from "@nakama/ui/spinner";
 import { Switch } from "@nakama/ui/switch";
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { ComposioSettingsCard } from "@/components/ComposioSettingsCard";
 import { LocalAuthTokenCard } from "@/components/LocalAuthTokenCard";
+import { BrowserRuntimeSettingsCard } from "@/components/settings/BrowserRuntimeSettingsCard";
 import { BrowserSessionsCard } from "@/components/settings/BrowserSessionsCard";
 import { DataPortabilityPanel } from "@/components/settings/DataPortabilityPanel";
 import { ImageGenerationSettingsCard } from "@/components/settings/ImageGenerationSettingsCard";
@@ -226,6 +228,12 @@ export function SettingsPage() {
         {!isDemo && isPlatformAdmin ? <PlatformMfaSettingsCard /> : null}
 
         {isPlatformAdmin ? (
+          <section id="composio">
+            <ComposioSettingsCard />
+          </section>
+        ) : null}
+
+        {isPlatformAdmin ? (
           <Card className="w-full overflow-hidden shadow-none">
             <CardContent className="p-0">
               <DataPortabilityPanel />
@@ -249,6 +257,7 @@ export function LlmProvidersPage() {
           <TranscriptionSettingsCard />
           <ImageGenerationSettingsCard />
           <WebSearchSettingsCard />
+          <BrowserRuntimeSettingsCard />
         </CardContent>
       </Card>
     </div>

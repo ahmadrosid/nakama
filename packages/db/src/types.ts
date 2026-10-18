@@ -260,8 +260,6 @@ export interface StoredWorkspaceSettingsRecord {
   id: string;
   imageModel: string | null;
   selectedCodingAgentHarness: string | null;
-  /** null = inherit the NAKAMA_OMNI env var; true/false = set explicitly here. */
-  tokenOptimizerEnabled?: boolean | null;
   transcriptionModel: string | null;
   updatedAt: string;
   visionModel: string | null;
@@ -365,45 +363,20 @@ export interface LlmUsageStatsDelta {
   requestCount: number;
 }
 
-/** Bytes one optimiser removed from one tool result before it was inserted. */
-export interface ToolOutputSavingsDelta {
-  bytesIn: number;
-  bytesOut: number;
-  optimizer: string;
-  tool: string;
-}
-
-/** One request's provider tokens, tagged with the arm it belongs to. */
+/** One request's provider tokens. */
 export interface LlmTurnUsageDelta {
   estimated: boolean;
   inputTokens: number;
-  optimized: boolean;
   outputTokens: number;
 }
 
 export interface StoredLlmTurnUsageRecord {
-  arm: string;
   bucket: string;
   estimatedTurns: number;
   inputTokens: number;
   orgId: string;
   outputTokens: number;
   turns: number;
-}
-
-export interface StoredToolOutputSavingsRecord {
-  /** Day the bytes were removed, `YYYY-MM-DD`. Day resolution because the panel
-   * plots days and an hour column would be 24x the rows for a chart nobody asked
-   * for at that grain. */
-  bucket: string;
-  bytesIn: number;
-  bytesOut: number;
-  calls: number;
-  optimizer: string;
-  orgId: string;
-  tool: string;
-  trackedSince: string;
-  updatedAt: string;
 }
 
 export type McpServerStatus =
@@ -658,7 +631,7 @@ export type OrgMemoryProposalStatus = "pending" | "approved" | "rejected";
 
 export type ProfileChangeSource =
   | "dashboard"
-  | "super_bot"
+  | "super_nakama"
   | "skill_manage"
   | "pack_import";
 
@@ -1235,12 +1208,6 @@ export interface DatabaseAdapter {
     usedAt?: string;
     patchedAt?: string;
   }): Promise<void>;
-  incrementToolOutputSavings(
-    orgId: string,
-    delta: ToolOutputSavingsDelta,
-    trackedSince: string
-  ): Promise<void>;
-
   insertAttachment(record: StoredAttachmentRecord): Promise<void>;
   insertAutomationRun(record: StoredAutomationRunRecord): Promise<void>;
   insertAutomationRunStep(step: StoredAutomationRunStepRecord): Promise<void>;
@@ -1405,10 +1372,6 @@ export interface DatabaseAdapter {
     skillId: string,
     options?: { limit?: number }
   ): Promise<StoredSkillVersion[]>;
-
-  listToolOutputSavings(
-    orgId: string
-  ): Promise<StoredToolOutputSavingsRecord[]>;
 
   listTools(): Promise<StoredToolRecord[]>;
 

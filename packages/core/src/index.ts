@@ -107,10 +107,6 @@ export * from "./notification-destinations";
 
 export * from "./ollama-provider-config";
 
-export * from "./omni";
-
-export * from "./omni-install";
-
 export * from "./openrouter-model-slug";
 
 export * from "./plugins";
@@ -124,6 +120,8 @@ export * from "./provider-label";
 export * from "./provider-setup-prompt";
 
 export * from "./runtime";
+
+export * from "./secret-mask";
 
 export * from "./skills";
 

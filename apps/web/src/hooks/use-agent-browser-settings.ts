@@ -1,4 +1,7 @@
-import type { AgentBrowserStatusResponse } from "@nakama/core/contract";
+import type {
+  AgentBrowserStatusResponse,
+  UpdateAgentBrowserSettingsRequest,
+} from "@nakama/core/contract";
 import {
   queryOptions,
   useMutation,
@@ -27,6 +30,18 @@ export function useInstallAgentBrowser() {
     mutationFn: async (
       options: { onProgress?: (message: string) => void } = {}
     ) => client.installAgentBrowser({ onProgress: options.onProgress }),
+    onSuccess: (saved: AgentBrowserStatusResponse) => {
+      queryClient.setQueryData(queryKeys.agentBrowser.settings, saved);
+    },
+  });
+}
+
+export function useSaveAgentBrowserSettings() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (request: UpdateAgentBrowserSettingsRequest) =>
+      client.setAgentBrowserSettings(request),
     onSuccess: (saved: AgentBrowserStatusResponse) => {
       queryClient.setQueryData(queryKeys.agentBrowser.settings, saved);
     },

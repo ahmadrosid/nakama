@@ -50,14 +50,18 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateTenantOrgScope);
   atomic(migrateSkillOrgIds);
   atomic(migrateProfileOrgColumns);
+  atomic(migrateSessionOrgIds);
   atomic(migrateBrowserSessionsTable);
   atomic(migratePasswordResetTokensTable);
   migrateLegacyProfileIds(db);
   atomic(migrateCodingDelegationSkillName);
   atomic(migrateArtifactDesignSkillName);
+  atomic(migrateSuperNakamaNaming);
   atomic(migrateWorkspaceSettingsTable);
   atomic(migrateLlmUsageOrgScope);
-  atomic(migrateToolOutputSavingsTable);
+  atomic((database) =>
+    database.exec("DROP TABLE IF EXISTS tool_output_savings")
+  );
   atomic(migrateLlmTurnUsageTable);
   atomic(migrateLlmUsageActorStatsTable);
   atomic(migrateLlmUsageDailyStatsTable);
@@ -714,29 +718,9 @@ function migrateLlmUsageOrgScope(db: Database): void {
 }
 
 /**
- * Bytes removed from a tool result before it entered the conversation, per org,
- * per optimiser, per tool.
- *
- * Deliberately not tokens and not cost: a shortened result is re-sent on later
- * turns as a cache read billed at a fraction of fresh input, so multiplying
- * these by a price would invent a number nobody can support.
- *
- * `optimizer` is a column rather than a hard-coded name because OMNI will not be
- * the only one. It is also why this is not called `omni_savings`. What it cannot
- * hold is anything that never sees tool output: a command rewriter like rtk acts
- * before the command runs, and a proxy like headroom replaces the provider
- * client, so neither produces a row here. That is a boundary worth naming, not
- * hiding.
- */
-/**
- * Provider input tokens per turn, per org, per day, split by whether the
- * optimiser removed anything on that turn.
- *
- * This is the only table here that holds tokens rather than bytes, and it holds
- * what the provider charged rather than an estimate. The comparison it supports
- * is observational, not randomised: turns land in an arm because of what
- * happened, not because anything was assigned, so a workload difference between
- * the arms is a confound the reader has to be told about.
+ * Provider tokens per turn, per org, per day. The monthly usage quota sums it.
+ * `arm` is left from the removed token optimiser (#1888) and is now always
+ * `none`; older rows may say `omni`, and the quota counts both.
  */
 function migrateLlmTurnUsageTable(db: Database): void {
   db.exec(`
@@ -819,41 +803,6 @@ function migrateLlmUsageDailyStatsTable(db: Database): void {
       updated_at TEXT NOT NULL,
       PRIMARY KEY (org_id, day, model_id, provider)
     );
-  `);
-}
-
-function migrateToolOutputSavingsTable(db: Database): void {
-  // The first cut of this table had no `bucket`, and CREATE TABLE IF NOT EXISTS
-  // will not add one. It is a counter with no history worth keeping and it has
-  // never shipped, so recreating is cheaper and clearer than an ALTER dance.
-  const columns = db
-    .prepare<{ name: string }, SQLQueryBindings[]>(
-      "PRAGMA table_info(tool_output_savings)"
-    )
-    .all();
-
-  if (
-    columns.length > 0 &&
-    !columns.some((column) => column.name === "bucket")
-  ) {
-    db.exec("DROP TABLE tool_output_savings;");
-  }
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS tool_output_savings (
-      org_id TEXT NOT NULL,
-      bucket TEXT NOT NULL,
-      optimizer TEXT NOT NULL,
-      tool TEXT NOT NULL,
-      calls INTEGER NOT NULL DEFAULT 0,
-      bytes_in INTEGER NOT NULL DEFAULT 0,
-      bytes_out INTEGER NOT NULL DEFAULT 0,
-      tracked_since TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      PRIMARY KEY (org_id, bucket, optimizer, tool)
-    );
-    CREATE INDEX IF NOT EXISTS tool_output_savings_org_bucket
-      ON tool_output_savings (org_id, bucket);
   `);
 }
 
@@ -1540,6 +1489,25 @@ function migrateProfileOrgColumns(db: Database): void {
   })();
 }
 
+/**
+ * `sessions.org_id` shipped empty because the only insert path never set it,
+ * so every row a pre-fix install holds is NULL. The owning org is recoverable
+ * from the session's profile, which migrateProfileOrgColumns scopes first. A
+ * session whose profile is gone keeps NULL instead of failing the boot.
+ */
+function migrateSessionOrgIds(db: Database): void {
+  db.prepare(`
+    UPDATE sessions
+    SET org_id = (
+      SELECT org_id FROM profiles WHERE profiles.id = sessions.profile_id
+    )
+    WHERE org_id IS NULL
+      AND EXISTS (
+        SELECT 1 FROM profiles WHERE profiles.id = sessions.profile_id
+      )
+  `).run();
+}
+
 export function addOrgIdColumnIfMissing(db: Database, tableName: string): void {
   assertTenantOrgIdTable(tableName);
   const quotedTableName = quoteSqliteIdentifier(tableName);
@@ -1673,6 +1641,14 @@ export function migrateCodingDelegationSkillName(db: Database): void {
 
 export function migrateArtifactDesignSkillName(db: Database): void {
   renameSkillRecords(db, "save-artifact", "artifact-design");
+}
+
+// Only the stock name moves; a renamed super profile keeps its name.
+export function migrateSuperNakamaNaming(db: Database): void {
+  db.exec(`
+    UPDATE profiles SET name = 'Super Nakama' WHERE is_super = 1 AND name = 'Super Bot';
+    UPDATE profile_change_events SET source = 'super_nakama' WHERE source = 'super_bot';
+  `);
 }
 
 // Points profile_skills at the new name without duplicates, then drops the
@@ -1984,13 +1960,11 @@ function migrateWorkspaceSettingsTable(db: Database): void {
     `);
   }
 
-  // Null means "not chosen here", which falls back to the NAKAMA_OMNI env var.
-  // A tri-state rather than a boolean so an operator who set the env var does
-  // not have it silently overridden by a default row.
-  if (!columnNames.has("token_optimizer_enabled")) {
-    db.exec(`
-      ALTER TABLE workspace_settings ADD COLUMN token_optimizer_enabled INTEGER;
-    `);
+  // Left by the token optimiser removed in #1888.
+  if (columnNames.has("token_optimizer_enabled")) {
+    db.exec(
+      "ALTER TABLE workspace_settings DROP COLUMN token_optimizer_enabled;"
+    );
   }
 
   if (!columnNames.has("coding_agent_provider_passthrough")) {

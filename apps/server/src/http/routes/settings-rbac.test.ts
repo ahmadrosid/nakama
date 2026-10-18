@@ -236,6 +236,11 @@ const INSTALL_WRITES: { body?: unknown; method: string; path: string }[] = [
   { method: "POST", path: "/v1/settings/email/test" },
   { method: "POST", path: "/v1/settings/agent-browser/install" },
   {
+    body: { apiKey: "kernel-key", provider: "kernel" },
+    method: "PUT",
+    path: "/v1/settings/agent-browser",
+  },
+  {
     body: { providerPassthroughEnabled: false },
     method: "PUT",
     path: "/v1/settings/coding-harnesses",
@@ -304,7 +309,7 @@ function createApp(systemStatus?: SystemStatusStub) {
       deleteProvider: record("deleteProvider"),
       discoverModels: record("discoverModels"),
       getProfile: async (_orgId: string, profileId: string) => ({
-        profile: { id: "default", isSuper: profileId === "super_bot" },
+        profile: { id: "default", isSuper: profileId === "super_nakama" },
       }),
       listProfiles: async () => ({ profiles: [{ id: "default" }] }),
       sendErrorTrackingTest: record("sendErrorTrackingTest"),
@@ -428,13 +433,13 @@ describe("install-wide settings writes require a platform admin", () => {
   });
 
   for (const channel of ["telegram", "discord", "whatsapp"]) {
-    test(`an admin cannot connect ${channel} to Super Bot`, async () => {
+    test(`an admin cannot connect ${channel} to Super Nakama`, async () => {
       const { app, calls, session } = await login("admin", true);
 
       const response = await callRoute(app, session, {
         body: { botToken: "token" },
         method: "PUT",
-        path: `/v1/settings/${channel}?profileId=super_bot`,
+        path: `/v1/settings/${channel}?profileId=super_nakama`,
       });
 
       expect(response.status).toBe(400);

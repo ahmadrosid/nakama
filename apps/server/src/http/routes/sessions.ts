@@ -11,6 +11,7 @@ import type {
   ListSessionsResponse,
   SendMessageRequest,
   SendMessageResponse,
+  SessionBrowserResponse,
   SessionMessagesResponse,
   SessionStatusResponse,
   SessionSummary,
@@ -24,6 +25,10 @@ import {
   NakamaApiError,
   reportError,
 } from "@nakama/core";
+import {
+  getUserBrowser,
+  stopUserBrowser,
+} from "../../services/agent-browser-service";
 import { resolveRequestClientOrigin } from "../../services/composio-callback-url";
 import { sessionTurnRegistry } from "../../services/session-turn-registry";
 import type { ServerOptions } from "../context";
@@ -51,7 +56,7 @@ export function registerSessionRoutes(
 ): void {
   const { agent } = options;
 
-  // createSession refuses Super Bot to non-admins. Every route that names an
+  // createSession refuses Super Nakama to non-admins. Every route that names an
   // existing session repeats the check, or holding the ID would be enough.
   const requireSessionAccess = async (
     c: Parameters<typeof requireActiveOrgIdFromContext>[0]
@@ -242,8 +247,6 @@ export function registerSessionRoutes(
           toolDefinitions: z.number(),
         })
         .optional(),
-      bytesKeptOut: z.number().optional(),
-      bytesProduced: z.number().optional(),
       contextWindow: z.number(),
       source: z.enum(["provider", "estimate"]),
       usableContextTokens: z.number(),
@@ -711,7 +714,7 @@ export function registerSessionRoutes(
       {
         cognito: body.cognito,
         codingWorkspaceRoot: body.codingWorkspaceRoot,
-        excludeSuperBot: auth.mode === "local-token" && channel !== "cli",
+        excludeSuperNakama: auth.mode === "local-token" && channel !== "cli",
         isPlatformAdmin: auth.isPlatformAdmin,
         model: body.model,
         orgRole: auth.orgRole,
@@ -876,6 +879,42 @@ export function registerSessionRoutes(
     }
 
     return json<AcpSessionSettingsResponse>(response);
+  });
+
+  // The live view controls the browser, so viewers get none of these, and
+  // each caller only ever gets their own browser, even in someone else's chat.
+  app.get("/v1/sessions/:sessionId/browser", async (c) => {
+    const auth = requireOrgMemberFromContext(c);
+    const { orgId, sessionId } = await requireSessionAccess(c);
+
+    if (!(await agent.getSessionSummary(sessionId, orgId))) {
+      return errorResponse("Session not found", 404);
+    }
+
+    return json<SessionBrowserResponse>(
+      await getUserBrowser(orgId, auth.user.id)
+    );
+  });
+
+  app.delete("/v1/sessions/:sessionId/browser", async (c) => {
+    const auth = requireOrgMemberFromContext(c);
+    const { orgId, sessionId } = await requireSessionAccess(c);
+
+    if (!(await agent.getSessionSummary(sessionId, orgId))) {
+      return errorResponse("Session not found", 404);
+    }
+
+    try {
+      await stopUserBrowser(orgId, auth.user.id);
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      throw error;
+    }
+
+    return new Response(null, { status: 204 });
   });
 
   app.post("/v1/sessions/:sessionId/compact", async (c) => {

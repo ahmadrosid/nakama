@@ -163,8 +163,7 @@ Docker socket, or unrelated application data into the container. Host-backed
 whatever the Nakama process can reach.
 
 The stock image already runs as UID `1000`; do not replace that with root or add
-`--privileged`. Add `/dev/kvm` only when you deliberately operate the
-MicroSandbox backend and understand the host dependency.
+`--privileged`.
 
 ## Handle secrets deliberately
 
@@ -213,9 +212,8 @@ flows.
 
 - Assign `bash`, browser automation, coding agents, skill scripts, custom tools,
   MCP servers, plugins, and external providers only to profiles that need them.
-- Prefer MicroSandbox for untrusted shell work when the host supports it. The
-  default host backend runs inside the Nakama process environment and is not a
-  tenant sandbox.
+- `bash` runs inside the Nakama process environment and is not a tenant
+  sandbox. Do not give it to profiles that run untrusted shell work.
 - Set CPU and memory limits with enough headroom for enabled channel workers.
   WhatsApp and browser workloads use more memory than an offline server.
 - Leave `/metrics` off unless a private collector needs it. Use `/healthz` for

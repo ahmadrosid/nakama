@@ -1,7 +1,7 @@
 import { NakamaApiError } from "@nakama/core/api-error";
 import type {
   CreateProfileRequest,
-  CreateProfileWithSuperBotRequest,
+  CreateProfileWithSuperNakamaRequest,
   DocumentAttachment,
   ImageAttachment,
   KnowledgeBaseDuplicateAction,
@@ -81,12 +81,12 @@ export function useCreateProfileMutation() {
   });
 }
 
-export function useCreateProfileWithSuperBotMutation() {
+export function useCreateProfileWithSuperNakamaMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: CreateProfileWithSuperBotRequest) =>
-      client.createProfileWithSuperBot(input),
+    mutationFn: (input: CreateProfileWithSuperNakamaRequest) =>
+      client.createProfileWithSuperNakama(input),
     onSuccess: (data) =>
       invalidateQueries(
         queryClient,

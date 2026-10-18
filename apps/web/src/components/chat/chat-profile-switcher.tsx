@@ -81,7 +81,7 @@ export function ChatProfileSwitcher({
               </span>
             )}
             <span className="max-w-[10rem] truncate">
-              {activeProfile ? profileLabel(activeProfile) : "Select profile"}
+              {activeProfile ? profileLabel(activeProfile) : "Select agent"}
             </span>
             <ArrowDown01Icon
               aria-hidden

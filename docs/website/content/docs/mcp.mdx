@@ -143,9 +143,9 @@ Tools appear as `exa__web_search_exa` and `exa__web_fetch_exa`.
 
 Nakama ships a preinstalled **firecrawl** server (`https://mcp.firecrawl.dev/v2/mcp`) with no API key. Assign it from **Agent** when a profile needs JS-rendered public pages.
 
-Keyless tools appear as `firecrawl__firecrawl_search`, `firecrawl__firecrawl_scrape`, and `firecrawl__firecrawl_parse`. Use scrape for JS-heavy public pages. Search is extra surface next to Exa and builtin [`web_search`](/builtin-tools#web_search). Hosted parse is not for files in the profile workspace — use [`extract_document_text`](/builtin-tools#extract_document_text).
+Keyless tools appear as `firecrawl__firecrawl_search`, `firecrawl__firecrawl_scrape`, and `firecrawl__firecrawl_parse`. Use scrape for JS-heavy public pages. Search is extra surface next to Exa and builtin [`web_search`](/tool-reference#web_search). Hosted parse is not for files in the profile workspace — use [`extract_document_text`](/tool-reference#extract_document_text).
 
-Firecrawl Cloud fetches the URL. Unlike [`web_fetch`](/builtin-tools#web_fetch), the page is processed off the Nakama host. Keyless usage shares a daily cap on the host's public IP across every assigned profile, including automations and Telegram / WhatsApp / Discord.
+Firecrawl Cloud fetches the URL. Unlike [`web_fetch`](/tool-reference#web_fetch), the page is processed off the Nakama host. Keyless usage shares a daily cap on the host's public IP across every assigned profile, including automations and Telegram / WhatsApp / Discord.
 
 Keyless MCP does not include interact, crawl, or map. For login walls, forms, and clicks, use the [agent-browser](/agent-browser) skill.
 

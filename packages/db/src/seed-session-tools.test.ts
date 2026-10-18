@@ -85,7 +85,7 @@ describe("session tool definitions", () => {
     expect(names).not.toContain("read_profile_session");
   });
 
-  test("assigns both to the Super Bot profile", async () => {
+  test("assigns both to the Super Nakama profile", async () => {
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();
     await db.upsertOrganization({
@@ -112,7 +112,7 @@ describe("session tool definitions", () => {
     expect(names).toContain("read_profile_session");
   });
 
-  test("re-assigns both to Super Bot on the next boot after an unassign", async () => {
+  test("re-assigns both to Super Nakama on the next boot after an unassign", async () => {
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();
     await db.upsertOrganization({
@@ -140,7 +140,7 @@ describe("session tool definitions", () => {
 
     expect(afterUnassign).not.toContain("list_profile_sessions");
 
-    // Second boot: seedOrgSuperBotProfile takes the existing-profile branch.
+    // Second boot: seedOrgSuperNakamaProfile takes the existing-profile branch.
     await seedDatabase(db);
 
     const afterReboot = (await db.listToolsForProfile(profileId)).map(

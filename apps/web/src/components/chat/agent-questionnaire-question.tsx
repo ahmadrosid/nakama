@@ -11,10 +11,16 @@ function RadioDot({ selected }: { selected: boolean }) {
     <span
       aria-hidden
       className={cn(
-        "size-4 shrink-0 rounded-full border bg-background transition-all",
-        selected ? "border-[5px] border-primary" : "border-muted-foreground/40"
+        "grid size-4 shrink-0 place-items-center rounded-full border-[1.5px] transition-colors",
+        selected
+          ? "border-primary bg-primary"
+          : "border-muted-foreground/50 bg-transparent"
       )}
-    />
+    >
+      {selected ? (
+        <span className="size-1.5 rounded-full bg-primary-foreground" />
+      ) : null}
+    </span>
   );
 }
 

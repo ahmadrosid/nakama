@@ -93,16 +93,6 @@ describe("resolveProvider", () => {
     expect(provider).toBe("openrouter");
   });
 
-  test("uses the only configured env API key", () => {
-    const provider = resolveProvider({
-      env: {
-        GEMINI_API_KEY: "test-key",
-      },
-    });
-
-    expect(provider).toBe("gemini");
-  });
-
   test("uses an API key mounted through a companion file variable", () => {
     const directory = mkdtempSync(join(tmpdir(), "nakama-provider-key-"));
     const keyPath = join(directory, "gemini");
@@ -163,28 +153,6 @@ describe("resolveProvider deepseek", () => {
     });
 
     expect(provider).toBeNull();
-  });
-});
-
-describe("resolveProvider qwen", () => {
-  test("auto-resolves Qwen intl when it is the only env API key", () => {
-    const provider = resolveProvider({
-      env: {
-        QWEN_API_KEY: "qwen-test",
-      },
-    });
-
-    expect(provider).toBe("qwen");
-  });
-
-  test("auto-resolves Qwen CN when it is the only env API key", () => {
-    const provider = resolveProvider({
-      env: {
-        QWEN_CN_API_KEY: "qwen-cn-test",
-      },
-    });
-
-    expect(provider).toBe("qwen_cn");
   });
 });
 

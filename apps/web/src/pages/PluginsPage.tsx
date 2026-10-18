@@ -123,7 +123,8 @@ type PluginDialog =
   | { plugin: OrgPluginDetail; type: "uninstall" }
   | { plugin: OrgPluginDetail; type: "purge" }
   | { pluginId: string; type: "remove-release"; version: string }
-  | { pluginId: string; type: "remove-plugin"; versions: string[] };
+  | { pluginId: string; type: "remove-plugin"; versions: string[] }
+  | { pluginId: string; type: "force-delete"; versions: string[] };
 
 function usePluginCatalog(canInstallPackages: boolean) {
   const { data: plugins = [], isLoading, error } = useOrgPlugins();
@@ -171,6 +172,7 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
   const updateOrg = useUpdateOrgPlugin();
   const uninstallOrg = useUninstallOrgPlugin();
   const purgeData = useDeleteRetainedPluginData();
+  const unplug = useUnplugPlugin();
   const reinstallOfficial = useReinstallOfficialPlugin();
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const [dialog, setDialog] = useState<PluginDialog | null>(null);
@@ -192,6 +194,7 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
     updateOrg,
     uninstallOrg,
     purgeData,
+    unplug,
     reinstallOfficial,
     installOfficial,
   ].some((mutation) => mutation.isPending);
@@ -325,6 +328,20 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
           orgId,
           pluginId: dialog.plugin.pluginId,
         });
+      } else if (dialog.type === "force-delete") {
+        const usage = await client.getPluginUsage(dialog.pluginId);
+
+        await Promise.all(
+          usage.orgs.map((org) =>
+            unplug.mutateAsync({ org, pluginId: dialog.pluginId })
+          )
+        );
+
+        await Promise.all(
+          dialog.versions.map((version) =>
+            removeRelease.mutateAsync({ pluginId: dialog.pluginId, version })
+          )
+        );
       } else if (dialog.type === "remove-plugin") {
         await Promise.all(
           dialog.versions.map((version) =>
@@ -361,7 +378,7 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
   };
 }
 
-/** Built-in (official catalog), Super Bot drafts (local releases), then the rest. */
+/** Built-in (official catalog), Super Nakama drafts (local releases), then the rest. */
 function groupPluginIds(
   pluginIds: string[],
   official: Array<{ id: string }>,
@@ -369,7 +386,7 @@ function groupPluginIds(
 ) {
   const builtIn = new Set(official.map((item) => item.id));
 
-  const createdBySuperBot = new Set(
+  const createdBySuperNakama = new Set(
     releases.flatMap((item) =>
       item.source === "local" || item.source === "agent" ? [item.pluginId] : []
     )
@@ -382,13 +399,13 @@ function groupPluginIds(
     },
     {
       ids: pluginIds.filter(
-        (id) => !builtIn.has(id) && createdBySuperBot.has(id)
+        (id) => !builtIn.has(id) && createdBySuperNakama.has(id)
       ),
       title: "Created by you",
     },
     {
       ids: pluginIds.filter(
-        (id) => !(builtIn.has(id) || createdBySuperBot.has(id))
+        (id) => !(builtIn.has(id) || createdBySuperNakama.has(id))
       ),
       title: "From other sources",
     },
@@ -538,7 +555,7 @@ export function PluginsPage() {
             return;
           }
 
-          if (type === "remove-plugin") {
+          if (type === "remove-plugin" || type === "force-delete") {
             setDialog({
               pluginId,
               type,
@@ -762,7 +779,7 @@ function PluginPageHeader({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
             <DropdownMenuItem onClick={onInstallFromFolder}>
-              Made by Super Bot
+              Made by Super Nakama
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onInstall(installRef.current)}>
               From npm package
@@ -1007,8 +1024,8 @@ function LocalPluginDraftPicker({
         }}
         value={profileId}
       >
-        <SelectTrigger aria-label="Super Bot">
-          <SelectValue placeholder="Super Bot" />
+        <SelectTrigger aria-label="Super Nakama">
+          <SelectValue placeholder="Super Nakama" />
         </SelectTrigger>
         <SelectContent>
           {(profiles.data?.profiles ?? [])
@@ -1254,7 +1271,7 @@ export function LocalPluginInstaller({
       )}
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Install a plugin made by Super Bot</DialogTitle>
+          <DialogTitle>Install a plugin made by Super Nakama</DialogTitle>
         </DialogHeader>
         {draft ? (
           error ? (
@@ -1356,7 +1373,7 @@ function PluginReleasesList({
               {release.source === "local" || release.source === "agent" ? (
                 <span className="text-xs">
                   {release.source === "agent"
-                    ? "Made by Super Bot"
+                    ? "Made by Super Nakama"
                     : "From a folder"}
                 </span>
               ) : null}
@@ -1400,7 +1417,8 @@ interface PluginRowProps {
         >
       | "reinstall"
       | "access"
-      | "remove-plugin",
+      | "remove-plugin"
+      | "force-delete",
     target: HTMLElement | null
   ): void;
   onRemove(release: PluginReleaseSummary, event: MouseEvent<HTMLElement>): void;
@@ -1705,6 +1723,15 @@ function pluginMenuActions({
       "Delete plugin",
       !(official || plugin?.installed) && releases.length > 0,
     ],
+    [
+      "force-delete",
+      "Force delete",
+      !official &&
+        plugin?.installed &&
+        releases.some(
+          (item) => item.source === "local" || item.source === "agent"
+        ),
+    ],
   ] as const;
 
   return all.filter(([, , visible]) => visible);
@@ -1803,7 +1830,8 @@ function PluginRowMenu({
             variant={
               type === "purge" ||
               type === "uninstall" ||
-              type === "remove-plugin"
+              type === "remove-plugin" ||
+              type === "force-delete"
                 ? "destructive"
                 : "default"
             }
@@ -2321,11 +2349,32 @@ function DialogBody({
     );
   }
 
+  return <RemovalDialogBody dialog={dialog} />;
+}
+
+function RemovalDialogBody({
+  dialog,
+}: {
+  dialog: Exclude<
+    PluginDialog,
+    { type: "package-entry" | "official-install" | "package" | "update" }
+  >;
+}) {
   if (dialog.type === "purge") {
     return (
       <p className="text-sm">
         This deletes all data that {dialog.plugin.name} saved. You cannot undo
         this.
+      </p>
+    );
+  }
+
+  if (dialog.type === "force-delete") {
+    return (
+      <p className="text-sm">
+        This removes {dialog.pluginId} from every organization, deletes its
+        saved data, and deletes all {dialog.versions.length} version
+        {dialog.versions.length === 1 ? "" : "s"}. You cannot undo this.
       </p>
     );
   }
@@ -2400,6 +2449,10 @@ function dialogTitle(dialog: PluginDialog | null): string {
     return "Delete saved data?";
   }
 
+  if (dialog.type === "force-delete") {
+    return "Force delete this plugin?";
+  }
+
   if (dialog.type === "remove-plugin") {
     return "Delete this plugin?";
   }
@@ -2438,6 +2491,10 @@ function confirmLabel(dialog: PluginDialog | null): string {
 
   if (dialog.type === "purge") {
     return "Delete saved data";
+  }
+
+  if (dialog.type === "force-delete") {
+    return "Force delete";
   }
 
   if (dialog.type === "remove-plugin") {

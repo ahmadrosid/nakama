@@ -45,7 +45,7 @@ test("platform admin finds and opens an agent in another organization", async ()
             id: `super-${orgId}`,
             isSuper: true,
             model: "test-model",
-            name: `Super Bot ${orgId}`,
+            name: `Super Nakama ${orgId}`,
             updatedAt: "2026-10-06T00:00:00Z",
           },
           ...(orgId === "org-a"
@@ -159,8 +159,8 @@ test("platform admin finds and opens an agent in another organization", async ()
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(document.body.textContent).toContain("Org B");
-    expect(document.body.textContent).toContain("Super Bot org-a");
-    expect(document.body.textContent).not.toContain("Super Bot org-b");
+    expect(document.body.textContent).toContain("Super Nakama org-a");
+    expect(document.body.textContent).not.toContain("Super Nakama org-b");
     expect(document.body.textContent).toContain("Default Bot");
     expect(listProfiles).toHaveBeenCalledWith("org-b");
     expect(document.body.textContent).not.toContain("Org C");

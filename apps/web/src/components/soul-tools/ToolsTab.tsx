@@ -32,7 +32,7 @@ import {
   pluginManagementPath,
   toolPlaygroundPath,
 } from "@/lib/navigation";
-import { findSuperBotProfile } from "@/lib/profiles";
+import { findSuperNakamaProfile } from "@/lib/profiles";
 
 const toolSearchThreshold = 4;
 
@@ -56,7 +56,7 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
 
   const { data: tools = [], isLoading, error } = useToolsQuery();
   const { data: profiles = [] } = useProfilesQuery();
-  const superBotProfile = findSuperBotProfile(profiles);
+  const superNakamaProfile = findSuperNakamaProfile(profiles);
   const deleteToolMutation = useDeleteToolMutation();
   const [actionError, setActionError] = useState<string | null>(null);
   const [emailConfigOpen, setEmailConfigOpen] = useState(false);
@@ -73,13 +73,13 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
   const builtinTools = tools.filter((tool) => !isListedCustomTool(tool));
 
   function goToCreateTool() {
-    if (!superBotProfile) {
-      setActionError("No super bot profile exists in this organization.");
+    if (!superNakamaProfile) {
+      setActionError("No super nakama profile exists in this organization.");
 
       return;
     }
 
-    navigateToNewChat(superBotProfile.id);
+    navigateToNewChat(superNakamaProfile.id);
   }
 
   function requestDeleteTool(toolId: string, toolName: string) {
@@ -129,7 +129,7 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
 
       {tools.length === 0 ? (
         <div className="flex min-h-48 flex-col items-center justify-center gap-3 text-center text-muted-foreground text-sm">
-          <p>No tools yet. Ask Super Bot to create one.</p>
+          <p>No tools yet. Ask Super Nakama to create one.</p>
           <Button onClick={goToCreateTool} size="sm" type="button">
             <Add01Icon
               aria-hidden

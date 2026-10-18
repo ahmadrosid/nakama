@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -88,6 +89,81 @@ describe("ensureBundledSkillFiles", () => {
     });
 
     expect(again.exitCode).toBe(1);
+  });
+
+  test("the create-plugin data scaffold builds working list and save actions", async () => {
+    await ensureBundledSkillFiles();
+
+    const workspace = await mkdtemp(join(tmpdir(), "nakama-plugin-ws-"));
+
+    const script = join(
+      configDir,
+      "agent",
+      "skills",
+      "create-plugin",
+      "scripts",
+      "new-plugin.mjs"
+    );
+
+    const run = Bun.spawnSync(
+      ["bun", script, "book-log", "Book Log", "--data"],
+      {
+        cwd: workspace,
+      }
+    );
+
+    expect(run.exitCode).toBe(0);
+
+    const draft = join(workspace, "plugin-drafts", "book-log");
+
+    const manifest = JSON.parse(
+      await readFile(join(draft, "nakama.plugin.json"), "utf8")
+    );
+
+    expect(manifest.actions.map(({ key }: { key: string }) => key)).toEqual([
+      "list_items",
+      "save_item",
+      "delete_item",
+    ]);
+    expect(await readdir(join(draft, "src"))).not.toContain("greet.js");
+
+    const databasePath = join(draft, "test.sqlite");
+    const db = new Database(databasePath);
+    db.exec(
+      await readFile(join(draft, manifest.database.migrations[0].path), "utf8")
+    );
+    db.close();
+
+    const save = await import(join(draft, "actions", "save_item.js"));
+    const list = await import(join(draft, "actions", "list_items.js"));
+    const context = { databasePath };
+
+    const { item } = await save.run({ name: "Dune", notes: "sci-fi" }, context);
+    await save.run({ id: item.id, name: "Dune Messiah" }, context);
+    await save.run({ name: "Emma" }, context);
+
+    const all = await list.run({}, context);
+    const found = await list.run({ query: "dune" }, context);
+
+    expect(all.items).toHaveLength(2);
+    expect(found.items.map(({ name }: { name: string }) => name)).toEqual([
+      "Dune Messiah",
+    ]);
+
+    const remove = await import(join(draft, "actions", "delete_item.js"));
+    await remove.run({ id: item.id }, context);
+
+    const left = await list.run({}, context);
+
+    expect(left.items.map(({ name }: { name: string }) => name)).toEqual([
+      "Emma",
+    ]);
+    await expect(remove.run({ id: item.id }, context)).rejects.toThrow();
+
+    const page = await readFile(join(draft, "ui", "app.js"), "utf8");
+
+    expect(page).toContain('[data-plugin-id="book-log"]');
+    expect(page).not.toMatch(/from\s*"react/);
   });
 
   test("does not overwrite existing skill files", async () => {

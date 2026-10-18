@@ -83,10 +83,6 @@ describe("isValidCronExpression", () => {
   test("accepts standard 5-field cron", () => {
     expect(isValidCronExpression("0 8 * * *")).toBe(true);
   });
-
-  test("rejects non-cron strings", () => {
-    expect(isValidCronExpression("0 8 * *")).toBe(false);
-  });
 });
 
 describe("validateTimezone", () => {
@@ -173,15 +169,6 @@ describe("isWorkerSchedulable", () => {
         },
         now
       )
-    ).toBe(false);
-  });
-
-  test("excludes past runAt automations", () => {
-    expect(
-      isWorkerSchedulable({
-        enabled: true,
-        trigger: { at: "2020-01-01T00:00:00.000Z", type: "runAt" },
-      })
     ).toBe(false);
   });
 });

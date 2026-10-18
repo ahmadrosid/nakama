@@ -327,14 +327,14 @@ export function ProfilesEmptyState({
   canImport = false,
   onCreate,
   onImport,
-  onAskSuperBot,
+  onAskSuperNakama,
 }: {
   disabled?: boolean;
   canCreate?: boolean;
   canImport?: boolean;
   onCreate: () => void;
   onImport?: () => void;
-  onAskSuperBot?: () => void;
+  onAskSuperNakama?: () => void;
 }) {
   const importIsPrimary = canImport && !canCreate;
 
@@ -378,15 +378,15 @@ export function ProfilesEmptyState({
             Import profile
           </Button>
         ) : null}
-        {onAskSuperBot ? (
+        {onAskSuperNakama ? (
           <Button
             disabled={disabled}
-            onClick={onAskSuperBot}
+            onClick={onAskSuperNakama}
             size="sm"
             type="button"
             variant="ghost"
           >
-            Ask Super Bot
+            Ask Super Nakama
           </Button>
         ) : null}
       </div>

@@ -126,11 +126,11 @@ $AB --session "$SESSION" wait 400
 $AB --session "$SESSION" screenshot "$SCREENSHOT_DIR/telegram-pairing.png"
 
 # ---------------------------------------------------------------------------
-# Debugging: More -> View logs (stderr shows token / config errors).
+# Debugging: View logs (stderr shows token / config errors).
 # Give the worker time to poll Telegram with the fake token and record 401s.
 # ---------------------------------------------------------------------------
 # The setup page shows worker controls after one user links. Seed only this
-# isolated demo config so the log menu is visible without a real Telegram user.
+# isolated demo config so the log button is visible without a real Telegram user.
 (cd "$ROOT" && NAKAMA_CONFIG_DIR="$TEMP_CONFIG" DOCS_ORG_ID="$ORG_ID" DOCS_PROFILE_ID="$PROFILE_ID" bun -e '
   const { saveTelegramConfig } = await import("./packages/core/src/telegram-config.ts");
   await saveTelegramConfig({
@@ -141,16 +141,16 @@ $AB --session "$SESSION" screenshot "$SCREENSHOT_DIR/telegram-pairing.png"
 $AB --session "$SESSION" open "${BASE_URL}/profiles/${PROFILE_ID}/channels/telegram"
 $AB --session "$SESSION" wait 2500
 $AB --session "$SESSION" wait 8000
-$AB --session "$SESSION" eval "(() => { const button = [...document.querySelectorAll('button')].find(el => el.textContent.trim() === 'More'); if (!button) throw new Error('Missing More button'); button.click(); })()"
-$AB --session "$SESSION" wait 400
-$AB --session "$SESSION" eval "(() => { const item = [...document.querySelectorAll('[role=menuitem]')].find(el => el.textContent.trim() === 'View logs'); if (!item) throw new Error('Missing View logs menu item'); item.click(); })()"
+$AB --session "$SESSION" eval "(() => { const button = [...document.querySelectorAll('button')].find(el => el.textContent.trim() === 'View logs'); if (!button) throw new Error('Missing View logs button'); button.click(); })()"
 $AB --session "$SESSION" wait 1500
 $AB --session "$SESSION" set viewport "$VIEWPORT_WIDTH" 760
 # The dialog only fetches once on open, so click Refresh to pull the latest
 # stderr (which now contains the 401 errors from the fake token).
-$AB --session "$SESSION" eval "(() => { const button = [...document.querySelectorAll('button')].find(el => el.textContent.trim() === 'Refresh'); if (!button) throw new Error('Missing Refresh button'); button.click(); })()"
+$AB --session "$SESSION" click '[aria-label="Log actions"]'
+$AB --session "$SESSION" wait 400
+$AB --session "$SESSION" eval "(() => { const item = [...document.querySelectorAll('[role=menuitem]')].find(el => el.textContent.trim() === 'Refresh'); if (!item) throw new Error('Missing Refresh menu item'); item.click(); })()"
 $AB --session "$SESSION" wait 1500
-$AB --session "$SESSION" eval "(() => { const button = [...document.querySelectorAll('button')].find(el => el.textContent.trim() === 'Stderr'); if (!button) throw new Error('Missing Stderr button'); button.click(); })()"
+$AB --session "$SESSION" eval "(() => { const button = [...document.querySelectorAll('button')].find(el => el.textContent.trim().toLowerCase() === 'stderr'); if (!button) throw new Error('Missing Stderr button'); button.click(); })()"
 $AB --session "$SESSION" wait 1000
 $AB --session "$SESSION" screenshot "$SCREENSHOT_DIR/telegram-worker-logs.png"
 

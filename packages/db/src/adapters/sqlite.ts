@@ -7,7 +7,9 @@ import type {
   ChatMessage,
 } from "@nakama/core";
 import {
+  decryptCredential,
   derivePluginToolName,
+  encryptCredential,
   getUserMessageText,
   NakamaApiError,
   PRIVATE_FILE_MODE,
@@ -296,7 +298,6 @@ interface WorkspaceSettingsRow {
   id: string;
   image_model: string | null;
   selected_coding_agent_harness: string | null;
-  token_optimizer_enabled: number | null;
   transcription_model: string | null;
   updated_at: string;
   vision_model: string | null;
@@ -580,8 +581,12 @@ export function openPrivateDatabase(databasePath: string): Database {
 
   if (databasePath !== ":memory:") {
     chmodSync(databasePath, PRIVATE_FILE_MODE);
-    // DELETE journal removal must sync its directory before a commit is acknowledged.
-    db.exec("PRAGMA synchronous = EXTRA");
+    // WAL lets readers run beside the writer. FULL syncs the log on every commit,
+    // so an acknowledged write still survives power loss; EXTRA only added a
+    // directory sync for the DELETE journal, which WAL never unlinks.
+    db.exec(
+      "PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA busy_timeout = 5000;"
+    );
   }
 
   return db;
@@ -1098,7 +1103,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       }
 
       if (profile.is_super) {
-        throw new NakamaApiError("Super Bot cannot be moved.", 400);
+        throw new NakamaApiError("Super Nakama cannot be moved.", 400);
       }
 
       const target = db
@@ -1319,14 +1324,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     "SELECT * FROM sessions WHERE id = ? AND app_user_id IS NULL"
   );
 
+  // org_id follows the profile's org. The profile move path keeps it in sync.
   const upsertSessionStmt = db.prepare(`
-    INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, app_user_id, user_id, model, pinned)
-    VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)
+    INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, app_user_id, user_id, model, org_id, pinned)
+    VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       profile_id = excluded.profile_id,
       channel = excluded.channel,
       user_id = COALESCE(excluded.user_id, sessions.user_id),
-      model = excluded.model
+      model = excluded.model,
+      org_id = excluded.org_id
     WHERE sessions.app_user_id IS NULL
   `);
 
@@ -2063,35 +2070,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       updated_at = excluded.updated_at
   `);
 
-  const incrementToolOutputSavingsStmt = db.prepare(`
-    INSERT INTO tool_output_savings (
-      org_id, bucket, optimizer, tool, calls, bytes_in, bytes_out, tracked_since, updated_at
-    )
-    VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)
-    ON CONFLICT(org_id, bucket, optimizer, tool) DO UPDATE SET
-      calls = tool_output_savings.calls + 1,
-      bytes_in = tool_output_savings.bytes_in + excluded.bytes_in,
-      bytes_out = tool_output_savings.bytes_out + excluded.bytes_out,
-      updated_at = excluded.updated_at
-  `);
-
-  const listToolOutputSavingsStmt = db.prepare<
-    {
-      bucket: string;
-      bytes_in: number;
-      bytes_out: number;
-      calls: number;
-      optimizer: string;
-      org_id: string;
-      tool: string;
-      tracked_since: string;
-      updated_at: string;
-    },
-    SQLQueryBindings[]
-  >(
-    "SELECT * FROM tool_output_savings WHERE org_id = ? ORDER BY bucket ASC, (bytes_in - bytes_out) DESC"
-  );
-
   const incrementLlmTurnUsageStmt = db.prepare(`
     INSERT INTO llm_turn_usage (
       org_id, bucket, arm, turns, input_tokens, output_tokens, estimated_turns, updated_at
@@ -2107,7 +2085,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
   const listLlmTurnUsageStmt = db.prepare<
     {
-      arm: string;
       bucket: string;
       estimated_turns: number;
       input_tokens: number;
@@ -2131,19 +2108,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       image_model,
       coding_agent_harnesses,
       selected_coding_agent_harness,
-      token_optimizer_enabled,
       coding_agent_provider_passthrough,
       automation_worker_poll_interval_ms,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       vision_model = excluded.vision_model,
       transcription_model = excluded.transcription_model,
       image_model = excluded.image_model,
       coding_agent_harnesses = excluded.coding_agent_harnesses,
       selected_coding_agent_harness = excluded.selected_coding_agent_harness,
-      token_optimizer_enabled = excluded.token_optimizer_enabled,
       coding_agent_provider_passthrough = excluded.coding_agent_provider_passthrough,
       automation_worker_poll_interval_ms = excluded.automation_worker_poll_interval_ms,
       updated_at = excluded.updated_at
@@ -2996,7 +2971,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         "llm_usage_model_stats",
         "mcp_servers",
         "skills",
-        "tool_output_savings",
         "tools",
         "workspace_settings",
       ]) {
@@ -4942,13 +4916,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async getMcpServer(id) {
       const row = getMcpServerStmt.get(id);
 
-      return row ? toMcpServerRecord(row) : null;
+      return row ? await toMcpServerRecord(row) : null;
     },
 
     async getMcpServerByName(name) {
       const row = getMcpServerByNameStmt.get(name);
 
-      return row ? toMcpServerRecord(row) : null;
+      return row ? await toMcpServerRecord(row) : null;
     },
 
     async getNotificationDestination(id) {
@@ -5250,7 +5224,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       incrementLlmTurnUsageStmt.run(
         orgId,
         updatedAt.slice(0, 10),
-        delta.optimized ? "omni" : "none",
+        // Legacy arm column, see migrateLlmTurnUsageTable.
+        "none",
         delta.inputTokens,
         delta.outputTokens,
         delta.estimated ? 1 : 0,
@@ -5329,20 +5304,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         input.patchedAt ?? null,
         now,
         now
-      );
-    },
-
-    async incrementToolOutputSavings(orgId, delta, trackedSince) {
-      const updatedAt = new Date().toISOString();
-      incrementToolOutputSavingsStmt.run(
-        orgId,
-        updatedAt.slice(0, 10),
-        delta.optimizer,
-        delta.tool,
-        delta.bytesIn,
-        delta.bytesOut,
-        trackedSince,
-        updatedAt
       );
     },
 
@@ -5525,7 +5486,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async listLlmTurnUsage(orgId) {
       return listLlmTurnUsageStmt.all(orgId).map((row) => ({
-        arm: row.arm,
         bucket: row.bucket,
         estimatedTurns: row.estimated_turns,
         inputTokens: row.input_tokens,
@@ -5564,13 +5524,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async listMcpServers() {
-      return listMcpServersStmt.all().map((row) => toMcpServerRecord(row));
+      return Promise.all(
+        listMcpServersStmt.all().map((row) => toMcpServerRecord(row))
+      );
     },
 
     async listMcpServersForProfile(profileId) {
-      return listMcpServersForProfileStmt
-        .all(profileId)
-        .map((row) => toMcpServerRecord(row));
+      return Promise.all(
+        listMcpServersForProfileStmt
+          .all(profileId)
+          .map((row) => toMcpServerRecord(row))
+      );
     },
 
     async listMessagesForSession(sessionId) {
@@ -5783,20 +5747,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const rows = listSkillVersionsStmt.all(skillId, options.limit ?? 50);
 
       return rows.map(toSkillVersionRecord);
-    },
-
-    async listToolOutputSavings(orgId) {
-      return listToolOutputSavingsStmt.all(orgId).map((row) => ({
-        bucket: row.bucket,
-        bytesIn: row.bytes_in,
-        bytesOut: row.bytes_out,
-        calls: row.calls,
-        optimizer: row.optimizer,
-        orgId: row.org_id,
-        tool: row.tool,
-        trackedSince: row.tracked_since,
-        updatedAt: row.updated_at,
-      }));
     },
 
     async listTools() {
@@ -6247,7 +6197,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.id,
         record.name,
         record.transport,
-        JSON.stringify(record.config ?? {}),
+        await encryptMcpConfig(record.id, record.config),
         record.enabled ? 1 : 0,
         record.status,
         record.lastError,
@@ -6293,6 +6243,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
     async upsertSession(record) {
       requireWritableSession(record.id);
+
+      // org_id comes from the session's current profile on every upsert;
+      // callers do not pass one, so it cannot drift from that profile.
+      const orgId = getProfileStmt.get(record.profileId)?.org_id ?? null;
+
       upsertSessionStmt.run(
         record.id,
         record.profileId,
@@ -6301,6 +6256,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.createdAt,
         record.userId ?? null,
         record.model,
+        orgId,
         record.pinned ? 1 : 0
       );
     },
@@ -6361,10 +6317,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.imageModel,
         JSON.stringify(record.codingAgentHarnesses),
         record.selectedCodingAgentHarness,
-        record.tokenOptimizerEnabled === null ||
-          record.tokenOptimizerEnabled === undefined
-          ? null
-          : Number(record.tokenOptimizerEnabled),
         record.codingAgentProviderPassthrough === false ? 0 : 1,
         record.automationWorkerPollIntervalMs ?? 5 * 60 * 1000,
         record.updatedAt
@@ -6542,13 +6494,48 @@ function normalizeSkillCreatedBy(
   return "bundled";
 }
 
-function toMcpServerRecord(row: McpServerRow): StoredMcpServerRecord {
+/**
+ * MCP config holds headers, env and OAuth tokens, so it is stored encrypted.
+ * Rows saved before encryption stay readable until the next save.
+ */
+const ENCRYPTED_MCP_CONFIG_PREFIX = "enc:";
+
+function mcpConfigScope(serverId: string): string {
+  return `mcp-server:${serverId}`;
+}
+
+async function encryptMcpConfig(
+  serverId: string,
+  config: StoredMcpServerRecord["config"]
+): Promise<string> {
+  return `${ENCRYPTED_MCP_CONFIG_PREFIX}${await encryptCredential(
+    mcpConfigScope(serverId),
+    JSON.stringify(config ?? {})
+  )}`;
+}
+
+async function decryptMcpConfig(row: McpServerRow): Promise<JsonValue> {
+  if (!row.config.startsWith(ENCRYPTED_MCP_CONFIG_PREFIX)) {
+    return parseJson(row.config);
+  }
+
+  return parseJson(
+    await decryptCredential(
+      mcpConfigScope(row.id),
+      row.config.slice(ENCRYPTED_MCP_CONFIG_PREFIX.length)
+    )
+  );
+}
+
+async function toMcpServerRecord(
+  row: McpServerRow
+): Promise<StoredMcpServerRecord> {
   return {
     // SAFETY: The adapter writes this row value through its typed contract.
     cachedTools: JSON.parse(
       row.cached_tools
     ) as StoredMcpServerRecord["cachedTools"],
-    config: parseJson(row.config),
+    config: await decryptMcpConfig(row),
     createdAt: row.created_at,
     enabled: row.enabled !== 0,
     id: row.id,
@@ -6926,11 +6913,6 @@ function toWorkspaceSettingsRecord(
     imageModel: row.image_model?.trim() || null,
     selectedCodingAgentHarness:
       row.selected_coding_agent_harness?.trim() || null,
-    tokenOptimizerEnabled:
-      row.token_optimizer_enabled === null ||
-      row.token_optimizer_enabled === undefined
-        ? null
-        : row.token_optimizer_enabled === 1,
     transcriptionModel: row.transcription_model?.trim() || null,
     updatedAt: row.updated_at,
     visionModel: row.vision_model?.trim() || null,

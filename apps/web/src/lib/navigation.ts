@@ -4,7 +4,6 @@ import {
   Building03Icon,
   CodeIcon,
   Coins01Icon,
-  CpuChargeIcon,
   DashboardSquare01Icon,
   Folder01Icon,
   LayoutGridIcon,
@@ -24,6 +23,7 @@ type NavIcon = typeof SharedWifiIcon;
 export type PageId =
   | "google-meet"
   | "chat"
+  | "composio"
   | "customize"
   | "usage"
   | "files"
@@ -90,12 +90,8 @@ const NAV_GROUPS: NavGroup[] = [
         "Capture and read meeting transcripts",
         SharedWifiIcon
       ),
-      navItem(
-        "files",
-        "Browse Files",
-        "Manage profile artifacts",
-        Folder01Icon
-      ),
+      navItem("plugin-management", "Plugins", "Manage plugins", PackageIcon),
+      navItem("composio", "Connectors", "Connect apps", Plug01Icon),
     ],
     label: "Chat",
   },
@@ -134,7 +130,12 @@ const NAV_GROUPS: NavGroup[] = [
     id: "system",
     items: [
       navItem("usage", "Usage", "View token usage and costs", Coins01Icon),
-      navItem("plugin-management", "Plugins", "Manage plugins", PackageIcon),
+      navItem(
+        "files",
+        "Browse Files",
+        "Manage profile artifacts",
+        Folder01Icon
+      ),
       navItem(
         "workers",
         "Workers",
@@ -166,7 +167,8 @@ const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
 export const SIDEBAR_PAGE_IDS: readonly PageId[] = [
   "chat",
   "profiles",
-  "files",
+  "plugin-management",
+  "composio",
   "automations",
   "customize",
 ];
@@ -230,6 +232,12 @@ export function visibleNavGroups(access: {
     const items = group.items.filter((item) => {
       if (item.id === "google-meet") {
         return canAccessIntegrationsPage(access.orgRole);
+      }
+
+      if (item.id === "composio") {
+        return (
+          access.isPlatformAdmin || canAccessIntegrationsPage(access.orgRole)
+        );
       }
 
       if (item.id === "organization" || item.id === "files") {
@@ -424,6 +432,7 @@ export function teamDetailPath(teamId: string): string {
 export const PAGE_PATHS: Record<PageId, string> = {
   automations: "/automations",
   chat: "/chat",
+  composio: "/connectors",
   customize: "/customize",
   files: "/files",
   "google-meet": "/google-meet",
@@ -443,6 +452,7 @@ export const PAGE_PATHS: Record<PageId, string> = {
 };
 
 const PREFIX_PAGE_IDS: readonly [string, PageId][] = [
+  [PAGE_PATHS.composio, "composio"],
   ["/customize/connections", "customize"],
   [PAGE_PATHS["plugin-management"], "plugin-management"],
   [PAGE_PATHS.chat, "chat"],
@@ -518,11 +528,6 @@ const INTEGRATION_SECTIONS = [
     label: "Coding agents",
   },
   {
-    icon: CpuChargeIcon,
-    id: "optimization",
-    label: "Context savings",
-  },
-  {
     icon: Bug01Icon,
     id: "error-tracking",
     label: "Error tracking",
@@ -530,6 +535,12 @@ const INTEGRATION_SECTIONS = [
 ] as const;
 
 export type IntegrationSectionId = (typeof INTEGRATION_SECTIONS)[number]["id"];
+
+export function integrationSectionPath(id: IntegrationSectionId): string {
+  return id === "composio"
+    ? PAGE_PATHS.composio
+    : `/customize/connections/${id}`;
+}
 
 export function visibleIntegrationSections(
   isPlatformAdmin: boolean,

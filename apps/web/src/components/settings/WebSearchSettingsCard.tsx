@@ -249,7 +249,11 @@ export function WebSearchSettingsCard() {
               className="h-9 w-full"
               id="web-search-provider"
             >
-              <SelectValue placeholder="Built-in" />
+              <SelectValue>
+                {PROVIDER_PRESETS.find(
+                  (preset) => preset.value === form.provider
+                )?.label ?? "Built-in (default)"}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent alignItemWithTrigger={false}>
               <SelectItem value={BUILT_IN_VALUE}>Built-in (default)</SelectItem>

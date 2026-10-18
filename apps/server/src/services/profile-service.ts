@@ -415,7 +415,7 @@ export class ProfileService {
     const source = await this.requireMutableProfile(orgId, sourceId);
 
     if (source.isSuper) {
-      throw new NakamaApiError("Super Bot cannot be cloned.", 400);
+      throw new NakamaApiError("Super Nakama cannot be cloned.", 400);
     }
 
     const name = request.name?.trim() || `${source.name} (copy)`;

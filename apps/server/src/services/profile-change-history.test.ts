@@ -195,7 +195,7 @@ describe("profile change history", () => {
     expect(again.events).toHaveLength(history.events.length);
   });
 
-  test("records super_bot and pack_import sources", async () => {
+  test("records super_nakama and pack_import sources", async () => {
     tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-pch-src-"));
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
@@ -222,7 +222,7 @@ describe("profile change history", () => {
         soulFiles: { "SOUL.md": "# soul after" },
         systemPrompt: "v2",
       },
-      { actorUserId: "user_chat", source: "super_bot" }
+      { actorUserId: "user_chat", source: "super_nakama" }
     );
 
     const history = await service.listProfileChangeHistory(
@@ -233,12 +233,13 @@ describe("profile change history", () => {
     expect(
       history.events.some(
         (event) =>
-          event.source === "super_bot" && event.field === "system_prompt"
+          event.source === "super_nakama" && event.field === "system_prompt"
       )
     ).toBe(true);
     expect(
       history.events.some(
-        (event) => event.source === "super_bot" && event.field === "soul.soul"
+        (event) =>
+          event.source === "super_nakama" && event.field === "soul.soul"
       )
     ).toBe(true);
   });

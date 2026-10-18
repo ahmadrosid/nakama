@@ -43,6 +43,9 @@ jobs:
     needs: build-assets
     strategy:
       matrix:
+        arch: [amd64, arm64]
+        # "full" keeps the Codex and Claude Code binaries (INSTALL_CODING_AGENTS).
+        variant: [default, full]
         include:
           - arch: amd64
             runner: ubuntu-24.04
@@ -50,6 +53,12 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
             platform: linux/arm64
+          - variant: default
+            suffix: ""
+            coding_agents: "false"
+          - variant: full
+            suffix: "-full"
+            coding_agents: "true"
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
@@ -71,7 +80,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push ${{ matrix.arch }}
+      - name: Build and push ${{ matrix.arch }}${{ matrix.suffix }}
         id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -79,9 +88,10 @@ jobs:
           build-contexts: build-assets=./build-assets
           push: true
           platforms: ${{ matrix.platform }}
-          tags: ghcr.io/${{ github.repository }}:build-${{ github.sha }}-${{ matrix.arch }}
-          cache-from: type=gha,scope=${{ matrix.arch }}
-          cache-to: type=gha,scope=${{ matrix.arch }},mode=max
+          build-args: INSTALL_CODING_AGENTS=${{ matrix.coding_agents }}
+          tags: ghcr.io/${{ github.repository }}:build-${{ github.sha }}-${{ matrix.arch }}${{ matrix.suffix }}
+          cache-from: type=gha,scope=${{ matrix.arch }}${{ matrix.suffix }}
+          cache-to: type=gha,scope=${{ matrix.arch }}${{ matrix.suffix }},mode=max
           # Runtime dependencies install from the committed lockfile, so the
           # image is describable: attach an SBOM attestation and keep the
           # content digest beside it.
@@ -90,25 +100,30 @@ jobs:
 
       - name: Publish SBOM and record the image digest
         run: |
-          image="ghcr.io/${{ github.repository }}:build-${{ github.sha }}-${{ matrix.arch }}"
+          image="ghcr.io/${{ github.repository }}:build-${{ github.sha }}-${{ matrix.arch }}${{ matrix.suffix }}"
           docker buildx imagetools inspect "$image" --format '{{ json .SBOM }}' \
-            > "sbom-${{ matrix.arch }}.json"
+            > "sbom-${{ matrix.arch }}${{ matrix.suffix }}.json"
           {
-            echo "### ${{ matrix.arch }}"
+            echo "### ${{ matrix.arch }}${{ matrix.suffix }}"
             echo "- image: \`$image\`"
             echo "- digest: \`${{ steps.build.outputs.digest }}\`"
-            echo "- SBOM: \`sbom-${{ matrix.arch }}.json\`"
+            echo "- SBOM: \`sbom-${{ matrix.arch }}${{ matrix.suffix }}.json\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload SBOM
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: sbom-${{ matrix.arch }}
-          path: sbom-${{ matrix.arch }}.json
+          name: sbom-${{ matrix.arch }}${{ matrix.suffix }}
+          path: sbom-${{ matrix.arch }}${{ matrix.suffix }}.json
           if-no-files-found: error
 
   publish:
     needs: build-images
+    strategy:
+      matrix:
+        include:
+          - suffix: ""
+          - suffix: "-full"
     runs-on: ubuntu-24.04
     steps:
       - name: Set up Docker Buildx
@@ -126,6 +141,9 @@ jobs:
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ghcr.io/${{ github.repository }}
+          flavor: |
+            latest=false
+            suffix=${{ matrix.suffix }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -143,12 +161,12 @@ jobs:
             [ -z "$tag" ] || { args+=(-t "$tag"); tags+=("$tag"); }
           done <<< "$TAGS"
           docker buildx imagetools create "${args[@]}" \
-            "$IMAGE:build-${{ github.sha }}-amd64" \
-            "$IMAGE:build-${{ github.sha }}-arm64"
+            "$IMAGE:build-${{ github.sha }}-amd64${{ matrix.suffix }}" \
+            "$IMAGE:build-${{ github.sha }}-arm64${{ matrix.suffix }}"
           digest="$(docker buildx imagetools inspect "${tags[0]}" \
             --format '{{ .Manifest.Digest }}')"
           {
-            echo "### Published runtime image"
+            echo "### Published runtime image${{ matrix.suffix }}"
             echo "- tags: \`${tags[*]}\`"
             echo "- digest: \`$digest\`"
           } >> "$GITHUB_STEP_SUMMARY"

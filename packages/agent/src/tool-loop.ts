@@ -42,31 +42,9 @@ export async function executeToolCall(
   try {
     // Check what the model and the transcript receive: the JSON-serialized
     // value, so optional fields left undefined are dropped, not rejected.
-    const result = ToolResultSchema.parse(
+    return ToolResultSchema.parse(
       JSON.parse(JSON.stringify(await tool.run(call.arguments, context)))
     );
-
-    // The single place every tool result passes through, so the optimiser is
-    // wired once rather than per tool. It returns `result` untouched unless it
-    // is enabled, recognises the tool, and produces something strictly shorter.
-    try {
-      return ToolResultSchema.parse(
-        JSON.parse(
-          JSON.stringify(
-            await core.distillToolResult(call.name, result, context)
-          )
-        )
-      );
-    } catch (error) {
-      // Distillation is best-effort: never replace a successful tool result with
-      // an optimiser failure (same shape as a tool-runtime error).
-      console.warn(
-        `distillToolResult failed for ${call.name}; returning raw result:`,
-        error instanceof Error ? error.message : error
-      );
-
-      return result;
-    }
   } catch (error) {
     context.signal?.throwIfAborted();
 

@@ -53,7 +53,7 @@ import type {
   CreateOrganizationRequest,
   CreateOrganizationResponse,
   CreateProfileRequest,
-  CreateProfileWithSuperBotRequest,
+  CreateProfileWithSuperNakamaRequest,
   CreateProviderRequest,
   CreateProviderResponse,
   CreateSessionRequest,
@@ -196,6 +196,7 @@ import type {
   SendErrorTrackingTestResponse,
   SendMessageRequest,
   SendMessageResponse,
+  SessionBrowserResponse,
   SessionMessagesResponse,
   SessionStatusResponse,
   SessionSummary,
@@ -227,8 +228,6 @@ import type {
   ThinkingSettings,
   ThinkingSettingsResponse,
   TimezoneSettingsResponse,
-  TokenOptimizationResponse,
-  TokenOptimizationUpdateResponse,
   ToolCredentialStatus,
   ToolResponse,
   ToolSetupPlan,
@@ -238,6 +237,7 @@ import type {
   TranscriptionSettings,
   TranscriptionSettingsResponse,
   UnpinOrgMemoryRequest,
+  UpdateAgentBrowserSettingsRequest,
   UpdateArtifactRequest,
   UpdateArtifactResponse,
   UpdateAuthProfileRequest,
@@ -389,22 +389,6 @@ export class NakamaClient {
   async getSystemStatus(profileId?: string): Promise<SystemStatusResponse> {
     return this.request<SystemStatusResponse>(
       `/v1/system/status?profileId=${encodeURIComponent(profileId ?? "")}`
-    );
-  }
-
-  async getTokenOptimization(): Promise<TokenOptimizationResponse> {
-    return this.request<TokenOptimizationResponse>("/v1/token-optimization");
-  }
-
-  async setTokenOptimization(
-    enabled: boolean
-  ): Promise<TokenOptimizationUpdateResponse> {
-    return this.request<TokenOptimizationUpdateResponse>(
-      "/v1/token-optimization",
-      {
-        body: JSON.stringify({ enabled }),
-        method: "PUT",
-      }
     );
   }
 
@@ -860,6 +844,19 @@ export class NakamaClient {
     );
   }
 
+  async getSessionBrowser(sessionId: string): Promise<SessionBrowserResponse> {
+    return this.request<SessionBrowserResponse>(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/browser`
+    );
+  }
+
+  async stopSessionBrowser(sessionId: string): Promise<void> {
+    await this.request<void>(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/browser`,
+      { method: "DELETE" }
+    );
+  }
+
   async getSessionAcpSettings(
     sessionId: string
   ): Promise<AcpSessionSettingsResponse> {
@@ -1053,10 +1050,10 @@ export class NakamaClient {
     });
   }
 
-  async createProfileWithSuperBot(
-    request: CreateProfileWithSuperBotRequest
+  async createProfileWithSuperNakama(
+    request: CreateProfileWithSuperNakamaRequest
   ): Promise<ProfileResponse> {
-    return this.request<ProfileResponse>("/v1/profiles/with-super-bot", {
+    return this.request<ProfileResponse>("/v1/profiles/with-super-nakama", {
       body: JSON.stringify(request),
       method: "POST",
     });
@@ -2832,6 +2829,18 @@ export class NakamaClient {
   async getAgentBrowserStatus(): Promise<AgentBrowserStatusResponse> {
     return this.request<AgentBrowserStatusResponse>(
       "/v1/settings/agent-browser"
+    );
+  }
+
+  async setAgentBrowserSettings(
+    request: UpdateAgentBrowserSettingsRequest
+  ): Promise<AgentBrowserStatusResponse> {
+    return this.request<AgentBrowserStatusResponse>(
+      "/v1/settings/agent-browser",
+      {
+        body: JSON.stringify(request),
+        method: "PUT",
+      }
     );
   }
 

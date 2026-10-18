@@ -1,10 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, symlink } from "node:fs/promises";
 import { join } from "node:path";
-import { normalizePairingCode } from "./pairing-code";
 import {
   claimLegacyTelegramConfig,
-  generatePairingCode,
   getTelegramConfigDir,
   isTelegramUserAuthorized,
   listTelegramAccessRequests,
@@ -53,12 +51,10 @@ describeSharedChannelConfigTests({
     allowlistValue: "42, 43",
     botTokenKey: "TELEGRAM_BOT_TOKEN",
   },
-  generatePairingCode,
   isUserAuthorized: isTelegramUserAuthorized,
   loadConfigFile: () => loadTelegramConfigFile(null),
   mask: maskBotToken,
   name: "telegram",
-  normalize: normalizePairingCode,
   regenerate: () => regenerateTelegramHandshake(null),
   resolveConfigFromSources: resolveTelegramConfigFromSources,
   resolveFile: {

@@ -254,9 +254,9 @@ The composer highlights the selected skill, but the message still sends as plain
 
 The slash picker also reserves **`/learn`** — use it to turn notes, a URL, a local folder, or the workflow you just finished into a reusable skill. See [Self-improving skills](/self-improving-skills#learn-from-sources).
 
-Nakama also ships bundled skills for system workflows. The `create-profile` bundled skill is assigned only to Super Bot, so profile-authoring instructions load when Super Bot is asked to create a profile without adding those instructions to ordinary profile prompts. That skill runs a confirm-first factory: draft soul files in chat, wait for explicit confirmation, then create.
+Nakama also ships bundled skills for system workflows. The `create-profile` bundled skill is assigned only to Super Nakama, so profile-authoring instructions load when Super Nakama is asked to create a profile without adding those instructions to ordinary profile prompts. That skill runs a confirm-first factory: draft soul files in chat, wait for explicit confirmation, then create.
 
-The `create-skill` bundled skill is also assigned only to Super Bot. When you ask Super Bot to write or improve a skill, it drafts the full `SKILL.md` in chat, waits for your confirmation, then saves it with `skill_manage`. If write approval is on, the skill waits for an admin to approve it.
+The `create-skill` bundled skill is also assigned only to Super Nakama. When you ask Super Nakama to write or improve a skill, it drafts the full `SKILL.md` in chat, waits for your confirmation, then saves it with `skill_manage`. If write approval is on, the skill waits for an admin to approve it.
 
 For more detail, see [Agent prompts](/agent-prompt).
 
@@ -284,10 +284,10 @@ Profiles receive bundled skills for common workflows:
 - `update-profile-memory` — record facts in active `MEMORY.md` via file tools
 - `archive-profile-memory` — move facts from active `MEMORY.md` into `memory-archive/` without deleting them
 - `artifact-design` — design rules for the HTML pages, dashboards, and slide decks the agent saves under `artifacts/`
-- `coding-agent` — invoke a coding agent for repo work via `bash` (Super Bot by default; see [Coding agent](/coding-agent))
+- `coding-agent` — invoke a coding agent for repo work via `bash` (Super Nakama by default; see [Coding agent](/coding-agent))
 - `agent-browser` — interactive browser automation via `bash` (opt-in; see [Agent browser](/agent-browser))
 
-Every profile receives the default bundled skills above when they are installed and synced on the server, including `manage-skills` for skill authoring. Nakama backfills missing default bundled skills onto existing profiles during startup. Super Bot additionally receives its Super Bot-specific skills, while opt-in skills such as `agent-browser` still require assignment.
+Every profile receives the default bundled skills above when they are installed and synced on the server, including `manage-skills` for skill authoring. Nakama backfills missing default bundled skills onto existing profiles during startup. Super Nakama additionally receives its Super Nakama-specific skills, while opt-in skills such as `agent-browser` still require assignment.
 
 To reuse a skill from GitHub, ask in web or CLI chat: **“Install this skill”** and paste its public GitHub directory or SKILL.md link. The agent installs it for the current profile, ready on the next turn. If write approval is enabled, an admin must approve it first. References, scripts, and assets are included. Reinstalling the same skill restores missing files. External programs required by a skill still need separate setup. Existing skills with different content are not overwritten.
 
@@ -311,7 +311,7 @@ They are hidden from the `/skill` slash picker (like `create-automation` and `ma
 
 ### Coding agent
 
-The `coding-agent` bundled skill teaches when to invoke a coding agent, how to install CLIs via `bash`, when to ask which backend to use, and how to summarize CLI results. Super Bot receives it by default. Setup and runtime flow are in [Coding agent](/coding-agent).
+The `coding-agent` bundled skill teaches when to invoke a coding agent, how to install CLIs via `bash`, when to ask which backend to use, and how to summarize CLI results. Super Nakama receives it by default. Setup and runtime flow are in [Coding agent](/coding-agent).
 
 ### Agent browser
 

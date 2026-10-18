@@ -235,7 +235,7 @@ export async function createProfilePackExport(
   }
 
   if (profile.isSuper) {
-    throw new NakamaApiError("Super Bot cannot be exported.", 400);
+    throw new NakamaApiError("Super Nakama cannot be exported.", 400);
   }
 
   const soulDir = getProfileSoulDir(orgId, profileId);

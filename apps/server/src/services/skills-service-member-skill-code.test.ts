@@ -6,7 +6,7 @@ import type { DiscoveredSkill } from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
   type DatabaseAdapter,
-  ensureSuperBotBashTool,
+  ensureSuperNakamaBashTool,
 } from "@nakama/db";
 import { loadPythonSkillTool } from "./python-skill-tool-loader";
 import { SkillProposalService } from "./skill-proposal-service";
@@ -306,7 +306,7 @@ describe("member-authored skill code", () => {
 
     expect(await service.loadToolsForProfile(ORG_ID, profileId)).toEqual([]);
 
-    await ensureSuperBotBashTool(db, profileId);
+    await ensureSuperNakamaBashTool(db, profileId);
     const tools = await service.loadToolsForProfile(ORG_ID, profileId);
 
     expect(tools.map((tool) => tool.name)).toEqual(["loads_run_python"]);

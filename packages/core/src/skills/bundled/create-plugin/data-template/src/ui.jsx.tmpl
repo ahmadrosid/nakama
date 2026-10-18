@@ -1,0 +1,304 @@
+/** @jsxRuntime classic */
+/** @jsx React.createElement */
+/** @jsxFrag React.Fragment */
+// The host supplies React and Nakama's UI kit through ctx.
+// Never import react, react-dom, or @nakama/* packages here.
+import css from "./ui.css" with { type: "text" };
+
+export const inject = ["slots", "host", "styles", "ui"];
+
+// JSX compiles to React.createElement, so components anywhere in this file
+// need this binding. apply() sets it before the host renders anything.
+let React;
+
+const DATE = new Intl.DateTimeFormat(undefined, {
+  day: "numeric",
+  month: "short",
+});
+
+function formatDate(value) {
+  const date = new Date(value);
+
+  return Number.isNaN(date.getTime()) ? "" : DATE.format(date);
+}
+
+function errorText(failure) {
+  return failure instanceof Error ? failure.message : String(failure);
+}
+
+/** @param {import("./nakama-plugin").PluginContext} ctx */
+export function apply(ctx) {
+  React = ctx.React;
+  const {
+    Button,
+    ConfirmDialog,
+    Dialog,
+    DialogContent,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    FormField,
+    Input,
+    Spinner,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+    Textarea,
+  } = ctx.ui;
+
+  ctx.styles(css);
+
+  // Create, edit, and delete share one dialog. An item without id is new.
+  function ItemDialog({ item, onClose, onSaved }) {
+    const [name, setName] = React.useState(item.name ?? "");
+    const [notes, setNotes] = React.useState(item.notes ?? "");
+    const [error, setError] = React.useState("");
+    const [busy, setBusy] = React.useState(false);
+    const [confirming, setConfirming] = React.useState(false);
+
+    async function save(event) {
+      event.preventDefault();
+      setBusy(true);
+      setError("");
+
+      try {
+        await ctx.host.call("save_item", {
+          ...(item.id ? { id: item.id } : {}),
+          name: name.trim(),
+          notes: notes.trim(),
+        });
+        onSaved();
+      } catch (failure) {
+        setError(errorText(failure));
+        setBusy(false);
+      }
+    }
+
+    return (
+      <Dialog onOpenChange={(open) => (open ? null : onClose())} open>
+        {/* Dialogs render outside the page, so they need the CSS scope too. */}
+        <DialogContent data-plugin-id={ctx.pluginId}>
+          <DialogHeader>
+            <DialogTitle>{item.id ? "Edit item" : "New item"}</DialogTitle>
+          </DialogHeader>
+          <form className="plugin-dialog-form" onSubmit={save}>
+            <FormField id="item-name" label="Name">
+              <Input
+                id="item-name"
+                onChange={(event) => setName(event.target.value)}
+                value={name}
+              />
+            </FormField>
+            <FormField id="item-notes" label="Notes">
+              <Textarea
+                id="item-notes"
+                onChange={(event) => setNotes(event.target.value)}
+                rows={3}
+                value={notes}
+              />
+            </FormField>
+            {error ? (
+              <p className="plugin-error" role="alert">
+                {error}
+              </p>
+            ) : null}
+            <DialogFooter>
+              {item.id ? (
+                <Button
+                  className="plugin-footer-start"
+                  disabled={busy}
+                  onClick={() => setConfirming(true)}
+                  type="button"
+                  variant="destructive"
+                >
+                  Delete
+                </Button>
+              ) : null}
+              <Button onClick={onClose} type="button" variant="outline">
+                Cancel
+              </Button>
+              <Button disabled={busy || !name.trim()} type="submit">
+                {busy ? <Spinner /> : null}
+                Save
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+        {confirming ? (
+          <ConfirmDialog
+            confirmLabel="Delete"
+            description={`${item.name} will be removed.`}
+            onClose={() => setConfirming(false)}
+            onConfirm={async () => {
+              await ctx.host.call("delete_item", { id: item.id });
+              onSaved();
+            }}
+            title="Delete item?"
+          />
+        ) : null}
+      </Dialog>
+    );
+  }
+
+  // The plugin page. The host already shows the page title and padding.
+  function Page({ renderHeaderActions = (children) => children }) {
+    const [items, setItems] = React.useState(null);
+    const [query, setQuery] = React.useState("");
+    const [editing, setEditing] = React.useState(null);
+    const [error, setError] = React.useState("");
+
+    const load = React.useCallback(async () => {
+      setError("");
+
+      try {
+        const result = await ctx.host.call("list_items", {});
+        setItems(Array.isArray(result?.items) ? result.items : []);
+      } catch (failure) {
+        setError(errorText(failure));
+        setItems([]);
+      }
+    }, []);
+
+    React.useEffect(() => {
+      load();
+    }, [load]);
+
+    const shown = React.useMemo(() => {
+      const needle = query.trim().toLowerCase();
+
+      return (items ?? []).filter(
+        (item) =>
+          !needle ||
+          `${item.name} ${item.notes}`.toLowerCase().includes(needle)
+      );
+    }, [items, query]);
+
+    function body() {
+      if (items === null) {
+        return (
+          <p className="plugin-muted plugin-loading">
+            <Spinner />
+            Loading…
+          </p>
+        );
+      }
+
+      if (shown.length === 0) {
+        return (
+          <p className="plugin-muted">
+            {items.length === 0 ? "No items yet." : "No matches."}
+          </p>
+        );
+      }
+
+      return (
+        <Table aria-label="Items">
+          <TableHeader>
+            <TableRow>
+              <TableHead scope="col">Name</TableHead>
+              <TableHead className="plugin-optional" scope="col">
+                Notes
+              </TableHead>
+              <TableHead className="plugin-number" scope="col">
+                Updated
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {shown.map((item) => (
+              <TableRow key={item.id}>
+                {/* The name opens the edit dialog, so no column can hide it. */}
+                <TableCell className="plugin-strong">
+                  <Button
+                    className="plugin-row-link"
+                    onClick={() => setEditing(item)}
+                    variant="link"
+                  >
+                    {item.name}
+                  </Button>
+                </TableCell>
+                <TableCell className="plugin-optional plugin-secondary">
+                  {item.notes}
+                </TableCell>
+                <TableCell className="plugin-number plugin-secondary">
+                  {formatDate(item.updated_at)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      );
+    }
+
+    return (
+      <div className="plugin-page plugin-page-wide">
+        {renderHeaderActions(
+          <Button onClick={() => setEditing({})} size="sm">
+            New item
+          </Button>
+        )}
+        <Input
+          aria-label="Filter items"
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Filter"
+          type="search"
+          value={query}
+        />
+        {error ? (
+          <p className="plugin-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        {body()}
+        {editing ? (
+          <ItemDialog
+            item={editing}
+            onClose={() => setEditing(null)}
+            onSaved={() => {
+              setEditing(null);
+              load();
+            }}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
+  // Shown in chat when an agent lists items.
+  function ListToolCard({ result = null, status }) {
+    if (status === "running") {
+      return <p className="plugin-muted">Loading…</p>;
+    }
+
+    const items = Array.isArray(result?.items) ? result.items : [];
+
+    return (
+      <p className="plugin-muted">
+        {items.length === 1 ? "1 item" : `${items.length} items`}
+      </p>
+    );
+  }
+
+  // Shown in chat when an agent saves an item.
+  function SaveToolCard({ result = null, status }) {
+    if (status === "running") {
+      return <p className="plugin-muted">Saving…</p>;
+    }
+
+    return result?.item ? (
+      <p className="plugin-muted">Saved {result.item.name}</p>
+    ) : null;
+  }
+
+  ctx.slots.register("page", Page);
+  ctx.slots.register("tool:list_items", ListToolCard);
+  ctx.slots.register("tool:save_item", SaveToolCard);
+  ctx.slots.register("tool:delete_item", ({ status }) => (
+    <p className="plugin-muted">
+      {status === "running" ? "Deleting…" : "Deleted"}
+    </p>
+  ));
+}

@@ -13,41 +13,51 @@ import {
 setupTestConfigDir("nakama-audit-log-test-");
 
 describe("audit event coverage", () => {
-  test.each([
-    ["POST", "/v1/auth/login", "auth.login"],
-    ["POST", "/v1/auth/logout", "auth.logout"],
-    ["POST", "/v1/auth/change-password", "auth.password_change"],
-    ["POST", "/v1/auth/local-token/rotate", "auth.token_rotate"],
-    ["POST", "/v1/auth/active-org", "auth.active_org"],
-    ["POST", "/v1/auth/setup/import/restore", "data.import"],
-    ["POST", "/v1/orgs/org_1/invites", "invite.create"],
-    ["PATCH", "/v1/orgs/org_1/members/user_1", "member.role_update"],
-    ["PUT", "/v1/settings/email", "settings.update"],
-    ["PATCH", "/v1/providers/provider_1", "provider.update"],
-    ["DELETE", "/v1/platform/orgs/org_1/permanent", "organization.delete"],
-    ["DELETE", "/v1/platform/users/user_1", "user.erase"],
-    ["DELETE", "/v1/profiles/profile_1", "profile.delete"],
-    ["GET", "/v1/profiles/profile_1/pack/export", "profile.export"],
-    ["POST", "/v1/platform/data/import/restore", "data.import"],
-    ["POST", "/v1/platform/plugins/releases", "plugin.release_install"],
-    ["POST", "/v1/profiles/profile_1/tools", "profile.tools.create"],
-    ["DELETE", "/v1/profiles/profile_1/tools/tool_1", "profile.tools.delete"],
-    ["POST", "/v1/profiles/profile_1/mcp-servers", "profile.mcp_server.create"],
-    [
-      "DELETE",
-      "/v1/profiles/profile_1/mcp-servers/mcp_1",
-      "profile.mcp_server.delete",
-    ],
-    ["POST", "/v1/profiles/profile_1/skills", "profile.skills.create"],
-    [
-      "DELETE",
-      "/v1/profiles/profile_1/skills/skill_1",
-      "profile.skills.delete",
-    ],
-    ["PUT", "/v1/profiles/profile_1/soul/files/USER.md", "profile.soul_update"],
-    ["DELETE", "/v1/sessions/session_1", "session.revoke"],
-  ])("classifies %s %s", (method, path, action) => {
-    expect(describeAuditEvent(method, path)?.action).toBe(action);
+  test("classifies security routes", () => {
+    for (const [method, path, action] of [
+      ["POST", "/v1/auth/login", "auth.login"],
+      ["POST", "/v1/auth/logout", "auth.logout"],
+      ["POST", "/v1/auth/change-password", "auth.password_change"],
+      ["POST", "/v1/auth/local-token/rotate", "auth.token_rotate"],
+      ["POST", "/v1/auth/active-org", "auth.active_org"],
+      ["POST", "/v1/auth/setup/import/restore", "data.import"],
+      ["POST", "/v1/orgs/org_1/invites", "invite.create"],
+      ["PATCH", "/v1/orgs/org_1/members/user_1", "member.role_update"],
+      ["PUT", "/v1/settings/email", "settings.update"],
+      ["PATCH", "/v1/providers/provider_1", "provider.update"],
+      ["DELETE", "/v1/platform/orgs/org_1/permanent", "organization.delete"],
+      ["DELETE", "/v1/platform/users/user_1", "user.erase"],
+      ["DELETE", "/v1/profiles/profile_1", "profile.delete"],
+      ["GET", "/v1/profiles/profile_1/pack/export", "profile.export"],
+      ["POST", "/v1/platform/data/import/restore", "data.import"],
+      ["POST", "/v1/platform/plugins/releases", "plugin.release_install"],
+      ["POST", "/v1/profiles/profile_1/tools", "profile.tools.create"],
+      ["DELETE", "/v1/profiles/profile_1/tools/tool_1", "profile.tools.delete"],
+      [
+        "POST",
+        "/v1/profiles/profile_1/mcp-servers",
+        "profile.mcp_server.create",
+      ],
+      [
+        "DELETE",
+        "/v1/profiles/profile_1/mcp-servers/mcp_1",
+        "profile.mcp_server.delete",
+      ],
+      ["POST", "/v1/profiles/profile_1/skills", "profile.skills.create"],
+      [
+        "DELETE",
+        "/v1/profiles/profile_1/skills/skill_1",
+        "profile.skills.delete",
+      ],
+      [
+        "PUT",
+        "/v1/profiles/profile_1/soul/files/USER.md",
+        "profile.soul_update",
+      ],
+      ["DELETE", "/v1/sessions/session_1", "session.revoke"],
+    ] as const) {
+      expect(describeAuditEvent(method, path)?.action).toBe(action);
+    }
   });
 
   test("covers security mutations registered in the real route table", () => {

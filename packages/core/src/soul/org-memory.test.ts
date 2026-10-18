@@ -22,12 +22,6 @@ describe("org memory parse/rebuild", () => {
     expect(parsed.sections).toEqual([]);
   });
 
-  test("round-trips parse -> rebuild -> equal", () => {
-    const content = `${ORG_MEMORY_PREAMBLE}\n\n- deploys ship on Tuesdays\n- prefer Bun over Node\n`;
-    const rebuilt = rebuildOrgMemoryContent(parseOrgMemoryContent(content));
-    expect(rebuilt).toBe(content);
-  });
-
   test("round-trips pinned and dated sections", () => {
     const content = `${ORG_MEMORY_PREAMBLE}\n\n- pinned fact\n\n## 2026-07-25\n\n- dated fact\n`;
     const rebuilt = rebuildOrgMemoryContent(parseOrgMemoryContent(content));

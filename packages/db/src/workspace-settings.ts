@@ -38,10 +38,6 @@ export function mergeWorkspaceSettings(
       patch.selectedCodingAgentHarness,
       existing?.selectedCodingAgentHarness ?? null
     ),
-    tokenOptimizerEnabled:
-      patch.tokenOptimizerEnabled === undefined
-        ? existing?.tokenOptimizerEnabled
-        : patch.tokenOptimizerEnabled,
     transcriptionModel: pickDefined(
       patch.transcriptionModel,
       existing?.transcriptionModel ?? null

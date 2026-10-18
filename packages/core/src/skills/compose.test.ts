@@ -54,6 +54,19 @@ describe("composeAgentBrowserCapabilityPrompt", () => {
     expect(composeAgentBrowserCapabilityPrompt([{ name: "weather" }])).toBe("");
     expect(composeAgentBrowserCapabilityPrompt([])).toBe("");
   });
+
+  test("adds the live browser workflow only when the cloud browser is on", () => {
+    const skills = [{ name: "agent-browser" }];
+    const local = composeAgentBrowserCapabilityPrompt(skills);
+
+    const cloud = composeAgentBrowserCapabilityPrompt(skills, {
+      cloudBrowser: true,
+    });
+
+    expect(local).not.toBe("");
+    expect(cloud.length).toBeGreaterThan(local.length);
+    expect(cloud.startsWith(local)).toBe(true);
+  });
 });
 
 describe("skill instruction discovery", () => {
