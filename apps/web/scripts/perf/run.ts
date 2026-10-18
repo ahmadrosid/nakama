@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { cpus, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -68,10 +69,18 @@ async function sample(dist: string, scenario: string) {
 
     const port = (await Bun.file(portFile).text()).split("\n")[0];
 
+    const response = await fetch(`http://127.0.0.1:${port}/json`);
+
+    if (!response.ok) {
+      throw new Error(
+        `Chromium target discovery failed: HTTP ${response.status}`
+      );
+    }
+
     // SAFETY: Chromium owns this loopback endpoint and returns page targets.
-    const targets = (await fetch(`http://127.0.0.1:${port}/json`).then((res) =>
-      res.json()
-    )) as { webSocketDebuggerUrl: string }[];
+    const targets = (await response.json()) as {
+      webSocketDebuggerUrl: string;
+    }[];
 
     socket = new WebSocket(targets[0]!.webSocketDebuggerUrl);
     await new Promise<void>((done, reject) => {
@@ -437,7 +446,8 @@ for (const dist of [baseline, candidate]) {
 
   for (const file of files) {
     hash.update(file);
-    hash.update(Buffer.from(await Bun.file(join(dist, file)).arrayBuffer()));
+    // Hashing runs after measurement. Read one file at a time in sorted order.
+    hash.update(readFileSync(join(dist, file)));
   }
 
   builds.push({ dist: resolve(dist), runtimeSha256: hash.digest("hex") });
