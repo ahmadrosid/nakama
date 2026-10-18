@@ -190,16 +190,9 @@ export async function installSkillPythonPackages(
   skillDirectory: string
 ): Promise<{ output: string }> {
   const requirements = path.join(skillDirectory, SKILL_REQUIREMENTS_FILE);
-
-  if (!(await pathExists(requirements))) {
-    throw new NakamaApiError(
-      `This skill has no ${SKILL_REQUIREMENTS_FILE}.`,
-      400
-    );
-  }
-
   const envDir = getSkillPythonEnvDir(skillDirectory);
 
+  // Taken before the first await, so of two calls the first one always wins.
   if (installingEnvDirs.has(envDir)) {
     throw new NakamaApiError(
       "Packages for this skill are already being installed.",
@@ -210,6 +203,13 @@ export async function installSkillPythonPackages(
   installingEnvDirs.add(envDir);
 
   try {
+    if (!(await pathExists(requirements))) {
+      throw new NakamaApiError(
+        `This skill has no ${SKILL_REQUIREMENTS_FILE}.`,
+        400
+      );
+    }
+
     const python = getSkillPythonEnvBin(skillDirectory);
     let output = "";
 
