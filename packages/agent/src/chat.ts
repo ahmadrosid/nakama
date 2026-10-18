@@ -214,8 +214,6 @@ export function createAgentChatSession(
     userTimezone: options.userTimezone,
   });
 
-  const toolContext: ToolContext = { ...options.toolContext };
-
   const history: ChatMessage[] = options.initialHistory
     ? [...options.initialHistory]
     : [];
@@ -458,7 +456,7 @@ export function createAgentChatSession(
           resolvePromptContext: options.resolvePromptContext,
           runCompaction,
           signal: sendOptions?.signal,
-          toolContext,
+          toolContext: options.toolContext,
           whatsappMessage: sendOptions?.whatsappMessage,
         }
       );
@@ -485,7 +483,7 @@ export function createAgentChatSession(
           resolvePromptContext: options.resolvePromptContext,
           runCompaction,
           signal: streamOptions?.signal,
-          toolContext,
+          toolContext: options.toolContext,
           whatsappMessage: streamOptions?.whatsappMessage,
         }
       );

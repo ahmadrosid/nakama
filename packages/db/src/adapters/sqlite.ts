@@ -5219,6 +5219,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       incrementLlmTurnUsageStmt.run(
         orgId,
         updatedAt.slice(0, 10),
+        // Legacy arm column, see migrateLlmTurnUsageTable.
         "none",
         delta.inputTokens,
         delta.outputTokens,

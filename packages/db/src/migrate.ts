@@ -716,29 +716,9 @@ function migrateLlmUsageOrgScope(db: Database): void {
 }
 
 /**
- * Bytes removed from a tool result before it entered the conversation, per org,
- * per optimiser, per tool.
- *
- * Deliberately not tokens and not cost: a shortened result is re-sent on later
- * turns as a cache read billed at a fraction of fresh input, so multiplying
- * these by a price would invent a number nobody can support.
- *
- * `optimizer` is a column rather than a hard-coded name because OMNI will not be
- * the only one. It is also why this is not called `omni_savings`. What it cannot
- * hold is anything that never sees tool output: a command rewriter like rtk acts
- * before the command runs, and a proxy like headroom replaces the provider
- * client, so neither produces a row here. That is a boundary worth naming, not
- * hiding.
- */
-/**
- * Provider input tokens per turn, per org, per day, split by whether the
- * optimiser removed anything on that turn.
- *
- * This is the only table here that holds tokens rather than bytes, and it holds
- * what the provider charged rather than an estimate. The comparison it supports
- * is observational, not randomised: turns land in an arm because of what
- * happened, not because anything was assigned, so a workload difference between
- * the arms is a confound the reader has to be told about.
+ * Provider tokens per turn, per org, per day. The monthly usage quota sums it.
+ * `arm` is left from the removed token optimiser (#1888) and is now always
+ * `none`; older rows may say `omni`, and the quota counts both.
  */
 function migrateLlmTurnUsageTable(db: Database): void {
   db.exec(`
@@ -824,6 +804,8 @@ function migrateLlmUsageDailyStatsTable(db: Database): void {
   `);
 }
 
+// Unused since the token optimiser was removed (#1888). Kept so an existing
+// install needs no migration to upgrade.
 function migrateToolOutputSavingsTable(db: Database): void {
   // The first cut of this table had no `bucket`, and CREATE TABLE IF NOT EXISTS
   // will not add one. It is a counter with no history worth keeping and it has
