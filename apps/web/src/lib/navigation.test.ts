@@ -123,7 +123,7 @@ describe("plugin navigation", () => {
     );
   });
 
-  test("shows Plugins as a tab of the Integrations sidebar item", () => {
+  test("shows Plugins as a tab of the Connections sidebar item", () => {
     expect(SIDEBAR_PAGE_IDS).toContain("composio");
     expect(SIDEBAR_PAGE_IDS).not.toContain("plugin-management");
     expect(sidebarPageId("plugin-management")).toBe("composio");

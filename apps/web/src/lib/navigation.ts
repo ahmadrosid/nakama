@@ -93,7 +93,7 @@ const NAV_GROUPS: NavGroup[] = [
       navItem("plugin-management", "Plugins", "Manage plugins", PackageIcon),
       navItem(
         "composio",
-        "Integrations",
+        "Connections",
         "Connect apps and manage plugins",
         Plug01Icon
       ),
@@ -177,7 +177,7 @@ export const SIDEBAR_PAGE_IDS: readonly PageId[] = [
   "customize",
 ];
 
-/** Plugins is a tab of Integrations, so it lights up the Integrations item. */
+/** Plugins is a tab of Connections, so it lights up the Connections item. */
 export function sidebarPageId(page: PageId): PageId {
   return page === "plugin-management" ? "composio" : page;
 }

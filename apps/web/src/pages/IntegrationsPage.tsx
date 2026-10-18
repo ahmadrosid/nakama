@@ -36,7 +36,7 @@ export function IntegrationsTabs() {
 
   return (
     <nav
-      aria-label="Integrations"
+      aria-label="Connections"
       className="mx-auto mb-6 flex max-w-4xl gap-6 border-border border-b"
     >
       {INTEGRATION_TABS.map((tab) => {
