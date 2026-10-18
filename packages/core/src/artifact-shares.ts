@@ -46,7 +46,7 @@ export async function writeArtifactShareSnapshot(input: {
   return storagePath;
 }
 
-function assertArtifactShareStoragePath(
+export function assertArtifactShareStoragePath(
   orgId: string,
   storagePath: string
 ): void {

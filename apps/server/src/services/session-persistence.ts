@@ -1,10 +1,10 @@
-import { copyFile, mkdir, open, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { copyFile, lstat, mkdir, open, rename, rm } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import type { AgentChatSession } from "@nakama/agent";
 import type { ChatMessage, ToolDefinition } from "@nakama/core";
 import {
+  assertArtifactShareStoragePath,
   createId,
-  deleteArtifactShareSnapshot,
   getProfileSoulDir,
   getUserConfigDir,
   jsonSchemaFromZod,
@@ -93,7 +93,8 @@ export function deleteSessionHistoryArchive(
 export function deleteProfileWithHistoryArchives(
   db: DatabaseAdapter,
   orgId: string,
-  profileId: string
+  profileId: string,
+  successorId?: string
 ): Promise<boolean> {
   return withArchiveLock(
     dirname(sessionHistoryArchivePath(orgId, "")),
@@ -103,35 +104,82 @@ export function deleteProfileWithHistoryArchives(
         profileId
       );
 
-      for (const share of artifactShares) {
-        await deleteArtifactShareSnapshot(orgId, share.storagePath);
-      }
-
       const sessions = await db.listSessions();
 
-      for (const session of sessions) {
-        if (session.profileId === profileId) {
-          await rm(sessionHistoryArchivePath(orgId, session.id), {
-            force: true,
-          });
+      const archivePaths = sessions
+        .filter((session) => session.profileId === profileId)
+        .map((session) => sessionHistoryArchivePath(orgId, session.id));
+
+      const snapshotPaths = artifactShares.map((share) => {
+        assertArtifactShareStoragePath(orgId, share.storagePath);
+
+        return share.storagePath;
+      });
+
+      const paths = [
+        ...snapshotPaths,
+        ...archivePaths,
+        getProfileSoulDir(orgId, profileId),
+        join(getUserConfigDir(), "retired-app-users", orgId, profileId),
+      ];
+
+      const staged: Array<{ original: string; staged: string }> = [];
+      let deleted: boolean;
+
+      try {
+        for (const path of paths) {
+          let details;
+
+          try {
+            details = await lstat(path);
+          } catch (error) {
+            // SAFETY: lstat throws NodeJS filesystem errors with a code field.
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+              continue;
+            }
+
+            throw error;
+          }
+
+          if (
+            (archivePaths.includes(path) || snapshotPaths.includes(path)) &&
+            details.isDirectory()
+          ) {
+            throw new Error("Expected a file during profile deletion.");
+          }
+
+          const stagedPath = join(
+            dirname(path),
+            `.${basename(path)}.delete-${createId()}`
+          );
+
+          await rename(path, stagedPath);
+          staged.push({ original: path, staged: stagedPath });
         }
+
+        deleted = await db.deleteProfileAndPromoteDefault(
+          profileId,
+          orgId,
+          successorId
+        );
+
+        if (!deleted) {
+          throw new Error("Profile not found.");
+        }
+      } catch (error) {
+        for (const path of staged.reverse()) {
+          await rename(path.staged, path.original);
+        }
+
+        throw error;
       }
 
-      // Keep the profile and session IDs available for retry when filesystem
-      // cleanup fails instead of leaving unreachable files after the cascade.
-      await rm(getProfileSoulDir(orgId, profileId), {
-        force: true,
-        recursive: true,
-      });
-      await rm(
-        join(getUserConfigDir(), "retired-app-users", orgId, profileId),
-        {
-          force: true,
-          recursive: true,
-        }
-      );
+      // shortcut: failed cleanup after commit leaves staged files; add a retry queue if this occurs.
+      for (const path of staged) {
+        await rm(path.staged, { force: true, recursive: true });
+      }
 
-      return db.deleteProfile(profileId);
+      return true;
     }
   );
 }

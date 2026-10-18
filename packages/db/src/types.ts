@@ -966,6 +966,11 @@ export interface DatabaseAdapter {
   deletePasskeys(userId: string): Promise<void>;
   deletePluginRelease(pluginId: string, version: string): Promise<boolean>;
   deleteProfile(id: string): Promise<boolean>;
+  deleteProfileAndPromoteDefault(
+    id: string,
+    orgId: string,
+    successorId?: string
+  ): Promise<boolean>;
   /** Org-scoped delete: resolves to `false` when the profile belongs elsewhere. */
   deleteProfileForOrg(id: string, orgId: string): Promise<boolean>;
   deleteSession(id: string): Promise<boolean>;

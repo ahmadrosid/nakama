@@ -747,6 +747,8 @@ export class ProfileService {
   async deleteProfile(orgId: string, profileId: string): Promise<void> {
     const profile = await this.requireProfile(orgId, profileId);
 
+    let successorId: string | undefined;
+
     if (profile.isDefault) {
       const orgProfiles = await this.db.listProfilesForOrg(orgId);
 
@@ -771,22 +773,16 @@ export class ProfileService {
         );
       }
 
-      await this.beforeChannelOwnerDelete?.(orgId, profileId);
-      await this.db.upsertProfile({
-        ...successor,
-        isDefault: true,
-        updatedAt: new Date().toISOString(),
-      });
+      successorId = successor.id;
     }
 
-    if (!profile.isDefault) {
-      await this.beforeChannelOwnerDelete?.(orgId, profileId);
-    }
+    await this.beforeChannelOwnerDelete?.(orgId, profileId);
 
     const deleted = await deleteProfileWithHistoryArchives(
       this.db,
       orgId,
-      profileId
+      profileId,
+      successorId
     );
 
     if (!deleted) {
