@@ -11,6 +11,7 @@ import {
   PackageIcon,
   Plug01Icon,
   PlusSignSquareIcon,
+  PuzzleIcon,
   Settings01Icon,
   SharedWifiIcon,
   SlidersHorizontalIcon,
@@ -95,7 +96,7 @@ const NAV_GROUPS: NavGroup[] = [
         "composio",
         "Connections",
         "Connect apps and manage plugins",
-        Plug01Icon
+        PuzzleIcon
       ),
     ],
     label: "Chat",
