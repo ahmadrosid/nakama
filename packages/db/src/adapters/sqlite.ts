@@ -7,7 +7,9 @@ import type {
   ChatMessage,
 } from "@nakama/core";
 import {
+  decryptCredential,
   derivePluginToolName,
+  encryptCredential,
   getUserMessageText,
   NakamaApiError,
   PRIVATE_FILE_MODE,
@@ -4944,13 +4946,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async getMcpServer(id) {
       const row = getMcpServerStmt.get(id);
 
-      return row ? toMcpServerRecord(row) : null;
+      return row ? await toMcpServerRecord(row) : null;
     },
 
     async getMcpServerByName(name) {
       const row = getMcpServerByNameStmt.get(name);
 
-      return row ? toMcpServerRecord(row) : null;
+      return row ? await toMcpServerRecord(row) : null;
     },
 
     async getNotificationDestination(id) {
@@ -5566,13 +5568,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async listMcpServers() {
-      return listMcpServersStmt.all().map((row) => toMcpServerRecord(row));
+      return Promise.all(
+        listMcpServersStmt.all().map((row) => toMcpServerRecord(row))
+      );
     },
 
     async listMcpServersForProfile(profileId) {
-      return listMcpServersForProfileStmt
-        .all(profileId)
-        .map((row) => toMcpServerRecord(row));
+      return Promise.all(
+        listMcpServersForProfileStmt
+          .all(profileId)
+          .map((row) => toMcpServerRecord(row))
+      );
     },
 
     async listMessagesForSession(sessionId) {
@@ -6249,7 +6255,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.id,
         record.name,
         record.transport,
-        JSON.stringify(record.config ?? {}),
+        await encryptMcpConfig(record.id, record.config),
         record.enabled ? 1 : 0,
         record.status,
         record.lastError,
@@ -6550,13 +6556,48 @@ function normalizeSkillCreatedBy(
   return "bundled";
 }
 
-function toMcpServerRecord(row: McpServerRow): StoredMcpServerRecord {
+/**
+ * MCP config holds headers, env and OAuth tokens, so it is stored encrypted.
+ * Rows saved before encryption stay readable until the next save.
+ */
+const ENCRYPTED_MCP_CONFIG_PREFIX = "enc:";
+
+function mcpConfigScope(serverId: string): string {
+  return `mcp-server:${serverId}`;
+}
+
+async function encryptMcpConfig(
+  serverId: string,
+  config: StoredMcpServerRecord["config"]
+): Promise<string> {
+  return `${ENCRYPTED_MCP_CONFIG_PREFIX}${await encryptCredential(
+    mcpConfigScope(serverId),
+    JSON.stringify(config ?? {})
+  )}`;
+}
+
+async function decryptMcpConfig(row: McpServerRow): Promise<JsonValue> {
+  if (!row.config.startsWith(ENCRYPTED_MCP_CONFIG_PREFIX)) {
+    return parseJson(row.config);
+  }
+
+  return parseJson(
+    await decryptCredential(
+      mcpConfigScope(row.id),
+      row.config.slice(ENCRYPTED_MCP_CONFIG_PREFIX.length)
+    )
+  );
+}
+
+async function toMcpServerRecord(
+  row: McpServerRow
+): Promise<StoredMcpServerRecord> {
   return {
     // SAFETY: The adapter writes this row value through its typed contract.
     cachedTools: JSON.parse(
       row.cached_tools
     ) as StoredMcpServerRecord["cachedTools"],
-    config: parseJson(row.config),
+    config: await decryptMcpConfig(row),
     createdAt: row.created_at,
     enabled: row.enabled !== 0,
     id: row.id,

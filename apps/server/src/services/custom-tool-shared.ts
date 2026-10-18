@@ -1,5 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type {
   JsonSchema,
@@ -9,9 +8,9 @@ import type {
   ToolSetupPlan,
 } from "@nakama/core";
 import {
-  ensureUserConfigDir,
+  decryptCredential,
+  encryptCredential,
   getCustomToolsDir,
-  getUserConfigDir,
   getUserConfigPath,
   NakamaApiError,
   parseIniWithSections,
@@ -118,92 +117,11 @@ async function readConfig() {
   }
 }
 
-/**
- * Tool API keys are AES-256-GCM encrypted in config.ini. The encryption key
- * lives in its own owner-only file, so a copy of config.ini alone does not
- * reveal any tool key.
- */
-const CREDENTIAL_KEY_FILE = "tool-credentials.key";
-
-async function readCredentialEncryptionKey(): Promise<Buffer> {
-  const keyPath = path.join(getUserConfigDir(), CREDENTIAL_KEY_FILE);
-
-  try {
-    return Buffer.from((await readFile(keyPath, "utf8")).trim(), "base64url");
-  } catch (error) {
-    if (!(error instanceof Error && hasErrorCode(error, "ENOENT"))) {
-      throw error;
-    }
-  }
-
-  await ensureUserConfigDir();
-  const key = randomBytes(32);
-
-  try {
-    await writeFile(keyPath, key.toString("base64url"), {
-      flag: "wx",
-      mode: 0o600,
-    });
-
-    return key;
-  } catch (error) {
-    if (!(error instanceof Error && hasErrorCode(error, "EEXIST"))) {
-      throw error;
-    }
-
-    return Buffer.from((await readFile(keyPath, "utf8")).trim(), "base64url");
-  }
-}
-
-async function encryptForOrg(
-  orgId: string,
-  plaintext: string
-): Promise<string> {
-  const iv = randomBytes(12);
-
-  const cipher = createCipheriv(
-    "aes-256-gcm",
-    await readCredentialEncryptionKey(),
-    iv
-  );
-
-  // Binding the org stops a ciphertext copied into another org's section
-  // from decrypting there.
-  cipher.setAAD(Buffer.from(orgId, "utf8"));
-
-  const ciphertext = Buffer.concat([
-    cipher.update(plaintext, "utf8"),
-    cipher.final(),
-  ]);
-
-  return Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString(
-    "base64url"
-  );
-}
-
-async function decryptForOrg(orgId: string, value: string): Promise<string> {
-  const encoded = Buffer.from(value, "base64url");
-
-  const decipher = createDecipheriv(
-    "aes-256-gcm",
-    await readCredentialEncryptionKey(),
-    encoded.subarray(0, 12)
-  );
-
-  decipher.setAAD(Buffer.from(orgId, "utf8"));
-  decipher.setAuthTag(encoded.subarray(12, 28));
-
-  return Buffer.concat([
-    decipher.update(encoded.subarray(28)),
-    decipher.final(),
-  ]).toString("utf8");
-}
-
 async function encryptToolApiKey(
   orgId: string,
   apiKey: string
 ): Promise<Record<string, string>> {
-  return { api_key_enc: await encryptForOrg(orgId, apiKey) };
+  return { api_key_enc: await encryptCredential(orgId, apiKey) };
 }
 
 async function decryptToolApiKey(
@@ -215,7 +133,7 @@ async function decryptToolApiKey(
     return credential?.api_key;
   }
 
-  return decryptForOrg(orgId, credential.api_key_enc);
+  return decryptCredential(orgId, credential.api_key_enc);
 }
 
 async function decryptToolEnv(
@@ -228,7 +146,7 @@ async function decryptToolEnv(
 
   return z
     .record(z.string(), z.string())
-    .parse(JSON.parse(await decryptForOrg(orgId, credential.env_enc)));
+    .parse(JSON.parse(await decryptCredential(orgId, credential.env_enc)));
 }
 
 export async function loadToolApiKey(
@@ -417,7 +335,7 @@ export function saveToolEnv(
     const env = { ...(await decryptToolEnv(orgId, existing)), ...updates };
     parsed.sections[section] = {
       ...existing,
-      env_enc: await encryptForOrg(orgId, JSON.stringify(env)),
+      env_enc: await encryptCredential(orgId, JSON.stringify(env)),
     };
     await writeParsedConfigIni(parsed.global, parsed.sections);
   });
