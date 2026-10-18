@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, jest, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import {
   type AcpProviderOptions,
@@ -63,5 +63,49 @@ describe("ACP draft settings", () => {
     await getAcpConfigOptions(optionsFor(chat));
 
     expect(adoptAcpDraftSession(draft, chat)).toBe(false);
+  });
+
+  test("a draft agent that never gets a message stops when idle", async () => {
+    const draft = `draft-${crypto.randomUUID()}`;
+    const chat = `chat-${crypto.randomUUID()}`;
+
+    jest.useFakeTimers();
+
+    try {
+      await getAcpConfigOptions(optionsFor(draft));
+      jest.advanceTimersByTime(10 * 60 * 1000);
+    } finally {
+      jest.useRealTimers();
+    }
+
+    expect(adoptAcpDraftSession(draft, chat)).toBe(false);
+  });
+
+  test("the idle stop leaves a running turn alone", async () => {
+    const chat = `chat-${crypto.randomUUID()}`;
+    const other = `chat-${crypto.randomUUID()}`;
+
+    jest.useFakeTimers();
+
+    try {
+      const provider = createAcpProvider(optionsFor(chat));
+
+      // The thought chunk arrives mid-turn, so the timeout passes while the turn runs.
+      const result = await provider.streamChat(
+        { messages: [{ content: "thought", role: "user" }], system: "" },
+        {
+          onChunk: () => {},
+          onThinking: () => {
+            jest.advanceTimersByTime(10 * 60 * 1000);
+          },
+        }
+      );
+
+      expect(result.content).toBe("fake: thought");
+    } finally {
+      jest.useRealTimers();
+    }
+
+    expect(adoptAcpDraftSession(chat, optionsFor(other).sessionKey)).toBe(true);
   });
 });
