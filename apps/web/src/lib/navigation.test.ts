@@ -10,6 +10,8 @@ import {
   pluginIdFromPath,
   pluginManagementPath,
   pluginPagePath,
+  SIDEBAR_PAGE_IDS,
+  sidebarPageId,
   skillDetailBackTarget,
   visibleNavGroups,
 } from "./navigation";
@@ -119,6 +121,13 @@ describe("plugin navigation", () => {
     expect(pageIdFromPath("/customize/plugins/notes")).toBe(
       "plugin-management"
     );
+  });
+
+  test("shows Plugins as a tab of the Integrations sidebar item", () => {
+    expect(SIDEBAR_PAGE_IDS).toContain("composio");
+    expect(SIDEBAR_PAGE_IDS).not.toContain("plugin-management");
+    expect(sidebarPageId("plugin-management")).toBe("composio");
+    expect(sidebarPageId("automations")).toBe("automations");
   });
 
   test("lists enabled pages only, sorted by label then plugin id", () => {

@@ -1,4 +1,5 @@
 import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import {
   Link,
   Navigate,
@@ -12,11 +13,54 @@ import { ErrorTrackingSettingsCard } from "@/components/ErrorTrackingSettingsCar
 import { NotificationDestinationsCard } from "@/components/NotificationDestinationsCard";
 import { useAuth } from "@/context/use-auth";
 import {
+  canAccessSystemPage,
   type IntegrationSectionId,
   integrationSectionPath,
   PAGE_PATHS,
   visibleIntegrationSections,
 } from "@/lib/navigation";
+
+const INTEGRATION_TABS = [
+  { label: "Connectors", path: PAGE_PATHS.composio },
+  { label: "Plugins", path: PAGE_PATHS["plugin-management"] },
+] as const;
+
+/** Connectors and Plugins share one sidebar item; this switches between them. */
+export function IntegrationsTabs() {
+  const { activeOrg, user } = useAuth();
+  const onConnectors = useMatch(PAGE_PATHS.composio) !== null;
+
+  if (!canAccessSystemPage(user?.isPlatformAdmin === true, activeOrg?.role)) {
+    return null;
+  }
+
+  return (
+    <nav
+      aria-label="Integrations"
+      className="mx-auto mb-6 flex max-w-4xl gap-6 border-border border-b"
+    >
+      {INTEGRATION_TABS.map((tab) => {
+        const active = (tab.path === PAGE_PATHS.composio) === onConnectors;
+
+        return (
+          <Link
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "-mb-px border-b-2 py-3 text-sm",
+              active
+                ? "border-foreground font-medium text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+            key={tab.path}
+            to={tab.path}
+          >
+            {tab.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
 
 function resolveSection(value: string | null): IntegrationSectionId {
   if (
@@ -102,7 +146,12 @@ export function IntegrationsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div
+      className={cn(
+        "mx-auto space-y-6",
+        onConnectors ? "min-w-0 max-w-4xl" : "max-w-3xl"
+      )}
+    >
       {onConnectors ? null : (
         <Link
           className="block w-fit text-muted-foreground text-sm hover:text-foreground"

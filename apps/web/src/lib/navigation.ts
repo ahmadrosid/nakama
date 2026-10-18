@@ -91,7 +91,12 @@ const NAV_GROUPS: NavGroup[] = [
         SharedWifiIcon
       ),
       navItem("plugin-management", "Plugins", "Manage plugins", PackageIcon),
-      navItem("composio", "Connectors", "Connect apps", Plug01Icon),
+      navItem(
+        "composio",
+        "Integrations",
+        "Connect apps and manage plugins",
+        Plug01Icon
+      ),
     ],
     label: "Chat",
   },
@@ -167,11 +172,15 @@ const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
 export const SIDEBAR_PAGE_IDS: readonly PageId[] = [
   "chat",
   "profiles",
-  "plugin-management",
   "composio",
   "automations",
   "customize",
 ];
+
+/** Plugins is a tab of Integrations, so it lights up the Integrations item. */
+export function sidebarPageId(page: PageId): PageId {
+  return page === "plugin-management" ? "composio" : page;
+}
 
 export const STANDALONE_PAGES: Partial<Record<PageId, NavItem>> = {
   notifications: navItem(
