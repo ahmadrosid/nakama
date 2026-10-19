@@ -1,4 +1,7 @@
-import { formatAgentQuestionnaireAnswersMessage } from "@nakama/core/agent-questionnaire";
+import {
+  formatAgentQuestionnaireAnswersMessage,
+  hasActiveAgentQuestionnaire,
+} from "@nakama/core/agent-questionnaire";
 import {
   Dialog,
   DialogContent,
@@ -128,15 +131,6 @@ export function ChatPageContent(state: ChatPageState) {
         onSubmit={(text, files) => {
           void sendMessage(text, files);
         }}
-        onSubmitQuestionnaire={(answers) => {
-          void sendMessage(
-            formatAgentQuestionnaireAnswersMessage(answers),
-            [],
-            {
-              questionnaireAnswers: answers,
-            }
-          );
-        }}
         onThinkingEffortChange={handleThinkingEffortChange}
         placeholder={isEmptyState ? composerEntry.placeholder : undefined}
         primarySupportsVision={activeModelSupportsVision}
@@ -144,7 +138,6 @@ export function ChatPageContent(state: ChatPageState) {
         profileModelId={extractModelId(currentModelSelection)}
         providerConfigured={health?.providerConfigured}
         providerModelGroups={providerModelGroups}
-        questionnaire={agentQuestionnaire}
         queuedMessages={queuedMessages}
         renderModelLabel={renderModelLabel}
         sessionUsage={sessionUsage}
@@ -154,7 +147,9 @@ export function ChatPageContent(state: ChatPageState) {
         thinkingEffortDisabled={thinkingEffortDisabled}
         thinkingEffortOptions={thinkingEffortOptions}
         thinkingEffortVisible={thinkingEffortVisible}
-        todos={agentTodos}
+        todos={
+          hasActiveAgentQuestionnaire(agentQuestionnaire) ? [] : agentTodos
+        }
       />
     </>
   );
@@ -204,7 +199,17 @@ export function ChatPageContent(state: ChatPageState) {
                 void handleEditMessage(message, text)
               }
               onRetryMessage={(message) => void handleTryAgainMessage(message)}
+              onSubmitQuestionnaire={(answers) => {
+                void sendMessage(
+                  formatAgentQuestionnaireAnswersMessage(answers),
+                  [],
+                  { questionnaireAnswers: answers }
+                );
+              }}
               profileId={profileId}
+              questionnaire={
+                !busy && queuedMessages.length === 0 ? agentQuestionnaire : null
+              }
               sessionId={session?.id}
               showThinking={showThinking}
               showUsage={showUsage}

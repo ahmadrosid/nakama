@@ -12,23 +12,17 @@ import {
 } from "@/components/chat/agent-questionnaire.shared";
 import { AgentQuestionnaireNav } from "@/components/chat/agent-questionnaire-nav";
 import { AgentQuestionnaireQuestion } from "@/components/chat/agent-questionnaire-question";
-import {
-  type ComposerStackEdge,
-  composerShelfPanelClass,
-} from "@/lib/chat-stream";
 
 interface AgentQuestionnairePanelProps {
   disabled?: boolean;
   onSubmit: (answers: AgentQuestionAnswer[]) => void;
   questionnaire: AgentQuestionnaire | null;
-  stackEdge?: ComposerStackEdge;
 }
 
 export function AgentQuestionnairePanel({
   questionnaire,
   disabled = false,
   onSubmit,
-  stackEdge = "start",
 }: AgentQuestionnairePanelProps) {
   const [answers, setAnswers] = useState<Record<string, DraftAnswerState>>({});
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -248,10 +242,10 @@ export function AgentQuestionnairePanel({
   }
 
   return (
-    <div className="px-3">
-      <aside
+    <div className="w-full max-w-2xl">
+      <section
         aria-label="Agent questions"
-        className={composerShelfPanelClass(stackEdge)}
+        className="rounded-xl border border-border bg-background"
       >
         <AgentQuestionnaireNav
           answered={resolvedAnswers.map(
@@ -306,7 +300,7 @@ export function AgentQuestionnairePanel({
             </div>
           </div>
         </div>
-      </aside>
+      </section>
     </div>
   );
 }
