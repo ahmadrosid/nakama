@@ -31,6 +31,8 @@ import { cn } from "@nakama/ui/utils";
 import {
   Add01Icon,
   Alert02Icon,
+  ArrowExpand01Icon,
+  ArrowShrink02Icon,
   ArrowUp02Icon,
   Cancel01Icon,
   File01Icon,
@@ -70,9 +72,17 @@ import { ChatSkillTokenOverlay } from "@/components/chat/chat-skill-token-overla
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import { useAuth } from "@/context/use-auth";
+import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
+import {
+  useProfileQuery,
+  useSkillsQuery,
+  useToolsQuery,
+} from "@/hooks/use-app-queries";
+import { pluginAgentAccessState, useOrgPlugins } from "@/hooks/use-plugins";
 import type { ChatStatus, FileUIPart } from "@/lib/ai-ui-types";
 import {
   type ComposerAddCommandAction,
+  type ComposerOpenPlugin,
   type ComposerSuggestion,
   filterComposerMentionSuggestions,
   filterComposerSlashSuggestions,
@@ -80,6 +90,7 @@ import {
   getLeadingCommand,
   matchComposerAddCommand,
   matchComposerLearningLoopCommand,
+  matchComposerOpenCommand,
   replaceSlashRangeWithReservedCommand,
   replaceSlashRangeWithSkillInvocation,
   type SkillSlashRange,
@@ -104,11 +115,13 @@ import {
 import { formatError } from "@/lib/client";
 import { prepareChatUploadFiles } from "@/lib/compress-image";
 import { encodeModelSelection } from "@/lib/models";
+import { enabledPluginNavEntries } from "@/lib/navigation";
 import {
   isPastedTextDocument,
   LONG_PASTE_WORD_THRESHOLD,
 } from "@/lib/pasted-text";
 import { THINKING_EFFORT_OPTIONS } from "@/lib/thinking-settings";
+import { PluginView } from "@/pages/PluginPage";
 import { composerActions } from "./chat-composer.shared";
 import { ChatComposerError, ChatTips } from "./chat-tips";
 
@@ -278,7 +291,7 @@ function ChatComposerWorkStack({
 }
 
 const FULL_TEXTAREA_CLASS =
-  "max-h-36 min-h-11 px-1 py-1.5 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-10 sm:text-sm";
+  "max-h-36 min-h-9 px-1 py-1 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-8 sm:text-sm";
 
 const MINIMAL_TEXTAREA_CLASS =
   "max-h-32 min-h-10 px-1 py-1.5 text-sm leading-relaxed placeholder:text-muted-foreground";
@@ -358,7 +371,7 @@ function ChatComposerStackedPrompt({
         <PromptInputFooter
           className={cn(
             "w-full border-0 px-0 py-0",
-            "flex-nowrap items-center gap-1.5 pt-2.5",
+            "flex-nowrap items-center gap-1.5 pt-1",
             footerClassName
           )}
         >
@@ -463,7 +476,7 @@ function ChatComposerBarePrompt({
             "w-full border-0 px-0 py-0",
             isMinimal
               ? "justify-end pt-1.5"
-              : "flex-nowrap items-center gap-1.5 pt-2.5",
+              : "flex-nowrap items-center gap-1.5 pt-1",
             footerClassName
           )}
         >
@@ -508,12 +521,16 @@ function resolveChatComposerLayout(
   const todos = props.todos ?? EMPTY_TODOS;
   const questionnaire = props.questionnaire ?? null;
   const queuedMessages = props.queuedMessages ?? EMPTY_QUEUED_MESSAGES;
-  const hasQuestionnaire = hasActiveAgentQuestionnaire(questionnaire);
+  const hasQueuedMessages = queuedMessages.length > 0;
+
+  // Ask only once every turn is done: no stream in flight, nothing queued.
+  const hasQuestionnaire =
+    hasActiveAgentQuestionnaire(questionnaire) &&
+    !props.busy &&
+    !hasQueuedMessages;
 
   const showTodos =
     hasActiveAgentTodos(todos) && !hasQuestionnaire && !displayError;
-
-  const hasQueuedMessages = queuedMessages.length > 0;
 
   const queueStackEdge: ComposerStackEdge =
     hasQuestionnaire || showTodos ? "continue" : "start";
@@ -612,6 +629,63 @@ function ChatComposerMain({
   );
 }
 
+const NO_OPEN_PLUGINS: ComposerOpenPlugin[] = [];
+
+/** Enabled plugin pages whose tools or skills the agent has, for `/open`. */
+function useAgentPluginViews(profileId: string | null): ComposerOpenPlugin[] {
+  const plugins = useOrgPlugins();
+  const profile = useProfileQuery(profileId);
+  const enabled = Boolean(profileId);
+  const tools = useToolsQuery({ enabled });
+  const skills = useSkillsQuery({ enabled });
+
+  if (!(profile.data && plugins.data && tools.data && skills.data)) {
+    return NO_OPEN_PLUGINS;
+  }
+
+  const resources = { skills: skills.data, tools: tools.data };
+
+  return enabledPluginNavEntries(plugins.data).flatMap(({ label, pluginId }) =>
+    pluginAgentAccessState(profile.data, pluginId, resources).assigned > 0
+      ? [{ label, pluginId }]
+      : []
+  );
+}
+
+/** Expand control for a plugin page in the side panel, like the artifact preview. */
+function PluginPanelExpandButton({ panelId }: { panelId: string }) {
+  const panel = useOptionalChatAttachmentPanel();
+  const fullscreen = panel?.isFullscreen ?? false;
+
+  return (
+    <Button
+      aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+      onClick={() =>
+        panel?.update(panelId, {
+          fullscreen: !fullscreen,
+          resizable: fullscreen,
+        })
+      }
+      size="icon-sm"
+      title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+      type="button"
+      variant="ghost"
+    >
+      {fullscreen ? (
+        <ArrowShrink02Icon aria-hidden className="size-4" />
+      ) : (
+        <ArrowExpand01Icon aria-hidden className="size-4" />
+      )}
+    </Button>
+  );
+}
+
+/** Plugin pages `/open` lists for the active agent, and how to show one. */
+const OpenPluginContext = createContext<{
+  open: (plugin: ComposerOpenPlugin) => void;
+  plugins: ComposerOpenPlugin[];
+}>({ open: () => undefined, plugins: NO_OPEN_PLUGINS });
+
 const CommandPrefixContext = createContext<{
   prefix: string | null;
   setPrefix: (prefix: string | null) => void;
@@ -631,7 +705,7 @@ function ChatComposerCommandBanner({
   }
 
   return (
-    <PromptInputHeader className="-mx-3 -mt-3 mb-1.5 w-auto flex-nowrap items-center gap-2 rounded-t-3xl border-border border-b bg-muted/60 px-5 py-2 text-sm sm:-mx-3.5 sm:-mt-3.5">
+    <PromptInputHeader className="-mx-3 -mt-3 mb-1.5 w-auto flex-nowrap items-center gap-2 rounded-t-xl border-border border-b bg-muted/60 px-5 py-2 text-sm sm:-mx-3.5 sm:-mt-3.5">
       <span className="shrink-0 font-semibold text-foreground">{prefix}</span>
       <span className="min-w-0 flex-1 truncate text-muted-foreground">
         {command.description}
@@ -645,6 +719,43 @@ function ChatComposerCommandBanner({
         ×
       </button>
     </PromptInputHeader>
+  );
+}
+
+/** `/open` state for the composer: the agent's plugin pages, shown or hidden in the side panel. */
+function useOpenPluginContext(profileId: string | null) {
+  const panel = useOptionalChatAttachmentPanel();
+
+  const openPlugins = useAgentPluginViews(panel ? profileId : null);
+
+  return useMemo(
+    () => ({
+      open: (plugin: ComposerOpenPlugin) => {
+        const id = `plugin:${plugin.pluginId}`;
+
+        // A second /open for the same plugin closes it, like a toggle.
+        if (panel?.activeId === id) {
+          panel.hide(id);
+
+          return;
+        }
+
+        panel?.show({
+          bodyClassName: "flex flex-col overflow-hidden p-0",
+          content: (
+            <PluginView inlineHeaderActions pluginId={plugin.pluginId} />
+          ),
+          defaultWidth: 768,
+          fullscreen: false,
+          headerActions: <PluginPanelExpandButton panelId={id} />,
+          id,
+          resizable: true,
+          title: plugin.label,
+        });
+      },
+      plugins: openPlugins,
+    }),
+    [openPlugins, panel]
   );
 }
 
@@ -683,6 +794,10 @@ export function ChatComposer(props: ChatComposerProps) {
     setAddDialog(action);
   }, []);
 
+  const openPluginContext = useOpenPluginContext(
+    isFullComposer(props) ? (props.profileId ?? null) : null
+  );
+
   const canAddCapabilities =
     isFullComposer(props) &&
     Boolean(props.profileId) &&
@@ -697,6 +812,18 @@ export function ChatComposer(props: ChatComposerProps) {
         : typedText;
 
       setCommandPrefix(null);
+
+      const openCommand = matchComposerOpenCommand(
+        text,
+        openPluginContext.plugins
+      );
+
+      if (openCommand) {
+        clearDraft();
+        openPluginContext.open(openCommand);
+
+        return;
+      }
 
       if (matchComposerLearningLoopCommand(text)) {
         clearDraft();
@@ -752,41 +879,43 @@ export function ChatComposer(props: ChatComposerProps) {
 
   return (
     <CommandPrefixContext.Provider value={commandContext}>
-      <div className={cn("w-full shrink-0", props.className)}>
-        {layout.showOfflineHint && isFullComposer(props) ? (
-          <ChatComposerOfflineHint
-            onConnectProvider={props.onConnectProvider}
+      <OpenPluginContext.Provider value={openPluginContext}>
+        <div className={cn("w-full shrink-0", props.className)}>
+          {layout.showOfflineHint && isFullComposer(props) ? (
+            <ChatComposerOfflineHint
+              onConnectProvider={props.onConnectProvider}
+            />
+          ) : null}
+          <ChatComposerMain
+            displayError={displayError}
+            layout={layout}
+            onAddCommand={openAddCommand}
+            props={composerProps}
+            setAttachmentError={setAttachmentError}
           />
-        ) : null}
-        <ChatComposerMain
-          displayError={displayError}
-          layout={layout}
-          onAddCommand={openAddCommand}
-          props={composerProps}
-          setAttachmentError={setAttachmentError}
-        />
-        {addProfileId ? (
-          <ChatAddCapabilitiesDialogs
-            mcpOpen={addDialog === "add-mcp"}
-            onMcpOpenChange={(open) => {
-              setAddDialog(open ? "add-mcp" : null);
-            }}
-            onPluginOpenChange={(open) =>
-              setAddDialog(open ? "add-plugin" : null)
-            }
-            onSkillOpenChange={(open) => {
-              setAddDialog(open ? "add-skill" : null);
-            }}
-            onToolOpenChange={(open) => {
-              setAddDialog(open ? "add-tool" : null);
-            }}
-            pluginOpen={addDialog === "add-plugin"}
-            profileId={addProfileId}
-            skillOpen={addDialog === "add-skill"}
-            toolOpen={addDialog === "add-tool"}
-          />
-        ) : null}
-      </div>
+          {addProfileId ? (
+            <ChatAddCapabilitiesDialogs
+              mcpOpen={addDialog === "add-mcp"}
+              onMcpOpenChange={(open) => {
+                setAddDialog(open ? "add-mcp" : null);
+              }}
+              onPluginOpenChange={(open) =>
+                setAddDialog(open ? "add-plugin" : null)
+              }
+              onSkillOpenChange={(open) => {
+                setAddDialog(open ? "add-skill" : null);
+              }}
+              onToolOpenChange={(open) => {
+                setAddDialog(open ? "add-tool" : null);
+              }}
+              pluginOpen={addDialog === "add-plugin"}
+              profileId={addProfileId}
+              skillOpen={addDialog === "add-skill"}
+              toolOpen={addDialog === "add-tool"}
+            />
+          ) : null}
+        </div>
+      </OpenPluginContext.Provider>
     </CommandPrefixContext.Provider>
   );
 }
@@ -810,6 +939,7 @@ function ChatComposerTextarea({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [slashRange, setSlashRange] = useState<SkillSlashRange | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const openPlugin = useContext(OpenPluginContext);
 
   const mentionOpen =
     slashRange !== null && controller.textInput.value[slashRange.start] === "@";
@@ -823,8 +953,15 @@ function ChatComposerTextarea({
       ? filterComposerMentionSuggestions(slashRange.query)
       : filterComposerSlashSuggestions(availableSkills, slashRange.query, {
           enableAddCommands: onAddCommand != null,
+          openPlugins: openPlugin.plugins,
         });
-  }, [availableSkills, mentionOpen, onAddCommand, slashRange]);
+  }, [
+    availableSkills,
+    mentionOpen,
+    onAddCommand,
+    openPlugin.plugins,
+    slashRange,
+  ]);
 
   const pickerOpen = Boolean(slashRange && !disabled && suggestions.length > 0);
 
@@ -856,6 +993,17 @@ function ChatComposerTextarea({
         );
 
       if (!activeRange) {
+        return;
+      }
+
+      if (suggestion.kind === "plugin") {
+        controller.textInput.setInput(
+          `${value.slice(0, activeRange.start)}${value.slice(activeRange.end)}`
+        );
+        setSlashRange(null);
+        setActiveIndex(0);
+        openPlugin.open(suggestion.plugin);
+
         return;
       }
 
@@ -911,7 +1059,7 @@ function ChatComposerTextarea({
         textareaRef.current?.focus();
       });
     },
-    [controller.textInput, onAddCommand, slashRange]
+    [controller.textInput, onAddCommand, openPlugin, slashRange]
   );
 
   const { prefix, setPrefix } = useContext(CommandPrefixContext);
@@ -1164,7 +1312,7 @@ function ChatModelPicker({
       >
         <PopoverTrigger
           aria-label="Select model and effort"
-          className="flex h-8 max-w-full items-center overflow-hidden rounded-full bg-muted px-3 font-medium text-foreground text-sm transition-[background-color,opacity] hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 aria-expanded:bg-accent"
+          className="flex h-7 max-w-full items-center overflow-hidden rounded-full bg-muted px-2.5 font-medium text-foreground text-xs transition-[background-color,opacity] hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 aria-expanded:bg-accent"
           disabled={disabled || !(hasModels || effort)}
           title={triggerLabel}
           type="button"
@@ -1303,10 +1451,10 @@ function ChatComposerFullFooter({
   );
 }
 
-/** Visible 36px face; ≥40px hit via pseudo. Keep transform in transition for press scale. */
+/** Visible 32px face; ≥40px hit via pseudo. Keep transform in transition for press scale. */
 const composerSubmitButtonClassName = cn(
   composerHitTargetClass,
-  "size-9 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-[color,background-color,transform,opacity] hover:bg-primary/90 active:scale-[0.96] disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
+  "size-8 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-[color,background-color,transform,opacity] hover:bg-primary/90 active:scale-[0.96] disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
 );
 
 const composerAttachmentRemoveClassName = cn(
@@ -1501,14 +1649,14 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
                   aria-label="Add attachment"
                   className={cn(
                     composerIconButtonClass,
-                    "size-9 bg-transparent text-foreground hover:bg-muted"
+                    "size-8 bg-transparent text-foreground hover:bg-muted"
                   )}
                   disabled={disabled}
                   size="icon-sm"
                   type="button"
                   variant="ghost"
                 >
-                  <Add01Icon className="size-5" />
+                  <Add01Icon className="size-4" />
                 </Button>
               }
             />

@@ -78,6 +78,34 @@ const pluginJsonSchema = z.json();
 
 type PluginJsonValue = z.infer<typeof pluginJsonSchema>;
 
+const pluginRunnerOutputSchema = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), result: pluginJsonSchema }),
+  z.object({ error: z.string(), ok: z.literal(false) }),
+]);
+
+const MAX_ACTION_ERROR_CHARS = 500;
+
+// Plugin authors write these messages for people, so they can leak a host
+// path from a template string. Redact absolute paths and cap the length.
+const ABSOLUTE_PATH_PATTERN =
+  /(?<=^|[\s"'(=])(?:file:\/\/)?(?:[A-Za-z]:)?[\\/](?:[^\s\\/:"'`]+[\\/])+[^\s\\/:"'`]*/g;
+
+function safeActionErrorMessage(message: string): string {
+  const cleaned = message
+    .replace(ABSOLUTE_PATH_PATTERN, "[path]")
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned) {
+    return "Plugin action failed.";
+  }
+
+  return cleaned.length > MAX_ACTION_ERROR_CHARS
+    ? `${cleaned.slice(0, MAX_ACTION_ERROR_CHARS - 1)}…`
+    : cleaned;
+}
+
 export class PluginHostError extends Error {
   constructor(
     readonly code: string,
@@ -136,6 +164,7 @@ const OFFICIAL_PLUGINS = new Map<
 >([
   ["workflows", { requiresHost: true, setupAction: "import_legacy" }],
   ["supermemory", { requiresHost: true }],
+  ["data-view", { requiresHost: true }],
 ]);
 
 const lifecycleLocks = new Map<string, Promise<unknown>>();
@@ -456,7 +485,7 @@ export class PluginService {
     };
   }
 
-  /** Super Bot's handoff: validates its own draft without approving it. */
+  /** Super Nakama's handoff: validates its own draft without approving it. */
   async describeLocalPlugin(draft: LocalPluginDraftRequest) {
     const inspected = await this.inspectLocalPlugin(draft);
 
@@ -645,7 +674,7 @@ export class PluginService {
 
     const { id, minNakamaVersion } = validated.manifest;
 
-    // HTTP maps only the code; the reason lets Super Bot fix its own draft.
+    // HTTP maps only the code; the reason lets Super Nakama fix its own draft.
     const failures: Array<[boolean, string]> = [
       [
         packageJson.version !== validated.manifest.version,
@@ -1096,7 +1125,9 @@ export class PluginService {
     orgId: string,
     pluginId: string,
     actionKey: string
-  ): Promise<PluginManifest["actions"][number] | null> {
+  ): Promise<
+    (PluginManifest["actions"][number] & { pluginDescription: string }) | null
+  > {
     const install = await this.db.getOrgPlugin(orgId, pluginId);
 
     if (
@@ -1118,7 +1149,9 @@ export class PluginService {
       (item) => item.key === actionKey && item.exposeAsTool
     );
 
-    return action ?? null;
+    return action && release
+      ? { ...action, pluginDescription: release.manifest.description }
+      : null;
   }
 
   async previewPluginContributionChanges(
@@ -2220,7 +2253,16 @@ export class PluginService {
       workspaceRoot: input.context.workspaceRoot,
     });
 
-    return pluginJsonSchema.parse(result);
+    const output = pluginRunnerOutputSchema.parse(result);
+
+    if (!output.ok) {
+      throw new PluginHostError(
+        "action_failed",
+        safeActionErrorMessage(output.error)
+      );
+    }
+
+    return output.result;
   }
 
   private withOrgPluginMutation<T>(

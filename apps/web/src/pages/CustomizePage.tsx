@@ -13,6 +13,7 @@ import { useOrgPlugins } from "@/hooks/use-plugins";
 import { client, formatError } from "@/lib/client";
 import {
   enabledPluginNavEntries,
+  integrationSectionPath,
   navHrefForPage,
   pluginIcon,
   profilePath,
@@ -57,7 +58,14 @@ export function CustomizePage() {
 
   const sections = [
     {
-      pages: ["organization", "usage", "workers", "google-meet", "settings"],
+      pages: [
+        "organization",
+        "files",
+        "usage",
+        "workers",
+        "google-meet",
+        "settings",
+      ],
       title: "Workspace",
     },
     {
@@ -86,7 +94,7 @@ export function CustomizePage() {
       user?.isPlatformAdmin === true,
       activeOrg?.role
     ).map((item) => ({
-      href: `/customize/connections/${item.id}`,
+      href: integrationSectionPath(item.id),
       icon: item.icon,
       label: item.label,
     })),

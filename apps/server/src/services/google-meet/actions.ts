@@ -1,34 +1,52 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { UserConfig } from "@nakama/core";
+import type { MeetImportProgress } from "@nakama/core/google-meet";
 import { z } from "zod";
+import type { ComposioService } from "../composio-service";
+import { importMeetRecording } from "../meet-recording-import";
 import { type Meeting, MeetingStore } from "./store";
-import { transcriptionConfig } from "./transcription";
 
-export function privateJson(
-  path: string,
-  data: { apiKey: string } | { enabled: boolean }
-) {
+export const OPENAI_PROVIDER_REQUIRED_MESSAGE =
+  "Add an OpenAI provider in AI Providers first.";
+
+// Meet calls OpenAI directly, so it takes the key from the AI provider settings:
+// the default provider when it is OpenAI, otherwise the first OpenAI provider.
+export function openaiProviderKey(config: UserConfig | null) {
+  const providers = (config?.providers ?? []).filter(
+    (provider) => provider.type === "openai" && provider.apiKey.trim()
+  );
+
+  const provider =
+    providers.find(({ id }) => id === config?.defaultProviderId) ??
+    providers[0];
+
+  return provider?.apiKey.trim() || null;
+}
+
+function privateJson(path: string, data: { enabled: boolean }) {
   const temporary = `${path}.${crypto.randomUUID()}.tmp`;
   writeFileSync(temporary, JSON.stringify(data), { mode: 0o600 });
   renameSync(temporary, path);
 }
 
-export function readSettings(directory: string) {
-  return transcriptionConfig(
-    JSON.parse(readFileSync(join(directory, "settings.json"), "utf8"))
-  );
-}
-
 export const meetingActionSchemas = {
   configure: z
     .object({
-      apiKey: z.string().max(4096).optional(),
       enabled: z.boolean().optional(),
     })
     .strict(),
   delete: z.object({ meetingId: z.string() }).strict(),
+  "import-progress": z.object({}).strict(),
+  "import-recording": z
+    .object({
+      fileId: z.string().regex(/^[A-Za-z0-9_-]{10,128}$/),
+      messageId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
+    })
+    .strict(),
   leave: z.object({ meetingId: z.string() }).strict(),
   meetings: z.object({}).strict(),
+  recordings: z.object({}).strict(),
   "start-capture": z
     .object({
       durationMinutes: z.number().int().min(1).max(120).optional(),
@@ -54,8 +72,17 @@ export interface MeetExecutionContext {
   actionKey: string;
   actor: { id: string; role: "admin" | "member" };
   captureUrl?(): Promise<string>;
+  composio?: Pick<
+    ComposioService,
+    "listMeetRecordings" | "downloadMeetRecording"
+  >;
   createCapture?(meeting: Meeting): { token: string; url: string };
   dataDir: string;
+  importProgress?: {
+    get(): MeetImportProgress | null;
+    set(progress: MeetImportProgress | null): void;
+  };
+  openaiKey?(): string | null;
   orgId: string;
   profileId?: string;
   signal?: AbortSignal;
@@ -67,7 +94,6 @@ export interface MeetExecutionContext {
 
 export interface MeetActionInput {
   after?: number;
-  apiKey?: string;
   content?: string;
   durationMinutes?: number;
   enabled?: boolean;
@@ -92,8 +118,11 @@ export async function run(
     .enum([
       "configure",
       "delete",
+      "import-progress",
+      "import-recording",
       "leave",
       "meetings",
+      "recordings",
       "start-capture",
       "status",
       "transcript",
@@ -114,24 +143,21 @@ export async function run(
 
   const store = new MeetingStore(context.dataDir, context.orgId);
 
+  // An agent sees its profile's meetings plus its member's own page meetings,
+  // which have no profile.
   const canAccess = (meeting: Meeting) =>
     (context.actor.role === "admin" || meeting.actorId === context.actor.id) &&
-    (!context.profileId || meeting.profileId === context.profileId);
+    (!context.profileId ||
+      meeting.profileId === context.profileId ||
+      (meeting.profileId === null && meeting.actorId === context.actor.id));
 
   try {
     const action = context.actionKey ?? "";
-    const settingsPath = join(context.dataDir, "settings.json");
+    const openaiKey = context.openaiKey?.() ?? null;
 
     if (action === "configure") {
       if (context.actor.role !== "admin") {
         throw new Error("Admin access required");
-      }
-
-      if (input.apiKey !== undefined) {
-        privateJson(
-          settingsPath,
-          transcriptionConfig({ apiKey: input.apiKey })
-        );
       }
 
       if (input.enabled !== undefined) {
@@ -141,7 +167,7 @@ export async function run(
       }
 
       return {
-        configured: existsSync(settingsPath),
+        configured: Boolean(openaiKey),
         enabled: meetEnabled(context.dataDir),
       };
     }
@@ -158,19 +184,22 @@ export async function run(
       return {
         canConfigure: context.actor.role === "admin",
         captureProtocol: 2,
-        configured: existsSync(settingsPath),
+        configured: Boolean(openaiKey),
         enabled,
         meetings: enabled
           ? store.list(
               context.actor.role === "admin" ? null : context.actor.id,
-              context.profileId ?? null
+              context.profileId ?? null,
+              context.actor.id
             )
           : [],
       };
     }
 
     if (action === "start-capture") {
-      readSettings(context.dataDir);
+      if (!openaiKey) {
+        throw new Error(OPENAI_PROVIDER_REQUIRED_MESSAGE);
+      }
 
       if (!(context.captureUrl && context.createCapture)) {
         throw new Error("Capture service unavailable");
@@ -260,6 +289,63 @@ export async function run(
         context.actor.id,
         context.profileId
       );
+    }
+
+    if (action === "import-progress") {
+      return { progress: context.importProgress?.get() ?? null };
+    }
+
+    if (action === "recordings" || action === "import-recording") {
+      if (!context.composio) {
+        throw new Error("Recording import is unavailable");
+      }
+
+      if (action === "recordings") {
+        return context.composio.listMeetRecordings(
+          context.orgId,
+          context.actor.id
+        );
+      }
+
+      if (!openaiKey) {
+        throw new Error(OPENAI_PROVIDER_REQUIRED_MESSAGE);
+      }
+
+      const progress = context.importProgress;
+
+      try {
+        const result = await importMeetRecording(
+          context.composio,
+          {
+            apiKey: openaiKey,
+            // SAFETY: The surrounding code checked this value before the assertion.
+            fileId: input.fileId as string,
+            // SAFETY: The surrounding code checked this value before the assertion.
+            messageId: input.messageId as string,
+            orgId: context.orgId,
+            userId: context.actor.id,
+          },
+          context.signal ?? AbortSignal.timeout(20 * 60_000),
+          (step) => progress?.set(step)
+        );
+
+        context.signal?.throwIfAborted();
+
+        if (!result.text.trim()) {
+          throw new Error("Recording transcription returned no speech");
+        }
+
+        progress?.set({ step: "save" });
+
+        return store.importFile(
+          result.filename,
+          result.text,
+          context.actor.id,
+          context.profileId
+        );
+      } finally {
+        progress?.set(null);
+      }
     }
 
     const meeting = store.get(String(input.meetingId ?? ""));

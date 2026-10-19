@@ -30,7 +30,7 @@ import type {
   ConfigureProviderRequest,
   ConfigureProviderResponse,
   CreateProfileRequest,
-  CreateProfileWithSuperBotRequest,
+  CreateProfileWithSuperNakamaRequest,
   CreateProviderRequest,
   CreateProviderResponse,
   CreateSkillRequest,
@@ -120,6 +120,7 @@ import type {
   UserContextStatusResponse,
   VisionSettings,
   VisionSettingsResponse,
+  WebSearchProvider,
   WebSearchSettingsResponse,
   WhatsAppSettingsResponse,
   XaiOAuthCredentials,
@@ -152,6 +153,7 @@ import {
   initSoulDirectory,
   isEmailConfigComplete,
   isProviderConfigured,
+  isWebSearchProvider,
   isWritableSoulFileKey,
   listArtifacts,
   listTelegramAccessRequests,
@@ -209,6 +211,7 @@ import {
   toMailboxConfig,
   transcribeAudio,
   USER_CONTEXT_TEMPLATE,
+  WEB_SEARCH_PROVIDER_ENV_NAMES,
   WRITABLE_SOUL_FILES,
   writeArtifactFile,
   writeSoulFile,
@@ -222,7 +225,7 @@ import {
   NETRA_AGENT_MODEL_ID,
 } from "@nakama/core/discovery-providers";
 import { readTextIfExists } from "@nakama/core/fs";
-import { canAccessSuperBotProfile } from "@nakama/core/profiles";
+import { canAccessSuperNakamaProfile } from "@nakama/core/profiles";
 import {
   type DatabaseAdapter,
   mergeWorkspaceSettings,
@@ -231,7 +234,7 @@ import {
   type StoredSessionRecord,
   type StoredSessionSummaryRecord,
   type StoredToolRecord,
-  SUPER_BOT_TOOL_AUTHORING_RULES,
+  SUPER_NAKAMA_TOOL_AUTHORING_RULES,
 } from "@nakama/db";
 import { z } from "zod";
 import {
@@ -249,6 +252,7 @@ import {
 } from "../providers";
 import {
   acpMcpServerFor,
+  clearAcpToolAccess,
   setAcpToolAccess,
 } from "../providers/acp/acp-mcp-tools";
 import {
@@ -257,6 +261,7 @@ import {
   createAcpProvider,
   getAcpConfigOptions,
   setAcpConfigOption,
+  stopAcpSession,
 } from "../providers/acp/acp-provider";
 import { toAcpSessionSettings } from "../providers/acp/acp-session-settings";
 import {
@@ -275,6 +280,7 @@ import {
   createOrgMemoryTools,
   PROPOSE_ORG_MEMORY_TOOL_NAME,
 } from "../tools/org-memory-tools";
+import { SAVE_ARTIFACT_TOOL_NAME } from "../tools/save-artifact-tool";
 import {
   createSendDiscordArtifactTools,
   sendWhatsAppArtifactTool,
@@ -294,7 +300,7 @@ import {
   type SubAgentRunResult,
 } from "../tools/sub-agent-shared";
 import { SUB_AGENT_TOOL_NAME } from "../tools/sub-agent-tool";
-import { createSuperBotTools } from "../tools/super-bot-tools";
+import { createSuperNakamaTools } from "../tools/super-nakama-tools";
 import { createTodoTools } from "../tools/todo-tools";
 import { getAgentBrowserStatus } from "./agent-browser-service";
 import { AgentQuestionnaireState } from "./agent-questionnaire-state";
@@ -386,7 +392,7 @@ import { SkillPostTurnReviewService } from "./skill-post-turn-review-service";
 import type { SkillProposalService } from "./skill-proposal-service";
 import type { SkillSuggestionService } from "./skill-suggestion-service";
 import type { SkillsService } from "./skills-service";
-import { SuperBotSessionState } from "./super-bot-session-state";
+import { SuperNakamaSessionState } from "./super-nakama-session-state";
 import { telegramManagedBotPairing } from "./telegram-managed-bot-pairing";
 import {
   resolveProfileStoredTools,
@@ -412,7 +418,7 @@ interface CognitoSessionOptions {
 export interface CreateSessionOptions {
   codingWorkspaceRoot?: string;
   cognito?: boolean;
-  excludeSuperBot?: boolean;
+  excludeSuperNakama?: boolean;
   isPlatformAdmin?: boolean;
   model?: string | null;
   orgRole?: OrgRole | null;
@@ -420,17 +426,48 @@ export interface CreateSessionOptions {
 
 type ChatProfileAccess = Pick<
   CreateSessionOptions,
-  "excludeSuperBot" | "isPlatformAdmin" | "orgRole"
+  "excludeSuperNakama" | "isPlatformAdmin" | "orgRole"
 > & { user?: { id: string } };
+
+/**
+ * Messaging-app chats are started by the channel worker's service user, not by
+ * a person in the org, so they stay visible to everyone who can use the agent.
+ */
+const SHARED_HISTORY_CHANNELS: readonly AgentChannel[] = [
+  "discord",
+  "slack",
+  "telegram",
+  "whatsapp",
+];
+
+/**
+ * Any other chat belongs to the user who started it. Platform admins may open
+ * any chat for support; everyone else gets the same 404 as a missing session,
+ * so holding another user's session id reveals nothing.
+ */
+function assertSessionOwner(
+  record: StoredSessionRecord,
+  access: ChatProfileAccess
+): void {
+  if (
+    access.isPlatformAdmin ||
+    SHARED_HISTORY_CHANNELS.some((channel) => channel === record.channel) ||
+    (access.user && record.userId === access.user.id)
+  ) {
+    return;
+  }
+
+  throw new NakamaApiError("Session not found", 404);
+}
 
 export class AgentService {
   private userConfig: UserConfig | null;
   private readonly db: DatabaseAdapter;
   private readonly profileService: ProfileService;
-  private readonly superBotSessionState = new SuperBotSessionState();
+  private readonly superNakamaSessionState = new SuperNakamaSessionState();
   private readonly agentTodoState: AgentTodoState;
   private readonly agentQuestionnaireState: AgentQuestionnaireState;
-  private readonly superBotTools: ToolDefinition[];
+  private readonly superNakamaTools: ToolDefinition[];
   private readonly orgMemoryTools: ToolDefinition[];
   private automationTools: ToolDefinition[] = [];
   private automationRunHistoryTools: ToolDefinition[] = [];
@@ -496,9 +533,9 @@ export class AgentService {
       this.agentQuestionnaireState
     );
     this.todoTools = createTodoTools(this.agentTodoState);
-    this.superBotTools = createSuperBotTools(
+    this.superNakamaTools = createSuperNakamaTools(
       this.profileService,
-      this.superBotSessionState,
+      this.superNakamaSessionState,
       async (profileModel, context) => {
         const session =
           context.sessionId && context.orgId
@@ -534,12 +571,6 @@ export class AgentService {
       isProviderConfigured(userConfig) && provider !== null;
   }
 
-  /**
-   * Binds a savings recorder to one org. Fire and forget on purpose: a counter
-   * for a dashboard must never delay a tool result or fail a turn, so the write
-   * is not awaited and a rejection is swallowed.
-   */
-  /** Same fire-and-forget shape as the savings recorder, for provider tokens. */
   private llmTurnQuotaCheckerFor(orgId: string | undefined) {
     if (!orgId?.trim()) {
       return;
@@ -554,6 +585,10 @@ export class AgentService {
       );
   }
 
+  /**
+   * Fire and forget on purpose: a usage counter must never fail a turn, so the
+   * write is not awaited and a rejection is swallowed.
+   */
   private turnUsageRecorderFor(orgId: string | undefined) {
     if (!orgId?.trim()) {
       return;
@@ -564,34 +599,10 @@ export class AgentService {
     return (turn: {
       estimated: boolean;
       inputTokens: number;
-      optimized: boolean;
       outputTokens: number;
     }): void => {
       void this.db
         .incrementLlmTurnUsage(scopedOrgId, turn)
-        .catch(() => undefined);
-    };
-  }
-
-  private savingsRecorderFor(orgId: string | undefined) {
-    if (!orgId?.trim()) {
-      return;
-    }
-
-    const scopedOrgId = orgId.trim();
-
-    return (saving: {
-      bytesIn: number;
-      bytesOut: number;
-      optimizer: string;
-      tool: string;
-    }): void => {
-      void this.db
-        .incrementToolOutputSavings(
-          scopedOrgId,
-          saving,
-          new Date().toISOString()
-        )
         .catch(() => undefined);
     };
   }
@@ -1703,14 +1714,11 @@ export class AgentService {
   async getWebSearchSettings(): Promise<WebSearchSettingsResponse> {
     const settings = await loadWebSearchSettingsPublic();
 
-    const envName =
-      settings.provider === "firecrawl" ? "FIRECRAWL_API_KEY" : "EXA_API_KEY";
-
     const status = settings.provider
       ? await this.managedSecrets?.status(
           "global",
           `web-search:${settings.provider}`,
-          [envName]
+          [WEB_SEARCH_PROVIDER_ENV_NAMES[settings.provider]]
         )
       : null;
 
@@ -1747,17 +1755,14 @@ export class AgentService {
   }
 
   async setWebSearchSecret(
-    provider: "exa" | "firecrawl",
+    provider: WebSearchProvider,
     apiKey: string
   ): Promise<WebSearchSettingsResponse> {
-    if (
-      !this.managedSecrets ||
-      (provider !== "exa" && provider !== "firecrawl")
-    ) {
+    if (!(this.managedSecrets && isWebSearchProvider(provider))) {
       throw new NakamaApiError("Invalid web search provider.", 400);
     }
 
-    const envName = provider === "exa" ? "EXA_API_KEY" : "FIRECRAWL_API_KEY";
+    const envName = WEB_SEARCH_PROVIDER_ENV_NAMES[provider];
 
     if (
       (
@@ -1801,7 +1806,9 @@ export class AgentService {
         ? ["NAKAMA_EMAIL_PASSWORD"]
         : kind === "composio"
           ? ["COMPOSIO_API_KEY"]
-          : [provider === "firecrawl" ? "FIRECRAWL_API_KEY" : "EXA_API_KEY"];
+          : provider
+            ? [WEB_SEARCH_PROVIDER_ENV_NAMES[provider]]
+            : [];
 
     if (action === "clear") {
       await this.managedSecrets.delete("global", name);
@@ -1957,7 +1964,6 @@ export class AgentService {
 
     const userTimezone = await this.getUserTimezone();
     const userContext = await this.loadUserContextForUser(orgId, undefined);
-    const harness = this.createHarnessForProfile(profile);
 
     const toolContext = buildToolExecutionContext({
       assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
@@ -1967,9 +1973,18 @@ export class AgentService {
       orgId,
       orgRole: "member",
       profileId,
-      recordToolOutputSavings: this.savingsRecorderFor(orgId),
       recordTurnUsage: this.turnUsageRecorderFor(orgId),
     });
+
+    const acpKey = oneShotAcpKey(profile);
+
+    const harness = this.createHarnessForProfile(
+      profile,
+      profile.model,
+      undefined,
+      acpKey,
+      { context: toolContext, tools }
+    );
 
     const savedSteps = automationRunId
       ? await this.db.listAutomationRunSteps(automationRunId)
@@ -2039,10 +2054,14 @@ export class AgentService {
       userTimezone,
     });
 
-    return session.sendStream(
-      replay.length ? RESUME_AUTOMATION_PROMPT : prompt,
-      stepHandlers ?? { onChunk() {} }
-    );
+    try {
+      return await session.sendStream(
+        replay.length ? RESUME_AUTOMATION_PROMPT : prompt,
+        stepHandlers ?? { onChunk() {} }
+      );
+    } finally {
+      endOneShotAcp(acpKey);
+    }
   }
 
   /**
@@ -2173,7 +2192,6 @@ export class AgentService {
       orgId,
       orgRole: "member",
       profileId: context.profileId,
-      recordToolOutputSavings: this.savingsRecorderFor(orgId),
       recordTurnUsage: this.turnUsageRecorderFor(orgId),
       workflowId: context.workflowId,
       workflowRunId: context.runId,
@@ -2202,7 +2220,15 @@ export class AgentService {
 
     const userTimezone = await this.getUserTimezone();
     const userContext = await this.loadUserContextForUser(orgId, undefined);
-    const harness = this.createHarnessForProfile(profile);
+    const acpKey = oneShotAcpKey(profile);
+
+    const harness = this.createHarnessForProfile(
+      profile,
+      profile.model,
+      undefined,
+      acpKey,
+      { context: {}, tools: [] }
+    );
 
     const userMessage = [
       "Workflow receipts (only source of truth — do not invent values):",
@@ -2223,7 +2249,6 @@ export class AgentService {
         orgId,
         orgRole: "member",
         profileId,
-        recordToolOutputSavings: this.savingsRecorderFor(orgId),
         recordTurnUsage: this.turnUsageRecorderFor(orgId),
       }),
       tools: [],
@@ -2231,7 +2256,15 @@ export class AgentService {
       userTimezone,
     });
 
-    return session.sendStream(userMessage, { onChunk() {} }, { signal });
+    try {
+      return await session.sendStream(
+        userMessage,
+        { onChunk() {} },
+        { signal }
+      );
+    } finally {
+      endOneShotAcp(acpKey);
+    }
   }
 
   async runSubAgentPrompt(input: SubAgentRunInput): Promise<SubAgentRunResult> {
@@ -2284,10 +2317,27 @@ export class AgentService {
       input.userId
     );
 
+    const toolContext = buildToolExecutionContext({
+      agentDepth: input.agentDepth,
+      ...this.knowledgeToolContext(input.orgId, input.profileId),
+      assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(input.orgId),
+      clientOrigin: input.clientOrigin,
+      orgId: input.orgId,
+      orgRole: input.orgRole,
+      profileId: input.profileId,
+      recordTurnUsage: this.turnUsageRecorderFor(input.orgId),
+      sessionId: input.sessionId,
+      userId: input.userId,
+    });
+
+    const acpKey = oneShotAcpKey(profile);
+
     const harness = this.createHarnessForProfile(
       profile,
       profile.model,
-      input.userId
+      input.userId,
+      acpKey,
+      { context: toolContext, tools }
     );
 
     const prompt = buildSubAgentPrompt(task, input.context);
@@ -2297,19 +2347,7 @@ export class AgentService {
       enableToolLoop: true,
       soul: soulActive,
       systemPrompt: childSystemPrompt,
-      toolContext: buildToolExecutionContext({
-        agentDepth: input.agentDepth,
-        ...this.knowledgeToolContext(input.orgId, input.profileId),
-        assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(input.orgId),
-        clientOrigin: input.clientOrigin,
-        orgId: input.orgId,
-        orgRole: input.orgRole,
-        profileId: input.profileId,
-        recordToolOutputSavings: this.savingsRecorderFor(input.orgId),
-        recordTurnUsage: this.turnUsageRecorderFor(input.orgId),
-        sessionId: input.sessionId,
-        userId: input.userId,
-      }),
+      toolContext,
       tools,
       userContext,
       userTimezone,
@@ -2355,7 +2393,11 @@ export class AgentService {
       setTimeout(() => resolve({ kind: "timeout" }), timeoutMs);
     });
 
-    const outcome = await Promise.race([sendPromise, timeoutPromise]);
+    // A timed-out sub-agent's ACP process is stopped here too, not left running.
+    const outcome = await Promise.race([sendPromise, timeoutPromise]).finally(
+      () => endOneShotAcp(acpKey)
+    );
+
     const durationMs = Date.now() - startedAt;
 
     if (outcome.kind === "timeout") {
@@ -2504,6 +2546,7 @@ export class AgentService {
         await this.requireProfile(orgId, record.profileId),
         access
       );
+      assertSessionOwner(record, access);
     }
   }
 
@@ -2523,6 +2566,16 @@ export class AgentService {
       access
     );
 
+    const sessionRecord = record.sessionId
+      ? await this.getSessionRecordForOrg(record.sessionId, orgId)
+      : this.ephemeralSessions.findByAttachmentId(attachmentId)?.record;
+
+    if (!sessionRecord) {
+      return null;
+    }
+
+    assertSessionOwner(sessionRecord, access);
+
     return createAttachmentLoader(this.db, {
       orgId,
       profileId: record.profileId,
@@ -2535,10 +2588,10 @@ export class AgentService {
   ): void {
     if (
       profile.isSuper &&
-      (access.excludeSuperBot || !canAccessSuperBotProfile(access))
+      (access.excludeSuperNakama || !canAccessSuperNakamaProfile(access))
     ) {
       throw new NakamaApiError(
-        "Super Bot is only available to org admins.",
+        "Super Nakama is only available to org admins.",
         403
       );
     }
@@ -2561,7 +2614,7 @@ export class AgentService {
     entry: EphemeralSession
   ): Promise<void> {
     entry.session.clear();
-    this.superBotSessionState.clearSession(entry.record.id);
+    this.superNakamaSessionState.clearSession(entry.record.id);
     this.agentTodoState.clearSession(entry.record.id);
     this.agentQuestionnaireState.clearSession(entry.record.id);
 
@@ -2867,6 +2920,10 @@ export class AgentService {
         // One row past the page tells whether another page follows.
         limit: page ? page.limit + 1 : undefined,
         query,
+        sharedChannels: SHARED_HISTORY_CHANNELS,
+        // Everyone, admins included, lists only their own chats. A caller
+        // with no user has none.
+        userId: access.user?.id ?? "",
       }
     );
 
@@ -2945,7 +3002,7 @@ export class AgentService {
     discardInFlightSessionWrites(sessionId);
     this.sessions.get(sessionId)?.session.clear();
     this.sessions.delete(sessionId);
-    this.superBotSessionState.clearSession(sessionId);
+    this.superNakamaSessionState.clearSession(sessionId);
     this.agentTodoState.clearSession(sessionId);
     this.agentQuestionnaireState.clearSession(sessionId);
     await deleteSessionHistoryArchive(orgId, sessionId);
@@ -4333,16 +4390,16 @@ export class AgentService {
     return this.profileService.createProfile(orgId, request, owner);
   }
 
-  async createProfileWithSuperBot(
+  async createProfileWithSuperNakama(
     orgId: string,
-    request: CreateProfileWithSuperBotRequest
+    request: CreateProfileWithSuperNakamaRequest
   ): Promise<ProfileResponse> {
-    const superBot = (await this.db.listProfilesForOrg(orgId)).find(
+    const superNakama = (await this.db.listProfilesForOrg(orgId)).find(
       (profile) => profile.isSuper
     );
 
-    if (!superBot) {
-      throw new Error("Super Bot is not available in this organization.");
+    if (!superNakama) {
+      throw new Error("Super Nakama is not available in this organization.");
     }
 
     const nameLine = request.name
@@ -4353,7 +4410,7 @@ export class AgentService {
 
     await this.runAutomationPrompt(
       orgId,
-      superBot.id,
+      superNakama.id,
       [
         "Create one new agent for the request below. Do not ask for confirmation. Call create_profile exactly once with name and soulFiles (SOUL.md and INSTRUCTIONS.md), then stop.",
         nameLine,
@@ -4382,7 +4439,7 @@ export class AgentService {
     );
 
     if (!createdProfileId) {
-      throw new Error("Super Bot did not create an agent.");
+      throw new Error("Super Nakama did not create an agent.");
     }
 
     return this.profileService.getProfile(orgId, createdProfileId);
@@ -4468,7 +4525,7 @@ export class AgentService {
     const tool = await this.db.getTool(toolId);
     await this.profileService.deleteTool(toolId);
 
-    if (tool) {
+    if (tool?.orgId) {
       await this.managedSecrets?.delete(tool.orgId, `tool:${toolId}`);
     }
   }
@@ -4674,6 +4731,13 @@ export class AgentService {
       skillId,
       versionId,
       meta
+    );
+  }
+
+  async installSkillPythonPackages(orgId: string, skillId: string) {
+    return this.requireSkillsService().installSkillPythonPackages(
+      orgId,
+      skillId
     );
   }
 
@@ -5016,14 +5080,68 @@ export class AgentService {
     );
   }
 
+  /**
+   * `createdByUserId` limits the list to the files that user saved, for a member
+   * who cannot manage the agent. Paging then applies to that shorter list.
+   */
   async listProfileArtifacts(
     orgId: string,
     profileId: string,
-    options: ListArtifactsOptions = {}
+    options: ListArtifactsOptions = {},
+    createdByUserId?: string
   ): Promise<ListArtifactsResponse> {
     await this.requireProfile(orgId, profileId);
 
-    return listArtifacts(orgId, profileId, options);
+    const listed = await listArtifacts(
+      orgId,
+      profileId,
+      createdByUserId ? { folder: options.folder } : options
+    );
+
+    const owners = new Map(
+      (await this.db.listArtifactRecords(orgId, profileId)).map((record) => [
+        record.filename,
+        record,
+      ])
+    );
+
+    const artifacts = listed.artifacts.map((artifact) => {
+      const owner = owners.get(artifact.filename);
+
+      return owner
+        ? {
+            ...artifact,
+            createdBy: {
+              channel: owner.channel,
+              createdAt: owner.createdAt,
+              userId: owner.userId,
+              userName: owner.userName,
+            },
+          }
+        : artifact;
+    });
+
+    if (!createdByUserId) {
+      return { ...listed, artifacts };
+    }
+
+    const own = artifacts.filter(
+      (artifact) => artifact.createdBy?.userId === createdByUserId
+    );
+
+    if (options.limit === undefined) {
+      return { ...listed, artifacts: own, total: own.length };
+    }
+
+    const offset = options.offset ?? 0;
+
+    return {
+      ...listed,
+      artifacts: own.slice(offset, offset + options.limit),
+      limit: options.limit,
+      offset,
+      total: own.length,
+    };
   }
 
   async readProfileArtifact(
@@ -5060,11 +5178,27 @@ export class AgentService {
   async deleteProfileArtifact(
     orgId: string,
     profileId: string,
-    filename: string
+    filename: string,
+    createdByUserId?: string
   ): Promise<DeleteArtifactResponse> {
     await this.requireProfile(orgId, profileId);
 
-    return deleteArtifactFile({ filename, orgId, profileId });
+    // Exact match on the stored name, so no path trick reaches another file.
+    if (
+      createdByUserId &&
+      !(await this.db.listArtifactRecords(orgId, profileId)).some(
+        (record) =>
+          record.filename === filename && record.userId === createdByUserId
+      )
+    ) {
+      throw new NakamaApiError("Forbidden", 403);
+    }
+
+    const deleted = await deleteArtifactFile({ filename, orgId, profileId });
+
+    await this.db.deleteArtifactRecord(orgId, profileId, deleted.filename);
+
+    return deleted;
   }
 
   async getUserContext(
@@ -5403,6 +5537,7 @@ export class AgentService {
       includeSkillManageTools?: boolean;
       /** False in a cognito session: proposing org memory is a write-back. */
       includeMemoryWriteTools?: boolean;
+      mcpDiscovery?: boolean;
       userId?: string | null;
     } = {}
   ): Promise<ToolDefinition[]> {
@@ -5574,6 +5709,32 @@ export class AgentService {
         throw new Error("Profile organization is missing.");
       }
 
+      const discoveryAccess = options.mcpDiscovery
+        ? async (serverId: string, toolName: string, context: ToolContext) => {
+            requireToolOrgMember(context);
+
+            if (
+              context.orgId !== orgId ||
+              context.profileId !== profile.id ||
+              !(await this.db.getProfileForOrg(profile.id, orgId))
+            ) {
+              return false;
+            }
+
+            const current = shared
+              ? ((await this.resolveSharedAgentProfile(orgId, profile.id))
+                  ?.assignedMcpServers ?? [])
+              : await this.db.listMcpServersForProfile(profile.id);
+
+            return current.some(
+              (server) =>
+                server.id === serverId &&
+                server.enabled &&
+                server.cachedTools.some((tool) => tool.name === toolName)
+            );
+          }
+        : undefined;
+
       const mcpTools = shared
         ? mcpServers.flatMap((server) =>
             buildMcpToolDefinitions(
@@ -5581,7 +5742,8 @@ export class AgentService {
               this.mcpService!,
               this.db,
               orgId,
-              profile.id
+              profile.id,
+              discoveryAccess
             ).map<ToolDefinition>((tool) => ({
               ...tool,
               run: async (input, context) => {
@@ -5611,7 +5773,8 @@ export class AgentService {
                     this.mcpService!,
                     this.db,
                     orgId,
-                    profile.id
+                    profile.id,
+                    discoveryAccess
                   ).find((item) => item.name === tool.name);
 
                 if (!definition) {
@@ -5633,7 +5796,8 @@ export class AgentService {
             this.mcpService,
             this.db,
             orgId,
-            profile.id
+            profile.id,
+            discoveryAccess
           );
 
       resolved = [...resolved, ...mcpTools];
@@ -5726,7 +5890,7 @@ export class AgentService {
     }
 
     if (profile.isSuper) {
-      resolved = [...resolved, ...this.superBotTools];
+      resolved = [...resolved, ...this.superNakamaTools];
     }
 
     if (hasOwnTools) {
@@ -5787,6 +5951,8 @@ export class AgentService {
           : undefined,
       includeMemoryWriteTools: !cognito,
       includeSkillManageTools,
+      mcpDiscovery:
+        process.env.NAKAMA_MCP_TOOL_DISCOVERY === "1" && !profile.acpAgent,
       userId,
     });
 
@@ -5815,16 +5981,8 @@ export class AgentService {
       false
     );
 
-    // Install-wide override for the tool-output optimiser, read from the single
-    // `workspace_settings` row: one flag governs every org on this host, which
-    // is why only platform admins can write it. Undefined leaves the decision
-    // to the server's env var, so an operator who never opened the UI keeps
-    // whatever they configured.
-    const tokenOptimizerEnabled = (await this.db.getWorkspaceSettings())
-      ?.tokenOptimizerEnabled;
-
     const resolvedSystemPrompt = profile.isSuper
-      ? `${systemPrompt.trim()}\n\n${SUPER_BOT_TOOL_AUTHORING_RULES}`
+      ? `${systemPrompt.trim()}\n\n${SUPER_NAKAMA_TOOL_AUTHORING_RULES}`
       : systemPrompt;
 
     // A cognito session has nothing stored to load. On a model change it is
@@ -5896,6 +6054,9 @@ export class AgentService {
       channel,
       ...this.knowledgeToolContext(orgId, profileId),
       codingWorkspaceRoot,
+      forbidArtifactFileWrites: tools.some(
+        (tool) => tool.name === SAVE_ARTIFACT_TOOL_NAME
+      ),
       forbidMemoryWrites: cognito ? true : undefined,
       forbidProfileSkillMarkdownWrites: hasSkillManage,
       isPlatformAdmin: isPlatformAdmin || undefined,
@@ -5906,10 +6067,8 @@ export class AgentService {
       orgId,
       orgRole: orgRole ?? undefined,
       profileId,
-      recordToolOutputSavings: this.savingsRecorderFor(orgId),
       recordTurnUsage: this.turnUsageRecorderFor(orgId),
       sessionId,
-      tokenOptimizerEnabled: tokenOptimizerEnabled ?? undefined,
       trackEphemeralAttachment,
       userId: userId ?? undefined,
     });
@@ -6123,7 +6282,7 @@ export class AgentService {
 
     const persistedSession = wrapPersistedSession(sessionId, session, this.db, {
       onBeginTurn: (id) => {
-        this.superBotSessionState.beginTurn(id);
+        this.superNakamaSessionState.beginTurn(id);
         void this.agentQuestionnaireState.clear(id);
       },
     });
@@ -6337,15 +6496,22 @@ export class AgentService {
     profile: StoredProfileRecord,
     selectedModel: string | null = profile.model,
     userId?: string | null,
-    acpSessionKey?: string
+    acpSessionKey?: string,
+    acpTools?: { context: ToolContext; tools: ToolDefinition[] }
   ): AgentDependencies {
     if (profile.acpAgent && profile.orgId) {
+      const sessionKey = acpSessionKey ?? `${profile.id}:${randomUUID()}`;
+
+      // A chat registers its tools under its own key later. A one-shot run
+      // passes them here: an unregistered key leaves the agent's MCP connect
+      // hanging for 30s.
+      if (acpTools) {
+        setAcpToolAccess(sessionKey, acpTools.tools, acpTools.context);
+      }
+
       // ACP agents run their own model loop, so the profile's LLM provider is unused.
       const provider = createAcpProvider(
-        acpOptionsForProfile(
-          profile,
-          acpSessionKey ?? `${profile.id}:${randomUUID()}`
-        )
+        acpOptionsForProfile(profile, sessionKey)
       );
 
       return this.createHarness({
@@ -6530,6 +6696,22 @@ function acpOptionsForProfile(
   };
 }
 
+/**
+ * A one-shot run (automation, sub-agent, plugin summary) gets its own ACP
+ * agent. Its key is never reused, so the agent is stopped when the run ends
+ * instead of idling for ten minutes.
+ */
+function oneShotAcpKey(profile: StoredProfileRecord): string | undefined {
+  return profile.acpAgent ? `${profile.id}:${randomUUID()}` : undefined;
+}
+
+function endOneShotAcp(sessionKey: string | undefined): void {
+  if (sessionKey) {
+    stopAcpSession(sessionKey);
+    clearAcpToolAccess(sessionKey);
+  }
+}
+
 /** Key for the agent that holds a profile's draft settings until its first chat starts. */
 function acpDraftKey(orgId: string, profileId: string): string {
   return `${orgId}:draft:${profileId}`;
@@ -6546,7 +6728,6 @@ const REPLAYABLE_AUTOMATION_TOOLS = new Set([
   "knowledge_base_search",
   "list_artifacts",
   "list_profile_sessions",
-  "omni_retrieve",
   "read_file",
   "read_profile_session",
   "read_session_history",

@@ -152,6 +152,20 @@ A script can import its siblings by bare name. Python puts the running script's
 own directory first on `sys.path`, so `scripts/invoice.py` can `import pricing`
 with no packaging.
 
+### Python written for Claude Code
+
+Skills written for Claude Code ship ordinary modules: functions to import and a
+`__main__` that prints a demo. They have no `run(input, context)`, so neither
+`tool.py` nor `scripts:` reaches them.
+
+On a profile that has the `bash` tool, each such skill also gets a
+`<skill>_run_python` tool. The agent passes `{"code": "..."}`, the code runs with
+the skill directory first on `sys.path`, and whatever it prints comes back as
+`stdout`. It is the same subprocess, environment allowlist and 30 second timeout
+as `tool.py`, and it never receives `NAKAMA_CONFIG_DIR`. A profile without
+`bash` gets nothing new, because running model-written Python is the same power
+as a shell.
+
 ### Whose code runs
 
 A skill's tool module and scripts are host code: `tool.py` and every declared
@@ -174,23 +188,42 @@ Python skill processes for member-authored skills are spawned without
 `NAKAMA_CONFIG_DIR`, so they are not told where the deployment keeps its
 configuration and API keys.
 
+### Python in a profile pack
+
+Because a skill's Python runs on the server host, importing a profile pack only
+installs `.py` files when a **platform admin** approves it. An org-admin import
+lists every packed `tool.py` and declared `scripts/*.py` in the preview as
+skipped and never writes them to the workspace, so the imported skill lands as
+instructions only. See [Profiles → Export and import a profile pack](/profiles#export-and-import-a-profile-pack).
+
 ### What Python is available
 
-The published image ships `python3` and the standard library. There is no pip
-and no third-party package, so a script that imports one fails on its first call
-with `ModuleNotFoundError`.
+The published image ships `python3` and the standard library, with no
+third-party packages.
 
-To add packages, build a virtualenv on the host and point Nakama at its
-interpreter before starting the server:
+A skill that needs packages lists them in a `requirements.txt` in its folder.
+Until they are installed, the skill page names each missing package under
+**Script issues**, so nobody meets a `ModuleNotFoundError` on the first call.
+
+A platform admin installs them with **Install Python packages** on the skill
+page (`POST /v1/skills/<id>/python-packages`). That builds a virtualenv for this
+skill alone under `NAKAMA_CONFIG_DIR/python-envs/`, so it survives restarts and
+image upgrades, and runs `pip install -r requirements.txt` into it. The skill's
+`tool.py`, declared scripts and `_run_python` tool then run with that
+interpreter. Nothing is installed when a skill is created or when the server
+starts, because an agent can write skills and pip runs package build code on the
+host. Run the install again after editing `requirements.txt`. A second install
+for the same skill while one is running returns 409, and deleting the skill
+removes its virtualenv.
+
+Python tools outside skills still use one interpreter for the whole install.
+Point `NAKAMA_PYTHON_BIN` at a virtualenv to give them packages:
 
 ```bash
 python3 -m venv /opt/nakama-python
 /opt/nakama-python/bin/pip install matplotlib
 export NAKAMA_PYTHON_BIN=/opt/nakama-python/bin/python3
 ```
-
-This is install-wide: every Python tool and every skill script in every
-organization uses that interpreter.
 
 ## How skills are used at runtime
 
@@ -221,9 +254,9 @@ The composer highlights the selected skill, but the message still sends as plain
 
 The slash picker also reserves **`/learn`** — use it to turn notes, a URL, a local folder, or the workflow you just finished into a reusable skill. See [Self-improving skills](/self-improving-skills#learn-from-sources).
 
-Nakama also ships bundled skills for system workflows. The `create-profile` bundled skill is assigned only to Super Bot, so profile-authoring instructions load when Super Bot is asked to create a profile without adding those instructions to ordinary profile prompts. That skill runs a confirm-first factory: draft soul files in chat, wait for explicit confirmation, then create.
+Nakama also ships bundled skills for system workflows. The `create-profile` bundled skill is assigned only to Super Nakama, so profile-authoring instructions load when Super Nakama is asked to create a profile without adding those instructions to ordinary profile prompts. That skill runs a confirm-first factory: draft soul files in chat, wait for explicit confirmation, then create.
 
-The `create-skill` bundled skill is also assigned only to Super Bot. When you ask Super Bot to write or improve a skill, it drafts the full `SKILL.md` in chat, waits for your confirmation, then saves it with `skill_manage`. If write approval is on, the skill waits for an admin to approve it.
+The `create-skill` bundled skill is also assigned only to Super Nakama. When you ask Super Nakama to write or improve a skill, it drafts the full `SKILL.md` in chat, waits for your confirmation, then saves it with `skill_manage`. If write approval is on, the skill waits for an admin to approve it.
 
 For more detail, see [Agent prompts](/agent-prompt).
 
@@ -250,11 +283,11 @@ Profiles receive bundled skills for common workflows:
 - `manage-skills` — create, patch, edit, and delete profile-scoped skills (and supporting files under a skill directory) with the `skill_manage` tool (file tools still inspect skills; they cannot write under `skills/*/` when `skill_manage` is present)
 - `update-profile-memory` — record facts in active `MEMORY.md` via file tools
 - `archive-profile-memory` — move facts from active `MEMORY.md` into `memory-archive/` without deleting them
-- `save-artifact` — save files the agent produces (reports, documents, generated text) under `artifacts/` via `write_file`
-- `coding-agent` — invoke a coding agent for repo work via `bash` (Super Bot by default; see [Coding agent](/coding-agent))
+- `artifact-design` — design rules for the HTML pages, dashboards, and slide decks the agent saves under `artifacts/`
+- `coding-agent` — invoke a coding agent for repo work via `bash` (Super Nakama by default; see [Coding agent](/coding-agent))
 - `agent-browser` — interactive browser automation via `bash` (opt-in; see [Agent browser](/agent-browser))
 
-Every profile receives the default bundled skills above when they are installed and synced on the server, including `manage-skills` for skill authoring. Nakama backfills missing default bundled skills onto existing profiles during startup. Super Bot additionally receives its Super Bot-specific skills, while opt-in skills such as `agent-browser` still require assignment.
+Every profile receives the default bundled skills above when they are installed and synced on the server, including `manage-skills` for skill authoring. Nakama backfills missing default bundled skills onto existing profiles during startup. Super Nakama additionally receives its Super Nakama-specific skills, while opt-in skills such as `agent-browser` still require assignment.
 
 To reuse a skill from GitHub, ask in web or CLI chat: **“Install this skill”** and paste its public GitHub directory or SKILL.md link. The agent installs it for the current profile, ready on the next turn. If write approval is enabled, an admin must approve it first. References, scripts, and assets are included. Reinstalling the same skill restores missing files. External programs required by a skill still need separate setup. Existing skills with different content are not overwritten.
 
@@ -266,19 +299,19 @@ Org admins can enable **Ask me before a bot saves a skill** under **Control cent
 
 ### Bundled system skills
 
-`update-profile-memory`, `archive-profile-memory`, and `save-artifact` replace older dedicated builtins. They teach the agent how to use generic file tools safely:
+`update-profile-memory` and `archive-profile-memory` replace older dedicated builtins. They teach the agent how to use generic file tools safely:
 
 - **Memory write path:** read or create `MEMORY.md`, append a dated `- bullet` under the user's timezone date, keep the `# Memory Log` preamble, stay under 4096 bytes
 - **Archive path:** copy exact bullets to `memory-archive/YYYY-MM.md`, then remove them from `MEMORY.md`
-- **Artifact path:** save the file the agent produced with `write_file` or `write_docx` under `artifacts/{filename}` with the correct file extension. Nakama derives the file type, size, and timestamp automatically. Use `write_file` for text, Markdown, HTML, JSON, and code; use `write_docx` when the user wants a real Word document.
+- **Artifact path** (chat prompt rules): save the file the agent produced with `save_artifact` or `write_docx` under `artifacts/{filename}` with the correct file extension. Nakama derives the file type, size, and timestamp automatically. Use `save_artifact` for text, Markdown, HTML, JSON, and code; use `write_docx` when the user wants a real Word document.
 
-These skills use `include-body-on-match: true`, so the full procedure loads when the user's message matches the skill description. The chat wrapper also mentions memory skills when `read_file` and `edit_file` are available, and `save-artifact` when `write_file` is available.
+These skills use `include-body-on-match: true`, so the full procedure loads when the user's message matches the skill description. The chat wrapper also mentions memory skills when `read_file` and `edit_file` are available, and the artifact save rules when `save_artifact` or `write_file` is available.
 
-They are hidden from the `/skill` slash picker (like `create-automation` and `manage-skills`) because they are system workflows, not user-authored skills. Agents can still invoke them explicitly with `/skill update-profile-memory`, `/skill archive-profile-memory`, or `/skill save-artifact`.
+They are hidden from the `/skill` slash picker (like `create-automation` and `manage-skills`) because they are system workflows, not user-authored skills. Agents can still invoke them explicitly with `/skill update-profile-memory`, `/skill archive-profile-memory`, or `/skill artifact-design`.
 
 ### Coding agent
 
-The `coding-agent` bundled skill teaches when to invoke a coding agent, how to install CLIs via `bash`, when to ask which backend to use, and how to summarize CLI results. Super Bot receives it by default. Setup and runtime flow are in [Coding agent](/coding-agent).
+The `coding-agent` bundled skill teaches when to invoke a coding agent, how to install CLIs via `bash`, when to ask which backend to use, and how to summarize CLI results. Super Nakama receives it by default. Setup and runtime flow are in [Coding agent](/coding-agent).
 
 ### Agent browser
 
@@ -354,7 +387,7 @@ Skill management is a platform-admin operation in the dashboard and API.
 - Use **`archive-profile-memory`** when the user wants to forget, tidy, or free space in active memory without deleting history
 - Use the **main profile prompt** for always-on behavior and identity
 - Use a **builtin tool** for a native capability like web search or file access
-- Use **`save-artifact`** with **`write_file`** or **`write_docx`** when the agent should save a file for you (reports, summaries, generated text, Word documents) under `artifacts/`
+- Use **`save_artifact`** or **`write_docx`** when the agent should save a file for you (reports, summaries, generated text, Word documents) under `artifacts/`; **`artifact-design`** sets how HTML pages, dashboards, and decks look
 - Use **`coding-agent`** with **`bash`** when repo work is better handled by a dedicated coding agent ([setup](/coding-agent))
 - Use **`agent-browser`** with **`bash`** for login walls, forms, and interactive browsing ([setup](/agent-browser))
 - Use an **MCP server** for external tool integrations

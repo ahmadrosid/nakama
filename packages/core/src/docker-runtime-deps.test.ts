@@ -55,6 +55,7 @@ describe("production image dependency sets", () => {
       "COPY .docker/runtime-deps/package.json .docker/runtime-deps/bun.lock ./"
     );
     expect(stage).toMatch(FROZEN_INSTALL);
+    expect(stage).toContain("ARG INSTALL_CODING_AGENTS=false");
   });
 
   test("the optional Meet stage installs the committed manifest and lockfile", async () => {

@@ -28,17 +28,18 @@ describe("database permissions", () => {
     let db = openPrivateDatabase(databasePath);
 
     try {
-      expect(db.query("PRAGMA synchronous").get()).toEqual({ synchronous: 3 });
+      expect(db.query("PRAGMA synchronous").get()).toEqual({ synchronous: 2 });
       expect(db.query("PRAGMA journal_mode").get()).toEqual({
-        journal_mode: "delete",
+        journal_mode: "wal",
       });
+      expect(db.query("PRAGMA busy_timeout").get()).toEqual({ timeout: 5000 });
       db.exec("CREATE TABLE durable_marker (value TEXT NOT NULL)");
       db.transaction(() =>
         db.run("INSERT INTO durable_marker VALUES (?)", ["committed"])
       )();
       db.close();
       db = openPrivateDatabase(databasePath);
-      expect(db.query("PRAGMA synchronous").get()).toEqual({ synchronous: 3 });
+      expect(db.query("PRAGMA synchronous").get()).toEqual({ synchronous: 2 });
       expect(db.query("SELECT value FROM durable_marker").get()).toEqual({
         value: "committed",
       });
@@ -57,6 +58,10 @@ describe("database permissions", () => {
 
     try {
       const db = openPrivateDatabase(databasePath);
+      db.exec("CREATE TABLE wal_marker (value TEXT)");
+
+      // Uncheckpointed transcripts sit in the WAL, so it needs the same mode.
+      expect(modeOf(`${databasePath}-wal`)).toBe(0o600);
       db.close();
 
       expect(modeOf(databasePath)).toBe(0o600);

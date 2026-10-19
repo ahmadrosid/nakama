@@ -73,8 +73,9 @@ import {
   ORG_INVITE_EXPIRY_DAYS,
   ORG_ROLES,
   seedOrgDefaultProfile,
-  seedOrgSuperBotProfile,
+  seedOrgSuperNakamaProfile,
 } from "@nakama/db";
+import { isTenantBashEnabled } from "../tools/bash-config";
 import type { AuthService } from "./auth-service";
 import {
   deleteOrgToolCredentials,
@@ -2395,12 +2396,13 @@ export class OrgService {
 
     await initSoulDirectory(getProfileSoulDir(orgId, defaultProfile.id));
 
-    const superBotProfile = await seedOrgSuperBotProfile(
+    const superNakamaProfile = await seedOrgSuperNakamaProfile(
       this.databaseAdapter,
-      orgId
+      orgId,
+      { grantBash: isTenantBashEnabled() }
     );
 
-    await initSoulDirectory(getProfileSoulDir(orgId, superBotProfile.id));
+    await initSoulDirectory(getProfileSoulDir(orgId, superNakamaProfile.id));
   }
 }
 
@@ -2576,6 +2578,7 @@ function toOrgMemberSummary(
 ): OrgMemberSummary {
   return {
     createdAt,
+    disabledAt: user.disabledAt ?? null,
     email: user.email,
     name: user.name ?? null,
     phone: user.phone ?? null,

@@ -198,7 +198,8 @@ export function createAgentChatSession(
   const channel = options.channel ?? "cli";
   const tools = options.tools ?? dependencies.tools ?? [];
   const enableToolLoop = options.enableToolLoop ?? tools.length > 0;
-  let activeTools = createTurnTools(tools);
+  const discoveredTools = new Set<string>();
+  let activeTools = createTurnTools(tools, discoveredTools);
 
   const systemPrompt = buildChatSystemPrompt(activeTools, {
     basePrompt: options.systemPrompt,
@@ -212,31 +213,6 @@ export function createAgentChatSession(
     userContext: options.userContext,
     userTimezone: options.userTimezone,
   });
-
-  // Bytes this session's optimiser kept out of the context. Session scope on
-  // purpose: the chip beside it reports this conversation, not the org, and
-  // showing an org total there would be read as this chat's saving.
-  let bytesKeptOut = 0;
-  // The denominator is every byte the handled tools produced this session,
-  // including calls where nothing was removed. Dividing only by the optimised
-  // calls would report a percentage of a set chosen after the fact.
-  let bytesProduced = 0;
-  const callerRecord = options.toolContext?.recordToolOutputSavings;
-  const callerTurnUsage = options.toolContext?.recordTurnUsage;
-
-  const toolContext: ToolContext = {
-    ...options.toolContext,
-    recordToolOutputSavings: (saving) => {
-      bytesKeptOut += Math.max(0, saving.bytesIn - saving.bytesOut);
-      bytesProduced += saving.bytesIn;
-      callerRecord?.(saving);
-    },
-    // The arm is session state, and the conversation loop is a module-level
-    // function that cannot see it, so it is filled in here and the loop's own
-    // value is ignored.
-    recordTurnUsage: (turn) =>
-      callerTurnUsage?.({ ...turn, optimized: bytesKeptOut > 0 }),
-  };
 
   const history: ChatMessage[] = options.initialHistory
     ? [...options.initialHistory]
@@ -284,10 +260,6 @@ export function createAgentChatSession(
 
     return {
       breakdown,
-      // Reported only once an optimiser has actually removed something in this
-      // session, so the chip stays silent rather than announcing a feature.
-      bytesKeptOut: bytesKeptOut > 0 ? bytesKeptOut : undefined,
-      bytesProduced: bytesKeptOut > 0 ? bytesProduced : undefined,
       contextWindow: options.compaction.contextWindow,
       source,
       usableContextTokens: usableContextTokens(options.compaction),
@@ -435,7 +407,8 @@ export function createAgentChatSession(
   return {
     clear() {
       history.length = 0;
-      activeTools = createTurnTools(tools);
+      discoveredTools.clear();
+      activeTools = createTurnTools(tools, discoveredTools);
       lastContextUsage = null;
       turnUsageCalls = [];
       bumpHistoryRevision();
@@ -463,7 +436,7 @@ export function createAgentChatSession(
       return aggregateTurnUsage();
     },
     async send(input, sendOptions) {
-      activeTools = createTurnTools(tools);
+      activeTools = createTurnTools(tools, discoveredTools);
       turnUsageCalls = [];
 
       return sendMessage(
@@ -483,13 +456,13 @@ export function createAgentChatSession(
           resolvePromptContext: options.resolvePromptContext,
           runCompaction,
           signal: sendOptions?.signal,
-          toolContext,
+          toolContext: options.toolContext,
           whatsappMessage: sendOptions?.whatsappMessage,
         }
       );
     },
     async sendStream(input, handlers, streamOptions) {
-      activeTools = createTurnTools(tools);
+      activeTools = createTurnTools(tools, discoveredTools);
       turnUsageCalls = [];
 
       return sendMessage(
@@ -510,7 +483,7 @@ export function createAgentChatSession(
           resolvePromptContext: options.resolvePromptContext,
           runCompaction,
           signal: streamOptions?.signal,
-          toolContext,
+          toolContext: options.toolContext,
           whatsappMessage: streamOptions?.whatsappMessage,
         }
       );
@@ -825,16 +798,10 @@ async function runConversation(
         result.usage && !result.usage.estimated ? "provider" : "estimate"
       );
 
-      // The arm is what the optimiser did in this session, not what a setting
-      // says: a session where nothing was ever shortened belongs in the control
-      // arm even with the feature switched on, or the comparison flatters itself.
       try {
         toolContext?.recordTurnUsage?.({
           estimated: Boolean(result.usage?.estimated ?? !result.usage),
           inputTokens: result.usage?.inputTokens ?? 0,
-          // Overwritten by the session wrapper, which is the only scope that
-          // knows whether anything was shortened.
-          optimized: false,
           outputTokens: result.usage?.outputTokens ?? 0,
         });
       } catch {

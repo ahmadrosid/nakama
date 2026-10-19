@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import * as recordingImport from "../meet-recording-import";
 import { GoogleMeetService } from "./service";
 import * as transcription from "./transcription";
 
@@ -30,9 +31,12 @@ beforeEach(async () => {
     });
   }
 
-  service = new GoogleMeetService(db, root, async () => ({
-    text: "Recording",
-  }));
+  service = new GoogleMeetService(
+    db,
+    root,
+    async () => ({ text: "Recording" }),
+    () => "test"
+  );
 });
 
 afterEach(async () => {
@@ -41,11 +45,20 @@ afterEach(async () => {
 });
 
 test("startup is idempotent and restart preserves settings while recovering unfinished capture", async () => {
+  await db.upsertTool({
+    createdAt: now,
+    description: "",
+    handlerConfig: { name: "google_meet_delete" },
+    handlerType: "builtin",
+    id: "meet_a_delete",
+    name: "google_meet_delete",
+    orgId: "a",
+    updatedAt: now,
+  });
   await Promise.all([
     service.ensureOrganization("a"),
     service.ensureOrganization("a"),
   ]);
-  await service.invoke("a", "configure", { apiKey: "test" }, admin);
 
   const capture = await service.invoke(
     "a",
@@ -75,16 +88,17 @@ test("startup is idempotent and restart preserves settings while recovering unfi
     false
   );
   const tools = (await db.listTools()).filter((tool) => tool.orgId === "a");
-  expect(tools).toHaveLength(6);
-  expect(
-    tools.every(
-      (tool) =>
-        tool.handlerType === "builtin" && tool.name.startsWith("google_meet_")
-    )
-  ).toBe(true);
+  expect(tools.map((tool) => tool.name).sort()).toEqual([
+    "google_meet_meetings",
+    "google_meet_transcript",
+  ]);
+  expect(service.tools().map((tool) => tool.name)).toEqual([
+    "google_meet_meetings",
+    "google_meet_transcript",
+  ]);
 });
 
-test("agent tools require current assignment and hide page captures without a profile", async () => {
+test("agent tools require current assignment and see only their profile and their member's page meetings", async () => {
   await db.createUser({
     createdAt: now,
     email: "alice@example.com",
@@ -108,11 +122,28 @@ test("agent tools require current assignment and hide page captures without a pr
     systemPrompt: "",
     updatedAt: now,
   });
-  await service.invoke(
+
+  const page = await service.invoke(
     "a",
     "upload",
     { content: "UGFnZSBub3Rlcw==", filename: "page.md" },
     admin
+  );
+
+  await service.invoke(
+    "a",
+    "upload",
+    { content: "Qm9iIG5vdGVz", filename: "bob.md" },
+    { id: "bob", role: "member" }
+  );
+
+  await service.invoke(
+    "a",
+    "upload",
+    { content: "T3RoZXIgbm90ZXM=", filename: "other.md" },
+    admin,
+    undefined,
+    "other-profile"
   );
 
   const own = await service.invoke(
@@ -143,7 +174,9 @@ test("agent tools require current assignment and hide page captures without a pr
     meetings: Array<{ id: string }>;
   };
 
-  expect(result.meetings.map((meeting) => meeting.id)).toEqual([own.id]);
+  expect(result.meetings.map((meeting) => meeting.id).sort()).toEqual(
+    [own.id, page.id].sort()
+  );
   await db.unassignToolFromProfile("profile", "meet_a_meetings");
   await expect(tool.run({}, context)).rejects.toThrow();
 });
@@ -186,8 +219,6 @@ test("members cannot read another user's or another organization's meeting; miss
 });
 
 test("queued capture blocks snapshots and disabling invalidates its token", async () => {
-  await service.invoke("a", "configure", { apiKey: "test" }, admin);
-
   const capture = await service.invoke(
     "a",
     "start-capture",
@@ -208,7 +239,12 @@ test("queued capture blocks snapshots and disabling invalidates its token", asyn
 
 test("bounds simultaneous uploads and shutdown cancels a provider that ignores abort", async () => {
   await service.close();
-  service = new GoogleMeetService(db, root, () => new Promise(() => {}));
+  service = new GoogleMeetService(
+    db,
+    root,
+    () => new Promise(() => {}),
+    () => "test"
+  );
   await service.ensureOrganization("a");
 
   const input = {
@@ -247,9 +283,6 @@ test("shared capture listener consumes tokens once and preserves protocol 2 fina
   }));
 
   try {
-    await service.invoke("a", "configure", { apiKey: "test" }, admin);
-    await service.invoke("b", "configure", { apiKey: "test" }, admin);
-
     const first = await service.invoke(
       "a",
       "start-capture",
@@ -314,5 +347,87 @@ test("shared capture listener consumes tokens once and preserves protocol 2 fina
     await service.invoke("b", "leave", { meetingId: second.id }, admin);
   } finally {
     connect.mockRestore();
+  }
+});
+
+test("built-in recording imports use the current member and cancel without saving", async () => {
+  await service.close();
+  let importing!: () => void;
+
+  const started = new Promise<void>((resolve) => {
+    importing = resolve;
+  });
+
+  const importer = spyOn(
+    recordingImport,
+    "importMeetRecording"
+  ).mockImplementation(async (_composio, input, signal) => {
+    expect(input).toMatchObject({
+      apiKey: "test",
+      orgId: "a",
+      userId: "alice",
+    });
+    importing();
+    await new Promise<void>((resolve) =>
+      signal.addEventListener("abort", () => resolve(), { once: true })
+    );
+
+    return { filename: "meeting.mp4", text: "Late transcript" };
+  });
+
+  service = new GoogleMeetService(
+    db,
+    root,
+    async () => ({ text: "" }),
+    () => "test",
+    {
+      async downloadMeetRecording() {
+        throw new Error("Unexpected download");
+      },
+      async listMeetRecordings(orgId, userId) {
+        expect([orgId, userId]).toEqual(["a", "alice"]);
+
+        return { driveConnected: true, gmailConnected: true, recordings: [] };
+      },
+    }
+  );
+
+  try {
+    expect(
+      (await service.invoke("a", "recordings", {}, admin)).driveConnected
+    ).toBe(true);
+    await expect(
+      service.invoke(
+        "a",
+        "import-recording",
+        { fileId: "../invalid", messageId: "msg" },
+        admin
+      )
+    ).rejects.toThrow();
+    expect(importer).not.toHaveBeenCalled();
+
+    const pending = service.invoke(
+      "a",
+      "import-recording",
+      { fileId: "drive_file_123", messageId: "msg" },
+      admin
+    );
+
+    const settled = Promise.allSettled([pending]);
+    await started;
+    await expect(service.withSnapshot(async () => true)).rejects.toThrow();
+    expect(() => service.pauseOrganization("a")).toThrow();
+    await service.close();
+    expect((await settled)[0]?.status).toBe("rejected");
+    await service.reopen();
+    expect((await service.invoke("a", "meetings", {}, admin)).meetings).toEqual(
+      []
+    );
+    await service.invoke("a", "configure", { enabled: false }, admin);
+    await expect(
+      service.invoke("a", "recordings", {}, admin)
+    ).rejects.toThrow();
+  } finally {
+    importer.mockRestore();
   }
 });

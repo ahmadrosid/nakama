@@ -1,0 +1,12 @@
+# Build __PLUGIN_NAME__
+
+Run from `plugin-drafts/__PLUGIN_ID__/`:
+
+```sh
+bun build ./src/list_items.js --outfile actions/list_items.js --target bun
+bun build ./src/save_item.js --outfile actions/save_item.js --target bun
+bun build ./src/delete_item.js --outfile actions/delete_item.js --target bun
+bun build ./src/ui.jsx --outfile ui/app.js --target browser
+```
+
+Build each new action the same way.

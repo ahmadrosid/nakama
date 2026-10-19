@@ -192,6 +192,10 @@ export interface SlackWorkerStatus {
 export interface WhatsAppWorkerStatus {
   configured: boolean;
   connected: boolean;
+  /** Set when WhatsApp linked an account this agent may not use. */
+  linkError?: string;
+  /** The agent that holds that account, when the viewer may see its org. */
+  linkOwner?: { agentName: string; orgName: string };
   ok: boolean;
   paired: boolean;
   process?: WorkerProcessInfo;
@@ -268,71 +272,6 @@ export interface McpStatus {
   serverCount: number;
 }
 
-/**
- * Bytes an optimiser removed from tool results before they entered the
- * conversation. Not tokens and not cost: see the route that serves it for why
- * converting these to either would be a fabrication.
- */
-export interface TokenOptimizationResponse {
-  /**
-   * Two arms. `optimized` is what an optimiser shortened; `control` is what went
-   * in untouched. One arm alone is not a comparison, it is a restatement that
-   * the feature was on.
-   */
-  arms: {
-    control: TokenOptimizationArm;
-    optimized: TokenOptimizationArm;
-  };
-  byTool: Array<{
-    bytesIn: number;
-    bytesOut: number;
-    calls: number;
-    tool: string;
-  }>;
-  /** One entry per day in the window, oldest first, zero-filled. */
-  days: Array<{
-    bytesIn: number;
-    bytesRemoved: number;
-    day: string;
-  }>;
-  /**
-   * Provider input tokens per turn, split by arm. The only tokens here; every
-   * other figure is bytes. Observational rather than randomised, so a workload
-   * difference between the arms is a confound, not a result.
-   */
-  inputTokens: {
-    control: TokenOptimizationTurnArm;
-    optimized: TokenOptimizationTurnArm;
-  };
-  optimizers: Array<{
-    enabled: boolean;
-    id: string;
-    /** Whether the binary is reachable on this host. Enabled without installed
-     * is the case an operator has to be told about, because the optimiser fails
-     * open and would otherwise look merely idle. */
-    installed: boolean;
-    tools: string[];
-  }>;
-  totals: {
-    bytesIn: number;
-    bytesRemoved: number;
-    calls: number;
-  };
-  trackedSince: string | null;
-  windowDays: number;
-}
-
-export interface TokenOptimizationUpdateResponse {
-  enabled: boolean;
-  /**
-   * Why the binary is still missing after switching the optimiser on, or null.
-   * Switching on triggers an install, and an operator who is told only that the
-   * binary is absent cannot tell a blocked download from one never attempted.
-   */
-  installError: string | null;
-  installed: boolean;
-}
-
 export interface CodingHarnessLoginCommand {
   command: string;
   name: string;
@@ -349,22 +288,6 @@ export interface UpdateAutomationWorkerSettingsRequest {
 export interface CodingHarnessSettingsResponse {
   loginCommands: CodingHarnessLoginCommand[];
   providerPassthroughEnabled: boolean;
-}
-
-export interface TokenOptimizationTurnArm {
-  arm: string;
-  /** Turns whose token count came from an estimate, not the provider. */
-  estimatedTurns: number;
-  inputTokens: number;
-  inputTokensPerTurn: number;
-  turns: number;
-}
-
-export interface TokenOptimizationArm {
-  arm: string;
-  bytesIn: number;
-  bytesOut: number;
-  calls: number;
 }
 
 export interface SystemStatusResponse {
@@ -786,7 +709,7 @@ export interface OrgUsageLeader {
 }
 
 export interface OrgUsageSummaryResponse {
-  /** Every agent by requests, Super Bot excluded. */
+  /** Every agent by requests, Super Nakama excluded. */
   agents: OrgUsageLeader[];
   /** Estimated spend over the last 30 UTC days. */
   costUsd30d: number;
@@ -835,6 +758,8 @@ export interface SetActiveOrgRequest {
 
 export interface OrgMemberSummary {
   createdAt: string;
+  /** Set while the account is disabled; disabling is install-wide, not per org. */
+  disabledAt?: string | null;
   email: string;
   name: string | null;
   phone: string | null;
@@ -1213,15 +1138,6 @@ export interface ChatContextUsage {
    * total may differ from `usedTokens` when the provider reports input size.
    */
   breakdown?: ChatContextUsageBreakdown;
-  /**
-   * Bytes an optimiser kept out of this session's context so far. Absent until
-   * something is actually removed, so the UI reports a measurement rather than
-   * announcing a feature. Bytes, not tokens: the label must carry a byte unit.
-   */
-  bytesKeptOut?: number;
-  /** Everything the handled tools produced this session, the denominator for
-   * the percentage. Present whenever bytesKeptOut is. */
-  bytesProduced?: number;
   contextWindow: number;
   source: ChatContextUsageSource;
   /** Denominator matching compaction usable context (window minus reserved output). */
@@ -1658,7 +1574,7 @@ export interface UpdateImageGenerationRequest {
 }
 
 /** Search back-end that replaces the provider-hosted `web_search` tool. */
-export type WebSearchProvider = "exa" | "firecrawl";
+export type WebSearchProvider = "exa" | "firecrawl" | "serply";
 
 export interface WebSearchSettingsResponse {
   apiKeyMasked: string | null;
@@ -1950,13 +1866,30 @@ export interface SendEmailTestResponse {
   to: string;
 }
 
+/** Cloud browser that agent-browser connects to instead of local Chrome. */
+export type AgentBrowserProvider = "kernel";
+
 export interface AgentBrowserStatusResponse {
+  apiKeyMasked: string | null;
   installCommand: string;
   installed: boolean;
   nextStep: "install" | null;
+  /** null means agent-browser launches Chrome on the Nakama host. */
+  provider: AgentBrowserProvider | null;
   ready: boolean;
   statusMessage: string | null;
   version: string | null;
+}
+
+/** Live view of the caller's cloud browser; null when none is running. */
+export interface SessionBrowserResponse {
+  liveViewUrl: string | null;
+}
+
+export interface UpdateAgentBrowserSettingsRequest {
+  apiKey?: string;
+  /** null restores local Chrome. */
+  provider?: AgentBrowserProvider | null;
 }
 
 export type AgentBrowserInstallEvent =
@@ -2498,7 +2431,7 @@ export interface ProfileResponse {
   profile: ProfileDetail;
 }
 
-export interface CreateProfileWithSuperBotRequest {
+export interface CreateProfileWithSuperNakamaRequest {
   name?: string;
   prompt: string;
 }
@@ -2539,7 +2472,7 @@ export interface UpdateProfileRequest {
 
 export type ProfileChangeSource =
   | "dashboard"
-  | "super_bot"
+  | "super_nakama"
   | "skill_manage"
   | "pack_import";
 
@@ -2695,7 +2628,16 @@ export interface UpdateSoulFileRequest {
   content: string;
 }
 
+/** Who saved an artifact. Absent when no owner was recorded (older files, shell writes). */
+export interface ArtifactCreator {
+  channel: string | null;
+  createdAt: string;
+  userId: string | null;
+  userName: string | null;
+}
+
 export interface ArtifactFile {
+  createdBy?: ArtifactCreator;
   filename: string;
   mimeType: string;
   path: string;
@@ -2928,6 +2870,7 @@ export type ProviderName =
   | "zhipu"
   | "zhipu_cn"
   | "xai"
+  | "groq"
   | "together"
   | "xiaomi"
   | "meta"
@@ -3175,6 +3118,12 @@ export interface ToolContext {
   /** Emits concise live status lines while a sub-agent child loop runs (parent web UI). */
   emitSubAgentActivity?: (label: string) => void;
   /**
+   * When true (save_artifact is in the session tool list), write_file refuses paths
+   * under artifacts/ so every saved artifact goes through save_artifact and gets an
+   * owner row.
+   */
+  forbidArtifactFileWrites?: boolean;
+  /**
    * When true (a cognito session), write_file / write_docx / edit_file / delete_file
    * refuse MEMORY.md and memory-archive/YYYY-MM.md under the profile workspace, so a
    * chat that leaves no trace cannot leave one through the file tools either.
@@ -3185,7 +3134,7 @@ export interface ToolContext {
    * refuse paths matching skills/<name>/SKILL.md under the profile workspace.
    */
   forbidProfileSkillMarkdownWrites?: boolean;
-  /** Platform admin flag for Super Bot bind checks (same as HTTP ProfileAccess). */
+  /** Platform admin flag for Super Nakama bind checks (same as HTTP ProfileAccess). */
   isPlatformAdmin?: boolean;
   listPublishedKnowledgeDocuments?: () => Promise<
     PublishedKnowledgeBaseDocument[]
@@ -3210,27 +3159,10 @@ export interface ToolContext {
     filePath: string,
     maxBytes: number
   ) => Promise<Uint8Array>;
-  /**
-   * Records bytes an optimiser removed from a tool result before insertion.
-   * Passed in rather than imported because the database lives in the server and
-   * this runs in core. Optional and fire-and-forget: a platform that does not
-   * record anything simply leaves it undefined.
-   */
-  recordToolOutputSavings?: (saving: {
-    bytesIn: number;
-    bytesOut: number;
-    optimizer: string;
-    tool: string;
-  }) => void;
-  /**
-   * Records what the provider actually charged for one request, tagged with
-   * whether the optimiser was active. This is the only honest route from bytes
-   * to tokens: the provider counts, split by arm.
-   */
+  /** Records what the provider actually charged for one request. */
   recordTurnUsage?: (turn: {
     estimated: boolean;
     inputTokens: number;
-    optimized: boolean;
     outputTokens: number;
   }) => void;
   searchKnowledge?: (input: {
@@ -3245,11 +3177,6 @@ export interface ToolContext {
   sessionId?: string;
   /** Aborts when the caller cancels the turn. Long-running tools should stop their work on it. */
   signal?: AbortSignal;
-  /**
-   * Per-org override for the tool-output optimiser. Undefined means the setting
-   * was never chosen, which falls back to the server's NAKAMA_OMNI env var.
-   */
-  tokenOptimizerEnabled?: boolean | null;
   /**
    * Present only in a cognito session. Attachments there have no `sessions`
    * row to reference, so they are written with a null session_id and their
@@ -3272,9 +3199,15 @@ export interface ToolContext {
 }
 
 export interface ToolDefinition<Input = unknown, Output = unknown> {
+  /** Rechecked before a deferred tool is returned by discovery. */
+  canDiscover?: (context: ToolContext) => Promise<boolean>;
   description: string;
-  /** Assigned plugin tools in this group are discovered per user turn. */
+  /** Assigned tools in this group are loaded through discovery. */
   discoveryGroup?: string;
+  /** What the group is for, shown beside it in the discovery catalog. */
+  discoveryHint?: string;
+  /** Plugins default to one turn; MCP discoveries can last for the session. */
+  discoveryScope?: "session";
   /**
    * When true, the LLM provider runs this tool itself and `run` is never
    * called. Only `web_search` uses it today: the built-in stub is hosted, a

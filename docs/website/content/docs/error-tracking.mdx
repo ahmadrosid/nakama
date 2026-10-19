@@ -24,13 +24,13 @@ GlitchTip also shows a second address under the same page, ending in `/security/
 
 **2. Paste it into Nakama.** Open **Control center → Integrations → Error tracking**, paste the DSN, and press **Save**.
 
-![The Error tracking page in Nakama before a DSN is saved, showing the badge reading Off](/screenshots/error-tracking-empty.png)
+![The Error tracking page in Nakama before a DSN is saved](/screenshots/error-tracking-empty.png)
 
 Nakama checks the shape of what you pasted and refuses anything that is not a DSN, so a typo fails on the spot rather than going quiet for a week. It takes effect immediately: there is nothing to restart.
 
-**3. Press Send test event.** The badge turns to **Sending** once a DSN is saved, and the button tells you whether the event actually arrived.
+**3. Press Send test event.** The switch reads **On** once a DSN is saved, and **Last test** tells you whether the event actually arrived.
 
-![The Error tracking page with a saved DSN, the badge reading Sending, and the message confirming the test event was delivered](/screenshots/error-tracking-test-event.png)
+![The Error tracking page with a saved DSN, the switch on, and Last test reading Delivered](/screenshots/error-tracking-test-event.png)
 
 Open your tracker and you should see one event within a few seconds, at info level, so it does not sit in your triage queue looking like a real crash. If the button says the ingest could not be reached, the DSN or the network is wrong, and nothing has been lost.
 

@@ -1,6 +1,6 @@
 {
   "name": "nakama",
-  "version": "0.4.48",
+  "version": "0.4.52",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -10,8 +10,6 @@
     "packages/plugins/*"
   ],
   "scripts": {
-    "agent:ui": "bash scripts/agent-ui-harness.sh start",
-    "agent:ui:stop": "bash scripts/agent-ui-harness.sh stop",
     "build": "bun run --workspaces --if-present build",
     "build:docs": "bun run --cwd docs/website build",
     "check": "ultracite check && bun run check:anti-slop",
@@ -53,7 +51,7 @@
     "jscpd": "4.3.0",
     "knip": "6.38.0",
     "oxlint": "1.87.0",
-    "react-doctor": "0.9.14",
+    "react-doctor": "0.9.18",
     "ultracite": "7.11.0"
   },
   "patchedDependencies": {

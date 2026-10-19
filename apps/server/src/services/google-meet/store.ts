@@ -168,15 +168,29 @@ export class MeetingStore {
 
     return this.get(id)!;
   }
-  list(actorId: string | null = null, profileId: string | null = null) {
+  /**
+   * `pageOwnerId` adds that member's meetings without a profile (page imports
+   * and captures) to a profile-scoped list.
+   */
+  list(
+    actorId: string | null = null,
+    profileId: string | null = null,
+    pageOwnerId: string | null = null
+  ) {
     return this.db
       .query<
         Meeting,
-        [string | null, string | null, string | null, string | null]
+        [
+          string | null,
+          string | null,
+          string | null,
+          string | null,
+          string | null,
+        ]
       >(
-        "SELECT meetings.*, (SELECT substr(text, 1, 180) FROM segments WHERE meetingId=meetings.id AND trim(text) != '' ORDER BY sequence LIMIT 1) AS preview FROM meetings WHERE (? IS NULL OR actorId=?) AND (? IS NULL OR profileId=?) ORDER BY createdAt DESC LIMIT 100"
+        "SELECT meetings.*, (SELECT substr(text, 1, 180) FROM segments WHERE meetingId=meetings.id AND trim(text) != '' ORDER BY sequence LIMIT 1) AS preview FROM meetings WHERE (? IS NULL OR actorId=?) AND (? IS NULL OR profileId=? OR (profileId IS NULL AND actorId=?)) ORDER BY createdAt DESC LIMIT 100"
       )
-      .all(actorId, actorId, profileId, profileId)
+      .all(actorId, actorId, profileId, profileId, pageOwnerId)
       .map((meeting) => ({
         ...meeting,
         transcriptFile: existsSync(this.transcriptPath(meeting.id))

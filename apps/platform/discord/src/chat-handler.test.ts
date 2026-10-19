@@ -585,7 +585,7 @@ describe("Discord selection pickers", () => {
     });
   });
 
-  test("profile picker excludes Super Bot and rejects stale or unavailable choices", async () => {
+  test("profile picker excludes Super Nakama and rejects stale or unavailable choices", async () => {
     await withTempHome(async (homeDir) => {
       const handler = await createPairedHandler(homeDir, {
         orgs: createMultiTestOrgs(),
@@ -742,7 +742,7 @@ describe("createChatHandler artifact delivery", () => {
     { content: "Saved the report.", role: "assistant" },
   ];
 
-  test("auto-uploads a small artifact after a paired save-artifact turn", async () => {
+  test("auto-uploads a small artifact after a paired save_artifact turn", async () => {
     await withTempHome(async (homeDir) => {
       const { handleMessage, calls, sessionStore } = await createPairedHandler(
         homeDir,
@@ -776,7 +776,7 @@ describe("createChatHandler artifact delivery", () => {
     });
   });
 
-  test("auto-uploads a PDF artifact after a paired save-artifact turn", async () => {
+  test("auto-uploads a PDF artifact after a paired save_artifact turn", async () => {
     await withTempHome(async (homeDir) => {
       const pdfMeta = JSON.stringify({
         mimeType: "application/pdf",
@@ -857,7 +857,7 @@ describe("createChatHandler artifact delivery", () => {
     });
   });
 
-  test("auto-uploads a CSV artifact after a paired save-artifact turn", async () => {
+  test("auto-uploads a CSV artifact after a paired save_artifact turn", async () => {
     await withTempHome(async (homeDir) => {
       const csvMeta = JSON.stringify({
         mimeType: "text/csv",

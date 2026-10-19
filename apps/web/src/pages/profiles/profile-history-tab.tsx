@@ -46,8 +46,8 @@ function formatSourceLabel(source: ProfileChangeEvent["source"]): string {
   switch (source) {
     case "dashboard":
       return "Dashboard";
-    case "super_bot":
-      return "Super Bot";
+    case "super_nakama":
+      return "Super Nakama";
     case "skill_manage":
       return "Skill manager";
     case "pack_import":

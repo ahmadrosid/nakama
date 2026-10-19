@@ -20,16 +20,13 @@ One container, one process tree. Measured on `ghcr.io/ahmadrosid/nakama:latest`
 It starts and serves on **1 vCPU and 1 GB**. It also starts under a 512 MB cap,
 using 221 MB, but that leaves nothing for the rest of the box.
 
-Three things raise the figure and are not in the table:
+Two things raise the figure and are not in the table:
 
 - **Channel workers.** Telegram, WhatsApp, and Discord each run as their own
   process next to the server. WhatsApp carries Baileys and libsignal and is the
   heaviest of the three. Size for them separately if you enable them.
 - **A configured provider.** The numbers above come from offline mode, so no
   model traffic passed through the container.
-- **The MicroSandbox bash backend**, which needs a working hypervisor at
-  `/dev/kvm`. Most small VPS plans do not expose it. See
-  [MicroSandbox bash backend](#optional-microsandbox-bash-backend).
 
 ## Quick run
 
@@ -170,6 +167,38 @@ The script does not remove the cached
 custom names set through the build helper can remain unless you remove them
 yourself.
 
+## Claude and Codex agents
+
+The Claude and Codex [ACP agents](/acp-agents) need the Claude Code and Codex binaries. They add about 670 MB, so the default image does not include them.
+
+| Tag | Claude and Codex agents | Size (amd64) |
+| --- | --- | --- |
+| `latest`, `X.Y.Z` | Bring your own binary | ~620 MB |
+| `latest-full`, `X.Y.Z-full` | Included | ~1.3 GB |
+
+If you use these agents, run the full image:
+
+```bash
+docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahmadrosid/nakama:latest-full
+```
+
+To build it from source, pass the build arg:
+
+```bash
+./scripts/docker-build-run.sh --build-arg INSTALL_CODING_AGENTS=true
+```
+
+To keep the default image, give the agents a binary through the data volume. Install the CLI once inside the container, then restart it with the path set:
+
+```bash
+docker exec nakama bun add -g @openai/codex @anthropic-ai/claude-code
+docker rm -f nakama
+docker run -d -p 4310:4310 -v nakama-data:/nakama/data \
+  -e CODEX_PATH=/nakama/data/.bun/bin/codex \
+  -e CLAUDE_CODE_EXECUTABLE=/nakama/data/.bun/bin/claude \
+  --name nakama ghcr.io/ahmadrosid/nakama:latest
+```
+
 ## Optional: CloakBrowser with agent-browser
 
 The image does not include [CloakBrowser](https://github.com/CloakHQ/CloakBrowser). Stock Chrome from `agent-browser install` still works inside the container when you use the dashboard **Install** path.
@@ -186,13 +215,9 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data \
 
 See [Agent browser](/agent-browser#3-optional-cloakbrowser-for-antibot-sites).
 
-## Optional: MicroSandbox bash backend
+## Bash in Docker
 
-Stock `docker run` / `./scripts/docker-build-run.sh` does **not** pass `/dev/kvm` (or nested virtualization). Keep `NAKAMA_BASH_BACKEND=host` (the default) inside Docker unless you deliberately add hypervisor access.
-
-In Docker, host Bash runs inside the Nakama container with the server process's OS permissions. It can access mounted data outside the active profile workspace, including other profiles' files when permissions allow. The shared container does not isolate profiles from each other. Assign host Bash only to trusted profiles.
-
-If you set `NAKAMA_BASH_BACKEND=microsandbox` without a working MicroSandbox runtime / KVM device, **every** `bash` tool call fails closed — there is no silent host fallback. Coding-agent harness runs require `host` for now. See [Choose a MicroSandbox image](/builtin-tools#choose-a-microsandbox-image) for custom image setup.
+In Docker, Bash runs inside the Nakama container with the server process's OS permissions. It can access mounted data outside the active profile workspace, including other profiles' files when permissions allow. The shared container does not isolate profiles from each other. Assign Bash only to trusted profiles.
 
 ## Next steps
 

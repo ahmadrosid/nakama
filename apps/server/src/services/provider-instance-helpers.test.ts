@@ -22,38 +22,40 @@ function createProviderInstance(
 }
 
 describe("OpenRouter routing validation", () => {
-  test.each([
-    null,
-    [[]],
-    true,
-    { zdr: "true" },
-    { requireParameters: 1 },
-    { dataCollection: "never" },
-    { extra_body: {} },
-    { data_collection: "deny" },
-  ])("rejects invalid routing %j on create and update", (value) => {
-    // SAFETY: The test fixture matches the contract used by this test.
-    const openRouterRouting = value as OpenRouterRoutingSettings;
-    expect(() =>
-      buildProviderInstanceFromCreateRequest(
-        {
-          apiKey: `sk-or-${"x".repeat(24)}`,
-          openRouterRouting,
-          type: "openrouter",
-        },
-        []
-      )
-    ).toThrow(NakamaApiError);
-    expect(() =>
-      applyProviderInstanceUpdate(
-        createProviderInstance({
-          id: "or",
-          label: "OpenRouter",
-          type: "openrouter",
-        }),
-        { openRouterRouting }
-      )
-    ).toThrow(NakamaApiError);
+  test("rejects invalid routing on create and update", () => {
+    for (const value of [
+      null,
+      [[]],
+      true,
+      { zdr: "true" },
+      { requireParameters: 1 },
+      { dataCollection: "never" },
+      { extra_body: {} },
+      { data_collection: "deny" },
+    ]) {
+      // SAFETY: The test fixture matches the contract used by this test.
+      const openRouterRouting = value as OpenRouterRoutingSettings;
+      expect(() =>
+        buildProviderInstanceFromCreateRequest(
+          {
+            apiKey: `sk-or-${"x".repeat(24)}`,
+            openRouterRouting,
+            type: "openrouter",
+          },
+          []
+        )
+      ).toThrow(NakamaApiError);
+      expect(() =>
+        applyProviderInstanceUpdate(
+          createProviderInstance({
+            id: "or",
+            label: "OpenRouter",
+            type: "openrouter",
+          }),
+          { openRouterRouting }
+        )
+      ).toThrow(NakamaApiError);
+    }
   });
 
   test("does not apply OpenRouter routing to other providers", () => {

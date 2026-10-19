@@ -56,11 +56,11 @@ describe("cli-config", () => {
   });
   test("saves and loads profile_id", async () => {
     await withCliConfigDir(async () => {
-      await saveCliProfileId("super_bot");
-      expect(await loadSavedCliProfileId()).toBe("super_bot");
+      await saveCliProfileId("super_nakama");
+      expect(await loadSavedCliProfileId()).toBe("super_nakama");
 
       const raw = await readFile(getCliConfigPath(), "utf8");
-      expect(raw).toContain("profile_id=super_bot");
+      expect(raw).toContain("profile_id=super_nakama");
     });
   });
 
@@ -71,7 +71,7 @@ describe("cli-config", () => {
         path,
         [
           "# Nakama CLI",
-          "profile_id=super_bot",
+          "profile_id=super_nakama",
           "evil=injected",
           "org_id=org_123",
           "another=payload",
@@ -80,14 +80,14 @@ describe("cli-config", () => {
         { mode: 0o600 }
       );
 
-      expect(await loadSavedCliProfileId()).toBe("super_bot");
+      expect(await loadSavedCliProfileId()).toBe("super_nakama");
       expect(await loadSavedCliOrgId()).toBe("org_123");
 
       await saveCliOrgId("org_123");
       await saveCliServerUrl(" https://example.com ");
       expect(await loadSavedCliServerUrl()).toBe("https://example.com");
       const raw = await readFile(path, "utf8");
-      expect(raw).toContain("profile_id=super_bot");
+      expect(raw).toContain("profile_id=super_nakama");
       expect(raw).toContain("org_id=org_123");
       expect(raw).not.toContain("evil");
       expect(raw).not.toContain("another");

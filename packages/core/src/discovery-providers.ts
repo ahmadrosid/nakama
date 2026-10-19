@@ -18,6 +18,7 @@ export const DISCOVERY_MODEL_PROVIDERS: ReadonlySet<ProviderName> =
     "moonshot",
     "moonshot_cn",
     "xai",
+    "groq",
     "zhipu",
     "zhipu_cn",
   ]);
@@ -28,6 +29,7 @@ export const DISCOVERY_MODEL_PROVIDERS: ReadonlySet<ProviderName> =
 export const DISCOVERY_PROVIDER_BASE_URLS: Readonly<
   Partial<Record<ProviderName, string>>
 > = {
+  groq: "https://api.groq.com/openai/v1",
   minimax: "https://api.minimax.io/v1",
   minimax_cn: "https://api.minimaxi.com/v1",
   moonshot: "https://api.moonshot.ai/v1",

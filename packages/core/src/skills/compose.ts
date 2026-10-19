@@ -3,7 +3,8 @@ import type { DiscoveredSkill } from "./types";
 export const AGENT_BROWSER_SKILL_NAME = "agent-browser";
 
 export function composeAgentBrowserCapabilityPrompt(
-  skills: Pick<DiscoveredSkill, "name">[]
+  skills: Pick<DiscoveredSkill, "name">[],
+  options: { cloudBrowser?: boolean } = {}
 ): string {
   const skill = skills.find((entry) => entry.name === AGENT_BROWSER_SKILL_NAME);
 
@@ -15,7 +16,13 @@ export function composeAgentBrowserCapabilityPrompt(
 
 The **agent-browser** skill is assigned (see Available Agent Skills). Skills are workflow instructions, not callable tools — run this one with \`bash\` + the agent-browser CLI. For login walls, forms, clicks, screenshots, and dynamic pages; prefer \`web_fetch\` for plain public text.
 
-\`agent-browser open <url>\` → act or \`screenshot artifacts/<file>.png\` → \`close\`. Full workflow: follow the skill when matched or \`/skill agent-browser\`. Missing CLI → tell the operator to install it. Host \`AGENT_BROWSER_EXECUTABLE_PATH\` / \`AGENT_BROWSER_ARGS\` (optional Cloak stealth Chromium) are inherited by bash; if unset, stock Chrome from \`agent-browser install\` is correct.`;
+\`agent-browser open <url>\` → act or \`screenshot artifacts/<file>.png\` → \`close\`. Full workflow: follow the skill when matched or \`/skill agent-browser\`. Missing CLI → tell the operator to install it. Host \`AGENT_BROWSER_EXECUTABLE_PATH\` / \`AGENT_BROWSER_ARGS\` (optional Cloak stealth Chromium) are inherited by bash; if unset, stock Chrome from \`agent-browser install\` is correct.${
+    options.cloudBrowser
+      ? `
+
+Cloud browser is on. For websites, use the browser_* tools when they are available; they drive the user's own cloud browser.`
+      : ""
+  }`;
 }
 
 /**
@@ -47,7 +54,7 @@ export function composeSkillsCatalog(skills: DiscoveredSkill[]): string {
     "# Available Agent Skills",
     "Workflow skills extend your capabilities for specific tasks. Follow a skill's instructions when it matches the user's request.",
     "Before using a skill, read its SKILL.md with read_file unless its full instructions are already included below. Follow any required references before producing the deliverable. Do not claim to have used a skill based only on its description.",
-    "Use the full instruction path shown below as read_file's path and omit cwd. Do not shorten it to a relative path. For references and assets, build the full path from the skill directory and omit cwd.",
+    "Use the full instruction path shown below as read_file's path. Do not shorten it to a relative path. For references and assets, build the full path from the skill directory.",
     "",
     ...skills.map(
       (skill) =>
@@ -74,7 +81,7 @@ export function composeMatchedSkillsPrompt(
     const includeBody = explicitInvocation || skill.includeBodyOnMatch;
     const body = includeBody ? skill.body.trim() : "";
 
-    const location = `Instruction file: ${JSON.stringify(skill.skillFilePath)}. Pass this full path to read_file and omit cwd. Resolve relative references and assets to full paths from ${JSON.stringify(skill.directory)} and omit cwd for those reads too.`;
+    const location = `Instruction file: ${JSON.stringify(skill.skillFilePath)}. Pass this full path to read_file. Resolve relative references and assets to full paths from ${JSON.stringify(skill.directory)}.`;
 
     const loading = includeBody
       ? "Follow the instructions below and read any references they require before starting the task."

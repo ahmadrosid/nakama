@@ -7,9 +7,9 @@ import {
 import { createInMemoryDatabaseAdapter } from "./index";
 import {
   ensureBundledSkillsAssigned,
-  ensureOrgSuperBotProfiles,
+  ensureOrgSuperNakamaProfiles,
   seedOrgDefaultProfile,
-  seedOrgSuperBotProfile,
+  seedOrgSuperNakamaProfile,
 } from "./org-profiles";
 import { ensureBuiltinToolDefinitions } from "./seed";
 
@@ -71,13 +71,13 @@ describe("seedOrgDefaultProfile", () => {
     expect(await db.listProfilesForOrg("org_a")).toHaveLength(1);
   });
 
-  test("assigns default bundled skills but not super bot skills", async () => {
+  test("assigns default bundled skills but not super nakama skills", async () => {
     const db = createInMemoryDatabaseAdapter();
     await upsertSkill(db, "create-automation");
     await upsertSkill(db, "skill-installer");
     await upsertSkill(db, "update-profile-memory");
     await upsertSkill(db, "archive-profile-memory");
-    await upsertSkill(db, "save-artifact");
+    await upsertSkill(db, "artifact-design");
     await upsertSkill(db, "create-profile");
 
     const profile = await seedOrgDefaultProfile(db, "org_a");
@@ -90,23 +90,23 @@ describe("seedOrgDefaultProfile", () => {
     expect(skillNames).toContain("skill-installer");
     expect(skillNames).toContain("update-profile-memory");
     expect(skillNames).toContain("archive-profile-memory");
-    expect(skillNames).toContain("save-artifact");
+    expect(skillNames).toContain("artifact-design");
     expect(skillNames).not.toContain("create-profile");
   });
 });
 
-describe("seedOrgSuperBotProfile", () => {
+describe("seedOrgSuperNakamaProfile", () => {
   test.each(["create-plugin", "create-skill"])(
-    "assigns %s to new and existing Super Bots only",
+    "assigns %s to new and existing Super Nakamas only",
     async (name) => {
       const db = createInMemoryDatabaseAdapter();
       await upsertSkill(db, name);
-      const profile = await seedOrgSuperBotProfile(db, "org_a");
+      const profile = await seedOrgSuperNakamaProfile(db, "org_a");
       expect(
         (await db.listSkillsForProfile(profile.id)).map((skill) => skill.name)
       ).toContain(name);
       await db.unassignSkillFromProfile(profile.id, `skill_${name}`);
-      await seedOrgSuperBotProfile(db, "org_a");
+      await seedOrgSuperNakamaProfile(db, "org_a");
       expect(
         (await db.listSkillsForProfile(profile.id)).map((skill) => skill.name)
       ).toContain(name);
@@ -116,9 +116,9 @@ describe("seedOrgSuperBotProfile", () => {
       ).not.toContain(name);
     }
   );
-  test("assigns a Super Bot skill whose row syncs after the Super Bot exists", async () => {
+  test("assigns a Super Nakama skill whose row syncs after the Super Nakama exists", async () => {
     const db = createInMemoryDatabaseAdapter();
-    const profile = await seedOrgSuperBotProfile(db, "org_a");
+    const profile = await seedOrgSuperNakamaProfile(db, "org_a");
     const ordinary = await seedOrgDefaultProfile(db, "org_a");
     await upsertSkill(db, "create-skill");
     await ensureBundledSkillsAssigned(db);
@@ -130,28 +130,28 @@ describe("seedOrgSuperBotProfile", () => {
     ).not.toContain("create-skill");
   });
 
-  test("creates one super bot per org", async () => {
+  test("creates one super nakama per org", async () => {
     const db = createInMemoryDatabaseAdapter();
 
-    const orgASuperBot = await seedOrgSuperBotProfile(db, "org_a");
-    const orgBSuperBot = await seedOrgSuperBotProfile(db, "org_b");
+    const orgASuperNakama = await seedOrgSuperNakamaProfile(db, "org_a");
+    const orgBSuperNakama = await seedOrgSuperNakamaProfile(db, "org_b");
 
-    expect(orgASuperBot.orgId).toBe("org_a");
-    expect(orgBSuperBot.orgId).toBe("org_b");
-    expect(orgASuperBot.id).not.toBe(orgBSuperBot.id);
-    expect(orgASuperBot.isSuper).toBe(true);
-    expect(orgASuperBot.isDefault).toBe(false);
-    expect(orgASuperBot.name).toBe("Super Bot");
+    expect(orgASuperNakama.orgId).toBe("org_a");
+    expect(orgBSuperNakama.orgId).toBe("org_b");
+    expect(orgASuperNakama.id).not.toBe(orgBSuperNakama.id);
+    expect(orgASuperNakama.isSuper).toBe(true);
+    expect(orgASuperNakama.isDefault).toBe(false);
+    expect(orgASuperNakama.name).toBe("Super Nakama");
 
     const orgAList = await db.listProfilesForOrg("org_a");
     expect(orgAList).toHaveLength(1);
-    expect(orgAList[0]?.id).toBe(orgASuperBot.id);
+    expect(orgAList[0]?.id).toBe(orgASuperNakama.id);
   });
 
   test("assigns builtins and bash", async () => {
     const db = createInMemoryDatabaseAdapter();
     await ensureBuiltinToolDefinitions(db);
-    const profile = await seedOrgSuperBotProfile(db, "org_a");
+    const profile = await seedOrgSuperNakamaProfile(db, "org_a");
 
     const toolIds = (await db.listToolsForProfile(profile.id)).map(
       (tool) => tool.id
@@ -174,51 +174,55 @@ describe("seedOrgSuperBotProfile", () => {
   test("the shared mailbox tool is never assigned by default, on create or on a later boot", async () => {
     const db = createInMemoryDatabaseAdapter();
     await ensureBuiltinToolDefinitions(db);
-    const superBot = await seedOrgSuperBotProfile(db, "org_a");
+    const superNakama = await seedOrgSuperNakamaProfile(db, "org_a");
     const defaultBot = await seedOrgDefaultProfile(db, "org_a");
 
     const toolIdsOf = async (profileId: string) =>
       (await db.listToolsForProfile(profileId)).map((tool) => tool.id);
 
-    expect(await toolIdsOf(superBot.id)).not.toContain(BUILTIN_TOOL_IDS.email);
+    expect(await toolIdsOf(superNakama.id)).not.toContain(
+      BUILTIN_TOOL_IDS.email
+    );
     expect(await toolIdsOf(defaultBot.id)).not.toContain(
       BUILTIN_TOOL_IDS.email
     );
 
     // An admin's explicit choice survives the seed that runs on every boot.
     await db.assignToolToProfile(defaultBot.id, BUILTIN_TOOL_IDS.email);
-    await seedOrgSuperBotProfile(db, "org_a");
+    await seedOrgSuperNakamaProfile(db, "org_a");
     await seedOrgDefaultProfile(db, "org_a");
 
-    expect(await toolIdsOf(superBot.id)).not.toContain(BUILTIN_TOOL_IDS.email);
+    expect(await toolIdsOf(superNakama.id)).not.toContain(
+      BUILTIN_TOOL_IDS.email
+    );
     expect(await toolIdsOf(defaultBot.id)).toContain(BUILTIN_TOOL_IDS.email);
   });
 
-  test("unassigns delete_file from an existing super bot", async () => {
+  test("unassigns delete_file from an existing super nakama", async () => {
     const db = createInMemoryDatabaseAdapter();
     await ensureBuiltinToolDefinitions(db);
-    const profile = await seedOrgSuperBotProfile(db, "org_a");
+    const profile = await seedOrgSuperNakamaProfile(db, "org_a");
 
     await db.assignToolToProfile(profile.id, BUILTIN_TOOL_IDS.delete_file);
     expect(
       (await db.listToolsForProfile(profile.id)).map((tool) => tool.id)
     ).toContain(BUILTIN_TOOL_IDS.delete_file);
 
-    await seedOrgSuperBotProfile(db, "org_a");
+    await seedOrgSuperNakamaProfile(db, "org_a");
 
     expect(
       (await db.listToolsForProfile(profile.id)).map((tool) => tool.id)
     ).not.toContain(BUILTIN_TOOL_IDS.delete_file);
   });
 
-  test("assigns super bot bundled skills", async () => {
+  test("assigns super nakama bundled skills", async () => {
     const db = createInMemoryDatabaseAdapter();
     await upsertSkill(db, "create-automation");
     await upsertSkill(db, "create-profile");
     await upsertSkill(db, "coding-agent");
     await upsertSkill(db, "agent-browser");
 
-    const profile = await seedOrgSuperBotProfile(db, "org_a");
+    const profile = await seedOrgSuperNakamaProfile(db, "org_a");
 
     const skillNames = (await db.listSkillsForProfile(profile.id)).map(
       (skill) => skill.name
@@ -232,22 +236,22 @@ describe("seedOrgSuperBotProfile", () => {
 
   test("is idempotent for the same org", async () => {
     const db = createInMemoryDatabaseAdapter();
-    const first = await seedOrgSuperBotProfile(db, "org_a");
-    const second = await seedOrgSuperBotProfile(db, "org_a");
+    const first = await seedOrgSuperNakamaProfile(db, "org_a");
+    const second = await seedOrgSuperNakamaProfile(db, "org_a");
 
     expect(second.id).toBe(first.id);
     expect(await db.listProfilesForOrg("org_a")).toHaveLength(1);
   });
 
-  test("backfills newly added bundled skills on existing super bot", async () => {
+  test("backfills newly added bundled skills on existing super nakama", async () => {
     const db = createInMemoryDatabaseAdapter();
 
-    const profile = await seedOrgSuperBotProfile(db, "org_a");
+    const profile = await seedOrgSuperNakamaProfile(db, "org_a");
     await upsertSkill(db, "update-profile-memory");
     await upsertSkill(db, "archive-profile-memory");
-    await upsertSkill(db, "save-artifact");
+    await upsertSkill(db, "artifact-design");
 
-    await seedOrgSuperBotProfile(db, "org_a");
+    await seedOrgSuperNakamaProfile(db, "org_a");
 
     const skillNames = (await db.listSkillsForProfile(profile.id)).map(
       (skill) => skill.name
@@ -255,16 +259,16 @@ describe("seedOrgSuperBotProfile", () => {
 
     expect(skillNames).toContain("update-profile-memory");
     expect(skillNames).toContain("archive-profile-memory");
-    expect(skillNames).toContain("save-artifact");
+    expect(skillNames).toContain("artifact-design");
   });
 
-  test("backfills super bot bundled skills on existing super bot", async () => {
+  test("backfills super nakama bundled skills on existing super nakama", async () => {
     const db = createInMemoryDatabaseAdapter();
 
-    const profile = await seedOrgSuperBotProfile(db, "org_a");
+    const profile = await seedOrgSuperNakamaProfile(db, "org_a");
     await upsertSkill(db, "create-profile");
 
-    await seedOrgSuperBotProfile(db, "org_a");
+    await seedOrgSuperNakamaProfile(db, "org_a");
 
     const skillNames = (await db.listSkillsForProfile(profile.id)).map(
       (skill) => skill.name
@@ -274,8 +278,22 @@ describe("seedOrgSuperBotProfile", () => {
   });
 });
 
+describe("seedOrgSuperNakamaProfile with bash turned off", () => {
+  test("a re-seed removes bash the Super Nakama already had", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await ensureBuiltinToolDefinitions(db);
+    const profile = await seedOrgSuperNakamaProfile(db, "org_a");
+
+    await seedOrgSuperNakamaProfile(db, "org_a", { grantBash: false });
+
+    expect(
+      (await db.listToolsForProfile(profile.id)).map((tool) => tool.id)
+    ).not.toContain(BASH_TOOL_ID);
+  });
+});
+
 describe("ensureBundledSkillsAssigned", () => {
-  test("does not assign super bot-only skills to ordinary profiles", async () => {
+  test("does not assign super nakama-only skills to ordinary profiles", async () => {
     const db = createInMemoryDatabaseAdapter();
     await upsertSkill(db, "create-automation");
     await upsertSkill(db, "create-profile");
@@ -295,8 +313,8 @@ describe("ensureBundledSkillsAssigned", () => {
   });
 });
 
-describe("ensureOrgSuperBotProfiles", () => {
-  test("backfills super bot for existing orgs", async () => {
+describe("ensureOrgSuperNakamaProfiles", () => {
+  test("backfills super nakama for existing orgs", async () => {
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();
 
@@ -315,7 +333,7 @@ describe("ensureOrgSuperBotProfiles", () => {
       )
     ).toBe(false);
 
-    await ensureOrgSuperBotProfiles(db);
+    await ensureOrgSuperNakamaProfiles(db);
 
     const profiles = await db.listProfilesForOrg("org_legacy");
     expect(profiles).toHaveLength(2);
@@ -346,7 +364,7 @@ describe("ensureOrgSuperBotProfiles", () => {
     const archivedDefault = await seedOrgDefaultProfile(db, "org_archived");
     await upsertSkill(db, "create-automation");
 
-    await ensureOrgSuperBotProfiles(db);
+    await ensureOrgSuperNakamaProfiles(db);
     await ensureBundledSkillsAssigned(db);
 
     const activeProfiles = await db.listProfilesForOrg("org_active");
@@ -380,7 +398,7 @@ test("shared listing is seeded and assigned to fresh profiles, without restoring
     "builtin"
   );
 
-  for (const seed of [seedOrgDefaultProfile, seedOrgSuperBotProfile]) {
+  for (const seed of [seedOrgDefaultProfile, seedOrgSuperNakamaProfile]) {
     const profile = await seed(db, "org_listing");
     expect(
       (await db.listToolsForProfile(profile.id)).some(

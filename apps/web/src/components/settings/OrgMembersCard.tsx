@@ -23,6 +23,7 @@ import {
   useInviteOrgMember,
   useOrgMembers,
   useRemoveOrgMember,
+  useSetOrgMemberDisabled,
   useUpdateOrgMember,
 } from "@/hooks/use-org-members";
 import { formatError } from "@/lib/client";
@@ -304,6 +305,85 @@ function useOrgMemberActions(
   };
 }
 
+function OrgMembersToolbar({
+  tab,
+  setTab,
+  state,
+  dispatch,
+  invitePending,
+  onInviteSubmit,
+}: {
+  tab: "members" | "settings";
+  setTab(value: "members" | "settings"): void;
+  state: OrgMembersState;
+  dispatch: React.Dispatch<OrgMembersAction>;
+  invitePending: boolean;
+  onInviteSubmit(event: React.FormEvent): void;
+}) {
+  return (
+    <div
+      aria-label="Organization sections"
+      className="flex items-center justify-between gap-3 px-4 py-2"
+      role="tablist"
+    >
+      <OrgMembersTabs onChange={setTab} value={tab} />
+      {tab === "members" ? (
+        <OrgMembersActions
+          inviteEmail={state.inviteEmail}
+          inviteFormError={state.formError}
+          inviteOpen={state.inviteOpen}
+          invitePending={invitePending}
+          inviteRole={state.inviteRole}
+          onAddMember={() => {
+            dispatch({ type: "reset-add" });
+            dispatch({ type: "clear-secrets" });
+            dispatch({ type: "patch", values: { addOpen: true } });
+          }}
+          onInviteEmailChange={(value) =>
+            dispatch({ type: "patch", values: { inviteEmail: value } })
+          }
+          onInviteOpenChange={(open) => {
+            dispatch({ type: "patch", values: { inviteOpen: open } });
+
+            if (open) {
+              dispatch({ type: "reset-invite" });
+              dispatch({ type: "clear-secrets" });
+            } else {
+              dispatch({ type: "reset-invite" });
+            }
+          }}
+          onInviteRoleChange={(value) =>
+            dispatch({ type: "patch", values: { inviteRole: value } })
+          }
+          onInviteSubmit={onInviteSubmit}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function OrgMembersSecret({
+  state,
+  onCopy,
+}: {
+  state: OrgMembersState;
+  onCopy(value: string): void;
+}) {
+  const secretValue = state.secretValue;
+
+  if (!secretValue) {
+    return null;
+  }
+
+  return (
+    <OrgMembersSecretBanner
+      onCopy={() => onCopy(secretValue)}
+      secretHint={state.secretHint}
+      secretValue={secretValue}
+    />
+  );
+}
+
 export function OrgMembersCard() {
   const { user, activeOrg, updateOrg } = useAuth();
   const orgId = activeOrg?.id ?? null;
@@ -322,8 +402,9 @@ export function OrgMembersCard() {
   );
 
   const actions = useOrgMemberActions(orgId ?? "", state, dispatch);
+  const setDisabled = useSetOrgMemberDisabled(orgId ?? "");
 
-  if (!activeOrg || activeOrg.role !== "admin") {
+  if (activeOrg?.role !== "admin") {
     return null;
   }
 
@@ -349,44 +430,14 @@ export function OrgMembersCard() {
     <>
       <Card className="w-full shadow-none">
         <CardContent className="divide-y divide-border p-0">
-          <div
-            aria-label="Organization sections"
-            className="flex items-center justify-between gap-3 px-4 py-2"
-            role="tablist"
-          >
-            <OrgMembersTabs onChange={setTab} value={tab} />
-            {tab === "members" ? (
-              <OrgMembersActions
-                inviteEmail={state.inviteEmail}
-                inviteFormError={state.formError}
-                inviteOpen={state.inviteOpen}
-                invitePending={inviteMutation.isPending}
-                inviteRole={state.inviteRole}
-                onAddMember={() => {
-                  dispatch({ type: "reset-add" });
-                  dispatch({ type: "clear-secrets" });
-                  dispatch({ type: "patch", values: { addOpen: true } });
-                }}
-                onInviteEmailChange={(value) =>
-                  dispatch({ type: "patch", values: { inviteEmail: value } })
-                }
-                onInviteOpenChange={(open) => {
-                  dispatch({ type: "patch", values: { inviteOpen: open } });
-
-                  if (open) {
-                    dispatch({ type: "reset-invite" });
-                    dispatch({ type: "clear-secrets" });
-                  } else {
-                    dispatch({ type: "reset-invite" });
-                  }
-                }}
-                onInviteRoleChange={(value) =>
-                  dispatch({ type: "patch", values: { inviteRole: value } })
-                }
-                onInviteSubmit={handleInviteSubmit}
-              />
-            ) : null}
-          </div>
+          <OrgMembersToolbar
+            dispatch={dispatch}
+            invitePending={inviteMutation.isPending}
+            onInviteSubmit={handleInviteSubmit}
+            setTab={setTab}
+            state={state}
+            tab={tab}
+          />
 
           {tab === "settings" ? (
             <>
@@ -404,23 +455,31 @@ export function OrgMembersCard() {
             </>
           ) : (
             <>
-              {state.secretValue ? (
-                <OrgMembersSecretBanner
-                  onCopy={() =>
-                    void copyWithHint(state.secretValue!, "secretHint")
-                  }
-                  secretHint={state.secretHint}
-                  secretValue={state.secretValue}
-                />
-              ) : null}
+              <OrgMembersSecret
+                onCopy={(value) => void copyWithHint(value, "secretHint")}
+                state={state}
+              />
 
               <div>
                 <OrgMembersTable
                   currentUserEmail={user?.email}
+                  disablePending={setDisabled.isPending}
                   isLoading={isLoading}
                   members={members}
                   onEdit={(member) => dispatch({ member, type: "open-edit" })}
                   onRemove={handleRemove}
+                  onToggleDisabled={
+                    user?.isPlatformAdmin
+                      ? (member) =>
+                          setDisabled.mutate(
+                            {
+                              disabled: !member.disabledAt,
+                              userId: member.userId,
+                            },
+                            { onError: (error) => toast(formatError(error)) }
+                          )
+                      : undefined
+                  }
                   removePending={removeMutation.isPending}
                   updatePending={updateMemberMutation.isPending}
                 />

@@ -198,15 +198,21 @@ async function ensureSession(
 ): Promise<LiveSession> {
   const live = await getOrStartProcess(options);
 
-  if (live.sessionId === null) {
-    const created = await live.process.connection.newSession({
-      cwd: options.cwd,
-      mcpServers: options.mcpServers ?? [],
-    });
+  try {
+    if (live.sessionId === null) {
+      const created = await live.process.connection.newSession({
+        cwd: options.cwd,
+        mcpServers: options.mcpServers ?? [],
+      });
 
-    live.sessionId = created.sessionId;
-    live.configOptions = created.configOptions ?? [];
-    await applyInitialSettings(live, options.initialSettings ?? {});
+      live.sessionId = created.sessionId;
+      live.configOptions = created.configOptions ?? [];
+      await applyInitialSettings(live, options.initialSettings ?? {});
+    }
+  } finally {
+    // A settings read starts an agent too, and may never be followed by a
+    // prompt. Arm the idle stop here so that agent does not run forever.
+    scheduleIdleStop(live);
   }
 
   return live;
@@ -258,11 +264,6 @@ async function getOrStartProcess(
   const existing = liveSessions.get(options.sessionKey);
 
   if (existing && sameAgent(existing, options)) {
-    if (existing.idleTimer) {
-      clearTimeout(existing.idleTimer);
-      existing.idleTimer = null;
-    }
-
     return existing;
   }
 
@@ -330,7 +331,8 @@ function scheduleIdleStop(live: LiveSession): void {
   }
 
   live.idleTimer = setTimeout(() => {
-    if (liveSessions.get(live.key) === live) {
+    // A mapper means a turn is running. Its end arms the timer again.
+    if (liveSessions.get(live.key) === live && !live.route.mapper) {
       stopAcpSession(live.key);
     }
   }, IDLE_TIMEOUT_MS);

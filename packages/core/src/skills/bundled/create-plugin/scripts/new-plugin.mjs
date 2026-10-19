@@ -1,5 +1,8 @@
-// Scaffold a plugin draft from ../template and build its first action.
+// Scaffold a plugin draft from ../template and build its actions and page.
 // Usage: bun new-plugin.mjs <plugin-id> "<Plugin Name>" [action-key]
+//        bun new-plugin.mjs <plugin-id> "<Plugin Name>" --data
+// --data lays ../data-template over ../template: a SQLite table, list_items
+// and save_item actions, and a page with a Table and an edit Dialog.
 // Run it from the profile workspace; it writes plugin-drafts/<plugin-id>/.
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -11,7 +14,11 @@ const ACTION_KEY = /^[a-z][a-z0-9_-]{0,63}$/;
 
 const OFFICIAL_IDS = new Set(["workflows", "supermemory", "google-meet"]);
 
-const [id, name, action = "greet"] = process.argv.slice(2);
+const args = process.argv.slice(2);
+
+const data = args.includes("--data");
+
+const [id, name, action = "greet"] = args.filter((arg) => arg !== "--data");
 
 function fail(message) {
   console.error(message);
@@ -34,11 +41,9 @@ if (!ACTION_KEY.test(action)) {
   fail("Action key must be lowercase letters, digits, dashes, or underscores.");
 }
 
-const templateDir = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-  "template"
-);
+const skillDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+const ACTION_TEMPLATE = path.join("src", "__ACTION_KEY__.js.tmpl");
 
 const target = path.resolve("plugin-drafts", id);
 
@@ -59,28 +64,36 @@ function fill(text) {
   );
 }
 
-const entries = await readdir(templateDir, { recursive: true });
+// Template file (relative path) -> source path. Data files replace base files.
+const sources = new Map();
 
-for (const entry of entries) {
-  if (!entry.endsWith(".tmpl")) {
-    continue;
+for (const dir of data ? ["template", "data-template"] : ["template"]) {
+  const root = path.join(skillDir, dir);
+
+  for (const entry of await readdir(root, { recursive: true })) {
+    if (entry.endsWith(".tmpl") && !(data && entry === ACTION_TEMPLATE)) {
+      sources.set(entry, path.join(root, entry));
+    }
   }
-
-  const output = path.join(target, fill(entry.slice(0, -".tmpl".length)));
-  await mkdir(path.dirname(output), { recursive: true });
-  await writeFile(
-    output,
-    fill(await readFile(path.join(templateDir, entry), "utf8"))
-  );
 }
 
+for (const [entry, source] of sources) {
+  const output = path.join(target, fill(entry.slice(0, -".tmpl".length)));
+  await mkdir(path.dirname(output), { recursive: true });
+  await writeFile(output, fill(await readFile(source, "utf8")));
+}
+
+const manifest = JSON.parse(
+  await readFile(path.join(target, "nakama.plugin.json"), "utf8")
+);
+
 const builds = [
-  {
-    entry: `${action}.js`,
-    file: `${action}.js`,
+  ...manifest.actions.map(({ key }) => ({
+    entry: `${key}.js`,
+    file: `${key}.js`,
     out: "actions",
     target: "bun",
-  },
+  })),
   { entry: "ui.jsx", file: "app.js", out: "ui", target: "browser" },
 ];
 

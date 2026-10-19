@@ -32,6 +32,8 @@ export * from "./paths";
 
 export * from "./profile-org-override";
 
+export * from "./python-env";
+
 export * from "./script-trust";
 
 export * from "./types";

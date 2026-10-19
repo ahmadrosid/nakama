@@ -70,6 +70,7 @@ export function formatProviderLabel(
     provider === "zhipu" ||
     provider === "zhipu_cn" ||
     provider === "xai" ||
+    provider === "groq" ||
     provider === "together" ||
     provider === "xiaomi" ||
     provider === "meta" ||
@@ -109,6 +110,7 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
     { id: "opencode_go", label: "OpenCode Go" },
     { id: "minimax", label: "MiniMax" },
     { id: "xai", label: "xAI Grok" },
+    { id: "groq", label: "Groq" },
     { id: "minimax_cn", label: "MiniMax (CN)" },
     { id: "moonshot", label: "Moonshot Kimi" },
     { id: "moonshot_cn", label: "Moonshot Kimi (CN)" },

@@ -32,14 +32,16 @@
     "agent-prompt",
     "---Extend---",
     "builtin-tools",
+    "tool-reference",
     "skills",
     "integrations",
     "image-generation",
-    "token-optimiser",
     "coding-agent",
     "acp-agents",
     "workflows",
+    "data-view",
     "agent-browser",
+    "cloud-browser",
     "mcp",
     "composio",
     "plugins",
@@ -47,6 +49,7 @@
     "build-a-plugin",
     "---Community---",
     "contributing",
+    "brand-kit",
     "changelog"
   ]
 }

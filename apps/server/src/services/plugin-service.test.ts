@@ -25,10 +25,10 @@ import {
   pluginTarball,
   publishPluginPackageVersion,
 } from "../testing/plugin-package-fixture";
-import { createSuperBotTools } from "../tools/super-bot-tools";
+import { createSuperNakamaTools } from "../tools/super-nakama-tools";
 import { PluginService, setPluginLifecycleTestHooks } from "./plugin-service";
 import type { ProfileService } from "./profile-service";
-import { SuperBotSessionState } from "./super-bot-session-state";
+import { SuperNakamaSessionState } from "./super-nakama-session-state";
 
 afterEach(closePluginPackageRegistry);
 
@@ -168,13 +168,13 @@ describe("PluginService", () => {
     };
   }
 
-  test("submit_plugin_draft describes Super Bot's own draft without installing it", async () => {
+  test("submit_plugin_draft describes Super Nakama's own draft without installing it", async () => {
     const { db, directory, draft, service } = await localDraft();
 
-    const submit = createSuperBotTools(
+    const submit = createSuperNakamaTools(
       // SAFETY: submit_plugin_draft never touches profile management.
       {} as ProfileService,
-      new SuperBotSessionState(),
+      new SuperNakamaSessionState(),
       undefined,
       () => service
     ).find((tool) => tool.name === "submit_plugin_draft");
@@ -405,7 +405,7 @@ describe("PluginService", () => {
     }
   });
 
-  test("local review requires platform authority and a Super Bot in the named organization", async () => {
+  test("local review requires platform authority and a Super Nakama in the named organization", async () => {
     const { draft, service, actor } = await localDraft();
     await expect(
       service.previewLocalPlugin(draft, { ...actor, isPlatformAdmin: false })

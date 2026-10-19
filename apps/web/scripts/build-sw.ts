@@ -13,7 +13,7 @@ import {
 } from "../src/lib/sw-precache";
 
 /** Unhashed files the shell needs on a cold, offline start. */
-const EXTRA_PRECACHE_URLS = ["/manifest.webmanifest", "/icons/icon-192.png"];
+const EXTRA_PRECACHE_URLS = ["/manifest.webmanifest", "/icons/icon-192-v2.png"];
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 

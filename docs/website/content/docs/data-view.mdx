@@ -1,0 +1,37 @@
+---
+title: "Data View"
+description: "Keep a copy of a Google Sheet to view and edit for free, then sync your edits back."
+---
+
+Reading a Google Sheet through Composio costs a tool call every time. Data View fetches the sheet once and keeps a copy in Nakama. You and your agents read and edit that copy for free. Google Sheets changes only when you press **Sync**.
+
+## Install and open
+
+1. Open **Control center → Agent tools → Plugins** as an organization admin.
+2. Under **Official plugins**, click **Install** on **Data View**.
+3. Open **Data View** from **Control center → Installed plugins**, or search for it with `Ctrl+K` / `Cmd+K`.
+
+## Add a sheet
+
+Paste a Google Sheets link and click **Add**. The link opens the tab it points to.
+
+- A sheet shared as **Anyone with the link** downloads directly. No Composio call.
+- A private sheet reads once through your own Google Sheets connection. Connect **Google Sheets** in **Control center → Composio** first.
+
+## Edit and sync
+
+| Action | Result |
+| --- | --- |
+| Click a cell, then type, or double-click | Edit the cell. **Enter** saves, **Escape** cancels |
+| Formula bar | Edit the selected cell. Values that start with `=` become formulas after sync |
+| **Add row** | Adds an empty row at the bottom |
+| **Sync** | Writes only the changed cells to Google Sheets with your Google Sheets connection |
+| **Refresh** | Loads the sheet again. Unsynced edits are lost, so Data View asks first |
+
+Changed cells show a yellow tint until they sync.
+
+Sync writes cells by position. If someone inserts or deletes rows in Google Sheets after your last refresh, refresh before you edit.
+
+## Use from chat
+
+Open **Agent**, select a profile, and assign the Data View tools and the **data-view** skill. The agent can then save a sheet link, read and search rows, and edit cells in the copy. Only a person can press **Sync**.

@@ -1,4 +1,6 @@
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { z } from "zod";
@@ -108,6 +110,7 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   doubao: "Doubao (Volcengine)",
   fireworks: "Fireworks",
   gemini: "Gemini",
+  groq: "Groq",
   meta: "Meta Model API",
   minimax: "MiniMax",
   minimax_cn: "MiniMax (CN)",
@@ -307,6 +310,98 @@ export async function ensureUserConfigDir(): Promise<string> {
   await ensureDir(dir);
 
   return dir;
+}
+
+/**
+ * Stored credentials (custom tool keys, MCP server config) are AES-256-GCM
+ * encrypted. The key lives in its own owner-only file, so a copy of
+ * config.ini or the database alone does not reveal them.
+ */
+const CREDENTIAL_KEY_FILE = "tool-credentials.key";
+
+const ErrorCodeSchema = z.object({ code: z.string().optional() });
+
+function hasErrorCode(error: Error, code: string): boolean {
+  return ErrorCodeSchema.safeParse(error).data?.code === code;
+}
+
+async function readCredentialEncryptionKey(): Promise<Buffer> {
+  const keyPath = join(getUserConfigDir(), CREDENTIAL_KEY_FILE);
+
+  try {
+    return Buffer.from((await readFile(keyPath, "utf8")).trim(), "base64url");
+  } catch (error) {
+    if (!(error instanceof Error && hasErrorCode(error, "ENOENT"))) {
+      throw error;
+    }
+  }
+
+  await ensureUserConfigDir();
+  const key = randomBytes(32);
+
+  try {
+    await writeFile(keyPath, key.toString("base64url"), {
+      flag: "wx",
+      mode: 0o600,
+    });
+
+    return key;
+  } catch (error) {
+    if (!(error instanceof Error && hasErrorCode(error, "EEXIST"))) {
+      throw error;
+    }
+
+    return Buffer.from((await readFile(keyPath, "utf8")).trim(), "base64url");
+  }
+}
+
+/**
+ * `scope` is bound as AAD, so a ciphertext copied to another scope (another
+ * org, another MCP server) does not decrypt there.
+ */
+export async function encryptCredential(
+  scope: string,
+  plaintext: string
+): Promise<string> {
+  const iv = randomBytes(12);
+
+  const cipher = createCipheriv(
+    "aes-256-gcm",
+    await readCredentialEncryptionKey(),
+    iv
+  );
+
+  cipher.setAAD(Buffer.from(scope, "utf8"));
+
+  const ciphertext = Buffer.concat([
+    cipher.update(plaintext, "utf8"),
+    cipher.final(),
+  ]);
+
+  return Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString(
+    "base64url"
+  );
+}
+
+export async function decryptCredential(
+  scope: string,
+  value: string
+): Promise<string> {
+  const encoded = Buffer.from(value, "base64url");
+
+  const decipher = createDecipheriv(
+    "aes-256-gcm",
+    await readCredentialEncryptionKey(),
+    encoded.subarray(0, 12)
+  );
+
+  decipher.setAAD(Buffer.from(scope, "utf8"));
+  decipher.setAuthTag(encoded.subarray(12, 28));
+
+  return Buffer.concat([
+    decipher.update(encoded.subarray(28)),
+    decipher.final(),
+  ]).toString("utf8");
 }
 
 export async function loadUserConfig(): Promise<UserConfig | null> {

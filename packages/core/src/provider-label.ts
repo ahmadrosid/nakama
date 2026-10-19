@@ -12,6 +12,7 @@ const BUILTIN_LABELS: Record<
   doubao: "Doubao (Volcengine)",
   fireworks: "Fireworks",
   gemini: "Gemini",
+  groq: "Groq",
   meta: "Meta Model API",
   minimax: "MiniMax",
   minimax_cn: "MiniMax (CN)",

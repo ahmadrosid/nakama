@@ -16,12 +16,13 @@ const FORCE_REFRESH_BUNDLED_SKILL_NAMES = new Set<string>([
   "coding-backend-codex",
   "coding-backend-cursor",
   "agent-browser",
-  "save-artifact",
+  "artifact-design",
   "archive-profile-memory",
 ]);
 
 const RENAMED_BUNDLED_SKILL_DIRS = [
   ["coding-delegation", "coding-agent"],
+  ["save-artifact", "artifact-design"],
 ] as const;
 
 async function migrateRenamedBundledSkillDirectories(): Promise<string[]> {

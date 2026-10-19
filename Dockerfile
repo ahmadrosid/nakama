@@ -6,7 +6,7 @@
 # Verify each proposed multi-arch digest with: docker buildx imagetools inspect <image>
 
 # --- Build architecture-independent web and JavaScript bundles once ---
-FROM --platform=$BUILDPLATFORM oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52d95a519631e2fc61 AS web-builder
+FROM --platform=$BUILDPLATFORM oven/bun:1.4.3-slim@sha256:14a223fa35747ec728bce300ef85888bc5f7958164d15bbba6a54b22b52a3288 AS web-builder
 WORKDIR /app
 
 COPY package.json bun.lock ./
@@ -36,20 +36,45 @@ COPY --from=web-builder /app/apps/platform/slack/dist /app/apps/platform/slack/d
 # Production runtime dependencies are installed from a committed manifest and
 # lockfile. Re-resolving version ranges at image build time let two builds of
 # the same commit ship different transitive bytes, so the lockfile is the input.
-FROM oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52d95a519631e2fc61 AS runtime-deps
+FROM oven/bun:1.4.3-slim@sha256:14a223fa35747ec728bce300ef85888bc5f7958164d15bbba6a54b22b52a3288 AS runtime-deps
 WORKDIR /runtime-deps
 
+# The Codex and Claude Code binaries are about 670 MB, half the image. The
+# default image drops them; the -full tag keeps them. Without them, the ACP
+# agents use CODEX_PATH / CLAUDE_CODE_EXECUTABLE.
+ARG INSTALL_CODING_AGENTS=false
 COPY .docker/runtime-deps/package.json .docker/runtime-deps/bun.lock ./
 RUN bun install --frozen-lockfile --production --ignore-scripts \
   # The runtime is Debian (glibc); the SDK never picks its musl binary here.
-  && rm -rf node_modules/@anthropic-ai/claude-agent-sdk-linux-x64-musl
+  && rm -rf node_modules/@anthropic-ai/claude-agent-sdk-linux-*-musl \
+  && if [ "$INSTALL_CODING_AGENTS" != "true" ]; then \
+       rm -rf node_modules/@anthropic-ai/claude-agent-sdk-linux-* node_modules/@openai/codex-linux-*; \
+     fi
+
+# Keep FFmpeg's video libraries out of the runtime image. These pinned static
+# binaries cover both published architectures without Debian's GUI dependencies.
+FROM --platform=$BUILDPLATFORM alpine:3.22 AS ffmpeg-binaries
+ARG TARGETARCH
+RUN set -eu; \
+  case "$TARGETARCH" in \
+    amd64) arch=x64; ffmpeg_sha=9eac5b2b5076db5ff853a6fa0dcd6b8de7d0cac8481eadda6c47cd935825f1ee; ffprobe_sha=065d3c56926052a76e884c4e4b51b7d95248da9391ab7effdcca6b94ceab98cf ;; \
+    arm64) arch=arm64; ffmpeg_sha=6e7b1d7d1aa8c35e3fedd78a140aa0968717aeb7386ecfb0ee00773d9f0a4503; ffprobe_sha=fd2aca1456f0261cabef4514b6d97a70fa342003347f51b39c473dd364328089 ;; \
+    *) echo "no FFmpeg build for $TARGETARCH" >&2; exit 1 ;; \
+  esac; \
+  base=https://github.com/shaka-project/static-ffmpeg-binaries/releases/download/n8.1.2-1; \
+  wget -q -O /ffmpeg "$base/ffmpeg-linux-$arch"; \
+  wget -q -O /ffprobe "$base/ffprobe-linux-$arch"; \
+  echo "$ffmpeg_sha  /ffmpeg" | sha256sum -c -; \
+  echo "$ffprobe_sha  /ffprobe" | sha256sum -c -; \
+  chmod +x /ffmpeg /ffprobe
 
 # --- Production runtime (server + workspace packages + built static assets) ---
-FROM oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52d95a519631e2fc61 AS runtime
+FROM oven/bun:1.4.3-slim@sha256:14a223fa35747ec728bce300ef85888bc5f7958164d15bbba6a54b22b52a3288 AS runtime
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates sudo python3 \
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl sudo python3 python3-venv \
   && rm -rf /var/lib/apt/lists/*
+COPY --from=ffmpeg-binaries /ffmpeg /ffprobe /usr/local/bin/
 
 # Optional Google Meet audio-capture runtime. Chromium remains sandboxed and
 # runs as the existing non-root Nakama user. The manifest and lockfile are
@@ -59,35 +84,10 @@ ARG INSTALL_MEET_DEPS=false
 COPY .docker/meet-deps/package.json .docker/meet-deps/bun.lock /opt/nakama-meet/
 RUN if [ "$INSTALL_MEET_DEPS" = "true" ]; then \
       apt-get update && apt-get install -y --no-install-recommends \
-        chromium ffmpeg pulseaudio pulseaudio-utils fonts-liberation xvfb \
+        chromium pulseaudio pulseaudio-utils fonts-liberation xvfb \
       && rm -rf /var/lib/apt/lists/* \
       && cd /opt/nakama-meet \
       && bun install --frozen-lockfile --production --ignore-scripts; \
-    fi
-
-# Tool-output optimiser, on by default so the dashboard toggle works on a fresh
-# image without a rebuild. Just under 10 MB unpacked. Build with
-# --build-arg OMNI_VERSION= to leave it out; the server then fetches it on demand
-# when the toggle is switched on, unless NAKAMA_OMNI_AUTO_INSTALL=0.
-# The release is a static musl build, which runs on this glibc base, and the
-# published checksum is verified rather than the download trusted.
-ARG OMNI_VERSION="0.7.9"
-RUN if [ -n "$OMNI_VERSION" ]; then \
-      set -eu; \
-      apt-get update && apt-get install -y --no-install-recommends curl ca-certificates; \
-      case "$(dpkg --print-architecture)" in \
-        amd64) target=x86_64-unknown-linux-musl ;; \
-        arm64) target=aarch64-unknown-linux-musl ;; \
-        *) echo "no omni build for $(dpkg --print-architecture)" >&2; exit 1 ;; \
-      esac; \
-      base="https://github.com/fajarhide/omni/releases/download/v${OMNI_VERSION}"; \
-      archive="omni-v${OMNI_VERSION}-${target}.tar.gz"; \
-      curl -fsSL -o "/tmp/${archive}" "${base}/${archive}"; \
-      curl -fsSL -o /tmp/SHA256SUMS "${base}/SHA256SUMS"; \
-      (cd /tmp && grep " ${archive}\$" SHA256SUMS | sha256sum -c -); \
-      tar -xzf "/tmp/${archive}" -C /usr/local/bin omni; \
-      rm -rf "/tmp/${archive}" /tmp/SHA256SUMS /var/lib/apt/lists/*; \
-      omni --version; \
     fi
 
 RUN mkdir -p /nakama/data \

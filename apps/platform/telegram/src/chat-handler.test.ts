@@ -1554,7 +1554,7 @@ describe("bridge API integration", () => {
     });
   });
 
-  test("/profile hides super bot from channel profile switches", async () => {
+  test("/profile hides super nakama from channel profile switches", async () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         botToken: "1234567890:TEST",
@@ -1569,7 +1569,7 @@ describe("bridge API integration", () => {
         {
           profiles: [
             { id: "default", isDefault: true, name: "Default Bot" },
-            { id: "super_bot", isSuper: true, name: "Super Bot" },
+            { id: "super_nakama", isSuper: true, name: "Super Nakama" },
           ],
         }
       );
@@ -1583,7 +1583,7 @@ describe("bridge API integration", () => {
 
       const text = replies.join("\n");
       expect(text).toContain("Default Bot");
-      expect(text).not.toContain("Super Bot");
+      expect(text).not.toContain("Super Nakama");
     });
   });
 
@@ -2037,7 +2037,7 @@ describe("createChatHandler artifact delivery", () => {
     { content: "Saved the report.", role: "assistant" },
   ];
 
-  test("posts a publish share link after a paired save-artifact turn", async () => {
+  test("posts a publish share link after a paired save_artifact turn", async () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         botToken: "1234567890:TEST",

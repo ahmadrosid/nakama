@@ -7,9 +7,11 @@ import { REDACTED_SECRET_VALUE } from "./secret-mask";
 import { getUserConfigPath, parseIniWithSections } from "./user-config";
 import {
   isWebSearchConfigComplete,
+  isWebSearchProvider,
   loadWebSearchConfig,
   loadWebSearchSettingsPublic,
   saveWebSearchConfig,
+  WEB_SEARCH_PROVIDER_LABELS,
   WEB_SEARCH_SECTION,
 } from "./web-search-config";
 
@@ -25,6 +27,7 @@ describe("web search config", () => {
     delete process.env.NAKAMA_CONFIG_DIR;
     delete process.env.EXA_API_KEY;
     delete process.env.FIRECRAWL_API_KEY;
+    delete process.env.SERPLY_API_KEY;
   });
 
   async function useTempConfigDir(): Promise<void> {
@@ -133,5 +136,17 @@ describe("web search config", () => {
         provider: "exa",
       })
     ).toBe(false);
+  });
+
+  test("knows Serply as a vendor with its own endpoint and label", async () => {
+    await useTempConfigDir();
+    process.env.SERPLY_API_KEY = "serply-secret-key-9876";
+
+    const saved = await saveWebSearchConfig({ provider: "serply" });
+
+    expect(isWebSearchProvider("serply")).toBe(true);
+    expect(WEB_SEARCH_PROVIDER_LABELS.serply).toBe("Serply");
+    expect(saved.endpoint).toBe("https://api.serply.io/v1/search");
+    expect(saved.apiKeyMasked?.endsWith("9876")).toBe(true);
   });
 });

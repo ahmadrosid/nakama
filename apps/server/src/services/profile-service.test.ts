@@ -12,9 +12,11 @@ import os from "node:os";
 import path from "node:path";
 import { getProfileSoulDir, writeArtifactShareSnapshot } from "@nakama/core";
 import type { UpdateProfileRequest } from "@nakama/core/contract";
+import { BASH_TOOL_ID } from "@nakama/core/tools/protected";
 import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
+  ensureBashToolDefinition,
   ensureBuiltinToolDefinitions,
 } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
@@ -560,6 +562,46 @@ describe("profile service createProfile", () => {
     ).rejects.toThrow(/already taken/i);
   });
 
+  test("create and clone refuse an id claimed after the taken check", async () => {
+    tempConfigDir = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-profile-claim-race-")
+    );
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+
+    const db = createInMemoryDatabaseAdapter();
+    const service = new ProfileService(db);
+    const source = await service.createProfile("org_second", { name: "Src" });
+
+    await db.createProfileIfAbsent({
+      createdAt: "2020-01-01T00:00:00.000Z",
+      id: "imported",
+      isSuper: false,
+      model: null,
+      name: "Imported",
+      orgId: "org_first",
+      systemPrompt: "first org prompt",
+    });
+
+    // The taken check runs before a concurrent import inserts its row.
+    const realGetProfile = db.getProfile.bind(db);
+    db.getProfile = async (id) =>
+      id === "imported" ? null : await realGetProfile(id);
+
+    await expect(
+      service.createProfile("org_second", { id: "imported", name: "Mine" })
+    ).rejects.toThrow(/already taken/i);
+
+    await expect(
+      service.cloneProfile("org_second", source.profile.id, { id: "imported" })
+    ).rejects.toThrow(/already taken/i);
+
+    expect(await realGetProfile("imported")).toMatchObject({
+      name: "Imported",
+      orgId: "org_first",
+      systemPrompt: "first org prompt",
+    });
+  });
+
   test("resolves legacy slug ids via getProfile and getProfileForOrg", async () => {
     tempConfigDir = await mkdtemp(
       path.join(os.tmpdir(), "nakama-profile-legacy-slug-")
@@ -1076,18 +1118,18 @@ describe("profile service cloneProfile", () => {
     }
   );
 
-  test("refuses to clone Super Bot and writes nothing", async () => {
+  test("refuses to clone Super Nakama and writes nothing", async () => {
     const { db, service } = await setup();
 
-    const superBot = await service.createProfile(ORG_ID, {
+    const superNakama = await service.createProfile(ORG_ID, {
       isSuper: true,
-      name: "Super Bot",
+      name: "Super Nakama",
     });
 
     const countBefore = (await db.listProfilesForOrg(ORG_ID)).length;
 
     await expect(
-      service.cloneProfile(ORG_ID, superBot.profile.id, {})
+      service.cloneProfile(ORG_ID, superNakama.profile.id, {})
     ).rejects.toThrow(/cannot be cloned/i);
 
     expect(await db.listProfilesForOrg(ORG_ID)).toHaveLength(countBefore);
@@ -1290,12 +1332,84 @@ describe("profile service deleteProfile", () => {
     );
   });
 
-  test("does not promote Super Bot as the new default", async () => {
+  test("keeps files and the default when database deletion fails", async () => {
+    const { db, service } = await setup();
+    const first = await service.createProfile(ORG_ID, { name: "Default Bot" });
+    const second = await service.createProfile(ORG_ID, { name: "Second" });
+    await service.createProfile(ORG_ID, { name: "Third" });
+    await markDefault(db, first.profile.id);
+
+    const soulPath = path.join(
+      getProfileSoulDir(ORG_ID, first.profile.id),
+      "SOUL.md"
+    );
+
+    const soul = await readFile(soulPath, "utf8");
+    const deleteProfile = db.deleteProfileAndPromoteDefault;
+    db.deleteProfileAndPromoteDefault = async () => {
+      throw new Error("Database unavailable");
+    };
+
+    await expect(
+      service.deleteProfile(ORG_ID, first.profile.id)
+    ).rejects.toThrow();
+    db.deleteProfileAndPromoteDefault = deleteProfile;
+
+    expect(await readFile(soulPath, "utf8")).toBe(soul);
+    expect((await db.getProfile(first.profile.id))?.isDefault).toBe(true);
+    expect((await db.getProfile(second.profile.id))?.isDefault).toBe(false);
+    await expect(
+      db.deleteProfileAndPromoteDefault(first.profile.id, ORG_ID, "missing")
+    ).rejects.toThrow();
+    expect((await db.getProfile(first.profile.id))?.isDefault).toBe(true);
+    expect(await readFile(soulPath, "utf8")).toBe(soul);
+  });
+
+  test("keeps a newer default selected during deletion", async () => {
+    const { db, service } = await setup();
+    const first = await service.createProfile(ORG_ID, { name: "Default Bot" });
+    const second = await service.createProfile(ORG_ID, { name: "Second" });
+    const third = await service.createProfile(ORG_ID, { name: "Third" });
+    await markDefault(db, first.profile.id);
+    service.beforeChannelOwnerDelete = async () => {
+      await markDefault(db, third.profile.id);
+    };
+
+    await service.deleteProfile(ORG_ID, first.profile.id);
+
+    expect((await db.getProfile(second.profile.id))?.isDefault).toBe(false);
+    expect((await db.getProfile(third.profile.id))?.isDefault).toBe(true);
+  });
+
+  test("keeps a target promoted to default during deletion", async () => {
+    const { db, service } = await setup();
+    const first = await service.createProfile(ORG_ID, { name: "Default Bot" });
+    const second = await service.createProfile(ORG_ID, { name: "Second" });
+    await service.createProfile(ORG_ID, { name: "Third" });
+    await markDefault(db, first.profile.id);
+    service.beforeChannelOwnerDelete = async () => {
+      await markDefault(db, second.profile.id);
+    };
+
+    await expect(
+      service.deleteProfile(ORG_ID, second.profile.id)
+    ).rejects.toThrow();
+
+    expect((await db.getProfile(second.profile.id))?.isDefault).toBe(true);
+    expect(
+      await readFile(
+        path.join(getProfileSoulDir(ORG_ID, second.profile.id), "SOUL.md"),
+        "utf8"
+      )
+    ).toBeTruthy();
+  });
+
+  test("does not promote Super Nakama as the new default", async () => {
     const { db, service } = await setup();
     const first = await service.createProfile(ORG_ID, { name: "Default Bot" });
     await service.createProfile(ORG_ID, {
       isSuper: true,
-      name: "Super Bot",
+      name: "Super Nakama",
     });
     const third = await service.createProfile(ORG_ID, { name: "Writer" });
     await markDefault(db, first.profile.id);
@@ -1964,5 +2078,41 @@ describe("profile organization transfer", () => {
       raw.close(true);
       database.close();
     }
+  });
+});
+
+describe("profile service with bash turned off", () => {
+  const originalTenantBash = process.env.NAKAMA_TENANT_BASH;
+
+  afterEach(() => {
+    if (originalConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    }
+
+    if (originalTenantBash === undefined) {
+      delete process.env.NAKAMA_TENANT_BASH;
+    } else {
+      process.env.NAKAMA_TENANT_BASH = originalTenantBash;
+    }
+  });
+
+  test("refuses to assign bash to a profile", async () => {
+    process.env.NAKAMA_CONFIG_DIR = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-bash-off-")
+    );
+    process.env.NAKAMA_TENANT_BASH = "0";
+    const db = createInMemoryDatabaseAdapter();
+    await ensureBuiltinToolDefinitions(db);
+    await ensureBashToolDefinition(db);
+    const service = new ProfileService(db);
+    const { profile } = await service.createProfile(ORG_ID, { name: "Ops" });
+
+    await expect(
+      service.assignTool(ORG_ID, profile.id, { toolId: BASH_TOOL_ID })
+    ).rejects.toMatchObject({ status: 403 });
+
+    await rm(process.env.NAKAMA_CONFIG_DIR, { force: true, recursive: true });
   });
 });

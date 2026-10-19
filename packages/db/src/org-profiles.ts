@@ -1,16 +1,18 @@
 import {
   DEFAULT_BUNDLED_SKILL_NAMES,
   nanoid,
-  SUPER_BOT_BUNDLED_SKILL_NAMES,
+  SUPER_NAKAMA_BUNDLED_SKILL_NAMES,
 } from "@nakama/core";
 import {
   BASH_TOOL_ID,
+  BROWSER_TOOL_IDS,
   BUILTIN_TOOL_IDS,
   GENERATE_IMAGE_TOOL_ID,
   LIST_PROFILE_SESSIONS_TOOL_ID,
   READ_PROFILE_SESSION_TOOL_ID,
+  SAVE_ARTIFACT_TOOL_ID,
 } from "@nakama/core/tools/protected";
-import { SUPER_BOT_SYSTEM_PROMPT } from "./constants";
+import { SUPER_NAKAMA_SYSTEM_PROMPT } from "./constants";
 import type { DatabaseAdapter, StoredProfileRecord } from "./types";
 
 // The mailbox is one config for the whole install, so email is opt-in. This
@@ -31,6 +33,10 @@ export async function ensureProfileDefaultBuiltinTools(
 
     await db.assignToolToProfile(profileId, toolId);
   }
+
+  if (await db.getTool(SAVE_ARTIFACT_TOOL_ID)) {
+    await db.assignToolToProfile(profileId, SAVE_ARTIFACT_TOOL_ID);
+  }
 }
 
 export async function ensureProfileDefaultBundledSkills(
@@ -46,11 +52,11 @@ export async function ensureProfileDefaultBundledSkills(
   }
 }
 
-export async function ensureProfileSuperBotBundledSkills(
+export async function ensureProfileSuperNakamaBundledSkills(
   db: DatabaseAdapter,
   profileId: string
 ): Promise<void> {
-  for (const name of SUPER_BOT_BUNDLED_SKILL_NAMES) {
+  for (const name of SUPER_NAKAMA_BUNDLED_SKILL_NAMES) {
     const skill = await db.getSkillByName(name);
 
     if (skill) {
@@ -79,9 +85,9 @@ export async function ensureBundledSkillsAssigned(
 
     await ensureProfileDefaultBundledSkills(db, profile.id);
 
-    // Boot seeds Super Bots before skill rows sync, so a new skill lands here.
+    // Boot seeds Super Nakamas before skill rows sync, so a new skill lands here.
     if (profile.isSuper) {
-      await ensureProfileSuperBotBundledSkills(db, profile.id);
+      await ensureProfileSuperNakamaBundledSkills(db, profile.id);
     }
   }
 }
@@ -114,19 +120,16 @@ export async function seedOrgDefaultProfile(
   };
 
   await db.upsertProfile(profile);
-
-  for (const toolId of DEFAULT_BUILTIN_TOOL_IDS) {
-    await db.assignToolToProfile(profile.id, toolId);
-  }
-
+  await ensureProfileDefaultBuiltinTools(db, profile.id);
   await ensureProfileDefaultBundledSkills(db, profile.id);
 
   return profile;
 }
 
-export async function seedOrgSuperBotProfile(
+export async function seedOrgSuperNakamaProfile(
   db: DatabaseAdapter,
-  orgId: string
+  orgId: string,
+  options: SuperNakamaSeedOptions = {}
 ): Promise<StoredProfileRecord> {
   const existing = (await db.listProfilesForOrg(orgId)).find(
     (profile) => profile.isSuper
@@ -136,9 +139,9 @@ export async function seedOrgSuperBotProfile(
     await ensureProfileDefaultBuiltinTools(db, existing.id, true);
     await db.unassignToolFromProfile(existing.id, BUILTIN_TOOL_IDS.delete_file);
     await ensureProfileDefaultBundledSkills(db, existing.id);
-    await ensureProfileSuperBotBundledSkills(db, existing.id);
-    await ensureSuperBotBashTool(db, existing.id);
-    await ensureSuperBotSessionTools(db, existing.id);
+    await ensureProfileSuperNakamaBundledSkills(db, existing.id);
+    await ensureSuperNakamaBashTool(db, existing.id, options.grantBash);
+    await ensureSuperNakamaSessionTools(db, existing.id);
 
     return existing;
   }
@@ -151,9 +154,9 @@ export async function seedOrgSuperBotProfile(
     isDefault: false,
     isSuper: true,
     model: null,
-    name: "Super Bot",
+    name: "Super Nakama",
     orgId,
-    systemPrompt: SUPER_BOT_SYSTEM_PROMPT,
+    systemPrompt: SUPER_NAKAMA_SYSTEM_PROMPT,
     updatedAt: now,
   };
 
@@ -161,16 +164,17 @@ export async function seedOrgSuperBotProfile(
 
   await ensureProfileDefaultBuiltinTools(db, profile.id);
   await db.unassignToolFromProfile(profile.id, BUILTIN_TOOL_IDS.delete_file);
-  await ensureSuperBotBashTool(db, profile.id);
-  await ensureSuperBotSessionTools(db, profile.id);
+  await ensureSuperNakamaBashTool(db, profile.id, options.grantBash);
+  await ensureSuperNakamaSessionTools(db, profile.id);
   await ensureProfileDefaultBundledSkills(db, profile.id);
-  await ensureProfileSuperBotBundledSkills(db, profile.id);
+  await ensureProfileSuperNakamaBundledSkills(db, profile.id);
 
   return profile;
 }
 
-export async function ensureOrgSuperBotProfiles(
-  db: DatabaseAdapter
+export async function ensureOrgSuperNakamaProfiles(
+  db: DatabaseAdapter,
+  options: SuperNakamaSeedOptions = {}
 ): Promise<void> {
   const orgs = await db.listOrganizations();
 
@@ -179,7 +183,7 @@ export async function ensureOrgSuperBotProfiles(
       continue;
     }
 
-    await seedOrgSuperBotProfile(db, org.id);
+    await seedOrgSuperNakamaProfile(db, org.id, options);
   }
 }
 
@@ -217,6 +221,38 @@ export async function ensureGenerateImageToolDefinition(
     name: "generate_image",
     updatedAt: now,
   });
+}
+
+export async function ensureSaveArtifactToolDefinition(
+  db: DatabaseAdapter
+): Promise<void> {
+  const now = new Date().toISOString();
+  const existing = await db.getTool(SAVE_ARTIFACT_TOOL_ID);
+
+  await db.upsertTool({
+    createdAt: existing?.createdAt ?? now,
+    description:
+      "Save a text deliverable under artifacts/ and record which user made it.",
+    handlerConfig: {},
+    handlerType: "save_artifact",
+    id: SAVE_ARTIFACT_TOOL_ID,
+    name: "save_artifact",
+    updatedAt: now,
+  });
+
+  if (existing) {
+    return;
+  }
+
+  // Once, when the tool first appears: every profile that can write files can save
+  // artifacts. Later boots skip this, so an admin can unassign it.
+  for (const profile of await db.listProfiles()) {
+    const tools = await db.listToolsForProfile(profile.id);
+
+    if (tools.some((tool) => tool.id === BUILTIN_TOOL_IDS.write_file)) {
+      await db.assignToolToProfile(profile.id, SAVE_ARTIFACT_TOOL_ID);
+    }
+  }
 }
 
 /**
@@ -259,7 +295,65 @@ export async function ensureSessionToolDefinitions(
   }
 }
 
-export async function ensureSuperBotSessionTools(
+/**
+ * Kernel cloud browser tools. Seeded so they exist and survive
+ * removeUnsupportedTools, and opt-in per profile like the session tools. They
+ * only work once a platform admin sets up the Kernel browser runtime.
+ */
+export async function ensureBrowserToolDefinitions(
+  db: DatabaseAdapter
+): Promise<void> {
+  const now = new Date().toISOString();
+
+  const definitions = [
+    {
+      description: "Open a URL in the user's cloud browser.",
+      id: BROWSER_TOOL_IDS.browser_navigate,
+      name: "browser_navigate",
+    },
+    {
+      description: "Read the text and links of the current page.",
+      id: BROWSER_TOOL_IDS.browser_read,
+      name: "browser_read",
+    },
+    {
+      description: "Scroll the page and wait for new content.",
+      id: BROWSER_TOOL_IDS.browser_scroll,
+      name: "browser_scroll",
+    },
+    {
+      description: "Run Playwright code in the user's cloud browser.",
+      id: BROWSER_TOOL_IDS.browser_playwright,
+      name: "browser_playwright",
+    },
+    {
+      description: "Take a screenshot of the user's cloud browser.",
+      id: BROWSER_TOOL_IDS.browser_screenshot,
+      name: "browser_screenshot",
+    },
+    {
+      description: "Use the mouse and keyboard on the user's cloud browser.",
+      id: BROWSER_TOOL_IDS.browser_computer,
+      name: "browser_computer",
+    },
+  ];
+
+  for (const definition of definitions) {
+    const existing = await db.getTool(definition.id);
+
+    await db.upsertTool({
+      createdAt: existing?.createdAt ?? now,
+      description: definition.description,
+      handlerConfig: {},
+      handlerType: "browser",
+      id: definition.id,
+      name: definition.name,
+      updatedAt: now,
+    });
+  }
+}
+
+export async function ensureSuperNakamaSessionTools(
   db: DatabaseAdapter,
   profileId: string
 ): Promise<void> {
@@ -268,10 +362,21 @@ export async function ensureSuperBotSessionTools(
   await db.assignToolToProfile(profileId, READ_PROFILE_SESSION_TOOL_ID);
 }
 
-export async function ensureSuperBotBashTool(
+export interface SuperNakamaSeedOptions {
+  /** False when the deployment turned bash off (NAKAMA_TENANT_BASH=0). */
+  grantBash?: boolean;
+}
+
+export async function ensureSuperNakamaBashTool(
   db: DatabaseAdapter,
-  profileId: string
+  profileId: string,
+  grantBash = true
 ): Promise<void> {
   await ensureBashToolDefinition(db);
-  await db.assignToolToProfile(profileId, BASH_TOOL_ID);
+
+  if (grantBash) {
+    await db.assignToolToProfile(profileId, BASH_TOOL_ID);
+  } else {
+    await db.unassignToolFromProfile(profileId, BASH_TOOL_ID);
+  }
 }

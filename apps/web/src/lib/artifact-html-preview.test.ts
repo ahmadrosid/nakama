@@ -1,11 +1,21 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { MAX_HTML_ARTIFACT_BYTES } from "@nakama/core/artifact-mime";
 import { Window } from "happy-dom";
 import {
+  ARTIFACT_HTML_IFRAME_SANDBOX,
   htmlForArtifactPreview,
   resolveArtifactHtmlAssets,
 } from "./artifact-html-preview";
 
 describe("htmlForArtifactPreview", () => {
+  test("blocks oversized HTML, including multibyte content, before rendering", () => {
+    const html = "é".repeat(MAX_HTML_ARTIFACT_BYTES / 2);
+    expect(htmlForArtifactPreview(html)).toContain(html);
+    expect(htmlForArtifactPreview(`${html}x`)).not.toContain(html);
+    expect(htmlForArtifactPreview(`${html}x`)).toContain('role="alert"');
+    expect(ARTIFACT_HTML_IFRAME_SANDBOX.split(" ")).toEqual(["allow-scripts"]);
+  });
+
   test("injects scrollbar styles into head", () => {
     const html = "<html><head><title>Slides</title></head><body></body></html>";
     expect(htmlForArtifactPreview(html)).toContain(
@@ -53,6 +63,19 @@ function assetReader(calls: string[]) {
 }
 
 describe("relative HTML artifact assets", () => {
+  test("rejects a page whose embedded assets exceed the HTML limit", async () => {
+    await expect(
+      resolveArtifactHtmlAssets(
+        '<img src="large.png">',
+        "page.html",
+        async () => ({
+          contentType: "image/png",
+          data: new Uint8Array(12_000_000).buffer,
+        }),
+        new AbortController().signal
+      )
+    ).rejects.toMatchObject({ status: 413 });
+  });
   test("loads sibling and parent media from the HTML artifact directory", async () => {
     const calls: string[] = [];
     const controller = new AbortController();

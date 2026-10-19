@@ -1,6 +1,5 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { ToolDefinition } from "@nakama/core";
-import * as core from "@nakama/core";
 import {
   canRunToolCallsInParallel,
   createTurnTools,
@@ -85,9 +84,7 @@ describe("tool-loop", () => {
     expect(result).toEqual({ error: "boom" });
   });
 
-  test("executeToolCall rejects non-JSON results before distillation", async () => {
-    const spy = spyOn(core, "distillToolResult");
-
+  test("executeToolCall rejects non-JSON results", async () => {
     const invalidTool: ToolDefinition = {
       ...sampleTool,
       async run() {
@@ -95,18 +92,13 @@ describe("tool-loop", () => {
       },
     };
 
-    try {
-      const result = await executeToolCall([invalidTool], {
-        arguments: {},
-        id: "invalid",
-        name: "sample",
-      });
+    const result = await executeToolCall([invalidTool], {
+      arguments: {},
+      id: "invalid",
+      name: "sample",
+    });
 
-      expect(result).toHaveProperty("error");
-      expect(spy).not.toHaveBeenCalled();
-    } finally {
-      spy.mockRestore();
-    }
+    expect(result).toHaveProperty("error");
   });
 
   test("executeToolCall drops undefined fields like JSON serialization", async () => {
@@ -124,32 +116,6 @@ describe("tool-loop", () => {
     });
 
     expect(result).toEqual({ message: "kept" });
-  });
-
-  test("executeToolCall returns raw result when distillToolResult throws", async () => {
-    const payload = { message: "kept" };
-
-    const spy = spyOn(core, "distillToolResult").mockImplementation(
-      async () => {
-        throw new Error("omni unavailable");
-      }
-    );
-
-    const warnSpy = spyOn(console, "warn").mockImplementation(() => undefined);
-
-    try {
-      const result = await executeToolCall([sampleTool], {
-        arguments: payload,
-        id: "call_4",
-        name: "sample",
-      });
-
-      expect(result).toEqual(payload);
-      expect(warnSpy).toHaveBeenCalled();
-    } finally {
-      spy.mockRestore();
-      warnSpy.mockRestore();
-    }
   });
 
   test("executeToolCall re-throws the cancellation reason", async () => {
@@ -181,6 +147,50 @@ describe("tool-loop", () => {
 });
 
 describe("createTurnTools", () => {
+  test("checks discovery access before loading a tool and cancels without widening the session", async () => {
+    const discovered = new Set<string>();
+    let checked = 0;
+    const controller = new AbortController();
+
+    const assigned: ToolDefinition[] = [
+      {
+        ...sampleTool,
+        async canDiscover() {
+          checked += 1;
+
+          return false;
+        },
+        discoveryGroup: "office",
+        discoveryScope: "session",
+        name: "office__read",
+      },
+      {
+        ...sampleTool,
+        async canDiscover() {
+          controller.abort();
+
+          return true;
+        },
+        discoveryGroup: "office",
+        discoveryScope: "session",
+        name: "office__write",
+      },
+    ];
+
+    const active = createTurnTools(assigned, discovered);
+    const search = active[0]!;
+    expect(await search.run({ query: "read office" }, {})).toEqual({
+      remaining: 0,
+      tools: [],
+    });
+    expect(checked).toBe(1);
+    await expect(
+      search.run({ query: "write office" }, { signal: controller.signal })
+    ).rejects.toThrow();
+    expect(discovered.size).toBe(0);
+    expect(active.map((tool) => tool.name)).toEqual(["find_tools"]);
+  });
+
   test("discovery is bounded to assignments, validates input, and does not execute tools", async () => {
     let calls = 0;
 
@@ -238,6 +248,27 @@ describe("createTurnTools", () => {
       createTurnTools([existing, deferred]).map((tool) => tool.name)
     ).toEqual(["find_tools", "find_tools_plugins"]);
   });
+});
+
+test("the discovery catalog says what each plugin holds", () => {
+  const assigned = ["list_sheets", "read_sheet"].map((action) => ({
+    ...sampleTool,
+    discoveryGroup: "data_view",
+    discoveryHint: "Spreadsheet copies",
+    name: `plugin_data_view__${action}`,
+  }));
+
+  const [discovery] = createTurnTools([
+    ...assigned,
+    { ...sampleTool, discoveryGroup: "notes", name: "plugin_notes__list" },
+  ]);
+
+  expect(discovery?.description).toContain(
+    // oxlint-disable-next-line anti-slop/no-copy-assertions -- The catalog text is what the model reads; the hint must reach it.
+    "data_view (Spreadsheet copies): list_sheets, read_sheet"
+  );
+  // oxlint-disable-next-line anti-slop/no-copy-assertions -- A plugin without a hint keeps the plain entry.
+  expect(discovery?.description).toContain("notes: list");
 });
 
 test("plugin search supports multiple actions and paginates broad group queries", async () => {

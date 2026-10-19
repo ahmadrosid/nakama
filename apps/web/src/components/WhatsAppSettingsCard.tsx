@@ -50,15 +50,15 @@ function WhatsAppSettingsCardForOrg({
       allowedPhoneSummary={card.allowedPhoneSummary}
       allowUnpairedGroupMembers={card.allowUnpairedGroupMembers}
       awaitingQr={card.awaitingQr}
-      bridgeStarting={card.bridgeStarting}
       canSave={card.canSave}
       configured={card.configured}
       connected={card.connected}
       copied={card.copied}
-      embedded={embedded}
       formError={card.formError}
+      linkError={card.linkError}
       linkedNumber={card.linkedNumber}
       linkingAfterScan={card.linkingAfterScan}
+      linkOwner={card.linkOwner}
       loadError={card.loadError}
       onAllowUnpairedGroupMembersChange={card.onAllowUnpairedGroupMembersChange}
       onCopyPairingCode={card.onCopyPairingCode}

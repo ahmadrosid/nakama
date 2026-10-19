@@ -44,12 +44,15 @@ interface ProviderSetupFormProps {
   density?: "default" | "compact";
   onSuccess?: (result: CreateProviderResponse) => void;
   showHeading?: boolean;
+  /** Setup leaves this off and keeps the provider's default; Settings shows it. */
+  showModelPicker?: boolean;
   submitLabel?: string;
 }
 
 export function ProviderSetupForm({
   submitLabel = "Save & continue",
   showHeading = true,
+  showModelPicker = true,
   density = "default",
   onSuccess,
 }: ProviderSetupFormProps) {
@@ -129,6 +132,7 @@ export function ProviderSetupForm({
           canConnect={canConnect}
           density={density}
           form={form}
+          showModelPicker={showModelPicker}
           submitLabel={submitLabel}
         />
       )}
@@ -357,10 +361,12 @@ function ProviderSetupExtraFields({
   canConnect,
   density,
   form,
+  showModelPicker,
 }: {
   canConnect: boolean;
   density: "default" | "compact";
   form: ReturnType<typeof useProviderSetupForm>;
+  showModelPicker: boolean;
 }) {
   if (form.selectedProvider === "netra") {
     return (
@@ -438,7 +444,10 @@ function ProviderSetupExtraFields({
     );
   }
 
-  if (form.selectedProvider === "chatgpt" && !canConnect) {
+  if (
+    !showModelPicker ||
+    (form.selectedProvider === "chatgpt" && !canConnect)
+  ) {
     return null;
   }
 
@@ -450,12 +459,14 @@ function ProviderSetupDetails({
   canConnect,
   density,
   form,
+  showModelPicker,
   submitLabel,
 }: {
   apiKeyOptional: boolean;
   canConnect: boolean;
   density: "default" | "compact";
   form: ReturnType<typeof useProviderSetupForm>;
+  showModelPicker: boolean;
   submitLabel: string;
 }) {
   return (
@@ -487,6 +498,7 @@ function ProviderSetupDetails({
         canConnect={canConnect}
         density={density}
         form={form}
+        showModelPicker={showModelPicker}
       />
       {form.formError ? (
         <p className="text-destructive text-sm" role="alert">

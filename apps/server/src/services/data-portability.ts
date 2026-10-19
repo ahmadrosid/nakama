@@ -244,7 +244,8 @@ export async function retireAppUserData(
       current = join(current, segment);
 
       try {
-        result = await lstat(current);
+        // NTFS file ids pass 2^53; as numbers two files can share an ino.
+        result = await lstat(current, { bigint: true });
       } catch (error) {
         if (getNodeErrorCode(error) === "ENOENT") {
           return null;
@@ -258,7 +259,7 @@ export async function retireAppUserData(
       }
     }
 
-    return result ?? (await lstat(root));
+    return result ?? (await lstat(root, { bigint: true }));
   }
 
   async function moveRetiredPath(

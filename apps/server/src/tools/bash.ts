@@ -22,21 +22,11 @@ import {
 import { getToolExecutionEnv } from "../lib/ensure-process-path";
 import { mergeCodingAgentSpawnEnv } from "../services/coding-agent-spawn-env";
 import { killProcessTree } from "../services/custom-tool-subprocess";
-import {
-  type BashBackendKind,
-  resolveBashBackend,
-  resolveBashSandboxImage,
-  resolveBashSandboxNetwork,
-} from "./bash-config";
-import { buildBashSandboxEnv } from "./bash-sandbox-env";
+import { isTenantBashEnabled, TENANT_BASH_DISABLED } from "./bash-config";
 import {
   commandLooksLikeCursorAgent,
   formatCodingAgentBashStdout,
 } from "./cursor-agent-output";
-import {
-  BASH_SANDBOX_GUEST_WORKSPACE,
-  ProfileSandboxManager,
-} from "./profile-sandbox-manager";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -68,10 +58,6 @@ export interface BashOutput {
 }
 
 interface BashRunOptions {
-  /** Override backend for tests. */
-  backend?: BashBackendKind;
-  /** Reuse a manager across calls (tests). */
-  sandboxManager?: ProfileSandboxManager;
   workspaceRoot?: string;
 }
 
@@ -81,41 +67,10 @@ interface ShellRunOptions {
   workspaceRoot: string;
 }
 
-let sharedSandboxManager: ProfileSandboxManager | null = null;
-
-async function getSandboxManager(): Promise<ProfileSandboxManager> {
-  if (sharedSandboxManager) {
-    return sharedSandboxManager;
-  }
-
-  const { MicrosandboxBashRuntime } = await import(
-    "./bash-microsandbox-runtime"
-  );
-
-  sharedSandboxManager = new ProfileSandboxManager(
-    new MicrosandboxBashRuntime()
-  );
-
-  return sharedSandboxManager;
-}
-
-/** Test helper to clear the process-wide warm-sandbox manager. */
-export function resetBashSandboxManagerForTests(): void {
-  sharedSandboxManager = null;
-}
-
 const BASH_TOOL_DESCRIPTION_BASE =
   "Run a one-off shell command and return stdout, stderr, and exit code. In local CLI sessions, commands start in the directory where the CLI was launched; otherwise they start in the active profile workspace. Do not use this to create persistent tools, tool files, shell wrappers, or .sh scripts. If the user wants a reusable tool, translate shell examples into JavaScript instead.";
 
 function bashToolDescription(): string {
-  try {
-    if (resolveBashBackend() === "microsandbox") {
-      return `${BASH_TOOL_DESCRIPTION_BASE} Commands run under /bin/sh (POSIX ash on alpine — not bash; no [[ ]], arrays, or pipefail). Public network is denied by default. codingAgent harness runs are unsupported on this backend.`;
-    }
-  } catch {
-    // Invalid backend config — keep the host description.
-  }
-
   return `${BASH_TOOL_DESCRIPTION_BASE} Host execution is unrestricted by Nakama and uses the server process's OS permissions. Commands can access files outside the profile workspace, including other profiles' files when OS permissions allow. Assign host bash only to trusted profiles.`;
 }
 
@@ -172,6 +127,13 @@ export async function runBash(
     throw new Error("orgId is required.");
   }
 
+  // Seeding and assignment also drop bash when it is off, but a profile can
+  // still hold it from before (or via clone), so this is the gate that counts.
+  // The CLI channel is the operator's own terminal.
+  if (context.channel !== "cli" && !isTenantBashEnabled()) {
+    throw new Error(TENANT_BASH_DISABLED);
+  }
+
   const command = input.command.trim();
 
   if (!command) {
@@ -212,34 +174,6 @@ export async function runBash(
   const timeoutMs = readTimeout(input.timeoutMs);
   const env = input.env ?? {};
 
-  const backend = options.backend ?? resolveBashBackend();
-
-  if (backend === "microsandbox" && codingAgentMode) {
-    throw new Error(
-      "codingAgent is unsupported when NAKAMA_BASH_BACKEND=microsandbox. Use NAKAMA_BASH_BACKEND=host for coding-agent harness runs."
-    );
-  }
-
-  if (backend === "microsandbox") {
-    const manager = options.sandboxManager ?? (await getSandboxManager());
-
-    return manager.run({
-      command,
-      env: buildBashSandboxEnv({
-        overrides: env,
-        workspaceRoot: BASH_SANDBOX_GUEST_WORKSPACE,
-      }),
-      hostCwd: cwd,
-      hostWorkspace: workspaceRoot,
-      image: resolveBashSandboxImage(),
-      network: resolveBashSandboxNetwork(),
-      orgId,
-      profileId,
-      signal: context.signal,
-      timeoutMs,
-    });
-  }
-
   return runShellCommand(command, cwd, timeoutMs, env, {
     codingAgentMode,
     signal: context.signal,
@@ -256,6 +190,9 @@ const NAKAMA_STATE_PATTERN =
   /\.(?:sqlite3?|db|ini|key)\b|\bsqlite3\b|token|\/auth\b/i;
 
 const SHELL_WORD_DELIMITER = /[\s;|&<>()`]+/;
+
+const OTHER_WORKSPACE_REFUSAL =
+  "Refused: this command reaches into Nakama's org data outside this profile's workspace. Bash can only read this profile's own files. Use the Nakama tools assigned to this profile for anything else.";
 
 const NAKAMA_STATE_REFUSAL =
   "Refused: this command reads Nakama's internal state (local auth token, config.ini, credential keys, or server SQLite databases). The bash tool cannot call the Nakama API or read its databases. Use the Nakama tools assigned to this profile; if no tool fits, tell the user what is missing.";
@@ -286,15 +223,24 @@ function refuseNakamaStateAccess(
   ) {
     throw new Error(NAKAMA_STATE_REFUSAL);
   }
+
+  // Other orgs' and profiles' files hold no secret-shaped name, so the
+  // pattern gate above never sees them. Anything under orgs/ outside this
+  // profile's workspace is refused.
+  if (reachesNakamaConfigDir(normalized, cwd, workspaceDirs, "orgs")) {
+    throw new Error(OTHER_WORKSPACE_REFUSAL);
+  }
 }
 
 function reachesNakamaConfigDir(
   command: string,
   cwd: string,
-  workspaceDirs: string[]
+  workspaceDirs: string[],
+  subdir = ""
 ): boolean {
   const configDir = path.resolve(getUserConfigDir());
   const configRoots = [configDir, resolveWithRealpath(configDir)];
+  const scopes = configRoots.map((root) => path.join(root, subdir));
 
   const exemptDirs = workspaceDirs
     .flatMap((dir) => [path.resolve(dir), resolveWithRealpath(dir)])
@@ -302,8 +248,15 @@ function reachesNakamaConfigDir(
       configRoots.some((root) => isInsideDir(dir, root) && dir !== root)
     );
 
+  // With a subdir, a parent of it inside the config dir counts too:
+  // `grep -r x ~/.nakama` reads orgs/.
   const reachesState = (target: string) =>
     configRoots.some((root) => isInsideDir(target, root)) &&
+    scopes.some(
+      (scope) =>
+        isInsideDir(target, scope) ||
+        (subdir !== "" && isInsideDir(scope, target))
+    ) &&
     !exemptDirs.some((dir) => isInsideDir(target, dir));
 
   const homeRelative = path

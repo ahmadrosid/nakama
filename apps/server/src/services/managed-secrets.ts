@@ -11,11 +11,13 @@ import {
   getComposioConfigPath,
   getUserConfigDir,
   getUserConfigPath,
+  isWebSearchProvider,
   parseIni,
   parseIniWithSections,
   readEnvValue,
   readTextOrNull,
   type UserProviderName,
+  WEB_SEARCH_PROVIDER_ENV_NAMES,
   writeParsedConfigIni,
 } from "@nakama/core";
 import { parseProviderName } from "@nakama/core/provider-resolution";
@@ -350,14 +352,11 @@ export class ManagedSecrets {
               providerSecretEnvNames(providerId, providerType)
             );
           } else if (section === "web_search") {
-            if (values.provider !== "exa" && values.provider !== "firecrawl") {
+            if (!isWebSearchProvider(values.provider)) {
               throw new Error("Cannot migrate an unknown web search provider.");
             }
 
-            const envName =
-              values.provider === "firecrawl"
-                ? "FIRECRAWL_API_KEY"
-                : "EXA_API_KEY";
+            const envName = WEB_SEARCH_PROVIDER_ENV_NAMES[values.provider];
 
             await this.migrate(
               "global",

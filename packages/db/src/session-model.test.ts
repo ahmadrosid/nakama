@@ -1,4 +1,8 @@
+import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createSqliteDatabase } from "./adapters/sqlite";
 
 describe("SQLite session model persistence", () => {
@@ -72,6 +76,87 @@ describe("SQLite session model persistence", () => {
       });
     } finally {
       database.close();
+    }
+  });
+
+  test("writes the profile org on insert and follows a profile move on re-upsert", async () => {
+    const root = mkdtempSync(join(tmpdir(), "session-org-"));
+    const filename = join(root, "nakama.sqlite");
+    const database = await createSqliteDatabase(`file:${filename}`);
+    const raw = new Database(filename);
+    const now = new Date().toISOString();
+
+    try {
+      const org = (id: string) =>
+        database.adapter.upsertOrganization({
+          createdAt: now,
+          id,
+          name: `Org ${id}`,
+          slug: `org-${id}`,
+          updatedAt: now,
+        });
+
+      const profile = (id: string, orgId: string) =>
+        database.adapter.upsertProfile({
+          createdAt: now,
+          id,
+          isDefault: false,
+          isSuper: false,
+          model: null,
+          name: `Profile ${id}`,
+          orgId,
+          systemPrompt: "Test",
+          updatedAt: now,
+        });
+
+      await org("org_a");
+
+      await org("org_b");
+
+      await profile("profile_org_a", "org_a");
+
+      await profile("profile_org_b", "org_b");
+
+      const record = {
+        agentQuestionnaire: null,
+        agentTodos: [],
+        channel: "web",
+        createdAt: now,
+        id: "session_test",
+        model: "provider-1::chat-model",
+        profileId: "profile_org_a",
+        title: null,
+        userId: null,
+      };
+
+      await database.adapter.upsertSession(record);
+
+      expect(
+        raw.query("SELECT org_id FROM sessions WHERE id = 'session_test'").get()
+      ).toEqual({ org_id: "org_a" });
+
+      await database.adapter.upsertSession(record);
+
+      expect(
+        raw.query("SELECT org_id FROM sessions WHERE id = 'session_test'").get()
+      ).toEqual({ org_id: "org_a" });
+
+      await database.adapter.upsertSession({
+        ...record,
+        profileId: "profile_org_b",
+      });
+
+      expect(
+        raw
+          .query(
+            "SELECT profile_id, org_id FROM sessions WHERE id = 'session_test'"
+          )
+          .get()
+      ).toEqual({ org_id: "org_b", profile_id: "profile_org_b" });
+    } finally {
+      raw.close(true);
+      database.release();
+      rmSync(root, { force: true, recursive: true });
     }
   });
 });

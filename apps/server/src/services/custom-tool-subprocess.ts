@@ -3,7 +3,7 @@ import path from "node:path";
 import type { ToolContext } from "@nakama/core";
 
 // Shared subprocess machinery for custom tool loaders (javascript, python).
-// A registered tool can be written by any org's Super Bot profile, so both
+// A registered tool can be written by any org's Super Nakama profile, so both
 // handler types run as a child process with an explicit env allowlist
 // instead of inheriting the server's full environment.
 

@@ -1,9 +1,13 @@
+import {
+  assertHtmlArtifactSize,
+  MAX_HTML_ARTIFACT_BYTES,
+} from "@nakama/core/artifact-mime";
+
 const HIDDEN_SCROLLBAR_STYLE =
   "<style data-nakama-html-preview>html,body{scrollbar-width:none;-ms-overflow-style:none}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none}</style>";
 
 /** Scripts run inside the iframe, but without same-origin access to the host app. */
-export const ARTIFACT_HTML_IFRAME_SANDBOX =
-  "allow-scripts allow-forms allow-popups";
+export const ARTIFACT_HTML_IFRAME_SANDBOX = "allow-scripts";
 
 /** Served by the API with its own CSP; see `ARTIFACT_FRAME_HTML` on the server. */
 export const ARTIFACT_FRAME_URL = "/artifact-frame";
@@ -11,6 +15,10 @@ export const ARTIFACT_FRAME_URL = "/artifact-frame";
 export const ARTIFACT_FRAME_READY = "nakama-artifact-frame-ready";
 
 export function htmlForArtifactPreview(html: string): string {
+  if (new TextEncoder().encode(html).byteLength > MAX_HTML_ARTIFACT_BYTES) {
+    return `<p role="alert">HTML artifacts cannot exceed ${MAX_HTML_ARTIFACT_BYTES} bytes.</p>`;
+  }
+
   if (/<head[\s>]/i.test(html)) {
     return html.replace(
       /<head(\s[^>]*)?>/i,
@@ -79,6 +87,11 @@ export async function resolveArtifactHtmlAssets(
   ) => Promise<{ data: ArrayBuffer; contentType: string }>,
   signal: AbortSignal
 ): Promise<string> {
+  assertHtmlArtifactSize(
+    artifactPath,
+    new TextEncoder().encode(html).byteLength,
+    "text/html"
+  );
   const document = new DOMParser().parseFromString(html, "text/html");
   const cache = new Map<string, string>();
   signal.throwIfAborted();
@@ -246,5 +259,12 @@ export async function resolveArtifactHtmlAssets(
     }
   }
 
-  return `${document.doctype ? "<!DOCTYPE html>" : ""}${document.documentElement.outerHTML}`;
+  const output = `${document.doctype ? "<!DOCTYPE html>" : ""}${document.documentElement.outerHTML}`;
+  assertHtmlArtifactSize(
+    artifactPath,
+    new TextEncoder().encode(output).byteLength,
+    "text/html"
+  );
+
+  return output;
 }

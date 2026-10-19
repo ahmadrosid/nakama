@@ -19,7 +19,7 @@ import {
   canUseToolPlayground,
   toolPlaygroundBackTarget,
 } from "@/lib/navigation";
-import { findSuperBotProfile } from "@/lib/profiles";
+import { findSuperNakamaProfile } from "@/lib/profiles";
 
 const sectionClass = "rounded-md border border-border bg-card";
 
@@ -44,7 +44,7 @@ export function ToolPlaygroundPage() {
   } = useToolQuery(toolId ?? null);
 
   const { data: profiles = [] } = useProfilesQuery();
-  const superBotProfileId = findSuperBotProfile(profiles)?.id ?? null;
+  const superNakamaProfileId = findSuperNakamaProfile(profiles)?.id ?? null;
 
   if (authLoading) {
     return <PageState message="Loading…" />;
@@ -80,7 +80,7 @@ export function ToolPlaygroundPage() {
   return (
     <ToolPlaygroundPageContent
       key={JSON.stringify([activeOrg?.id ?? null, tool.id])}
-      superBotProfileId={superBotProfileId}
+      superNakamaProfileId={superNakamaProfileId}
       tool={tool}
     />
   );
@@ -88,10 +88,10 @@ export function ToolPlaygroundPage() {
 
 function ToolPlaygroundPageContent({
   tool,
-  superBotProfileId,
+  superNakamaProfileId,
 }: {
   tool: ToolDetail;
-  superBotProfileId: string | null;
+  superNakamaProfileId: string | null;
 }) {
   const [searchParams] = useSearchParams();
   const back = toolPlaygroundBackTarget(searchParams);
@@ -99,7 +99,7 @@ function ToolPlaygroundPageContent({
   const isCustomTool =
     tool.handlerType === "javascript" || tool.handlerType === "python";
 
-  const run = useToolPlaygroundRun(tool, superBotProfileId);
+  const run = useToolPlaygroundRun(tool, superNakamaProfileId);
   const [mainTab, setMainTab] = useState<"output" | "detail">("output");
 
   return (
@@ -155,7 +155,7 @@ function ToolPlaygroundPageContent({
                     >
                       <ToolPlaygroundOutput
                         run={run}
-                        superBotProfileId={superBotProfileId}
+                        superNakamaProfileId={superNakamaProfileId}
                       />
                     </div>
                   ) : (

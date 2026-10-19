@@ -68,7 +68,7 @@ export function createAutomationTools(
           },
           profileId: {
             description:
-              "Optional org profile id to run as. Omit to use the current chat profile. Super Bot requires org admin or platform admin.",
+              "Optional org profile id to run as. Omit to use the current chat profile. Super Nakama requires org admin or platform admin.",
             type: "string",
           },
           prompt: {

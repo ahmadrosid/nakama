@@ -278,10 +278,10 @@ function ToolConfigurationCard({ toolId }: { toolId: string }) {
 
 export function ToolPlaygroundOutput({
   run,
-  superBotProfileId,
+  superNakamaProfileId,
 }: {
   run: ToolPlaygroundRunControls;
-  superBotProfileId: string | null;
+  superNakamaProfileId: string | null;
 }) {
   return (
     <div className="min-h-32">
@@ -310,14 +310,14 @@ export function ToolPlaygroundOutput({
           <pre className="text-destructive text-xs leading-relaxed">
             {run.runState.error}
           </pre>
-          {superBotProfileId ? (
+          {superNakamaProfileId ? (
             <Button
-              onClick={run.handleFixWithSuperBot}
+              onClick={run.handleFixWithSuperNakama}
               size="sm"
               type="button"
               variant="outline"
             >
-              Fix with Super Bot
+              Fix with Super Nakama
             </Button>
           ) : null}
         </div>

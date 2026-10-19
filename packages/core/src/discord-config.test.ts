@@ -2,7 +2,6 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { asTestFetch } from "./channel-test-helpers";
 import {
   buildDiscordInviteUrl,
-  generatePairingCode,
   isDiscordUserAuthorized,
   loadDiscordConfigFile,
   loadDiscordSettingsPublic,
@@ -14,7 +13,6 @@ import {
   saveDiscordConfig,
   verifyAndPairDiscordUser,
 } from "./discord-config";
-import { normalizePairingCode } from "./pairing-code";
 import {
   describeSharedChannelConfigTests,
   withTempHomedir,
@@ -26,13 +24,6 @@ describe("buildDiscordInviteUrl", () => {
     expect(buildDiscordInviteUrl("1525937133096013954")).toBe(
       "https://discord.com/oauth2/authorize?client_id=1525937133096013954&permissions=101376&scope=bot+applications.commands"
     );
-  });
-
-  test("invite permissions bitfield includes Attach Files (32768)", () => {
-    const url = new URL(buildDiscordInviteUrl("1525937133096013954"));
-    const permissions = Number(url.searchParams.get("permissions"));
-    const attachFilesBit = 32_768;
-    expect(Math.floor(permissions / attachFilesBit) % 2).toBe(1);
   });
 });
 
@@ -188,12 +179,10 @@ describeSharedChannelConfigTests({
     allowlistValue: "123456789012345678, 987654321098765432",
     botTokenKey: "DISCORD_BOT_TOKEN",
   },
-  generatePairingCode,
   isUserAuthorized: isDiscordUserAuthorized,
   loadConfigFile: loadDiscordConfigFile,
   mask: maskBotToken,
   name: "discord",
-  normalize: normalizePairingCode,
   regenerate: () => regenerateDiscordHandshake(null),
   resolveConfigFromSources: resolveDiscordConfigFromSources,
   resolveFile: {

@@ -39,7 +39,7 @@ interface MatchParseResult {
 export function buildRipgrepArgs(options: {
   query: string;
   searchRoot: string;
-  glob: string | null;
+  glob: string | string[] | null;
   regex: boolean;
   maxResults: number;
 }): string[] {
@@ -56,8 +56,10 @@ export function buildRipgrepArgs(options: {
     args.push("--fixed-strings");
   }
 
-  if (options.glob) {
-    args.push("--glob", options.glob);
+  for (const glob of [options.glob ?? []].flat()) {
+    if (glob) {
+      args.push("--glob", glob);
+    }
   }
 
   args.push("--", options.query, options.searchRoot);

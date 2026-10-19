@@ -20,10 +20,8 @@ import type { ChatListItem } from "@/lib/chat-history";
 import { formatError } from "@/lib/client";
 import { canAccessSystemPage } from "@/lib/navigation";
 import { findPluginTool } from "@/lib/plugin-runtime";
-import {
-  LocalPluginInstaller,
-  PluginAgentAccessDialog,
-} from "@/pages/PluginsPage";
+import { LocalPluginInstaller } from "@/pages/plugins/local-plugin-installer";
+import { PluginAgentAccessDialog } from "@/pages/plugins/plugin-agent-access-dialog";
 
 interface PluginDraft {
   actions: string[];
@@ -189,14 +187,25 @@ function PluginEnableButton({
   enable: ReturnType<typeof useEnableOrgPlugin>;
   plugin: OrgPluginDetail;
 }) {
+  const panel = useOptionalChatAttachmentPanel();
+
   return (
     <Button
       disabled={enable.isPending}
       onClick={() =>
-        enable.mutate({
-          expectedRevision: plugin.revision,
-          pluginId: plugin.pluginId,
-        })
+        enable.mutate(
+          {
+            expectedRevision: plugin.revision,
+            pluginId: plugin.pluginId,
+          },
+          {
+            onSuccess: () => {
+              if (panel && plugin.ui) {
+                showPluginPanel(panel, plugin);
+              }
+            },
+          }
+        )
       }
       size="sm"
     >
@@ -215,21 +224,26 @@ function PluginOpenButton({ plugin }: { plugin: OrgPluginDetail }) {
 
   return (
     <Button
-      onClick={() =>
-        panel.show({
-          content: <PluginPanelBody pluginId={plugin.pluginId} />,
-          defaultWidth: clampAttachmentPanelWidth(WIDE_ARTIFACT_PANEL_WIDTH),
-          id: `plugin:${plugin.pluginId}`,
-          title: plugin.name,
-          typeLabel: "Plugin",
-        })
-      }
+      onClick={() => showPluginPanel(panel, plugin)}
       size="sm"
       variant="outline"
     >
       Open
     </Button>
   );
+}
+
+function showPluginPanel(
+  panel: NonNullable<ReturnType<typeof useOptionalChatAttachmentPanel>>,
+  plugin: OrgPluginDetail
+) {
+  panel.show({
+    content: <PluginPanelBody pluginId={plugin.pluginId} />,
+    defaultWidth: clampAttachmentPanelWidth(WIDE_ARTIFACT_PANEL_WIDTH),
+    id: `plugin:${plugin.pluginId}`,
+    title: plugin.name,
+    typeLabel: "Plugin",
+  });
 }
 
 /** Reads live plugin and theme so the panel follows reinstalls and theme switches. */

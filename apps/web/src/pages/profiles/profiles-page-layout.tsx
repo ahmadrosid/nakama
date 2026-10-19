@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/context/use-auth";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { PAGE_PATHS, teamDetailPath } from "@/lib/navigation";
-import { resolveSuperBotChatProfileId } from "@/lib/profiles";
+import { resolveSuperNakamaChatProfileId } from "@/lib/profiles";
 import { ProfileConfigTab } from "@/pages/profiles/profile-config-tab";
 import { PageState, ProfilesEmptyState } from "@/pages/profiles/profiles-ui";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
@@ -17,16 +17,16 @@ function useProfilesPageLayoutMeta(state: ProfilesPageState) {
   const canCreateProfile = user?.isPlatformAdmin === true;
   const canPack = isOrgAdmin || canCreateProfile;
   const { navigateToNewChat } = useAppNavigation();
-  const superBotProfileId = resolveSuperBotChatProfileId(profiles);
+  const superNakamaProfileId = resolveSuperNakamaChatProfileId(profiles);
 
-  const onAskSuperBot = superBotProfileId
-    ? () => navigateToNewChat(superBotProfileId)
+  const onAskSuperNakama = superNakamaProfileId
+    ? () => navigateToNewChat(superNakamaProfileId)
     : undefined;
 
   return {
     canCreateProfile,
     canPack,
-    onAskSuperBot,
+    onAskSuperNakama,
   };
 }
 
@@ -121,12 +121,12 @@ function ProfilesMainSection({
   state,
   canCreateProfile,
   canPack,
-  onAskSuperBot,
+  onAskSuperNakama,
 }: {
   state: ProfilesPageState;
   canCreateProfile: boolean;
   canPack: boolean;
-  onAskSuperBot?: () => void;
+  onAskSuperNakama?: () => void;
 }) {
   const {
     profiles,
@@ -150,7 +150,7 @@ function ProfilesMainSection({
           canCreate={canCreateProfile}
           canImport={canPack}
           disabled={busy}
-          onAskSuperBot={onAskSuperBot}
+          onAskSuperNakama={onAskSuperNakama}
           onCreate={() => setCreateOpen(true)}
           onImport={() => setImportOpen(true)}
         />
@@ -193,7 +193,7 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
     detailError,
   } = state;
 
-  const { canCreateProfile, canPack, onAskSuperBot } =
+  const { canCreateProfile, canPack, onAskSuperNakama } =
     useProfilesPageLayoutMeta(state);
 
   if (profilesLoading && profiles.length === 0) {
@@ -212,7 +212,7 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
         <ProfilesMainSection
           canCreateProfile={canCreateProfile}
           canPack={canPack}
-          onAskSuperBot={onAskSuperBot}
+          onAskSuperNakama={onAskSuperNakama}
           state={state}
         />
       </section>

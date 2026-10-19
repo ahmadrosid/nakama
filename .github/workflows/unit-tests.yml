@@ -59,6 +59,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile --ignore-scripts
 
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - parallel:
           # bun test does not type-check or bundle. Docker Publish does both, but
           # only after the merge. Keep this list the same as the one in Dockerfile.
@@ -103,6 +106,9 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile --ignore-scripts --filter nakama --filter '@nakama/server...' --filter './packages/*' --filter './packages/plugins/*'
+
+      - name: Install FFmpeg
+        run: choco install ffmpeg --no-progress -y
 
       - name: Run tests
         # Split the slow server suite across runners; run each smaller suite once.

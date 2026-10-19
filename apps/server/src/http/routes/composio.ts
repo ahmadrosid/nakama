@@ -43,6 +43,11 @@ export function registerComposioOAuthRoutes(
     try {
       const connectedAccountId = c.req.query("connected_account_id");
       const result = await service.completeOAuth(state, { connectedAccountId });
+
+      if (result.returnTo) {
+        return c.redirect(result.returnTo);
+      }
+
       const accept = c.req.header("accept") ?? "";
 
       const wantsHtml =
@@ -122,6 +127,38 @@ export function registerComposioRoutes(
         await service.disableToolkit(
           auth.activeOrgId!,
           c.req.param("toolkitSlug")
+        )
+      );
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      return errorResponse(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
+    }
+  });
+
+  app.post("/v1/composio/meet/:toolkitSlug/connect", async (c) => {
+    const auth = requireOrgMemberFromContext(c);
+
+    try {
+      const body = await readOptionalJson<ComposioConnectRequest>(
+        c.req.raw,
+        {}
+      );
+
+      return json<ComposioConnectResponse>(
+        await service.connectMeetRecordingSource(
+          auth.activeOrgId!,
+          auth.user.id,
+          c.req.param("toolkitSlug"),
+          resolveComposioCallbackBaseUrl({
+            clientOrigin: body.callbackOrigin,
+            request: c.req.raw,
+          })
         )
       );
     } catch (error) {

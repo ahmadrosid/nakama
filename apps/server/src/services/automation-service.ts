@@ -20,14 +20,14 @@ import {
   validateAutomationDelivery,
   validateAutomationInput,
 } from "@nakama/core";
-import { canAccessSuperBotProfile } from "@nakama/core/profiles";
+import { canAccessSuperNakamaProfile } from "@nakama/core/profiles";
 import { type DatabaseAdapter, DatabaseAutomationStore } from "@nakama/db";
 import { z } from "zod";
 
 const DeliveryStatusSchema = z.enum(["sent", "failed", "skipped"]).nullish();
 
-/** Caller role context used to gate access to admin-only profiles (e.g. Super Bot). */
-export type ProfileAccess = Parameters<typeof canAccessSuperBotProfile>[0];
+/** Caller role context used to gate access to admin-only profiles (e.g. Super Nakama). */
+export type ProfileAccess = Parameters<typeof canAccessSuperNakamaProfile>[0];
 
 export interface AutomationServiceOptions {
   canSendEmail?: (profileId: string, orgId: string) => Promise<boolean>;
@@ -458,9 +458,9 @@ export class AutomationService {
       const profile = await this.db.getProfileForOrg(trimmed, orgId);
 
       if (profile) {
-        if (profile.isSuper && !canAccessSuperBotProfile(access ?? {})) {
+        if (profile.isSuper && !canAccessSuperNakamaProfile(access ?? {})) {
           throw new NakamaApiError(
-            "Super Bot is only available to org admins.",
+            "Super Nakama is only available to org admins.",
             403
           );
         }

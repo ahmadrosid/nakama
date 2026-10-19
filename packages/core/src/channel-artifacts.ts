@@ -65,7 +65,9 @@ function parseToolResult(content: string): JsonObject | null {
 }
 
 function isWriteFileToolName(name: string): boolean {
-  return name === "write_file" || name === "write_docx";
+  return (
+    name === "write_file" || name === "write_docx" || name === "save_artifact"
+  );
 }
 
 function isGenerateImageToolName(name: string): boolean {

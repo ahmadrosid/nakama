@@ -24,7 +24,7 @@ test("official workflow install imports once, executes through IPC, isolates org
   directories.push(dir);
   const officialPackagesDir = join(dir, "official");
 
-  for (const pluginId of ["workflows", "supermemory"]) {
+  for (const pluginId of ["workflows", "supermemory", "data-view"]) {
     await cp(
       resolve(import.meta.dir, "../../../../packages/plugins", pluginId),
       join(officialPackagesDir, pluginId),
@@ -276,7 +276,7 @@ test("official workflow install imports once, executes through IPC, isolates org
   expect(await invoke("list_workflows")).toEqual(savedWorkflows);
 }, 20_000);
 
-test("host capabilities enforce profile tenancy, Super Bot access, and tool assignment", async () => {
+test("host capabilities enforce profile tenancy, Super Nakama access, and tool assignment", async () => {
   const { createPluginAgentHost } = await import("./plugin-agent-host");
   const db = createInMemoryDatabaseAdapter();
   const now = new Date().toISOString();
@@ -448,4 +448,59 @@ test("failed official setup disables the new installation and can be retried", a
   );
 
   expect(retried.lifecycleState).toBe("enabled");
+});
+
+test("only Data View reaches Google Sheets, as the calling member", async () => {
+  const { createPluginAgentHost } = await import("./plugin-agent-host");
+  const calls: unknown[][] = [];
+
+  const host = createPluginAgentHost(
+    createInMemoryDatabaseAdapter(),
+    // SAFETY: Google Sheets requests never reach the agent service.
+    {} as never,
+    {
+      executeGoogleSheetsTool: async (...args) => {
+        calls.push(args);
+
+        return { totalUpdatedCells: 1 };
+      },
+    }
+  );
+
+  const context = {
+    actor: { id: "member", role: "member" as const },
+    apiVersion: 1 as const,
+    dataDir: "/tmp",
+    invocationId: "invocation",
+    orgId: "org_a",
+    pluginId: "data-view",
+    pluginVersion: "0.1.0",
+  };
+
+  const write = {
+    action: "write",
+    data: [{ range: "Sheet1!B2", values: [["10"]] }],
+    op: "google_sheets",
+    spreadsheetId: "abc123",
+  };
+
+  await expect(
+    host(write, { ...context, pluginId: "workflows" })
+  ).rejects.toThrow();
+  await expect(
+    host({ ...write, spreadsheetId: "../other" }, context)
+  ).rejects.toThrow();
+  expect(await host(write, context)).toEqual({ totalUpdatedCells: 1 });
+  expect(calls).toEqual([
+    [
+      "org_a",
+      "member",
+      "GOOGLESHEETS_UPDATE_VALUES_BATCH",
+      {
+        data: [{ range: "Sheet1!B2", values: [["10"]] }],
+        spreadsheet_id: "abc123",
+        valueInputOption: "USER_ENTERED",
+      },
+    ],
+  ]);
 });

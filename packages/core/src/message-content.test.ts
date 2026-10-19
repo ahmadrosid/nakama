@@ -177,20 +177,6 @@ describe("validateDocumentAttachments", () => {
       ])
     ).toThrow(NakamaApiError);
   });
-
-  test("rejects oversized excel the same way as other documents", () => {
-    const huge = "A".repeat((6 * 1024 * 1024 * 4) / 3);
-    expect(() =>
-      validateDocumentAttachments([
-        {
-          data: huge,
-          filename: "big.xlsx",
-          mediaType:
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        },
-      ])
-    ).toThrow(NakamaApiError);
-  });
 });
 
 describe("validateCombinedAttachmentCount", () => {

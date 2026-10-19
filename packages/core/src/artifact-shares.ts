@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
+import { assertHtmlArtifactSize } from "./artifact-mime";
 import { pathExists } from "./fs";
 import { assertConfigPathSegment, getArtifactSharesDir } from "./soul/resolve";
 
@@ -20,7 +21,13 @@ export async function writeArtifactShareSnapshot(input: {
   shareId: string;
   filename: string;
   bytes: Buffer;
+  mimeType?: string;
 }): Promise<string> {
+  assertHtmlArtifactSize(
+    input.filename,
+    input.bytes.byteLength,
+    input.mimeType
+  );
   const sharesDir = getArtifactSharesDir(input.orgId);
 
   const shareDir = path.join(
@@ -39,7 +46,7 @@ export async function writeArtifactShareSnapshot(input: {
   return storagePath;
 }
 
-function assertArtifactShareStoragePath(
+export function assertArtifactShareStoragePath(
   orgId: string,
   storagePath: string
 ): void {
@@ -61,7 +68,8 @@ function assertArtifactShareStoragePath(
 
 export async function readArtifactShareSnapshot(
   orgId: string,
-  storagePath: string
+  storagePath: string,
+  mimeType = ""
 ): Promise<Buffer> {
   assertArtifactShareStoragePath(orgId, storagePath);
 
@@ -69,7 +77,11 @@ export async function readArtifactShareSnapshot(
     throw new Error(`Artifact share snapshot not found: ${storagePath}`);
   }
 
-  return readFile(storagePath);
+  assertHtmlArtifactSize(storagePath, (await stat(storagePath)).size, mimeType);
+  const bytes = await readFile(storagePath);
+  assertHtmlArtifactSize(storagePath, bytes.byteLength, mimeType);
+
+  return bytes;
 }
 
 export async function deleteArtifactShareSnapshot(

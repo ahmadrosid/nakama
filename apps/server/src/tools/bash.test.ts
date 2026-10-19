@@ -13,6 +13,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { getProfileSoulDir, PathGuardError } from "@nakama/core";
+import { removeTestDir } from "../test-config-dir";
 import { resolveHostBash, runBash } from "./bash";
 
 describe("host Bash discovery", () => {
@@ -160,27 +161,7 @@ describe("bash tool", () => {
 
   afterEach(async () => {
     if (workspaceRoot) {
-      // Bun 1.4 parses rm's maxRetries/retryDelay but does not apply them.
-      for (let attempt = 0; ; attempt++) {
-        try {
-          await rm(workspaceRoot, { force: true, recursive: true });
-          break;
-        } catch (error) {
-          if (
-            process.platform !== "win32" ||
-            attempt >= 5 ||
-            !["EBUSY", "EPERM", "ENOTEMPTY"].includes(
-              // SAFETY: Bun file-system busy errors expose Node's standard errno code.
-              (error as NodeJS.ErrnoException).code ?? ""
-            )
-          ) {
-            throw error;
-          }
-
-          await Bun.sleep(100 * (attempt + 1));
-        }
-      }
-
+      await removeTestDir(workspaceRoot);
       workspaceRoot = "";
     }
   });
@@ -882,6 +863,33 @@ describe("bash tool Nakama state guard", () => {
     }
 
     expect(await readdir(profileWorkspace)).not.toContain("ran.txt");
+  });
+
+  test("NAKAMA_TENANT_BASH=0 refuses every channel but the CLI", async () => {
+    await setupConfigDir();
+    const previousTenantBash = process.env.NAKAMA_TENANT_BASH;
+    process.env.NAKAMA_TENANT_BASH = "0";
+
+    try {
+      await expect(
+        runBash({ command: "touch ran.txt" }, context, { backend: "host" })
+      ).rejects.toThrow(/NAKAMA_TENANT_BASH=0/);
+      expect(await readdir(profileWorkspace)).not.toContain("ran.txt");
+
+      const cli = await runBash(
+        { command: "echo ok" },
+        { ...context, channel: "cli" },
+        { backend: "host" }
+      );
+
+      expect(cli.stdout.trim()).toBe("ok");
+    } finally {
+      if (previousTenantBash === undefined) {
+        delete process.env.NAKAMA_TENANT_BASH;
+      } else {
+        process.env.NAKAMA_TENANT_BASH = previousTenantBash;
+      }
+    }
   });
 
   test("still runs ordinary commands in the profile workspace", async () => {

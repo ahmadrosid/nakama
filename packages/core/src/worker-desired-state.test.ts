@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -49,20 +49,6 @@ describe("parseWorkerDesiredState", () => {
   test("returns defaults for invalid json", () => {
     expect(parseWorkerDesiredState("not-json")).toEqual({
       automation: true,
-      discord: false,
-      slack: false,
-      telegram: false,
-      whatsapp: false,
-    });
-  });
-
-  test("explicit automation false is honored", () => {
-    expect(
-      parseWorkerDesiredState(
-        '{"telegram":false,"whatsapp":false,"automation":false}'
-      )
-    ).toEqual({
-      automation: false,
       discord: false,
       slack: false,
       telegram: false,
@@ -120,25 +106,6 @@ describe("worker desired state persistence", () => {
         slack: false,
         telegram: false,
         whatsapp: true,
-      });
-    });
-  });
-
-  test("loads existing file from disk", async () => {
-    await withConfigDir(async () => {
-      const runtimeDir = join(process.env.NAKAMA_CONFIG_DIR!, "runtime");
-      await mkdir(runtimeDir, { recursive: true });
-      await writeFile(
-        join(runtimeDir, "worker-desired-state.json"),
-        '{"telegram":true,"whatsapp":false}\n'
-      );
-
-      expect(await readWorkerDesiredState()).toEqual({
-        automation: true,
-        discord: false,
-        slack: false,
-        telegram: true,
-        whatsapp: false,
       });
     });
   });

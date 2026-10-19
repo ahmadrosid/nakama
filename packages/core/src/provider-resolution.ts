@@ -28,6 +28,7 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "zhipu",
   "zhipu_cn",
   "xai",
+  "groq",
   "together",
   "xiaomi",
   "meta",
@@ -71,6 +72,7 @@ export function parseProviderName(
     normalized === "zhipu" ||
     normalized === "zhipu_cn" ||
     normalized === "xai" ||
+    normalized === "groq" ||
     normalized === "together" ||
     normalized === "xiaomi" ||
     normalized === "meta" ||
@@ -135,6 +137,8 @@ export function apiKeyEnvVarForProvider(
       return "ZHIPU_CN_API_KEY";
     case "xai":
       return "XAI_API_KEY";
+    case "groq":
+      return "GROQ_API_KEY";
     case "together":
       return "TOGETHER_API_KEY";
     case "xiaomi":

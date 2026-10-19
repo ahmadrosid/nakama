@@ -4,7 +4,7 @@ import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { client, formatError } from "@/lib/client";
 import { buildExampleParametersJson } from "@/lib/tool-playground-params";
 
-function buildSuperBotFixDraft(input: {
+function buildSuperNakamaFixDraft(input: {
   toolName: string;
   parameters: unknown;
   error: string;
@@ -39,7 +39,7 @@ type ToolPlaygroundRunState =
 export interface ToolPlaygroundRunControls {
   actionError: string | null;
   assistPrompt: string;
-  handleFixWithSuperBot: () => void;
+  handleFixWithSuperNakama: () => void;
   handleRun: () => Promise<void>;
   handleSuggestParams: () => Promise<void>;
   jsonError: string | null;
@@ -99,7 +99,7 @@ function isJsonValue(value: unknown): value is JsonValue {
 
 export function useToolPlaygroundRun(
   tool: ToolDetail,
-  superBotProfileId: string | null
+  superNakamaProfileId: string | null
 ): ToolPlaygroundRunControls {
   const { navigateToNewChat } = useAppNavigation();
 
@@ -175,18 +175,18 @@ export function useToolPlaygroundRun(
     }
   }
 
-  function handleFixWithSuperBot() {
-    if (runState.status !== "error" || !superBotProfileId) {
+  function handleFixWithSuperNakama() {
+    if (runState.status !== "error" || !superNakamaProfileId) {
       return;
     }
 
-    const draft = buildSuperBotFixDraft({
+    const draft = buildSuperNakamaFixDraft({
       error: runState.error,
       parameters: runState.parameters,
       toolName: tool.name,
     });
 
-    navigateToNewChat(superBotProfileId, { draft });
+    navigateToNewChat(superNakamaProfileId, { draft });
   }
 
   function setParametersJson(value: string) {
@@ -197,7 +197,7 @@ export function useToolPlaygroundRun(
   return {
     actionError,
     assistPrompt,
-    handleFixWithSuperBot,
+    handleFixWithSuperNakama,
     handleRun,
     handleSuggestParams,
     jsonError,

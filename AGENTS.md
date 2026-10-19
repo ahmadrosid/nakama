@@ -53,15 +53,6 @@ Screenshots: `gh pr edit <number> --attach <image-path>` uploads and embeds it i
 
 ## Browser automation
 
-```bash
-bun run agent:ui
-# source the printed harness.env, then:
-agent-browser open $BASE_URL/chat
-bun run agent:ui:stop
-```
-
-The harness boots an isolated API + Vite stack under `/tmp`, seeds setup over HTTP, and never writes `~/.nakama` or steals `4310`. Run it outside a sandbox that blocks bind or detach. `/chat` is the only seeded-ready page. Other `apps/web` routes are navigation hints, not harness success signals.
-
 Prefer role and text locators. Add `data-testid` only when labels collide.
 
 Operator Docker / `dev:web` on `4310` stays valid for humans. For PR motion video, use `.agents/skills/browser-video-proof/SKILL.md`.
@@ -135,14 +126,14 @@ Profile workspace / soul dir: `~/.nakama/orgs/{orgId}/profiles/{profileId}/` (`g
 | Tool / skill | Notes |
 |---|---|
 | `update-profile-memory` / `archive-profile-memory` | MEMORY.md ↔ memory-archive/ |
-| `save-artifact` | Persist under `artifacts/` |
+| `save_artifact` / `artifact-design` | Persist under `artifacts/`; skill holds design rules |
 | `knowledge_base_search` / `web_search` / `email` | KB, web, mailbox |
 | `search_files` / `ripgrep` | File/content search |
-| `bash` | Profile workspace shell — assign per profile; Super Bot by default |
+| `bash` | Profile workspace shell — assign per profile; Super Nakama by default |
 | `sub_agent` | Opt-in same-profile delegate (not repo coding) |
 | `coding-agent` | Repo coding via Codex / Claude Code / OpenCode / pi / Cursor Agent (`agent`) through `bash` — use instead of `sub_agent` for coding |
 | `agent-browser` | Opt-in browser CLI; needs host install — `docs/website/agent-browser.md` |
-| `create-profile` | Super Bot only, confirm-first — `apps/server/src/tools/super-bot-tools.ts` |
+| `create-profile` | Super Nakama only, confirm-first — `apps/server/src/tools/super-nakama-tools.ts` |
 | `skill_manage` | Web/cli skill CRUD + auto-assign — `apps/server/src/tools/skill-manage-tool.ts` (approval, curator, post-turn review live there) |
 | Composio | Org toolkits + per-user OAuth — `docs/website/composio.md` |
 
@@ -174,7 +165,7 @@ Always build context with `buildToolExecutionContext()` (`packages/core/src/tool
 
 **Parallel tool calls:** `parallelSafe: true` on read/search/fetch builtins (`read_file`, `search_files`, `knowledge_base_search`, `web_search`, `web_fetch`). Mutating / shell / delegation stay sequential. Custom JS opts in via `handlerConfig.parallelSafe`; Python always sequential. Mixed turn → whole turn sequential.
 
-**Debug:** (1) path under `~/.nakama/tools/`, (2) `buildToolExecutionContext` + real `profileId`, (3) monorepo-root paths ⇒ missing `workspaceRoot`, (4) test files in the assigned profile workspace. Super Bot rules: `SUPER_BOT_SYSTEM_PROMPT` in `packages/db/src/constants.ts`.
+**Debug:** (1) path under `~/.nakama/tools/`, (2) `buildToolExecutionContext` + real `profileId`, (3) monorepo-root paths ⇒ missing `workspaceRoot`, (4) test files in the assigned profile workspace. Super Nakama rules: `SUPER_NAKAMA_SYSTEM_PROMPT` in `packages/db/src/constants.ts`.
 
 **Playground UI:** `/system/playground/:toolId` — `ToolPlaygroundPage.tsx`, `ToolPlaygroundPanel.tsx`; admin-only via `canUseToolPlayground()`.
 

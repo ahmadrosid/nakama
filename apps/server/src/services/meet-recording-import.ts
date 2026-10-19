@@ -1,0 +1,284 @@
+import { execFile } from "node:child_process";
+import { createWriteStream } from "node:fs";
+import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pipeline } from "node:stream/promises";
+import { promisify } from "node:util";
+import { fetchPublicHttps, transcribeAudio } from "@nakama/core";
+import type { MeetImportProgress } from "@nakama/core/google-meet";
+import type { ComposioService } from "./composio-service";
+
+const exec = promisify(execFile);
+
+const MAX_VIDEO_BYTES = 1024 ** 3;
+
+const MAX_PART_BYTES = 24 * 1024 * 1024;
+
+export async function cleanupInterruptedMeetImports() {
+  for (const name of await readdir(tmpdir())) {
+    const match = /^nakama-meet-(\d+)-/.exec(name);
+
+    if (!match) {
+      continue;
+    }
+
+    try {
+      process.kill(Number(match[1]), 0);
+      continue;
+    } catch (error) {
+      // SAFETY: The surrounding code checked this value before the assertion.
+      if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+        continue;
+      }
+    }
+
+    await rm(join(tmpdir(), name), { force: true, recursive: true }).catch(
+      () => {}
+    );
+  }
+}
+
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Composio tool payloads are untyped JSON that this function inspects structurally.
+function fileSource(value: unknown): { url?: string; base64?: string } {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Composio tool payloads are untyped JSON narrowed here by shape.
+  if (typeof value === "string") {
+    return value.startsWith("https://") ? { url: value } : { base64: value };
+  }
+
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Composio tool payloads are untyped JSON narrowed here by shape.
+  if (!value || typeof value !== "object") {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- The explicit type names the shape this helper exposes.
+    return {};
+  }
+
+  // SAFETY: The surrounding code checked this value before the assertion.
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Composio tool payloads are untyped JSON objects.
+  const record = value as Record<string, unknown>;
+
+  for (const child of [
+    record.downloaded_file_content,
+    record.file,
+    record.data,
+  ]) {
+    const nested = fileSource(child);
+
+    if (nested.url || nested.base64) {
+      return nested;
+    }
+  }
+
+  const pick = (keys: string[]) => {
+    for (const key of keys) {
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Composio tool payloads are untyped JSON narrowed here by shape.
+      if (typeof record[key] === "string") {
+        // SAFETY: The surrounding code checked this value before the assertion.
+        return record[key] as string;
+      }
+    }
+  };
+
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- The explicit type names the shape this helper exposes.
+  return {
+    base64: pick(["base64", "content"]),
+    url: pick(["url", "s3url", "s3Url", "downloadUrl", "fileUrl", "publicUrl"]),
+  };
+}
+
+async function saveDownload(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Composio tool payloads are untyped JSON that this function inspects structurally.
+  value: unknown,
+  path: string,
+  signal: AbortSignal,
+  onBytes: (bytes: number, totalBytes: number) => void
+) {
+  const source = fileSource(value);
+
+  if (source.base64) {
+    const encoded = source.base64.replace(/^data:[^,]+,/, "");
+
+    if (encoded.length > Math.ceil(MAX_VIDEO_BYTES / 3) * 4) {
+      throw new Error("Recording is too large.");
+    }
+
+    const bytes = Buffer.from(encoded, "base64");
+
+    if (!bytes.length || bytes.length > MAX_VIDEO_BYTES) {
+      throw new Error("Invalid recording download.");
+    }
+
+    await Bun.write(path, bytes);
+
+    return;
+  }
+
+  if (!source.url) {
+    throw new Error("Composio returned no recording data.");
+  }
+
+  const response = await fetchPublicHttps(source.url, signal);
+  const { body } = response;
+
+  if (!(response.ok && body)) {
+    throw new Error("Recording download failed.");
+  }
+
+  const declared = Number(response.headers.get("content-length"));
+
+  if (declared > MAX_VIDEO_BYTES) {
+    throw new Error("Recording is too large.");
+  }
+
+  let size = 0;
+  let reported = 0;
+  const total = declared > 0 ? declared : 0;
+  await pipeline(
+    async function* () {
+      for await (const chunk of body) {
+        size += chunk.byteLength;
+
+        if (size - reported >= 1024 * 1024) {
+          reported = size;
+          onBytes(size, total);
+        }
+
+        if (size > MAX_VIDEO_BYTES) {
+          throw new Error("Recording is too large.");
+        }
+
+        yield chunk;
+      }
+
+      if (!size) {
+        throw new Error("Recording download was empty.");
+      }
+    },
+    createWriteStream(path, { mode: 0o600 }),
+    { signal }
+  );
+  onBytes(size, total);
+}
+
+export async function importMeetRecording(
+  composio: Pick<ComposioService, "downloadMeetRecording">,
+  input: {
+    apiKey: string;
+    orgId: string;
+    userId: string;
+    messageId: string;
+    fileId: string;
+  },
+  signal: AbortSignal,
+  onProgress: (progress: MeetImportProgress) => void = () => undefined
+): Promise<{ filename: string; text: string }> {
+  onProgress({ step: "download" });
+
+  const { recording, file } = await composio.downloadMeetRecording(
+    input.orgId,
+    input.userId,
+    input.messageId,
+    input.fileId
+  );
+
+  const directory = await mkdtemp(
+    join(tmpdir(), `nakama-meet-${process.pid}-`)
+  );
+
+  try {
+    const video = join(directory, "recording");
+    await saveDownload(file, video, signal, (bytes, totalBytes) =>
+      onProgress({
+        bytes,
+        step: "download",
+        totalBytes: totalBytes || recording.size || undefined,
+      })
+    );
+    onProgress({ step: "extract" });
+
+    const { stdout } = await exec(
+      "ffprobe",
+      [
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        video,
+      ],
+      { signal, timeout: 30_000 }
+    );
+
+    const duration = Number(stdout.trim());
+
+    if (!Number.isFinite(duration) || duration <= 0 || duration > 7200) {
+      throw new Error("Recording must be at most two hours.");
+    }
+
+    await exec(
+      "ffmpeg",
+      [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        video,
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-c:a",
+        "libmp3lame",
+        "-b:a",
+        "48k",
+        "-f",
+        "segment",
+        "-segment_time",
+        "1800",
+        "-reset_timestamps",
+        "1",
+        join(directory, "part-%03d.mp3"),
+      ],
+      { maxBuffer: 1024 * 1024, signal, timeout: 600_000 }
+    );
+
+    const parts = (await readdir(directory))
+      .filter((name) => /^part-\d+\.mp3$/.test(name))
+      .sort();
+
+    if (!parts.length) {
+      throw new Error("No audio found in the recording.");
+    }
+
+    const transcript: string[] = [];
+
+    for (const [index, part] of parts.entries()) {
+      signal.throwIfAborted();
+      onProgress({ part: index + 1, parts: parts.length, step: "transcribe" });
+      const path = join(directory, part);
+      const { size } = await stat(path);
+
+      if (!size || size > MAX_PART_BYTES) {
+        throw new Error("Converted audio part exceeds the Whisper limit.");
+      }
+
+      const text = await transcribeAudio({
+        audio: {
+          bytes: await readFile(path),
+          filename: part,
+          mediaType: "audio/mpeg",
+        },
+        model: "whisper-1",
+        provider: { apiKey: input.apiKey, type: "openai" },
+        signal,
+      });
+
+      transcript.push(text);
+    }
+
+    return { filename: recording.name, text: transcript.join("\n\n") };
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+}

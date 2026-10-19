@@ -60,7 +60,7 @@ Parent changes apply on the next resource read or agent turn.
 Teams can add local resources under their existing permissions.
 Publication does not assign every tool or skill to every agent.
 Use the existing agent assignment controls for permitted resources.
-Default Bot and Super Bot cannot be published.
+Default Bot and Super Nakama cannot be published.
 
 Published tools do not supply parent credentials.
 Connect integrations for the executing team when setup is required.
@@ -110,6 +110,15 @@ When deciding permissions, think of it like this:
 - **Org admin** manages who is inside one organization
 - **Member** uses the bots
 
+## Who sees chat history
+
+Each person's chats stay private, so a teammate cannot read what you asked an agent.
+
+- The chat history shows only the chats you started, even on a shared agent. This is true for org admins too.
+- A **platform admin** can open any chat from a direct link, for support. Their own history still shows only their chats.
+- Telegram, Discord, Slack, and WhatsApp chats come from the messaging app, not from one person. Everyone who can use the agent sees them.
+- An older private chat with no owner, or whose owner was deleted, belongs to the first platform admin. Messaging-app chat owners stay unchanged.
+
 ## First-time setup
 
 When you install Nakama for the first time:
@@ -129,6 +138,14 @@ Use separate organizations when you want clear separation between:
 - Different privacy boundaries
 
 If one team needs different bots but should still share users and data boundaries, use multiple **profiles** inside one organization instead.
+
+## Disable an account
+
+A platform admin can lock an account out without deleting it, for example when someone leaves or a password may be compromised. In the organization's **Members** list, open the actions menu beside the person and select **Disable**. The list then marks them **Disabled**.
+
+A disabled account cannot log in, and every request it makes is refused, including from sessions that were already open. Disabling applies to the whole deployment, not one organization. Nakama refuses to disable the only admin of an organization. Select **Enable** to restore access.
+
+Channel pairings on Telegram, WhatsApp and Discord are tied to the chat app's user, not to a Nakama account, so remove those separately.
 
 ## Remove an organization
 

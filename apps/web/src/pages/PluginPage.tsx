@@ -17,6 +17,18 @@ import {
 
 export function PluginPage() {
   const { pluginId } = useParams<{ pluginId: string }>();
+
+  return <PluginView pluginId={pluginId} />;
+}
+
+/** A plugin's page, on its own route or in the chat side panel. */
+export function PluginView({
+  inlineHeaderActions,
+  pluginId,
+}: {
+  inlineHeaderActions?: boolean;
+  pluginId: string | undefined;
+}) {
   const { user, activeOrg } = useAuth();
   const { resolvedTheme } = useTheme();
   const query = useOrgPlugin(pluginId);
@@ -47,6 +59,7 @@ export function PluginPage() {
             Loading plugin
           </p>
         }
+        inlineHeaderActions={inlineHeaderActions}
         key={key}
         orgId={activeOrg.id}
         plugin={query.data}

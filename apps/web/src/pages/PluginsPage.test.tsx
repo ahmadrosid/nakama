@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { client } from "@/lib/client";
-import { LocalPluginInstaller } from "./PluginsPage";
+import { LocalPluginInstaller } from "./plugins/local-plugin-installer";
 
 const cleanups: Array<() => void> = [];
 
@@ -29,7 +29,7 @@ async function openDraft() {
   await settle();
   await act(async () =>
     document
-      .querySelector<HTMLButtonElement>('[aria-label="Super Bot"]')
+      .querySelector<HTMLButtonElement>('[aria-label="Super Nakama"]')
       ?.click()
   );
   await settle();
@@ -98,9 +98,9 @@ async function mount() {
     defaultOptions: { queries: { retry: false } },
   });
 
-  // SAFETY: This component reads only ID, name, and Super Bot status from profile fixtures.
+  // SAFETY: This component reads only ID, name, and Super Nakama status from profile fixtures.
   const profiles = spyOn(client, "listProfiles").mockResolvedValue({
-    profiles: [{ id: "super", isSuper: true, name: "Super Bot" }],
+    profiles: [{ id: "super", isSuper: true, name: "Super Nakama" }],
   } as Awaited<ReturnType<typeof client.listProfiles>>);
 
   cleanups.push(() => {

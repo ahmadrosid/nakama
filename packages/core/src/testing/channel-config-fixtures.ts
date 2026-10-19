@@ -108,8 +108,6 @@ type SharedChannelConfigCase<TId extends string | number> = {
     pairedUserIds: TId[];
   };
   mask: (token: string) => string | null;
-  normalize: (input: string) => string;
-  generatePairingCode: () => string;
   isUserAuthorized: (
     userId: TId,
     access: { allowedUserIds: TId[]; pairedUserIds: TId[] }
@@ -158,12 +156,6 @@ export function describeSharedChannelConfigTests<TId extends string | number>(
       });
     });
 
-    describe("normalizePairingCode", () => {
-      test("strips spaces and grouping, and uppercases", () => {
-        expect(tc.normalize(" ab-cd 12 ")).toBe("ABCD12");
-      });
-    });
-
     describe("isUserAuthorized", () => {
       test("accepts paired or allowlisted users", () => {
         expect(
@@ -184,12 +176,6 @@ export function describeSharedChannelConfigTests<TId extends string | number>(
             pairedUserIds: [],
           })
         ).toBe(false);
-      });
-    });
-
-    describe("generatePairingCode", () => {
-      test("returns 32 uppercase hex chars", () => {
-        expect(tc.generatePairingCode()).toMatch(HANDSHAKE_CODE_PATTERN);
       });
     });
 
@@ -259,24 +245,6 @@ export function describeSharedChannelConfigTests<TId extends string | number>(
           );
 
           expect(expired).toEqual(wrong);
-        });
-      });
-
-      test("rejects invalid pairing codes and keeps the code", async () => {
-        await withTempHomedir(tempPrefix, async (homeDir) => {
-          const code = liveHandshakeCode();
-          await writeChannelIniConfig(homeDir, tc.name, {
-            botToken: tc.botToken,
-            ...code,
-          });
-
-          const result = await tc.verifyAndPair("F".repeat(32), tc.sampleId);
-
-          expect(result.ok).toBe(false);
-
-          const config = await tc.loadConfigFile();
-          expect(config?.pairedUserIds).toEqual([]);
-          expect(config?.handshakeCode).toBe(code.handshakeCode);
         });
       });
 

@@ -149,6 +149,17 @@ export function useUpdateOrgMember(orgId: string) {
   });
 }
 
+/** Disabling is install-wide and needs a platform admin, like the route. */
+export function useSetOrgMemberDisabled(orgId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ disabled, userId }: { disabled: boolean; userId: string }) =>
+      client.setPlatformOrgMemberDisabled(orgId, userId, disabled),
+    onSuccess: () => invalidateOrgMembers(queryClient, orgId),
+  });
+}
+
 export function useRemoveOrgMember(orgId: string) {
   const queryClient = useQueryClient();
 

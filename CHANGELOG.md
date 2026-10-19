@@ -11,6 +11,7 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 
 ### Removed
 
+- The built-in token optimiser and its Context savings panel. Tool results reach the model unshortened, the image no longer ships the `omni` binary, and `NAKAMA_OMNI` and `NAKAMA_OMNI_AUTO_INSTALL` are ignored. Upgrading drops the `tool_output_savings` table and the `token_optimizer_enabled` setting ([#1888]) *(in review)*
 - Organization backend API keys and app-user integration. External apps using these keys must stop using this API. Private session rows remain retired; files are retained in `retired-app-users` for operators. Back up the full database and config directory before upgrading; do not run old and new servers against the same data. Rollback requires restoring that full backup.
 
 ### Changed
@@ -195,7 +196,7 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 
 ### Changed
 
-- Super Bot deletes files with `bash`; `delete_file` is no longer assigned ([#650])
+- Super Nakama deletes files with `bash`; `delete_file` is no longer assigned ([#650])
 - Dashboard uses Inter Variable
 
 ### Fixed
@@ -213,7 +214,7 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 - Batch-add provider models from setup ([#465])
 - Optional error delivery to a Sentry-compatible DSN ([#442], [#443])
 - Custom tool failures retry at most twice with backoff ([#454])
-- Super Bot `update_profile` can edit soul files
+- Super Nakama `update_profile` can edit soul files
 
 ### Changed
 
@@ -240,7 +241,7 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 ### Added
 
 - WhatsApp group chats, extra allowed numbers, and quoted group context in the agent turn ([#450])
-- Super Bot confirm-first `update_profile` for stored system prompts ([#450])
+- Super Nakama confirm-first `update_profile` for stored system prompts ([#450])
 - Optional LLM skill curator consolidate ([#437])
 
 ### Changed
@@ -268,7 +269,7 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 
 - Optional CloakBrowser stealth Chromium behind the agent-browser skill ([#314])
 - Direct MiniMax, xAI Grok, and Zhipu GLM providers with dynamic model discovery ([#392], [#408], [#394])
-- Custom Python tools, including Super Bot authoring ([#352], [#403])
+- Custom Python tools, including Super Nakama authoring ([#352], [#403])
 - Read another profile's sessions from within the same org ([#351])
 - Platform admins can archive an organization ([#393])
 - Composio: connect, auto-assign, and a shorter app list on Integrations ([#337])
@@ -554,7 +555,7 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 
 ### Changed
 
-- Super Bot capabilities and documentation updated
+- Super Nakama capabilities and documentation updated
 - Chat message queue panel reworked
 
 ## [0.3.1] - 2026-08-03
@@ -1079,3 +1080,4 @@ First tagged release. The baseline it established:
 [#921]: https://github.com/ahmadrosid/nakama/pull/921
 [#926]: https://github.com/ahmadrosid/nakama/pull/926
 [#1270]: https://github.com/ahmadrosid/nakama/issues/1270
+[#1888]: https://github.com/ahmadrosid/nakama/issues/1888

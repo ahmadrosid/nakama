@@ -262,6 +262,11 @@ function SkillDetailPageContent({
                 skill={skill}
                 usageSummary={usageSummary}
               />
+              {filesQuery.data?.files.some(
+                (file) => file.path === "requirements.txt"
+              ) ? (
+                <SkillPythonPackages orgId={orgId} skillId={skill.id} />
+              ) : null}
               <SkillVersionHistory
                 disabled={editing || busy}
                 orgId={orgId}
@@ -424,7 +429,7 @@ const versionSourceLabels: Record<
   dashboard: "Dashboard",
   pack_import: "Pack import",
   skill_manage: "Agent",
-  super_bot: "Super Bot",
+  super_nakama: "Super Nakama",
 };
 
 function versionAuthor(version: SkillVersion): string {
@@ -528,6 +533,46 @@ function RelativeTime({ value }: { value: string }) {
     <time dateTime={value} title={formatSessionTimestamp(value)}>
       {formatSessionRelativeTime(value)}
     </time>
+  );
+}
+
+/** Installing is an explicit admin action, never a side effect of a skill
+ * being created, because pip runs package build code on the host. */
+function SkillPythonPackages({
+  orgId,
+  skillId,
+}: {
+  orgId: string;
+  skillId: string;
+}) {
+  const queryClient = useQueryClient();
+
+  const installMutation = useMutation({
+    mutationFn: () => client.installSkillPythonPackages(skillId, orgId),
+    onError: (error) => toast(formatError(error)),
+    onSuccess: async () => {
+      toast("Python packages installed.");
+      await invalidateQueries(queryClient, queryKeys.skills.detail(skillId));
+    },
+  });
+
+  return (
+    <section className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm">
+      <p className="text-muted-foreground">
+        This skill lists Python packages in <code>requirements.txt</code>.
+      </p>
+      <Button
+        disabled={installMutation.isPending}
+        onClick={() => installMutation.mutate()}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        {installMutation.isPending
+          ? "Installing..."
+          : "Install Python packages"}
+      </Button>
+    </section>
   );
 }
 

@@ -5,6 +5,7 @@ import {
   NakamaApiError,
   reportError,
 } from "@nakama/core";
+import { isHtmlArtifactMimeType } from "@nakama/core/artifact-mime";
 import { bodyLimit } from "hono/body-limit";
 import { requestId } from "hono/request-id";
 import { sessionTurnRegistry } from "../services/session-turn-registry";
@@ -53,7 +54,6 @@ import {
   DOCS_SCRIPT_URL,
   registerSystemRoutes,
 } from "./routes/system";
-import { registerTokenOptimizationRoutes } from "./routes/token-optimization";
 import { registerToolRoutes } from "./routes/tools";
 import { registerUserContextRoutes } from "./routes/user-context";
 import { registerWorkerRoutes } from "./routes/workers";
@@ -67,7 +67,7 @@ import type { HonoApp } from "./types";
  * the two drift, which is the only thing keeping this constant honest.
  */
 const THEME_BOOTSTRAP_SCRIPT_HASH =
-  "sha256-HsiO8mtwNQyMUSzPhZ0Zgx52OUxlMda3rA2mB6m/SO0=";
+  "sha256-ccmZA+DQW+fCYJWBEiKXptNNdt/GBPFOLMhetVtPmLA=";
 
 // Regular JSON can carry a 5 MiB attachment after base64 expansion. Full-data
 // imports accept a 100 MiB archive, which expands to roughly 134 MiB as base64.
@@ -76,6 +76,9 @@ export const DEFAULT_HTTP_REQUEST_BODY_LIMIT_BYTES = 10 * 1024 * 1024;
 export const MAX_HTTP_REQUEST_BODY_LIMIT_BYTES = 140 * 1024 * 1024;
 
 const LARGE_BODY_ROUTES = new Set([
+  // File tools validate decoded bytes; JSON escaping can exceed the normal cap.
+  "/v1/tools/tool_write_file/run",
+  "/v1/tools/tool_edit_file/run",
   "/v1/auth/setup/import/preview",
   "/v1/auth/setup/import/restore",
   "/v1/platform/data/import/preview",
@@ -216,8 +219,18 @@ export function createHonoApp(options: ServerOptions) {
       headers.set("X-Content-Type-Options", "nosniff");
       const isArtifactFrame = c.req.path === ARTIFACT_FRAME_PATH;
 
+      const isArtifactDocument =
+        isArtifactFrame ||
+        (/^\/v1\/profiles\/[^/]+\/artifacts\/content$/.test(c.req.path) &&
+          isHtmlArtifactMimeType(headers.get("Content-Type") ?? ""));
+
       if (!isArtifactFrame) {
         headers.set("X-Frame-Options", "DENY");
+      }
+
+      if (isArtifactDocument) {
+        headers.set("Permissions-Policy", "camera=(), microphone=()");
+        headers.set("Referrer-Policy", "no-referrer");
       }
 
       // Only set Referrer-Policy if it's not already set
@@ -239,9 +252,9 @@ export function createHonoApp(options: ServerOptions) {
 
       headers.set(
         "Content-Security-Policy",
-        isArtifactFrame
+        isArtifactDocument
           ? ARTIFACT_FRAME_CSP
-          : `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'${docsScripts}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://logos.composio.dev; media-src 'self' blob:; object-src blob:; frame-src 'self' blob:; font-src 'self' data:${docsFonts}; connect-src 'self'${docsConnections};`
+          : `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'${docsScripts}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://logos.composio.dev; media-src 'self' blob:; object-src blob:; frame-src 'self' blob: https://*.kernel.sh:* https://*.onkernel.com:*; font-src 'self' data:${docsFonts}; connect-src 'self'${docsConnections};`
       );
 
       // Also true behind a TLS terminator, which is where HSTS matters most.
@@ -392,7 +405,6 @@ export function createHonoApp(options: ServerOptions) {
   registerGoogleMeetRoutes(app, options);
   registerAutomationRoutes(app, options);
   registerNotificationDestinationRoutes(app, options);
-  registerTokenOptimizationRoutes(app, options);
   registerAutomationWorkerSettingsRoutes(app, options);
   registerCodingHarnessSettingsRoutes(app, options);
   registerComposioRoutes(app, options);

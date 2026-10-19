@@ -7,16 +7,7 @@ import {
   type TranscriptSegment,
 } from "@nakama/core/google-meet";
 import { asTestFetch } from "../../providers/test-helpers";
-import { connectTranscription, transcriptionConfig } from "./transcription";
-
-test("settings trim and validate the dedicated API key", () => {
-  expect(transcriptionConfig({ apiKey: " secret " })).toEqual({
-    apiKey: "secret",
-  });
-  const invalidConfig = { apiKey: "secret", model: "gpt-4.1" };
-  expect(() => transcriptionConfig(invalidConfig)).toThrow();
-  expect(() => transcriptionConfig({ apiKey: " " })).toThrow();
-});
+import { connectTranscription } from "./transcription";
 
 test("speaker exports preserve imports and historical unlabelled text", () => {
   expect(
@@ -78,7 +69,7 @@ test("publishes before Stop, captures while request is pending, and reuses voice
   );
 
   const session = await connectTranscription({
-    ...transcriptionConfig({ apiKey: "test" }),
+    apiKey: "test",
     directory: audioDir,
     onError: () => {},
     onSegment: (segment) => segments.push(segment),
@@ -145,7 +136,7 @@ test("reused anonymous labels across chunks do not merge voices and invalid resp
   );
 
   const session = await connectTranscription({
-    ...transcriptionConfig({ apiKey: "test" }),
+    apiKey: "test",
     directory: join(directory, "audio"),
     onError: (error) => failures.push(error),
     onSegment: (segment) => segments.push(segment),
@@ -176,7 +167,7 @@ test("permanent provider errors are not retried and queued audio is cleaned", as
   );
 
   const session = await connectTranscription({
-    ...transcriptionConfig({ apiKey: "test" }),
+    apiKey: "test",
     directory: join(directory, "audio"),
     onError: () => {},
     onSegment: () => {},
@@ -238,7 +229,7 @@ test("reference bank stays at four voices and retries do not duplicate turns", a
   );
 
   const session = await connectTranscription({
-    ...transcriptionConfig({ apiKey: "test" }),
+    apiKey: "test",
     directory: join(directory, "audio"),
     onError: () => {},
     onSegment: (segment) => segments.push(segment),
@@ -278,7 +269,7 @@ test("aborting an upload publishes no late segments and removes audio", async ()
   );
 
   const session = await connectTranscription({
-    ...transcriptionConfig({ apiKey: "test" }),
+    apiKey: "test",
     directory: audioDirectory,
     onError: () => {},
     onSegment: (segment) => segments.push(segment),

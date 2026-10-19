@@ -55,6 +55,7 @@ const PROVIDER_CHOICES: Array<{ id: UserProviderName; label: string }> = [
   { id: "qwen_cn", label: "Qwen (DashScope CN)" },
   { id: "perplexity", label: "Perplexity Sonar" },
   { id: "xai", label: "xAI Grok" },
+  { id: "groq", label: "Groq" },
   { id: "cerebras", label: "Cerebras" },
   { id: "cloudflare", label: "Cloudflare Worker AI" },
   { id: "fireworks", label: "Fireworks" },
@@ -278,6 +279,7 @@ function resolveProviderChoice(input: string): UserProviderName | null {
     normalized === "zhipu" ||
     normalized === "zhipu_cn" ||
     normalized === "xai" ||
+    normalized === "groq" ||
     normalized === "together" ||
     normalized === "xiaomi" ||
     normalized === "meta" ||

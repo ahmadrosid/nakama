@@ -728,6 +728,20 @@ CREATE TABLE IF NOT EXISTS file_pins (
   PRIMARY KEY (org_id, user_id, profile_id, path)
 );
 
+-- Who made each artifact. The file stays on disk; this row only records its owner.
+CREATE TABLE IF NOT EXISTS artifacts (
+  org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  filename TEXT NOT NULL,
+  session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  channel TEXT,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (org_id, profile_id, filename)
+);
+
+CREATE INDEX IF NOT EXISTS artifacts_org_user ON artifacts (org_id, user_id);
+
 -- Source links survive publication removal so shared instances remain managed.
 CREATE TABLE IF NOT EXISTS org_shared_resources (
   id TEXT PRIMARY KEY NOT NULL,

@@ -66,7 +66,7 @@ test("automation notification opens the automation under its agent", async () =>
   }
 });
 
-test("automations follow the selected agent and Super Bot shows all", async () => {
+test("automations follow the selected agent and Super Nakama shows all", async () => {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },

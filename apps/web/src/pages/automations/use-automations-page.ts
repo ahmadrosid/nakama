@@ -14,7 +14,7 @@ import {
   useUpdateAutomationMutation,
 } from "@/hooks/use-automations";
 import { formatError } from "@/lib/client";
-import { findSuperBotProfile } from "@/lib/profiles";
+import { findSuperNakamaProfile } from "@/lib/profiles";
 
 const EMPTY_AUTOMATIONS: StoredAutomation[] = [];
 
@@ -43,15 +43,15 @@ export function useAutomationsPage() {
   const { data: profiles = [], isLoading: profilesLoading } =
     useProfilesQuery();
 
-  const superBotProfile = findSuperBotProfile(profiles);
+  const superNakamaProfile = findSuperNakamaProfile(profiles);
 
   const automations = useMemo(() => {
     const all = automationsData?.automations ?? EMPTY_AUTOMATIONS;
 
-    return profileId && profileId === superBotProfile?.id
+    return profileId && profileId === superNakamaProfile?.id
       ? all
       : all.filter((automation) => automation.profileId === profileId);
-  }, [automationsData?.automations, profileId, superBotProfile?.id]);
+  }, [automationsData?.automations, profileId, superNakamaProfile?.id]);
 
   const [searchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -293,13 +293,13 @@ export function useAutomationsPage() {
       return;
     }
 
-    if (!superBotProfile) {
-      setError("No super bot profile exists in this organization.");
+    if (!superNakamaProfile) {
+      setError("No super nakama profile exists in this organization.");
 
       return;
     }
 
-    navigateToNewChat(superBotProfile.id, {
+    navigateToNewChat(superNakamaProfile.id, {
       draft,
       intent: "automation",
     });

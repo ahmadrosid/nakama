@@ -71,52 +71,26 @@ describe("readToolSource", () => {
     expect(source.content).toContain("def run");
   });
 
-  test("reads built-in write_file source", async () => {
-    const source = await readToolSource({
-      createdAt: new Date().toISOString(),
-      description: "Write file",
-      handlerConfig: { name: "write_file" },
-      handlerType: "builtin",
-      id: BUILTIN_TOOL_IDS.write_file,
-      name: "write_file",
-      updatedAt: new Date().toISOString(),
-    });
+  test("reads built-in file tool source", async () => {
+    for (const [name, id, implementation] of [
+      ["write_file", BUILTIN_TOOL_IDS.write_file, "writeFileTool"],
+      ["edit_file", BUILTIN_TOOL_IDS.edit_file, "editFileTool"],
+      ["read_file", BUILTIN_TOOL_IDS.read_file, "readFileTool"],
+    ] as const) {
+      const source = await readToolSource({
+        createdAt: new Date().toISOString(),
+        description: name,
+        handlerConfig: { name },
+        handlerType: "builtin",
+        id,
+        name,
+        updatedAt: new Date().toISOString(),
+      });
 
-    expect(source.path).toBe("packages/core/src/tools/builtin.ts");
-    expect(source.language).toBe("typescript");
-    expect(source.content).toContain("writeFileTool");
-  });
-
-  test("reads built-in edit_file source", async () => {
-    const source = await readToolSource({
-      createdAt: new Date().toISOString(),
-      description: "Edit file",
-      handlerConfig: { name: "edit_file" },
-      handlerType: "builtin",
-      id: BUILTIN_TOOL_IDS.edit_file,
-      name: "edit_file",
-      updatedAt: new Date().toISOString(),
-    });
-
-    expect(source.path).toBe("packages/core/src/tools/builtin.ts");
-    expect(source.language).toBe("typescript");
-    expect(source.content).toContain("editFileTool");
-  });
-
-  test("reads built-in read_file source", async () => {
-    const source = await readToolSource({
-      createdAt: new Date().toISOString(),
-      description: "Read file",
-      handlerConfig: { name: "read_file" },
-      handlerType: "builtin",
-      id: BUILTIN_TOOL_IDS.read_file,
-      name: "read_file",
-      updatedAt: new Date().toISOString(),
-    });
-
-    expect(source.path).toBe("packages/core/src/tools/builtin.ts");
-    expect(source.language).toBe("typescript");
-    expect(source.content).toContain("readFileTool");
+      expect(source.path).toBe("packages/core/src/tools/builtin.ts");
+      expect(source.language).toBe("typescript");
+      expect(source.content).toContain(implementation);
+    }
   });
 
   test("rejects unmapped built-in names", async () => {

@@ -1,0 +1,81 @@
+---
+title: "Cloud browser"
+description: "Let an agent use websites that need your login, in your own Kernel cloud browser that you can watch and sign in to from chat."
+---
+
+Some work needs a real browser and your own login. Examples are reading your LinkedIn feed, checking notifications on a vendor portal, or replying in a web inbox. [`web_fetch`](/builtin-tools#web_fetch) cannot reach these pages, and you do not want to paste your password into a chat.
+
+The cloud browser gives each user their own browser on [Kernel](https://www.kernel.sh). The agent drives it with the **Cloud browser** tools. You watch it live in the chat, and you sign in there yourself.
+
+## Why use the cloud browser
+
+- **You sign in once.** Sign in to a site in the live browser. Your later chats, with any agent, start signed in.
+- **You can watch and help.** The **Browser** panel in the chat shows the agent's browser live. You can type and click in it.
+- **Your logins stay yours.** Each user has their own browser in each organization. Other members never see or use your logins.
+- **Nothing to install.** The browser runs on Kernel, not on the Nakama server.
+- **Nothing goes out without your yes.** Before the agent sends a message, a connection request, a post, or a comment, it shows you the exact text and where it goes, and waits for your yes in chat.
+
+## Set up Kernel (platform admins)
+
+1. Get an API key from the [Kernel dashboard](https://dashboard.onkernel.com).
+2. Open **Control center → Agent tools → AI Providers**.
+3. In **Browser runtime**, select **Kernel**, paste the key, and select **Save**.
+
+Docker and Kubernetes can set the same thing with host env instead. Env values take priority over the saved key:
+
+```bash
+NAKAMA_BROWSER_PROVIDER=kernel
+KERNEL_API_KEY=your-kernel-api-key
+```
+
+Until Kernel is set up, the Cloud browser tools do not show in the tool picker, and agents cannot use them.
+
+## Give an agent the cloud browser
+
+1. Open **Agent** and select the profile.
+2. In **Tools**, select **Add tool**.
+3. Select **Cloud browser**. This adds all six browser tools at once.
+
+The agent does not need `bash` or the [agent-browser](/agent-browser) skill for this.
+
+## Use it in chat
+
+Ask for the task in plain words. For example:
+
+> Open LinkedIn for me. I want to log in first and then check my latest notifications.
+
+> Scroll my LinkedIn home page and tell me what you learn from my feed.
+
+What happens:
+
+1. The agent opens the page in your cloud browser, and the **Browser** panel opens in the chat.
+2. If the site asks for a login, the agent asks you to sign in in the panel. Sign in there, then tell the agent you are done. Never send passwords or codes in the chat.
+3. The agent reads the page, scrolls for more, and clicks or fills forms when the task needs it.
+4. Before anything other people will see, the agent shows you the exact text and waits for your yes.
+
+## Stop the browser
+
+Select **Stop browser** in the **Browser** panel when you are done. Kernel then saves your logins, and the next browser starts signed in.
+
+If you do not stop it, Kernel stops and saves the browser after about 10 minutes with no activity. An open live view counts as activity.
+
+## Good to know
+
+- **One browser per user.** All your chats share it. Each chat works in its own tab, and Nakama closes the oldest chat tabs so that only a few stay open.
+- **Viewers** get no Browser panel, because the live view can control the browser.
+- **Automations** have no signed-in user, so they cannot use the cloud browser.
+- **Bot checks:** some sites still block automated browsers. The cloud browser does not promise to get past CAPTCHAs.
+
+## Troubleshooting
+
+| Symptom | What to check |
+|---------|---------------|
+| **Cloud browser** is not in **Add tool** | A platform admin must set up Kernel under **AI Providers → Browser runtime** |
+| The agent says the browser runtime is not set up | Same as above. Also check `NAKAMA_BROWSER_PROVIDER` and `KERNEL_API_KEY` if you use env |
+| The site shows its login page again | The previous browser was not stopped and saved yet. Sign in once in the panel, then select **Stop browser** |
+| The Browser panel is empty or dark | Close the panel and ask the agent to open the page again. The live view can take a few seconds to connect |
+
+## Next steps
+
+- [Agent browser](/agent-browser): drive Chrome on the Nakama server with `bash` and the agent-browser skill
+- [Builtin tools](/builtin-tools): other tools you can give an agent

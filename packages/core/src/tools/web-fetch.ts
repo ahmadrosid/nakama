@@ -477,10 +477,35 @@ async function readBoundedBody(
   }
 }
 
-function validateImageUrl(url: URL): void {
+function validateHttpsUrl(url: URL): void {
   if (url.protocol !== "https:" || url.username || url.password || url.port) {
-    throw new Error("Images require HTTPS on port 443 without credentials.");
+    throw new Error(
+      "Remote files require HTTPS on port 443 without credentials."
+    );
   }
+}
+
+/**
+ * GET a public HTTPS file, for downloads from presigned storage URLs that
+ * can live on any host. Shares web_fetch's DNS pinning and redirect checks,
+ * so the URL cannot reach a private or loopback address.
+ */
+export async function fetchPublicHttps(
+  rawUrl: string,
+  signal: AbortSignal
+): Promise<Response> {
+  const url = parseUrl(rawUrl);
+  validateHttpsUrl(url);
+  const addresses = await resolvePublicAddresses(url.hostname, signal);
+
+  const { response } = await fetchWithRedirects(
+    url,
+    addresses,
+    signal,
+    validateHttpsUrl
+  );
+
+  return response;
 }
 
 /** Public raster images only; shares web_fetch's DNS pinning and redirect checks. */
@@ -490,7 +515,7 @@ export async function fetchRemoteImage(
   validateRedirect?: (url: URL) => void
 ) {
   const url = parseUrl(rawUrl);
-  validateImageUrl(url);
+  validateHttpsUrl(url);
   const addresses = await resolvePublicAddresses(url.hostname, signal);
 
   const { response } = await fetchWithRedirects(
@@ -498,7 +523,7 @@ export async function fetchRemoteImage(
     addresses,
     signal,
     (next) => {
-      validateImageUrl(next);
+      validateHttpsUrl(next);
       validateRedirect?.(next);
     }
   );
@@ -590,7 +615,7 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
     const url = parseUrl(parsed.url);
 
     if (parsed.imageMetadata) {
-      validateImageUrl(url);
+      validateHttpsUrl(url);
     }
 
     const controller = new AbortController();

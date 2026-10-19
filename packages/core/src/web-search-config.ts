@@ -12,20 +12,30 @@ import {
 export const WEB_SEARCH_SECTION = "web_search";
 
 /** Search back-ends that can replace the provider-hosted `web_search` tool. */
-export const WEB_SEARCH_PROVIDERS: readonly WebSearchProvider[] = [
+export const WEB_SEARCH_PROVIDERS = [
   "exa",
   "firecrawl",
-];
+  "serply",
+] as const satisfies readonly WebSearchProvider[];
 
 export const WEB_SEARCH_PROVIDER_ENDPOINTS: Record<WebSearchProvider, string> =
   {
     exa: "https://api.exa.ai/search",
     firecrawl: "https://api.firecrawl.dev/v2/search",
+    serply: "https://api.serply.io/v1/search",
+  };
+
+export const WEB_SEARCH_PROVIDER_ENV_NAMES: Record<WebSearchProvider, string> =
+  {
+    exa: "EXA_API_KEY",
+    firecrawl: "FIRECRAWL_API_KEY",
+    serply: "SERPLY_API_KEY",
   };
 
 export const WEB_SEARCH_PROVIDER_LABELS: Record<WebSearchProvider, string> = {
   exa: "Exa",
   firecrawl: "Firecrawl",
+  serply: "Serply",
 };
 
 export interface WebSearchConfigFile {
@@ -122,14 +132,11 @@ export async function loadWebSearchConfig(): Promise<WebSearchConfigFile | null>
     return null;
   }
 
-  const envName =
-    config.provider === "exa" ? "EXA_API_KEY" : "FIRECRAWL_API_KEY";
-
   return {
     ...config,
     apiKey:
       (await resolveManagedSecret("global", `web-search:${config.provider}`, [
-        envName,
+        WEB_SEARCH_PROVIDER_ENV_NAMES[config.provider],
       ])) ?? "",
   };
 }

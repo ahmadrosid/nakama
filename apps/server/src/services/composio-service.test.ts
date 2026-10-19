@@ -39,6 +39,9 @@ function createMockClient(): Pick<
       };
     },
     async deleteConnectedAccount() {},
+    async executeTool() {
+      return {};
+    },
     async linkToolkitAccount(_userId, _toolkitSlug) {
       return {
         connectedAccountId: "ca_1",
@@ -150,6 +153,120 @@ async function createConfiguredService() {
 }
 
 describe("ComposioService", () => {
+  test("lists only Gmail-linked Drive recordings from the member's connections", async () => {
+    const { db, service, restore } = await createConfiguredService();
+    const now = "2026-01-01T00:00:00.000Z";
+    const fileId = "recording_file_123";
+    const calls: string[] = [];
+
+    try {
+      await seedOrgWithAdmin(db);
+
+      for (const slug of ["gmail", "googledrive"]) {
+        const toolkit = await service.enableToolkit(ORG_ID, {
+          toolkitSlug: slug,
+        });
+
+        await db.upsertComposioUserConnection({
+          connectedAccountId: `ca_${slug}`,
+          createdAt: now,
+          id: `cuc_${slug}`,
+          lastError: null,
+          oauthStateHash: null,
+          orgId: ORG_ID,
+          sessionIdEnc: null,
+          status: "connected",
+          toolkitId: toolkit.id,
+          updatedAt: now,
+          userId: USER_ID,
+        });
+      }
+
+      injectMockComposioClient(service, {
+        ...createMockClient(),
+        async executeTool(slug, userId, accountId) {
+          expect(userId).toBe("nakama:user:user_admin");
+          calls.push(`${slug}:${accountId}`);
+
+          if (slug === "GMAIL_FETCH_EMAILS") {
+            return {
+              data: { messages: [{ id: "msg_1", threadId: "thread_1" }] },
+            };
+          }
+
+          if (slug === "GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID") {
+            return {
+              data: {
+                payload: {
+                  parts: [
+                    {
+                      body: {
+                        data: Buffer.from(
+                          `https://drive.google.com/file/d/${fileId}/view`
+                        ).toString("base64url"),
+                      },
+                    },
+                  ],
+                },
+              },
+            };
+          }
+
+          if (slug === "GOOGLEDRIVE_GET_FILE_METADATA") {
+            return {
+              data: { mimeType: "video/mp4", name: "Sprint.mp4", size: "100" },
+            };
+          }
+
+          return {
+            data: {
+              downloaded_file_content: {
+                url: "https://files.composio.dev/video",
+              },
+            },
+          };
+        },
+      });
+
+      const listed = await service.listMeetRecordings(ORG_ID, USER_ID);
+      expect(listed.recordings).toEqual([
+        {
+          date: "",
+          fileId,
+          messageId: "msg_1",
+          name: "Sprint.mp4",
+          size: 100,
+        },
+      ]);
+      await expect(
+        service.downloadMeetRecording(
+          ORG_ID,
+          USER_ID,
+          "msg_1",
+          "other_file_123"
+        )
+      ).rejects.toThrow();
+      expect(
+        calls.some((call) => call.startsWith("GOOGLEDRIVE_DOWNLOAD_FILE"))
+      ).toBe(false);
+
+      const downloaded = await service.downloadMeetRecording(
+        ORG_ID,
+        USER_ID,
+        "msg_1",
+        fileId
+      );
+
+      expect(downloaded.recording.name).toBe("Sprint.mp4");
+      expect(calls).toContain("GOOGLEDRIVE_DOWNLOAD_FILE:ca_googledrive");
+      const other = await service.listMeetRecordings(ORG_ID, "another_member");
+      expect(other.recordings).toEqual([]);
+      expect(other.gmailConnected).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
   test("teams use only their own personal connections and invalidate removed accounts", async () => {
     const { db, service, restore } = await createConfiguredService();
 
@@ -464,7 +581,7 @@ describe("ComposioService", () => {
         isDefault: false,
         isSuper: true,
         model: null,
-        name: "Super Bot",
+        name: "Super Nakama",
         orgId: ORG_ID,
         systemPrompt: "",
         updatedAt: new Date().toISOString(),
@@ -477,7 +594,7 @@ describe("ComposioService", () => {
       const assigned = await db.listProfileComposioToolkits("profile_default");
       expect(assigned.map((entry) => entry.toolkitId)).toEqual([toolkit.id]);
 
-      // Super Bot and channel-facing profiles stay an explicit choice.
+      // Super Nakama and channel-facing profiles stay an explicit choice.
       expect(await db.listProfileComposioToolkits("profile_super")).toEqual([]);
     } finally {
       restore();
@@ -538,6 +655,92 @@ describe("ComposioService", () => {
       expect(listed.userConnections[0]?.status).toBe("oauth_in_progress");
     } finally {
       restore();
+    }
+  });
+
+  test("Meet connect enables the toolkit and OAuth returns to Google Meet", async () => {
+    const { db, service, restore } = await createConfiguredService();
+    let callbackUrl = "";
+
+    injectMockComposioClient(service, {
+      async createProfileSession() {
+        return {
+          headers: {},
+          sessionId: "session_meet",
+          url: "https://mcp.composio.dev/session_meet",
+        };
+      },
+      async linkToolkitAccount(_userId, _toolkitSlug, url) {
+        callbackUrl = url;
+
+        return {
+          connectedAccountId: "ca_1",
+          redirectUrl: "https://example.com/oauth",
+        };
+      },
+    });
+
+    try {
+      await seedOrgWithAdmin(db);
+      await expect(
+        service.connectMeetRecordingSource(
+          ORG_ID,
+          USER_ID,
+          "slack",
+          "http://localhost:4310"
+        )
+      ).rejects.toThrow();
+
+      const response = await service.connectMeetRecordingSource(
+        ORG_ID,
+        USER_ID,
+        "gmail",
+        "http://localhost:4310"
+      );
+
+      expect(response.redirectUrl).toBe("https://example.com/oauth");
+      const toolkit = await db.getComposioToolkitBySlug(ORG_ID, "gmail");
+      expect(toolkit?.status).toBe("enabled");
+
+      const state = new URL(callbackUrl).searchParams.get("state") ?? "";
+      const result = await service.completeOAuth(state);
+
+      expect(result).toEqual({
+        orgId: ORG_ID,
+        returnTo: "/google-meet?import=recording",
+        toolkitSlug: "gmail",
+      });
+      const listed = await service.listToolkits(ORG_ID, USER_ID);
+      expect(listed.userConnections[0]?.status).toBe("connected");
+    } finally {
+      restore();
+    }
+  });
+
+  test("Meet recordings report when Composio is not configured", async () => {
+    const previous = process.env.NAKAMA_CONFIG_DIR;
+    process.env.NAKAMA_CONFIG_DIR = await mkdtemp(
+      join(tmpdir(), "nakama-composio-unset-")
+    );
+
+    try {
+      const service = new ComposioService(
+        createInMemoryDatabaseAdapter(),
+        new AuthService()
+      );
+
+      expect(await service.listMeetRecordings(ORG_ID, USER_ID)).toEqual({
+        composioConfigured: false,
+        driveConnected: false,
+        gmailConnected: false,
+        recordings: [],
+      });
+    } finally {
+      if (previous === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = previous;
+      }
     }
   });
 

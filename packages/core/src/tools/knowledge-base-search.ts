@@ -250,8 +250,8 @@ type SearchTarget = {
   unreadable: string[];
   publishedDocuments?: PublishedKnowledgeBaseDocument[];
 } & (
-  | { kind: "dir"; root: string; glob: string; scope: KnowledgeBaseScope }
-  | { kind: "file"; root: string; glob: null; scope: KnowledgeBaseScope }
+  | { kind: "dir"; root: string; globs: string[]; scope: KnowledgeBaseScope }
+  | { kind: "file"; root: string; globs: null; scope: KnowledgeBaseScope }
   | { kind: "missing"; root: string; scope: KnowledgeBaseScope }
 );
 
@@ -329,7 +329,11 @@ async function resolveProfileSearchTarget(
     getKnowledgeBaseDir(orgId, profileId),
     "profile",
     await listKnowledgeBaseDocuments(orgId, profileId),
-    filename
+    filename,
+    // Pages the knowledge-base-wiki skill compiles from these documents. The
+    // leading **/ is needed: ripgrep matches a glob holding a slash against the
+    // absolute path, and Bun.Glob.scan drops brace sets that hold one.
+    ["**/wiki/*.md"]
   );
 }
 
@@ -364,7 +368,8 @@ function pickSearchTarget(
   root: string,
   scope: KnowledgeBaseScope,
   documents: { filename: string; id: string; status: string }[],
-  filename: string | null
+  filename: string | null,
+  extraGlobs: string[] = []
 ): SearchTarget {
   const unreadable = unreadableFilenames(documents, filename);
 
@@ -378,10 +383,12 @@ function pickSearchTarget(
     }
 
     return {
-      glob:
+      globs: [
         ids.length === 1
           ? `${ids[0]}${KNOWLEDGE_BASE_EXTRACTED_SUFFIX}`
           : `{${ids.map((id) => `${id}${KNOWLEDGE_BASE_EXTRACTED_SUFFIX}`).join(",")}}`,
+        ...extraGlobs,
+      ],
       kind: "dir",
       root,
       scope,
@@ -402,7 +409,7 @@ function pickSearchTarget(
   }
 
   return {
-    glob: null,
+    globs: null,
     kind: "file",
     root: getKnowledgeBaseExtractedPath(root, document.id),
     scope,
@@ -452,7 +459,7 @@ async function runSearchTarget(
 
   const result = await runRipgrep(
     buildRipgrepArgs({
-      glob: target.glob,
+      glob: target.globs,
       maxResults: probeLimit,
       query: parsed.query,
       regex: parsed.regex,
@@ -505,14 +512,14 @@ async function runLexicalSearchTargets(
         "CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(body, tokenize='porter unicode61')"
       );
 
-      const ftsQuery = buildFtsQuery(parsed.query);
+      const terms = parseFtsTerms(parsed.query);
 
-      return await Promise.all(
+      const collections = await Promise.all(
         targets.map(async (target) => {
           if (target.kind === "missing") {
             removeCollection(db, target.scope);
 
-            return { matches: [], truncated: false };
+            return null;
           }
 
           const root =
@@ -522,58 +529,67 @@ async function runLexicalSearchTargets(
             removeCollection(db, target.scope);
           }
 
-          const pattern =
-            target.kind === "file" ? basename(target.root) : target.glob;
+          const patterns =
+            target.kind === "file" ? [basename(target.root)] : target.globs;
 
-          const paths = await syncCollection(db, target.scope, root, pattern);
+          const paths = await syncCollection(db, target.scope, root, patterns);
 
-          if (!ftsQuery || paths.length === 0) {
-            return { matches: [], truncated: false };
-          }
-
-          const rows = db
-            .query<{ path: string }, [string, string, string, number]>(
-              `SELECT d.path AS path
-               FROM docs_fts
-               JOIN docs d ON d.id = docs_fts.rowid
-               WHERE docs_fts MATCH ?
-                 AND d.collection = ?
-                 AND d.path IN (SELECT value FROM json_each(?))
-               ORDER BY bm25(docs_fts)
-               LIMIT ?`
-            )
-            .all(
-              ftsQuery,
-              target.scope,
-              JSON.stringify(paths),
-              parsed.maxResults + 1
-            );
-
-          const matches = await Promise.all(
-            rows.slice(0, parsed.maxResults).map(async (row) => {
-              const body = await Bun.file(join(root, row.path)).text();
-              const snippet = extractSnippet(body, parsed.query, 16_000);
-
-              return scopeSearchMatch(target, {
-                file:
-                  target.scope === "profile"
-                    ? relative(
-                        workspaceRoot,
-                        join(canonicalProfileRoot, row.path)
-                      )
-                    : row.path,
-                line: snippet.line,
-                text: snippet.text,
-              });
-            })
-          );
-
-          return {
-            matches: matches.flat(),
-            truncated: rows.length > parsed.maxResults,
-          };
+          return paths.length > 0 ? { paths, target } : null;
         })
       );
+
+      if (!terms) {
+        return targets.map(() => ({ matches: [], truncated: false }));
+      }
+
+      const queryCollections = (operator: FtsOperator) =>
+        collections.map((collection) =>
+          collection
+            ? queryCollection(
+                db,
+                collection,
+                joinFtsTerms(terms, operator),
+                parsed.maxResults + 1
+              )
+            : []
+        );
+
+      const strict = queryCollections("AND");
+
+      // Every term must match first. When that finds nothing anywhere, a
+      // question such as "how do I reset my password" still deserves the
+      // documents that hold most of its words, ranked by bm25.
+      const results =
+        terms.positive.length > 1 && strict.every((rows) => rows.length === 0)
+          ? queryCollections("OR")
+          : strict;
+
+      return results.map((rows, index) => {
+        const collection = collections[index];
+
+        if (!collection) {
+          return { matches: [], truncated: false };
+        }
+
+        return {
+          matches: rows.slice(0, parsed.maxResults).flatMap((row) => {
+            const snippet = extractSnippet(row.marked, 16_000);
+
+            return scopeSearchMatch(collection.target, {
+              file:
+                collection.target.scope === "profile"
+                  ? relative(
+                      workspaceRoot,
+                      join(canonicalProfileRoot, row.path)
+                    )
+                  : row.path,
+              line: snippet.line,
+              text: snippet.text,
+            });
+          }),
+          truncated: rows.length > parsed.maxResults,
+        };
+      });
     } finally {
       // Finalize prepared statements so Windows releases the index file.
       db.close(true);
@@ -590,7 +606,7 @@ function removeCollection(db: Database, collection: string): void {
 }
 
 /**
- * Brings the index up to date for the files `pattern` matches under `root` and
+ * Brings the index up to date for the files `patterns` match under `root` and
  * returns their relative paths. Rows for files that no longer exist are
  * dropped; rows for files outside this pattern stay, so alternating filename
  * filters do not rebuild the index.
@@ -599,12 +615,14 @@ async function syncCollection(
   db: Database,
   collection: string,
   root: string,
-  pattern: string
+  patterns: string[]
 ): Promise<string[]> {
   const paths: string[] = [];
 
-  for await (const path of new Bun.Glob(pattern).scan({ cwd: root })) {
-    paths.push(path);
+  for (const pattern of patterns) {
+    for await (const path of new Bun.Glob(pattern).scan({ cwd: root })) {
+      paths.push(path);
+    }
   }
 
   const known = new Map(
@@ -662,15 +680,68 @@ async function syncCollection(
   return paths;
 }
 
+interface IndexedCollection {
+  paths: string[];
+  target: SearchTarget;
+}
+
+interface RankedRow {
+  /** The document body with every matched token wrapped in highlight marks. */
+  marked: string;
+  path: string;
+}
+
+const HIGHLIGHT_OPEN = "\u0002";
+
+const HIGHLIGHT_CLOSE = "\u0003";
+
+function queryCollection(
+  db: Database,
+  collection: IndexedCollection,
+  ftsQuery: string,
+  limit: number
+): RankedRow[] {
+  return db
+    .query<RankedRow, [string, string, string, string, string, number]>(
+      `SELECT d.path AS path, highlight(docs_fts, 0, ?, ?) AS marked
+       FROM docs_fts
+       JOIN docs d ON d.id = docs_fts.rowid
+       WHERE docs_fts MATCH ?
+         AND d.collection = ?
+         AND d.path IN (SELECT value FROM json_each(?))
+       ORDER BY bm25(docs_fts)
+       LIMIT ?`
+    )
+    .all(
+      HIGHLIGHT_OPEN,
+      HIGHLIGHT_CLOSE,
+      ftsQuery,
+      collection.target.scope,
+      JSON.stringify(collection.paths),
+      limit
+    );
+}
+
+type FtsOperator = "AND" | "OR";
+
+interface FtsTerm {
+  phrase: boolean;
+  text: string;
+}
+
+interface FtsTerms {
+  negative: FtsTerm[];
+  positive: FtsTerm[];
+}
+
 /**
- * Turns free text into an FTS5 query: every term must match, plain words match
- * as prefixes, quoted phrases and hyphenated or dotted tokens (`gpt-4`,
- * `3.14.0`) match as phrases, and a leading `-` excludes a term. Returns null
- * when nothing searchable is left.
+ * Splits free text into FTS5 terms: quoted phrases and hyphenated or dotted
+ * tokens (`gpt-4`, `3.14.0`) are phrases, and a leading `-` excludes a term.
+ * Returns null when nothing searchable is left.
  */
-function buildFtsQuery(query: string): string | null {
-  const positive: string[] = [];
-  const negative: string[] = [];
+function parseFtsTerms(query: string): FtsTerms | null {
+  const positive: FtsTerm[] = [];
+  const negative: FtsTerm[] = [];
 
   for (const match of query.matchAll(/(-?)(?:"([^"]*)"|(\S+))/gu)) {
     const negated = match[1] === "-" || (match[3]?.startsWith("-") ?? false);
@@ -681,16 +752,31 @@ function buildFtsQuery(query: string): string | null {
       continue;
     }
 
-    const isPhrase = match[2] !== undefined || parts.length > 1;
-    const term = isPhrase ? `"${parts.join(" ")}"` : `"${parts[0]}"*`;
-    (negated ? negative : positive).push(term);
+    (negated ? negative : positive).push({
+      phrase: match[2] !== undefined || parts.length > 1,
+      text: parts.join(" "),
+    });
   }
 
-  if (positive.length === 0) {
-    return null;
-  }
+  return positive.length > 0 ? { negative, positive } : null;
+}
 
-  return [positive.join(" AND "), ...negative].join(" NOT ");
+/**
+ * Builds the FTS5 query. Plain words match as prefixes, except that a word of
+ * one or two characters only matches itself under `OR`: there `do` or `I`
+ * would otherwise pull in every document with `does` or `is`. Excluded terms
+ * always stay excluded.
+ */
+function joinFtsTerms(terms: FtsTerms, operator: FtsOperator): string {
+  const format = (term: FtsTerm) =>
+    term.phrase || (operator === "OR" && term.text.length < 3)
+      ? `"${term.text}"`
+      : `"${term.text}"*`;
+
+  return [
+    `(${terms.positive.map(format).join(` ${operator} `)})`,
+    ...terms.negative.map(format),
+  ].join(" NOT ");
 }
 
 interface SnippetResult {
@@ -698,32 +784,34 @@ interface SnippetResult {
   text: string;
 }
 
-/** Finds the line that matches the most query terms and returns it with context. */
-function extractSnippet(
-  body: string,
-  query: string,
-  maxLength: number
-): SnippetResult {
-  const lines = body.split("\n");
-
-  const terms = query
-    .toLowerCase()
-    .split(/\s+/u)
-    .map((term) => term.replace(/^-|"/gu, ""))
-    .filter(Boolean);
+/**
+ * Picks the line with the most distinct highlighted tokens and returns it with
+ * context. FTS5 marked the tokens with the search tokenizer, so stems, prefixes
+ * and phrases point at the line that matched, and excluded terms never do.
+ */
+function extractSnippet(marked: string, maxLength: number): SnippetResult {
+  const markedLines = marked.split("\n");
 
   let bestLine = 0;
-  let bestScore = -1;
+  let bestScore = 0;
 
-  for (const [index, line] of lines.entries()) {
-    const lower = line.toLowerCase();
-    const score = terms.filter((term) => lower.includes(term)).length;
+  for (const [index, line] of markedLines.entries()) {
+    const tokens = new Set(
+      Array.from(
+        line.matchAll(/\u0002([^\u0003]*)/gu),
+        (match) => match[1]?.toLowerCase() ?? ""
+      )
+    );
 
-    if (score > bestScore) {
+    if (tokens.size > bestScore) {
       bestLine = index;
-      bestScore = score;
+      bestScore = tokens.size;
     }
   }
+
+  const lines = markedLines.map((line) =>
+    line.replaceAll(HIGHLIGHT_OPEN, "").replaceAll(HIGHLIGHT_CLOSE, "")
+  );
 
   const start = Math.max(0, bestLine - 1);
   const snippetLines = lines.slice(start, bestLine + 3);

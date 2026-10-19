@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { z } from "zod";
-import { readSettings } from "./actions";
+import { OPENAI_PROVIDER_REQUIRED_MESSAGE } from "./actions";
 import type { Meeting, MeetingStore } from "./store";
 import {
   connectTranscription,
@@ -11,6 +11,7 @@ export function createStreamMeeting(
   meeting: Meeting,
   store: MeetingStore,
   directory: string,
+  apiKey: string | null,
   signal: AbortSignal
 ) {
   let transcription: TranscriptionSession | undefined;
@@ -21,9 +22,12 @@ export function createStreamMeeting(
   const combined = AbortSignal.any([signal, abort.signal]);
 
   const started = (async () => {
-    const config = readSettings(directory);
+    if (!apiKey) {
+      throw new Error(OPENAI_PROVIDER_REQUIRED_MESSAGE);
+    }
+
     transcription = await connectTranscription({
-      ...config,
+      apiKey,
       directory: join(directory, "audio", meeting.id),
       onError: (error) => {
         failure = error;
@@ -114,7 +118,7 @@ export function createStreamMeeting(
 
 export async function generateNextMeetingTitle(
   store: MeetingStore,
-  directory: string,
+  apiKey: string | null,
   signal: AbortSignal,
   meetingId?: string
 ) {
@@ -131,7 +135,9 @@ export async function generateNextMeetingTitle(
   );
 
   try {
-    const { apiKey } = readSettings(directory);
+    if (!apiKey) {
+      throw new Error(OPENAI_PROVIDER_REQUIRED_MESSAGE);
+    }
 
     // ponytail: sample the beginning and end; use chunk summaries if long meetings need better coverage.
     const text =

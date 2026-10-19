@@ -53,7 +53,7 @@ import type {
   CreateOrganizationRequest,
   CreateOrganizationResponse,
   CreateProfileRequest,
-  CreateProfileWithSuperBotRequest,
+  CreateProfileWithSuperNakamaRequest,
   CreateProviderRequest,
   CreateProviderResponse,
   CreateSessionRequest,
@@ -196,6 +196,7 @@ import type {
   SendErrorTrackingTestResponse,
   SendMessageRequest,
   SendMessageResponse,
+  SessionBrowserResponse,
   SessionMessagesResponse,
   SessionStatusResponse,
   SessionSummary,
@@ -227,8 +228,6 @@ import type {
   ThinkingSettings,
   ThinkingSettingsResponse,
   TimezoneSettingsResponse,
-  TokenOptimizationResponse,
-  TokenOptimizationUpdateResponse,
   ToolCredentialStatus,
   ToolResponse,
   ToolSetupPlan,
@@ -238,6 +237,7 @@ import type {
   TranscriptionSettings,
   TranscriptionSettingsResponse,
   UnpinOrgMemoryRequest,
+  UpdateAgentBrowserSettingsRequest,
   UpdateArtifactRequest,
   UpdateArtifactResponse,
   UpdateAuthProfileRequest,
@@ -278,6 +278,7 @@ import type {
   VisionSettings,
   VisionSettingsResponse,
   WebPublicUrlSettingsResponse,
+  WebSearchProvider,
   WebSearchSettingsResponse,
   WhatsAppSettingsResponse,
   WorkerLogsResponse,
@@ -389,22 +390,6 @@ export class NakamaClient {
   async getSystemStatus(profileId?: string): Promise<SystemStatusResponse> {
     return this.request<SystemStatusResponse>(
       `/v1/system/status?profileId=${encodeURIComponent(profileId ?? "")}`
-    );
-  }
-
-  async getTokenOptimization(): Promise<TokenOptimizationResponse> {
-    return this.request<TokenOptimizationResponse>("/v1/token-optimization");
-  }
-
-  async setTokenOptimization(
-    enabled: boolean
-  ): Promise<TokenOptimizationUpdateResponse> {
-    return this.request<TokenOptimizationUpdateResponse>(
-      "/v1/token-optimization",
-      {
-        body: JSON.stringify({ enabled }),
-        method: "PUT",
-      }
     );
   }
 
@@ -880,6 +865,19 @@ export class NakamaClient {
     );
   }
 
+  async getSessionBrowser(sessionId: string): Promise<SessionBrowserResponse> {
+    return this.request<SessionBrowserResponse>(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/browser`
+    );
+  }
+
+  async stopSessionBrowser(sessionId: string): Promise<void> {
+    await this.request<void>(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/browser`,
+      { method: "DELETE" }
+    );
+  }
+
   async getSessionAcpSettings(
     sessionId: string
   ): Promise<AcpSessionSettingsResponse> {
@@ -1073,10 +1071,10 @@ export class NakamaClient {
     });
   }
 
-  async createProfileWithSuperBot(
-    request: CreateProfileWithSuperBotRequest
+  async createProfileWithSuperNakama(
+    request: CreateProfileWithSuperNakamaRequest
   ): Promise<ProfileResponse> {
-    return this.request<ProfileResponse>("/v1/profiles/with-super-bot", {
+    return this.request<ProfileResponse>("/v1/profiles/with-super-nakama", {
       body: JSON.stringify(request),
       method: "POST",
     });
@@ -1397,6 +1395,16 @@ export class NakamaClient {
   ): Promise<SkillResponse> {
     return this.request<SkillResponse>(
       `/v1/skills/${encodeURIComponent(skillId)}/versions/${encodeURIComponent(versionId)}/restore`,
+      { headers: { "X-Org-Id": orgId }, method: "POST" }
+    );
+  }
+
+  async installSkillPythonPackages(
+    skillId: string,
+    orgId: string
+  ): Promise<{ output: string }> {
+    return this.request<{ output: string }>(
+      `/v1/skills/${encodeURIComponent(skillId)}/python-packages`,
       { headers: { "X-Org-Id": orgId }, method: "POST" }
     );
   }
@@ -2784,6 +2792,26 @@ export class NakamaClient {
     );
   }
 
+  async connectMeetRecordingSource(
+    toolkitSlug: string
+  ): Promise<ComposioConnectResponse> {
+    const body: ComposioConnectRequest = {};
+
+    const callbackOrigin = readBrowserOrigin();
+
+    if (callbackOrigin) {
+      body.callbackOrigin = callbackOrigin;
+    }
+
+    return this.request<ComposioConnectResponse>(
+      `/v1/composio/meet/${encodeURIComponent(toolkitSlug)}/connect`,
+      {
+        body: JSON.stringify(body),
+        method: "POST",
+      }
+    );
+  }
+
   async disconnectComposioToolkit(
     toolkitSlug: string
   ): Promise<ComposioToolkitSummary> {
@@ -2837,7 +2865,7 @@ export class NakamaClient {
   }
 
   async setWebSearchSecret(
-    provider: "exa" | "firecrawl",
+    provider: WebSearchProvider,
     apiKey: string
   ): Promise<WebSearchSettingsResponse> {
     return this.request<WebSearchSettingsResponse>(
@@ -2881,6 +2909,18 @@ export class NakamaClient {
   async getAgentBrowserStatus(): Promise<AgentBrowserStatusResponse> {
     return this.request<AgentBrowserStatusResponse>(
       "/v1/settings/agent-browser"
+    );
+  }
+
+  async setAgentBrowserSettings(
+    request: UpdateAgentBrowserSettingsRequest
+  ): Promise<AgentBrowserStatusResponse> {
+    return this.request<AgentBrowserStatusResponse>(
+      "/v1/settings/agent-browser",
+      {
+        body: JSON.stringify(request),
+        method: "PUT",
+      }
     );
   }
 
@@ -3547,6 +3587,17 @@ export class NakamaClient {
     return this.request<ListOrgMembersResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/members`,
       { headers: { "X-Org-Id": orgId } }
+    );
+  }
+
+  async setPlatformOrgMemberDisabled(
+    orgId: string,
+    userId: string,
+    disabled: boolean
+  ): Promise<void> {
+    await this.request<void>(
+      `/v1/platform/orgs/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}/${disabled ? "disable" : "enable"}`,
+      { method: "POST" }
     );
   }
 

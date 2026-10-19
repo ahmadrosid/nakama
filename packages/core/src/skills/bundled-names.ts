@@ -4,11 +4,11 @@ export const DEFAULT_BUNDLED_SKILL_NAMES = [
   "skill-installer",
   "update-profile-memory",
   "archive-profile-memory",
-  "save-artifact",
+  "artifact-design",
   "composio-integrations",
 ] as const;
 
-export const SUPER_BOT_BUNDLED_SKILL_NAMES = [
+export const SUPER_NAKAMA_BUNDLED_SKILL_NAMES = [
   "create-plugin",
   "create-profile",
   "create-skill",
@@ -27,11 +27,12 @@ export const RUNTIME_ONLY_BUNDLED_SKILL_NAMES = [
 export const OPT_IN_BUNDLED_SKILL_NAMES = [
   "agent-browser",
   "google-meet",
+  "knowledge-base-wiki",
 ] as const;
 
 export const BUNDLED_SKILL_NAMES = [
   ...DEFAULT_BUNDLED_SKILL_NAMES,
-  ...SUPER_BOT_BUNDLED_SKILL_NAMES,
+  ...SUPER_NAKAMA_BUNDLED_SKILL_NAMES,
   ...RUNTIME_ONLY_BUNDLED_SKILL_NAMES,
   ...OPT_IN_BUNDLED_SKILL_NAMES,
 ] as const;

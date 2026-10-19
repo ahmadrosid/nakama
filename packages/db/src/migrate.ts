@@ -50,13 +50,18 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateTenantOrgScope);
   atomic(migrateSkillOrgIds);
   atomic(migrateProfileOrgColumns);
+  atomic(migrateSessionOrgIds);
   atomic(migrateBrowserSessionsTable);
   atomic(migratePasswordResetTokensTable);
   migrateLegacyProfileIds(db);
   atomic(migrateCodingDelegationSkillName);
+  atomic(migrateArtifactDesignSkillName);
+  atomic(migrateSuperNakamaNaming);
   atomic(migrateWorkspaceSettingsTable);
   atomic(migrateLlmUsageOrgScope);
-  atomic(migrateToolOutputSavingsTable);
+  atomic((database) =>
+    database.exec("DROP TABLE IF EXISTS tool_output_savings")
+  );
   atomic(migrateLlmTurnUsageTable);
   atomic(migrateLlmUsageActorStatsTable);
   atomic(migrateLlmUsageDailyStatsTable);
@@ -74,6 +79,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateFilePinsTable);
   atomic(migrateNotificationWebhookDeliveriesTable);
   atomic(migrateManagedSecretsTable);
+  atomic(migrateArtifactsTable);
   atomic((database) =>
     addNullableTextColumnIfMissing(database, "profiles", "acp_agent")
   );
@@ -84,6 +90,35 @@ export function migrateDatabase(db: Database): void {
     addNullableTextColumnIfMissing(database, "profiles", "owner_user_id")
   );
   atomic(migrateProfileSharedWithTeamColumn);
+  atomic(migrateSessionOwners);
+}
+
+/**
+ * Chat history is private to the user who owns the session. Private sessions from
+ * before that rule, or whose owner was deleted, go to the first platform
+ * admin so they stay reachable. Before setup creates that admin there is
+ * nobody to hand them to, and the next open tries again.
+ */
+function migrateSessionOwners(db: Database): void {
+  addNullableTextColumnIfMissing(db, "sessions", "user_id");
+
+  db.exec(`
+    UPDATE sessions
+    SET user_id = (
+      SELECT id FROM users
+      WHERE is_platform_admin = 1
+      ORDER BY disabled_at IS NOT NULL, created_at ASC, id ASC
+      LIMIT 1
+    )
+    WHERE (user_id IS NULL OR user_id NOT IN (SELECT id FROM users))
+      -- Shared chats must not inherit the admin's tool execution permissions.
+      AND channel NOT IN ('discord', 'slack', 'telegram', 'whatsapp')
+      AND EXISTS (SELECT 1 FROM users WHERE is_platform_admin = 1)
+  `);
+
+  db.exec(
+    "CREATE INDEX IF NOT EXISTS sessions_profile_user ON sessions (profile_id, user_id, channel)"
+  );
 }
 
 function migrateProfileSharedWithTeamColumn(db: Database): void {
@@ -698,29 +733,9 @@ function migrateLlmUsageOrgScope(db: Database): void {
 }
 
 /**
- * Bytes removed from a tool result before it entered the conversation, per org,
- * per optimiser, per tool.
- *
- * Deliberately not tokens and not cost: a shortened result is re-sent on later
- * turns as a cache read billed at a fraction of fresh input, so multiplying
- * these by a price would invent a number nobody can support.
- *
- * `optimizer` is a column rather than a hard-coded name because OMNI will not be
- * the only one. It is also why this is not called `omni_savings`. What it cannot
- * hold is anything that never sees tool output: a command rewriter like rtk acts
- * before the command runs, and a proxy like headroom replaces the provider
- * client, so neither produces a row here. That is a boundary worth naming, not
- * hiding.
- */
-/**
- * Provider input tokens per turn, per org, per day, split by whether the
- * optimiser removed anything on that turn.
- *
- * This is the only table here that holds tokens rather than bytes, and it holds
- * what the provider charged rather than an estimate. The comparison it supports
- * is observational, not randomised: turns land in an arm because of what
- * happened, not because anything was assigned, so a workload difference between
- * the arms is a confound the reader has to be told about.
+ * Provider tokens per turn, per org, per day. The monthly usage quota sums it.
+ * `arm` is left from the removed token optimiser (#1888) and is now always
+ * `none`; older rows may say `omni`, and the quota counts both.
  */
 function migrateLlmTurnUsageTable(db: Database): void {
   db.exec(`
@@ -803,41 +818,6 @@ function migrateLlmUsageDailyStatsTable(db: Database): void {
       updated_at TEXT NOT NULL,
       PRIMARY KEY (org_id, day, model_id, provider)
     );
-  `);
-}
-
-function migrateToolOutputSavingsTable(db: Database): void {
-  // The first cut of this table had no `bucket`, and CREATE TABLE IF NOT EXISTS
-  // will not add one. It is a counter with no history worth keeping and it has
-  // never shipped, so recreating is cheaper and clearer than an ALTER dance.
-  const columns = db
-    .prepare<{ name: string }, SQLQueryBindings[]>(
-      "PRAGMA table_info(tool_output_savings)"
-    )
-    .all();
-
-  if (
-    columns.length > 0 &&
-    !columns.some((column) => column.name === "bucket")
-  ) {
-    db.exec("DROP TABLE tool_output_savings;");
-  }
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS tool_output_savings (
-      org_id TEXT NOT NULL,
-      bucket TEXT NOT NULL,
-      optimizer TEXT NOT NULL,
-      tool TEXT NOT NULL,
-      calls INTEGER NOT NULL DEFAULT 0,
-      bytes_in INTEGER NOT NULL DEFAULT 0,
-      bytes_out INTEGER NOT NULL DEFAULT 0,
-      tracked_since TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      PRIMARY KEY (org_id, bucket, optimizer, tool)
-    );
-    CREATE INDEX IF NOT EXISTS tool_output_savings_org_bucket
-      ON tool_output_savings (org_id, bucket);
   `);
 }
 
@@ -1490,36 +1470,23 @@ function migrateProfileOrgColumns(db: Database): void {
       WHERE org_id IS NULL
     `).run(firstOrg.id);
 
-      db.prepare(`
-      UPDATE profiles
-      SET is_default = 0
-      WHERE org_id = ?
-    `).run(firstOrg.id);
-
+      // This step runs on every open. Keep a default the user already chose;
+      // else prefer 'default', then the oldest profile. One default per org.
       const defaultProfile = db
         .prepare<{ id: string }, SQLQueryBindings[]>(`
         SELECT id FROM profiles
-        WHERE org_id = ? AND id = 'default'
+        WHERE org_id = ?
+        ORDER BY is_default DESC, id = 'default' DESC, created_at ASC
         LIMIT 1
       `)
         .get(firstOrg.id);
 
       if (defaultProfile) {
         db.prepare(`
-        UPDATE profiles SET is_default = 1 WHERE id = ?
-      `).run(defaultProfile.id);
-      } else {
-        const anyProfile = db
-          .prepare<{ id: string }, SQLQueryBindings[]>(`
-          SELECT id FROM profiles WHERE org_id = ? ORDER BY created_at ASC LIMIT 1
-        `)
-          .get(firstOrg.id);
-
-        if (anyProfile) {
-          db.prepare(`
-          UPDATE profiles SET is_default = 1 WHERE id = ?
-        `).run(anyProfile.id);
-        }
+        UPDATE profiles
+        SET is_default = CASE WHEN id = ? THEN 1 ELSE 0 END
+        WHERE org_id = ?
+      `).run(defaultProfile.id, firstOrg.id);
       }
     }
     // With no organization yet, org-less profiles stay as they are. This step
@@ -1535,6 +1502,25 @@ function migrateProfileOrgColumns(db: Database): void {
     WHERE org_id IS NULL
   `).run();
   })();
+}
+
+/**
+ * `sessions.org_id` shipped empty because the only insert path never set it,
+ * so every row a pre-fix install holds is NULL. The owning org is recoverable
+ * from the session's profile, which migrateProfileOrgColumns scopes first. A
+ * session whose profile is gone keeps NULL instead of failing the boot.
+ */
+function migrateSessionOrgIds(db: Database): void {
+  db.prepare(`
+    UPDATE sessions
+    SET org_id = (
+      SELECT org_id FROM profiles WHERE profiles.id = sessions.profile_id
+    )
+    WHERE org_id IS NULL
+      AND EXISTS (
+        SELECT 1 FROM profiles WHERE profiles.id = sessions.profile_id
+      )
+  `).run();
 }
 
 export function addOrgIdColumnIfMissing(db: Database, tableName: string): void {
@@ -1636,6 +1622,10 @@ function migrateLegacyProfileIds(db: Database): void {
 
   try {
     for (const [legacyId, canonicalId] of pending) {
+      if (!canonicalIdIsFree(db, legacyId, canonicalId)) {
+        continue;
+      }
+
       copyProfileRow(db, legacyId, canonicalId);
       moveProfileReferences(db, legacyId, canonicalId);
       db.prepare("DELETE FROM profiles WHERE id = ?").run(legacyId);
@@ -1661,11 +1651,33 @@ function migrateLegacyProfileIds(db: Database): void {
 }
 
 export function migrateCodingDelegationSkillName(db: Database): void {
+  renameSkillRecords(db, "coding-delegation", "coding-agent");
+}
+
+export function migrateArtifactDesignSkillName(db: Database): void {
+  renameSkillRecords(db, "save-artifact", "artifact-design");
+}
+
+// Only the stock name moves; a renamed super profile keeps its name.
+export function migrateSuperNakamaNaming(db: Database): void {
+  db.exec(`
+    UPDATE profiles SET name = 'Super Nakama' WHERE is_super = 1 AND name = 'Super Bot';
+    UPDATE profile_change_events SET source = 'super_nakama' WHERE source = 'super_bot';
+  `);
+}
+
+// Points profile_skills at the new name without duplicates, then drops the
+// old rows. With no new row yet, the old rows take the new name and path.
+function renameSkillRecords(
+  db: Database,
+  oldName: string,
+  newName: string
+): void {
   const legacyRows = db
     .prepare<{ id: string; source_path: string }, SQLQueryBindings[]>(
       "SELECT id, source_path FROM skills WHERE name = ?"
     )
-    .all("coding-delegation");
+    .all(oldName);
 
   if (legacyRows.length === 0) {
     return;
@@ -1675,7 +1687,7 @@ export function migrateCodingDelegationSkillName(db: Database): void {
     .prepare<{ id: string }, SQLQueryBindings[]>(
       "SELECT id FROM skills WHERE name = ?"
     )
-    .get("coding-agent");
+    .get(newName);
 
   if (canonical) {
     const reassignProfileSkill = db.prepare(`
@@ -1715,12 +1727,31 @@ export function migrateCodingDelegationSkillName(db: Database): void {
 
   for (const row of legacyRows) {
     update.run(
-      "coding-agent",
-      row.source_path.replaceAll("coding-delegation", "coding-agent"),
+      newName,
+      row.source_path.replaceAll(oldName, newName),
       now,
       row.id
     );
   }
+}
+
+// A canonical id owned by another org must not absorb this org's data. Keep
+// the legacy row in that case.
+function canonicalIdIsFree(
+  db: Database,
+  legacyId: string,
+  canonicalId: string
+): boolean {
+  const owners = db
+    .prepare<{ id: string; org_id: string | null }, SQLQueryBindings[]>(
+      "SELECT id, org_id FROM profiles WHERE id IN (?, ?)"
+    )
+    .all(legacyId, canonicalId);
+
+  const legacy = owners.find((row) => row.id === legacyId);
+  const canonical = owners.find((row) => row.id === canonicalId);
+
+  return !canonical || canonical.org_id === legacy?.org_id;
 }
 
 function copyProfileRow(
@@ -1728,28 +1759,18 @@ function copyProfileRow(
   legacyId: string,
   canonicalId: string
 ): void {
-  db.prepare(`
-    INSERT INTO profiles (
-      id,
-      name,
-      system_prompt,
-      model,
-      thinking_enabled,
-      thinking_effort,
-      is_super,
-      created_at,
-      updated_at
+  const columns = db
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(profiles)"
     )
-    SELECT
-      ?,
-      name,
-      system_prompt,
-      model,
-      thinking_enabled,
-      thinking_effort,
-      is_super,
-      created_at,
-      updated_at
+    .all()
+    .map((column) => quoteSqliteIdentifier(column.name))
+    .filter((column) => column !== '"id"')
+    .join(", ");
+
+  db.prepare(`
+    INSERT INTO profiles (id, ${columns})
+    SELECT ?, ${columns}
     FROM profiles
     WHERE id = ?
     ON CONFLICT(id) DO NOTHING
@@ -1761,35 +1782,63 @@ function moveProfileReferences(
   legacyId: string,
   canonicalId: string
 ): void {
-  db.prepare("UPDATE automations SET profile_id = ? WHERE profile_id = ?").run(
-    canonicalId,
-    legacyId
-  );
-  db.prepare("UPDATE sessions SET profile_id = ? WHERE profile_id = ?").run(
-    canonicalId,
-    legacyId
-  );
-  moveProfileJoinReferences(
-    db,
-    "profile_tools",
-    "tool_id",
-    legacyId,
-    canonicalId
-  );
-  moveProfileJoinReferences(
-    db,
-    "profile_mcp_servers",
-    "server_id",
-    legacyId,
-    canonicalId
-  );
-  moveProfileJoinReferences(
-    db,
-    "profile_skills",
-    "skill_id",
-    legacyId,
-    canonicalId
-  );
+  const tables = db
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+    )
+    .all();
+
+  for (const { name } of tables) {
+    if (name === "profiles" || name in PROFILE_JOIN_TABLE_COLUMNS) {
+      continue;
+    }
+
+    const quotedTableName = quoteSqliteIdentifier(name);
+
+    const hasProfileId = db
+      .prepare<{ name: string }, SQLQueryBindings[]>(
+        `PRAGMA table_info(${quotedTableName})`
+      )
+      .all()
+      .some((column) => column.name === "profile_id");
+
+    if (!hasProfileId) {
+      continue;
+    }
+
+    // Rows that collide with a canonical row are duplicates; drop them.
+    db.prepare(
+      `UPDATE OR IGNORE ${quotedTableName} SET profile_id = ? WHERE profile_id = ?`
+    ).run(canonicalId, legacyId);
+    db.prepare(`DELETE FROM ${quotedTableName} WHERE profile_id = ?`).run(
+      legacyId
+    );
+  }
+
+  // These hold profile ids without a profile_id column. Move them before the
+  // legacy row is deleted, or the delete triggers remove them.
+  db.prepare(`
+    UPDATE OR IGNORE org_shared_resources
+    SET resource_id = ?
+    WHERE resource_kind = 'agent' AND resource_id = ?
+  `).run(canonicalId, legacyId);
+  db.prepare(`
+    UPDATE OR IGNORE shared_agent_instances
+    SET source_profile_id = ?
+    WHERE source_profile_id = ?
+  `).run(canonicalId, legacyId);
+
+  for (const [tableName, relatedColumn] of Object.entries(
+    PROFILE_JOIN_TABLE_COLUMNS
+  )) {
+    moveProfileJoinReferences(
+      db,
+      tableName,
+      relatedColumn,
+      legacyId,
+      canonicalId
+    );
+  }
 }
 
 export function moveProfileJoinReferences(
@@ -1926,13 +1975,11 @@ function migrateWorkspaceSettingsTable(db: Database): void {
     `);
   }
 
-  // Null means "not chosen here", which falls back to the NAKAMA_OMNI env var.
-  // A tri-state rather than a boolean so an operator who set the env var does
-  // not have it silently overridden by a default row.
-  if (!columnNames.has("token_optimizer_enabled")) {
-    db.exec(`
-      ALTER TABLE workspace_settings ADD COLUMN token_optimizer_enabled INTEGER;
-    `);
+  // Left by the token optimiser removed in #1888.
+  if (columnNames.has("token_optimizer_enabled")) {
+    db.exec(
+      "ALTER TABLE workspace_settings DROP COLUMN token_optimizer_enabled;"
+    );
   }
 
   if (!columnNames.has("coding_agent_provider_passthrough")) {
@@ -2427,6 +2474,23 @@ CREATE TABLE IF NOT EXISTS file_pins (
   path TEXT NOT NULL,
   PRIMARY KEY (org_id, user_id, profile_id, path)
 );
+  `);
+}
+
+function migrateArtifactsTable(db: Database): void {
+  db.exec(`
+CREATE TABLE IF NOT EXISTS artifacts (
+  org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  filename TEXT NOT NULL,
+  session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  channel TEXT,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (org_id, profile_id, filename)
+);
+
+CREATE INDEX IF NOT EXISTS artifacts_org_user ON artifacts (org_id, user_id);
   `);
 }
 

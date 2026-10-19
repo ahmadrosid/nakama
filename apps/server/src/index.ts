@@ -73,6 +73,7 @@ import { claimLegacyCustomTools } from "./services/custom-tool-handlers";
 import { setToolSecrets } from "./services/custom-tool-shared";
 
 import { retireAppUserData } from "./services/data-portability";
+import { openaiProviderKey } from "./services/google-meet/actions";
 import { GoogleMeetService } from "./services/google-meet/service";
 import { LlmUsageTracker } from "./services/llm-usage-tracker";
 import { ManagedSecrets } from "./services/managed-secrets";
@@ -82,6 +83,7 @@ import {
   hasAutomationEmailDeliveryPath,
 } from "./services/mcp-email-delivery";
 import { McpService } from "./services/mcp-service";
+import { cleanupInterruptedMeetImports } from "./services/meet-recording-import";
 import { OrgMemoryService } from "./services/org-memory-service";
 import { OrgService } from "./services/org-service";
 import {
@@ -104,7 +106,9 @@ import {
   createAutomationRunHistoryTools,
   createAutomationTools,
 } from "./tools/automation-tools";
+import { isTenantBashEnabled } from "./tools/bash-config";
 import { createGenerateImageTool } from "./tools/generate-image-tool";
+import { createSaveArtifactTool } from "./tools/save-artifact-tool";
 import { createSessionTools } from "./tools/session-tools";
 import { createSubAgentTool } from "./tools/sub-agent-tool";
 
@@ -144,7 +148,9 @@ if (process.env.NAKAMA_CHECK_SECRETS_KEY === "1") {
 
 const MAX_AUTOMATION_RUN_RESUMES = 2;
 
-await seedDatabase(database.adapter);
+await seedDatabase(database.adapter, { grantBash: isTenantBashEnabled() });
+
+await cleanupInterruptedMeetImports();
 
 await claimLegacyCustomTools(database.adapter);
 
@@ -227,10 +233,14 @@ const agent = new AgentService(
   managedSecrets
 );
 
+const composioService = new ComposioService(database.adapter, authService);
+
 const googleMeetService = new GoogleMeetService(
   database.adapter,
   getUserConfigDir(),
-  (request, signal) => agent.transcribeAudio(request, signal)
+  (request, signal) => agent.transcribeAudio(request, signal),
+  () => openaiProviderKey(agent.getUserConfig()),
+  composioService
 );
 
 agent.setServerTools({
@@ -252,6 +262,7 @@ agent.setServerTools({
     },
   }),
   googleMeet: googleMeetService.tools(),
+  saveArtifact: createSaveArtifactTool({ db: database.adapter }),
   session: createSessionTools(agent),
   subAgent: createSubAgentTool(agent),
 });
@@ -275,8 +286,6 @@ if (sweptAttachments > 0) {
 const mcpClientManager = new McpClientManager();
 
 const mcpService = new McpService(database.adapter, mcpClientManager);
-
-const composioService = new ComposioService(database.adapter, authService);
 
 const skillsService = new SkillsService(database.adapter);
 
@@ -415,7 +424,11 @@ orgService.beforeArchiveChannels = async (orgId) => {
 
 const pluginService = new PluginService(database.adapter, getUserConfigDir(), {
   officialPackagesDir: join(projectRoot, "packages/plugins"),
-  onHostRequest: createPluginAgentHost(database.adapter, agent),
+  onHostRequest: createPluginAgentHost(
+    database.adapter,
+    agent,
+    composioService
+  ),
   workerManager,
 });
 

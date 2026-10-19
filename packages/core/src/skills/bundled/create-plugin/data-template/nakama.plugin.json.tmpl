@@ -1,0 +1,66 @@
+{
+  "apiVersion": 1,
+  "id": "__PLUGIN_ID__",
+  "name": "__PLUGIN_NAME__",
+  "description": "__PLUGIN_NAME__ plugin.",
+  "version": "0.1.0",
+  "minNakamaVersion": "0.4.47",
+  "author": "Super Nakama",
+  "license": "MIT",
+  "actions": [
+    {
+      "key": "list_items",
+      "description": "List saved items, newest first. Optional query filters by name or notes.",
+      "entry": "actions/list_items.js",
+      "access": "member",
+      "effect": "read",
+      "exposeAsTool": true,
+      "inputSchema": {
+        "type": "object",
+        "properties": { "query": { "type": "string" } },
+        "additionalProperties": false
+      }
+    },
+    {
+      "key": "save_item",
+      "description": "Create an item, or update it when id is given.",
+      "entry": "actions/save_item.js",
+      "access": "member",
+      "effect": "write",
+      "exposeAsTool": true,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "notes": { "type": "string" }
+        },
+        "required": ["name"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "key": "delete_item",
+      "description": "Delete an item by id.",
+      "entry": "actions/delete_item.js",
+      "access": "member",
+      "effect": "write",
+      "exposeAsTool": true,
+      "inputSchema": {
+        "type": "object",
+        "properties": { "id": { "type": "string", "minLength": 1 } },
+        "required": ["id"],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "database": {
+    "migrations": [{ "id": "001_initial", "path": "migrations/001_initial.sql" }]
+  },
+  "skills": [],
+  "ui": {
+    "entryModule": "ui/app.js",
+    "assetsDir": "ui",
+    "pageLabel": "__PLUGIN_NAME__"
+  }
+}

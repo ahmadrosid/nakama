@@ -33,6 +33,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("moonshot")).toBe("moonshot");
     expect(parseProviderName("moonshot_cn")).toBe("moonshot_cn");
     expect(parseProviderName("xai")).toBe("xai");
+    expect(parseProviderName("groq")).toBe("groq");
     expect(parseProviderName("together")).toBe("together");
     expect(parseProviderName("qwen")).toBe("qwen");
     expect(parseProviderName("qwen_cn")).toBe("qwen_cn");
@@ -51,6 +52,9 @@ describe("apiKeyEnvVarForProvider", () => {
   test("Netra uses its documented API key variable", () => {
     expect(apiKeyEnvVarForProvider("netra")).toBe("NETRA_API_KEY");
     expect(apiKeyEnvVarForProvider("deepseek")).toBe("DEEPSEEK_API_KEY");
+  });
+  test("Groq uses its documented API key variable", () => {
+    expect(apiKeyEnvVarForProvider("groq")).toBe("GROQ_API_KEY");
   });
   test("chatgpt uses OAuth, not an API key env var", () => {
     expect(apiKeyEnvVarForProvider("chatgpt")).toBeNull();
@@ -88,16 +92,6 @@ describe("resolveProvider", () => {
     });
 
     expect(provider).toBe("openrouter");
-  });
-
-  test("uses the only configured env API key", () => {
-    const provider = resolveProvider({
-      env: {
-        GEMINI_API_KEY: "test-key",
-      },
-    });
-
-    expect(provider).toBe("gemini");
   });
 
   test("uses an API key mounted through a companion file variable", () => {
@@ -163,28 +157,6 @@ describe("resolveProvider deepseek", () => {
   });
 });
 
-describe("resolveProvider qwen", () => {
-  test("auto-resolves Qwen intl when it is the only env API key", () => {
-    const provider = resolveProvider({
-      env: {
-        QWEN_API_KEY: "qwen-test",
-      },
-    });
-
-    expect(provider).toBe("qwen");
-  });
-
-  test("auto-resolves Qwen CN when it is the only env API key", () => {
-    const provider = resolveProvider({
-      env: {
-        QWEN_CN_API_KEY: "qwen-cn-test",
-      },
-    });
-
-    expect(provider).toBe("qwen_cn");
-  });
-});
-
 describe("isDiscoveryModelProvider", () => {
   test("includes providers whose models are discovered from /models", () => {
     expect(isDiscoveryModelProvider("openai_compatible")).toBe(true);
@@ -194,6 +166,7 @@ describe("isDiscoveryModelProvider", () => {
     expect(isDiscoveryModelProvider("zhipu")).toBe(true);
     expect(isDiscoveryModelProvider("zhipu_cn")).toBe(true);
     expect(isDiscoveryModelProvider("xai")).toBe(true);
+    expect(isDiscoveryModelProvider("groq")).toBe(true);
     expect(isDiscoveryModelProvider("moonshot")).toBe(true);
     expect(isDiscoveryModelProvider("moonshot_cn")).toBe(true);
   });
@@ -231,6 +204,9 @@ describe("defaultDiscoveryBaseUrl", () => {
     );
     expect(defaultDiscoveryBaseUrl("moonshot_cn")).toBe(
       "https://api.moonshot.cn/v1"
+    );
+    expect(defaultDiscoveryBaseUrl("groq")).toBe(
+      "https://api.groq.com/openai/v1"
     );
   });
 

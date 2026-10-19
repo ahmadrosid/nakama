@@ -6,6 +6,8 @@ import { z } from "zod";
 
 const ToolResultSchema = z.json();
 
+const MAX_DISCOVERY_HINT_CHARS = 140;
+
 const DiscoveryInputSchema = z
   .object({
     query: z.string().trim().min(1).max(500),
@@ -42,31 +44,9 @@ export async function executeToolCall(
   try {
     // Check what the model and the transcript receive: the JSON-serialized
     // value, so optional fields left undefined are dropped, not rejected.
-    const result = ToolResultSchema.parse(
+    return ToolResultSchema.parse(
       JSON.parse(JSON.stringify(await tool.run(call.arguments, context)))
     );
-
-    // The single place every tool result passes through, so the optimiser is
-    // wired once rather than per tool. It returns `result` untouched unless it
-    // is enabled, recognises the tool, and produces something strictly shorter.
-    try {
-      return ToolResultSchema.parse(
-        JSON.parse(
-          JSON.stringify(
-            await core.distillToolResult(call.name, result, context)
-          )
-        )
-      );
-    } catch (error) {
-      // Distillation is best-effort: never replace a successful tool result with
-      // an optimiser failure (same shape as a tool-runtime error).
-      console.warn(
-        `distillToolResult failed for ${call.name}; returning raw result:`,
-        error instanceof Error ? error.message : error
-      );
-
-      return result;
-    }
   } catch (error) {
     context.signal?.throwIfAborted();
 
@@ -76,17 +56,29 @@ export async function executeToolCall(
   }
 }
 
-/** A fresh tool set per user turn; discovery never widens profile assignments. */
-export function createTurnTools(assigned: ToolDefinition[]): ToolDefinition[] {
+/** Discovery never widens assignments; only session-scoped tools survive a turn. */
+export function createTurnTools(
+  assigned: ToolDefinition[],
+  discovered = new Set<string>()
+): ToolDefinition[] {
   const deferred = assigned.filter(
     (tool) => tool.discoveryGroup && !tool.hosted
   );
 
-  const active = assigned.filter((tool) => !tool.discoveryGroup || tool.hosted);
+  const active = assigned.filter(
+    (tool) =>
+      !tool.discoveryGroup ||
+      tool.hosted ||
+      (tool.discoveryScope === "session" && discovered.has(tool.name))
+  );
 
   if (!deferred.length) {
     return active;
   }
+
+  const hasSessionDiscovery = deferred.some(
+    (tool) => tool.discoveryScope === "session"
+  );
 
   let name = "find_tools";
 
@@ -95,16 +87,34 @@ export function createTurnTools(assigned: ToolDefinition[]): ToolDefinition[] {
   }
 
   const catalog = new Map<string, string[]>();
+  const hints = new Map<string, string>();
 
   for (const tool of deferred) {
     const group = tool.discoveryGroup!;
     const actions = catalog.get(group) ?? [];
-    actions.push(tool.name.replace(`plugin_${group}__`, ""));
+
+    if (tool.discoveryScope !== "session") {
+      actions.push(tool.name.replace(`plugin_${group}__`, ""));
+    }
+
     catalog.set(group, actions);
+
+    // The hint says what a plugin holds, so a request that never names the
+    // plugin ("this .xlsx file") still finds it.
+    const hint = tool.discoveryHint?.trim().slice(0, MAX_DISCOVERY_HINT_CHARS);
+
+    if (hint && !hints.has(group)) {
+      hints.set(group, hint);
+    }
   }
 
+  const label = (group: string) =>
+    hints.has(group) ? `${group} (${hints.get(group)})` : group;
+
   active.push({
-    description: `Find and load assigned plugin tools before calling them. Search by plugin or action name. Loaded tools remain available for this user request only. Catalog: ${[...catalog].map(([group, actions]) => `${group}: ${actions.join(", ")}`).join("; ")}`,
+    description: hasSessionDiscovery
+      ? `Find and load assigned tools before calling them. Search by server, plugin, action name, or MCP tool description. Plugin tools last for this request; MCP tools last for this session. Catalog: ${[...catalog].map(([group, actions]) => `${label(group)}${actions.length ? `: ${actions.join(", ")}` : " (MCP)"}`).join("; ")}`
+      : `Find and load assigned plugin tools before calling them. Search by plugin or action name. Loaded tools remain available for this user request only. Catalog: ${[...catalog].map(([group, actions]) => `${label(group)}: ${actions.join(", ")}`).join("; ")}`,
     name,
     parameters: core.jsonSchemaFromZod(DiscoveryInputSchema),
     async run(input, context) {
@@ -113,7 +123,11 @@ export function createTurnTools(assigned: ToolDefinition[]): ToolDefinition[] {
       const parsedInput = DiscoveryInputSchema.safeParse(input);
 
       if (!parsedInput.success) {
-        return { error: "Provide a query containing a plugin or action name." };
+        return {
+          error: hasSessionDiscovery
+            ? "Provide a query containing a server, plugin, or action name."
+            : "Provide a query containing a plugin or action name.",
+        };
       }
 
       const terms = parsedInput.data.query
@@ -129,6 +143,7 @@ export function createTurnTools(assigned: ToolDefinition[]): ToolDefinition[] {
               "tools",
               "tool",
               "plugin",
+              ...(hasSessionDiscovery ? ["mcp"] : []),
               "please",
             ].includes(term)
         );
@@ -170,7 +185,12 @@ export function createTurnTools(assigned: ToolDefinition[]): ToolDefinition[] {
             return [];
           }
 
-          const words = tool.name
+          const searchable =
+            tool.discoveryScope === "session"
+              ? `${tool.name} ${tool.description}`
+              : tool.name;
+
+          const words = searchable
             .toLowerCase()
             .split(/[^a-z0-9]+/)
             .map(normalize);
@@ -188,18 +208,37 @@ export function createTurnTools(assigned: ToolDefinition[]): ToolDefinition[] {
           (a, b) => b.score - a.score || a.tool.name.localeCompare(b.tool.name)
         );
 
+      const available: typeof matches = [];
+
+      for (const match of matches) {
+        context.signal?.throwIfAborted();
+
+        if (
+          !match.tool.canDiscover ||
+          (await match.tool.canDiscover(context))
+        ) {
+          available.push(match);
+        }
+      }
+
+      context.signal?.throwIfAborted();
+
       // Repeating a broad query loads the next batch instead of getting stuck.
-      const unloaded = matches.filter(
+      const unloaded = available.filter(
         ({ tool }) => !active.some((entry) => entry.name === tool.name)
       );
 
-      const selected = (unloaded.length ? unloaded : matches)
+      const selected = (unloaded.length ? unloaded : available)
         .slice(0, 5)
         .map(({ tool }) => tool);
 
       for (const tool of selected) {
         if (!active.some((entry) => entry.name === tool.name)) {
           active.push(tool);
+        }
+
+        if (tool.discoveryScope === "session") {
+          discovered.add(tool.name);
         }
       }
 

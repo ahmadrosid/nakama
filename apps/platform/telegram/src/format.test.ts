@@ -105,6 +105,12 @@ describe("renderTelegramRichText", () => {
       "<pre><code>$&amp; $` $'</code></pre>"
     );
   });
+
+  test("keeps literal placeholder text beside a code block", () => {
+    expect(renderTelegramRichText("@@TCTOKEN0@@\n```text\ncode\n```")).toBe(
+      "@@TCTOKEN0@@\n<pre><code>code</code></pre>"
+    );
+  });
 });
 
 describe("prepareTelegramReply", () => {

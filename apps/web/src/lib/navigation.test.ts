@@ -10,6 +10,8 @@ import {
   pluginIdFromPath,
   pluginManagementPath,
   pluginPagePath,
+  SIDEBAR_PAGE_IDS,
+  sidebarPageId,
   skillDetailBackTarget,
   visibleNavGroups,
 } from "./navigation";
@@ -33,6 +35,7 @@ describe("visibleNavGroups", () => {
     expect(pageIdsFor(true, "admin")).toEqual([
       "automations",
       "chat",
+      "composio",
       "customize",
       "files",
       "google-meet",
@@ -63,14 +66,14 @@ describe("visibleNavGroups", () => {
     expect(ids).toContain("usage");
   });
 
-  test("members can access Organization without system destinations", () => {
+  test("members can access Organization and Files without system destinations", () => {
     const member = pageIdsFor(false, "member");
     expect(member).not.toContain("integrations");
     expect(member).not.toContain("tools");
     expect(member).not.toContain("mcp");
     expect(member).toContain("organization");
     expect(member).not.toContain("workers");
-    expect(member).not.toContain("files");
+    expect(member).toContain("files");
     expect(member).not.toContain("plugin-management");
     expect(member).not.toContain("usage");
   });
@@ -118,6 +121,13 @@ describe("plugin navigation", () => {
     expect(pageIdFromPath("/customize/plugins/notes")).toBe(
       "plugin-management"
     );
+  });
+
+  test("shows Plugins as a tab of the Connections sidebar item", () => {
+    expect(SIDEBAR_PAGE_IDS).toContain("composio");
+    expect(SIDEBAR_PAGE_IDS).not.toContain("plugin-management");
+    expect(sidebarPageId("plugin-management")).toBe("composio");
+    expect(sidebarPageId("automations")).toBe("automations");
   });
 
   test("lists enabled pages only, sorted by label then plugin id", () => {

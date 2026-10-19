@@ -143,6 +143,14 @@ const AVATAR_EXTENSION_MEDIA_TYPES = new Map([
 const NOT_ALLOWLISTED_REASON =
   "Not part of the profile pack allowlist (secrets and generated data are excluded).";
 
+// A skill's `tool.py` and the `.py` scripts it declares under `scripts:` are
+// executed as subprocesses by the chat runtime, so a pack must not be able to
+// install host-level Python through the ordinary org-admin import. They are
+// written only when a platform admin approves the import, the same gate
+// custom tool source already passes through.
+const PYTHON_SKILL_SCRIPT_REASON =
+  "Python skill script skipped: it runs as a subprocess on the server and requires a platform admin to approve the import.";
+
 const PROFILE_ID_ATTEMPTS = 50;
 
 interface ProfilePackFile {
@@ -185,6 +193,7 @@ export interface CreateProfilePackOptions {
 }
 
 export interface PreviewProfilePackImportOptions {
+  allowPythonSkillTools?: boolean;
   isPlatformAdmin?: boolean;
   restoreCustomTools?: boolean;
 }
@@ -197,6 +206,7 @@ export interface CreateProfilePackResult {
 
 export interface ImportProfilePackOptions {
   actorUserId?: string | null;
+  allowPythonSkillTools?: boolean;
   confirm: boolean;
   isPlatformAdmin?: boolean;
   name?: string;
@@ -225,7 +235,7 @@ export async function createProfilePackExport(
   }
 
   if (profile.isSuper) {
-    throw new NakamaApiError("Super Bot cannot be exported.", 400);
+    throw new NakamaApiError("Super Nakama cannot be exported.", 400);
   }
 
   const soulDir = getProfileSoulDir(orgId, profileId);
@@ -320,6 +330,11 @@ export async function previewProfilePackImport(
   const manifest = readProfilePackManifest(entries);
 
   const skippedAssignments: ProfilePackSkippedItem[] = [];
+  previewBlockedPythonSkillScripts(
+    entries,
+    options.allowPythonSkillTools === true,
+    skippedAssignments
+  );
 
   if (!manifest.meta.sharedAgent) {
     await previewToolAssignments(
@@ -402,7 +417,6 @@ export async function importProfilePack(
   const entries = readProfilePackZip(archive);
   const manifest = readProfilePackManifest(entries);
   const name = options.name?.trim() || manifest.meta.name || "Imported profile";
-  const profileId = await resolveImportedProfileId(db, name);
   const now = (options.now ?? new Date()).toISOString();
 
   const ownerUserId = options.ownerUserId ?? null;
@@ -411,9 +425,10 @@ export async function importProfilePack(
     throw new NakamaApiError("Shared agents cannot be imported here.", 403);
   }
 
-  const profile: StoredProfileRecord = {
+  // Allocation and insertion are one atomic statement: a concurrent import may
+  // win the id, and we retry the next suffix instead of overwriting its row.
+  const profileId = await createImportedProfile(db, name, {
     createdAt: now,
-    id: profileId,
     isDefault: false,
     isSuper: false,
     model: manifest.meta.model,
@@ -430,9 +445,7 @@ export async function importProfilePack(
     thinkingEffort: manifest.meta.thinkingEffort,
     thinkingEnabled: manifest.meta.thinkingEnabled,
     updatedAt: now,
-  };
-
-  await db.upsertProfile(profile);
+  });
 
   let createdSkillIds: string[] = [];
   const createdCustomTools: CreatedCustomTool[] = [];
@@ -455,6 +468,7 @@ export async function importProfilePack(
       orgId,
       profileId,
       entries,
+      options.allowPythonSkillTools === true,
       skippedAssignments
     );
 
@@ -1280,6 +1294,7 @@ async function writePackedWorkspaceFiles(
   orgId: string,
   profileId: string,
   entries: ProfilePackZipEntry[],
+  allowPythonSkillTools: boolean,
   skipped: ProfilePackSkippedItem[]
 ): Promise<void> {
   const soulDir = getProfileSoulDir(orgId, profileId);
@@ -1303,8 +1318,40 @@ async function writePackedWorkspaceFiles(
       continue;
     }
 
+    if (!allowPythonSkillTools && isPackedPythonSkillScript(entry.name)) {
+      skipped.push({ path: entry.name, reason: PYTHON_SKILL_SCRIPT_REASON });
+      continue;
+    }
+
     const targetPath = join(soulDir, entry.name);
     await writePrivateBytesFile(targetPath, entry.data);
+  }
+}
+
+/** Every `.py` a skill could run: the skill root tool and declared scripts. */
+function isPackedPythonSkillScript(relativePath: string): boolean {
+  const [first, second] = relativePath.split("/");
+
+  if (first !== "skills" || !second) {
+    return false;
+  }
+
+  return relativePath.toLowerCase().endsWith(".py");
+}
+
+function previewBlockedPythonSkillScripts(
+  entries: ProfilePackZipEntry[],
+  allowPythonSkillTools: boolean,
+  skipped: ProfilePackSkippedItem[]
+): void {
+  if (allowPythonSkillTools) {
+    return;
+  }
+
+  for (const entry of entries) {
+    if (isPackedPythonSkillScript(entry.name)) {
+      skipped.push({ path: entry.name, reason: PYTHON_SKILL_SCRIPT_REASON });
+    }
   }
 }
 
@@ -1506,7 +1553,7 @@ async function rollbackFailedImport(
   }
 
   try {
-    await db.deleteProfile(profileId);
+    await db.deleteProfileForOrg(profileId, orgId);
   } catch {
     // Best-effort cleanup only; the original error is what matters.
   }
@@ -1521,17 +1568,19 @@ async function rollbackFailedImport(
   }
 }
 
-async function resolveImportedProfileId(
+async function createImportedProfile(
   db: DatabaseAdapter,
-  name: string
+  name: string,
+  profile: Omit<StoredProfileRecord, "id">
 ): Promise<string> {
   const base = slugifyProfileName(name);
 
   for (let suffix = 1; suffix <= PROFILE_ID_ATTEMPTS; suffix++) {
-    const candidate = suffix === 1 ? base : `${base}-${suffix}`;
+    const id = suffix === 1 ? base : `${base}-${suffix}`;
+    const created = await db.createProfileIfAbsent({ ...profile, id });
 
-    if (!(await db.getProfile(candidate))) {
-      return candidate;
+    if (created) {
+      return id;
     }
   }
 

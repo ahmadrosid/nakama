@@ -95,9 +95,17 @@ $AB --session "$SESSION" set viewport "$VIEWPORT_WIDTH" "$VIEWPORT_HEIGHT"
 $AB --session "$SESSION" set media light
 
 scroll_to_skill_card() {
+  # The approval card sits behind How bots learn skills -> Customize.
+  $AB --session "$SESSION" eval "(() => {
+    const toggle = [...document.querySelectorAll('button[aria-expanded=false]')].find(
+      (node) => node.textContent?.trim().startsWith('Customize'),
+    );
+    toggle?.click();
+  })()"
+  $AB --session "$SESSION" wait 600
   $AB --session "$SESSION" eval "(() => {
     const heading = [...document.querySelectorAll('p')].find(
-      (node) => node.textContent?.trim() === 'Skill write approval',
+      (node) => node.textContent?.trim() === 'Ask me before a bot saves a skill',
     );
     const card = heading?.closest('.overflow-hidden');
     card?.scrollIntoView({ block: 'start', behavior: 'instant' });
@@ -123,7 +131,7 @@ $AB --session "$SESSION" screenshot "$SCREENSHOT_DIR/skill-write-approval-propos
 # Review dialog for the seeded proposal
 $AB --session "$SESSION" eval "(() => {
   const card = [...document.querySelectorAll('p')]
-    .find((node) => node.textContent?.trim() === 'Skill write approval')
+    .find((node) => node.textContent?.trim() === 'Ask me before a bot saves a skill')
     ?.closest('.overflow-hidden');
   const review = card?.querySelector('button');
   const buttons = card ? [...card.querySelectorAll('button')] : [];

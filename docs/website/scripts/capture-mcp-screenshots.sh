@@ -74,7 +74,9 @@ $AB --session "$SESSION" snapshot -i >/dev/null
 $AB --session "$SESSION" find role button click --name "Add server" --exact
 $AB --session "$SESSION" wait 1200
 $AB --session "$SESSION" snapshot -i >/dev/null
-$AB --session "$SESSION" find role tab click --name "HTTP" --exact
+# Server types are buttons with a label and a hint (HTTP / Header).
+$AB --session "$SESSION" eval "[...document.querySelectorAll('[role=dialog] button')].find((el) => el.textContent.trim().startsWith('HTTP')).click()"
+$AB --session "$SESSION" wait 400
 $AB --session "$SESSION" find placeholder "server name" fill "exa"
 $AB --session "$SESSION" find placeholder "https://example.com/mcp" fill "https://mcp.exa.ai/mcp"
 $AB --session "$SESSION" fill '[aria-label="Header name 1"]' "x-api-key"

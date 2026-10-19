@@ -6,13 +6,18 @@ import { join } from "node:path";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { createHonoApp } from "../http/app";
 import { setupFreshInstallSession } from "../http/test-session-helpers";
+import { asTestFetch } from "../providers/test-helpers";
 import {
   getAgentBrowserInstallCommand,
   getAgentBrowserStatus,
+  getUserBrowser,
   installAgentBrowser,
+  saveAgentBrowserConfig,
+  stopUserBrowser,
 } from "../services/agent-browser-service";
 import { AgentService } from "../services/agent-service";
 import { AuthService } from "../services/auth-service";
+import { ensureKernelBrowser } from "../services/kernel-browser";
 import { OrgService } from "../services/org-service";
 import * as cliPackageInstall from "./cli-package-install";
 import {
@@ -398,3 +403,148 @@ setInterval(() => {}, 1000);
   await writeFile(scriptPath, script, "utf8");
   await chmod(scriptPath, 0o755);
 }
+
+describe("Kernel browser runtime", () => {
+  const originalFetch = globalThis.fetch;
+  const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
+  const kernelEnvKeys = ["NAKAMA_BROWSER_PROVIDER", "KERNEL_API_KEY"] as const;
+
+  const originalKernelEnv = Object.fromEntries(
+    kernelEnvKeys.map((key) => [key, process.env[key]])
+  );
+
+  let configDir = "";
+  let requests: Array<{ body: unknown; method: string; url: string }> = [];
+  let browsers: Map<string, Record<string, string>>;
+
+  const context = {
+    orgId: "org-a",
+    profileId: "agent-1",
+    sessionId: "chat-1",
+    userId: "user-1",
+  };
+
+  beforeEach(async () => {
+    configDir = await mkdtemp(join(tmpdir(), "nakama-kernel-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    for (const key of kernelEnvKeys) {
+      delete process.env[key];
+    }
+
+    requests = [];
+    browsers = new Map();
+
+    globalThis.fetch = asTestFetch(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input));
+        const method = init?.method ?? "GET";
+        const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+        requests.push({ body, method, url: url.pathname });
+
+        if (url.pathname === "/profiles") {
+          return Response.json({}, { status: 200 });
+        }
+
+        if (url.pathname === "/browsers" && method === "POST") {
+          const created = {
+            browser_live_view_url: `https://live.onkernel.com/${body.name}`,
+            cdp_ws_url: `wss://cdp.onkernel.com/${body.name}`,
+            session_id: `kernel-${browsers.size + 1}`,
+          };
+
+          browsers.set(body.name, created);
+
+          return Response.json(created);
+        }
+
+        const name = decodeURIComponent(url.pathname.split("/").pop() ?? "");
+        const browser = browsers.get(name);
+
+        if (method === "DELETE") {
+          browsers.delete(name);
+
+          return new Response(null, { status: browser ? 204 : 404 });
+        }
+
+        return browser
+          ? Response.json(browser)
+          : Response.json({}, { status: 404 });
+      }
+    );
+  });
+
+  afterEach(async () => {
+    globalThis.fetch = originalFetch;
+
+    for (const key of kernelEnvKeys) {
+      if (originalKernelEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = originalKernelEnv[key];
+      }
+    }
+
+    if (originalConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    }
+
+    await rm(configDir, { force: true, recursive: true });
+  });
+
+  test("uses the Kernel key from the host env", async () => {
+    process.env.NAKAMA_BROWSER_PROVIDER = "kernel";
+    process.env.KERNEL_API_KEY = "env-key";
+
+    expect((await getAgentBrowserStatus()).provider).toBe("kernel");
+  });
+
+  test("keeps another user off the first user's browser", async () => {
+    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await ensureKernelBrowser("kernel-key", "org-a", "user-1");
+
+    expect((await getUserBrowser("org-a", "user-2")).liveViewUrl).toBeNull();
+  });
+
+  test("requires a Kernel API key to save", async () => {
+    await expect(
+      saveAgentBrowserConfig({ provider: "kernel" })
+    ).rejects.toThrow();
+
+    process.env.KERNEL_API_KEY = "env-key";
+
+    await saveAgentBrowserConfig({ provider: "kernel" });
+    expect((await getAgentBrowserStatus()).provider).toBe("kernel");
+  });
+
+  test("restores local Chrome when the provider is cleared", async () => {
+    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await saveAgentBrowserConfig({ provider: null });
+
+    const status = await getAgentBrowserStatus();
+
+    expect(status.provider).toBeNull();
+    expect(status.apiKeyMasked).toBeNull();
+  });
+
+  test("does not show one org the browser of another org", async () => {
+    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await ensureKernelBrowser("kernel-key", "org-a", "user-1");
+
+    expect((await getUserBrowser("org-a", "user-1")).liveViewUrl).toBe(
+      "https://live.onkernel.com/nakama-org-a-user-user-1"
+    );
+    expect((await getUserBrowser("org-b", "user-1")).liveViewUrl).toBeNull();
+  });
+
+  test("stops the session browser", async () => {
+    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await ensureKernelBrowser("kernel-key", "org-a", "user-1");
+
+    await stopUserBrowser("org-a", "user-1");
+
+    expect((await getUserBrowser("org-a", "user-1")).liveViewUrl).toBeNull();
+  });
+});

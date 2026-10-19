@@ -8,7 +8,6 @@ import { convertDocxToMarkdown } from "../docx-text";
 import { markdownToDocx } from "../docx-write";
 import { pathExists } from "../fs";
 import { MAX_IMAGE_BYTES } from "../message-content";
-import { isOmniEnabled, omniRetrieveTool } from "../omni";
 import { getGlobalSkillsDir } from "../skills/paths";
 import { getProfileSoulDir } from "../soul/resolve";
 import { emailTool } from "./email";
@@ -16,6 +15,7 @@ import { extractDocumentTextTool } from "./extract-document-text";
 import { knowledgeBaseSearchTool } from "./knowledge-base-search";
 import {
   comparablePath,
+  fileSizeLimit,
   getCustomToolsDir,
   guardFilePath,
   PathGuardError,
@@ -28,68 +28,50 @@ import {
   readFileLimitSchema,
   readFileOffsetSchema,
   requiredTrimmedString,
-  trimmedOptionalString,
 } from "./schema";
 import { searchFilesTool } from "./search-files";
 import { sqliteTool } from "./sqlite";
 import { webFetchTool } from "./web-fetch";
 import { webSearchTool } from "./web-search";
 
-// Models fill in an undescribed cwd with guessed folders, so tell them to omit it.
-const fileToolCwdSchema = trimmedOptionalString.describe(
-  "Optional. Omit it. Only used to resolve a relative path inside the workspace; ignored for absolute paths."
-);
+// File tools take no cwd: models fill it with guessed folders and keep resending
+// it after errors. Unknown keys are stripped, so a stray cwd is ignored.
+export const writeFileInputSchema = z.object({
+  content: z
+    .string({ error: "content is required." })
+    // Constrained decoders can match the entire string against this pattern.
+    .regex(/^[\s\S]*\S[\s\S]*$/, "content is required."),
+  path: requiredTrimmedString("path"),
+});
 
-export const writeFileInputSchema = z
-  .object({
-    content: z
-      .string({ error: "content is required." })
-      .regex(/\S/, "content is required."),
-    cwd: fileToolCwdSchema,
-    path: requiredTrimmedString("path"),
-  })
-  .strict();
+export const writeDocxInputSchema = z.object({
+  markdown: requiredTrimmedString("markdown"),
+  path: requiredTrimmedString("path"),
+});
 
-export const writeDocxInputSchema = z
-  .object({
-    cwd: fileToolCwdSchema,
-    markdown: requiredTrimmedString("markdown"),
-    path: requiredTrimmedString("path"),
-  })
-  .strict();
+export const deleteFileInputSchema = z.object({
+  path: requiredTrimmedString("path"),
+});
 
-export const deleteFileInputSchema = z
-  .object({
-    cwd: fileToolCwdSchema,
-    path: requiredTrimmedString("path"),
-  })
-  .strict();
+export const editFileInputSchema = z.object({
+  edits: z
+    .array(
+      z
+        .object({
+          newText: z.string({ error: "newText is required." }),
+          oldText: z.string({ error: "oldText is required." }).min(1),
+        })
+        .strict()
+    )
+    .min(1, "edits must contain at least one replacement."),
+  path: requiredTrimmedString("path"),
+});
 
-export const editFileInputSchema = z
-  .object({
-    cwd: fileToolCwdSchema,
-    edits: z
-      .array(
-        z
-          .object({
-            newText: z.string({ error: "newText is required." }),
-            oldText: z.string({ error: "oldText is required." }).min(1),
-          })
-          .strict()
-      )
-      .min(1, "edits must contain at least one replacement."),
-    path: requiredTrimmedString("path"),
-  })
-  .strict();
-
-export const readFileInputSchema = z
-  .object({
-    cwd: fileToolCwdSchema,
-    limit: readFileLimitSchema,
-    offset: readFileOffsetSchema,
-    path: requiredTrimmedString("path"),
-  })
-  .strict();
+export const readFileInputSchema = z.object({
+  limit: readFileLimitSchema,
+  offset: readFileOffsetSchema,
+  path: requiredTrimmedString("path"),
+});
 
 export type WriteFileInput = z.infer<typeof writeFileInputSchema>;
 
@@ -394,12 +376,10 @@ export async function runWriteFile(
   const guardOptions = buildFileGuardOptions(context, options);
   const artifactRoot = fileToolWorkspaceRoot(context, options);
 
-  const guarded = await guardFilePath(
-    parsed.path,
-    parsed.cwd ?? null,
-    contentBytes,
-    { ...guardOptions, cwd: artifactRoot }
-  );
+  const guarded = await guardFilePath(parsed.path, null, contentBytes, {
+    ...guardOptions,
+    cwd: artifactRoot,
+  });
 
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseMemoryFileWrite(
@@ -411,6 +391,16 @@ export async function runWriteFile(
   const workspaceRoot = artifactRoot;
   let filePath = guarded.resolved;
   const normalizedPath = normalizeArtifactPath(parsed.path);
+
+  if (
+    context.forbidArtifactFileWrites &&
+    (isArtifactPath(parsed.path) ||
+      isArtifactPath(path.relative(workspaceRoot, filePath)))
+  ) {
+    throw new Error(
+      "write_file cannot save files under artifacts/. Use save_artifact to save an artifact; use edit_file to change an existing one."
+    );
+  }
 
   if (
     normalizedPath.endsWith(ARTIFACT_META_SUFFIX) &&
@@ -472,15 +462,10 @@ export async function runWriteDocx(
   const bytes = await markdownToDocx(parsed.markdown);
   const guardOptions = buildFileGuardOptions(context, options);
 
-  const guarded = await guardFilePath(
-    parsed.path,
-    parsed.cwd ?? null,
-    bytes.length,
-    {
-      ...guardOptions,
-      cwd: fileToolWorkspaceRoot(context, options),
-    }
-  );
+  const guarded = await guardFilePath(parsed.path, null, bytes.length, {
+    ...guardOptions,
+    cwd: fileToolWorkspaceRoot(context, options),
+  });
 
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseMemoryFileWrite(
@@ -522,7 +507,7 @@ export async function runDeleteFile(
 
   const guarded = await guardFilePath(
     parsed.path,
-    parsed.cwd ?? null,
+    null,
     undefined,
     guardOptions
   );
@@ -560,11 +545,10 @@ export async function runEditFile(
   refuseWordExtension(parsed.path);
 
   const guardOptions = buildFileGuardOptions(context, options);
-  const maxBytes = guardOptions.maxFileBytes ?? 10 * 1024 * 1024;
 
   const guarded = await guardFilePath(
     parsed.path,
-    parsed.cwd ?? null,
+    null,
     undefined,
     guardOptions
   );
@@ -577,6 +561,11 @@ export async function runEditFile(
   );
   refuseSkillLocalToolFileWrite(guarded.resolved);
   const filePath = guarded.resolved;
+
+  const maxBytes = Math.min(
+    fileSizeLimit(parsed.path, guardOptions),
+    fileSizeLimit(filePath, guardOptions)
+  );
 
   if (BLOCKED_READ_BASENAMES.includes(path.basename(filePath).toLowerCase())) {
     throw new PathGuardError(
@@ -620,10 +609,12 @@ export async function runEditFile(
   const lineEnding = detectLineEnding(content);
   const normalizedContent = normalizeToLF(content);
 
-  const edits = parsed.edits.map((edit) => ({
-    newText: normalizeToLF(edit.newText),
-    oldText: normalizeToLF(edit.oldText),
-  }));
+  const edits = parsed.edits.map((edit) =>
+    recoverMangledEdit(normalizedContent, {
+      newText: normalizeToLF(edit.newText),
+      oldText: normalizeToLF(edit.oldText),
+    })
+  );
 
   const fuzzyMatches = edits.filter(
     (edit) =>
@@ -661,12 +652,7 @@ export async function runEditFile(
   const outputContent = hasBom ? `\uFEFF${restored}` : restored;
   const bytesWritten = Buffer.byteLength(outputContent, "utf8");
 
-  await guardFilePath(
-    parsed.path,
-    parsed.cwd ?? null,
-    bytesWritten,
-    guardOptions
-  );
+  await guardFilePath(parsed.path, null, bytesWritten, guardOptions);
   await context.memoryFiles?.write(filePath, outputContent);
   await writeFile(filePath, outputContent, "utf8");
 
@@ -739,6 +725,121 @@ function normalizeForEditMatch(value: string): string {
     .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
     .replace(/[\u2010-\u2015\u2212]/g, "-")
     .replace(/[\u00A0\u2002-\u200A\u202F\u205F\u3000]/g, " ");
+}
+
+const JSON_ESCAPES = new Map([
+  ["'", "'"],
+  ['"', '"'],
+  ["\\", "\\"],
+  ["n", "\n"],
+  ["r", "\r"],
+  ["t", "\t"],
+]);
+
+// Ignored by loose matching: the characters models drop or add when they get
+// the JSON escapes in oldText wrong.
+const LOOSE_IGNORED = /[\s"'\\]/;
+
+// Short loose needles match by accident; past this they name one place.
+const MIN_LOOSE_MATCH_CHARS = 12;
+
+/**
+ * Some models get the JSON escapes in oldText wrong while newText is fine: a
+ * newline arrives as a literal "\n", as a bare "n", or not at all, and `\"`
+ * loses its quotes. When neither exact nor normalized matching finds oldText,
+ * swap in the one span of the file it was meant to be. Matching stays exact
+ * after that, so ambiguity and overlap checks still apply.
+ */
+function recoverMangledEdit(
+  content: string,
+  edit: EditFileInput["edits"][number]
+): EditFileInput["edits"][number] {
+  if (
+    content.includes(edit.oldText) ||
+    normalizeForEditMatch(content).includes(normalizeForEditMatch(edit.oldText))
+  ) {
+    return edit;
+  }
+
+  const unescapeJson = (value: string) =>
+    value.replace(
+      /\\(["'\\nrt])/g,
+      (_, char: string) => JSON_ESCAPES.get(char) ?? char
+    );
+
+  const oldText = unescapeJson(edit.oldText);
+
+  if (oldText !== edit.oldText && content.split(oldText).length === 2) {
+    // The model double-escaped; newText then carries the same mistake unless
+    // it already has real newlines.
+    const newText = edit.newText.includes("\n")
+      ? edit.newText
+      : unescapeJson(edit.newText);
+
+    return { newText, oldText };
+  }
+
+  // A bare "n" after punctuation and before indentation is a newline that lost
+  // its backslash, as in `);n  try {n`.
+  const restored = oldText.replace(/(?<=[^\w\s])n(?=[ \t])/g, "\n");
+
+  const span =
+    findLooseSpan(content, oldText, edit.newText) ??
+    findLooseSpan(content, restored, edit.newText);
+
+  return span ? { ...edit, oldText: span } : edit;
+}
+
+/** The one span of content that equals oldText once LOOSE_IGNORED is removed. */
+function findLooseSpan(
+  content: string,
+  oldText: string,
+  newText: string
+): string | undefined {
+  const needle = [...oldText].filter((char) => !LOOSE_IGNORED.test(char));
+
+  if (needle.length < MIN_LOOSE_MATCH_CHARS) {
+    return;
+  }
+
+  const positions: number[] = [];
+  let haystack = "";
+
+  for (let index = 0; index < content.length; index += 1) {
+    if (!LOOSE_IGNORED.test(content[index])) {
+      haystack += content[index];
+      positions.push(index);
+    }
+  }
+
+  const search = needle.join("");
+  const at = haystack.indexOf(search);
+
+  if (at === -1 || haystack.indexOf(search, at + 1) !== -1) {
+    return;
+  }
+
+  let start = positions[at];
+  let end = positions[at + search.length - 1] + 1;
+
+  // A quote dropped at either edge of oldText is still in the file. Take it
+  // along when newText has one there, or the edit would leave two.
+  if (/^["']/.test(newText.trimStart()) && /["']/.test(content[start - 1])) {
+    start -= 1;
+  }
+
+  if (/["']$/.test(newText.trimEnd()) && /["']/.test(content[end])) {
+    end += 1;
+  }
+
+  // Keep the indentation oldText asked for, so newText does not double it.
+  if (/^[ \t]/.test(oldText)) {
+    while (start > 0 && /[ \t]/.test(content[start - 1])) {
+      start -= 1;
+    }
+  }
+
+  return content.slice(start, end);
 }
 
 function applyEditsPreservingLines(
@@ -897,7 +998,7 @@ export async function runReadFile(
   const parsed = parseToolInput(readFileInputSchema, input);
   const guardOptions = buildFileGuardOptions(context, options);
   guardOptions.allowedDirs!.push(getGlobalSkillsDir());
-  const maxBytes = guardOptions.maxFileBytes ?? 10 * 1024 * 1024;
+  let maxBytes = fileSizeLimit(parsed.path, guardOptions);
 
   let filePath: string;
   let contentPath: string;
@@ -905,8 +1006,6 @@ export async function runReadFile(
   const shared = parsed.path.startsWith("published-skill://");
 
   if (shared) {
-    // A published skill reference is absolute, so cwd is ignored like it is
-    // for absolute file paths.
     if (
       !(context.orgId && context.profileId && context.readPublishedSkillFile)
     ) {
@@ -943,12 +1042,13 @@ export async function runReadFile(
   } else {
     const guarded = await guardFilePath(
       parsed.path,
-      parsed.cwd ?? null,
+      null,
       undefined,
       guardOptions
     );
 
     filePath = guarded.resolved;
+    maxBytes = Math.min(maxBytes, fileSizeLimit(filePath, guardOptions));
 
     if (
       BLOCKED_READ_BASENAMES.includes(path.basename(filePath).toLowerCase())
@@ -1060,10 +1160,6 @@ export const builtinTools: ToolDefinition[] = [
   webFetchTool,
   emailTool,
   extractDocumentTextTool,
-  // Gated on the server-wide env var, not the per-org toggle: the toggle says
-  // whether an org folds, and publishing the expander per-org would let an org
-  // flip folding on with no way to read back what was folded until a restart.
-  ...(isOmniEnabled() ? [omniRetrieveTool] : []),
 ];
 
 export { PathGuardError };

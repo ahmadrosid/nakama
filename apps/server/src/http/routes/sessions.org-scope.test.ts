@@ -2,7 +2,7 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { deleteAttachmentBytes } from "@nakama/core/attachments/store";
 import {
   createInMemoryDatabaseAdapter,
-  seedOrgSuperBotProfile,
+  seedOrgSuperNakamaProfile,
 } from "@nakama/db";
 import { asTestFetch } from "../../providers/test-helpers";
 import { AgentService } from "../../services/agent-service";
@@ -103,6 +103,8 @@ const CROSS_ORG_ROUTES: Array<{
   { method: "DELETE", path: (id) => `/v1/sessions/${id}?purge=true` },
   { method: "DELETE", path: (id) => `/v1/sessions/${id}` },
   { method: "POST", path: (id) => `/v1/sessions/${id}/compact` },
+  { method: "GET", path: (id) => `/v1/sessions/${id}/browser` },
+  { method: "DELETE", path: (id) => `/v1/sessions/${id}/browser` },
   {
     body: { messageIndex: 0 },
     method: "POST",
@@ -195,6 +197,13 @@ describe("session routes are scoped to the caller's active org", () => {
       userId: "user_secondary_member",
     });
 
+    const owner = await loginUserSession(
+      app,
+      "victim@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+
     const member = await loginUserSession(
       app,
       "member@example.com",
@@ -212,7 +221,7 @@ describe("session routes are scoped to the caller's active org", () => {
     const url = `http://localhost:4310/v1/attachments/${saved.attachmentId}/content`;
 
     const response = await app.fetch(
-      new Request(url, { headers: { Cookie: member.cookieHeader } })
+      new Request(url, { headers: { Cookie: owner.cookieHeader } })
     );
 
     expect(response.status).toBe(200);
@@ -225,13 +234,17 @@ describe("session routes are scoped to the caller's active org", () => {
       (await app.fetch(new Request(url, { headers: attacker.headers() })))
         .status
     ).toBe(404);
+    // Another member of the same org does not own the chat the image is in.
+    expect(
+      (await app.fetch(new Request(url, { headers: member.headers() }))).status
+    ).toBe(404);
     await deleteAttachmentBytes(
       VICTIM_ORG,
       "profile_victim",
       saved.attachmentId
     );
     expect(
-      (await app.fetch(new Request(url, { headers: member.headers() }))).status
+      (await app.fetch(new Request(url, { headers: owner.headers() }))).status
     ).toBe(404);
   });
 
@@ -496,8 +509,8 @@ describe("session routes are scoped to the caller's active org", () => {
   });
 });
 
-describe("Super Bot sessions stay admin-only after they are created", () => {
-  async function createSuperBotScenario() {
+describe("Super Nakama sessions stay admin-only after they are created", () => {
+  async function createSuperNakamaScenario() {
     const scenario = await createScenario();
     await seedOrgAdmin(scenario.databaseAdapter, {
       email: "member@example.com",
@@ -507,7 +520,7 @@ describe("Super Bot sessions stay admin-only after they are created", () => {
       userId: "user_member",
     });
 
-    const superProfile = await seedOrgSuperBotProfile(
+    const superProfile = await seedOrgSuperNakamaProfile(
       scenario.databaseAdapter,
       VICTIM_ORG
     );
@@ -545,9 +558,9 @@ describe("Super Bot sessions stay admin-only after they are created", () => {
     };
   }
 
-  test("Super Bot images use the same profile access guard as chat history", async () => {
+  test("Super Nakama images use the same profile access guard as chat history", async () => {
     const { app, databaseAdapter, member, superProfileId, superSessionId } =
-      await createSuperBotScenario();
+      await createSuperNakamaScenario();
 
     const saved = await createAttachmentSaver(databaseAdapter, {
       channel: "web",
@@ -583,7 +596,7 @@ describe("Super Bot sessions stay admin-only after they are created", () => {
   for (const route of CROSS_ORG_ROUTES) {
     test(`${route.method} ${route.path(":id")} -> 403 for a member`, async () => {
       const { app, databaseAdapter, member, superSessionId } =
-        await createSuperBotScenario();
+        await createSuperNakamaScenario();
 
       const response = await app.fetch(
         new Request(`http://localhost:4310${route.path(superSessionId)}`, {
@@ -600,9 +613,9 @@ describe("Super Bot sessions stay admin-only after they are created", () => {
     });
   }
 
-  test("a member cannot list Super Bot sessions, an admin still can", async () => {
+  test("a member cannot list Super Nakama sessions, an admin still can", async () => {
     const { app, member, superProfileId, superSessionId } =
-      await createSuperBotScenario();
+      await createSuperNakamaScenario();
 
     const admin = await loginUserSession(
       app,
@@ -698,5 +711,212 @@ describe("clearing a session while its turn is running", () => {
       releaseProvider.resolve();
       provider.mockRestore();
     }
+  });
+});
+
+describe("session routes are private to the chat owner", () => {
+  async function createOwnerScenario() {
+    const scenario = await createScenario();
+    const now = new Date().toISOString();
+
+    await seedOrgAdmin(scenario.databaseAdapter, {
+      email: "teammate@example.com",
+      orgId: VICTIM_ORG,
+      password: PASSWORD,
+      role: "member",
+      userId: "user_teammate",
+    });
+    await scenario.databaseAdapter.createUser({
+      createdAt: now,
+      email: "platform@example.com",
+      id: "user_platform",
+      isPlatformAdmin: true,
+      passwordHash: await scenario.authService.hashPassword(PASSWORD),
+      updatedAt: now,
+    });
+    await scenario.databaseAdapter.upsertOrgMember({
+      createdAt: now,
+      orgId: VICTIM_ORG,
+      role: "member",
+      userId: "user_platform",
+    });
+
+    return scenario;
+  }
+
+  const listSessions = (
+    app: Awaited<ReturnType<typeof createScenario>>["app"],
+    user: Awaited<ReturnType<typeof loginUserSession>>
+  ) =>
+    app.fetch(
+      new Request(
+        "http://localhost:4310/v1/sessions?profileId=profile_victim&channel=web",
+        { headers: user.headers() }
+      )
+    );
+
+  test("the list holds only the caller's own chats", async () => {
+    const { app, victimSessionId } = await createOwnerScenario();
+
+    const owner = await loginUserSession(
+      app,
+      "victim@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+
+    const teammate = await loginUserSession(
+      app,
+      "teammate@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+
+    const platformAdmin = await loginUserSession(
+      app,
+      "platform@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+
+    const ownerList = await listSessions(app, owner);
+    expect(ownerList.status).toBe(200);
+    expect(
+      (await ownerList.json()).sessions.map(({ id }: { id: string }) => id)
+    ).toEqual([victimSessionId]);
+
+    for (const other of [teammate, platformAdmin]) {
+      const response = await listSessions(app, other);
+      expect(response.status).toBe(200);
+      expect((await response.json()).sessions).toEqual([]);
+    }
+  });
+
+  for (const route of CROSS_ORG_ROUTES) {
+    test(`${route.method} ${route.path(":id")} -> 404 for a teammate`, async () => {
+      const { app, databaseAdapter, victimSessionId } =
+        await createOwnerScenario();
+
+      const teammate = await loginUserSession(
+        app,
+        "teammate@example.com",
+        PASSWORD,
+        VICTIM_ORG
+      );
+
+      const response = await app.fetch(
+        new Request(`http://localhost:4310${route.path(victimSessionId)}`, {
+          body: route.body ? JSON.stringify(route.body) : undefined,
+          headers: teammate.headers({ "X-CSRF-Token": teammate.csrfToken }),
+          method: route.method,
+        })
+      );
+
+      expect(response.status).toBe(404);
+      expect((await databaseAdapter.getSession(victimSessionId))?.model).toBe(
+        null
+      );
+      expect(
+        await databaseAdapter.listMessagesForSession(victimSessionId)
+      ).toHaveLength(1);
+    });
+  }
+
+  test("messaging-app chats stay visible to the whole team", async () => {
+    const { agent, app, databaseAdapter } = await createOwnerScenario();
+
+    const telegramSessionId = await agent.createSession(
+      VICTIM_ORG,
+      "telegram",
+      "profile_victim",
+      "user_victim"
+    );
+
+    await databaseAdapter.replaceMessagesForSession(telegramSessionId, [
+      {
+        createdAt: "2026-08-19T10:00:00.000Z",
+        id: "msg_telegram",
+        payload: { content: "from telegram", role: "user" },
+        seq: 0,
+        sessionId: telegramSessionId,
+      },
+    ]);
+
+    const teammate = await loginUserSession(
+      app,
+      "teammate@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+
+    const list = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/sessions?profileId=profile_victim&channels=web,telegram",
+        { headers: teammate.headers() }
+      )
+    );
+
+    expect(
+      (await list.json()).sessions.map(({ id }: { id: string }) => id)
+    ).toEqual([telegramSessionId]);
+
+    const messages = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/sessions/${telegramSessionId}/messages`,
+        { headers: teammate.headers() }
+      )
+    );
+
+    expect(messages.status).toBe(200);
+  });
+
+  test("a platform admin can open any chat in the org by id", async () => {
+    const { app, victimSessionId } = await createOwnerScenario();
+
+    const platformAdmin = await loginUserSession(
+      app,
+      "platform@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+
+    const response = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/sessions/${victimSessionId}/messages`,
+        { headers: platformAdmin.headers() }
+      )
+    );
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).messages).toHaveLength(1);
+  });
+
+  test("a branch keeps the owner of its source chat", async () => {
+    const { app, databaseAdapter, victimSessionId } =
+      await createOwnerScenario();
+
+    const owner = await loginUserSession(
+      app,
+      "victim@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+
+    const response = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/sessions/${victimSessionId}/branch`,
+        {
+          body: JSON.stringify({ messageIndex: 0 }),
+          headers: owner.headers({ "X-CSRF-Token": owner.csrfToken }),
+          method: "POST",
+        }
+      )
+    );
+
+    expect(response.status).toBe(201);
+    const { sessionId } = await response.json();
+    expect((await databaseAdapter.getSession(sessionId))?.userId).toBe(
+      "user_victim"
+    );
   });
 });

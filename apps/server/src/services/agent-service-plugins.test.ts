@@ -196,7 +196,7 @@ describe("AgentService plugin capabilities", () => {
     ).not.toContain("Plugin notes skill");
   });
 
-  test("web, automation, and sub-agent contexts keep org/profile/actor without Super Bot elevation", async () => {
+  test("web, automation, and sub-agent contexts keep org/profile/actor without Super Nakama elevation", async () => {
     const db = createInMemoryDatabaseAdapter();
     const profile = await seedOrgDefaultProfile(db, ORG_ID);
     await db.upsertProfile({ ...profile, isSuper: true });

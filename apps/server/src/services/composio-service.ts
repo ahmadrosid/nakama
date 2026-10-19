@@ -19,6 +19,7 @@ import {
   resolveComposioApiKey,
   type UpdateProfileComposioToolkitsRequest,
 } from "@nakama/core";
+import type { MeetActionResults } from "@nakama/core/google-meet";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import type {
   DatabaseAdapter,
@@ -57,9 +58,14 @@ interface ComposioOAuthStatePayload {
   connectionId: string;
   nonce: string;
   orgId: string;
+  returnTo?: string;
   toolkitId: string;
   userId: string;
 }
+
+const MEET_RECORDING_TOOLKITS = new Set(["gmail", "googledrive"]);
+
+const MEET_RETURN_PATH = "/google-meet?import=recording";
 
 function toOrgToolkitSummary(
   record: StoredComposioToolkitRecord
@@ -114,6 +120,241 @@ export class ComposioService {
     private readonly databaseAdapter: DatabaseAdapter,
     private readonly authService: AuthService
   ) {}
+
+  private async googleAccounts(orgId: string, userId: string) {
+    const actingUserId = await this.resolveComposioActingUserId(orgId, userId);
+
+    const toolkits =
+      await this.databaseAdapter.listComposioToolkitsForOrg(orgId);
+
+    const connections =
+      await this.databaseAdapter.listComposioUserConnectionsForUser(
+        orgId,
+        actingUserId
+      );
+
+    const account = (slug: string) => {
+      const toolkit = toolkits.find(
+        (item) => item.toolkitSlug === slug && item.status === "enabled"
+      );
+
+      const connection = connections.find(
+        (item) => item.toolkitId === toolkit?.id && item.status === "connected"
+      );
+
+      return connection?.connectedAccountId ?? null;
+    };
+
+    return {
+      actingUserId: composioUserId(actingUserId),
+      drive: account("googledrive"),
+      gmail: account("gmail"),
+      sheets: account("googlesheets"),
+    };
+  }
+
+  /** Runs one Google Sheets tool on the caller's own connected account. */
+  async executeGoogleSheetsTool(
+    orgId: string,
+    userId: string,
+    slug: string,
+    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Composio tool payloads are untyped JSON objects.
+    args: Record<string, unknown>
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Composio tool payloads are untyped JSON passed through to the caller.
+  ): Promise<unknown> {
+    const client = await this.getApiClient();
+    const accounts = await this.googleAccounts(orgId, userId);
+
+    if (!(client && accounts.sheets)) {
+      throw new Error("Connect Google Sheets in Composio first.");
+    }
+
+    return unwrapMeetToolResult(
+      await client.executeTool(
+        slug,
+        accounts.actingUserId,
+        accounts.sheets,
+        args
+      )
+    );
+  }
+
+  async listMeetRecordings(orgId: string, userId: string) {
+    const client = await this.getApiClient();
+
+    if (!client) {
+      return {
+        composioConfigured: false,
+        driveConnected: false,
+        gmailConnected: false,
+        recordings: [],
+      };
+    }
+
+    const accounts = await this.googleAccounts(orgId, userId);
+
+    if (!(accounts.gmail && accounts.drive)) {
+      return {
+        composioConfigured: true,
+        driveConnected: !!accounts.drive,
+        gmailConnected: !!accounts.gmail,
+        recordings: [],
+      };
+    }
+
+    const result = unwrapMeetToolResult(
+      await client.executeTool(
+        "GMAIL_FETCH_EMAILS",
+        accounts.actingUserId,
+        accounts.gmail,
+        {
+          include_payload: true,
+          max_results: 10,
+          query:
+            'subject:("Meeting records" OR "Meeting recording" OR "Meet Recording")',
+          verbose: true,
+        }
+      )
+    );
+
+    const messages = findMeetMessages(result).slice(0, 10);
+    const recordings: MeetActionResults["recordings"]["recordings"] = [];
+    const seen = new Set<string>();
+
+    for (const message of messages) {
+      const messageId = meetString(message.messageId ?? message.id);
+
+      if (!messageId) {
+        continue;
+      }
+
+      let full: unknown;
+
+      try {
+        full = unwrapMeetToolResult(
+          await client.executeTool(
+            "GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID",
+            accounts.actingUserId,
+            accounts.gmail,
+            { format: "full", message_id: messageId }
+          )
+        );
+      } catch {
+        continue;
+      }
+
+      for (const fileId of extractMeetDriveIds(full)) {
+        if (seen.has(fileId)) {
+          continue;
+        }
+
+        seen.add(fileId);
+        // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Composio tool payloads are untyped JSON objects.
+        let metadata: Record<string, unknown>;
+
+        try {
+          const value = unwrapMeetToolResult(
+            await client.executeTool(
+              "GOOGLEDRIVE_GET_FILE_METADATA",
+              accounts.actingUserId,
+              accounts.drive,
+              { fields: "id,name,mimeType,size", fileId }
+            )
+          );
+
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Composio tool payloads are untyped JSON narrowed here by shape.
+          if (!value || typeof value !== "object" || Array.isArray(value)) {
+            continue;
+          }
+
+          // SAFETY: The surrounding code checked this value before the assertion.
+          // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Composio tool payloads are untyped JSON objects.
+          metadata = value as Record<string, unknown>;
+        } catch {
+          continue;
+        }
+
+        const name = meetString(metadata.name ?? metadata.title);
+        const mimeType = meetString(metadata.mimeType);
+        const size = metadata.size == null ? 0 : Number(metadata.size);
+
+        if (
+          !(
+            name &&
+            name.length <= 255 &&
+            !/[\\/\x00-\x1f]/.test(name) &&
+            (mimeType.startsWith("video/") ||
+              /\.(mp4|mov|webm|mkv|m4v)$/i.test(name)) &&
+            Number.isSafeInteger(size) &&
+            size >= 0
+          )
+        ) {
+          continue;
+        }
+
+        recordings.push({
+          date: meetString(
+            message.messageTimestamp ?? message.internalDate ?? message.date
+          ),
+          fileId,
+          messageId,
+          name,
+          size,
+        });
+      }
+    }
+
+    return {
+      composioConfigured: true,
+      driveConnected: true,
+      gmailConnected: true,
+      recordings,
+    };
+  }
+
+  async downloadMeetRecording(
+    orgId: string,
+    userId: string,
+    messageId: string,
+    fileId: string
+  ) {
+    const listed = await this.listMeetRecordings(orgId, userId);
+
+    const recording = listed.recordings.find(
+      (item) => item.messageId === messageId && item.fileId === fileId
+    );
+
+    if (!recording) {
+      throw new NakamaApiError(
+        "Recording not found in your connected accounts.",
+        404
+      );
+    }
+
+    if (recording.size > 1024 ** 3) {
+      throw new NakamaApiError("Recording is larger than 1 GiB.", 400);
+    }
+
+    const accounts = await this.googleAccounts(orgId, userId);
+    const client = await this.getApiClient();
+
+    if (!(client && accounts.drive)) {
+      throw new NakamaApiError("Google Drive is not connected.", 400);
+    }
+
+    const result = unwrapMeetToolResult(
+      await client.executeTool(
+        "GOOGLEDRIVE_DOWNLOAD_FILE",
+        accounts.actingUserId,
+        accounts.drive,
+        {
+          file_id: fileId,
+        }
+      )
+    );
+
+    return { file: result, recording };
+  }
 
   reloadConfiguration(): void {
     this.apiClientCache = null;
@@ -419,7 +660,7 @@ export class ComposioService {
   /**
    * Enabling a toolkit assigns it to the org's default profile, so a fresh
    * setup is usable without a second trip to Profiles. Other profiles stay an
-   * explicit choice: Super Bot and channel-facing profiles should not gain a
+   * explicit choice: Super Nakama and channel-facing profiles should not gain a
    * member's Gmail because an admin enabled it for the org.
    */
   private async assignToDefaultProfile(
@@ -485,11 +726,41 @@ export class ComposioService {
     }
   }
 
-  async connectToolkit(
+  /**
+   * Meet's Import recording needs Gmail and Google Drive. One click enables the
+   * toolkit for the org when needed, then starts the member's OAuth, which
+   * returns to the Google Meet page instead of Integrations.
+   */
+  async connectMeetRecordingSource(
     orgId: string,
     userId: string,
     toolkitSlug: string,
     callbackBaseUrl: string
+  ): Promise<ComposioConnectResponse> {
+    if (!MEET_RECORDING_TOOLKITS.has(toolkitSlug)) {
+      throw new NakamaApiError("Unsupported recording source.", 400);
+    }
+
+    const existing = await this.databaseAdapter.getComposioToolkitBySlug(
+      orgId,
+      toolkitSlug
+    );
+
+    if (existing?.status !== "enabled") {
+      await this.enableToolkit(orgId, { toolkitSlug });
+    }
+
+    return this.connectToolkit(orgId, userId, toolkitSlug, callbackBaseUrl, {
+      returnTo: MEET_RETURN_PATH,
+    });
+  }
+
+  async connectToolkit(
+    orgId: string,
+    userId: string,
+    toolkitSlug: string,
+    callbackBaseUrl: string,
+    options: { returnTo?: string } = {}
   ): Promise<ComposioConnectResponse> {
     const actingUserId = await this.resolveComposioActingUserId(orgId, userId);
     const apiClient = await this.requireAvailable();
@@ -518,6 +789,7 @@ export class ComposioService {
         connectionId,
         nonce: oauthNonce,
         orgId,
+        returnTo: options.returnTo,
         toolkitId: orgToolkit.id,
         userId: actingUserId,
       } satisfies ComposioOAuthStatePayload)
@@ -556,7 +828,7 @@ export class ComposioService {
   async completeOAuth(
     state: string,
     options: { connectedAccountId?: string | null } = {}
-  ): Promise<{ orgId: string; toolkitSlug: string }> {
+  ): Promise<{ orgId: string; returnTo?: string; toolkitSlug: string }> {
     await this.requireAvailable();
 
     let payload: ComposioOAuthStatePayload;
@@ -567,6 +839,7 @@ export class ComposioService {
           connectionId: z.string(),
           nonce: z.string(),
           orgId: z.string(),
+          returnTo: z.literal(MEET_RETURN_PATH).optional(),
           toolkitId: z.string(),
           userId: z.string(),
         })
@@ -622,7 +895,11 @@ export class ComposioService {
       orgToolkit.toolkitSlug
     );
 
-    return { orgId: payload.orgId, toolkitSlug: orgToolkit.toolkitSlug };
+    return {
+      orgId: payload.orgId,
+      returnTo: payload.returnTo,
+      toolkitSlug: orgToolkit.toolkitSlug,
+    };
   }
 
   async disconnectToolkit(
@@ -1123,4 +1400,145 @@ export class ComposioService {
       throw new NakamaApiError("Profile not found for this organization.", 404);
     }
   }
+}
+
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Composio tool payloads are untyped JSON that this function inspects structurally.
+function meetString(value: unknown): string {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Composio tool payloads are untyped JSON narrowed here by shape.
+  return typeof value === "string" ? value.trim() : "";
+}
+
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- Composio tool payloads are untyped JSON that this function inspects structurally.
+function unwrapMeetToolResult(value: unknown): unknown {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Composio tool payloads are untyped JSON narrowed here by shape.
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  // SAFETY: The surrounding code checked this value before the assertion.
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Composio tool payloads are untyped JSON objects.
+  const record = value as Record<string, unknown>;
+
+  if (record.successful === false) {
+    throw new Error(meetString(record.error) || "Composio request failed.");
+  }
+
+  if (!("data" in record)) {
+    return value;
+  }
+
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Composio tool payloads are untyped JSON narrowed here by shape.
+  if (typeof record.data === "string") {
+    try {
+      return unwrapMeetToolResult(JSON.parse(record.data));
+    } catch {
+      return record.data;
+    }
+  }
+
+  return unwrapMeetToolResult(record.data);
+}
+
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type -- Composio tool payloads are untyped JSON that this function inspects structurally.
+function findMeetMessages(value: unknown): Record<string, unknown>[] {
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Composio tool payloads are untyped JSON objects.
+  const found: Record<string, unknown>[] = [];
+  const seen = new Set<string>();
+
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Composio tool payloads are untyped JSON that this function inspects structurally.
+  const visit = (node: unknown, depth: number) => {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Composio tool payloads are untyped JSON narrowed here by shape.
+    if (depth > 6 || !node || typeof node !== "object") {
+      return;
+    }
+
+    // SAFETY: The surrounding code checked this value before the assertion.
+    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Composio tool payloads are untyped JSON objects.
+    const record = node as Record<string, unknown>;
+    const id = meetString(record.messageId ?? record.id);
+
+    if (
+      id &&
+      (record.messageId ||
+        record.threadId ||
+        record.subject ||
+        record.snippet ||
+        record.payload) &&
+      !seen.has(id)
+    ) {
+      seen.add(id);
+      found.push(record);
+    }
+
+    for (const child of Object.values(record)) {
+      visit(child, depth + 1);
+    }
+  };
+
+  visit(value, 0);
+
+  return found;
+}
+
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Composio tool payloads are untyped JSON that this function inspects structurally.
+function extractMeetDriveIds(value: unknown): string[] {
+  const ids = new Set<string>();
+
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Composio tool payloads are untyped JSON that this function inspects structurally.
+  const visit = (node: unknown, depth: number) => {
+    if (depth > 10 || !node) {
+      return;
+    }
+
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Composio tool payloads are untyped JSON narrowed here by shape.
+    if (typeof node === "string") {
+      let text = node;
+
+      if (
+        text.length > 50 &&
+        !text.includes("://") &&
+        /^[A-Za-z0-9_+/=\s-]+$/.test(text)
+      ) {
+        const decoded = Buffer.from(
+          text.replace(/-/g, "+").replace(/_/g, "/"),
+          "base64"
+        ).toString("utf8");
+
+        if (decoded.includes("drive.google.com")) {
+          text = decoded;
+        }
+      }
+
+      text = text.replace(/&amp;/g, "&");
+
+      try {
+        text = decodeURIComponent(text);
+      } catch {
+        /* Keep original text. */
+      }
+
+      for (const pattern of [
+        /drive\.google\.com\/file\/d\/([A-Za-z0-9_-]{10,})/g,
+        /drive\.google\.com\/(?:open|uc)\?[^\s"'<>]*?id=([A-Za-z0-9_-]{10,})/g,
+        /docs\.google\.com\/[A-Za-z]+\/d\/([A-Za-z0-9_-]{10,})/g,
+      ]) {
+        for (const match of text.matchAll(pattern)) {
+          ids.add(match[1]!);
+        }
+      }
+
+      return;
+    }
+
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Composio tool payloads are untyped JSON narrowed here by shape.
+    if (typeof node === "object") {
+      for (const child of Object.values(node)) {
+        visit(child, depth + 1);
+      }
+    }
+  };
+
+  visit(value, 0);
+
+  return [...ids];
 }

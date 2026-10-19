@@ -369,7 +369,7 @@ describe("OrgService", () => {
 
     expect(
       profiles.some(
-        (profile) => profile.isSuper && profile.name === "Super Bot"
+        (profile) => profile.isSuper && profile.name === "Super Nakama"
       )
     ).toBe(true);
   });
@@ -1200,6 +1200,47 @@ describe("OrgService", () => {
     });
   });
 
+  // The member list is where an admin sees who is locked out; without the
+  // field the web cannot offer Enable for a disabled account.
+  test("the member list shows when an account is disabled, and clears it on enable", async () => {
+    const { orgService } = createOrgService();
+
+    const created = await orgService.createOrganization({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        phone: "+628123456789",
+      },
+      name: "Acme",
+      slug: "acme-disabled-list",
+    });
+
+    const orgId = created.organization.id;
+
+    const added = await orgService.addMember({
+      email: "member@acme.com",
+      name: "Member",
+      orgId,
+      phone: "+628987654321",
+      role: "member",
+    });
+
+    const userId = added.member.userId;
+
+    const disabledAtFor = async () =>
+      (await orgService.listMembers(orgId)).members.find(
+        (member) => member.userId === userId
+      )?.disabledAt;
+
+    expect(await disabledAtFor()).toBeNull();
+
+    await orgService.disableMember(orgId, userId);
+    expect(await disabledAtFor()).toEqual(expect.any(String));
+
+    await orgService.enableMember(orgId, userId);
+    expect(await disabledAtFor()).toBeNull();
+  });
+
   test("removeMember rejects bad userId shape before membership lookup", async () => {
     const { orgService } = createOrgService();
 
@@ -1884,7 +1925,6 @@ describe("OrgService shared agent selection", () => {
       await db.incrementLlmTurnUsage("org_parent", {
         estimated: false,
         inputTokens: 1,
-        optimized: false,
         outputTokens: 1,
       });
       const parentUsage = await db.listLlmTurnUsage("org_parent");
