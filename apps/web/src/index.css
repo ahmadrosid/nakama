@@ -732,6 +732,10 @@
   }
 
   aside:not([data-collapsed]) .sidebar-chat-row:hover {
+    @apply bg-muted/70;
+  }
+
+  .dark aside:not([data-collapsed]) .sidebar-chat-row:hover {
     @apply bg-muted/50;
   }
 
