@@ -32,8 +32,10 @@ function getBtwChatElement(): HTMLDivElement {
 function BtwChat({ question }: { question: string }) {
   const state = useChatPage();
   const consumeQuestion = useBtwChatStore((store) => store.consumeQuestion);
+
   const { activeProfile, cognito, composerDisabled, sendMessage, session } =
     state;
+
   const sendRef = useRef(sendMessage);
   const cognitoSessionRef = useRef<string | null>(null);
   const ready = Boolean(question && activeProfile && !composerDisabled);
