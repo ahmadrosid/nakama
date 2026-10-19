@@ -176,6 +176,7 @@ function ProviderSetupApiKeyField({
     >
       <InputGroup>
         <InputGroupInput
+          className="!rounded-l-md pl-3"
           aria-describedby={form.apiKeyError ? "api-key-error" : "api-key-hint"}
           aria-invalid={form.apiKeyError != null}
           autoComplete="off"
