@@ -21,9 +21,20 @@ let btwChatElement: HTMLDivElement | null = null;
  * chat lives only in the page, so the chat itself must not remount with it.
  */
 function getBtwChatElement(): HTMLDivElement {
-  btwChatElement ??= Object.assign(document.createElement("div"), {
-    className: "flex min-h-0 flex-1 flex-col",
-  });
+  // Kept across hot reloads in dev, so the open panel does not go blank.
+  const hotData = import.meta.hot?.data as
+    | { btwChatElement?: HTMLDivElement }
+    | undefined;
+
+  btwChatElement ??=
+    hotData?.btwChatElement ??
+    Object.assign(document.createElement("div"), {
+      className: "flex min-h-0 flex-1 flex-col",
+    });
+
+  if (hotData) {
+    hotData.btwChatElement = btwChatElement;
+  }
 
   return btwChatElement;
 }
@@ -154,6 +165,7 @@ export function BtwChatPanel() {
     <AttachmentDetailPanel
       bodyClassName="flex flex-col overflow-hidden p-0"
       className="max-sm:absolute max-sm:inset-0 max-sm:z-30"
+      headerClassName="px-3 py-1.5"
       onClose={close}
       onWidthChange={setWidth}
       title="Side chat"
