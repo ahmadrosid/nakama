@@ -25,10 +25,13 @@ import type { ChatPageState } from "@/pages/chat/use-chat-page";
 
 export function ChatPageContent({
   below,
+  cognitoLocked = false,
   onBtw,
   ...state
 }: ChatPageState & {
   below?: ReactNode;
+  /** Cognito cannot be turned off here, so the toggle is hidden. */
+  cognitoLocked?: boolean;
   onBtw?: (question: string) => void;
 }) {
   const {
@@ -80,17 +83,18 @@ export function ChatPageContent({
 
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
 
-  const cognitoControl = shouldShowCognitoControl(cognito, isEmptyState) ? (
-    // Pinned to the column's top-right corner, which is the top right of the
-    // screen area. The backdrop keeps it readable over a scrolling transcript.
-    <div className="absolute top-2 right-3 z-20 rounded-full backdrop-blur sm:right-6">
-      <ChatCognitoControl
-        cognito={cognito}
-        disabled={busy || readOnlySession}
-        onCognitoChange={handleCognitoChange}
-      />
-    </div>
-  ) : null;
+  const cognitoControl =
+    !cognitoLocked && shouldShowCognitoControl(cognito, isEmptyState) ? (
+      // Pinned to the column's top-right corner, which is the top right of the
+      // screen area. The backdrop keeps it readable over a scrolling transcript.
+      <div className="absolute top-2 right-3 z-20 rounded-full backdrop-blur sm:right-6">
+        <ChatCognitoControl
+          cognito={cognito}
+          disabled={busy || readOnlySession}
+          onCognitoChange={handleCognitoChange}
+        />
+      </div>
+    ) : null;
 
   const { visible: showUsage } = useChatUsageVisible();
   const sessionUsage = useMemo(() => sumChatUsage(messages), [messages]);

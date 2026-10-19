@@ -75,7 +75,7 @@ function BtwChat({ question }: { question: string }) {
     []
   );
 
-  return <ChatPageContent {...state} />;
+  return <ChatPageContent {...state} cognitoLocked />;
 }
 
 /** Keeps the side chat mounted for as long as it is open, on any page. */
