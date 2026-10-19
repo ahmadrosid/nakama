@@ -8,7 +8,6 @@ import {
 } from "@nakama/ui/dropdown-menu";
 import { cn } from "@nakama/ui/utils";
 import {
-  ArrowDown01Icon,
   Delete02Icon,
   MoreHorizontalIcon,
   PencilEdit02Icon,
@@ -28,6 +27,8 @@ function RecentChatActions({
   onTogglePin,
   onDetach,
   onMove,
+  onToggleCollapse,
+  collapsed,
   canMoveUp,
   canMoveDown,
 }: {
@@ -38,6 +39,8 @@ function RecentChatActions({
   onTogglePin: () => void;
   onDetach?: () => void;
   onMove?: (direction: "up" | "down") => void;
+  onToggleCollapse?: () => void;
+  collapsed: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
 }) {
@@ -58,6 +61,11 @@ function RecentChatActions({
           <MoreHorizontalIcon aria-hidden="true" className="size-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          {onToggleCollapse ? (
+            <DropdownMenuItem onClick={onToggleCollapse}>
+              {collapsed ? "Expand branches" : "Collapse branches"}
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem onClick={() => onRename({ id: session.id, title })}>
             <PencilEdit02Icon aria-hidden="true" className="size-4" />
             Rename
@@ -191,20 +199,6 @@ export function RecentChatRow({
           : undefined
       }
     >
-      {childCount > 0 ? (
-        <button
-          aria-expanded={!collapsed}
-          aria-label={`${collapsed ? "Expand" : "Collapse"} ${title} branches`}
-          className="flex size-6 shrink-0 items-center justify-center text-muted-foreground"
-          onClick={onToggleCollapse}
-          type="button"
-        >
-          <ArrowDown01Icon
-            aria-hidden="true"
-            className={cn("size-3.5", collapsed && "-rotate-90")}
-          />
-        </button>
-      ) : null}
       <Link
         aria-current={location.pathname === href ? "page" : undefined}
         className="sidebar-nav-link min-w-0 flex-1 px-2 py-1.5"
@@ -226,10 +220,12 @@ export function RecentChatRow({
       <RecentChatActions
         canMoveDown={canMoveDown}
         canMoveUp={canMoveUp}
+        collapsed={collapsed}
         onDelete={onDelete}
         onDetach={onDetach}
         onMove={onMove}
         onRename={onRename}
+        onToggleCollapse={childCount > 0 ? onToggleCollapse : undefined}
         onTogglePin={onTogglePin}
         session={session}
         title={title}
