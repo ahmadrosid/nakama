@@ -12,6 +12,7 @@ import {
   getReservedCommandTokenRanges,
   getSkillTokenRanges,
   matchComposerAddCommand,
+  matchComposerBtwCommand,
   matchComposerLearningLoopCommand,
   matchComposerOpenCommand,
   replaceSlashRangeWithReservedCommand,
@@ -234,6 +235,29 @@ describe("matchComposerAddCommand", () => {
     expect(matchComposerAddCommand("/add-skill")).toBe("add-skill");
     expect(matchComposerAddCommand("/add-plugin workflows")).toBeNull();
     expect(matchComposerAddCommand("/add-tool please")).toBeNull();
+  });
+});
+
+describe("/btw side chat command", () => {
+  test("returns the question, or empty for a bare command", () => {
+    expect(matchComposerBtwCommand("/btw what is RAG?")).toBe("what is RAG?");
+    expect(matchComposerBtwCommand("  /btw  ")).toBe("");
+    expect(matchComposerBtwCommand("/btw line one\nline two")).toBe(
+      "line one\nline two"
+    );
+    expect(matchComposerBtwCommand("/btwx")).toBeNull();
+    expect(matchComposerBtwCommand("please /btw")).toBeNull();
+  });
+
+  test("is listed only when enabled", () => {
+    const names = (enableBtw: boolean) =>
+      filterComposerSlashSuggestions([], "bt", { enableBtw }).map(
+        (suggestion) =>
+          suggestion.kind === "command" ? suggestion.command.name : null
+      );
+
+    expect(names(true)).toContain("btw");
+    expect(names(false)).not.toContain("btw");
   });
 });
 

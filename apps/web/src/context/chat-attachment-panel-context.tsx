@@ -20,10 +20,51 @@ const DEFAULT_PANEL_WIDTH = 448;
 
 const ENTER_SLIDE_MS = 200;
 
+/** The right side: the open panel, with `below` under it when both are open. */
+function ChatPanelColumn({
+  below,
+  fullscreen,
+  panel,
+  stacked,
+  width,
+}: {
+  below: ReactNode;
+  fullscreen: boolean;
+  panel: ReactNode;
+  stacked: boolean;
+  width: number;
+}) {
+  if (!stacked) {
+    return (
+      <>
+        {panel}
+        {below}
+      </>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "flex min-h-0 shrink-0 flex-col border-border border-l max-sm:w-full max-sm:flex-1",
+        "[&>aside+aside>[role=separator]]:hidden [&>aside+aside]:relative [&>aside+aside]:border-t [&>aside]:min-h-0 [&>aside]:w-full! [&>aside]:max-w-none [&>aside]:flex-1 [&>aside]:border-l-0",
+        fullscreen && "flex-1"
+      )}
+      style={fullscreen ? undefined : { width }}
+    >
+      {panel}
+      {below}
+    </div>
+  );
+}
+
 export function ChatAttachmentPanelProvider({
+  below,
   children,
   presentation = "push",
 }: {
+  /** A second panel. It sits under the open panel, or alone on the right. */
+  below?: ReactNode;
   children: ReactNode;
   /** `push` shares row space (chat). `overlay` slides over content from the right. */
   presentation?: "push" | "overlay";
@@ -156,12 +197,47 @@ export function ChatAttachmentPanelProvider({
   const overlay = presentation === "overlay";
   const fullscreen = config?.fullscreen ?? false;
 
+  const panel = config ? (
+    <>
+      {overlay && !fullscreen ? (
+        <button
+          aria-label="Close artifact preview"
+          className="fade-in-0 absolute inset-0 z-20 animate-in bg-background/50 transition-none duration-200"
+          onClick={handlePanelClose}
+          type="button"
+        />
+      ) : null}
+      <AttachmentDetailPanel
+        bodyClassName={config.bodyClassName}
+        className={cn(
+          overlay &&
+            "absolute inset-y-0 right-0 z-30 h-full max-h-full overflow-hidden shadow-xl",
+          overlay &&
+            enterSlide &&
+            "slide-in-from-right animate-in transition-none duration-200"
+        )}
+        fullscreen={fullscreen}
+        headerActions={config.headerActions}
+        leading={config.leading}
+        onClose={handlePanelClose}
+        onWidthChange={setWidth}
+        resizable={config.resizable ?? !fullscreen}
+        subtitle={config.subtitle}
+        title={config.title}
+        typeLabel={config.typeLabel}
+        width={width}
+      >
+        {config.content}
+      </AttachmentDetailPanel>
+    </>
+  ) : null;
+
   return (
     <ChatAttachmentPanelContext.Provider value={value}>
       <div
         className={cn(
-          "min-h-0 flex-1 overflow-hidden",
-          overlay ? "relative" : "flex"
+          "relative min-h-0 flex-1 overflow-hidden",
+          !overlay && "flex"
         )}
       >
         {overlay ? (
@@ -171,40 +247,13 @@ export function ChatAttachmentPanelProvider({
         ) : (
           children
         )}
-        {config ? (
-          <>
-            {overlay && !fullscreen ? (
-              <button
-                aria-label="Close artifact preview"
-                className="fade-in-0 absolute inset-0 z-20 animate-in bg-background/50 transition-none duration-200"
-                onClick={handlePanelClose}
-                type="button"
-              />
-            ) : null}
-            <AttachmentDetailPanel
-              bodyClassName={config.bodyClassName}
-              className={cn(
-                overlay &&
-                  "absolute inset-y-0 right-0 z-30 h-full max-h-full overflow-hidden shadow-xl",
-                overlay &&
-                  enterSlide &&
-                  "slide-in-from-right animate-in transition-none duration-200"
-              )}
-              fullscreen={fullscreen}
-              headerActions={config.headerActions}
-              leading={config.leading}
-              onClose={handlePanelClose}
-              onWidthChange={setWidth}
-              resizable={config.resizable ?? !fullscreen}
-              subtitle={config.subtitle}
-              title={config.title}
-              typeLabel={config.typeLabel}
-              width={width}
-            >
-              {config.content}
-            </AttachmentDetailPanel>
-          </>
-        ) : null}
+        <ChatPanelColumn
+          below={below}
+          fullscreen={fullscreen}
+          panel={panel}
+          stacked={Boolean(below && config && !overlay)}
+          width={width}
+        />
       </div>
     </ChatAttachmentPanelContext.Provider>
   );

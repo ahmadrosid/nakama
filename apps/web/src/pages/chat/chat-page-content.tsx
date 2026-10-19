@@ -5,7 +5,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@nakama/ui/dialog";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
 import { ArtifactStreamingPanelBridge } from "@/components/chat/artifact-streaming-panel-bridge";
 import { BrowserLiveViewPanelBridge } from "@/components/chat/browser-live-view-panel-bridge";
@@ -23,7 +23,14 @@ import { shouldShowCognitoControl } from "@/pages/chat/chat-page.shared";
 import { ChatPageColumn, ChatWelcome } from "@/pages/chat/chat-page-layout";
 import type { ChatPageState } from "@/pages/chat/use-chat-page";
 
-export function ChatPageContent(state: ChatPageState) {
+export function ChatPageContent({
+  below,
+  onBtw,
+  ...state
+}: ChatPageState & {
+  below?: ReactNode;
+  onBtw?: (question: string) => void;
+}) {
   const {
     session,
     messages,
@@ -122,6 +129,7 @@ export function ChatPageContent(state: ChatPageState) {
         draftStorageKey={composerDraftKey}
         error={error}
         headerNotice={skillReviewBanner}
+        onBtw={onBtw}
         onConnectProvider={() => setProviderDialogOpen(true)}
         onModelChange={handleModelChange}
         onStop={stopStreaming}
@@ -160,7 +168,7 @@ export function ChatPageContent(state: ChatPageState) {
   );
 
   const content = isEmptyState ? (
-    <ChatAttachmentPanelProvider key={session?.id ?? "new"}>
+    <ChatAttachmentPanelProvider below={below} key={session?.id ?? "new"}>
       <ChatPageColumn centered cognito={cognito}>
         {cognitoControl}
         <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col gap-1">
@@ -177,7 +185,7 @@ export function ChatPageContent(state: ChatPageState) {
       </ChatPageColumn>
     </ChatAttachmentPanelProvider>
   ) : (
-    <ChatAttachmentPanelProvider key={session?.id ?? "new"}>
+    <ChatAttachmentPanelProvider below={below} key={session?.id ?? "new"}>
       <ArtifactStreamingPanelBridge messages={messages} profileId={profileId} />
       <BrowserLiveViewPanelBridge messages={messages} sessionId={session?.id} />
       <ChatPageColumn cognito={cognito}>

@@ -89,6 +89,7 @@ import {
   findActiveSkillSlashRange,
   getLeadingCommand,
   matchComposerAddCommand,
+  matchComposerBtwCommand,
   matchComposerLearningLoopCommand,
   matchComposerOpenCommand,
   replaceSlashRangeWithReservedCommand,
@@ -152,6 +153,8 @@ interface ChatComposerFullProps extends ChatComposerBaseProps {
   contextUsage?: ChatContextUsage | null;
   currentModelSelection: string | null;
   headerNotice?: ReactNode;
+  /** Set on the main chat page: `/btw …` opens a side chat with the question. */
+  onBtw?: (question: string) => void;
   onConnectProvider?: () => void;
   onModelChange: (selection: string) => void;
   onThinkingEffortChange?: (effort: string) => void;
@@ -686,6 +689,29 @@ const OpenPluginContext = createContext<{
   plugins: ComposerOpenPlugin[];
 }>({ open: () => undefined, plugins: NO_OPEN_PLUGINS });
 
+function composerBtwHandler(props: ChatComposerProps) {
+  return isFullComposer(props) ? props.onBtw : undefined;
+}
+
+/** Opens the side chat for a sent `/btw …`. True when it did. */
+function runBtwCommand(
+  text: string,
+  onBtw: ((question: string) => void) | undefined
+): boolean {
+  const question = onBtw ? matchComposerBtwCommand(text) : null;
+
+  if (question === null) {
+    return false;
+  }
+
+  onBtw?.(question);
+
+  return true;
+}
+
+/** True when `/btw` is offered: only the composer that can open a side chat. */
+const BtwCommandContext = createContext(false);
+
 const CommandPrefixContext = createContext<{
   prefix: string | null;
   setPrefix: (prefix: string | null) => void;
@@ -798,6 +824,8 @@ export function ChatComposer(props: ChatComposerProps) {
     isFullComposer(props) ? (props.profileId ?? null) : null
   );
 
+  const onBtw = composerBtwHandler(props);
+
   const canAddCapabilities =
     isFullComposer(props) &&
     Boolean(props.profileId) &&
@@ -812,6 +840,12 @@ export function ChatComposer(props: ChatComposerProps) {
         : typedText;
 
       setCommandPrefix(null);
+
+      if (runBtwCommand(text, onBtw)) {
+        clearDraft();
+
+        return;
+      }
 
       const openCommand = matchComposerOpenCommand(
         text,
@@ -879,43 +913,45 @@ export function ChatComposer(props: ChatComposerProps) {
 
   return (
     <CommandPrefixContext.Provider value={commandContext}>
-      <OpenPluginContext.Provider value={openPluginContext}>
-        <div className={cn("w-full shrink-0", props.className)}>
-          {layout.showOfflineHint && isFullComposer(props) ? (
-            <ChatComposerOfflineHint
-              onConnectProvider={props.onConnectProvider}
+      <BtwCommandContext.Provider value={Boolean(onBtw)}>
+        <OpenPluginContext.Provider value={openPluginContext}>
+          <div className={cn("w-full shrink-0", props.className)}>
+            {layout.showOfflineHint && isFullComposer(props) ? (
+              <ChatComposerOfflineHint
+                onConnectProvider={props.onConnectProvider}
+              />
+            ) : null}
+            <ChatComposerMain
+              displayError={displayError}
+              layout={layout}
+              onAddCommand={openAddCommand}
+              props={composerProps}
+              setAttachmentError={setAttachmentError}
             />
-          ) : null}
-          <ChatComposerMain
-            displayError={displayError}
-            layout={layout}
-            onAddCommand={openAddCommand}
-            props={composerProps}
-            setAttachmentError={setAttachmentError}
-          />
-          {addProfileId ? (
-            <ChatAddCapabilitiesDialogs
-              mcpOpen={addDialog === "add-mcp"}
-              onMcpOpenChange={(open) => {
-                setAddDialog(open ? "add-mcp" : null);
-              }}
-              onPluginOpenChange={(open) =>
-                setAddDialog(open ? "add-plugin" : null)
-              }
-              onSkillOpenChange={(open) => {
-                setAddDialog(open ? "add-skill" : null);
-              }}
-              onToolOpenChange={(open) => {
-                setAddDialog(open ? "add-tool" : null);
-              }}
-              pluginOpen={addDialog === "add-plugin"}
-              profileId={addProfileId}
-              skillOpen={addDialog === "add-skill"}
-              toolOpen={addDialog === "add-tool"}
-            />
-          ) : null}
-        </div>
-      </OpenPluginContext.Provider>
+            {addProfileId ? (
+              <ChatAddCapabilitiesDialogs
+                mcpOpen={addDialog === "add-mcp"}
+                onMcpOpenChange={(open) => {
+                  setAddDialog(open ? "add-mcp" : null);
+                }}
+                onPluginOpenChange={(open) =>
+                  setAddDialog(open ? "add-plugin" : null)
+                }
+                onSkillOpenChange={(open) => {
+                  setAddDialog(open ? "add-skill" : null);
+                }}
+                onToolOpenChange={(open) => {
+                  setAddDialog(open ? "add-tool" : null);
+                }}
+                pluginOpen={addDialog === "add-plugin"}
+                profileId={addProfileId}
+                skillOpen={addDialog === "add-skill"}
+                toolOpen={addDialog === "add-tool"}
+              />
+            ) : null}
+          </div>
+        </OpenPluginContext.Provider>
+      </BtwCommandContext.Provider>
     </CommandPrefixContext.Provider>
   );
 }
@@ -940,6 +976,7 @@ function ChatComposerTextarea({
   const [slashRange, setSlashRange] = useState<SkillSlashRange | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const openPlugin = useContext(OpenPluginContext);
+  const enableBtw = useContext(BtwCommandContext);
 
   const mentionOpen =
     slashRange !== null && controller.textInput.value[slashRange.start] === "@";
@@ -953,10 +990,12 @@ function ChatComposerTextarea({
       ? filterComposerMentionSuggestions(slashRange.query)
       : filterComposerSlashSuggestions(availableSkills, slashRange.query, {
           enableAddCommands: onAddCommand != null,
+          enableBtw,
           openPlugins: openPlugin.plugins,
         });
   }, [
     availableSkills,
+    enableBtw,
     mentionOpen,
     onAddCommand,
     openPlugin.plugins,
