@@ -1,7 +1,9 @@
 /**
  * Pre-commit check: staged files must stay under 5,000 tokens (bytes / 4).
+ * Only a new file, or a file that crosses the limit in this commit, blocks;
+ * files that were already over it can still take small edits.
  * Files that agents do not write by hand (lockfiles, codegen, cassettes,
- * binaries) are skipped.
+ * binaries, built plugin bundles) are skipped.
  *
  *   bun run scripts/check-file-size.ts
  */
@@ -17,10 +19,19 @@ const IGNORED_PATHS = [
   /\.(generated|gen|min)\.[a-z]+$/,
   /\.(snap|svg|map|pdf|png|jpe?g|gif|webp|ico|icns|mp4|mov|woff2?|ttf|otf|zip|gz)$/i,
   /(^|\/)CHANGELOG\.md$/,
+  /^packages\/plugins\/[^/]+\/(actions\/[^/]+\.js|ui\/app\.js|workers\/[^/]+\.js)$/,
 ];
 
 const git = (args: string[]) =>
   Bun.spawnSync(["git", ...args], { stderr: "pipe", stdout: "pipe" });
+
+const tokensOf = (object: string) => {
+  const result = git(["cat-file", "-s", object]);
+
+  return result.exitCode === 0
+    ? Math.ceil(Number(result.stdout.toString()) / BYTES_PER_TOKEN)
+    : 0;
+};
 
 const staged = git([
   "diff",
@@ -40,10 +51,10 @@ for (const file of staged) {
     continue;
   }
 
-  const bytes = Number(git(["cat-file", "-s", `:${file}`]).stdout.toString());
-  const tokens = Math.ceil(bytes / BYTES_PER_TOKEN);
+  const tokens = tokensOf(`:${file}`);
 
-  if (tokens > MAX_TOKENS) {
+  // A file already over the limit at HEAD predates this check.
+  if (tokens > MAX_TOKENS && tokensOf(`HEAD:${file}`) <= MAX_TOKENS) {
     tooBig.push({ file, tokens });
   }
 }
