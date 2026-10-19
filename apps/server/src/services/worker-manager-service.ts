@@ -49,6 +49,7 @@ import {
   isProcessAlive,
 } from "@nakama/core/worker-heartbeat";
 import type { DatabaseAdapter } from "@nakama/db";
+import { isSecretEnvKey } from "../lib/ensure-process-path";
 
 const WORKER_SCRIPTS = new Map(
   Object.entries({
@@ -77,15 +78,22 @@ const VALID_WORKERS = [...WORKER_SCRIPTS.keys()];
  * A "shutdown" message lets the worker clean up before pm2 escalates.
  *
  * pm2 copies the server's environment into every worker. `filter_env` keeps
- * the secrets key (and `_NEXT`) out of channel and plugin workers.
+ * the same secrets the bash tool drops out of channel and plugin workers.
  */
-const PM2_START_OPTIONS: Pick<
+function pm2StartOptions(): Pick<
   WorkerStartOptions,
   "filter_env" | "shutdown_with_message"
-> = { filter_env: ["NAKAMA_SECRETS_KEY"] };
+> {
+  const options: Pick<
+    WorkerStartOptions,
+    "filter_env" | "shutdown_with_message"
+  > = { filter_env: Object.keys(process.env).filter(isSecretEnvKey) };
 
-if (process.platform === "win32") {
-  PM2_START_OPTIONS.shutdown_with_message = true;
+  if (process.platform === "win32") {
+    options.shutdown_with_message = true;
+  }
+
+  return options;
 }
 
 export interface PluginWorkerRegistration {
@@ -895,7 +903,7 @@ export class WorkerManagerService {
             name,
             output: join(worker.directory, "stdout.log"),
             script: process.env.NAKAMA_BUN_BIN ?? "bun",
-            ...PM2_START_OPTIONS,
+            ...pm2StartOptions(),
           },
           (error) => cb(error)
         )
@@ -1022,7 +1030,7 @@ export class WorkerManagerService {
         env,
         name: processName,
         script: "bun",
-        ...PM2_START_OPTIONS,
+        ...pm2StartOptions(),
       };
 
       if (isChannelOwner(scope)) {

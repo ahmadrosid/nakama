@@ -221,9 +221,19 @@ describe("WorkerManagerService", () => {
       expect(opts.interpreter).toBeUndefined();
     });
 
-    test("keeps the secrets key out of the worker environment", async () => {
-      process.env.NAKAMA_SECRETS_KEY = "server-only-key";
-      process.env.NAKAMA_SECRETS_KEY_NEXT = "server-only-next-key";
+    test("keeps secrets out of the worker environment", async () => {
+      const secrets = [
+        "NAKAMA_SECRETS_KEY",
+        "NAKAMA_SECRETS_KEY_NEXT",
+        "NAKAMA_EMAIL_PASSWORD",
+        "OPENAI_API_KEY",
+      ];
+
+      for (const key of secrets) {
+        process.env[key] = "server-only-secret";
+      }
+
+      process.env.NAKAMA_WORKER_TEST_PLAIN = "kept";
 
       try {
         const mockPm2 = createMockPm2();
@@ -237,12 +247,13 @@ describe("WorkerManagerService", () => {
 
         const app = prepareAppConf({ cwd: projectRoot }, { ...opts });
 
-        expect(app.env.NAKAMA_SECRETS_KEY).toBeUndefined();
-        expect(app.env.NAKAMA_SECRETS_KEY_NEXT).toBeUndefined();
+        expect(secrets.filter((key) => key in app.env)).toEqual([]);
+        expect(app.env.NAKAMA_WORKER_TEST_PLAIN).toBe("kept");
         expect(app.env.NAKAMA_CONFIG_DIR).toBe(configDir ?? undefined);
       } finally {
-        delete process.env.NAKAMA_SECRETS_KEY;
-        delete process.env.NAKAMA_SECRETS_KEY_NEXT;
+        for (const key of [...secrets, "NAKAMA_WORKER_TEST_PLAIN"]) {
+          delete process.env[key];
+        }
       }
     });
 
