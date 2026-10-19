@@ -7,7 +7,7 @@ import {
   ArrowRight01Icon,
   Search01Icon,
 } from "hugeicons-react";
-import { useMemo } from "react";
+import { lazy, Suspense, useMemo } from "react";
 import {
   Link,
   Outlet,
@@ -20,6 +20,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { MobileNavDrawer } from "@/components/MobileNavDrawer";
 import { ProfileRail } from "@/components/ProfileRail";
 import { RouteBoundary } from "@/components/RouteBoundary";
+import { useBtwChatStore } from "@/context/btw-chat-store";
 import { useAppContext } from "@/context/use-app-context";
 import { useOrgPlugins } from "@/hooks/use-plugins";
 import {
@@ -37,8 +38,15 @@ import {
   sidebarPageId,
 } from "@/lib/navigation";
 
+const BtwChatHost = lazy(() =>
+  import("@/components/chat/btw-chat").then((module) => ({
+    default: module.BtwChatHost,
+  }))
+);
+
 export function Layout() {
   const shell = useAppShell();
+  const btwOpen = useBtwChatStore((store) => store.chat !== null);
 
   return (
     <TooltipProvider delay={0}>
@@ -73,6 +81,11 @@ export function Layout() {
         </div>
       </div>
       <CommandPalette />
+      {btwOpen ? (
+        <Suspense fallback={null}>
+          <BtwChatHost />
+        </Suspense>
+      ) : null}
     </TooltipProvider>
   );
 }

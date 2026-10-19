@@ -128,6 +128,8 @@ interface QueuedSend {
  * it can run next to the page without moving it.
  */
 export interface ChatHost {
+  /** Start in cognito: not saved, not in History, not in the URL. */
+  cognito: boolean;
   /** Draft key slot for a chat with no session, so two drafts do not mix. */
   draftSessionId: string | null;
   location: { pathname: string; search: string };
@@ -146,7 +148,14 @@ function useChatHost(): ChatHost {
   const profile = useActiveChatProfile();
 
   return (
-    override ?? { draftSessionId: null, location, navigate, params, profile }
+    override ?? {
+      cognito: false,
+      draftSessionId: null,
+      location,
+      navigate,
+      params,
+      profile,
+    }
   );
 }
 
@@ -237,7 +246,7 @@ export function useChatPage() {
   });
 
   const [session, setSession] = useState<RemoteChatSession | null>(null);
-  const [cognito, setCognito] = useState(false);
+  const [cognito, setCognito] = useState(host.cognito);
   const [sessionModel, setSessionModel] = useState<string | null>(null);
   const [sessionChannel, setSessionChannel] = useState<AgentChannel>("web");
   const [messages, setMessages] = useState<ChatListItem[]>([]);
