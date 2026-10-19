@@ -40,8 +40,10 @@ export function SetupStepAccount({
   const [confirmPassword, setConfirmPassword] = useState(
     seeded.confirmPassword
   );
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
 
   if (mode === "backup") {
@@ -149,7 +151,7 @@ export function SetupStepAccount({
               required
               type={showPassword ? "text" : "password"}
               value={password}
-              autocomplete="new-password"
+              autoComplete="new-password"
             />
             <button
               type="button"
@@ -180,7 +182,7 @@ export function SetupStepAccount({
               required
               type={showConfirmPassword ? "text" : "password"}
               value={confirmPassword}
-              autocomplete="new-password"
+              autoComplete="new-password"
             />
             <button
               type="button"
