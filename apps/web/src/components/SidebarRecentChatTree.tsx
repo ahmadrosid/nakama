@@ -416,7 +416,7 @@ export function useRecentChatTree(
           className={cn(
             "relative rounded-md",
             draggingId === session.id &&
-              "z-10 bg-sidebar shadow-lg ring-1 ring-border/60"
+              "z-10 bg-sidebar shadow-sm ring-1 ring-border/60"
           )}
           key={session.id}
           ref={(node) => {
