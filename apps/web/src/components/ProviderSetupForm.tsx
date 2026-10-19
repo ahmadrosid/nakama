@@ -179,6 +179,7 @@ function ProviderSetupApiKeyField({
           aria-describedby={form.apiKeyError ? "api-key-error" : "api-key-hint"}
           aria-invalid={form.apiKeyError != null}
           autoComplete="off"
+          className="!rounded-l-md pl-3"
           disabled={form.busy}
           id="api-key"
           onBlur={form.handleApiKeyBlur}

@@ -108,9 +108,17 @@ function SetupUserContextSession({
       }}
     >
       <div className="rounded-md border border-border bg-card px-4 py-4">
-        <h2 className="mb-4 font-semibold text-base text-foreground">
-          About you
-        </h2>
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <h2 className="font-semibold text-base text-foreground">About you</h2>
+          <button
+            className="shrink-0 text-muted-foreground text-sm underline underline-offset-4 transition-colors hover:text-foreground"
+            disabled={busy}
+            onClick={handleSkip}
+            type="button"
+          >
+            Set up later
+          </button>
+        </div>
 
         {isLoading ? (
           <div className="flex min-h-32 items-center justify-center">
@@ -165,28 +173,14 @@ function SetupUserContextSession({
         <Button
           disabled={busy}
           onClick={onBack}
-          size="sm"
           type="button"
-          variant="ghost"
+          variant="outline"
         >
           Back
         </Button>
 
         <div className="flex items-center gap-3">
-          <button
-            className="text-muted-foreground text-sm underline underline-offset-4 transition-colors hover:text-foreground"
-            disabled={busy}
-            onClick={handleSkip}
-            type="button"
-          >
-            Set up later
-          </button>
-
-          <Button
-            disabled={busy || isLoading || !!loadError}
-            size="sm"
-            type="submit"
-          >
+          <Button disabled={busy || isLoading || !!loadError} type="submit">
             {busy ? (
               <>
                 <Spinner className="mr-2" />

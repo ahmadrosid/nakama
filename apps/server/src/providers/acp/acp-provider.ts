@@ -362,8 +362,28 @@ function lastUserText(input: GenerateChatInput): string {
     }
 
     return content
-      .filter((part) => part.type === "text")
-      .map((part) => part.text)
+      .map((part) => {
+        if (part.type === "text") {
+          return part.text;
+        }
+
+        // The agent gets text only, so a text file goes in with its name and
+        // every other file is named, never dropped without a word.
+        if (part.type === "document") {
+          return part.mediaType.startsWith("text/")
+            ? `[File: ${part.filename}]\n${Buffer.from(part.data, "base64").toString("utf8")}`
+            : `[File: ${part.filename} (${part.mediaType}) is attached, but its contents cannot be sent to this agent.]`;
+        }
+
+        if (part.type === "image") {
+          return part.description
+            ? `[Image: ${part.description}]`
+            : "[An image is attached, but it cannot be sent to this agent.]";
+        }
+
+        return "";
+      })
+      .filter(Boolean)
       .join("\n");
   }
 

@@ -17,6 +17,25 @@ After a package is approved and your organization turns it on:
 
 The same note you create on the page is the one the agent reads. Another organization never sees it.
 
+## How plugins work
+
+A plugin goes through three gates before your team uses it. Each gate has an owner.
+
+![A plugin comes from npm, the official catalog, or a Super Nakama draft. A platform admin reviews and installs it, an org admin enables it, and a platform admin connects it to profiles. Members then use its page and chat tools.](/diagrams/plugin-lifecycle.svg)
+
+1. **Review and install.** A platform admin checks the package and installs it. Nothing runs yet. Official plugins skip the separate platform approval.
+2. **Enable.** An org admin turns the plugin on for one organization. This creates that organization's plugin data and starts any background workers the plugin needs.
+3. **Connect to profiles.** A platform admin gives plugin tools to profiles. A profile without the tools cannot call them.
+
+When someone uses the plugin, the page and the chat both run the same plugin actions:
+
+![A member on the plugin page, or a profile in chat, starts a plugin action. Nakama checks the organization, role, and assignment, then runs the action on the server. The action uses its organization data and can use the profile's assigned tools.](/diagrams/plugin-runtime.svg)
+
+- Nakama checks the organization, the user's role, the profile assignment, and that the plugin is on before each action runs.
+- An action can use only its own organization's data.
+- An action can call other tools only through a profile, and only tools assigned to that profile.
+- In chat, a profile first searches for plugin tools by name. This keeps the start of each chat small when a profile has many plugin tools.
+
 ## How to use them
 
 **1. Install a package (platform admin).** Open **Control center → Agent tools → Plugins**, enter the public npm package name and exact version, choose **Preview package**, review what it declares, and install it. Installation stores the package. It does not run plugin code and does not turn the plugin on for any organization.

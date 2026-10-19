@@ -44,3 +44,4 @@ tmp-repro-setup-auth.mjs
 # jscpd duplication report
 .jscpd-report/
 nakama-secrets.env
+.idea

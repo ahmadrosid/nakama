@@ -146,6 +146,39 @@ describe("ACP provider", () => {
     expect(second.content).toBe("fake: second");
   });
 
+  test("sends a text file to the agent with its name and names other files", async () => {
+    const provider = createProvider(nextSessionKey());
+    const csv = "campaign,spend_usd\nSearch - Brand,7400";
+
+    const result = await provider.generateChat({
+      messages: [
+        {
+          content: [
+            { text: "Sum the spend.", type: "text" },
+            {
+              data: Buffer.from(csv).toString("base64"),
+              filename: "google-ads.csv",
+              mediaType: "text/csv",
+              type: "document",
+            },
+            {
+              data: "JVBERi0=",
+              filename: "brief.pdf",
+              mediaType: "application/pdf",
+              type: "document",
+            },
+          ],
+          role: "user",
+        },
+      ],
+      system: "",
+    });
+
+    expect(result.content).toContain(`[File: google-ads.csv]\n${csv}`);
+    expect(result.content).toContain("brief.pdf");
+    expect(result.content).not.toContain("JVBERi0=");
+  });
+
   test("rejects a turn with no user message", async () => {
     const provider = createProvider(nextSessionKey());
 

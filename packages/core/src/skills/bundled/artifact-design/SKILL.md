@@ -22,6 +22,8 @@ These instructions are loaded directly when this skill is active.
 5. Support both themes through `prefers-color-scheme`. If an existing design system provides an explicit theme signal, respect it.
 6. Choose typefaces deliberately. Pair fonts only when the pairing improves hierarchy, and keep a consistent type scale with readable fallback fonts.
 7. Use only facts from the request or available sources. Do not add dates, durations, team sizes, customers, quotes, metrics, integrations, or feature details that were not supplied; omit them. Label supplied sample data; a "sample" label does not permit invented content.
+   - Calculate totals, ratios, and deltas from the source rows with a tool that runs code, such as `bash`. Do not do arithmetic in the reply. If no tool can calculate, show the source rows and label the totals as not verified.
+   - When a source metric differs from the target metric, such as impressions against a reach target, label that target as not verified. Do not calculate a variance for it.
 8. Write plain, direct copy. Use meaningful headings and labels; omit filler and placeholder sections.
 
 Avoid generic defaults: cream with terracotta accents, purple gradients, Inter for every subject, emoji, and grids of boxed items (a dashboard's stat-card row is the one exception).

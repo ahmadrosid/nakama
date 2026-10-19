@@ -1,28 +1,50 @@
 import { Button } from "@nakama/ui/button";
 import { Card } from "@nakama/ui/card";
 import { Input } from "@nakama/ui/input";
-import { Upload04Icon } from "hugeicons-react";
+import { Upload04Icon, ViewIcon, ViewOffIcon } from "hugeicons-react";
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { SetupStepBackupImport } from "@/components/setup-wizard/SetupStepBackupImport";
 import type { SetupAccountDraft } from "@/components/setup-wizard/setup-wizard.shared";
 
 interface SetupStepAccountProps {
+  initialDraft?: SetupAccountDraft | null;
   onNext: (account: SetupAccountDraft) => void;
 }
 
 type SetupAccountMode = "account" | "backup";
 
-export function SetupStepAccount({ onNext }: SetupStepAccountProps) {
+function seedFromDraft(draft: SetupAccountDraft | null | undefined) {
+  return {
+    confirmPassword: draft?.password ?? "",
+    email: draft?.email ?? "",
+    name: draft?.name ?? "",
+    password: draft?.password ?? "",
+    phone: draft?.phone ?? "",
+  };
+}
+
+export function SetupStepAccount({
+  onNext,
+  initialDraft,
+}: SetupStepAccountProps) {
   const navigate = useNavigate();
   const backupInputRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<SetupAccountMode>("account");
   const [initialBackupFile, setInitialBackupFile] = useState<File | null>(null);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [seeded] = useState(() => seedFromDraft(initialDraft));
+  const [name, setName] = useState(seeded.name);
+  const [email, setEmail] = useState(seeded.email);
+  const [phone, setPhone] = useState(seeded.phone);
+  const [password, setPassword] = useState(seeded.password);
+
+  const [confirmPassword, setConfirmPassword] = useState(
+    seeded.confirmPassword
+  );
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
 
   if (mode === "backup") {
@@ -121,15 +143,30 @@ export function SetupStepAccount({ onNext }: SetupStepAccountProps) {
           >
             Password
           </label>
-          <Input
-            id="setup-password"
-            minLength={8}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="••••••••"
-            required
-            type="password"
-            value={password}
-          />
+          <div className="relative flex items-center">
+            <Input
+              autoComplete="new-password"
+              id="setup-password"
+              minLength={8}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="••••••••"
+              required
+              type={showPassword ? "text" : "password"}
+              value={password}
+            />
+            <button
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              className="absolute right-3 text-muted-foreground hover:text-foreground focus:outline-none"
+              onClick={() => setShowPassword(!showPassword)}
+              type="button"
+            >
+              {showPassword ? (
+                <ViewOffIcon className="size-4" />
+              ) : (
+                <ViewIcon className="size-4" />
+              )}
+            </button>
+          </div>
         </div>
         <div>
           <label
@@ -138,14 +175,33 @@ export function SetupStepAccount({ onNext }: SetupStepAccountProps) {
           >
             Confirm Password
           </label>
-          <Input
-            id="setup-confirm"
-            onChange={(event) => setConfirmPassword(event.target.value)}
-            placeholder="••••••••"
-            required
-            type="password"
-            value={confirmPassword}
-          />
+          <div className="relative flex items-center">
+            <Input
+              autoComplete="new-password"
+              id="setup-confirm"
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              placeholder="••••••••"
+              required
+              type={showConfirmPassword ? "text" : "password"}
+              value={confirmPassword}
+            />
+            <button
+              aria-label={
+                showConfirmPassword
+                  ? "Hide confirm password"
+                  : "Show confirm password"
+              }
+              className="absolute right-3 text-muted-foreground hover:text-foreground focus:outline-none"
+              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              type="button"
+            >
+              {showConfirmPassword ? (
+                <ViewOffIcon className="size-4" />
+              ) : (
+                <ViewIcon className="size-4" />
+              )}
+            </button>
+          </div>
         </div>
         {error && (
           <div className="rounded-md bg-red-50 px-3 py-2 text-red-800 text-sm dark:bg-red-950/30 dark:text-red-200">

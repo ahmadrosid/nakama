@@ -1,8 +1,13 @@
 import type * as acp from "@agentclientprotocol/sdk";
 import type { JsonValue, StreamChatHandlers, ToolCall } from "@nakama/core";
+import { z } from "zod";
 import { readRecord } from "../shared";
 
 const NAKAMA_MCP_PREFIX = "mcp__nakama__";
+
+// Codex names an MCP step `mcp.nakama.<tool>` and wraps its input as
+// `{ server, tool, arguments }`.
+const CODEX_NAKAMA_MCP_PREFIX = "mcp.nakama.";
 
 /** Claude's built-in tools, mapped to the names Nakama's step cards already know. */
 const BUILT_IN_TOOLS = new Map([
@@ -67,7 +72,7 @@ export function createAcpUpdateMapper(handlers: StreamChatHandlers) {
     const acpName = claudeToolName(update) ?? update.title ?? record.tool;
     record.tool = toNakamaToolName(acpName);
 
-    const input = readRecord(update.rawInput);
+    const input = unwrapCodexMcpInput(readRecord(update.rawInput));
 
     if (Object.keys(input).length > 0) {
       record.input = toNakamaInput(record.tool, input);
@@ -132,7 +137,9 @@ export function createAcpUpdateMapper(handlers: StreamChatHandlers) {
 
           start(update.toolCallId, record);
 
-          const result = update.rawOutput ?? update.content ?? null;
+          const result = toNakamaResult(
+            update.rawOutput ?? update.content ?? null
+          );
 
           handlers.onToolEnd?.({
             result,
@@ -176,7 +183,67 @@ function toNakamaToolName(acpName: string): string {
     return acpName.slice(NAKAMA_MCP_PREFIX.length);
   }
 
+  if (acpName.startsWith(CODEX_NAKAMA_MCP_PREFIX)) {
+    return acpName.slice(CODEX_NAKAMA_MCP_PREFIX.length);
+  }
+
   return BUILT_IN_TOOLS.get(acpName) ?? acpName;
+}
+
+function unwrapCodexMcpInput(
+  input: Record<string, JsonValue>
+): Record<string, JsonValue> {
+  return input.server === "nakama" && input.arguments !== undefined
+    ? readRecord(input.arguments)
+    : input;
+}
+
+/**
+ * Gives a Nakama MCP step the result its native tool returns, such as
+ * `{ path, bytesWritten }` for save_artifact, so the artifact chip shows.
+ * Codex wraps the MCP result as `{ result: { content }, error }`.
+ */
+function toNakamaResult<Output>(output: Output): JsonValue | Output {
+  const codex = codexMcpResultSchema.safeParse(output);
+
+  if (codex.success) {
+    const { error, result } = codex.data;
+
+    if (error) {
+      return { error };
+    }
+
+    return (result && parseTextContent(result.content)) ?? output;
+  }
+
+  const content = mcpTextContentSchema.safeParse(output);
+
+  return (content.success && parseTextContent(content.data)) || output;
+}
+
+const mcpTextContentSchema = z.tuple([
+  z.object({ text: z.string(), type: z.literal("text") }),
+]);
+
+const codexMcpResultSchema = z.object({
+  error: z
+    .union([
+      z.string(),
+      z.object({ message: z.string() }).transform((value) => value.message),
+    ])
+    .nullable(),
+  result: z.object({ content: mcpTextContentSchema }).nullable(),
+});
+
+/** The tool's own JSON object, when the one text part holds one. */
+function parseTextContent(
+  content: z.infer<typeof mcpTextContentSchema>
+): JsonValue | undefined {
+  try {
+    const parsed: JsonValue = JSON.parse(content[0].text);
+
+    return readRecord(parsed) === parsed ? parsed : undefined;
+  } catch {}
 }
 
 /** Renames the agent's input keys to the ones Nakama's cards read. Other keys are kept. */

@@ -109,6 +109,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
       case 1:
         return (
           <SetupStepAccount
+            initialDraft={accountDraft}
             onNext={(account) => {
               setAccountDraft(account);
               goNext();

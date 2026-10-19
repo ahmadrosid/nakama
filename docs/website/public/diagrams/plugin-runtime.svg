@@ -1,0 +1,178 @@
+<svg
+  aria-labelledby="title desc"
+  height="400"
+  role="img"
+  viewBox="0 0 680 400"
+  width="680"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <title id="title">What runs when someone uses a plugin</title>
+  <desc id="desc">
+    A member on the plugin page, or a profile in chat, starts a plugin action.
+    Nakama checks the organization, role, and assignment, then runs the action
+    on the server. The action uses its organization data and can use the
+    profile's assigned tools.
+  </desc>
+  <style>
+  .bg {
+    fill: #ffffff;
+    stroke: #e7e5e4;
+  }
+  .src {
+    fill: #f5f5f4;
+    stroke: #a8a29e;
+  }
+  .gate {
+    fill: #fef3c7;
+    stroke: #d97706;
+  }
+  .use {
+    fill: #e1f5ee;
+    stroke: #0f6e56;
+  }
+  .title {
+    font:
+      500 14px ui-sans-serif,
+      system-ui,
+      sans-serif;
+    fill: #1c1917;
+  }
+  .sub {
+    font:
+      400 12px ui-sans-serif,
+      system-ui,
+      sans-serif;
+    fill: #57534e;
+  }
+  .gate-t {
+    fill: #78350f;
+  }
+  .gate-s {
+    fill: #92400e;
+  }
+  .use-t {
+    fill: #085041;
+  }
+  .use-s {
+    fill: #0f6e56;
+  }
+  .arr {
+    fill: none;
+    stroke: #78716c;
+    stroke-width: 1.2;
+  }
+  @media (prefers-color-scheme: dark) {
+    .bg {
+      fill: #111113;
+      stroke: #27272a;
+    }
+    .src {
+      fill: #1c1917;
+      stroke: #57534e;
+    }
+    .gate {
+      fill: #451a03;
+      stroke: #f59e0b;
+    }
+    .use {
+      fill: #04342c;
+      stroke: #5dcaa5;
+    }
+    .title {
+      fill: #f5f5f4;
+    }
+    .sub {
+      fill: #a8a29e;
+    }
+    .gate-t {
+      fill: #fef3c7;
+    }
+    .gate-s {
+      fill: #fcd34d;
+    }
+    .use-t {
+      fill: #e1f5ee;
+    }
+    .use-s {
+      fill: #9fe1cb;
+    }
+    .arr {
+      stroke: #a8a29e;
+    }
+  }
+  </style>
+  <defs>
+    <marker
+      id="a"
+      markerHeight="6"
+      markerWidth="6"
+      orient="auto-start-reverse"
+      refX="8"
+      refY="5"
+      viewBox="0 0 10 10"
+    >
+      <path
+        class="arr"
+        d="M2 1L8 5L2 9"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="1.5"
+      />
+    </marker>
+  </defs>
+  <rect class="bg" height="399" rx="12" width="679" x="0.5" y="0.5" />
+
+  <rect class="use" height="56" rx="8" width="250" x="60" y="32" />
+  <text class="title use-t" text-anchor="middle" x="185" y="55">
+    Member on the plugin page
+  </text>
+  <text class="sub use-s" text-anchor="middle" x="185" y="74">
+    Clicks a button
+  </text>
+
+  <rect class="use" height="56" rx="8" width="250" x="370" y="32" />
+  <text class="title use-t" text-anchor="middle" x="495" y="55">
+    Profile in chat
+  </text>
+  <text class="sub use-s" text-anchor="middle" x="495" y="74">
+    Finds and calls a plugin tool
+  </text>
+
+  <path class="arr" d="M185 88 L290 138" marker-end="url(#a)" />
+  <path class="arr" d="M495 88 L390 138" marker-end="url(#a)" />
+
+  <rect class="gate" height="56" rx="8" width="340" x="170" y="142" />
+  <text class="title gate-t" text-anchor="middle" x="340" y="165">
+    Nakama checks access
+  </text>
+  <text class="sub gate-s" text-anchor="middle" x="340" y="184">
+    Organization, role, assignment, plugin on
+  </text>
+  <path class="arr" d="M340 198 L340 228" marker-end="url(#a)" />
+
+  <rect class="src" height="56" rx="8" width="340" x="170" y="232" />
+  <text class="title" text-anchor="middle" x="340" y="255">
+    Plugin action runs
+  </text>
+  <text class="sub" text-anchor="middle" x="340" y="274">
+    On the Nakama server
+  </text>
+  <path class="arr" d="M300 288 L205 318" marker-end="url(#a)" />
+  <path class="arr" d="M380 288 L475 318" marker-end="url(#a)" />
+
+  <rect class="src" height="56" rx="8" width="250" x="60" y="322" />
+  <text class="title" text-anchor="middle" x="185" y="345">
+    Organization plugin data
+  </text>
+  <text class="sub" text-anchor="middle" x="185" y="364">
+    One store per organization
+  </text>
+
+  <rect class="src" height="56" rx="8" width="250" x="370" y="322" />
+  <text class="title" text-anchor="middle" x="495" y="345">
+    Profile's assigned tools
+  </text>
+  <text class="sub" text-anchor="middle" x="495" y="364">
+    Only when the action asks
+  </text>
+</svg>
