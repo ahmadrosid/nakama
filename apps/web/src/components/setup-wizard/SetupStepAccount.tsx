@@ -8,19 +8,19 @@ import { SetupStepBackupImport } from "@/components/setup-wizard/SetupStepBackup
 import type { SetupAccountDraft } from "@/components/setup-wizard/setup-wizard.shared";
 
 interface SetupStepAccountProps {
-  onNext: (account: SetupAccountDraft) => void;
   initialDraft?: SetupAccountDraft | null;
+  onNext: (account: SetupAccountDraft) => void;
 }
 
 type SetupAccountMode = "account" | "backup";
 
 function seedFromDraft(draft: SetupAccountDraft | null | undefined) {
   return {
-    name: draft?.name ?? "",
-    email: draft?.email ?? "",
-    phone: draft?.phone ?? "",
-    password: draft?.password ?? "",
     confirmPassword: draft?.password ?? "",
+    email: draft?.email ?? "",
+    name: draft?.name ?? "",
+    password: draft?.password ?? "",
+    phone: draft?.phone ?? "",
   };
 }
 
@@ -37,6 +37,7 @@ export function SetupStepAccount({
   const [email, setEmail] = useState(seeded.email);
   const [phone, setPhone] = useState(seeded.phone);
   const [password, setPassword] = useState(seeded.password);
+
   const [confirmPassword, setConfirmPassword] = useState(
     seeded.confirmPassword
   );
@@ -144,6 +145,7 @@ export function SetupStepAccount({
           </label>
           <div className="relative flex items-center">
             <Input
+              autoComplete="new-password"
               id="setup-password"
               minLength={8}
               onChange={(event) => setPassword(event.target.value)}
@@ -151,13 +153,12 @@ export function SetupStepAccount({
               required
               type={showPassword ? "text" : "password"}
               value={password}
-              autoComplete="new-password"
             />
             <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 text-muted-foreground hover:text-foreground focus:outline-none"
               aria-label={showPassword ? "Hide password" : "Show password"}
+              className="absolute right-3 text-muted-foreground hover:text-foreground focus:outline-none"
+              onClick={() => setShowPassword(!showPassword)}
+              type="button"
             >
               {showPassword ? (
                 <ViewOffIcon className="size-4" />
@@ -176,23 +177,23 @@ export function SetupStepAccount({
           </label>
           <div className="relative flex items-center">
             <Input
+              autoComplete="new-password"
               id="setup-confirm"
               onChange={(event) => setConfirmPassword(event.target.value)}
               placeholder="••••••••"
               required
               type={showConfirmPassword ? "text" : "password"}
               value={confirmPassword}
-              autoComplete="new-password"
             />
             <button
-              type="button"
-              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              className="absolute right-3 text-muted-foreground hover:text-foreground focus:outline-none"
               aria-label={
                 showConfirmPassword
                   ? "Hide confirm password"
                   : "Show confirm password"
               }
+              className="absolute right-3 text-muted-foreground hover:text-foreground focus:outline-none"
+              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              type="button"
             >
               {showConfirmPassword ? (
                 <ViewOffIcon className="size-4" />
