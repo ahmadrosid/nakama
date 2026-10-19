@@ -30,7 +30,7 @@ export function ChatPageContent({
   ...state
 }: ChatPageState & {
   below?: ReactNode;
-  /** Cognito cannot be turned off here, so the toggle is hidden. */
+  /** Cognito cannot be turned off here: no toggle, no cognito surface. */
   cognitoLocked?: boolean;
   onBtw?: (question: string) => void;
 }) {
@@ -82,6 +82,9 @@ export function ChatPageContent({
   } = state;
 
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
+
+  // A locked cognito chat looks like a normal one: it has no other mode.
+  const cognitoSurface = cognito && !cognitoLocked;
 
   const cognitoControl =
     !cognitoLocked && shouldShowCognitoControl(cognito, isEmptyState) ? (
@@ -173,7 +176,7 @@ export function ChatPageContent({
 
   const content = isEmptyState ? (
     <ChatAttachmentPanelProvider below={below} key={session?.id ?? "new"}>
-      <ChatPageColumn centered cognito={cognito}>
+      <ChatPageColumn centered cognito={cognitoSurface}>
         {cognitoControl}
         <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col gap-1">
           <ChatWelcome
@@ -192,7 +195,7 @@ export function ChatPageContent({
     <ChatAttachmentPanelProvider below={below} key={session?.id ?? "new"}>
       <ArtifactStreamingPanelBridge messages={messages} profileId={profileId} />
       <BrowserLiveViewPanelBridge messages={messages} sessionId={session?.id} />
-      <ChatPageColumn cognito={cognito}>
+      <ChatPageColumn cognito={cognitoSurface}>
         {cognitoControl}
         <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
