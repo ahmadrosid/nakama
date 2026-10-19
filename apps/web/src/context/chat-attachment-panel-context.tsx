@@ -20,21 +20,21 @@ const DEFAULT_PANEL_WIDTH = 448;
 
 const ENTER_SLIDE_MS = 200;
 
-/** The right side: the open panel, with `below` under it when both are open. */
+/** The right side: the open panel as a card, with `below` under it when both are open. */
 function ChatPanelColumn({
   below,
   fullscreen,
   panel,
-  stacked,
+  framed,
   width,
 }: {
   below: ReactNode;
   fullscreen: boolean;
   panel: ReactNode;
-  stacked: boolean;
+  framed: boolean;
   width: number;
 }) {
-  if (!stacked) {
+  if (!framed) {
     return (
       <>
         {panel}
@@ -46,7 +46,7 @@ function ChatPanelColumn({
   return (
     <div
       className={cn(
-        "flex min-h-0 shrink-0 flex-col gap-1 p-1 max-sm:w-full max-sm:flex-1",
+        "flex min-h-0 shrink-0 flex-col gap-1.5 p-1.5 max-sm:w-full max-sm:flex-1",
         "[&>aside+aside>[role=separator]]:hidden [&>aside+aside]:relative [&>aside]:min-h-0 [&>aside]:w-full! [&>aside]:max-w-none [&>aside]:flex-1 [&>aside]:overflow-hidden [&>aside]:rounded-lg [&>aside]:border",
         fullscreen && "flex-1"
       )}
@@ -249,9 +249,9 @@ export function ChatAttachmentPanelProvider({
         )}
         <ChatPanelColumn
           below={below}
+          framed={Boolean(config && !overlay)}
           fullscreen={fullscreen}
           panel={panel}
-          stacked={Boolean(below && config && !overlay)}
           width={width}
         />
       </div>
