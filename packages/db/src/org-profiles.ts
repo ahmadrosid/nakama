@@ -5,6 +5,7 @@ import {
 } from "@nakama/core";
 import {
   BASH_TOOL_ID,
+  BROWSER_TOOL_IDS,
   BUILTIN_TOOL_IDS,
   GENERATE_IMAGE_TOOL_ID,
   LIST_PROFILE_SESSIONS_TOOL_ID,
@@ -287,6 +288,64 @@ export async function ensureSessionToolDefinitions(
       description: definition.description,
       handlerConfig: {},
       handlerType: "session",
+      id: definition.id,
+      name: definition.name,
+      updatedAt: now,
+    });
+  }
+}
+
+/**
+ * Kernel cloud browser tools. Seeded so they exist and survive
+ * removeUnsupportedTools, and opt-in per profile like the session tools. They
+ * only work once a platform admin sets up the Kernel browser runtime.
+ */
+export async function ensureBrowserToolDefinitions(
+  db: DatabaseAdapter
+): Promise<void> {
+  const now = new Date().toISOString();
+
+  const definitions = [
+    {
+      description: "Open a URL in the user's cloud browser.",
+      id: BROWSER_TOOL_IDS.browser_navigate,
+      name: "browser_navigate",
+    },
+    {
+      description: "Read the text and links of the current page.",
+      id: BROWSER_TOOL_IDS.browser_read,
+      name: "browser_read",
+    },
+    {
+      description: "Scroll the page and wait for new content.",
+      id: BROWSER_TOOL_IDS.browser_scroll,
+      name: "browser_scroll",
+    },
+    {
+      description: "Run Playwright code in the user's cloud browser.",
+      id: BROWSER_TOOL_IDS.browser_playwright,
+      name: "browser_playwright",
+    },
+    {
+      description: "Take a screenshot of the user's cloud browser.",
+      id: BROWSER_TOOL_IDS.browser_screenshot,
+      name: "browser_screenshot",
+    },
+    {
+      description: "Use the mouse and keyboard on the user's cloud browser.",
+      id: BROWSER_TOOL_IDS.browser_computer,
+      name: "browser_computer",
+    },
+  ];
+
+  for (const definition of definitions) {
+    const existing = await db.getTool(definition.id);
+
+    await db.upsertTool({
+      createdAt: existing?.createdAt ?? now,
+      description: definition.description,
+      handlerConfig: {},
+      handlerType: "browser",
       id: definition.id,
       name: definition.name,
       updatedAt: now,

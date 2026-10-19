@@ -11,6 +11,7 @@ import {
 import { ensureLocalClientAccess } from "./local-client";
 import {
   ensureBashToolDefinition,
+  ensureBrowserToolDefinitions,
   ensureGenerateImageToolDefinition,
   ensureOrgSuperNakamaProfiles,
   ensureSaveArtifactToolDefinition,
@@ -44,6 +45,7 @@ const SUPPORTED_TOOL_HANDLER_TYPES = new Set([
   "generate_image",
   "save_artifact",
   "session",
+  "browser",
   "plugin",
 ]);
 
@@ -58,6 +60,7 @@ export async function seedDatabase(
   await ensureBuiltinToolDefinitions(db);
   await ensureSubAgentToolDefinition(db);
   await ensureSessionToolDefinitions(db);
+  await ensureBrowserToolDefinitions(db);
   await ensureBashToolDefinition(db);
   await ensureGenerateImageToolDefinition(db);
   await ensureSaveArtifactToolDefinition(db);

@@ -73,6 +73,11 @@ const SAVE_ARTIFACT_SOURCE = {
   filePath: path.join(serverSrcDir, "tools/save-artifact-tool.ts"),
 };
 
+const BROWSER_SOURCE = {
+  displayPath: "apps/server/src/tools/browser-tools.ts",
+  filePath: path.join(serverSrcDir, "tools/browser-tools.ts"),
+};
+
 const SESSION_SOURCE = {
   displayPath: "apps/server/src/tools/session-tools.ts",
   filePath: path.join(serverSrcDir, "tools/session-tools.ts"),
@@ -103,6 +108,10 @@ export async function readToolSource(
 
   if (record.handlerType === "session") {
     return readFixedToolSource(SESSION_SOURCE, "typescript");
+  }
+
+  if (record.handlerType === "browser") {
+    return readFixedToolSource(BROWSER_SOURCE, "typescript");
   }
 
   if (record.handlerType === "plugin") {

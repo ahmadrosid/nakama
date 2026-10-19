@@ -12,7 +12,6 @@ import {
   type UpdateAgentBrowserSettingsRequest,
   writeParsedConfigIni,
 } from "@nakama/core";
-import { z } from "zod";
 import {
   ensureBunGlobalInstallDirs,
   ensureProcessPath,
@@ -27,6 +26,12 @@ import {
   runTimedInstallCommand,
   summarizeInstallOutput,
 } from "./cli-package-install";
+import {
+  deleteKernelBrowser,
+  ensureKernelBrowser,
+  getKernelBrowser,
+  userBrowserName,
+} from "./kernel-browser";
 
 const AGENT_BROWSER_PACKAGE = "agent-browser";
 
@@ -36,16 +41,9 @@ const AGENT_BROWSER_SECTION = "agent_browser";
 
 const AGENT_BROWSER_COMMAND_PATTERN = /(^|[\s;&|(`])agent-browser(?=\s|$)/;
 
-const KERNEL_API_URL = "https://api.onkernel.com";
-
-const KERNEL_REQUEST_TIMEOUT_MS = 30_000;
-
 const AGENT_BROWSER_MAX_OUTPUT_CHARS = 20_000;
 
 const AGENT_BROWSER_DAEMON_IDLE_MS = 120_000;
-
-/** Idle time, counting live view use, before Kernel stops and saves the browser. */
-const KERNEL_BROWSER_IDLE_SECONDS = 600;
 
 interface AgentBrowserConfig {
   apiKey: string;
@@ -119,7 +117,7 @@ async function loadAgentBrowserConfig(): Promise<AgentBrowserConfig | null> {
  * Not `AGENT_BROWSER_PROVIDER`: agent-browser reads that name itself, and a
  * provider wins over the CDP URL that points it at the user's browser.
  */
-async function resolveAgentBrowserConfig(
+export async function resolveAgentBrowserConfig(
   env: Record<string, string | undefined> = process.env
 ): Promise<AgentBrowserConfig | null> {
   const saved = await loadAgentBrowserConfig();
@@ -208,136 +206,6 @@ export async function getAgentBrowserStatus(): Promise<AgentBrowserStatusRespons
   return toAgentBrowserStatusResponse(runtime, config);
 }
 
-const kernelBrowserSchema = z.object({
-  browser_live_view_url: z.string().optional(),
-  cdp_ws_url: z.string(),
-  session_id: z.string(),
-});
-
-type KernelBrowser = z.infer<typeof kernelBrowserSchema>;
-
-interface KernelProfileRequest {
-  name: string;
-}
-
-interface KernelBrowserRequest {
-  headless: boolean;
-  name: string;
-  profile: { name: string; save_changes: boolean };
-  timeout_seconds: number;
-}
-
-function kernelName(...parts: string[]): string {
-  return ["nakama", ...parts.map((part) => part.replace(/[^A-Za-z0-9_-]/g, ""))]
-    .join("-")
-    .slice(0, 255);
-}
-
-function kernelRequest(
-  apiKey: string,
-  method: "DELETE" | "GET" | "POST",
-  path: string,
-  body?: KernelBrowserRequest | KernelProfileRequest
-): Promise<Response> {
-  return fetch(`${KERNEL_API_URL}${path}`, {
-    body: body === undefined ? undefined : JSON.stringify(body),
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    method,
-    signal: AbortSignal.timeout(KERNEL_REQUEST_TIMEOUT_MS),
-  });
-}
-
-async function kernelFailure(
-  response: Response,
-  action: string
-): Promise<NakamaApiError> {
-  const detail = (await response.text().catch(() => "")).slice(0, 300);
-
-  return new NakamaApiError(
-    `Kernel could not ${action} (HTTP ${response.status})${detail ? `: ${detail}` : "."}`,
-    502
-  );
-}
-
-async function getKernelBrowser(
-  apiKey: string,
-  name: string
-): Promise<KernelBrowser | null> {
-  const response = await kernelRequest(
-    apiKey,
-    "GET",
-    `/browsers/${encodeURIComponent(name)}`
-  );
-
-  if (response.status === 404) {
-    return null;
-  }
-
-  if (!response.ok) {
-    throw await kernelFailure(response, "read the browser");
-  }
-
-  return kernelBrowserSchema.parse(await response.json());
-}
-
-function userBrowserName(orgId: string, userId: string): string {
-  return kernelName(orgId, "user", userId);
-}
-
-/**
- * One Kernel browser per user in each org, found again by its name, so every
- * chat and agent of that user and the live view in the web UI share it. A
- * login the user makes once is there in the next chat. Kernel saves the
- * browser into the user's profile when it stops, so a later browser starts
- * signed in too. Other users never get it: their logins are their own.
- */
-async function ensureKernelBrowser(
-  apiKey: string,
-  orgId: string,
-  userId: string
-): Promise<KernelBrowser> {
-  const name = userBrowserName(orgId, userId);
-  const existing = await getKernelBrowser(apiKey, name);
-
-  if (existing) {
-    return existing;
-  }
-
-  const profileName = name;
-
-  const profile = await kernelRequest(apiKey, "POST", "/profiles", {
-    name: profileName,
-  });
-
-  if (!(profile.ok || profile.status === 409)) {
-    throw await kernelFailure(profile, "create the browser profile");
-  }
-
-  const created = await kernelRequest(apiKey, "POST", "/browsers", {
-    headless: false,
-    name,
-    profile: { name: profileName, save_changes: true },
-    timeout_seconds: KERNEL_BROWSER_IDLE_SECONDS,
-  });
-
-  if (created.status === 409) {
-    const raced = await getKernelBrowser(apiKey, name);
-
-    if (raced) {
-      return raced;
-    }
-  }
-
-  if (!created.ok) {
-    throw await kernelFailure(created, "start a browser");
-  }
-
-  return kernelBrowserSchema.parse(await created.json());
-}
-
 async function requireKernelApiKey(): Promise<string> {
   const config = await resolveAgentBrowserConfig();
 
@@ -349,7 +217,7 @@ async function requireKernelApiKey(): Promise<string> {
 }
 
 function toSessionBrowserResponse(
-  browser: KernelBrowser | null
+  browser: Awaited<ReturnType<typeof getKernelBrowser>>
 ): SessionBrowserResponse {
   return { liveViewUrl: browser?.browser_live_view_url ?? null };
 }
@@ -374,15 +242,10 @@ export async function stopUserBrowser(
   orgId: string,
   userId: string
 ): Promise<void> {
-  const response = await kernelRequest(
+  await deleteKernelBrowser(
     await requireKernelApiKey(),
-    "DELETE",
-    `/browsers/${encodeURIComponent(userBrowserName(orgId, userId))}`
+    userBrowserName(orgId, userId)
   );
-
-  if (!(response.ok || response.status === 404)) {
-    throw await kernelFailure(response, "stop the browser");
-  }
 }
 
 /**

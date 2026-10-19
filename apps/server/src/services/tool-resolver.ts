@@ -17,6 +17,7 @@ import { emailTool } from "@nakama/core/tools/email";
 import { loadWebSearchConfig } from "@nakama/core/web-search-config";
 import type { DatabaseAdapter, StoredToolRecord } from "@nakama/db";
 import { type BashInput, bashTool, runBash } from "../tools/bash";
+import { createBrowserTools } from "../tools/browser-tools";
 import { enrichAgentBrowserBashInput } from "./agent-browser-service";
 import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
 import { getCustomToolHandler } from "./custom-tool-handlers";
@@ -24,6 +25,8 @@ import type { CustomToolRecord } from "./custom-tool-shared";
 import type { OrgService } from "./org-service";
 import type { PluginService } from "./plugin-service";
 import { actorMayInvoke, PluginHostError } from "./plugin-service";
+
+const BROWSER_TOOLS = createBrowserTools();
 
 export type ServerToolOverrides = {
   googleMeet?: ToolDefinition[];
@@ -136,7 +139,8 @@ async function resolveStoredTool(
     record.handlerType === "sub_agent" ||
     record.handlerType === "generate_image" ||
     record.handlerType === "save_artifact" ||
-    record.handlerType === "session"
+    record.handlerType === "session" ||
+    record.handlerType === "browser"
   ) {
     return serverTools.get(record.name) ?? null;
   }
@@ -178,7 +182,9 @@ function buildServerTools(
     map.set(overrides.saveArtifact.name, overrides.saveArtifact);
   }
 
-  for (const tool of overrides.session ?? []) {
+  // Browser tools need no services: they read the Kernel settings and the
+  // caller's org and user on each call.
+  for (const tool of [...(overrides.session ?? []), ...BROWSER_TOOLS]) {
     map.set(tool.name, tool);
   }
 

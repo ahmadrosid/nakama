@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { ToolDefinition } from "@nakama/core";
 import { emailTool } from "@nakama/core/tools/email";
 import {
+  BROWSER_TOOL_IDS,
   LIST_PROFILE_SESSIONS_TOOL_ID,
   READ_PROFILE_SESSION_TOOL_ID,
   SUB_AGENT_TOOL_ID,
@@ -85,6 +86,24 @@ describe("resolveToolsFromStorage sub_agent", () => {
     });
 
     expect(tools.map((tool) => tool.name)).toContain("sub_agent");
+  });
+});
+
+describe("resolveToolsFromStorage browser", () => {
+  test("resolves every seeded browser tool with no server overrides", async () => {
+    const db = createInMemoryDatabaseAdapter();
+
+    for (const [name, id] of Object.entries(BROWSER_TOOL_IDS)) {
+      await upsertTool(db, { handlerType: "browser", id, name });
+    }
+
+    const names = (
+      await resolveToolsFromStorage(await db.listTools(), db, [], {})
+    ).map((tool) => tool.name);
+
+    expect(names).toEqual(
+      expect.arrayContaining(Object.keys(BROWSER_TOOL_IDS))
+    );
   });
 });
 
