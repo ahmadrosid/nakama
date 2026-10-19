@@ -1125,7 +1125,9 @@ export class PluginService {
     orgId: string,
     pluginId: string,
     actionKey: string
-  ): Promise<PluginManifest["actions"][number] | null> {
+  ): Promise<
+    (PluginManifest["actions"][number] & { pluginDescription: string }) | null
+  > {
     const install = await this.db.getOrgPlugin(orgId, pluginId);
 
     if (
@@ -1147,7 +1149,9 @@ export class PluginService {
       (item) => item.key === actionKey && item.exposeAsTool
     );
 
-    return action ?? null;
+    return action && release
+      ? { ...action, pluginDescription: release.manifest.description }
+      : null;
   }
 
   async previewPluginContributionChanges(

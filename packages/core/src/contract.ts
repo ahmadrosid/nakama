@@ -3191,6 +3191,8 @@ export interface ToolDefinition<Input = unknown, Output = unknown> {
   description: string;
   /** Assigned tools in this group are loaded through discovery. */
   discoveryGroup?: string;
+  /** What the group is for, shown beside it in the discovery catalog. */
+  discoveryHint?: string;
   /** Plugins default to one turn; MCP discoveries can last for the session. */
   discoveryScope?: "session";
   /**

@@ -239,6 +239,7 @@ async function loadPluginTool(
   return {
     description: record.description,
     discoveryGroup: pluginId,
+    discoveryHint: action.pluginDescription,
     name: record.name,
     parameters: isJsonSchema(action.inputSchema)
       ? action.inputSchema

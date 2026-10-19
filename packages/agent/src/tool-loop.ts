@@ -6,6 +6,8 @@ import { z } from "zod";
 
 const ToolResultSchema = z.json();
 
+const MAX_DISCOVERY_HINT_CHARS = 140;
+
 const DiscoveryInputSchema = z
   .object({
     query: z.string().trim().min(1).max(500),
@@ -85,6 +87,7 @@ export function createTurnTools(
   }
 
   const catalog = new Map<string, string[]>();
+  const hints = new Map<string, string>();
 
   for (const tool of deferred) {
     const group = tool.discoveryGroup!;
@@ -95,12 +98,23 @@ export function createTurnTools(
     }
 
     catalog.set(group, actions);
+
+    // The hint says what a plugin holds, so a request that never names the
+    // plugin ("this .xlsx file") still finds it.
+    const hint = tool.discoveryHint?.trim().slice(0, MAX_DISCOVERY_HINT_CHARS);
+
+    if (hint && !hints.has(group)) {
+      hints.set(group, hint);
+    }
   }
+
+  const label = (group: string) =>
+    hints.has(group) ? `${group} (${hints.get(group)})` : group;
 
   active.push({
     description: hasSessionDiscovery
-      ? `Find and load assigned tools before calling them. Search by server, plugin, action name, or MCP tool description. Plugin tools last for this request; MCP tools last for this session. Catalog: ${[...catalog].map(([group, actions]) => `${group}${actions.length ? `: ${actions.join(", ")}` : " (MCP)"}`).join("; ")}`
-      : `Find and load assigned plugin tools before calling them. Search by plugin or action name. Loaded tools remain available for this user request only. Catalog: ${[...catalog].map(([group, actions]) => `${group}: ${actions.join(", ")}`).join("; ")}`,
+      ? `Find and load assigned tools before calling them. Search by server, plugin, action name, or MCP tool description. Plugin tools last for this request; MCP tools last for this session. Catalog: ${[...catalog].map(([group, actions]) => `${label(group)}${actions.length ? `: ${actions.join(", ")}` : " (MCP)"}`).join("; ")}`
+      : `Find and load assigned plugin tools before calling them. Search by plugin or action name. Loaded tools remain available for this user request only. Catalog: ${[...catalog].map(([group, actions]) => `${label(group)}: ${actions.join(", ")}`).join("; ")}`,
     name,
     parameters: core.jsonSchemaFromZod(DiscoveryInputSchema),
     async run(input, context) {

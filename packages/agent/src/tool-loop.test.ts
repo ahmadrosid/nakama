@@ -250,6 +250,27 @@ describe("createTurnTools", () => {
   });
 });
 
+test("the discovery catalog says what each plugin holds", () => {
+  const assigned = ["list_sheets", "read_sheet"].map((action) => ({
+    ...sampleTool,
+    discoveryGroup: "data_view",
+    discoveryHint: "Spreadsheet copies",
+    name: `plugin_data_view__${action}`,
+  }));
+
+  const [discovery] = createTurnTools([
+    ...assigned,
+    { ...sampleTool, discoveryGroup: "notes", name: "plugin_notes__list" },
+  ]);
+
+  expect(discovery?.description).toContain(
+    // oxlint-disable-next-line anti-slop/no-copy-assertions -- The catalog text is what the model reads; the hint must reach it.
+    "data_view (Spreadsheet copies): list_sheets, read_sheet"
+  );
+  // oxlint-disable-next-line anti-slop/no-copy-assertions -- A plugin without a hint keeps the plain entry.
+  expect(discovery?.description).toContain("notes: list");
+});
+
 test("plugin search supports multiple actions and paginates broad group queries", async () => {
   const assigned = ["create", "update", "list", "run", "delete", "inspect"].map(
     (action) => ({
