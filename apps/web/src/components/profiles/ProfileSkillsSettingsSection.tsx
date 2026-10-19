@@ -56,7 +56,7 @@ export function ProfileSkillsSettingsSection({
                     className="mt-1 block text-pretty font-normal text-muted-foreground text-xs"
                     id="profile-automations-enabled-description"
                   >
-                    Let this agent set up tasks that run on a schedule.
+                    Run this agent's tasks on a schedule.
                   </span>
                 </span>
               </label>
@@ -66,7 +66,7 @@ export function ProfileSkillsSettingsSection({
                   aria-describedby="profile-automations-enabled-description"
                   aria-label="Automations"
                   checked={automationsEnabled}
-                  disabled={readOnly || updateMutation.isPending}
+                  disabled={readOnly}
                   id="profile-automations-enabled"
                   onCheckedChange={(automationsEnabled) => {
                     if (readOnly) {

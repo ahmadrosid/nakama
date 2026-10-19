@@ -6,6 +6,8 @@ import type {
   ImageAttachment,
   KnowledgeBaseDuplicateAction,
   ListSessionsResponse,
+  ProfileDetail,
+  ProfileSummary,
   SoulStackFiles,
   UpdateProfileRequest,
   UpdateSessionRequest,
@@ -109,8 +111,65 @@ export function useUpdateProfileMutation() {
       profileId: string;
       input: UpdateProfileRequest;
     }) => client.updateProfile(profileId, input),
-    onSuccess: (_data, variables) =>
-      invalidateProfileQueries(queryClient, variables.profileId),
+    onError: (
+      _error,
+      variables,
+      context:
+        | { detail?: ProfileDetail; profiles?: ProfileSummary[] }
+        | null
+        | undefined
+    ) => {
+      if (!context) {
+        return;
+      }
+
+      queryClient.setQueryData(
+        queryKeys.profiles.detail(variables.profileId),
+        context.detail
+      );
+      queryClient.setQueryData(queryKeys.profiles.all, context.profiles);
+    },
+    // The automations switch moves before the save returns.
+    onMutate: async ({ profileId, input }) => {
+      const { automationsEnabled } = input;
+
+      if (automationsEnabled === undefined) {
+        return null;
+      }
+
+      await queryClient.cancelQueries({ queryKey: queryKeys.profiles.all });
+
+      const detailKey = queryKeys.profiles.detail(profileId);
+      const detail = queryClient.getQueryData<ProfileDetail>(detailKey);
+
+      const profiles = queryClient.getQueryData<ProfileSummary[]>(
+        queryKeys.profiles.all
+      );
+
+      queryClient.setQueryData<ProfileDetail>(detailKey, (current) =>
+        current ? { ...current, automationsEnabled } : current
+      );
+      queryClient.setQueryData<ProfileSummary[]>(
+        queryKeys.profiles.all,
+        (current) =>
+          current?.map((profile) =>
+            profile.id === profileId
+              ? { ...profile, automationsEnabled }
+              : profile
+          )
+      );
+
+      return { detail, profiles };
+    },
+    onSuccess: async (_data, variables) => {
+      if (variables.input.automationsEnabled !== undefined) {
+        void invalidateProfileQueries(queryClient, variables.profileId);
+
+        return;
+      }
+
+      await invalidateProfileQueries(queryClient, variables.profileId);
+    },
   });
 }
 

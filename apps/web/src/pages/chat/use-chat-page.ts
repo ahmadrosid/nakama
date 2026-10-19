@@ -1383,6 +1383,11 @@ export function useChatPage() {
         void invalidateQueries(queryClient, queryKeys.sessions(profileId));
         // A turn can remove an artifact owned by any profile.
         void invalidateQueries(queryClient, ["artifacts"]);
+        // A turn's first automation turns the profile's automations on.
+        void invalidateQueries(
+          queryClient,
+          queryKeys.profiles.detail(profileId)
+        );
 
         if (!detached) {
           streamAbortRef.current = null;
