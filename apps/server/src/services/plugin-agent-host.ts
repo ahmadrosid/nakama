@@ -4,6 +4,7 @@ import { inspectWorkflowSqlite } from "@nakama/core";
 import { type DatabaseAdapter, DatabaseWorkflowStore } from "@nakama/db";
 import { z } from "zod";
 import type { AgentService } from "./agent-service";
+import type { ComposioService } from "./composio-service";
 
 const pluginJsonSchema = z.json();
 
@@ -35,11 +36,33 @@ const hostRequestSchema = z.discriminatedUnion("op", [
     runId: z.string().optional(),
     workflowId: z.string().optional(),
   }),
+  z.object({
+    action: z.enum(["info", "read", "write"]),
+    data: z
+      .array(
+        z.object({
+          range: z.string(),
+          values: z.array(z.array(z.string())),
+        })
+      )
+      .max(10_000)
+      .optional(),
+    op: z.literal("google_sheets"),
+    range: z.string().optional(),
+    spreadsheetId: z.string().regex(/^[\w-]+$/),
+  }),
 ]);
+
+const GOOGLE_SHEETS_TOOLS = {
+  info: "GOOGLESHEETS_GET_SPREADSHEET_INFO",
+  read: "GOOGLESHEETS_BATCH_GET",
+  write: "GOOGLESHEETS_UPDATE_VALUES_BATCH",
+};
 
 export function createPluginAgentHost(
   db: DatabaseAdapter,
-  agent: AgentService
+  agent: AgentService,
+  composio?: Pick<ComposioService, "executeGoogleSheetsTool">
 ) {
   return async (
     value: PluginJsonValue,
@@ -64,6 +87,35 @@ export function createPluginAgentHost(
         await inspectWorkflowSqlite(
           orgId,
           request.table ? { table: request.table } : {}
+        )
+      );
+    }
+
+    if (request.op === "google_sheets") {
+      if (context.pluginId !== "data-view" || !composio) {
+        throw new Error("Forbidden");
+      }
+
+      const args = {
+        info: { spreadsheet_id: request.spreadsheetId },
+        read: {
+          ranges: [request.range ?? ""],
+          spreadsheet_id: request.spreadsheetId,
+        },
+        write: {
+          data: request.data ?? [],
+          spreadsheet_id: request.spreadsheetId,
+          valueInputOption: "USER_ENTERED",
+        },
+      }[request.action];
+
+      // The caller's own Google account does the work, so each member keeps their sheet access.
+      return toPluginJson(
+        await composio.executeGoogleSheetsTool(
+          orgId,
+          context.actor.id,
+          GOOGLE_SHEETS_TOOLS[request.action],
+          args
         )
       );
     }

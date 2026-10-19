@@ -1129,7 +1129,7 @@ describe("plugin HTTP API", () => {
     });
   });
 
-  test.each(["workflows", "supermemory"])(
+  test.each(["workflows", "supermemory", "data-view"])(
     "org admin installs official %s; member and CSRF failures are blocked",
     async (pluginId) => {
       const workerManager = {

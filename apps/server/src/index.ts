@@ -375,7 +375,11 @@ orgService.beforeArchiveChannels = async (orgId) => {
 
 const pluginService = new PluginService(database.adapter, getUserConfigDir(), {
   officialPackagesDir: join(projectRoot, "packages/plugins"),
-  onHostRequest: createPluginAgentHost(database.adapter, agent),
+  onHostRequest: createPluginAgentHost(
+    database.adapter,
+    agent,
+    composioService
+  ),
   workerManager,
 });
 

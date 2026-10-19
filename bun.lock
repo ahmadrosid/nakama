@@ -186,6 +186,15 @@
         "@nakama/core": "workspace:*",
       },
     },
+    "packages/plugins/data-view": {
+      "name": "@nakama/plugin-data-view",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@nakama/core": "workspace:*",
+        "@nakama/ui": "workspace:*",
+        "@types/react": "^19.3.0",
+      },
+    },
     "packages/plugins/supermemory": {
       "name": "@nakama/plugin-supermemory",
       "version": "0.1.0",
@@ -606,6 +615,8 @@
     "@nakama/desktop": ["@nakama/desktop@workspace:apps/desktop"],
 
     "@nakama/discord": ["@nakama/discord@workspace:apps/platform/discord"],
+
+    "@nakama/plugin-data-view": ["@nakama/plugin-data-view@workspace:packages/plugins/data-view"],
 
     "@nakama/plugin-supermemory": ["@nakama/plugin-supermemory@workspace:packages/plugins/supermemory"],
 

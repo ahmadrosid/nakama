@@ -121,7 +121,7 @@ export class ComposioService {
     private readonly authService: AuthService
   ) {}
 
-  private async meetAccounts(orgId: string, userId: string) {
+  private async googleAccounts(orgId: string, userId: string) {
     const actingUserId = await this.resolveComposioActingUserId(orgId, userId);
 
     const toolkits =
@@ -149,7 +149,34 @@ export class ComposioService {
       actingUserId: composioUserId(actingUserId),
       drive: account("googledrive"),
       gmail: account("gmail"),
+      sheets: account("googlesheets"),
     };
+  }
+
+  /** Runs one Google Sheets tool on the caller's own connected account. */
+  async executeGoogleSheetsTool(
+    orgId: string,
+    userId: string,
+    slug: string,
+    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Composio tool payloads are untyped JSON objects.
+    args: Record<string, unknown>
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Composio tool payloads are untyped JSON passed through to the caller.
+  ): Promise<unknown> {
+    const client = await this.getApiClient();
+    const accounts = await this.googleAccounts(orgId, userId);
+
+    if (!(client && accounts.sheets)) {
+      throw new Error("Connect Google Sheets in Composio first.");
+    }
+
+    return unwrapMeetToolResult(
+      await client.executeTool(
+        slug,
+        accounts.actingUserId,
+        accounts.sheets,
+        args
+      )
+    );
   }
 
   async listMeetRecordings(orgId: string, userId: string) {
@@ -164,7 +191,7 @@ export class ComposioService {
       };
     }
 
-    const accounts = await this.meetAccounts(orgId, userId);
+    const accounts = await this.googleAccounts(orgId, userId);
 
     if (!(accounts.gmail && accounts.drive)) {
       return {
@@ -308,7 +335,7 @@ export class ComposioService {
       throw new NakamaApiError("Recording is larger than 1 GiB.", 400);
     }
 
-    const accounts = await this.meetAccounts(orgId, userId);
+    const accounts = await this.googleAccounts(orgId, userId);
     const client = await this.getApiClient();
 
     if (!(client && accounts.drive)) {
@@ -1391,7 +1418,7 @@ function unwrapMeetToolResult(value: unknown): unknown {
   const record = value as Record<string, unknown>;
 
   if (record.successful === false) {
-    throw new Error("Composio request failed.");
+    throw new Error(meetString(record.error) || "Composio request failed.");
   }
 
   if (!("data" in record)) {
