@@ -415,8 +415,9 @@ export function useRecentChatTree(
         <div
           className={cn(
             "relative rounded-md",
+            // Draw the drag card inset so it looks tighter than the row slot.
             draggingId === session.id &&
-              "z-10 bg-sidebar shadow-xs ring-1 ring-border/40"
+              "z-10 before:absolute before:inset-x-0 before:inset-y-1 before:-z-10 before:rounded-md before:bg-sidebar before:shadow-xs before:ring-1 before:ring-border/40 [&_.sidebar-chat-row]:bg-transparent!"
           )}
           key={session.id}
           ref={(node) => {
