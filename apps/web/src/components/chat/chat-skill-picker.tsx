@@ -24,6 +24,10 @@ function suggestionKey(suggestion: ComposerSuggestion): string {
     return `mention:${suggestion.mention.name}`;
   }
 
+  if (suggestion.kind === "plugin") {
+    return `plugin:${suggestion.plugin.pluginId}`;
+  }
+
   return suggestion.kind === "command"
     ? `command:${suggestion.command.name}`
     : `skill:${suggestion.skill.id}`;
@@ -40,6 +44,10 @@ function suggestionTitle(suggestion: ComposerSuggestion): string {
     return humanize(suggestion.mention.name);
   }
 
+  if (suggestion.kind === "plugin") {
+    return suggestion.plugin.label;
+  }
+
   return suggestion.kind === "command"
     ? humanize(suggestion.command.name)
     : suggestion.skill.name;
@@ -50,12 +58,17 @@ function suggestionToken(suggestion: ComposerSuggestion): string | null {
     return `@${suggestion.mention.name}`;
   }
 
+  if (suggestion.kind === "plugin") {
+    return `/open ${suggestion.plugin.pluginId}`;
+  }
+
   return suggestion.kind === "command" ? `/${suggestion.command.name}` : null;
 }
 
 const SECTION_LABELS: Record<ComposerSuggestion["kind"], string> = {
   command: "Commands",
   mention: "Tools",
+  plugin: "Plugins",
   skill: "Skills",
 };
 
@@ -66,6 +79,10 @@ function suggestionDescription(suggestion: ComposerSuggestion): string | null {
 
   if (suggestion.kind === "command") {
     return suggestion.command.description;
+  }
+
+  if (suggestion.kind === "plugin") {
+    return null;
   }
 
   return skillDescription(suggestion.skill);

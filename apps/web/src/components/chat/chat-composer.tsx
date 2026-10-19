@@ -31,6 +31,8 @@ import { cn } from "@nakama/ui/utils";
 import {
   Add01Icon,
   Alert02Icon,
+  ArrowExpand01Icon,
+  ArrowShrink02Icon,
   ArrowUp02Icon,
   Cancel01Icon,
   File01Icon,
@@ -70,9 +72,17 @@ import { ChatSkillTokenOverlay } from "@/components/chat/chat-skill-token-overla
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import { useAuth } from "@/context/use-auth";
+import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
+import {
+  useProfileQuery,
+  useSkillsQuery,
+  useToolsQuery,
+} from "@/hooks/use-app-queries";
+import { pluginAgentAccessState, useOrgPlugins } from "@/hooks/use-plugins";
 import type { ChatStatus, FileUIPart } from "@/lib/ai-ui-types";
 import {
   type ComposerAddCommandAction,
+  type ComposerOpenPlugin,
   type ComposerSuggestion,
   filterComposerMentionSuggestions,
   filterComposerSlashSuggestions,
@@ -80,6 +90,7 @@ import {
   getLeadingCommand,
   matchComposerAddCommand,
   matchComposerLearningLoopCommand,
+  matchComposerOpenCommand,
   replaceSlashRangeWithReservedCommand,
   replaceSlashRangeWithSkillInvocation,
   type SkillSlashRange,
@@ -104,11 +115,13 @@ import {
 import { formatError } from "@/lib/client";
 import { prepareChatUploadFiles } from "@/lib/compress-image";
 import { encodeModelSelection } from "@/lib/models";
+import { enabledPluginNavEntries } from "@/lib/navigation";
 import {
   isPastedTextDocument,
   LONG_PASTE_WORD_THRESHOLD,
 } from "@/lib/pasted-text";
 import { THINKING_EFFORT_OPTIONS } from "@/lib/thinking-settings";
+import { PluginView } from "@/pages/PluginPage";
 import { composerActions } from "./chat-composer.shared";
 import { ChatComposerError, ChatTips } from "./chat-tips";
 
@@ -616,6 +629,63 @@ function ChatComposerMain({
   );
 }
 
+const NO_OPEN_PLUGINS: ComposerOpenPlugin[] = [];
+
+/** Enabled plugin pages whose tools or skills the agent has, for `/open`. */
+function useAgentPluginViews(profileId: string | null): ComposerOpenPlugin[] {
+  const plugins = useOrgPlugins();
+  const profile = useProfileQuery(profileId);
+  const enabled = Boolean(profileId);
+  const tools = useToolsQuery({ enabled });
+  const skills = useSkillsQuery({ enabled });
+
+  if (!(profile.data && plugins.data && tools.data && skills.data)) {
+    return NO_OPEN_PLUGINS;
+  }
+
+  const resources = { skills: skills.data, tools: tools.data };
+
+  return enabledPluginNavEntries(plugins.data).flatMap(({ label, pluginId }) =>
+    pluginAgentAccessState(profile.data, pluginId, resources).assigned > 0
+      ? [{ label, pluginId }]
+      : []
+  );
+}
+
+/** Expand control for a plugin page in the side panel, like the artifact preview. */
+function PluginPanelExpandButton({ panelId }: { panelId: string }) {
+  const panel = useOptionalChatAttachmentPanel();
+  const fullscreen = panel?.isFullscreen ?? false;
+
+  return (
+    <Button
+      aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+      onClick={() =>
+        panel?.update(panelId, {
+          fullscreen: !fullscreen,
+          resizable: fullscreen,
+        })
+      }
+      size="icon-sm"
+      title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+      type="button"
+      variant="ghost"
+    >
+      {fullscreen ? (
+        <ArrowShrink02Icon aria-hidden className="size-4" />
+      ) : (
+        <ArrowExpand01Icon aria-hidden className="size-4" />
+      )}
+    </Button>
+  );
+}
+
+/** Plugin pages `/open` lists for the active agent, and how to show one. */
+const OpenPluginContext = createContext<{
+  open: (plugin: ComposerOpenPlugin) => void;
+  plugins: ComposerOpenPlugin[];
+}>({ open: () => undefined, plugins: NO_OPEN_PLUGINS });
+
 const CommandPrefixContext = createContext<{
   prefix: string | null;
   setPrefix: (prefix: string | null) => void;
@@ -649,6 +719,43 @@ function ChatComposerCommandBanner({
         ×
       </button>
     </PromptInputHeader>
+  );
+}
+
+/** `/open` state for the composer: the agent's plugin pages, shown or hidden in the side panel. */
+function useOpenPluginContext(profileId: string | null) {
+  const panel = useOptionalChatAttachmentPanel();
+
+  const openPlugins = useAgentPluginViews(panel ? profileId : null);
+
+  return useMemo(
+    () => ({
+      open: (plugin: ComposerOpenPlugin) => {
+        const id = `plugin:${plugin.pluginId}`;
+
+        // A second /open for the same plugin closes it, like a toggle.
+        if (panel?.activeId === id) {
+          panel.hide(id);
+
+          return;
+        }
+
+        panel?.show({
+          bodyClassName: "flex flex-col overflow-hidden p-0",
+          content: (
+            <PluginView inlineHeaderActions pluginId={plugin.pluginId} />
+          ),
+          defaultWidth: 768,
+          fullscreen: false,
+          headerActions: <PluginPanelExpandButton panelId={id} />,
+          id,
+          resizable: true,
+          title: plugin.label,
+        });
+      },
+      plugins: openPlugins,
+    }),
+    [openPlugins, panel]
   );
 }
 
@@ -687,6 +794,10 @@ export function ChatComposer(props: ChatComposerProps) {
     setAddDialog(action);
   }, []);
 
+  const openPluginContext = useOpenPluginContext(
+    isFullComposer(props) ? (props.profileId ?? null) : null
+  );
+
   const canAddCapabilities =
     isFullComposer(props) &&
     Boolean(props.profileId) &&
@@ -701,6 +812,18 @@ export function ChatComposer(props: ChatComposerProps) {
         : typedText;
 
       setCommandPrefix(null);
+
+      const openCommand = matchComposerOpenCommand(
+        text,
+        openPluginContext.plugins
+      );
+
+      if (openCommand) {
+        clearDraft();
+        openPluginContext.open(openCommand);
+
+        return;
+      }
 
       if (matchComposerLearningLoopCommand(text)) {
         clearDraft();
@@ -756,41 +879,43 @@ export function ChatComposer(props: ChatComposerProps) {
 
   return (
     <CommandPrefixContext.Provider value={commandContext}>
-      <div className={cn("w-full shrink-0", props.className)}>
-        {layout.showOfflineHint && isFullComposer(props) ? (
-          <ChatComposerOfflineHint
-            onConnectProvider={props.onConnectProvider}
+      <OpenPluginContext.Provider value={openPluginContext}>
+        <div className={cn("w-full shrink-0", props.className)}>
+          {layout.showOfflineHint && isFullComposer(props) ? (
+            <ChatComposerOfflineHint
+              onConnectProvider={props.onConnectProvider}
+            />
+          ) : null}
+          <ChatComposerMain
+            displayError={displayError}
+            layout={layout}
+            onAddCommand={openAddCommand}
+            props={composerProps}
+            setAttachmentError={setAttachmentError}
           />
-        ) : null}
-        <ChatComposerMain
-          displayError={displayError}
-          layout={layout}
-          onAddCommand={openAddCommand}
-          props={composerProps}
-          setAttachmentError={setAttachmentError}
-        />
-        {addProfileId ? (
-          <ChatAddCapabilitiesDialogs
-            mcpOpen={addDialog === "add-mcp"}
-            onMcpOpenChange={(open) => {
-              setAddDialog(open ? "add-mcp" : null);
-            }}
-            onPluginOpenChange={(open) =>
-              setAddDialog(open ? "add-plugin" : null)
-            }
-            onSkillOpenChange={(open) => {
-              setAddDialog(open ? "add-skill" : null);
-            }}
-            onToolOpenChange={(open) => {
-              setAddDialog(open ? "add-tool" : null);
-            }}
-            pluginOpen={addDialog === "add-plugin"}
-            profileId={addProfileId}
-            skillOpen={addDialog === "add-skill"}
-            toolOpen={addDialog === "add-tool"}
-          />
-        ) : null}
-      </div>
+          {addProfileId ? (
+            <ChatAddCapabilitiesDialogs
+              mcpOpen={addDialog === "add-mcp"}
+              onMcpOpenChange={(open) => {
+                setAddDialog(open ? "add-mcp" : null);
+              }}
+              onPluginOpenChange={(open) =>
+                setAddDialog(open ? "add-plugin" : null)
+              }
+              onSkillOpenChange={(open) => {
+                setAddDialog(open ? "add-skill" : null);
+              }}
+              onToolOpenChange={(open) => {
+                setAddDialog(open ? "add-tool" : null);
+              }}
+              pluginOpen={addDialog === "add-plugin"}
+              profileId={addProfileId}
+              skillOpen={addDialog === "add-skill"}
+              toolOpen={addDialog === "add-tool"}
+            />
+          ) : null}
+        </div>
+      </OpenPluginContext.Provider>
     </CommandPrefixContext.Provider>
   );
 }
@@ -814,6 +939,7 @@ function ChatComposerTextarea({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [slashRange, setSlashRange] = useState<SkillSlashRange | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const openPlugin = useContext(OpenPluginContext);
 
   const mentionOpen =
     slashRange !== null && controller.textInput.value[slashRange.start] === "@";
@@ -827,8 +953,15 @@ function ChatComposerTextarea({
       ? filterComposerMentionSuggestions(slashRange.query)
       : filterComposerSlashSuggestions(availableSkills, slashRange.query, {
           enableAddCommands: onAddCommand != null,
+          openPlugins: openPlugin.plugins,
         });
-  }, [availableSkills, mentionOpen, onAddCommand, slashRange]);
+  }, [
+    availableSkills,
+    mentionOpen,
+    onAddCommand,
+    openPlugin.plugins,
+    slashRange,
+  ]);
 
   const pickerOpen = Boolean(slashRange && !disabled && suggestions.length > 0);
 
@@ -860,6 +993,17 @@ function ChatComposerTextarea({
         );
 
       if (!activeRange) {
+        return;
+      }
+
+      if (suggestion.kind === "plugin") {
+        controller.textInput.setInput(
+          `${value.slice(0, activeRange.start)}${value.slice(activeRange.end)}`
+        );
+        setSlashRange(null);
+        setActiveIndex(0);
+        openPlugin.open(suggestion.plugin);
+
         return;
       }
 
@@ -915,7 +1059,7 @@ function ChatComposerTextarea({
         textareaRef.current?.focus();
       });
     },
-    [controller.textInput, onAddCommand, slashRange]
+    [controller.textInput, onAddCommand, openPlugin, slashRange]
   );
 
   const { prefix, setPrefix } = useContext(CommandPrefixContext);
