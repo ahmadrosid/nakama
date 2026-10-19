@@ -63,7 +63,7 @@ async function assignComposeioGmailSender(
 }
 
 describe("AutomationService", () => {
-  test("does not create or schedule automations for a disabled profile", async () => {
+  test("turns automations on when a disabled profile creates its first automation", async () => {
     const db = await createTestDb();
 
     const service = new AutomationService(db, {
@@ -73,18 +73,65 @@ describe("AutomationService", () => {
     const profile = (await db.getProfile(PROFILE_ID))!;
     await db.upsertProfile({ ...profile, automationsEnabled: false });
 
-    await expect(
-      service.create(
-        ORG_ID,
-        {
-          description: "Paused",
-          name: "Paused automation",
-          prompt: "Do not run",
-          trigger: { cron: "0 8 * * *", type: "schedule" },
-        },
-        PROFILE_ID
-      )
-    ).rejects.toBeInstanceOf(NakamaApiError);
+    const automation = await service.create(
+      ORG_ID,
+      {
+        name: "First automation",
+        prompt: "Say hello",
+        trigger: { cron: "0 8 * * *", type: "schedule" },
+      },
+      PROFILE_ID
+    );
+
+    expect((await db.getProfile(PROFILE_ID))?.automationsEnabled).toBe(true);
+    expect((await service.listAll()).map((item) => item.id)).toEqual([
+      automation.id,
+    ]);
+  });
+
+  test("keeps automations off when a disabled profile already has automations", async () => {
+    const db = await createTestDb();
+
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+
+    await service.create(
+      ORG_ID,
+      {
+        name: "Existing automation",
+        prompt: "Say hello",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID
+    );
+
+    const profile = (await db.getProfile(PROFILE_ID))!;
+    await db.upsertProfile({ ...profile, automationsEnabled: false });
+
+    await service.create(
+      ORG_ID,
+      {
+        name: "Second automation",
+        prompt: "Say hello again",
+        trigger: { cron: "0 8 * * *", type: "schedule" },
+      },
+      PROFILE_ID
+    );
+
+    expect((await db.getProfile(PROFILE_ID))?.automationsEnabled).toBe(false);
+    expect(await service.listAll()).toEqual([]);
+  });
+
+  test("does not schedule automations for a disabled profile", async () => {
+    const db = await createTestDb();
+
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+
+    const profile = (await db.getProfile(PROFILE_ID))!;
+    await db.upsertProfile({ ...profile, automationsEnabled: false });
 
     await db.upsertAutomation({
       createdAt: new Date().toISOString(),

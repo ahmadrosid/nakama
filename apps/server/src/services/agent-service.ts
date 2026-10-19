@@ -5501,7 +5501,6 @@ export class AgentService {
     if (
       hasOwnTools &&
       includeAutomationTools &&
-      profile.automationsEnabled !== false &&
       this.automationTools.length > 0
     ) {
       resolved = [...resolved, ...this.automationTools];

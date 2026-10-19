@@ -1069,9 +1069,12 @@ function migrateAutomationsEnabledColumn(db: Database): void {
   if (
     !new Set(columns.map((column) => column.name)).has("automations_enabled")
   ) {
+    // New profiles start with automations off. Profiles from before the
+    // column always ran automations, so they keep that.
     db.exec(
-      "ALTER TABLE profiles ADD COLUMN automations_enabled INTEGER NOT NULL DEFAULT 1;"
+      "ALTER TABLE profiles ADD COLUMN automations_enabled INTEGER NOT NULL DEFAULT 0;"
     );
+    db.exec("UPDATE profiles SET automations_enabled = 1;");
   }
 }
 

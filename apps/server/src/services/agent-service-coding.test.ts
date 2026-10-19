@@ -354,7 +354,7 @@ describe("AgentService skill_manage injection", () => {
     expect(withTools.some((tool) => tool.name === "todo_write")).toBe(true);
   });
 
-  test("omits automation tools for a disabled profile", async () => {
+  test("keeps automation tools for a disabled profile so it can create its first automation", async () => {
     const db = createInMemoryDatabaseAdapter();
 
     const profile = {
@@ -394,7 +394,7 @@ describe("AgentService skill_manage injection", () => {
       ).resolveProfileTools.bind(service);
 
     const tools = await resolve(profile, { includeAutomationTools: true });
-    expect(tools.some((tool) => tool.name === "create_automation")).toBe(false);
+    expect(tools.some((tool) => tool.name === "create_automation")).toBe(true);
   });
 
   test("keeps raw /learn in history on web when manage-skills is assigned", async () => {

@@ -238,6 +238,22 @@ describe("profile service avatar", () => {
     }
   });
 
+  test("creates new profiles with automations off", async () => {
+    tempConfigDir = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-profile-automations-")
+    );
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+
+    const db = createInMemoryDatabaseAdapter();
+    const service = new ProfileService(db);
+    const created = await service.createProfile(ORG_ID, { name: "New Bot" });
+
+    expect(created.profile.automationsEnabled).toBe(false);
+    expect((await db.getProfile(created.profile.id))?.automationsEnabled).toBe(
+      false
+    );
+  });
+
   test("uploads, serves, and deletes profile avatars", async () => {
     tempConfigDir = await mkdtemp(
       path.join(os.tmpdir(), "nakama-profile-avatar-")
