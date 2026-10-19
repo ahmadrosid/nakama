@@ -43,6 +43,10 @@ jobs:
         uses: millionco/react-doctor@695e46eee203a5d1855020191aa7e9c010a1250e # v2.4.0
         with:
           commit-status: true
+          # The action's own `fetch --depth=1` of the base SHA makes this full
+          # clone shallow and drops the merge base, so the warning's
+          # `fetch-depth: 0` advice cannot help.
+          silence-missing-baseline-warning: true
 
       - name: Check out the merge result for Knip
         if: github.event_name == 'pull_request'
