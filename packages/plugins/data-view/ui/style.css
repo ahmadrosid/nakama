@@ -12,22 +12,13 @@
   }
 
   .dv-page {
-    display: grid;
+    display: flex;
     flex: 1;
-    grid-template-columns: 240px minmax(0, 1fr);
+    flex-direction: column;
+    min-width: 0;
     min-height: 0;
     font-size: 14px;
     color: var(--foreground);
-  }
-
-  .dv-sidebar {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    min-height: 0;
-    padding: 12px;
-    overflow-y: auto;
-    border-right: 1px solid var(--border);
   }
 
   .dv-add {
@@ -35,84 +26,66 @@
     gap: 6px;
   }
 
-  .dv-sidebar ul {
-    padding: 0;
-    margin: 0;
-    list-style: none;
-  }
-
-  .dv-sidebar li button {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    width: 100%;
-    padding: 6px 8px;
-    color: inherit;
-    text-align: left;
-    cursor: pointer;
-    background: none;
-    border: 0;
-    border-radius: 6px;
-  }
-
-  .dv-sidebar li button span:first-child {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .dv-sidebar li button:hover,
-  .dv-sidebar li button[aria-current] {
-    background: var(--muted);
-  }
-
-  .dv-badge {
-    min-width: 20px;
-    padding: 0 6px;
-    font-size: 12px;
-    line-height: 18px;
-    color: #202124;
-    text-align: center;
-    background: #fbbc04;
-    border-radius: 9px;
-  }
-
-  .dv-main {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-  }
-
   .dv-toolbar {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     align-items: center;
-    padding: 8px 12px;
+    min-height: 44px;
+    padding: 0 8px;
     border-bottom: 1px solid var(--border);
   }
 
-  .dv-toolbar a {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-size: 16px;
+  .dv-picker-trigger {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
+    height: 32px;
+    padding: 0 8px;
+    font: inherit;
     font-weight: 500;
     color: inherit;
-    white-space: nowrap;
-    text-decoration: none;
+    cursor: pointer;
+    background: none;
+    border: 0;
+    border-radius: 8px;
   }
 
-  .dv-toolbar a:hover {
-    text-decoration: underline;
+  .dv-picker-trigger:hover,
+  .dv-picker-trigger[data-popup-open] {
+    background: var(--muted);
+  }
+
+  .dv-picker-trigger > svg:first-child {
+    flex-shrink: 0;
+    color: #188038;
+  }
+
+  .dv-picker-trigger > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .dv-status {
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     font-size: 12px;
     color: var(--muted-foreground);
     white-space: nowrap;
+  }
+
+  .dv-status[data-pending]::before {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-right: 6px;
+    vertical-align: middle;
+    content: "";
+    background: #e39b12;
+    border-radius: 3px;
   }
 
   .dv-error,
@@ -135,7 +108,12 @@
     display: grid;
     flex: 1;
     place-items: center;
+    padding: 16px;
     color: var(--muted-foreground);
+  }
+
+  .dv-empty .dv-add {
+    width: min(100%, 420px);
   }
 
   .dv-formula {
@@ -277,21 +255,54 @@
     background: var(--background);
     border: 0;
   }
+}
 
-  @media (max-width: 720px) {
-    .dv-page {
-      grid-template-rows: auto minmax(0, 1fr);
-      grid-template-columns: minmax(0, 1fr);
-    }
+/* The sheet picker renders in a portal, outside the plugin container. */
+.dv-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 340px;
+  padding: 6px;
+}
 
-    .dv-sidebar {
-      max-height: 180px;
-      border-right: 0;
-      border-bottom: 1px solid var(--border);
-    }
+.dv-picker [cmdk-item] {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
 
-    .dv-toolbar {
-      flex-wrap: wrap;
-    }
-  }
+.dv-picker [cmdk-item][data-current] {
+  font-weight: 500;
+}
+
+.dv-picker-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dv-picker .dv-add {
+  display: flex;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.dv-picker .dv-add:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.dv-badge {
+  min-width: 20px;
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 18px;
+  color: #202124;
+  text-align: center;
+  background: #fbbc04;
+  border-radius: 9px;
 }

@@ -13,22 +13,13 @@ var style_default = `[data-plugin-id="data-view"] {
   }
 
   .dv-page {
-    display: grid;
+    display: flex;
     flex: 1;
-    grid-template-columns: 240px minmax(0, 1fr);
+    flex-direction: column;
+    min-width: 0;
     min-height: 0;
     font-size: 14px;
     color: var(--foreground);
-  }
-
-  .dv-sidebar {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    min-height: 0;
-    padding: 12px;
-    overflow-y: auto;
-    border-right: 1px solid var(--border);
   }
 
   .dv-add {
@@ -36,84 +27,66 @@ var style_default = `[data-plugin-id="data-view"] {
     gap: 6px;
   }
 
-  .dv-sidebar ul {
-    padding: 0;
-    margin: 0;
-    list-style: none;
-  }
-
-  .dv-sidebar li button {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    width: 100%;
-    padding: 6px 8px;
-    color: inherit;
-    text-align: left;
-    cursor: pointer;
-    background: none;
-    border: 0;
-    border-radius: 6px;
-  }
-
-  .dv-sidebar li button span:first-child {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .dv-sidebar li button:hover,
-  .dv-sidebar li button[aria-current] {
-    background: var(--muted);
-  }
-
-  .dv-badge {
-    min-width: 20px;
-    padding: 0 6px;
-    font-size: 12px;
-    line-height: 18px;
-    color: #202124;
-    text-align: center;
-    background: #fbbc04;
-    border-radius: 9px;
-  }
-
-  .dv-main {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-  }
-
   .dv-toolbar {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     align-items: center;
-    padding: 8px 12px;
+    min-height: 44px;
+    padding: 0 8px;
     border-bottom: 1px solid var(--border);
   }
 
-  .dv-toolbar a {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-size: 16px;
+  .dv-picker-trigger {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
+    height: 32px;
+    padding: 0 8px;
+    font: inherit;
     font-weight: 500;
     color: inherit;
-    white-space: nowrap;
-    text-decoration: none;
+    cursor: pointer;
+    background: none;
+    border: 0;
+    border-radius: 8px;
   }
 
-  .dv-toolbar a:hover {
-    text-decoration: underline;
+  .dv-picker-trigger:hover,
+  .dv-picker-trigger[data-popup-open] {
+    background: var(--muted);
+  }
+
+  .dv-picker-trigger > svg:first-child {
+    flex-shrink: 0;
+    color: #188038;
+  }
+
+  .dv-picker-trigger > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .dv-status {
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     font-size: 12px;
     color: var(--muted-foreground);
     white-space: nowrap;
+  }
+
+  .dv-status[data-pending]::before {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-right: 6px;
+    vertical-align: middle;
+    content: "";
+    background: #e39b12;
+    border-radius: 3px;
   }
 
   .dv-error,
@@ -136,7 +109,12 @@ var style_default = `[data-plugin-id="data-view"] {
     display: grid;
     flex: 1;
     place-items: center;
+    padding: 16px;
     color: var(--muted-foreground);
+  }
+
+  .dv-empty .dv-add {
+    width: min(100%, 420px);
   }
 
   .dv-formula {
@@ -278,28 +256,60 @@ var style_default = `[data-plugin-id="data-view"] {
     background: var(--background);
     border: 0;
   }
+}
 
-  @media (max-width: 720px) {
-    .dv-page {
-      grid-template-rows: auto minmax(0, 1fr);
-      grid-template-columns: minmax(0, 1fr);
-    }
+/* The sheet picker renders in a portal, outside the plugin container. */
+.dv-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 340px;
+  padding: 6px;
+}
 
-    .dv-sidebar {
-      max-height: 180px;
-      border-right: 0;
-      border-bottom: 1px solid var(--border);
-    }
+.dv-picker [cmdk-item] {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
 
-    .dv-toolbar {
-      flex-wrap: wrap;
-    }
-  }
+.dv-picker [cmdk-item][data-current] {
+  font-weight: 500;
+}
+
+.dv-picker-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dv-picker .dv-add {
+  display: flex;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.dv-picker .dv-add:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.dv-badge {
+  min-width: 20px;
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 18px;
+  color: #202124;
+  text-align: center;
+  background: #fbbc04;
+  border-radius: 9px;
 }
 `;
 
-// src/ui.tsx
-var inject = ["slots", "host", "styles", "ui"];
+// src/ui-grid.tsx
 var ROW_HEIGHT = 24;
 var OVERSCAN = 20;
 function columnLetter(column) {
@@ -309,39 +319,9 @@ function columnLetter(column) {
   }
   return letters;
 }
-var errorText = (error) => error instanceof Error ? error.message : error;
-function readSummary(value) {
-  if (!(value instanceof Object) || Array.isArray(value)) {
-    throw new Error("Invalid Data View response");
-  }
-  return {
-    fetchedAt: Number(value.fetchedAt),
-    id: String(value.id),
-    pendingEdits: Number(value.pendingEdits),
-    rows: Number(value.rows),
-    syncedAt: value.syncedAt === null ? null : Number(value.syncedAt),
-    title: String(value.title),
-    url: String(value.url)
-  };
-}
-function readStrings(value) {
-  return Array.isArray(value) ? value.map(String) : [];
-}
-function readSheet(value) {
-  if (!(value instanceof Object) || Array.isArray(value)) {
-    throw new Error("Invalid Data View response");
-  }
-  return {
-    ...readSummary(value),
-    changed: readStrings(value.changed),
-    data: Array.isArray(value.data) ? value.data.map(readStrings) : []
-  };
-}
-function apply(ctx) {
+function createSheetGrid(ctx) {
   const React = ctx.React;
-  const { Button, ConfirmDialog, Input, Spinner } = ctx.ui;
-  ctx.styles(style_default);
-  function SheetGrid({
+  return function SheetGrid({
     sheet,
     onEdit
   }) {
@@ -514,11 +494,88 @@ function apply(ctx) {
     }) : null, Array.from({ length: Math.max(0, last - first) }, (_, index) => renderRow(first + index)), last < rows ? /* @__PURE__ */ React.createElement("tr", {
       style: { height: (rows - last) * ROW_HEIGHT }
     }) : null))));
+  };
+}
+
+// src/ui.tsx
+var inject = ["slots", "host", "styles", "ui"];
+var SEARCH_AFTER = 6;
+var errorText = (error) => error instanceof Error ? error.message : error;
+function readSummary(value) {
+  if (!(value instanceof Object) || Array.isArray(value)) {
+    throw new Error("Invalid Data View response");
   }
+  return {
+    fetchedAt: Number(value.fetchedAt),
+    id: String(value.id),
+    pendingEdits: Number(value.pendingEdits),
+    rows: Number(value.rows),
+    syncedAt: value.syncedAt === null ? null : Number(value.syncedAt),
+    title: String(value.title),
+    url: String(value.url)
+  };
+}
+function readStrings(value) {
+  return Array.isArray(value) ? value.map(String) : [];
+}
+function readSheet(value) {
+  if (!(value instanceof Object) || Array.isArray(value)) {
+    throw new Error("Invalid Data View response");
+  }
+  return {
+    ...readSummary(value),
+    changed: readStrings(value.changed),
+    data: Array.isArray(value.data) ? value.data.map(readStrings) : []
+  };
+}
+function apply(ctx) {
+  const React = ctx.React;
+  const {
+    Button,
+    Command,
+    CommandEmpty,
+    CommandInput,
+    CommandItem,
+    CommandList,
+    ConfirmDialog,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+    Input,
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+    Spinner
+  } = ctx.ui;
+  const ICONS = {
+    chevron: "M6 9l6 6 6-6",
+    more: "M5 12h.01M12 12h.01M19 12h.01",
+    refresh: "M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7",
+    sheet: "M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 9h16M4 15h16M10 9v12"
+  };
+  function Icon({ kind }) {
+    return /* @__PURE__ */ React.createElement("svg", {
+      "aria-hidden": "true",
+      fill: "none",
+      height: "16",
+      stroke: "currentColor",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      strokeWidth: kind === "more" ? 3 : 1.8,
+      viewBox: "0 0 24 24",
+      width: "16"
+    }, /* @__PURE__ */ React.createElement("path", {
+      d: ICONS[kind]
+    }));
+  }
+  ctx.styles(style_default);
+  const SheetGrid = createSheetGrid(ctx);
   function DataViewPage() {
     const [sheets, setSheets] = React.useState([]);
     const [sheet, setSheet] = React.useState(null);
     const [url, setUrl] = React.useState("");
+    const [pickerOpen, setPickerOpen] = React.useState(false);
     const [busy, setBusy] = React.useState("");
     const [error, setError] = React.useState("");
     const [notice, setNotice] = React.useState("");
@@ -559,6 +616,7 @@ function apply(ctx) {
       run("add", async () => {
         const added = readSummary(await ctx.host.call("add_sheet", { url: url.trim() }));
         setUrl("");
+        setPickerOpen(false);
         await loadList();
         await open(added.id);
       });
@@ -639,11 +697,7 @@ function apply(ctx) {
         await loadList();
       }
     };
-    return /* @__PURE__ */ React.createElement("div", {
-      className: "dv-page"
-    }, /* @__PURE__ */ React.createElement("aside", {
-      className: "dv-sidebar"
-    }, /* @__PURE__ */ React.createElement("form", {
+    const addForm = /* @__PURE__ */ React.createElement("form", {
       className: "dv-add",
       onSubmit: add
     }, /* @__PURE__ */ React.createElement(Input, {
@@ -654,49 +708,83 @@ function apply(ctx) {
     }), /* @__PURE__ */ React.createElement(Button, {
       disabled: !url.trim() || Boolean(busy),
       type: "submit"
-    }, busy === "add" ? /* @__PURE__ */ React.createElement(Spinner, null) : "Add")), /* @__PURE__ */ React.createElement("ul", null, sheets.map((entry) => /* @__PURE__ */ React.createElement("li", {
-      key: entry.id
-    }, /* @__PURE__ */ React.createElement("button", {
-      "aria-current": entry.id === sheet?.id || undefined,
-      onClick: () => run("open", () => open(entry.id)),
-      type: "button"
-    }, /* @__PURE__ */ React.createElement("span", null, entry.title), entry.pendingEdits ? /* @__PURE__ */ React.createElement("span", {
+    }, busy === "add" ? /* @__PURE__ */ React.createElement(Spinner, null) : "Add"));
+    return /* @__PURE__ */ React.createElement("div", {
+      className: "dv-page"
+    }, /* @__PURE__ */ React.createElement("header", {
+      className: "dv-toolbar"
+    }, /* @__PURE__ */ React.createElement(Popover, {
+      onOpenChange: setPickerOpen,
+      open: pickerOpen
+    }, /* @__PURE__ */ React.createElement(PopoverTrigger, {
+      render: /* @__PURE__ */ React.createElement("button", {
+        className: "dv-picker-trigger",
+        type: "button"
+      })
+    }, /* @__PURE__ */ React.createElement(Icon, {
+      kind: "sheet"
+    }), /* @__PURE__ */ React.createElement("span", null, sheet?.title ?? "Add a sheet"), /* @__PURE__ */ React.createElement(Icon, {
+      kind: "chevron"
+    })), /* @__PURE__ */ React.createElement(PopoverContent, {
+      align: "start",
+      className: "dv-picker"
+    }, sheets.length ? /* @__PURE__ */ React.createElement(Command, null, sheets.length > SEARCH_AFTER ? /* @__PURE__ */ React.createElement(CommandInput, {
+      "aria-label": "Search sheets",
+      placeholder: "Search sheets"
+    }) : null, /* @__PURE__ */ React.createElement(CommandList, null, /* @__PURE__ */ React.createElement(CommandEmpty, null, "No sheets found"), sheets.map((entry) => /* @__PURE__ */ React.createElement(CommandItem, {
+      "data-current": entry.id === sheet?.id || undefined,
+      key: entry.id,
+      onSelect: () => {
+        setPickerOpen(false);
+        run("open", () => open(entry.id));
+      },
+      value: `${entry.title} ${entry.id}`
+    }, /* @__PURE__ */ React.createElement("span", {
+      className: "dv-picker-title"
+    }, entry.title), entry.pendingEdits ? /* @__PURE__ */ React.createElement("span", {
       className: "dv-badge"
-    }, entry.pendingEdits) : null))))), /* @__PURE__ */ React.createElement("main", {
-      className: "dv-main"
-    }, error ? /* @__PURE__ */ React.createElement("p", {
+    }, entry.pendingEdits) : null)))) : null, addForm)), /* @__PURE__ */ React.createElement("span", {
+      className: "dv-status",
+      "data-pending": Boolean(sheet?.pendingEdits) || undefined
+    }, sheet ? sheet.pendingEdits ? `${sheet.pendingEdits} unsynced` : "Synced" : null), sheet ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(Button, {
+      "aria-label": "Refresh",
+      disabled: Boolean(busy),
+      onClick: () => sheet.pendingEdits ? setConfirming("refresh") : run("refresh", () => refresh(false)),
+      size: "icon-sm",
+      title: "Refresh",
+      variant: "ghost"
+    }, busy === "refresh" ? /* @__PURE__ */ React.createElement(Spinner, null) : /* @__PURE__ */ React.createElement(Icon, {
+      kind: "refresh"
+    })), /* @__PURE__ */ React.createElement(Button, {
+      disabled: Boolean(busy) || !sheet.pendingEdits,
+      onClick: sync,
+      size: "sm"
+    }, busy === "sync" ? /* @__PURE__ */ React.createElement(Spinner, null) : "Sync"), /* @__PURE__ */ React.createElement(DropdownMenu, null, /* @__PURE__ */ React.createElement(DropdownMenuTrigger, {
+      disabled: Boolean(busy),
+      render: /* @__PURE__ */ React.createElement(Button, {
+        "aria-label": "More actions",
+        size: "icon-sm",
+        type: "button",
+        variant: "ghost"
+      })
+    }, /* @__PURE__ */ React.createElement(Icon, {
+      kind: "more"
+    })), /* @__PURE__ */ React.createElement(DropdownMenuContent, {
+      align: "end"
+    }, /* @__PURE__ */ React.createElement(DropdownMenuItem, {
+      onClick: addRow
+    }, "Add row"), /* @__PURE__ */ React.createElement(DropdownMenuItem, {
+      onClick: () => window.open(sheet.url, "_blank", "noopener,noreferrer")
+    }, "Open in Google Sheets"), /* @__PURE__ */ React.createElement(DropdownMenuItem, {
+      onClick: () => setConfirming("remove"),
+      variant: "destructive"
+    }, "Remove")))) : null), error ? /* @__PURE__ */ React.createElement("p", {
       className: "dv-error",
       role: "alert"
     }, error) : null, notice ? /* @__PURE__ */ React.createElement("p", {
       className: "dv-notice",
       role: "status"
-    }, notice) : null, sheet ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("header", {
-      className: "dv-toolbar"
-    }, /* @__PURE__ */ React.createElement("a", {
-      href: sheet.url,
-      rel: "noreferrer",
-      target: "_blank"
-    }, sheet.title), /* @__PURE__ */ React.createElement("span", {
-      className: "dv-status"
-    }, sheet.pendingEdits ? `${sheet.pendingEdits} unsynced edits` : "All changes synced"), /* @__PURE__ */ React.createElement(Button, {
-      onClick: addRow,
-      size: "sm",
-      variant: "ghost"
-    }, "Add row"), /* @__PURE__ */ React.createElement(Button, {
-      disabled: Boolean(busy),
-      onClick: () => sheet.pendingEdits ? setConfirming("refresh") : run("refresh", () => refresh(false)),
-      size: "sm",
-      variant: "outline"
-    }, busy === "refresh" ? /* @__PURE__ */ React.createElement(Spinner, null) : "Refresh"), /* @__PURE__ */ React.createElement(Button, {
-      disabled: Boolean(busy) || !sheet.pendingEdits,
-      onClick: sync,
-      size: "sm"
-    }, busy === "sync" ? /* @__PURE__ */ React.createElement(Spinner, null) : "Sync"), /* @__PURE__ */ React.createElement(Button, {
-      disabled: Boolean(busy),
-      onClick: () => setConfirming("remove"),
-      size: "sm",
-      variant: "ghost"
-    }, "Remove")), /* @__PURE__ */ React.createElement(SheetGrid, {
+    }, notice) : null, sheet ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(SheetGrid, {
       onEdit: edit,
       sheet
     }), confirming === "refresh" ? /* @__PURE__ */ React.createElement(ConfirmDialog, {
@@ -713,7 +801,7 @@ function apply(ctx) {
       title: "Remove sheet?"
     }) : null) : /* @__PURE__ */ React.createElement("div", {
       className: "dv-empty"
-    }, busy === "load" ? /* @__PURE__ */ React.createElement(Spinner, null) : "Add a Google Sheets link.")));
+    }, busy === "load" ? /* @__PURE__ */ React.createElement(Spinner, null) : addForm));
   }
   ctx.slots.register("page", DataViewPage);
 }

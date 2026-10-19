@@ -2,48 +2,22 @@
 /** @jsx React.createElement */
 /** @jsxFrag React.Fragment */
 
-import type * as UI from "@nakama/ui";
 import type * as ReactType from "react";
 import css from "../ui/style.css" with { type: "text" };
 import type { JsonValue } from "./actions";
-
-type Summary = {
-  id: string;
-  title: string;
-  url: string;
-  rows: number;
-  pendingEdits: number;
-  fetchedAt: number;
-  syncedAt: number | null;
-};
-
-type Sheet = Summary & { data: string[][]; changed: string[] };
-
-type Context = {
-  React: typeof ReactType;
-  ui: typeof UI;
-  slots: { register(slot: "page", component: ReactType.ComponentType): void };
-  styles(css: string): void;
-  host: { call(action: string, input?: JsonValue): Promise<JsonValue> };
-};
-
-type Cell = { row: number; column: number };
+import {
+  type Cell,
+  type Context,
+  columnLetter,
+  createSheetGrid,
+  type Sheet,
+  type Summary,
+} from "./ui-grid";
 
 export const inject = ["slots", "host", "styles", "ui"];
 
-const ROW_HEIGHT = 24;
-
-const OVERSCAN = 20;
-
-function columnLetter(column: number): string {
-  let letters = "";
-
-  for (let rest = column + 1; rest > 0; rest = Math.floor((rest - 1) / 26)) {
-    letters = String.fromCharCode(65 + ((rest - 1) % 26)) + letters;
-  }
-
-  return letters;
-}
+// The sheet picker shows a search field once the list is longer than this.
+const SEARCH_AFTER = 6;
 
 const errorText = (error: Error | string) =>
   error instanceof Error ? error.message : error;
@@ -82,275 +56,61 @@ function readSheet(value: JsonValue): Sheet {
 
 export function apply(ctx: Context) {
   const React = ctx.React;
-  const { Button, ConfirmDialog, Input, Spinner } = ctx.ui;
+
+  const {
+    Button,
+    Command,
+    CommandEmpty,
+    CommandInput,
+    CommandItem,
+    CommandList,
+    ConfirmDialog,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+    Input,
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+    Spinner,
+  } = ctx.ui;
+
+  const ICONS = {
+    chevron: "M6 9l6 6 6-6",
+    more: "M5 12h.01M12 12h.01M19 12h.01",
+    refresh: "M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7",
+    sheet:
+      "M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 9h16M4 15h16M10 9v12",
+  };
+
+  function Icon({ kind }: { kind: keyof typeof ICONS }) {
+    return (
+      <svg
+        aria-hidden="true"
+        fill="none"
+        height="16"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={kind === "more" ? 3 : 1.8}
+        viewBox="0 0 24 24"
+        width="16"
+      >
+        <path d={ICONS[kind]} />
+      </svg>
+    );
+  }
 
   ctx.styles(css);
 
-  function SheetGrid({
-    sheet,
-    onEdit,
-  }: {
-    sheet: Sheet;
-    onEdit: (cell: Cell, value: string) => void;
-  }) {
-    const [selected, setSelected] = React.useState<Cell>({
-      column: 0,
-      row: 0,
-    });
-
-    const [editing, setEditing] = React.useState<string | null>(null);
-    const [scrollTop, setScrollTop] = React.useState(0);
-    const [height, setHeight] = React.useState(600);
-    const scroller = React.useRef<HTMLDivElement>(null);
-    const closing = React.useRef(false);
-    const changed = React.useMemo(() => new Set(sheet.changed), [sheet]);
-    const rows = sheet.data.length;
-    const columns = sheet.data[0]?.length ?? 1;
-    const value = sheet.data[selected.row]?.[selected.column] ?? "";
-
-    React.useEffect(() => {
-      const element = scroller.current;
-
-      if (!element) {
-        return;
-      }
-
-      const observer = new ResizeObserver(() =>
-        setHeight(element.clientHeight)
-      );
-
-      observer.observe(element);
-
-      return () => observer.disconnect();
-    }, []);
-
-    const move = (row: number, column: number) => {
-      const next = {
-        column: Math.min(Math.max(column, 0), columns - 1),
-        row: Math.min(Math.max(row, 0), rows - 1),
-      };
-
-      setSelected(next);
-      setEditing(null);
-
-      const element = scroller.current;
-
-      if (element) {
-        // Row 1 stays frozen under the letters, so data rows scroll below it.
-        const top = next.row * ROW_HEIGHT;
-
-        if (top < element.scrollTop + ROW_HEIGHT && next.row > 0) {
-          element.scrollTop = top - ROW_HEIGHT;
-        } else if (
-          top + ROW_HEIGHT * 2 >
-          element.scrollTop + element.clientHeight
-        ) {
-          element.scrollTop = top + ROW_HEIGHT * 2 - element.clientHeight;
-        }
-      }
-    };
-
-    const commit = (next: string) => {
-      if (next !== value) {
-        onEdit(selected, next);
-      }
-
-      setEditing(null);
-    };
-
-    const onKeyDown = (event: ReactType.KeyboardEvent<HTMLDivElement>) => {
-      if (editing !== null) {
-        return;
-      }
-
-      const { column, row } = selected;
-
-      const target = new Map<string, [number, number]>([
-        ["ArrowDown", [row + 1, column]],
-        ["ArrowLeft", [row, column - 1]],
-        ["ArrowRight", [row, column + 1]],
-        ["ArrowUp", [row - 1, column]],
-        ["Tab", [row, column + (event.shiftKey ? -1 : 1)]],
-      ]).get(event.key);
-
-      if (event.key === "Enter" || event.key === "F2") {
-        event.preventDefault();
-        setEditing(value);
-      } else if (target) {
-        event.preventDefault();
-        move(...target);
-      } else if (event.key === "Delete" || event.key === "Backspace") {
-        event.preventDefault();
-        commit("");
-      } else if (
-        event.key.length === 1 &&
-        !(event.metaKey || event.ctrlKey || event.altKey)
-      ) {
-        event.preventDefault();
-        setEditing(event.key);
-      }
-    };
-
-    const onEditorKeyDown = (
-      event: ReactType.KeyboardEvent<HTMLInputElement>
-    ) => {
-      event.stopPropagation();
-
-      if (event.key === "Escape") {
-        closing.current = true;
-        setEditing(null);
-        scroller.current?.focus();
-      } else if (event.key === "Enter" || event.key === "Tab") {
-        event.preventDefault();
-        closing.current = true;
-        commit(event.currentTarget.value);
-        const down = event.key === "Enter";
-        move(
-          selected.row + (down ? (event.shiftKey ? -1 : 1) : 0),
-          selected.column + (down ? 0 : event.shiftKey ? -1 : 1)
-        );
-        scroller.current?.focus();
-      }
-    };
-
-    // Row 1 renders frozen, so the window covers data rows only.
-    const first = Math.max(1, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
-
-    const last = Math.min(
-      rows,
-      Math.ceil((scrollTop + height) / ROW_HEIGHT) + OVERSCAN
-    );
-
-    const renderRow = (row: number) => (
-      <tr data-frozen={row === 0 || undefined} key={row}>
-        <th
-          aria-selected={row === selected.row}
-          className="dv-row-head"
-          scope="row"
-        >
-          {row + 1}
-        </th>
-        {Array.from({ length: columns }, (_, column) => {
-          const isSelected = row === selected.row && column === selected.column;
-
-          return (
-            <td
-              aria-selected={isSelected}
-              data-changed={changed.has(`${row}:${column}`) || undefined}
-              key={column}
-              onClick={() => move(row, column)}
-              onDoubleClick={() => {
-                move(row, column);
-                setEditing(sheet.data[row]?.[column] ?? "");
-              }}
-            >
-              {isSelected && editing !== null ? (
-                <input
-                  aria-label={`${columnLetter(column)}${row + 1}`}
-                  autoFocus
-                  className="dv-editor"
-                  defaultValue={editing}
-                  onBlur={(event) => {
-                    // Escape cancels; Enter and Tab already saved.
-                    if (closing.current) {
-                      closing.current = false;
-                    } else {
-                      commit(event.currentTarget.value);
-                    }
-                  }}
-                  onFocus={() => {
-                    closing.current = false;
-                  }}
-                  onKeyDown={onEditorKeyDown}
-                />
-              ) : (
-                sheet.data[row]?.[column]
-              )}
-            </td>
-          );
-        })}
-      </tr>
-    );
-
-    return (
-      <>
-        <div className="dv-formula">
-          <span className="dv-ref">
-            {columnLetter(selected.column)}
-            {selected.row + 1}
-          </span>
-          <span aria-hidden="true" className="dv-fx">
-            fx
-          </span>
-          <input
-            aria-label="Cell value"
-            defaultValue={value}
-            key={`${selected.row}:${selected.column}:${value}`}
-            onBlur={(event) => {
-              if (event.currentTarget.value !== value) {
-                onEdit(selected, event.currentTarget.value);
-              }
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.currentTarget.blur();
-                scroller.current?.focus();
-              }
-            }}
-          />
-        </div>
-        <div
-          aria-label={sheet.title}
-          className="dv-grid"
-          onKeyDown={onKeyDown}
-          onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
-          ref={scroller}
-          role="grid"
-          tabIndex={0}
-        >
-          <table>
-            <colgroup>
-              <col className="dv-row-col" />
-              {Array.from({ length: columns }, (_, column) => (
-                <col key={column} />
-              ))}
-            </colgroup>
-            <thead>
-              <tr>
-                <th className="dv-corner" />
-                {Array.from({ length: columns }, (_, column) => (
-                  <th
-                    aria-selected={column === selected.column}
-                    key={column}
-                    scope="col"
-                  >
-                    {columnLetter(column)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {renderRow(0)}
-              {first > 1 ? (
-                <tr style={{ height: (first - 1) * ROW_HEIGHT }} />
-              ) : null}
-              {Array.from({ length: Math.max(0, last - first) }, (_, index) =>
-                renderRow(first + index)
-              )}
-              {last < rows ? (
-                <tr style={{ height: (rows - last) * ROW_HEIGHT }} />
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </>
-    );
-  }
+  const SheetGrid = createSheetGrid(ctx);
 
   function DataViewPage() {
     const [sheets, setSheets] = React.useState<Summary[]>([]);
     const [sheet, setSheet] = React.useState<Sheet | null>(null);
     const [url, setUrl] = React.useState("");
+    const [pickerOpen, setPickerOpen] = React.useState(false);
     const [busy, setBusy] = React.useState("");
     const [error, setError] = React.useState("");
     const [notice, setNotice] = React.useState("");
@@ -409,6 +169,7 @@ export function apply(ctx: Context) {
         );
 
         setUrl("");
+        setPickerOpen(false);
         await loadList();
         await open(added.id);
       });
@@ -532,116 +293,168 @@ export function apply(ctx: Context) {
       }
     };
 
+    const addForm = (
+      <form className="dv-add" onSubmit={add}>
+        <Input
+          aria-label="Google Sheets link"
+          onChange={(event) => setUrl(event.currentTarget.value)}
+          placeholder="Paste a Google Sheets link"
+          value={url}
+        />
+        <Button disabled={!url.trim() || Boolean(busy)} type="submit">
+          {busy === "add" ? <Spinner /> : "Add"}
+        </Button>
+      </form>
+    );
+
     return (
       <div className="dv-page">
-        <aside className="dv-sidebar">
-          <form className="dv-add" onSubmit={add}>
-            <Input
-              aria-label="Google Sheets link"
-              onChange={(event) => setUrl(event.currentTarget.value)}
-              placeholder="Paste a Google Sheets link"
-              value={url}
-            />
-            <Button disabled={!url.trim() || Boolean(busy)} type="submit">
-              {busy === "add" ? <Spinner /> : "Add"}
-            </Button>
-          </form>
-          <ul>
-            {sheets.map((entry) => (
-              <li key={entry.id}>
-                <button
-                  aria-current={entry.id === sheet?.id || undefined}
-                  onClick={() => run("open", () => open(entry.id))}
-                  type="button"
-                >
-                  <span>{entry.title}</span>
-                  {entry.pendingEdits ? (
-                    <span className="dv-badge">{entry.pendingEdits}</span>
+        <header className="dv-toolbar">
+          <Popover onOpenChange={setPickerOpen} open={pickerOpen}>
+            <PopoverTrigger
+              render={<button className="dv-picker-trigger" type="button" />}
+            >
+              <Icon kind="sheet" />
+              <span>{sheet?.title ?? "Add a sheet"}</span>
+              <Icon kind="chevron" />
+            </PopoverTrigger>
+            <PopoverContent align="start" className="dv-picker">
+              {sheets.length ? (
+                <Command>
+                  {sheets.length > SEARCH_AFTER ? (
+                    <CommandInput
+                      aria-label="Search sheets"
+                      placeholder="Search sheets"
+                    />
                   ) : null}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </aside>
-        <main className="dv-main">
-          {error ? (
-            <p className="dv-error" role="alert">
-              {error}
-            </p>
-          ) : null}
-          {notice ? (
-            <p className="dv-notice" role="status">
-              {notice}
-            </p>
-          ) : null}
+                  <CommandList>
+                    <CommandEmpty>No sheets found</CommandEmpty>
+                    {sheets.map((entry) => (
+                      <CommandItem
+                        data-current={entry.id === sheet?.id || undefined}
+                        key={entry.id}
+                        onSelect={() => {
+                          setPickerOpen(false);
+                          run("open", () => open(entry.id));
+                        }}
+                        value={`${entry.title} ${entry.id}`}
+                      >
+                        <span className="dv-picker-title">{entry.title}</span>
+                        {entry.pendingEdits ? (
+                          <span className="dv-badge">{entry.pendingEdits}</span>
+                        ) : null}
+                      </CommandItem>
+                    ))}
+                  </CommandList>
+                </Command>
+              ) : null}
+              {addForm}
+            </PopoverContent>
+          </Popover>
+          <span
+            className="dv-status"
+            data-pending={Boolean(sheet?.pendingEdits) || undefined}
+          >
+            {sheet
+              ? sheet.pendingEdits
+                ? `${sheet.pendingEdits} unsynced`
+                : "Synced"
+              : null}
+          </span>
           {sheet ? (
             <>
-              <header className="dv-toolbar">
-                <a href={sheet.url} rel="noreferrer" target="_blank">
-                  {sheet.title}
-                </a>
-                <span className="dv-status">
-                  {sheet.pendingEdits
-                    ? `${sheet.pendingEdits} unsynced edits`
-                    : "All changes synced"}
-                </span>
-                <Button onClick={addRow} size="sm" variant="ghost">
-                  Add row
-                </Button>
-                <Button
+              <Button
+                aria-label="Refresh"
+                disabled={Boolean(busy)}
+                onClick={() =>
+                  sheet.pendingEdits
+                    ? setConfirming("refresh")
+                    : run("refresh", () => refresh(false))
+                }
+                size="icon-sm"
+                title="Refresh"
+                variant="ghost"
+              >
+                {busy === "refresh" ? <Spinner /> : <Icon kind="refresh" />}
+              </Button>
+              <Button
+                disabled={Boolean(busy) || !sheet.pendingEdits}
+                onClick={sync}
+                size="sm"
+              >
+                {busy === "sync" ? <Spinner /> : "Sync"}
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
                   disabled={Boolean(busy)}
-                  onClick={() =>
-                    sheet.pendingEdits
-                      ? setConfirming("refresh")
-                      : run("refresh", () => refresh(false))
+                  render={
+                    <Button
+                      aria-label="More actions"
+                      size="icon-sm"
+                      type="button"
+                      variant="ghost"
+                    />
                   }
-                  size="sm"
-                  variant="outline"
                 >
-                  {busy === "refresh" ? <Spinner /> : "Refresh"}
-                </Button>
-                <Button
-                  disabled={Boolean(busy) || !sheet.pendingEdits}
-                  onClick={sync}
-                  size="sm"
-                >
-                  {busy === "sync" ? <Spinner /> : "Sync"}
-                </Button>
-                <Button
-                  disabled={Boolean(busy)}
-                  onClick={() => setConfirming("remove")}
-                  size="sm"
-                  variant="ghost"
-                >
-                  Remove
-                </Button>
-              </header>
-              <SheetGrid onEdit={edit} sheet={sheet} />
-              {confirming === "refresh" ? (
-                <ConfirmDialog
-                  confirmLabel="Discard and refresh"
-                  description={`${sheet.pendingEdits} unsynced edits will be lost.`}
-                  onClose={() => setConfirming(null)}
-                  onConfirm={() => refresh(true)}
-                  title="Discard unsynced edits?"
-                />
-              ) : null}
-              {confirming === "remove" ? (
-                <ConfirmDialog
-                  confirmLabel="Remove"
-                  description={`${sheet.title} leaves Data View. Google Sheets does not change.`}
-                  onClose={() => setConfirming(null)}
-                  onConfirm={remove}
-                  title="Remove sheet?"
-                />
-              ) : null}
+                  <Icon kind="more" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={addRow}>Add row</DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      window.open(sheet.url, "_blank", "noopener,noreferrer")
+                    }
+                  >
+                    Open in Google Sheets
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setConfirming("remove")}
+                    variant="destructive"
+                  >
+                    Remove
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </>
-          ) : (
-            <div className="dv-empty">
-              {busy === "load" ? <Spinner /> : "Add a Google Sheets link."}
-            </div>
-          )}
-        </main>
+          ) : null}
+        </header>
+        {error ? (
+          <p className="dv-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        {notice ? (
+          <p className="dv-notice" role="status">
+            {notice}
+          </p>
+        ) : null}
+        {sheet ? (
+          <>
+            <SheetGrid onEdit={edit} sheet={sheet} />
+            {confirming === "refresh" ? (
+              <ConfirmDialog
+                confirmLabel="Discard and refresh"
+                description={`${sheet.pendingEdits} unsynced edits will be lost.`}
+                onClose={() => setConfirming(null)}
+                onConfirm={() => refresh(true)}
+                title="Discard unsynced edits?"
+              />
+            ) : null}
+            {confirming === "remove" ? (
+              <ConfirmDialog
+                confirmLabel="Remove"
+                description={`${sheet.title} leaves Data View. Google Sheets does not change.`}
+                onClose={() => setConfirming(null)}
+                onConfirm={remove}
+                title="Remove sheet?"
+              />
+            ) : null}
+          </>
+        ) : (
+          <div className="dv-empty">
+            {busy === "load" ? <Spinner /> : addForm}
+          </div>
+        )}
       </div>
     );
   }
