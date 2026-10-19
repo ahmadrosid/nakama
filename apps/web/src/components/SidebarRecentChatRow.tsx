@@ -47,7 +47,7 @@ function RecentChatActions({
   canMoveDown: boolean;
 }) {
   return (
-    <div className="mr-1 flex shrink-0 items-center">
+    <div className="flex shrink-0 items-center p-1.5">
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
