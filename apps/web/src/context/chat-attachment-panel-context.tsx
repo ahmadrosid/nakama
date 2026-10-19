@@ -46,8 +46,8 @@ function ChatPanelColumn({
   return (
     <div
       className={cn(
-        "flex min-h-0 shrink-0 flex-col border-border border-l max-sm:w-full max-sm:flex-1",
-        "[&>aside+aside>[role=separator]]:hidden [&>aside+aside]:relative [&>aside+aside]:border-t [&>aside]:min-h-0 [&>aside]:w-full! [&>aside]:max-w-none [&>aside]:flex-1 [&>aside]:border-l-0",
+        "flex min-h-0 shrink-0 flex-col gap-1 p-1 max-sm:w-full max-sm:flex-1",
+        "[&>aside+aside>[role=separator]]:hidden [&>aside+aside]:relative [&>aside]:min-h-0 [&>aside]:w-full! [&>aside]:max-w-none [&>aside]:flex-1 [&>aside]:overflow-hidden [&>aside]:rounded-lg [&>aside]:border",
         fullscreen && "flex-1"
       )}
       style={fullscreen ? undefined : { width }}
