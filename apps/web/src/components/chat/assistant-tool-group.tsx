@@ -1,4 +1,10 @@
 import { Button } from "@nakama/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogTrigger,
+} from "@nakama/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -355,6 +361,40 @@ function PluginToolRow({ message }: { message: ChatListItem }) {
   );
 }
 
+function ToolResultImage({
+  className,
+  src,
+}: {
+  className?: string;
+  src: string;
+}) {
+  return (
+    <Dialog>
+      <DialogTrigger
+        aria-label="Zoom image"
+        className="max-w-full cursor-zoom-in rounded-md"
+      >
+        <img
+          alt="Tool result"
+          className={cn(
+            "max-w-full rounded-md border border-border",
+            className
+          )}
+          src={src}
+        />
+      </DialogTrigger>
+      <DialogContent className="w-auto max-w-[calc(100vw-2rem)] bg-transparent p-0 ring-0 sm:max-w-[calc(100vw-2rem)]">
+        <DialogTitle className="sr-only">Tool result image</DialogTitle>
+        <img
+          alt="Tool result"
+          className="max-h-[calc(100dvh-2rem)] max-w-full rounded-lg object-contain"
+          src={src}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function AssistantWorkGroup({
   active,
   thinking,
@@ -395,9 +435,8 @@ function AssistantWorkGroup({
       {images.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-2">
           {images.map(({ key, src }) => (
-            <img
-              alt="Tool result"
-              className="max-h-40 max-w-full rounded-md border border-border object-contain"
+            <ToolResultImage
+              className="max-h-40 object-contain"
               key={key}
               src={src}
             />
@@ -1060,12 +1099,7 @@ function ToolTimelineDetails({
         <DetailBlock content={query} label="Query" tone="command" />
       ) : null}
       {images.map((image) => (
-        <img
-          alt="Tool result"
-          className="max-h-96 max-w-full rounded-md border border-border"
-          key={image}
-          src={image}
-        />
+        <ToolResultImage className="max-h-96" key={image} src={image} />
       ))}
       <ToolTimelineOutput
         command={command}
