@@ -6,44 +6,22 @@ import {
   isCustomChoice,
 } from "@/components/chat/agent-questionnaire.shared";
 
-function RadioDot({ selected }: { selected: boolean }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "grid size-4 shrink-0 place-items-center rounded-full border-[1.5px] transition-colors",
-        selected
-          ? "border-primary bg-primary"
-          : "border-muted-foreground/50 bg-transparent"
-      )}
-    >
-      {selected ? (
-        <span className="size-1.5 rounded-full bg-primary-foreground" />
-      ) : null}
-    </span>
-  );
-}
-
 const optionRowClass =
-  "flex min-h-11 w-full items-center gap-3 rounded-lg border px-3.5 text-left text-foreground text-sm transition-colors";
+  "flex min-h-10 w-full items-center gap-2 rounded-md px-2 text-left text-foreground text-sm transition-colors";
 
 function optionStateClass(selected: boolean, disabled: boolean): string {
   return cn(
-    selected
-      ? "border-primary bg-primary/5"
-      : "border-transparent bg-muted/60 hover:bg-muted",
+    selected ? "bg-muted font-medium" : "hover:bg-muted/60",
     disabled && "pointer-events-none opacity-50"
   );
 }
 
 export function AgentQuestionnaireQuestion({
-  questionIndex,
   question,
   state,
   disabled,
   onStateChange,
 }: {
-  questionIndex: number;
   question: AgentQuestionnaire["questions"][number];
   state: DraftAnswerState;
   disabled: boolean;
@@ -56,13 +34,11 @@ export function AgentQuestionnaireQuestion({
   const showCustomInput = question.allowCustomAnswer || Boolean(customChoice);
 
   return (
-    <section className="space-y-2.5">
-      <p className="font-medium text-base text-foreground">
-        {questionIndex + 1}. {question.prompt}
-      </p>
+    <section className="space-y-2">
+      <p className="font-medium text-foreground text-sm">{question.prompt}</p>
       {question.choices.length > 0 ? (
-        <div className="space-y-1.5">
-          {question.choices.map((choice) => {
+        <div className="space-y-0.5">
+          {question.choices.map((choice, choiceIndex) => {
             const selected = state.selectedChoiceId === choice.id;
 
             if (isCustomChoice(choice)) {
@@ -70,17 +46,14 @@ export function AgentQuestionnaireQuestion({
                 <div
                   className={cn(
                     optionRowClass,
-                    "border-dashed",
-                    selected
-                      ? "border-primary bg-primary/5"
-                      : "border-muted-foreground/30",
+                    selected ? "bg-muted" : "hover:bg-muted/60",
                     disabled && "pointer-events-none opacity-50"
                   )}
                   key={choice.id}
                 >
                   <button
                     aria-label={choice.label}
-                    className="flex shrink-0 items-center"
+                    className="flex size-10 shrink-0 items-center justify-center text-muted-foreground tabular-nums"
                     data-question-option="true"
                     data-selected={selected}
                     disabled={disabled}
@@ -93,10 +66,10 @@ export function AgentQuestionnaireQuestion({
                     }
                     type="button"
                   >
-                    <RadioDot selected={selected} />
+                    {choiceIndex + 1}.
                   </button>
                   <Input
-                    className="h-auto flex-1 border-0 bg-transparent! px-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                    className="h-10 flex-1 border-0 bg-transparent! px-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
                     disabled={disabled}
                     onChange={(event) =>
                       onStateChange({
@@ -139,7 +112,12 @@ export function AgentQuestionnaireQuestion({
                 }
                 type="button"
               >
-                <RadioDot selected={selected} />
+                <span
+                  aria-hidden
+                  className="w-5 shrink-0 text-muted-foreground tabular-nums"
+                >
+                  {choiceIndex + 1}.
+                </span>
                 {choice.label}
               </button>
             );
@@ -148,7 +126,7 @@ export function AgentQuestionnaireQuestion({
       ) : null}
       {showCustomInput && !customChoice ? (
         <Input
-          className="min-h-11 rounded-lg border-dashed"
+          className="min-h-10 rounded-md border-dashed"
           disabled={disabled}
           onChange={(event) =>
             onStateChange({

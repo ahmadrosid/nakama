@@ -242,7 +242,7 @@ export function AgentQuestionnairePanel({
   }
 
   return (
-    <div className="w-full max-w-2xl">
+    <div className="w-full max-w-xl">
       <section
         aria-label="Agent questions"
         className="rounded-xl border border-border bg-background"
@@ -253,7 +253,7 @@ export function AgentQuestionnairePanel({
           )}
           currentQuestionIndex={currentQuestionIndex}
         />
-        <div className="space-y-4 px-3 py-3" onKeyDown={handleKeyDown}>
+        <div className="space-y-3 px-3 pt-1 pb-3" onKeyDown={handleKeyDown}>
           <div key={activeQuestion.id} ref={activeQuestionRef}>
             <AgentQuestionnaireQuestion
               disabled={disabled}
@@ -264,7 +264,6 @@ export function AgentQuestionnairePanel({
                 }))
               }
               question={activeQuestion}
-              questionIndex={currentQuestionIndex}
               state={activeState}
             />
           </div>
