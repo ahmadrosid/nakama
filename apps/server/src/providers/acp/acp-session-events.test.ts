@@ -77,10 +77,87 @@ describe("ACP tool steps", () => {
     ]);
     expect(ends).toEqual([
       {
-        result: [{ text: '{"matchCount":0}', type: "text" }],
+        result: { matchCount: 0 },
         tool: "knowledge_base_search",
         toolCallId: "t1",
       },
+    ]);
+  });
+
+  test("a Codex save_artifact call shows as save_artifact with the path and size it saved", () => {
+    const { ends, handlers, starts } = recorder();
+    const mapper = createAcpUpdateMapper(handlers);
+    const path = "/w/artifacts/q3.html";
+
+    mapper.handle(
+      notify({
+        kind: "other",
+        rawInput: {
+          arguments: { content: "<html></html>", path: "artifacts/q3.html" },
+          server: "nakama",
+          tool: "save_artifact",
+        },
+        sessionUpdate: "tool_call",
+        status: "in_progress",
+        title: "mcp.nakama.save_artifact",
+        toolCallId: "c1",
+      })
+    );
+    mapper.handle(
+      notify({
+        rawOutput: {
+          error: null,
+          result: {
+            _meta: null,
+            content: [
+              {
+                text: JSON.stringify({ bytesWritten: 13, path }),
+                type: "text",
+              },
+            ],
+            structuredContent: null,
+          },
+        },
+        sessionUpdate: "tool_call_update",
+        status: "completed",
+        title: "mcp.nakama.save_artifact",
+        toolCallId: "c1",
+      })
+    );
+
+    expect(starts).toEqual([
+      {
+        input: { content: "<html></html>", path: "artifacts/q3.html" },
+        tool: "save_artifact",
+        toolCallId: "c1",
+      },
+    ]);
+    expect(ends).toEqual([
+      {
+        result: { bytesWritten: 13, path },
+        tool: "save_artifact",
+        toolCallId: "c1",
+      },
+    ]);
+    expect(mapper.completedToolCalls()[0]?.call.name).toBe("save_artifact");
+  });
+
+  test("a failed Codex MCP call keeps its error", () => {
+    const { ends, handlers } = recorder();
+    const mapper = createAcpUpdateMapper(handlers);
+
+    mapper.handle(
+      notify({
+        rawOutput: { error: { message: "denied" }, result: null },
+        sessionUpdate: "tool_call_update",
+        status: "failed",
+        title: "mcp.nakama.save_artifact",
+        toolCallId: "c2",
+      })
+    );
+
+    expect(ends).toEqual([
+      { result: { error: "denied" }, tool: "save_artifact", toolCallId: "c2" },
     ]);
   });
 
