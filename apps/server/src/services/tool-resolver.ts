@@ -20,10 +20,7 @@ import { loadWebSearchConfig } from "@nakama/core/web-search-config";
 import type { DatabaseAdapter, StoredToolRecord } from "@nakama/db";
 import { type BashInput, bashTool, runBash } from "../tools/bash";
 import { createBrowserTools } from "../tools/browser-tools";
-import {
-  enrichAgentBrowserBashInput,
-  isCloudBrowserRuntime,
-} from "./agent-browser-service";
+import { isCloudBrowserRuntime } from "./agent-browser-service";
 import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
 import { getCustomToolHandler } from "./custom-tool-handlers";
 import type { CustomToolRecord } from "./custom-tool-shared";
@@ -228,10 +225,7 @@ function createCodingAgentAwareBashTool(
         orgService
       );
 
-      return runBash(
-        await enrichAgentBrowserBashInput(enriched, context),
-        context
-      );
+      return runBash(enriched, context);
     },
   };
 }

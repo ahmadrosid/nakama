@@ -6,29 +6,12 @@ import { client } from "@/lib/client";
 
 const PANEL_ID = "session-browser";
 
-const AGENT_BROWSER_PATTERN = /(^|[\s;&|(`])agent-browser(?=\s|$)/;
-
-/** Changes each time a browser tool call or an agent-browser bash call starts or finishes. */
+/** Changes each time a browser_* tool call starts or finishes. */
 function latestAgentBrowserCall(messages: ChatListItem[]): string | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
 
-    if (message?.role !== "tool") {
-      continue;
-    }
-
-    if (message.tool?.startsWith("browser_")) {
-      return `${message.toolCallId}:${message.toolStatus ?? "done"}`;
-    }
-
-    const command = message.toolInput?.command;
-
-    if (
-      message.tool === "bash" &&
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Tool input is decoded JSON from the stream.
-      typeof command === "string" &&
-      AGENT_BROWSER_PATTERN.test(command)
-    ) {
+    if (message?.role === "tool" && message.tool?.startsWith("browser_")) {
       return `${message.toolCallId}:${message.toolStatus ?? "done"}`;
     }
   }

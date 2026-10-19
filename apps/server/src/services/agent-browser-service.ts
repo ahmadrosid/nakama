@@ -8,7 +8,6 @@ import {
   REDACTED_SECRET_VALUE,
   readTextOrNull,
   type SessionBrowserResponse,
-  type ToolContext,
   type UpdateAgentBrowserSettingsRequest,
   writeParsedConfigIni,
 } from "@nakama/core";
@@ -16,7 +15,6 @@ import {
   ensureBunGlobalInstallDirs,
   ensureProcessPath,
 } from "../lib/ensure-process-path";
-import type { BashInput } from "../tools/bash";
 import {
   buildPinnedPackageInstallPlan,
   detectNpmOrBun,
@@ -28,7 +26,6 @@ import {
 } from "./cli-package-install";
 import {
   deleteKernelBrowser,
-  ensureKernelBrowser,
   getKernelBrowser,
   userBrowserName,
 } from "./kernel-browser";
@@ -38,12 +35,6 @@ const AGENT_BROWSER_PACKAGE = "agent-browser";
 const AGENT_BROWSER_COMMAND = "agent-browser";
 
 const AGENT_BROWSER_SECTION = "agent_browser";
-
-const AGENT_BROWSER_COMMAND_PATTERN = /(^|[\s;&|(`])agent-browser(?=\s|$)/;
-
-const AGENT_BROWSER_MAX_OUTPUT_CHARS = 20_000;
-
-const AGENT_BROWSER_DAEMON_IDLE_MS = 120_000;
 
 interface AgentBrowserConfig {
   apiKey: string;
@@ -246,50 +237,6 @@ export async function stopUserBrowser(
     await requireKernelApiKey(),
     userBrowserName(orgId, userId)
   );
-}
-
-/**
- * Connects agent-browser commands to the chat user's Kernel browser over
- * CDP. The API key stays on the server: the shell only gets the CDP URL of
- * that one browser. Runs with no user, such as automations, keep the local
- * browser rather than borrow someone's signed-in one.
- */
-export async function enrichAgentBrowserBashInput(
-  input: BashInput,
-  context: ToolContext
-): Promise<BashInput> {
-  if (!AGENT_BROWSER_COMMAND_PATTERN.test(input.command)) {
-    return input;
-  }
-
-  const orgId = context.orgId?.trim();
-  const userId = context.userId?.trim();
-  const config = await resolveAgentBrowserConfig();
-
-  if (!(config?.apiKey && orgId && userId)) {
-    return input;
-  }
-
-  const browser = await ensureKernelBrowser(config.apiKey, orgId, userId);
-
-  return {
-    ...input,
-    env: {
-      // One LinkedIn snapshot runs past 30k characters; uncapped, a few of
-      // them crowd out the rest of the conversation.
-      AGENT_BROWSER_MAX_OUTPUT: String(AGENT_BROWSER_MAX_OUTPUT_CHARS),
-      ...input.env,
-      AGENT_BROWSER_CDP: browser.cdp_ws_url,
-      // The daemon holds its CDP connection open, and Kernel counts that as
-      // activity: without this the browser never idles out, so it never saves
-      // the user's logins to the profile and keeps billing.
-      AGENT_BROWSER_IDLE_TIMEOUT_MS: String(AGENT_BROWSER_DAEMON_IDLE_MS),
-      // A new Kernel browser gets a new daemon session, so agent-browser never
-      // reuses a CDP connection to a browser that already timed out.
-      AGENT_BROWSER_SESSION: `kernel-${browser.session_id}`,
-      KERNEL_API_KEY: "",
-    },
-  };
 }
 
 export interface AgentBrowserInstallProgress {

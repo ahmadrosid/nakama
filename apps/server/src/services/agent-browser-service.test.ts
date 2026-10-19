@@ -8,7 +8,6 @@ import { createHonoApp } from "../http/app";
 import { setupFreshInstallSession } from "../http/test-session-helpers";
 import { asTestFetch } from "../providers/test-helpers";
 import {
-  enrichAgentBrowserBashInput,
   getAgentBrowserInstallCommand,
   getAgentBrowserStatus,
   getUserBrowser,
@@ -18,6 +17,7 @@ import {
 } from "../services/agent-browser-service";
 import { AgentService } from "../services/agent-service";
 import { AuthService } from "../services/auth-service";
+import { ensureKernelBrowser } from "../services/kernel-browser";
 import { OrgService } from "../services/org-service";
 import * as cliPackageInstall from "./cli-package-install";
 import {
@@ -494,101 +494,18 @@ describe("Kernel browser runtime", () => {
     await rm(configDir, { force: true, recursive: true });
   });
 
-  test("leaves agent-browser on local Chrome when Kernel is not set up", async () => {
-    const input = { command: "agent-browser open https://example.com" };
-
-    expect(await enrichAgentBrowserBashInput(input, context)).toEqual(input);
-    expect(requests).toHaveLength(0);
-  });
-
-  test("keeps another user off the first user's browser", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
-    await enrichAgentBrowserBashInput(
-      { command: "agent-browser open x" },
-      context
-    );
-
-    expect((await getUserBrowser("org-a", "user-2")).liveViewUrl).toBeNull();
-  });
-
-  test("keeps runs with no user on the local browser", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
-    const input = { command: "agent-browser open https://example.com" };
-
-    expect(
-      await enrichAgentBrowserBashInput(input, {
-        ...context,
-        userId: undefined,
-      })
-    ).toEqual(input);
-  });
-
-  test("leaves other bash commands alone when Kernel is set up", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
-    const input = { command: "ls agent-browser-notes" };
-
-    expect(await enrichAgentBrowserBashInput(input, context)).toEqual(input);
-    expect(requests).toHaveLength(0);
-  });
-
-  test("shares one Kernel browser across a user's chats and agents", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
-    const input = { command: "agent-browser open https://www.linkedin.com" };
-
-    const first = await enrichAgentBrowserBashInput(input, context);
-
-    const second = await enrichAgentBrowserBashInput(input, {
-      ...context,
-      profileId: "agent-2",
-      sessionId: "chat-2",
-    });
-
-    expect(first.env?.AGENT_BROWSER_CDP).toBe(
-      "wss://cdp.onkernel.com/nakama-org-a-user-user-1"
-    );
-    expect(first.env?.KERNEL_API_KEY).toBe("");
-    expect(first.env).not.toHaveProperty("AGENT_BROWSER_PROVIDER");
-    expect(Number(first.env?.AGENT_BROWSER_MAX_OUTPUT)).toBeGreaterThan(0);
-    expect(Number(first.env?.AGENT_BROWSER_IDLE_TIMEOUT_MS)).toBeGreaterThan(0);
-    expect(second.env).toEqual(first.env);
-    expect(
-      requests.filter((request) => request.url === "/browsers")
-    ).toHaveLength(1);
-    expect(
-      requests.find((request) => request.url === "/browsers")?.body
-    ).toMatchObject({
-      headless: false,
-      profile: { name: "nakama-org-a-user-user-1", save_changes: true },
-    });
-  });
-
-  test("keeps an output cap the caller sets", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
-
-    const enriched = await enrichAgentBrowserBashInput(
-      {
-        command: "agent-browser snapshot",
-        env: { AGENT_BROWSER_MAX_OUTPUT: "500" },
-      },
-      context
-    );
-
-    expect(enriched.env?.AGENT_BROWSER_MAX_OUTPUT).toBe("500");
-  });
-
   test("uses the Kernel key from the host env", async () => {
     process.env.NAKAMA_BROWSER_PROVIDER = "kernel";
     process.env.KERNEL_API_KEY = "env-key";
 
-    const status = await getAgentBrowserStatus();
+    expect((await getAgentBrowserStatus()).provider).toBe("kernel");
+  });
 
-    const enriched = await enrichAgentBrowserBashInput(
-      { command: "agent-browser snapshot -i" },
-      context
-    );
+  test("keeps another user off the first user's browser", async () => {
+    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await ensureKernelBrowser("kernel-key", "org-a", "user-1");
 
-    expect(status.provider).toBe("kernel");
-    expect(enriched.env?.AGENT_BROWSER_CDP).toBeString();
+    expect((await getUserBrowser("org-a", "user-2")).liveViewUrl).toBeNull();
   });
 
   test("requires a Kernel API key to save", async () => {
@@ -614,10 +531,7 @@ describe("Kernel browser runtime", () => {
 
   test("does not show one org the browser of another org", async () => {
     await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
-    await enrichAgentBrowserBashInput(
-      { command: "agent-browser open x" },
-      context
-    );
+    await ensureKernelBrowser("kernel-key", "org-a", "user-1");
 
     expect((await getUserBrowser("org-a", "user-1")).liveViewUrl).toBe(
       "https://live.onkernel.com/nakama-org-a-user-user-1"
@@ -627,10 +541,7 @@ describe("Kernel browser runtime", () => {
 
   test("stops the session browser", async () => {
     await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
-    await enrichAgentBrowserBashInput(
-      { command: "agent-browser open x" },
-      context
-    );
+    await ensureKernelBrowser("kernel-key", "org-a", "user-1");
 
     await stopUserBrowser("org-a", "user-1");
 
