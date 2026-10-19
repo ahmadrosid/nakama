@@ -280,7 +280,7 @@ function openInBrowser(value) {
 // development run starts the stock Electron binary, whose icon is Electron's.
 export const windowIcon = app.isPackaged
   ? undefined
-  : join(import.meta.dirname, "../web/public/icons/icon-512.png");
+  : join(import.meta.dirname, "../web/public/icons/icon-512-v2.png");
 
 // The web app draws its own 40px title bar. Overlay colors follow its
 // --sidebar and --muted-foreground tokens so the native buttons blend in.

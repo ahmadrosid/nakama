@@ -27,7 +27,7 @@ mac:
   entitlementsInherit: entitlements.mac.plist
   binaries:
     - Contents/Resources/runtime/bin/bun
-  icon: ../web/public/icons/icon-512.png
+  icon: ../web/public/icons/icon-512-v2.png
   category: public.app-category.productivity
   minimumSystemVersion: '15.0'
   target:
@@ -36,7 +36,7 @@ mac:
     - target: zip
       arch: [arm64]
 win:
-  icon: ../web/public/icons/icon-512.png
+  icon: ../web/public/icons/icon-512-v2.png
   target:
     - target: nsis
       arch: [x64]
