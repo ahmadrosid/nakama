@@ -111,7 +111,7 @@ function SetupUserContextSession({
         <div className="mb-4 flex items-center justify-between gap-4">
           <h2 className="font-semibold text-base text-foreground">About you</h2>
           <button
-            className="text-muted-foreground text-sm underline underline-offset-4 transition-colors hover:text-foreground shrink-0"
+            className="shrink-0 text-muted-foreground text-sm underline underline-offset-4 transition-colors hover:text-foreground"
             disabled={busy}
             onClick={handleSkip}
             type="button"
