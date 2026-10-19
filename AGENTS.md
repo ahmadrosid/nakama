@@ -53,15 +53,6 @@ Screenshots: `gh pr edit <number> --attach <image-path>` uploads and embeds it i
 
 ## Browser automation
 
-```bash
-bun run agent:ui
-# source the printed harness.env, then:
-agent-browser open $BASE_URL/chat
-bun run agent:ui:stop
-```
-
-The harness boots an isolated API + Vite stack under `/tmp`, seeds setup over HTTP, and never writes `~/.nakama` or steals `4310`. Run it outside a sandbox that blocks bind or detach. `/chat` is the only seeded-ready page. Other `apps/web` routes are navigation hints, not harness success signals.
-
 Prefer role and text locators. Add `data-testid` only when labels collide.
 
 Operator Docker / `dev:web` on `4310` stays valid for humans. For PR motion video, use `.agents/skills/browser-video-proof/SKILL.md`.
