@@ -30,6 +30,7 @@ const PROVIDER_PRESETS: Array<{
 }> = [
   { label: "Exa", value: "exa" },
   { label: "Firecrawl", value: "firecrawl" },
+  { label: "Serply", value: "serply" },
 ];
 
 function useSavedHint() {

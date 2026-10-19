@@ -1240,6 +1240,32 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
   const deleteProfileStmt = db.prepare("DELETE FROM profiles WHERE id = ?");
 
+  const promoteProfileStmt = db.prepare(
+    "UPDATE profiles SET is_default = 1, updated_at = ? WHERE id = ? AND org_id = ?"
+  );
+
+  const deleteProfileAndPromoteDefaultTx = db.transaction(
+    (id: string, orgId: string, successorId?: string) => {
+      if (getProfileForOrgStmt.get(id, orgId)?.is_default && !successorId) {
+        throw new Error("Default profile changed during deletion.");
+      }
+
+      const deleted = deleteProfileForOrgStmt.run(id, orgId).changes > 0;
+
+      if (
+        deleted &&
+        successorId &&
+        !getDefaultProfileForOrgStmt.get(orgId) &&
+        promoteProfileStmt.run(new Date().toISOString(), successorId, orgId)
+          .changes !== 1
+      ) {
+        throw new Error("Successor profile not found.");
+      }
+
+      return deleted;
+    }
+  );
+
   const deleteProfileForOrgStmt = db.prepare(
     "DELETE FROM profiles WHERE id = ? AND org_id = ?"
   );
@@ -4743,6 +4769,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const result = deleteProfileStmt.run(id);
 
       return result.changes > 0;
+    },
+
+    async deleteProfileAndPromoteDefault(id, orgId, successorId) {
+      return deleteProfileAndPromoteDefaultTx.immediate(id, orgId, successorId);
     },
 
     async deleteProfileForOrg(id, orgId) {

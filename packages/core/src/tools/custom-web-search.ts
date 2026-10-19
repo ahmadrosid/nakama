@@ -68,19 +68,42 @@ function truncate(value: string, maxChars: number): string {
 interface SearchRequestHeaders {
   accept: string;
   authorization?: string;
-  "content-type": string;
+  "content-type"?: string;
+  "user-agent"?: string;
   "x-api-key"?: string;
 }
 
 interface SearchRequest {
-  body: string;
+  /** Absent for a GET vendor, which carries the query in the URL instead. */
+  body?: string;
   headers: SearchRequestHeaders;
+  method: "GET" | "POST";
+  url: string;
 }
 
 function buildRequest(
   config: WebSearchConfigFile,
   query: string
 ): SearchRequest {
+  // Serply reads the query from the URL, so it carries no body and no content
+  // type, and identifies the project in the agent string the vendor asked for.
+  if (config.provider === "serply") {
+    const url = new URL(config.endpoint);
+
+    url.searchParams.set("q", query);
+    url.searchParams.set("num", String(MAX_RESULTS));
+
+    return {
+      headers: {
+        accept: "application/json",
+        "user-agent": "nakama",
+        "x-api-key": config.apiKey,
+      },
+      method: "GET",
+      url: url.toString(),
+    };
+  }
+
   const headers: SearchRequestHeaders = {
     accept: "application/json",
     "content-type": "application/json",
@@ -96,6 +119,8 @@ function buildRequest(
         query,
       }),
       headers: { ...headers },
+      method: "POST",
+      url: config.endpoint,
     };
   }
 
@@ -104,6 +129,8 @@ function buildRequest(
   return {
     body: JSON.stringify({ limit: MAX_RESULTS, query }),
     headers,
+    method: "POST",
+    url: config.endpoint,
   };
 }
 
@@ -205,17 +232,19 @@ export async function runCustomWebSearch(
   context?: ToolContext
 ): Promise<CustomWebSearchOutput> {
   const { query } = webSearchInputSchema.parse(input);
-  const { body, headers } = buildRequest(config, query);
+  const { body, headers, method, url } = buildRequest(config, query);
 
-  const response = await fetch(
-    config.endpoint,
-    withDisabledFetchIdle({
-      body,
-      headers: new Headers(Object.entries(headers)),
-      method: "POST",
-      signal: resolveSignal(context),
-    })
-  );
+  const init: RequestInit = {
+    headers: new Headers(Object.entries(headers)),
+    method,
+    signal: resolveSignal(context),
+  };
+
+  if (body !== undefined) {
+    init.body = body;
+  }
+
+  const response = await fetch(url, withDisabledFetchIdle(init));
 
   if (!response.ok) {
     const detail = truncate(

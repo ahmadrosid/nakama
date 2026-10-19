@@ -145,7 +145,7 @@ Search the web for current information.
 
 **Availability:** When assigned **and** the configured provider is OpenAI or Anthropic with a valid API key. Not available on OpenRouter. On Gemini, web search is disabled when other local tools are present on the same turn.
 
-**Custom search back-end:** Set a provider under **Control center → Agent tools → AI Providers → Web search** (Exa, Firecrawl, or any endpoint that answers with JSON search results) to run the search on Nakama instead of the model provider. This removes the provider restriction above and returns `{ provider, query, results: [{ title, url, snippet }] }`. Leave it on **Built-in** to keep the provider-hosted search.
+**Custom search back-end:** Set a provider under **Control center → Agent tools → AI Providers → Web search** (Exa, Firecrawl, Serply, or any endpoint that answers with JSON search results) to run the search on Nakama instead of the model provider. This removes the provider restriction above and returns `{ provider, query, results: [{ title, url, snippet }] }`. Leave it on **Built-in** to keep the provider-hosted search.
 
 ## `web_fetch`
 

@@ -11,6 +11,7 @@ const originalFetch = globalThis.fetch;
 interface CapturedRequest {
   body: unknown;
   headers: Record<string, string>;
+  method: string;
   url: string;
 }
 
@@ -24,6 +25,7 @@ function stubFetch(
     captured.push({
       body: JSON.parse(String(init?.body ?? "{}")),
       headers: Object.fromEntries(new Headers(init?.headers)),
+      method: String(init?.method ?? "GET"),
       url: String(input),
     });
 
@@ -144,6 +146,88 @@ describe("createCustomWebSearchTool", () => {
 
     await expect(tool?.run({ query: "anything" }, {})).rejects.toThrow(
       "Exa returned 402"
+    );
+  });
+
+  test("sends the Serply query in the URL of a GET", async () => {
+    const captured: CapturedRequest[] = [];
+    stubFetch({ body: { results: [] } }, captured);
+
+    const tool = createCustomWebSearchTool(
+      config({
+        apiKey: "serply-key",
+        endpoint: "https://api.serply.io/v1/search",
+        provider: "serply",
+      })
+    );
+
+    await tool?.run({ query: "bun release notes" }, {});
+
+    const url = new URL(String(captured[0]?.url));
+
+    expect(captured[0]?.method).toBe("GET");
+    expect(`${url.origin}${url.pathname}`).toBe(
+      "https://api.serply.io/v1/search"
+    );
+    expect(url.searchParams.get("q")).toBe("bun release notes");
+    expect(url.searchParams.get("num")).toBe("5");
+    expect(captured[0]?.headers["x-api-key"]).toBe("serply-key");
+    expect(captured[0]?.headers["user-agent"]).toBe("nakama");
+  });
+
+  test("reads Serply's link and description fields", async () => {
+    const captured: CapturedRequest[] = [];
+    stubFetch(
+      {
+        body: {
+          results: [
+            {
+              description: "All-in-one JavaScript toolkit",
+              link: "https://bun.sh",
+              title: "Bun",
+            },
+          ],
+        },
+      },
+      captured
+    );
+
+    const tool = createCustomWebSearchTool(
+      config({
+        apiKey: "serply-key",
+        endpoint: "https://api.serply.io/v1/search",
+        provider: "serply",
+      })
+    );
+
+    const output = await tool?.run({ query: "bun" }, {});
+
+    expect(output).toEqual({
+      provider: "serply",
+      query: "bun",
+      results: [
+        {
+          snippet: "All-in-one JavaScript toolkit",
+          title: "Bun",
+          url: "https://bun.sh",
+        },
+      ],
+    });
+  });
+
+  test("surfaces a Serply failure under its own label", async () => {
+    stubFetch({ body: "rate limited", status: 429 }, []);
+
+    const tool = createCustomWebSearchTool(
+      config({
+        apiKey: "serply-key",
+        endpoint: "https://api.serply.io/v1/search",
+        provider: "serply",
+      })
+    );
+
+    await expect(tool?.run({ query: "anything" }, {})).rejects.toThrow(
+      "Serply returned 429"
     );
   });
 });

@@ -1332,6 +1332,78 @@ describe("profile service deleteProfile", () => {
     );
   });
 
+  test("keeps files and the default when database deletion fails", async () => {
+    const { db, service } = await setup();
+    const first = await service.createProfile(ORG_ID, { name: "Default Bot" });
+    const second = await service.createProfile(ORG_ID, { name: "Second" });
+    await service.createProfile(ORG_ID, { name: "Third" });
+    await markDefault(db, first.profile.id);
+
+    const soulPath = path.join(
+      getProfileSoulDir(ORG_ID, first.profile.id),
+      "SOUL.md"
+    );
+
+    const soul = await readFile(soulPath, "utf8");
+    const deleteProfile = db.deleteProfileAndPromoteDefault;
+    db.deleteProfileAndPromoteDefault = async () => {
+      throw new Error("Database unavailable");
+    };
+
+    await expect(
+      service.deleteProfile(ORG_ID, first.profile.id)
+    ).rejects.toThrow();
+    db.deleteProfileAndPromoteDefault = deleteProfile;
+
+    expect(await readFile(soulPath, "utf8")).toBe(soul);
+    expect((await db.getProfile(first.profile.id))?.isDefault).toBe(true);
+    expect((await db.getProfile(second.profile.id))?.isDefault).toBe(false);
+    await expect(
+      db.deleteProfileAndPromoteDefault(first.profile.id, ORG_ID, "missing")
+    ).rejects.toThrow();
+    expect((await db.getProfile(first.profile.id))?.isDefault).toBe(true);
+    expect(await readFile(soulPath, "utf8")).toBe(soul);
+  });
+
+  test("keeps a newer default selected during deletion", async () => {
+    const { db, service } = await setup();
+    const first = await service.createProfile(ORG_ID, { name: "Default Bot" });
+    const second = await service.createProfile(ORG_ID, { name: "Second" });
+    const third = await service.createProfile(ORG_ID, { name: "Third" });
+    await markDefault(db, first.profile.id);
+    service.beforeChannelOwnerDelete = async () => {
+      await markDefault(db, third.profile.id);
+    };
+
+    await service.deleteProfile(ORG_ID, first.profile.id);
+
+    expect((await db.getProfile(second.profile.id))?.isDefault).toBe(false);
+    expect((await db.getProfile(third.profile.id))?.isDefault).toBe(true);
+  });
+
+  test("keeps a target promoted to default during deletion", async () => {
+    const { db, service } = await setup();
+    const first = await service.createProfile(ORG_ID, { name: "Default Bot" });
+    const second = await service.createProfile(ORG_ID, { name: "Second" });
+    await service.createProfile(ORG_ID, { name: "Third" });
+    await markDefault(db, first.profile.id);
+    service.beforeChannelOwnerDelete = async () => {
+      await markDefault(db, second.profile.id);
+    };
+
+    await expect(
+      service.deleteProfile(ORG_ID, second.profile.id)
+    ).rejects.toThrow();
+
+    expect((await db.getProfile(second.profile.id))?.isDefault).toBe(true);
+    expect(
+      await readFile(
+        path.join(getProfileSoulDir(ORG_ID, second.profile.id), "SOUL.md"),
+        "utf8"
+      )
+    ).toBeTruthy();
+  });
+
   test("does not promote Super Nakama as the new default", async () => {
     const { db, service } = await setup();
     const first = await service.createProfile(ORG_ID, { name: "Default Bot" });

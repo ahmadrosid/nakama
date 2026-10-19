@@ -7,6 +7,13 @@ import { asTestFetch } from "../channel-test-helpers";
 import type { JsonValue } from "../contract";
 import { saveTelegramConfig } from "../telegram-config";
 import { createTelegramOutboundAdapter } from "./telegram-outbound";
+import { renderTelegramRichText } from "./telegram-rich-text";
+
+test("keeps literal placeholder text beside a code block", () => {
+  expect(renderTelegramRichText("@@TCTOKEN0@@\n```text\ncode\n```")).toBe(
+    "@@TCTOKEN0@@\n<pre><code>code</code></pre>"
+  );
+});
 
 const owner = { orgId: "org_test", profileId: "agent_test" };
 
