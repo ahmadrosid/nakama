@@ -89,6 +89,23 @@ describe("browser tools", () => {
           return playwrightResponse(call);
         }
 
+        if (call.path.endsWith("/playwright/executors")) {
+          return Response.json({
+            executors: [
+              { last_used_at: "2026-10-19T01:00:00Z", name: "default" },
+              { last_used_at: "2026-10-19T01:05:00Z", name: "old-1" },
+              { last_used_at: "2026-10-19T01:06:00Z", name: "old-2" },
+              { last_used_at: "2026-10-19T01:07:00Z", name: "recent-1" },
+              { last_used_at: "2026-10-19T01:08:00Z", name: "recent-2" },
+              { last_used_at: "2026-10-19T01:09:00Z", name: "chat-1" },
+            ],
+          });
+        }
+
+        if (call.path.includes("/playwright/executors/")) {
+          return new Response(null, { status: 204 });
+        }
+
         if (call.path.endsWith("/computer/screenshot")) {
           return new Response(new Uint8Array([137, 80, 78, 71]), {
             headers: { "content-type": "image/png" },
@@ -253,6 +270,43 @@ describe("browser tools", () => {
     expect(full.links).toHaveLength(1);
     expect(short.text.length).toBe(100);
     expect(short.truncated).toBe(true);
+  });
+
+  test("a new chat tab closes the oldest chat tabs", async () => {
+    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+
+    playwrightResponse = () =>
+      Response.json({ result: {}, success: true, tab: { created: true } });
+
+    await tool("browser_navigate").run({ url: "https://example.com" }, context);
+
+    const closed = calls
+      .filter(
+        (call) =>
+          call.method === "DELETE" &&
+          call.path.includes("/playwright/executors/")
+      )
+      .map((call) => call.path.split("/").pop());
+
+    expect(closed.sort()).toEqual(["old-1", "old-2"]);
+  });
+
+  test("read from an offset returns only the text after it", async () => {
+    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+
+    playwrightResponse = () =>
+      Response.json({
+        result: { links: [], text: `${"a".repeat(3000)}${"b".repeat(500)}` },
+        success: true,
+      });
+
+    const tail = z
+      .object({ offset: z.number(), text: z.string(), truncated: z.boolean() })
+      .parse(await tool("browser_read").run({ offset: 3000 }, context));
+
+    expect(tail.offset).toBe(3000);
+    expect(tail.text).toBe("b".repeat(500));
+    expect(tail.truncated).toBe(false);
   });
 
   test("playwright reports a failed step as an error", async () => {

@@ -135,6 +135,7 @@ const NavigateInputSchema = z.object({ url: z.string() });
 
 const ReadInputSchema = z.object({
   maxChars: z.number().optional().catch(undefined),
+  offset: z.number().optional().catch(undefined),
   selector: z.string().optional().catch(undefined),
 });
 
@@ -296,6 +297,17 @@ const start = await page.evaluate(({ pixels, selector }) => {
 }, input);
 if (!start) throw new Error("No element matches " + input.selector + ".");
 await page.waitForTimeout(1500);
+// Feeds such as LinkedIn load the next posts only after the bottom is reached,
+// so give them a few seconds before calling it the end.
+const bottom = await page.evaluate(() => {
+  const el = window.__nakamaScrollTarget;
+  return el.scrollTop + el.clientHeight >= el.scrollHeight - 4 ? el.scrollHeight : null;
+});
+if (bottom !== null) {
+  await page
+    .waitForFunction((height) => window.__nakamaScrollTarget.scrollHeight > height, bottom, { timeout: 8000 })
+    .catch(() => null);
+}
 const after = await page.evaluate(() => {
   const el = window.__nakamaScrollTarget;
   return {
@@ -345,6 +357,11 @@ export function createBrowserTools(): ToolDefinition[] {
             description: "Return at most this many characters of text.",
             type: "number",
           },
+          offset: {
+            description:
+              "Start at this character. After browser_scroll, pass the totalChars from your last read to get only the new text.",
+            type: "number",
+          },
           selector: {
             description: "CSS selector of the part of the page to read.",
             type: "string",
@@ -373,13 +390,19 @@ export function createBrowserTools(): ToolDefinition[] {
           MAX_OUTPUT_CHARS
         );
 
-        const capped = capText(page.text.slice(0, limit));
+        const offset = Math.min(
+          Math.max(Math.trunc(parsed.offset ?? 0), 0),
+          page.text.length
+        );
+
+        const capped = capText(page.text.slice(offset, offset + limit));
 
         return {
           ...page,
+          offset,
           text: capped.text,
           totalChars: page.text.length,
-          truncated: capped.truncated || page.text.length > limit,
+          truncated: capped.truncated || page.text.length > offset + limit,
         };
       },
     },

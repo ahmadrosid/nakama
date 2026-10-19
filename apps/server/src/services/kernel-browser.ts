@@ -29,7 +29,19 @@ const playwrightResultSchema = z.object({
   stderr: z.string().optional(),
   stdout: z.string().optional(),
   success: z.boolean(),
+  tab: z.object({ created: z.boolean() }).optional(),
 });
+
+const executorListSchema = z.object({
+  executors: z.array(z.object({ last_used_at: z.string(), name: z.string() })),
+});
+
+/**
+ * Chat tabs left open hold the user's browser busy: with five LinkedIn tabs
+ * open, the feed in a new one stopped loading more posts. Only the most
+ * recently used chat tabs stay.
+ */
+const MAX_CHAT_TABS = 3;
 
 export type KernelPlaywrightResult = z.infer<typeof playwrightResultSchema>;
 
@@ -245,7 +257,51 @@ export async function executeKernelPlaywright(
     throw await kernelFailure(response, "run the browser step");
   }
 
-  return playwrightResultSchema.parse(await response.json());
+  const outcome = playwrightResultSchema.parse(await response.json());
+
+  if (outcome.tab?.created && input.executor) {
+    await closeOldChatTabs(apiKey, browserName, input.executor).catch(
+      () => null
+    );
+  }
+
+  return outcome;
+}
+
+async function closeOldChatTabs(
+  apiKey: string,
+  browserName: string,
+  current: string
+): Promise<void> {
+  const response = await kernelRequest(
+    apiKey,
+    "GET",
+    browserPath(browserName, "/playwright/executors")
+  );
+
+  if (!response.ok) {
+    return;
+  }
+
+  const { executors } = executorListSchema.parse(await response.json());
+
+  const stale = executors
+    .filter((executor) => !["default", current].includes(executor.name))
+    .sort((a, b) => b.last_used_at.localeCompare(a.last_used_at))
+    .slice(MAX_CHAT_TABS - 1);
+
+  await Promise.all(
+    stale.map((executor) =>
+      kernelRequest(
+        apiKey,
+        "DELETE",
+        browserPath(
+          browserName,
+          `/playwright/executors/${encodeURIComponent(executor.name)}`
+        )
+      )
+    )
+  );
 }
 
 export async function captureKernelScreenshot(
