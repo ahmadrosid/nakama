@@ -153,6 +153,56 @@ describe("groupMessagesIntoTurns", () => {
     expect(turns[2]).toMatchObject({ kind: "user", message: { id: "u2" } });
   });
 
+  test("keeps confirmed question answers in the assistant turn", () => {
+    const answers = [
+      { answer: "Deep green", prompt: "Which color?", questionId: "color" },
+    ];
+
+    const turns = groupMessagesIntoTurns([
+      item({ content: "Choose a color", id: "u1", role: "user" }),
+      item({
+        id: "q1",
+        role: "tool",
+        tool: "ask_user_question",
+        toolStatus: "done",
+      }),
+      item({
+        content: "Answers\n\nQ: Which color?\nA: Deep green",
+        id: "u2",
+        questionnaireAnswers: answers,
+        role: "user",
+      }),
+      item({ content: "Deep green it is.", id: "a1", role: "assistant" }),
+    ]);
+
+    expect(turns).toHaveLength(3);
+    expect(turns[1]).toMatchObject({
+      kind: "assistant",
+      messages: [{ message: { id: "q1" } }],
+      questionnaireAnswers: answers,
+    });
+    expect(turns[2]).toMatchObject({
+      kind: "assistant",
+      messages: [{ message: { id: "a1" } }],
+    });
+  });
+
+  test("keeps ordinary answers as user messages", () => {
+    const turns = groupMessagesIntoTurns([
+      item({ content: "Ready", id: "a1", role: "assistant" }),
+      item({
+        content: "Answers\n\nQ: Which color?\nA: Green",
+        id: "u1",
+        questionnaireAnswers: [
+          { answer: "Green", prompt: "Which color?", questionId: "color" },
+        ],
+        role: "user",
+      }),
+    ]);
+
+    expect(turns[1]).toMatchObject({ kind: "user", message: { id: "u1" } });
+  });
+
   test("keeps consecutive assistants and tools in one assistant turn", () => {
     const messages: ChatListItem[] = [
       item({ content: "thinking aloud", id: "a0", role: "assistant" }),

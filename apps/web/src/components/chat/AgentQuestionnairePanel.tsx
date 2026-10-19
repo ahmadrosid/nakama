@@ -304,3 +304,30 @@ export function AgentQuestionnairePanel({
     </div>
   );
 }
+
+export function AgentQuestionnaireAnswers({
+  answers,
+}: {
+  answers: AgentQuestionAnswer[];
+}) {
+  return (
+    <section
+      aria-label="Agent questions"
+      className="w-full max-w-2xl rounded-xl border border-border bg-background px-3 py-3"
+    >
+      <p className="font-medium text-sm">Questions · Confirmed</p>
+      <div className="mt-3 space-y-3">
+        {answers.map((entry, index) => (
+          <div key={entry.questionId}>
+            <p className="font-medium text-sm">
+              {index + 1}. {entry.prompt}
+            </p>
+            <p className="mt-1 whitespace-pre-wrap text-muted-foreground text-sm">
+              {entry.answer || "Skipped"}
+            </p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}

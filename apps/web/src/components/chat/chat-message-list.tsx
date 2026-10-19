@@ -39,7 +39,10 @@ import {
   ConversationStickinessProvider,
 } from "@/components/ai-elements/conversation";
 import { Message, MessageContent } from "@/components/ai-elements/message";
-import { AgentQuestionnairePanel } from "@/components/chat/AgentQuestionnairePanel";
+import {
+  AgentQuestionnaireAnswers,
+  AgentQuestionnairePanel,
+} from "@/components/chat/AgentQuestionnairePanel";
 import { ArtifactAttachmentPreview } from "@/components/chat/artifact-attachment-preview";
 import {
   AssistantTurnSegmentView,
@@ -380,6 +383,7 @@ function ChatMessageListSession({
             questionnaire={
               turnIndex === turns.length - 1 ? questionnaire : null
             }
+            questionnaireAnswers={turn.questionnaireAnswers}
             readOnly={readOnly}
             sessionId={sessionId}
             showAwaiting={
@@ -501,6 +505,7 @@ function AssistantTurn({
   onRetryMessage,
   onSubmitQuestionnaire,
   questionnaire,
+  questionnaireAnswers,
   usedPluginTools,
 }: {
   readOnly?: boolean;
@@ -522,6 +527,7 @@ function AssistantTurn({
   onRetryMessage?: (message: ChatListItem) => void;
   onSubmitQuestionnaire?: (answers: AgentQuestionAnswer[]) => void;
   questionnaire?: AgentQuestionnaire | null;
+  questionnaireAnswers?: AgentQuestionAnswer[];
   usedPluginTools: string[];
 }) {
   const turnMessages = messages.map(({ message }) => message);
@@ -570,7 +576,11 @@ function AssistantTurn({
       {showAwaiting && !segments.some((segment) => segment.kind === "work") ? (
         <TurnAwaitingElapsed startedAt={turnStartedAt} />
       ) : null}
-      {onSubmitQuestionnaire &&
+      {questionnaireAnswers?.length ? (
+        <AgentQuestionnaireAnswers answers={questionnaireAnswers} />
+      ) : null}
+      {!questionnaireAnswers?.length &&
+      onSubmitQuestionnaire &&
       hasActiveAgentQuestionnaire(questionnaire) &&
       turnMessages.some(
         (message) =>
