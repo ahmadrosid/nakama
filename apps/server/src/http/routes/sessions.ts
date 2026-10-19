@@ -864,6 +864,7 @@ export function registerSessionRoutes(
 
   app.put("/v1/sessions/order", async (c) => {
     requireOrgMemberFromContext(c);
+
     const body = await readJson(
       c.req.raw,
       z.object({
@@ -871,12 +872,14 @@ export function registerSessionRoutes(
         sessionIds: z.array(z.string().min(1)).max(5000),
       })
     );
+
     await agent.setSessionOrder(
       requireActiveOrgIdFromContext(c),
       body.profileId,
       getRequestAuth(c),
       body.sessionIds
     );
+
     return new Response(null, { status: 204 });
   });
 

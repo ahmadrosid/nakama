@@ -3029,6 +3029,7 @@ export class AgentService {
 
   async detachSession(sessionId: string, orgId: string): Promise<boolean> {
     const record = await this.getSessionRecordForOrg(sessionId, orgId);
+
     return record ? this.db.updateSessionParent(sessionId, null) : false;
   }
 
@@ -3039,19 +3040,24 @@ export class AgentService {
     sessionIds: string[]
   ): Promise<void> {
     const userId = access.user?.id;
+
     if (!userId || new Set(sessionIds).size !== sessionIds.length) {
       throw new NakamaApiError("Invalid session order.", 400);
     }
+
     const { sessions } = await this.listSessions(
       orgId,
       profileId,
       ["web", ...SHARED_HISTORY_CHANNELS],
       access
     );
+
     const visibleIds = new Set(sessions.map((session) => session.id));
+
     if (sessionIds.some((id) => !visibleIds.has(id))) {
       throw new NakamaApiError("Invalid session order.", 400);
     }
+
     await this.db.setSessionOrder(userId, sessionIds);
   }
 

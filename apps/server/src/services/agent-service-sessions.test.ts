@@ -264,11 +264,13 @@ describe("AgentService branching", () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertProfile(createDefaultProfile());
     const service = new AgentService(null, null, db);
+
     const sourceId = await service.createSession(
       ORG_ID,
       "web",
       "profile_default"
     );
+
     await db.appendMessagesForSession(sourceId, [
       {
         createdAt: "2026-06-14T10:00:00.000Z",
@@ -278,8 +280,10 @@ describe("AgentService branching", () => {
         sessionId: sourceId,
       },
     ]);
+
     const branchId = (await service.branchSession(sourceId, 0, ORG_ID))!
       .sessionId;
+
     expect((await db.getSession(branchId))?.parentSessionId).toBe(sourceId);
     expect(await service.detachSession(branchId, ORG_ID)).toBe(true);
     expect((await db.getSession(branchId))?.parentSessionId).toBeNull();

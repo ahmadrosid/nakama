@@ -1383,9 +1383,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const updateSessionPinnedStmt = db.prepare(
     "UPDATE sessions SET pinned = ? WHERE id = ? AND app_user_id IS NULL"
   );
+
   const updateSessionParentStmt = db.prepare(
     "UPDATE sessions SET parent_session_id = ? WHERE id = ? AND app_user_id IS NULL"
   );
+
   const setSessionOrderStmt = db.prepare(`
     INSERT INTO session_user_order (session_id, user_id, sort_position)
     VALUES (?, ?, ?)
@@ -4806,6 +4808,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         db.prepare("DELETE FROM session_user_order WHERE session_id = ?").run(
           id
         );
+
         return deleteSessionStmt.run(id).changes > 0;
       })();
     },

@@ -1918,6 +1918,7 @@ function migrateSessionsTable(db: Database): void {
 
 function migrateSessionTree(db: Database): void {
   addNullableTextColumnIfMissing(db, "sessions", "parent_session_id");
+
   if (
     !db
       .prepare<{ name: string }, SQLQueryBindings[]>(
@@ -1928,6 +1929,7 @@ function migrateSessionTree(db: Database): void {
   ) {
     db.exec("ALTER TABLE sessions ADD COLUMN branch_message_index INTEGER");
   }
+
   db.exec(`CREATE TABLE IF NOT EXISTS session_user_order (
     session_id TEXT NOT NULL REFERENCES sessions (id) ON DELETE CASCADE,
     user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,

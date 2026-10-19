@@ -157,23 +157,28 @@ describe("listSessions pages the merged history", () => {
 
   test("saved order belongs to one user", async () => {
     const { service } = await seedHistory();
+
     const owner = await service.listSessions(
       ORG_ID,
       "profile_default",
       CHANNELS,
       ACCESS
     );
+
     const ids = owner.sessions.map((session) => session.id).reverse();
     await service.setSessionOrder(ORG_ID, "profile_default", ACCESS, ids);
+
     const ordered = await service.listSessions(
       ORG_ID,
       "profile_default",
       CHANNELS,
       ACCESS
     );
+
     expect(ordered.sessions.map((session) => session.sortPosition)).toEqual(
       ordered.sessions.map((session) => ids.indexOf(session.id))
     );
+
     const teammate = await service.listSessions(
       ORG_ID,
       "profile_default",
@@ -183,6 +188,7 @@ describe("listSessions pages the merged history", () => {
         user: { id: "user_other" },
       }
     );
+
     expect(teammate.sessions.map((session) => session.sortPosition)).toEqual(
       teammate.sessions.map(() => null)
     );
