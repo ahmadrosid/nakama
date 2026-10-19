@@ -8,6 +8,7 @@ import {
 import {
   defaultDiscoveryBaseUrl,
   NETRA_AGENT_MODEL_ID,
+  resolveNetraModelId,
 } from "@nakama/core/discovery-providers";
 import OpenAI from "openai";
 import { AVAILABLE_MODELS, type ProviderModelOption } from "./model-catalog";
@@ -270,9 +271,27 @@ export function getModelsForProviderInstance(
   if (instance.type === "netra") {
     return annotate(
       customModelsToCatalog(
-        (instance.customModels ?? []).filter(
-          (entry) => entry.id === NETRA_AGENT_MODEL_ID
-        ),
+        (instance.customModels ?? [])
+          .filter(
+            (entry) => resolveNetraModelId(entry.id) === NETRA_AGENT_MODEL_ID
+          )
+          .filter(
+            (entry, index, entries) =>
+              entry.id === NETRA_AGENT_MODEL_ID ||
+              (!entries.some((item) => item.id === NETRA_AGENT_MODEL_ID) &&
+                index === 0)
+          )
+          .map((entry) =>
+            entry.id === NETRA_AGENT_MODEL_ID
+              ? entry
+              : {
+                  default: entry.default,
+                  id: NETRA_AGENT_MODEL_ID,
+                  name: "DeepSeek V4.1 Flash",
+                  supportsThinking: true,
+                  supportsVision: false,
+                }
+          ),
         "netra"
       )
     );
@@ -605,7 +624,7 @@ export async function fetchNetraModels(
     .filter((entry) => entry.id === NETRA_AGENT_MODEL_ID)
     .map((entry) => ({
       ...entry,
-      name: "DeepSeek V4 Flash 0731",
+      name: "DeepSeek V4.1 Flash",
       supportsThinking: true,
       supportsVision: false,
     }));

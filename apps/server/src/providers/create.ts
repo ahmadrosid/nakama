@@ -35,6 +35,10 @@ import { createOpenCodeGoProvider } from "./opencode-go";
 import { createOpenRouterProvider } from "./openrouter";
 import { createXaiProvider } from "./xai-oauth";
 
+// Keep false until a live V4.1 tool call AND result continuation are recorded.
+// See index.llm.test.ts and PR #1608. Offline mocks are not release evidence.
+const NETRA_V41_TOOL_TURN_VERIFIED = false;
+
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 
 const DEFAULT_DOUBAO_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3";
@@ -134,7 +138,7 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         providerName: "deepseek",
       });
     case "netra":
-      if (model !== NETRA_AGENT_MODEL_ID) {
+      if (model !== NETRA_AGENT_MODEL_ID || !NETRA_V41_TOOL_TURN_VERIFIED) {
         throw new Error("This Netra model needs a verified tool-turn test.");
       }
 
@@ -144,10 +148,7 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         displayName: "Netra Runtime",
         model,
         providerName: "netra",
-        supportsThinking: compatibleModelSupportsThinking(
-          model,
-          options.instance?.customModels
-        ),
+        supportsThinking: true,
       });
     case "doubao":
       return createOpenAIProvider({
