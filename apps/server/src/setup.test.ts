@@ -144,21 +144,33 @@ describe("ensureProviderConfigured", () => {
     );
   });
 
-  test("saves the Netra migration but blocks execution pending live validation", async () => {
-    snapshotEnv();
-    configDir = await mkdtemp(join(tmpdir(), "nakama-setup-netra-"));
-    process.env.NAKAMA_CONFIG_DIR = configDir;
-    process.env.NETRA_API_KEY = "netra-test-key";
-    process.env.NETRA_MODEL = "deepseek/deepseek-v4.1-flash";
+  test.each([
+    undefined,
+    "deepseek/deepseek-v4-flash-0731",
+    "deepseek/deepseek-v4.1-flash",
+  ])(
+    "saves the Netra migration for %s but blocks execution pending live validation",
+    async (model) => {
+      snapshotEnv();
+      configDir = await mkdtemp(join(tmpdir(), "nakama-setup-netra-"));
+      process.env.NAKAMA_CONFIG_DIR = configDir;
+      process.env.NETRA_API_KEY = "netra-test-key";
 
-    await expect(ensureProviderConfigured()).rejects.toThrow();
-    const userConfig = await loadUserConfig();
-    expect(userConfig?.providers[0]?.type).toBe("netra");
-    expect(userConfig?.providers[0]?.customModels).toEqual([
-      { default: true, id: "deepseek/deepseek-v4.1-flash" },
-    ]);
-    expect(await readFile(getUserConfigPath(), "utf8")).not.toContain(
-      "netra-test-key"
-    );
-  });
+      if (model) {
+        process.env.NETRA_MODEL = model;
+      } else {
+        delete process.env.NETRA_MODEL;
+      }
+
+      await expect(ensureProviderConfigured()).rejects.toThrow();
+      const userConfig = await loadUserConfig();
+      expect(userConfig?.providers[0]?.type).toBe("netra");
+      expect(userConfig?.providers[0]?.customModels).toEqual([
+        { default: true, id: "deepseek/deepseek-v4.1-flash" },
+      ]);
+      expect(await readFile(getUserConfigPath(), "utf8")).not.toContain(
+        "netra-test-key"
+      );
+    }
+  );
 });
