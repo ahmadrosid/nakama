@@ -128,8 +128,6 @@ export function RecentChatRow({
   onToggleCollapse,
   onDetach,
   onMove,
-  onDropChat,
-  onPointerDropChat,
   onPointerStartDrag,
   sortable = false,
   canMoveUp = false,
@@ -146,9 +144,7 @@ export function RecentChatRow({
   onToggleCollapse?: () => void;
   onDetach?: () => void;
   onMove?: (direction: "up" | "down") => void;
-  onDropChat?: (sourceId: string, after: boolean) => void;
-  onPointerDropChat?: (after: boolean) => void;
-  onPointerStartDrag?: () => void;
+  onPointerStartDrag?: (event: React.PointerEvent<HTMLDivElement>) => void;
   sortable?: boolean;
   canMoveUp?: boolean;
   canMoveDown?: boolean;
@@ -160,46 +156,17 @@ export function RecentChatRow({
   return (
     <div
       className={cn("relative flex min-w-0 items-center", depth > 0 && "pl-3")}
-      draggable={sortable}
-      onDragOver={onDropChat ? (event) => event.preventDefault() : undefined}
-      onDragStart={
-        sortable
-          ? (event) => event.dataTransfer.setData("text/plain", session.id)
-          : undefined
-      }
-      onDrop={
-        onDropChat
-          ? (event) => {
-              event.preventDefault();
-              onDropChat(
-                event.dataTransfer.getData("text/plain"),
-                event.clientY >
-                  event.currentTarget.getBoundingClientRect().top +
-                    event.currentTarget.clientHeight / 2
-              );
-            }
-          : undefined
-      }
       onPointerDown={
         sortable
           ? (event) => {
               if (
+                event.button === 0 &&
                 event.target instanceof Element &&
                 !event.target.closest("button")
               ) {
-                onPointerStartDrag?.();
+                onPointerStartDrag?.(event);
               }
             }
-          : undefined
-      }
-      onPointerUp={
-        onPointerDropChat
-          ? (event) =>
-              onPointerDropChat(
-                event.clientY >
-                  event.currentTarget.getBoundingClientRect().top +
-                    event.currentTarget.clientHeight / 2
-              )
           : undefined
       }
     >
@@ -208,6 +175,7 @@ export function RecentChatRow({
           aria-current={location.pathname === href ? "page" : undefined}
           className="sidebar-nav-link min-w-0 flex-1 px-2 py-1.5"
           data-active={location.pathname === href || undefined}
+          draggable={false}
           title={session.active ? `${title} (still responding)` : title}
           to={href}
         >
