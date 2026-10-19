@@ -75,9 +75,18 @@ const VALID_WORKERS = [...WORKER_SCRIPTS.keys()];
 /**
  * pm2 stops Windows processes with `taskkill /F`, so no signal handler runs.
  * A "shutdown" message lets the worker clean up before pm2 escalates.
+ *
+ * pm2 copies the server's environment into every worker. `filter_env` keeps
+ * the secrets key (and `_NEXT`) out of channel and plugin workers.
  */
-const PM2_SHUTDOWN_OPTIONS =
-  process.platform === "win32" ? { shutdown_with_message: true } : {};
+const PM2_START_OPTIONS: Pick<
+  WorkerStartOptions,
+  "filter_env" | "shutdown_with_message"
+> = { filter_env: ["NAKAMA_SECRETS_KEY"] };
+
+if (process.platform === "win32") {
+  PM2_START_OPTIONS.shutdown_with_message = true;
+}
 
 export interface PluginWorkerRegistration {
   configDir?: string;
@@ -104,6 +113,7 @@ interface WorkerStartOptions {
   cwd: string;
   env: WorkerProcessEnv;
   error?: string;
+  filter_env?: string[];
   name: string;
   output?: string;
   script?: string;
@@ -885,7 +895,7 @@ export class WorkerManagerService {
             name,
             output: join(worker.directory, "stdout.log"),
             script: process.env.NAKAMA_BUN_BIN ?? "bun",
-            ...PM2_SHUTDOWN_OPTIONS,
+            ...PM2_START_OPTIONS,
           },
           (error) => cb(error)
         )
@@ -1012,7 +1022,7 @@ export class WorkerManagerService {
         env,
         name: processName,
         script: "bun",
-        ...PM2_SHUTDOWN_OPTIONS,
+        ...PM2_START_OPTIONS,
       };
 
       if (isChannelOwner(scope)) {
