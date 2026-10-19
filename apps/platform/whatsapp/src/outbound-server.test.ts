@@ -16,7 +16,11 @@ const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 let configDir = "";
 
 afterEach(async () => {
-  process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+  if (originalConfigDir === undefined) {
+    delete process.env.NAKAMA_CONFIG_DIR;
+  } else {
+    process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+  }
 
   if (configDir) {
     await rm(configDir, { force: true, recursive: true });

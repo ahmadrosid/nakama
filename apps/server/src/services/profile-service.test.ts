@@ -230,7 +230,11 @@ describe("profile service avatar", () => {
   let tempConfigDir = "";
 
   afterEach(async () => {
-    process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    if (originalConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    }
 
     if (tempConfigDir) {
       await rm(tempConfigDir, { force: true, recursive: true });
@@ -272,7 +276,11 @@ describe("profile service createProfile", () => {
   let tempConfigDir = "";
 
   afterEach(async () => {
-    process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    if (originalConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    }
 
     if (tempConfigDir) {
       await rm(tempConfigDir, { force: true, recursive: true });
@@ -658,7 +666,11 @@ describe("profile service updateProfile", () => {
   let tempConfigDir = "";
 
   afterEach(async () => {
-    process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    if (originalConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    }
 
     if (tempConfigDir) {
       await rm(tempConfigDir, { force: true, recursive: true });
@@ -715,7 +727,12 @@ describe("profile service assignSkill", () => {
   const originalDisableFixPath = process.env.NAKAMA_DISABLE_FIX_PATH;
 
   afterEach(async () => {
-    process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    if (originalConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    }
+
     process.env.PATH = originalPath;
 
     if (originalDisableFixPath === undefined) {
@@ -818,7 +835,11 @@ describe("profile service knowledge base", () => {
   let tempConfigDir = "";
 
   afterEach(async () => {
-    process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    if (originalConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    }
 
     if (tempConfigDir) {
       await rm(tempConfigDir, { force: true, recursive: true });
@@ -1426,7 +1447,11 @@ describe("profile service plugin tool org scope", () => {
   let tempConfigDir = "";
 
   afterEach(async () => {
-    process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    if (originalConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    }
 
     if (tempConfigDir) {
       await rm(tempConfigDir, { force: true, recursive: true });
