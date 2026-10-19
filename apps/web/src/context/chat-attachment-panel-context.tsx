@@ -50,7 +50,7 @@ function ChatPanelColumn({
     <div
       className={cn(
         "flex min-h-0 shrink-0 flex-col gap-1.5 p-1.5 max-sm:w-full max-sm:flex-1",
-        "[&>aside]:min-h-0 [&>aside]:flex-1 [&>aside]:overflow-hidden [&>aside]:rounded-lg [&>aside]:border [&>aside]:shadow-md",
+        "[&>aside]:min-h-0 [&>aside]:flex-1 [&>aside]:overflow-hidden [&>aside]:rounded-lg [&>aside]:border [&>aside]:shadow-xs",
         sized &&
           "[&>aside+aside>[role=separator]]:hidden [&>aside+aside]:relative [&>aside]:w-full! [&>aside]:max-w-none",
         fullscreen && "flex-1"
