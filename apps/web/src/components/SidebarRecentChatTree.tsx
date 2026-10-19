@@ -191,22 +191,33 @@ export function useRecentChatTree(
   );
 
   const renderTree = (parentId: string | null, depth = 0): React.ReactNode =>
-    childrenByParent.get(parentId)?.map((session) => {
+    childrenByParent.get(parentId)?.map((session, index, siblings) => {
       const children = childrenByParent.get(session.id) ?? [];
 
       return (
         <div className="relative" key={session.id}>
           {depth > 0 ? (
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute top-[17px] left-0 w-3 border-border/60 border-t"
-            />
+            index === siblings.length - 1 ? (
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute top-0 left-0 h-[18px] w-3 rounded-bl-md border-border/60 border-b border-l"
+              />
+            ) : (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 left-0 border-border/60 border-l"
+                />
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute top-[17px] left-0 w-3 border-border/60 border-t"
+                />
+              </>
+            )
           ) : null}
           {renderSession(session, depth, children.length)}
           {!collapsedBranches.has(session.id) && children.length > 0 ? (
-            <div className="ml-4 border-border/60 border-l">
-              {renderTree(session.id, depth + 1)}
-            </div>
+            <div className="ml-4">{renderTree(session.id, depth + 1)}</div>
           ) : null}
         </div>
       );
