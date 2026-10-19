@@ -1,6 +1,7 @@
 import {
   builtinTools,
   type JsonSchema,
+  type ListToolsResponse,
   NakamaApiError,
   type PluginActorRole,
   type PluginExecutionActor,
@@ -14,11 +15,15 @@ import {
 } from "@nakama/core/email-config";
 import { createCustomWebSearchTool } from "@nakama/core/tools/custom-web-search";
 import { emailTool } from "@nakama/core/tools/email";
+import { BROWSER_TOOL_IDS } from "@nakama/core/tools/protected";
 import { loadWebSearchConfig } from "@nakama/core/web-search-config";
 import type { DatabaseAdapter, StoredToolRecord } from "@nakama/db";
 import { type BashInput, bashTool, runBash } from "../tools/bash";
 import { createBrowserTools } from "../tools/browser-tools";
-import { enrichAgentBrowserBashInput } from "./agent-browser-service";
+import {
+  enrichAgentBrowserBashInput,
+  isCloudBrowserRuntime,
+} from "./agent-browser-service";
 import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
 import { getCustomToolHandler } from "./custom-tool-handlers";
 import type { CustomToolRecord } from "./custom-tool-shared";
@@ -45,15 +50,31 @@ export type ResolveStoredToolsOptions = {
   userConfig?: UserConfig | null;
 };
 
+const BROWSER_TOOL_NAMES = new Set(Object.keys(BROWSER_TOOL_IDS));
+
 export function omitUnavailableBuiltinTools(
   tools: ToolDefinition[],
-  emailConfigured: boolean
+  available: { cloudBrowser: boolean; email: boolean }
 ): ToolDefinition[] {
-  if (emailConfigured) {
-    return tools;
+  return tools.filter(
+    (tool) =>
+      (available.email || tool.name !== emailTool.name) &&
+      (available.cloudBrowser || !BROWSER_TOOL_NAMES.has(tool.name))
+  );
+}
+
+/** The tool picker lists the browser tools only once Kernel is set up. */
+export async function omitUnavailableToolDetails(
+  response: ListToolsResponse
+): Promise<ListToolsResponse> {
+  if (await isCloudBrowserRuntime()) {
+    return response;
   }
 
-  return tools.filter((tool) => tool.name !== emailTool.name);
+  return {
+    ...response,
+    tools: response.tools.filter((tool) => tool.handlerType !== "browser"),
+  };
 }
 
 export async function resolveProfileStoredTools(
@@ -75,10 +96,10 @@ export async function resolveProfileStoredTools(
     options
   );
 
-  return omitUnavailableBuiltinTools(
-    tools,
-    isEmailConfigComplete(await loadEmailConfig())
-  );
+  return omitUnavailableBuiltinTools(tools, {
+    cloudBrowser: await isCloudBrowserRuntime(),
+    email: isEmailConfigComplete(await loadEmailConfig()),
+  });
 }
 
 export async function resolveToolsFromStorage(

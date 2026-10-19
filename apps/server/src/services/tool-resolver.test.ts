@@ -15,11 +15,13 @@ import {
   createInMemoryDatabaseAdapter,
   type StoredToolRecord,
 } from "@nakama/db";
+import { createBrowserTools } from "../tools/browser-tools";
 import { createSessionTools } from "../tools/session-tools";
 import { createSubAgentTool } from "../tools/sub-agent-tool";
 import { AgentService } from "./agent-service";
 import {
   omitUnavailableBuiltinTools,
+  omitUnavailableToolDetails,
   resolveProfileStoredTools,
   resolveToolsFromStorage,
 } from "./tool-resolver";
@@ -54,11 +56,31 @@ describe("omitUnavailableBuiltinTools", () => {
     const tools = [webSearchTool, emailTool];
 
     expect(
-      omitUnavailableBuiltinTools(tools, false).map((tool) => tool.name)
+      omitUnavailableBuiltinTools(tools, {
+        cloudBrowser: true,
+        email: false,
+      }).map((tool) => tool.name)
     ).toEqual(["web_search"]);
     expect(
-      omitUnavailableBuiltinTools(tools, true).map((tool) => tool.name)
+      omitUnavailableBuiltinTools(tools, {
+        cloudBrowser: true,
+        email: true,
+      }).map((tool) => tool.name)
     ).toEqual(["web_search", "email"]);
+  });
+
+  test("drops the browser tools when Kernel is not set up", () => {
+    const tools = [webSearchTool, ...createBrowserTools()];
+
+    expect(
+      omitUnavailableBuiltinTools(tools, {
+        cloudBrowser: false,
+        email: true,
+      }).map((tool) => tool.name)
+    ).toEqual(["web_search"]);
+    expect(
+      omitUnavailableBuiltinTools(tools, { cloudBrowser: true, email: true })
+    ).toHaveLength(tools.length);
   });
 });
 
@@ -86,6 +108,66 @@ describe("resolveToolsFromStorage sub_agent", () => {
     });
 
     expect(tools.map((tool) => tool.name)).toContain("sub_agent");
+  });
+});
+
+describe("omitUnavailableToolDetails", () => {
+  const original = {
+    configDir: process.env.NAKAMA_CONFIG_DIR,
+    key: process.env.KERNEL_API_KEY,
+    provider: process.env.NAKAMA_BROWSER_PROVIDER,
+  };
+
+  let configDir = "";
+
+  afterEach(async () => {
+    await rm(configDir, { force: true, recursive: true });
+
+    for (const [name, value] of [
+      ["NAKAMA_CONFIG_DIR", original.configDir],
+      ["KERNEL_API_KEY", original.key],
+      ["NAKAMA_BROWSER_PROVIDER", original.provider],
+    ] as const) {
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    }
+  });
+
+  const detail = (name: string, handlerType: string) => ({
+    createdAt: "",
+    description: "",
+    handlerConfig: {},
+    handlerType,
+    id: `tool_${name}`,
+    name,
+    updatedAt: "",
+  });
+
+  test("lists the browser tools only when Kernel is set up", async () => {
+    const response = {
+      tools: [detail("bash", "bash"), detail("browser_read", "browser")],
+    };
+
+    configDir = await mkdtemp(join(tmpdir(), "nakama-tool-details-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+    delete process.env.NAKAMA_BROWSER_PROVIDER;
+    delete process.env.KERNEL_API_KEY;
+
+    const hidden = await omitUnavailableToolDetails(response);
+
+    process.env.NAKAMA_BROWSER_PROVIDER = "kernel";
+    process.env.KERNEL_API_KEY = "kernel-key";
+
+    const shown = await omitUnavailableToolDetails(response);
+
+    expect(hidden.tools.map((tool) => tool.name)).toEqual(["bash"]);
+    expect(shown.tools.map((tool) => tool.name)).toEqual([
+      "bash",
+      "browser_read",
+    ]);
   });
 });
 

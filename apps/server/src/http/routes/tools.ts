@@ -18,6 +18,7 @@ import {
   saveToolApiKey,
   saveToolEnv,
 } from "../../services/custom-tool-shared";
+import { omitUnavailableToolDetails } from "../../services/tool-resolver";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
@@ -433,7 +434,9 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
       ?.ensureOrganization(orgId)
       .catch(() => undefined);
 
-    return json<ListToolsResponse>(await agent.listTools(orgId));
+    return json<ListToolsResponse>(
+      await omitUnavailableToolDetails(await agent.listTools(orgId))
+    );
   });
 
   app.post("/v1/tools", async (c) => {
