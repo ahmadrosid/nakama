@@ -33,7 +33,7 @@ try {
     $assets = Join-Path $resources 'appx'
     New-Item -ItemType Directory -Force $assets | Out-Null
     Add-Type -AssemblyName System.Drawing
-    $icon = [System.Drawing.Image]::FromFile((Join-Path $PWD '../web/public/icons/icon-512.png'))
+    $icon = [System.Drawing.Image]::FromFile((Join-Path $PWD '../web/public/icons/icon-512-v2.png'))
     try {
         foreach ($asset in @(
             @('StoreLogo.png', 50, 50),
@@ -66,7 +66,7 @@ try {
         publish = $null
         win = @{
             target = @(@{ target = 'appx'; arch = @('x64') })
-            icon = '../web/public/icons/icon-512.png'
+            icon = '../web/public/icons/icon-512-v2.png'
         }
         appx = @{
             artifactName = 'Nakama-${version}-${arch}.msix'
