@@ -14,7 +14,7 @@ import {
 import { Input } from "@nakama/ui/input";
 import { useQueries } from "@tanstack/react-query";
 import { Search01Icon } from "hugeicons-react";
-import { useDeferredValue, useMemo, useState } from "react";
+import { type ReactNode, useDeferredValue, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   type ComposioToolkitListProps,
@@ -46,6 +46,16 @@ import {
 } from "@/lib/composio-toolkit-rows";
 
 const EMPTY_PROFILES: ProfileSummary[] = [];
+
+/** Keeps the Plugins tab reachable while Composio is loading, failing, or unset. */
+function WithIntegrationsTabs({ children }: { children: ReactNode }) {
+  return (
+    <div className="space-y-10">
+      <IntegrationsTabs>{null}</IntegrationsTabs>
+      {children}
+    </div>
+  );
+}
 
 function ComposioToolkitList({
   assignedProfileIdsByToolkit,
@@ -448,26 +458,30 @@ function ComposioConnectionsReady({
 
   if (!configured) {
     return (
-      <ComposioNotConfiguredState
-        bordered={bordered}
-        embedded={embedded}
-        isOrgAdmin={state.isOrgAdmin}
-      />
+      <WithIntegrationsTabs>
+        <ComposioNotConfiguredState
+          bordered={bordered}
+          embedded={embedded}
+          isOrgAdmin={state.isOrgAdmin}
+        />
+      </WithIntegrationsTabs>
     );
   }
 
   if (!data) {
-    return null;
+    return <WithIntegrationsTabs>{null}</WithIntegrationsTabs>;
   }
 
   if (data.catalogError) {
     return (
-      <ComposioCatalogErrorState
-        bordered={bordered}
-        catalogError={data.catalogError}
-        embedded={embedded}
-        isOrgAdmin={state.isOrgAdmin}
-      />
+      <WithIntegrationsTabs>
+        <ComposioCatalogErrorState
+          bordered={bordered}
+          catalogError={data.catalogError}
+          embedded={embedded}
+          isOrgAdmin={state.isOrgAdmin}
+        />
+      </WithIntegrationsTabs>
     );
   }
 
@@ -559,16 +573,22 @@ export function ComposioConnectionsCard({
   const state = useComposioConnectionsState();
 
   if (state.toolkitsQuery.isLoading) {
-    return <ComposioConnectionsSkeleton bordered={bordered} />;
+    return (
+      <WithIntegrationsTabs>
+        <ComposioConnectionsSkeleton bordered={bordered} />
+      </WithIntegrationsTabs>
+    );
   }
 
   if (state.toolkitsQuery.error) {
     return (
-      <IntegrationCardShell bordered={bordered} embedded={embedded}>
-        <div className="p-4 text-destructive text-sm">
-          {formatError(state.toolkitsQuery.error)}
-        </div>
-      </IntegrationCardShell>
+      <WithIntegrationsTabs>
+        <IntegrationCardShell bordered={bordered} embedded={embedded}>
+          <div className="p-4 text-destructive text-sm">
+            {formatError(state.toolkitsQuery.error)}
+          </div>
+        </IntegrationCardShell>
+      </WithIntegrationsTabs>
     );
   }
 
