@@ -384,13 +384,13 @@ function ToolResultImage({
         />
       </DialogTrigger>
       <DialogContent
-        className="data-closed:zoom-out-100 data-open:zoom-in-100 w-auto max-w-[calc(100vw-2rem)] bg-transparent p-0 ring-0 sm:max-w-[calc(100vw-2rem)]"
+        className="data-closed:zoom-out-100 data-open:zoom-in-100 w-[min(90vw,1600px)] max-w-[calc(100vw-2rem)] bg-transparent p-0 ring-0 sm:max-w-[calc(100vw-2rem)]"
         overlayClassName="bg-black/70 supports-backdrop-filter:backdrop-blur-none"
       >
         <DialogTitle className="sr-only">Tool result image</DialogTitle>
         <img
           alt="Tool result"
-          className="max-h-[calc(100dvh-2rem)] max-w-full rounded-lg object-contain"
+          className="h-auto max-h-[calc(100dvh-4rem)] w-full rounded-lg object-contain"
           src={src}
         />
       </DialogContent>
