@@ -9,26 +9,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@nakama/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@nakama/ui/dropdown-menu";
 import { Input } from "@nakama/ui/input";
 import { cn } from "@nakama/ui/utils";
 import {
   ArrowDown01Icon,
   Cancel01Icon,
-  Delete02Icon,
-  MoreHorizontalIcon,
   PencilEdit02Icon,
-  PinIcon,
-  PinOffIcon,
   Search01Icon,
 } from "hugeicons-react";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import type { SessionTarget } from "@/components/SidebarRecentChatRow";
+import { useRecentChatTree } from "@/components/SidebarRecentChatTree";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAuth } from "@/context/use-auth";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
@@ -39,7 +31,6 @@ import {
 } from "@/hooks/use-resource-mutations";
 import { useLocalStorageFlag } from "@/hooks/use-sidebar-collapsed";
 import {
-  buildChatPath,
   chatProfileIdFromPath,
   resolveRecentChatsProfileId,
 } from "@/lib/chat-history";
@@ -53,8 +44,6 @@ import {
 } from "@/lib/sidebar";
 
 const SKELETON_ROW_WIDTHS = ["w-3/4", "w-1/2", "w-2/3"] as const;
-
-type SessionTarget = { id: string; title: string };
 
 function RecentChatsDialogs({
   deleteTarget,
@@ -137,93 +126,6 @@ function SessionRowSkeletons() {
           <div className={cn("skeleton-shimmer h-4 rounded", width)} />
         </div>
       ))}
-    </div>
-  );
-}
-
-function RecentChatRow({
-  session,
-  profileId,
-  onRename,
-  onDelete,
-  onTogglePin,
-}: {
-  session: ReturnType<typeof useHistorySessionsQuery>["data"][number];
-  profileId: string;
-  onRename: (target: SessionTarget) => void;
-  onDelete: (target: SessionTarget) => void;
-  onTogglePin: () => void;
-}) {
-  const location = useLocation();
-  const href = buildChatPath(profileId, session.id);
-  const title = session.title?.trim() || "Untitled chat";
-
-  return (
-    <div className="group relative flex min-w-0 items-center" key={session.id}>
-      <Link
-        aria-current={location.pathname === href ? "page" : undefined}
-        className="sidebar-nav-link min-w-0 flex-1 px-2 py-1.5 group-focus-within:pr-[60px] group-hover:pr-[60px]"
-        data-active={location.pathname === href || undefined}
-        title={session.active ? `${title} (still responding)` : title}
-        to={href}
-      >
-        <span className="sidebar-chat-title-clip min-w-0 flex-1 overflow-hidden">
-          <span
-            className={cn(
-              "sidebar-chat-title block w-max whitespace-nowrap",
-              session.active && "ai-rainbow-text"
-            )}
-          >
-            {title}
-          </span>
-        </span>
-      </Link>
-      <div className="absolute right-1 flex items-center opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                aria-label={`More actions for ${title}`}
-                className="size-7 text-muted-foreground hover:bg-black/10 dark:hover:bg-transparent"
-                size="icon-sm"
-                title="More actions"
-                variant="ghost"
-              />
-            }
-          >
-            <MoreHorizontalIcon aria-hidden="true" className="size-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onClick={() => onRename({ id: session.id, title })}
-            >
-              <PencilEdit02Icon aria-hidden="true" className="size-4" />
-              Rename
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="text-destructive"
-              onClick={() => onDelete({ id: session.id, title })}
-            >
-              <Delete02Icon aria-hidden="true" className="size-4" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <Button
-          aria-label={session.pinned ? `Unpin ${title}` : `Pin ${title}`}
-          className="size-7 text-muted-foreground hover:bg-black/10 dark:hover:bg-transparent"
-          onClick={onTogglePin}
-          size="icon-sm"
-          title={session.pinned ? "Unpin" : "Pin"}
-          variant="ghost"
-        >
-          {session.pinned ? (
-            <PinOffIcon aria-hidden="true" className="size-4" />
-          ) : (
-            <PinIcon aria-hidden="true" className="size-4" />
-          )}
-        </Button>
-      </div>
     </div>
   );
 }
@@ -318,7 +220,7 @@ function PinnedChats({
         inert={pinnedCollapsed}
       >
         <div className="min-h-0 overflow-hidden">
-          {sessions.map(renderSession)}
+          {sessions.map((session) => renderSession(session))}
         </div>
       </div>
     </div>
@@ -341,7 +243,7 @@ export function RecentChats() {
       search: location.search,
     }) ?? "";
 
-  const history = useHistorySessionsQuery(profileId);
+  const history = useHistorySessionsQuery(profileId, undefined, true);
   const [search, setSearch] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   // Typing waits a moment before asking the server; clearing is immediate.
@@ -386,6 +288,7 @@ export function RecentChats() {
 
     return () => observer.disconnect();
   }, [pageEnd, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
   const updateSession = useUpdateSessionMutation();
   const deleteSession = useDeleteSessionMutation();
   const [deleteTarget, setDeleteTarget] = useState<SessionTarget | null>(null);
@@ -397,24 +300,9 @@ export function RecentChats() {
   );
 
   const pinnedSessions = sessions.filter((session) => session.pinned);
-  const recentSessions = sessions.filter((session) => !session.pinned);
 
-  const renderSession = (session: (typeof sessions)[number]) => (
-    <RecentChatRow
-      key={session.id}
-      onDelete={setDeleteTarget}
-      onRename={setRenameTarget}
-      onTogglePin={() =>
-        void updateSession.mutateAsync({
-          input: { pinned: !session.pinned },
-          profileId,
-          sessionId: session.id,
-        })
-      }
-      profileId={profileId}
-      session={session}
-    />
-  );
+  const { orderedRecent, renderSession, renderTree, orderError } =
+    useRecentChatTree(profileId, sessions, setRenameTarget, setDeleteTarget);
 
   const renderList = (rows: typeof sessions, emptyText: string | null) => (
     <div className="no-scrollbar min-h-0 overflow-y-auto">
@@ -429,7 +317,14 @@ export function RecentChats() {
       {!(list.isLoading || list.error) && rows.length === 0 && emptyText && (
         <p className="px-3 py-2 text-muted-foreground text-xs">{emptyText}</p>
       )}
-      {rows.map(renderSession)}
+      {rows === orderedRecent
+        ? renderTree(null)
+        : rows.map((session) => renderSession(session))}
+      {orderError && (
+        <p className="px-3 text-destructive text-xs" role="status">
+          Couldn’t save chat order.
+        </p>
+      )}
       {isFetchingNextPage && <SessionRowSkeletons />}
       {hasNextPage && <div aria-hidden="true" ref={setPageEnd} />}
     </div>
@@ -488,7 +383,7 @@ export function RecentChats() {
         : null}
       {searchQuery || collapsed
         ? null
-        : renderList(recentSessions, "No recent chats")}
+        : renderList(orderedRecent, "No recent chats")}
       <RecentChatsDialogs
         deleteTarget={deleteTarget}
         onDelete={async () => {

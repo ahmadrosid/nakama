@@ -143,11 +143,13 @@ export interface StoredToolRecord {
 export interface StoredSessionRecord {
   agentQuestionnaire: AgentQuestionnaire | null;
   agentTodos: AgentTodo[];
+  branchMessageIndex?: number | null;
   channel: string;
   createdAt: string;
   id: string;
   model: string | null;
   orgId?: string | null;
+  parentSessionId?: string | null;
   pinned?: boolean;
   profileId: string;
   title: string | null;
@@ -185,16 +187,19 @@ export interface StoredAttachmentRecord {
 }
 
 export interface StoredSessionSummaryRecord {
+  branchMessageIndex: number | null;
   channel: string;
   createdAt: string;
   id: string;
   messageCount: number;
   orgId?: string | null;
+  parentSessionId: string | null;
   pinned: boolean;
   /** 1-based place in the list the query returned the row from. */
   position: number;
   preview: string | null;
   profileId: string;
+  sortPosition: number | null;
   title: string | null;
   updatedAt: string;
 }
@@ -1466,6 +1471,7 @@ export interface DatabaseAdapter {
     pendingTotpSecretEnc: string,
     updatedAt: string
   ): Promise<void>;
+  setSessionOrder(userId: string, sessionIds: string[]): Promise<void>;
   setUserContext(
     orgId: string,
     userId: string,
@@ -1529,6 +1535,10 @@ export interface DatabaseAdapter {
     counter: number
   ): Promise<void>;
   updateSessionModel(sessionId: string, model: string | null): Promise<boolean>;
+  updateSessionParent(
+    sessionId: string,
+    parentSessionId: string | null
+  ): Promise<boolean>;
   updateSessionPinned(sessionId: string, pinned: boolean): Promise<boolean>;
   updateSessionQuestionnaire(
     sessionId: string,

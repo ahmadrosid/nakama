@@ -908,6 +908,15 @@ export class NakamaClient {
       method: "PATCH",
     });
   }
+  async setSessionOrder(
+    profileId: string,
+    sessionIds: string[]
+  ): Promise<void> {
+    await this.request<void>("/v1/sessions/order", {
+      body: JSON.stringify({ profileId, sessionIds }),
+      method: "PUT",
+    });
+  }
   async deleteSession(sessionId: string): Promise<void> {
     await this.request<void>(
       `/v1/sessions/${encodeURIComponent(sessionId)}?purge=true`,

@@ -1224,7 +1224,7 @@ describe("schema bootstrap version", () => {
 });
 
 describe("chat session schema", () => {
-  test("adds a model override to legacy sessions", () => {
+  test("adds model and tree data to legacy sessions", () => {
     const db = new Database(":memory:");
 
     try {
@@ -1250,6 +1250,19 @@ describe("chat session schema", () => {
 
       expect(columns.some((column) => column.name === "model")).toBe(true);
       expect(columns.some((column) => column.name === "updated_at")).toBe(true);
+      expect(
+        columns.some((column) => column.name === "parent_session_id")
+      ).toBe(true);
+      expect(
+        columns.some((column) => column.name === "branch_message_index")
+      ).toBe(true);
+      expect(
+        db
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE name = 'session_user_order'"
+          )
+          .get()
+      ).not.toBeNull();
     } finally {
       db.close();
     }

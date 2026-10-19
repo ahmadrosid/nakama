@@ -11,13 +11,16 @@ const NOW = Date.parse("2026-09-21T12:00:00.000Z");
 function session(overrides: Partial<SessionSummary> = {}): SessionSummary {
   return {
     active: false,
+    branchMessageIndex: null,
     channel: "web",
     createdAt: "2026-09-21T11:00:00.000Z",
     id: "session_1",
     messageCount: 2,
+    parentSessionId: null,
     pinned: false,
     preview: null,
     profileId: "default",
+    sortPosition: null,
     title: "Titled chat",
     updatedAt: "2026-09-21T11:59:00.000Z",
     ...overrides,

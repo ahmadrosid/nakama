@@ -23,6 +23,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateAutomationsTable);
   atomic(migrateDropTasksTables);
   atomic(migrateSessionsTable);
+  atomic(migrateSessionTree);
   atomic(migrateSessionAppUserId);
   atomic(migrateMcpTables);
   atomic(migrateSkillsTables);
@@ -1913,6 +1914,26 @@ function migrateSessionsTable(db: Database): void {
       ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
     `);
   }
+}
+
+function migrateSessionTree(db: Database): void {
+  addNullableTextColumnIfMissing(db, "sessions", "parent_session_id");
+  if (
+    !db
+      .prepare<{ name: string }, SQLQueryBindings[]>(
+        "PRAGMA table_info(sessions)"
+      )
+      .all()
+      .some((column) => column.name === "branch_message_index")
+  ) {
+    db.exec("ALTER TABLE sessions ADD COLUMN branch_message_index INTEGER");
+  }
+  db.exec(`CREATE TABLE IF NOT EXISTS session_user_order (
+    session_id TEXT NOT NULL REFERENCES sessions (id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    sort_position INTEGER NOT NULL,
+    PRIMARY KEY (session_id, user_id)
+  )`);
 }
 
 function migrateWorkspaceSettingsTable(db: Database): void {

@@ -2674,10 +2674,12 @@ export class AgentService {
     await this.db.upsertSession({
       agentQuestionnaire: null,
       agentTodos: [],
+      branchMessageIndex: messageIndex,
       channel: record.channel,
       createdAt: new Date().toISOString(),
       id: nextSessionId,
       model: record.model,
+      parentSessionId: sessionId,
       profileId: record.profileId,
       title: null,
       userId: record.userId ?? null,
@@ -3023,6 +3025,34 @@ export class AgentService {
     }
 
     return this.db.updateSessionPinned(sessionId, pinned);
+  }
+
+  async detachSession(sessionId: string, orgId: string): Promise<boolean> {
+    const record = await this.getSessionRecordForOrg(sessionId, orgId);
+    return record ? this.db.updateSessionParent(sessionId, null) : false;
+  }
+
+  async setSessionOrder(
+    orgId: string,
+    profileId: string,
+    access: ChatProfileAccess,
+    sessionIds: string[]
+  ): Promise<void> {
+    const userId = access.user?.id;
+    if (!userId || new Set(sessionIds).size !== sessionIds.length) {
+      throw new NakamaApiError("Invalid session order.", 400);
+    }
+    const { sessions } = await this.listSessions(
+      orgId,
+      profileId,
+      ["web", ...SHARED_HISTORY_CHANNELS],
+      access
+    );
+    const visibleIds = new Set(sessions.map((session) => session.id));
+    if (sessionIds.some((id) => !visibleIds.has(id))) {
+      throw new NakamaApiError("Invalid session order.", 400);
+    }
+    await this.db.setSessionOrder(userId, sessionIds);
   }
 
   async beginSessionTurn(
@@ -6416,14 +6446,17 @@ function clampSubAgentTimeout(timeoutMs: number | undefined): number {
 function toSessionSummary(session: StoredSessionSummaryRecord): SessionSummary {
   return {
     active: sessionTurnRegistry.isActive(session.id),
+    branchMessageIndex: session.branchMessageIndex,
     // The query returns only the channels it was asked for, all of them valid.
     channel: parseAgentChannel(session.channel) ?? "web",
     createdAt: session.createdAt,
     id: session.id,
     messageCount: session.messageCount,
+    parentSessionId: session.parentSessionId,
     pinned: session.pinned,
     preview: session.preview,
     profileId: session.profileId,
+    sortPosition: session.sortPosition,
     title: session.title,
     updatedAt: session.updatedAt,
   };

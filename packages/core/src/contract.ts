@@ -1068,6 +1068,7 @@ export interface CreateSessionResponse {
 
 export interface UpdateSessionRequest {
   model?: string | null;
+  parentSessionId?: null;
   pinned?: boolean;
   title?: string;
 }
@@ -1163,13 +1164,16 @@ export interface SessionStatusResponse {
 export interface SessionSummary {
   /** True while a turn is streaming for this session on the serving process. */
   active: boolean;
+  branchMessageIndex: number | null;
   channel: AgentChannel;
   createdAt: string;
   id: string;
   messageCount: number;
+  parentSessionId: string | null;
   pinned: boolean;
   preview: string | null;
   profileId: string;
+  sortPosition: number | null;
   title: string | null;
   updatedAt: string;
 }
