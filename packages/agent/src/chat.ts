@@ -73,6 +73,8 @@ const ImageAttachmentSchema = z.object({
 
 const VisualToolResultSchema = z.record(z.string(), z.json());
 
+const QuestionnaireToolResultSchema = z.object({ questionnaire: z.json() });
+
 const MAX_TOOL_ITERATIONS = 100;
 
 const MAX_TURN_OUTPUT_TOKENS = 200_000;
@@ -884,7 +886,8 @@ async function runConversation(
     }
 
     const toolHistoryStart = history.length;
-    await executeToolCalls(
+
+    const waitingForAnswers = await executeToolCalls(
       iterationTools,
       result.toolCalls,
       history,
@@ -893,11 +896,16 @@ async function runConversation(
       preprocessUserContent,
       toolGroupId
     );
+
     // Check between batches: one batch can overshoot, but no next request runs.
     producedTokens += estimateHistoryTokens(
       history.slice(toolHistoryStart),
       ""
     );
+
+    if (waitingForAnswers) {
+      return result.content;
+    }
   }
 
   const reason =
@@ -924,7 +932,7 @@ async function executeToolCalls(
   toolContext: ToolContext = {},
   preprocessUserContent?: AgentChatSessionOptions["preprocessUserContent"],
   toolGroupId?: string
-): Promise<void> {
+): Promise<boolean> {
   const contextForCall = (call: ToolCall): ToolContext => {
     if (!handlers?.onSubAgentActivity || call.name !== "sub_agent") {
       return toolContext;
@@ -1000,8 +1008,15 @@ async function executeToolCalls(
       throw failed.reason;
     }
 
-    return;
+    return results.some(
+      (entry) =>
+        entry.status === "fulfilled" &&
+        entry.value.call.name === "ask_user_question" &&
+        QuestionnaireToolResultSchema.safeParse(entry.value.result).success
+    );
   }
+
+  let waitingForAnswers = false;
 
   for (const call of toolCalls) {
     toolContext.signal?.throwIfAborted();
@@ -1043,7 +1058,16 @@ async function executeToolCalls(
     }
 
     history.push(message);
+
+    if (
+      call.name === "ask_user_question" &&
+      QuestionnaireToolResultSchema.safeParse(result).success
+    ) {
+      waitingForAnswers = true;
+    }
   }
+
+  return waitingForAnswers;
 }
 
 async function prepareVisualToolResult(

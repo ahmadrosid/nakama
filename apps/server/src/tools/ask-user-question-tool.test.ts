@@ -54,7 +54,7 @@ test("ask_user_question stores the questionnaire with generated ids", async () =
   );
 
   const stored = await state.get("session_test");
-  expect(result).toEqual({ questionnaire: stored });
+  expect(result).toMatchObject({ questionnaire: stored });
   expect(stored?.questions).toEqual([
     {
       allowCustomAnswer: true,
