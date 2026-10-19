@@ -36,18 +36,50 @@ export function isPluginOwned(resource: { pluginId?: string | null }): boolean {
   return Boolean(resource.pluginId);
 }
 
-/** Group plugin actions for one-click profile assignment, retaining their IDs. */
-export function groupPluginTools(tools: ToolSummary[]) {
-  const groups = new Map<string, { tool: ToolSummary; tools: ToolSummary[] }>();
+function toolGroupKey(tool: ToolSummary): string {
+  if (tool.pluginId) {
+    return `plugin:${tool.pluginId}`;
+  }
+
+  return tool.handlerType === "browser" ? "browser" : `tool:${tool.id}`;
+}
+
+/**
+ * Group plugin actions and the cloud browser tools for one-click profile
+ * assignment, retaining their IDs. `label` names the group; `unit` counts its
+ * members ("actions", "tools") and is null for a single tool.
+ */
+export function groupAssignableTools(tools: ToolSummary[]) {
+  const groups = new Map<
+    string,
+    {
+      label: string;
+      tool: ToolSummary;
+      tools: ToolSummary[];
+      unit: string | null;
+    }
+  >();
 
   for (const tool of tools) {
-    const key = tool.pluginId ? `plugin:${tool.pluginId}` : `tool:${tool.id}`;
+    const key = toolGroupKey(tool);
     const group = groups.get(key);
 
     if (group) {
       group.tools.push(tool);
+    } else if (key === "browser") {
+      groups.set(key, {
+        label: "Cloud browser",
+        tool,
+        tools: [tool],
+        unit: "tools",
+      });
     } else {
-      groups.set(key, { tool, tools: [tool] });
+      groups.set(key, {
+        label: tool.pluginId ?? tool.name,
+        tool,
+        tools: [tool],
+        unit: tool.pluginId ? "actions" : null,
+      });
     }
   }
 

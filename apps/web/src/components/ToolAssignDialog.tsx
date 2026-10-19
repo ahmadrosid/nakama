@@ -17,7 +17,7 @@ import {
 } from "@nakama/ui/dialog";
 import { Add01Icon } from "hugeicons-react";
 import { useState } from "react";
-import { groupPluginTools, isPluginOwned } from "@/hooks/use-plugins";
+import { groupAssignableTools, isPluginOwned } from "@/hooks/use-plugins";
 
 interface ToolAssignDialogProps {
   disabled?: boolean;
@@ -48,6 +48,17 @@ export function ToolAssignDialog({
 
     if (openProp === undefined) {
       setUncontrolledOpen(nextOpen);
+    }
+  }
+
+  // A plugin's handler expands one id to all its actions; the cloud browser
+  // group has no handler of its own, so each of its tools is assigned in turn.
+  async function assignGroup(tool: ToolSummary, members: ToolSummary[]) {
+    const ids = tool.pluginId ? [tool.id] : members.map((entry) => entry.id);
+
+    for (const id of ids) {
+      // oxlint-disable-next-line react-doctor/async-await-in-loop -- Assign in order and stop at the first failure.
+      await onAssign(id);
     }
   }
 
@@ -101,29 +112,32 @@ export function ToolAssignDialog({
               </CommandEmpty>
               <CommandGroup>
                 {(groupPlugins
-                  ? groupPluginTools(tools)
-                  : tools.map((tool) => ({ tool, tools: [tool] }))
-                ).map(({ tool, tools: members }) => (
+                  ? groupAssignableTools(tools)
+                  : tools.map((tool) => ({
+                      label: tool.name,
+                      tool,
+                      tools: [tool],
+                      unit: null,
+                    }))
+                ).map(({ label, tool, tools: members, unit }) => (
                   <CommandItem
                     disabled={disabled}
                     key={tool.id}
                     onSelect={() => {
-                      void onAssign(tool.id);
                       setOpen(false);
+                      void assignGroup(tool, members);
                     }}
-                    value={`${tool.pluginId ?? ""} ${members.map((entry) => `${entry.name} ${entry.description}`).join(" ")}`}
+                    value={`${label} ${tool.pluginId ?? ""} ${members.map((entry) => `${entry.name} ${entry.description}`).join(" ")}`}
                   >
                     <div className="min-w-0">
-                      <p>
-                        {groupPlugins && tool.pluginId
-                          ? tool.pluginId
-                          : tool.name}
-                      </p>
-                      {isPluginOwned(tool) ? (
+                      <p>{label}</p>
+                      {unit ? (
                         <p className="truncate text-muted-foreground text-xs">
-                          {groupPlugins
-                            ? `${members.length} actions`
-                            : tool.pluginId}
+                          {members.length} {unit}
+                        </p>
+                      ) : isPluginOwned(tool) ? (
+                        <p className="truncate text-muted-foreground text-xs">
+                          {tool.pluginId}
                         </p>
                       ) : tool.description ? (
                         <p className="truncate text-muted-foreground text-xs">

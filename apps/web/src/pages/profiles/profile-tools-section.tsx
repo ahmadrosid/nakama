@@ -7,7 +7,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { EmailSettingsDialog } from "@/components/EmailSettingsDialog";
 import { useAuth } from "@/context/use-auth";
-import { groupPluginTools, isPluginOwned } from "@/hooks/use-plugins";
+import { groupAssignableTools } from "@/hooks/use-plugins";
 import { canUseToolPlayground, toolPlaygroundPath } from "@/lib/navigation";
 import type { RemoveAssignmentTarget } from "@/pages/profiles/profiles-page.shared";
 
@@ -30,7 +30,7 @@ export function ProfileToolsSection({
 
   const [emailConfigOpen, setEmailConfigOpen] = useState(false);
 
-  const groups = groupPluginTools(detail.tools);
+  const groups = groupAssignableTools(detail.tools);
 
   return (
     <div className="pt-5">
@@ -38,15 +38,15 @@ export function ProfileToolsSection({
         <p className="type-body text-pretty text-xs">No tools assigned.</p>
       ) : (
         <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
-          {groups.map(({ tool, tools: members }) => {
+          {groups.map(({ label, tool, tools: members, unit }) => {
             const name = (
               <div className="min-w-0">
                 <p className="truncate font-normal text-foreground text-sm leading-tight">
-                  {tool.pluginId ?? tool.name}
+                  {label}
                 </p>
-                {isPluginOwned(tool) ? (
+                {unit ? (
                   <p className="truncate text-muted-foreground text-xs">
-                    {members.length} actions
+                    {members.length} {unit}
                   </p>
                 ) : null}
               </div>
@@ -62,7 +62,7 @@ export function ProfileToolsSection({
                 className="flex items-center justify-between gap-2 px-4 py-3 transition-colors duration-150 ease-out hover:bg-muted/40"
                 key={tool.id}
               >
-                {canOpenPlayground && !tool.pluginId ? (
+                {canOpenPlayground && !unit ? (
                   <Link
                     aria-label={`Open playground for ${tool.name}`}
                     className={cn(
@@ -93,7 +93,7 @@ export function ProfileToolsSection({
                     </Button>
                   ) : null}
                   <Button
-                    aria-label={`Delete ${tool.name}`}
+                    aria-label={`Delete ${label}`}
                     className="relative text-muted-foreground transition-colors duration-150 ease-out after:absolute after:-inset-x-1.5 after:-inset-y-1 hover:text-destructive"
                     disabled={busy}
                     onClick={() =>
@@ -101,7 +101,7 @@ export function ProfileToolsSection({
                         id: tool.id,
                         ids: members.map((entry) => entry.id),
                         kind: "tool",
-                        name: tool.pluginId ?? tool.name,
+                        name: label,
                       })
                     }
                     size="icon-sm"
