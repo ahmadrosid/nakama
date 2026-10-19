@@ -8,6 +8,8 @@ import {
 } from "@nakama/ui/dropdown-menu";
 import { cn } from "@nakama/ui/utils";
 import {
+  ArrowDown02Icon,
+  ArrowUp02Icon,
   Delete02Icon,
   MoreHorizontalIcon,
   PencilEdit02Icon,
@@ -51,7 +53,7 @@ function RecentChatActions({
           render={
             <Button
               aria-label={`More actions for ${title}`}
-              className="size-7 text-muted-foreground hover:bg-black/10 dark:hover:bg-transparent"
+              className="size-7 text-muted-foreground opacity-0 hover:bg-black/10 focus-visible:opacity-100 group-hover/row:opacity-100 aria-expanded:opacity-100 dark:hover:bg-transparent [@media(hover:none)]:opacity-100"
               size="icon-sm"
               title="More actions"
               variant="ghost"
@@ -89,12 +91,14 @@ function RecentChatActions({
                 disabled={!canMoveUp}
                 onClick={() => onMove("up")}
               >
+                <ArrowUp02Icon aria-hidden="true" className="size-4" />
                 Move up
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={!canMoveDown}
                 onClick={() => onMove("down")}
               >
+                <ArrowDown02Icon aria-hidden="true" className="size-4" />
                 Move down
               </DropdownMenuItem>
             </>
@@ -199,37 +203,39 @@ export function RecentChatRow({
           : undefined
       }
     >
-      <Link
-        aria-current={location.pathname === href ? "page" : undefined}
-        className="sidebar-nav-link min-w-0 flex-1 px-2 py-1.5"
-        data-active={location.pathname === href || undefined}
-        title={session.active ? `${title} (still responding)` : title}
-        to={href}
-      >
-        <span className="sidebar-chat-title-clip min-w-0 flex-1 overflow-hidden">
-          <span
-            className={cn(
-              "sidebar-chat-title block w-max whitespace-nowrap",
-              session.active && "ai-rainbow-text"
-            )}
-          >
-            {title}
+      <div className="sidebar-chat-row group/row flex min-w-0 flex-1 items-center rounded-md">
+        <Link
+          aria-current={location.pathname === href ? "page" : undefined}
+          className="sidebar-nav-link min-w-0 flex-1 px-2 py-1.5"
+          data-active={location.pathname === href || undefined}
+          title={session.active ? `${title} (still responding)` : title}
+          to={href}
+        >
+          <span className="sidebar-chat-title-clip min-w-0 flex-1 overflow-hidden">
+            <span
+              className={cn(
+                "sidebar-chat-title block w-max whitespace-nowrap",
+                session.active && "ai-rainbow-text"
+              )}
+            >
+              {title}
+            </span>
           </span>
-        </span>
-      </Link>
-      <RecentChatActions
-        canMoveDown={canMoveDown}
-        canMoveUp={canMoveUp}
-        collapsed={collapsed}
-        onDelete={onDelete}
-        onDetach={onDetach}
-        onMove={onMove}
-        onRename={onRename}
-        onToggleCollapse={childCount > 0 ? onToggleCollapse : undefined}
-        onTogglePin={onTogglePin}
-        session={session}
-        title={title}
-      />
+        </Link>
+        <RecentChatActions
+          canMoveDown={canMoveDown}
+          canMoveUp={canMoveUp}
+          collapsed={collapsed}
+          onDelete={onDelete}
+          onDetach={onDetach}
+          onMove={onMove}
+          onRename={onRename}
+          onToggleCollapse={childCount > 0 ? onToggleCollapse : undefined}
+          onTogglePin={onTogglePin}
+          session={session}
+          title={title}
+        />
+      </div>
     </div>
   );
 }
