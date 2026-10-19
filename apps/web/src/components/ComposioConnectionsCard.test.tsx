@@ -59,6 +59,7 @@ test("the Plugins tab stays reachable when Composio is not configured", async ()
     for (const spy of spies) {
       spy.mockRestore();
     }
+
     await act(async () => root.unmount());
     container.remove();
   });
@@ -84,6 +85,7 @@ test("the Plugins tab stays reachable when Composio is not configured", async ()
     if (hrefs().includes("/settings#composio")) {
       break;
     }
+
     await act(() => Bun.sleep(10));
   }
 
