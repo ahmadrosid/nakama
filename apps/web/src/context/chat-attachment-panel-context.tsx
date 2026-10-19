@@ -20,7 +20,7 @@ const DEFAULT_PANEL_WIDTH = 448;
 
 const ENTER_SLIDE_MS = 200;
 
-/** The right side: the open panel as a card, with `below` under it when both are open. */
+/** The right side as cards: the open panel, with `below` under it. */
 function ChatPanelColumn({
   below,
   fullscreen,
@@ -43,14 +43,19 @@ function ChatPanelColumn({
     );
   }
 
+  // With no open panel, `below` keeps its own width and resize handle.
+  const sized = Boolean(panel);
+
   return (
     <div
       className={cn(
         "flex min-h-0 shrink-0 flex-col gap-1.5 p-1.5 max-sm:w-full max-sm:flex-1",
-        "[&>aside+aside>[role=separator]]:hidden [&>aside+aside]:relative [&>aside]:min-h-0 [&>aside]:w-full! [&>aside]:max-w-none [&>aside]:flex-1 [&>aside]:overflow-hidden [&>aside]:rounded-lg [&>aside]:border",
+        "[&>aside]:min-h-0 [&>aside]:flex-1 [&>aside]:overflow-hidden [&>aside]:rounded-lg [&>aside]:border",
+        sized &&
+          "[&>aside+aside>[role=separator]]:hidden [&>aside+aside]:relative [&>aside]:w-full! [&>aside]:max-w-none",
         fullscreen && "flex-1"
       )}
-      style={fullscreen ? undefined : { width }}
+      style={sized && !fullscreen ? { width } : undefined}
     >
       {panel}
       {below}
@@ -249,7 +254,7 @@ export function ChatAttachmentPanelProvider({
         )}
         <ChatPanelColumn
           below={below}
-          framed={Boolean(config && !overlay)}
+          framed={Boolean((config || below) && !overlay)}
           fullscreen={fullscreen}
           panel={panel}
           width={width}
