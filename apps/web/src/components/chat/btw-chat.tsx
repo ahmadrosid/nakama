@@ -22,6 +22,7 @@ let btwChatElement: HTMLDivElement | null = null;
  */
 function getBtwChatElement(): HTMLDivElement {
   // Kept across hot reloads in dev, so the open panel does not go blank.
+  // SAFETY: only this function writes `btwChatElement` into the hot data.
   const hotData = import.meta.hot?.data as
     | { btwChatElement?: HTMLDivElement }
     | undefined;
