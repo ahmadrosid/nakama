@@ -194,6 +194,7 @@ export function RecentChatRow({
   const location = useLocation();
   const href = buildChatPath(profileId, session.id);
   const title = session.title?.trim() || "Untitled chat";
+
   const menu = {
     canMoveDown,
     canMoveUp,

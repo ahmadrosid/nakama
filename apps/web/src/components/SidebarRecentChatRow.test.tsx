@@ -27,6 +27,7 @@ test("right click on a chat opens the chat actions in place of the browser menu"
   });
 
   const link = container.querySelector("a");
+
   const event = new MouseEvent("contextmenu", {
     bubbles: true,
     cancelable: true,
@@ -39,9 +40,11 @@ test("right click on a chat opens the chat actions in place of the browser menu"
   });
 
   expect(event.defaultPrevented).toBe(true);
+
   const items = [...document.querySelectorAll('[role="menuitem"]')].map(
     (item) => item.textContent
   );
+
   expect(items).toEqual([
     "Open in new tab",
     "Copy link",
@@ -50,12 +53,14 @@ test("right click on a chat opens the chat actions in place of the browser menu"
     "Delete",
   ]);
 
-  const pin = [...document.querySelectorAll('[role="menuitem"]')].find(
-    (item) => item.textContent === "Pin"
-  );
+  const pin = [
+    ...document.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+  ].find((item) => item.textContent === "Pin");
+
   await act(async () => {
-    (pin as HTMLElement).click();
+    pin?.click();
   });
+
   expect(onTogglePin).toHaveBeenCalledTimes(1);
 
   await act(async () => {
