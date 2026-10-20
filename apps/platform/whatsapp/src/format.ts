@@ -4,7 +4,7 @@ const WHATSAPP_MAX_MESSAGE_LENGTH = 65_536;
 
 const WHATSAPP_CHAT_BUBBLE_MAX_CHARS = 400;
 
-export function stripMarkdownForWhatsApp(text: string): string {
+function stripMarkdownForWhatsApp(text: string): string {
   let result = text.trim();
 
   result = result.replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code: string) =>

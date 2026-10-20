@@ -19,7 +19,7 @@ export function countWords(text: string): number {
   return normalized.split(/\s+/).filter(Boolean).length;
 }
 
-export function pastedTextFilename(wordCount: number): string {
+function pastedTextFilename(wordCount: number): string {
   return `Pasted text (${wordCount} words).txt`;
 }
 

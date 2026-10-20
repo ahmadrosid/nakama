@@ -13,7 +13,7 @@ const PENDING_PREFIX = "⏳ pending: ";
 
 const MAX_PENDING_DISPLAY_LINES = 6;
 
-export function formatPendingSummary(message: PendingMessage): string {
+function formatPendingSummary(message: PendingMessage): string {
   const text = message.line.trim() || (message.images?.length ? "[image]" : "");
 
   return text.replace(/\s+/g, " ");

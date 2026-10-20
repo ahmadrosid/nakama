@@ -7,7 +7,7 @@
  * cursor math correct for those cases.
  */
 
-export type TextToken =
+type TextToken =
   | { type: "ansi"; value: string }
   | { type: "char"; value: string; width: number };
 
@@ -17,7 +17,7 @@ export type TextToken =
  * return 2, everything else returns 1. This is intentionally simple; it covers
  * the common cases without importing a full wcwidth table.
  */
-export function getCharWidth(char: string): number {
+function getCharWidth(char: string): number {
   const code = char.codePointAt(0) ?? 0;
 
   // Zero-width / combining marks
@@ -122,7 +122,7 @@ function readAnsiSequence(text: string, start: number): string {
  * Tokenize text into ANSI sequences and visible characters. Each character
  * includes its terminal column width.
  */
-export function* tokenizeText(text: string): Generator<TextToken> {
+function* tokenizeText(text: string): Generator<TextToken> {
   let i = 0;
 
   while (i < text.length) {

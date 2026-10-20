@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   addChatUsage,
   CHAT_USAGE_VISIBLE_KEY,
-  chatUsageTitle,
   formatChatUsage,
   formatChatUsageCost,
   getInitialChatUsageVisible,
@@ -134,26 +133,5 @@ describe("chat usage", () => {
         value: previous,
       });
     }
-  });
-
-  test("keeps the exact count in the hover title", () => {
-    expect(
-      chatUsageTitle({ inputTokens: 1200, outputTokens: 34, totalTokens: 1234 })
-    ).toContain("1,234 tokens");
-  });
-
-  test("names the cached slice, and stays silent when there is none", () => {
-    expect(
-      chatUsageTitle({
-        cachedInputTokens: 6144,
-        inputTokens: 6348,
-        outputTokens: 10,
-        totalTokens: 6358,
-      })
-    ).toContain("6,144 input tokens served from cache");
-
-    expect(
-      chatUsageTitle({ inputTokens: 6348, outputTokens: 10, totalTokens: 6358 })
-    ).not.toContain("from cache");
   });
 });

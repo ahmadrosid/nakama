@@ -3,7 +3,7 @@ import { statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { getUserConfigDir, readTextOrNull, writeTextFile } from "@nakama/core";
-import { stripAnsi, visibleLength } from "./text-measure";
+import { stripAnsi } from "./text-measure";
 
 type NamedColor = "default" | "cyan" | "yellow" | "red" | "green";
 
@@ -425,10 +425,6 @@ export function styledLineFromAnsi(input: string): StyledLine {
 
 export function styledLineText(line: StyledLine): string {
   return line.segments.map((segment) => segment.text).join("");
-}
-
-export function styledLineWidth(line: StyledLine): number {
-  return visibleLength(styledLineText(line));
 }
 
 export function serializeStyledLine(line: StyledLine): string {
