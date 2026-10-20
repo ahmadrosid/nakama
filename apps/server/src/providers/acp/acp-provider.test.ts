@@ -130,7 +130,7 @@ describe("ACP provider", () => {
 
     const result = await provider.generateChat(chatInput("mcp check"));
 
-    expect(result.content).toBe("mcp servers: 1");
+    expect(result.content).toBe("mcp servers: 1 meta: null");
   });
 
   test("sends the system prompt on the first turn only", async () => {

@@ -5,7 +5,7 @@
  * Prompt text picks the behavior:
  *   - "tool"  sends a tool_call and a completed tool_call_update first
  *   - "mcp-tools" asks the Nakama MCP endpoint for its tools and reports them
- *   - "mcp"   reports how many MCP servers the session was created with
+ *   - "mcp"   reports how many MCP servers the session was created with, and its _meta
  *   - "thought" sends a thought chunk before the reply
  *   - anything else echoes the prompt back
  */
@@ -42,6 +42,7 @@ function initialConfigOptions(): acp.SessionConfigOption[] {
 
 class FakeAgent implements acp.Agent {
   private mcpServerCount = 0;
+  private sessionMeta = "";
   private mcpUrl = "";
   private configOptions = initialConfigOptions();
   private readonly sessionIds: string[] = [];
@@ -60,6 +61,7 @@ class FakeAgent implements acp.Agent {
     params: acp.NewSessionRequest
   ): Promise<acp.NewSessionResponse> {
     this.mcpServerCount = params.mcpServers.length;
+    this.sessionMeta = JSON.stringify(params._meta ?? null);
     this.mcpUrl =
       params.mcpServers
         .flatMap((server) => ("env" in server ? server.env : []))
@@ -146,7 +148,7 @@ class FakeAgent implements acp.Agent {
     const reply = text.includes("mcp-tools")
       ? await this.listMcpTools()
       : text.includes("mcp")
-        ? `mcp servers: ${this.mcpServerCount}`
+        ? `mcp servers: ${this.mcpServerCount} meta: ${this.sessionMeta}`
         : `${modelTag}fake: ${text}`;
 
     await this.send(params.sessionId, {
