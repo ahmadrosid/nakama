@@ -1,10 +1,5 @@
-import type {
-  DocumentAttachment,
-  ImageAttachment,
-  OrgRole,
-  ProfileSummary,
-} from "@nakama/core";
-import { NakamaApiError, resolveDocumentPartForProvider } from "@nakama/core";
+import type { ImageAttachment, OrgRole, ProfileSummary } from "@nakama/core";
+import { NakamaApiError } from "@nakama/core";
 import {
   type AgentGroup,
   type AgentGroupMessage,
@@ -16,15 +11,11 @@ import {
   memberHandles,
   mentionedMemberIds,
 } from "@nakama/core/agent-groups";
-import {
-  validateDocumentAttachments,
-  validateImageAttachments,
-} from "@nakama/core/message-content";
+import { validateImageAttachments } from "@nakama/core/message-content";
 import { filterProfilesForChatAccess } from "@nakama/core/profiles";
 import type { DatabaseAdapter } from "@nakama/db";
 import { failSubAgentResult } from "../tools/sub-agent-shared";
 import {
-  DOCUMENT_CONTEXT_CHARS,
   ensureGroupSharedDir,
   groupMembers,
   groupTask,
@@ -53,7 +44,10 @@ import {
   updateAgentGroup,
   updateGroupSession,
 } from "./agent-group-store";
+import { retitleGroupSession } from "./agent-group-title";
 import type { AgentService } from "./agent-service";
+
+export { readGroupDocuments } from "./agent-group-prompt";
 
 /** Agent replies allowed per user message, so two agents cannot loop forever. */
 const MAX_GROUP_HOPS = 6;
@@ -72,6 +66,8 @@ interface ActiveRun extends AgentGroupRun {
   queue: string[];
   steps: string[];
   text: string;
+  /** The session title being generated from the first reply. */
+  titling: Promise<void> | null;
 }
 
 /** An agent answering the user in one thread; at most one per thread. */
@@ -94,7 +90,7 @@ export class AgentGroupService {
     private readonly db: Pick<DatabaseAdapter, "getOrgMember" | "getUserById">,
     private readonly agent: Pick<
       AgentService,
-      "listProfiles" | "runSubAgentPrompt"
+      "generateSessionTitle" | "listProfiles" | "runSubAgentPrompt"
     >
   ) {}
 
@@ -434,6 +430,7 @@ export class AgentGroupService {
       steps: [],
       stopping: false,
       text: "",
+      titling: null,
     };
 
     this.runs.set(sessionId, run);
@@ -486,6 +483,17 @@ export class AgentGroupService {
           run.queue,
           mentioned.length > 0 ? mentioned : fallback ? [fallback.id] : []
         );
+      }
+
+      // The session list polls only while a run is active, so the title has
+      // to land before the run ends.
+      if (
+        run.titling &&
+        (!group || run.stopping || run.queue.length === 0 || run.hopsLeft <= 0)
+      ) {
+        await run.titling;
+        run.titling = null;
+        continue;
       }
 
       const profileId = run.queue.shift();
@@ -554,6 +562,18 @@ export class AgentGroupService {
           ? text
           : `_${result.error ?? "No reply."}_`
       );
+
+      if (result.status === "success" && text) {
+        run.titling ??= retitleGroupSession(
+          this.agent,
+          orgId,
+          userId,
+          session,
+          profileId,
+          text
+        );
+      }
+
       run.lastSpeaker = profileId;
       enqueue(run.queue, mentionedMemberIds(text, handles, profileId));
     }
@@ -688,36 +708,6 @@ export class AgentGroupService {
       halt(run);
     }
   }
-}
-
-/**
- * The text of attached documents, read before a message is saved so a bad file
- * fails the send instead of an agent's turn.
- */
-export async function readGroupDocuments(
-  documents: DocumentAttachment[]
-): Promise<GroupDocument[]> {
-  validateDocumentAttachments(documents);
-
-  return await Promise.all(
-    documents.map(async (document) => {
-      // A provider with no native documents always gets them as text.
-      const part = await resolveDocumentPartForProvider(
-        { ...document, type: "document" },
-        "openai_compatible"
-      );
-
-      return {
-        filename: document.filename.trim(),
-        text:
-          part.type === "text"
-            ? part.text
-                .replace(/^\[File: [^\n]*\]\n/, "")
-                .slice(0, DOCUMENT_CONTEXT_CHARS)
-            : "",
-      };
-    })
-  );
 }
 
 /**

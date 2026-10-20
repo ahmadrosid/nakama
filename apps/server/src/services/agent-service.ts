@@ -2823,6 +2823,13 @@ export class AgentService {
     this.sessionTitleService.scheduleSessionTitleGeneration(sessionId);
   }
 
+  generateSessionTitle(
+    profileId: string,
+    messages: readonly ChatMessage[]
+  ): Promise<string | null> {
+    return this.sessionTitleService.titleFor(profileId, messages);
+  }
+
   schedulePostTurnSkillReview(sessionId: string): void {
     // The review writes skill suggestions, which is exactly the write-back a
     // cognito session promises not to do.
