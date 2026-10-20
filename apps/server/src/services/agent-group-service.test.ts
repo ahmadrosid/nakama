@@ -229,8 +229,12 @@ describe("AgentGroupService", () => {
     ).rejects.toThrow();
   });
 
-  test("without a mention the session's last speaker replies, else the first member", async () => {
-    const { calls, chat, service } = setup(() => "ok");
+  test("without a mention the last speaker answers first, then the others may pass", async () => {
+    // Every agent passes whenever its task allows it.
+    const { calls, chat, contents, service } = setup(({ task }) =>
+      task.includes("(pass)") ? "(pass)" : "ok"
+    );
+
     const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
     const sessionId = await chat(group.id, "hello");
 
@@ -239,7 +243,34 @@ describe("AgentGroupService", () => {
     // A new session has no last speaker of its own.
     await chat(group.id, "fresh start");
 
-    expect(calls).toEqual(["a", "b", "b", "a"]);
+    expect(calls).toEqual(["a", "b", "b", "b", "a", "a", "b"]);
+    expect(contents(group.id, sessionId)).toEqual([
+      "hello",
+      "ok",
+      "@beta hi",
+      "ok",
+      "and you?",
+      "ok",
+    ]);
+  });
+
+  test("a teammate's @mention cannot be passed on", async () => {
+    const { chat, contents, service } = setup(({ profileId, task }) => {
+      if (task.includes("(pass)")) {
+        return "(pass)";
+      }
+
+      return profileId === "a" ? "ask @beta" : "on it";
+    });
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+    const sessionId = await chat(group.id, "hello");
+
+    expect(contents(group.id, sessionId)).toEqual([
+      "hello",
+      "ask @beta",
+      "on it",
+    ]);
   });
 
   test("an agent that loses access mid-run is skipped", async () => {

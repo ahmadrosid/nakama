@@ -1,7 +1,11 @@
 import { mkdirSync } from "node:fs";
 import type { ProfileSummary } from "@nakama/core";
 import { getGroupSharedDir } from "@nakama/core";
-import type { AgentGroup, AgentGroupMessage } from "@nakama/core/agent-groups";
+import {
+  type AgentGroup,
+  type AgentGroupMessage,
+  mentionedMemberIds,
+} from "@nakama/core/agent-groups";
 import {
   listAgentGroupMessages,
   listAgentGroupThreadMessages,
@@ -55,11 +59,89 @@ function handleOf(handles: Map<string, string>, profileId: string): string {
   return [...handles].find(([, id]) => id === profileId)?.[0] ?? "";
 }
 
-export function groupTask(
+/** What an agent replies when it has nothing to add. */
+const PASS = "(pass)";
+
+/** A pass, loosely ("pass", "(pass).") or an empty reply. */
+export function isPassReply(text: string): boolean {
+  return /^\(?\s*pass\s*\)?\.?$/i.test(text) || text === "";
+}
+
+/**
+ * Who answers a user message: the members it @mentions, else every member,
+ * the last speaker first, like people in a group chat.
+ */
+export function addressedMembers(
+  message: string,
+  members: ProfileSummary[],
+  handles: Map<string, string>,
+  lastSpeaker: string | null
+): string[] {
+  const mentioned = mentionedMemberIds(message, handles);
+  const first = members.find((p) => p.id === lastSpeaker) ?? members[0];
+
+  if (mentioned.length > 0 || !first) {
+    return mentioned;
+  }
+
+  return [first.id, ...members.flatMap((p) => (p === first ? [] : [p.id]))];
+}
+
+/**
+ * A speaker may pass once an agent answered the user's newest message, unless
+ * someone has @mentioned it since: a direct ask always gets an answer.
+ */
+function mayPass(
+  messages: AgentGroupMessage[],
+  profileId: string,
+  handles: Map<string, string>
+): boolean {
+  const since = messages.slice(
+    messages.findLastIndex((message) => message.authorProfileId === null)
+  );
+
+  return (
+    since.length > 1 &&
+    !since.some(({ authorProfileId, content }) =>
+      mentionedMemberIds(
+        content,
+        handles,
+        authorProfileId ?? undefined
+      ).includes(profileId)
+    )
+  );
+}
+
+/** What the speaker gets this turn, and whether it may pass. */
+export function groupTurn(
+  orgId: string,
+  sessionId: string,
+  group: AgentGroup,
+  speaker: ProfileSummary,
+  handles: Map<string, string>
+) {
+  const sharedDir = ensureGroupSharedDir(orgId, group.id);
+
+  const optional = mayPass(
+    listAgentGroupMessages(orgId, sessionId),
+    speaker.id,
+    handles
+  );
+
+  return {
+    mayPass: optional,
+    sharedDir,
+    task: groupTask(group, speaker, handles, sharedDir, optional),
+  };
+}
+
+/** `mayPass`: a teammate already answered, so the speaker may stay silent. */
+function groupTask(
   group: AgentGroup,
   speaker: ProfileSummary,
   handles: Map<string, string>,
-  sharedDir: string
+  sharedDir: string,
+  mayPass: boolean
 ): string {
   const roster = [...handles]
     .map(([handle, id]) => `@${handle}${id === speaker.id ? " (you)" : ""}`)
@@ -70,7 +152,12 @@ export function groupTask(
     ...briefSection(group),
     "The conversation so far is under Context, newest last. Reply to it as yourself.",
     `This is a chat message, not a report. ${CHAT_STYLE} Do not prefix it with your name.`,
-    "To hand the conversation to another agent, mention their @handle. Mention nobody when you are done or the user should answer.",
+    "You work as a team: build on what teammates said, and when a step belongs to a teammate, ask them by @handle so they pick it up. Mention nobody when you are done or the user should answer.",
+    ...(mayPass
+      ? [
+          `A teammate already answered. Reply only if you add something new: your part of the work, a correction, or a question for a teammate. Otherwise reply with exactly ${PASS} and nothing else.`,
+        ]
+      : []),
     "When the user writes @all, every agent answers in turn; you never use @all yourself.",
     ARTIFACT_GUIDANCE,
     sharedGuidance(sharedDir),
