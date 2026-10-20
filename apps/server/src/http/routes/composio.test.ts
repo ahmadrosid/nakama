@@ -30,8 +30,8 @@ function createMockClient(): Pick<
       };
     },
     async deleteConnectedAccount() {},
-    async linkToolkitAccount() {
-      return { redirectUrl: "https://example.com/oauth" };
+    async linkToolkitAccount(_userId, _toolkitSlug, callbackUrl) {
+      return { redirectUrl: callbackUrl };
     },
     async listCatalogToolkits() {
       return [
@@ -167,9 +167,18 @@ describe("composio routes", () => {
     );
 
     expect(connectResponse.status).toBe(200);
-    await expect(connectResponse.json()).resolves.toMatchObject({
-      redirectUrl: "https://example.com/oauth",
-    });
+
+    // SAFETY: The test client returns the callback URL as its redirect URL.
+    const { redirectUrl } = (await connectResponse.json()) as {
+      redirectUrl: string;
+    };
+
+    const callbackResponse = await app.fetch(new Request(redirectUrl));
+
+    expect(callbackResponse.status).toBe(302);
+    expect(callbackResponse.headers.get("location")).toBe(
+      "/integrations?section=composio"
+    );
 
     const connections =
       await databaseAdapter.listComposioUserConnectionsForUser(
@@ -179,7 +188,7 @@ describe("composio routes", () => {
 
     expect(connections).toHaveLength(1);
     expect(connections[0]?.userId).toBe("user_admin");
-    expect(connections[0]?.status).toBe("oauth_in_progress");
+    expect(connections[0]?.status).toBe("connected");
   });
 
   test("org member can list toolkits but cannot enable them", async () => {

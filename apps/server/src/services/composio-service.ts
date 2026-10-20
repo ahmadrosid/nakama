@@ -838,7 +838,9 @@ export class ComposioService {
           connectionId: z.string(),
           nonce: z.string(),
           orgId: z.string(),
-          returnTo: z.literal(MEET_RETURN_PATH).optional(),
+          returnTo: z
+            .enum([MEET_RETURN_PATH, "/integrations?section=composio"])
+            .optional(),
           toolkitId: z.string(),
           userId: z.string(),
         })
