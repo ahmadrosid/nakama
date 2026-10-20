@@ -42,6 +42,7 @@ import {
   Folder01Icon,
   Image01Icon,
   Plug01Icon,
+  PuzzleIcon,
   Settings01Icon,
   WifiOff01Icon,
 } from "hugeicons-react";
@@ -662,9 +663,11 @@ function PluginPanelExpandButton({ panelId }: { panelId: string }) {
 
 /** Plugin pages `/open` lists for the active agent, and how to show one. */
 const OpenPluginContext = createContext<{
+  /** Opens the add-plugin dialog. Null when the user cannot assign tools. */
+  onAdd: (() => void) | null;
   open: (plugin: ComposerOpenPlugin) => void;
   plugins: ComposerOpenPlugin[];
-}>({ open: () => undefined, plugins: NO_OPEN_PLUGINS });
+}>({ onAdd: null, open: () => undefined, plugins: NO_OPEN_PLUGINS });
 
 function composerBtwHandler(props: ChatComposerProps) {
   return isFullComposer(props) ? props.onBtw : undefined;
@@ -896,10 +899,18 @@ export function ChatComposer(props: ChatComposerProps) {
     [addProfileId, openAddCommand]
   );
 
+  const pluginsMenuContext = useMemo(
+    () => ({
+      ...openPluginContext,
+      onAdd: addProfileId ? () => openAddCommand("add-plugin") : null,
+    }),
+    [addProfileId, openAddCommand, openPluginContext]
+  );
+
   return (
     <CommandPrefixContext.Provider value={commandContext}>
       <BtwCommandContext.Provider value={Boolean(onBtw)}>
-        <OpenPluginContext.Provider value={openPluginContext}>
+        <OpenPluginContext.Provider value={pluginsMenuContext}>
           <ConnectorsContext.Provider value={connectorsContext}>
             <div className={cn("w-full shrink-0", props.className)}>
               {layout.showOfflineHint && isFullComposer(props) ? (
@@ -1732,9 +1743,42 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
           <Folder01Icon aria-hidden className="size-4 text-muted-foreground" />
           Add folder
         </DropdownMenuItem>
+        <ChatPluginsSubmenu disabled={disabled} />
         <ChatConnectorsSubmenu disabled={disabled} />
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/** + menu submenu: open one of the agent's plugin pages, or add a plugin. */
+function ChatPluginsSubmenu({ disabled }: { disabled: boolean }) {
+  const { onAdd, open, plugins } = useContext(OpenPluginContext);
+
+  if (plugins.length === 0 && !onAdd) {
+    return null;
+  }
+
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger disabled={disabled}>
+        <PuzzleIcon aria-hidden className="size-4 text-muted-foreground" />
+        Plugins
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="min-w-56">
+        {onAdd ? (
+          <DropdownMenuItem onClick={onAdd}>
+            <Add01Icon aria-hidden className="size-4 text-muted-foreground" />
+            Add plugin
+          </DropdownMenuItem>
+        ) : null}
+        {onAdd && plugins.length > 0 ? <DropdownMenuSeparator /> : null}
+        {plugins.map((plugin) => (
+          <DropdownMenuItem key={plugin.pluginId} onClick={() => open(plugin)}>
+            {plugin.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }
 
