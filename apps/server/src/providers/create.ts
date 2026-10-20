@@ -35,9 +35,8 @@ import { createOpenCodeGoProvider } from "./opencode-go";
 import { createOpenRouterProvider } from "./openrouter";
 import { createXaiProvider } from "./xai-oauth";
 
-// Keep false until a live V4.1 tool call AND result continuation are recorded.
-// See index.llm.test.ts and PR #1608. Offline mocks are not release evidence.
-const NETRA_V41_TOOL_TURN_VERIFIED = false;
+// Live tool call and result continuation are recorded in index.llm.test.ts.
+const NETRA_V41_TOOL_TURN_VERIFIED = true;
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 
