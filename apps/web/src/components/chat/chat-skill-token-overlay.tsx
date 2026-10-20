@@ -6,14 +6,20 @@ import {
 
 interface ChatSkillTokenOverlayProps {
   className?: string;
+  /** Tokens to highlight; defaults to the chat composer's built-in mentions. */
+  ranges?: SkillTokenRange[];
+  /** The textarea's scroll offset, so highlights stay under their text. */
+  scrollTop?: number;
   value: string;
 }
 
 export function ChatSkillTokenOverlay({
   value,
   className,
+  ranges,
+  scrollTop,
 }: ChatSkillTokenOverlayProps) {
-  const tokenRanges = getMentionTokenRanges(value);
+  const tokenRanges = ranges ?? getMentionTokenRanges(value);
 
   if (tokenRanges.length === 0) {
     return null;
@@ -27,7 +33,13 @@ export function ChatSkillTokenOverlay({
         className
       )}
     >
-      {renderHighlightedValue(value, tokenRanges)}
+      {scrollTop ? (
+        <div style={{ transform: `translateY(${-scrollTop}px)` }}>
+          {renderHighlightedValue(value, tokenRanges)}
+        </div>
+      ) : (
+        renderHighlightedValue(value, tokenRanges)
+      )}
     </div>
   );
 }

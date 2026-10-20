@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { z } from "zod";
+import { isSecretEnvKey } from "../secret-mask";
 
 const JsonValueSchema = z.json();
 
@@ -86,19 +87,16 @@ export async function runRipgrep(
   const command = await resolveRipgrepCommand();
 
   return await new Promise((resolve, reject) => {
+    const env = { ...process.env };
+
+    for (const key of Object.keys(env)) {
+      if (isSecretEnvKey(key)) {
+        delete env[key];
+      }
+    }
+
     const child = spawn(command, args, {
-      env: Object.fromEntries(
-        Object.entries(process.env).filter(
-          ([key]) =>
-            key !== "NAKAMA_SECRETS_KEY" &&
-            key !== "NAKAMA_SECRETS_KEY_NEXT" &&
-            key !== "NAKAMA_EMAIL_PASSWORD" &&
-            key !== "NAKAMA_EMAIL_PASSWORD_FILE" &&
-            !key.startsWith("NAKAMA_PROVIDER_API_KEY_") &&
-            !key.startsWith("NAKAMA_TOOL_API_KEY_") &&
-            !/(?:^|_)API_KEY(?:_FILE)?$/.test(key)
-        )
-      ),
+      env,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });

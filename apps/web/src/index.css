@@ -723,6 +723,30 @@
     @apply bg-sidebar-accent text-sidebar-foreground;
   }
 
+  .sidebar-chat-row {
+    transition: background-color 150ms ease-out;
+  }
+
+  aside:not([data-collapsed]) .sidebar-chat-row .sidebar-nav-link {
+    @apply bg-transparent;
+  }
+
+  aside:not([data-collapsed]) .sidebar-chat-row:hover {
+    @apply bg-muted/70;
+  }
+
+  .dark aside:not([data-collapsed]) .sidebar-chat-row:hover {
+    @apply bg-muted/50;
+  }
+
+  aside:not([data-collapsed]) .sidebar-chat-row:has([data-active]) {
+    @apply bg-muted/80;
+  }
+
+  .dark aside:not([data-collapsed]) .sidebar-chat-row:has([data-active]) {
+    @apply bg-sidebar-accent;
+  }
+
   aside[data-collapsed] .sidebar-nav-link {
     @apply relative justify-center text-muted-foreground/70;
   }

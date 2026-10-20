@@ -6,6 +6,8 @@ import type {
   ImageAttachment,
   KnowledgeBaseDuplicateAction,
   ListSessionsResponse,
+  ProfileDetail,
+  ProfileSummary,
   SoulStackFiles,
   UpdateProfileRequest,
   UpdateSessionRequest,
@@ -109,8 +111,65 @@ export function useUpdateProfileMutation() {
       profileId: string;
       input: UpdateProfileRequest;
     }) => client.updateProfile(profileId, input),
-    onSuccess: (_data, variables) =>
-      invalidateProfileQueries(queryClient, variables.profileId),
+    onError: (
+      _error,
+      variables,
+      context:
+        | { detail?: ProfileDetail; profiles?: ProfileSummary[] }
+        | null
+        | undefined
+    ) => {
+      if (!context) {
+        return;
+      }
+
+      queryClient.setQueryData(
+        queryKeys.profiles.detail(variables.profileId),
+        context.detail
+      );
+      queryClient.setQueryData(queryKeys.profiles.all, context.profiles);
+    },
+    // The automations switch moves before the save returns.
+    onMutate: async ({ profileId, input }) => {
+      const { automationsEnabled } = input;
+
+      if (automationsEnabled === undefined) {
+        return null;
+      }
+
+      await queryClient.cancelQueries({ queryKey: queryKeys.profiles.all });
+
+      const detailKey = queryKeys.profiles.detail(profileId);
+      const detail = queryClient.getQueryData<ProfileDetail>(detailKey);
+
+      const profiles = queryClient.getQueryData<ProfileSummary[]>(
+        queryKeys.profiles.all
+      );
+
+      queryClient.setQueryData<ProfileDetail>(detailKey, (current) =>
+        current ? { ...current, automationsEnabled } : current
+      );
+      queryClient.setQueryData<ProfileSummary[]>(
+        queryKeys.profiles.all,
+        (current) =>
+          current?.map((profile) =>
+            profile.id === profileId
+              ? { ...profile, automationsEnabled }
+              : profile
+          )
+      );
+
+      return { detail, profiles };
+    },
+    onSuccess: async (_data, variables) => {
+      if (variables.input.automationsEnabled !== undefined) {
+        void invalidateProfileQueries(queryClient, variables.profileId);
+
+        return;
+      }
+
+      await invalidateProfileQueries(queryClient, variables.profileId);
+    },
   });
 }
 
@@ -126,6 +185,22 @@ export function useUpdateSessionMutation() {
       sessionId: string;
       input: UpdateSessionRequest;
     }) => client.updateSession(sessionId, input),
+    onSuccess: (_data, variables) =>
+      invalidateQueries(queryClient, queryKeys.sessions(variables.profileId)),
+  });
+}
+
+export function useSetSessionOrderMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      profileId,
+      sessionIds,
+    }: {
+      profileId: string;
+      sessionIds: string[];
+    }) => client.setSessionOrder(profileId, sessionIds),
     onSuccess: (_data, variables) =>
       invalidateQueries(queryClient, queryKeys.sessions(variables.profileId)),
   });
@@ -524,11 +599,12 @@ const SESSION_PAGE_SIZE = 30;
 function listSessionPage(
   profileId: string,
   cursor: string | null,
-  search?: string
+  search?: string,
+  all = false
 ) {
   return client.listSessions(profileId, HISTORY_SESSION_CHANNELS, {
     cursor,
-    limit: SESSION_PAGE_SIZE,
+    limit: all ? undefined : SESSION_PAGE_SIZE,
     query: search || undefined,
   });
 }
@@ -538,7 +614,11 @@ function listSessionPage(
  * `search` narrows it on the server to chats whose title or messages match;
  * an empty one idles, so clearing a search does not refetch the plain list.
  */
-export function useHistorySessionsQuery(profileId: string, search?: string) {
+export function useHistorySessionsQuery(
+  profileId: string,
+  search?: string,
+  all = false
+) {
   const queryClient = useQueryClient();
   const runningSessionIds = useRunningTurnsStore((state) => state.sessionIds);
   const localTurn = runningSessionIds.length > 0;
@@ -547,7 +627,9 @@ export function useHistorySessionsQuery(profileId: string, search?: string) {
 
   const queryKey = search
     ? queryKeys.sessionSearch(profileId, search)
-    : queryKeys.sessions(profileId);
+    : all
+      ? [...queryKeys.sessions(profileId), "all"]
+      : queryKeys.sessions(profileId);
 
   const query = useInfiniteQuery({
     enabled,
@@ -558,7 +640,8 @@ export function useHistorySessionsQuery(profileId: string, search?: string) {
     // Typing on keeps the previous results up; a first search starts empty.
     placeholderData: (previous, previousQuery) =>
       previousQuery?.queryKey[2] === "search" ? previous : undefined,
-    queryFn: ({ pageParam }) => listSessionPage(profileId, pageParam, search),
+    queryFn: ({ pageParam }) =>
+      listSessionPage(profileId, pageParam, search, all),
     queryKey,
   });
 
@@ -573,7 +656,7 @@ export function useHistorySessionsQuery(profileId: string, search?: string) {
   useQuery({
     enabled: enabled && pollInterval !== false,
     queryFn: async () => {
-      const head = await listSessionPage(profileId, null, search);
+      const head = await listSessionPage(profileId, null, search, all);
 
       const data =
         queryClient.getQueryData<
@@ -594,7 +677,9 @@ export function useHistorySessionsQuery(profileId: string, search?: string) {
 
       return null;
     },
-    queryKey: queryKeys.sessionListHead(profileId, search),
+    queryKey: all
+      ? [...queryKeys.sessionListHead(profileId, search), "all"]
+      : queryKeys.sessionListHead(profileId, search),
     refetchInterval: pollInterval,
   });
 

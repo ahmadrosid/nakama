@@ -190,7 +190,8 @@ export function registerComposioRoutes(
           resolveComposioCallbackBaseUrl({
             clientOrigin: body.callbackOrigin,
             request: c.req.raw,
-          })
+          }),
+          { returnTo: "/integrations?section=composio" }
         )
       );
     } catch (error) {

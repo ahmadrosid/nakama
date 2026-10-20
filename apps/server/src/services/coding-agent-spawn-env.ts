@@ -1,4 +1,8 @@
-import type { ProviderName, UserConfig } from "@nakama/core";
+import {
+  isSecretEnvKey,
+  type ProviderName,
+  type UserConfig,
+} from "@nakama/core";
 import type { StoredCodingAgentHarnessKind } from "@nakama/db";
 import {
   createHarnessConfigDir,
@@ -305,14 +309,15 @@ export async function buildSpawnEnvForHarness(
     const configDir = await createHarnessConfigDir("nakama-codex-config-");
     await writeCodexConfigToml(configDir.dir, routing, "codex", providerType);
 
-    return {
-      cleanup: configDir.cleanup,
-      env: {
-        CODEX_HOME: configDir.dir,
-        NAKAMA_HARNESS_API_KEY: routing.apiKey,
-        ...env,
-      },
+    const codexEnv: CodingAgentSpawnEnvResult["env"] = {
+      CODEX_HOME: configDir.dir,
     };
+
+    if (routing.apiKey) {
+      codexEnv.NAKAMA_HARNESS_API_KEY = routing.apiKey;
+    }
+
+    return { cleanup: configDir.cleanup, env: codexEnv };
   }
 
   return buildOpenCodeSpawnEnv(routing, providerType);
@@ -331,18 +336,6 @@ export async function buildSpawnEnvForHarness(
 const HIJACKING_ENV_KEY =
   /^(BASH_ENV|IFS|PS4|SHELLOPTS|BASHOPTS|NODE_OPTIONS|BASH_FUNC_.*|LD_.*|DYLD_.*|PYTHON.*)$/;
 
-function isManagedSecretEnvKey(key: string): boolean {
-  return (
-    key === "NAKAMA_SECRETS_KEY" ||
-    key === "NAKAMA_SECRETS_KEY_NEXT" ||
-    key === "NAKAMA_EMAIL_PASSWORD" ||
-    key === "NAKAMA_EMAIL_PASSWORD_FILE" ||
-    key.startsWith("NAKAMA_PROVIDER_API_KEY_") ||
-    key.startsWith("NAKAMA_TOOL_API_KEY_") ||
-    /(?:^|_)API_KEY(?:_FILE)?$/.test(key)
-  );
-}
-
 export function mergeCodingAgentSpawnEnv(
   baseEnv: NodeJS.ProcessEnv,
   spawnEnv: Record<string, string>,
@@ -355,7 +348,7 @@ export function mergeCodingAgentSpawnEnv(
   const merged: Record<string, string> = {};
 
   for (const [key, value] of Object.entries(baseEnv)) {
-    if (value !== undefined && !isManagedSecretEnvKey(key)) {
+    if (value !== undefined && !isSecretEnvKey(key)) {
       merged[key] = value;
     }
   }
@@ -376,7 +369,7 @@ export function mergeCodingAgentSpawnEnv(
   }
 
   for (const [key, value] of Object.entries(callerEnv)) {
-    if (HIJACKING_ENV_KEY.test(key) || isManagedSecretEnvKey(key)) {
+    if (HIJACKING_ENV_KEY.test(key) || isSecretEnvKey(key)) {
       continue;
     }
 

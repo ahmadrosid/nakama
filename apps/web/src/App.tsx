@@ -107,6 +107,16 @@ const StatusPage = lazyPage(() => import("@/pages/StatusPage"), "StatusPage");
 
 const LlmUsageTab = lazyPage(() => import("@/pages/StatusPage"), "LlmUsageTab");
 
+const AgentGroupsPage = lazyPage(
+  () => import("@/pages/AgentGroupsPage"),
+  "AgentGroupsPage"
+);
+
+const AgentGroupChatPage = lazyPage(
+  () => import("@/pages/AgentGroupChatPage"),
+  "AgentGroupChatPage"
+);
+
 const GoogleMeetPage = lazyPage(
   () => import("@/pages/GoogleMeetPage"),
   "GoogleMeetPage"
@@ -248,6 +258,18 @@ function AppShell() {
                   <Route
                     element={<GoogleMeetPage />}
                     path={PAGE_PATHS["google-meet"]}
+                  />
+                  <Route
+                    element={<AgentGroupsPage />}
+                    path={PAGE_PATHS.groups}
+                  />
+                  <Route
+                    element={<AgentGroupChatPage />}
+                    path={`${PAGE_PATHS.groups}/:groupId`}
+                  />
+                  <Route
+                    element={<AgentGroupChatPage />}
+                    path={`${PAGE_PATHS.groups}/:groupId/:sessionId`}
                   />
                   <Route
                     element={

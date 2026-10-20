@@ -133,7 +133,6 @@ export class AutomationService {
       access
     );
 
-    await this.assertProfileAutomationEnabled(profileId);
     const delivery = normalizeAutomationDelivery(input.delivery);
     await validateAutomationDelivery(delivery, {
       access: {
@@ -168,7 +167,23 @@ export class AutomationService {
       automation.delivery = delivery;
     }
 
+    const profile = await this.db.getProfile(profileId);
+
+    const isFirstAutomation = !(
+      await this.db.listAutomationsForOrg(orgId)
+    ).some((existing) => existing.profileId === profileId);
+
     await this.store.save(automation);
+
+    // The first automation is the user's consent to run automations.
+    if (profile && profile.automationsEnabled === false && isFirstAutomation) {
+      await this.db.upsertProfile({
+        ...profile,
+        automationsEnabled: true,
+        updatedAt: now,
+      });
+    }
+
     await this.notifyChange();
 
     return this.enrichAutomation(automation);
@@ -500,17 +515,6 @@ export class AutomationService {
     const profile = await this.db.getProfile(profileId);
 
     return profile?.automationsEnabled !== false;
-  }
-
-  private async assertProfileAutomationEnabled(
-    profileId: string
-  ): Promise<void> {
-    if (!(await this.isProfileAutomationEnabled(profileId))) {
-      throw new NakamaApiError(
-        "Automations are disabled for this profile.",
-        403
-      );
-    }
   }
 
   private async notifyChange(): Promise<void> {

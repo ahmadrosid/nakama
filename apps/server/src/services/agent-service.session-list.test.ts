@@ -155,6 +155,53 @@ describe("listSessions pages the merged history", () => {
     expect(paged).toEqual(all.sessions.map((session) => session.id));
   });
 
+  test("saved order belongs to one user", async () => {
+    const { service } = await seedHistory();
+
+    const owner = await service.listSessions(
+      ORG_ID,
+      "profile_default",
+      CHANNELS,
+      ACCESS
+    );
+
+    const ids = owner.sessions.map((session) => session.id).reverse();
+    await service.setSessionOrder(ORG_ID, "profile_default", ACCESS, ids);
+
+    const ordered = await service.listSessions(
+      ORG_ID,
+      "profile_default",
+      CHANNELS,
+      ACCESS
+    );
+
+    expect(ordered.sessions.map((session) => session.sortPosition)).toEqual(
+      ordered.sessions.map((session) => ids.indexOf(session.id))
+    );
+
+    const teammate = await service.listSessions(
+      ORG_ID,
+      "profile_default",
+      CHANNELS,
+      {
+        isPlatformAdmin: true,
+        user: { id: "user_other" },
+      }
+    );
+
+    expect(teammate.sessions.map((session) => session.sortPosition)).toEqual(
+      teammate.sessions.map(() => null)
+    );
+    await expect(
+      service.setSessionOrder(
+        ORG_ID,
+        "profile_default",
+        { isPlatformAdmin: true, user: { id: "user_other" } },
+        ids
+      )
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
   test("a page asked for after a chat moved across its cursor is stale", async () => {
     const { db, service } = await seedHistory();
 

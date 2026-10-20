@@ -8,7 +8,7 @@ export function AgentQuestionnaireNav({
   answered: boolean[];
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 px-3 pt-3 pb-1">
+    <div className="flex items-center justify-between gap-3 px-3 pt-2 pb-1">
       <p className="truncate font-medium text-foreground text-sm">Questions</p>
       <div className="flex items-center gap-2.5">
         <div aria-hidden className="flex gap-1">

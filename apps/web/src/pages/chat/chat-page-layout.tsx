@@ -7,11 +7,11 @@ import { welcomeAnimationKey } from "@/pages/chat/chat-page.shared";
 
 /**
  * Applied straight to the column rather than as an overlay child, so nothing
- * has to be lifted out of the way with z-index. The gradient is opaque, so the
- * result is identical.
+ * has to be lifted out of the way with z-index. It follows the app theme: a
+ * pale indigo glow in light mode, the near-black one in dark mode.
  */
 const COGNITO_SURFACE =
-  "radial-gradient(125% 125% at 50% 100%, #000000 40%, #010133 100%)";
+  "bg-[radial-gradient(125%_125%_at_50%_100%,#ffffff_40%,#dfe3ff_100%)] dark:bg-[radial-gradient(125%_125%_at_50%_100%,#000000_40%,#010133_100%)]";
 
 /** Size of one dither pixel, in CSS pixels. */
 const DITHER_CELL_PX = 4;
@@ -278,7 +278,7 @@ export function ChatPageColumn({
   return (
     <div
       className={cn(
-        cognito && "dark",
+        cognito && COGNITO_SURFACE,
         // `relative` so a page-level control can pin itself to this column's
         // top-right corner, which is the top-right of the screen area.
         "relative isolate flex min-h-0 min-w-0 flex-col transition-[width,opacity,padding] duration-200 ease-out motion-reduce:transition-none",
@@ -290,10 +290,6 @@ export function ChatPageColumn({
           "max-sm:pointer-events-none max-sm:w-0 max-sm:flex-none max-sm:overflow-hidden max-sm:px-0 max-sm:opacity-0",
         centered && "justify-center"
       )}
-      // `dark` is a plain class here, not html.dark, so it re-declares the
-      // colour tokens for this subtree only. Without it a light theme would
-      // paint dark text onto the near-black gradient.
-      style={cognito ? { background: COGNITO_SURFACE } : undefined}
     >
       {centered && !cognito && <ChatDitherBackground />}
       {children}

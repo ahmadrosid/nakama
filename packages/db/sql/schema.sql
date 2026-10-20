@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   is_super INTEGER DEFAULT 0 NOT NULL,
   org_id TEXT,
   is_default INTEGER DEFAULT 0 NOT NULL,
-  automations_enabled INTEGER DEFAULT 1 NOT NULL,
+  automations_enabled INTEGER DEFAULT 0 NOT NULL,
   skills_write_approval INTEGER,
   skills_post_turn_review INTEGER,
   skills_curator_consolidate_enabled INTEGER,
@@ -64,11 +64,20 @@ CREATE TABLE IF NOT EXISTS sessions (
   updated_at TEXT NOT NULL,
   title TEXT,
   pinned INTEGER NOT NULL DEFAULT 0,
+  parent_session_id TEXT REFERENCES sessions (id) ON DELETE SET NULL,
+  branch_message_index INTEGER,
   model TEXT,
   agent_todos TEXT DEFAULT '[]' NOT NULL,
   agent_questionnaire TEXT,
   FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS session_user_order (
+  session_id TEXT NOT NULL REFERENCES sessions (id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  sort_position INTEGER NOT NULL,
+  PRIMARY KEY (session_id, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS session_messages (

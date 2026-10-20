@@ -1027,6 +1027,77 @@ for (const kind of ["create", "clone", "update", "delete"] as const) {
   );
 }
 
+test.each([false, true])(
+  "automations toggle moves the cached profile before the save returns; failure=%s",
+  async (fails) => {
+    const profile = { automationsEnabled: false, id: "profile_toggle" };
+    const other = { automationsEnabled: false, id: "profile_other" };
+    const detailKey = queryKeys.profiles.detail(profile.id);
+    const save = Promise.withResolvers<{ profile: never }>();
+
+    const update = spyOn(client, "updateProfile").mockReturnValue(save.promise);
+
+    queryClient.setQueryData(detailKey, profile);
+    queryClient.setQueryData(queryKeys.profiles.all, [profile, other]);
+
+    let updateMutation!: ReturnType<typeof useUpdateProfileMutation>;
+
+    function Probe() {
+      updateMutation = useUpdateProfileMutation();
+
+      return null;
+    }
+
+    try {
+      renderToString(
+        createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(Probe)
+        )
+      );
+
+      const operation = updateMutation.mutateAsync({
+        input: { automationsEnabled: true },
+        profileId: profile.id,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(queryClient.getQueryData<typeof profile>(detailKey)).toEqual({
+        ...profile,
+        automationsEnabled: true,
+      });
+      expect(
+        queryClient.getQueryData<(typeof profile)[]>(queryKeys.profiles.all)
+      ).toEqual([{ ...profile, automationsEnabled: true }, other]);
+
+      if (fails) {
+        save.reject(new Error("Retry toggle"));
+        await expect(operation).rejects.toThrow();
+      } else {
+        // SAFETY: The hook ignores the saved profile; only the cache is checked.
+        save.resolve({ profile: undefined as never });
+        await operation;
+      }
+
+      const expected = fails
+        ? profile
+        : { ...profile, automationsEnabled: true };
+
+      expect(queryClient.getQueryData<typeof profile>(detailKey)).toEqual(
+        expected
+      );
+      expect(
+        queryClient.getQueryData<(typeof profile)[]>(queryKeys.profiles.all)
+      ).toEqual([expected, other]);
+    } finally {
+      update.mockRestore();
+      queryClient.removeQueries({ queryKey: queryKeys.profiles.all });
+    }
+  }
+);
+
 for (const kind of ["add", "invite", "update", "remove"] as const) {
   test.each([false, true])(
     `${kind} member refreshes summaries only on success; failure=%s`,

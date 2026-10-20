@@ -97,6 +97,14 @@ const COMPOSER_ADD_SLASH_COMMANDS: ReservedSlashCommand[] = [
   },
 ];
 
+/** Opens a side chat next to the page. Shown on the main chat page only. */
+const BTW_SLASH_COMMAND: ReservedSlashCommand = {
+  description: "Ask a side question in a new chat",
+  name: "btw",
+};
+
+const BTW_COMMAND_PATTERN = /^\/btw(?:\s+([\s\S]*))?$/i;
+
 /** `@` tokens the server acts on (`@image` asks the agent for generate_image). */
 const COMPOSER_MENTIONS: ReservedSlashCommand[] = [
   {
@@ -195,6 +203,13 @@ export function matchComposerAddCommand(
   return command?.action ?? null;
 }
 
+/** The question a sent `/btw …` asks (empty for a bare `/btw`), or null. */
+export function matchComposerBtwCommand(text: string): string | null {
+  const match = BTW_COMMAND_PATTERN.exec(text.trim());
+
+  return match ? (match[1] ?? "").trim() : null;
+}
+
 /** Plugin pages that match `/o`, `/open`, or `/open dat`, by id or label. */
 function filterOpenPluginSuggestions(
   plugins: ComposerOpenPlugin[],
@@ -271,9 +286,16 @@ export function filterComposerSlashSuggestions(
   query: string,
   options: {
     enableAddCommands?: boolean;
+    enableBtw?: boolean;
     openPlugins?: ComposerOpenPlugin[];
   } = {}
 ): ComposerSlashSuggestion[] {
+  const btwCommands = options.enableBtw
+    ? filterReservedSlashCommands(query, [BTW_SLASH_COMMAND]).map(
+        (command) => ({ command, kind: "command" as const })
+      )
+    : [];
+
   const addCommands = options.enableAddCommands
     ? filterReservedSlashCommands(query, COMPOSER_ADD_SLASH_COMMANDS).map(
         (command) => ({
@@ -303,6 +325,7 @@ export function filterComposerSlashSuggestions(
   );
 
   return [
+    ...btwCommands,
     ...addCommands,
     ...learnCommands,
     ...pluginSuggestions,

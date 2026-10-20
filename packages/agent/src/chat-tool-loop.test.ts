@@ -128,6 +128,77 @@ function delayedTool(
 }
 
 describe("agent chat tool loop", () => {
+  test.each([false, true])(
+    "waits for questionnaire answers after the tool batch (stream: %s)",
+    async (stream) => {
+      const calls: string[] = [];
+
+      const question: ToolDefinition = {
+        description: "Ask the user",
+        name: "ask_user_question",
+        async run() {
+          calls.push("question");
+
+          return { questionnaire: { title: "Choose" } };
+        },
+      };
+
+      const other: ToolDefinition = {
+        ...sampleTool,
+        async run() {
+          calls.push("other");
+
+          return { ok: true };
+        },
+      };
+
+      const session = createAgentChatSession({
+        provider: createMockProvider([
+          toolTurn([
+            { arguments: {}, id: "question", name: "ask_user_question" },
+            { arguments: {}, id: "other", name: "sample" },
+          ]),
+        ]),
+        tools: [question, other],
+      });
+
+      const reply = stream
+        ? await session.sendStream("Build a page", { onChunk() {} })
+        : await session.send("Build a page");
+
+      expect(reply).toBe("");
+      expect(calls).toEqual(["question", "other"]);
+      expect(
+        session
+          .getHistory()
+          .filter((message) => message.role === "tool")
+          .map((message) => message.toolCallId)
+      ).toEqual(["question", "other"]);
+    }
+  );
+
+  test("continues when ask_user_question fails", async () => {
+    const session = createAgentChatSession({
+      provider: createMockProvider([
+        toolTurn([
+          { arguments: {}, id: "question", name: "ask_user_question" },
+        ]),
+        textReply("Please answer in chat."),
+      ]),
+      tools: [
+        {
+          description: "Ask the user",
+          name: "ask_user_question",
+          async run() {
+            throw new Error("No active session");
+          },
+        },
+      ],
+    });
+
+    expect(await session.send("Build a page")).toBe("Please answer in chat.");
+  });
+
   test.each([
     { images: [] },
     { images: null },

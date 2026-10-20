@@ -23,6 +23,7 @@ import type {
 } from "@nakama/core";
 import {
   getUserConfigDir,
+  isSecretEnvKey,
   type PlatformWorkerName,
   type PluginWorkerContribution,
   readRuntimeServerUrl,
@@ -49,7 +50,6 @@ import {
   isProcessAlive,
 } from "@nakama/core/worker-heartbeat";
 import type { DatabaseAdapter } from "@nakama/db";
-import { isSecretEnvKey } from "../lib/ensure-process-path";
 
 const WORKER_SCRIPTS = new Map(
   Object.entries({

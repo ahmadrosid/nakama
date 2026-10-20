@@ -228,6 +228,7 @@ describe("coding-agent spawn env", () => {
       {
         EXA_API_KEY_FILE: "/secret",
         NAKAMA_SECRETS_KEY: "master",
+        NODE_ENV: "test",
         PATH: "/bin",
       },
       { NAKAMA_HARNESS_API_KEY: "selected" },

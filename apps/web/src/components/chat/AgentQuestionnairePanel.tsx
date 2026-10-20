@@ -12,23 +12,17 @@ import {
 } from "@/components/chat/agent-questionnaire.shared";
 import { AgentQuestionnaireNav } from "@/components/chat/agent-questionnaire-nav";
 import { AgentQuestionnaireQuestion } from "@/components/chat/agent-questionnaire-question";
-import {
-  type ComposerStackEdge,
-  composerShelfPanelClass,
-} from "@/lib/chat-stream";
 
 interface AgentQuestionnairePanelProps {
   disabled?: boolean;
   onSubmit: (answers: AgentQuestionAnswer[]) => void;
   questionnaire: AgentQuestionnaire | null;
-  stackEdge?: ComposerStackEdge;
 }
 
 export function AgentQuestionnairePanel({
   questionnaire,
   disabled = false,
   onSubmit,
-  stackEdge = "start",
 }: AgentQuestionnairePanelProps) {
   const [answers, setAnswers] = useState<Record<string, DraftAnswerState>>({});
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -248,10 +242,10 @@ export function AgentQuestionnairePanel({
   }
 
   return (
-    <div className="px-3">
-      <aside
+    <div className="w-full max-w-xl">
+      <section
         aria-label="Agent questions"
-        className={composerShelfPanelClass(stackEdge)}
+        className="rounded-xl border border-border bg-background"
       >
         <AgentQuestionnaireNav
           answered={resolvedAnswers.map(
@@ -259,7 +253,7 @@ export function AgentQuestionnairePanel({
           )}
           currentQuestionIndex={currentQuestionIndex}
         />
-        <div className="space-y-4 px-3 py-3" onKeyDown={handleKeyDown}>
+        <div className="space-y-3 px-3 pt-1 pb-3" onKeyDown={handleKeyDown}>
           <div key={activeQuestion.id} ref={activeQuestionRef}>
             <AgentQuestionnaireQuestion
               disabled={disabled}
@@ -270,7 +264,6 @@ export function AgentQuestionnairePanel({
                 }))
               }
               question={activeQuestion}
-              questionIndex={currentQuestionIndex}
               state={activeState}
             />
           </div>
@@ -306,7 +299,34 @@ export function AgentQuestionnairePanel({
             </div>
           </div>
         </div>
-      </aside>
+      </section>
     </div>
+  );
+}
+
+export function AgentQuestionnaireAnswers({
+  answers,
+}: {
+  answers: AgentQuestionAnswer[];
+}) {
+  return (
+    <section
+      aria-label="Agent questions"
+      className="w-full max-w-2xl rounded-xl border border-border bg-background px-3 py-3"
+    >
+      <p className="font-medium text-sm">Questions · Confirmed</p>
+      <div className="mt-3 space-y-3">
+        {answers.map((entry, index) => (
+          <div key={entry.questionId}>
+            <p className="font-medium text-sm">
+              {index + 1}. {entry.prompt}
+            </p>
+            <p className="mt-1 whitespace-pre-wrap text-muted-foreground text-sm">
+              {entry.answer || "Skipped"}
+            </p>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

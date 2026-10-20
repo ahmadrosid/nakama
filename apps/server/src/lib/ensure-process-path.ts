@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+import { isSecretEnvKey } from "@nakama/core";
 
 let ensured = false;
 
@@ -80,19 +81,6 @@ function withBunInstallBin(current: string): string {
   }
 
   return current ? `${bunBin}${path.delimiter}${current}` : bunBin;
-}
-
-/** Env vars that hold a secret and never reach a child process. */
-export function isSecretEnvKey(key: string): boolean {
-  return (
-    key === "NAKAMA_SECRETS_KEY" ||
-    key === "NAKAMA_SECRETS_KEY_NEXT" ||
-    key === "NAKAMA_EMAIL_PASSWORD" ||
-    key === "NAKAMA_EMAIL_PASSWORD_FILE" ||
-    key.startsWith("NAKAMA_PROVIDER_API_KEY_") ||
-    key.startsWith("NAKAMA_TOOL_API_KEY_") ||
-    /(?:^|_)API_KEY(?:_FILE)?$/.test(key)
-  );
 }
 
 export function getToolExecutionEnv(): NodeJS.ProcessEnv {

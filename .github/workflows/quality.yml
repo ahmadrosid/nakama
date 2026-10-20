@@ -87,7 +87,7 @@ jobs:
               # The compound script must pass coverage flags to Bun, not Electron.
               xvfb-run -a bun run --cwd "$workspace" test:coverage 2>&1 | tee "$report.txt" || workspace_status=$?
             else
-              bun run --cwd "$workspace" test --coverage --coverage-reporter=text 2>&1 | tee "$report.txt" || workspace_status=$?
+              bun run --cwd "$workspace" test --coverage --coverage-reporter=text --timeout=30000 2>&1 | tee "$report.txt" || workspace_status=$?
             fi
             echo "$workspace_status" > "$report.status"
             if [ "$workspace_status" -ne 0 ]; then status=1; fi

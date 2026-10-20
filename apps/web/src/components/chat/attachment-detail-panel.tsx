@@ -16,6 +16,7 @@ interface AttachmentDetailPanelProps {
   className?: string;
   fullscreen?: boolean;
   headerActions?: ReactNode;
+  headerClassName?: string;
   leading?: ReactNode;
   onClose: () => void;
   onWidthChange: (width: number) => void;
@@ -33,6 +34,7 @@ export function AttachmentDetailPanel({
   leading,
   children,
   headerActions,
+  headerClassName,
   bodyClassName,
   resizable = true,
   fullscreen = false,
@@ -142,7 +144,8 @@ export function AttachmentDetailPanel({
         <div
           className={cn(
             "items-center gap-3 border-border border-b px-4 py-3",
-            leading ? "grid grid-cols-[1fr_auto_1fr]" : "flex justify-between"
+            leading ? "grid grid-cols-[1fr_auto_1fr]" : "flex justify-between",
+            headerClassName
           )}
         >
           <div className="flex min-w-0 flex-1 items-center gap-2">

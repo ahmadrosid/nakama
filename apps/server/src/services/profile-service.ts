@@ -375,7 +375,7 @@ export class ProfileService {
     const now = new Date().toISOString();
 
     const profile: StoredProfileRecord = {
-      automationsEnabled: true,
+      automationsEnabled: false,
       createdAt: now,
       id: profileId,
       isDefault: false,

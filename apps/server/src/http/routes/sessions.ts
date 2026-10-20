@@ -97,6 +97,9 @@ export function registerSessionRoutes(
       id: z.string(),
       messageCount: z.number().optional(),
       pinned: z.boolean().optional(),
+      parentSessionId: z.string().nullable().optional(),
+      branchMessageIndex: z.number().int().nullable().optional(),
+      sortPosition: z.number().int().nullable().optional(),
       preview: z.string().nullable().optional(),
       profileId: z.string(),
       title: z.string().nullable().optional(),
@@ -194,12 +197,14 @@ export function registerSessionRoutes(
     .object({
       model: z.string().trim().min(1).nullable().optional(),
       pinned: z.boolean().optional(),
+      parentSessionId: z.null().optional(),
       title: z.string().trim().min(1).max(200).optional(),
     })
     .refine(
       (body) =>
         body.model !== undefined ||
         body.pinned !== undefined ||
+        body.parentSessionId !== undefined ||
         body.title !== undefined,
       "At least one session field is required."
     )
@@ -846,6 +851,34 @@ export function registerSessionRoutes(
         return errorResponse("Session not found", 404);
       }
     }
+
+    if (
+      body.parentSessionId === null &&
+      !(await agent.detachSession(sessionId, orgId))
+    ) {
+      return errorResponse("Session not found", 404);
+    }
+
+    return new Response(null, { status: 204 });
+  });
+
+  app.put("/v1/sessions/order", async (c) => {
+    requireOrgMemberFromContext(c);
+
+    const body = await readJson(
+      c.req.raw,
+      z.object({
+        profileId: z.string().min(1),
+        sessionIds: z.array(z.string().min(1)).max(5000),
+      })
+    );
+
+    await agent.setSessionOrder(
+      requireActiveOrgIdFromContext(c),
+      body.profileId,
+      getRequestAuth(c),
+      body.sessionIds
+    );
 
     return new Response(null, { status: 204 });
   });

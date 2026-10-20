@@ -21,6 +21,7 @@
     "./channel-chat-lock": "./src/channel-chat-lock.ts",
     "./channel-typing-loop": "./src/channel-typing-loop.ts",
     "./google-meet": "./src/google-meet.ts",
+    "./agent-groups": "./src/agent-groups.ts",
     "./contract": "./src/contract.ts",
     "./notification-destinations": "./src/notification-destinations.ts",
     "./chat-stream-timeout": "./src/chat-stream-timeout.ts",

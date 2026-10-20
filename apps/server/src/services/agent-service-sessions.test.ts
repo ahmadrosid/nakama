@@ -243,6 +243,8 @@ describe("AgentService branching", () => {
     expect(branchRecord?.profileId).toBe("profile_default");
     expect(branchRecord?.channel).toBe("web");
     expect(branchRecord?.title).toBe("Original chat (Branch)");
+    expect(branchRecord?.parentSessionId).toBe(sourceSessionId);
+    expect(branchRecord?.branchMessageIndex).toBe(1);
 
     const sourceMessages = await service.getSessionMessages(
       sourceSessionId,
@@ -250,6 +252,44 @@ describe("AgentService branching", () => {
     );
 
     expect(sourceMessages?.messages).toHaveLength(3);
+
+    await db.deleteSession(sourceSessionId);
+    expect((await db.getSession(branchSessionId))?.parentSessionId).toBeNull();
+    expect(
+      (await service.getSessionMessages(branchSessionId, ORG_ID))?.messages
+    ).toHaveLength(2);
+  });
+
+  test("detaches a branch without losing its messages", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    const service = new AgentService(null, null, db);
+
+    const sourceId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default"
+    );
+
+    await db.appendMessagesForSession(sourceId, [
+      {
+        createdAt: "2026-06-14T10:00:00.000Z",
+        id: "msg_detach",
+        payload: { content: "Keep this", role: "user" },
+        seq: 0,
+        sessionId: sourceId,
+      },
+    ]);
+
+    const branchId = (await service.branchSession(sourceId, 0, ORG_ID))!
+      .sessionId;
+
+    expect((await db.getSession(branchId))?.parentSessionId).toBe(sourceId);
+    expect(await service.detachSession(branchId, ORG_ID)).toBe(true);
+    expect((await db.getSession(branchId))?.parentSessionId).toBeNull();
+    expect(
+      (await service.getSessionMessages(branchId, ORG_ID))?.messages
+    ).toEqual([{ content: "Keep this", role: "user" }]);
   });
 
   test("rejects an out-of-range branch index", async () => {

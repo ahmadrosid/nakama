@@ -1,10 +1,15 @@
+import type { AgentQuestionAnswer } from "@nakama/core/contract";
 import type { ChatListItem } from "@/lib/chat-history";
 
 export type IndexedMessage = { message: ChatListItem; index: number };
 
 export type MessageTurn =
   | { kind: "user"; message: ChatListItem; index: number }
-  | { kind: "assistant"; messages: IndexedMessage[] };
+  | {
+      kind: "assistant";
+      messages: IndexedMessage[];
+      questionnaireAnswers?: AgentQuestionAnswer[];
+    };
 
 export function groupMessagesIntoTurns(
   messages: ChatListItem[]
@@ -14,6 +19,21 @@ export function groupMessagesIntoTurns(
 
   for (const [index, message] of messages.entries()) {
     if (message.role === "user") {
+      if (
+        message.questionnaireAnswers?.length &&
+        currentAssistantTurn?.some(
+          ({ message: item }) => item.tool === "ask_user_question"
+        )
+      ) {
+        turns.push({
+          kind: "assistant",
+          messages: currentAssistantTurn,
+          questionnaireAnswers: message.questionnaireAnswers,
+        });
+        currentAssistantTurn = null;
+        continue;
+      }
+
       if (currentAssistantTurn) {
         turns.push({ kind: "assistant", messages: currentAssistantTurn });
         currentAssistantTurn = null;

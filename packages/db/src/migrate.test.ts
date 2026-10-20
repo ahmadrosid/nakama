@@ -1223,8 +1223,66 @@ describe("schema bootstrap version", () => {
   });
 });
 
+describe("automations enabled column", () => {
+  const selectAutomationsEnabled = (db: Database) =>
+    db
+      .prepare<{ automations_enabled: number; id: string }, SQLQueryBindings[]>(
+        "SELECT id, automations_enabled FROM profiles ORDER BY id"
+      )
+      .all();
+
+  test("keeps the stored value of existing profiles", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+      db.exec(`
+        INSERT INTO profiles (id, name, automations_enabled, created_at, updated_at)
+        VALUES
+          ('profile_off', 'Off', 0, '2026-10-20T00:00:00.000Z', '2026-10-20T00:00:00.000Z'),
+          ('profile_on', 'On', 1, '2026-10-20T00:00:00.000Z', '2026-10-20T00:00:00.000Z');
+      `);
+
+      migrateDatabase(db);
+
+      expect(selectAutomationsEnabled(db)).toEqual([
+        { automations_enabled: 0, id: "profile_off" },
+        { automations_enabled: 1, id: "profile_on" },
+      ]);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("keeps automations on for profiles from before the column", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+      db.exec(`
+        ALTER TABLE profiles DROP COLUMN automations_enabled;
+        INSERT INTO profiles (id, name, created_at, updated_at)
+        VALUES ('profile_legacy', 'Legacy', '2026-10-20T00:00:00.000Z', '2026-10-20T00:00:00.000Z');
+      `);
+
+      migrateDatabase(db);
+      db.exec(`
+        INSERT INTO profiles (id, name, created_at, updated_at)
+        VALUES ('profile_new', 'New', '2026-10-20T00:00:00.000Z', '2026-10-20T00:00:00.000Z');
+      `);
+
+      expect(selectAutomationsEnabled(db)).toEqual([
+        { automations_enabled: 1, id: "profile_legacy" },
+        { automations_enabled: 0, id: "profile_new" },
+      ]);
+    } finally {
+      db.close();
+    }
+  });
+});
+
 describe("chat session schema", () => {
-  test("adds a model override to legacy sessions", () => {
+  test("adds model and tree data to legacy sessions", () => {
     const db = new Database(":memory:");
 
     try {
@@ -1250,6 +1308,19 @@ describe("chat session schema", () => {
 
       expect(columns.some((column) => column.name === "model")).toBe(true);
       expect(columns.some((column) => column.name === "updated_at")).toBe(true);
+      expect(
+        columns.some((column) => column.name === "parent_session_id")
+      ).toBe(true);
+      expect(
+        columns.some((column) => column.name === "branch_message_index")
+      ).toBe(true);
+      expect(
+        db
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE name = 'session_user_order'"
+          )
+          .get()
+      ).not.toBeNull();
     } finally {
       db.close();
     }

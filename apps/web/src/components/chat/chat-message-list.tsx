@@ -1,4 +1,9 @@
-import type { ChatUsage } from "@nakama/core/contract";
+import { hasActiveAgentQuestionnaire } from "@nakama/core/agent-questionnaire";
+import type {
+  AgentQuestionAnswer,
+  AgentQuestionnaire,
+  ChatUsage,
+} from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import {
   DropdownMenu,
@@ -34,6 +39,10 @@ import {
   ConversationStickinessProvider,
 } from "@/components/ai-elements/conversation";
 import { Message, MessageContent } from "@/components/ai-elements/message";
+import {
+  AgentQuestionnaireAnswers,
+  AgentQuestionnairePanel,
+} from "@/components/chat/AgentQuestionnairePanel";
 import { ArtifactAttachmentPreview } from "@/components/chat/artifact-attachment-preview";
 import {
   AssistantTurnSegmentView,
@@ -149,7 +158,9 @@ interface ChatMessageListProps {
   onContinueToolSetup?: (setupId: string) => Promise<void>;
   onEditMessage?: (message: ChatListItem, text: string) => void;
   onRetryMessage?: (message: ChatListItem) => void;
+  onSubmitQuestionnaire?: (answers: AgentQuestionAnswer[]) => void;
   profileId?: string | null;
+  questionnaire?: AgentQuestionnaire | null;
   readOnly?: boolean;
   sessionId?: string;
   showThinking?: boolean;
@@ -184,6 +195,8 @@ function ChatMessageListSession({
   onBranchMessage,
   onEditMessage,
   onRetryMessage,
+  onSubmitQuestionnaire,
+  questionnaire,
   emptyMessage,
   className,
   contentClassName,
@@ -365,7 +378,12 @@ function ChatMessageListSession({
               canPreviewCitations ? openCitationPreview : undefined
             }
             onRetryMessage={onRetryMessage}
+            onSubmitQuestionnaire={onSubmitQuestionnaire}
             profileId={profileId}
+            questionnaire={
+              turnIndex === turns.length - 1 ? questionnaire : null
+            }
+            questionnaireAnswers={turn.questionnaireAnswers}
             readOnly={readOnly}
             sessionId={sessionId}
             showAwaiting={
@@ -396,8 +414,10 @@ function ChatMessageListSession({
       onBranchMessage,
       onEditMessage,
       onRetryMessage,
+      onSubmitQuestionnaire,
       openCitationPreview,
       profileId,
+      questionnaire,
       showThinking,
       showUsage,
       streamActive,
@@ -483,6 +503,9 @@ function AssistantTurn({
   onBranchMessage,
   onOpenFileCitation,
   onRetryMessage,
+  onSubmitQuestionnaire,
+  questionnaire,
+  questionnaireAnswers,
   usedPluginTools,
 }: {
   readOnly?: boolean;
@@ -502,6 +525,9 @@ function AssistantTurn({
   onBranchMessage?: (message: ChatListItem) => void;
   onOpenFileCitation?: (path: string) => void;
   onRetryMessage?: (message: ChatListItem) => void;
+  onSubmitQuestionnaire?: (answers: AgentQuestionAnswer[]) => void;
+  questionnaire?: AgentQuestionnaire | null;
+  questionnaireAnswers?: AgentQuestionAnswer[];
   usedPluginTools: string[];
 }) {
   const turnMessages = messages.map(({ message }) => message);
@@ -549,6 +575,22 @@ function AssistantTurn({
       ))}
       {showAwaiting && !segments.some((segment) => segment.kind === "work") ? (
         <TurnAwaitingElapsed startedAt={turnStartedAt} />
+      ) : null}
+      {questionnaireAnswers?.length ? (
+        <AgentQuestionnaireAnswers answers={questionnaireAnswers} />
+      ) : null}
+      {!questionnaireAnswers?.length &&
+      onSubmitQuestionnaire &&
+      hasActiveAgentQuestionnaire(questionnaire) &&
+      turnMessages.some(
+        (message) =>
+          message.tool === "ask_user_question" && message.toolStatus === "done"
+      ) ? (
+        <AgentQuestionnairePanel
+          disabled={actionsDisabled}
+          onSubmit={(answers) => onSubmitQuestionnaire?.(answers)}
+          questionnaire={questionnaire ?? null}
+        />
       ) : null}
       {!workStreamActive &&
         interactiveTurnComplete &&

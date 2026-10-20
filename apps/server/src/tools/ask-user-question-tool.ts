@@ -71,7 +71,11 @@ export function createAskUserQuestionTools(
 
         const result = await questionnaireState.write(sessionId, questionnaire);
 
-        return { questionnaire: result };
+        return {
+          message:
+            "Questions shown to the user. Wait for the next user message before continuing.",
+          questionnaire: result,
+        };
       },
     },
   ];

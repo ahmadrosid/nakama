@@ -8,7 +8,9 @@ import type {
 } from "@nakama/core/contract";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -16,10 +18,10 @@ import {
   useState,
 } from "react";
 import {
+  type Params,
   useLocation,
   useNavigate,
   useParams,
-  useSearchParams,
 } from "react-router-dom";
 import type { QueuedComposerMessage } from "@/components/chat/ChatMessageQueuePanel";
 import { useRunningTurnsStore } from "@/context/running-turns-store";
@@ -120,18 +122,57 @@ interface QueuedSend {
   text: string;
 }
 
+/**
+ * Where a chat reads its route and active profile. The page uses the browser
+ * URL and the shared profile store; the `/btw` side chat swaps in its own, so
+ * it can run next to the page without moving it.
+ */
+export interface ChatHost {
+  /** Start in cognito: not saved, not in History, not in the URL. */
+  cognito: boolean;
+  /** Draft key slot for a chat with no session, so two drafts do not mix. */
+  draftSessionId: string | null;
+  location: { pathname: string; search: string };
+  navigate: (to: string, options?: { replace?: boolean }) => void;
+  params: Readonly<Params>;
+  profile: ReturnType<typeof useActiveChatProfile>;
+}
+
+export const ChatHostContext = createContext<ChatHost | null>(null);
+
+function useChatHost(): ChatHost {
+  const override = useContext(ChatHostContext);
+  const params = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const profile = useActiveChatProfile();
+
+  return (
+    override ?? {
+      cognito: false,
+      draftSessionId: null,
+      location,
+      navigate,
+      params,
+      profile,
+    }
+  );
+}
+
 function useChatComposerDraft({
   userId,
   orgId,
   profileId,
   routeSession,
   search,
+  draftSessionId,
 }: {
   userId?: string;
   orgId?: string;
   profileId: string;
   routeSession: ReturnType<typeof parseChatRouteParams>;
   search: string;
+  draftSessionId: string | null;
 }) {
   const composerDraftKey = chatComposerDraftKey(
     userId,
@@ -139,7 +180,7 @@ function useChatComposerDraft({
     readRequestedProfileFromNewChatSearch(search) ??
       routeSession?.profileId ??
       profileId,
-    routeSession?.sessionId ?? null
+    routeSession?.sessionId ?? draftSessionId
   );
 
   const [composerEntry, setComposerEntry] = useState<{
@@ -169,10 +210,14 @@ const AUTOMATION_COMPOSER_PLACEHOLDER =
 
 export function useChatPage() {
   const queryClient = useQueryClient();
-  const params = useParams();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const host = useChatHost();
+  const { location, navigate, params } = host;
+
+  const searchParams = useMemo(
+    () => new URLSearchParams(location.search),
+    [location.search]
+  );
+
   const routeSession = useMemo(() => parseChatRouteParams(params), [params]);
   const { health, models } = useAppContext();
   const { user, activeOrg, isLoading: authLoading } = useAuth();
@@ -183,7 +228,7 @@ export function useChatPage() {
     profileId: storeProfileId,
     setProfileId,
     syncForOrg,
-  } = useActiveChatProfile();
+  } = host.profile;
 
   const profilesQuery = useProfilesQuery(activeOrg?.id ?? null);
 
@@ -201,7 +246,7 @@ export function useChatPage() {
   });
 
   const [session, setSession] = useState<RemoteChatSession | null>(null);
-  const [cognito, setCognito] = useState(false);
+  const [cognito, setCognito] = useState(host.cognito);
   const [sessionModel, setSessionModel] = useState<string | null>(null);
   const [sessionChannel, setSessionChannel] = useState<AgentChannel>("web");
   const [messages, setMessages] = useState<ChatListItem[]>([]);
@@ -231,6 +276,7 @@ export function useChatPage() {
 
   const { composerDraftKey, composerEntry, setComposerEntry } =
     useChatComposerDraft({
+      draftSessionId: host.draftSessionId,
       orgId: activeOrg?.id,
       profileId,
       routeSession,
@@ -1337,6 +1383,11 @@ export function useChatPage() {
         void invalidateQueries(queryClient, queryKeys.sessions(profileId));
         // A turn can remove an artifact owned by any profile.
         void invalidateQueries(queryClient, ["artifacts"]);
+        // A turn's first automation turns the profile's automations on.
+        void invalidateQueries(
+          queryClient,
+          queryKeys.profiles.detail(profileId)
+        );
 
         if (!detached) {
           streamAbortRef.current = null;
