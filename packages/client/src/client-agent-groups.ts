@@ -1,5 +1,6 @@
 import type {
   AgentGroup,
+  AgentGroupMemory,
   AgentGroupSession,
   AgentGroupSessionDetail,
   AgentGroupThreadDetail,
@@ -65,6 +66,22 @@ export class AgentGroupsClient extends OrgMemoryClient {
 
   async deleteAgentGroup(groupId: string): Promise<void> {
     await this.request(agentGroupPath(groupId), { method: "DELETE" });
+  }
+
+  async getAgentGroupMemory(groupId: string): Promise<AgentGroupMemory> {
+    return this.request<AgentGroupMemory>(`${agentGroupPath(groupId)}/memory`);
+  }
+
+  /** Fails with 409 when the memory is no longer `base`, what the editor opened. */
+  async updateAgentGroupMemory(
+    groupId: string,
+    content: string,
+    base: string
+  ): Promise<AgentGroupMemory> {
+    return this.request<AgentGroupMemory>(`${agentGroupPath(groupId)}/memory`, {
+      body: JSON.stringify({ base, content }),
+      method: "PUT",
+    });
   }
 
   async listAgentGroupFiles(
