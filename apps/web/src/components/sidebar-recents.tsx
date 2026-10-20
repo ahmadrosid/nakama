@@ -29,6 +29,7 @@ import {
 } from "hugeicons-react";
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { RecentChatContextMenu } from "@/components/SidebarRecentChatRow";
 import { useLocalStorageFlag } from "@/hooks/use-sidebar-collapsed";
 import {
   getInitialPinnedCollapsed,
@@ -153,7 +154,16 @@ export function RecentChatRow({
   const current = location.pathname === href;
 
   return (
-    <div className="group relative flex min-w-0 items-center">
+    <RecentChatContextMenu
+      className="group relative flex min-w-0 items-center"
+      href={href}
+      id={id}
+      onDelete={onDelete}
+      onRename={onRename}
+      onTogglePin={onTogglePin}
+      pinned={item.pinned}
+      title={title}
+    >
       <Link
         aria-current={current ? "page" : undefined}
         className="sidebar-nav-link min-w-0 flex-1 px-2 py-1.5 group-focus-within:pr-[60px] group-hover:pr-[60px]"
@@ -216,7 +226,7 @@ export function RecentChatRow({
           )}
         </Button>
       </div>
-    </div>
+    </RecentChatContextMenu>
   );
 }
 
