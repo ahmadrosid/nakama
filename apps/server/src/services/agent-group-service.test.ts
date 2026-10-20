@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { ProfileSummary } from "@nakama/core";
+import { join } from "node:path";
+import {
+  getProfileSoulDir,
+  type ProfileSummary,
+  SOUL_TEMPLATE,
+} from "@nakama/core";
 import { setupTestConfigDir } from "../test-config-dir";
 import type { SubAgentRunInput } from "../tools/sub-agent-shared";
 import { AgentGroupService, readGroupDocuments } from "./agent-group-service";
@@ -173,6 +178,38 @@ describe("AgentGroupService", () => {
     expect(tasks.every((task) => task.includes("Launch v2 on Friday"))).toBe(
       true
     );
+  });
+
+  test("the roster gives each teammate's SOUL.md tagline, but not the template's", async () => {
+    await Bun.write(
+      join(getProfileSoulDir(ORG_ID, "a"), "SOUL.md"),
+      "# Alpha\n\nWrites and reviews\n**copy**.\n\n---\n\n## Who I Am"
+    );
+    await Bun.write(
+      join(getProfileSoulDir(ORG_ID, "b"), "SOUL.md"),
+      SOUL_TEMPLATE
+    );
+
+    const tasks: string[] = [];
+
+    const { chat, service } = setup(({ task }) => {
+      tasks.push(task);
+
+      return "ok";
+    });
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+
+    await chat(group.id, "@alpha hi");
+
+    const roster = tasks[0]
+      ?.split("\n")
+      .filter((line) => line.startsWith("- @"));
+
+    expect(roster).toEqual([
+      "- @alpha (you): Writes and reviews copy.",
+      "- @beta",
+    ]);
   });
 
   test("an attached document reaches the agent, and the client sees only its name", async () => {

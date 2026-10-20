@@ -1,6 +1,12 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { ProfileSummary } from "@nakama/core";
-import { getGroupSharedDir } from "@nakama/core";
+import {
+  getGroupSharedDir,
+  getProfileSoulDir,
+  SOUL_FILES,
+  SOUL_TEMPLATE,
+} from "@nakama/core";
 import {
   type AgentGroup,
   type AgentGroupMessage,
@@ -112,6 +118,35 @@ function mayPass(
   );
 }
 
+/** The paragraph under a SOUL.md title, like "A social media manager for…". */
+function soulTagline(soul: string): string {
+  const [title, paragraph = ""] = soul.trim().split(/\n\s*\n/);
+
+  if (!title?.startsWith("# ") || /^(#|---)/.test(paragraph)) {
+    return "";
+  }
+
+  return paragraph.replaceAll("**", "").replace(/\s+/g, " ").slice(0, 240);
+}
+
+/** The template's tagline says nothing about what an agent does. */
+const STOCK_TAGLINE = soulTagline(SOUL_TEMPLATE);
+
+/** Each member's role from its SOUL.md tagline; empty when it has none. */
+function memberRoles(orgId: string, ids: string[]): Map<string, string> {
+  return new Map(
+    ids.map((id) => {
+      const path = join(getProfileSoulDir(orgId, id), SOUL_FILES.soul);
+
+      const tagline = soulTagline(
+        existsSync(path) ? readFileSync(path, "utf8") : ""
+      );
+
+      return [id, tagline === STOCK_TAGLINE ? "" : tagline];
+    })
+  );
+}
+
 /** What the speaker gets this turn, and whether it may pass. */
 export function groupTurn(
   orgId: string,
@@ -131,7 +166,14 @@ export function groupTurn(
   return {
     mayPass: optional,
     sharedDir,
-    task: groupTask(group, speaker, handles, sharedDir, optional),
+    task: groupTask(
+      group,
+      speaker,
+      handles,
+      memberRoles(orgId, [...handles.values()]),
+      sharedDir,
+      optional
+    ),
   };
 }
 
@@ -140,15 +182,19 @@ function groupTask(
   group: AgentGroup,
   speaker: ProfileSummary,
   handles: Map<string, string>,
+  roles: Map<string, string>,
   sharedDir: string,
   mayPass: boolean
 ): string {
-  const roster = [...handles]
-    .map(([handle, id]) => `@${handle}${id === speaker.id ? " (you)" : ""}`)
-    .join(", ");
+  const roster = [...handles].map(([handle, id]) => {
+    const role = roles.get(id);
+
+    return `- @${handle}${id === speaker.id ? " (you)" : ""}${role ? `: ${role}` : ""}`;
+  });
 
   return [
-    `You are ${speaker.name} (@${handleOf(handles, speaker.id)}) in the group chat "${group.name}" with the user and these agents: ${roster}.`,
+    `You are ${speaker.name} (@${handleOf(handles, speaker.id)}) in the group chat "${group.name}" with the user and these agents:`,
+    ...roster,
     ...briefSection(group),
     "The conversation so far is under Context, newest last. Reply to it as yourself.",
     `This is a chat message, not a report. ${CHAT_STYLE} Do not prefix it with your name.`,
