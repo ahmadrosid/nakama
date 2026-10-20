@@ -275,6 +275,7 @@ import {
 } from "../providers/xai-oauth/oauth";
 import { createAskUserQuestionTools } from "../tools/ask-user-question-tool";
 import { formatImageMentionContext } from "../tools/generate-image-tool";
+import { groupMemoryTool } from "../tools/group-memory-tool";
 import {
   createOrgMemoryTools,
   PROPOSE_ORG_MEMORY_TOOL_NAME,
@@ -2131,13 +2132,17 @@ export class AgentService {
       input.profileId
     );
 
-    const tools = await this.resolveProfileTools(profile, {
-      includeAutomationTools: false,
-      includeQuestionTools: false,
-      includeSubAgentTool: false,
-      includeTodoTools: false,
-      userId: input.userId,
-    });
+    const tools = [
+      ...(await this.resolveProfileTools(profile, {
+        includeAutomationTools: false,
+        includeQuestionTools: false,
+        includeSubAgentTool: false,
+        includeTodoTools: false,
+        userId: input.userId,
+      })),
+      // Only a group turn carries a shared folder, and with it a group memory.
+      ...(input.sharedDir ? [groupMemoryTool] : []),
+    ];
 
     const { systemPrompt, soulActive } = await this.resolveProfileSystemPrompt(
       input.orgId,
