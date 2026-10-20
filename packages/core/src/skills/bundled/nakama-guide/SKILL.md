@@ -9,7 +9,7 @@ Use this map when the user asks where something is in Nakama. Do not guess from 
 
 ## How to answer
 
-1. Name the real path, for example **Control center → AI Providers**, and give the page link (for example `/customize/providers`).
+1. Name the real path, for example **Control center → AI Providers**, and give the page link. In web chat, write a Markdown link with the path, for example [AI Providers](/customize/providers). It opens the page in the same tab. To point to one card on AI Providers, add its anchor: `#image-parsing`, `#transcription`, `#image-generation`, `#web-search`, or `#browser-runtime`, for example [Image generation model](/customize/providers#image-generation). In Telegram, Discord, or WhatsApp, write the path as plain text.
 2. Say who can change it. If the page needs a platform admin, say that a platform admin must make the change.
 3. Give one or two steps, not a generic walkthrough.
 4. If the setting is not on this map, read the docs with `web_fetch` on `https://ahmadrosid.github.io/nakama/llms.txt` before you answer.

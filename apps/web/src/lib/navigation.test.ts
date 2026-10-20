@@ -9,6 +9,7 @@ import {
   enabledPluginNavEntries,
   groupPath,
   groupRouteFromPath,
+  inAppLinkPath,
   integrationSectionPath,
   orgSkillProposalsPath,
   PAGE_PATHS,
@@ -284,5 +285,28 @@ describe("page paths named to the agent", () => {
       .filter((pagePath) => !guide.includes(`\`${pagePath}\``));
 
     expect(missing).toEqual([]);
+  });
+});
+
+describe("inAppLinkPath", () => {
+  const origin = "http://localhost:4310";
+
+  test("keeps a relative path to a known page with its hash", () => {
+    expect(inAppLinkPath("/customize/providers#image-generation", origin)).toBe(
+      "/customize/providers#image-generation"
+    );
+  });
+
+  test("accepts a same-origin URL to a known page", () => {
+    expect(inAppLinkPath(`${origin}/settings?tab=a`, origin)).toBe(
+      "/settings?tab=a"
+    );
+  });
+
+  test("rejects other sites, unknown paths, and protocol-relative links", () => {
+    expect(inAppLinkPath("https://example.com/settings", origin)).toBeNull();
+    expect(inAppLinkPath("/does-not-exist", origin)).toBeNull();
+    expect(inAppLinkPath("//example.com/settings", origin)).toBeNull();
+    expect(inAppLinkPath("mailto:a@example.com", origin)).toBeNull();
   });
 });

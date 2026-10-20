@@ -570,6 +570,27 @@ export function pageIdFromPath(pathname: string): PageId | null {
   );
 }
 
+/** App path for a same-origin link to a known page, or null for other links. */
+export function inAppLinkPath(href: string, origin: string): string | null {
+  if (href.startsWith("//")) {
+    return null;
+  }
+
+  let url: URL;
+
+  try {
+    url = new URL(href, origin);
+  } catch {
+    return null;
+  }
+
+  if (url.origin !== origin || !pageIdFromPath(url.pathname)) {
+    return null;
+  }
+
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
 const INTEGRATION_SECTIONS = [
   {
     icon: Notification01Icon,
