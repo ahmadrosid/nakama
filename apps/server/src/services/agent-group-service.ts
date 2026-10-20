@@ -25,6 +25,7 @@ import type { DatabaseAdapter } from "@nakama/db";
 import { failSubAgentResult } from "../tools/sub-agent-shared";
 import {
   DOCUMENT_CONTEXT_CHARS,
+  ensureGroupSharedDir,
   groupMembers,
   groupTask,
   threadTask,
@@ -512,6 +513,8 @@ export class AgentGroupService {
 
       run.speakerProfileId = profileId;
       run.activity = null;
+
+      const sharedDir = ensureGroupSharedDir(orgId, group.id);
       run.steps = [];
       run.text = "";
 
@@ -531,7 +534,8 @@ export class AgentGroupService {
           orgId,
           orgRole: access.orgRole,
           profileId,
-          task: groupTask(group, speaker, handles),
+          sharedDir,
+          task: groupTask(group, speaker, handles, sharedDir),
           userId,
         })
         .catch((error) =>
@@ -585,6 +589,7 @@ export class AgentGroupService {
       }
 
       const handles = memberHandles(members);
+      const sharedDir = ensureGroupSharedDir(orgId, group.id);
 
       const result = await this.agent
         .runSubAgentPrompt({
@@ -602,7 +607,8 @@ export class AgentGroupService {
           orgId,
           orgRole: access.orgRole,
           profileId,
-          task: threadTask(group, speaker, handles),
+          sharedDir,
+          task: threadTask(group, speaker, handles, sharedDir),
           userId,
         })
         .catch((error) =>

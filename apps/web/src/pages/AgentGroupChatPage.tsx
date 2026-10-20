@@ -12,7 +12,11 @@ import { Button } from "@nakama/ui";
 import { Spinner } from "@nakama/ui/spinner";
 import { toast } from "@nakama/ui/toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { MessageAdd01Icon, PencilEdit02Icon } from "hugeicons-react";
+import {
+  Folder01Icon,
+  MessageAdd01Icon,
+  PencilEdit02Icon,
+} from "hugeicons-react";
 import { useMemo, useRef, useState } from "react";
 import {
   Link,
@@ -25,6 +29,7 @@ import { GroupComposer } from "@/components/agent-groups/group-composer";
 import { GroupDialog } from "@/components/agent-groups/group-dialog";
 import { GroupMessageList } from "@/components/agent-groups/group-message-list";
 import {
+  GroupFilesPanel,
   GroupLivePanel,
   GroupThreadPanel,
 } from "@/components/agent-groups/group-thread-panel";
@@ -56,18 +61,20 @@ export function AgentGroupChatPage() {
   const requested = Number(searchParams.get("thread"));
   const openThreadId = sessionId && requested > 0 ? requested : null;
   const liveOpen = Boolean(sessionId) && searchParams.get("live") === "1";
+  const filesOpen = searchParams.get("files") === "1";
 
-  // The thread and the live view share one side panel; opening one closes the other.
-  function setThread(messageId: number | null) {
+  // The thread, the live view and the files share one side panel; opening one closes the others.
+  function setPanel(panel: "files" | "live" | "thread", value: string | null) {
     setSearchParams(
       (current) => {
         const next = new URLSearchParams(current);
-        next.delete("live");
 
-        if (messageId === null) {
-          next.delete("thread");
-        } else {
-          next.set("thread", String(messageId));
+        for (const key of ["files", "live", "thread"]) {
+          next.delete(key);
+        }
+
+        if (value !== null) {
+          next.set(panel, value);
         }
 
         return next;
@@ -76,23 +83,11 @@ export function AgentGroupChatPage() {
     );
   }
 
-  function setLive(open: boolean) {
-    setSearchParams(
-      (current) => {
-        const next = new URLSearchParams(current);
-        next.delete("thread");
+  const setThread = (messageId: number | null) =>
+    setPanel("thread", messageId === null ? null : String(messageId));
 
-        if (open) {
-          next.set("live", "1");
-        } else {
-          next.delete("live");
-        }
-
-        return next;
-      },
-      { replace: true }
-    );
-  }
+  const setLive = (open: boolean) => setPanel("live", open ? "1" : null);
+  const setFilesOpen = (open: boolean) => setPanel("files", open ? "1" : null);
 
   if (isLoading) {
     return (
@@ -111,23 +106,17 @@ export function AgentGroupChatPage() {
     // The thread opens in its `below` slot: the same framed side panel as /btw.
     <ChatAttachmentPanelProvider
       below={
-        sessionId && liveOpen ? (
-          <GroupLivePanel
-            group={group}
-            onClose={() => setLive(false)}
-            profiles={profiles}
-            sessionId={sessionId}
-          />
-        ) : sessionId && openThreadId ? (
-          <GroupThreadPanel
-            group={group}
-            key={openThreadId}
-            messageId={openThreadId}
-            onClose={() => setThread(null)}
-            profiles={profiles}
-            sessionId={sessionId}
-          />
-        ) : null
+        <GroupSidePanel
+          filesOpen={filesOpen}
+          group={group}
+          liveOpen={liveOpen}
+          onCloseFiles={() => setFilesOpen(false)}
+          onCloseLive={() => setLive(false)}
+          onCloseThread={() => setThread(null)}
+          profiles={profiles}
+          sessionId={sessionId}
+          threadId={openThreadId}
+        />
       }
       key={`${groupId}:${sessionId ?? "new"}`}
     >
@@ -146,6 +135,61 @@ export function AgentGroupChatPage() {
   );
 }
 
+/** The one side panel that is open: files, the live view, or a thread. */
+function GroupSidePanel({
+  filesOpen,
+  group,
+  liveOpen,
+  onCloseFiles,
+  onCloseLive,
+  onCloseThread,
+  profiles,
+  sessionId,
+  threadId,
+}: {
+  filesOpen: boolean;
+  group: AgentGroup;
+  liveOpen: boolean;
+  onCloseFiles: () => void;
+  onCloseLive: () => void;
+  onCloseThread: () => void;
+  profiles: ProfileSummary[];
+  sessionId?: string;
+  threadId: number | null;
+}) {
+  if (filesOpen) {
+    return (
+      <GroupFilesPanel group={group} key={group.id} onClose={onCloseFiles} />
+    );
+  }
+
+  if (sessionId && liveOpen) {
+    return (
+      <GroupLivePanel
+        group={group}
+        onClose={onCloseLive}
+        profiles={profiles}
+        sessionId={sessionId}
+      />
+    );
+  }
+
+  if (sessionId && threadId) {
+    return (
+      <GroupThreadPanel
+        group={group}
+        key={threadId}
+        messageId={threadId}
+        onClose={onCloseThread}
+        profiles={profiles}
+        sessionId={sessionId}
+      />
+    );
+  }
+
+  return null;
+}
+
 function joinNames(names: string[]): string {
   return names.length < 2
     ? (names[0] ?? "")
@@ -160,6 +204,35 @@ function GroupMissing({ message }: { message?: string }) {
         Back to groups
       </Link>
     </div>
+  );
+}
+
+/** Opens the group's shared folder in the side panel. */
+function GroupFilesButton() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  return (
+    <Button
+      onClick={() =>
+        setSearchParams(
+          (current) => {
+            const next = new URLSearchParams(current);
+            next.delete("thread");
+            next.delete("live");
+            next.set("files", "1");
+
+            return next;
+          },
+          { replace: true }
+        )
+      }
+      size="sm"
+      type="button"
+      variant={searchParams.get("files") === "1" ? "secondary" : "outline"}
+    >
+      <Folder01Icon aria-hidden />
+      Files
+    </Button>
   );
 }
 
@@ -214,6 +287,7 @@ function GroupHeader({
           <PencilEdit02Icon aria-hidden />
           Edit group
         </Button>
+        <GroupFilesButton />
         <Button
           onClick={() => navigate(groupPath(group.id))}
           size="sm"
@@ -390,7 +464,7 @@ function GroupDraft({
         className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col"
         id="group-new-chat"
       >
-        <div className="flex shrink-0 justify-end px-4 pt-4">
+        <div className="flex shrink-0 justify-end gap-2 px-4 pt-4">
           <Button
             onClick={() => setEditing(true)}
             size="sm"
@@ -400,6 +474,7 @@ function GroupDraft({
             <PencilEdit02Icon aria-hidden />
             Edit group
           </Button>
+          <GroupFilesButton />
         </div>
         <div className="flex flex-1 flex-col justify-center gap-6 pb-12">
           <div className="flex flex-col items-center gap-3 px-4 text-center">

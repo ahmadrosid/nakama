@@ -3174,6 +3174,8 @@ export interface ToolContext {
     truncated: boolean;
   } | null>;
   sessionId?: string;
+  /** Agent group folder the file tools may also read and write (absolute path). */
+  sharedDir?: string;
   /** Aborts when the caller cancels the turn. Long-running tools should stop their work on it. */
   signal?: AbortSignal;
   /**

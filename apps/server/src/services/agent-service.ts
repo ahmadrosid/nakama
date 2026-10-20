@@ -2171,6 +2171,7 @@ export class AgentService {
       profileId: input.profileId,
       recordTurnUsage: this.turnUsageRecorderFor(input.orgId),
       sessionId: input.sessionId,
+      sharedDir: input.sharedDir,
       userId: input.userId,
     });
 

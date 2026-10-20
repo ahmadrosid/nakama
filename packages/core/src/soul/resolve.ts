@@ -55,6 +55,18 @@ export function getProfileArtifactsDir(
   return join(getProfileSoulDir(orgId, profileId), "artifacts");
 }
 
+/** Files every member of an agent group reads and writes: {orgDir}/groups/{groupId}/shared/ */
+export function getGroupSharedDir(orgId: string, groupId: string): string {
+  return join(
+    getUserConfigDir(),
+    "orgs",
+    assertConfigPathSegment(orgId, "orgId"),
+    "groups",
+    assertConfigPathSegment(groupId, "groupId"),
+    "shared"
+  );
+}
+
 export function getArtifactSharesDir(orgId: string): string {
   return join(
     getUserConfigDir(),

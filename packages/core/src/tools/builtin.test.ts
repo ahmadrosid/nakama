@@ -71,6 +71,44 @@ describe("file builtin tools", () => {
     expect(await readFile(targetPath, "utf8")).toBe("hello world");
   });
 
+  test("a group shared folder is readable by another profile, and only with sharedDir set", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-shared-"));
+    const sharedDir = path.join(tempDir, "shared");
+    const writer = path.join(tempDir, "writer");
+    const reader = path.join(tempDir, "reader");
+    const file = path.join(sharedDir, "outline.md");
+
+    await mkdir(sharedDir);
+    await mkdir(writer);
+    await mkdir(reader);
+
+    await runWriteFile({ content: "act one", path: file }, PROFILE_CONTEXT, {
+      workspaceRoot: writer,
+    }).then(
+      () => {
+        throw new Error("write outside the workspace should fail");
+      },
+      (error) => expect(error).toBeInstanceOf(PathGuardError)
+    );
+
+    await runWriteFile(
+      { content: "act one", path: file },
+      { ...PROFILE_CONTEXT, sharedDir },
+      { workspaceRoot: writer }
+    );
+
+    const read = await runReadFile(
+      { path: file },
+      { ...PROFILE_CONTEXT, sharedDir },
+      { workspaceRoot: reader }
+    );
+
+    expect(read.content).toBe("act one");
+    await expect(
+      runReadFile({ path: file }, PROFILE_CONTEXT, { workspaceRoot: reader })
+    ).rejects.toBeInstanceOf(PathGuardError);
+  });
+
   test("HTML file tools accept the byte limit and reject growth without changing the file", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-html-limit-"));
     const opts = { workspaceRoot: tempDir };

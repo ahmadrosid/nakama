@@ -1,7 +1,7 @@
 import type { WorkspaceEntry } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { useQuery } from "@tanstack/react-query";
-import { Download04Icon } from "hugeicons-react";
+import { ArrowLeft01Icon, Download04Icon } from "hugeicons-react";
 import { useEffect, useState } from "react";
 import { ArtifactAttachmentPanelActions } from "@/components/chat/artifact-attachment-panel-actions";
 import { ArtifactAttachmentPanelBody } from "@/components/chat/artifact-attachment-panel-body";
@@ -31,24 +31,16 @@ import { artifactBasename } from "@/pages/files/files-artifact-folders";
 import { ArtifactIcon } from "@/pages/files/files-artifact-icon";
 import { toChatArtifactRef } from "@/pages/files/files-shared";
 
-export function WorkspaceFilePreview({
-  entry,
-  profileId,
-  onClose,
-  id = `workspace:${profileId}:${entry.path}`,
-}: {
-  entry: WorkspaceEntry;
-  profileId: string;
-  onClose: () => void;
-  id?: string;
-}) {
-  const { activeOrg } = useAuth();
-  const { show, update, hide } = useChatAttachmentPanel();
-  const [fullscreen, setFullscreen] = useState(false);
-  const [copied, setCopied] = useState(false);
+/** A file of one profile's workspace, or of one group's shared folder. */
+type WorkspaceFileScope =
+  | { groupId?: undefined; profileId: string }
+  | { groupId: string; profileId?: undefined };
 
-  const [previewMode, setPreviewMode] =
-    useState<ArtifactPreviewMode>("preview");
+function useWorkspaceFileContent(
+  entry: WorkspaceEntry,
+  { groupId, profileId }: WorkspaceFileScope
+) {
+  const { activeOrg } = useAuth();
 
   // A Word file has no text of its own to show, so the server converts it and
   // it is previewed as the markdown it comes back as.
@@ -81,20 +73,24 @@ export function WorkspaceFilePreview({
   const { data, isLoading, error } = useQuery({
     enabled: canPreview,
     queryFn: async () => {
-      const blob = await client.readProfileWorkspaceFile(
-        profileId,
-        entry.path,
-        {
-          render: isWordDocument ? "markdown" : undefined,
-        }
-      );
+      const options = {
+        render: isWordDocument ? ("markdown" as const) : undefined,
+      };
+
+      const blob = groupId
+        ? await client.readAgentGroupFile(groupId, entry.path, options)
+        : await client.readProfileWorkspaceFile(
+            profileId ?? "",
+            entry.path,
+            options
+          );
 
       return { blob, text: isText ? await blob.text() : null };
     },
     queryKey: [
       "workspace-preview",
       activeOrg?.id,
-      profileId,
+      groupId ?? profileId,
       entry.path,
       entry.updatedAt,
     ],
@@ -110,7 +106,56 @@ export function WorkspaceFilePreview({
 
     return () => URL.revokeObjectURL(url);
   }, [data]);
-  const downloadUrl = `${client.baseUrl}/v1/profiles/${encodeURIComponent(profileId)}/workspace/content?${new URLSearchParams({ path: entry.path })}`;
+
+  const downloadUrl = `${client.baseUrl}${
+    groupId
+      ? `/v1/agent-groups/${encodeURIComponent(groupId)}/files/content`
+      : `/v1/profiles/${encodeURIComponent(profileId ?? "")}/workspace/content`
+  }?${new URLSearchParams({ path: entry.path })}`;
+
+  return {
+    canPreview,
+    data,
+    downloadUrl,
+    error,
+    isImage,
+    isLoading,
+    isMarkdown,
+    isVideo,
+    objectUrl,
+  };
+}
+
+export function WorkspaceFilePreview({
+  entry,
+  profileId,
+  onClose,
+  id = `workspace:${profileId}:${entry.path}`,
+}: {
+  entry: WorkspaceEntry;
+  profileId: string;
+  onClose: () => void;
+  id?: string;
+}) {
+  const { show, update, hide } = useChatAttachmentPanel();
+  const [fullscreen, setFullscreen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const [previewMode, setPreviewMode] =
+    useState<ArtifactPreviewMode>("preview");
+
+  const {
+    canPreview,
+    data,
+    downloadUrl,
+    error,
+    isImage,
+    isLoading,
+    isMarkdown,
+    isVideo,
+    objectUrl,
+  } = useWorkspaceFileContent(entry, { profileId });
+
   useEffect(() => {
     show({
       content: null,
@@ -215,6 +260,89 @@ export function WorkspaceFilePreview({
   ]);
 
   return null;
+}
+
+/** A file of a group's shared folder, shown inside the files panel in place of its list. */
+export function GroupFileViewer({
+  entry,
+  groupId,
+  onBack,
+}: {
+  entry: WorkspaceEntry;
+  groupId: string;
+  onBack: () => void;
+}) {
+  const [previewMode, setPreviewMode] =
+    useState<ArtifactPreviewMode>("preview");
+
+  const {
+    canPreview,
+    data,
+    downloadUrl,
+    error,
+    isImage,
+    isLoading,
+    isMarkdown,
+    isVideo,
+    objectUrl,
+  } = useWorkspaceFileContent(entry, { groupId });
+
+  const bodyClassName = artifactPanelBodyClassName({
+    isHtml: false,
+    isImage,
+    isMarkdown,
+    isVideo,
+    previewMode,
+  });
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
+        <Button onClick={onBack} size="sm" type="button" variant="ghost">
+          <ArrowLeft01Icon aria-hidden className="size-4" />
+          Back
+        </Button>
+        <span className="min-w-0 flex-1 truncate font-medium text-sm">
+          {artifactBasename(entry.filename)}
+        </span>
+        {isMarkdown ? (
+          <ArtifactPreviewModeToggle
+            mode={previewMode}
+            onChange={setPreviewMode}
+          />
+        ) : null}
+        <Button
+          nativeButton={false}
+          render={
+            <a
+              aria-label={`Download ${artifactBasename(entry.filename)}`}
+              download={artifactBasename(entry.filename)}
+              href={downloadUrl}
+            />
+          }
+          size="sm"
+          variant="ghost"
+        >
+          <Download04Icon aria-hidden className="size-4" />
+        </Button>
+      </div>
+      <div
+        className={`min-h-0 flex-1 overflow-y-auto ${bodyClassName ?? ""} ${isMarkdown && previewMode === "preview" ? "px-4 py-3" : ""}`}
+      >
+        <WorkspacePreviewBody
+          canPreview={canPreview}
+          content={data?.text ?? null}
+          downloadUrl={downloadUrl}
+          entry={entry}
+          error={error}
+          isMarkdown={isMarkdown}
+          loading={isLoading}
+          objectUrl={objectUrl}
+          previewMode={previewMode}
+        />
+      </div>
+    </div>
+  );
 }
 
 function WorkspacePreviewBody({

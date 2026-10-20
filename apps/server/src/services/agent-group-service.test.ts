@@ -108,6 +108,27 @@ describe("AgentGroupService", () => {
     ]);
   });
 
+  test("every member of a group gets the same shared folder", async () => {
+    const dirs: Array<string | undefined> = [];
+
+    const { chat, service } = setup((input) => {
+      dirs.push(input.sharedDir);
+
+      return "ok";
+    });
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+    const other = await service.create(ORG_ID, USER_ID, "Other", ["a", "b"]);
+
+    await chat(group.id, "@all hi");
+    await chat(other.id, "@alpha hi");
+
+    expect(dirs[0]).toBe(dirs[1]);
+    expect(dirs[0]).toContain(group.id);
+    expect(dirs[2]).toContain(other.id);
+    expect(dirs[2]).not.toBe(dirs[0]);
+  });
+
   test("@all gives every member a turn, in member order", async () => {
     const { calls, chat, service } = setup(() => "here");
     const group = await service.create(ORG_ID, USER_ID, "Team", ["b", "a"]);

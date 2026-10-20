@@ -10,6 +10,7 @@ import type {
 import type {
   DocumentAttachment,
   ImageAttachment,
+  ListWorkspaceFilesResponse,
 } from "@nakama/core/contract";
 import { OrgMemoryClient } from "./client-org-memory";
 
@@ -64,6 +65,35 @@ export class AgentGroupsClient extends OrgMemoryClient {
 
   async deleteAgentGroup(groupId: string): Promise<void> {
     await this.request(agentGroupPath(groupId), { method: "DELETE" });
+  }
+
+  async listAgentGroupFiles(
+    groupId: string,
+    folder = ""
+  ): Promise<ListWorkspaceFilesResponse> {
+    const query = new URLSearchParams({ folder });
+
+    return this.request<ListWorkspaceFilesResponse>(
+      `${agentGroupPath(groupId)}/files?${query}`
+    );
+  }
+
+  async readAgentGroupFile(
+    groupId: string,
+    filename: string,
+    options: { render?: "markdown" } = {}
+  ): Promise<Blob> {
+    const query = new URLSearchParams({ path: filename });
+
+    if (options.render) {
+      query.set("render", options.render);
+    }
+
+    const response = await this.fetchRaw(
+      `${agentGroupPath(groupId)}/files/content?${query}`
+    );
+
+    return response.blob();
   }
 
   async uploadAgentGroupAvatar(

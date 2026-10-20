@@ -3,6 +3,7 @@ import type {
   AgentGroup,
   AgentGroupThreadDetail,
 } from "@nakama/core/agent-groups";
+import type { WorkspaceEntry } from "@nakama/core/contract";
 import { toast } from "@nakama/ui/toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -15,10 +16,30 @@ import {
 } from "@/components/ai-elements/message";
 import { AttachmentDetailPanel } from "@/components/chat/attachment-detail-panel";
 import { ThinkingState } from "@/components/chat/ThinkingState";
+import { GroupFileViewer } from "@/components/chat/workspace-file-preview";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
+import {
+  type ArtifactTypeFilter,
+  artifactMatchesTypeFilter,
+  availableArtifactTypeFilters,
+} from "@/components/soul-tools/artifacts-tab-filters";
 import { PENDING_RUN, pendingMessage } from "@/lib/agent-group-pending";
 import { client, formatError } from "@/lib/client";
+import {
+  type FilesViewMode,
+  getStoredFilesViewMode,
+  setStoredFilesViewMode,
+} from "@/lib/files-page.shared";
 import { queryKeys } from "@/lib/query-keys";
+import { ArtifactFolderBreadcrumb } from "@/pages/files/files-artifact-folder-breadcrumb";
+import { artifactBasename } from "@/pages/files/files-artifact-folders";
+import {
+  CompactFileEntry,
+  FileEntriesLayout,
+  FileEntry,
+} from "@/pages/files/files-artifact-list-view";
+import { FilesSearchRow } from "@/pages/files/files-search-row";
+import { FilesToolbar } from "@/pages/files/files-toolbar";
 
 const THREAD_PANEL_WIDTH = 448;
 
@@ -251,5 +272,153 @@ export function GroupLivePanel({
         <div ref={bottomRef} />
       </div>
     </AttachmentDetailPanel>
+  );
+}
+
+/** The group's shared folder, which its agents write to. */
+export function GroupFilesPanel({
+  group,
+  onClose,
+}: {
+  group: AgentGroup;
+  onClose: () => void;
+}) {
+  const [width, setWidth] = useState(THREAD_PANEL_WIDTH);
+  const [folder, setFolder] = useState("");
+  const [selected, setSelected] = useState<WorkspaceEntry | null>(null);
+
+  return (
+    <AttachmentDetailPanel
+      bodyClassName="flex flex-col overflow-hidden p-0"
+      className="max-sm:absolute max-sm:inset-0 max-sm:z-30"
+      headerClassName="px-3 py-1.5"
+      onClose={onClose}
+      onWidthChange={setWidth}
+      title="Files"
+      width={width}
+    >
+      {selected ? (
+        <GroupFileViewer
+          entry={selected}
+          groupId={group.id}
+          key={selected.path}
+          onBack={() => setSelected(null)}
+        />
+      ) : (
+        <GroupFilesList
+          folder={folder}
+          groupId={group.id}
+          onFolder={setFolder}
+          onSelect={setSelected}
+        />
+      )}
+    </AttachmentDetailPanel>
+  );
+}
+
+/** One folder of the group's shared files, with the Browse Files toolbar. */
+function GroupFilesList({
+  folder,
+  groupId,
+  onFolder,
+  onSelect,
+}: {
+  folder: string;
+  groupId: string;
+  onFolder: (folder: string) => void;
+  onSelect: (entry: WorkspaceEntry) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<ArtifactTypeFilter>("all");
+
+  const [viewMode, setViewMode] = useState<FilesViewMode>(
+    getStoredFilesViewMode
+  );
+
+  const { data, error, isFetching, isLoading, refetch } = useQuery({
+    queryFn: () => client.listAgentGroupFiles(groupId, folder),
+    queryKey: queryKeys.agentGroups.files(groupId, folder),
+    // Agents add files while they reply.
+    refetchInterval: 4000,
+  });
+
+  const typeOptions = availableArtifactTypeFilters(
+    (data?.entries ?? []).filter((entry) => entry.kind !== "directory")
+  );
+
+  const entries = (data?.entries ?? []).filter(
+    (entry) =>
+      artifactBasename(entry.filename)
+        .toLowerCase()
+        .includes(search.trim().toLowerCase()) &&
+      (entry.kind === "directory" ||
+        artifactMatchesTypeFilter(entry, typeFilter))
+  );
+
+  function openFolder(next: string) {
+    setSearch("");
+    onFolder(next);
+  }
+
+  return (
+    <div className="no-scrollbar flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
+      <FilesToolbar
+        isFetching={isFetching}
+        onRefresh={() => void refetch()}
+        onViewModeChange={(mode) => {
+          setViewMode(mode);
+          setStoredFilesViewMode(mode);
+        }}
+        showViewModeToggle
+        viewMode={viewMode}
+      >
+        <FilesSearchRow
+          onSearchQueryChange={setSearch}
+          onTypeFilterChange={setTypeFilter}
+          searchLabel="Search current folder"
+          searchQuery={search}
+          typeFilter={typeFilter}
+          typeOptions={typeOptions}
+        />
+      </FilesToolbar>
+      <ArtifactFolderBreadcrumb onNavigate={openFolder} prefix={folder} />
+      {error ? (
+        <p className="text-destructive text-sm">{formatError(error)}</p>
+      ) : isLoading ? null : entries.length === 0 ? (
+        <p className="text-muted-foreground text-sm">
+          {search ? "No matching files." : "No files yet."}
+        </p>
+      ) : (
+        <FileEntriesLayout compact viewMode={viewMode}>
+          {entries.map((entry) => {
+            const directory = entry.kind === "directory";
+
+            const open = () =>
+              directory ? openFolder(entry.path) : onSelect(entry);
+
+            const filename = artifactBasename(entry.filename);
+
+            return viewMode === "list" ? (
+              <CompactFileEntry
+                {...entry}
+                directory={directory}
+                filename={filename}
+                key={entry.path}
+                onOpen={open}
+              />
+            ) : (
+              <FileEntry
+                {...entry}
+                directory={directory}
+                filename={filename}
+                key={entry.path}
+                onOpen={open}
+                viewMode={viewMode}
+              />
+            );
+          })}
+        </FileEntriesLayout>
+      )}
+    </div>
   );
 }

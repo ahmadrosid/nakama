@@ -21,6 +21,8 @@ export interface SubAgentRunInput {
   orgRole?: OrgRole;
   profileId: string;
   sessionId?: string;
+  /** Agent group folder the child's file tools may also use. */
+  sharedDir?: string;
   task: string;
   timeoutMs?: number;
   userId?: string;

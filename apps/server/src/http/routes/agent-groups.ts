@@ -1,5 +1,5 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { NakamaApiError } from "@nakama/core";
+import { listGroupFiles, NakamaApiError, readGroupFile } from "@nakama/core";
 import type {
   AgentGroup,
   AgentGroupSession,
@@ -94,6 +94,13 @@ const DOCUMENTED_ROUTES: [
     "/v1/agent-groups/{groupId}/avatar",
     "Remove a group's photo",
     204,
+  ],
+  ["get", "/v1/agent-groups/{groupId}/files", "List a shared folder", 200],
+  [
+    "get",
+    "/v1/agent-groups/{groupId}/files/content",
+    "Download a file from a group's shared folder",
+    200,
   ],
   ["get", "/v1/agent-groups/{groupId}/sessions", "List a group's chats", 200],
   [
@@ -272,6 +279,42 @@ export function registerAgentGroupRoutes(
     );
 
     return c.body(null, 204);
+  });
+
+  app.get("/v1/agent-groups/:groupId/files", async (c) => {
+    const auth = requireOrgMemberFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const group = service.get(orgId, auth.user.id, c.req.param("groupId"));
+
+    return json(await listGroupFiles(orgId, group.id, c.req.query("folder")));
+  });
+
+  app.get("/v1/agent-groups/:groupId/files/content", async (c) => {
+    const auth = requireOrgMemberFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const group = service.get(orgId, auth.user.id, c.req.param("groupId"));
+    const filename = c.req.query("path");
+
+    if (!filename) {
+      return json({ error: "path is required" }, 400);
+    }
+
+    const file = await readGroupFile(orgId, group.id, filename, {
+      render: c.req.query("render") === "markdown" ? "markdown" : undefined,
+    });
+
+    const disposition = c.req.query("inline") === "1" ? "inline" : "attachment";
+    const body = "markdown" in file ? file.markdown : Bun.file(file.filePath);
+
+    return new Response(body, {
+      headers: {
+        "Content-Type": file.contentType,
+        "Content-Disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(filename.split("/").pop() ?? "file")}`,
+        "Content-Security-Policy": "sandbox",
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "no-store",
+      },
+    });
   });
 
   app.get("/v1/agent-groups/:groupId/sessions", (c) => {

@@ -1,4 +1,6 @@
+import { mkdirSync } from "node:fs";
 import type { ProfileSummary } from "@nakama/core";
+import { getGroupSharedDir } from "@nakama/core";
 import type { AgentGroup, AgentGroupMessage } from "@nakama/core/agent-groups";
 import {
   listAgentGroupMessages,
@@ -22,6 +24,18 @@ const CHAT_STYLE =
 const ARTIFACT_GUIDANCE =
   "For a file the user asked for (page, report, deck, code, data), save it with save_artifact and name its path, like artifacts/report.html, in your short reply. Never paste the file into the chat.";
 
+/** The group's shared folder, created on first use. */
+export function ensureGroupSharedDir(orgId: string, groupId: string): string {
+  const dir = getGroupSharedDir(orgId, groupId);
+
+  mkdirSync(dir, { recursive: true });
+
+  return dir;
+}
+
+const sharedGuidance = (sharedDir: string) =>
+  `The group has a shared folder at ${sharedDir}. Every member can read and write it with the file tools, using absolute paths. Keep files the team builds on (outline, notes, drafts) there and read what others wrote before you answer. Name a file by its path when you mention it.`;
+
 /** The group's members the user can still reach, in member order. */
 export function groupMembers(
   group: AgentGroup,
@@ -44,7 +58,8 @@ function handleOf(handles: Map<string, string>, profileId: string): string {
 export function groupTask(
   group: AgentGroup,
   speaker: ProfileSummary,
-  handles: Map<string, string>
+  handles: Map<string, string>,
+  sharedDir: string
 ): string {
   const roster = [...handles]
     .map(([handle, id]) => `@${handle}${id === speaker.id ? " (you)" : ""}`)
@@ -58,6 +73,7 @@ export function groupTask(
     "To hand the conversation to another agent, mention their @handle. Mention nobody when you are done or the user should answer.",
     "When the user writes @all, every agent answers in turn; you never use @all yourself.",
     ARTIFACT_GUIDANCE,
+    sharedGuidance(sharedDir),
   ].join("\n");
 }
 
@@ -114,7 +130,8 @@ export function transcript(
 export function threadTask(
   group: AgentGroup,
   speaker: ProfileSummary,
-  handles: Map<string, string>
+  handles: Map<string, string>,
+  sharedDir: string
 ): string {
   return [
     `You are ${speaker.name} (@${handleOf(handles, speaker.id)}) in the group chat "${group.name}".`,
@@ -122,6 +139,7 @@ export function threadTask(
     "The user opened a private thread with you on one of your messages. The group chat up to that message, then the thread, are under Context, newest last.",
     `Reply to the user in the thread as yourself, without prefixing your name. ${CHAT_STYLE} Other agents do not see the thread, so do not mention them.`,
     ARTIFACT_GUIDANCE,
+    sharedGuidance(sharedDir),
   ].join("\n");
 }
 
