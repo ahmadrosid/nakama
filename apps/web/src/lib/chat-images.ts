@@ -26,6 +26,82 @@ export const DOCUMENT_ACCEPT =
 
 export const ALL_ATTACHMENT_ACCEPT = `${IMAGE_ACCEPT},${DOCUMENT_ACCEPT}`;
 
+export const MAX_FOLDER_FILES = 20;
+
+export const MAX_FOLDER_BYTES = 20 * 1024 * 1024;
+
+export function fileMatchesAccept(file: File, accept?: string): boolean {
+  if (!accept || accept.trim() === "") {
+    return true;
+  }
+
+  const fileType = file.type.split(";")[0]?.trim().toLowerCase() ?? "";
+  const fileName = file.name.toLowerCase();
+
+  return accept
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+    .some((pattern) => {
+      if (pattern.endsWith("/*")) {
+        return fileType.startsWith(pattern.slice(0, -1));
+      }
+
+      if (pattern.startsWith(".")) {
+        return fileName.endsWith(pattern);
+      }
+
+      return fileType === pattern;
+    });
+}
+
+export type FolderSelection =
+  | { files: File[]; ok: true }
+  | { error: string; ok: false };
+
+/** Keeps the relative path as the file name so the agent sees the structure. */
+export function selectFolderFiles(picked: File[]): FolderSelection {
+  const files: File[] = [];
+  let totalBytes = 0;
+
+  for (const file of picked) {
+    const path = file.webkitRelativePath || file.name;
+
+    if (path.split("/").some((segment) => segment.startsWith("."))) {
+      continue;
+    }
+
+    if (!fileMatchesAccept(file, ALL_ATTACHMENT_ACCEPT)) {
+      continue;
+    }
+
+    totalBytes += file.size;
+    // The File constructor rewrites "/" in names, so set the name directly.
+    Object.defineProperty(file, "name", { value: path });
+    files.push(file);
+  }
+
+  if (files.length === 0) {
+    return { error: "No supported files in this folder.", ok: false };
+  }
+
+  if (files.length > MAX_FOLDER_FILES) {
+    return {
+      error: `Folder has ${files.length} files. The limit is ${MAX_FOLDER_FILES}.`,
+      ok: false,
+    };
+  }
+
+  if (totalBytes > MAX_FOLDER_BYTES) {
+    return {
+      error: `Folder is over ${MAX_FOLDER_BYTES / (1024 * 1024)} MB.`,
+      ok: false,
+    };
+  }
+
+  return { files, ok: true };
+}
+
 const DOCUMENT_MEDIA_TYPES = new Set([
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",

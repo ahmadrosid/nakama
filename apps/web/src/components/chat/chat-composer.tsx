@@ -39,6 +39,7 @@ import {
   ArrowUp02Icon,
   Cancel01Icon,
   File01Icon,
+  Folder01Icon,
   Image01Icon,
   Plug01Icon,
   Settings01Icon,
@@ -113,6 +114,8 @@ import {
   DOCUMENT_ACCEPT,
   IMAGE_ACCEPT,
   isImageFilePart,
+  MAX_FOLDER_FILES,
+  selectFolderFiles,
 } from "@/lib/chat-images";
 import {
   type ComposerStackEdge,
@@ -339,7 +342,7 @@ function ChatComposerStackedPrompt({
         className={composerShellClass}
         inputGroupClassName={composerInputGroupClass}
         maxFileSize={MAX_IMAGE_BYTES}
-        maxFiles={5}
+        maxFiles={MAX_FOLDER_FILES}
         multiple
         onError={(attachmentErr) => setAttachmentError(attachmentErr.message)}
         onSubmit={({ text, files }) => {
@@ -434,7 +437,7 @@ function ChatComposerBarePrompt({
         className={isMinimal ? composerShellCompactClass : composerShellClass}
         inputGroupClassName={composerInputGroupClass}
         maxFileSize={isMinimal ? undefined : MAX_IMAGE_BYTES}
-        maxFiles={isMinimal ? undefined : 5}
+        maxFiles={isMinimal ? undefined : MAX_FOLDER_FILES}
         multiple={!isMinimal}
         onError={
           isMinimal
@@ -1647,6 +1650,17 @@ function ChatAttachmentHeader({
 
 function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
   const attachments = usePromptInputAttachments();
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
+
+  const addFolder = (picked: FileList | null) => {
+    const selection = selectFolderFiles([...(picked ?? [])]);
+
+    if (selection.ok) {
+      attachments.add(selection.files);
+    } else if (picked && picked.length > 0) {
+      toast(selection.error);
+    }
+  };
 
   const openPicker = (accept: string) => {
     const input = attachments.fileInputRef.current;
@@ -1702,8 +1716,28 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
           <File01Icon aria-hidden className="size-4 text-muted-foreground" />
           Document
         </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={disabled}
+          onClick={() => folderInputRef.current?.click()}
+        >
+          <Folder01Icon aria-hidden className="size-4 text-muted-foreground" />
+          Add folder
+        </DropdownMenuItem>
         <ChatConnectorsSubmenu disabled={disabled} />
       </DropdownMenuContent>
+      <input
+        aria-hidden
+        className="hidden"
+        multiple
+        onChange={(event) => {
+          addFolder(event.currentTarget.files);
+          event.currentTarget.value = "";
+        }}
+        ref={folderInputRef}
+        tabIndex={-1}
+        type="file"
+        {...{ webkitdirectory: "" }}
+      />
     </DropdownMenu>
   );
 }
