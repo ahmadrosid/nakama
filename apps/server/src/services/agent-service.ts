@@ -2208,7 +2208,9 @@ export class AgentService {
 
     const sendPromise = session
       .sendStream(prompt, {
-        onChunk: () => {
+        onChunk: (chunk) => {
+          input.onText?.(chunk);
+
           if (sawWriting) {
             return;
           }

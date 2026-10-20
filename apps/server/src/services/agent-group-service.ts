@@ -69,6 +69,8 @@ interface ActiveRun extends AgentGroupRun {
   inbox: string[];
   lastSpeaker: string | null;
   queue: string[];
+  steps: string[];
+  text: string;
 }
 
 /** An agent answering the user in one thread; at most one per thread. */
@@ -216,7 +218,9 @@ export class AgentGroupService {
         ? {
             activity: run.activity,
             speakerProfileId: run.speakerProfileId,
+            steps: run.steps,
             stopping: run.stopping,
+            text: run.text,
           }
         : null,
       session: this.withActive(session),
@@ -426,7 +430,9 @@ export class AgentGroupService {
         )?.authorProfileId ?? null,
       queue: [],
       speakerProfileId: null,
+      steps: [],
       stopping: false,
+      text: "",
     };
 
     this.runs.set(sessionId, run);
@@ -506,6 +512,8 @@ export class AgentGroupService {
 
       run.speakerProfileId = profileId;
       run.activity = null;
+      run.steps = [];
+      run.text = "";
 
       // ponytail: Stop and the hop timeout cannot abort a running hop, add an
       // AbortSignal to SubAgentRunInput if that cost matters.
@@ -515,6 +523,10 @@ export class AgentGroupService {
           context: transcript(orgId, session.id, handles, members),
           onActivity: (label) => {
             run.activity = label;
+            run.steps.push(label);
+          },
+          onText: (chunk) => {
+            run.text += chunk;
           },
           orgId,
           orgRole: access.orgRole,

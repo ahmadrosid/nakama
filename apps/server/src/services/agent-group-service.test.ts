@@ -279,6 +279,42 @@ describe("AgentGroupService", () => {
     ).toBeNull();
   });
 
+  test("a running turn exposes the agent's steps and text so far", async () => {
+    const started = Promise.withResolvers<void>();
+    const held = Promise.withResolvers<void>();
+
+    const { service } = setup(async (input) => {
+      input.onActivity?.("Searching the web");
+      input.onText?.("Hel");
+      input.onText?.("lo");
+      started.resolve();
+      await held.promise;
+
+      return "Hello";
+    });
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a"]);
+
+    const { run, session } = service.start(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      "@alpha hi"
+    );
+
+    await started.promise;
+
+    expect(service.session(ORG_ID, USER_ID, group.id, session.id).run).toEqual(
+      expect.objectContaining({
+        speakerProfileId: "a",
+        steps: ["Searching the web"],
+        text: "Hello",
+      })
+    );
+    held.resolve();
+    await run;
+  });
+
   test("a message after Stop only wakes the agents it mentions", async () => {
     const started = Promise.withResolvers<void>();
     const held = Promise.withResolvers<void>();

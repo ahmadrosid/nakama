@@ -24,7 +24,10 @@ import { GroupAvatar } from "@/components/agent-groups/GroupAvatar";
 import { GroupComposer } from "@/components/agent-groups/group-composer";
 import { GroupDialog } from "@/components/agent-groups/group-dialog";
 import { GroupMessageList } from "@/components/agent-groups/group-message-list";
-import { GroupThreadPanel } from "@/components/agent-groups/group-thread-panel";
+import {
+  GroupLivePanel,
+  GroupThreadPanel,
+} from "@/components/agent-groups/group-thread-panel";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
 import { useAgentGroupQuery } from "@/hooks/use-agent-groups";
@@ -52,16 +55,37 @@ export function AgentGroupChatPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const requested = Number(searchParams.get("thread"));
   const openThreadId = sessionId && requested > 0 ? requested : null;
+  const liveOpen = Boolean(sessionId) && searchParams.get("live") === "1";
 
+  // The thread and the live view share one side panel; opening one closes the other.
   function setThread(messageId: number | null) {
     setSearchParams(
       (current) => {
         const next = new URLSearchParams(current);
+        next.delete("live");
 
         if (messageId === null) {
           next.delete("thread");
         } else {
           next.set("thread", String(messageId));
+        }
+
+        return next;
+      },
+      { replace: true }
+    );
+  }
+
+  function setLive(open: boolean) {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete("thread");
+
+        if (open) {
+          next.set("live", "1");
+        } else {
+          next.delete("live");
         }
 
         return next;
@@ -87,7 +111,14 @@ export function AgentGroupChatPage() {
     // The thread opens in its `below` slot: the same framed side panel as /btw.
     <ChatAttachmentPanelProvider
       below={
-        sessionId && openThreadId ? (
+        sessionId && liveOpen ? (
+          <GroupLivePanel
+            group={group}
+            onClose={() => setLive(false)}
+            profiles={profiles}
+            sessionId={sessionId}
+          />
+        ) : sessionId && openThreadId ? (
           <GroupThreadPanel
             group={group}
             key={openThreadId}
@@ -103,6 +134,7 @@ export function AgentGroupChatPage() {
       {sessionId ? (
         <GroupSession
           group={group}
+          onOpenLive={() => setLive(true)}
           onOpenThread={setThread}
           profiles={profiles}
           sessionId={sessionId}
@@ -202,6 +234,7 @@ function GroupHeader({
 function GroupConversation({
   group,
   messages,
+  onOpenLive,
   onOpenThread,
   onSend,
   onStop,
@@ -212,6 +245,7 @@ function GroupConversation({
   group: AgentGroup;
   messages: AgentGroupMessage[];
   /** Absent while a new chat's session is still being created. */
+  onOpenLive?: () => void;
   onOpenThread?: (messageId: number) => void;
   onSend: (content: string, documents?: DocumentAttachment[]) => Promise<void>;
   onStop: () => void;
@@ -233,6 +267,7 @@ function GroupConversation({
             <GroupMessageList
               handles={handles}
               messages={messages}
+              onOpenLive={() => onOpenLive?.()}
               onOpenThread={(messageId) => onOpenThread?.(messageId)}
               profiles={profiles}
               run={run}
@@ -444,11 +479,13 @@ function GroupDraft({
 
 function GroupSession({
   group,
+  onOpenLive,
   onOpenThread,
   profiles,
   sessionId,
 }: {
   group: AgentGroup;
+  onOpenLive: () => void;
   onOpenThread: (messageId: number) => void;
   profiles: ProfileSummary[];
   sessionId: string;
@@ -526,6 +563,7 @@ function GroupSession({
     <GroupConversation
       group={group}
       messages={data.messages}
+      onOpenLive={onOpenLive}
       onOpenThread={onOpenThread}
       onSend={send}
       onStop={() =>

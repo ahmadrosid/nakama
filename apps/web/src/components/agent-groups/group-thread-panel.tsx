@@ -189,3 +189,67 @@ export function GroupThreadPanel({
     </AttachmentDetailPanel>
   );
 }
+
+/** The working agent's steps and answer as it writes them. */
+export function GroupLivePanel({
+  group,
+  onClose,
+  profiles,
+  sessionId,
+}: {
+  group: AgentGroup;
+  onClose: () => void;
+  profiles: ProfileSummary[];
+  sessionId: string;
+}) {
+  const [width, setWidth] = useState(THREAD_PANEL_WIDTH);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  const { data } = useQuery({
+    queryFn: () => client.getAgentGroupSession(group.id, sessionId),
+    queryKey: queryKeys.agentGroups.session(group.id, sessionId),
+  });
+
+  const run = data?.run ?? null;
+  const agent = profiles.find((p) => p.id === run?.speakerProfileId);
+  const text = run?.text ?? "";
+  const stepCount = run?.steps?.length ?? 0;
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: "end" });
+  }, [text, stepCount]);
+
+  return (
+    <AttachmentDetailPanel
+      bodyClassName="flex flex-col overflow-hidden p-0"
+      className="max-sm:absolute max-sm:inset-0 max-sm:z-30"
+      headerClassName="px-3 py-1.5"
+      onClose={onClose}
+      onWidthChange={setWidth}
+      title={agent ? `${agent.name} live` : "Live"}
+      width={width}
+    >
+      <div className="no-scrollbar flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
+        {run?.steps?.map((step, index) => (
+          <p
+            className="text-muted-foreground text-sm"
+            // Steps repeat and only ever append.
+            key={`${index}-${step}`}
+          >
+            {step}
+          </p>
+        ))}
+        {text ? <MessageResponse>{text}</MessageResponse> : null}
+        {run ? (
+          <ThinkingState
+            className="text-sm"
+            label={run.stopping ? "Stopping after this reply" : "Working…"}
+          />
+        ) : (
+          <p className="text-muted-foreground text-sm">Done</p>
+        )}
+        <div ref={bottomRef} />
+      </div>
+    </AttachmentDetailPanel>
+  );
+}

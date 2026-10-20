@@ -269,10 +269,12 @@ function messageKeys(messages: AgentGroupMessage[]): string[] {
 
 /** The typing dots of the agent that is writing. */
 function TypingRow({
+  onOpenLive,
   speaker,
   speakerContinues,
   stopping,
 }: {
+  onOpenLive: () => void;
   speaker: ProfileSummary | undefined;
   speakerContinues: boolean;
   stopping: boolean;
@@ -290,10 +292,11 @@ function TypingRow({
             {speaker.name}
           </div>
         ) : null}
-        <div
-          aria-label={stopping ? "Stopping" : "Typing"}
-          className="flex h-9 items-center gap-1 rounded-[1.25rem] rounded-bl-md bg-muted px-4"
-          role="status"
+        <button
+          aria-label={stopping ? "Stopping, watch live" : "Watch live"}
+          className="flex h-9 cursor-pointer items-center gap-1 rounded-[1.25rem] rounded-bl-md bg-muted px-4 transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={onOpenLive}
+          type="button"
         >
           {[0, 1, 2].map((dot) => (
             <span
@@ -302,7 +305,7 @@ function TypingRow({
               style={{ animationDelay: `${dot * 150}ms` }}
             />
           ))}
-        </div>
+        </button>
       </div>
     </div>
   );
@@ -312,6 +315,7 @@ function TypingRow({
 export function GroupMessageList({
   handles,
   messages,
+  onOpenLive,
   onOpenThread,
   profiles,
   run,
@@ -319,6 +323,7 @@ export function GroupMessageList({
 }: {
   handles: Map<string, string>;
   messages: AgentGroupMessage[];
+  onOpenLive: () => void;
   onOpenThread: (messageId: number) => void;
   profiles: ProfileSummary[];
   run: AgentGroupRun | null;
@@ -572,6 +577,7 @@ export function GroupMessageList({
             )}
             {run ? (
               <TypingRow
+                onOpenLive={onOpenLive}
                 speaker={speaker}
                 speakerContinues={speakerContinues}
                 stopping={run.stopping}

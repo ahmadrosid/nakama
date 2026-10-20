@@ -33,7 +33,11 @@ export interface AgentGroupMessage {
 export interface AgentGroupRun {
   activity: string | null;
   speakerProfileId: string | null;
+  /** What the speaker has done so far this turn, oldest first. */
+  steps?: string[];
   stopping: boolean;
+  /** The speaker's answer so far this turn. */
+  text?: string;
 }
 
 /** One conversation in a group; a group holds many, like an agent's chats. */
