@@ -13,6 +13,7 @@ import { Spinner } from "@nakama/ui/spinner";
 import { toast } from "@nakama/ui/toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  BrainIcon,
   Folder01Icon,
   MessageAdd01Icon,
   PencilEdit02Icon,
@@ -27,6 +28,7 @@ import {
 import { GroupAvatar } from "@/components/agent-groups/GroupAvatar";
 import { GroupComposer } from "@/components/agent-groups/group-composer";
 import { GroupDialog } from "@/components/agent-groups/group-dialog";
+import { GroupMemoryPanel } from "@/components/agent-groups/group-memory-panel";
 import { GroupMessageList } from "@/components/agent-groups/group-message-list";
 import {
   GroupFilesPanel,
@@ -52,6 +54,9 @@ const COMPOSER_DOCK =
 
 const NO_THREAD_RUNS: number[] = [];
 
+/** Search params of the side panel; one is open at a time. */
+const PANELS = ["files", "live", "memory", "thread"] as const;
+
 /** `/groups/:groupId` is a new chat in the group; with `:sessionId` one of its chats. */
 export function AgentGroupChatPage() {
   const { groupId = "", sessionId } = useParams();
@@ -62,14 +67,15 @@ export function AgentGroupChatPage() {
   const openThreadId = sessionId && requested > 0 ? requested : null;
   const liveOpen = Boolean(sessionId) && searchParams.get("live") === "1";
   const filesOpen = searchParams.get("files") === "1";
+  const memoryOpen = searchParams.get("memory") === "1";
 
-  // The thread, the live view and the files share one side panel; opening one closes the others.
-  function setPanel(panel: "files" | "live" | "thread", value: string | null) {
+  // The thread, the live view, the files and the memory share one side panel; opening one closes the others.
+  function setPanel(panel: (typeof PANELS)[number], value: string | null) {
     setSearchParams(
       (current) => {
         const next = new URLSearchParams(current);
 
-        for (const key of ["files", "live", "thread"]) {
+        for (const key of PANELS) {
           next.delete(key);
         }
 
@@ -88,6 +94,7 @@ export function AgentGroupChatPage() {
 
   const setLive = (open: boolean) => setPanel("live", open ? "1" : null);
   const setFilesOpen = (open: boolean) => setPanel("files", open ? "1" : null);
+  const closeMemory = () => setPanel("memory", null);
 
   if (isLoading) {
     return (
@@ -110,8 +117,10 @@ export function AgentGroupChatPage() {
           filesOpen={filesOpen}
           group={group}
           liveOpen={liveOpen}
+          memoryOpen={memoryOpen}
           onCloseFiles={() => setFilesOpen(false)}
           onCloseLive={() => setLive(false)}
+          onCloseMemory={closeMemory}
           onCloseThread={() => setThread(null)}
           profiles={profiles}
           sessionId={sessionId}
@@ -135,13 +144,15 @@ export function AgentGroupChatPage() {
   );
 }
 
-/** The one side panel that is open: files, the live view, or a thread. */
+/** The one side panel that is open: files, memory, the live view, or a thread. */
 function GroupSidePanel({
   filesOpen,
   group,
   liveOpen,
+  memoryOpen,
   onCloseFiles,
   onCloseLive,
+  onCloseMemory,
   onCloseThread,
   profiles,
   sessionId,
@@ -150,8 +161,10 @@ function GroupSidePanel({
   filesOpen: boolean;
   group: AgentGroup;
   liveOpen: boolean;
+  memoryOpen: boolean;
   onCloseFiles: () => void;
   onCloseLive: () => void;
+  onCloseMemory: () => void;
   onCloseThread: () => void;
   profiles: ProfileSummary[];
   sessionId?: string;
@@ -160,6 +173,12 @@ function GroupSidePanel({
   if (filesOpen) {
     return (
       <GroupFilesPanel group={group} key={group.id} onClose={onCloseFiles} />
+    );
+  }
+
+  if (memoryOpen) {
+    return (
+      <GroupMemoryPanel group={group} key={group.id} onClose={onCloseMemory} />
     );
   }
 
@@ -207,19 +226,31 @@ function GroupMissing({ message }: { message?: string }) {
   );
 }
 
-/** Opens the group's shared folder in the side panel. */
-function GroupFilesButton() {
+/** Opens the group's shared folder or memory in the side panel. */
+function GroupPanelButton({
+  icon: Icon,
+  label,
+  panel,
+}: {
+  icon: typeof Folder01Icon;
+  label: string;
+  panel: "files" | "memory";
+}) {
   const [searchParams, setSearchParams] = useSearchParams();
 
   return (
     <Button
+      aria-label={label}
       onClick={() =>
         setSearchParams(
           (current) => {
             const next = new URLSearchParams(current);
-            next.delete("thread");
-            next.delete("live");
-            next.set("files", "1");
+
+            for (const key of PANELS) {
+              next.delete(key);
+            }
+
+            next.set(panel, "1");
 
             return next;
           },
@@ -228,11 +259,21 @@ function GroupFilesButton() {
       }
       size="sm"
       type="button"
-      variant={searchParams.get("files") === "1" ? "secondary" : "outline"}
+      variant={searchParams.get(panel) === "1" ? "secondary" : "outline"}
     >
-      <Folder01Icon aria-hidden />
-      Files
+      <Icon aria-hidden />
+      {/* Icon only while the side panel leaves the header narrow. */}
+      <span className="@2xl:inline hidden">{label}</span>
     </Button>
+  );
+}
+
+function GroupPanelButtons() {
+  return (
+    <>
+      <GroupPanelButton icon={Folder01Icon} label="Files" panel="files" />
+      <GroupPanelButton icon={BrainIcon} label="Memory" panel="memory" />
+    </>
   );
 }
 
@@ -260,7 +301,7 @@ function GroupHeader({
   const [editing, setEditing] = useState(false);
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 px-4 sm:px-6">
+    <header className="@container flex h-14 shrink-0 items-center gap-3 px-4 sm:px-6">
       <h1 className="truncate font-semibold text-lg tracking-tight">
         {group.name}
       </h1>
@@ -287,7 +328,7 @@ function GroupHeader({
           <PencilEdit02Icon aria-hidden />
           Edit group
         </Button>
-        <GroupFilesButton />
+        <GroupPanelButtons />
         <Button
           onClick={() => navigate(groupPath(group.id))}
           size="sm"
@@ -464,7 +505,7 @@ function GroupDraft({
         className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col"
         id="group-new-chat"
       >
-        <div className="flex shrink-0 justify-end gap-2 px-4 pt-4">
+        <div className="@container flex shrink-0 justify-end gap-2 px-4 pt-4">
           <Button
             onClick={() => setEditing(true)}
             size="sm"
@@ -474,7 +515,7 @@ function GroupDraft({
             <PencilEdit02Icon aria-hidden />
             Edit group
           </Button>
-          <GroupFilesButton />
+          <GroupPanelButtons />
         </div>
         <div className="flex flex-1 flex-col justify-center gap-6 pb-12">
           <div className="flex flex-col items-center gap-3 px-4 text-center">
