@@ -47,19 +47,16 @@ export function ChatPageContent({
     chatStatus,
     busy,
     lastSuccessfulTurnAt,
-    turnStartedAt,
     canStop,
     error,
     composerDraftKey,
     composerEntry,
     queuedMessages,
-    branchingMessageId,
     showOfflineHint,
     health,
     providerModelGroups,
     currentModelSelection,
     activeModelSupportsVision,
-    showThinking,
     thinkingEffortVisible,
     thinkingEffort,
     thinkingEffortDisabled,
@@ -74,10 +71,7 @@ export function ChatPageContent({
     handleThinkingEffortChange,
     renderModelLabel,
     cognito,
-    handleBranchMessage,
     handleCognitoChange,
-    handleEditMessage,
-    handleTryAgainMessage,
     sendMessage,
     stopStreaming,
     agentTodos,
@@ -187,6 +181,73 @@ export function ChatPageContent({
       </ChatPageColumn>
     </ChatAttachmentPanelProvider>
   ) : (
+    <ChatConversation
+      below={below}
+      cognitoControl={cognitoControl}
+      cognitoSurface={cognitoSurface}
+      composer={composer}
+      showUsage={showUsage}
+      state={state}
+    />
+  );
+
+  return (
+    <PromptInputProvider
+      initialInput={composerEntry.initialInput}
+      key={`${composerDraftKey}:${composerEntry.revision}`}
+    >
+      {content}
+      <Dialog onOpenChange={setProviderDialogOpen} open={providerDialogOpen}>
+        <DialogContent className="w-[min(96vw,56rem)] grid-cols-1 sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Connect provider</DialogTitle>
+          </DialogHeader>
+          <ProviderSetupForm
+            onSuccess={() => setProviderDialogOpen(false)}
+            showHeading={false}
+            submitLabel="Connect provider"
+          />
+        </DialogContent>
+      </Dialog>
+    </PromptInputProvider>
+  );
+}
+
+function ChatConversation({
+  below,
+  cognitoControl,
+  cognitoSurface,
+  composer,
+  showUsage,
+  state,
+}: {
+  below?: ReactNode;
+  cognitoControl: ReactNode;
+  cognitoSurface: boolean;
+  composer: ReactNode;
+  showUsage: boolean;
+  state: ChatPageState;
+}) {
+  const {
+    agentQuestionnaire,
+    branchingMessageId,
+    busy,
+    currentModelSelection,
+    handleBranchMessage,
+    handleEditMessage,
+    handleTryAgainMessage,
+    messages,
+    profileId,
+    queuedMessages,
+    readOnlySession,
+    renderModelLabel,
+    sendMessage,
+    session,
+    showThinking,
+    turnStartedAt,
+  } = state;
+
+  return (
     <ChatAttachmentPanelProvider below={below} key={session?.id ?? "new"}>
       <ArtifactStreamingPanelBridge messages={messages} profileId={profileId} />
       <BrowserLiveViewPanelBridge messages={messages} sessionId={session?.id} />
@@ -240,26 +301,5 @@ export function ChatPageContent({
         </div>
       </ChatPageColumn>
     </ChatAttachmentPanelProvider>
-  );
-
-  return (
-    <PromptInputProvider
-      initialInput={composerEntry.initialInput}
-      key={`${composerDraftKey}:${composerEntry.revision}`}
-    >
-      {content}
-      <Dialog onOpenChange={setProviderDialogOpen} open={providerDialogOpen}>
-        <DialogContent className="w-[min(96vw,56rem)] grid-cols-1 sm:max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Connect provider</DialogTitle>
-          </DialogHeader>
-          <ProviderSetupForm
-            onSuccess={() => setProviderDialogOpen(false)}
-            showHeading={false}
-            submitLabel="Connect provider"
-          />
-        </DialogContent>
-      </Dialog>
-    </PromptInputProvider>
   );
 }

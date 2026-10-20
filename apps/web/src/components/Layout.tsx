@@ -195,7 +195,7 @@ function useAppShell() {
   return {
     error,
     headerLabel:
-      (page === "chat" ? chatTitle : undefined) ||
+      chatTitle ||
       groupTitle ||
       (activePlugin?.label ??
         findNavItem(sidebarPageId(page))?.label ??
