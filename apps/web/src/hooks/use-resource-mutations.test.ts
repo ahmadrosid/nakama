@@ -1042,14 +1042,13 @@ test.each([false, true])(
 
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(queryClient.getQueryData(detailKey)).toEqual({
+      expect(queryClient.getQueryData<typeof profile>(detailKey)).toEqual({
         ...profile,
         automationsEnabled: true,
       });
-      expect(queryClient.getQueryData(queryKeys.profiles.all)).toEqual([
-        { ...profile, automationsEnabled: true },
-        other,
-      ]);
+      expect(
+        queryClient.getQueryData<(typeof profile)[]>(queryKeys.profiles.all)
+      ).toEqual([{ ...profile, automationsEnabled: true }, other]);
 
       if (fails) {
         save.reject(new Error("Retry toggle"));
@@ -1064,11 +1063,12 @@ test.each([false, true])(
         ? profile
         : { ...profile, automationsEnabled: true };
 
-      expect(queryClient.getQueryData(detailKey)).toEqual(expected);
-      expect(queryClient.getQueryData(queryKeys.profiles.all)).toEqual([
-        expected,
-        other,
-      ]);
+      expect(queryClient.getQueryData<typeof profile>(detailKey)).toEqual(
+        expected
+      );
+      expect(
+        queryClient.getQueryData<(typeof profile)[]>(queryKeys.profiles.all)
+      ).toEqual([expected, other]);
     } finally {
       update.mockRestore();
       queryClient.removeQueries({ queryKey: queryKeys.profiles.all });
