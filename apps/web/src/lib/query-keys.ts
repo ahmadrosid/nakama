@@ -14,6 +14,7 @@ export const queryKeys = {
     detail: (groupId: string) => ["agentGroups", groupId] as const,
     files: (groupId: string, folder: string) =>
       ["agentGroups", groupId, "files", folder] as const,
+    memory: (groupId: string) => ["agentGroups", groupId, "memory"] as const,
     session: (groupId: string, sessionId: string) =>
       ["agentGroups", groupId, "sessions", sessionId] as const,
     sessions: (groupId: string) =>

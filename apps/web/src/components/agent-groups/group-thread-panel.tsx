@@ -41,7 +41,7 @@ import {
 import { FilesSearchRow } from "@/pages/files/files-search-row";
 import { FilesToolbar } from "@/pages/files/files-toolbar";
 
-const THREAD_PANEL_WIDTH = 448;
+export const THREAD_PANEL_WIDTH = 448;
 
 /** A private chat with the agent that wrote one message of the group chat. */
 export function GroupThreadPanel({
