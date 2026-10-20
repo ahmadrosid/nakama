@@ -105,8 +105,10 @@ function initialProfileSection(
   hash: string,
   search: string
 ) {
-  if (new URLSearchParams(search).get("section") === "tools") {
-    return "tools";
+  const section = new URLSearchParams(search).get("section");
+
+  if (section === "tools" || section === "mcp") {
+    return section;
   }
 
   if (detailTab === "proposals") {

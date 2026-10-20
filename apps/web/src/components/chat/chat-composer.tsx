@@ -17,11 +17,17 @@ import {
 } from "@nakama/ui/command";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@nakama/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@nakama/ui/popover";
+import { Spinner } from "@nakama/ui/spinner";
 import { toast } from "@nakama/ui/toast";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
@@ -34,6 +40,8 @@ import {
   Cancel01Icon,
   File01Icon,
   Image01Icon,
+  Plug01Icon,
+  Settings01Icon,
   WifiOff01Icon,
 } from "hugeicons-react";
 import {
@@ -46,6 +54,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   PromptInput,
   PromptInputBody,
@@ -70,11 +79,16 @@ import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview
 import { useAuth } from "@/context/use-auth";
 import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import {
+  useMcpServersQuery,
   useProfileQuery,
   useSkillsQuery,
   useToolsQuery,
 } from "@/hooks/use-app-queries";
 import { pluginAgentAccessState, useOrgPlugins } from "@/hooks/use-plugins";
+import {
+  useAssignMcpServerMutation,
+  useUnassignMcpServerMutation,
+} from "@/hooks/use-resource-mutations";
 import type { ChatStatus, FileUIPart } from "@/lib/ai-ui-types";
 import {
   type ComposerAddCommandAction,
@@ -112,7 +126,7 @@ import {
 import { formatError } from "@/lib/client";
 import { prepareChatUploadFiles } from "@/lib/compress-image";
 import { encodeModelSelection } from "@/lib/models";
-import { enabledPluginNavEntries } from "@/lib/navigation";
+import { enabledPluginNavEntries, profilePath } from "@/lib/navigation";
 import {
   isPastedTextDocument,
   LONG_PASTE_WORD_THRESHOLD,
@@ -669,6 +683,12 @@ function runBtwCommand(
   return true;
 }
 
+/** Agent whose MCP servers the + menu can switch, and how to add one. Null hides Connectors. */
+const ConnectorsContext = createContext<{
+  onAdd: () => void;
+  profileId: string;
+} | null>(null);
+
 /** True when `/btw` is offered: only the composer that can open a side chat. */
 const BtwCommandContext = createContext(false);
 
@@ -865,45 +885,55 @@ export function ChatComposer(props: ChatComposerProps) {
       ? (composerProps.profileId ?? null)
       : null;
 
+  const connectorsContext = useMemo(
+    () =>
+      addProfileId
+        ? { onAdd: () => openAddCommand("add-mcp"), profileId: addProfileId }
+        : null,
+    [addProfileId, openAddCommand]
+  );
+
   return (
     <CommandPrefixContext.Provider value={commandContext}>
       <BtwCommandContext.Provider value={Boolean(onBtw)}>
         <OpenPluginContext.Provider value={openPluginContext}>
-          <div className={cn("w-full shrink-0", props.className)}>
-            {layout.showOfflineHint && isFullComposer(props) ? (
-              <ChatComposerOfflineHint
-                onConnectProvider={props.onConnectProvider}
+          <ConnectorsContext.Provider value={connectorsContext}>
+            <div className={cn("w-full shrink-0", props.className)}>
+              {layout.showOfflineHint && isFullComposer(props) ? (
+                <ChatComposerOfflineHint
+                  onConnectProvider={props.onConnectProvider}
+                />
+              ) : null}
+              <ChatComposerMain
+                displayError={displayError}
+                layout={layout}
+                onAddCommand={openAddCommand}
+                props={composerProps}
+                setAttachmentError={setAttachmentError}
               />
-            ) : null}
-            <ChatComposerMain
-              displayError={displayError}
-              layout={layout}
-              onAddCommand={openAddCommand}
-              props={composerProps}
-              setAttachmentError={setAttachmentError}
-            />
-            {addProfileId ? (
-              <ChatAddCapabilitiesDialogs
-                mcpOpen={addDialog === "add-mcp"}
-                onMcpOpenChange={(open) => {
-                  setAddDialog(open ? "add-mcp" : null);
-                }}
-                onPluginOpenChange={(open) =>
-                  setAddDialog(open ? "add-plugin" : null)
-                }
-                onSkillOpenChange={(open) => {
-                  setAddDialog(open ? "add-skill" : null);
-                }}
-                onToolOpenChange={(open) => {
-                  setAddDialog(open ? "add-tool" : null);
-                }}
-                pluginOpen={addDialog === "add-plugin"}
-                profileId={addProfileId}
-                skillOpen={addDialog === "add-skill"}
-                toolOpen={addDialog === "add-tool"}
-              />
-            ) : null}
-          </div>
+              {addProfileId ? (
+                <ChatAddCapabilitiesDialogs
+                  mcpOpen={addDialog === "add-mcp"}
+                  onMcpOpenChange={(open) => {
+                    setAddDialog(open ? "add-mcp" : null);
+                  }}
+                  onPluginOpenChange={(open) =>
+                    setAddDialog(open ? "add-plugin" : null)
+                  }
+                  onSkillOpenChange={(open) => {
+                    setAddDialog(open ? "add-skill" : null);
+                  }}
+                  onToolOpenChange={(open) => {
+                    setAddDialog(open ? "add-tool" : null);
+                  }}
+                  pluginOpen={addDialog === "add-plugin"}
+                  profileId={addProfileId}
+                  skillOpen={addDialog === "add-skill"}
+                  toolOpen={addDialog === "add-tool"}
+                />
+              ) : null}
+            </div>
+          </ConnectorsContext.Provider>
         </OpenPluginContext.Provider>
       </BtwCommandContext.Provider>
     </CommandPrefixContext.Provider>
@@ -1672,8 +1702,130 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
           <File01Icon aria-hidden className="size-4 text-muted-foreground" />
           Document
         </DropdownMenuItem>
+        <ChatConnectorsSubmenu disabled={disabled} />
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/** + menu submenu: switch org MCP servers on or off for the chat's agent. */
+function ChatConnectorsSubmenu({ disabled }: { disabled: boolean }) {
+  const connectors = useContext(ConnectorsContext);
+
+  return connectors ? (
+    <ChatConnectorsSubmenuItems
+      disabled={disabled}
+      onAdd={connectors.onAdd}
+      profileId={connectors.profileId}
+    />
+  ) : null;
+}
+
+function ChatConnectorsSubmenuItems({
+  disabled,
+  onAdd,
+  profileId,
+}: {
+  disabled: boolean;
+  onAdd: () => void;
+  profileId: string;
+}) {
+  const navigate = useNavigate();
+  const servers = useMcpServersQuery();
+  const profile = useProfileQuery(profileId);
+  const assign = useAssignMcpServerMutation();
+  const unassign = useUnassignMcpServerMutation();
+
+  const [pending, setPending] = useState<ReadonlyMap<string, boolean>>(
+    () => new Map()
+  );
+
+  const assignedIds = new Set(
+    profile.data?.mcpServers.map((server) => server.id) ?? []
+  );
+
+  const toggle = (serverId: string, on: boolean) => {
+    setPending((current) => new Map(current).set(serverId, on));
+
+    const mutation = on ? assign : unassign;
+
+    mutation
+      .mutateAsync({ profileId, serverId })
+      .catch((error) => toast(formatError(error)))
+      .finally(() =>
+        setPending((current) => {
+          const next = new Map(current);
+
+          next.delete(serverId);
+
+          return next;
+        })
+      );
+  };
+
+  return (
+    <>
+      <DropdownMenuSeparator />
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger disabled={disabled}>
+          <Plug01Icon aria-hidden className="size-4 text-muted-foreground" />
+          Connectors
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="min-w-56">
+          <DropdownMenuItem
+            onClick={() => navigate(profilePath(profileId, { section: "mcp" }))}
+          >
+            <Settings01Icon
+              aria-hidden
+              className="size-4 text-muted-foreground"
+            />
+            Manage connectors
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onAdd}>
+            <Add01Icon aria-hidden className="size-4 text-muted-foreground" />
+            Add connector
+          </DropdownMenuItem>
+          {servers.data && servers.data.length > 0 ? (
+            <DropdownMenuSeparator />
+          ) : null}
+          {servers.data?.map((server) => {
+            const saving = pending.has(server.id);
+
+            const checked =
+              pending.get(server.id) ?? assignedIds.has(server.id);
+
+            return (
+              <DropdownMenuCheckboxItem
+                checked={checked}
+                closeOnClick={false}
+                disabled={saving || !profile.data}
+                key={server.id}
+                onCheckedChange={(next) => toggle(server.id, next)}
+              >
+                <span className="min-w-0 flex-1 truncate">{server.name}</span>
+                {saving ? (
+                  <Spinner className="size-3.5 text-muted-foreground" />
+                ) : null}
+                <span
+                  aria-hidden
+                  className={cn(
+                    "relative inline-flex h-4.5 w-8 shrink-0 items-center rounded-full transition-colors",
+                    checked ? "bg-primary" : "bg-muted-foreground/30"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "block size-3.5 rounded-full bg-background shadow-sm transition-transform",
+                      checked ? "translate-x-4" : "translate-x-0.5"
+                    )}
+                  />
+                </span>
+              </DropdownMenuCheckboxItem>
+            );
+          })}
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    </>
   );
 }
 

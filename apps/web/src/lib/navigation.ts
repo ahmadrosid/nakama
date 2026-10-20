@@ -372,8 +372,17 @@ export function enabledPluginNavEntries(
     }));
 }
 
-export const profilePath = (profileId: string): string =>
-  queryPath(PAGE_PATHS.profiles, { profile: profileId });
+export function profilePath(
+  profileId: string,
+  options?: { section?: "mcp" }
+): string {
+  return queryPath(
+    PAGE_PATHS.profiles,
+    options?.section
+      ? { profile: profileId, section: options.section }
+      : { profile: profileId }
+  );
+}
 
 export function skillDetailPath(
   skillId: string,
