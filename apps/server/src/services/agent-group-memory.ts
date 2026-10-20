@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { getGroupMemoryPath } from "@nakama/core";
+import { getGroupMemoryPath, NakamaApiError } from "@nakama/core";
 
 /** Longest memory members see, the same cap as a profile's MEMORY.md. */
 export const GROUP_MEMORY_CHARS = 4096;
@@ -18,4 +18,25 @@ export function writeGroupMemory(sharedDir: string, content: string): void {
 
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, trimmed ? `${trimmed}\n` : "");
+}
+
+/**
+ * The user's save of the whole memory. `base` is what their editor opened;
+ * when an agent saved a fact since, the save is refused instead of dropping it.
+ */
+export function replaceGroupMemory(
+  sharedDir: string,
+  content: string,
+  base: string
+): string {
+  if (readGroupMemory(sharedDir) !== base.trim()) {
+    throw new NakamaApiError(
+      "The group memory changed since you opened it. Reload it and try again.",
+      409
+    );
+  }
+
+  writeGroupMemory(sharedDir, content);
+
+  return readGroupMemory(sharedDir);
 }
