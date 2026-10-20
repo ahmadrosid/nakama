@@ -22,6 +22,22 @@ export class SessionTitleService {
     });
   }
 
+  /** A title for messages kept outside the session store, such as a group chat. */
+  async titleFor(
+    profileId: string,
+    messages: readonly ChatMessage[]
+  ): Promise<string | null> {
+    const provider = await createProviderForProfile(
+      this.db,
+      profileId,
+      this.getUserConfig()
+    );
+
+    return provider
+      ? generateSessionTitleFromMessages(messages, { provider })
+      : null;
+  }
+
   private async generateSessionTitle(sessionId: string): Promise<void> {
     if (this.inFlight.has(sessionId)) {
       return;

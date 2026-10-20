@@ -33,7 +33,7 @@ function setup(reply: (input: SubAgentRunInput) => string | Promise<string>) {
     },
   ] as ProfileSummary[];
 
-  const state = { inOrg: true };
+  const state = { inOrg: true, title: "" };
   const calls: string[] = [];
 
   // SAFETY: Tests implement only the two lookups the service reads.
@@ -42,8 +42,9 @@ function setup(reply: (input: SubAgentRunInput) => string | Promise<string>) {
     getUserById: async () => ({ id: USER_ID }),
   } as never;
 
-  // SAFETY: Tests implement only listProfiles and runSubAgentPrompt.
+  // SAFETY: Tests implement only the agent calls the service makes.
   const agent = {
+    generateSessionTitle: async () => state.title || null,
     listProfiles: async () => ({ profiles }),
     runSubAgentPrompt: async (input: SubAgentRunInput) => {
       calls.push(input.profileId);
@@ -110,6 +111,45 @@ describe("AgentGroupService", () => {
     ]);
     expect(service.sessions(ORG_ID, USER_ID, group.id)).toMatchObject([
       { active: false, id: sessionId, title: "@alpha start" },
+    ]);
+  });
+
+  test("the first reply gives a new session a generated title", async () => {
+    const { chat, service, state } = setup(() => "ok");
+    state.title = "Launch Plan";
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a"]);
+    const sessionId = await chat(group.id, "plan the launch");
+
+    expect(service.sessions(ORG_ID, USER_ID, group.id)).toMatchObject([
+      { id: sessionId, title: "Launch Plan" },
+    ]);
+
+    state.title = "Other";
+    await service.post(ORG_ID, USER_ID, group.id, sessionId, "more");
+
+    expect(service.sessions(ORG_ID, USER_ID, group.id)).toMatchObject([
+      { id: sessionId, title: "Launch Plan" },
+    ]);
+  });
+
+  test("a title the user set before the first reply stays", async () => {
+    const { service, state } = setup(async () => {
+      service.updateSession(ORG_ID, USER_ID, group.id, session.id, {
+        title: "Mine",
+      });
+
+      return "ok";
+    });
+
+    state.title = "Generated";
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a"]);
+    const { run, session } = service.start(ORG_ID, USER_ID, group.id, "hi");
+    await run;
+
+    expect(service.sessions(ORG_ID, USER_ID, group.id)).toMatchObject([
+      { id: session.id, title: "Mine" },
     ]);
   });
 

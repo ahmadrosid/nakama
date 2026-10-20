@@ -6,6 +6,7 @@ import type {
 } from "@/components/ai-elements/prompt-input-context";
 import { useOptionalPromptInputController } from "@/components/ai-elements/prompt-input-context";
 import type { FileUIPart } from "@/lib/ai-ui-types";
+import { fileMatchesAccept } from "@/lib/chat-images";
 import { createClientId } from "@/lib/client-id";
 
 type FileErrorCode = "max_files" | "max_file_size" | "accept";
@@ -64,35 +65,7 @@ export function usePromptInputFileState({
   }, []);
 
   const matchesAccept = useCallback(
-    (f: File) => {
-      if (!accept || accept.trim() === "") {
-        return true;
-      }
-
-      const fileType = f.type.split(";")[0]?.trim().toLowerCase() ?? "";
-      const fileName = f.name.toLowerCase();
-
-      const patterns = accept
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-
-      return patterns.some((pattern) => {
-        const normalizedPattern = pattern.toLowerCase();
-
-        if (pattern.endsWith("/*")) {
-          const prefix = pattern.slice(0, -1);
-
-          return fileType.startsWith(prefix);
-        }
-
-        if (pattern.startsWith(".")) {
-          return fileName.endsWith(normalizedPattern);
-        }
-
-        return fileType === normalizedPattern;
-      });
-    },
+    (f: File) => fileMatchesAccept(f, accept),
     [accept]
   );
 
