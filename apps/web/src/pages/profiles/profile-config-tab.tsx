@@ -292,6 +292,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
             allMcpServers={state.allMcpServers}
             busy={busy || !state.canManageProfile}
             detail={detail}
+            onAssign={state.handleAssignMcpServer}
             onCreateOpen={() => state.setMcpCreateOpen(true)}
             onRemove={state.setRemoveConfirm}
           />
