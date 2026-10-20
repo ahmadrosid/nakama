@@ -1650,7 +1650,6 @@ function ChatAttachmentHeader({
 
 function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
   const attachments = usePromptInputAttachments();
-  const folderInputRef = useRef<HTMLInputElement | null>(null);
 
   const addFolder = (picked: FileList | null) => {
     const selection = selectFolderFiles([...(picked ?? [])]);
@@ -1660,6 +1659,19 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
     } else if (picked && picked.length > 0) {
       toast(selection.error);
     }
+  };
+
+  // Built on demand: a rendered input here makes the + menu close on focus-out.
+  const openFolderPicker = () => {
+    const input = document.createElement("input");
+
+    input.type = "file";
+    input.multiple = true;
+    input.webkitdirectory = true;
+    input.addEventListener("change", () => addFolder(input.files), {
+      once: true,
+    });
+    input.click();
   };
 
   const openPicker = (accept: string) => {
@@ -1716,28 +1728,12 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
           <File01Icon aria-hidden className="size-4 text-muted-foreground" />
           Document
         </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={disabled}
-          onClick={() => folderInputRef.current?.click()}
-        >
+        <DropdownMenuItem disabled={disabled} onClick={openFolderPicker}>
           <Folder01Icon aria-hidden className="size-4 text-muted-foreground" />
           Add folder
         </DropdownMenuItem>
         <ChatConnectorsSubmenu disabled={disabled} />
       </DropdownMenuContent>
-      <input
-        aria-hidden
-        className="hidden"
-        multiple
-        onChange={(event) => {
-          addFolder(event.currentTarget.files);
-          event.currentTarget.value = "";
-        }}
-        ref={folderInputRef}
-        tabIndex={-1}
-        type="file"
-        {...{ webkitdirectory: "" }}
-      />
     </DropdownMenu>
   );
 }
