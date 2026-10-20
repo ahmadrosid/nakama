@@ -6,6 +6,7 @@ import {
 } from "@nakama/core";
 import type { AgentGroup, AgentGroupMessage } from "@nakama/core/agent-groups";
 import { validateDocumentAttachments } from "@nakama/core/message-content";
+import { GROUP_MEMORY_CHARS, readGroupMemory } from "./agent-group-memory";
 import {
   type GroupDocument,
   listAgentGroupMessages,
@@ -51,6 +52,26 @@ export function groupMembers(
   );
 }
 
+const MEMORY_GUIDANCE =
+  "When the user or the team settles something worth keeping across chats, like a decision, a name or a preference, save it as one short entry with update_group_memory, or fix a wrong entry there. Never save secrets.";
+
+/** The group's memory, cut at the cap, and how to add to it. */
+function memorySection(sharedDir: string): string[] {
+  const memory = readGroupMemory(sharedDir);
+
+  const shown =
+    memory.length > GROUP_MEMORY_CHARS
+      ? `${memory.slice(0, GROUP_MEMORY_CHARS)}\n[truncated]`
+      : memory;
+
+  return [
+    shown
+      ? `Group memory, kept across every chat in this group:\n${shown}`
+      : "The group memory is empty.",
+    MEMORY_GUIDANCE,
+  ];
+}
+
 /** The group's brief as a task section, or nothing when it has none. */
 function briefSection(group: AgentGroup): string[] {
   return group.brief ? [`Group brief from the user:\n${group.brief}`] : [];
@@ -73,6 +94,7 @@ export function groupTask(
   return [
     `You are ${speaker.name} (@${handleOf(handles, speaker.id)}) in the group chat "${group.name}" with the user and these agents: ${roster}.`,
     ...briefSection(group),
+    ...memorySection(sharedDir),
     "The conversation so far is under Context, newest last. Reply to it as yourself.",
     `This is a chat message, not a report. ${CHAT_STYLE} Do not prefix it with your name.`,
     "To hand the conversation to another agent, mention their @handle. Mention nobody when you are done or the user should answer.",
@@ -141,6 +163,7 @@ export function threadTask(
   return [
     `You are ${speaker.name} (@${handleOf(handles, speaker.id)}) in the group chat "${group.name}".`,
     ...briefSection(group),
+    ...memorySection(sharedDir),
     "The user opened a private thread with you on one of your messages. The group chat up to that message, then the thread, are under Context, newest last.",
     `Reply to the user in the thread as yourself, without prefixing your name. ${CHAT_STYLE} Other agents do not see the thread, so do not mention them.`,
     ARTIFACT_GUIDANCE,
