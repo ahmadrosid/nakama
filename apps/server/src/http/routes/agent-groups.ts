@@ -1,7 +1,13 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { listGroupFiles, NakamaApiError, readGroupFile } from "@nakama/core";
+import {
+  getGroupSharedDir,
+  listGroupFiles,
+  NakamaApiError,
+  readGroupFile,
+} from "@nakama/core";
 import type {
   AgentGroup,
+  AgentGroupMemory,
   AgentGroupSession,
   AgentGroupSessionDetail,
   AgentGroupThreadDetail,
@@ -10,6 +16,11 @@ import type {
   ListRailPinsResponse,
 } from "@nakama/core/agent-groups";
 import type { Context } from "hono";
+import {
+  GROUP_MEMORY_CHARS,
+  readGroupMemory,
+  replaceGroupMemory,
+} from "../../services/agent-group-memory";
 import {
   AgentGroupService,
   readGroupDocuments,
@@ -30,6 +41,12 @@ const groupSchema = z.object({
 });
 
 const imageSchema = z.object({ data: z.string(), mediaType: z.string() });
+
+// `base` is the memory the editor opened, so a save cannot drop a newer fact.
+const memorySchema = z.object({
+  base: z.string(),
+  content: z.string().max(65_536),
+});
 
 const messageSchema = z.object({
   content: z.string().trim().min(1).max(8000),
@@ -101,6 +118,14 @@ const DOCUMENTED_ROUTES: [
     "/v1/agent-groups/{groupId}/files/content",
     "Download a file from a group's shared folder",
     200,
+  ],
+  ["get", "/v1/agent-groups/{groupId}/memory", "Read a group's memory", 200],
+  [
+    "put",
+    "/v1/agent-groups/{groupId}/memory",
+    "Replace a group's memory",
+    200,
+    memorySchema,
   ],
   ["get", "/v1/agent-groups/{groupId}/sessions", "List a group's chats", 200],
   [
@@ -314,6 +339,33 @@ export function registerAgentGroupRoutes(
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "no-store",
       },
+    });
+  });
+
+  app.get("/v1/agent-groups/:groupId/memory", (c) => {
+    const auth = requireOrgMemberFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const group = service.get(orgId, auth.user.id, c.req.param("groupId"));
+
+    return json<AgentGroupMemory>({
+      content: readGroupMemory(getGroupSharedDir(orgId, group.id)),
+      limit: GROUP_MEMORY_CHARS,
+    });
+  });
+
+  app.put("/v1/agent-groups/:groupId/memory", async (c) => {
+    const auth = requireOrgMemberFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const group = service.get(orgId, auth.user.id, c.req.param("groupId"));
+    const { base, content } = await readJson(c.req.raw, memorySchema);
+
+    return json<AgentGroupMemory>({
+      content: replaceGroupMemory(
+        getGroupSharedDir(orgId, group.id),
+        content,
+        base
+      ),
+      limit: GROUP_MEMORY_CHARS,
     });
   });
 

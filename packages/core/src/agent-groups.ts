@@ -89,6 +89,13 @@ export function groupSessionTitle(content: string): string {
   return line.length > 80 ? `${line.slice(0, 79)}…` : line || "New chat";
 }
 
+/** Facts every member of a group reads in every chat of the group. */
+export interface AgentGroupMemory {
+  content: string;
+  /** Characters agents see; the rest is cut. */
+  limit: number;
+}
+
 /** Agent and group ids the user pinned to the top of the rail, latest first. */
 export interface ListRailPinsResponse {
   itemIds: string[];
