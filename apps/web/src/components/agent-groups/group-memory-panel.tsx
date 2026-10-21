@@ -1,4 +1,4 @@
-import type { AgentGroup, AgentGroupMemory } from "@nakama/core/agent-groups";
+import type { AgentGroup } from "@nakama/core/agent-groups";
 import { NakamaApiError } from "@nakama/core/api-error";
 import { Button, Textarea } from "@nakama/ui";
 import { Spinner } from "@nakama/ui/spinner";
@@ -45,16 +45,24 @@ function GroupMemoryEditor({ groupId }: { groupId: string }) {
   });
 
   // Null until the user types, so a fact an agent saves meanwhile still shows.
-  const [draft, setDraft] = useState<string | null>(null);
+  // `base` is the memory the edit started from, so a refetch cannot move it.
+  const [draft, setDraft] = useState<{ base: string; text: string } | null>(
+    null
+  );
+
   const [saving, setSaving] = useState(false);
 
-  async function save(memory: AgentGroupMemory, content: string) {
+  async function save(draftToSave: { base: string; text: string }) {
     setSaving(true);
 
     try {
       queryClient.setQueryData(
         queryKey,
-        await client.updateAgentGroupMemory(groupId, content, memory.content)
+        await client.updateAgentGroupMemory(
+          groupId,
+          draftToSave.text,
+          draftToSave.base
+        )
       );
       setDraft(null);
     } catch (saveError) {
@@ -92,20 +100,21 @@ function GroupMemoryEditor({ groupId }: { groupId: string }) {
     );
   }
 
-  const content = draft ?? data.content;
+  const content = draft?.text ?? data.content;
   const over = content.length > data.limit;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 p-4" id="group-memory">
-      <p className="text-muted-foreground text-sm">
-        Facts every agent in this group keeps across chats. Agents add to it
-        too.
-      </p>
       <Textarea
         aria-label="Group memory"
         className="min-h-40 flex-1 resize-none font-mono text-sm"
         id="group-memory-input"
-        onChange={(event) => setDraft(event.target.value)}
+        onChange={(event) =>
+          setDraft({
+            base: draft?.base ?? data.content,
+            text: event.target.value,
+          })
+        }
         placeholder="- The genre is noir"
         value={content}
       />
@@ -119,9 +128,9 @@ function GroupMemoryEditor({ groupId }: { groupId: string }) {
         </span>
         <Button
           className="ml-auto"
-          disabled={saving || draft === null || draft === data.content}
+          disabled={saving || draft === null || draft.text === draft.base}
           id="btn-save-group-memory"
-          onClick={() => save(data, content)}
+          onClick={() => draft && save(draft)}
           size="sm"
           type="button"
         >
