@@ -288,10 +288,10 @@ function ChatComposerWorkStack({
 }
 
 const FULL_TEXTAREA_CLASS =
-  "max-h-36 min-h-9 px-1 py-1 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-8 sm:text-sm";
+  "max-h-36 min-h-9 px-1 py-1 text-base leading-relaxed [scrollbar-gutter:stable] placeholder:text-muted-foreground sm:min-h-8 sm:text-sm";
 
 const MINIMAL_TEXTAREA_CLASS =
-  "max-h-32 min-h-10 px-1 py-1.5 text-sm leading-relaxed placeholder:text-muted-foreground";
+  "max-h-32 min-h-10 px-1 py-1.5 text-sm leading-relaxed [scrollbar-gutter:stable] placeholder:text-muted-foreground";
 
 function ChatComposerStackedPrompt({
   availableSkills,
@@ -962,6 +962,7 @@ function ChatComposerTextarea({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [slashRange, setSlashRange] = useState<SkillSlashRange | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [scrollTop, setScrollTop] = useState(0);
   const openPlugin = useContext(OpenPluginContext);
   const enableBtw = useContext(BtwCommandContext);
 
@@ -1109,6 +1110,7 @@ function ChatComposerTextarea({
     <div className="relative min-w-0 flex-1">
       <ChatSkillTokenOverlay
         className={className}
+        scrollTop={scrollTop}
         value={controller.textInput.value}
       />
       {pickerOpen ? (
@@ -1178,6 +1180,7 @@ function ChatComposerTextarea({
             }
           }
         }}
+        onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
         placeholder={placeholder}
         ref={textareaRef}
       />
