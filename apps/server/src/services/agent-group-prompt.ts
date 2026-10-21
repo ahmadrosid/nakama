@@ -61,15 +61,20 @@ export function groupMembers(
 }
 
 const MEMORY_GUIDANCE =
-  "When the user or the team settles something worth keeping across chats, like a decision, a name or a preference, save it as one short entry with update_group_memory, or fix a wrong entry there. Never save secrets.";
+  "When the user states or agrees to something worth keeping across chats, like a decision, a name or a preference, save it as one short entry with update_group_memory, or fix a wrong entry there. A suggestion from you or a teammate is not a decision until the user agrees to it. Never save secrets.";
 
 /** The group's memory, cut at the cap, and how to add to it. */
 function memorySection(sharedDir: string): string[] {
   const memory = readGroupMemory(sharedDir);
+  const head = memory.slice(0, GROUP_MEMORY_CHARS);
+
+  // Cut at the last full line, so no fact is half shown; one line past the cap is cut where it is.
+  const lastLineEnd =
+    memory[GROUP_MEMORY_CHARS] === "\n" ? head.length : head.lastIndexOf("\n");
 
   const shown =
     memory.length > GROUP_MEMORY_CHARS
-      ? `${memory.slice(0, GROUP_MEMORY_CHARS)}\n[truncated]`
+      ? `${lastLineEnd > 0 ? head.slice(0, lastLineEnd) : head}\n[truncated]`
       : memory;
 
   return [

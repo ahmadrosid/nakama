@@ -27,7 +27,7 @@ function factOf(text: string): string {
  */
 export const groupMemoryTool: ToolDefinition = {
   description:
-    "Save a fact to this group's memory, which every member reads in every chat of the group, or fix or remove an entry. One short fact per entry: a decision, a name, a preference. Never save secrets.",
+    "Save a fact to this group's memory, which every member reads in every chat of the group, or fix or remove an entry. One short fact per entry: a decision, a name, a preference, as the user stated or agreed to it. Never save an agent's suggestion the user has not agreed to, or secrets.",
   name: "update_group_memory",
   parallelSafe: false,
   parameters: {
