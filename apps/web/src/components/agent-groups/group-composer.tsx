@@ -11,6 +11,7 @@ import { toast } from "@nakama/ui/toast";
 import { cn } from "@nakama/ui/utils";
 import {
   Add01Icon,
+  ArrowDown01Icon,
   ArrowUp02Icon,
   Cancel01Icon,
   File01Icon,
@@ -27,7 +28,6 @@ import {
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
 import { ChatSkillTokenOverlay } from "@/components/chat/chat-skill-token-overlay";
-import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { findActiveSkillSlashRange } from "@/lib/chat-composer-skills";
 import {
@@ -41,6 +41,7 @@ import {
 import {
   isPastedTextDocument,
   LONG_PASTE_WORD_THRESHOLD,
+  wordCountFromPastedFilename,
 } from "@/lib/pasted-text";
 
 // The same textarea, send button and stop icon as the agent chat composer.
@@ -195,43 +196,14 @@ function GroupComposerForm({
           })}
         </div>
       ) : null}
-      {attachments.files.length > 0 ? (
-        <div className="mb-2 flex flex-wrap gap-2">
-          {attachments.files.map((file) =>
-            isPastedTextDocument(file.filename ?? "", file.mediaType ?? "") ? (
-              <TextAttachmentPreview
-                filename={file.filename ?? "Document"}
-                key={file.id}
-                onRemove={() => attachments.remove(file.id)}
-              />
-            ) : (
-              <div
-                className="flex max-w-full items-center gap-2 rounded-lg border border-border bg-muted py-1.5 pr-1.5 pl-3"
-                key={file.id}
-              >
-                <File01Icon
-                  aria-hidden
-                  className="size-4 shrink-0 text-muted-foreground"
-                />
-                <span className="truncate font-medium text-xs">
-                  {file.filename ?? "Document"}
-                </span>
-                <button
-                  aria-label={`Remove ${file.filename ?? "document"}`}
-                  className="rounded-md p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
-                  onClick={() => attachments.remove(file.id)}
-                  type="button"
-                >
-                  <Cancel01Icon className="size-3.5" />
-                </button>
-              </div>
-            )
-          )}
-        </div>
-      ) : null}
+      <GroupAttachmentSummary />
       <PromptInput
         accept={allowDocuments ? DOCUMENT_ACCEPT : undefined}
-        className={GROUP_SHELL_CLASS}
+        className={cn(
+          GROUP_SHELL_CLASS,
+          attachments.files.length > 0 &&
+            "[&_[data-slot=input-group]]:rounded-t-none"
+        )}
         inputGroupClassName={composerInputGroupClass}
         maxFileSize={allowDocuments ? MAX_DOCUMENT_BYTES : undefined}
         maxFiles={allowDocuments ? 5 : undefined}
@@ -339,6 +311,104 @@ function GroupComposerForm({
           )}
         </PromptInputFooter>
       </PromptInput>
+    </div>
+  );
+}
+
+/** The attached files as one line on top of the field; the list opens on demand. */
+function GroupAttachmentSummary() {
+  const { attachments } = usePromptInputController();
+  const [filesOpen, setFilesOpen] = useState(false);
+
+  const files = attachments.files.map((file) => {
+    const filename = file.filename ?? "Document";
+
+    const words = isPastedTextDocument(filename, file.mediaType ?? "")
+      ? wordCountFromPastedFilename(filename)
+      : null;
+
+    return {
+      filename,
+      id: file.id,
+      label:
+        words === null
+          ? filename
+          : `Pasted text, ${words.toLocaleString()} words`,
+      words,
+    };
+  });
+
+  const pastedWords = files.every((file) => file.words !== null)
+    ? files.reduce((total, file) => total + (file.words ?? 0), 0)
+    : null;
+
+  const summary =
+    files.length === 1
+      ? files[0]!.label
+      : pastedWords === null
+        ? `${files.length} attachments`
+        : `${files.length} pasted texts · ${pastedWords.toLocaleString()} words`;
+
+  if (files.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-t-xl border border-border border-b-0 bg-muted/50 text-foreground/80 text-xs">
+      <div className="flex items-center gap-2 py-1 pr-1.5 pl-4">
+        <File01Icon aria-hidden className="size-3.5 shrink-0" />
+        {files.length > 1 ? (
+          <button
+            aria-expanded={filesOpen}
+            className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left"
+            onClick={() => setFilesOpen(!filesOpen)}
+            type="button"
+          >
+            <span className="flex-1 truncate font-medium">{summary}</span>
+            <span className="text-muted-foreground">
+              {filesOpen ? "Hide" : "Show"}
+            </span>
+            <ArrowDown01Icon
+              aria-hidden
+              className={cn("size-3.5", filesOpen && "rotate-180")}
+            />
+          </button>
+        ) : (
+          <>
+            <span className="flex-1 truncate py-1 font-medium">{summary}</span>
+            <button
+              aria-label={`Remove ${files[0]!.filename}`}
+              className="rounded-md p-1 text-muted-foreground hover:bg-background hover:text-foreground"
+              onClick={() => attachments.remove(files[0]!.id)}
+              type="button"
+            >
+              <Cancel01Icon className="size-3.5" />
+            </button>
+          </>
+        )}
+      </div>
+      {files.length > 1 && filesOpen ? (
+        <ul className="max-h-28 overflow-y-auto border-border/60 border-t pb-1">
+          {files.map((file, index) => (
+            <li
+              className="flex items-center gap-2 py-0.5 pr-1.5 pl-[2.375rem]"
+              key={file.id}
+            >
+              <span className="flex-1 truncate">
+                {index + 1}. {file.label}
+              </span>
+              <button
+                aria-label={`Remove ${file.filename}`}
+                className="rounded-md p-1 text-muted-foreground hover:bg-background hover:text-foreground"
+                onClick={() => attachments.remove(file.id)}
+                type="button"
+              >
+                <Cancel01Icon className="size-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }
