@@ -1,0 +1,279 @@
+{
+  "exchanges": [
+    {
+      "request": {
+        "body": {
+          "messages": [
+            {
+              "content": "Use the lookup tool. After the tool result, reply with only the result.",
+              "role": "system"
+            },
+            {
+              "content": "Call lookup once, then report its result.",
+              "role": "user"
+            }
+          ],
+          "model": "deepseek/deepseek-v4.1-flash",
+          "reasoning": {
+            "effort": "low"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "function": {
+                "description": "Return synthetic test data",
+                "name": "lookup",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {},
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            }
+          ]
+        },
+        "method": "POST",
+        "url": "https://api.netraruntime.com/v1/chat/completions"
+      },
+      "response": {
+        "body": {
+          "choices": [
+            {
+              "finish_reason": "tool_calls",
+              "index": 0,
+              "message": {
+                "content": "\n\n",
+                "reasoning": "The user wants me to call lookup once and report its result.",
+                "reasoning_content": "The user wants me to call lookup once and report its result.",
+                "reasoning_details": [
+                  {
+                    "format": "unknown",
+                    "text": "The user wants me to call lookup once and report its result.",
+                    "type": "reasoning.text"
+                  }
+                ],
+                "role": "assistant",
+                "tool_calls": [
+                  {
+                    "function": {
+                      "arguments": "{}",
+                      "name": "lookup"
+                    },
+                    "id": "call_31ab153c31c84c1ebc666ab28c0b1965",
+                    "type": "function"
+                  }
+                ]
+              },
+              "native_finish_reason": "tool_calls"
+            }
+          ],
+          "created": 1792501701,
+          "id": "chatcmpl-9e7b5d2472ec467d962e0eea0741d0f5",
+          "kv_transfer_params": null,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "object": "chat.completion",
+          "prompt_token_ids": null,
+          "usage": {
+            "completion_tokens": 36,
+            "latency_s": 0.2398,
+            "prompt_tokens": 302,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 338,
+            "tpot_s": 0.0019,
+            "ttft_s": 0.1727
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "messages": [
+            {
+              "content": "Use the lookup tool. After the tool result, reply with only the result.",
+              "role": "system"
+            },
+            {
+              "content": "Call lookup once, then report its result.",
+              "role": "user"
+            },
+            {
+              "content": null,
+              "role": "assistant",
+              "reasoning_details": [
+                {
+                  "format": "unknown",
+                  "text": "The user wants me to call lookup once and report its result.",
+                  "type": "reasoning.text"
+                }
+              ],
+              "tool_calls": [
+                {
+                  "function": {
+                    "arguments": "{}",
+                    "name": "lookup"
+                  },
+                  "id": "call_31ab153c31c84c1ebc666ab28c0b1965",
+                  "type": "function"
+                }
+              ]
+            },
+            {
+              "content": "SYNTHETIC_OK_42",
+              "role": "tool",
+              "tool_call_id": "call_31ab153c31c84c1ebc666ab28c0b1965"
+            }
+          ],
+          "model": "deepseek/deepseek-v4.1-flash",
+          "reasoning": {
+            "effort": "low"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "function": {
+                "description": "Return synthetic test data",
+                "name": "lookup",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {},
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            }
+          ]
+        },
+        "method": "POST",
+        "url": "https://api.netraruntime.com/v1/chat/completions"
+      },
+      "response": {
+        "body": {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": "Result: `SYNTHETIC_OK_42`",
+                "role": "assistant"
+              },
+              "native_finish_reason": "stop"
+            }
+          ],
+          "created": 1792501701,
+          "id": "chatcmpl-dbfa38462a6a4837a892e497e14d2bc9",
+          "kv_transfer_params": null,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "object": "chat.completion",
+          "prompt_token_ids": null,
+          "usage": {
+            "completion_tokens": 14,
+            "latency_s": 0.2054,
+            "prompt_tokens": 357,
+            "prompt_tokens_details": {
+              "cached_tokens": 128
+            },
+            "total_tokens": 371,
+            "tpot_s": 0.0026,
+            "ttft_s": 0.1708
+          }
+        },
+        "status": 200
+      }
+    }
+  ],
+  "name": "netra-v41-tool-continuation",
+  "recordedAt": "2026-10-20T13:08:21.489Z",
+  "request": {
+    "body": {
+      "messages": [
+        {
+          "content": "Use the lookup tool. After the tool result, reply with only the result.",
+          "role": "system"
+        },
+        {
+          "content": "Call lookup once, then report its result.",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek/deepseek-v4.1-flash",
+      "reasoning": {
+        "effort": "low"
+      },
+      "tool_choice": "auto",
+      "tools": [
+        {
+          "function": {
+            "description": "Return synthetic test data",
+            "name": "lookup",
+            "parameters": {
+              "additionalProperties": false,
+              "properties": {},
+              "type": "object"
+            }
+          },
+          "type": "function"
+        }
+      ]
+    },
+    "method": "POST",
+    "url": "https://api.netraruntime.com/v1/chat/completions"
+  },
+  "response": {
+    "body": {
+      "choices": [
+        {
+          "finish_reason": "tool_calls",
+          "index": 0,
+          "message": {
+            "content": "\n\n",
+            "reasoning": "The user wants me to call lookup once and report its result.",
+            "reasoning_content": "The user wants me to call lookup once and report its result.",
+            "reasoning_details": [
+              {
+                "format": "unknown",
+                "text": "The user wants me to call lookup once and report its result.",
+                "type": "reasoning.text"
+              }
+            ],
+            "role": "assistant",
+            "tool_calls": [
+              {
+                "function": {
+                  "arguments": "{}",
+                  "name": "lookup"
+                },
+                "id": "call_31ab153c31c84c1ebc666ab28c0b1965",
+                "type": "function"
+              }
+            ]
+          },
+          "native_finish_reason": "tool_calls"
+        }
+      ],
+      "created": 1792501701,
+      "id": "chatcmpl-9e7b5d2472ec467d962e0eea0741d0f5",
+      "kv_transfer_params": null,
+      "model": "deepseek/deepseek-v4.1-flash",
+      "object": "chat.completion",
+      "prompt_token_ids": null,
+      "usage": {
+        "completion_tokens": 36,
+        "latency_s": 0.2398,
+        "prompt_tokens": 302,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 338,
+        "tpot_s": 0.0019,
+        "ttft_s": 0.1727
+      }
+    },
+    "status": 200
+  },
+  "version": 2
+}

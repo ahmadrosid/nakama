@@ -16,9 +16,11 @@ import { filterProfilesForChatAccess } from "@nakama/core/profiles";
 import type { DatabaseAdapter } from "@nakama/db";
 import { failSubAgentResult } from "../tools/sub-agent-shared";
 import {
+  addressedMembers,
   ensureGroupSharedDir,
   groupMembers,
-  groupTask,
+  groupTurn,
+  isPassReply,
   threadTask,
   threadTranscript,
   transcript,
@@ -471,18 +473,16 @@ export class AgentGroupService {
       const handles = memberHandles(members);
 
       for (const message of run.inbox.splice(0)) {
-        const mentioned = mentionedMemberIds(message, handles);
-
-        // Everyone the user named gets a turn, even past the cap (`@all`).
-        run.hopsLeft = Math.max(MAX_GROUP_HOPS, mentioned.length);
-
-        const fallback =
-          members.find((p) => p.id === run.lastSpeaker) ?? members[0];
-
-        enqueue(
-          run.queue,
-          mentioned.length > 0 ? mentioned : fallback ? [fallback.id] : []
+        const woken = addressedMembers(
+          message,
+          members,
+          handles,
+          run.lastSpeaker
         );
+
+        // Everyone woken gets a turn, even past the cap (`@all`).
+        run.hopsLeft = Math.max(MAX_GROUP_HOPS, woken.length);
+        enqueue(run.queue, woken);
       }
 
       // The session list polls only while a run is active, so the title has
@@ -506,7 +506,6 @@ export class AgentGroupService {
         return;
       }
 
-      run.hopsLeft -= 1;
       const speaker = members.find((p) => p.id === profileId);
 
       if (!speaker) {
@@ -522,7 +521,7 @@ export class AgentGroupService {
       run.speakerProfileId = profileId;
       run.activity = null;
 
-      const sharedDir = ensureGroupSharedDir(orgId, group.id);
+      const turn = groupTurn(orgId, session.id, group, speaker, handles);
       run.steps = [];
       run.text = "";
 
@@ -542,8 +541,8 @@ export class AgentGroupService {
           orgId,
           orgRole: access.orgRole,
           profileId,
-          sharedDir,
-          task: groupTask(group, speaker, handles, sharedDir),
+          sharedDir: turn.sharedDir,
+          task: turn.task,
           userId,
         })
         .catch((error) =>
@@ -554,6 +553,12 @@ export class AgentGroupService {
 
       const text = result.output.trim();
 
+      // A pass is silence, not a reply: nothing is saved and no hop is spent.
+      if (turn.mayPass && result.status === "success" && isPassReply(text)) {
+        continue;
+      }
+
+      run.hopsLeft -= 1;
       appendAgentGroupMessage(
         orgId,
         session,

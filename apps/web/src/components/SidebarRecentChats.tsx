@@ -1,14 +1,5 @@
 import { MAX_SESSION_SEARCH_LENGTH } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
-import {
-  ConfirmDialog,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@nakama/ui/dialog";
 import { Input } from "@nakama/ui/input";
 import { cn } from "@nakama/ui/utils";
 import {
@@ -21,6 +12,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import type { SessionTarget } from "@/components/SidebarRecentChatRow";
 import { useRecentChatTree } from "@/components/SidebarRecentChatTree";
+import { RecentChatsDialogs } from "@/components/sidebar-recents";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAuth } from "@/context/use-auth";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
@@ -44,78 +36,6 @@ import {
 } from "@/lib/sidebar";
 
 const SKELETON_ROW_WIDTHS = ["w-3/4", "w-1/2", "w-2/3"] as const;
-
-function RecentChatsDialogs({
-  deleteTarget,
-  onDelete,
-  onRename,
-  onRenameTitleChange,
-  renameTarget,
-  setDeleteTarget,
-  setRenameTarget,
-}: {
-  deleteTarget: SessionTarget | null;
-  onDelete: () => Promise<void>;
-  onRename: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
-  onRenameTitleChange: (title: string) => void;
-  renameTarget: SessionTarget | null;
-  setDeleteTarget: (target: SessionTarget | null) => void;
-  setRenameTarget: (target: SessionTarget | null) => void;
-}) {
-  return (
-    <>
-      {renameTarget ? (
-        <Dialog
-          onOpenChange={(open) => {
-            if (!open) {
-              setRenameTarget(null);
-            }
-          }}
-          open
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Rename chat</DialogTitle>
-              <DialogDescription>
-                Choose a name that helps you find this chat later.
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={(event) => void onRename(event)}>
-              <Input
-                autoFocus
-                onChange={(event) => onRenameTitleChange(event.target.value)}
-                value={renameTarget.title}
-              />
-              <DialogFooter className="mt-4">
-                <Button
-                  onClick={() => setRenameTarget(null)}
-                  type="button"
-                  variant="outline"
-                >
-                  Cancel
-                </Button>
-                <Button disabled={!renameTarget.title.trim()} type="submit">
-                  Save
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-      ) : null}
-      {deleteTarget ? (
-        <ConfirmDialog
-          confirmLabel="Delete"
-          description={`Delete "${deleteTarget.title}" permanently? This cannot be undone.`}
-          onClose={() => setDeleteTarget(null)}
-          onConfirm={async () => {
-            await onDelete();
-          }}
-          title="Delete chat?"
-        />
-      ) : null}
-    </>
-  );
-}
 
 function SessionRowSkeletons() {
   return (

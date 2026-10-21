@@ -26,7 +26,7 @@ async function resolveAccessToken(
 
   if (!current) {
     throw new Error(
-      "ChatGPT provider is not connected. Reconnect in Settings → LLM providers."
+      "ChatGPT provider is not connected. Reconnect in Control center → AI Providers (/customize/providers)."
     );
   }
 

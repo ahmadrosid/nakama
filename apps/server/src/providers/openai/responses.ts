@@ -16,8 +16,8 @@ import {
 } from "@nakama/core";
 import { z } from "zod";
 import {
+  buildProviderHttpError,
   buildTokenUsage,
-  formatHttpErrorBody,
   normalizeThinkingEffort,
   parseJsonRecord,
   readRecord,
@@ -157,9 +157,7 @@ export async function generateOpenAIResponsesChat(options: {
   });
 
   if (!response.ok) {
-    throw new Error(
-      formatHttpErrorBody(label, response.status, await response.text())
-    );
+    throw buildProviderHttpError(label, response.status, await response.text());
   }
 
   if (options.stream) {

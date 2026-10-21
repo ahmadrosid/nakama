@@ -201,6 +201,11 @@ async function ensureSession(
   try {
     if (live.sessionId === null) {
       const created = await live.process.connection.newSession({
+        // Claude's agent also loads every MCP server of the host's own Claude
+        // Code config (user settings, plugins, claude.ai connectors), so the
+        // profile could reach tools it never attached. Strict keeps it to the
+        // servers below. Other agents ignore this `_meta`.
+        _meta: { claudeCode: { options: { strictMcpConfig: true } } },
         cwd: options.cwd,
         mcpServers: options.mcpServers ?? [],
       });

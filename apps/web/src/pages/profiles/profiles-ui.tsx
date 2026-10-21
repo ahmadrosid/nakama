@@ -14,7 +14,11 @@ import {
   UserGroup02Icon,
 } from "hugeicons-react";
 import { type ReactNode, useState } from "react";
-import { moodstoneIndexes, moodstoneSvg } from "@/components/moodstone";
+import {
+  isMoodstoneAvatar,
+  moodstoneIndexes,
+  moodstoneSvg,
+} from "@/components/moodstone";
 import {
   moodstoneAvatars,
   moodstoneColors,
@@ -75,16 +79,23 @@ export function ProfileSaveIndicator({
 }
 
 function ProfileAvatarOverlay({
+  round,
   size,
   uploading,
 }: {
+  round: boolean;
   size: "xs" | "sm" | "md" | "ml" | "lg";
   uploading: boolean;
 }) {
   const overlayIconClass = size === "lg" ? "size-5" : "size-4";
 
   return (
-    <span className="absolute inset-0 flex items-center justify-center rounded-full bg-foreground/50 opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100">
+    <span
+      className={cn(
+        "absolute inset-0 flex items-center justify-center bg-foreground/50 opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100",
+        round && "rounded-full"
+      )}
+    >
       {uploading ? (
         <Spinner className={cn(overlayIconClass, "text-primary-foreground")} />
       ) : (
@@ -118,6 +129,7 @@ export function EditableProfileAvatar({
 }) {
   const [open, setOpen] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
+  const square = isMoodstoneAvatar(profile);
 
   const [colorIndex, setColorIndex] = useState(
     () => moodstoneIndexes(profile.id || profile.name || "?").colorIndex
@@ -138,15 +150,23 @@ export function EditableProfileAvatar({
       >
         <PopoverTrigger
           aria-label="Change profile image"
-          className="group relative shrink-0 rounded-full transition-transform duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 active:not-disabled:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
+          className={cn(
+            "group relative shrink-0 transition-transform duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 active:not-disabled:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50",
+            square ? "rounded-none" : "rounded-full"
+          )}
           disabled={disabled}
         >
           <ProfileAvatar
             className={avatarClassName}
             profile={profile}
             size={size}
+            squareMoodstone
           />
-          <ProfileAvatarOverlay size={size} uploading={uploading} />
+          <ProfileAvatarOverlay
+            round={!square}
+            size={size}
+            uploading={uploading}
+          />
         </PopoverTrigger>
         <PopoverContent
           align="center"

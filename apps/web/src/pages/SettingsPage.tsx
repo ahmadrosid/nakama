@@ -247,17 +247,34 @@ export function SettingsPage() {
 
 export function LlmProvidersPage() {
   const [formError, setFormError] = useState<string | null>(null);
+  const { hash } = useLocation();
+
+  useEffect(() => {
+    if (hash) {
+      document.getElementById(hash.slice(1))?.scrollIntoView();
+    }
+  }, [hash]);
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <ProviderSettingsCard formError={formError} onFormError={setFormError} />
       <Card className="w-full shadow-none">
         <CardContent className="divide-y divide-border p-0">
-          <VisionSettingsCard />
-          <TranscriptionSettingsCard />
-          <ImageGenerationSettingsCard />
-          <WebSearchSettingsCard />
-          <BrowserRuntimeSettingsCard />
+          <div id="image-parsing">
+            <VisionSettingsCard />
+          </div>
+          <div id="transcription">
+            <TranscriptionSettingsCard />
+          </div>
+          <div id="image-generation">
+            <ImageGenerationSettingsCard />
+          </div>
+          <div id="web-search">
+            <WebSearchSettingsCard />
+          </div>
+          <div id="browser-runtime">
+            <BrowserRuntimeSettingsCard />
+          </div>
         </CardContent>
       </Card>
     </div>

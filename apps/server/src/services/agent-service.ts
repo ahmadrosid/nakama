@@ -6143,7 +6143,7 @@ export class AgentService {
       return [
         "# Coding Agent Harness",
         `${harness.name} is installed (\`${harness.command}\`) but is not ready yet.`,
-        "Check Settings → Provider for passthrough compatibility, or retry after the CLI finishes installing.",
+        "Check Control center → AI Providers (/customize/providers) for passthrough compatibility, or retry after the CLI finishes installing.",
       ].join("\n");
     }
   }

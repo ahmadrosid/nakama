@@ -12,13 +12,9 @@ import { Button } from "@nakama/ui";
 import { Spinner } from "@nakama/ui/spinner";
 import { toast } from "@nakama/ui/toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  BrainIcon,
-  Folder01Icon,
-  MessageAdd01Icon,
-  PencilEdit02Icon,
-} from "hugeicons-react";
+import { MessageAdd01Icon, PencilEdit02Icon } from "hugeicons-react";
 import { useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Link,
   useNavigate,
@@ -30,6 +26,10 @@ import { GroupComposer } from "@/components/agent-groups/group-composer";
 import { GroupDialog } from "@/components/agent-groups/group-dialog";
 import { GroupMemoryPanel } from "@/components/agent-groups/group-memory-panel";
 import { GroupMessageList } from "@/components/agent-groups/group-message-list";
+import {
+  GroupPanelButtons,
+  PANELS,
+} from "@/components/agent-groups/group-panel-buttons";
 import {
   GroupFilesPanel,
   GroupLivePanel,
@@ -50,12 +50,9 @@ import { queryKeys } from "@/lib/query-keys";
 import { ChatPageColumn } from "@/pages/chat/chat-page-layout";
 
 const COMPOSER_DOCK =
-  "sticky bottom-0 z-10 mt-auto w-full shrink-0 bg-background/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:pt-4 sm:pb-4";
+  "sticky bottom-0 z-10 mt-auto w-full shrink-0 bg-background/95 pt-3 max-sm:px-0 sm:px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:pt-4 sm:pb-4";
 
 const NO_THREAD_RUNS: number[] = [];
-
-/** Search params of the side panel; one is open at a time. */
-const PANELS = ["files", "live", "memory", "thread"] as const;
 
 /** `/groups/:groupId` is a new chat in the group; with `:sessionId` one of its chats. */
 export function AgentGroupChatPage() {
@@ -113,19 +110,22 @@ export function AgentGroupChatPage() {
     // The thread opens in its `below` slot: the same framed side panel as /btw.
     <ChatAttachmentPanelProvider
       below={
-        <GroupSidePanel
-          filesOpen={filesOpen}
-          group={group}
-          liveOpen={liveOpen}
-          memoryOpen={memoryOpen}
-          onCloseFiles={() => setFilesOpen(false)}
-          onCloseLive={() => setLive(false)}
-          onCloseMemory={closeMemory}
-          onCloseThread={() => setThread(null)}
-          profiles={profiles}
-          sessionId={sessionId}
-          threadId={openThreadId}
-        />
+        // An empty slot would still frame a blank column beside the chat.
+        filesOpen || memoryOpen || (sessionId && (liveOpen || openThreadId)) ? (
+          <GroupSidePanel
+            filesOpen={filesOpen}
+            group={group}
+            liveOpen={liveOpen}
+            memoryOpen={memoryOpen}
+            onCloseFiles={() => setFilesOpen(false)}
+            onCloseLive={() => setLive(false)}
+            onCloseMemory={closeMemory}
+            onCloseThread={() => setThread(null)}
+            profiles={profiles}
+            sessionId={sessionId}
+            threadId={openThreadId}
+          />
+        ) : null
       }
       key={`${groupId}:${sessionId ?? "new"}`}
     >
@@ -226,57 +226,6 @@ function GroupMissing({ message }: { message?: string }) {
   );
 }
 
-/** Opens the group's shared folder or memory in the side panel. */
-function GroupPanelButton({
-  icon: Icon,
-  label,
-  panel,
-}: {
-  icon: typeof Folder01Icon;
-  label: string;
-  panel: "files" | "memory";
-}) {
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  return (
-    <Button
-      aria-label={label}
-      onClick={() =>
-        setSearchParams(
-          (current) => {
-            const next = new URLSearchParams(current);
-
-            for (const key of PANELS) {
-              next.delete(key);
-            }
-
-            next.set(panel, "1");
-
-            return next;
-          },
-          { replace: true }
-        )
-      }
-      size="sm"
-      type="button"
-      variant={searchParams.get(panel) === "1" ? "secondary" : "outline"}
-    >
-      <Icon aria-hidden />
-      {/* Icon only while the side panel leaves the header narrow. */}
-      <span className="@2xl:inline hidden">{label}</span>
-    </Button>
-  );
-}
-
-function GroupPanelButtons() {
-  return (
-    <>
-      <GroupPanelButton icon={Folder01Icon} label="Files" panel="files" />
-      <GroupPanelButton icon={BrainIcon} label="Memory" panel="memory" />
-    </>
-  );
-}
-
 function useMembers(group: AgentGroup, profiles: ProfileSummary[]) {
   const members = useMemo(
     () =>
@@ -300,48 +249,65 @@ function GroupHeader({
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
 
+  const actions = (
+    <>
+      <Button
+        onClick={() => setEditing(true)}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        <PencilEdit02Icon aria-hidden />
+        <span className="max-sm:sr-only">Edit group</span>
+      </Button>
+      <GroupPanelButtons />
+      <Button
+        onClick={() => navigate(groupPath(group.id))}
+        size="sm"
+        type="button"
+      >
+        <MessageAdd01Icon aria-hidden />
+        <span className="max-sm:sr-only">New chat</span>
+      </Button>
+    </>
+  );
+
+  // On a phone the app navbar names the group, so the actions move up there.
+  const navbarActions = document.querySelector("[data-page-header-actions]");
+
   return (
-    <header className="@container flex h-14 shrink-0 items-center gap-3 px-4 sm:px-6">
-      <h1 className="truncate font-semibold text-lg tracking-tight">
-        {group.name}
-      </h1>
-      <div className="flex shrink-0 -space-x-2">
-        {members.slice(0, 4).map((member) => (
-          <ProfileAvatar
-            className="outline-none"
-            key={member.id}
-            profile={member}
-            size="sm"
-          />
-        ))}
-      </div>
-      <span className="shrink-0 text-muted-foreground text-sm">
-        {group.memberIds.length} agents
-      </span>
-      <div className="ml-auto flex shrink-0 items-center gap-2">
-        <Button
-          onClick={() => setEditing(true)}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          <PencilEdit02Icon aria-hidden />
-          Edit group
-        </Button>
-        <GroupPanelButtons />
-        <Button
-          onClick={() => navigate(groupPath(group.id))}
-          size="sm"
-          type="button"
-        >
-          <MessageAdd01Icon aria-hidden />
-          New chat
-        </Button>
-      </div>
+    <>
+      <header className="flex h-14 shrink-0 items-center gap-3 px-4 max-sm:hidden sm:px-6">
+        <h1 className="min-w-0 truncate font-semibold text-lg tracking-tight">
+          {group.name}
+        </h1>
+        <div className="flex shrink-0 -space-x-2">
+          {members.slice(0, 4).map((member) => (
+            <ProfileAvatar
+              className="outline-none"
+              key={member.id}
+              profile={member}
+              size="sm"
+            />
+          ))}
+        </div>
+        <span className="shrink-0 text-muted-foreground text-sm">
+          {group.memberIds.length} agents
+        </span>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {actions}
+        </div>
+      </header>
+      {navbarActions
+        ? createPortal(
+            <div className="flex items-center gap-2 sm:hidden">{actions}</div>,
+            navbarActions
+          )
+        : null}
       {editing ? (
         <GroupDialog group={group} onClose={() => setEditing(false)} />
       ) : null}
-    </header>
+    </>
   );
 }
 

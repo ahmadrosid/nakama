@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import path from "node:path";
+import { Glob } from "bun";
 import {
   canAccessIntegrationsPage,
   canAccessOrganizationPage,
@@ -7,7 +9,10 @@ import {
   enabledPluginNavEntries,
   groupPath,
   groupRouteFromPath,
+  inAppLinkPath,
+  integrationSectionPath,
   orgSkillProposalsPath,
+  PAGE_PATHS,
   pageIdFromPath,
   pluginIdFromPath,
   pluginManagementPath,
@@ -15,6 +20,7 @@ import {
   SIDEBAR_PAGE_IDS,
   sidebarPageId,
   skillDetailBackTarget,
+  visibleIntegrationSections,
   visibleNavGroups,
 } from "./navigation";
 
@@ -216,4 +222,91 @@ test("a group path names the group and, inside a chat, the session", () => {
   expect(groupRouteFromPath("/groups/")).toBeNull();
   expect(groupRouteFromPath("/chat/g1/s1")).toBeNull();
   expect(pageIdFromPath(groupPath("g1", "s1"))).toBe("groups");
+});
+
+describe("page paths named to the agent", () => {
+  const repoRoot = path.resolve(import.meta.dir, "../../../..");
+  const guidePath = "packages/core/src/skills/bundled/nakama-guide/SKILL.md";
+
+  const knownPaths = new Set([
+    ...Object.values(PAGE_PATHS),
+    ...visibleIntegrationSections(true, "admin").map((section) =>
+      integrationSectionPath(section.id)
+    ),
+  ]);
+
+  const readRepoText = (relative: string) =>
+    Bun.file(path.join(repoRoot, relative)).text();
+
+  test("every page path in tool text and the nakama-guide skill exists", async () => {
+    const named: string[] = [];
+    const guide = await readRepoText(guidePath);
+
+    for (const [, pagePath] of guide.matchAll(/`(\/[a-z/-]*)`/g)) {
+      named.push(`${guidePath}: ${pagePath}`);
+    }
+
+    for (const pattern of [
+      "apps/server/src/**/*.ts",
+      "packages/core/src/**/*.ts",
+      "packages/agent/src/**/*.ts",
+    ]) {
+      for await (const file of new Glob(pattern).scan(repoRoot)) {
+        if (file.endsWith(".test.ts")) {
+          continue;
+        }
+
+        const text = await readRepoText(file);
+
+        // UI destinations are written as "Control center → Page (/path)".
+        for (const [, pagePath] of text.matchAll(
+          /→[^()\n"`]*\((\/[a-z/-]+)\)/g
+        )) {
+          named.push(`${file}: ${pagePath}`);
+        }
+      }
+    }
+
+    expect(named.some((entry) => entry.startsWith("apps/server"))).toBe(true);
+    expect(
+      named.filter((entry) => !knownPaths.has(entry.split(": ")[1]))
+    ).toEqual([]);
+  });
+
+  test("the nakama-guide skill lists every navigation page", async () => {
+    const guide = await readRepoText(guidePath);
+
+    const missing = visibleNavGroups({
+      isPlatformAdmin: true,
+      orgRole: "admin",
+    })
+      .flatMap((group) => group.items)
+      .map((item) => PAGE_PATHS[item.id])
+      .filter((pagePath) => !guide.includes(`\`${pagePath}\``));
+
+    expect(missing).toEqual([]);
+  });
+});
+
+describe("inAppLinkPath", () => {
+  const origin = "http://localhost:4310";
+
+  test("keeps a relative path to a known page with its hash", () => {
+    expect(inAppLinkPath("/customize/providers#image-generation", origin)).toBe(
+      "/customize/providers#image-generation"
+    );
+  });
+
+  test("accepts a same-origin URL to a known page", () => {
+    expect(inAppLinkPath(`${origin}/settings?tab=a`, origin)).toBe(
+      "/settings?tab=a"
+    );
+  });
+
+  test("rejects other sites, unknown paths, and protocol-relative links", () => {
+    expect(inAppLinkPath("https://example.com/settings", origin)).toBeNull();
+    expect(inAppLinkPath("/does-not-exist", origin)).toBeNull();
+    expect(inAppLinkPath("//example.com/settings", origin)).toBeNull();
+    expect(inAppLinkPath("mailto:a@example.com", origin)).toBeNull();
+  });
 });

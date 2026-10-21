@@ -5,7 +5,7 @@ import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
 import { client, formatError } from "@/lib/client";
-import { ditherLogoSrc } from "@/lib/theme";
+import { markLogoSrc } from "@/lib/theme";
 
 export function AcceptInvitePage() {
   const [searchParams] = useSearchParams();
@@ -44,7 +44,7 @@ export function AcceptInvitePage() {
           <img
             alt="Nakama"
             className="mb-4 size-14 rounded-xl"
-            src={ditherLogoSrc(resolvedTheme)}
+            src={markLogoSrc(resolvedTheme)}
           />
           <h1 className="font-semibold text-xl tracking-tight">
             Accept invitation

@@ -179,6 +179,7 @@ describe("super nakama create_tool", () => {
         "tool_setup_test"
       );
       const result = await create.run(input, context);
+      expect(result).toMatchObject({ assignedProfileId: "target" });
       expect(JSON.stringify(result)).not.toContain("private-key");
       expect(created).toHaveLength(1);
       expect(created[0]?.name).toBe("echo");
@@ -199,6 +200,69 @@ describe("super nakama create_tool", () => {
       expect(assigned).toHaveLength(1);
     }
   );
+
+  test("approved setup with no agent reports no assignment", async () => {
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-tool-setup-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+    const toolsDir = path.join(tempConfigDir, "orgs", ORG_ID, "tools");
+    await mkdir(toolsDir, { recursive: true });
+    await writeFile(
+      path.join(toolsDir, "echo.js"),
+      "export async function run(input) { return input; }"
+    );
+    let assignCalls = 0;
+
+    const tools = createSuperNakamaTools(
+      asProfileService({
+        async assignTool() {
+          assignCalls += 1;
+
+          return profileResponse();
+        },
+        async createTool(request: CreateToolRequest) {
+          return {
+            ...request,
+            createdAt: "now",
+            handlerConfig: request.handlerConfig ?? {},
+            handlerType: "javascript",
+            id: "tool_unassigned",
+            updatedAt: "now",
+          };
+        },
+      }),
+      new SuperNakamaSessionState()
+    );
+
+    const propose = tools.find((tool) => tool.name === "propose_tool")!;
+    const create = tools.find((tool) => tool.name === "create_tool")!;
+    const context = { orgId: ORG_ID, sessionId: SESSION_ID };
+
+    const { setupId } = z.object({ setupId: z.string() }).parse(
+      await propose.run(
+        {
+          description: "Echo",
+          name: "echo",
+          plan: "Return the supplied input.",
+          requiresApiKey: false,
+        },
+        context
+      )
+    );
+
+    await approveToolSetup(ORG_ID, setupId, {});
+    const input = { handlerConfig: { modulePath: "echo.js" }, setupId };
+
+    expect(await create.run(input, context)).toMatchObject({
+      assignedProfileId: null,
+      toolId: "tool_unassigned",
+      type: "tool_setup_ready",
+    });
+    expect(await create.run(input, context)).toMatchObject({
+      assignedProfileId: null,
+      type: "tool_setup_ready",
+    });
+    expect(assignCalls).toBe(0);
+  });
 
   test("setup retry rejects an unavailable tool before moving its key", async () => {
     tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-tool-setup-"));
@@ -497,6 +561,40 @@ if __name__ == "__main__":
     );
 
     expect(error?.message).toBe("Tool module not found: missing.js");
+    expect(createToolCalled).toBe(false);
+  });
+
+  test("rejects javascript modules with a syntax error before storing the tool", async () => {
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-super-tool-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+    const toolsDir = path.join(tempConfigDir, "orgs", ORG_ID, "tools");
+    await mkdir(toolsDir, { recursive: true });
+    await writeFile(
+      path.join(toolsDir, "broken.js"),
+      "export async function run(input) {\n  const count = ;\n  return count;\n}\n"
+    );
+
+    let createToolCalled = false;
+
+    const createTool = getCreateToolTool({
+      async createTool(): Promise<ToolDetail> {
+        createToolCalled = true;
+        throw new Error("should not be called");
+      },
+    });
+
+    const error = await captureError(
+      createTool.run(
+        {
+          description: "Broken module",
+          handlerConfig: { modulePath: "broken.js" },
+          name: "broken",
+        },
+        { orgId: ORG_ID, sessionId: SESSION_ID }
+      )
+    );
+
+    expect(error).not.toBeNull();
     expect(createToolCalled).toBe(false);
   });
 });

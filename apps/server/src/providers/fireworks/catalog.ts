@@ -1,5 +1,5 @@
 import type { CustomModelEntry } from "@nakama/core";
-import { formatHttpErrorBody } from "../shared";
+import { buildProviderHttpError } from "../shared";
 
 const FIREWORKS_GATEWAY_BASE_URL = "https://api.fireworks.ai/v1";
 
@@ -203,7 +203,7 @@ export async function fetchFireworksGatewayModels(
 
     if (!response.ok) {
       const body = await response.text();
-      throw new Error(formatHttpErrorBody("Fireworks", response.status, body));
+      throw buildProviderHttpError("Fireworks", response.status, body);
     }
 
     // SAFETY: The upstream payload is validated or constructed by the provider adapter before this conversion.

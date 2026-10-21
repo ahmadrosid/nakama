@@ -21,9 +21,9 @@ export function resolveVisionProviderSelection(
     userConfig?.visionModel,
     {
       invalid:
-        "Configured image parsing model is invalid. Update it in Settings.",
+        "Configured image parsing model is invalid. Update it in Control center → AI Providers (/customize/providers).",
       missingProvider:
-        "Configured image parsing provider is missing. Update it in Settings.",
+        "Configured image parsing provider is missing. Update it in Control center → AI Providers (/customize/providers).",
     }
   );
 
@@ -33,7 +33,7 @@ export function resolveVisionProviderSelection(
 
   if (!modelExistsOnInstance(selected.instance, selected.modelId)) {
     throw new NakamaApiError(
-      "Configured image parsing model is unavailable. Update it in Settings.",
+      "Configured image parsing model is unavailable. Update it in Control center → AI Providers (/customize/providers).",
       400
     );
   }
@@ -46,7 +46,7 @@ export function resolveVisionProviderSelection(
 
   if (!resolved) {
     throw new NakamaApiError(
-      "Configured image parsing model is unavailable. Update it in Settings.",
+      "Configured image parsing model is unavailable. Update it in Control center → AI Providers (/customize/providers).",
       400
     );
   }
@@ -107,4 +107,4 @@ export async function describeImagesWithVisionModel(
 }
 
 export const VISION_MODEL_REQUIRED_MESSAGE =
-  "This model cannot see images. Configure an image parsing model in Settings before sending images.";
+  "This model cannot see images. Configure an image parsing model in Control center → AI Providers (/customize/providers) before sending images.";

@@ -40,7 +40,7 @@ import {
 
 // The same textarea, send button and stop icon as the agent chat composer.
 const FULL_TEXTAREA_CLASS =
-  "max-h-36 min-h-9 px-1 py-1 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-8 sm:text-sm";
+  "max-h-36 min-h-9 px-1 py-1 text-base leading-relaxed [scrollbar-gutter:stable] placeholder:text-muted-foreground sm:min-h-8 sm:text-sm";
 
 // One row: the field on the left, stop and send on the right.
 const GROUP_SHELL_CLASS =

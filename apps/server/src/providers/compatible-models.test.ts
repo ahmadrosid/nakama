@@ -72,7 +72,7 @@ test("instances without a shortlist expose their provider catalog", () => {
   }
 });
 
-test("Netra discovery keeps only the documented tool-capable model", async () => {
+test("Netra discovery keeps only the migration target", async () => {
   globalThis.fetch = asTestFetch(
     mock(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe("https://api.netraruntime.com/v1/models");
@@ -91,15 +91,15 @@ test("Netra discovery keeps only the documented tool-capable model", async () =>
 
   expect(await fetchNetraModels("test-key")).toEqual([
     {
-      id: "deepseek/deepseek-v4-flash-0731",
-      name: "DeepSeek V4 Flash 0731",
+      id: "deepseek/deepseek-v4.1-flash",
+      name: "DeepSeek V4.1 Flash",
       supportsThinking: true,
       supportsVision: false,
     },
   ]);
 });
 
-test("Netra agent catalog excludes models without a tool-turn check", () => {
+test("Netra catalog prefers the replacement over retired selections", () => {
   const models = getModelsForProviderInstance({
     apiKey: "test-key",
     createdAt: "2026-10-05T00:00:00.000Z",
@@ -113,7 +113,7 @@ test("Netra agent catalog excludes models without a tool-turn check", () => {
   });
 
   expect(models.map((model) => model.id)).toEqual([
-    "deepseek/deepseek-v4-flash-0731",
+    "deepseek/deepseek-v4.1-flash",
   ]);
 });
 
@@ -293,3 +293,24 @@ for (const status of [401, 403, 503] as const) {
     }
   });
 }
+
+test("Netra upgrades a saved catalog without inheriting retired prices", () => {
+  const models = getModelsForProviderInstance({
+    apiKey: "test-key",
+    createdAt: "2026-10-19T00:00:00.000Z",
+    customModels: [
+      {
+        default: true,
+        id: "deepseek/deepseek-v4-flash-0731",
+        inputPerMillionUsd: 99,
+      },
+    ],
+    id: "netra-1",
+    label: "Netra Runtime",
+    type: "netra",
+  });
+
+  expect(models).toHaveLength(1);
+  expect(models[0]?.id).toBe("deepseek/deepseek-v4.1-flash");
+  expect(models[0]?.inputPerMillionUsd).toBeUndefined();
+});

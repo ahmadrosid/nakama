@@ -18,6 +18,7 @@ const FORCE_REFRESH_BUNDLED_SKILL_NAMES = new Set<string>([
   "agent-browser",
   "artifact-design",
   "archive-profile-memory",
+  "nakama-guide",
 ]);
 
 const RENAMED_BUNDLED_SKILL_DIRS = [

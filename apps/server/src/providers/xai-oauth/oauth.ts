@@ -333,7 +333,7 @@ export async function resolveXaiOAuthCredentials(
 
   if (!current) {
     throw new Error(
-      "Grok is not connected. Reconnect in Settings → LLM providers."
+      "Grok is not connected. Reconnect in Control center → AI Providers (/customize/providers)."
     );
   }
 

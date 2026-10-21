@@ -71,6 +71,43 @@ function createServerOptions() {
 }
 
 describe("createHonoApp", () => {
+  test("compresses chat history when the browser accepts gzip", async () => {
+    const options = createServerOptions();
+    options.agent.getSessionMessages = async () => ({
+      channel: "web",
+      contextUsage: null,
+      messageMeta: [],
+      messages: [{ content: "history ".repeat(12_000), role: "assistant" }],
+      model: null,
+    });
+    const app = createHonoApp(options);
+
+    const session = await setupFreshInstallSession(
+      app,
+      options.databaseAdapter
+    );
+
+    const url = "http://localhost:4310/v1/sessions/session_1/messages";
+    const headers = session.headers();
+    const plain = await app.fetch(new Request(url, { headers }));
+
+    const compressed = await app.fetch(
+      new Request(url, {
+        headers: { ...headers, "Accept-Encoding": "gzip" },
+      })
+    );
+
+    expect(plain.headers.get("Content-Encoding")).toBeNull();
+    expect(compressed.headers.get("Content-Encoding")).toBe("gzip");
+    expect(compressed.headers.get("Vary")).toContain("Accept-Encoding");
+    const plainText = await plain.text();
+    const compressedBytes = await compressed.bytes();
+    expect(compressedBytes.byteLength).toBeLessThan(plainText.length);
+    expect(new TextDecoder().decode(Bun.gunzipSync(compressedBytes))).toBe(
+      plainText
+    );
+  });
+
   test("rejects invalid profile fields before calling the agent service", async () => {
     const options = createServerOptions();
     let calls = 0;

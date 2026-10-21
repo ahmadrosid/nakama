@@ -47,6 +47,9 @@ type SupportedSoulFileName = (typeof SUPPORTED_SOUL_FILE_NAMES)[number];
 
 const SuperNakamaInputSchema = z.record(z.string(), z.json());
 
+/** A period followed by whitespace: where list_tools cuts each description. */
+const SENTENCE_END = /(?<=\.)\s/;
+
 type SuperNakamaInput = z.infer<typeof SuperNakamaInputSchema>;
 
 const SOUL_STACK_FILES = [
@@ -627,7 +630,18 @@ export function createSuperNakamaTools(
           return { tools: [] };
         }
 
-        return profileService.listTools(orgId);
+        const { tools } = await profileService.listTools(orgId);
+
+        // This result stays in context for every later call of the turn, so
+        // keep only what reuse and assignment need.
+        return {
+          tools: tools.map((tool) => ({
+            description: tool.description.split(SENTENCE_END)[0],
+            handlerType: tool.handlerType,
+            id: tool.id,
+            name: tool.name,
+          })),
+        };
       },
     },
     {
@@ -676,7 +690,7 @@ export function createSuperNakamaTools(
 
         if (setup?.status === "ready") {
           return {
-            profileId: setup.profileId,
+            assignedProfileId: setup.profileId ?? null,
             toolId: setup.toolId,
             type: "tool_setup_ready",
           };
@@ -753,8 +767,10 @@ export function createSuperNakamaTools(
 
           await completeToolSetup(orgId, setup, tool.id);
 
+          // Null says "assigned to no agent" outright. A missing key sent the
+          // agent off to list_profiles and get_profile to find out.
           return {
-            profileId: setup.profileId,
+            assignedProfileId: setup.profileId ?? null,
             tool,
             toolId: tool.id,
             type: "tool_setup_ready",

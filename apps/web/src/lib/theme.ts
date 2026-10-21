@@ -48,12 +48,6 @@ export function applyTheme(theme: Theme): void {
   applyFavicon(resolved);
 }
 
-export function ditherLogoSrc(resolvedTheme: ResolvedTheme): string {
-  return resolvedTheme === "light"
-    ? "/nakama-logo-dither-light.png"
-    : "/nakama-logo-dither.png";
-}
-
 export function markLogoSrc(resolvedTheme: ResolvedTheme): string {
   return resolvedTheme === "light"
     ? "/nakama-mark.svg"

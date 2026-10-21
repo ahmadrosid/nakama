@@ -16,7 +16,7 @@ import {
 import { decodeStoredModelSelection } from "./provider-instance-helpers";
 
 export const IMAGE_MODEL_REQUIRED_MESSAGE =
-  "Configure an image generation model in Settings before generating images.";
+  "Configure an image generation model in Control center → AI Providers (/customize/providers) before generating images.";
 
 export const IMAGE_GENERATION_SIZES = [
   "1024x1024",
@@ -186,7 +186,7 @@ export function resolveImageGenerationSelection(
 
   if (!instance) {
     throw new NakamaApiError(
-      "Image generation requires an OpenAI provider. Add one in Settings.",
+      "Image generation requires an OpenAI provider. Add one in Control center → AI Providers (/customize/providers).",
       400
     );
   }
@@ -247,7 +247,7 @@ function resolveCompatibleImageGenerationSelection(
     )
   ) {
     throw new NakamaApiError(
-      "Configured image generation model is invalid. Update it in Settings.",
+      "Configured image generation model is invalid. Update it in Control center → AI Providers (/customize/providers).",
       400
     );
   }

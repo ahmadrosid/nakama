@@ -21,9 +21,9 @@ import { generateOpenAIResponsesChat } from "../openai/responses";
 import { openAIModelRejectsChatToolsWithReasoning } from "../openai/thinking";
 import {
   buildChatCompletionResult,
+  buildProviderHttpError,
   extractOpenAITokenUsage,
   finalizePendingToolCalls,
-  formatHttpErrorBody,
   mergePendingToolCall,
   normalizeThinkingEffort,
   notifyToolInputDelta,
@@ -187,7 +187,7 @@ function formatSdkError<ProviderError>(
     const providerError = readProviderString(error.error);
     const body = providerError ?? JSON.stringify(error.error ?? error.message);
 
-    return new Error(formatHttpErrorBody(label, error.status ?? 0, body));
+    return buildProviderHttpError(label, error.status ?? 0, body);
   }
 
   if (error instanceof Error) {
@@ -418,16 +418,20 @@ async function streamChatCompletion(options: {
   const bodyText = response.ok ? null : await response.text();
 
   if (!response.ok) {
-    throw new Error(
-      formatHttpErrorBody(options.label, response.status, bodyText ?? "")
+    throw buildProviderHttpError(
+      options.label,
+      response.status,
+      bodyText ?? ""
     );
   }
 
   const contentType = response.headers.get("content-type") ?? "";
 
   if (contentType.includes("application/json")) {
-    throw new Error(
-      formatHttpErrorBody(options.label, response.status, await response.text())
+    throw buildProviderHttpError(
+      options.label,
+      response.status,
+      await response.text()
     );
   }
 

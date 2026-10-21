@@ -53,8 +53,8 @@ describe("resolveModel", () => {
     ];
 
     for (const provider of USER_PROVIDER_NAMES) {
-      if (provider === "cloudflare") {
-        // Cloudflare resolves its default from the fixed catalog.
+      if (provider === "cloudflare" || provider === "netra") {
+        // Cloudflare uses its fixed catalog; Netra uses its explicit allowlist.
         continue;
       }
 
@@ -474,4 +474,17 @@ describe("resolveModelLimits", () => {
       ])
     ).toEqual({ contextWindow: 32_000, maxOutputTokens: 4096 });
   });
+});
+
+test("Netra resolves saved retired selections and defaults without allowing arbitrary IDs", () => {
+  const saved = [{ default: true, id: "deepseek/deepseek-v4-flash-0731" }];
+  expect(resolveModel("netra", undefined, saved)).toBe(
+    "deepseek/deepseek-v4.1-flash"
+  );
+  expect(resolveModel("netra", saved[0]!.id, saved)).toBe(
+    "deepseek/deepseek-v4.1-flash"
+  );
+  expect(resolveModel("netra", "unverified-model", saved)).toBe(
+    "unverified-model"
+  );
 });

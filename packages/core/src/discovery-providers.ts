@@ -1,6 +1,13 @@
 import type { ProviderName } from "./contract";
 
-export const NETRA_AGENT_MODEL_ID = "deepseek/deepseek-v4-flash-0731";
+export const NETRA_AGENT_MODEL_ID = "deepseek/deepseek-v4.1-flash";
+
+// Saved selections remain readable; never send the retired ID to Netra.
+export function resolveNetraModelId(model: string): string {
+  return model === "deepseek/deepseek-v4-flash-0731"
+    ? NETRA_AGENT_MODEL_ID
+    : model;
+}
 
 // Providers whose model lists are discovered live from the platform's
 // /models endpoint and stored as instance custom models, instead of a

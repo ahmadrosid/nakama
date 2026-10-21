@@ -1,23 +1,17 @@
-import { getProfileAvatarUrl } from "@nakama/client";
-import type { ProfileSummary } from "@nakama/core/contract";
 import { cn } from "@nakama/ui/utils";
 import { hashToSeeds, oklchToCss } from "hashvatar";
 import { Hashvatar } from "hashvatar/react";
 import { useEffect, useMemo, useState } from "react";
-import { moodstoneIndexes, moodstoneSvg } from "./moodstone";
-
-type ProfileAvatarProfile = Pick<
-  ProfileSummary,
-  "id" | "name" | "hasAvatar" | "updatedAt" | "isSuper"
-> &
-  Partial<Pick<ProfileSummary, "createdAt">>;
-
-const SUPER_AGENT_DEFAULT_AVATAR = "/super-agent.png";
+import {
+  isPreMoodstone,
+  moodstoneIndexes,
+  moodstoneSvg,
+  type ProfileAvatarProfile,
+  resolveAvatarSrc,
+  SUPER_AGENT_DEFAULT_AVATAR,
+} from "./moodstone";
 
 const SUPER_AGENT_LIGHT_AVATAR = "/super-agent-light.png";
-
-/** Profiles created before Moodstone shipped keep their Hashvatar look. */
-const MOODSTONE_SINCE = Date.parse("2026-10-10T00:00:00Z");
 
 const sizeClasses = {
   lg: "size-16",
@@ -56,34 +50,13 @@ function tonesFromHash(hash: string): [string, string] {
   ];
 }
 
-// create_profile chat cards carry only updatedAt, which is the creation time there.
-function isPreMoodstone(profile: ProfileAvatarProfile): boolean {
-  return Date.parse(profile.createdAt ?? profile.updatedAt) < MOODSTONE_SINCE;
-}
-
-function resolveAvatarSrc(
-  profile: ProfileAvatarProfile,
-  orgId?: string
-): string | null {
-  const uploaded = getProfileAvatarUrl(profile, orgId);
-
-  if (uploaded) {
-    return uploaded;
-  }
-
-  if (profile.isSuper) {
-    return SUPER_AGENT_DEFAULT_AVATAR;
-  }
-
-  return null;
-}
-
 export function ProfileAvatar({
   profile,
   size = "md",
   active = false,
   className,
   orgId,
+  squareMoodstone = false,
 }: {
   profile: ProfileAvatarProfile;
   size?: keyof typeof sizeClasses;
@@ -91,6 +64,8 @@ export function ProfileAvatar({
   active?: boolean;
   className?: string;
   orgId?: string;
+  /** Draw the generated Moodstone avatar square; images and dithers stay round. */
+  squareMoodstone?: boolean;
 }) {
   const avatarUrl = resolveAvatarSrc(profile, orgId);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
@@ -121,13 +96,16 @@ export function ProfileAvatar({
     return `data:image/svg+xml,${encodeURIComponent(svg)}`;
   }, [avatarUrl, failedUrl, profile.id, profile.name, active, reducedMotion]);
 
+  const showUploaded = avatarUrl !== null && avatarUrl !== failedUrl;
+
   const surfaceClass = cn(
-    "shrink-0 rounded-full outline outline-1 outline-black/10 -outline-offset-1 dark:outline-white/10",
+    "shrink-0 outline outline-1 outline-black/10 -outline-offset-1 dark:outline-white/10",
+    squareMoodstone && !showUploaded && !isPreMoodstone(profile)
+      ? "rounded-none"
+      : "rounded-full",
     sizeClasses[size],
     className
   );
-
-  const showUploaded = avatarUrl !== null && avatarUrl !== failedUrl;
 
   if (!showUploaded && isPreMoodstone(profile)) {
     const hash = profile.id || profile.name || "?";
