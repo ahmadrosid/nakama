@@ -12,7 +12,7 @@ import { Button } from "@nakama/ui";
 import { Spinner } from "@nakama/ui/spinner";
 import { toast } from "@nakama/ui/toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { MessageAdd01Icon, PencilEdit02Icon } from "hugeicons-react";
+import { MessageAdd01Icon } from "hugeicons-react";
 import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -22,14 +22,11 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { GroupAvatar } from "@/components/agent-groups/GroupAvatar";
+import { GroupActionsMenu } from "@/components/agent-groups/group-actions-menu";
 import { GroupComposer } from "@/components/agent-groups/group-composer";
 import { GroupDialog } from "@/components/agent-groups/group-dialog";
 import { GroupMemoryPanel } from "@/components/agent-groups/group-memory-panel";
 import { GroupMessageList } from "@/components/agent-groups/group-message-list";
-import {
-  GroupPanelButtons,
-  PANELS,
-} from "@/components/agent-groups/group-panel-buttons";
 import {
   GroupFilesPanel,
   GroupLivePanel,
@@ -40,8 +37,10 @@ import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-con
 import { useAgentGroupQuery } from "@/hooks/use-agent-groups";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
+  type PANELS,
   PENDING_RUN,
   pendingMessage,
+  withPanel,
   withPendingMessage,
 } from "@/lib/agent-group-pending";
 import { client, formatError } from "@/lib/client";
@@ -63,27 +62,15 @@ export function AgentGroupChatPage() {
   const requested = Number(searchParams.get("thread"));
   const openThreadId = sessionId && requested > 0 ? requested : null;
   const liveOpen = Boolean(sessionId) && searchParams.get("live") === "1";
-  const filesOpen = searchParams.get("files") === "1";
+  const files = searchParams.get("files");
+  const filesOpen = files !== null;
   const memoryOpen = searchParams.get("memory") === "1";
 
   // The thread, the live view, the files and the memory share one side panel; opening one closes the others.
   function setPanel(panel: (typeof PANELS)[number], value: string | null) {
-    setSearchParams(
-      (current) => {
-        const next = new URLSearchParams(current);
-
-        for (const key of PANELS) {
-          next.delete(key);
-        }
-
-        if (value !== null) {
-          next.set(panel, value);
-        }
-
-        return next;
-      },
-      { replace: true }
-    );
+    setSearchParams((current) => withPanel(current, panel, value), {
+      replace: true,
+    });
   }
 
   const setThread = (messageId: number | null) =>
@@ -113,6 +100,7 @@ export function AgentGroupChatPage() {
         // An empty slot would still frame a blank column beside the chat.
         filesOpen || memoryOpen || (sessionId && (liveOpen || openThreadId)) ? (
           <GroupSidePanel
+            file={files === "1" ? null : files}
             filesOpen={filesOpen}
             group={group}
             liveOpen={liveOpen}
@@ -146,6 +134,7 @@ export function AgentGroupChatPage() {
 
 /** The one side panel that is open: files, memory, the live view, or a thread. */
 function GroupSidePanel({
+  file,
   filesOpen,
   group,
   liveOpen,
@@ -158,6 +147,7 @@ function GroupSidePanel({
   sessionId,
   threadId,
 }: {
+  file: string | null;
   filesOpen: boolean;
   group: AgentGroup;
   liveOpen: boolean;
@@ -172,7 +162,12 @@ function GroupSidePanel({
 }) {
   if (filesOpen) {
     return (
-      <GroupFilesPanel group={group} key={group.id} onClose={onCloseFiles} />
+      <GroupFilesPanel
+        file={file}
+        group={group}
+        key={`${group.id}:${file ?? ""}`}
+        onClose={onCloseFiles}
+      />
     );
   }
 
@@ -251,16 +246,7 @@ function GroupHeader({
 
   const actions = (
     <>
-      <Button
-        onClick={() => setEditing(true)}
-        size="sm"
-        type="button"
-        variant="outline"
-      >
-        <PencilEdit02Icon aria-hidden />
-        <span className="max-sm:sr-only">Edit group</span>
-      </Button>
-      <GroupPanelButtons />
+      <GroupActionsMenu onEdit={() => setEditing(true)} />
       <Button
         onClick={() => navigate(groupPath(group.id))}
         size="sm"
@@ -472,16 +458,7 @@ function GroupDraft({
         id="group-new-chat"
       >
         <div className="@container flex shrink-0 justify-end gap-2 px-4 pt-4">
-          <Button
-            onClick={() => setEditing(true)}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <PencilEdit02Icon aria-hidden />
-            Edit group
-          </Button>
-          <GroupPanelButtons />
+          <GroupActionsMenu onEdit={() => setEditing(true)} />
         </div>
         <div className="flex flex-1 flex-col justify-center gap-6 pb-12">
           <div className="flex flex-col items-center gap-3 px-4 text-center">

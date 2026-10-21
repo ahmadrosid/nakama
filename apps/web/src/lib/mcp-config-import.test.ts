@@ -85,4 +85,51 @@ describe("parseMcpConfigJson", () => {
     expect(result).not.toBeNull();
     expect(result?.ok).toBe(false);
   });
+
+  test("parses OpenCode remote and local servers", () => {
+    const remote = parseMcpConfigJson(`{
+      "$schema": "https://opencode.ai/config.json",
+      "mcp": {
+        "nakama-owner": {
+          "type": "remote",
+          "url": "https://withnakama.com/mcp/owner",
+          "enabled": true,
+          "headers": { "Authorization": "Bearer token" }
+        }
+      }
+    }`);
+
+    expect(remote).toEqual({
+      importedCount: 1,
+      ok: true,
+      server: {
+        config: {
+          headers: { Authorization: "Bearer token" },
+          url: "https://withnakama.com/mcp/owner",
+        },
+        name: "nakama-owner",
+        transport: "http",
+      },
+    });
+
+    const local = parseMcpConfigJson(`{
+      "mcp": {
+        "files": {
+          "type": "local",
+          "command": ["npx", "-y", "pkg"],
+          "environment": { "KEY": "v" }
+        }
+      }
+    }`);
+
+    expect(local).toEqual({
+      importedCount: 1,
+      ok: true,
+      server: {
+        config: { args: ["-y", "pkg"], command: "npx", env: { KEY: "v" } },
+        name: "files",
+        transport: "stdio",
+      },
+    });
+  });
 });

@@ -1,12 +1,10 @@
 import type {
-  ChatgptOAuthCredentials,
   CustomModelEntry,
   OpenRouterRoutingSettings,
   ProviderInstanceSummary,
   ProviderModelOption,
   UpdateProviderRequest,
   WireApi,
-  XaiOAuthCredentials,
 } from "@nakama/core/contract";
 import {
   defaultDiscoveryBaseUrl,
@@ -80,11 +78,6 @@ export function useProviderInstanceCard({
   const [busy, setBusy] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
-  const [xaiOAuth, setXaiOAuth] = useState<XaiOAuthCredentials | null>(null);
-
-  const [chatgptOAuth, setChatgptOAuth] =
-    useState<ChatgptOAuthCredentials | null>(null);
-
   const [showApiKey, setShowApiKey] = useState(false);
   const [editLabel, setEditLabel] = useState("");
   const [editBaseUrl, setEditBaseUrl] = useState("");
@@ -163,37 +156,13 @@ export function useProviderInstanceCard({
     }
   };
 
+  const reconnect = async (
+    request: Pick<UpdateProviderRequest, "chatgptOAuth" | "xaiOAuth">
+  ) => {
+    await runUpdate(request, () => setReplaceKeyOpen(false));
+  };
+
   const handleReplaceKey = async () => {
-    if (isXaiOAuth) {
-      if (!xaiOAuth) {
-        setDialogError("Sign in with Grok before saving.");
-
-        return;
-      }
-
-      await runUpdate({ xaiOAuth }, () => {
-        setReplaceKeyOpen(false);
-        setXaiOAuth(null);
-      });
-
-      return;
-    }
-
-    if (isChatgpt) {
-      if (!chatgptOAuth) {
-        setDialogError("Sign in with ChatGPT before saving.");
-
-        return;
-      }
-
-      await runUpdate({ chatgptOAuth }, () => {
-        setReplaceKeyOpen(false);
-        setChatgptOAuth(null);
-      });
-
-      return;
-    }
-
     const nextError = validateApiKeyForProvider(apiKey, providerType, {
       ollamaHostMode: instance.hostMode ?? undefined,
     });
@@ -318,7 +287,6 @@ export function useProviderInstanceCard({
     apiKey,
     busy,
     catalogModelsForType,
-    chatgptOAuth,
     deleteOpen,
     dialogError,
     editBaseUrl,
@@ -343,11 +311,11 @@ export function useProviderInstanceCard({
     openManage,
     openRouterRouting,
     providerType,
+    reconnect,
     replaceKeyOpen,
     saveCompatible,
     saveManageModels,
     setApiKey,
-    setChatgptOAuth,
     setDeleteOpen,
     setEditBaseUrl,
     setEditLabel,
@@ -358,8 +326,6 @@ export function useProviderInstanceCard({
     setOpenRouterRouting,
     setReplaceKeyOpen,
     setShowApiKey,
-    setXaiOAuth,
     showApiKey,
-    xaiOAuth,
   };
 }

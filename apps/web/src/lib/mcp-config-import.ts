@@ -77,6 +77,27 @@ export function parseMcpConfigJson(text: string): ParseMcpConfigResult | null {
     };
   }
 
+  // OpenCode local servers: command is ["cmd", ...args], env is `environment`.
+  if (Array.isArray(config.command)) {
+    const [command, ...args] = readStringArray(config.command) ?? [];
+
+    if (command) {
+      return {
+        importedCount: entries.length,
+        ok: true,
+        server: {
+          config: {
+            args: args.length > 0 ? args : undefined,
+            command,
+            env: readStringRecord(config.environment),
+          },
+          name: serverName,
+          transport: "stdio",
+        },
+      };
+    }
+  }
+
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
   if (typeof config.command === "string" && config.command.trim()) {
     return {
@@ -101,15 +122,18 @@ function readServerEntries(
   // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This dictionary holds external JSON keys until the boundary parser validates each value.
   record: Record<string, unknown>
 ): Array<[string, unknown]> | null {
-  if (
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof record.mcpServers === "object" &&
-    record.mcpServers !== null &&
-    !Array.isArray(record.mcpServers)
-  ) {
-    // SAFETY: The enclosing parser checks the value before this conversion.
-    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This dictionary holds external JSON keys until the boundary parser validates each value.
-    return Object.entries(record.mcpServers as Record<string, unknown>);
+  // `mcp` is the OpenCode key.
+  for (const servers of [record.mcpServers, record.mcp]) {
+    if (
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
+      typeof servers === "object" &&
+      servers !== null &&
+      !Array.isArray(servers)
+    ) {
+      // SAFETY: The enclosing parser checks the value before this conversion.
+      // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This dictionary holds external JSON keys until the boundary parser validates each value.
+      return Object.entries(servers as Record<string, unknown>);
+    }
   }
 
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.

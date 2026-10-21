@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type {
+  ChatgptOAuthCredentials,
   ProviderInstanceSummary,
   ProviderModelOption,
   UpdateProviderRequest,
@@ -242,5 +243,45 @@ describe("provider model management", () => {
         supportsVision: false,
       },
     ]);
+  });
+
+  test("reconnect saves the new sign-in and closes the dialog", async () => {
+    let card: ReturnType<typeof useProviderInstanceCard>;
+    const updates: UpdateProviderRequest[] = [];
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    const chatgptOAuth: ChatgptOAuthCredentials = {
+      accessToken: "access",
+      accountId: "account",
+      expiresAt: "2026-12-01T00:00:00Z",
+      refreshToken: "refresh",
+    };
+
+    function Probe() {
+      card = useProviderInstanceCard({
+        catalog: [],
+        instance,
+        onDelete: async () => {},
+        onError: () => {},
+        onUpdate: async (_, request) => {
+          updates.push(request);
+        },
+      });
+
+      return null;
+    }
+
+    try {
+      await act(async () => root.render(<Probe />));
+      await act(async () => card.setReplaceKeyOpen(true));
+      await act(async () => card.reconnect({ chatgptOAuth }));
+      expect(updates).toEqual([{ chatgptOAuth }]);
+      expect(card!.replaceKeyOpen).toBe(false);
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
   });
 });

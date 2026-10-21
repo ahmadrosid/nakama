@@ -26,6 +26,8 @@ data/logs/*
 !.agents/skills/lean-pr-review/**
 !.agents/skills/browser-video-proof/
 !.agents/skills/browser-video-proof/**
+!.agents/skills/verify-bs/
+!.agents/skills/verify-bs/**
 apps/data/*
 .cursor/
 docs/plans/*

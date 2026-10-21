@@ -233,6 +233,29 @@ describe("AgentGroupService", () => {
     expect(tasks[1]).not.toContain("-tail");
   });
 
+  test("memory past the cap is cut at the last full line", async () => {
+    const tasks: string[] = [];
+    const first = `- ${"a".repeat(GROUP_MEMORY_CHARS - 100)}`;
+
+    const { chat, service } = setup(({ sharedDir, task }) => {
+      tasks.push(task);
+      writeGroupMemory(sharedDir!, `${first}\n- ${"b".repeat(200)}`);
+
+      return "ok";
+    });
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+
+    await chat(group.id, "@alpha hi");
+    await chat(group.id, "@alpha again");
+
+    const lines = tasks[1]!.split("\n");
+
+    expect(lines).toContain(first);
+    expect(lines[lines.indexOf(first) + 1]).toBe("[truncated]");
+    expect(tasks[1]).not.toContain("bbb");
+  });
+
   test("@all gives every member a turn, in member order", async () => {
     const { calls, chat, service } = setup(() => "here");
     const group = await service.create(ORG_ID, USER_ID, "Team", ["b", "a"]);

@@ -1,9 +1,4 @@
-import type {
-  ChatgptOAuthCredentials,
-  ProviderInstanceSummary,
-  WireApi,
-  XaiOAuthCredentials,
-} from "@nakama/core/contract";
+import type { ProviderInstanceSummary, WireApi } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import {
   Dialog,
@@ -20,14 +15,15 @@ import {
   InputGroupInput,
 } from "@nakama/ui/input-group";
 import { Spinner } from "@nakama/ui/spinner";
-import { ViewIcon, ViewOffIcon } from "hugeicons-react";
+import { LinkSquare02Icon, ViewIcon, ViewOffIcon } from "hugeicons-react";
 import type { ReactNode } from "react";
 import {
-  ChatgptSignInPanel,
-  XaiSignInPanel,
+  DeviceSignInCode,
+  useDeviceSignIn,
 } from "@/components/ChatgptSignInPanel";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
 import type { ModelListRow } from "@/components/ModelListEditor";
+import type { DeviceSignIn } from "@/components/subscription-sign-in.shared";
 import { apiKeyPlaceholder, type SelectedProvider } from "@/lib/models";
 
 export function ProviderReplaceKeyDialog({
@@ -36,14 +32,10 @@ export function ProviderReplaceKeyDialog({
   providerType,
   apiKey,
   showApiKey,
-  xaiOAuth = null,
-  onXaiOAuthChange,
-  chatgptOAuth = null,
   busy,
   dialogError,
   onOpenChange,
   onApiKeyChange,
-  onChatgptOAuthChange,
   onToggleShowApiKey,
   onSave,
   onManage,
@@ -53,53 +45,42 @@ export function ProviderReplaceKeyDialog({
   providerType: SelectedProvider;
   apiKey: string;
   showApiKey: boolean;
-  xaiOAuth?: XaiOAuthCredentials | null;
-  onXaiOAuthChange: (oauth: XaiOAuthCredentials | null) => void;
-  chatgptOAuth?: ChatgptOAuthCredentials | null;
   busy: boolean;
   dialogError: string | null;
   onOpenChange: (open: boolean) => void;
   onApiKeyChange: (value: string) => void;
-  onChatgptOAuthChange: (oauth: ChatgptOAuthCredentials | null) => void;
   onToggleShowApiKey: () => void;
   onSave: () => void;
   onManage?: (action: "clear" | "use-stored") => void;
 }) {
-  let title = `${instance.hasApiKey ? "Update API key" : "Add API key"} for ${instance.label}`;
-  let hasCredentials = Boolean(apiKey.trim());
-
-  switch (providerType) {
-    case "xai_oauth":
-      title = `Reconnect ${instance.label}`;
-      hasCredentials = Boolean(xaiOAuth);
-      break;
-    case "chatgpt":
-      title = `Reconnect ${instance.label}`;
-      hasCredentials = Boolean(chatgptOAuth);
-      break;
-    default:
-      break;
-  }
-
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle>
+            {instance.hasApiKey ? "Update API key" : "Add API key"} for{" "}
+            {instance.label}
+          </DialogTitle>
         </DialogHeader>
-        <ProviderCredentialField
-          apiKey={apiKey}
-          busy={busy}
-          chatgptOAuth={chatgptOAuth}
-          instance={instance}
-          onApiKeyChange={onApiKeyChange}
-          onChatgptOAuthChange={onChatgptOAuthChange}
-          onToggleShowApiKey={onToggleShowApiKey}
-          onXaiOAuthChange={onXaiOAuthChange}
-          providerType={providerType}
-          showApiKey={showApiKey}
-          xaiOAuth={xaiOAuth}
-        />
+        <InputGroup>
+          <InputGroupInput
+            autoComplete="off"
+            disabled={busy || instance.secretSource === "environment"}
+            onChange={(event) => onApiKeyChange(event.target.value)}
+            placeholder={apiKeyPlaceholder(providerType)}
+            type={showApiKey ? "text" : "password"}
+            value={apiKey}
+          />
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              aria-label={showApiKey ? "Hide API key" : "Show API key"}
+              onClick={onToggleShowApiKey}
+              size="icon-sm"
+            >
+              {showApiKey ? <ViewOffIcon /> : <ViewIcon />}
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
         {instance.secretSource === "environment" ? (
           <p className="text-sm">
             Managed by {instance.secretEnvName}. Restart Nakama after you change
@@ -143,7 +124,7 @@ export function ProviderReplaceKeyDialog({
           </Button>
           <Button
             disabled={
-              busy || instance.secretSource === "environment" || !hasCredentials
+              busy || instance.secretSource === "environment" || !apiKey.trim()
             }
             onClick={onSave}
             type="button"
@@ -157,71 +138,97 @@ export function ProviderReplaceKeyDialog({
   );
 }
 
-function ProviderCredentialField({
-  apiKey,
-  busy,
-  chatgptOAuth,
+export function ProviderReconnectDialog<T>({
+  open,
   instance,
-  onApiKeyChange,
-  onChatgptOAuthChange,
-  onToggleShowApiKey,
-  onXaiOAuthChange,
-  providerType,
-  showApiKey,
-  xaiOAuth,
+  signIn,
+  busy,
+  dialogError,
+  onOpenChange,
+  onConnected,
 }: {
-  apiKey: string;
-  busy: boolean;
-  chatgptOAuth: ChatgptOAuthCredentials | null;
+  open: boolean;
   instance: ProviderInstanceSummary;
-  onApiKeyChange: (value: string) => void;
-  onChatgptOAuthChange: (oauth: ChatgptOAuthCredentials | null) => void;
-  onToggleShowApiKey: () => void;
-  onXaiOAuthChange: (oauth: XaiOAuthCredentials | null) => void;
-  providerType: SelectedProvider;
-  showApiKey: boolean;
-  xaiOAuth: XaiOAuthCredentials | null;
+  signIn: DeviceSignIn<T>;
+  busy: boolean;
+  dialogError: string | null;
+  onOpenChange: (open: boolean) => void;
+  onConnected: (oauth: T) => void;
 }) {
-  if (providerType === "xai_oauth") {
-    return (
-      <XaiSignInPanel
-        disabled={busy}
-        oauth={xaiOAuth}
-        onOAuthChange={onXaiOAuthChange}
-      />
-    );
-  }
+  const device = useDeviceSignIn(signIn, {
+    onOAuthChange: (oauth) => {
+      if (oauth) {
+        onConnected(oauth);
+      }
+    },
+  });
 
-  if (providerType === "chatgpt") {
-    return (
-      <ChatgptSignInPanel
-        disabled={busy}
-        oauth={chatgptOAuth}
-        onOAuthChange={onChatgptOAuthChange}
-      />
-    );
-  }
+  const waiting = device.flow === "waiting";
+  const error = device.error ?? dialogError;
+  const verb = instance.hasApiKey ? "Reconnect" : "Connect";
 
   return (
-    <InputGroup>
-      <InputGroupInput
-        autoComplete="off"
-        disabled={busy || instance.secretSource === "environment"}
-        onChange={(event) => onApiKeyChange(event.target.value)}
-        placeholder={apiKeyPlaceholder(providerType)}
-        type={showApiKey ? "text" : "password"}
-        value={apiKey}
-      />
-      <InputGroupAddon align="inline-end">
-        <InputGroupButton
-          aria-label={showApiKey ? "Hide API key" : "Show API key"}
-          onClick={onToggleShowApiKey}
-          size="icon-sm"
-        >
-          {showApiKey ? <ViewOffIcon /> : <ViewIcon />}
-        </InputGroupButton>
-      </InputGroupAddon>
-    </InputGroup>
+    <Dialog
+      onOpenChange={(nextOpen) => {
+        if (!(nextOpen || busy)) {
+          device.cancel();
+          onOpenChange(false);
+        }
+      }}
+      open={open}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            {verb} {signIn.label}?
+          </DialogTitle>
+          {instance.hasApiKey ? (
+            <DialogDescription>
+              You sign in again. The new account replaces the current one.
+            </DialogDescription>
+          ) : null}
+        </DialogHeader>
+        {waiting ? (
+          <div className="space-y-3 rounded-md border p-3">
+            <DeviceSignInCode
+              loginUrl={device.loginUrl}
+              userCode={device.userCode}
+              verificationUri={device.verificationUri}
+            />
+          </div>
+        ) : null}
+        {error ? (
+          <p className="text-destructive text-sm" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <DialogFooter>
+          <Button
+            disabled={busy}
+            onClick={() => {
+              device.cancel();
+              onOpenChange(false);
+            }}
+            type="button"
+            variant="outline"
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={busy || waiting}
+            onClick={() => void device.start()}
+            type="button"
+          >
+            {busy || waiting ? (
+              <Spinner className="mr-2" />
+            ) : (
+              <LinkSquare02Icon className="mr-2 size-4" />
+            )}
+            {waiting ? "Waiting for sign-in…" : verb}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
