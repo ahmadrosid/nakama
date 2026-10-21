@@ -13,6 +13,7 @@ import {
 } from "hugeicons-react";
 import type { ReactNode } from "react";
 import { CatalogProviderModelFields } from "@/components/CatalogProviderModelFields";
+import { CHATGPT_SIGN_IN, XAI_SIGN_IN } from "@/components/ChatgptSignInPanel";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
 import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
@@ -20,6 +21,7 @@ import { ShortlistBrowseProviderModelFields } from "@/components/ShortlistBrowse
 import {
   ProviderCompatibleEditDialog,
   ProviderManageModelsDialog,
+  ProviderReconnectDialog,
   ProviderRemoveDialog,
   ProviderReplaceKeyDialog,
 } from "@/components/settings/provider-instance-dialogs";
@@ -276,23 +278,41 @@ function ProviderInstanceCardDialogs({
         open={card.deleteOpen}
       />
 
-      <ProviderReplaceKeyDialog
-        apiKey={card.apiKey}
-        busy={card.busy}
-        chatgptOAuth={card.chatgptOAuth}
-        dialogError={card.dialogError}
-        instance={instance}
-        onApiKeyChange={card.setApiKey}
-        onChatgptOAuthChange={card.setChatgptOAuth}
-        onOpenChange={card.setReplaceKeyOpen}
-        onSave={() => void card.handleReplaceKey()}
-        onToggleShowApiKey={() => card.setShowApiKey((current) => !current)}
-        onXaiOAuthChange={card.setXaiOAuth}
-        open={card.replaceKeyOpen}
-        providerType={card.providerType}
-        showApiKey={card.showApiKey}
-        xaiOAuth={card.xaiOAuth}
-      />
+      {card.isChatgpt ? (
+        <ProviderReconnectDialog
+          busy={card.busy}
+          dialogError={card.dialogError}
+          instance={instance}
+          onConnected={(chatgptOAuth) => void card.reconnect({ chatgptOAuth })}
+          onOpenChange={card.setReplaceKeyOpen}
+          open={card.replaceKeyOpen}
+          signIn={CHATGPT_SIGN_IN}
+        />
+      ) : card.isXaiOAuth ? (
+        <ProviderReconnectDialog
+          busy={card.busy}
+          dialogError={card.dialogError}
+          instance={instance}
+          onConnected={(xaiOAuth) => void card.reconnect({ xaiOAuth })}
+          onOpenChange={card.setReplaceKeyOpen}
+          open={card.replaceKeyOpen}
+          signIn={XAI_SIGN_IN}
+        />
+      ) : (
+        <ProviderReplaceKeyDialog
+          apiKey={card.apiKey}
+          busy={card.busy}
+          dialogError={card.dialogError}
+          instance={instance}
+          onApiKeyChange={card.setApiKey}
+          onOpenChange={card.setReplaceKeyOpen}
+          onSave={() => void card.handleReplaceKey()}
+          onToggleShowApiKey={() => card.setShowApiKey((current) => !current)}
+          open={card.replaceKeyOpen}
+          providerType={card.providerType}
+          showApiKey={card.showApiKey}
+        />
+      )}
 
       {card.isCompatibleLike ? (
         <ProviderCompatibleEditDialog
