@@ -1,9 +1,12 @@
-import { useEffect } from "react";
-import { BtwChatPanel } from "@/components/chat/btw-chat";
+import { lazy, Suspense, useEffect } from "react";
 import { useActiveChatProfileStore } from "@/context/active-chat-profile-store";
 import { useBtwChatStore } from "@/context/btw-chat-store";
 import { ChatPageContent } from "@/pages/chat/chat-page-content";
 import { useChatPage } from "@/pages/chat/use-chat-page";
+
+const BtwChatPanel = lazy(async () => ({
+  default: (await import("@/components/chat/btw-chat")).BtwChatPanel,
+}));
 
 export function ChatPage() {
   const state = useChatPage();
@@ -45,7 +48,13 @@ export function ChatPage() {
   return (
     <ChatPageContent
       {...state}
-      below={btwOpen ? <BtwChatPanel /> : null}
+      below={
+        btwOpen ? (
+          <Suspense fallback={null}>
+            <BtwChatPanel />
+          </Suspense>
+        ) : null
+      }
       onBtw={(question) =>
         openBtw({
           orgId: useActiveChatProfileStore.getState().orgId,

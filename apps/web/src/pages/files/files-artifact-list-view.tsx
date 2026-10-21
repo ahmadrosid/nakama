@@ -19,10 +19,13 @@ import { FilePinsContext, toChatArtifactRef } from "@/pages/files/files-shared";
 export function FileEntriesLayout({
   viewMode,
   children,
+  compact = false,
   showCreatedBy = false,
 }: {
   viewMode: FilesViewMode;
   children: ReactNode;
+  /** A narrow side panel: name and modified date only. */
+  compact?: boolean;
   showCreatedBy?: boolean;
 }) {
   if (viewMode === "grid") {
@@ -41,18 +44,22 @@ export function FileEntriesLayout({
             <th className="rounded-l-lg px-3 py-2.5 font-normal" scope="col">
               Name
             </th>
-            <th
-              className="hidden w-28 px-3 py-2.5 font-normal md:table-cell"
-              scope="col"
-            >
-              Type
-            </th>
-            <th
-              className="hidden w-24 px-3 py-2.5 font-normal sm:table-cell"
-              scope="col"
-            >
-              Size
-            </th>
+            {compact ? null : (
+              <>
+                <th
+                  className="hidden w-28 px-3 py-2.5 font-normal md:table-cell"
+                  scope="col"
+                >
+                  Type
+                </th>
+                <th
+                  className="hidden w-24 px-3 py-2.5 font-normal sm:table-cell"
+                  scope="col"
+                >
+                  Size
+                </th>
+              </>
+            )}
             {showCreatedBy ? (
               <th
                 className="hidden w-40 px-3 py-2.5 font-normal lg:table-cell"
@@ -62,14 +69,20 @@ export function FileEntriesLayout({
               </th>
             ) : null}
             <th
-              className="hidden w-36 px-3 py-2.5 font-normal lg:table-cell"
+              className={
+                compact
+                  ? "w-28 rounded-r-lg px-3 py-2.5 font-normal"
+                  : "hidden w-36 px-3 py-2.5 font-normal lg:table-cell"
+              }
               scope="col"
             >
               Modified
             </th>
-            <th className="w-24 rounded-r-lg" scope="col">
-              <span className="sr-only">Actions</span>
-            </th>
+            {compact ? null : (
+              <th className="w-24 rounded-r-lg" scope="col">
+                <span className="sr-only">Actions</span>
+              </th>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y divide-border/60">{children}</tbody>
@@ -111,53 +124,24 @@ export function FileEntry({
       />
     ) : null;
 
-  const date = new Date(updatedAt);
-
-  const modified = Number.isNaN(date.getTime())
-    ? "—"
-    : date.toLocaleDateString(undefined, {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      });
+  const modified = modifiedLabel(updatedAt);
 
   const type = directory
     ? "Folder"
     : artifactBasename(filename).split(".").slice(1).pop()?.toUpperCase() ||
       "File";
 
-  const icon = directory ? (
-    <Folder01Icon
-      aria-hidden
-      className={
-        viewMode === "grid"
-          ? "size-10 fill-muted-foreground/10 text-muted-foreground"
-          : "size-5 text-muted-foreground"
-      }
-    />
-  ) : (
-    <ArtifactIcon className="size-5" filename={filename} mimeType={mimeType} />
-  );
+  const icon = entryIcon({ directory, filename, mimeType, viewMode });
 
   if (viewMode === "list") {
     return (
       <tr className="group/file hover:bg-muted/30">
-        <td className="p-0">
-          <button
-            className="flex min-h-12 w-full items-center gap-3 rounded-md px-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={onOpen}
-            title={filename}
-            type="button"
-          >
-            <span className="shrink-0">{icon}</span>
-            <span
-              className="min-w-0 truncate font-medium data-[directory=true]:line-clamp-3 data-[directory=true]:whitespace-normal data-[directory=true]:break-all"
-              data-directory={directory}
-            >
-              {filename}
-            </span>
-          </button>
-        </td>
+        <FileNameCell
+          directory={directory}
+          filename={filename}
+          icon={icon}
+          onOpen={onOpen}
+        />
         <td className="hidden truncate px-3 py-3 text-muted-foreground md:table-cell">
           {type}
         </td>
@@ -187,6 +171,103 @@ export function FileEntry({
       modified={modified}
       onOpen={onOpen}
     />
+  );
+}
+
+function modifiedLabel(updatedAt: string): string {
+  const date = new Date(updatedAt);
+
+  return Number.isNaN(date.getTime())
+    ? "—"
+    : date.toLocaleDateString(undefined, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+}
+
+function entryIcon({
+  directory,
+  filename,
+  mimeType,
+  viewMode,
+}: {
+  directory: boolean;
+  filename: string;
+  mimeType: string;
+  viewMode: FilesViewMode;
+}): ReactNode {
+  return directory ? (
+    <Folder01Icon
+      aria-hidden
+      className={
+        viewMode === "grid"
+          ? "size-10 fill-muted-foreground/10 text-muted-foreground"
+          : "size-5 text-muted-foreground"
+      }
+    />
+  ) : (
+    <ArtifactIcon className="size-5" filename={filename} mimeType={mimeType} />
+  );
+}
+
+/** A row of a narrow side panel: name and modified date only. */
+export function CompactFileEntry({
+  directory = false,
+  filename,
+  mimeType = "",
+  onOpen,
+  updatedAt = "",
+}: {
+  directory?: boolean;
+  filename: string;
+  mimeType?: string;
+  onOpen: () => void;
+  updatedAt?: string;
+}) {
+  return (
+    <tr className="group/file hover:bg-muted/30">
+      <FileNameCell
+        directory={directory}
+        filename={filename}
+        icon={entryIcon({ directory, filename, mimeType, viewMode: "list" })}
+        onOpen={onOpen}
+      />
+      <td className="px-3 py-3 text-muted-foreground tabular-nums">
+        {modifiedLabel(updatedAt)}
+      </td>
+    </tr>
+  );
+}
+
+function FileNameCell({
+  directory,
+  filename,
+  icon,
+  onOpen,
+}: {
+  directory: boolean;
+  filename: string;
+  icon: ReactNode;
+  onOpen: () => void;
+}) {
+  return (
+    <td className="p-0">
+      <button
+        className="flex min-h-12 w-full items-center gap-3 rounded-md px-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={onOpen}
+        title={filename}
+        type="button"
+      >
+        <span className="shrink-0">{icon}</span>
+        <span
+          className="min-w-0 truncate font-medium data-[directory=true]:line-clamp-3 data-[directory=true]:whitespace-normal data-[directory=true]:break-all"
+          data-directory={directory}
+        >
+          {filename}
+        </span>
+      </button>
+    </td>
   );
 }
 

@@ -113,6 +113,19 @@ export interface PluginUi {
       onClick?: (event: unknown) => void;
     }
   >;
+  DropdownMenuCheckboxItem: Component<
+    Html & {
+      checked?: boolean;
+      defaultChecked?: boolean;
+      disabled?: boolean;
+      closeOnClick?: boolean;
+      onCheckedChange?: (checked: boolean) => void;
+    }
+  >;
+  DropdownMenuSeparator: Component<Html>;
+  DropdownMenuSub: Component<Open>;
+  DropdownMenuSubTrigger: Component<Html & { disabled?: boolean }>;
+  DropdownMenuSubContent: Component<Positioned>;
   ExpandableTextarea: Component<{
     label: string;
     htmlFor: string;

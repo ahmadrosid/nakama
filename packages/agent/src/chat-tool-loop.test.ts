@@ -128,6 +128,61 @@ function delayedTool(
 }
 
 describe("agent chat tool loop", () => {
+  test("keeps working when the model stops with open todos, up to two times", async () => {
+    const prompts: string[] = [];
+    let reminders = 0;
+
+    const provider: ProviderClient = {
+      generateChat(input: GenerateChatInput) {
+        prompts.push(input.system);
+
+        return Promise.resolve(textReply(`stop ${prompts.length}`));
+      },
+      generateText() {
+        return Promise.resolve({ content: "{}" });
+      },
+      name: "openai",
+      streamChat(input: GenerateChatInput) {
+        return this.generateChat(input);
+      },
+    };
+
+    const session = createAgentChatSession(
+      { provider, tools: [sampleTool] },
+      {
+        toolContext: {
+          openTodosReminder: () => {
+            reminders += 1;
+
+            return Promise.resolve("OPEN TODOS");
+          },
+        },
+      }
+    );
+
+    const reply = await session.send("Do the plan");
+
+    expect(reply).toBe("stop 3");
+    expect(prompts).toHaveLength(3);
+    expect(prompts[0]).not.toContain("OPEN TODOS");
+    expect(prompts[1]).toContain("OPEN TODOS");
+    expect(prompts[2]).toContain("OPEN TODOS");
+    expect(reminders).toBe(2);
+  });
+
+  test("ends the turn when no todos are open", async () => {
+    const provider = createMockProvider([textReply("done")]);
+
+    const session = createAgentChatSession(
+      { provider, tools: [sampleTool] },
+      {
+        toolContext: { openTodosReminder: () => Promise.resolve(null) },
+      }
+    );
+
+    expect(await session.send("Hi")).toBe("done");
+  });
+
   test.each([false, true])(
     "waits for questionnaire answers after the tool batch (stream: %s)",
     async (stream) => {

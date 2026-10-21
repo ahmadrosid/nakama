@@ -49,6 +49,7 @@ import type { AppEnv, HonoApp } from "../types";
 
 const ORG_ADMIN_PROFILE_SETTING_KEYS = new Set([
   "automationsEnabled",
+  "groupsEnabled",
   "skillsWriteApproval",
   "skillsPostTurnReview",
 ]);

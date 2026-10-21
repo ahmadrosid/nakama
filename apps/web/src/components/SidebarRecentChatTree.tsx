@@ -55,10 +55,6 @@ export function useRecentChatTree(
   const saveCount = useRef(0);
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
-  const [collapsedBranches, setCollapsedBranches] = useState<Set<string>>(
-    new Set()
-  );
-
   const updateSession = useUpdateSessionMutation();
   const recentSessions = sessions.filter((session) => !session.pinned);
   const localPositions = new Map(localOrder?.map((id, index) => [id, index]));
@@ -339,16 +335,10 @@ export function useRecentChatTree(
     };
   };
 
-  const renderSession = (
-    session: (typeof sessions)[number],
-    depth = 0,
-    childCount = 0
-  ) => (
+  const renderSession = (session: (typeof sessions)[number], depth = 0) => (
     <RecentChatRow
       canMoveDown={siblingsOf(session).at(-1)?.id !== session.id}
       canMoveUp={siblingsOf(session)[0]?.id !== session.id}
-      childCount={childCount}
-      collapsed={collapsedBranches.has(session.id)}
       depth={depth}
       key={session.id}
       onDelete={onDelete}
@@ -381,19 +371,6 @@ export function useRecentChatTree(
       }
       onPointerStartDrag={(event) => startDrag(session, event)}
       onRename={onRename}
-      onToggleCollapse={() =>
-        setCollapsedBranches((current) => {
-          const next = new Set(current);
-
-          if (next.has(session.id)) {
-            next.delete(session.id);
-          } else {
-            next.add(session.id);
-          }
-
-          return next;
-        })
-      }
       onTogglePin={() =>
         void updateSession.mutateAsync({
           input: { pinned: !session.pinned },
@@ -447,8 +424,8 @@ export function useRecentChatTree(
               </>
             )
           ) : null}
-          {renderSession(session, depth, children.length)}
-          {!collapsedBranches.has(session.id) && children.length > 0 ? (
+          {renderSession(session, depth)}
+          {children.length > 0 ? (
             <div className="ml-4">{renderTree(session.id, depth + 1)}</div>
           ) : null}
         </div>

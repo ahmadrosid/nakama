@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   org_id TEXT,
   is_default INTEGER DEFAULT 0 NOT NULL,
   automations_enabled INTEGER DEFAULT 0 NOT NULL,
+  groups_enabled INTEGER DEFAULT 1 NOT NULL,
   skills_write_approval INTEGER,
   skills_post_turn_review INTEGER,
   skills_curator_consolidate_enabled INTEGER,

@@ -11,7 +11,10 @@ import {
   saveUserConfig,
   type UserConfig,
 } from "@nakama/core";
-import { NETRA_AGENT_MODEL_ID } from "@nakama/core/discovery-providers";
+import {
+  NETRA_AGENT_MODEL_ID,
+  resolveNetraModelId,
+} from "@nakama/core/discovery-providers";
 import { createProviderFromActiveConfig } from "./providers";
 import {
   type ManagedSecrets,
@@ -40,7 +43,11 @@ async function bootstrapProviderFromEnv(
   }
 
   const netraModel =
-    providerType === "netra" ? readEnvValue(env, "NETRA_MODEL") : null;
+    providerType === "netra"
+      ? resolveNetraModelId(
+          readEnvValue(env, "NETRA_MODEL") ?? NETRA_AGENT_MODEL_ID
+        )
+      : null;
 
   if (providerType === "netra" && netraModel !== NETRA_AGENT_MODEL_ID) {
     return null;

@@ -116,7 +116,7 @@ describe("ACP provider", () => {
     expect(result.content).toBe("fake: thought first");
   });
 
-  test("passes the Nakama MCP servers to the agent session", async () => {
+  test("passes only the Nakama MCP servers to the agent session", async () => {
     const sessionKey = nextSessionKey();
 
     const provider = createAcpProvider({
@@ -130,7 +130,10 @@ describe("ACP provider", () => {
 
     const result = await provider.generateChat(chatInput("mcp check"));
 
-    expect(result.content).toBe("mcp servers: 1");
+    // Strict keeps Claude from adding the MCP servers of the host's own Claude Code config.
+    expect(result.content).toBe(
+      'mcp servers: 1 meta: {"claudeCode":{"options":{"strictMcpConfig":true}}}'
+    );
   });
 
   test("sends the system prompt on the first turn only", async () => {

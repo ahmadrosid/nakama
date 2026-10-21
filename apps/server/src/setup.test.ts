@@ -144,19 +144,28 @@ describe("ensureProviderConfigured", () => {
     );
   });
 
-  test("boots a Cloud Netra instance with its default model", async () => {
+  test.each([
+    undefined,
+    "deepseek/deepseek-v4-flash-0731",
+    "deepseek/deepseek-v4.1-flash",
+  ])("starts Netra V4.1 for saved model %s", async (model) => {
     snapshotEnv();
     configDir = await mkdtemp(join(tmpdir(), "nakama-setup-netra-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
     process.env.NETRA_API_KEY = "netra-test-key";
-    process.env.NETRA_MODEL = "deepseek/deepseek-v4-flash-0731";
 
-    const { provider, userConfig } = await ensureProviderConfigured();
+    if (model) {
+      process.env.NETRA_MODEL = model;
+    } else {
+      delete process.env.NETRA_MODEL;
+    }
 
-    expect(provider).not.toBeNull();
+    const { provider } = await ensureProviderConfigured();
+    expect(provider?.name).toBe("netra");
+    const userConfig = await loadUserConfig();
     expect(userConfig?.providers[0]?.type).toBe("netra");
     expect(userConfig?.providers[0]?.customModels).toEqual([
-      { default: true, id: "deepseek/deepseek-v4-flash-0731" },
+      { default: true, id: "deepseek/deepseek-v4.1-flash" },
     ]);
     expect(await readFile(getUserConfigPath(), "utf8")).not.toContain(
       "netra-test-key"

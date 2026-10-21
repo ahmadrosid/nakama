@@ -13,6 +13,7 @@ import {
   type ToolDefinition,
   type UpdateProfileRequest,
 } from "@nakama/core";
+import type { AgentGroup } from "@nakama/core/agent-groups";
 import { z } from "zod";
 import { modelSupportsVision } from "../providers/models";
 import {
@@ -45,6 +46,9 @@ const SUPPORTED_SOUL_FILE_NAMES = [
 type SupportedSoulFileName = (typeof SUPPORTED_SOUL_FILE_NAMES)[number];
 
 const SuperNakamaInputSchema = z.record(z.string(), z.json());
+
+/** A period followed by whitespace: where list_tools cuts each description. */
+const SENTENCE_END = /(?<=\.)\s/;
 
 type SuperNakamaInput = z.infer<typeof SuperNakamaInputSchema>;
 
@@ -93,6 +97,13 @@ export function createSuperNakamaTools(
       request: AssignSkillRequest,
       meta: ProfileChangeMeta
     ) => Promise<ProfileResponse>;
+    createGroup?: (
+      orgId: string,
+      userId: string,
+      name: string,
+      memberIds: string[],
+      brief: string
+    ) => Promise<AgentGroup>;
     getModels?: () => Promise<ModelsResponse>;
     listSkills?: (orgId: string) => Promise<ListSkillsResponse>;
   } = {}
@@ -281,7 +292,8 @@ export function createSuperNakamaTools(
             type: ["string", "null"],
           },
           name: {
-            description: "Display name for the profile.",
+            description:
+              "Display name for the profile: a human first name such as Maya or Theo, never a job title. Put the role in the soul files.",
             type: "string",
           },
           soulFiles: {
@@ -328,11 +340,70 @@ export function createSuperNakamaTools(
     },
     {
       description:
-        "Update a profile's stored system prompt and/or soul files. Draft changes in chat, wait for explicit user confirmation, then call this. Use get_profile first when you need the current prompt or soul files.",
+        "Create a group chat where the user talks with several agents at once. Get the member ids from list_profiles. Confirm the name, members, and brief with the user before calling this. The brief is shared with every agent in the group as context.",
+      name: "create_group",
+      parameters: {
+        additionalProperties: false,
+        properties: {
+          brief: {
+            description:
+              "What the group is for. Every agent in the group reads it.",
+            type: "string",
+          },
+          memberIds: {
+            description: "Profile ids of the agents to add. 2 to 12.",
+            items: { type: "string" },
+            type: "array",
+          },
+          name: {
+            description:
+              'Group name in short, readable title case, like "Rosid\'s Brand Team". Never a slug or hyphenated.',
+            type: "string",
+          },
+        },
+        required: ["name", "memberIds"],
+        type: "object",
+      },
+      async run(input, context: ToolContext) {
+        const orgId = requireOrgId(context);
+        const userId = context.userId?.trim();
+
+        if (!(userId && services.createGroup)) {
+          throw new Error("Creating groups needs a signed-in user.");
+        }
+
+        const parsed = z
+          .object({
+            brief: z.string().trim().max(4000).default(""),
+            memberIds: z.array(z.string().min(1)).min(2).max(12),
+            name: z.string().trim().min(1).max(80),
+          })
+          .strict()
+          .parse(input);
+
+        const group = await services.createGroup(
+          orgId,
+          userId,
+          parsed.name,
+          parsed.memberIds,
+          parsed.brief
+        );
+
+        return { group, type: "group_created" as const };
+      },
+    },
+    {
+      description:
+        "Update a profile's stored system prompt, soul files, and/or model. Draft changes in chat, wait for explicit user confirmation, then call this. Use get_profile first when you need the current prompt or soul files.",
       name: "update_profile",
       parameters: {
         additionalProperties: false,
         properties: {
+          model: {
+            description:
+              "Model id from list_models (providerId::modelId). Omit to leave unchanged.",
+            type: "string",
+          },
           profileId: {
             description: "Profile id to update.",
             type: "string",
@@ -352,13 +423,14 @@ export function createSuperNakamaTools(
         const profileId = readString(toolInput, "profileId");
         const systemPrompt = readStringAllowEmpty(toolInput, "systemPrompt");
         const soulFiles = readSoulFiles(toolInput);
+        const model = readString(toolInput, "model");
 
         if (!profileId) {
           throw new Error("profileId is required.");
         }
 
-        if (systemPrompt === null && soulFiles === undefined) {
-          throw new Error("Provide systemPrompt and/or soulFiles.");
+        if (systemPrompt === null && soulFiles === undefined && !model) {
+          throw new Error("Provide systemPrompt, soulFiles, and/or model.");
         }
 
         if (!sessionState.canUpdateProfile(context.sessionId)) {
@@ -373,6 +445,10 @@ export function createSuperNakamaTools(
 
         if (soulFiles !== undefined) {
           request.soulFiles = soulFiles;
+        }
+
+        if (model) {
+          request.model = model;
         }
 
         return profileService.updateProfile(
@@ -555,7 +631,18 @@ export function createSuperNakamaTools(
           return { tools: [] };
         }
 
-        return profileService.listTools(orgId);
+        const { tools } = await profileService.listTools(orgId);
+
+        // This result stays in context for every later call of the turn, so
+        // keep only what reuse and assignment need.
+        return {
+          tools: tools.map((tool) => ({
+            description: tool.description.split(SENTENCE_END)[0],
+            handlerType: tool.handlerType,
+            id: tool.id,
+            name: tool.name,
+          })),
+        };
       },
     },
     {
@@ -604,7 +691,7 @@ export function createSuperNakamaTools(
 
         if (setup?.status === "ready") {
           return {
-            profileId: setup.profileId,
+            assignedProfileId: setup.profileId ?? null,
             toolId: setup.toolId,
             type: "tool_setup_ready",
           };
@@ -681,8 +768,10 @@ export function createSuperNakamaTools(
 
           await completeToolSetup(orgId, setup, tool.id);
 
+          // Null says "assigned to no agent" outright. A missing key sent the
+          // agent off to list_profiles and get_profile to find out.
           return {
-            profileId: setup.profileId,
+            assignedProfileId: setup.profileId ?? null,
             tool,
             toolId: tool.id,
             type: "tool_setup_ready",

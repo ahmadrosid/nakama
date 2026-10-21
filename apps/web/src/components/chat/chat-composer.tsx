@@ -17,11 +17,17 @@ import {
 } from "@nakama/ui/command";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@nakama/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@nakama/ui/popover";
+import { Spinner } from "@nakama/ui/spinner";
 import { toast } from "@nakama/ui/toast";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
@@ -33,7 +39,11 @@ import {
   ArrowUp02Icon,
   Cancel01Icon,
   File01Icon,
+  Folder01Icon,
   Image01Icon,
+  Plug01Icon,
+  PuzzleIcon,
+  Settings01Icon,
   WifiOff01Icon,
 } from "hugeicons-react";
 import {
@@ -46,6 +56,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   PromptInput,
   PromptInputBody,
@@ -70,11 +81,16 @@ import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview
 import { useAuth } from "@/context/use-auth";
 import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import {
+  useMcpServersQuery,
   useProfileQuery,
   useSkillsQuery,
   useToolsQuery,
 } from "@/hooks/use-app-queries";
 import { pluginAgentAccessState, useOrgPlugins } from "@/hooks/use-plugins";
+import {
+  useAssignMcpServerMutation,
+  useUnassignMcpServerMutation,
+} from "@/hooks/use-resource-mutations";
 import type { ChatStatus, FileUIPart } from "@/lib/ai-ui-types";
 import {
   type ComposerAddCommandAction,
@@ -99,6 +115,8 @@ import {
   DOCUMENT_ACCEPT,
   IMAGE_ACCEPT,
   isImageFilePart,
+  MAX_FOLDER_FILES,
+  selectFolderFiles,
 } from "@/lib/chat-images";
 import {
   type ComposerStackEdge,
@@ -112,7 +130,7 @@ import {
 import { formatError } from "@/lib/client";
 import { prepareChatUploadFiles } from "@/lib/compress-image";
 import { encodeModelSelection } from "@/lib/models";
-import { enabledPluginNavEntries } from "@/lib/navigation";
+import { enabledPluginNavEntries, profilePath } from "@/lib/navigation";
 import {
   isPastedTextDocument,
   LONG_PASTE_WORD_THRESHOLD,
@@ -271,10 +289,10 @@ function ChatComposerWorkStack({
 }
 
 const FULL_TEXTAREA_CLASS =
-  "max-h-36 min-h-9 px-1 py-1 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-8 sm:text-sm";
+  "max-h-36 min-h-9 px-1 py-1 text-base leading-relaxed [scrollbar-gutter:stable] placeholder:text-muted-foreground sm:min-h-8 sm:text-sm";
 
 const MINIMAL_TEXTAREA_CLASS =
-  "max-h-32 min-h-10 px-1 py-1.5 text-sm leading-relaxed placeholder:text-muted-foreground";
+  "max-h-32 min-h-10 px-1 py-1.5 text-sm leading-relaxed [scrollbar-gutter:stable] placeholder:text-muted-foreground";
 
 function ChatComposerStackedPrompt({
   availableSkills,
@@ -325,7 +343,7 @@ function ChatComposerStackedPrompt({
         className={composerShellClass}
         inputGroupClassName={composerInputGroupClass}
         maxFileSize={MAX_IMAGE_BYTES}
-        maxFiles={5}
+        maxFiles={MAX_FOLDER_FILES}
         multiple
         onError={(attachmentErr) => setAttachmentError(attachmentErr.message)}
         onSubmit={({ text, files }) => {
@@ -420,7 +438,7 @@ function ChatComposerBarePrompt({
         className={isMinimal ? composerShellCompactClass : composerShellClass}
         inputGroupClassName={composerInputGroupClass}
         maxFileSize={isMinimal ? undefined : MAX_IMAGE_BYTES}
-        maxFiles={isMinimal ? undefined : 5}
+        maxFiles={isMinimal ? undefined : MAX_FOLDER_FILES}
         multiple={!isMinimal}
         onError={
           isMinimal
@@ -645,9 +663,11 @@ function PluginPanelExpandButton({ panelId }: { panelId: string }) {
 
 /** Plugin pages `/open` lists for the active agent, and how to show one. */
 const OpenPluginContext = createContext<{
+  /** Opens the add-plugin dialog. Null when the user cannot assign tools. */
+  onAdd: (() => void) | null;
   open: (plugin: ComposerOpenPlugin) => void;
   plugins: ComposerOpenPlugin[];
-}>({ open: () => undefined, plugins: NO_OPEN_PLUGINS });
+}>({ onAdd: null, open: () => undefined, plugins: NO_OPEN_PLUGINS });
 
 function composerBtwHandler(props: ChatComposerProps) {
   return isFullComposer(props) ? props.onBtw : undefined;
@@ -668,6 +688,12 @@ function runBtwCommand(
 
   return true;
 }
+
+/** Agent whose MCP servers the + menu can switch, and how to add one. Null hides Connectors. */
+const ConnectorsContext = createContext<{
+  onAdd: () => void;
+  profileId: string;
+} | null>(null);
 
 /** True when `/btw` is offered: only the composer that can open a side chat. */
 const BtwCommandContext = createContext(false);
@@ -865,45 +891,63 @@ export function ChatComposer(props: ChatComposerProps) {
       ? (composerProps.profileId ?? null)
       : null;
 
+  const connectorsContext = useMemo(
+    () =>
+      addProfileId
+        ? { onAdd: () => openAddCommand("add-mcp"), profileId: addProfileId }
+        : null,
+    [addProfileId, openAddCommand]
+  );
+
+  const pluginsMenuContext = useMemo(
+    () => ({
+      ...openPluginContext,
+      onAdd: addProfileId ? () => openAddCommand("add-plugin") : null,
+    }),
+    [addProfileId, openAddCommand, openPluginContext]
+  );
+
   return (
     <CommandPrefixContext.Provider value={commandContext}>
       <BtwCommandContext.Provider value={Boolean(onBtw)}>
-        <OpenPluginContext.Provider value={openPluginContext}>
-          <div className={cn("w-full shrink-0", props.className)}>
-            {layout.showOfflineHint && isFullComposer(props) ? (
-              <ChatComposerOfflineHint
-                onConnectProvider={props.onConnectProvider}
+        <OpenPluginContext.Provider value={pluginsMenuContext}>
+          <ConnectorsContext.Provider value={connectorsContext}>
+            <div className={cn("w-full shrink-0", props.className)}>
+              {layout.showOfflineHint && isFullComposer(props) ? (
+                <ChatComposerOfflineHint
+                  onConnectProvider={props.onConnectProvider}
+                />
+              ) : null}
+              <ChatComposerMain
+                displayError={displayError}
+                layout={layout}
+                onAddCommand={openAddCommand}
+                props={composerProps}
+                setAttachmentError={setAttachmentError}
               />
-            ) : null}
-            <ChatComposerMain
-              displayError={displayError}
-              layout={layout}
-              onAddCommand={openAddCommand}
-              props={composerProps}
-              setAttachmentError={setAttachmentError}
-            />
-            {addProfileId ? (
-              <ChatAddCapabilitiesDialogs
-                mcpOpen={addDialog === "add-mcp"}
-                onMcpOpenChange={(open) => {
-                  setAddDialog(open ? "add-mcp" : null);
-                }}
-                onPluginOpenChange={(open) =>
-                  setAddDialog(open ? "add-plugin" : null)
-                }
-                onSkillOpenChange={(open) => {
-                  setAddDialog(open ? "add-skill" : null);
-                }}
-                onToolOpenChange={(open) => {
-                  setAddDialog(open ? "add-tool" : null);
-                }}
-                pluginOpen={addDialog === "add-plugin"}
-                profileId={addProfileId}
-                skillOpen={addDialog === "add-skill"}
-                toolOpen={addDialog === "add-tool"}
-              />
-            ) : null}
-          </div>
+              {addProfileId ? (
+                <ChatAddCapabilitiesDialogs
+                  mcpOpen={addDialog === "add-mcp"}
+                  onMcpOpenChange={(open) => {
+                    setAddDialog(open ? "add-mcp" : null);
+                  }}
+                  onPluginOpenChange={(open) =>
+                    setAddDialog(open ? "add-plugin" : null)
+                  }
+                  onSkillOpenChange={(open) => {
+                    setAddDialog(open ? "add-skill" : null);
+                  }}
+                  onToolOpenChange={(open) => {
+                    setAddDialog(open ? "add-tool" : null);
+                  }}
+                  pluginOpen={addDialog === "add-plugin"}
+                  profileId={addProfileId}
+                  skillOpen={addDialog === "add-skill"}
+                  toolOpen={addDialog === "add-tool"}
+                />
+              ) : null}
+            </div>
+          </ConnectorsContext.Provider>
         </OpenPluginContext.Provider>
       </BtwCommandContext.Provider>
     </CommandPrefixContext.Provider>
@@ -929,6 +973,7 @@ function ChatComposerTextarea({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [slashRange, setSlashRange] = useState<SkillSlashRange | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [scrollTop, setScrollTop] = useState(0);
   const openPlugin = useContext(OpenPluginContext);
   const enableBtw = useContext(BtwCommandContext);
 
@@ -1076,6 +1121,7 @@ function ChatComposerTextarea({
     <div className="relative min-w-0 flex-1">
       <ChatSkillTokenOverlay
         className={className}
+        scrollTop={scrollTop}
         value={controller.textInput.value}
       />
       {pickerOpen ? (
@@ -1145,6 +1191,7 @@ function ChatComposerTextarea({
             }
           }
         }}
+        onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
         placeholder={placeholder}
         ref={textareaRef}
       />
@@ -1618,6 +1665,29 @@ function ChatAttachmentHeader({
 function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
   const attachments = usePromptInputAttachments();
 
+  const addFolder = (picked: FileList | null) => {
+    const selection = selectFolderFiles([...(picked ?? [])]);
+
+    if (selection.ok) {
+      attachments.add(selection.files);
+    } else if (picked && picked.length > 0) {
+      toast(selection.error);
+    }
+  };
+
+  // Built on demand: a rendered input here makes the + menu close on focus-out.
+  const openFolderPicker = () => {
+    const input = document.createElement("input");
+
+    input.type = "file";
+    input.multiple = true;
+    input.webkitdirectory = true;
+    input.addEventListener("change", () => addFolder(input.files), {
+      once: true,
+    });
+    input.click();
+  };
+
   const openPicker = (accept: string) => {
     const input = attachments.fileInputRef.current;
 
@@ -1672,8 +1742,167 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
           <File01Icon aria-hidden className="size-4 text-muted-foreground" />
           Document
         </DropdownMenuItem>
+        <DropdownMenuItem disabled={disabled} onClick={openFolderPicker}>
+          <Folder01Icon aria-hidden className="size-4 text-muted-foreground" />
+          Add folder
+        </DropdownMenuItem>
+        <ChatPluginsSubmenu disabled={disabled} />
+        <ChatConnectorsSubmenu disabled={disabled} />
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/** + menu submenu: open one of the agent's plugin pages, or add a plugin. */
+function ChatPluginsSubmenu({ disabled }: { disabled: boolean }) {
+  const { onAdd, open, plugins } = useContext(OpenPluginContext);
+
+  if (plugins.length === 0 && !onAdd) {
+    return null;
+  }
+
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger disabled={disabled}>
+        <PuzzleIcon aria-hidden className="size-4 text-muted-foreground" />
+        Plugins
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="min-w-56">
+        {onAdd ? (
+          <DropdownMenuItem onClick={onAdd}>
+            <Add01Icon aria-hidden className="size-4 text-muted-foreground" />
+            Add plugin
+          </DropdownMenuItem>
+        ) : null}
+        {onAdd && plugins.length > 0 ? <DropdownMenuSeparator /> : null}
+        {plugins.map((plugin) => (
+          <DropdownMenuItem key={plugin.pluginId} onClick={() => open(plugin)}>
+            {plugin.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
+/** + menu submenu: switch org MCP servers on or off for the chat's agent. */
+function ChatConnectorsSubmenu({ disabled }: { disabled: boolean }) {
+  const connectors = useContext(ConnectorsContext);
+
+  return connectors ? (
+    <ChatConnectorsSubmenuItems
+      disabled={disabled}
+      onAdd={connectors.onAdd}
+      profileId={connectors.profileId}
+    />
+  ) : null;
+}
+
+function ChatConnectorsSubmenuItems({
+  disabled,
+  onAdd,
+  profileId,
+}: {
+  disabled: boolean;
+  onAdd: () => void;
+  profileId: string;
+}) {
+  const navigate = useNavigate();
+  const servers = useMcpServersQuery();
+  const profile = useProfileQuery(profileId);
+  const assign = useAssignMcpServerMutation();
+  const unassign = useUnassignMcpServerMutation();
+
+  const [pending, setPending] = useState<ReadonlyMap<string, boolean>>(
+    () => new Map()
+  );
+
+  const assignedIds = new Set(
+    profile.data?.mcpServers.map((server) => server.id) ?? []
+  );
+
+  const toggle = (serverId: string, on: boolean) => {
+    setPending((current) => new Map(current).set(serverId, on));
+
+    const mutation = on ? assign : unassign;
+
+    mutation
+      .mutateAsync({ profileId, serverId })
+      .catch((error) => toast(formatError(error)))
+      .finally(() =>
+        setPending((current) => {
+          const next = new Map(current);
+
+          next.delete(serverId);
+
+          return next;
+        })
+      );
+  };
+
+  return (
+    <>
+      <DropdownMenuSeparator />
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger disabled={disabled}>
+          <Plug01Icon aria-hidden className="size-4 text-muted-foreground" />
+          Connectors
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="min-w-56">
+          <DropdownMenuItem
+            onClick={() => navigate(profilePath(profileId, { section: "mcp" }))}
+          >
+            <Settings01Icon
+              aria-hidden
+              className="size-4 text-muted-foreground"
+            />
+            Manage connectors
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onAdd}>
+            <Add01Icon aria-hidden className="size-4 text-muted-foreground" />
+            Add connector
+          </DropdownMenuItem>
+          {servers.data && servers.data.length > 0 ? (
+            <DropdownMenuSeparator />
+          ) : null}
+          {servers.data?.map((server) => {
+            const saving = pending.has(server.id);
+
+            const checked =
+              pending.get(server.id) ?? assignedIds.has(server.id);
+
+            return (
+              <DropdownMenuCheckboxItem
+                checked={checked}
+                closeOnClick={false}
+                disabled={saving || !profile.data}
+                key={server.id}
+                onCheckedChange={(next) => toggle(server.id, next)}
+              >
+                <span className="min-w-0 flex-1 truncate">{server.name}</span>
+                {saving ? (
+                  <Spinner className="size-3.5 text-muted-foreground" />
+                ) : null}
+                <span
+                  aria-hidden
+                  className={cn(
+                    "relative inline-flex h-4.5 w-8 shrink-0 items-center rounded-full transition-colors",
+                    checked ? "bg-primary" : "bg-muted-foreground/30"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "block size-3.5 rounded-full bg-background shadow-sm transition-transform",
+                      checked ? "translate-x-4" : "translate-x-0.5"
+                    )}
+                  />
+                </span>
+              </DropdownMenuCheckboxItem>
+            );
+          })}
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    </>
   );
 }
 

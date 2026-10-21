@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { ProfileSummary } from "@nakama/core";
+import { join } from "node:path";
+import {
+  getProfileSoulDir,
+  type ProfileSummary,
+  SOUL_TEMPLATE,
+} from "@nakama/core";
 import { setupTestConfigDir } from "../test-config-dir";
 import type { SubAgentRunInput } from "../tools/sub-agent-shared";
-import { AgentGroupService } from "./agent-group-service";
+import { AgentGroupService, readGroupDocuments } from "./agent-group-service";
 import { closeAgentGroupDatabases } from "./agent-group-store";
 
 const ORG_ID = "org_test";
@@ -28,7 +33,7 @@ function setup(reply: (input: SubAgentRunInput) => string | Promise<string>) {
     },
   ] as ProfileSummary[];
 
-  const state = { inOrg: true };
+  const state = { inOrg: true, title: "" };
   const calls: string[] = [];
 
   // SAFETY: Tests implement only the two lookups the service reads.
@@ -37,8 +42,9 @@ function setup(reply: (input: SubAgentRunInput) => string | Promise<string>) {
     getUserById: async () => ({ id: USER_ID }),
   } as never;
 
-  // SAFETY: Tests implement only listProfiles and runSubAgentPrompt.
+  // SAFETY: Tests implement only the agent calls the service makes.
   const agent = {
+    generateSessionTitle: async () => state.title || null,
     listProfiles: async () => ({ profiles }),
     runSubAgentPrompt: async (input: SubAgentRunInput) => {
       calls.push(input.profileId);
@@ -108,6 +114,66 @@ describe("AgentGroupService", () => {
     ]);
   });
 
+  test("the first reply gives a new session a generated title", async () => {
+    const { chat, service, state } = setup(() => "ok");
+    state.title = "Launch Plan";
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a"]);
+    const sessionId = await chat(group.id, "plan the launch");
+
+    expect(service.sessions(ORG_ID, USER_ID, group.id)).toMatchObject([
+      { id: sessionId, title: "Launch Plan" },
+    ]);
+
+    state.title = "Other";
+    await service.post(ORG_ID, USER_ID, group.id, sessionId, "more");
+
+    expect(service.sessions(ORG_ID, USER_ID, group.id)).toMatchObject([
+      { id: sessionId, title: "Launch Plan" },
+    ]);
+  });
+
+  test("a title the user set before the first reply stays", async () => {
+    const { service, state } = setup(async () => {
+      service.updateSession(ORG_ID, USER_ID, group.id, session.id, {
+        title: "Mine",
+      });
+
+      return "ok";
+    });
+
+    state.title = "Generated";
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a"]);
+    const { run, session } = service.start(ORG_ID, USER_ID, group.id, "hi");
+    await run;
+
+    expect(service.sessions(ORG_ID, USER_ID, group.id)).toMatchObject([
+      { id: session.id, title: "Mine" },
+    ]);
+  });
+
+  test("every member of a group gets the same shared folder", async () => {
+    const dirs: Array<string | undefined> = [];
+
+    const { chat, service } = setup((input) => {
+      dirs.push(input.sharedDir);
+
+      return "ok";
+    });
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+    const other = await service.create(ORG_ID, USER_ID, "Other", ["a", "b"]);
+
+    await chat(group.id, "@all hi");
+    await chat(other.id, "@alpha hi");
+
+    expect(dirs[0]).toBe(dirs[1]);
+    expect(dirs[0]).toContain(group.id);
+    expect(dirs[2]).toContain(other.id);
+    expect(dirs[2]).not.toBe(dirs[0]);
+  });
+
   test("@all gives every member a turn, in member order", async () => {
     const { calls, chat, service } = setup(() => "here");
     const group = await service.create(ORG_ID, USER_ID, "Team", ["b", "a"]);
@@ -129,8 +195,123 @@ describe("AgentGroupService", () => {
     expect(calls).toHaveLength(6);
   });
 
-  test("without a mention the session's last speaker replies, else the first member", async () => {
-    const { calls, chat, service } = setup(() => "ok");
+  test("every agent gets the group brief as context", async () => {
+    const tasks: string[] = [];
+
+    const { chat, service } = setup(({ task }) => {
+      tasks.push(task);
+
+      return "ok";
+    });
+
+    const group = await service.create(
+      ORG_ID,
+      USER_ID,
+      "Team",
+      ["a", "b"],
+      "Launch v2 on Friday"
+    );
+
+    await chat(group.id, "@all hi");
+
+    expect(tasks).toHaveLength(2);
+    expect(tasks.every((task) => task.includes("Launch v2 on Friday"))).toBe(
+      true
+    );
+  });
+
+  test("the roster gives each teammate's SOUL.md tagline, but not the template's", async () => {
+    await Bun.write(
+      join(getProfileSoulDir(ORG_ID, "a"), "SOUL.md"),
+      "# Alpha\n\nWrites and reviews\n**copy**.\n\n---\n\n## Who I Am"
+    );
+    await Bun.write(
+      join(getProfileSoulDir(ORG_ID, "b"), "SOUL.md"),
+      SOUL_TEMPLATE
+    );
+
+    const tasks: string[] = [];
+
+    const { chat, service } = setup(({ task }) => {
+      tasks.push(task);
+
+      return "ok";
+    });
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+
+    await chat(group.id, "@alpha hi");
+
+    const roster = tasks[0]
+      ?.split("\n")
+      .filter((line) => line.startsWith("- @"));
+
+    expect(roster).toEqual([
+      "- @alpha (you): Writes and reviews copy.",
+      "- @beta",
+    ]);
+  });
+
+  test("an attached document reaches the agent, and the client sees only its name", async () => {
+    const contexts: string[] = [];
+
+    const { service } = setup(({ context }) => {
+      contexts.push(context ?? "");
+
+      return "ok";
+    });
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+
+    const documents = await readGroupDocuments([
+      {
+        data: Buffer.from("Q3 revenue was 42").toString("base64"),
+        filename: "notes.txt",
+        mediaType: "text/plain",
+      },
+    ]);
+
+    const { run, session } = service.start(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      "",
+      documents
+    );
+
+    await run;
+
+    expect(contexts[0]).toContain("Q3 revenue was 42");
+
+    const [message] = service.session(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      session.id
+    ).messages;
+
+    expect(message?.files).toEqual(["notes.txt"]);
+    expect(JSON.stringify(message)).not.toContain("Q3 revenue");
+  });
+
+  test("a document of an unsupported type is rejected", async () => {
+    await expect(
+      readGroupDocuments([
+        {
+          data: "AAAA",
+          filename: "run.exe",
+          mediaType: "application/x-msdownload",
+        },
+      ])
+    ).rejects.toThrow();
+  });
+
+  test("without a mention the last speaker answers first, then the others may pass", async () => {
+    // Every agent passes whenever its task allows it.
+    const { calls, chat, contents, service } = setup(({ task }) =>
+      task.includes("(pass)") ? "(pass)" : "ok"
+    );
+
     const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
     const sessionId = await chat(group.id, "hello");
 
@@ -139,7 +320,34 @@ describe("AgentGroupService", () => {
     // A new session has no last speaker of its own.
     await chat(group.id, "fresh start");
 
-    expect(calls).toEqual(["a", "b", "b", "a"]);
+    expect(calls).toEqual(["a", "b", "b", "b", "a", "a", "b"]);
+    expect(contents(group.id, sessionId)).toEqual([
+      "hello",
+      "ok",
+      "@beta hi",
+      "ok",
+      "and you?",
+      "ok",
+    ]);
+  });
+
+  test("a teammate's @mention cannot be passed on", async () => {
+    const { chat, contents, service } = setup(({ profileId, task }) => {
+      if (task.includes("(pass)")) {
+        return "(pass)";
+      }
+
+      return profileId === "a" ? "ask @beta" : "on it";
+    });
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+    const sessionId = await chat(group.id, "hello");
+
+    expect(contents(group.id, sessionId)).toEqual([
+      "hello",
+      "ask @beta",
+      "on it",
+    ]);
   });
 
   test("an agent that loses access mid-run is skipped", async () => {
@@ -198,6 +406,42 @@ describe("AgentGroupService", () => {
     expect(
       service.session(ORG_ID, USER_ID, group.id, session.id).run
     ).toBeNull();
+  });
+
+  test("a running turn exposes the agent's steps and text so far", async () => {
+    const started = Promise.withResolvers<void>();
+    const held = Promise.withResolvers<void>();
+
+    const { service } = setup(async (input) => {
+      input.onActivity?.("Searching the web");
+      input.onText?.("Hel");
+      input.onText?.("lo");
+      started.resolve();
+      await held.promise;
+
+      return "Hello";
+    });
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a"]);
+
+    const { run, session } = service.start(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      "@alpha hi"
+    );
+
+    await started.promise;
+
+    expect(service.session(ORG_ID, USER_ID, group.id, session.id).run).toEqual(
+      expect.objectContaining({
+        speakerProfileId: "a",
+        steps: ["Searching the web"],
+        text: "Hello",
+      })
+    );
+    held.resolve();
+    await run;
   });
 
   test("a message after Stop only wakes the agents it mentions", async () => {
@@ -293,5 +537,69 @@ describe("AgentGroupService", () => {
 
     expect(calls).toEqual(["a"]);
     expect(service.sessions(ORG_ID, USER_ID, group.id)).toEqual([]);
+  });
+
+  test("a thread is answered by the agent it hangs from, and stays out of the main chat", async () => {
+    const { calls, chat, contents, service } = setup(({ profileId, task }) =>
+      task.includes("private thread") ? "thread answer" : `${profileId} spoke`
+    );
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+    const sessionId = await chat(group.id, "@beta hello");
+
+    const [, root] = service.session(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      sessionId
+    ).messages;
+
+    calls.length = 0;
+    await service.postThread(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      sessionId,
+      root!.id,
+      "more?"
+    );
+
+    expect(calls).toEqual(["b"]);
+    expect(contents(group.id, sessionId)).toEqual(["@beta hello", "b spoke"]);
+
+    const thread = service.thread(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      sessionId,
+      root!.id
+    );
+
+    expect(thread.profileId).toBe("b");
+    expect(thread.messages.map((message) => message.content)).toEqual([
+      "b spoke",
+      "more?",
+      "thread answer",
+    ]);
+    expect(
+      service.session(ORG_ID, USER_ID, group.id, sessionId).messages[1]
+    ).toMatchObject({ threadReplies: 2 });
+  });
+
+  test("a thread cannot open on the user's own message", async () => {
+    const { chat, service } = setup(() => "ok");
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+    const sessionId = await chat(group.id, "@alpha hi");
+
+    const [own] = service.session(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      sessionId
+    ).messages;
+
+    expect(() =>
+      service.thread(ORG_ID, USER_ID, group.id, sessionId, own!.id)
+    ).toThrow(expect.objectContaining({ status: 404 }));
   });
 });

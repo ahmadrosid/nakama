@@ -425,6 +425,7 @@ export class ProfileService {
     await this.insertNewProfile({
       automationsEnabled: source.automationsEnabled !== false,
       createdAt: now,
+      groupsEnabled: source.groupsEnabled !== false,
       id: profileId,
       isDefault: false,
       isSuper: false,
@@ -571,6 +572,10 @@ export class ProfileService {
         request.automationsEnabled === undefined
           ? profile.automationsEnabled !== false
           : request.automationsEnabled,
+      groupsEnabled:
+        request.groupsEnabled === undefined
+          ? profile.groupsEnabled !== false
+          : request.groupsEnabled,
       model: request.model === undefined ? profile.model : request.model,
       name: request.name?.trim() ?? profile.name,
       sharedWithTeam: request.sharedWithTeam ?? profile.sharedWithTeam,
@@ -1900,6 +1905,7 @@ export class ProfileService {
       acpAgent: profile.acpAgent ?? null,
       automationsEnabled: profile.automationsEnabled !== false,
       createdAt: profile.createdAt,
+      groupsEnabled: profile.groupsEnabled !== false,
       hasAvatar: await hasProfileAvatar(orgId, profile.id),
       id: profile.id,
       isDefault: profile.isDefault ?? false,

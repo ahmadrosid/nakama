@@ -46,6 +46,7 @@ import {
 import { ArtifactAttachmentPreview } from "@/components/chat/artifact-attachment-preview";
 import {
   AssistantTurnSegmentView,
+  GroupCreatedCard,
   LocalCitationPreview,
   ProfileCreatedCard,
 } from "@/components/chat/assistant-tool-group";
@@ -72,6 +73,7 @@ import {
 import {
   awaitingModelLabel,
   isAwaitingModelResponse,
+  parseGroupCreatedResult,
   parseProfileCreatedResult,
 } from "@/lib/chat-stream";
 import { sumChatUsage } from "@/lib/chat-usage";
@@ -178,45 +180,7 @@ export function ChatMessageList(props: ChatMessageListProps) {
   return <ChatMessageListSession key={sessionAnchor} {...props} />;
 }
 
-function ChatMessageListSession({
-  sessionId,
-  onContinueToolSetup,
-  messages,
-  profileId,
-  showThinking = true,
-  showUsage = false,
-  modelLabel,
-  branchingMessageId,
-  actionsDisabled = false,
-  readOnly = false,
-  streamActive = false,
-  turnStartedAt = null,
-  workStreamActive = streamActive,
-  onBranchMessage,
-  onEditMessage,
-  onRetryMessage,
-  onSubmitQuestionnaire,
-  questionnaire,
-  emptyMessage,
-  className,
-  contentClassName,
-}: ChatMessageListProps) {
-  const turns = useMemo(() => groupMessagesIntoTurns(messages), [messages]);
-
-  // A plugin draft card marks "Try it" once its tool runs anywhere in the chat.
-  const usedPluginToolKey = [
-    ...new Set(
-      messages.flatMap((item) =>
-        item.tool?.startsWith("plugin_") ? [item.tool] : []
-      )
-    ),
-  ].join("\n");
-
-  const usedPluginTools = useMemo(
-    () => (usedPluginToolKey ? usedPluginToolKey.split("\n") : []),
-    [usedPluginToolKey]
-  );
-
+function useListPinning() {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const scrollerRef = useRef<HTMLElement | null>(null);
   const isAtBottomRef = useRef(true);
@@ -226,30 +190,6 @@ function ChatMessageListSession({
   const userTogglePinPause = useUserTogglePinPause();
   const { isPinPaused } = userTogglePinPause;
   const [isAtBottom, setIsAtBottom] = useState(true);
-  const canPreviewCitations = useOptionalChatAttachmentPanel() !== null;
-
-  const [citationPreview, setCitationPreview] = useState<{
-    path: string;
-    profileId: string;
-  } | null>(null);
-
-  const openCitationPreview = useCallback(
-    (path: string) => {
-      if (profileId) {
-        setCitationPreview({ path, profileId });
-      }
-    },
-    [profileId]
-  );
-
-  const closeCitationPreview = useCallback(() => setCitationPreview(null), []);
-
-  const showAwaitingPlaceholder =
-    streamActive && isAwaitingModelResponse(messages);
-
-  const awaitingLabel = showAwaitingPlaceholder
-    ? awaitingModelLabel(messages)
-    : null;
 
   const pinLatest = useCallback((behavior: "auto" | "smooth") => {
     const scroller = scrollerRef.current;
@@ -341,6 +281,91 @@ function ChatMessageListSession({
     },
     [isPinPaused, pinLatest]
   );
+
+  return {
+    handleAtBottomStateChange,
+    handleFollowOutput,
+    handleScrollerRef,
+    handleTotalListHeightChanged,
+    stickiness,
+    userTogglePinPause,
+    virtuosoRef,
+  };
+}
+
+function ChatMessageListSession({
+  sessionId,
+  onContinueToolSetup,
+  messages,
+  profileId,
+  showThinking = true,
+  showUsage = false,
+  modelLabel,
+  branchingMessageId,
+  actionsDisabled = false,
+  readOnly = false,
+  streamActive = false,
+  turnStartedAt = null,
+  workStreamActive = streamActive,
+  onBranchMessage,
+  onEditMessage,
+  onRetryMessage,
+  onSubmitQuestionnaire,
+  questionnaire,
+  emptyMessage,
+  className,
+  contentClassName,
+}: ChatMessageListProps) {
+  const turns = useMemo(() => groupMessagesIntoTurns(messages), [messages]);
+
+  // A plugin draft card marks "Try it" once its tool runs anywhere in the chat.
+  const usedPluginToolKey = [
+    ...new Set(
+      messages.flatMap((item) =>
+        item.tool?.startsWith("plugin_") ? [item.tool] : []
+      )
+    ),
+  ].join("\n");
+
+  const usedPluginTools = useMemo(
+    () => (usedPluginToolKey ? usedPluginToolKey.split("\n") : []),
+    [usedPluginToolKey]
+  );
+
+  const {
+    handleAtBottomStateChange,
+    handleFollowOutput,
+    handleScrollerRef,
+    handleTotalListHeightChanged,
+    stickiness,
+    userTogglePinPause,
+    virtuosoRef,
+  } = useListPinning();
+
+  const canPreviewCitations = useOptionalChatAttachmentPanel() !== null;
+
+  const [citationPreview, setCitationPreview] = useState<{
+    path: string;
+    profileId: string;
+  } | null>(null);
+
+  const openCitationPreview = useCallback(
+    (path: string) => {
+      if (profileId) {
+        setCitationPreview({ path, profileId });
+      }
+    },
+    [profileId]
+  );
+
+  const closeCitationPreview = useCallback(() => setCitationPreview(null), []);
+
+  const showAwaitingPlaceholder =
+    streamActive && isAwaitingModelResponse(messages);
+
+  const awaitingLabel = showAwaitingPlaceholder
+    ? awaitingModelLabel(messages)
+    : null;
 
   const renderTurn = useCallback(
     (turnIndex: number, turn: MessageTurn) => {
@@ -576,50 +601,27 @@ function AssistantTurn({
       {showAwaiting && !segments.some((segment) => segment.kind === "work") ? (
         <TurnAwaitingElapsed startedAt={turnStartedAt} />
       ) : null}
-      {questionnaireAnswers?.length ? (
-        <AgentQuestionnaireAnswers answers={questionnaireAnswers} />
-      ) : null}
-      {!questionnaireAnswers?.length &&
-      onSubmitQuestionnaire &&
-      hasActiveAgentQuestionnaire(questionnaire) &&
-      turnMessages.some(
-        (message) =>
-          message.tool === "ask_user_question" && message.toolStatus === "done"
-      ) ? (
-        <AgentQuestionnairePanel
+      <TurnQuestionnaire
+        actionsDisabled={actionsDisabled}
+        answers={questionnaireAnswers}
+        messages={turnMessages}
+        onSubmit={onSubmitQuestionnaire}
+        questionnaire={questionnaire}
+      />
+      {workStreamActive || !interactiveTurnComplete ? null : (
+        <ToolCredentialCards
           disabled={actionsDisabled}
-          onSubmit={(answers) => onSubmitQuestionnaire?.(answers)}
-          questionnaire={questionnaire ?? null}
+          messages={turnMessages}
+          onContinue={onContinueToolSetup}
+          sessionId={sessionId}
         />
-      ) : null}
-      {!workStreamActive &&
-        interactiveTurnComplete &&
-        turnMessages
-          .filter((message) => message.toolResult != null)
-          .map((message) => (
-            <ToolCredentialCard
-              disabled={actionsDisabled}
-              key={message.id}
-              onContinue={onContinueToolSetup}
-              result={message.toolResult}
-              sessionId={sessionId}
-            />
-          ))}
+      )}
       {profileId && showArtifacts ? (
-        <div className="flex flex-wrap gap-2">
-          {liveArtifacts.map((artifact) => {
-            const chipId = `${artifactTurnKey}:${artifact.ownerProfileId ?? profileId}:${artifact.path}`;
-
-            return (
-              <ArtifactAttachmentPreview
-                artifact={artifact}
-                id={chipId}
-                key={chipId}
-                profileId={profileId}
-              />
-            );
-          })}
-        </div>
+        <TurnArtifacts
+          artifacts={liveArtifacts}
+          profileId={profileId}
+          turnKey={artifactTurnKey}
+        />
       ) : null}
       <CreatedProfiles
         complete={interactiveTurnComplete}
@@ -645,6 +647,92 @@ function AssistantTurn({
   );
 }
 
+function TurnQuestionnaire({
+  actionsDisabled,
+  answers,
+  messages,
+  onSubmit,
+  questionnaire,
+}: {
+  actionsDisabled?: boolean;
+  answers?: AgentQuestionAnswer[];
+  messages: ChatListItem[];
+  onSubmit?: (answers: AgentQuestionAnswer[]) => void;
+  questionnaire?: AgentQuestionnaire | null;
+}) {
+  if (answers?.length) {
+    return <AgentQuestionnaireAnswers answers={answers} />;
+  }
+
+  const asked = messages.some(
+    (message) =>
+      message.tool === "ask_user_question" && message.toolStatus === "done"
+  );
+
+  if (!(onSubmit && asked && hasActiveAgentQuestionnaire(questionnaire))) {
+    return null;
+  }
+
+  return (
+    <AgentQuestionnairePanel
+      disabled={actionsDisabled}
+      onSubmit={(next) => onSubmit(next)}
+      questionnaire={questionnaire ?? null}
+    />
+  );
+}
+
+function ToolCredentialCards({
+  disabled,
+  messages,
+  onContinue,
+  sessionId,
+}: {
+  disabled?: boolean;
+  messages: ChatListItem[];
+  onContinue?: (setupId: string) => Promise<void>;
+  sessionId?: string;
+}) {
+  return messages
+    .filter((message) => message.toolResult != null)
+    .map((message) => (
+      <ToolCredentialCard
+        disabled={disabled}
+        key={message.id}
+        onContinue={onContinue}
+        result={message.toolResult}
+        sessionId={sessionId}
+      />
+    ));
+}
+
+function TurnArtifacts({
+  artifacts,
+  profileId,
+  turnKey,
+}: {
+  artifacts: ReturnType<typeof extractTurnArtifacts>;
+  profileId: string;
+  turnKey: string;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {artifacts.map((artifact) => {
+        const chipId = `${turnKey}:${artifact.ownerProfileId ?? profileId}:${artifact.path}`;
+
+        return (
+          <ArtifactAttachmentPreview
+            artifact={artifact}
+            id={chipId}
+            key={chipId}
+            profileId={profileId}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 function CreatedProfiles({
   complete,
   messages,
@@ -666,7 +754,16 @@ function CreatedProfiles({
     return profile ? [profile] : [];
   });
 
-  if (profiles.length === 0) {
+  const groups = messages.flatMap((message) => {
+    const group =
+      message.tool === "create_group"
+        ? parseGroupCreatedResult(message.toolResult)
+        : null;
+
+    return group ? [group] : [];
+  });
+
+  if (profiles.length === 0 && groups.length === 0) {
     return null;
   }
 
@@ -674,6 +771,9 @@ function CreatedProfiles({
     <div className="flex w-full flex-col gap-2">
       {profiles.map((profile) => (
         <ProfileCreatedCard key={profile.id} profile={profile} />
+      ))}
+      {groups.map((group) => (
+        <GroupCreatedCard group={group} key={group.id} />
       ))}
     </div>
   );

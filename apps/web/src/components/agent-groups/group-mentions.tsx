@@ -1,12 +1,6 @@
 import type { ProfileSummary } from "@nakama/core";
-import {
-  ALL_MEMBERS_ID,
-  type MentionRange,
-  mentionRanges,
-} from "@nakama/core/agent-groups";
-import { UserGroupIcon } from "hugeicons-react";
+import { type MentionRange, mentionRanges } from "@nakama/core/agent-groups";
 import type { MessageResponseProps } from "@/components/ai-elements/message";
-import { ProfileAvatar } from "@/components/ProfileAvatar";
 
 type MarkdownComponents = NonNullable<MessageResponseProps["components"]>;
 
@@ -23,18 +17,9 @@ function MentionChip({
 
   return (
     <span
-      className="mx-px inline-flex items-center gap-1 rounded-md bg-primary/15 px-1.5 align-baseline font-medium text-primary leading-snug"
+      className="align-baseline font-medium text-primary leading-snug"
       title={`@${range.handle}`}
     >
-      {range.id === ALL_MEMBERS_ID ? (
-        <UserGroupIcon aria-hidden className="size-3.5" />
-      ) : profile ? (
-        <ProfileAvatar
-          className="size-3.5 rounded-[4px]"
-          profile={profile}
-          size="xxs"
-        />
-      ) : null}
       @{profile?.name ?? range.handle}
     </span>
   );

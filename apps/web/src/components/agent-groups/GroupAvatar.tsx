@@ -39,12 +39,12 @@ export function GroupAvatar({
       {faces[0] && faces[1] ? (
         <>
           <ProfileAvatar
-            className="absolute top-0 left-0 size-[64%] rounded-[5px]"
+            className="absolute top-0 left-0 size-[64%] rounded-[5px] outline-none"
             profile={faces[0]}
             size="xxs"
           />
           <ProfileAvatar
-            className="absolute right-0 bottom-0 size-[64%] rounded-[5px] ring-2 ring-sidebar"
+            className="absolute right-0 bottom-0 size-[64%] rounded-[5px] outline-none"
             profile={faces[1]}
             size="xxs"
           />

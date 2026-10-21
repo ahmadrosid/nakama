@@ -6,6 +6,7 @@ const dom = new Window({ url: "http://localhost" });
 
 const globals = {
   cancelAnimationFrame: dom.cancelAnimationFrame.bind(dom),
+  DOMRect: dom.DOMRect,
   DocumentFragment: dom.DocumentFragment,
   document: dom.document,
   Element: dom.Element,
@@ -13,6 +14,7 @@ const globals = {
   HTMLElement: dom.HTMLElement,
   IS_REACT_ACT_ENVIRONMENT: true,
   KeyboardEvent: dom.KeyboardEvent,
+  MouseEvent: dom.MouseEvent,
   MutationObserver: dom.MutationObserver,
   Node: dom.Node,
   navigator: dom.navigator,

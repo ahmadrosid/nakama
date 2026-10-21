@@ -9,16 +9,18 @@ import {
   useContext,
   useState,
 } from "react";
+import { Link } from "react-router-dom";
 import { type LinkSafetyModalProps, StreamdownContext } from "streamdown";
 import { ExternalLinkSafetyModal } from "@/components/ai-elements/external-link-safety-modal";
 import { YoutubeEmbed } from "@/components/ai-elements/youtube-embed";
+import { inAppLinkPath } from "@/lib/navigation";
 import { parseYoutubeVideoId } from "@/lib/youtube-url";
 
 type MarkdownAProps = ComponentProps<"a"> & {
   node?: unknown;
 };
 
-/** Streamdown `a` override: embed YouTube URLs, keep link-safety for everything else. */
+/** Streamdown `a` override: embed YouTube URLs, route Nakama pages in-app, keep link-safety for everything else. */
 export function MarkdownA({
   href,
   children,
@@ -56,6 +58,27 @@ export function MarkdownA({
         </sup>
       );
     }
+  }
+
+  const appPath = href ? inAppLinkPath(href, window.location.origin) : null;
+
+  if (appPath) {
+    return (
+      <Link
+        {...rest}
+        className={cn(
+          "wrap-anywhere font-medium text-primary underline",
+          className
+        )}
+        data-streamdown="link"
+        // Streamdown sets target="_blank"; in-app pages open in this tab.
+        rel={undefined}
+        target={undefined}
+        to={appPath}
+      >
+        {children}
+      </Link>
+    );
   }
 
   return (

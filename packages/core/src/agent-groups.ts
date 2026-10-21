@@ -4,8 +4,16 @@ import { slugifyProfileName } from "./profiles";
 export interface AgentGroup {
   /** Changes when the custom image changes; `null` when there is none. */
   avatarVersion: string | null;
+  /** What the group is for; every agent gets it as context. Empty when unset. */
+  brief: string;
   createdAt: string;
   id: string;
+  /** The newest main-chat message across the group's sessions. */
+  lastMessage: {
+    authorProfileId: string | null;
+    content: string;
+    createdAt: string;
+  } | null;
   memberIds: string[];
   name: string;
 }
@@ -15,13 +23,21 @@ export interface AgentGroupMessage {
   authorProfileId: string | null;
   content: string;
   createdAt: string;
+  /** Names of the documents the user attached; their text stays on the server. */
+  files?: string[];
   id: number;
+  /** Replies in the thread opened on this message; always 0 inside a thread. */
+  threadReplies: number;
 }
 
 export interface AgentGroupRun {
   activity: string | null;
   speakerProfileId: string | null;
+  /** What the speaker has done so far this turn, oldest first. */
+  steps?: string[];
   stopping: boolean;
+  /** The speaker's answer so far this turn. */
+  text?: string;
 }
 
 /** One conversation in a group; a group holds many, like an agent's chats. */
@@ -41,6 +57,21 @@ export interface AgentGroupSessionDetail {
   messages: AgentGroupMessage[];
   run: AgentGroupRun | null;
   session: AgentGroupSession;
+  /** Messages whose thread has an agent replying right now. */
+  threadRunIds: number[];
+}
+
+/**
+ * A private chat between the user and one agent, opened on that agent's
+ * message in a session.
+ */
+export interface AgentGroupThreadDetail {
+  /** The agent's message the thread hangs from, then the replies. */
+  messages: AgentGroupMessage[];
+  /** The agent the thread is with. */
+  profileId: string;
+  rootId: number;
+  run: AgentGroupRun | null;
 }
 
 export interface ListAgentGroupsResponse {

@@ -321,7 +321,11 @@ function buildFileGuardOptions(
 
   return {
     ...defaultGuardOptions,
-    allowedDirs: [workspaceRoot, getCustomToolsDir(orgId)],
+    allowedDirs: [
+      workspaceRoot,
+      getCustomToolsDir(orgId),
+      ...(context.sharedDir ? [context.sharedDir] : []),
+    ],
     cwd: workspaceRoot,
   };
 }

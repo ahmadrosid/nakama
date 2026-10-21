@@ -707,7 +707,7 @@ async function probeHarnessLight(
     ready: false,
     statusMessage:
       routing.error ??
-      `${harness.name} is installed but provider passthrough is not active. Check Settings → Provider.`,
+      `${harness.name} is installed but provider passthrough is not active. Check Control center → AI Providers (/customize/providers).`,
   };
 }
 
@@ -813,8 +813,8 @@ async function probeHarnessExec(
         statusMessage: passthrough
           ? (routing.error ??
             (combinedOutput
-              ? `${harness.name} could not authenticate with the configured Nakama provider. ${summarizeProbeOutput(combinedOutput)} Check Settings → Provider.`
-              : `${harness.name} could not authenticate with the configured Nakama provider. Check Settings → Provider.`))
+              ? `${harness.name} could not authenticate with the configured Nakama provider. ${summarizeProbeOutput(combinedOutput)} Check Control center → AI Providers (/customize/providers).`
+              : `${harness.name} could not authenticate with the configured Nakama provider. Check Control center → AI Providers (/customize/providers).`))
           : combinedOutput
             ? `${harness.name} could not authenticate with harness login. ${summarizeProbeOutput(combinedOutput)} ${nativeHint}`
             : `${harness.name} could not authenticate with harness login. ${nativeHint}`,

@@ -105,8 +105,10 @@ function initialProfileSection(
   hash: string,
   search: string
 ) {
-  if (new URLSearchParams(search).get("section") === "tools") {
-    return "tools";
+  const section = new URLSearchParams(search).get("section");
+
+  if (section === "tools" || section === "mcp") {
+    return section;
   }
 
   if (detailTab === "proposals") {
@@ -290,6 +292,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
             allMcpServers={state.allMcpServers}
             busy={busy || !state.canManageProfile}
             detail={detail}
+            onAssign={state.handleAssignMcpServer}
             onCreateOpen={() => state.setMcpCreateOpen(true)}
             onRemove={state.setRemoveConfirm}
           />

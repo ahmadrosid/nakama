@@ -78,6 +78,7 @@ import {
 import { isRunWorkflowTool } from "@/lib/chat-stream-workflow";
 import { client, formatError } from "@/lib/client";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
+import { groupPath } from "@/lib/navigation";
 import { findPluginTool } from "@/lib/plugin-runtime";
 import { splitStreamingMarkdown } from "@/lib/streaming-markdown-seal";
 
@@ -412,7 +413,10 @@ function AssistantWorkGroup({
   profileId?: string | null;
 }) {
   const visibleTools = tools.filter(
-    (tool) => !isArtifactMetaSidecarTool(tool) && tool.tool !== "create_profile"
+    (tool) =>
+      !isArtifactMetaSidecarTool(tool) &&
+      tool.tool !== "create_profile" &&
+      tool.tool !== "create_group"
   );
 
   if (visibleTools.length === 0 && !thinking && !active) {
@@ -765,6 +769,30 @@ export function ProfileCreatedCard({
         variant="outline"
       >
         Start conversation
+        <ArrowRight01Icon aria-hidden className="size-4" />
+      </Button>
+    </div>
+  );
+}
+
+export function GroupCreatedCard({
+  group,
+}: {
+  group: { id: string; name: string };
+}) {
+  return (
+    <div className="flex w-fit max-w-full items-center gap-3 rounded-xl bg-muted/40 p-3">
+      <p className="min-w-0 truncate font-medium text-foreground text-sm">
+        {group.name}
+      </p>
+      <Button
+        className="min-h-10 shrink-0 rounded-lg transition-transform active:scale-[0.96]"
+        render={<Link to={groupPath(group.id)} />}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        Open group
         <ArrowRight01Icon aria-hidden className="size-4" />
       </Button>
     </div>

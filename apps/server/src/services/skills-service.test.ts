@@ -1022,15 +1022,17 @@ if __name__ == "__main__":
       const updated = (await agent.resolveSession(id, "team_a"))!;
       expect(updated).not.toBe(second);
       await updated.send("Third");
+      // A turn can also trigger follow-up provider calls; the newest one has
+      // the rebuilt session's tools.
       expect(
-        turns[2]!.tools?.find((tool) => tool.name === "shared-notes")
+        turns.at(-1)!.tools?.find((tool) => tool.name === "shared-notes")
           ?.parameters
       ).toMatchObject({ properties: { current: { type: "number" } } });
       await db.deleteOrgSharedResource("parent", publication.id);
       const revoked = (await agent.resolveSession(id, "team_a"))!;
       expect(revoked).not.toBe(updated);
       await revoked.send("Fourth");
-      expect(turns[3]!.tools?.map((tool) => tool.name) ?? []).not.toContain(
+      expect(turns.at(-1)!.tools?.map((tool) => tool.name) ?? []).not.toContain(
         "shared-notes"
       );
       expect(

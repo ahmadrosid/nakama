@@ -2,7 +2,6 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { type ComponentType, lazy, useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthGuard } from "@/components/AuthGuard";
-import { Layout } from "@/components/Layout";
 import { PlatformAdminGuard } from "@/components/PlatformAdminGuard";
 import { RouteBoundary } from "@/components/RouteBoundary";
 import { SetupGuard } from "@/components/SetupGuard";
@@ -16,6 +15,8 @@ const lazyPage = <Name extends string>(
   load: () => Promise<Record<Name, ComponentType>>,
   name: Name
 ) => lazy(async () => ({ default: (await load())[name] }));
+
+const Layout = lazyPage(() => import("@/components/Layout"), "Layout");
 
 const AutomationsPage = lazyPage(
   () => import("@/pages/AutomationsPage"),
@@ -206,7 +207,13 @@ function AppShell() {
             />
             <Route element={<AuthGuard />}>
               <Route element={<SetupGuard />}>
-                <Route element={<Layout />}>
+                <Route
+                  element={
+                    <RouteBoundary fullScreen>
+                      <Layout />
+                    </RouteBoundary>
+                  }
+                >
                   <Route element={<Navigate replace to="/chat" />} index />
                   <Route
                     element={<Navigate replace to={PAGE_PATHS.workers} />}

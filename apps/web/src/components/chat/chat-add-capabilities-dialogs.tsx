@@ -14,6 +14,7 @@ import {
 } from "@nakama/ui/dialog";
 import { Input } from "@nakama/ui/input";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Add01Icon, Search01Icon, Tick02Icon } from "hugeicons-react";
 import { type FormEvent, useId, useState } from "react";
 import { Link } from "react-router-dom";
 import { readRecord, readString } from "@/components/chat/web-search.shared";
@@ -43,8 +44,9 @@ import {
   useInstallSkillMutation,
 } from "@/hooks/use-resource-mutations";
 import { client, formatError } from "@/lib/client";
-import { toolPlaygroundPath } from "@/lib/navigation";
+import { pluginIcon, toolPlaygroundPath } from "@/lib/navigation";
 import { invalidateQueries } from "@/lib/query-client";
+import { PLUGIN_DESCRIPTIONS } from "@/pages/plugins/use-plugin-management";
 
 type ToolCredentialResult =
   | { type: "tool_setup_required"; orgId: string; setupId: string }
@@ -840,6 +842,10 @@ function ChatSkillDialog({
   );
 }
 
+function pluginDescription(plugin: { description?: string; pluginId: string }) {
+  return PLUGIN_DESCRIPTIONS.get(plugin.pluginId) || plugin.description;
+}
+
 function ChatPluginDialog({
   profileId,
   onOpenChange,
@@ -853,6 +859,7 @@ function ChatPluginDialog({
   const tools = useToolsQuery();
   const skills = useSkillsQuery();
   const save = useSavePluginAgentAccess();
+  const [query, setQuery] = useState("");
 
   if (!user?.isPlatformAdmin) {
     return null;
@@ -867,9 +874,15 @@ function ChatPluginDialog({
   const error =
     save.error || plugins.error || profile.error || tools.error || skills.error;
 
-  const enabled = (plugins.data ?? []).filter(
-    (plugin) => plugin.installed && plugin.lifecycleState === "enabled"
-  );
+  const needle = query.trim().toLowerCase();
+
+  const enabled = (plugins.data ?? [])
+    .filter((plugin) => plugin.installed && plugin.lifecycleState === "enabled")
+    .filter((plugin) =>
+      [plugin.name, pluginDescription(plugin)].some((text) =>
+        text?.toLowerCase().includes(needle)
+      )
+    );
 
   return (
     <Dialog
@@ -882,8 +895,22 @@ function ChatPluginDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add plugin</DialogTitle>
+          <DialogTitle>Plugins</DialogTitle>
         </DialogHeader>
+        <div className="relative">
+          <Search01Icon
+            aria-hidden="true"
+            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            aria-label="Search plugins"
+            className="pl-9"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search plugins"
+            type="search"
+            value={query}
+          />
+        </div>
         {error ? (
           <p className="text-destructive text-sm" role="alert">
             {formatError(error)}
@@ -892,7 +919,7 @@ function ChatPluginDialog({
         {loading ? (
           <p className="text-muted-foreground text-sm">Loading plugins…</p>
         ) : (
-          <ul className="max-h-80 divide-y divide-border overflow-auto">
+          <ul className="max-h-80 divide-y divide-border overflow-auto rounded-xl border border-border">
             {enabled.map((plugin) => {
               const assigned =
                 profile.data &&
@@ -901,37 +928,64 @@ function ChatPluginDialog({
                   tools: tools.data ?? [],
                 });
 
+              const Icon = pluginIcon(plugin.pluginId);
+              const description = pluginDescription(plugin);
+
               return (
                 <li
-                  className="flex items-center justify-between gap-3 py-3"
+                  className="flex items-center gap-3 px-4 py-3"
                   key={plugin.pluginId}
                 >
-                  <span className="font-medium text-sm">{plugin.name}</span>
-                  <Button
-                    disabled={
-                      !assigned ||
-                      assigned.full ||
-                      assigned.total === 0 ||
-                      save.isPending
-                    }
-                    onClick={() =>
-                      save.mutate({
-                        changes: { [profileId]: true },
-                        pluginId: plugin.pluginId,
-                      })
-                    }
-                    size="sm"
-                  >
-                    {assigned?.full ? "Enabled" : "Enable"}
-                  </Button>
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-foreground">
+                    <Icon
+                      aria-hidden="true"
+                      className="size-5"
+                      strokeWidth={1.75}
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="break-words font-medium text-sm">
+                      {plugin.name}
+                    </p>
+                    {description ? (
+                      <p className="line-clamp-1 break-words text-muted-foreground text-sm">
+                        {description}
+                      </p>
+                    ) : null}
+                  </div>
+                  {assigned?.full ? (
+                    <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 font-medium text-emerald-700 text-sm dark:text-emerald-400">
+                      <Tick02Icon aria-hidden="true" className="size-4" />
+                      Added
+                    </span>
+                  ) : (
+                    <Button
+                      aria-label={`Add ${plugin.name}`}
+                      className="shrink-0 rounded-full"
+                      disabled={
+                        !assigned || assigned.total === 0 || save.isPending
+                      }
+                      onClick={() =>
+                        save.mutate({
+                          changes: { [profileId]: true },
+                          pluginId: plugin.pluginId,
+                        })
+                      }
+                      size="sm"
+                      variant="outline"
+                    >
+                      <Add01Icon aria-hidden="true" className="size-4" />
+                      Add
+                    </Button>
+                  )}
                 </li>
               );
             })}
           </ul>
         )}
         {!loading && enabled.length === 0 ? (
-          <p className="text-muted-foreground text-sm">
-            No enabled plugins available.
+          <p className="text-center text-muted-foreground text-sm">
+            {needle ? "No plugins match." : "No plugins available."}
           </p>
         ) : null}
       </DialogContent>

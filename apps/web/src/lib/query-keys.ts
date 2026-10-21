@@ -12,10 +12,21 @@ export const queryKeys = {
   agentGroups: {
     all: ["agentGroups"] as const,
     detail: (groupId: string) => ["agentGroups", groupId] as const,
+    files: (groupId: string, folder: string) =>
+      ["agentGroups", groupId, "files", folder] as const,
     session: (groupId: string, sessionId: string) =>
       ["agentGroups", groupId, "sessions", sessionId] as const,
     sessions: (groupId: string) =>
       ["agentGroups", groupId, "sessions"] as const,
+    thread: (groupId: string, sessionId: string, messageId: number) =>
+      [
+        "agentGroups",
+        groupId,
+        "sessions",
+        sessionId,
+        "threads",
+        messageId,
+      ] as const,
   },
   artifacts: {
     profile: (profileId: string) => ["artifacts", profileId] as const,

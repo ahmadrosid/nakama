@@ -372,8 +372,17 @@ export function enabledPluginNavEntries(
     }));
 }
 
-export const profilePath = (profileId: string): string =>
-  queryPath(PAGE_PATHS.profiles, { profile: profileId });
+export function profilePath(
+  profileId: string,
+  options?: { section?: "mcp" }
+): string {
+  return queryPath(
+    PAGE_PATHS.profiles,
+    options?.section
+      ? { profile: profileId, section: options.section }
+      : { profile: profileId }
+  );
+}
 
 export function skillDetailPath(
   skillId: string,
@@ -559,6 +568,27 @@ export function pageIdFromPath(pathname: string): PageId | null {
       ([, path]) => pathname === path
     )?.[0] ?? null
   );
+}
+
+/** App path for a same-origin link to a known page, or null for other links. */
+export function inAppLinkPath(href: string, origin: string): string | null {
+  if (href.startsWith("//")) {
+    return null;
+  }
+
+  let url: URL;
+
+  try {
+    url = new URL(href, origin);
+  } catch {
+    return null;
+  }
+
+  if (url.origin !== origin || !pageIdFromPath(url.pathname)) {
+    return null;
+  }
+
+  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 const INTEGRATION_SECTIONS = [

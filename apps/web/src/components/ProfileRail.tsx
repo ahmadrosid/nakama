@@ -125,17 +125,19 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
     (id) => allItems.find((item) => item.id === id) ?? []
   );
 
+  const pinnedIds = new Set(pins);
+
   const agentItems = allItems.filter(
-    (item) => item.kind === "agent" && !pins.includes(item.id)
+    (item) => item.kind === "agent" && !pinnedIds.has(item.id)
   );
 
   const groupItems = allItems.filter(
-    (item) => item.kind === "group" && !pins.includes(item.id)
+    (item) => item.kind === "group" && !pinnedIds.has(item.id)
   );
 
   function renderItem(item: RailItem) {
     const name = item.kind === "agent" ? item.profile.name : item.group.name;
-    const pinned = pins.includes(item.id);
+    const pinned = pinnedIds.has(item.id);
 
     // An open group takes the highlight from the chat agent.
     const active =
@@ -294,35 +296,12 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
         ) : null}
         {groupItems.map(renderItem)}
 
-        {user?.isPlatformAdmin ? (
-          <ProfileAdminPlusButton
-            label={onProfilesPage ? "New profile" : "Manage profiles"}
-            onClick={() => {
-              onNavigate?.();
-
-              if (!onProfilesPage) {
-                navigate(pathForPage("profiles"));
-
-                return;
-              }
-
-              if (location.pathname !== PAGE_PATHS.profiles) {
-                navigate(`${PAGE_PATHS.profiles}?create=1`);
-
-                return;
-              }
-
-              const params = new URLSearchParams(location.search);
-              params.set("create", "1");
-              navigate(`${PAGE_PATHS.profiles}?${params.toString()}`);
-            }}
-          />
-        ) : (
-          <ProfileAdminPlusButton
-            label="New agent"
-            onClick={() => setCreateOpen(true)}
-          />
-        )}
+        <ProfileRailCreateButton
+          isPlatformAdmin={user?.isPlatformAdmin === true}
+          onCreateAgent={() => setCreateOpen(true)}
+          onNavigate={onNavigate}
+          onProfilesPage={onProfilesPage}
+        />
       </div>
 
       {user?.isPlatformAdmin ? null : (
@@ -364,5 +343,49 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
         />
       ) : null}
     </div>
+  );
+}
+
+function ProfileRailCreateButton({
+  isPlatformAdmin,
+  onCreateAgent,
+  onNavigate,
+  onProfilesPage,
+}: {
+  isPlatformAdmin: boolean;
+  onCreateAgent: () => void;
+  onNavigate?: () => void;
+  onProfilesPage: boolean;
+}) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  if (!isPlatformAdmin) {
+    return <ProfileAdminPlusButton label="New agent" onClick={onCreateAgent} />;
+  }
+
+  return (
+    <ProfileAdminPlusButton
+      label={onProfilesPage ? "New profile" : "Manage profiles"}
+      onClick={() => {
+        onNavigate?.();
+
+        if (!onProfilesPage) {
+          navigate(pathForPage("profiles"));
+
+          return;
+        }
+
+        if (location.pathname !== PAGE_PATHS.profiles) {
+          navigate(`${PAGE_PATHS.profiles}?create=1`);
+
+          return;
+        }
+
+        const params = new URLSearchParams(location.search);
+        params.set("create", "1");
+        navigate(`${PAGE_PATHS.profiles}?${params.toString()}`);
+      }}
+    />
   );
 }

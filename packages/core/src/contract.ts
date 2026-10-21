@@ -2147,6 +2147,8 @@ export interface ProfileSummary {
   /** Whether this profile may create and execute automations. */
   automationsEnabled?: boolean;
   createdAt: string;
+  /** Whether a super agent may create agent groups. */
+  groupsEnabled?: boolean;
   hasAvatar: boolean;
   id: string;
   isDefault?: boolean;
@@ -2458,6 +2460,7 @@ export interface UpdateProfileRequest {
   /** Platform admins only: the agent runs as a process on the server host. */
   acpAgent?: AcpAgentConfig | null;
   automationsEnabled?: boolean;
+  groupsEnabled?: boolean;
   model?: string | null;
   name?: string;
   /** Owner or admin: false keeps the agent private to its owner. */
@@ -3153,6 +3156,11 @@ export interface ToolContext {
   };
   /** Invalidates the cached skills catalog after a live skill mutation. */
   onSkillCatalogChange?: () => void;
+  /**
+   * Returns a reminder when the session still has open todos, else null. The
+   * chat loop uses it to keep the model working instead of ending the turn.
+   */
+  openTodosReminder?: () => Promise<string | null>;
   orgId?: string;
   /** Org role of the invoking user. Org-memory tools gate on this; undefined means deny-by-default. */
   orgRole?: OrgRole;
@@ -3179,6 +3187,8 @@ export interface ToolContext {
     truncated: boolean;
   } | null>;
   sessionId?: string;
+  /** Agent group folder the file tools may also read and write (absolute path). */
+  sharedDir?: string;
   /** Aborts when the caller cancels the turn. Long-running tools should stop their work on it. */
   signal?: AbortSignal;
   /**

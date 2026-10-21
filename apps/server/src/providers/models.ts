@@ -7,6 +7,10 @@ import {
   validateCustomModels,
 } from "@nakama/core";
 import {
+  NETRA_AGENT_MODEL_ID,
+  resolveNetraModelId,
+} from "@nakama/core/discovery-providers";
+import {
   resolveCerebrasDefaultModel,
   resolveCompatibleDefaultModel,
   resolveFireworksDefaultModel,
@@ -213,6 +217,10 @@ export function getDefaultModel(
   provider: ProviderName,
   customModels?: CustomModelEntry[]
 ): string {
+  if (provider === "netra") {
+    return NETRA_AGENT_MODEL_ID;
+  }
+
   if (isDiscoveryModelProvider(provider) || provider === "xai_oauth") {
     // Discovery providers and Grok subscription fetch model lists live
     // and store them as instance custom models — no hardcoded catalog.
@@ -253,6 +261,10 @@ export function resolveModel(
 
   if (!trimmed) {
     return getDefaultModel(provider, customModels);
+  }
+
+  if (provider === "netra") {
+    return resolveNetraModelId(trimmed);
   }
 
   if (provider === "openrouter" && isOpenRouterModelSlug(trimmed)) {

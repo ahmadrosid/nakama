@@ -68,6 +68,22 @@ describe("agent group store", () => {
     });
   });
 
+  test("keeps a group's brief across create and update", () => {
+    const group = createAgentGroup(
+      ORG_ID,
+      "u1",
+      "Launch",
+      ["p1", "p2"],
+      "Ship v2"
+    );
+
+    expect(getAgentGroup(ORG_ID, "u1", group.id)?.brief).toBe("Ship v2");
+
+    updateAgentGroup(ORG_ID, "u1", group.id, "Launch", ["p1", "p2"], "Ship v3");
+
+    expect(getAgentGroup(ORG_ID, "u1", group.id)?.brief).toBe("Ship v3");
+  });
+
   test("keeps each session's messages apart and lists the latest session first", () => {
     const group = createAgentGroup(ORG_ID, "u1", "Launch", ["p1", "p2"]);
     const first = createGroupSession(ORG_ID, group.id, "First");

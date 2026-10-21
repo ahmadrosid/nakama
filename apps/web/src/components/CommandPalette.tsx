@@ -1,4 +1,5 @@
 import uFuzzy from "@leeoniya/ufuzzy";
+import type { AgentGroup } from "@nakama/core/agent-groups";
 import type { ProfileSummary } from "@nakama/core/contract";
 import {
   Command,
@@ -12,15 +13,18 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { GroupAvatar } from "@/components/agent-groups/GroupAvatar";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAuth } from "@/context/use-auth";
+import { useAgentGroupsQuery } from "@/hooks/use-agent-groups";
 import { useOrgPlugins } from "@/hooks/use-plugins";
 import { useSelectProfile } from "@/hooks/use-select-profile";
 import { buildNewChatPath } from "@/lib/chat-history";
 import { client } from "@/lib/client";
 import {
   enabledPluginNavEntries,
+  groupPath,
   type NavGroup,
   type NavItem,
   navHrefForPage,
@@ -216,9 +220,38 @@ function AgentResults({
   );
 }
 
+function GroupResults({
+  groups,
+  onSelect,
+  profiles,
+}: {
+  groups: AgentGroup[];
+  onSelect: (group: AgentGroup) => void;
+  profiles: ProfileSummary[];
+}) {
+  return groups.length > 0 ? (
+    <CommandGroup heading="Groups">
+      {groups.map((group) => (
+        <CommandItem
+          className="[&>svg:last-child]:hidden"
+          key={group.id}
+          onSelect={() => onSelect(group)}
+          value={`group ${group.id}`}
+        >
+          <GroupAvatar className="size-5" group={group} profiles={profiles} />
+          <span className="truncate">{group.name}</span>
+          <span className="ml-auto min-w-0 flex-1 truncate text-right text-muted-foreground text-xs">
+            {group.memberIds.length} agents
+          </span>
+        </CommandItem>
+      ))}
+    </CommandGroup>
+  ) : null;
+}
+
 /**
  * Cmd+K jumps to any page the sidebar would offer this user, or straight to
- * one of their agents. The destination list comes from visibleNavGroups, the
+ * one of their agents or groups. The destination list comes from visibleNavGroups, the
  * same gate the sidebar uses, so the palette cannot route someone to a page
  * their role hides.
  */
@@ -241,6 +274,7 @@ export function CommandPalette() {
   const { data: orgPlugins = [] } = useOrgPlugins();
   const { profiles, selectProfile } = useSelectProfile();
   const { syncForOrg } = useActiveChatProfile();
+  const { data: agentGroups = [] } = useAgentGroupsQuery();
   const isPlatformAdmin = user?.isPlatformAdmin === true;
 
   const activePlatformOrgs = useMemo(
@@ -329,6 +363,10 @@ export function CommandPalette() {
     (item) => `${item.profile.name} ${item.orgName}`.toLowerCase()
   );
 
+  const matchedGroups = fuzzyFilter(agentGroups, query, (group) =>
+    group.name.toLowerCase()
+  );
+
   const filteredPlugins = useMemo(
     () =>
       fuzzyFilter(pluginNav, query, (entry) =>
@@ -410,7 +448,7 @@ export function CommandPalette() {
   return (
     <CommandDialog
       className="sm:max-w-2xl"
-      description="Jump to a page or agent"
+      description="Jump to a page, agent or group"
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen);
 
@@ -426,13 +464,13 @@ export function CommandPalette() {
       <Command shouldFilter={false}>
         <CommandInput
           onValueChange={setQuery}
-          placeholder="Jump to a page or agent..."
+          placeholder="Jump to a page, agent or group..."
         />
         <CommandList>
           <CommandEmpty>
             {isPlatformAdmin && open && search.isPending
               ? "Loading agents..."
-              : "No matching page or agent."}
+              : "No matching page, agent or group."}
           </CommandEmpty>
           <NavigationResults
             groups={filteredGroups}
@@ -456,6 +494,11 @@ export function CommandPalette() {
               </CommandItem>
             </CommandGroup>
           ) : null}
+          <GroupResults
+            groups={matchedGroups}
+            onSelect={(group) => go(groupPath(group.id))}
+            profiles={profiles}
+          />
           <AgentResults
             activeOrgId={activeOrg?.id}
             isPlatformAdmin={isPlatformAdmin}

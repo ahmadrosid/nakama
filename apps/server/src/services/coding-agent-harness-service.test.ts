@@ -148,7 +148,7 @@ describe("coding-agent harness resolution", () => {
     expect(codex?.installed).toBe(true);
     expect(codex?.ready).toBe(true);
     expect(codex?.statusMessage).toMatch(/codex login/i);
-    expect(codex?.statusMessage).not.toMatch(/Settings → Provider/);
+    expect(codex?.statusMessage).not.toMatch(/AI Providers/);
   });
 
   test("refreshCodingAgentHarnessProbe persists cached readiness", async () => {

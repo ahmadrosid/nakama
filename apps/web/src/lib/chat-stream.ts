@@ -278,6 +278,32 @@ export function parseProfileCreatedResult(
   return profile as CreatedProfileSummary;
 }
 
+export function parseGroupCreatedResult(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
+  result: unknown
+): { id: string; name: string } | null {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
+  if (typeof result !== "object" || result === null) {
+    return null;
+  }
+
+  // SAFETY: The enclosing parser checks the value before this conversion.
+  const { group, type } = result as { group?: unknown; type?: unknown };
+
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
+  if (type !== "group_created" || typeof group !== "object" || group === null) {
+    return null;
+  }
+
+  // SAFETY: The enclosing parser checks the value before this conversion.
+  const { id, name } = group as { id?: unknown; name?: unknown };
+
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
+  return typeof id === "string" && typeof name === "string"
+    ? { id, name }
+    : null;
+}
+
 type SubAgentToolStatus = "success" | "fail" | "timeout";
 
 export interface ParsedSubAgentResult {

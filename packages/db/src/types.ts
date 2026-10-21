@@ -105,6 +105,8 @@ export interface StoredProfileRecord {
   /** Defaults to enabled when absent for legacy in-memory records. */
   automationsEnabled?: boolean;
   createdAt: string;
+  /** Whether a super agent may create agent groups. Defaults to enabled. */
+  groupsEnabled?: boolean;
   id: string;
   isDefault?: boolean;
   isSuper: boolean;

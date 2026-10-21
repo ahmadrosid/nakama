@@ -187,7 +187,7 @@ describe("OpenAI-compatible provider", () => {
         { messages: [{ content: "Hi", role: "user" }], system: "Help" },
         { onChunk: (chunk) => chunks.push(chunk) }
       )
-    ).rejects.toThrow("stream failed");
+    ).rejects.toThrow("balance exhausted");
     expect(chunks).toEqual(["Part"]);
   });
 

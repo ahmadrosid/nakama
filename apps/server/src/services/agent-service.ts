@@ -234,6 +234,7 @@ import {
   type StoredSessionRecord,
   type StoredSessionSummaryRecord,
   type StoredToolRecord,
+  SUPER_NAKAMA_TEAM_RULES,
   SUPER_NAKAMA_TOOL_AUTHORING_RULES,
 } from "@nakama/db";
 import { z } from "zod";
@@ -303,6 +304,7 @@ import { SUB_AGENT_TOOL_NAME } from "../tools/sub-agent-tool";
 import { createSuperNakamaTools } from "../tools/super-nakama-tools";
 import { createTodoTools } from "../tools/todo-tools";
 import { getAgentBrowserStatus } from "./agent-browser-service";
+import { AgentGroupService } from "./agent-group-service";
 import { AgentQuestionnaireState } from "./agent-questionnaire-state";
 import { AgentTodoState } from "./agent-todo-state";
 import {
@@ -562,6 +564,14 @@ export class AgentService {
       {
         assignSkill: (orgId, profileId, request, meta) =>
           this.assignSkill(orgId, profileId, request, meta),
+        createGroup: (orgId, userId, name, memberIds, brief) =>
+          new AgentGroupService(this.db, this).create(
+            orgId,
+            userId,
+            name,
+            memberIds,
+            brief
+          ),
         getModels: () => this.getModels(),
         listSkills: (orgId) => this.listSkills(orgId),
       }
@@ -2327,6 +2337,7 @@ export class AgentService {
       profileId: input.profileId,
       recordTurnUsage: this.turnUsageRecorderFor(input.orgId),
       sessionId: input.sessionId,
+      sharedDir: input.sharedDir,
       userId: input.userId,
     });
 
@@ -2364,7 +2375,9 @@ export class AgentService {
 
     const sendPromise = session
       .sendStream(prompt, {
-        onChunk: () => {
+        onChunk: (chunk) => {
+          input.onText?.(chunk);
+
           if (sawWriting) {
             return;
           }
@@ -2974,6 +2987,13 @@ export class AgentService {
     }
 
     this.sessionTitleService.scheduleSessionTitleGeneration(sessionId);
+  }
+
+  generateSessionTitle(
+    profileId: string,
+    messages: readonly ChatMessage[]
+  ): Promise<string | null> {
+    return this.sessionTitleService.titleFor(profileId, messages);
   }
 
   schedulePostTurnSkillReview(sessionId: string): void {
@@ -5925,7 +5945,13 @@ export class AgentService {
     }
 
     if (profile.isSuper) {
-      resolved = [...resolved, ...this.superNakamaTools];
+      resolved = [
+        ...resolved,
+        ...this.superNakamaTools.filter(
+          (tool) =>
+            tool.name !== "create_group" || profile.groupsEnabled !== false
+        ),
+      ];
     }
 
     if (hasOwnTools) {
@@ -6017,7 +6043,7 @@ export class AgentService {
     );
 
     const resolvedSystemPrompt = profile.isSuper
-      ? `${systemPrompt.trim()}\n\n${SUPER_NAKAMA_TOOL_AUTHORING_RULES}`
+      ? `${systemPrompt.trim()}\n\n${SUPER_NAKAMA_TOOL_AUTHORING_RULES}\n\n${SUPER_NAKAMA_TEAM_RULES}`
       : systemPrompt;
 
     // A cognito session has nothing stored to load. On a model change it is
@@ -6098,6 +6124,13 @@ export class AgentService {
       loadAttachment,
       onSkillCatalogChange: () => {
         this.sessions.delete(sessionId);
+      },
+      openTodosReminder: async () => {
+        const plan = await this.agentTodoState.formatForPrompt(sessionId);
+
+        return plan
+          ? `${plan}\n\nYour task plan still has open todos. Continue the work with tools, or set each remaining todo to completed or cancelled with todo_write before you give the final reply.`
+          : null;
       },
       orgId,
       orgRole: orgRole ?? undefined,
@@ -6443,7 +6476,7 @@ export class AgentService {
       return [
         "# Coding Agent Harness",
         `${harness.name} is installed (\`${harness.command}\`) but is not ready yet.`,
-        "Check Settings → Provider for passthrough compatibility, or retry after the CLI finishes installing.",
+        "Check Control center → AI Providers (/customize/providers) for passthrough compatibility, or retry after the CLI finishes installing.",
       ].join("\n");
     }
   }

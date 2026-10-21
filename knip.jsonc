@@ -2,7 +2,6 @@
   "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
   "ignore": [
     "tools/oxlint/anti-slop/**",
-    "apps/desktop/dist/**",
     // Bundled skill scripts run through the agent's bash tool, not imports.
     "packages/core/src/skills/bundled/*/scripts/**"
   ],

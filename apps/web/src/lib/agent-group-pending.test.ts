@@ -5,12 +5,22 @@ import { PENDING_RUN, withPendingMessage } from "./agent-group-pending";
 const idle: AgentGroupSessionDetail = {
   group: {
     avatarVersion: null,
+    brief: "",
     createdAt: "",
     id: "g",
+    lastMessage: null,
     memberIds: ["a", "b"],
     name: "Team",
   },
-  messages: [{ authorProfileId: "a", content: "hi", createdAt: "", id: 4 }],
+  messages: [
+    {
+      authorProfileId: "a",
+      content: "hi",
+      createdAt: "",
+      id: 4,
+      threadReplies: 0,
+    },
+  ],
   run: null,
   session: {
     active: false,
@@ -21,6 +31,7 @@ const idle: AgentGroupSessionDetail = {
     title: "hi",
     updatedAt: "",
   },
+  threadRunIds: [],
 };
 
 describe("withPendingMessage", () => {

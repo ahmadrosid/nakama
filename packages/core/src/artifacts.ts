@@ -36,7 +36,11 @@ import type {
 import { convertDocxToMarkdown } from "./docx-text";
 import { pathExists } from "./fs";
 import { SOUL_FILES } from "./soul/load";
-import { getProfileArtifactsDir, getProfileSoulDir } from "./soul/resolve";
+import {
+  getGroupSharedDir,
+  getProfileArtifactsDir,
+  getProfileSoulDir,
+} from "./soul/resolve";
 import { buildToolExecutionContext } from "./tools/context";
 import { guardFilePath, PathGuardError } from "./tools/paths";
 import { jsonSchemaFromZod, parseToolInput } from "./tools/schema";
@@ -446,13 +450,7 @@ export async function deleteArtifactFile(input: {
   };
 }
 
-async function resolveWorkspacePath(
-  orgId: string,
-  profileId: string,
-  filename: string
-) {
-  const root = getProfileSoulDir(orgId, profileId);
-
+async function resolveWorkspacePath(root: string, filename: string) {
   if (
     path.isAbsolute(filename) ||
     filename.includes("\\") ||
@@ -477,12 +475,28 @@ async function resolveWorkspacePath(
   }
 }
 
-export async function listWorkspaceFiles(
+export function listWorkspaceFiles(
   orgId: string,
   profileId: string,
   folder = ""
 ): Promise<ListWorkspaceFilesResponse> {
-  const directory = await resolveWorkspacePath(orgId, profileId, folder);
+  return listFolder(getProfileSoulDir(orgId, profileId), folder);
+}
+
+/** The group's shared folder, which its agents write to. */
+export function listGroupFiles(
+  orgId: string,
+  groupId: string,
+  folder = ""
+): Promise<ListWorkspaceFilesResponse> {
+  return listFolder(getGroupSharedDir(orgId, groupId), folder);
+}
+
+async function listFolder(
+  root: string,
+  folder: string
+): Promise<ListWorkspaceFilesResponse> {
+  const directory = await resolveWorkspacePath(root, folder);
   let children;
 
   try {
@@ -513,7 +527,7 @@ export async function listWorkspaceFiles(
     }
 
     const filename = path.posix.join(folder, child.name);
-    const filePath = await resolveWorkspacePath(orgId, profileId, filename);
+    const filePath = await resolveWorkspacePath(root, filename);
     const info = await stat(filePath);
     entries.push({
       filename,
@@ -534,12 +548,16 @@ export async function listWorkspaceFiles(
   return { entries };
 }
 
-export async function getWorkspaceEntry(
+export function getWorkspaceEntry(
   orgId: string,
   profileId: string,
   filename: string
 ) {
-  const filePath = await resolveWorkspacePath(orgId, profileId, filename);
+  return entryAt(getProfileSoulDir(orgId, profileId), filename);
+}
+
+async function entryAt(root: string, filename: string) {
+  const filePath = await resolveWorkspacePath(root, filename);
 
   const info = await stat(filePath).catch((error) => {
     if (error instanceof Error) {
@@ -565,13 +583,30 @@ export async function getWorkspaceEntry(
   return { contentType: entry.mimeType, entry, filePath };
 }
 
-export async function readWorkspaceFile(
+export function readWorkspaceFile(
   orgId: string,
   profileId: string,
   filename: string,
   options: { render?: "markdown" } = {}
 ) {
-  const file = await getWorkspaceEntry(orgId, profileId, filename);
+  return readFileAt(getProfileSoulDir(orgId, profileId), filename, options);
+}
+
+export function readGroupFile(
+  orgId: string,
+  groupId: string,
+  filename: string,
+  options: { render?: "markdown" } = {}
+) {
+  return readFileAt(getGroupSharedDir(orgId, groupId), filename, options);
+}
+
+async function readFileAt(
+  root: string,
+  filename: string,
+  options: { render?: "markdown" }
+) {
+  const file = await entryAt(root, filename);
 
   assertHtmlArtifactSize(filename, file.entry.sizeBytes, file.contentType);
   assertHtmlArtifactSize(file.filePath, file.entry.sizeBytes, file.contentType);

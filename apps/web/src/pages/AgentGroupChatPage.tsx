@@ -7,14 +7,33 @@ import {
   type AgentGroupSessionDetail,
   memberHandles,
 } from "@nakama/core/agent-groups";
+import type { DocumentAttachment } from "@nakama/core/contract";
+import { Button } from "@nakama/ui";
 import { Spinner } from "@nakama/ui/spinner";
 import { toast } from "@nakama/ui/toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Folder01Icon,
+  MessageAdd01Icon,
+  PencilEdit02Icon,
+} from "hugeicons-react";
 import { useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { createPortal } from "react-dom";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { GroupAvatar } from "@/components/agent-groups/GroupAvatar";
 import { GroupComposer } from "@/components/agent-groups/group-composer";
+import { GroupDialog } from "@/components/agent-groups/group-dialog";
 import { GroupMessageList } from "@/components/agent-groups/group-message-list";
+import {
+  GroupFilesPanel,
+  GroupLivePanel,
+  GroupThreadPanel,
+} from "@/components/agent-groups/group-thread-panel";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
 import { useAgentGroupQuery } from "@/hooks/use-agent-groups";
@@ -30,13 +49,46 @@ import { queryKeys } from "@/lib/query-keys";
 import { ChatPageColumn } from "@/pages/chat/chat-page-layout";
 
 const COMPOSER_DOCK =
-  "sticky bottom-0 z-10 mt-auto w-full shrink-0 bg-background/95 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:pt-4 sm:pb-4";
+  "sticky bottom-0 z-10 mt-auto w-full shrink-0 bg-background/95 pt-3 max-sm:px-0 sm:px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:pt-4 sm:pb-4";
+
+const NO_THREAD_RUNS: number[] = [];
 
 /** `/groups/:groupId` is a new chat in the group; with `:sessionId` one of its chats. */
 export function AgentGroupChatPage() {
   const { groupId = "", sessionId } = useParams();
   const { data: group, error, isLoading } = useAgentGroupQuery(groupId);
   const { data: profiles = [] } = useProfilesQuery();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requested = Number(searchParams.get("thread"));
+  const openThreadId = sessionId && requested > 0 ? requested : null;
+  const liveOpen = Boolean(sessionId) && searchParams.get("live") === "1";
+  const filesOpen = searchParams.get("files") === "1";
+
+  // The thread, the live view and the files share one side panel; opening one closes the others.
+  function setPanel(panel: "files" | "live" | "thread", value: string | null) {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+
+        for (const key of ["files", "live", "thread"]) {
+          next.delete(key);
+        }
+
+        if (value !== null) {
+          next.set(panel, value);
+        }
+
+        return next;
+      },
+      { replace: true }
+    );
+  }
+
+  const setThread = (messageId: number | null) =>
+    setPanel("thread", messageId === null ? null : String(messageId));
+
+  const setLive = (open: boolean) => setPanel("live", open ? "1" : null);
+  const setFilesOpen = (open: boolean) => setPanel("files", open ? "1" : null);
 
   if (isLoading) {
     return (
@@ -52,14 +104,100 @@ export function AgentGroupChatPage() {
 
   return (
     // The chat column reads the attachment panel, as on the agent chat page.
-    <ChatAttachmentPanelProvider key={`${groupId}:${sessionId ?? "new"}`}>
+    // The thread opens in its `below` slot: the same framed side panel as /btw.
+    <ChatAttachmentPanelProvider
+      below={
+        // An empty slot would still frame a blank column beside the chat.
+        filesOpen || (sessionId && (liveOpen || openThreadId)) ? (
+          <GroupSidePanel
+            filesOpen={filesOpen}
+            group={group}
+            liveOpen={liveOpen}
+            onCloseFiles={() => setFilesOpen(false)}
+            onCloseLive={() => setLive(false)}
+            onCloseThread={() => setThread(null)}
+            profiles={profiles}
+            sessionId={sessionId}
+            threadId={openThreadId}
+          />
+        ) : null
+      }
+      key={`${groupId}:${sessionId ?? "new"}`}
+    >
       {sessionId ? (
-        <GroupSession group={group} profiles={profiles} sessionId={sessionId} />
+        <GroupSession
+          group={group}
+          onOpenLive={() => setLive(true)}
+          onOpenThread={setThread}
+          profiles={profiles}
+          sessionId={sessionId}
+        />
       ) : (
         <GroupDraft group={group} profiles={profiles} />
       )}
     </ChatAttachmentPanelProvider>
   );
+}
+
+/** The one side panel that is open: files, the live view, or a thread. */
+function GroupSidePanel({
+  filesOpen,
+  group,
+  liveOpen,
+  onCloseFiles,
+  onCloseLive,
+  onCloseThread,
+  profiles,
+  sessionId,
+  threadId,
+}: {
+  filesOpen: boolean;
+  group: AgentGroup;
+  liveOpen: boolean;
+  onCloseFiles: () => void;
+  onCloseLive: () => void;
+  onCloseThread: () => void;
+  profiles: ProfileSummary[];
+  sessionId?: string;
+  threadId: number | null;
+}) {
+  if (filesOpen) {
+    return (
+      <GroupFilesPanel group={group} key={group.id} onClose={onCloseFiles} />
+    );
+  }
+
+  if (sessionId && liveOpen) {
+    return (
+      <GroupLivePanel
+        group={group}
+        onClose={onCloseLive}
+        profiles={profiles}
+        sessionId={sessionId}
+      />
+    );
+  }
+
+  if (sessionId && threadId) {
+    return (
+      <GroupThreadPanel
+        group={group}
+        key={threadId}
+        messageId={threadId}
+        onClose={onCloseThread}
+        profiles={profiles}
+        sessionId={sessionId}
+      />
+    );
+  }
+
+  return null;
+}
+
+function joinNames(names: string[]): string {
+  return names.length < 2
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
 
 function GroupMissing({ message }: { message?: string }) {
@@ -70,6 +208,35 @@ function GroupMissing({ message }: { message?: string }) {
         Back to groups
       </Link>
     </div>
+  );
+}
+
+/** Opens the group's shared folder in the side panel. */
+function GroupFilesButton() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  return (
+    <Button
+      onClick={() =>
+        setSearchParams(
+          (current) => {
+            const next = new URLSearchParams(current);
+            next.delete("thread");
+            next.delete("live");
+            next.set("files", "1");
+
+            return next;
+          },
+          { replace: true }
+        )
+      }
+      size="sm"
+      type="button"
+      variant={searchParams.get("files") === "1" ? "secondary" : "outline"}
+    >
+      <Folder01Icon aria-hidden />
+      <span className="max-sm:sr-only">Files</span>
+    </Button>
   );
 }
 
@@ -85,50 +252,137 @@ function useMembers(group: AgentGroup, profiles: ProfileSummary[]) {
   return { handles: useMemo(() => memberHandles(members), [members]), members };
 }
 
+/** The group's name, its agents' avatars and count, and the edit group and new chat buttons. */
+function GroupHeader({
+  group,
+  members,
+}: {
+  group: AgentGroup;
+  members: ProfileSummary[];
+}) {
+  const navigate = useNavigate();
+  const [editing, setEditing] = useState(false);
+
+  const actions = (
+    <>
+      <Button
+        onClick={() => setEditing(true)}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        <PencilEdit02Icon aria-hidden />
+        <span className="max-sm:sr-only">Edit group</span>
+      </Button>
+      <GroupFilesButton />
+      <Button
+        onClick={() => navigate(groupPath(group.id))}
+        size="sm"
+        type="button"
+      >
+        <MessageAdd01Icon aria-hidden />
+        <span className="max-sm:sr-only">New chat</span>
+      </Button>
+    </>
+  );
+
+  // On a phone the app navbar names the group, so the actions move up there.
+  const navbarActions = document.querySelector("[data-page-header-actions]");
+
+  return (
+    <>
+      <header className="flex h-14 shrink-0 items-center gap-3 px-4 max-sm:hidden sm:px-6">
+        <h1 className="min-w-0 truncate font-semibold text-lg tracking-tight">
+          {group.name}
+        </h1>
+        <div className="flex shrink-0 -space-x-2">
+          {members.slice(0, 4).map((member) => (
+            <ProfileAvatar
+              className="outline-none"
+              key={member.id}
+              profile={member}
+              size="sm"
+            />
+          ))}
+        </div>
+        <span className="shrink-0 text-muted-foreground text-sm">
+          {group.memberIds.length} agents
+        </span>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {actions}
+        </div>
+      </header>
+      {navbarActions
+        ? createPortal(
+            <div className="flex items-center gap-2 sm:hidden">{actions}</div>,
+            navbarActions
+          )
+        : null}
+      {editing ? (
+        <GroupDialog group={group} onClose={() => setEditing(false)} />
+      ) : null}
+    </>
+  );
+}
+
 /** The transcript with the composer docked under it, as in agent chat. */
 function GroupConversation({
   group,
   messages,
+  onOpenLive,
+  onOpenThread,
   onSend,
   onStop,
   profiles,
   run,
+  threadRunIds = NO_THREAD_RUNS,
 }: {
   group: AgentGroup;
   messages: AgentGroupMessage[];
-  onSend: (content: string) => Promise<void>;
+  /** Absent while a new chat's session is still being created. */
+  onOpenLive?: () => void;
+  onOpenThread?: (messageId: number) => void;
+  onSend: (content: string, documents?: DocumentAttachment[]) => Promise<void>;
   onStop: () => void;
   profiles: ProfileSummary[];
   run: AgentGroupRun | null;
+  threadRunIds?: number[];
 }) {
   const { handles, members } = useMembers(group, profiles);
 
   return (
-    <ChatPageColumn>
-      <div
-        className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col"
-        id="agent-group-chat"
-      >
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <GroupMessageList
-            handles={handles}
-            messages={messages}
-            profiles={profiles}
-            run={run}
-          />
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <GroupHeader group={group} members={members} />
+      <ChatPageColumn>
+        <div
+          className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col"
+          id="agent-group-chat"
+        >
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <GroupMessageList
+              handles={handles}
+              messages={messages}
+              onOpenLive={() => onOpenLive?.()}
+              onOpenThread={(messageId) => onOpenThread?.(messageId)}
+              profiles={profiles}
+              run={run}
+              threadRunIds={threadRunIds}
+            />
+          </div>
+          <div className={COMPOSER_DOCK}>
+            <GroupComposer
+              allowDocuments
+              busy={run !== null}
+              handles={handles}
+              members={members}
+              onSend={onSend}
+              onStop={onStop}
+              stopping={run?.stopping ?? false}
+            />
+          </div>
         </div>
-        <div className={COMPOSER_DOCK}>
-          <GroupComposer
-            busy={run !== null}
-            handles={handles}
-            members={members}
-            onSend={onSend}
-            onStop={onStop}
-            stopping={run?.stopping ?? false}
-          />
-        </div>
-      </div>
-    </ChatPageColumn>
+      </ChatPageColumn>
+    </div>
   );
 }
 
@@ -149,11 +403,28 @@ function GroupDraft({
   const { handles, members } = useMembers(group, profiles);
   const [pending, setPending] = useState<AgentGroupMessage | null>(null);
   const [restored, setRestored] = useState("");
+  const [editing, setEditing] = useState(false);
   const creating = useRef<Promise<AgentGroupSession> | null>(null);
 
-  async function sendFirst(content: string) {
-    const message = pendingMessage(content);
-    const request = client.createAgentGroupSession(group.id, content);
+  // `handles` maps handle to member id.
+  const handleOf = (id: string) =>
+    [...handles].find(([, memberId]) => memberId === id)?.[0] ?? "";
+
+  async function sendFirst(
+    content: string,
+    documents: DocumentAttachment[] = []
+  ) {
+    const message = pendingMessage(
+      content,
+      documents.map((document) => document.filename)
+    );
+
+    const request = client.createAgentGroupSession(
+      group.id,
+      content,
+      documents
+    );
+
     creating.current = request;
     setPending(message);
 
@@ -162,7 +433,13 @@ function GroupDraft({
 
       queryClient.setQueryData<AgentGroupSessionDetail>(
         queryKeys.agentGroups.session(group.id, session.id),
-        { group, messages: [message], run: PENDING_RUN, session }
+        {
+          group,
+          messages: [message],
+          run: PENDING_RUN,
+          session,
+          threadRunIds: [],
+        }
       );
       void queryClient.invalidateQueries({
         exact: true,
@@ -183,11 +460,16 @@ function GroupDraft({
         group={group}
         messages={[pending]}
         // A second message before the session exists waits for it.
-        onSend={async (content) => {
+        onSend={async (content, documents) => {
           const session = await creating.current;
 
           if (session) {
-            await client.sendAgentGroupMessage(group.id, session.id, content);
+            await client.sendAgentGroupMessage(
+              group.id,
+              session.id,
+              content,
+              documents
+            );
           }
         }}
         onStop={() => undefined}
@@ -203,29 +485,47 @@ function GroupDraft({
         className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col"
         id="group-new-chat"
       >
+        <div className="flex shrink-0 justify-end gap-2 px-4 pt-4">
+          <Button
+            onClick={() => setEditing(true)}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <PencilEdit02Icon aria-hidden />
+            Edit group
+          </Button>
+          <GroupFilesButton />
+        </div>
         <div className="flex flex-1 flex-col justify-center gap-6 pb-12">
           <div className="flex flex-col items-center gap-3 px-4 text-center">
-            <GroupAvatar
-              className="size-16 rounded-2xl"
-              group={group}
-              profiles={profiles}
-            />
-            <h2 className="type-section-title text-xl tracking-tight">
+            {group.avatarVersion ? (
+              <GroupAvatar
+                className="size-16 rounded-2xl"
+                group={group}
+                profiles={profiles}
+              />
+            ) : (
+              <div className="flex -space-x-2">
+                {members.slice(0, 2).map((member) => (
+                  <ProfileAvatar
+                    className="size-16 outline-none"
+                    key={member.id}
+                    profile={member}
+                    size="lg"
+                  />
+                ))}
+              </div>
+            )}
+            <h2 className="type-section-title text-2xl tracking-tight">
               {group.name}
             </h2>
-            <div className="flex flex-wrap justify-center gap-1.5">
-              {members.map((member) => (
-                <span
-                  className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-13"
-                  key={member.id}
-                >
-                  <ProfileAvatar profile={member} size="xxs" />
-                  {member.name}
-                </span>
-              ))}
-            </div>
+            <p className="text-muted-foreground text-sm">
+              {joinNames(members.map((member) => member.name))}
+            </p>
           </div>
           <GroupComposer
+            allowDocuments
             busy={false}
             handles={handles}
             initialInput={restored}
@@ -235,7 +535,39 @@ function GroupDraft({
             onStop={() => undefined}
             stopping={false}
           />
+          <div className="flex flex-wrap justify-center gap-2 px-4">
+            <button
+              className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-sm hover:bg-muted"
+              onClick={() => void sendFirst("@all introduce yourselves")}
+              type="button"
+            >
+              <span className="text-primary">@all</span>
+              introduce yourselves
+            </button>
+            {members.slice(0, 2).map((member) => (
+              <button
+                className="inline-flex items-center gap-2 rounded-full border border-border py-1.5 pr-3 pl-1.5 text-sm hover:bg-muted"
+                key={member.id}
+                onClick={() =>
+                  void sendFirst(
+                    `@${handleOf(member.id)} what can you help with?`
+                  )
+                }
+                type="button"
+              >
+                <ProfileAvatar
+                  className="outline-none"
+                  profile={member}
+                  size="xs"
+                />
+                {member.name}: what can you help with?
+              </button>
+            ))}
+          </div>
         </div>
+        {editing ? (
+          <GroupDialog group={group} onClose={() => setEditing(false)} />
+        ) : null}
       </div>
     </ChatPageColumn>
   );
@@ -243,10 +575,14 @@ function GroupDraft({
 
 function GroupSession({
   group,
+  onOpenLive,
+  onOpenThread,
   profiles,
   sessionId,
 }: {
   group: AgentGroup;
+  onOpenLive: () => void;
+  onOpenThread: (messageId: number) => void;
   profiles: ProfileSummary[];
   sessionId: string;
 }) {
@@ -260,7 +596,10 @@ function GroupSession({
     queryKey: sessionKey,
     // Poll only while agents are replying.
     refetchInterval: (query) =>
-      !sending && query.state.data?.run ? 1500 : false,
+      !sending &&
+      (query.state.data?.run || query.state.data?.threadRunIds?.length)
+        ? 1500
+        : false,
   });
 
   const refresh = () =>
@@ -273,15 +612,26 @@ function GroupSession({
     ]).then(() => undefined);
 
   /** Shows the message at once, then lets the server confirm or roll it back. */
-  async function send(content: string) {
+  async function send(content: string, documents: DocumentAttachment[] = []) {
     setSending(true);
     await queryClient.cancelQueries({ exact: true, queryKey: sessionKey });
     queryClient.setQueryData<AgentGroupSessionDetail>(sessionKey, (detail) =>
-      detail ? withPendingMessage(detail, content) : detail
+      detail
+        ? withPendingMessage(
+            detail,
+            content,
+            documents.map((document) => document.filename)
+          )
+        : detail
     );
 
     try {
-      await client.sendAgentGroupMessage(group.id, sessionId, content);
+      await client.sendAgentGroupMessage(
+        group.id,
+        sessionId,
+        content,
+        documents
+      );
     } catch (sendError) {
       toast(formatError(sendError));
       throw sendError;
@@ -309,6 +659,8 @@ function GroupSession({
     <GroupConversation
       group={group}
       messages={data.messages}
+      onOpenLive={onOpenLive}
+      onOpenThread={onOpenThread}
       onSend={send}
       onStop={() =>
         void client
@@ -318,6 +670,7 @@ function GroupSession({
       }
       profiles={profiles}
       run={data.run}
+      threadRunIds={data.threadRunIds}
     />
   );
 }

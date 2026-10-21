@@ -591,6 +591,7 @@ describe("shared agent instance persistence", () => {
       acpAgent: null,
       acpSettings: null,
       automationsEnabled: true,
+      groupsEnabled: true,
       id: "instance_a",
       orgId: "team_a",
       ownerUserId: null,

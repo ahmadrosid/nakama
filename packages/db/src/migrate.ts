@@ -39,6 +39,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateOrganizationAllowedInviteDomains);
   atomic(migrateSkillsPostTurnReviewColumns);
   atomic(migrateAutomationsEnabledColumn);
+  atomic(migrateGroupsEnabledColumn);
   atomic(migrateSkillsCuratorColumns);
   atomic(migrateLlmUsageQuotaColumns);
   atomic(migrateOrgLlmMonthlyQuotaTable);
@@ -1091,6 +1092,20 @@ function migrateAutomationsEnabledColumn(db: Database): void {
       "ALTER TABLE profiles ADD COLUMN automations_enabled INTEGER NOT NULL DEFAULT 0;"
     );
     db.exec("UPDATE profiles SET automations_enabled = 1;");
+  }
+}
+
+function migrateGroupsEnabledColumn(db: Database): void {
+  const columns = db
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(profiles)"
+    )
+    .all();
+
+  if (!columns.some((column) => column.name === "groups_enabled")) {
+    db.exec(
+      "ALTER TABLE profiles ADD COLUMN groups_enabled INTEGER NOT NULL DEFAULT 1;"
+    );
   }
 }
 

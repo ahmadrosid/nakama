@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useTheme } from "@/context/use-theme";
 import { client, formatError } from "@/lib/client";
-import { ditherLogoSrc } from "@/lib/theme";
+import { markLogoSrc } from "@/lib/theme";
 
 export function PasswordResetPage() {
   const [searchParams] = useSearchParams();
@@ -70,7 +70,7 @@ export function PasswordResetPage() {
           <img
             alt="Nakama"
             className="mb-4 size-14 rounded-xl"
-            src={ditherLogoSrc(resolvedTheme)}
+            src={markLogoSrc(resolvedTheme)}
           />
           <h1 className="font-semibold text-xl tracking-tight">{heading}</h1>
         </div>

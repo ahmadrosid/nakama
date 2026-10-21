@@ -15,10 +15,14 @@ export interface SubAgentRunInput {
   clientOrigin?: string;
   context?: string;
   onActivity?: (label: string) => void;
+  /** Answer text as the model writes it. */
+  onText?: (chunk: string) => void;
   orgId: string;
   orgRole?: OrgRole;
   profileId: string;
   sessionId?: string;
+  /** Agent group folder the child's file tools may also use. */
+  sharedDir?: string;
   task: string;
   timeoutMs?: number;
   userId?: string;

@@ -31,7 +31,14 @@ const SCHEMA = `PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
   CREATE TABLE IF NOT EXISTS rail_pins (
     user_id TEXT NOT NULL, item_id TEXT NOT NULL, PRIMARY KEY (user_id, item_id));`;
 
-const GROUP_COLUMNS = `g.id, g.name, g.member_ids, g.created_at, a.updated_at AS avatar_version
+// Latest main-chat message across the group's sessions, for the list preview.
+const LAST_MESSAGE = (column: string) =>
+  `(SELECT lm.${column} FROM messages lm WHERE lm.group_id = g.id AND lm.thread_root_id IS NULL ORDER BY lm.id DESC LIMIT 1)`;
+
+const GROUP_COLUMNS = `g.id, g.name, g.brief, g.member_ids, g.created_at, a.updated_at AS avatar_version,
+  ${LAST_MESSAGE("content")} AS last_content,
+  ${LAST_MESSAGE("author_profile_id")} AS last_author_profile_id,
+  ${LAST_MESSAGE("created_at")} AS last_created_at
   FROM groups g LEFT JOIN group_avatars a ON a.group_id = g.id`;
 
 // Joined to groups so every session read is scoped to the group's owner.
@@ -40,8 +47,12 @@ const SESSION_COLUMNS = `s.id, s.group_id, s.title, s.pinned, s.created_at, s.up
 
 interface GroupRow {
   avatar_version: string | null;
+  brief: string;
   created_at: string;
   id: string;
+  last_author_profile_id: string | null;
+  last_content: string | null;
+  last_created_at: string | null;
   member_ids: string;
   name: string;
 }
@@ -55,12 +66,26 @@ interface SessionRow {
   updated_at: string;
 }
 
+/** A document the user attached, as the text the agents read. */
+export interface GroupDocument {
+  filename: string;
+  text: string;
+}
+
 interface MessageRow {
   author_profile_id: string | null;
   content: string;
   created_at: string;
+  file_names: string;
   id: number;
+  thread_replies: number;
 }
+
+// Main messages carry their thread's reply count; thread messages carry none.
+const MESSAGE_COLUMNS = `m.id, m.author_profile_id, m.content, m.created_at,
+  (SELECT json_group_array(json_extract(d.value, '$.filename')) FROM json_each(m.documents) d) AS file_names,
+  (SELECT COUNT(*) FROM messages t WHERE t.thread_root_id = m.id) AS thread_replies
+  FROM messages m`;
 
 /** A stored session; `active` belongs to the in-memory run state. */
 export type StoredGroupSession = Omit<AgentGroupSession, "active">;
@@ -81,6 +106,9 @@ function withGroupDb<T>(orgId: string, run: (db: Database) => T): T {
     try {
       chmodSync(path, 0o600);
       db.exec(SCHEMA);
+      addThreadColumn(db);
+      addBriefColumn(db);
+      addDocumentsColumn(db);
     } catch (error) {
       db.close();
       throw error;
@@ -90,6 +118,42 @@ function withGroupDb<T>(orgId: string, run: (db: Database) => T): T {
   }
 
   return run(db);
+}
+
+/** Threads came after the first release, so older files lack the column. */
+function addThreadColumn(db: Database): void {
+  const columns = db
+    .query<{ name: string }, []>("PRAGMA table_info(messages)")
+    .all();
+
+  if (!columns.some((column) => column.name === "thread_root_id")) {
+    db.exec(
+      `ALTER TABLE messages ADD COLUMN thread_root_id INTEGER;
+        CREATE INDEX IF NOT EXISTS messages_thread ON messages (thread_root_id, id);`
+    );
+  }
+}
+
+/** Briefs came after the first release, so older files lack the column. */
+function addBriefColumn(db: Database): void {
+  const columns = db
+    .query<{ name: string }, []>("PRAGMA table_info(groups)")
+    .all();
+
+  if (!columns.some((column) => column.name === "brief")) {
+    db.exec("ALTER TABLE groups ADD COLUMN brief TEXT NOT NULL DEFAULT ''");
+  }
+}
+
+/** Attachments came after the first release, so older files lack the column. */
+function addDocumentsColumn(db: Database): void {
+  const columns = db
+    .query<{ name: string }, []>("PRAGMA table_info(messages)")
+    .all();
+
+  if (!columns.some((column) => column.name === "documents")) {
+    db.exec("ALTER TABLE messages ADD COLUMN documents TEXT");
+  }
 }
 
 /**
@@ -111,8 +175,17 @@ function toGroup(row: GroupRow): AgentGroup {
 
   return {
     avatarVersion: row.avatar_version,
+    brief: row.brief,
     createdAt: row.created_at,
     id: row.id,
+    lastMessage:
+      row.last_content === null || row.last_created_at === null
+        ? null
+        : {
+            authorProfileId: row.last_author_profile_id,
+            content: row.last_content,
+            createdAt: row.last_created_at,
+          },
     memberIds,
     name: row.name,
   };
@@ -130,11 +203,16 @@ function toSession(row: SessionRow): StoredGroupSession {
 }
 
 function toMessage(row: MessageRow): AgentGroupMessage {
+  // SAFETY: file_names is built by json_group_array over filename strings.
+  const files = JSON.parse(row.file_names) as string[];
+
   return {
     authorProfileId: row.author_profile_id,
     content: row.content,
     createdAt: row.created_at,
+    ...(files.length > 0 && { files }),
     id: row.id,
+    threadReplies: row.thread_replies,
   };
 }
 
@@ -169,12 +247,15 @@ export function createAgentGroup(
   orgId: string,
   ownerId: string,
   name: string,
-  memberIds: string[]
+  memberIds: string[],
+  brief = ""
 ): AgentGroup {
   const group: AgentGroup = {
     avatarVersion: null,
+    brief,
     createdAt: new Date().toISOString(),
     id: randomUUID(),
+    lastMessage: null,
     memberIds,
     name,
   };
@@ -182,12 +263,13 @@ export function createAgentGroup(
   withGroupDb(orgId, (db) =>
     db
       .query(
-        "INSERT INTO groups (id, owner_user_id, name, member_ids, created_at) VALUES (?, ?, ?, ?, ?)"
+        "INSERT INTO groups (id, owner_user_id, name, brief, member_ids, created_at) VALUES (?, ?, ?, ?, ?, ?)"
       )
       .run(
         group.id,
         ownerId,
         group.name,
+        brief,
         JSON.stringify(memberIds),
         group.createdAt
       )
@@ -202,16 +284,18 @@ export function updateAgentGroup(
   ownerId: string,
   groupId: string,
   name: string,
-  memberIds: string[]
+  memberIds: string[],
+  brief = ""
 ): boolean {
   return withGroupDb(
     orgId,
     (db) =>
       db
         .query(
-          "UPDATE groups SET name = ?, member_ids = ? WHERE id = ? AND owner_user_id = ?"
+          "UPDATE groups SET name = ?, brief = ?, member_ids = ? WHERE id = ? AND owner_user_id = ?"
         )
-        .run(name, JSON.stringify(memberIds), groupId, ownerId).changes > 0
+        .run(name, brief, JSON.stringify(memberIds), groupId, ownerId).changes >
+      0
   );
 }
 
@@ -430,7 +514,7 @@ export function deleteGroupSession(
   );
 }
 
-/** The newest `limit` messages of a session, oldest first. */
+/** The newest `limit` messages of a session's main chat, oldest first. */
 export function listAgentGroupMessages(
   orgId: string,
   sessionId: string,
@@ -439,23 +523,86 @@ export function listAgentGroupMessages(
   return withGroupDb(orgId, (db) =>
     db
       .query<MessageRow, [string, number]>(
-        `SELECT * FROM (SELECT id, author_profile_id, content, created_at FROM messages
-          WHERE session_id = ? ORDER BY id DESC LIMIT ?) ORDER BY id`
+        `SELECT * FROM (SELECT ${MESSAGE_COLUMNS}
+          WHERE m.session_id = ? AND m.thread_root_id IS NULL
+          ORDER BY m.id DESC LIMIT ?) ORDER BY id`
       )
       .all(sessionId, limit)
       .map(toMessage)
   );
 }
 
+/** One main-chat message, or null when it is gone or sits inside a thread. */
+export function getAgentGroupMessage(
+  orgId: string,
+  sessionId: string,
+  messageId: number
+): AgentGroupMessage | null {
+  const row = withGroupDb(orgId, (db) =>
+    db
+      .query<MessageRow, [string, number]>(
+        `SELECT ${MESSAGE_COLUMNS}
+          WHERE m.session_id = ? AND m.id = ? AND m.thread_root_id IS NULL`
+      )
+      .get(sessionId, messageId)
+  );
+
+  return row ? toMessage(row) : null;
+}
+
+/** The replies in one thread, oldest first. */
+export function listAgentGroupThreadMessages(
+  orgId: string,
+  sessionId: string,
+  rootId: number
+): AgentGroupMessage[] {
+  return withGroupDb(orgId, (db) =>
+    db
+      .query<MessageRow, [string, number]>(
+        `SELECT ${MESSAGE_COLUMNS}
+          WHERE m.session_id = ? AND m.thread_root_id = ? ORDER BY m.id`
+      )
+      .all(sessionId, rootId)
+      .map(toMessage)
+  );
+}
+
+/** The text of the documents attached to these messages, by message id. */
+export function listGroupMessageDocuments(
+  orgId: string,
+  messageIds: number[]
+): Map<number, GroupDocument[]> {
+  if (messageIds.length === 0) {
+    return new Map();
+  }
+
+  const rows = withGroupDb(orgId, (db) =>
+    db
+      .query<{ documents: string; id: number }, number[]>(
+        `SELECT id, documents FROM messages
+          WHERE documents IS NOT NULL AND id IN (${messageIds.map(() => "?").join(",")})`
+      )
+      .all(...messageIds)
+  );
+
+  // SAFETY: documents is only ever written by this store as a GroupDocument array.
+  return new Map(
+    rows.map((row) => [row.id, JSON.parse(row.documents) as GroupDocument[]])
+  );
+}
+
 /**
- * Appends to a session and marks it as the latest activity. Throws once the
- * session or group is gone, which ends a run on a deleted conversation.
+ * Appends to a session and marks it as the latest activity. With `threadRootId`
+ * the message joins that message's thread instead of the main chat. Throws once
+ * the session or group is gone, which ends a run on a deleted conversation.
  */
 export function appendAgentGroupMessage(
   orgId: string,
   session: Pick<StoredGroupSession, "groupId" | "id">,
   authorProfileId: string | null,
-  content: string
+  content: string,
+  threadRootId?: number,
+  documents: GroupDocument[] = []
 ): AgentGroupMessage {
   const createdAt = new Date().toISOString();
 
@@ -463,9 +610,17 @@ export function appendAgentGroupMessage(
     db.transaction(() => {
       const inserted = db
         .query(
-          "INSERT INTO messages (group_id, session_id, author_profile_id, content, created_at) VALUES (?, ?, ?, ?, ?)"
+          "INSERT INTO messages (group_id, session_id, author_profile_id, content, created_at, thread_root_id, documents) VALUES (?, ?, ?, ?, ?, ?, ?)"
         )
-        .run(session.groupId, session.id, authorProfileId, content, createdAt);
+        .run(
+          session.groupId,
+          session.id,
+          authorProfileId,
+          content,
+          createdAt,
+          threadRootId ?? null,
+          documents.length > 0 ? JSON.stringify(documents) : null
+        );
 
       db.query("UPDATE group_sessions SET updated_at = ? WHERE id = ?").run(
         createdAt,
@@ -476,5 +631,12 @@ export function appendAgentGroupMessage(
     })()
   );
 
-  return { authorProfileId, content, createdAt, id: Number(lastInsertRowid) };
+  return {
+    authorProfileId,
+    content,
+    createdAt,
+    ...(documents.length > 0 && { files: documents.map((d) => d.filename) }),
+    id: Number(lastInsertRowid),
+    threadReplies: 0,
+  };
 }

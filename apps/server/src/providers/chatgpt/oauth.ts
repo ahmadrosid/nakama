@@ -353,7 +353,7 @@ export async function fetchChatgptCodexModels(
       refreshed = await refreshChatgptOAuthToken(oauth.refreshToken);
     } catch {
       throw new NakamaApiError(
-        "ChatGPT sign-in expired. Reconnect in Settings → LLM providers.",
+        "ChatGPT sign-in expired. Reconnect in Control center → AI Providers (/customize/providers).",
         400
       );
     }
@@ -365,7 +365,7 @@ export async function fetchChatgptCodexModels(
   if (response.status === 401) {
     await response.body?.cancel();
     throw new NakamaApiError(
-      "ChatGPT sign-in expired. Reconnect in Settings → LLM providers.",
+      "ChatGPT sign-in expired. Reconnect in Control center → AI Providers (/customize/providers).",
       400
     );
   }

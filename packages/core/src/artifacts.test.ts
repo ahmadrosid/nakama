@@ -15,13 +15,19 @@ import { MAX_HTML_ARTIFACT_BYTES } from "./artifact-mime";
 import {
   listArtifacts,
   listArtifactsTool,
+  listGroupFiles,
   listWorkspaceFiles,
   readArtifactFile,
+  readGroupFile,
   readWorkspaceFile,
   renameWorkspaceEntry,
   writeArtifactFile,
 } from "./artifacts";
-import { getProfileArtifactsDir, getProfileSoulDir } from "./soul/resolve";
+import {
+  getGroupSharedDir,
+  getProfileArtifactsDir,
+  getProfileSoulDir,
+} from "./soul/resolve";
 
 const SAMPLE_DOCX_PATH = path.join(
   import.meta.dir,
@@ -784,6 +790,33 @@ test("workspace paths reject traversal and symlinks outside the profile", async 
     readWorkspaceFile(ORG_ID, PROFILE_ID, "artifacts")
   ).rejects.toMatchObject({ status: 404 });
   expect((await listWorkspaceFiles(ORG_ID, "new_profile")).entries).toEqual([]);
+});
+
+test("a group's shared folder lists and reads its files, and stays inside it", async () => {
+  const shared = getGroupSharedDir(ORG_ID, "group_test");
+  await mkdir(path.join(shared, "chapters"), { recursive: true });
+  await writeFile(path.join(shared, "outline.md"), "# Outline");
+  await writeFile(path.join(shared, "chapters", "one.md"), "Once");
+  await writeFile(path.join(shared, "..", "secret.txt"), "secret");
+
+  const listing = await listGroupFiles(ORG_ID, "group_test");
+
+  expect(listing.entries.map(({ path: entry }) => entry)).toEqual([
+    "chapters",
+    "outline.md",
+  ]);
+  expect(
+    (await listGroupFiles(ORG_ID, "group_test", "chapters")).entries[0]?.path
+  ).toBe("chapters/one.md");
+  expect(
+    await Bun.file(
+      (await readGroupFile(ORG_ID, "group_test", "outline.md")).filePath
+    ).text()
+  ).toBe("# Outline");
+  await expect(
+    readGroupFile(ORG_ID, "group_test", "../secret.txt")
+  ).rejects.toMatchObject({ status: 400 });
+  expect((await listGroupFiles(ORG_ID, "new_group")).entries).toEqual([]);
 });
 
 test("list_artifacts projects relative keys, and pages results", async () => {

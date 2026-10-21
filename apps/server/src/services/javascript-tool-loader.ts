@@ -23,6 +23,12 @@ const customToolJsonValueSchema = z.json();
 
 type CustomToolJsonValue = z.infer<typeof customToolJsonValueSchema>;
 
+const javascriptSyntaxChecker = new Bun.Transpiler({ loader: "js" });
+
+const syntaxErrorPositionSchema = z.object({
+  position: z.object({ column: z.number(), line: z.number() }),
+});
+
 const RUNNER_PATH = fileURLToPath(
   new URL("./javascript-tool-runner.js", import.meta.url)
 );
@@ -118,8 +124,23 @@ export async function validateJavascriptToolModule(
   }
 
   // Static checks catch the obvious authoring failures before registration.
-  // Syntax errors still surface at invocation.
   const source = await readFile(resolvedPath, "utf8");
+
+  // A parse in this process costs far less than an agent turn spent finding a
+  // syntax error some other way: bash cannot reach the tools directory.
+  try {
+    javascriptSyntaxChecker.scan(source);
+  } catch (error) {
+    const position = syntaxErrorPositionSchema.safeParse(error).data?.position;
+
+    const where = position
+      ? ` at line ${position.line}:${position.column}`
+      : "";
+
+    const reason = error instanceof Error ? error.message : String(error);
+
+    throw new Error(`Syntax error in ${modulePath}${where}: ${reason}`);
+  }
 
   if (
     !/\bexport\s+(?:async\s+)?function\s+run\s*\(|\bexport\s+(?:const|let|var)\s+run\s*=/.test(

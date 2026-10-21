@@ -10,7 +10,7 @@ export function contextUsageRatio(usage: ChatContextUsage): number {
   return Math.min(1, Math.max(0, usage.usedTokens / usage.usableContextTokens));
 }
 
-export function formatTokenCount(tokens: number): string {
+function formatTokenCount(tokens: number): string {
   if (tokens < 1000) {
     return String(Math.max(0, Math.round(tokens)));
   }

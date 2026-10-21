@@ -167,6 +167,7 @@ interface ProfileRow {
   acp_settings: string | null;
   automations_enabled: number;
   created_at: string;
+  groups_enabled: number;
   id: string;
   is_default: number;
   is_super: number;
@@ -1033,6 +1034,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       org_id,
       is_default,
       automations_enabled,
+      groups_enabled,
       skills_write_approval,
       skills_post_turn_review,
       skills_curator_consolidate_enabled,
@@ -1043,7 +1045,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       created_at,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       system_prompt = excluded.system_prompt,
@@ -1054,6 +1056,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       org_id = excluded.org_id,
       is_default = excluded.is_default,
       automations_enabled = excluded.automations_enabled,
+      groups_enabled = excluded.groups_enabled,
       skills_write_approval = excluded.skills_write_approval,
       skills_post_turn_review = excluded.skills_post_turn_review,
       skills_curator_consolidate_enabled = excluded.skills_curator_consolidate_enabled,
@@ -1076,6 +1079,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       org_id,
       is_default,
       automations_enabled,
+      groups_enabled,
       skills_write_approval,
       skills_post_turn_review,
       skills_curator_consolidate_enabled,
@@ -1086,7 +1090,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       created_at,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO NOTHING
   `);
 
@@ -1101,6 +1105,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     record.orgId ?? null,
     record.isDefault ? 1 : 0,
     record.automationsEnabled === false ? 0 : 1,
+    record.groupsEnabled === false ? 0 : 1,
     record.skillsWriteApproval == null
       ? null
       : record.skillsWriteApproval
@@ -6589,6 +6594,7 @@ function toProfileRecord(row: ProfileRow): StoredProfileRecord {
         : (JSON.parse(row.acp_settings) as Record<string, string>),
     automationsEnabled: row.automations_enabled !== 0,
     createdAt: row.created_at,
+    groupsEnabled: row.groups_enabled !== 0,
     id: row.id,
     isDefault: row.is_default !== 0,
     isSuper: row.is_super !== 0,

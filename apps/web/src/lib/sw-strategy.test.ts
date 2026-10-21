@@ -52,7 +52,7 @@ describe("classifyRequest", () => {
 
   test("revalidates unhashed static files in the background", () => {
     expect(classify(`${ORIGIN}/manifest.webmanifest`)).toBe("revalidate");
-    expect(classify(`${ORIGIN}/nakama-logo-dither.png`)).toBe("revalidate");
+    expect(classify(`${ORIGIN}/nakama-mark.svg`)).toBe("revalidate");
     expect(classify(`${ORIGIN}/icons/icon-512.png`)).toBe("revalidate");
   });
 

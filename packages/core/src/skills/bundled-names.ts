@@ -6,6 +6,7 @@ export const DEFAULT_BUNDLED_SKILL_NAMES = [
   "archive-profile-memory",
   "artifact-design",
   "composio-integrations",
+  "nakama-guide",
 ] as const;
 
 export const SUPER_NAKAMA_BUNDLED_SKILL_NAMES = [

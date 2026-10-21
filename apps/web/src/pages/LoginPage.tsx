@@ -16,7 +16,7 @@ import { useTheme } from "@/context/use-theme";
 import { client } from "@/lib/client";
 import { SETUP_PATH } from "@/lib/navigation";
 import { getPasskey } from "@/lib/passkey";
-import { ditherLogoSrc } from "@/lib/theme";
+import { markLogoSrc } from "@/lib/theme";
 
 function isDemoLoginHost(
   hostname: string = typeof window === "undefined"
@@ -125,14 +125,14 @@ function LoginHeader({
   demoLogin: boolean;
   mfaRequired: boolean;
   passkeyRequired: boolean;
-  resolvedTheme: Parameters<typeof ditherLogoSrc>[0];
+  resolvedTheme: Parameters<typeof markLogoSrc>[0];
 }) {
   return (
     <div className="flex flex-col items-center text-center">
       <img
         alt="Nakama"
         className="mb-4 size-14 rounded-xl"
-        src={ditherLogoSrc(resolvedTheme)}
+        src={markLogoSrc(resolvedTheme)}
       />
       <h1 className="font-semibold text-xl tracking-tight">
         {mfaRequired || passkeyRequired
