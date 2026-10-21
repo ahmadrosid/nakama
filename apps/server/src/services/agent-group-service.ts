@@ -271,14 +271,15 @@ export class AgentGroupService {
     groupId: string,
     sessionId: string,
     rootId: number,
-    content: string
+    content: string,
+    documents: GroupDocument[] = []
   ): Promise<void> {
     const session = requireSession(orgId, userId, groupId, sessionId);
     const root = requireThreadRoot(orgId, sessionId, rootId);
     const key = threadKey(sessionId, rootId);
     const active = this.threadRuns.get(key);
 
-    appendAgentGroupMessage(orgId, session, null, content, rootId);
+    appendAgentGroupMessage(orgId, session, null, content, rootId, documents);
 
     if (active) {
       active.again = true;

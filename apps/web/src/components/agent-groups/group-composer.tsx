@@ -27,6 +27,7 @@ import {
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
 import { ChatSkillTokenOverlay } from "@/components/chat/chat-skill-token-overlay";
+import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { findActiveSkillSlashRange } from "@/lib/chat-composer-skills";
 import {
@@ -37,6 +38,10 @@ import {
   composerHitTargetClass,
   composerInputGroupClass,
 } from "@/lib/chat-stream";
+import {
+  isPastedTextDocument,
+  LONG_PASTE_WORD_THRESHOLD,
+} from "@/lib/pasted-text";
 
 // The same textarea, send button and stop icon as the agent chat composer.
 const FULL_TEXTAREA_CLASS =
@@ -192,28 +197,36 @@ function GroupComposerForm({
       ) : null}
       {attachments.files.length > 0 ? (
         <div className="mb-2 flex flex-wrap gap-2">
-          {attachments.files.map((file) => (
-            <div
-              className="flex max-w-full items-center gap-2 rounded-lg border border-border bg-muted py-1.5 pr-1.5 pl-3"
-              key={file.id}
-            >
-              <File01Icon
-                aria-hidden
-                className="size-4 shrink-0 text-muted-foreground"
+          {attachments.files.map((file) =>
+            isPastedTextDocument(file.filename ?? "", file.mediaType ?? "") ? (
+              <TextAttachmentPreview
+                filename={file.filename ?? "Document"}
+                key={file.id}
+                onRemove={() => attachments.remove(file.id)}
               />
-              <span className="truncate font-medium text-xs">
-                {file.filename ?? "Document"}
-              </span>
-              <button
-                aria-label={`Remove ${file.filename ?? "document"}`}
-                className="rounded-md p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
-                onClick={() => attachments.remove(file.id)}
-                type="button"
+            ) : (
+              <div
+                className="flex max-w-full items-center gap-2 rounded-lg border border-border bg-muted py-1.5 pr-1.5 pl-3"
+                key={file.id}
               >
-                <Cancel01Icon className="size-3.5" />
-              </button>
-            </div>
-          ))}
+                <File01Icon
+                  aria-hidden
+                  className="size-4 shrink-0 text-muted-foreground"
+                />
+                <span className="truncate font-medium text-xs">
+                  {file.filename ?? "Document"}
+                </span>
+                <button
+                  aria-label={`Remove ${file.filename ?? "document"}`}
+                  className="rounded-md p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
+                  onClick={() => attachments.remove(file.id)}
+                  type="button"
+                >
+                  <Cancel01Icon className="size-3.5" />
+                </button>
+              </div>
+            )
+          )}
         </div>
       ) : null}
       <PromptInput
@@ -256,6 +269,9 @@ function GroupComposerForm({
                 FULL_TEXTAREA_CLASS,
                 "text-transparent caret-foreground"
               )}
+              longPasteWordThreshold={
+                allowDocuments ? LONG_PASTE_WORD_THRESHOLD : undefined
+              }
               maxLength={8000}
               onChange={(event) => setCaret(event.target.selectionStart)}
               onKeyDown={(event) => {

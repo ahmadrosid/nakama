@@ -463,7 +463,10 @@ export function registerAgentGroupRoutes(
     "/v1/agent-groups/:groupId/sessions/:sessionId/threads/:messageId/messages",
     async (c) => {
       const t = threadParams(c);
-      const { content } = await readJson(c.req.raw, messageSchema);
+      const { content, documents } = await readJson(
+        c.req.raw,
+        groupMessageSchema
+      );
 
       service
         .postThread(
@@ -472,7 +475,8 @@ export function registerAgentGroupRoutes(
           t.groupId,
           t.sessionId,
           t.messageId,
-          content
+          content,
+          await readGroupDocuments(documents)
         )
         .catch(logRunFailure(t.groupId));
 

@@ -209,11 +209,12 @@ export class AgentGroupsClient extends OrgMemoryClient {
     groupId: string,
     sessionId: string,
     messageId: number,
-    content: string
+    content: string,
+    documents: DocumentAttachment[] = []
   ): Promise<void> {
     await this.request(
       `${agentGroupThreadPath(groupId, sessionId, messageId)}/messages`,
-      { body: JSON.stringify({ content }), method: "POST" }
+      { body: JSON.stringify({ content, documents }), method: "POST" }
     );
   }
 
