@@ -43,7 +43,7 @@ export function formatImageMentionContext(
 
   return toolNames.includes(GENERATE_IMAGE_TOOL_NAME)
     ? `The user tagged @image, so this turn is an image request. Call ${GENERATE_IMAGE_TOOL_NAME} right away with a detailed prompt built from their message (leave out the @image tag), then reply briefly. Do not answer with text only.`
-    : `The user tagged @image, but the ${GENERATE_IMAGE_TOOL_NAME} tool is not assigned to this agent. Tell them image generation is off here: assign the ${GENERATE_IMAGE_TOOL_NAME} tool to this agent and a platform admin must pick an image generation model in Control center → AI Providers (/customize/providers).`;
+    : `The user tagged @image, but the ${GENERATE_IMAGE_TOOL_NAME} tool is not assigned to this agent. Tell them image generation is off here: assign the ${GENERATE_IMAGE_TOOL_NAME} tool to this agent and a platform admin must pick an image generation model in Control center → AI Providers (/customize/providers#image-generation).`;
 }
 
 interface GenerateImageToolSuccess {
@@ -98,7 +98,7 @@ export function createGenerateImageTool(
 ): ToolDefinition {
   return {
     description:
-      "Generate an image from a text prompt using the workspace image model (OpenAI gpt-image-2). Saves a PNG under artifacts/ with a metadata sidecar and session attachment when available. A platform admin sets the model in Control center → AI Providers (/customize/providers) — do not pass a model name.",
+      "Generate an image from a text prompt using the workspace image model (OpenAI gpt-image-2). Saves a PNG under artifacts/ with a metadata sidecar and session attachment when available. A platform admin sets the model in Control center → AI Providers (/customize/providers#image-generation) — do not pass a model name.",
     name: GENERATE_IMAGE_TOOL_NAME,
     parallelSafe: false,
     parameters: {
@@ -147,7 +147,7 @@ export async function runGenerateImageTool(
   if (Object.hasOwn(input, "model")) {
     return {
       error:
-        "model is not a generate_image parameter; a platform admin sets it in Control center → AI Providers (/customize/providers).",
+        "model is not a generate_image parameter; a platform admin sets it in Control center → AI Providers (/customize/providers#image-generation).",
     };
   }
 

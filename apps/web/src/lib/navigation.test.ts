@@ -6,6 +6,7 @@ import {
   canAccessOrganizationPage,
   canAccessSystemPage,
   canManagePluginReleases,
+  canOpenPage,
   enabledPluginNavEntries,
   groupPath,
   groupRouteFromPath,
@@ -308,5 +309,31 @@ describe("inAppLinkPath", () => {
     expect(inAppLinkPath("/does-not-exist", origin)).toBeNull();
     expect(inAppLinkPath("//example.com/settings", origin)).toBeNull();
     expect(inAppLinkPath("mailto:a@example.com", origin)).toBeNull();
+  });
+});
+
+describe("canOpenPage", () => {
+  test("AI Providers opens for a platform admin only", () => {
+    expect(
+      canOpenPage("providers", { isPlatformAdmin: true, orgRole: "member" })
+    ).toBe(true);
+    expect(
+      canOpenPage("providers", { isPlatformAdmin: false, orgRole: "admin" })
+    ).toBe(false);
+  });
+
+  test("Tools opens for an org admin, not a member", () => {
+    expect(
+      canOpenPage("tools", { isPlatformAdmin: false, orgRole: "admin" })
+    ).toBe(true);
+    expect(
+      canOpenPage("tools", { isPlatformAdmin: false, orgRole: "member" })
+    ).toBe(false);
+  });
+
+  test("Settings opens for a viewer", () => {
+    expect(
+      canOpenPage("settings", { isPlatformAdmin: false, orgRole: "viewer" })
+    ).toBe(true);
   });
 });
