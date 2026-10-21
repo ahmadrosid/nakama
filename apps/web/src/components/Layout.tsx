@@ -22,10 +22,7 @@ import { ProfileRail } from "@/components/ProfileRail";
 import { RouteBoundary } from "@/components/RouteBoundary";
 import { useBtwChatStore } from "@/context/btw-chat-store";
 import { useAppContext } from "@/context/use-app-context";
-import {
-  useAgentGroupQuery,
-  useGroupSessionsQuery,
-} from "@/hooks/use-agent-groups";
+import { useAgentGroupQuery } from "@/hooks/use-agent-groups";
 import { useOrgPlugins } from "@/hooks/use-plugins";
 import {
   useHistorySessionsQuery,
@@ -166,18 +163,10 @@ function useAppShell() {
 
   const chatTitle = (listedChat ?? unlistedChat)?.title?.trim();
 
-  // On a phone the header names the group chat: its session, else the group.
+  // On a phone the header names the group.
   const groupRoute = groupRouteFromPath(location.pathname);
   const { data: group } = useAgentGroupQuery(groupRoute?.groupId ?? "");
-
-  const { data: groupSessions } = useGroupSessionsQuery(
-    groupRoute?.groupId ?? ""
-  );
-
-  const groupTitle = groupRoute?.sessionId
-    ? groupSessions?.find((session) => session.id === groupRoute.sessionId)
-        ?.title
-    : group?.name;
+  const groupTitle = group?.name;
 
   const { data: orgPlugins = [] } = useOrgPlugins();
 

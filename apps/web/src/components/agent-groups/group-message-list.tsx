@@ -460,7 +460,10 @@ export function GroupMessageList({
           }}
           ref={scrollRef}
         >
-          <div className="flex flex-col px-4 py-4" ref={contentRef}>
+          <div
+            className="flex flex-col py-4 max-sm:px-0 sm:px-4"
+            ref={contentRef}
+          >
             {rows.map(
               ({ endsGroup, message, showTime, startsGroup }, index) => {
                 const spacing =
@@ -523,6 +526,7 @@ export function GroupMessageList({
                             className="outline-none"
                             profile={author}
                             size="sm"
+                            squareMoodstone
                           />
                         ) : (
                           <span className="size-7 shrink-0" />
