@@ -28,14 +28,15 @@ the built-in browser, or a new Vite/server instance.
    `http://localhost:3003/<route>`. Never work in the user's own tabs.
 4. **Drive it.** `snapshot mode="interactive"` → `act` by ref → `screenshot`
    for each state. Wait with `wait for="text"`, not a fixed pause.
-5. **Stay read-only.** The app uses the user's real `~/.nakama` data.
-   - Do not click Save, Remove, Send, or anything that writes, unless the
-     change needs it and the user said yes.
-   - A flow that starts and can be cancelled (sign-in, dialog) is fine: cancel
-     it at the end.
+5. **Do what the check needs.** Save, create, edit, send or delete when the
+   goal needs it; no need to ask first. The app uses the user's real
+   `~/.nakama` data, so:
+   - Prefer test records you create (name them `verify-bs …`) and clean them
+     up at the end.
+   - Report every write you made to the user's existing data.
    - Close any tab the app opened in your group (for example an OAuth page).
 6. **Report.** Numbered list: each state checked, pass or fail, one line each.
-   Name what you did not check and why. Keep your BrowserOS tab open.
+   List the data you changed. Name what you did not check and why. Keep your BrowserOS tab open.
 
 ## Notes
 
