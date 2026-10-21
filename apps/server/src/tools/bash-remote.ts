@@ -39,7 +39,7 @@ export function remoteBashDescription(
       ? "Public network is on."
       : "Network is off.";
 
-  return `Commands run in a remote sandbox, not on this server. ${REMOTE_WORKSPACE} starts empty and does not share files with read_file, write_file, or edit_file. ${network} codingAgent runs are unsupported on this backend.`;
+  return `Outside local CLI sessions, commands run in a remote sandbox, not on this server. ${REMOTE_WORKSPACE} starts empty and does not share files with read_file, write_file, or edit_file. ${network} codingAgent runs are unsupported on this backend.`;
 }
 
 /**

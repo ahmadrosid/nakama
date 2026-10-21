@@ -190,7 +190,7 @@ In Docker, Bash runs inside the Nakama container with the server process's OS pe
 
 ### Remote bash backend
 
-Use this when org admins are not the operator but profiles still need a shell, or when the host cannot run a sandbox itself. Bash then runs in a sandbox service you operate, not in the Nakama container, so commands cannot reach `config.ini`, other profiles' files, or the server network.
+Use this when org admins are not the operator but profiles still need a shell, or when the host cannot run a sandbox itself. Bash then runs in a sandbox service you operate, not in the Nakama container, so bash commands cannot reach `config.ini`, other profiles' files, or the server network. Python skill tools written by members still run on the Nakama server.
 
 ```bash
 NAKAMA_BASH_BACKEND=remote
@@ -205,6 +205,9 @@ What changes for profiles:
 - `/workspace` in the sandbox starts empty. It does not share files with `read_file`, `write_file`, or `edit_file`, which still use the profile workspace on the Nakama server.
 - `codingAgent` runs are refused. Use `NAKAMA_BASH_BACKEND=host` for the [coding agent](/coding-agent).
 - `NAKAMA_TENANT_BASH=0` still turns bash off for both backends.
+- Skills that run through `bash` run in the sandbox. Install their CLIs there (for example `agent-browser`). Skill scripts in the profile workspace are not in `/workspace`, and files a skill writes there (such as `screenshot artifacts/<file>.png`) stay in the sandbox, so `save_artifact` and channel delivery cannot find them.
+- Bash from the [CLI](/cli) still runs on the Nakama server, in the directory where the CLI was launched.
+- Nakama checks `NAKAMA_BASH_BACKEND` and `NAKAMA_BASH_SANDBOX_NETWORK` at startup. An invalid value stops the server from starting.
 
 Nakama fails closed. A missing URL or token, a rejected token, an unreachable service, or a malformed reply is an error. Nakama never falls back to host bash.
 
@@ -232,6 +235,7 @@ Content-Type: application/json
 - `env` holds only the tool call's own `env`. Nakama removes keys that look like secrets (`*_KEY`, `*_TOKEN`, `*_SECRET`, `*_PASSWORD`, `*_URL`, and similar) and never sends the server's environment.
 - `network` is `off` or `public`. Block outbound traffic when it is `off`.
 - Stop the command at `timeoutMs`.
+- If the client disconnects, kill the command.
 
 Reply `200` with:
 

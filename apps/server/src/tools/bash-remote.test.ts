@@ -200,6 +200,16 @@ describe("remote bash backend", () => {
     expect(calls).toHaveLength(0);
   });
 
+  test("keeps the CLI channel on host bash", async () => {
+    const result = await runBash(
+      { command: "echo hi" },
+      { ...context, channel: "cli", codingWorkspaceRoot: process.cwd() }
+    );
+
+    expect(result.stdout).toBe("hi\n");
+    expect(calls).toHaveLength(0);
+  });
+
   test("sends network public only when the operator opts in", async () => {
     process.env.NAKAMA_BASH_SANDBOX_NETWORK = "public";
     await runBash({ command: "curl example.com" }, context);

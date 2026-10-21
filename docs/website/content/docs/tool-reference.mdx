@@ -232,7 +232,7 @@ Run a one-off shell command starting in the profile workspace and return stdout,
 
 **Host access:** Host Bash is unrestricted by Nakama and runs with the server process's OS permissions. The profile workspace is only the starting directory; commands can access files outside it, including other profiles' files when OS permissions allow. Checking `cwd` does not isolate commands. Assign host Bash only to trusted profiles.
 
-**Remote backend:** With `NAKAMA_BASH_BACKEND=remote`, commands run in a sandbox service you operate instead of on the server. The sandbox `/workspace` starts empty and does not share files with `read_file`, `write_file`, or `edit_file`, network is off by default, and `codingAgent` runs are refused. See [Docker: Remote bash backend](/docker#remote-bash-backend) for setup and the service contract.
+**Remote backend:** With `NAKAMA_BASH_BACKEND=remote`, commands run in a sandbox service you operate instead of on the server. The sandbox `/workspace` starts empty and does not share files with `read_file`, `write_file`, or `edit_file`, network is off by default, and `codingAgent` runs are refused. Skills that run through `bash` (such as `agent-browser`) need their CLIs in the sandbox, and files they write stay there. Local CLI sessions still use host bash. See [Docker: Remote bash backend](/docker#remote-bash-backend) for setup and the service contract.
 
 Do not use `bash` to create persistent tools or `.sh` wrappers — register JavaScript tools under `~/.nakama/tools/` instead.
 

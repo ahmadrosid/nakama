@@ -152,7 +152,8 @@ export async function runBash(
   const codingAgentMode =
     input.codingAgent === true || commandLooksLikeCursorAgent(command);
 
-  if (resolveBashBackend() === "remote") {
+  // The CLI channel stays on host bash: it is the operator's own terminal.
+  if (context.channel !== "cli" && resolveBashBackend() === "remote") {
     return runRemoteBash({
       codingAgent: codingAgentMode,
       command,
