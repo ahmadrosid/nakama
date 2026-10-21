@@ -38,6 +38,7 @@ import {
   ArrowShrink02Icon,
   ArrowUp02Icon,
   Cancel01Icon,
+  CommandLineIcon,
   File01Icon,
   Folder01Icon,
   Image01Icon,
@@ -1662,8 +1663,37 @@ function ChatAttachmentHeader({
   );
 }
 
+/** Types `/` at the composer cursor through the input event, so the slash list opens as if typed. */
+function typeSlashCommand(textarea: HTMLTextAreaElement) {
+  const { selectionEnd, selectionStart, value } = textarea;
+  const before = value.slice(0, selectionStart);
+  const slash = before === "" || /\s$/.test(before) ? "/" : " /";
+  const cursor = before.length + slash.length;
+
+  const setValue = Object.getOwnPropertyDescriptor(
+    window.HTMLTextAreaElement.prototype,
+    "value"
+  )?.set;
+
+  setValue?.call(textarea, `${before}${slash}${value.slice(selectionEnd)}`);
+  textarea.setSelectionRange(cursor, cursor);
+  textarea.dispatchEvent(new window.Event("input", { bubbles: true }));
+}
+
 function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
   const attachments = usePromptInputAttachments();
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const focusAfterCloseRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const insertSlashCommand = () => {
+    const textarea =
+      triggerRef.current?.closest("form")?.querySelector("textarea") ?? null;
+
+    if (textarea) {
+      typeSlashCommand(textarea);
+      focusAfterCloseRef.current = textarea;
+    }
+  };
 
   const addFolder = (picked: FileList | null) => {
     const selection = selectFolderFiles([...(picked ?? [])]);
@@ -1715,6 +1745,7 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
                     "size-8 bg-transparent text-foreground hover:bg-muted"
                   )}
                   disabled={disabled}
+                  ref={triggerRef}
                   size="icon-sm"
                   type="button"
                   variant="ghost"
@@ -1727,7 +1758,17 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
         />
         <TooltipContent side="top">Add attachment</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="start" className="min-w-40">
+      <DropdownMenuContent
+        align="start"
+        className="min-w-40"
+        finalFocus={() => {
+          const textarea = focusAfterCloseRef.current;
+
+          focusAfterCloseRef.current = null;
+
+          return textarea ?? true;
+        }}
+      >
         <DropdownMenuItem
           disabled={disabled}
           onClick={() => openPicker(IMAGE_ACCEPT)}
@@ -1745,6 +1786,13 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
         <DropdownMenuItem disabled={disabled} onClick={openFolderPicker}>
           <Folder01Icon aria-hidden className="size-4 text-muted-foreground" />
           Add folder
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled={disabled} onClick={insertSlashCommand}>
+          <CommandLineIcon
+            aria-hidden
+            className="size-4 text-muted-foreground"
+          />
+          Slash commands
         </DropdownMenuItem>
         <ChatPluginsSubmenu disabled={disabled} />
         <ChatConnectorsSubmenu disabled={disabled} />
