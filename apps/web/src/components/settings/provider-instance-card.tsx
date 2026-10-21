@@ -13,7 +13,6 @@ import {
 } from "hugeicons-react";
 import type { ReactNode } from "react";
 import { CatalogProviderModelFields } from "@/components/CatalogProviderModelFields";
-import { CHATGPT_SIGN_IN, XAI_SIGN_IN } from "@/components/ChatgptSignInPanel";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
 import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
@@ -27,6 +26,10 @@ import {
 } from "@/components/settings/provider-instance-dialogs";
 import { useProviderInstanceCard } from "@/components/settings/use-provider-instance-card";
 import { isShortlistBrowseProvider } from "@/components/shortlist-browse-providers.shared";
+import {
+  CHATGPT_SIGN_IN,
+  XAI_SIGN_IN,
+} from "@/components/subscription-sign-in.shared";
 
 function ProviderActionButton({
   label,

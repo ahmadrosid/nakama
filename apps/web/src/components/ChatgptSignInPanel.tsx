@@ -1,6 +1,5 @@
 import type {
   ChatgptOAuthCredentials,
-  ChatgptOAuthDeviceStartResponse,
   CustomModelEntry,
   XaiOAuthCredentials,
 } from "@nakama/core/contract";
@@ -8,40 +7,14 @@ import { Button } from "@nakama/ui/button";
 import { FormField } from "@nakama/ui/form-field";
 import { Spinner } from "@nakama/ui/spinner";
 import { useEffect, useRef, useState } from "react";
-import { client, formatError } from "@/lib/client";
+import {
+  CHATGPT_SIGN_IN,
+  type DeviceSignIn,
+  XAI_SIGN_IN,
+} from "@/components/subscription-sign-in.shared";
+import { formatError } from "@/lib/client";
 
 type SubscriptionSignInFlow = "idle" | "waiting" | "error";
-
-export interface DeviceSignIn<T> {
-  completeDevice: (
-    sessionId: string,
-    signal: AbortSignal
-  ) => Promise<{ oauth: T; models?: CustomModelEntry[] }>;
-  label: string;
-  loginUrl?: string;
-  startDevice: () => Promise<ChatgptOAuthDeviceStartResponse>;
-}
-
-export const CHATGPT_SIGN_IN: DeviceSignIn<ChatgptOAuthCredentials> = {
-  completeDevice: async (sessionId) => {
-    const result = await client.completeChatgptOAuthDevice({ sessionId });
-
-    return { models: result.models, oauth: result.chatgptOAuth };
-  },
-  label: "ChatGPT",
-  loginUrl: "https://auth.openai.com/codex/device",
-  startDevice: () => client.startChatgptOAuthDevice(),
-};
-
-export const XAI_SIGN_IN: DeviceSignIn<XaiOAuthCredentials> = {
-  completeDevice: async (sessionId, signal) => {
-    const result = await client.completeXaiOAuthDevice({ sessionId }, signal);
-
-    return { models: result.models, oauth: result.xaiOAuth };
-  },
-  label: "Grok",
-  startDevice: () => client.startXaiOAuthDevice(),
-};
 
 export function useDeviceSignIn<T>(
   { completeDevice, loginUrl, startDevice }: DeviceSignIn<T>,

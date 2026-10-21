@@ -18,12 +18,12 @@ import { Spinner } from "@nakama/ui/spinner";
 import { LinkSquare02Icon, ViewIcon, ViewOffIcon } from "hugeicons-react";
 import type { ReactNode } from "react";
 import {
-  type DeviceSignIn,
   DeviceSignInCode,
   useDeviceSignIn,
 } from "@/components/ChatgptSignInPanel";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
 import type { ModelListRow } from "@/components/ModelListEditor";
+import type { DeviceSignIn } from "@/components/subscription-sign-in.shared";
 import { apiKeyPlaceholder, type SelectedProvider } from "@/lib/models";
 
 export function ProviderReplaceKeyDialog({
