@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatMessage, ToolCall } from "@nakama/core";
+import { NakamaApiError } from "@nakama/core";
 import {
+  buildProviderHttpError,
   extractOpenAITokenUsage,
   finalizePendingToolCalls,
+  formatHttpErrorBody,
   mergePendingToolCall,
   normalizeThinkingEffort,
   type PendingToolCall,
@@ -176,5 +179,28 @@ describe("extractOpenAITokenUsage", () => {
         total_tokens: 6358,
       })
     ).toEqual({ inputTokens: 6348, outputTokens: 10, totalTokens: 6358 });
+  });
+});
+
+describe("buildProviderHttpError", () => {
+  test("maps a rejected API key to 400 so it is never reported as a server bug, keeping the provider's message", () => {
+    const body = JSON.stringify({
+      error: { message: "Incorrect API key provided." },
+    });
+
+    const error = buildProviderHttpError("OpenAI", 401, body);
+
+    expect(error).toBeInstanceOf(NakamaApiError);
+    expect(error.status).toBe(400);
+    expect(error.message).toBe(formatHttpErrorBody("OpenAI", 401, body));
+  });
+
+  test("maps a 403 from the provider to 400 as well", () => {
+    expect(buildProviderHttpError("OpenAI", 403, "").status).toBe(400);
+  });
+
+  test("maps every other provider failure to 502", () => {
+    expect(buildProviderHttpError("OpenAI", 429, "").status).toBe(502);
+    expect(buildProviderHttpError("OpenAI", 500, "").status).toBe(502);
   });
 });

@@ -1,4 +1,4 @@
-import { isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { getUserConfigDir } from "../user-config";
 import { loadSoulStack } from "./load";
 import type { LoadedSoulStack } from "./types";
@@ -65,6 +65,14 @@ export function getGroupSharedDir(orgId: string, groupId: string): string {
     assertConfigPathSegment(groupId, "groupId"),
     "shared"
   );
+}
+
+/**
+ * A group's memory, beside its shared folder: {orgDir}/groups/{groupId}/memory.md.
+ * Keyed by the shared folder because that is the one group path a turn carries.
+ */
+export function getGroupMemoryPath(sharedDir: string): string {
+  return join(dirname(sharedDir), "memory.md");
 }
 
 export function getArtifactSharesDir(orgId: string): string {

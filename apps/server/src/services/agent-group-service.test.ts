@@ -6,7 +6,9 @@ import {
   SOUL_TEMPLATE,
 } from "@nakama/core";
 import { setupTestConfigDir } from "../test-config-dir";
+import { groupMemoryTool } from "../tools/group-memory-tool";
 import type { SubAgentRunInput } from "../tools/sub-agent-shared";
+import { GROUP_MEMORY_CHARS, writeGroupMemory } from "./agent-group-memory";
 import { AgentGroupService, readGroupDocuments } from "./agent-group-service";
 import { closeAgentGroupDatabases } from "./agent-group-store";
 
@@ -172,6 +174,63 @@ describe("AgentGroupService", () => {
     expect(dirs[0]).toContain(group.id);
     expect(dirs[2]).toContain(other.id);
     expect(dirs[2]).not.toBe(dirs[0]);
+  });
+
+  test("a fact saved in one chat reaches every member in the next, and threads", async () => {
+    const tasks: string[] = [];
+
+    const { chat, contents, service } = setup(async ({ sharedDir, task }) => {
+      tasks.push(task);
+
+      if (tasks.length === 1) {
+        await groupMemoryTool.run({ entry: "noir" }, { sharedDir });
+      }
+
+      return "ok";
+    });
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+
+    await chat(group.id, "@alpha the genre is noir");
+    const sessionId = await chat(group.id, "@all hi");
+
+    const root = service.session(ORG_ID, USER_ID, group.id, sessionId)
+      .messages[1];
+
+    await service.postThread(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      sessionId,
+      root!.id,
+      "and?"
+    );
+
+    expect(contents(group.id, sessionId)).toHaveLength(3);
+    expect(tasks).toHaveLength(4);
+
+    for (const task of tasks.slice(1)) {
+      expect(task.split("\n")).toContain("- noir");
+    }
+  });
+
+  test("memory past the cap reaches agents cut, not as an error", async () => {
+    const tasks: string[] = [];
+
+    const { chat, service } = setup(({ sharedDir, task }) => {
+      tasks.push(task);
+      writeGroupMemory(sharedDir!, `- ${"a".repeat(GROUP_MEMORY_CHARS)}-tail`);
+
+      return "ok";
+    });
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+
+    await chat(group.id, "@alpha hi");
+    await chat(group.id, "@alpha again");
+
+    expect(tasks[1]).toContain("[truncated]");
+    expect(tasks[1]).not.toContain("-tail");
   });
 
   test("@all gives every member a turn, in member order", async () => {

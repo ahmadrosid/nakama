@@ -22,7 +22,12 @@ import {
 import { getToolExecutionEnv } from "../lib/ensure-process-path";
 import { mergeCodingAgentSpawnEnv } from "../services/coding-agent-spawn-env";
 import { killProcessTree } from "../services/custom-tool-subprocess";
-import { isTenantBashEnabled, TENANT_BASH_DISABLED } from "./bash-config";
+import {
+  isTenantBashEnabled,
+  resolveBashBackend,
+  TENANT_BASH_DISABLED,
+} from "./bash-config";
+import { remoteBashDescription, runRemoteBash } from "./bash-remote";
 import {
   commandLooksLikeCursorAgent,
   formatCodingAgentBashStdout,
@@ -71,6 +76,10 @@ const BASH_TOOL_DESCRIPTION_BASE =
   "Run a one-off shell command and return stdout, stderr, and exit code. In local CLI sessions, commands start in the directory where the CLI was launched; otherwise they start in the active profile workspace. Do not use this to create persistent tools, tool files, shell wrappers, or .sh scripts. If the user wants a reusable tool, translate shell examples into JavaScript instead.";
 
 function bashToolDescription(): string {
+  if (resolveBashBackend() === "remote") {
+    return `${BASH_TOOL_DESCRIPTION_BASE} ${remoteBashDescription()}`;
+  }
+
   return `${BASH_TOOL_DESCRIPTION_BASE} Host execution is unrestricted by Nakama and uses the server process's OS permissions. Commands can access files outside the profile workspace, including other profiles' files when OS permissions allow. Assign host bash only to trusted profiles.`;
 }
 
@@ -142,6 +151,20 @@ export async function runBash(
 
   const codingAgentMode =
     input.codingAgent === true || commandLooksLikeCursorAgent(command);
+
+  // The CLI channel stays on host bash: it is the operator's own terminal.
+  if (context.channel !== "cli" && resolveBashBackend() === "remote") {
+    return runRemoteBash({
+      codingAgent: codingAgentMode,
+      command,
+      cwd: input.cwd,
+      env: input.env,
+      orgId,
+      profileId,
+      signal: context.signal,
+      timeoutMs: readTimeout(input.timeoutMs),
+    });
+  }
 
   const codingWorkspace =
     context.channel === "cli" || codingAgentMode

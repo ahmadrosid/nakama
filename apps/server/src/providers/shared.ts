@@ -5,6 +5,7 @@ import type {
   ThinkingEffort,
   ToolCall,
 } from "@nakama/core";
+import { NakamaApiError } from "@nakama/core";
 import { z } from "zod";
 
 export type ProviderJsonValue =
@@ -463,4 +464,22 @@ export function formatHttpErrorBody(
   }
 
   return `${label} request failed (${status}): ${trimmed.slice(0, 500)}`;
+}
+
+/**
+ * A rejected API key is the caller's config to fix, not a Nakama bug: 400 so
+ * the global error handler's `status >= 500` check never reports it. Anything
+ * else from the provider (rate limits, 5xx, timeouts) stays worth seeing.
+ */
+export function buildProviderHttpError(
+  label: string,
+  status: number,
+  body: string
+): NakamaApiError {
+  const clientStatus = status === 401 || status === 403 ? 400 : 502;
+
+  return new NakamaApiError(
+    formatHttpErrorBody(label, status, body),
+    clientStatus
+  );
 }

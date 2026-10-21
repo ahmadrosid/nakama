@@ -3,7 +3,7 @@ import type {
   AgentGroup,
   AgentGroupThreadDetail,
 } from "@nakama/core/agent-groups";
-import type { WorkspaceEntry } from "@nakama/core/contract";
+import type { DocumentAttachment, WorkspaceEntry } from "@nakama/core/contract";
 import { toast } from "@nakama/ui/toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -41,7 +41,7 @@ import {
 import { FilesSearchRow } from "@/pages/files/files-search-row";
 import { FilesToolbar } from "@/pages/files/files-toolbar";
 
-const THREAD_PANEL_WIDTH = 448;
+export const THREAD_PANEL_WIDTH = 448;
 
 /** A private chat with the agent that wrote one message of the group chat. */
 export function GroupThreadPanel({
@@ -89,13 +89,19 @@ export function GroupThreadPanel({
       queryKey: queryKeys.agentGroups.session(group.id, sessionId),
     });
 
-  async function send(content: string) {
+  async function send(content: string, documents: DocumentAttachment[] = []) {
     await queryClient.cancelQueries({ exact: true, queryKey: threadKey });
     queryClient.setQueryData<AgentGroupThreadDetail>(threadKey, (detail) =>
       detail
         ? {
             ...detail,
-            messages: [...detail.messages, pendingMessage(content)],
+            messages: [
+              ...detail.messages,
+              pendingMessage(
+                content,
+                documents.map((document) => document.filename)
+              ),
+            ],
             run: detail.run ?? PENDING_RUN,
           }
         : detail
@@ -106,7 +112,8 @@ export function GroupThreadPanel({
         group.id,
         sessionId,
         messageId,
-        content
+        content,
+        documents
       );
     } catch (sendError) {
       toast(formatError(sendError));
@@ -188,6 +195,7 @@ export function GroupThreadPanel({
       </div>
       <div className="shrink-0 px-4 pt-2 pb-4">
         <GroupComposer
+          allowDocuments
           busy={data?.run != null}
           handles={noHandles}
           members={agent ? [agent] : []}

@@ -22,9 +22,9 @@ import {
 import { z } from "zod";
 import {
   buildChatCompletionResult,
+  buildProviderHttpError,
   extractOpenAITokenUsage,
   finalizePendingToolCalls,
-  formatHttpErrorBody,
   mergePendingToolCall,
   normalizeThinkingEffort,
   notifyToolInputDelta,
@@ -692,8 +692,10 @@ async function requestChatCompletion(
   });
 
   if (!response.ok) {
-    throw new Error(
-      formatHttpErrorBody(client.label, response.status, await response.text())
+    throw buildProviderHttpError(
+      client.label,
+      response.status,
+      await response.text()
     );
   }
 
@@ -755,8 +757,10 @@ async function streamChatCompletion(
   });
 
   if (!response.ok) {
-    throw new Error(
-      formatHttpErrorBody(client.label, response.status, await response.text())
+    throw buildProviderHttpError(
+      client.label,
+      response.status,
+      await response.text()
     );
   }
 
@@ -796,8 +800,10 @@ async function requestCompletion(
   });
 
   if (!response.ok) {
-    throw new Error(
-      formatHttpErrorBody(client.label, response.status, await response.text())
+    throw buildProviderHttpError(
+      client.label,
+      response.status,
+      await response.text()
     );
   }
 

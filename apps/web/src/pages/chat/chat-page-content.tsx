@@ -259,11 +259,12 @@ function ChatConversation({
       <BrowserLiveViewPanelBridge messages={messages} sessionId={session?.id} />
       <ChatPageColumn cognito={cognitoSurface}>
         {cognitoControl}
-        <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
+        <div className="mx-auto flex min-h-0 w-full flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <ChatMessageList
               actionsDisabled={busy || readOnlySession}
               branchingMessageId={branchingMessageId}
+              contentClassName="mx-auto w-full max-w-3xl px-4"
               messages={messages}
               modelLabel={
                 currentModelSelection
@@ -302,7 +303,7 @@ function ChatConversation({
           </div>
 
           <div className="sticky bottom-0 z-10 mt-auto w-full shrink-0 bg-background/95 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:pt-4 sm:pb-4">
-            {composer}
+            <div className="mx-auto w-full max-w-3xl">{composer}</div>
           </div>
         </div>
       </ChatPageColumn>
