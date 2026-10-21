@@ -5,7 +5,7 @@ import {
   mentionSuggestions,
 } from "@nakama/core/agent-groups";
 import type { DocumentAttachment } from "@nakama/core/contract";
-import { MAX_DOCUMENT_BYTES } from "@nakama/core/message-content";
+import { MAX_DOCUMENT_BYTES, parseDataUrl } from "@nakama/core/message-content";
 import { Button } from "@nakama/ui/button";
 import { toast } from "@nakama/ui/toast";
 import { cn } from "@nakama/ui/utils";
@@ -31,8 +31,9 @@ import { ChatSkillTokenOverlay } from "@/components/chat/chat-skill-token-overla
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { findActiveSkillSlashRange } from "@/lib/chat-composer-skills";
 import {
-  DOCUMENT_ACCEPT,
+  ALL_ATTACHMENT_ACCEPT,
   filePartsToDocumentAttachments,
+  isImageFilePart,
 } from "@/lib/chat-images";
 import {
   composerHitTargetClass,
@@ -67,7 +68,7 @@ function StopIcon() {
 }
 
 interface GroupComposerProps {
-  /** Shows the attach button; a thread has none. */
+  /** Shows the attach button and takes pasted images and documents. */
   allowDocuments?: boolean;
   busy: boolean;
   handles: Map<string, string>;
@@ -198,7 +199,7 @@ function GroupComposerForm({
       ) : null}
       <GroupAttachmentSummary />
       <PromptInput
-        accept={allowDocuments ? DOCUMENT_ACCEPT : undefined}
+        accept={allowDocuments ? ALL_ATTACHMENT_ACCEPT : undefined}
         className={cn(
           GROUP_SHELL_CLASS,
           attachments.files.length > 0 &&
@@ -213,7 +214,18 @@ function GroupComposerForm({
         // send puts the text back unless something new was typed meanwhile.
         onSubmit={({ files, text }) => {
           const content = text.trim();
-          const documents = filePartsToDocumentAttachments(files);
+
+          // Images go with the documents; the server saves them for the agents.
+          const documents = [
+            ...filePartsToDocumentAttachments(files),
+            ...files.filter(isImageFilePart).flatMap((file) => {
+              const image = parseDataUrl(file.url);
+
+              return image
+                ? [{ ...image, filename: file.filename ?? "image.png" }]
+                : [];
+            }),
+          ];
 
           if (!(content || documents.length > 0)) {
             return;
@@ -276,11 +288,11 @@ function GroupComposerForm({
         <PromptInputFooter className="w-auto shrink-0 flex-nowrap items-center justify-end gap-1.5 border-0 p-0">
           {allowDocuments ? (
             <Button
-              aria-label="Add document"
+              aria-label="Add file"
               className="size-8 shrink-0 rounded-full"
               onClick={attachments.openFileDialog}
               size="icon-sm"
-              title="Add document"
+              title="Add file"
               type="button"
               variant="ghost"
             >

@@ -1,79 +1,16 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import {
-  getProfileSoulDir,
-  type ProfileSummary,
-  SOUL_TEMPLATE,
-} from "@nakama/core";
+import { getProfileSoulDir, SOUL_TEMPLATE } from "@nakama/core";
 import { setupTestConfigDir } from "../test-config-dir";
 import { groupMemoryTool } from "../tools/group-memory-tool";
-import type { SubAgentRunInput } from "../tools/sub-agent-shared";
 import { GROUP_MEMORY_CHARS, writeGroupMemory } from "./agent-group-memory";
-import { AgentGroupService, readGroupDocuments } from "./agent-group-service";
 import { closeAgentGroupDatabases } from "./agent-group-store";
-
-const ORG_ID = "org_test";
-
-const USER_ID = "u1";
+import { ORG_ID, setup, USER_ID } from "./agent-group-test-setup";
 
 // Before the config dir cleanup, which Windows refuses while a file is open.
 afterEach(closeAgentGroupDatabases);
 
 setupTestConfigDir("nakama-agent-group-service-");
-
-function setup(reply: (input: SubAgentRunInput) => string | Promise<string>) {
-  // SAFETY: The service reads only these ProfileSummary fields.
-  const profiles = [
-    { id: "a", isSuper: false, name: "Alpha", sharedWithTeam: true },
-    { id: "b", isSuper: false, name: "Beta", sharedWithTeam: true },
-    {
-      id: "s",
-      isSuper: false,
-      name: "Secret",
-      ownerUserId: "u2",
-      sharedWithTeam: false,
-    },
-  ] as ProfileSummary[];
-
-  const state = { inOrg: true, title: "" };
-  const calls: string[] = [];
-
-  // SAFETY: Tests implement only the two lookups the service reads.
-  const db = {
-    getOrgMember: async () => (state.inOrg ? { role: "member" } : null),
-    getUserById: async () => ({ id: USER_ID }),
-  } as never;
-
-  // SAFETY: Tests implement only the agent calls the service makes.
-  const agent = {
-    generateSessionTitle: async () => state.title || null,
-    listProfiles: async () => ({ profiles }),
-    runSubAgentPrompt: async (input: SubAgentRunInput) => {
-      calls.push(input.profileId);
-      const output = await reply(input);
-
-      return { output, status: "success", summary: output };
-    },
-  } as never;
-
-  const service = new AgentGroupService(db, agent);
-
-  /** Opens a session with `content` and waits for the replies. */
-  async function chat(groupId: string, content: string) {
-    const { run, session } = service.start(ORG_ID, USER_ID, groupId, content);
-    await run;
-
-    return session.id;
-  }
-
-  function contents(groupId: string, sessionId: string) {
-    return service
-      .session(ORG_ID, USER_ID, groupId, sessionId)
-      .messages.map((message) => message.content);
-  }
-
-  return { calls, chat, contents, profiles, service, state };
-}
 
 describe("AgentGroupService", () => {
   test("rejects an agent the user cannot chat with", async () => {
@@ -332,60 +269,6 @@ describe("AgentGroupService", () => {
       "- @alpha (you): Writes and reviews copy.",
       "- @beta",
     ]);
-  });
-
-  test("an attached document reaches the agent, and the client sees only its name", async () => {
-    const contexts: string[] = [];
-
-    const { service } = setup(({ context }) => {
-      contexts.push(context ?? "");
-
-      return "ok";
-    });
-
-    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
-
-    const documents = await readGroupDocuments([
-      {
-        data: Buffer.from("Q3 revenue was 42").toString("base64"),
-        filename: "notes.txt",
-        mediaType: "text/plain",
-      },
-    ]);
-
-    const { run, session } = service.start(
-      ORG_ID,
-      USER_ID,
-      group.id,
-      "",
-      documents
-    );
-
-    await run;
-
-    expect(contexts[0]).toContain("Q3 revenue was 42");
-
-    const [message] = service.session(
-      ORG_ID,
-      USER_ID,
-      group.id,
-      session.id
-    ).messages;
-
-    expect(message?.files).toEqual(["notes.txt"]);
-    expect(JSON.stringify(message)).not.toContain("Q3 revenue");
-  });
-
-  test("a document of an unsupported type is rejected", async () => {
-    await expect(
-      readGroupDocuments([
-        {
-          data: "AAAA",
-          filename: "run.exe",
-          mediaType: "application/x-msdownload",
-        },
-      ])
-    ).rejects.toThrow();
   });
 
   test("without a mention the last speaker answers first, then the others may pass", async () => {

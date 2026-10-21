@@ -337,7 +337,9 @@ export class AgentGroupService {
     const session = createGroupSession(
       orgId,
       groupId,
-      groupSessionTitle(content || (documents[0]?.filename ?? ""))
+      groupSessionTitle(
+        content || (documents.find((d) => !d.path)?.filename ?? "")
+      )
     );
 
     const run = this.post(

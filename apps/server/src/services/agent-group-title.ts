@@ -45,6 +45,7 @@ export function retitleGroupSession(
   const userText = [
     first.content,
     ...(first.files ?? []).map((name) => `[File: ${name}]`),
+    ...(first.images ?? []).map(() => "[Image]"),
   ]
     .filter(Boolean)
     .join("\n");
