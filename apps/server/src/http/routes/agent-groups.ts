@@ -463,6 +463,7 @@ export function registerAgentGroupRoutes(
     "/v1/agent-groups/:groupId/sessions/:sessionId/threads/:messageId/messages",
     async (c) => {
       const t = threadParams(c);
+
       const { content, documents } = await readJson(
         c.req.raw,
         groupMessageSchema
