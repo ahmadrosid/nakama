@@ -37,9 +37,10 @@ import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-con
 import { useAgentGroupQuery } from "@/hooks/use-agent-groups";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
-  PANELS,
+  type PANELS,
   PENDING_RUN,
   pendingMessage,
+  withPanel,
   withPendingMessage,
 } from "@/lib/agent-group-pending";
 import { client, formatError } from "@/lib/client";
@@ -61,27 +62,15 @@ export function AgentGroupChatPage() {
   const requested = Number(searchParams.get("thread"));
   const openThreadId = sessionId && requested > 0 ? requested : null;
   const liveOpen = Boolean(sessionId) && searchParams.get("live") === "1";
-  const filesOpen = searchParams.get("files") === "1";
+  const files = searchParams.get("files");
+  const filesOpen = files !== null;
   const memoryOpen = searchParams.get("memory") === "1";
 
   // The thread, the live view, the files and the memory share one side panel; opening one closes the others.
   function setPanel(panel: (typeof PANELS)[number], value: string | null) {
-    setSearchParams(
-      (current) => {
-        const next = new URLSearchParams(current);
-
-        for (const key of PANELS) {
-          next.delete(key);
-        }
-
-        if (value !== null) {
-          next.set(panel, value);
-        }
-
-        return next;
-      },
-      { replace: true }
-    );
+    setSearchParams((current) => withPanel(current, panel, value), {
+      replace: true,
+    });
   }
 
   const setThread = (messageId: number | null) =>
@@ -111,6 +100,7 @@ export function AgentGroupChatPage() {
         // An empty slot would still frame a blank column beside the chat.
         filesOpen || memoryOpen || (sessionId && (liveOpen || openThreadId)) ? (
           <GroupSidePanel
+            file={files === "1" ? null : files}
             filesOpen={filesOpen}
             group={group}
             liveOpen={liveOpen}
@@ -144,6 +134,7 @@ export function AgentGroupChatPage() {
 
 /** The one side panel that is open: files, memory, the live view, or a thread. */
 function GroupSidePanel({
+  file,
   filesOpen,
   group,
   liveOpen,
@@ -156,6 +147,7 @@ function GroupSidePanel({
   sessionId,
   threadId,
 }: {
+  file: string | null;
   filesOpen: boolean;
   group: AgentGroup;
   liveOpen: boolean;
@@ -170,7 +162,12 @@ function GroupSidePanel({
 }) {
   if (filesOpen) {
     return (
-      <GroupFilesPanel group={group} key={group.id} onClose={onCloseFiles} />
+      <GroupFilesPanel
+        file={file}
+        group={group}
+        key={`${group.id}:${file ?? ""}`}
+        onClose={onCloseFiles}
+      />
     );
   }
 

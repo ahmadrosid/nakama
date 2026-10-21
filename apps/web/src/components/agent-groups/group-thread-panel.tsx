@@ -8,7 +8,7 @@ import { toast } from "@nakama/ui/toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { GroupComposer } from "@/components/agent-groups/group-composer";
-import { GroupMessageArtifacts } from "@/components/agent-groups/group-message-list";
+import { GroupMessageArtifacts } from "@/components/agent-groups/group-message-files";
 import {
   Message,
   MessageContent,
@@ -23,7 +23,12 @@ import {
   artifactMatchesTypeFilter,
   availableArtifactTypeFilters,
 } from "@/components/soul-tools/artifacts-tab-filters";
-import { PENDING_RUN, pendingMessage } from "@/lib/agent-group-pending";
+import {
+  PENDING_RUN,
+  pendingMessage,
+  shortenSharedPaths,
+} from "@/lib/agent-group-pending";
+import { inferArtifactMimeType } from "@/lib/chat-artifacts";
 import { client, formatError } from "@/lib/client";
 import {
   type FilesViewMode,
@@ -159,7 +164,9 @@ export function GroupThreadPanel({
               ) : null}
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <span className="font-medium text-13">{agent?.name}</span>
-                <MessageResponse>{message.content}</MessageResponse>
+                <MessageResponse>
+                  {shortenSharedPaths(message.content)}
+                </MessageResponse>
                 <GroupMessageArtifacts
                   content={message.content}
                   messageId={message.id}
@@ -283,17 +290,33 @@ export function GroupLivePanel({
   );
 }
 
-/** The group's shared folder, which its agents write to. */
+/** The group's shared folder, which its agents write to; `file` opens on that file. */
 export function GroupFilesPanel({
+  file,
   group,
   onClose,
 }: {
+  file: string | null;
   group: AgentGroup;
   onClose: () => void;
 }) {
   const [width, setWidth] = useState(THREAD_PANEL_WIDTH);
   const [folder, setFolder] = useState("");
-  const [selected, setSelected] = useState<WorkspaceEntry | null>(null);
+
+  const [selected, setSelected] = useState<WorkspaceEntry | null>(() => {
+    const filename = file?.split("/").pop();
+
+    return file && filename
+      ? {
+          filename,
+          kind: "file",
+          mimeType: inferArtifactMimeType(filename),
+          path: file,
+          sizeBytes: 0,
+          updatedAt: "",
+        }
+      : null;
+  });
 
   return (
     <AttachmentDetailPanel

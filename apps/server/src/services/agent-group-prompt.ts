@@ -48,7 +48,7 @@ export function ensureGroupSharedDir(orgId: string, groupId: string): string {
 }
 
 const sharedGuidance = (sharedDir: string) =>
-  `The group has a shared folder at ${sharedDir}. Every member can read and write it with the file tools, using absolute paths. Keep files the team builds on (outline, notes, drafts) there and read what others wrote before you answer. Name a file by its path when you mention it.`;
+  `The group has a shared folder at ${sharedDir}. Every member can read and write it with the file tools, using absolute paths. Keep files the team builds on (outline, notes, drafts) there and read what others wrote before you answer. When you mention a file to the user, write its path inside the folder, like shared/plan.md, never the full path.`;
 
 /** The group's members the user can still reach, in member order. */
 export function groupMembers(

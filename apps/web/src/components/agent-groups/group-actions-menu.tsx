@@ -12,27 +12,16 @@ import {
   PencilEdit02Icon,
 } from "hugeicons-react";
 import { useSearchParams } from "react-router-dom";
-import { PANELS } from "@/lib/agent-group-pending";
+import { withPanel } from "@/lib/agent-group-pending";
 
 /** Edit group, and the group's shared folder or memory in the side panel, behind one menu. */
 export function GroupActionsMenu({ onEdit }: { onEdit: () => void }) {
   const [, setSearchParams] = useSearchParams();
 
   const openPanel = (panel: "files" | "memory") =>
-    setSearchParams(
-      (current) => {
-        const next = new URLSearchParams(current);
-
-        for (const key of PANELS) {
-          next.delete(key);
-        }
-
-        next.set(panel, "1");
-
-        return next;
-      },
-      { replace: true }
-    );
+    setSearchParams((current) => withPanel(current, panel, "1"), {
+      replace: true,
+    });
 
   return (
     <DropdownMenu>

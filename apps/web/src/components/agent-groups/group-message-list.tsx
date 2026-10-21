@@ -5,7 +5,6 @@ import type {
 } from "@nakama/core/agent-groups";
 import { cn } from "@nakama/ui/utils";
 import {
-  ArrowUpRight01Icon,
   Chat01Icon,
   CheckmarkCircle01Icon,
   Copy01Icon,
@@ -24,6 +23,7 @@ import {
   markMentions,
   mentionMarkdownComponents,
 } from "@/components/agent-groups/group-mentions";
+import { GroupMessageArtifacts } from "@/components/agent-groups/group-message-files";
 import {
   Conversation,
   ConversationScrollButton,
@@ -34,14 +34,8 @@ import {
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message";
-import { useArtifactAttachmentPreviewPanel } from "@/components/chat/use-artifact-attachment-preview-panel";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
-import { useArtifactsExist } from "@/hooks/use-resource-mutations";
-import {
-  type ChatArtifactRef,
-  extractArtifactPathsFromText,
-  inferArtifactMimeType,
-} from "@/lib/chat-artifacts";
+import { shortenSharedPaths } from "@/lib/agent-group-pending";
 
 /** Same threshold as the agent chat list. */
 const AT_BOTTOM_PX = 80;
@@ -117,98 +111,6 @@ function ThreadLink({
         ? "Replying in thread…"
         : `${replies} ${replies === 1 ? "reply" : "replies"} in thread`}
     </button>
-  );
-}
-
-/** One line: file icon, name and type, as its own bubble. */
-function ArtifactPill({
-  artifact,
-  id,
-  profileId,
-}: {
-  artifact: ChatArtifactRef;
-  id: string;
-  profileId: string;
-}) {
-  const { openPanel } = useArtifactAttachmentPreviewPanel({
-    artifact,
-    id,
-    profileId: artifact.ownerProfileId ?? profileId,
-  });
-
-  const type = artifact.filename.split(".").pop()?.toUpperCase();
-
-  return (
-    <button
-      className="inline-flex max-w-full cursor-pointer items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-sm shadow-xs transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      onClick={openPanel}
-      type="button"
-    >
-      <File01Icon
-        aria-hidden
-        className="size-4 shrink-0 text-muted-foreground"
-      />
-      <span className="truncate font-medium">{artifact.filename}</span>
-      {type ? (
-        <span className="shrink-0 text-muted-foreground text-xs">{type}</span>
-      ) : null}
-      <ArrowUpRight01Icon
-        aria-hidden
-        className="size-3.5 shrink-0 text-muted-foreground"
-      />
-    </button>
-  );
-}
-
-/** Chips for the `artifacts/...` files an agent names in its message. */
-export function GroupMessageArtifacts({
-  content,
-  messageId,
-  profileId,
-}: {
-  content: string;
-  messageId: number;
-  profileId: string;
-}) {
-  const artifacts = useMemo<ChatArtifactRef[]>(
-    () =>
-      extractArtifactPathsFromText(content).map(({ ownerProfileId, path }) => {
-        const filename = path.split("/").pop() ?? path;
-
-        return {
-          filename,
-          mimeType: inferArtifactMimeType(filename),
-          ownerProfileId,
-          path,
-          savedAt: "",
-          sizeBytes: 0,
-        };
-      }),
-    [content]
-  );
-
-  const exists = useArtifactsExist(artifacts, profileId, messageId > 0);
-  const live = artifacts.filter((_, index) => exists[index]);
-
-  if (live.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="flex flex-col items-start gap-0.5">
-      {live.map((artifact) => {
-        const id = `group:${messageId}:${artifact.ownerProfileId ?? profileId}:${artifact.path}`;
-
-        return (
-          <ArtifactPill
-            artifact={artifact}
-            id={id}
-            key={id}
-            profileId={profileId}
-          />
-        );
-      })}
-    </div>
   );
 }
 
@@ -551,7 +453,10 @@ export function GroupMessageList({
                                 <MessageResponse
                                   components={markdownComponents}
                                 >
-                                  {markMentions(message.content, handles)}
+                                  {markMentions(
+                                    shortenSharedPaths(message.content),
+                                    handles
+                                  )}
                                 </MessageResponse>
                               </MessageContent>
                             </Message>
