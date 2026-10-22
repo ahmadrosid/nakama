@@ -19,7 +19,7 @@ import {
   documentDisplayFromFilePart,
 } from "@/lib/pasted-text";
 
-export const IMAGE_ACCEPT = "image/jpeg,image/png,image/gif,image/webp";
+const IMAGE_ACCEPT = "image/jpeg,image/png,image/gif,image/webp";
 
 export const DOCUMENT_ACCEPT =
   ".pdf,.docx,.xls,.xlsx,.xlsm,.xlsb,.csv,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.ms-excel.sheet.binary.macroEnabled.12,text/plain,text/csv,text/markdown";
