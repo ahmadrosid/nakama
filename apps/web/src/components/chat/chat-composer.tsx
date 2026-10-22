@@ -59,6 +59,7 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  type AttachmentsContext,
   PromptInput,
   PromptInputBody,
   PromptInputFooter,
@@ -113,8 +114,6 @@ import type { ChatContextUsage } from "@/lib/chat-context-usage";
 import { storeComposerDraft } from "@/lib/chat-history";
 import {
   ALL_ATTACHMENT_ACCEPT,
-  DOCUMENT_ACCEPT,
-  IMAGE_ACCEPT,
   isImageFilePart,
   MAX_FOLDER_FILES,
   selectFolderFiles,
@@ -971,6 +970,7 @@ function ChatComposerTextarea({
   longPasteWordThreshold?: number;
 }) {
   const controller = usePromptInputController();
+  const attachments = usePromptInputAttachments();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [slashRange, setSlashRange] = useState<SkillSlashRange | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -1143,6 +1143,17 @@ function ChatComposerTextarea({
           );
         }}
         onKeyDown={(event) => {
+          if (
+            !disabled &&
+            (event.ctrlKey || event.metaKey) &&
+            event.key.toLowerCase() === "u"
+          ) {
+            event.preventDefault();
+            openAttachmentPicker(attachments, ALL_ATTACHMENT_ACCEPT);
+
+            return;
+          }
+
           if (!pickerOpen) {
             if (event.key === "Escape" && prefix) {
               event.preventDefault();
@@ -1680,6 +1691,24 @@ function typeSlashCommand(textarea: HTMLTextAreaElement) {
   textarea.dispatchEvent(new window.Event("input", { bubbles: true }));
 }
 
+/** Shared by the + menu item and the Ctrl+U/Cmd+U composer shortcut. */
+function openAttachmentPicker(attachments: AttachmentsContext, accept: string) {
+  const input = attachments.fileInputRef.current;
+
+  if (!input) {
+    attachments.openFileDialog();
+
+    return;
+  }
+
+  input.accept = accept;
+  input.click();
+}
+
+function addFilesShortcutLabel(): string {
+  return navigator.userAgent.includes("Mac") ? "⌘U" : "Ctrl U";
+}
+
 function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
   const attachments = usePromptInputAttachments();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -1718,19 +1747,6 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
     input.click();
   };
 
-  const openPicker = (accept: string) => {
-    const input = attachments.fileInputRef.current;
-
-    if (!input) {
-      attachments.openFileDialog();
-
-      return;
-    }
-
-    input.accept = accept;
-    input.click();
-  };
-
   return (
     <DropdownMenu>
       <Tooltip>
@@ -1760,7 +1776,7 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
       </Tooltip>
       <DropdownMenuContent
         align="start"
-        className="min-w-40"
+        className="min-w-56"
         finalFocus={() => {
           const textarea = focusAfterCloseRef.current;
 
@@ -1771,17 +1787,15 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
       >
         <DropdownMenuItem
           disabled={disabled}
-          onClick={() => openPicker(IMAGE_ACCEPT)}
+          onClick={() =>
+            openAttachmentPicker(attachments, ALL_ATTACHMENT_ACCEPT)
+          }
         >
           <Image01Icon aria-hidden className="size-4 text-muted-foreground" />
-          Image
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={disabled}
-          onClick={() => openPicker(DOCUMENT_ACCEPT)}
-        >
-          <File01Icon aria-hidden className="size-4 text-muted-foreground" />
-          Document
+          <span className="whitespace-nowrap">Add files or photos</span>
+          <kbd className="ml-auto whitespace-nowrap font-sans text-2xs text-muted-foreground">
+            {addFilesShortcutLabel()}
+          </kbd>
         </DropdownMenuItem>
         <DropdownMenuItem disabled={disabled} onClick={openFolderPicker}>
           <Folder01Icon aria-hidden className="size-4 text-muted-foreground" />
