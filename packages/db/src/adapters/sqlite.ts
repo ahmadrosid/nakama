@@ -208,6 +208,7 @@ interface SessionRow {
   parent_session_id: string | null;
   pinned: number;
   profile_id: string;
+  thinking_effort?: string | null;
   title: string | null;
   updated_at?: string | null;
   user_id?: string | null;
@@ -1362,8 +1363,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
   // org_id follows the profile's org. The profile move path keeps it in sync.
   const upsertSessionStmt = db.prepare(`
-    INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, app_user_id, user_id, model, org_id, pinned, parent_session_id, branch_message_index)
-    VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)
+    INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, app_user_id, user_id, model, org_id, pinned, parent_session_id, branch_message_index, thinking_effort)
+    VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       profile_id = excluded.profile_id,
       channel = excluded.channel,
@@ -1383,6 +1384,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
   const updateSessionModelStmt = db.prepare(
     "UPDATE sessions SET model = ? WHERE id = ? AND app_user_id IS NULL"
+  );
+
+  const updateSessionThinkingEffortStmt = db.prepare(
+    "UPDATE sessions SET thinking_effort = ? WHERE id = ? AND app_user_id IS NULL"
   );
 
   const updateSessionPinnedStmt = db.prepare(
@@ -6123,6 +6128,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         sessionId
       );
     },
+    async updateSessionThinkingEffort(sessionId, effort) {
+      const result = updateSessionThinkingEffortStmt.run(effort, sessionId);
+
+      return result.changes > 0;
+    },
 
     async updateSessionTitle(sessionId, title) {
       const result = updateSessionTitleStmt.run(title, sessionId);
@@ -6333,7 +6343,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         orgId,
         record.pinned ? 1 : 0,
         record.parentSessionId ?? null,
-        record.branchMessageIndex ?? null
+        record.branchMessageIndex ?? null,
+        record.thinkingEffort ?? null
       );
     },
     async upsertSkill(record) {
@@ -6828,6 +6839,12 @@ function parseAgentQuestionnaire(
   }
 }
 
+function parseThinkingEffort(value: string | null | undefined) {
+  return value === "low" || value === "medium" || value === "high"
+    ? value
+    : null;
+}
+
 function toSessionRecord(row: SessionRow): StoredSessionRecord {
   return {
     agentQuestionnaire: parseAgentQuestionnaire(row.agent_questionnaire),
@@ -6840,6 +6857,7 @@ function toSessionRecord(row: SessionRow): StoredSessionRecord {
     parentSessionId: row.parent_session_id,
     pinned: row.pinned === 1,
     profileId: row.profile_id,
+    thinkingEffort: parseThinkingEffort(row.thinking_effort),
     title: row.title ?? null,
     userId: row.user_id ?? null,
   };

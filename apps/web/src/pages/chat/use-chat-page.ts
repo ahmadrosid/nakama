@@ -5,6 +5,7 @@ import type {
   AgentQuestionnaire,
   AgentTodo,
   ChatContextUsage,
+  ThinkingEffort,
 } from "@nakama/core/contract";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -248,6 +249,11 @@ export function useChatPage() {
   const [session, setSession] = useState<RemoteChatSession | null>(null);
   const [cognito, setCognito] = useState(host.cognito);
   const [sessionModel, setSessionModel] = useState<string | null>(null);
+
+  // Null follows the install effort. A member's pick for this chat only.
+  const [sessionThinkingEffort, setSessionThinkingEffort] =
+    useState<ThinkingEffort | null>(null);
+
   const [sessionChannel, setSessionChannel] = useState<AgentChannel>("web");
   const [messages, setMessages] = useState<ChatListItem[]>([]);
   const [agentTodos, setAgentTodos] = useState<AgentTodo[]>([]);
@@ -403,7 +409,6 @@ export function useChatPage() {
     acpAgentKey: acpAgentSettingsKey(activeProfile?.acpAgent),
     acpEnabled: Boolean(activeProfile?.acpAgent),
     busy,
-    canManageInstallSettings,
     currentProviderId: models?.currentProviderId,
     models: models?.models,
     profileId: profileId || null,
@@ -412,6 +417,7 @@ export function useChatPage() {
     saveThinkingPending: saveThinkingSettingsMutation.isPending,
     sessionId: session?.id ?? null,
     sessionModel,
+    sessionThinkingEffort,
     thinkingSettingsEffort: thinkingSettings?.effort,
     thinkingSettingsLoading,
   });
@@ -555,6 +561,7 @@ export function useChatPage() {
       setQueuedMessages([]);
       setSession(null);
       setSessionModel(restoreLastChatModel(nextProfileId));
+      setSessionThinkingEffort(null);
       setSessionChannel("web");
       setMessages([]);
       setError(null);
@@ -603,6 +610,7 @@ export function useChatPage() {
     setAgentQuestionnaire(null);
     setContextUsage(null);
     setSessionModel(null);
+    setSessionThinkingEffort(null);
     setError(null);
     setBusy(false);
     setTurnStartedAt(null);
@@ -624,14 +632,15 @@ export function useChatPage() {
         return;
       }
 
-      if (
-        !(canManageInstallSettings && profileId) ||
-        effort === thinkingEffort
-      ) {
+      if (!profileId || effort === thinkingEffort) {
         return;
       }
 
-      if (busy || saveThinkingSettingsMutation.isPending) {
+      if (
+        busy ||
+        saveThinkingSettingsMutation.isPending ||
+        updateSessionMutation.isPending
+      ) {
         if (busy) {
           setError("Wait for the current response to finish.");
         }
@@ -639,9 +648,38 @@ export function useChatPage() {
         return;
       }
 
-      void saveThinkingSettingsMutation
-        .mutateAsync(buildThinkingSettingsPayload(effort))
+      // An admin's pick stays the install default. Everyone else, or a chat
+      // that already has its own effort, changes only this chat.
+      if (canManageInstallSettings && sessionThinkingEffort === null) {
+        void saveThinkingSettingsMutation
+          .mutateAsync(buildThinkingSettingsPayload(effort))
+          .catch((err) => {
+            setError(formatError(err));
+          });
+
+        return;
+      }
+
+      const previousEffort = sessionThinkingEffort;
+      setSessionThinkingEffort(effort);
+
+      if (!session) {
+        return;
+      }
+
+      const updatedSessionId = session.id;
+      void updateSessionMutation
+        .mutateAsync({
+          input: { thinkingEffort: effort },
+          profileId,
+          sessionId: updatedSessionId,
+        })
         .catch((err) => {
+          if (activeSessionIdRef.current !== updatedSessionId) {
+            return;
+          }
+
+          setSessionThinkingEffort(previousEffort);
           setError(formatError(err));
         });
     },
@@ -653,6 +691,9 @@ export function useChatPage() {
       thinkingEffort,
       busy,
       saveThinkingSettingsMutation,
+      session,
+      sessionThinkingEffort,
+      updateSessionMutation,
     ]
   );
 
@@ -746,6 +787,7 @@ export function useChatPage() {
           messages: storedMessages,
           messageMeta,
           model,
+          thinkingEffort: storedThinkingEffort,
           todos,
           questionnaire,
           contextUsage: nextContextUsage,
@@ -769,6 +811,7 @@ export function useChatPage() {
         setSessionChannel(channel);
         setSession(nextSession);
         setSessionModel(model);
+        setSessionThinkingEffort(storedThinkingEffort ?? null);
         setMessages(listItems);
         setAgentTodos(todos);
         setAgentQuestionnaire(questionnaire);
@@ -834,6 +877,7 @@ export function useChatPage() {
             setAgentQuestionnaire(refreshed.questionnaire);
             setContextUsage(refreshed.contextUsage ?? null);
             setSessionModel(refreshed.model);
+            setSessionThinkingEffort(refreshed.thinkingEffort ?? null);
 
             if (reconnected) {
               setLastSuccessfulTurnAt((previous) =>
@@ -990,6 +1034,7 @@ export function useChatPage() {
     setSessionModel(
       targetProfileId ? restoreLastChatModel(targetProfileId) : null
     );
+    setSessionThinkingEffort(null);
     setSessionChannel("web");
     setMessages([]);
     setError(null);
@@ -1196,6 +1241,7 @@ export function useChatPage() {
             cognito: cognitoRef.current || undefined,
             model: sessionModel ?? undefined,
             profileId,
+            thinkingEffort: sessionThinkingEffort ?? undefined,
           });
 
           // A cognito session id is never stored or put in the URL: either
@@ -1269,6 +1315,7 @@ export function useChatPage() {
           questionnaire,
           contextUsage: nextContextUsage,
           model: nextSessionModel,
+          thinkingEffort: nextThinkingEffort,
         } = await client.getSessionMessages(activeSession.id);
 
         setMessages(chatMessagesToListItems(storedMessages, messageMeta));
@@ -1276,6 +1323,7 @@ export function useChatPage() {
         setAgentQuestionnaire(questionnaire);
         setContextUsage(nextContextUsage ?? null);
         setSessionModel(nextSessionModel);
+        setSessionThinkingEffort(nextThinkingEffort ?? null);
         setLastSuccessfulTurnAt((previous) => nextSuccessfulTurnAt(previous));
       } catch (err) {
         if (!activeSession) {
@@ -1330,6 +1378,7 @@ export function useChatPage() {
               cognito: cognitoRef.current || undefined,
               model: sessionModel ?? undefined,
               profileId,
+              thinkingEffort: sessionThinkingEffort ?? undefined,
             });
 
             if (!cognitoRef.current) {
@@ -1428,6 +1477,7 @@ export function useChatPage() {
       showThinking,
       activeModelSupportsVision,
       sessionModel,
+      sessionThinkingEffort,
       queryClient,
     ]
   );
@@ -1521,6 +1571,7 @@ export function useChatPage() {
             cognito: cognitoRef.current || undefined,
             model: sessionModel ?? undefined,
             profileId,
+            thinkingEffort: sessionThinkingEffort ?? undefined,
           });
         }
 
@@ -1551,6 +1602,7 @@ export function useChatPage() {
       sendMessage,
       session,
       sessionModel,
+      sessionThinkingEffort,
       syncChatUrl,
     ]
   );

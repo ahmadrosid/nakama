@@ -154,6 +154,8 @@ export interface StoredSessionRecord {
   parentSessionId?: string | null;
   pinned?: boolean;
   profileId: string;
+  /** Null uses the install thinking effort. */
+  thinkingEffort?: ThinkingEffort | null;
   title: string | null;
   userId?: string | null;
 }
@@ -1546,6 +1548,10 @@ export interface DatabaseAdapter {
     sessionId: string,
     questionnaire: AgentQuestionnaire | null
   ): Promise<void>;
+  updateSessionThinkingEffort(
+    sessionId: string,
+    effort: ThinkingEffort | null
+  ): Promise<boolean>;
   updateSessionTitle(sessionId: string, title: string): Promise<boolean>;
   updateSessionTodos(sessionId: string, todos: AgentTodo[]): Promise<void>;
   updateSkillProposalStatus(
