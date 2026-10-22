@@ -13,6 +13,88 @@ afterEach(closeAgentGroupDatabases);
 setupTestConfigDir("nakama-agent-group-service-");
 
 describe("AgentGroupService", () => {
+  test.each(["reply", "pass", "error"])(
+    "keeps ordered memory changes after %s, including thread replies and reload",
+    async (outcome) => {
+      const { chat, service } = setup(
+        async ({ profileId, sharedDir, onGroupMemoryChange }) => {
+          if (profileId === "a") {
+            return "Answer";
+          }
+
+          for (const input of [
+            { entry: "Yearly is $39.99" },
+            { entry: "Yearly is $49.99", replaces: "Yearly is $39.99" },
+            { entry: "", replaces: "Yearly is $49.99" },
+          ]) {
+            const result = await groupMemoryTool.run(input, { sharedDir });
+
+            if (result.change) {
+              onGroupMemoryChange?.(result.change);
+            }
+          }
+
+          if (outcome === "error") {
+            throw new Error("Provider failed after writing");
+          }
+
+          return outcome === "pass" ? "(pass)" : "Done";
+        }
+      );
+
+      const changes = [
+        { newEntry: "- Yearly is $39.99", oldEntry: null },
+        { newEntry: "- Yearly is $49.99", oldEntry: "- Yearly is $39.99" },
+        { newEntry: null, oldEntry: "- Yearly is $49.99" },
+      ];
+
+      const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+      const sessionId = await chat(group.id, "hello");
+      closeAgentGroupDatabases();
+
+      const messages = service.session(
+        ORG_ID,
+        USER_ID,
+        group.id,
+        sessionId
+      ).messages;
+
+      expect(messages).toHaveLength(3);
+      expect(messages[0]?.memoryChanges).toBeUndefined();
+      expect(messages[1]?.memoryChanges).toBeUndefined();
+      const reply = messages[2]!;
+      expect(reply.authorProfileId).toBe("b");
+      expect(reply.memoryChanges).toEqual(changes);
+
+      if (outcome === "pass") {
+        expect(reply.content).toBe("");
+      }
+
+      await service.postThread(
+        ORG_ID,
+        USER_ID,
+        group.id,
+        sessionId,
+        reply.id,
+        "continue"
+      );
+      closeAgentGroupDatabases();
+
+      const thread = service.thread(
+        ORG_ID,
+        USER_ID,
+        group.id,
+        sessionId,
+        reply.id
+      );
+
+      expect(thread.messages.at(-1)?.memoryChanges).toEqual(changes);
+      expect(
+        service.session(ORG_ID, USER_ID, group.id, sessionId).messages
+      ).toHaveLength(3);
+    }
+  );
+
   test("rejects an agent the user cannot chat with", async () => {
     const { service } = setup(() => "");
 
