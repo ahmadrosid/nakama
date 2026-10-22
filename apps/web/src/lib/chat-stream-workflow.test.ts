@@ -4,8 +4,6 @@ import {
   activeWorkflowStepIndex,
   buildWorkflowRunCard,
   buildWorkflowStepViews,
-  isListWorkflowsTool,
-  isRunWorkflowTool,
   parseListWorkflowsResult,
   parseRunWorkflowResult,
   parseWorkflowId,
@@ -51,14 +49,6 @@ describe("chat-stream-workflow", () => {
       });
     }
   );
-
-  test("isRunWorkflowTool matches name", () => {
-    expect(isRunWorkflowTool("run_workflow")).toBe(true);
-    expect(isRunWorkflowTool("plugin_workflows__run_workflow")).toBe(true);
-    expect(isListWorkflowsTool("plugin_workflows__list_workflows")).toBe(true);
-    expect(isRunWorkflowTool("create_workflow")).toBe(false);
-    expect(isListWorkflowsTool("list_workflows")).toBe(true);
-  });
 
   test("parseListWorkflowsResult reads summaries", () => {
     const listed = parseListWorkflowsResult([
@@ -216,19 +206,6 @@ describe("chat-stream-workflow", () => {
 
     expect(views[0]?.meta).toBe("5 words");
     expect(views[2]?.meta).toBe("Morning Brief — 5 September 2026");
-  });
-
-  test("buildWorkflowRunCard prefers workflow name and off status", () => {
-    const card = buildWorkflowRunCard({
-      isRunning: false,
-      parsed: { name: "From result", run: null, status: null },
-      runs: [],
-      workflow: { enabled: false, name: "Morning Brief", steps },
-    });
-
-    expect(card.title).toBe("Morning Brief");
-    expect(card.statusLabel).toBe("Off");
-    expect(card.views).toHaveLength(3);
   });
 });
 

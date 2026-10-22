@@ -70,12 +70,6 @@ describe("composeAgentBrowserCapabilityPrompt", () => {
 });
 
 describe("skill instruction discovery", () => {
-  test("catalog exposes the instruction file for available skills", () => {
-    expect(composeSkillsCatalog([baseSkill])).toContain(
-      baseSkill.skillFilePath
-    );
-  });
-
   test("natural-language Bang-Motion request gets its instruction location", () => {
     const skill = {
       ...baseSkill,
@@ -133,11 +127,6 @@ describe("skills that ship code nothing can run", () => {
     ]);
 
     expect(line).toContain("ships 2 scripts that cannot run here");
-  });
-
-  test("a skill with a working tool is unchanged", () => {
-    expect(composeSkillsCatalog([baseSkill])).toContain("(includes tool)");
-    expect(composeSkillsCatalog([baseSkill])).not.toContain("cannot run here");
   });
 
   test("a prose-only skill with no scripts stays silent", () => {

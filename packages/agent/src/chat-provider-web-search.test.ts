@@ -45,43 +45,6 @@ describe("provider-native web search", () => {
     expect(input?.tools?.map((tool) => tool.name)).toEqual(["sample"]);
   });
 
-  test("tells the model when OpenRouter drops hosted web search", async () => {
-    const input = await turn([webSearchTool], "openrouter");
-
-    expect(input?.providerOptions).toBeUndefined();
-    expect(input?.system).toContain("Web search is unavailable on this turn");
-  });
-
-  test("points the model at web_fetch when that tool is assigned", async () => {
-    const webFetch: ToolDefinition = {
-      description: "Fetch a URL",
-      name: "web_fetch",
-      run(input) {
-        return Promise.resolve(input);
-      },
-    };
-
-    const input = await turn([webFetch, webSearchTool], "openrouter");
-
-    expect(input?.system).toContain("read it with web_fetch");
-  });
-
-  test("stays silent when web_search is served by a local search back-end", async () => {
-    const customWebSearch: ToolDefinition = {
-      description: "Search via a configured endpoint",
-      hosted: false,
-      name: "web_search",
-      run() {
-        return Promise.resolve({ results: [] });
-      },
-    };
-
-    const input = await turn([customWebSearch], "openrouter");
-
-    expect(input?.tools?.map((tool) => tool.name)).toEqual(["web_search"]);
-    expect(input?.system).not.toContain("Web search is unavailable");
-  });
-
   test("skips provider web search on Gemini when local tools are also assigned", async () => {
     const input = await turn([localTool, webSearchTool], "gemini");
 

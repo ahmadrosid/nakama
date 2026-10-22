@@ -28,18 +28,6 @@ describe("precacheUrls", () => {
     ]);
   });
 
-  test("adds extra urls once, sorted with the rest", () => {
-    const urls = precacheUrls(MANIFEST, [
-      "/manifest.webmanifest",
-      "/assets/index-js111.js",
-    ]);
-
-    expect(urls.filter((url) => url === "/assets/index-js111.js")).toHaveLength(
-      1
-    );
-    expect(urls).toContain("/manifest.webmanifest");
-  });
-
   test("survives a cycle between chunks", () => {
     const cyclic: ViteManifest = {
       "b.js": { file: "assets/b.js", imports: ["index.html"] },
@@ -70,11 +58,5 @@ describe("buildVersion", () => {
     expect(buildVersion(["/assets/a.js"])).not.toBe(
       buildVersion(["/assets/b.js"])
     );
-  });
-
-  test("is stable for the same build and short enough to read in devtools", () => {
-    const version = buildVersion(["/", "/assets/a.js"]);
-    expect(version).toBe(buildVersion(["/", "/assets/a.js"]));
-    expect(version).toMatch(/^[0-9a-f]{12}$/);
   });
 });

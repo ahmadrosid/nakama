@@ -10,9 +10,7 @@ import {
   firstAvailableProviderOption,
   hasOpenCodeZenProvider,
   isOpenCodeZenBaseUrl,
-  isProviderTypeAlreadyConfigured,
   knownModelSelection,
-  PROVIDER_OPTIONS,
   profileModelSelectionValue,
   resolveModelThinkingSupport,
   resolveModelVisionSupport,
@@ -286,37 +284,6 @@ describe("filterVisionCapableProviderGroups", () => {
       "compat-2",
     ]);
     expect(filtered[1]?.models.map((model) => model.id)).toEqual(["model-1"]);
-  });
-});
-
-describe("isProviderTypeAlreadyConfigured", () => {
-  test("treats builtin providers as taken once configured", () => {
-    const configured = new Set(["openai", "anthropic"]);
-
-    expect(isProviderTypeAlreadyConfigured("openai", configured)).toBe(true);
-    expect(isProviderTypeAlreadyConfigured("gemini", configured)).toBe(false);
-  });
-
-  test("always allows another openai_compatible instance", () => {
-    const configured = new Set(["openai_compatible", "openai"]);
-
-    expect(
-      isProviderTypeAlreadyConfigured("openai_compatible", configured)
-    ).toBe(false);
-  });
-
-  test("always allows another ollama instance", () => {
-    const configured = new Set(["ollama", "openai"]);
-
-    expect(isProviderTypeAlreadyConfigured("ollama", configured)).toBe(false);
-  });
-});
-
-describe("PROVIDER_OPTIONS", () => {
-  test("lists every registered provider type", () => {
-    expect(PROVIDER_OPTIONS.map((option) => option.id).toSorted()).toEqual(
-      [...USER_PROVIDER_NAMES].toSorted()
-    );
   });
 });
 

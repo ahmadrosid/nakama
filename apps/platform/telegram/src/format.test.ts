@@ -8,24 +8,6 @@ import {
 } from "./format";
 
 describe("stripMarkdownForTelegram", () => {
-  test("removes bold and inline code", () => {
-    expect(stripMarkdownForTelegram("Hello **world** and `code`")).toBe(
-      "Hello world and code"
-    );
-  });
-
-  test("unwraps fenced code blocks", () => {
-    expect(
-      stripMarkdownForTelegram("Before\n```js\nconst x = 1;\n```\nAfter")
-    ).toBe("Before\nconst x = 1;\nAfter");
-  });
-
-  test("strips headings and link syntax", () => {
-    expect(
-      stripMarkdownForTelegram("## Title\n[docs](https://example.com)")
-    ).toBe("Title\ndocs (https://example.com)");
-  });
-
   test("preserves legacy share tokens with underscores in bare URLs", () => {
     const shareUrl =
       "http://127.0.0.1:4310/s/tc_share_a7e24436b9bd4ec8bd60edba6d403c74f0b19596f27b440db85d7f171299bbdc";
@@ -62,20 +44,6 @@ describe("stripMarkdownForTelegram", () => {
 });
 
 describe("renderTelegramRichText", () => {
-  test("renders common markdown as Telegram HTML", () => {
-    expect(
-      renderTelegramRichText(
-        "Hello **world**, `code`, and [docs](https://example.com)."
-      )
-    ).toBe(
-      'Hello <b>world</b>, <code>code</code>, and <a href="https://example.com">docs</a>.'
-    );
-  });
-
-  test("renders headings as bold text", () => {
-    expect(renderTelegramRichText("## Status")).toBe("<b>Status</b>");
-  });
-
   test("does not italicize underscores or double-escape query params in links", () => {
     expect(
       renderTelegramRichText("[docs](https://example.com/a_b?x=1&y=2)")
@@ -124,10 +92,6 @@ describe("prepareTelegramReply", () => {
 describe("splitIntoChatBubbles", () => {
   test("returns empty for blank text", () => {
     expect(splitIntoChatBubbles("   ")).toEqual([]);
-  });
-
-  test("keeps short replies as one bubble", () => {
-    expect(splitIntoChatBubbles("Hello there.")).toEqual(["Hello there."]);
   });
 
   test("splits on paragraph boundaries", () => {

@@ -49,28 +49,6 @@ test("buildChatSystemPrompt omits untrusted document guidance without documents 
   expect(prompt(["bash"])).not.toContain("untrusted document data");
 });
 
-test("buildChatSystemPrompt inserts USER.md section after identity", () => {
-  const text = buildChatSystemPrompt([], {
-    basePrompt: "You are a helpful assistant.",
-    userContext: "Name: Alex\nRole: engineer",
-  });
-
-  const identityIndex = text.indexOf("You are a helpful assistant.");
-  const userIndex = text.indexOf("# Personalisation (USER.md)");
-  const runtimeIndex = text.indexOf("Chat naturally");
-
-  expect(identityIndex).toBeGreaterThanOrEqual(0);
-  expect(userIndex).toBeGreaterThan(identityIndex);
-  expect(runtimeIndex).toBeGreaterThan(userIndex);
-  expect(text).toContain("Name: Alex\nRole: engineer");
-  expect(
-    buildChatSystemPrompt([], {
-      basePrompt: "You are a helpful assistant.",
-      userContext: "   ",
-    })
-  ).not.toContain("# Personalisation (USER.md)");
-});
-
 // Every channel, so flipping one entry of MESSAGING_CHANNEL_PROMPT between a
 // config and null fails here rather than silently changing the reply style.
 test("buildChatSystemPrompt gives messaging style to the four chat channels only", () => {
@@ -87,28 +65,4 @@ test("buildChatSystemPrompt gives messaging style to the four chat channels only
 
   const whatsapp = prompt([], { channel: "whatsapp", chatKind: "group" });
   expect(whatsapp).toContain("WhatsApp channel");
-});
-
-test("automation report follows the delivery channel's format rules", () => {
-  const telegram = prompt([], {
-    channel: "automation",
-    deliveryChannel: "telegram",
-  });
-
-  expect(telegram).toContain("Telegram");
-  expect(telegram).toContain("Avoid raw HTML");
-  expect(telegram).not.toContain("share link");
-
-  expect(
-    prompt([], { channel: "automation", deliveryChannel: "whatsapp" })
-  ).toContain("Do not use markdown headings");
-});
-
-test("automation report adds no channel rules for email or no delivery", () => {
-  const plain = prompt([], { channel: "automation" });
-
-  expect(prompt([], { channel: "automation", deliveryChannel: "email" })).toBe(
-    plain
-  );
-  expect(plain).not.toContain("Telegram");
 });

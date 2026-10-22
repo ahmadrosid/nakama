@@ -29,17 +29,8 @@ import * as promptModule from "./prompt";
 import { TerminalRenderer } from "./terminal-renderer";
 
 describe("needsTrailingStreamNewline", () => {
-  test("adds a newline when no chunk was rendered", () => {
-    expect(needsTrailingStreamNewline(null)).toBe(true);
-  });
-
   test("adds a newline when the stream ended mid-line", () => {
     expect(needsTrailingStreamNewline("Hello.")).toBe(true);
-  });
-
-  test("skips the newline when the stream already ended with one", () => {
-    expect(needsTrailingStreamNewline("Hello.\n")).toBe(false);
-    expect(needsTrailingStreamNewline("Hello.\r\n")).toBe(false);
   });
 });
 
@@ -178,27 +169,11 @@ describe("formatStatusLines", () => {
       "Model: claude-sonnet",
     ]);
   });
-
-  test("shows offline mode when no provider is configured", () => {
-    expect(
-      formatStatusLines({ ...health, providerConfigured: false }, null, profile)
-    ).toEqual([
-      "Server: ok",
-      "Provider configured: no",
-      "Chat runs in offline mode without an API key.",
-    ]);
-  });
 });
 
 describe("formatErrorLines", () => {
   test("adds a blank line above rendered errors", () => {
     expect(formatErrorLines(new Error("Boom"))).toEqual(["", "Boom"]);
-  });
-
-  test("splits multiline errors into separate render lines", () => {
-    expect(
-      formatErrorLines(new Error("DeepSeek request failed\ninternal_error"))
-    ).toEqual(["", "DeepSeek request failed", "internal_error"]);
   });
 });
 

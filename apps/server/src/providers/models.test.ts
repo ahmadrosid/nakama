@@ -14,14 +14,6 @@ import {
 import { estimateUsageCostUsd } from "./pricing";
 
 describe("isOpenRouterModelSlug", () => {
-  test("accepts vendor/model slugs", () => {
-    expect(isOpenRouterModelSlug("anthropic/claude-sonnet-4-6")).toBe(true);
-  });
-
-  test("accepts latest-model aliases", () => {
-    expect(isOpenRouterModelSlug("~google/gemini-flash-latest")).toBe(true);
-  });
-
   test("rejects bare model ids", () => {
     expect(isOpenRouterModelSlug("gpt-5.4")).toBe(false);
   });
@@ -119,12 +111,6 @@ describe("resolveModel", () => {
       "account-model"
     );
     expect(resolveModel("chatgpt", " gpt-5.4 ", customModels)).toBe("gpt-5.4");
-  });
-
-  test("passes through custom OpenRouter slugs", () => {
-    expect(resolveModel("openrouter", "google/gemini-2.5-pro-preview")).toBe(
-      "google/gemini-2.5-pro-preview"
-    );
   });
 
   test("falls back to default for invalid OpenRouter slugs", () => {

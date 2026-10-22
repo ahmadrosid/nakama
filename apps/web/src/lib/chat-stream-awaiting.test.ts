@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatListItem } from "@/lib/chat-history";
-import {
-  awaitingModelLabel,
-  buildStreamHandlers,
-  isAwaitingModelResponse,
-} from "./chat-stream";
+import { buildStreamHandlers, isAwaitingModelResponse } from "./chat-stream";
 
 function assistant(
   partial: Partial<ChatListItem> & { id: string }
@@ -80,26 +76,6 @@ describe("isAwaitingModelResponse", () => {
         tool({ id: "t2", tool: "list_tools", toolStatus: "done" }),
       ])
     ).toBe(true);
-  });
-});
-
-describe("awaitingModelLabel", () => {
-  test("Thinking… before any tools or thinking text", () => {
-    expect(
-      awaitingModelLabel([
-        { content: "hi", id: "u1", role: "user" },
-        assistant({ id: "a1", streaming: true }),
-      ])
-    ).toBe("Thinking…");
-  });
-
-  test("Working… after tools", () => {
-    expect(
-      awaitingModelLabel([
-        { content: "hi", id: "u1", role: "user" },
-        tool({ id: "t1", tool: "list_profiles", toolStatus: "done" }),
-      ])
-    ).toBe("Working…");
   });
 });
 

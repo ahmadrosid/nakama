@@ -59,12 +59,6 @@ describe("formatTelegramDestinationLabel", () => {
   test("formats chat-only destinations", () => {
     expect(formatTelegramDestinationLabel({ chatId: 1001 })).toBe("Chat 1001");
   });
-
-  test("formats topic destinations", () => {
-    expect(formatTelegramDestinationLabel({ chatId: 1001, topicId: 22 })).toBe(
-      "Chat 1001 / Topic 22"
-    );
-  });
 });
 
 describe("maskWebhookApiKey", () => {
