@@ -84,6 +84,7 @@ export function ChatAttachmentPanelProvider({
     rememberedWidth = next;
     setWidth(next);
   }, []);
+
   const [enterSlide, setEnterSlide] = useState(false);
   const configRef = useRef<ChatAttachmentPanelConfig | null>(config);
 

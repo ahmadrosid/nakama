@@ -321,6 +321,7 @@ export function GroupFilesPanel({
   onClose: () => void;
 }) {
   const [width, setWidth] = useGroupPanelWidth();
+
   const [state, setState] = useState(() => {
     const cached = filesPanelState.get(group.id);
     const filename = file?.split("/").pop();
