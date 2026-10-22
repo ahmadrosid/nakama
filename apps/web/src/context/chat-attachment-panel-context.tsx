@@ -18,6 +18,9 @@ import {
 
 const DEFAULT_PANEL_WIDTH = 448;
 
+// The width the user last gave the panel; once set, it wins over each file's default width.
+let rememberedWidth: number | null = null;
+
 const ENTER_SLIDE_MS = 200;
 
 /** The right side as cards: the open panel, with `below` under it. */
@@ -75,7 +78,12 @@ export function ChatAttachmentPanelProvider({
   presentation?: "push" | "overlay";
 }) {
   const [config, setConfig] = useState<ChatAttachmentPanelConfig | null>(null);
-  const [width, setWidth] = useState(DEFAULT_PANEL_WIDTH);
+  const [width, setWidth] = useState(rememberedWidth ?? DEFAULT_PANEL_WIDTH);
+
+  const resize = useCallback((next: number) => {
+    rememberedWidth = next;
+    setWidth(next);
+  }, []);
   const [enterSlide, setEnterSlide] = useState(false);
   const configRef = useRef<ChatAttachmentPanelConfig | null>(config);
 
@@ -129,7 +137,7 @@ export function ChatAttachmentPanelProvider({
 
       setConfig(nextConfig);
 
-      if (nextConfig.defaultWidth != null) {
+      if (nextConfig.defaultWidth != null && rememberedWidth === null) {
         setWidth(clampAttachmentPanelWidth(nextConfig.defaultWidth));
       }
     };
@@ -152,7 +160,7 @@ export function ChatAttachmentPanelProvider({
 
   const update = useCallback(
     (id: string, patch: Partial<Omit<ChatAttachmentPanelConfig, "id">>) => {
-      if (patch.defaultWidth != null) {
+      if (patch.defaultWidth != null && rememberedWidth === null) {
         setWidth(clampAttachmentPanelWidth(patch.defaultWidth));
       }
 
@@ -225,7 +233,7 @@ export function ChatAttachmentPanelProvider({
         headerActions={config.headerActions}
         leading={config.leading}
         onClose={handlePanelClose}
-        onWidthChange={setWidth}
+        onWidthChange={resize}
         resizable={config.resizable ?? !fullscreen}
         subtitle={config.subtitle}
         title={config.title}
