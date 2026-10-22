@@ -281,8 +281,10 @@ export function userContentToDisplayDocuments(
 
   return content
     .filter(
-      (part): part is Extract<typeof part, { type: "document" }> =>
-        part.type === "document"
+      (
+        part
+      ): part is Extract<typeof part, { type: "document" | "document_ref" }> =>
+        part.type === "document" || part.type === "document_ref"
     )
     .map((part) => documentDisplayFromContentPart(part));
 }
