@@ -57,7 +57,7 @@ export interface DisplayDocument {
 }
 
 export function documentDisplayFromContentPart(
-  part: Extract<MessageContentPart, { type: "document" }>
+  part: Extract<MessageContentPart, { type: "document" | "document_ref" }>
 ): DisplayDocument {
   return {
     filename: part.filename,
