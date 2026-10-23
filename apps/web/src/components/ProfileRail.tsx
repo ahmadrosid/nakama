@@ -147,9 +147,8 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
 
     const avatarClass = cn(
       "size-7 rounded-md outline-none transition-all duration-150",
-      active
-        ? "opacity-100 saturate-100"
-        : "opacity-45 grayscale group-hover:opacity-70 group-hover:grayscale-0"
+      // Avatar colors identify agents, so inactive ones stay in color.
+      active ? "opacity-100" : "opacity-80 group-hover:opacity-100"
     );
 
     const trigger = (
