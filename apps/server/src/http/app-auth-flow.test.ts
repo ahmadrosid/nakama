@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { HealthResponse } from "@nakama/core/contract";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AuthService } from "../services/auth-service";
@@ -113,6 +114,42 @@ describe("createHonoApp", () => {
       userConfigured: false,
       version: expect.any(String),
     });
+  });
+
+  test("reports onboarding off unless NAKAMA_ENABLE_ONBOARDING is on", async () => {
+    const previous = process.env.NAKAMA_ENABLE_ONBOARDING;
+    const app = createHonoApp(createServerOptions());
+
+    const readFlag = async () => {
+      const response = await app.fetch(
+        new Request("http://localhost:4310/health")
+      );
+
+      // SAFETY: /health always answers with the HealthResponse schema.
+      const body = (await response.json()) as HealthResponse;
+
+      return body.onboardingEnabled;
+    };
+
+    try {
+      delete process.env.NAKAMA_ENABLE_ONBOARDING;
+      expect(await readFlag()).toBe(false);
+
+      process.env.NAKAMA_ENABLE_ONBOARDING = "true";
+      expect(await readFlag()).toBe(true);
+
+      process.env.NAKAMA_ENABLE_ONBOARDING = "1";
+      expect(await readFlag()).toBe(true);
+
+      process.env.NAKAMA_ENABLE_ONBOARDING = "no";
+      expect(await readFlag()).toBe(false);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.NAKAMA_ENABLE_ONBOARDING;
+      } else {
+        process.env.NAKAMA_ENABLE_ONBOARDING = previous;
+      }
+    }
   });
 
   test("reports userConfigured when only the local CLI client exists", async () => {

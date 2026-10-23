@@ -2,6 +2,7 @@ import {
   formatAgentQuestionnaireAnswersMessage,
   hasActiveAgentQuestionnaire,
 } from "@nakama/core/agent-questionnaire";
+import { parseUserContext, renderUserContext } from "@nakama/core/user-context";
 import {
   Dialog,
   DialogContent,
@@ -17,13 +18,28 @@ import { ChatCognitoControl } from "@/components/chat/chat-cognito-control";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
+import { useAppContext } from "@/context/use-app-context";
+import { useAuth } from "@/context/use-auth";
 import { useChatUsageVisible } from "@/hooks/use-chat-usage-visible";
 import { usePostTurnSkillReviewOverlay } from "@/hooks/use-post-turn-skill-review-overlay";
+import {
+  useHistorySessionsQuery,
+  useUserContextQuery,
+  useWriteUserContextMutation,
+} from "@/hooks/use-resource-mutations";
 import { formatSessionChannelLabel } from "@/lib/chat-history";
 import { sumChatUsage } from "@/lib/chat-usage";
+import { formatError } from "@/lib/client";
 import { extractModelId } from "@/lib/models";
-import { shouldShowCognitoControl } from "@/pages/chat/chat-page.shared";
-import { ChatPageColumn, ChatWelcome } from "@/pages/chat/chat-page-layout";
+import {
+  shouldShowCognitoControl,
+  shouldShowGoalPrompt,
+} from "@/pages/chat/chat-page.shared";
+import {
+  ChatGoalPrompt,
+  ChatPageColumn,
+  ChatWelcome,
+} from "@/pages/chat/chat-page-layout";
 import type { ChatPageState } from "@/pages/chat/use-chat-page";
 
 const ProviderSetupForm = lazy(async () => ({
@@ -83,6 +99,14 @@ export function ChatPageContent({
   } = state;
 
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
+
+  const goalPrompt = useGoalPrompt({
+    cognito,
+    cognitoLocked,
+    isEmptyState,
+    profileId,
+    readOnlySession,
+  });
 
   // A locked cognito chat looks like a normal one: it has no other mode.
   const cognitoSurface = cognito && !cognitoLocked;
@@ -172,15 +196,26 @@ export function ChatPageContent({
       <ChatPageColumn centered cognito={cognitoSurface}>
         {cognitoControl}
         <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col gap-1">
-          <ChatWelcome
-            cognito={cognito}
-            onProfileSwitch={handleProfileSwitch}
-            profile={activeProfile}
-            profileId={profileId}
-            profileSwitchDisabled={busy}
-            profiles={profiles}
-          />
-          {composer}
+          {goalPrompt.show ? (
+            <ChatGoalPrompt
+              error={goalPrompt.error}
+              onSave={goalPrompt.save}
+              onSkip={goalPrompt.skip}
+              saving={goalPrompt.saving}
+            />
+          ) : (
+            <>
+              <ChatWelcome
+                cognito={cognito}
+                onProfileSwitch={handleProfileSwitch}
+                profile={activeProfile}
+                profileId={profileId}
+                profileSwitchDisabled={busy}
+                profiles={profiles}
+              />
+              {composer}
+            </>
+          )}
         </div>
       </ChatPageColumn>
     </ChatAttachmentPanelProvider>
@@ -217,6 +252,67 @@ export function ChatPageContent({
       </Dialog>
     </PromptInputProvider>
   );
+}
+
+/**
+ * Decides whether the empty chat asks for a goal, and saves the answer to
+ * USER.md "Help with". Waits for both reads, so a returning user never sees
+ * the prompt flash before their history loads.
+ */
+function useGoalPrompt({
+  cognito,
+  cognitoLocked,
+  isEmptyState,
+  profileId,
+  readOnlySession,
+}: {
+  cognito: boolean;
+  cognitoLocked: boolean;
+  isEmptyState: boolean;
+  profileId: string;
+  readOnlySession: boolean;
+}) {
+  const { health } = useAppContext();
+  const { activeOrg } = useAuth();
+
+  const enabled =
+    health?.onboardingEnabled === true &&
+    isEmptyState &&
+    !cognito &&
+    !cognitoLocked &&
+    !readOnlySession;
+
+  const orgId = activeOrg?.id ?? null;
+  const [skipped, setSkipped] = useState(false);
+  const userContext = useUserContextQuery({ includeContent: true, orgId });
+  const history = useHistorySessionsQuery(profileId);
+  const writeUserContext = useWriteUserContextMutation();
+
+  const show =
+    enabled &&
+    !skipped &&
+    userContext.isSuccess &&
+    !history.isLoading &&
+    !history.error &&
+    shouldShowGoalPrompt({
+      orgRole: activeOrg?.role,
+      sessions: history.data,
+      userContext: userContext.data.content,
+    });
+
+  return {
+    error: writeUserContext.error ? formatError(writeUserContext.error) : null,
+    save: (goal: string) => {
+      const { answers, extra } = parseUserContext(userContext.data?.content);
+
+      writeUserContext.mutate(
+        renderUserContext({ ...answers, help: goal }, extra)
+      );
+    },
+    saving: writeUserContext.isPending,
+    show,
+    skip: () => setSkipped(true),
+  };
 }
 
 function ChatConversation({

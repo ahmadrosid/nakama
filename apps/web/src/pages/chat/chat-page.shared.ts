@@ -1,3 +1,5 @@
+import type { AgentChannel } from "@nakama/core/contract";
+import { parseUserContext } from "@nakama/core/user-context";
 import type { ChatListItem, FailedChatTurn } from "@/lib/chat-history";
 import { createClientId } from "@/lib/client-id";
 
@@ -21,6 +23,31 @@ export function shouldShowCognitoControl(
   isEmptyState: boolean
 ): boolean {
   return cognito || isEmptyState;
+}
+
+/**
+ * A new user lands on an empty chat with no idea what to ask. The goal prompt
+ * shows only then: someone who can chat, has no web chat yet, and has not
+ * said what they want help with. A saved goal or a first chat ends it.
+ */
+export function shouldShowGoalPrompt({
+  orgRole,
+  sessions,
+  userContext,
+}: {
+  orgRole: string | undefined;
+  sessions: readonly { channel: AgentChannel }[];
+  userContext: string | null | undefined;
+}): boolean {
+  if (orgRole === "viewer") {
+    return false;
+  }
+
+  if (sessions.some((session) => session.channel === "web")) {
+    return false;
+  }
+
+  return !parseUserContext(userContext).answers.help?.trim();
 }
 
 export function findRetryPrompt(

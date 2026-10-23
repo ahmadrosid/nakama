@@ -288,11 +288,19 @@ export class SystemStatusService {
         : false,
       composioConfigured,
       ok: true,
+      onboardingEnabled: isOnboardingEnabled(),
       providerConfigured: this.agent.providerConfigured,
       userConfigured: humanUserCount > 0,
       version: getNakamaVersion(),
     };
   }
+}
+
+/** Off unless the operator turns it on with `NAKAMA_ENABLE_ONBOARDING`. */
+export function isOnboardingEnabled(): boolean {
+  const value = process.env.NAKAMA_ENABLE_ONBOARDING?.trim().toLowerCase();
+
+  return value === "1" || value === "true";
 }
 
 function isString<T>(value: T): value is T & string {

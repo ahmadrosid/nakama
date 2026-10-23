@@ -117,6 +117,10 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data \
   --name nakama ghcr.io/ahmadrosid/nakama:latest
 ```
 
+### Goal prompt for new users (optional)
+
+A seeded instance skips the setup wizard, so a new user lands on an empty chat. Set `NAKAMA_ENABLE_ONBOARDING=true` to ask that user "What is your goal?" first. The answer is saved to **Help with** in the user's personal context. The prompt shows only to members and admins who have no chats with the selected agent and no saved goal. It is off by default.
+
 ## Reset a local Docker install
 
 To remove the default local resources and start fresh:

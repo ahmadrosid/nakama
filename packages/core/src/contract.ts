@@ -128,6 +128,8 @@ export interface HealthResponse {
   /** A Composio project API key is saved on this server. */
   composioConfigured: boolean;
   ok: true;
+  /** `NAKAMA_ENABLE_ONBOARDING` is on: a new user gets the goal prompt. */
+  onboardingEnabled: boolean;
   providerConfigured: boolean;
   userConfigured: boolean;
   /** App version (`NAKAMA_VERSION` or package.json). Not `apiVersion`. */
