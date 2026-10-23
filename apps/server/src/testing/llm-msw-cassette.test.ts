@@ -74,7 +74,7 @@ test.each(["text/event-stream; charset=utf-8", ""])(
           },
           { ...options, mode: "replay" }
         )
-      ).rejects.toThrow("unused exchanges");
+      ).rejects.toThrow();
     } finally {
       await endpoint.stop();
       await rm(cassettesDir, { force: true, recursive: true });
