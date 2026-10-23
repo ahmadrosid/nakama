@@ -178,6 +178,12 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
         title={name}
         type="button"
       >
+        {active ? (
+          <span
+            aria-hidden="true"
+            className="absolute top-1/2 -left-2 h-5 w-1 -translate-y-1/2 rounded-full bg-primary"
+          />
+        ) : null}
         {item.kind === "agent" ? (
           <ProfileAvatar
             active={
@@ -284,7 +290,7 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
         />
       </a>
 
-      <div className="no-scrollbar flex min-h-0 flex-1 flex-col items-center gap-1.5 overflow-y-auto px-1 py-1">
+      <div className="no-scrollbar flex min-h-0 flex-1 flex-col items-center gap-1.5 overflow-y-auto px-2 py-1">
         {pinnedItems.map(renderItem)}
         {pinnedItems.length > 0 && agentItems.length + groupItems.length > 0 ? (
           <RailDivider />

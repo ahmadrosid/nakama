@@ -284,6 +284,14 @@ test.each([
     );
     expect(readSvg(inactiveImage).querySelector("animate")).toBeNull();
     expect(inactiveImage.className).not.toContain("grayscale");
+
+    const bars = container.querySelectorAll(
+      '[aria-label="Profiles"] button > span[aria-hidden="true"]'
+    );
+
+    expect(
+      [...bars].map((bar) => bar.parentElement?.getAttribute("aria-label"))
+    ).toEqual(["Agent A"]);
   } finally {
     await act(async () => root.unmount());
     useActiveChatProfileStore.setState(previousState);
