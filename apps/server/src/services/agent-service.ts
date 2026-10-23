@@ -87,6 +87,7 @@ import type {
   TelegramPairingStartResponse,
   TelegramPairingStatusResponse,
   TelegramSettingsResponse,
+  ThinkingEffort,
   ThinkingSettings,
   ThinkingSettingsResponse,
   ToolContext,
@@ -422,6 +423,7 @@ export interface CreateSessionOptions {
   isPlatformAdmin?: boolean;
   model?: string | null;
   orgRole?: OrgRole | null;
+  thinkingEffort?: ThinkingEffort | null;
 }
 
 type ChatProfileAccess = Pick<
@@ -2330,6 +2332,7 @@ export class AgentService {
       id: sessionId,
       model: modelOverride,
       profileId: resolvedProfileId,
+      thinkingEffort: options?.thinkingEffort ?? null,
       title: null,
       userId: userId ?? null,
     };
@@ -2359,7 +2362,8 @@ export class AgentService {
       options?.orgRole,
       options?.isPlatformAdmin,
       options?.codingWorkspaceRoot,
-      cognito ? {} : undefined
+      cognito ? {} : undefined,
+      record.thinkingEffort
     );
 
     if (cognito) {
@@ -2521,7 +2525,8 @@ export class AgentService {
       orgRole,
       isPlatformAdmin,
       undefined,
-      { initialHistory: [...entry.session.getHistory()] }
+      { initialHistory: [...entry.session.getHistory()] },
+      entry.record.thinkingEffort
     );
 
     entry.record.model = model;
@@ -2588,6 +2593,7 @@ export class AgentService {
     contextUsage: ChatContextUsage | null;
     model: string | null;
     profileId: string;
+    thinkingEffort: ThinkingEffort | null;
   } | null> {
     const record = await this.getSessionRecordForOrg(sessionId, orgId);
 
@@ -2629,6 +2635,7 @@ export class AgentService {
           messages: [...history],
           model: record.model,
           profileId: record.profileId,
+          thinkingEffort: record.thinkingEffort ?? null,
         };
       }
     }
@@ -2655,6 +2662,7 @@ export class AgentService {
       messages: storedMessages.map((message) => message.payload as ChatMessage),
       model: record.model,
       profileId: record.profileId,
+      thinkingEffort: record.thinkingEffort ?? null,
     };
   }
 
@@ -2699,6 +2707,7 @@ export class AgentService {
       model: record.model,
       parentSessionId: sessionId,
       profileId: record.profileId,
+      thinkingEffort: record.thinkingEffort ?? null,
       title: null,
       userId: record.userId ?? null,
     });
@@ -2738,7 +2747,8 @@ export class AgentService {
       branchOrgRole,
       branchIsPlatformAdmin,
       undefined,
-      undefined
+      undefined,
+      record.thinkingEffort
     );
 
     this.sessions.set(nextSessionId, {
@@ -2959,7 +2969,8 @@ export class AgentService {
       resumeOrgRole,
       resumeIsPlatformAdmin,
       undefined,
-      undefined
+      undefined,
+      record.thinkingEffort
     );
 
     this.sessions.set(sessionId, {
@@ -3024,6 +3035,58 @@ export class AgentService {
       sessionTurnRegistry.cancelTurn(sessionId);
     }
   }
+  async updateSessionThinkingEffort(
+    sessionId: string,
+    orgId: string,
+    effort: ThinkingEffort | null
+  ): Promise<boolean> {
+    const record = await this.getSessionRecordForOrg(sessionId, orgId);
+
+    if (!record) {
+      return false;
+    }
+
+    const turn = sessionTurnRegistry.beginTurn(sessionId);
+
+    if (!turn.started) {
+      throw new NakamaApiError(
+        "Wait for the current response before changing thinking effort.",
+        409
+      );
+    }
+
+    try {
+      if ((record.thinkingEffort ?? null) === effort) {
+        return true;
+      }
+
+      const ephemeral = this.ephemeralSessions.get(sessionId);
+
+      if (ephemeral) {
+        ephemeral.record.thinkingEffort = effort;
+
+        return await this.rebuildEphemeralSession(
+          ephemeral,
+          orgId,
+          ephemeral.record.model
+        );
+      }
+
+      const updated = await this.db.updateSessionThinkingEffort(
+        sessionId,
+        effort
+      );
+
+      if (updated) {
+        this.sessions.delete(sessionId);
+      }
+
+      return updated;
+    } finally {
+      sessionTurnRegistry.cancelTurn(sessionId);
+    }
+  }
+
   async renameSession(
     sessionId: string,
     orgId: string,
@@ -5656,7 +5719,8 @@ export class AgentService {
     orgRole?: OrgRole | null,
     isPlatformAdmin?: boolean,
     codingWorkspaceRoot?: string,
-    cognito?: CognitoSessionOptions
+    cognito?: CognitoSessionOptions,
+    thinkingEffort?: ThinkingEffort | null
   ): Promise<AgentChatSession> {
     await this.ensureVisionSettingsLoaded();
     const profile = await this.requireExecutionProfile(orgId, profileId);
@@ -5729,11 +5793,18 @@ export class AgentService {
 
     const compaction = this.resolveCompactionConfig(profile, selectedModel);
 
+    const workspaceThinking = this.resolveWorkspaceThinkingDefaults();
+
     const harness = this.createHarnessForProfile(
       profile,
       selectedModel,
       userId,
-      `${orgId}:${sessionId}`
+      `${orgId}:${sessionId}`,
+      undefined,
+      {
+        ...workspaceThinking,
+        effort: thinkingEffort ?? workspaceThinking.effort,
+      }
     );
 
     // Part of the "no tools" contract: session-history and channel-artifact
@@ -6232,7 +6303,8 @@ export class AgentService {
     selectedModel: string | null = profile.model,
     userId?: string | null,
     acpSessionKey?: string,
-    acpTools?: { context: ToolContext; tools: ToolDefinition[] }
+    acpTools?: { context: ToolContext; tools: ToolDefinition[] },
+    thinking: ThinkingSettings = this.resolveWorkspaceThinkingDefaults()
   ): AgentDependencies {
     if (profile.acpAgent && profile.orgId) {
       const sessionKey = acpSessionKey ?? `${profile.id}:${randomUUID()}`;
@@ -6255,7 +6327,7 @@ export class AgentService {
         profileId: profile.id,
         provider,
         providerInstance: null,
-        thinking: this.resolveWorkspaceThinkingDefaults(),
+        thinking,
         userId,
       });
     }
@@ -6273,7 +6345,7 @@ export class AgentService {
         profileId: profile.id,
         provider: null,
         providerInstance: null,
-        thinking: this.resolveWorkspaceThinkingDefaults(),
+        thinking,
       });
     }
 
@@ -6307,7 +6379,7 @@ export class AgentService {
       profileId: profile.id,
       provider: resolvedProvider,
       providerInstance: resolved.instance,
-      thinking: this.resolveWorkspaceThinkingDefaults(),
+      thinking,
       userId,
     });
   }

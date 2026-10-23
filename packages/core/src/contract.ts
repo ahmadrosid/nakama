@@ -1060,6 +1060,8 @@ export interface CreateSessionRequest {
   cognito?: boolean;
   model?: string;
   profileId?: string;
+  /** Overrides the install thinking effort for this session. */
+  thinkingEffort?: ThinkingEffort;
 }
 
 export interface CreateSessionResponse {
@@ -1070,6 +1072,8 @@ export interface UpdateSessionRequest {
   model?: string | null;
   parentSessionId?: null;
   pinned?: boolean;
+  /** Null goes back to the install thinking effort. */
+  thinkingEffort?: ThinkingEffort | null;
   title?: string;
 }
 
@@ -1153,6 +1157,8 @@ export interface SessionMessagesResponse {
   messages: ChatMessage[];
   model: string | null;
   questionnaire: AgentQuestionnaire | null;
+  /** Null or absent follows the install thinking effort. */
+  thinkingEffort?: ThinkingEffort | null;
   todos: AgentTodo[];
 }
 

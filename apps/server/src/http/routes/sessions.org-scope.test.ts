@@ -100,6 +100,11 @@ const CROSS_ORG_ROUTES: Array<{
     method: "PATCH",
     path: (id) => `/v1/sessions/${id}`,
   },
+  {
+    body: { thinkingEffort: "high" },
+    method: "PATCH",
+    path: (id) => `/v1/sessions/${id}`,
+  },
   { method: "DELETE", path: (id) => `/v1/sessions/${id}?purge=true` },
   { method: "DELETE", path: (id) => `/v1/sessions/${id}` },
   { method: "POST", path: (id) => `/v1/sessions/${id}/compact` },
@@ -430,6 +435,40 @@ describe("session routes are scoped to the caller's active org", () => {
     expect((await databaseAdapter.getProfile("profile_victim"))?.model).toBe(
       profileModel
     );
+  });
+
+  test("a user who is not a platform admin sets the chat's thinking effort", async () => {
+    const { app, databaseAdapter, victimSessionId } = await createScenario();
+
+    const victim = await loginUserSession(
+      app,
+      "victim@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+
+    const patch = (thinkingEffort: string | number | null) =>
+      app.fetch(
+        new Request(`http://localhost:4310/v1/sessions/${victimSessionId}`, {
+          body: JSON.stringify({ thinkingEffort }),
+          headers: victim.headers({ "X-CSRF-Token": victim.csrfToken }),
+          method: "PATCH",
+        })
+      );
+
+    expect((await patch("high")).status).toBe(204);
+    expect(
+      (await databaseAdapter.getSession(victimSessionId))?.thinkingEffort
+    ).toBe("high");
+
+    for (const invalid of ["max", 3]) {
+      expect((await patch(invalid)).status).toBe(400);
+    }
+
+    expect((await patch(null)).status).toBe(204);
+    expect(
+      (await databaseAdapter.getSession(victimSessionId))?.thinkingEffort
+    ).toBeNull();
   });
 
   test("rejects malformed and unknown chat models", async () => {

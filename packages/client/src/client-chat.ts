@@ -50,6 +50,7 @@ export class ChatClient extends ProfileFilesClient {
         cognito: options.cognito,
         model: options.model,
         profileId: options.profileId,
+        thinkingEffort: options.thinkingEffort,
       }),
       method: "POST",
     });
