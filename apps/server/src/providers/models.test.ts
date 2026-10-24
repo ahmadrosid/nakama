@@ -45,8 +45,8 @@ describe("resolveModel", () => {
     ];
 
     for (const provider of USER_PROVIDER_NAMES) {
-      if (provider === "cloudflare" || provider === "netra") {
-        // Cloudflare uses its fixed catalog; Netra uses its explicit allowlist.
+      if (provider === "netra") {
+        // Netra uses its explicit allowlist.
         continue;
       }
 
