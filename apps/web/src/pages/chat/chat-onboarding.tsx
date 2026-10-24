@@ -310,7 +310,7 @@ function SetupChecklistRowItem({
         </span>
       ) : (
         <Button
-          className="h-9 rounded-full px-4"
+          className="h-9 px-4"
           disabled={busy}
           onClick={onAction}
           type="button"
