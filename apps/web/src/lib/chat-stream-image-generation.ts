@@ -64,7 +64,7 @@ export function parseGenerateImageSize(input: unknown): string | null {
 }
 
 /** Format tool size (`1024x1024`) as display resolution (`1024 × 1024`). */
-export function formatImageGenerationResolution(size: string | null): string {
+function formatImageGenerationResolution(size: string | null): string {
   const normalized = (size ?? DEFAULT_SIZE).trim().toLowerCase();
 
   if (!normalized || normalized === "auto") {
@@ -80,7 +80,7 @@ export function formatImageGenerationResolution(size: string | null): string {
   return `${match[1]} × ${match[2]}`;
 }
 
-export function imageGenerationAspectFromSize(
+function imageGenerationAspectFromSize(
   size: string | null
 ): ImageGenerationAspect {
   const normalized = (size ?? DEFAULT_SIZE).trim().toLowerCase();

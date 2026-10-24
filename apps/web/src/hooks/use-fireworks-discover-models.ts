@@ -4,7 +4,7 @@ import type { CapabilityBrowseRow } from "@/components/model-browse-utils";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
-export const FIREWORKS_FALLBACK_ROWS: CapabilityBrowseRow[] = [
+const FIREWORKS_FALLBACK_ROWS: CapabilityBrowseRow[] = [
   {
     contextLength: 262_144,
     description: "Reasoning-focused Kimi model on Fireworks serverless.",

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-export function elapsedSecondsSince(anchorMs: number, nowMs: number): number {
+function elapsedSecondsSince(anchorMs: number, nowMs: number): number {
   return Math.max(0, Math.floor((nowMs - anchorMs) / 1000));
 }
 

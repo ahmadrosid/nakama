@@ -38,7 +38,7 @@ export interface TerminalRendererState {
   statusLine: StyledLine | null;
 }
 
-export function buildComposerLines(
+function buildComposerLines(
   state: Pick<TerminalRendererState, "composer" | "pendingMessages">,
   width = getTerminalColumns()
 ): StyledLine[] {

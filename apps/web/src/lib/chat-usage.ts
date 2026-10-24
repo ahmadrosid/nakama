@@ -89,13 +89,6 @@ export function formatChatUsageCost(usage: ChatUsage): string | null {
   return `${usage.estimated ? "~" : ""}${formatUsd(usage.costUsd)}`;
 }
 
-export function formatChatUsage(usage: ChatUsage): string {
-  const tokens = `${formatCompactTokens(usage.inputTokens)} in · ${formatCompactTokens(usage.outputTokens)} out`;
-  const cost = usage.costUsd == null ? "" : ` · ${formatUsd(usage.costUsd)}`;
-
-  return `${usage.estimated ? "~" : ""}${tokens}${cost}`;
-}
-
 export function chatUsageTitle(usage: ChatUsage): string {
   const parts = [
     `${usage.totalTokens.toLocaleString()} tokens for this reply`,
