@@ -318,7 +318,7 @@ export function usePluginManagement(
   };
 }
 
-/** Built-in (official catalog), Super Nakama drafts (local releases), then the rest. */
+/** Built-in (official catalog), agent drafts (local releases), then the rest. */
 export function groupPluginIds(
   pluginIds: string[],
   official: Array<{ id: string }>,
