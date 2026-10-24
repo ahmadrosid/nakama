@@ -1708,9 +1708,28 @@ export function registerModelRoutes(
   });
 
   app.get("/v1/providers", async (c) => {
-    getRequestAuth(c);
+    const auth = getRequestAuth(c);
 
-    return json<ListProvidersResponse>(await agent.listProviders());
+    const result = await agent.listProviders();
+
+    // The inventory is install-wide configuration; its sibling endpoints are
+    // platform-admin-only. Non-admin callers still need the list for the chat
+    // model picker, so they get the identifying fields only — no baseUrl,
+    // hasApiKey, custom model inventory, or routing details.
+    const providers = auth.isPlatformAdmin
+      ? result.providers
+      : result.providers.map((provider) => ({
+          createdAt: provider.createdAt,
+          id: provider.id,
+          label: provider.label,
+          modelCount: provider.modelCount,
+          type: provider.type,
+        }));
+
+    return json<ListProvidersResponse>({
+      defaultProviderId: result.defaultProviderId,
+      providers,
+    });
   });
 
   app.post("/v1/providers", async (c) => {
