@@ -317,6 +317,7 @@ function usesBrowsePricingHint(provider: LlmUsageStatus["provider"]): boolean {
   return (
     provider === "openrouter" ||
     provider === "cerebras" ||
+    provider === "cloudflare" ||
     provider === "fireworks"
   );
 }
