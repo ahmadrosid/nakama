@@ -233,6 +233,12 @@ const SETUP_ITEM_ACTION: Record<SetupChecklistRow["item"]["kind"], string> = {
   write_context: "Write",
 };
 
+const SETUP_ITEM_DONE: Record<SetupChecklistRow["item"]["kind"], string> = {
+  connect_toolkit: "Connected",
+  enable_skill: "On",
+  write_context: "Done",
+};
+
 function SetupProgressBar({ done, total }: { done: number; total: number }) {
   return (
     <span
@@ -247,77 +253,69 @@ function SetupProgressBar({ done, total }: { done: number; total: number }) {
   );
 }
 
-function SetupChecklistRowCard({
+const RING_RADIUS = 11;
+const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
+
+function SetupProgressRing({ done, total }: { done: number; total: number }) {
+  return (
+    <svg aria-hidden="true" className="size-7 -rotate-90" viewBox="0 0 28 28">
+      <circle
+        className="stroke-muted"
+        cx="14"
+        cy="14"
+        fill="none"
+        r={RING_RADIUS}
+        strokeWidth="3"
+      />
+      <circle
+        className="stroke-primary transition-[stroke-dasharray] duration-300 motion-reduce:transition-none"
+        cx="14"
+        cy="14"
+        fill="none"
+        r={RING_RADIUS}
+        strokeDasharray={`${total ? (done / total) * RING_LENGTH : 0} ${RING_LENGTH}`}
+        strokeLinecap="round"
+        strokeWidth="3"
+      />
+    </svg>
+  );
+}
+
+function SetupChecklistRowItem({
   busy,
   onAction,
-  onSkip,
   row,
 }: {
   busy: boolean;
   onAction: () => void;
-  onSkip: () => void;
   row: SetupChecklistRow;
 }) {
   const Icon = SETUP_ITEM_ICON[row.item.kind];
-  const done = row.status === "done";
 
   return (
-    <li
-      className={cn(
-        "flex min-h-[76px] flex-wrap items-center gap-3.5 rounded-xl border px-4 py-3",
-        done ? "border-border bg-muted/40" : "border-border bg-card"
-      )}
-    >
-      <span
-        className={cn(
-          "flex size-9 shrink-0 items-center justify-center rounded-lg",
-          done
-            ? "bg-foreground text-background"
-            : "bg-muted text-muted-foreground"
-        )}
-      >
-        {done ? (
-          <Tick02Icon className="size-4" />
-        ) : (
-          <Icon className="size-[18px]" />
-        )}
+    <li className="flex min-h-16 flex-wrap items-center gap-3.5 px-4 py-3">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+        <Icon className="size-4" />
       </span>
-      <span
-        className={cn(
-          "min-w-0 flex-[1_1_14rem] font-medium text-sm",
-          done && "text-muted-foreground line-through"
-        )}
-      >
+      <span className="min-w-0 flex-[1_1_12rem] font-medium text-sm">
         {row.item.title}
       </span>
-      {done ? (
-        <span className="px-3 font-medium text-muted-foreground text-sm">
-          Done
+      {row.status === "done" ? (
+        <span className="flex items-center gap-1.5 px-1 font-medium text-emerald-700 text-sm dark:text-emerald-400">
+          <Tick02Icon className="size-4" />
+          {SETUP_ITEM_DONE[row.item.kind]}
         </span>
       ) : (
-        <span className="flex items-center gap-1">
-          {row.status === "skipped" ? (
-            <span className="px-3 text-muted-foreground text-sm">Skipped</span>
-          ) : (
-            <Button
-              disabled={busy}
-              onClick={onSkip}
-              type="button"
-              variant="ghost"
-            >
-              Skip
-            </Button>
-          )}
-          <Button
-            className="h-10 rounded-full px-4"
-            disabled={busy}
-            onClick={onAction}
-            type="button"
-          >
-            {busy ? <Spinner className="mr-1" /> : null}
-            {SETUP_ITEM_ACTION[row.item.kind]}
-          </Button>
-        </span>
+        <Button
+          className="h-9 rounded-full px-4"
+          disabled={busy}
+          onClick={onAction}
+          type="button"
+          variant="outline"
+        >
+          {busy ? <Spinner className="mr-1" /> : null}
+          {SETUP_ITEM_ACTION[row.item.kind]}
+        </Button>
       )}
     </li>
   );
@@ -330,7 +328,6 @@ export function ChatSetupChecklist({
   goal,
   onAction,
   onFinish,
-  onSkip,
   rows,
 }: {
   busyKey: string | null;
@@ -338,7 +335,6 @@ export function ChatSetupChecklist({
   goal: string | null;
   onAction: (row: SetupChecklistRow) => void;
   onFinish: () => void;
-  onSkip: (row: SetupChecklistRow) => void;
   rows: SetupChecklistRow[];
 }) {
   const done = rows.filter((row) => row.status === "done").length;
@@ -346,31 +342,30 @@ export function ChatSetupChecklist({
   return (
     <section
       aria-labelledby="chat-setup-heading"
-      className="fade-in-0 flex animate-in flex-col gap-5 px-4 duration-300 motion-reduce:animate-none"
+      className="fade-in-0 flex animate-in flex-col gap-6 px-4 duration-300 motion-reduce:animate-none"
     >
-      <GoalPill goal={goal} />
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-3">
+          <GoalPill goal={goal} />
           <h2
             className="type-section-title text-2xl tracking-tight"
             id="chat-setup-heading"
           >
-            Set up {rows.length} {rows.length === 1 ? "thing" : "things"}
+            Set up your tools
           </h2>
-          <span className="text-muted-foreground text-sm tabular-nums">
-            {done} of {rows.length} done
-          </span>
         </div>
-        <SetupProgressBar done={done} total={rows.length} />
+        <span className="flex items-center gap-2.5 text-muted-foreground text-sm tabular-nums">
+          <SetupProgressRing done={done} total={rows.length} />
+          {done} of {rows.length}
+        </span>
       </div>
 
-      <ul className="flex flex-col gap-3">
+      <ul className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
         {rows.map((row) => (
-          <SetupChecklistRowCard
+          <SetupChecklistRowItem
             busy={busyKey === row.key}
             key={row.key}
             onAction={() => onAction(row)}
-            onSkip={() => onSkip(row)}
             row={row}
           />
         ))}

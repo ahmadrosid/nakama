@@ -264,8 +264,6 @@ export function useOnboarding({
     savingGoal: writeUserContext.isPending,
     setAboutYouOpen,
     skipGoal: () => setGoalSkipped(true),
-    skipItem: (row: SetupChecklistRow) =>
-      stored && update({ ...stored, skipped: [...stored.skipped, row.key] }),
     view,
   };
 }
