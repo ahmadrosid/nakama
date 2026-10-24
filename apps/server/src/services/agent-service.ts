@@ -101,6 +101,7 @@ import type {
   TranscribeAudioResponse,
   TranscriptionSettings,
   TranscriptionSettingsResponse,
+  UpdateAgentBrowserSettingsRequest,
   UpdateArtifactResponse,
   UpdateComposioSettingsRequest,
   UpdateDiscordSettingsRequest,
@@ -308,7 +309,10 @@ import {
 import { SUB_AGENT_TOOL_NAME } from "../tools/sub-agent-tool";
 import { createSuperNakamaTools } from "../tools/super-nakama-tools";
 import { createTodoTools } from "../tools/todo-tools";
-import { getAgentBrowserStatus } from "./agent-browser-service";
+import {
+  getAgentBrowserStatus,
+  saveAgentBrowserConfig,
+} from "./agent-browser-service";
 import { AgentGroupService } from "./agent-group-service";
 import { AgentQuestionnaireState } from "./agent-questionnaire-state";
 import { AgentTodoState } from "./agent-todo-state";
@@ -1876,6 +1880,18 @@ export class AgentService {
   }
 
   async getAgentBrowserStatus(): Promise<AgentBrowserStatusResponse> {
+    return getAgentBrowserStatus();
+  }
+
+  async saveAgentBrowserSettings(
+    input: UpdateAgentBrowserSettingsRequest
+  ): Promise<AgentBrowserStatusResponse> {
+    if (!this.managedSecrets) {
+      throw new Error("Secret store is not ready.");
+    }
+
+    await saveAgentBrowserConfig(input, this.managedSecrets);
+
     return getAgentBrowserStatus();
   }
 

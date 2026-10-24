@@ -26,6 +26,11 @@ import { z } from "zod";
 
 export type ManagedSecretSource = "environment" | "settings" | "missing";
 
+/** The Kernel cloud browser key, saved in Settings or set as KERNEL_API_KEY. */
+export const KERNEL_BROWSER_SECRET = "kernel-browser";
+
+export const KERNEL_API_KEY_ENV = "KERNEL_API_KEY";
+
 export function providerSecretEnvNames(
   providerId: string,
   type: UserProviderName
@@ -384,6 +389,11 @@ export class ManagedSecrets {
 
             await this.migrate(ids.data[0], `tool:${ids.data[1]}`, apiKey, [
               toolSecretEnvName(ids.data[0], ids.data[1]),
+            ]);
+          } else if (section === "agent_browser") {
+            // The rewrite keeps `provider=kernel`; only the key moves.
+            await this.migrate("global", KERNEL_BROWSER_SECRET, apiKey, [
+              KERNEL_API_KEY_ENV,
             ]);
           } else {
             throw new Error(

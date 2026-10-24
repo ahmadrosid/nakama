@@ -90,6 +90,10 @@ describe("ManagedSecrets", () => {
           "username=test@example.com",
           "password=email-secret",
           "",
+          "[agent_browser]",
+          "api_key=kernel-secret",
+          "provider=kernel",
+          "",
         ].join("\n")
       );
       await mkdir(join(root, "composio"));
@@ -111,6 +115,8 @@ describe("ManagedSecrets", () => {
       expect(config).not.toContain("search-secret");
       expect(config).not.toContain("tool-secret");
       expect(config).not.toContain("email-secret");
+      expect(config).not.toContain("kernel-secret");
+      expect(config).toContain("provider=kernel");
       expect(
         (await secrets.resolve("global", "provider:provider-a")).value
       ).toBe("provider-secret");
@@ -122,6 +128,9 @@ describe("ManagedSecrets", () => {
       );
       expect((await secrets.resolve("global", "composio")).value).toBe(
         "composio-secret"
+      );
+      expect((await secrets.resolve("global", "kernel-browser")).value).toBe(
+        "kernel-secret"
       );
       await expect(
         readFile(join(root, "composio", "config.ini"))

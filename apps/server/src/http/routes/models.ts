@@ -58,11 +58,7 @@ import {
   fetchXaiOAuthModels,
   startXaiOAuthDeviceSession,
 } from "../../providers/xai-oauth/oauth";
-import {
-  getAgentBrowserStatus,
-  installAgentBrowser,
-  saveAgentBrowserConfig,
-} from "../../services/agent-browser-service";
+import { installAgentBrowser } from "../../services/agent-browser-service";
 import {
   getExternalModelCatalog,
   isExternalModelCatalogId,
@@ -2307,9 +2303,9 @@ export function registerModelRoutes(
     const body = await readJson(c.req.raw, updateAgentBrowserRequestSchema);
 
     try {
-      await saveAgentBrowserConfig(body);
-
-      return json<AgentBrowserStatusResponse>(await getAgentBrowserStatus());
+      return json<AgentBrowserStatusResponse>(
+        await agent.saveAgentBrowserSettings(body)
+      );
     } catch (error) {
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
