@@ -22,6 +22,7 @@ import { openAIModelRejectsChatToolsWithReasoning } from "../openai/thinking";
 import {
   buildChatCompletionResult,
   buildProviderHttpError,
+  buildProviderResponseError,
   extractOpenAITokenUsage,
   finalizePendingToolCalls,
   mergePendingToolCall,
@@ -121,7 +122,9 @@ export function createOpenAICompatibleProvider(
         const content = result.content.trim();
 
         if (!content) {
-          throw new Error(`${label} returned an empty response.`);
+          throw buildProviderResponseError(
+            `${label} returned an empty response.`
+          );
         }
 
         const textResult: GenerateTextResult = { content };
@@ -358,7 +361,7 @@ async function requestChatCompletion(
       toolCalls.length === 0 &&
       !thinking?.trim()
     ) {
-      throw new Error(`${label} returned an empty response.`);
+      throw buildProviderResponseError(`${label} returned an empty response.`);
     }
 
     return buildChatCompletionResult({
@@ -442,7 +445,9 @@ async function streamChatCompletion(options: {
   }
 
   if (!response.body) {
-    throw new Error(`${options.label} returned an empty stream.`);
+    throw buildProviderResponseError(
+      `${options.label} returned an empty stream.`
+    );
   }
 
   let content = "";
@@ -473,7 +478,7 @@ async function streamChatCompletion(options: {
     if (options.netra && (event === "error" || payload.error)) {
       const detail = payload.error ? readStreamErrorMessage(payload.error) : "";
 
-      throw new Error(
+      throw buildProviderResponseError(
         `${options.label} stream failed after it started${detail ? `: ${detail}` : "."}`
       );
     }
@@ -521,7 +526,9 @@ async function streamChatCompletion(options: {
   });
 
   if (options.netra && !ended) {
-    throw new Error(`${options.label} stream ended before [DONE].`);
+    throw buildProviderResponseError(
+      `${options.label} stream ended before [DONE].`
+    );
   }
 
   const toolCalls = finalizePendingToolCalls(pending);
@@ -531,7 +538,9 @@ async function streamChatCompletion(options: {
     toolCalls.length === 0 &&
     !thinking.trim()
   ) {
-    throw new Error(`${options.label} returned an empty response.`);
+    throw buildProviderResponseError(
+      `${options.label} returned an empty response.`
+    );
   }
 
   return buildChatCompletionResult({
@@ -568,7 +577,7 @@ async function requestCompletion(
     const content = completion.choices[0]?.message?.content?.trim();
 
     if (!content) {
-      throw new Error(`${label} returned an empty response.`);
+      throw buildProviderResponseError(`${label} returned an empty response.`);
     }
 
     const usage = extractOpenAITokenUsage(completion.usage);

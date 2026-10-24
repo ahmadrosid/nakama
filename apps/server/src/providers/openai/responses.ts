@@ -17,6 +17,7 @@ import {
 import { z } from "zod";
 import {
   buildProviderHttpError,
+  buildProviderResponseError,
   buildTokenUsage,
   normalizeThinkingEffort,
   parseJsonRecord,
@@ -162,7 +163,7 @@ export async function generateOpenAIResponsesChat(options: {
 
   if (options.stream) {
     if (!response.body) {
-      throw new Error(`${label} returned an empty stream.`);
+      throw buildProviderResponseError(`${label} returned an empty stream.`);
     }
 
     return readOpenAIResponsesStream(response.body, options.handlers);

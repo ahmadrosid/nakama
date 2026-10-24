@@ -8,7 +8,7 @@ import {
   type ProviderName,
   type StreamChatHandlers,
 } from "@nakama/core";
-import { buildTokenUsage } from "../shared";
+import { buildProviderResponseError, buildTokenUsage } from "../shared";
 import {
   buildAnthropicThinkingRequest,
   continueAnthropicUntilDone,
@@ -136,7 +136,9 @@ export function createAnthropicProvider(
           .trim();
 
         if (!content) {
-          throw new Error(`${label} returned an empty response.`);
+          throw buildProviderResponseError(
+            `${label} returned an empty response.`
+          );
         }
 
         const usage = buildTokenUsage({

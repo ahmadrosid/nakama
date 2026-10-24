@@ -23,6 +23,7 @@ import { z } from "zod";
 import {
   buildChatCompletionResult,
   buildProviderHttpError,
+  buildProviderResponseError,
   extractOpenAITokenUsage,
   finalizePendingToolCalls,
   mergePendingToolCall,
@@ -713,7 +714,9 @@ async function requestChatCompletion(
   const thinking = readReasoningContent(message);
 
   if (!content.trim() && toolCalls.length === 0 && !thinking) {
-    throw new Error(`${client.label} returned an empty response.`);
+    throw buildProviderResponseError(
+      `${client.label} returned an empty response.`
+    );
   }
 
   return buildChatCompletionResult({
@@ -765,7 +768,9 @@ async function streamChatCompletion(
   }
 
   if (!response.body) {
-    throw new Error(`${client.label} returned an empty stream.`);
+    throw buildProviderResponseError(
+      `${client.label} returned an empty stream.`
+    );
   }
 
   return readOpenAIStream(
@@ -818,7 +823,9 @@ async function requestCompletion(
   const usage = extractOpenAITokenUsage(payload.usage);
 
   if (!content) {
-    throw new Error(`${client.label} returned an empty response.`);
+    throw buildProviderResponseError(
+      `${client.label} returned an empty response.`
+    );
   }
 
   const result: GenerateTextResult = { content };
@@ -892,7 +899,7 @@ async function readOpenAIStream(
   }
 
   if (!content.trim() && toolCalls.length === 0 && !thinkingText) {
-    throw new Error(`${label} returned an empty response.`);
+    throw buildProviderResponseError(`${label} returned an empty response.`);
   }
 
   return buildChatCompletionResult({
