@@ -113,18 +113,23 @@ export function getExplicitModelPricing(
   context: PricingContext = {}
 ): ModelPricing | null {
   const imagePricing = IMAGE_GENERATION_PRICING.get(modelId) ?? null;
+  const provider = context.provider ?? context.providerInstance?.type;
 
   if (isUserPriced(context)) {
-    // A gateway serving gpt-image-2 under that exact id bills its own rates,
-    // not OpenAI's list price.
-    return getCustomModelPricing(modelId, context) ?? imagePricing;
+    const custom = getCustomModelPricing(modelId, context);
+
+    // A saved Cloudflare entry without rates falls through to the catalog, so
+    // a built-in id keeps its published price.
+    if (custom || provider !== "cloudflare") {
+      // A gateway serving gpt-image-2 under that exact id bills its own rates,
+      // not OpenAI's list price.
+      return custom ?? imagePricing;
+    }
   }
 
   if (imagePricing) {
     return imagePricing;
   }
-
-  const provider = context.provider ?? context.providerInstance?.type;
 
   const catalog = provider
     ? getModelsForProvider(provider).find((model) => model.id === modelId)

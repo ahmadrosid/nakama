@@ -160,6 +160,7 @@ describe("estimateUsageCostUsd", () => {
           outputPerMillionUsd: 0.75,
         },
         { id: "@cf/swiss-ai/apertus-v1.5-8b" },
+        { id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" },
       ],
       id: "cloudflare-one",
       label: "Cloudflare Worker AI",
@@ -180,6 +181,13 @@ describe("estimateUsageCostUsd", () => {
         providerInstance,
       })
     ).toBeNull();
+    // A saved built-in id without rates keeps its catalog price.
+    expect(
+      getModelPricing("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
+        provider: "cloudflare",
+        providerInstance,
+      })
+    ).toEqual({ inputPerMillionUsd: 0.293, outputPerMillionUsd: 2.253 });
     // Without a saved list the built-in catalog still prices its models.
     expect(
       getModelPricing("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
