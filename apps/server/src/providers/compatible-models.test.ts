@@ -50,6 +50,24 @@ test("instance shortlists preserve only saved models and their owner", () => {
   }
 });
 
+test("a saved entry's sizes override the catalog's in the picker", () => {
+  const catalogModel = getModelsForProvider("openai")[0]!;
+
+  const [model] = getModelsForProviderInstance({
+    apiKey: "test",
+    createdAt: "2026-06-07T10:00:00.000Z",
+    customModels: [
+      { contextWindow: 24_000, id: catalogModel.id, maxOutputTokens: 4096 },
+    ],
+    id: "instance-one",
+    label: "Instance one",
+    type: "openai",
+  });
+
+  expect(model?.contextWindow).toBe(24_000);
+  expect(model?.maxOutputTokens).toBe(4096);
+});
+
 test("instances without a shortlist expose their provider catalog", () => {
   for (const type of USER_PROVIDER_NAMES) {
     const catalog = getModelsForProvider(type);

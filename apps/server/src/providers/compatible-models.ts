@@ -159,6 +159,14 @@ export function catalogCustomModelsToCatalog(
       model.default = true;
     }
 
+    if (entry.contextWindow !== undefined) {
+      model.contextWindow = entry.contextWindow;
+    }
+
+    if (entry.maxOutputTokens !== undefined) {
+      model.maxOutputTokens = entry.maxOutputTokens;
+    }
+
     if (entry.supportsVision !== undefined) {
       model.supportsVision = entry.supportsVision;
     } else if (provider === "chatgpt" || provider === "xai_oauth") {
