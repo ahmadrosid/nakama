@@ -40,6 +40,8 @@ Local data (SQLite database, profile workspaces) lives in `~/.nakama`. Point `NA
 NAKAMA_CONFIG_DIR=/tmp/nakama-scratch bun run dev:server
 ```
 
+Secrets saved in Settings are encrypted with `NAKAMA_SECRETS_KEY`. The dev scripts create one on first start in `~/.config/nakama/dev-secrets.env` and reuse it. Keep that file: without it, the secrets you saved locally cannot be read. Set `NAKAMA_SECRETS_KEY` yourself to use another key.
+
 See [AGENTS.md](./AGENTS.md) for Docker run/build scripts and deeper layout notes.
 
 ## Choosing an issue
