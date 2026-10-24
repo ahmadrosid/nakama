@@ -745,7 +745,7 @@ async function runConversation(
   let producedTokens = 0;
   let stoppedReply = "";
   let finalReplyOnly = false;
-  let finalReplyWithoutThinking = false;
+  let thinkingOff = false;
   let openTodoNudges = 0;
   let openTodosReminder: string | null = null;
 
@@ -786,9 +786,7 @@ async function runConversation(
     const { thinking: _thinking, ...optionsWithoutThinking } =
       providerOptions ?? {};
 
-    const finalReplyOptions: ProviderChatOptions = finalReplyWithoutThinking
-      ? { ...optionsWithoutThinking, webSearch: false }
-      : { ...providerOptions, webSearch: false };
+    const stepOptions = thinkingOff ? optionsWithoutThinking : providerOptions;
 
     const toolGroupId = createId("toolgroup");
     let result: Awaited<ReturnType<typeof generateReply>>;
@@ -799,7 +797,7 @@ async function runConversation(
         iterationPrompt,
         history,
         llmTools,
-        finalReplyOnly ? finalReplyOptions : providerOptions,
+        finalReplyOnly ? { ...stepOptions, webSearch: false } : stepOptions,
         mode,
         handlers,
         rehydrateMessagesForProvider,
@@ -866,10 +864,15 @@ async function runConversation(
       result.toolCalls.length === 0 &&
       !result.content.trim()
     ) {
+      // Thinking used the whole output limit. Try the same step again with
+      // the tools, and do not think for the rest of this turn.
+      if (result.truncated && !thinkingOff) {
+        thinkingOff = true;
+        continue;
+      }
+
       if (!finalReplyOnly) {
         finalReplyOnly = true;
-        // Thinking used the whole output limit, so the retry must not think.
-        finalReplyWithoutThinking = Boolean(result.truncated);
         continue;
       }
 

@@ -1160,7 +1160,7 @@ describe("agent chat tool loop", () => {
     );
   });
 
-  test("retries without thinking when thinking used the whole output limit", async () => {
+  test("turns thinking off for the turn when thinking used the whole output limit", async () => {
     const seen: GenerateChatInput[] = [];
 
     const provider: ProviderClient = {
@@ -1168,9 +1168,15 @@ describe("agent chat tool loop", () => {
       generateChat(input: GenerateChatInput) {
         seen.push(input);
 
+        if (seen.length === 1) {
+          return Promise.resolve({ ...textReply(""), truncated: true });
+        }
+
         return Promise.resolve(
-          seen.length === 1
-            ? { ...textReply(""), truncated: true }
+          seen.length === 2
+            ? toolTurn([
+                { arguments: { message: "hi" }, id: "c1", name: "sample" },
+              ])
             : textReply("Final")
         );
       },
@@ -1188,7 +1194,8 @@ describe("agent chat tool loop", () => {
     expect(reply).toBe("Final");
     expect(seen[0]?.providerOptions?.thinking?.enabled).toBe(true);
     expect(seen[1]?.providerOptions?.thinking).toBeUndefined();
-    expect(seen[1]?.tools?.length ?? 0).toBe(0);
+    expect(seen[1]?.tools?.length).toBe(1);
+    expect(seen[2]?.providerOptions?.thinking).toBeUndefined();
   });
 
   test("keeps thinking on the retry after an empty reply under the limit", async () => {
