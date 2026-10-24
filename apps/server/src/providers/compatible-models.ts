@@ -185,7 +185,8 @@ export function catalogCustomModelsToCatalog(
       provider === "mistral" ||
       provider === "qwen" ||
       provider === "qwen_cn" ||
-      provider === "perplexity"
+      provider === "perplexity" ||
+      provider === "cloudflare"
     ) {
       model.supportsThinking = false;
     }
@@ -358,6 +359,22 @@ export function getModelsForProviderInstance(
 
     return annotate(
       ensureCurrentModelInCatalog(catalog, currentModel, "fireworks")
+    );
+  }
+
+  if (instance.type === "cloudflare") {
+    const entries = instance.customModels ?? [];
+
+    const staticModels = AVAILABLE_MODELS.filter(
+      (model) => model.provider === "cloudflare"
+    );
+
+    const catalog = entries.length
+      ? catalogCustomModelsToCatalog(entries, staticModels, "cloudflare")
+      : staticModels;
+
+    return annotate(
+      ensureCurrentModelInCatalog(catalog, currentModel, "cloudflare")
     );
   }
 

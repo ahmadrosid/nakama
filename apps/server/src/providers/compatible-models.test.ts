@@ -26,11 +26,10 @@ afterEach(() => {
 test("instance shortlists preserve only saved models and their owner", () => {
   for (const type of USER_PROVIDER_NAMES) {
     if (
-      type === "cloudflare" ||
-      (!getModelsForProvider(type).length &&
-        type !== "openrouter" &&
-        type !== "openai_compatible" &&
-        type !== "ollama")
+      !getModelsForProvider(type).length &&
+      type !== "openrouter" &&
+      type !== "openai_compatible" &&
+      type !== "ollama"
     ) {
       continue;
     }
