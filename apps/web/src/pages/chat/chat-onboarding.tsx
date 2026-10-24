@@ -395,11 +395,7 @@ export function ChatSetupChecklist({
         ) : (
           <span />
         )}
-        <Button
-          className="h-9 rounded-full px-4"
-          onClick={onFinish}
-          type="button"
-        >
+        <Button className="h-9 px-4" onClick={onFinish} type="button">
           Start chatting
         </Button>
       </div>
