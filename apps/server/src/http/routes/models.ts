@@ -1712,10 +1712,10 @@ export function registerModelRoutes(
 
     const result = await agent.listProviders();
 
-    // The inventory is install-wide configuration; its sibling endpoints are
-    // platform-admin-only. Non-admin callers still need the list for the chat
-    // model picker, so they get the identifying fields only — no baseUrl,
-    // hasApiKey, custom model inventory, or routing details.
+    // The sibling provider endpoints are platform-admin-only. Non-admin
+    // callers still see the provider list in the UI, so they get the
+    // identifying fields only — no baseUrl, key status, custom model
+    // inventory, or routing details.
     const providers = auth.isPlatformAdmin
       ? result.providers
       : result.providers.map((provider) => ({

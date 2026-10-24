@@ -667,8 +667,7 @@ describe("the install-wide provider inventory read is scoped by role", () => {
 
     expect(response.status).toBe(200);
 
-    // SAFETY: the test asserts the exact serialized summary against the
-    // route's declared response contract.
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await response.json()) as ListProvidersResponse;
 
     expect(body.defaultProviderId).toBe("provider_1");
@@ -693,8 +692,7 @@ describe("the install-wide provider inventory read is scoped by role", () => {
 
     expect(response.status).toBe(200);
 
-    // SAFETY: the test asserts the serialized summary against the route's
-    // declared response contract.
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await response.json()) as ListProvidersResponse;
 
     expect(body.providers[0]).toMatchObject({
