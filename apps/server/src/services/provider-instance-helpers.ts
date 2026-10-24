@@ -475,10 +475,15 @@ function buildProviderFieldsFromRequest(
     return { customModels };
   }
 
+  const customModels =
+    type === "cloudflare" && request.customModels?.length
+      ? validateCloudflareCustomModels(request.customModels)
+      : undefined;
+
   const rawBaseUrl = request.baseUrl?.trim();
 
   if (!rawBaseUrl) {
-    return {};
+    return customModels ? { customModels } : {};
   }
 
   const baseUrl = normalizeBaseUrl(rawBaseUrl);
@@ -487,7 +492,7 @@ function buildProviderFieldsFromRequest(
     throw new Error("A valid http(s) base URL is required.");
   }
 
-  return { baseUrl };
+  return customModels ? { baseUrl, customModels } : { baseUrl };
 }
 
 export function mergeModelsForConfig(
