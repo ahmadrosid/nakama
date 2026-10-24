@@ -1,6 +1,13 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import type { ProviderInstance } from "@nakama/core";
 import { createProviderForInstance } from "./create";
+import { asTestFetch, streamFromChunks } from "./test-helpers";
+
+const originalFetch = globalThis.fetch;
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
 
 describe("compatible provider routing", () => {
   test("allows verified Netra V4.1 and maps retired selections", () => {
@@ -23,6 +30,44 @@ describe("compatible provider routing", () => {
     expect(() =>
       createProviderForInstance(instance, "unverified-model")
     ).toThrow();
+  });
+
+  test.each([
+    [undefined, 32_000],
+    [4096, 4096],
+  ])("Netra asks for an output limit (model limit %p)", async (limit, sent) => {
+    let maxTokens: unknown;
+    globalThis.fetch = asTestFetch(async (_url, init) => {
+      maxTokens = JSON.parse(String(init?.body)).max_tokens;
+
+      return new Response(
+        streamFromChunks([
+          'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n',
+          "data: [DONE]\n\n",
+        ]),
+        { headers: { "Content-Type": "text/event-stream" } }
+      );
+    });
+
+    const client = createProviderForInstance(
+      {
+        apiKey: "test-key",
+        createdAt: "2026-10-05T00:00:00.000Z",
+        customModels: [
+          { id: "deepseek/deepseek-v4.1-flash", maxOutputTokens: limit },
+        ],
+        id: "netra-1",
+        label: "Netra Runtime",
+        type: "netra",
+      },
+      "deepseek/deepseek-v4.1-flash"
+    );
+
+    await client!.streamChat(
+      { messages: [{ content: "Hi", role: "user" }], system: "" },
+      { onChunk: () => {} }
+    );
+    expect(maxTokens).toBe(sent);
   });
 
   test("routes xiaomi instances to the configured base URL with auth", async () => {

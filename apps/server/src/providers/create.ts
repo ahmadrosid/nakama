@@ -1,5 +1,6 @@
 import {
   apiKeyEnvVarForProvider,
+  findCustomModel,
   getActiveProviderInstance,
   isChatgptProviderConnected,
   isOllamaCloudInstance,
@@ -37,6 +38,11 @@ import { createXaiProvider } from "./xai-oauth";
 
 // Live tool call and result continuation are recorded in index.llm.test.ts.
 const NETRA_V41_TOOL_TURN_VERIFIED = true;
+
+// Netra reports no output limit and stops at 8192 tokens when the request has
+// none, which thinking alone can use up. Ask for more, as opencode does for
+// models without a known limit. The context window is 1M tokens.
+const NETRA_MAX_OUTPUT_TOKENS = 32_000;
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 
@@ -145,6 +151,9 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         apiKey: options.apiKey,
         baseUrl: discoveryBaseUrl!,
         displayName: "Netra Runtime",
+        maxOutputTokens:
+          findCustomModel(options.instance?.customModels, model)
+            ?.maxOutputTokens ?? NETRA_MAX_OUTPUT_TOKENS,
         model,
         providerName: "netra",
         supportsThinking: true,
