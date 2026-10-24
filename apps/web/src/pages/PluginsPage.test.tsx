@@ -28,9 +28,7 @@ async function openDraft() {
   await act(async () => button?.click());
   await settle();
   await act(async () =>
-    document
-      .querySelector<HTMLButtonElement>('[aria-label="Super Nakama"]')
-      ?.click()
+    document.querySelector<HTMLButtonElement>('[aria-label="Agent"]')?.click()
   );
   await settle();
   await act(async () =>
