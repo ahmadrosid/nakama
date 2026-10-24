@@ -135,20 +135,9 @@ export async function seedOrgSuperNakamaProfile(
     (profile) => profile.isSuper
   );
 
-  if (existing) {
-    await ensureProfileDefaultBuiltinTools(db, existing.id, true);
-    await db.unassignToolFromProfile(existing.id, BUILTIN_TOOL_IDS.delete_file);
-    await ensureProfileDefaultBundledSkills(db, existing.id);
-    await ensureProfileSuperNakamaBundledSkills(db, existing.id);
-    await ensureSuperNakamaBashTool(db, existing.id, options.grantBash);
-    await ensureSuperNakamaSessionTools(db, existing.id);
-
-    return existing;
-  }
-
   const now = new Date().toISOString();
 
-  const profile: StoredProfileRecord = {
+  const profile: StoredProfileRecord = existing ?? {
     createdAt: now,
     id: nanoid(),
     isDefault: false,
@@ -160,9 +149,11 @@ export async function seedOrgSuperNakamaProfile(
     updatedAt: now,
   };
 
-  await db.upsertProfile(profile);
+  if (!existing) {
+    await db.upsertProfile(profile);
+  }
 
-  await ensureProfileDefaultBuiltinTools(db, profile.id);
+  await ensureProfileDefaultBuiltinTools(db, profile.id, !!existing);
   await db.unassignToolFromProfile(profile.id, BUILTIN_TOOL_IDS.delete_file);
   await ensureSuperNakamaBashTool(db, profile.id, options.grantBash);
   await ensureSuperNakamaSessionTools(db, profile.id);
