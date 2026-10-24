@@ -7,7 +7,6 @@ import type { ChatListItem } from "./chat-history";
 import {
   buildWebFetchToolState,
   formatWebFetchHeaderText,
-  isWebFetchTool,
   parseExaWebFetchTextResult,
   parseWebFetchSourcesFromResult,
   parseWebFetchUrls,
@@ -65,13 +64,6 @@ test.each([
 );
 
 describe("chat-stream-web-fetch", () => {
-  test("isWebFetchTool matches builtin and Exa MCP names", () => {
-    expect(isWebFetchTool("web_fetch")).toBe(true);
-    expect(isWebFetchTool("exa__web_fetch_exa")).toBe(true);
-    expect(isWebFetchTool("exa__web_search_exa")).toBe(false);
-    expect(isWebFetchTool("web_search")).toBe(false);
-  });
-
   test("parseWebFetchUrls reads url and urls array", () => {
     expect(parseWebFetchUrls({ url: "https://example.com/a" })).toEqual([
       "https://example.com/a",

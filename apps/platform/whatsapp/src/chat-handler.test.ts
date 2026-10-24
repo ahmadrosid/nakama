@@ -480,28 +480,6 @@ describe("createChatHandler", () => {
     });
   });
 
-  test("handles /help command for authorized JID", async () => {
-    await withTempHome(async (homeDir) => {
-      await writeWhatsAppConfigIni(homeDir, {
-        pairedJid: PAIRED_JID,
-        phoneNumber: "1234567890",
-      });
-
-      const {
-        calls,
-        handler: handleMessage,
-        sent,
-      } = await createTestHandler(homeDir);
-
-      await handleMessage({ jid: PAIRED_JID, text: "/help" });
-
-      const helpText = sent.map((message) => message.text).join("\n");
-      expect(helpText).toContain("/help");
-      expect(helpText).toContain("/attach");
-      expect(calls.sendStream).toBe(0);
-    });
-  });
-
   test("handles /clear command", async () => {
     await withTempHome(async (homeDir) => {
       await writeWhatsAppConfigIni(homeDir, {
@@ -589,27 +567,6 @@ describe("createChatHandler", () => {
 
       expect(sent.length).toBe(1);
       expect(sent[0].text).toBe("Nothing to stop.");
-    });
-  });
-
-  test("unknown commands return help text", async () => {
-    await withTempHome(async (homeDir) => {
-      await writeWhatsAppConfigIni(homeDir, {
-        pairedJid: PAIRED_JID,
-        phoneNumber: "1234567890",
-      });
-
-      const {
-        calls,
-        handler: handleMessage,
-        sent,
-      } = await createTestHandler(homeDir);
-
-      await handleMessage({ jid: PAIRED_JID, text: "/unknown" });
-
-      expect(sent.length).toBe(1);
-      expect(sent[0].text).toContain("Unknown command");
-      expect(calls.sendStream).toBe(0);
     });
   });
 

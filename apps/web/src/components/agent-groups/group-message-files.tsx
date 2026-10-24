@@ -1,6 +1,7 @@
+import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight01Icon, File01Icon } from "hugeicons-react";
-import { useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useArtifactAttachmentPreviewPanel } from "@/components/chat/use-artifact-attachment-preview-panel";
 import { useArtifactsExist } from "@/hooks/use-resource-mutations";
 import { sharedFileMentions, withPanel } from "@/lib/agent-group-pending";
@@ -9,6 +10,7 @@ import {
   extractArtifactPathsFromText,
   inferArtifactMimeType,
 } from "@/lib/chat-artifacts";
+import { client } from "@/lib/client";
 
 /** One line: file icon, name and type, as its own bubble. */
 function ArtifactPill({
@@ -81,6 +83,54 @@ function SharedFilePill({ path }: { path: string }) {
         aria-hidden
         className="size-3.5 shrink-0 text-muted-foreground"
       />
+    </button>
+  );
+}
+
+/** An image the user pasted; opens it in the Files panel. */
+export function GroupMessageImage({ path }: { path: string }) {
+  const { groupId = "" } = useParams();
+  const [, setSearchParams] = useSearchParams();
+  const [url, setUrl] = useState<string | null>(null);
+
+  const { data } = useQuery({
+    queryFn: () => client.readAgentGroupFile(groupId, path),
+    queryKey: ["agentGroups", groupId, "image", path],
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+
+  useEffect(() => {
+    if (!data) {
+      return;
+    }
+
+    const next = URL.createObjectURL(data);
+    setUrl(next);
+
+    return () => URL.revokeObjectURL(next);
+  }, [data]);
+
+  return (
+    <button
+      className="block overflow-hidden rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      onClick={() =>
+        setSearchParams((current) => withPanel(current, "files", path), {
+          replace: true,
+        })
+      }
+      type="button"
+    >
+      {url ? (
+        <img
+          alt={path.split("/").pop() ?? path}
+          className="max-h-64 max-w-full object-contain"
+          height={256}
+          src={url}
+          width={256}
+        />
+      ) : (
+        <div className="size-40 animate-pulse bg-muted" />
+      )}
     </button>
   );
 }

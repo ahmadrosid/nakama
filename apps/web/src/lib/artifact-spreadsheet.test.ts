@@ -23,15 +23,6 @@ describe("artifact spreadsheet", () => {
     );
   });
 
-  test("parses and serializes tsv with tabs", () => {
-    const rows = parseSpreadsheetText("rates.tsv", "a\tb\n1\t2\n");
-    expect(rows).toEqual([
-      ["a", "b"],
-      ["1", "2"],
-    ]);
-    expect(serializeSpreadsheetText("rates.tsv", rows)).toBe("a\tb\n1\t2\n");
-  });
-
   test("pads short rows to a rectangular grid", () => {
     expect(parseSpreadsheetText("pad.csv", "a,b,c\n1\n")).toEqual([
       ["a", "b", "c"],

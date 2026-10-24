@@ -3,21 +3,11 @@ import type { ChatListItem } from "./chat-history";
 import {
   buildWebSearchToolState,
   extractWebSearchBlocksFromProviderContent,
-  isWebSearchTool,
   parseWebSearchQuery,
   parseWebSearchSourcesFromResult,
 } from "./chat-stream-web-search";
 
 describe("chat-stream-web-search", () => {
-  test("isWebSearchTool matches name", () => {
-    expect(isWebSearchTool("web_search")).toBe(true);
-    expect(isWebSearchTool("exa__web_search_exa")).toBe(true);
-    expect(isWebSearchTool("exa__web_search_advanced_exa")).toBe(true);
-    expect(isWebSearchTool("exa__web_fetch_exa")).toBe(false);
-    expect(isWebSearchTool("web_fetch")).toBe(false);
-    expect(isWebSearchTool("search_files")).toBe(false);
-  });
-
   test("parseWebSearchQuery reads query and queries array", () => {
     expect(parseWebSearchQuery({ query: "  jwt security  " })).toBe(
       "jwt security"

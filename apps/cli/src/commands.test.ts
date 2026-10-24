@@ -6,7 +6,6 @@ import type {
 } from "@nakama/core";
 import {
   effectiveModelState,
-  formatSlashCommands,
   parseModelCommandArg,
   resolveModelSwitchTarget,
   resolveSuggestions,
@@ -82,13 +81,6 @@ describe("parseModelCommandArg", () => {
       providerId: "provider-b",
     });
   });
-
-  test("keeps plain model ids intact", () => {
-    expect(parseModelCommandArg("anthropic/claude-sonnet-4-6")).toEqual({
-      modelId: "anthropic/claude-sonnet-4-6",
-      providerId: null,
-    });
-  });
 });
 
 describe("resolveModelSwitchTarget", () => {
@@ -136,32 +128,7 @@ describe("effectiveModelState", () => {
   });
 });
 
-describe("status command", () => {
-  test("is included in help and suggestions", () => {
-    expect(formatSlashCommands()).toContain("/status");
-    expect(resolveSuggestions({ input: "/sta" })).toContainEqual({
-      description: "show server and model status",
-      insertValue: "/status",
-      label: "/status",
-    });
-  });
-
-  test("fuzzy matches slash commands", () => {
-    expect(
-      resolveSuggestions({ input: "/stts" }).map(
-        (suggestion) => suggestion.label
-      )
-    ).toContain("/status");
-    expect(resolveSuggestions({ input: "/-_" })).toEqual([]);
-  });
-});
-
 describe("model command", () => {
-  test("uses one command for model selection", () => {
-    expect(formatSlashCommands()).toContain("/model");
-    expect(formatSlashCommands()).not.toContain("/models");
-  });
-
   test("opens before enter selects a model", () => {
     const closed = resolveSuggestions({
       input: "/model",

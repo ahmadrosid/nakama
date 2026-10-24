@@ -23,7 +23,10 @@ import {
   markMentions,
   mentionMarkdownComponents,
 } from "@/components/agent-groups/group-mentions";
-import { GroupMessageArtifacts } from "@/components/agent-groups/group-message-files";
+import {
+  GroupMessageArtifacts,
+  GroupMessageImage,
+} from "@/components/agent-groups/group-message-files";
 import {
   Conversation,
   ConversationScrollButton,
@@ -387,32 +390,39 @@ export function GroupMessageList({
                     ) : null}
                     {message.authorProfileId === null ? (
                       <div className={cn("flex flex-col items-end", spacing)}>
-                        <div
-                          className={cn(
-                            "[&_span]:!text-white w-fit max-w-[75%] whitespace-pre-wrap rounded-[1.25rem] bg-[#0b84fe] px-3.5 py-2 text-white",
-                            endsGroup && "rounded-br-md"
-                          )}
-                        >
-                          {message.files?.map((filename) => (
-                            <div
-                              className="flex items-center gap-1.5 font-medium text-sm"
-                              key={filename}
-                            >
-                              <File01Icon
-                                aria-hidden
-                                className="size-4 shrink-0"
+                        {message.images?.map((path) => (
+                          <div className="mb-1 max-w-[75%]" key={path}>
+                            <GroupMessageImage path={path} />
+                          </div>
+                        ))}
+                        {message.files || message.content ? (
+                          <div
+                            className={cn(
+                              "[&_span]:!text-white w-fit max-w-[75%] whitespace-pre-wrap rounded-[1.25rem] bg-[#0b84fe] px-3.5 py-2 text-white",
+                              endsGroup && "rounded-br-md"
+                            )}
+                          >
+                            {message.files?.map((filename) => (
+                              <div
+                                className="flex items-center gap-1.5 font-medium text-sm"
+                                key={filename}
+                              >
+                                <File01Icon
+                                  aria-hidden
+                                  className="size-4 shrink-0"
+                                />
+                                <span className="truncate">{filename}</span>
+                              </div>
+                            ))}
+                            {message.content ? (
+                              <MentionText
+                                handles={handles}
+                                profiles={profiles}
+                                text={message.content}
                               />
-                              <span className="truncate">{filename}</span>
-                            </div>
-                          ))}
-                          {message.content ? (
-                            <MentionText
-                              handles={handles}
-                              profiles={profiles}
-                              text={message.content}
-                            />
-                          ) : null}
-                        </div>
+                            ) : null}
+                          </div>
+                        ) : null}
                         {message.id === deliveredId && !run ? (
                           <span className="mt-0.5 pr-1 text-muted-foreground text-xs">
                             Delivered

@@ -5,7 +5,7 @@ import { Spinner } from "@nakama/ui/spinner";
 import { toast } from "@nakama/ui/toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { THREAD_PANEL_WIDTH } from "@/components/agent-groups/group-thread-panel";
+import { useGroupPanelWidth } from "@/components/agent-groups/group-thread-panel";
 import { AttachmentDetailPanel } from "@/components/chat/attachment-detail-panel";
 import { client, formatError } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
@@ -18,7 +18,7 @@ export function GroupMemoryPanel({
   group: AgentGroup;
   onClose: () => void;
 }) {
-  const [width, setWidth] = useState(THREAD_PANEL_WIDTH);
+  const [width, setWidth] = useGroupPanelWidth();
 
   return (
     <AttachmentDetailPanel
@@ -35,6 +35,10 @@ export function GroupMemoryPanel({
   );
 }
 
+type MemoryDraft = { base: string; text: string };
+
+const memoryDrafts = new Map<string, MemoryDraft>();
+
 function GroupMemoryEditor({ groupId }: { groupId: string }) {
   const queryClient = useQueryClient();
   const queryKey = queryKeys.agentGroups.memory(groupId);
@@ -46,13 +50,24 @@ function GroupMemoryEditor({ groupId }: { groupId: string }) {
 
   // Null until the user types, so a fact an agent saves meanwhile still shows.
   // `base` is the memory the edit started from, so a refetch cannot move it.
-  const [draft, setDraft] = useState<{ base: string; text: string } | null>(
-    null
+  const [draft, setDraftState] = useState<MemoryDraft | null>(
+    () => memoryDrafts.get(groupId) ?? null
   );
+
+  // Kept per group, so an unsaved edit is still there when the panel opens again.
+  function setDraft(next: MemoryDraft | null) {
+    if (next) {
+      memoryDrafts.set(groupId, next);
+    } else {
+      memoryDrafts.delete(groupId);
+    }
+
+    setDraftState(next);
+  }
 
   const [saving, setSaving] = useState(false);
 
-  async function save(draftToSave: { base: string; text: string }) {
+  async function save(draftToSave: MemoryDraft) {
     setSaving(true);
 
     try {

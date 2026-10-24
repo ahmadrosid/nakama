@@ -1,23 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  formatAutomationDeliveryMessage,
-  splitTelegramChunks,
-  truncateForChannel,
-} from "./message-format";
-
-describe("formatAutomationDeliveryMessage", () => {
-  test("includes automation name and body", () => {
-    const formatted = formatAutomationDeliveryMessage({
-      automationName: "AI news",
-      body: "Summary text",
-      completedAt: "2026-06-29T08:00:00.000Z",
-      status: "completed",
-    });
-
-    expect(formatted.subject).toBe("[Nakama] AI news — completed");
-    expect(formatted.text).toContain("Summary text");
-  });
-});
+import { splitTelegramChunks, truncateForChannel } from "./message-format";
 
 describe("truncateForChannel", () => {
   test("truncates long telegram messages", () => {

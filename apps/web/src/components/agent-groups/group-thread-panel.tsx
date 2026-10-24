@@ -6,7 +6,7 @@ import type {
 import type { DocumentAttachment, WorkspaceEntry } from "@nakama/core/contract";
 import { toast } from "@nakama/ui/toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GroupComposer } from "@/components/agent-groups/group-composer";
 import { GroupMessageArtifacts } from "@/components/agent-groups/group-message-files";
 import {
@@ -46,7 +46,27 @@ import {
 import { FilesSearchRow } from "@/pages/files/files-search-row";
 import { FilesToolbar } from "@/pages/files/files-toolbar";
 
-export const THREAD_PANEL_WIDTH = 448;
+const THREAD_PANEL_WIDTH = 448;
+
+// The side panel's width, shared by its views, so it stays the same when one closes and another opens.
+let panelWidth = THREAD_PANEL_WIDTH;
+
+export function useGroupPanelWidth() {
+  const [width, setWidth] = useState(panelWidth);
+
+  const changeWidth = useCallback((next: number) => {
+    panelWidth = next;
+    setWidth(next);
+  }, []);
+
+  return [width, changeWidth] as const;
+}
+
+// The folder and file the Files panel last showed, per group, for when it opens again.
+const filesPanelState = new Map<
+  string,
+  { folder: string; selected: WorkspaceEntry | null }
+>();
 
 /** A private chat with the agent that wrote one message of the group chat. */
 export function GroupThreadPanel({
@@ -64,7 +84,7 @@ export function GroupThreadPanel({
 }) {
   const queryClient = useQueryClient();
   const bottomRef = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(THREAD_PANEL_WIDTH);
+  const [width, setWidth] = useGroupPanelWidth();
 
   const threadKey = queryKeys.agentGroups.thread(
     group.id,
@@ -238,7 +258,7 @@ export function GroupLivePanel({
   profiles: ProfileSummary[];
   sessionId: string;
 }) {
-  const [width, setWidth] = useState(THREAD_PANEL_WIDTH);
+  const [width, setWidth] = useGroupPanelWidth();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const { data } = useQuery({
@@ -300,23 +320,46 @@ export function GroupFilesPanel({
   group: AgentGroup;
   onClose: () => void;
 }) {
-  const [width, setWidth] = useState(THREAD_PANEL_WIDTH);
-  const [folder, setFolder] = useState("");
+  const [width, setWidth] = useGroupPanelWidth();
 
-  const [selected, setSelected] = useState<WorkspaceEntry | null>(() => {
+  const [state, setState] = useState(() => {
+    const cached = filesPanelState.get(group.id);
     const filename = file?.split("/").pop();
 
-    return file && filename
-      ? {
-          filename,
-          kind: "file",
-          mimeType: inferArtifactMimeType(filename),
-          path: file,
-          sizeBytes: 0,
-          updatedAt: "",
-        }
-      : null;
+    if (!(file && filename)) {
+      return cached ?? { folder: "", selected: null };
+    }
+
+    // A file link opens that file; the cached one is kept if it is the same file.
+    const selected: WorkspaceEntry =
+      cached?.selected?.path === file
+        ? cached.selected
+        : {
+            filename,
+            kind: "file",
+            mimeType: inferArtifactMimeType(filename),
+            path: file,
+            sizeBytes: 0,
+            updatedAt: "",
+          };
+
+    const next = { folder: cached?.folder ?? "", selected };
+    filesPanelState.set(group.id, next);
+
+    return next;
   });
+
+  const { folder, selected } = state;
+
+  function update(next: typeof state) {
+    filesPanelState.set(group.id, next);
+    setState(next);
+  }
+
+  const setFolder = (next: string) => update({ ...state, folder: next });
+
+  const setSelected = (next: WorkspaceEntry | null) =>
+    update({ ...state, selected: next });
 
   return (
     <AttachmentDetailPanel

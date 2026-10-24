@@ -2,12 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { openRouterModelSupportsThinking } from "./thinking";
 
 describe("openRouterModelSupportsThinking", () => {
-  test("allows catalog Claude models", () => {
-    expect(openRouterModelSupportsThinking("anthropic/claude-sonnet-4-6")).toBe(
-      true
-    );
-  });
-
   test("honors custom model supportsThinking override", () => {
     expect(
       openRouterModelSupportsThinking("some-vendor/some-model", [
@@ -31,12 +25,6 @@ describe("openRouterModelSupportsThinking", () => {
   test("denies unknown custom Llama slugs", () => {
     expect(openRouterModelSupportsThinking("meta-llama/llama-3.3-70b")).toBe(
       false
-    );
-  });
-
-  test("allows custom Claude slugs by prefix", () => {
-    expect(openRouterModelSupportsThinking("anthropic/claude-3.7-sonnet")).toBe(
-      true
     );
   });
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { OrgRole } from "@nakama/core";
+import type { ListProvidersResponse, OrgRole } from "@nakama/core";
 import {
   loadWhatsAppConfigFile,
   syncWhatsAppOwnerPairing,
@@ -312,6 +312,22 @@ function createApp(systemStatus?: SystemStatusStub) {
         profile: { id: "default", isSuper: profileId === "super_nakama" },
       }),
       listProfiles: async () => ({ profiles: [{ id: "default" }] }),
+      listProviders: async () => ({
+        defaultProviderId: "provider_1",
+        providers: [
+          {
+            baseUrl: "https://operator-upstream.example.com/v1",
+            createdAt: "now",
+            hasApiKey: true,
+            hostMode: null,
+            id: "provider_1",
+            label: "Operator Plan",
+            modelCount: 3,
+            type: "openai_compatible",
+            wireApi: "responses",
+          },
+        ],
+      }),
       sendErrorTrackingTest: record("sendErrorTrackingTest"),
       setComposioSettings: record("setComposioSettings"),
       setDiscordSettings: record("setDiscordSettings"),
@@ -638,4 +654,51 @@ describe("usage by agent and user is for admins only", () => {
       expect(requested).toMatchObject([{ includeUsageByActor: expected }]);
     });
   }
+});
+
+describe("the install-wide provider inventory read is scoped by role", () => {
+  test("a plain member gets the identifying fields only", async () => {
+    const { app, session } = await login("member");
+
+    const response = await callRoute(app, session, {
+      method: "GET",
+      path: "/v1/providers",
+    });
+
+    expect(response.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
+    const body = (await response.json()) as ListProvidersResponse;
+
+    expect(body.defaultProviderId).toBe("provider_1");
+    expect(body.providers).toEqual([
+      {
+        createdAt: "now",
+        id: "provider_1",
+        label: "Operator Plan",
+        modelCount: 3,
+        type: "openai_compatible",
+      },
+    ]);
+  });
+
+  test("a platform admin gets the full summary", async () => {
+    const { app, session } = await login("member", true);
+
+    const response = await callRoute(app, session, {
+      method: "GET",
+      path: "/v1/providers",
+    });
+
+    expect(response.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
+    const body = (await response.json()) as ListProvidersResponse;
+
+    expect(body.providers[0]).toMatchObject({
+      baseUrl: "https://operator-upstream.example.com/v1",
+      hasApiKey: true,
+      id: "provider_1",
+    });
+  });
 });

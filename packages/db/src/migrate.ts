@@ -1947,6 +1947,8 @@ function migrateSessionsTable(db: Database): void {
       ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
     `);
   }
+
+  addNullableTextColumnIfMissing(db, "sessions", "thinking_effort");
 }
 
 function migrateSessionTree(db: Database): void {

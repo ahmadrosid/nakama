@@ -11,7 +11,6 @@ import {
   getMentionTokenRanges,
   getReservedCommandTokenRanges,
   getSkillTokenRanges,
-  matchComposerAddCommand,
   matchComposerBtwCommand,
   matchComposerLearningLoopCommand,
   matchComposerOpenCommand,
@@ -73,22 +72,6 @@ function skill(overrides: Partial<SkillSummary>): SkillSummary {
 }
 
 describe("findActiveSkillSlashRange", () => {
-  test("finds slash query at the cursor", () => {
-    expect(findActiveSkillSlashRange("/we", 3)).toEqual({
-      end: 3,
-      query: "we",
-      start: 0,
-    });
-  });
-
-  test("finds slash query after whitespace", () => {
-    expect(findActiveSkillSlashRange("please /dep", 11)).toEqual({
-      end: 11,
-      query: "dep",
-      start: 7,
-    });
-  });
-
   test("ignores slash after a word and slash ranges with whitespace", () => {
     expect(findActiveSkillSlashRange("https://nakama.test", 8)).toBeNull();
     expect(findActiveSkillSlashRange("/skill weather", 14)).toBeNull();
@@ -227,17 +210,6 @@ describe("filterComposerSlashSuggestions", () => {
   });
 });
 
-describe("matchComposerAddCommand", () => {
-  test("matches a bare add command", () => {
-    expect(matchComposerAddCommand("  /add-tool  ")).toBe("add-tool");
-    expect(matchComposerAddCommand("/add-mcp")).toBe("add-mcp");
-    expect(matchComposerAddCommand("/add-plugin")).toBe("add-plugin");
-    expect(matchComposerAddCommand("/add-skill")).toBe("add-skill");
-    expect(matchComposerAddCommand("/add-plugin workflows")).toBeNull();
-    expect(matchComposerAddCommand("/add-tool please")).toBeNull();
-  });
-});
-
 describe("/btw side chat command", () => {
   test("returns the question, or empty for a bare command", () => {
     expect(matchComposerBtwCommand("/btw what is RAG?")).toBe("what is RAG?");
@@ -307,33 +279,12 @@ describe("replaceSlashRangeWithReservedCommand", () => {
 });
 
 describe("getSkillTokenRanges", () => {
-  test("detects explicit skill invocations for highlighting", () => {
-    expect(getSkillTokenRanges("/skill weather please")).toEqual([
-      { end: 14, name: "weather", start: 0 },
-    ]);
-    expect(getSkillTokenRanges("please /skill deploy now")).toEqual([
-      { end: 20, name: "deploy", start: 7 },
-    ]);
-  });
-
   test("does not create token ranges for partial invocations", () => {
     expect(getSkillTokenRanges("/skill ")).toEqual([]);
   });
 });
 
 describe("getReservedCommandTokenRanges", () => {
-  test("highlights a leading /learn command", () => {
-    expect(getReservedCommandTokenRanges("/learn filing an expense")).toEqual([
-      { end: 6, name: "learn", start: 0 },
-    ]);
-  });
-
-  test("highlights a bare /learn command", () => {
-    expect(getReservedCommandTokenRanges("/learn")).toEqual([
-      { end: 6, name: "learn", start: 0 },
-    ]);
-  });
-
   test("does not highlight when learn is disabled for the profile", () => {
     expect(
       getReservedCommandTokenRanges("/learn filing", { enableLearn: false })

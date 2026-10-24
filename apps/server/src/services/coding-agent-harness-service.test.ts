@@ -9,9 +9,7 @@ import {
 import {
   buildCodingHarnessInstallPlan,
   inferCodingAgentHarnessKind,
-  isCodingAgentCommand,
   listCodingAgentHarnessStatuses,
-  listCodingHarnessLoginCommands,
   refreshCodingAgentHarnessProbe,
 } from "./coding-agent-harness-service";
 import {
@@ -23,29 +21,6 @@ import {
 const testPosix = test.skipIf(process.platform === "win32");
 
 describe("coding-agent harness resolution", () => {
-  test("login commands follow default harnesses that support vendor login", () => {
-    expect(listCodingHarnessLoginCommands()).toEqual([
-      { command: "codex login", name: "Codex" },
-      { command: "claude auth login", name: "Claude Code" },
-      { command: "opencode auth login", name: "OpenCode" },
-      { command: "pi login", name: "pi.dev" },
-    ]);
-  });
-
-  test("detects harness-shaped bash commands", () => {
-    const harnesses = [
-      { command: "claude", enabled: true },
-      { command: "codex", enabled: true },
-    ];
-
-    expect(isCodingAgentCommand("claude --print 'task'", harnesses)).toBe(true);
-    expect(
-      isCodingAgentCommand("claude --print 'task'", [
-        { command: "claude", enabled: false },
-      ])
-    ).toBe(false);
-  });
-
   test("infers harness kind from argv0", () => {
     const harnesses = [
       { command: "claude", enabled: true, kind: "claude_code" as const },

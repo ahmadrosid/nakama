@@ -1,7 +1,7 @@
 import type { ProfileSummary } from "@nakama/core";
 import type { AgentGroup } from "@nakama/core/agent-groups";
 import type { ImageAttachment } from "@nakama/core/contract";
-import { parseDataUrl } from "@nakama/core/message-content";
+import { MAX_IMAGE_BYTES, parseDataUrl } from "@nakama/core/message-content";
 import {
   Button,
   Dialog,
@@ -203,6 +203,21 @@ export function GroupDialog({
       return;
     }
 
+    setImage(undefined);
+    setPreview(null);
+
+    if (file.size > MAX_IMAGE_BYTES) {
+      setImageError("Choose an image that is 5 MB or smaller.");
+
+      return;
+    }
+
+    if (!IMAGE_TYPES.split(",").includes(file.type)) {
+      setImageError("Choose a PNG, JPEG, GIF, or WebP image.");
+
+      return;
+    }
+
     const dataUrl = await readFileAsDataUrl(file);
     const parsed = parseDataUrl(dataUrl);
 
@@ -243,6 +258,11 @@ export function GroupDialog({
           id="group-form"
           onSubmit={(event) => {
             event.preventDefault();
+
+            if (save.isPending) {
+              return;
+            }
+
             save.mutate(
               { brief: brief.trim(), image, memberIds, name: name.trim() },
               {
@@ -277,6 +297,7 @@ export function GroupDialog({
                   onClick={() => {
                     setImage(group?.avatarVersion ? null : undefined);
                     setPreview(null);
+                    setImageError(null);
                   }}
                   size="sm"
                   type="button"

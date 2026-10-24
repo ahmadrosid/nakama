@@ -38,6 +38,7 @@ import {
   ArrowShrink02Icon,
   ArrowUp02Icon,
   Cancel01Icon,
+  CommandLineIcon,
   File01Icon,
   Folder01Icon,
   Image01Icon,
@@ -58,6 +59,7 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  type AttachmentsContext,
   PromptInput,
   PromptInputBody,
   PromptInputFooter,
@@ -112,8 +114,6 @@ import type { ChatContextUsage } from "@/lib/chat-context-usage";
 import { storeComposerDraft } from "@/lib/chat-history";
 import {
   ALL_ATTACHMENT_ACCEPT,
-  DOCUMENT_ACCEPT,
-  IMAGE_ACCEPT,
   isImageFilePart,
   MAX_FOLDER_FILES,
   selectFolderFiles,
@@ -970,6 +970,7 @@ function ChatComposerTextarea({
   longPasteWordThreshold?: number;
 }) {
   const controller = usePromptInputController();
+  const attachments = usePromptInputAttachments();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [slashRange, setSlashRange] = useState<SkillSlashRange | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -1142,6 +1143,17 @@ function ChatComposerTextarea({
           );
         }}
         onKeyDown={(event) => {
+          if (
+            !disabled &&
+            (event.ctrlKey || event.metaKey) &&
+            event.key.toLowerCase() === "u"
+          ) {
+            event.preventDefault();
+            openAttachmentPicker(attachments, ALL_ATTACHMENT_ACCEPT);
+
+            return;
+          }
+
           if (!pickerOpen) {
             if (event.key === "Escape" && prefix) {
               event.preventDefault();
@@ -1662,8 +1674,55 @@ function ChatAttachmentHeader({
   );
 }
 
+/** Types `/` at the composer cursor through the input event, so the slash list opens as if typed. */
+function typeSlashCommand(textarea: HTMLTextAreaElement) {
+  const { selectionEnd, selectionStart, value } = textarea;
+  const before = value.slice(0, selectionStart);
+  const slash = before === "" || /\s$/.test(before) ? "/" : " /";
+  const cursor = before.length + slash.length;
+
+  const setValue = Object.getOwnPropertyDescriptor(
+    window.HTMLTextAreaElement.prototype,
+    "value"
+  )?.set;
+
+  setValue?.call(textarea, `${before}${slash}${value.slice(selectionEnd)}`);
+  textarea.setSelectionRange(cursor, cursor);
+  textarea.dispatchEvent(new window.Event("input", { bubbles: true }));
+}
+
+/** Shared by the + menu item and the Ctrl+U/Cmd+U composer shortcut. */
+function openAttachmentPicker(attachments: AttachmentsContext, accept: string) {
+  const input = attachments.fileInputRef.current;
+
+  if (!input) {
+    attachments.openFileDialog();
+
+    return;
+  }
+
+  input.accept = accept;
+  input.click();
+}
+
+function addFilesShortcutLabel(): string {
+  return navigator.userAgent.includes("Mac") ? "⌘U" : "Ctrl U";
+}
+
 function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
   const attachments = usePromptInputAttachments();
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const focusAfterCloseRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const insertSlashCommand = () => {
+    const textarea =
+      triggerRef.current?.closest("form")?.querySelector("textarea") ?? null;
+
+    if (textarea) {
+      typeSlashCommand(textarea);
+      focusAfterCloseRef.current = textarea;
+    }
+  };
 
   const addFolder = (picked: FileList | null) => {
     const selection = selectFolderFiles([...(picked ?? [])]);
@@ -1688,19 +1747,6 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
     input.click();
   };
 
-  const openPicker = (accept: string) => {
-    const input = attachments.fileInputRef.current;
-
-    if (!input) {
-      attachments.openFileDialog();
-
-      return;
-    }
-
-    input.accept = accept;
-    input.click();
-  };
-
   return (
     <DropdownMenu>
       <Tooltip>
@@ -1715,6 +1761,7 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
                     "size-8 bg-transparent text-foreground hover:bg-muted"
                   )}
                   disabled={disabled}
+                  ref={triggerRef}
                   size="icon-sm"
                   type="button"
                   variant="ghost"
@@ -1727,24 +1774,39 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
         />
         <TooltipContent side="top">Add attachment</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="start" className="min-w-40">
+      <DropdownMenuContent
+        align="start"
+        className="min-w-56"
+        finalFocus={() => {
+          const textarea = focusAfterCloseRef.current;
+
+          focusAfterCloseRef.current = null;
+
+          return textarea ?? true;
+        }}
+      >
         <DropdownMenuItem
           disabled={disabled}
-          onClick={() => openPicker(IMAGE_ACCEPT)}
+          onClick={() =>
+            openAttachmentPicker(attachments, ALL_ATTACHMENT_ACCEPT)
+          }
         >
           <Image01Icon aria-hidden className="size-4 text-muted-foreground" />
-          Image
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={disabled}
-          onClick={() => openPicker(DOCUMENT_ACCEPT)}
-        >
-          <File01Icon aria-hidden className="size-4 text-muted-foreground" />
-          Document
+          <span className="whitespace-nowrap">Add files or photos</span>
+          <kbd className="ml-auto whitespace-nowrap font-sans text-2xs text-muted-foreground">
+            {addFilesShortcutLabel()}
+          </kbd>
         </DropdownMenuItem>
         <DropdownMenuItem disabled={disabled} onClick={openFolderPicker}>
           <Folder01Icon aria-hidden className="size-4 text-muted-foreground" />
           Add folder
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled={disabled} onClick={insertSlashCommand}>
+          <CommandLineIcon
+            aria-hidden
+            className="size-4 text-muted-foreground"
+          />
+          Slash commands
         </DropdownMenuItem>
         <ChatPluginsSubmenu disabled={disabled} />
         <ChatConnectorsSubmenu disabled={disabled} />

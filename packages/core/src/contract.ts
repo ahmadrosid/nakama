@@ -128,6 +128,8 @@ export interface HealthResponse {
   /** A Composio project API key is saved on this server. */
   composioConfigured: boolean;
   ok: true;
+  /** `NAKAMA_ENABLE_ONBOARDING` is on: a new user gets the goal prompt. */
+  onboardingEnabled: boolean;
   providerConfigured: boolean;
   userConfigured: boolean;
   /** App version (`NAKAMA_VERSION` or package.json). Not `apiVersion`. */
@@ -1060,6 +1062,8 @@ export interface CreateSessionRequest {
   cognito?: boolean;
   model?: string;
   profileId?: string;
+  /** Overrides the install thinking effort for this session. */
+  thinkingEffort?: ThinkingEffort;
 }
 
 export interface CreateSessionResponse {
@@ -1070,6 +1074,8 @@ export interface UpdateSessionRequest {
   model?: string | null;
   parentSessionId?: null;
   pinned?: boolean;
+  /** Null goes back to the install thinking effort. */
+  thinkingEffort?: ThinkingEffort | null;
   title?: string;
 }
 
@@ -1153,6 +1159,8 @@ export interface SessionMessagesResponse {
   messages: ChatMessage[];
   model: string | null;
   questionnaire: AgentQuestionnaire | null;
+  /** Null or absent follows the install thinking effort. */
+  thinkingEffort?: ThinkingEffort | null;
   todos: AgentTodo[];
 }
 
@@ -3273,6 +3281,23 @@ export interface ComposioUserConnectionSummary {
   toolkitId: string;
   toolkitSlug: string;
   updatedAt: string;
+}
+
+/** One step a new user can take to get their agent ready for their goal. */
+export type SetupChecklistItem =
+  | { kind: "connect_toolkit"; title: string; toolkitSlug: string }
+  | { kind: "enable_skill"; skillId: string; title: string }
+  | { kind: "write_context"; scope: "org"; title: string };
+
+export interface SetupChecklistRequest {
+  /** The agent the user is about to chat with; skill items target it. */
+  profileId: string;
+}
+
+export interface SetupChecklistResponse {
+  /** USER.md "Help with", or the goal read from the rest of the context. */
+  goal: string | null;
+  items: SetupChecklistItem[];
 }
 
 export interface ComposioCatalogToolkitSummary {

@@ -1,9 +1,11 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { extname, join } from "node:path";
 import type { DocumentAttachment, ProfileSummary } from "@nakama/core";
 import {
   getGroupSharedDir,
   getProfileSoulDir,
+  NakamaApiError,
   resolveDocumentPartForProvider,
   SOUL_FILES,
   SOUL_TEMPLATE,
@@ -13,10 +15,14 @@ import {
   type AgentGroupMessage,
   mentionedMemberIds,
 } from "@nakama/core/agent-groups";
-import { validateDocumentAttachments } from "@nakama/core/message-content";
+import {
+  validateDocumentAttachments,
+  validateImageAttachments,
+} from "@nakama/core/message-content";
 import { GROUP_MEMORY_CHARS, readGroupMemory } from "./agent-group-memory";
 import {
   type GroupDocument,
+  getAgentGroup,
   listAgentGroupMessages,
   listAgentGroupThreadMessages,
   listGroupMessageDocuments,
@@ -248,7 +254,9 @@ function labelled(
 ): string[] {
   const documents = listGroupMessageDocuments(
     orgId,
-    messages.flatMap((message) => (message.files ? [message.id] : []))
+    messages.flatMap((message) =>
+      message.files || message.images ? [message.id] : []
+    )
   );
 
   return messages.map(({ authorProfileId, content, id }) => {
@@ -334,15 +342,47 @@ export function threadTranscript(
 
 /**
  * The text of attached documents, read before a message is saved so a bad file
- * fails the send instead of an agent's turn.
+ * fails the send instead of an agent's turn. An image is saved in the group's
+ * shared folder, and the agents get its path to open with read_file.
  */
 export async function readGroupDocuments(
-  documents: DocumentAttachment[]
+  orgId: string,
+  userId: string,
+  groupId: string,
+  attachments: DocumentAttachment[]
 ): Promise<GroupDocument[]> {
-  validateDocumentAttachments(documents);
+  const isImage = (attachment: DocumentAttachment) =>
+    attachment.mediaType.startsWith("image/");
+
+  validateImageAttachments(attachments.filter(isImage));
+  validateDocumentAttachments(attachments.filter((a) => !isImage(a)));
+
+  // Checked before an image is written to the group's folder.
+  if (attachments.some(isImage) && !getAgentGroup(orgId, userId, groupId)) {
+    throw new NakamaApiError("Group not found", 404);
+  }
 
   return await Promise.all(
-    documents.map(async (document) => {
+    attachments.map(async (document) => {
+      const filename = document.filename.trim() || "image";
+
+      if (isImage(document)) {
+        const sharedDir = ensureGroupSharedDir(orgId, groupId);
+        const path = `uploads/${randomUUID().slice(0, 8)}${extname(filename) || ".png"}`;
+
+        mkdirSync(join(sharedDir, "uploads"), { recursive: true });
+        writeFileSync(
+          join(sharedDir, path),
+          Buffer.from(document.data, "base64")
+        );
+
+        return {
+          filename,
+          path,
+          text: `Image saved at ${join(sharedDir, path)}. Open it with read_file to see it.`,
+        };
+      }
+
       // A provider with no native documents always gets them as text.
       const part = await resolveDocumentPartForProvider(
         { ...document, type: "document" },
@@ -350,7 +390,7 @@ export async function readGroupDocuments(
       );
 
       return {
-        filename: document.filename.trim(),
+        filename,
         text:
           part.type === "text"
             ? part.text

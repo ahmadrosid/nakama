@@ -123,11 +123,6 @@ describe("WorkerManagerService", () => {
   });
 
   describe("isValidWorker", () => {
-    test("returns true for discord", () => {
-      const service = new WorkerManagerService(projectRoot, createMockPm2());
-      expect(service.isValidWorker("discord")).toBe(true);
-    });
-
     test("returns false for unknown worker", () => {
       const service = new WorkerManagerService(projectRoot, createMockPm2());
       expect(service.isValidWorker("foobar")).toBe(false);

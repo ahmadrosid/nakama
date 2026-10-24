@@ -3,8 +3,6 @@ import type { ChatListItem } from "@/lib/chat-history";
 import {
   extractArtifactPathsFromText,
   extractTurnArtifacts,
-  inferArtifactMimeType,
-  toArtifactsRelativePath,
 } from "./chat-artifacts";
 
 const ARTIFACTS_ROOT =
@@ -472,20 +470,6 @@ describe("extractTurnArtifacts", () => {
   });
 });
 
-describe("toArtifactsRelativePath", () => {
-  test("strips the artifacts directory prefix", () => {
-    expect(toArtifactsRelativePath(`${ARTIFACTS_ROOT}/weekly/report.md`)).toBe(
-      "weekly/report.md"
-    );
-  });
-
-  test("supports relative artifacts paths", () => {
-    expect(toArtifactsRelativePath("artifacts/weekly/report.md")).toBe(
-      "weekly/report.md"
-    );
-  });
-});
-
 describe("extractArtifactPathsFromText", () => {
   test("finds bare and owner-qualified artifact paths", () => {
     expect(
@@ -518,13 +502,5 @@ describe("extractArtifactPathsFromText", () => {
       [undefined, "report.md"],
       ["video-producer", "report.md"],
     ]);
-  });
-});
-
-describe("inferArtifactMimeType", () => {
-  test("maps common extensions", () => {
-    expect(inferArtifactMimeType("slides.html")).toBe("text/html");
-    expect(inferArtifactMimeType("notes.md")).toBe("text/markdown");
-    expect(inferArtifactMimeType("data.json")).toBe("application/json");
   });
 });

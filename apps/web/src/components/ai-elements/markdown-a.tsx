@@ -13,7 +13,8 @@ import { Link } from "react-router-dom";
 import { type LinkSafetyModalProps, StreamdownContext } from "streamdown";
 import { ExternalLinkSafetyModal } from "@/components/ai-elements/external-link-safety-modal";
 import { YoutubeEmbed } from "@/components/ai-elements/youtube-embed";
-import { inAppLinkPath } from "@/lib/navigation";
+import { AuthContext } from "@/context/auth-context-shared";
+import { canOpenPage, inAppLinkPath, pageIdFromPath } from "@/lib/navigation";
 import { parseYoutubeVideoId } from "@/lib/youtube-url";
 
 type MarkdownAProps = ComponentProps<"a"> & {
@@ -28,6 +29,7 @@ export function MarkdownA({
   node: _node,
   ...rest
 }: MarkdownAProps) {
+  const auth = useContext(AuthContext);
   const videoId = href ? parseYoutubeVideoId(href) : null;
 
   if (videoId) {
@@ -63,6 +65,21 @@ export function MarkdownA({
   const appPath = href ? inAppLinkPath(href, window.location.origin) : null;
 
   if (appPath) {
+    const pageId = pageIdFromPath(new URL(appPath, "http://app").pathname);
+
+    const allowed =
+      pageId !== null &&
+      auth !== null &&
+      canOpenPage(pageId, {
+        isPlatformAdmin: auth.user?.isPlatformAdmin === true,
+        orgRole: auth.activeOrg?.role,
+      });
+
+    // A link the user cannot open would only bounce to /chat.
+    if (!allowed) {
+      return <span className={className}>{children}</span>;
+    }
+
     return (
       <Link
         {...rest}

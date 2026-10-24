@@ -5,6 +5,7 @@ import {
   MAX_FOLDER_BYTES,
   MAX_FOLDER_FILES,
   selectFolderFiles,
+  userContentToDisplayDocuments,
 } from "./chat-images";
 
 describe("chat document accept", () => {
@@ -38,6 +39,35 @@ describe("chat document accept", () => {
         url: "data:application/octet-stream;base64,YWJj",
       })
     ).toBe(true);
+  });
+});
+
+describe("userContentToDisplayDocuments", () => {
+  test("reads an inline document part", () => {
+    expect(
+      userContentToDisplayDocuments([
+        {
+          data: "YWJj",
+          filename: "cla.pdf",
+          mediaType: "application/pdf",
+          type: "document",
+        },
+      ])
+    ).toEqual([{ filename: "cla.pdf", mediaType: "application/pdf" }]);
+  });
+
+  test("reads a persisted document_ref part", () => {
+    expect(
+      userContentToDisplayDocuments([
+        {
+          attachmentId: "att-1",
+          filename: "cla.pdf",
+          mediaType: "application/pdf",
+          size: 1024,
+          type: "document_ref",
+        },
+      ])
+    ).toEqual([{ filename: "cla.pdf", mediaType: "application/pdf" }]);
   });
 });
 

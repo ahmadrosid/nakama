@@ -3,11 +3,13 @@ import { join } from "node:path";
 import {
   type AgentChatSession,
   type AgentDependencies,
+  buildSetupChecklist,
   type CompactionConfig,
   createAgentChatSession,
   createAutomationFromPrompt,
   executeToolCall,
   expandLearnInLastUserMessage,
+  listSetupChecklistCandidates,
   suggestToolParamsFromPrompt,
 } from "@nakama/agent";
 import type {
@@ -77,6 +79,7 @@ import type {
   SendEmailTestResponse,
   SendErrorTrackingTestResponse,
   SessionSummary,
+  SetupChecklistResponse,
   SkillResponse,
   SoulStackResponse,
   SoulStatusResponse,
@@ -87,6 +90,7 @@ import type {
   TelegramPairingStartResponse,
   TelegramPairingStatusResponse,
   TelegramSettingsResponse,
+  ThinkingEffort,
   ThinkingSettings,
   ThinkingSettingsResponse,
   ToolContext,
@@ -425,6 +429,7 @@ export interface CreateSessionOptions {
   isPlatformAdmin?: boolean;
   model?: string | null;
   orgRole?: OrgRole | null;
+  thinkingEffort?: ThinkingEffort | null;
 }
 
 type ChatProfileAccess = Pick<
@@ -2496,6 +2501,7 @@ export class AgentService {
       id: sessionId,
       model: modelOverride,
       profileId: resolvedProfileId,
+      thinkingEffort: options?.thinkingEffort ?? null,
       title: null,
       userId: userId ?? null,
     };
@@ -2525,7 +2531,8 @@ export class AgentService {
       options?.orgRole,
       options?.isPlatformAdmin,
       options?.codingWorkspaceRoot,
-      cognito ? {} : undefined
+      cognito ? {} : undefined,
+      record.thinkingEffort
     );
 
     if (cognito) {
@@ -2687,7 +2694,8 @@ export class AgentService {
       orgRole,
       isPlatformAdmin,
       undefined,
-      { initialHistory: [...entry.session.getHistory()] }
+      { initialHistory: [...entry.session.getHistory()] },
+      entry.record.thinkingEffort
     );
 
     entry.record.model = model;
@@ -2754,6 +2762,7 @@ export class AgentService {
     contextUsage: ChatContextUsage | null;
     model: string | null;
     profileId: string;
+    thinkingEffort: ThinkingEffort | null;
   } | null> {
     const record = await this.getSessionRecordForOrg(sessionId, orgId);
 
@@ -2795,6 +2804,7 @@ export class AgentService {
           messages: [...history],
           model: record.model,
           profileId: record.profileId,
+          thinkingEffort: record.thinkingEffort ?? null,
         };
       }
     }
@@ -2821,6 +2831,7 @@ export class AgentService {
       messages: storedMessages.map((message) => message.payload as ChatMessage),
       model: record.model,
       profileId: record.profileId,
+      thinkingEffort: record.thinkingEffort ?? null,
     };
   }
 
@@ -2865,6 +2876,7 @@ export class AgentService {
       model: record.model,
       parentSessionId: sessionId,
       profileId: record.profileId,
+      thinkingEffort: record.thinkingEffort ?? null,
       title: null,
       userId: record.userId ?? null,
     });
@@ -2904,7 +2916,8 @@ export class AgentService {
       branchOrgRole,
       branchIsPlatformAdmin,
       undefined,
-      undefined
+      undefined,
+      record.thinkingEffort
     );
 
     this.sessions.set(nextSessionId, {
@@ -3125,7 +3138,8 @@ export class AgentService {
       resumeOrgRole,
       resumeIsPlatformAdmin,
       undefined,
-      undefined
+      undefined,
+      record.thinkingEffort
     );
 
     this.sessions.set(sessionId, {
@@ -3190,6 +3204,58 @@ export class AgentService {
       sessionTurnRegistry.cancelTurn(sessionId);
     }
   }
+  async updateSessionThinkingEffort(
+    sessionId: string,
+    orgId: string,
+    effort: ThinkingEffort | null
+  ): Promise<boolean> {
+    const record = await this.getSessionRecordForOrg(sessionId, orgId);
+
+    if (!record) {
+      return false;
+    }
+
+    const turn = sessionTurnRegistry.beginTurn(sessionId);
+
+    if (!turn.started) {
+      throw new NakamaApiError(
+        "Wait for the current response before changing thinking effort.",
+        409
+      );
+    }
+
+    try {
+      if ((record.thinkingEffort ?? null) === effort) {
+        return true;
+      }
+
+      const ephemeral = this.ephemeralSessions.get(sessionId);
+
+      if (ephemeral) {
+        ephemeral.record.thinkingEffort = effort;
+
+        return await this.rebuildEphemeralSession(
+          ephemeral,
+          orgId,
+          ephemeral.record.model
+        );
+      }
+
+      const updated = await this.db.updateSessionThinkingEffort(
+        sessionId,
+        effort
+      );
+
+      if (updated) {
+        this.sessions.delete(sessionId);
+      }
+
+      return updated;
+    } finally {
+      sessionTurnRegistry.cancelTurn(sessionId);
+    }
+  }
+
   async renameSession(
     sessionId: string,
     orgId: string,
@@ -4691,6 +4757,44 @@ export class AgentService {
     return { parameters };
   }
 
+  /**
+   * Setup steps for the user's goal: toolkits to connect, skills to give the
+   * agent, business context to write. Reads USER.md, so it also works after a
+   * memory import that left "Help with" empty.
+   */
+  async getSetupChecklist(
+    orgId: string,
+    userId: string,
+    profileId: string
+  ): Promise<SetupChecklistResponse> {
+    await this.getProfile(orgId, profileId);
+
+    const [userContext, toolkits, skills, assignedSkills, orgMemory] =
+      await Promise.all([
+        this.db.getUserContext(orgId, userId),
+        // Composio is optional and remote: no key or no network means no
+        // toolkit steps, not a failed checklist.
+        this.composioService?.listToolkits(orgId, userId).catch(() => null) ??
+          null,
+        this.listSkills(orgId),
+        this.skillsService?.listSkillsForProfile(profileId) ?? [],
+        this.getOrgMemoryService().getMemory(orgId),
+      ]);
+
+    const candidates = listSetupChecklistCandidates({
+      assignedSkillIds: assignedSkills.map((skill) => skill.id),
+      catalog: toolkits?.catalog ?? [],
+      orgMemory,
+      skills: skills.skills,
+      userConnections: toolkits?.userConnections ?? [],
+    });
+
+    return buildSetupChecklist(
+      { candidates, userContext },
+      { provider: createProviderFromActiveConfig(this.userConfig, process.env) }
+    );
+  }
+
   async listProfileTools(
     orgId: string,
     profileId: string
@@ -5993,7 +6097,8 @@ export class AgentService {
     orgRole?: OrgRole | null,
     isPlatformAdmin?: boolean,
     codingWorkspaceRoot?: string,
-    cognito?: CognitoSessionOptions
+    cognito?: CognitoSessionOptions,
+    thinkingEffort?: ThinkingEffort | null
   ): Promise<AgentChatSession> {
     await this.refreshManagedProviderKeys();
     await this.ensureVisionSettingsLoaded();
@@ -6067,11 +6172,18 @@ export class AgentService {
 
     const compaction = this.resolveCompactionConfig(profile, selectedModel);
 
+    const workspaceThinking = this.resolveWorkspaceThinkingDefaults();
+
     const harness = this.createHarnessForProfile(
       profile,
       selectedModel,
       userId,
-      `${orgId}:${sessionId}`
+      `${orgId}:${sessionId}`,
+      undefined,
+      {
+        ...workspaceThinking,
+        effort: thinkingEffort ?? workspaceThinking.effort,
+      }
     );
 
     // Part of the "no tools" contract: session-history and channel-artifact
@@ -6570,7 +6682,8 @@ export class AgentService {
     selectedModel: string | null = profile.model,
     userId?: string | null,
     acpSessionKey?: string,
-    acpTools?: { context: ToolContext; tools: ToolDefinition[] }
+    acpTools?: { context: ToolContext; tools: ToolDefinition[] },
+    thinking: ThinkingSettings = this.resolveWorkspaceThinkingDefaults()
   ): AgentDependencies {
     if (profile.acpAgent && profile.orgId) {
       const sessionKey = acpSessionKey ?? `${profile.id}:${randomUUID()}`;
@@ -6593,7 +6706,7 @@ export class AgentService {
         profileId: profile.id,
         provider,
         providerInstance: null,
-        thinking: this.resolveWorkspaceThinkingDefaults(),
+        thinking,
         userId,
       });
     }
@@ -6611,7 +6724,7 @@ export class AgentService {
         profileId: profile.id,
         provider: null,
         providerInstance: null,
-        thinking: this.resolveWorkspaceThinkingDefaults(),
+        thinking,
       });
     }
 
@@ -6645,7 +6758,7 @@ export class AgentService {
       profileId: profile.id,
       provider: resolvedProvider,
       providerInstance: resolved.instance,
-      thinking: this.resolveWorkspaceThinkingDefaults(),
+      thinking,
       userId,
     });
   }

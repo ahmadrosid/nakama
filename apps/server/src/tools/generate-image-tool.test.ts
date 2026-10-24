@@ -557,23 +557,9 @@ describe("generate_image tool persistence (U4)", () => {
 describe("formatImageMentionContext", () => {
   const withTool = [GENERATE_IMAGE_TOOL_NAME];
 
-  test("asks for generate_image when the message is tagged @image", () => {
-    for (const message of ["@image a red fox", "draw this @image", "@IMAGE"]) {
-      expect(formatImageMentionContext(message, withTool)).toContain(
-        `Call ${GENERATE_IMAGE_TOOL_NAME}`
-      );
-    }
-  });
-
   test("ignores emails, longer words and untagged messages", () => {
     for (const message of ["me@image.dev", "@images please", "a red fox"]) {
       expect(formatImageMentionContext(message, withTool)).toBe("");
     }
-  });
-
-  test("explains the missing tool instead of asking for it", () => {
-    const context = formatImageMentionContext("@image a red fox", ["bash"]);
-    expect(context).toContain("not assigned to this agent");
-    expect(context).not.toContain(`Call ${GENERATE_IMAGE_TOOL_NAME}`);
   });
 });

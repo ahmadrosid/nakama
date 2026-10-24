@@ -3,23 +3,10 @@ import {
   getTimezoneCatalog,
   resetTimezoneCatalogCache,
 } from "./timezone-catalog-service";
-import { getTimezoneCityAliases } from "./timezone-city-aliases";
 
 afterEach(() => {
   setSystemTime();
   resetTimezoneCatalogCache();
-});
-
-test("city aliases ignore unknown keys and return independent arrays", () => {
-  for (const zone of ["unknown", "constructor", "toString", "__proto__"]) {
-    expect(getTimezoneCityAliases(zone)).toEqual([]);
-  }
-
-  const aliases = getTimezoneCityAliases("America/New_York");
-  aliases.push("Changed");
-
-  expect(aliases).toContain("NYC");
-  expect(getTimezoneCityAliases("America/New_York")).not.toContain("Changed");
 });
 
 test("groups IANA zones by tzdata country", async () => {

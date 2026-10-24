@@ -68,7 +68,7 @@ const groupMessageSchema = z
       .default([]),
   })
   .refine((body) => body.content || body.documents.length > 0, {
-    message: "Message must include text or a document.",
+    message: "Message must include text or an attachment.",
   });
 
 const sessionChangesSchema = z
@@ -396,7 +396,7 @@ export function registerAgentGroupRoutes(
       auth.user.id,
       groupId,
       content,
-      await readGroupDocuments(documents)
+      await readGroupDocuments(orgId, auth.user.id, groupId, documents)
     );
 
     // The reply run outlives the request; the page polls the session for it.
@@ -464,7 +464,7 @@ export function registerAgentGroupRoutes(
           groupId,
           c.req.param("sessionId"),
           content,
-          await readGroupDocuments(documents)
+          await readGroupDocuments(orgId, auth.user.id, groupId, documents)
         )
         .catch(logRunFailure(groupId));
 
@@ -529,7 +529,7 @@ export function registerAgentGroupRoutes(
           t.sessionId,
           t.messageId,
           content,
-          await readGroupDocuments(documents)
+          await readGroupDocuments(t.orgId, t.userId, t.groupId, documents)
         )
         .catch(logRunFailure(t.groupId));
 

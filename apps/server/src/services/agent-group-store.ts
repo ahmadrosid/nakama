@@ -69,6 +69,8 @@ interface SessionRow {
 /** A document the user attached, as the text the agents read. */
 export interface GroupDocument {
   filename: string;
+  /** An image's place in the group's shared folder, like uploads/ab12cd34.png. */
+  path?: string;
   text: string;
 }
 
@@ -78,12 +80,16 @@ interface MessageRow {
   created_at: string;
   file_names: string;
   id: number;
+  image_paths: string;
   thread_replies: number;
 }
 
 // Main messages carry their thread's reply count; thread messages carry none.
 const MESSAGE_COLUMNS = `m.id, m.author_profile_id, m.content, m.created_at,
-  (SELECT json_group_array(json_extract(d.value, '$.filename')) FROM json_each(m.documents) d) AS file_names,
+  (SELECT json_group_array(json_extract(d.value, '$.filename')) FROM json_each(m.documents) d
+    WHERE json_extract(d.value, '$.path') IS NULL) AS file_names,
+  (SELECT json_group_array(json_extract(d.value, '$.path')) FROM json_each(m.documents) d
+    WHERE json_extract(d.value, '$.path') IS NOT NULL) AS image_paths,
   (SELECT COUNT(*) FROM messages t WHERE t.thread_root_id = m.id) AS thread_replies
   FROM messages m`;
 
@@ -205,6 +211,8 @@ function toSession(row: SessionRow): StoredGroupSession {
 function toMessage(row: MessageRow): AgentGroupMessage {
   // SAFETY: file_names is built by json_group_array over filename strings.
   const files = JSON.parse(row.file_names) as string[];
+  // SAFETY: image_paths is built by json_group_array over path strings.
+  const images = JSON.parse(row.image_paths) as string[];
 
   return {
     authorProfileId: row.author_profile_id,
@@ -212,6 +220,7 @@ function toMessage(row: MessageRow): AgentGroupMessage {
     createdAt: row.created_at,
     ...(files.length > 0 && { files }),
     id: row.id,
+    ...(images.length > 0 && { images }),
     threadReplies: row.thread_replies,
   };
 }
@@ -605,6 +614,8 @@ export function appendAgentGroupMessage(
   documents: GroupDocument[] = []
 ): AgentGroupMessage {
   const createdAt = new Date().toISOString();
+  const files = documents.flatMap((d) => (d.path ? [] : [d.filename]));
+  const images = documents.flatMap((d) => (d.path ? [d.path] : []));
 
   const { lastInsertRowid } = withGroupDb(orgId, (db) =>
     db.transaction(() => {
@@ -635,8 +646,9 @@ export function appendAgentGroupMessage(
     authorProfileId,
     content,
     createdAt,
-    ...(documents.length > 0 && { files: documents.map((d) => d.filename) }),
+    ...(files.length > 0 && { files }),
     id: Number(lastInsertRowid),
+    ...(images.length > 0 && { images }),
     threadReplies: 0,
   };
 }

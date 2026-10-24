@@ -10,6 +10,7 @@ import {
   getWebPublicUrlSettings,
   persistWebPublicUrl,
 } from "../../services/composio-callback-url";
+import { isOnboardingEnabled } from "../../services/system-status-service";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
@@ -106,6 +107,10 @@ export function registerSystemRoutes(
         description: "Whether a Composio project API key is saved locally.",
       }),
       ok: z.literal(true),
+      onboardingEnabled: z.boolean().openapi({
+        description:
+          "Whether NAKAMA_ENABLE_ONBOARDING is on. The web app then asks a new user for a goal.",
+      }),
       providerConfigured: z.boolean(),
       userConfigured: z.boolean(),
       version: z.string(),
@@ -262,6 +267,7 @@ export function registerSystemRoutes(
         composioAvailable: false,
         composioConfigured,
         ok: true,
+        onboardingEnabled: isOnboardingEnabled(),
         providerConfigured: agent.providerConfigured,
         userConfigured: humanUserCount > 0,
         version: getNakamaVersion(),

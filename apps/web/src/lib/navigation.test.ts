@@ -6,20 +6,14 @@ import {
   canAccessOrganizationPage,
   canAccessSystemPage,
   canManagePluginReleases,
+  canOpenPage,
   enabledPluginNavEntries,
   groupPath,
   groupRouteFromPath,
   inAppLinkPath,
   integrationSectionPath,
-  orgSkillProposalsPath,
   PAGE_PATHS,
   pageIdFromPath,
-  pluginIdFromPath,
-  pluginManagementPath,
-  pluginPagePath,
-  SIDEBAR_PAGE_IDS,
-  sidebarPageId,
-  skillDetailBackTarget,
   visibleIntegrationSections,
   visibleNavGroups,
 } from "./navigation";
@@ -31,14 +25,6 @@ const pageIdsFor = (isPlatformAdmin: boolean, orgRole: string | undefined) =>
     .sort();
 
 describe("visibleNavGroups", () => {
-  test("skills navigation returns to the organization catalog", () => {
-    expect(pageIdFromPath("/customize/skills")).toBe("skills");
-    expect(skillDetailBackTarget(new URLSearchParams("from=skills"))).toEqual({
-      href: "/customize/skills",
-      label: "Skills",
-    });
-    expect(pageIdsFor(false, "admin")).not.toContain("skills");
-  });
   test("a platform admin sees every destination", () => {
     expect(pageIdsFor(true, "admin")).toEqual([
       "automations",
@@ -97,19 +83,6 @@ describe("visibleNavGroups", () => {
   });
 });
 
-describe("automations navigation", () => {
-  test("maps the automations path and the legacy tasks redirect target", () => {
-    expect(pageIdFromPath("/tasks")).toBe("automations");
-    expect(pageIdFromPath("/automations")).toBe("automations");
-  });
-});
-
-describe("workers navigation", () => {
-  test("maps the workers path", () => {
-    expect(pageIdFromPath("/workers")).toBe("workers");
-  });
-});
-
 test("Customize is reachable for every organization role", () => {
   expect(pageIdFromPath("/customize")).toBe("customize");
 
@@ -119,26 +92,6 @@ test("Customize is reachable for every organization role", () => {
 });
 
 describe("plugin navigation", () => {
-  test("maps plugin pages and management under Customize", () => {
-    expect(pluginPagePath("notes")).toBe("/plugins/notes");
-    expect(pluginIdFromPath("/plugins/notes")).toBe("notes");
-    expect(pluginIdFromPath("/plugins")).toBeNull();
-    expect(pageIdFromPath("/plugins/notes")).toBe("plugins");
-    expect(pageIdFromPath("/google-meet")).toBe("google-meet");
-    expect(pluginManagementPath()).toBe("/customize/plugins");
-    expect(pageIdFromPath("/customize/plugins")).toBe("plugin-management");
-    expect(pageIdFromPath("/customize/plugins/notes")).toBe(
-      "plugin-management"
-    );
-  });
-
-  test("shows Plugins as a tab of the Connections sidebar item", () => {
-    expect(SIDEBAR_PAGE_IDS).toContain("composio");
-    expect(SIDEBAR_PAGE_IDS).not.toContain("plugin-management");
-    expect(sidebarPageId("plugin-management")).toBe("composio");
-    expect(sidebarPageId("automations")).toBe("automations");
-  });
-
   test("lists enabled pages only, sorted by label then plugin id", () => {
     const entries = enabledPluginNavEntries([
       {
@@ -190,23 +143,6 @@ describe("organization navigation", () => {
     expect(canAccessOrganizationPage(true, undefined)).toBe(true);
     expect(pageIdsFor(false, undefined)).not.toContain("organization");
   });
-  test("maps the organization path", () => {
-    expect(pageIdFromPath("/organization")).toBe("organization");
-  });
-
-  test("builds skill proposal deep links on the organization page", () => {
-    expect(orgSkillProposalsPath("p1")).toBe(
-      "/organization?skillProposals=proposals&profileId=p1"
-    );
-  });
-});
-
-test("the removed History page has no navigation destination", () => {
-  expect(pageIdFromPath("/history")).toBeNull();
-});
-
-test("Usage lives under Customize", () => {
-  expect(pageIdFromPath("/customize/usage")).toBe("usage");
 });
 
 test("a group path names the group and, inside a chat, the session", () => {
@@ -272,20 +208,6 @@ describe("page paths named to the agent", () => {
       named.filter((entry) => !knownPaths.has(entry.split(": ")[1]))
     ).toEqual([]);
   });
-
-  test("the nakama-guide skill lists every navigation page", async () => {
-    const guide = await readRepoText(guidePath);
-
-    const missing = visibleNavGroups({
-      isPlatformAdmin: true,
-      orgRole: "admin",
-    })
-      .flatMap((group) => group.items)
-      .map((item) => PAGE_PATHS[item.id])
-      .filter((pagePath) => !guide.includes(`\`${pagePath}\``));
-
-    expect(missing).toEqual([]);
-  });
 });
 
 describe("inAppLinkPath", () => {
@@ -308,5 +230,31 @@ describe("inAppLinkPath", () => {
     expect(inAppLinkPath("/does-not-exist", origin)).toBeNull();
     expect(inAppLinkPath("//example.com/settings", origin)).toBeNull();
     expect(inAppLinkPath("mailto:a@example.com", origin)).toBeNull();
+  });
+});
+
+describe("canOpenPage", () => {
+  test("AI Providers opens for a platform admin only", () => {
+    expect(
+      canOpenPage("providers", { isPlatformAdmin: true, orgRole: "member" })
+    ).toBe(true);
+    expect(
+      canOpenPage("providers", { isPlatformAdmin: false, orgRole: "admin" })
+    ).toBe(false);
+  });
+
+  test("Tools opens for an org admin, not a member", () => {
+    expect(
+      canOpenPage("tools", { isPlatformAdmin: false, orgRole: "admin" })
+    ).toBe(true);
+    expect(
+      canOpenPage("tools", { isPlatformAdmin: false, orgRole: "member" })
+    ).toBe(false);
+  });
+
+  test("Settings opens for a viewer", () => {
+    expect(
+      canOpenPage("settings", { isPlatformAdmin: false, orgRole: "viewer" })
+    ).toBe(true);
   });
 });

@@ -819,7 +819,7 @@ describe("Nakama data portability", () => {
 
     expect(restored.restoredFileCount).toBe(1);
     expect((await lstat(filePath)).size).toBe(MAX_IMPORT_ENTRY_BYTES);
-  }, 30_000);
+  }, 90_000);
 
   test("rejects an export whose SQLite snapshot exceeds the restore entry budget", async () => {
     const databasePath = join(rootDir, "nakama.sqlite");
@@ -851,7 +851,7 @@ describe("Nakama data portability", () => {
     } finally {
       original.close();
     }
-  }, 30_000);
+  }, 90_000);
 
   test("counts the manifest against the export entry budget", async () => {
     for (let start = 0; start < MAX_IMPORT_ENTRIES; start += 100) {

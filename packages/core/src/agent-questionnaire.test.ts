@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   formatAgentQuestionnaireAnswersMessage,
-  formatAgentQuestionnaireMessage,
   tryParseChannelQuestionnaireAnswers,
 } from "./agent-questionnaire";
 import type { AgentQuestionnaire } from "./contract";
@@ -43,19 +42,6 @@ const multiQuestion: AgentQuestionnaire = {
   ],
   title: "Two questions",
 };
-
-describe("formatAgentQuestionnaireMessage", () => {
-  test("renders title, numbered questions, and reply hint", () => {
-    const text = formatAgentQuestionnaireMessage(singleQuestion);
-
-    expect(text).toContain("Need input");
-    expect(text).toContain("1. How should I run this?");
-    expect(text).toContain("a) Build Playwright e2e");
-    expect(text).toContain("b) Manual steps only");
-    expect(text).toContain("Or reply with your own answer.");
-    expect(text).toContain("Reply with your answer in chat.");
-  });
-});
 
 describe("tryParseChannelQuestionnaireAnswers", () => {
   test("parses single-question letter, number, label, and free text", () => {

@@ -236,48 +236,48 @@ export function canManagePluginReleases(isPlatformAdmin: boolean): boolean {
 
 export const canUseToolPlayground = canAccessSystemPage;
 
+interface PageAccess {
+  isPlatformAdmin: boolean;
+  orgRole: string | undefined;
+}
+
+/** Whether this user can open the page, so it is not redirected away. */
+export function canOpenPage(pageId: PageId, access: PageAccess): boolean {
+  if (pageId === "google-meet" || pageId === "groups") {
+    return canAccessIntegrationsPage(access.orgRole);
+  }
+
+  if (pageId === "composio") {
+    return access.isPlatformAdmin || canAccessIntegrationsPage(access.orgRole);
+  }
+
+  if (pageId === "organization" || pageId === "files") {
+    return canAccessOrganizationPage(access.isPlatformAdmin, access.orgRole);
+  }
+
+  if (
+    pageId === "usage" ||
+    pageId === "plugin-management" ||
+    pageId === "tools" ||
+    pageId === "soul" ||
+    pageId === "workers"
+  ) {
+    return canAccessSystemPage(access.isPlatformAdmin, access.orgRole);
+  }
+
+  return !PLATFORM_ADMIN_PAGE_IDS.has(pageId) || access.isPlatformAdmin;
+}
+
 /**
  * Nav groups this user can actually reach, empty groups dropped. The sidebar and
  * the command palette both read this, so the palette cannot offer a destination
  * the sidebar hides.
  */
-export function visibleNavGroups(access: {
-  isPlatformAdmin: boolean;
-  orgRole: string | undefined;
-}): NavGroup[] {
+export function visibleNavGroups(access: PageAccess): NavGroup[] {
   const groups: NavGroup[] = [];
 
   for (const group of NAV_GROUPS) {
-    const items = group.items.filter((item) => {
-      if (item.id === "google-meet" || item.id === "groups") {
-        return canAccessIntegrationsPage(access.orgRole);
-      }
-
-      if (item.id === "composio") {
-        return (
-          access.isPlatformAdmin || canAccessIntegrationsPage(access.orgRole)
-        );
-      }
-
-      if (item.id === "organization" || item.id === "files") {
-        return canAccessOrganizationPage(
-          access.isPlatformAdmin,
-          access.orgRole
-        );
-      }
-
-      if (
-        item.id === "usage" ||
-        item.id === "plugin-management" ||
-        item.id === "tools" ||
-        item.id === "soul" ||
-        item.id === "workers"
-      ) {
-        return canAccessSystemPage(access.isPlatformAdmin, access.orgRole);
-      }
-
-      return !PLATFORM_ADMIN_PAGE_IDS.has(item.id) || access.isPlatformAdmin;
-    });
+    const items = group.items.filter((item) => canOpenPage(item.id, access));
 
     if (items.length > 0) {
       groups.push({ ...group, items });

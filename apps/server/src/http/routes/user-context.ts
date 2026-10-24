@@ -1,10 +1,14 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type {
   InitUserContextResponse,
+  SetupChecklistResponse,
   UserContextStatusResponse,
 } from "@nakama/core";
 import type { ServerOptions } from "../context";
-import { requireActiveOrgIdFromContext } from "../org-guards";
+import {
+  requireActiveOrgIdFromContext,
+  requireOrgMemberFromContext,
+} from "../org-guards";
 import { getRequestAuth, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
@@ -98,6 +102,59 @@ export function registerUserContextRoutes(
       tags: ["User"],
     })
   );
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "getSetupChecklist",
+      path: "/v1/user/setup-checklist",
+      request: {
+        body: {
+          content: {
+            "application/json": {
+              schema: z
+                .object({ profileId: z.string() })
+                .openapi("SetupChecklistRequest"),
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": {
+              schema: z
+                .object({})
+                .passthrough()
+                .openapi("SetupChecklistResponse"),
+            },
+          },
+          description:
+            "Setup steps for the user's goal, read from USER.md. Empty when no provider is set up.",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Viewers cannot chat",
+        },
+      },
+      summary: "Build the setup checklist for the user's goal",
+      tags: ["User"],
+    })
+  );
+
+  app.post("/v1/user/setup-checklist", async (c) => {
+    const auth = requireOrgMemberFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+
+    const body = await readJson(
+      c.req.raw,
+      z.object({ profileId: z.string().min(1) }).strict()
+    );
+
+    return json<SetupChecklistResponse>(
+      await agent.getSetupChecklist(orgId, auth.user.id, body.profileId)
+    );
+  });
 
   app.get("/v1/user/context", async (c) => {
     const auth = getRequestAuth(c);

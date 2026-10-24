@@ -26,6 +26,8 @@ export interface AgentGroupMessage {
   /** Names of the documents the user attached; their text stays on the server. */
   files?: string[];
   id: number;
+  /** Images the user pasted, as paths in the group's shared folder. */
+  images?: string[];
   /** Replies in the thread opened on this message; always 0 inside a thread. */
   threadReplies: number;
 }

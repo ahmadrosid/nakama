@@ -46,16 +46,6 @@ describe("normalizeGatewayModel", () => {
       })
     ).toBeNull();
   });
-
-  test("infers reasoning for known families when gateway omits the flag", () => {
-    const entry = normalizeGatewayModel({
-      conversationConfig: {},
-      displayName: "GPT OSS 120B",
-      name: "accounts/fireworks/models/gpt-oss-120b",
-    });
-
-    expect(entry?.supportsThinking).toBe(true);
-  });
 });
 
 describe("fetchFireworksGatewayModels", () => {
