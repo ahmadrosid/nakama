@@ -31,14 +31,27 @@ function save(
 }
 
 test("adds, replaces and removes entries, and skips a repeat", async () => {
-  await save({ entry: "Genre is noir" });
-  await save({ entry: "- Lead is\nMara" });
-  await save({ entry: "Genre is noir" });
+  expect((await save({ entry: "Genre is noir" })).change).toEqual({
+    newEntry: "- Genre is noir",
+    oldEntry: null,
+  });
+  expect((await save({ entry: "- Lead is\nMara" })).change).toEqual({
+    newEntry: "- Lead is Mara",
+    oldEntry: null,
+  });
+  expect((await save({ entry: "Genre is noir" })).change).toBeUndefined();
+  expect(
+    (await save({ entry: "Genre is noir", replaces: "Genre is noir" })).change
+  ).toBeUndefined();
 
   expect(readGroupMemory(sharedDir)).toBe("- Genre is noir\n- Lead is Mara");
 
-  await save({ entry: "Genre is sci-fi", replaces: "Genre is noir" });
-  await save({ entry: "", replaces: "- Lead is Mara" });
+  expect(
+    (await save({ entry: "Genre is sci-fi", replaces: "Genre is noir" })).change
+  ).toEqual({ newEntry: "- Genre is sci-fi", oldEntry: "- Genre is noir" });
+  expect(
+    (await save({ entry: "", replaces: "- Lead is Mara" })).change
+  ).toEqual({ newEntry: null, oldEntry: "- Lead is Mara" });
 
   expect(readGroupMemory(sharedDir)).toBe("- Genre is sci-fi");
 });
@@ -66,4 +79,8 @@ test("refuses to grow past the cap, but oversized memory may shrink", async () =
   await save({ entry: "short", replaces: long });
 
   expect(readGroupMemory(sharedDir)).toBe("- short");
+  expect((await save({ entry: "", replaces: "short" })).change).toEqual({
+    newEntry: null,
+    oldEntry: "- short",
+  });
 });

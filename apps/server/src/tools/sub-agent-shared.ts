@@ -1,4 +1,5 @@
 import type { OrgRole } from "@nakama/core";
+import type { AgentGroupMemoryChange } from "@nakama/core/agent-groups";
 
 export const DEFAULT_SUB_AGENT_TIMEOUT_MS = 300_000;
 
@@ -15,6 +16,7 @@ export interface SubAgentRunInput {
   clientOrigin?: string;
   context?: string;
   onActivity?: (label: string) => void;
+  onGroupMemoryChange?: (change: AgentGroupMemoryChange) => void;
   /** Answer text as the model writes it. */
   onText?: (chunk: string) => void;
   orgId: string;

@@ -25,7 +25,7 @@ function factOf(text: string): string {
  * memory of a group it is answering in. The read and write are synchronous,
  * so two turns in the same process cannot interleave and drop an entry.
  */
-export const groupMemoryTool: ToolDefinition = {
+export const groupMemoryTool = {
   description:
     "Save a fact to this group's memory, which every member reads in every chat of the group, or fix or remove an entry. One short fact per entry: a decision, a name, a preference, as the user stated or agreed to it. Never save an agent's suggestion the user has not agreed to, or secrets.",
   name: "update_group_memory",
@@ -83,6 +83,10 @@ export const groupMemoryTool: ToolDefinition = {
 
     const content = next.join("\n");
 
+    if (content === memory) {
+      return { memory };
+    }
+
     // Memory the user wrote past the cap may still shrink.
     if (content.length > GROUP_MEMORY_CHARS && content.length > memory.length) {
       throw new Error(
@@ -92,6 +96,12 @@ export const groupMemoryTool: ToolDefinition = {
 
     writeGroupMemory(sharedDir, content);
 
-    return { memory: readGroupMemory(sharedDir) };
+    return {
+      change: {
+        newEntry: fact ? `- ${fact}` : null,
+        oldEntry: target ? (lines[index] ?? null) : null,
+      },
+      memory: readGroupMemory(sharedDir),
+    };
   },
-};
+} satisfies ToolDefinition;

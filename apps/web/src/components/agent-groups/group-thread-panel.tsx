@@ -8,7 +8,10 @@ import { toast } from "@nakama/ui/toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GroupComposer } from "@/components/agent-groups/group-composer";
-import { GroupMessageArtifacts } from "@/components/agent-groups/group-message-files";
+import {
+  GroupMessageArtifacts,
+  GroupMessageMemoryChanges,
+} from "@/components/agent-groups/group-message-files";
 import {
   Message,
   MessageContent,
@@ -187,6 +190,7 @@ export function GroupThreadPanel({
                 <MessageResponse>
                   {shortenSharedPaths(message.content)}
                 </MessageResponse>
+                <GroupMessageMemoryChanges changes={message.memoryChanges} />
                 <GroupMessageArtifacts
                   content={message.content}
                   messageId={message.id}

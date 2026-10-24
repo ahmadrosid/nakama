@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { getOrgConfigDir } from "@nakama/core";
 import type {
   AgentGroup,
+  AgentGroupMemoryChange,
   AgentGroupMessage,
   AgentGroupSession,
 } from "@nakama/core/agent-groups";
@@ -81,11 +82,12 @@ interface MessageRow {
   file_names: string;
   id: number;
   image_paths: string;
+  memory_changes: string | null;
   thread_replies: number;
 }
 
 // Main messages carry their thread's reply count; thread messages carry none.
-const MESSAGE_COLUMNS = `m.id, m.author_profile_id, m.content, m.created_at,
+const MESSAGE_COLUMNS = `m.id, m.author_profile_id, m.content, m.created_at, m.memory_changes,
   (SELECT json_group_array(json_extract(d.value, '$.filename')) FROM json_each(m.documents) d
     WHERE json_extract(d.value, '$.path') IS NULL) AS file_names,
   (SELECT json_group_array(json_extract(d.value, '$.path')) FROM json_each(m.documents) d
@@ -115,6 +117,7 @@ function withGroupDb<T>(orgId: string, run: (db: Database) => T): T {
       addThreadColumn(db);
       addBriefColumn(db);
       addDocumentsColumn(db);
+      addMemoryChangesColumn(db);
     } catch (error) {
       db.close();
       throw error;
@@ -159,6 +162,17 @@ function addDocumentsColumn(db: Database): void {
 
   if (!columns.some((column) => column.name === "documents")) {
     db.exec("ALTER TABLE messages ADD COLUMN documents TEXT");
+  }
+}
+
+/** Older messages have no recorded memory changes. */
+function addMemoryChangesColumn(db: Database): void {
+  const columns = db
+    .query<{ name: string }, []>("PRAGMA table_info(messages)")
+    .all();
+
+  if (!columns.some((column) => column.name === "memory_changes")) {
+    db.exec("ALTER TABLE messages ADD COLUMN memory_changes TEXT");
   }
 }
 
@@ -214,6 +228,11 @@ function toMessage(row: MessageRow): AgentGroupMessage {
   // SAFETY: image_paths is built by json_group_array over path strings.
   const images = JSON.parse(row.image_paths) as string[];
 
+  // SAFETY: only this store writes memory_changes, from completed tool writes.
+  const memoryChanges = JSON.parse(
+    row.memory_changes ?? "[]"
+  ) as AgentGroupMemoryChange[];
+
   return {
     authorProfileId: row.author_profile_id,
     content: row.content,
@@ -221,6 +240,7 @@ function toMessage(row: MessageRow): AgentGroupMessage {
     ...(files.length > 0 && { files }),
     id: row.id,
     ...(images.length > 0 && { images }),
+    ...(memoryChanges.length > 0 && { memoryChanges }),
     threadReplies: row.thread_replies,
   };
 }
@@ -611,7 +631,8 @@ export function appendAgentGroupMessage(
   authorProfileId: string | null,
   content: string,
   threadRootId?: number,
-  documents: GroupDocument[] = []
+  documents: GroupDocument[] = [],
+  memoryChanges: AgentGroupMemoryChange[] = []
 ): AgentGroupMessage {
   const createdAt = new Date().toISOString();
   const files = documents.flatMap((d) => (d.path ? [] : [d.filename]));
@@ -621,7 +642,7 @@ export function appendAgentGroupMessage(
     db.transaction(() => {
       const inserted = db
         .query(
-          "INSERT INTO messages (group_id, session_id, author_profile_id, content, created_at, thread_root_id, documents) VALUES (?, ?, ?, ?, ?, ?, ?)"
+          "INSERT INTO messages (group_id, session_id, author_profile_id, content, created_at, thread_root_id, documents, memory_changes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .run(
           session.groupId,
@@ -630,7 +651,8 @@ export function appendAgentGroupMessage(
           content,
           createdAt,
           threadRootId ?? null,
-          documents.length > 0 ? JSON.stringify(documents) : null
+          documents.length > 0 ? JSON.stringify(documents) : null,
+          memoryChanges.length > 0 ? JSON.stringify(memoryChanges) : null
         );
 
       db.query("UPDATE group_sessions SET updated_at = ? WHERE id = ?").run(
@@ -649,6 +671,7 @@ export function appendAgentGroupMessage(
     ...(files.length > 0 && { files }),
     id: Number(lastInsertRowid),
     ...(images.length > 0 && { images }),
+    ...(memoryChanges.length > 0 && { memoryChanges }),
     threadReplies: 0,
   };
 }

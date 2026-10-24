@@ -1,3 +1,4 @@
+import type { AgentGroupMemoryChange } from "@nakama/core/agent-groups";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight01Icon, File01Icon } from "hugeicons-react";
 import { useEffect, useMemo, useState } from "react";
@@ -11,6 +12,71 @@ import {
   inferArtifactMimeType,
 } from "@/lib/chat-artifacts";
 import { client } from "@/lib/client";
+
+/** Completed writes stay with the reply, even if memory changes again later. */
+export function GroupMessageMemoryChanges({
+  changes,
+}: {
+  changes?: AgentGroupMemoryChange[];
+}) {
+  const [, setSearchParams] = useSearchParams();
+
+  if (!changes?.length) {
+    return null;
+  }
+
+  return (
+    <details className="max-w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
+      <summary className="cursor-pointer rounded text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        Updated group memory
+      </summary>
+      <ol className="mt-2 space-y-3">
+        {changes.map((change, index) => (
+          // Writes can repeat; their position is stable in this saved message.
+          <li
+            className="space-y-1 break-words"
+            key={`${index}-${change.oldEntry}-${change.newEntry}`}
+          >
+            <span className="font-medium">
+              {change.oldEntry === null
+                ? "Added"
+                : change.newEntry === null
+                  ? "Removed"
+                  : "Replaced"}
+            </span>
+            {change.oldEntry === null ? null : (
+              <p>
+                <span className="text-muted-foreground">Old: </span>
+                {change.oldEntry}
+              </p>
+            )}
+            {change.newEntry === null ? null : (
+              <p>
+                <span className="text-muted-foreground">New: </span>
+                {change.newEntry}
+              </p>
+            )}
+            <button
+              className="rounded text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() =>
+                setSearchParams(
+                  (current) => withPanel(current, "memory", "1"),
+                  {
+                    replace: true,
+                    state: { groupMemoryEntry: change.newEntry },
+                  }
+                )
+              }
+              type="button"
+            >
+              Open Memory
+            </button>
+          </li>
+        ))}
+      </ol>
+    </details>
+  );
+}
 
 /** One line: file icon, name and type, as its own bubble. */
 function ArtifactPill({
