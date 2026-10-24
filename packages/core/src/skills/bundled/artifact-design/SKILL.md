@@ -88,7 +88,7 @@ Use this layout when the user asks for a dashboard, KPI page, or performance rep
 
 ## Slide decks
 
-1. Put each slide in a `<section>` with `aspect-ratio: 16 / 9` and `container-type: size`. Fit the frame to the viewport and size slide text in `cqw`, so every slide keeps the same shape and scale at any width.
+1. Put each slide in a `<section>` with `aspect-ratio: 16 / 9` and `container-type: size`. Fit the frame to the viewport and size slide text in `cqw`, so every slide keeps the same shape and scale at any width. A slide with `container-type: size` takes no width from its content, so give every element between `<body>` and the slides a set width, such as `width: 100%`. A wrapper that shrinks to fit (a flex or grid item, `inline-block`, a float) collapses the slides to nothing.
 2. Show one slide at a time. Add previous and next buttons, Left/Right and Home/End keys, and an `n / N` counter. Keep every slide in the DOM.
 3. Print one slide per page: show all slides in `@media print`, use `@page { size: 16in 9in; margin: 0; }`, and `break-after: page`.
 4. Keep one idea per slide: a title near `5cqw`, body text at least `2.4cqw`, and at most four one-line points. Do not let content overflow the frame.
