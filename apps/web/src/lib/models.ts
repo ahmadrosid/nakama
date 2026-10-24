@@ -935,6 +935,7 @@ export function resolveModelVisionSupport(
     model.provider === "qwen_cn" ||
     model.provider === "perplexity" ||
     model.provider === "cerebras" ||
+    model.provider === "cloudflare" ||
     model.provider === "fireworks" ||
     model.provider === "ollama" ||
     model.provider === "openrouter"
