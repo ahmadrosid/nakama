@@ -595,6 +595,7 @@ export function buildCreateProviderRequest(options: {
       "xai_oauth",
       "chatgpt",
       "cerebras",
+      "cloudflare",
       "fireworks",
       "ollama",
       "opencode_go",
