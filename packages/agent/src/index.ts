@@ -11,6 +11,11 @@ export { expandLearnInLastUserMessage } from "./learn-prompt";
 
 export { generateSessionTitleFromMessages } from "./session-title";
 
+export {
+  buildSetupChecklist,
+  listSetupChecklistCandidates,
+} from "./setup-checklist";
+
 export type {
   SkillConsolidateBodyInput,
   SkillConsolidateMode,

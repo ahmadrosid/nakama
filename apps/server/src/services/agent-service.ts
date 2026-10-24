@@ -3,11 +3,13 @@ import { join } from "node:path";
 import {
   type AgentChatSession,
   type AgentDependencies,
+  buildSetupChecklist,
   type CompactionConfig,
   createAgentChatSession,
   createAutomationFromPrompt,
   executeToolCall,
   expandLearnInLastUserMessage,
+  listSetupChecklistCandidates,
   suggestToolParamsFromPrompt,
 } from "@nakama/agent";
 import type {
@@ -77,6 +79,7 @@ import type {
   SendEmailTestResponse,
   SendErrorTrackingTestResponse,
   SessionSummary,
+  SetupChecklistResponse,
   SkillResponse,
   SoulStackResponse,
   SoulStatusResponse,
@@ -4415,6 +4418,44 @@ export class AgentService {
     );
 
     return { parameters };
+  }
+
+  /**
+   * Setup steps for the user's goal: toolkits to connect, skills to give the
+   * agent, business context to write. Reads USER.md, so it also works after a
+   * memory import that left "Help with" empty.
+   */
+  async getSetupChecklist(
+    orgId: string,
+    userId: string,
+    profileId: string
+  ): Promise<SetupChecklistResponse> {
+    await this.getProfile(orgId, profileId);
+
+    const [userContext, toolkits, skills, assignedSkills, orgMemory] =
+      await Promise.all([
+        this.db.getUserContext(orgId, userId),
+        // Composio is optional and remote: no key or no network means no
+        // toolkit steps, not a failed checklist.
+        this.composioService?.listToolkits(orgId, userId).catch(() => null) ??
+          null,
+        this.listSkills(orgId),
+        this.skillsService?.listSkillsForProfile(profileId) ?? [],
+        this.getOrgMemoryService().getMemory(orgId),
+      ]);
+
+    const candidates = listSetupChecklistCandidates({
+      assignedSkillIds: assignedSkills.map((skill) => skill.id),
+      catalog: toolkits?.catalog ?? [],
+      orgMemory,
+      skills: skills.skills,
+      userConnections: toolkits?.userConnections ?? [],
+    });
+
+    return buildSetupChecklist(
+      { candidates, userContext },
+      { provider: createProviderFromActiveConfig(this.userConfig, process.env) }
+    );
   }
 
   async listProfileTools(

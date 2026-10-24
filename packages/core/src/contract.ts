@@ -3270,6 +3270,23 @@ export interface ComposioUserConnectionSummary {
   updatedAt: string;
 }
 
+/** One step a new user can take to get their agent ready for their goal. */
+export type SetupChecklistItem =
+  | { kind: "connect_toolkit"; title: string; toolkitSlug: string }
+  | { kind: "enable_skill"; skillId: string; title: string }
+  | { kind: "write_context"; scope: "org"; title: string };
+
+export interface SetupChecklistRequest {
+  /** The agent the user is about to chat with; skill items target it. */
+  profileId: string;
+}
+
+export interface SetupChecklistResponse {
+  /** USER.md "Help with", or the goal read from the rest of the context. */
+  goal: string | null;
+  items: SetupChecklistItem[];
+}
+
 export interface ComposioCatalogToolkitSummary {
   description: string | null;
   logoUrl: string | null;
