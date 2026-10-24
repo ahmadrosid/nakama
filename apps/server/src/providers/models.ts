@@ -305,6 +305,7 @@ export function resolveModel(
 // Shortlist providers know vision only from the saved entry or the catalog.
 const SHORTLIST_VISION_PROVIDERS: ReadonlySet<ProviderName> = new Set([
   "cerebras",
+  "cloudflare",
   "fireworks",
   "ollama",
 ]);

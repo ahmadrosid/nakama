@@ -383,6 +383,14 @@ describe("modelSupportsVision", () => {
     }
   });
 
+  test("treats a saved Cloudflare model without a vision flag as text-only", () => {
+    expect(
+      modelSupportsVision("@cf/qwen/qwen3.8-27b", "cloudflare", [
+        { id: "@cf/qwen/qwen3.8-27b" },
+      ])
+    ).toBe(false);
+  });
+
   test("keeps Moonshot models opt-in only (discovered lists)", () => {
     // Intl K2.x is text-only; the CN platform exposes vision variants, so
     // vision comes from discovered metadata, never from the id.
