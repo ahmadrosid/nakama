@@ -415,6 +415,10 @@ export function registerModelRoutes(
     .object({
       apiKey: z.string().optional(),
       baseUrl: z.string().optional(),
+      hostMode: z.enum(["local", "cloud"]).optional(),
+      provider: z
+        .enum(["ollama", "openai_compatible", "fireworks", "netra"])
+        .optional(),
       providerId: z.string().optional(),
     })
     .openapi("DiscoverModelsRequest");
