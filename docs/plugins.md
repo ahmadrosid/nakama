@@ -66,15 +66,16 @@ With `useHostLlm: true`, the host writes the active provider’s type, API key, 
 
 `GET /v1/workers/plugins` lists workers for the active organization. Organization admins and platform admins can use the existing worker control/log endpoints for those returned names. The Workers page exposes the same controls.
 
-## Local drafts from Super Nakama
+## Local drafts from agents
 
-Super Nakama's bundled `create-plugin` skill writes a draft beneath its profile
-workspace's `plugin-drafts/<pluginId>/` directory. It keeps sources in `src/`
+The bundled `create-plugin` skill writes a draft beneath the profile
+workspace's `plugin-drafts/<pluginId>/` directory. Super Nakama has the skill by
+default; any other profile gets it only when an admin assigns it. It keeps sources in `src/`
 alongside built actions, UI, skills, workers, and migrations. Direct `bun build`
 commands compile the draft; the agent does not install it or execute its actions.
 Host shell access is unsandboxed, including during drafting.
 
-The skill ships `scripts/new-plugin.mjs` and a `template/` folder. Super Nakama runs
+The skill ships `scripts/new-plugin.mjs` and a `template/` folder. The agent runs
 `bun <skill dir>/scripts/new-plugin.mjs <id> "<Name>" <action>` from its
 workspace to scaffold and build a new draft: one action, an example page
 (`src/ui.jsx`, `src/ui.css`), and a chat card for the action. The skill also
@@ -82,20 +83,27 @@ teaches the page style (host `ctx.ui` components, scoped CSS, host color
 variables). `ensureBundledSkillFiles` copies
 those assets into the installed skill folder on every start.
 
-When the draft builds, Super Nakama calls `submit_plugin_draft`. The tool runs
+A draft lives only in the workspace of the agent that built it. To change an
+installed plugin, the skill has the agent start from the newest release under
+`<config dir>/plugins/<pluginId>/`, which keeps `src/` and the migrations, unless
+its own draft is already at that version or newer.
+
+When the draft builds, the agent calls `submit_plugin_draft`. Super Nakama always
+has the tool; any other profile has it only while `create-plugin` is assigned,
+and gets none of Super Nakama's other tools. The tool runs
 `PluginService.describeLocalPlugin`, which validates the draft without the
 platform-admin check, and returns `type: "plugin_draft_ready"`. The web chat
 renders that result as `PluginDraftCard`. The card reads its state from the org
 plugin list and plugin agent access.
 
 A platform admin chooses **System → Plugins → Install from folder**, selects
-the active organization's Super Nakama, and enters the draft ID. Preview shows the
+the agent that built the draft, and enters the draft ID. Preview shows the
 effective development version, digest, and files grouped by what runs. Open
 files to review the source and executable output, then confirm installation.
 Install does not require opening every file.
 
 Local review and installation use explicit organization/profile/draft IDs,
-never caller-supplied absolute paths. Only server-local Super Nakama drafts in that
+never caller-supplied absolute paths. Only server-local drafts from a profile in that
 organization are accepted. Symlinks, hard links, special files, oversized trees,
 runtime dependencies, and official plugin IDs are rejected.
 
