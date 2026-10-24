@@ -268,16 +268,18 @@ function SetupProgressRing({ done, total }: { done: number; total: number }) {
         r={RING_RADIUS}
         strokeWidth="3"
       />
-      <circle
-        className="stroke-primary transition-[stroke-dasharray] duration-300 motion-reduce:transition-none"
-        cx="14"
-        cy="14"
-        fill="none"
-        r={RING_RADIUS}
-        strokeDasharray={`${total ? (done / total) * RING_LENGTH : 0} ${RING_LENGTH}`}
-        strokeLinecap="round"
-        strokeWidth="3"
-      />
+      {done > 0 ? (
+        <circle
+          className="stroke-primary transition-[stroke-dasharray] duration-300 motion-reduce:transition-none"
+          cx="14"
+          cy="14"
+          fill="none"
+          r={RING_RADIUS}
+          strokeDasharray={`${total ? (done / total) * RING_LENGTH : 0} ${RING_LENGTH}`}
+          strokeLinecap="round"
+          strokeWidth="3"
+        />
+      ) : null}
     </svg>
   );
 }
@@ -329,6 +331,7 @@ export function ChatSetupChecklist({
   goal,
   onAction,
   onFinish,
+  onSkipRest,
   rows,
 }: {
   busyKey: string | null;
@@ -336,6 +339,7 @@ export function ChatSetupChecklist({
   goal: string | null;
   onAction: (row: SetupChecklistRow) => void;
   onFinish: () => void;
+  onSkipRest: () => void;
   rows: SetupChecklistRow[];
 }) {
   const done = rows.filter((row) => row.status === "done").length;
@@ -378,9 +382,21 @@ export function ChatSetupChecklist({
         </p>
       ) : null}
 
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {done < rows.length ? (
+          <Button
+            className="h-auto px-0 text-muted-foreground underline underline-offset-4 hover:bg-transparent hover:text-foreground"
+            onClick={onSkipRest}
+            type="button"
+            variant="ghost"
+          >
+            Skip the rest for now
+          </Button>
+        ) : (
+          <span />
+        )}
         <Button
-          className="h-11 rounded-full px-5"
+          className="h-9 rounded-full px-4"
           onClick={onFinish}
           type="button"
         >

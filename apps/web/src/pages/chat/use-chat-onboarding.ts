@@ -264,6 +264,17 @@ export function useOnboarding({
     savingGoal: writeUserContext.isPending,
     setAboutYouOpen,
     skipGoal: () => setGoalSkipped(true),
+    skipRest: () => {
+      if (stored) {
+        const open = rows
+          .filter((row) => row.status === "open")
+          .map((row) => row.key);
+
+        update({ ...stored, skipped: [...stored.skipped, ...open] });
+      }
+
+      setPhase("idle");
+    },
     view,
   };
 }

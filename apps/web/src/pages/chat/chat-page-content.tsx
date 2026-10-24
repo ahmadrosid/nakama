@@ -277,6 +277,7 @@ function EmptyChatBody({
             goal={onboarding.goal}
             onAction={onboarding.runAction}
             onFinish={onboarding.finish}
+            onSkipRest={onboarding.skipRest}
             rows={onboarding.rows}
           />
           {dialog}
