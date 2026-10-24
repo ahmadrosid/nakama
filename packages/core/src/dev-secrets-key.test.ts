@@ -44,7 +44,11 @@ describe("withDevSecretsKey", () => {
 
     expect(first).toBe(second);
     expect(Buffer.from(first ?? "", "base64")).toHaveLength(32);
-    expect(statSync(path).mode.toString(8).slice(-3)).toBe("600");
+
+    if (process.platform !== "win32") {
+      expect(statSync(path).mode.toString(8).slice(-3)).toBe("600");
+    }
+
     expect(readFileSync(path, "utf8")).toBe(`NAKAMA_SECRETS_KEY=${first}\n`);
     expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();
