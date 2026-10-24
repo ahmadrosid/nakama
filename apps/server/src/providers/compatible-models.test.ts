@@ -26,11 +26,10 @@ afterEach(() => {
 test("instance shortlists preserve only saved models and their owner", () => {
   for (const type of USER_PROVIDER_NAMES) {
     if (
-      type === "cloudflare" ||
-      (!getModelsForProvider(type).length &&
-        type !== "openrouter" &&
-        type !== "openai_compatible" &&
-        type !== "ollama")
+      !getModelsForProvider(type).length &&
+      type !== "openrouter" &&
+      type !== "openai_compatible" &&
+      type !== "ollama"
     ) {
       continue;
     }
@@ -48,6 +47,24 @@ test("instance shortlists preserve only saved models and their owner", () => {
     expect(models[0]?.providerId).toBe("instance-one");
     expect(models[0]?.providerLabel).toBe("Instance one");
   }
+});
+
+test("a saved entry's sizes override the catalog's in the picker", () => {
+  const catalogModel = getModelsForProvider("openai")[0]!;
+
+  const [model] = getModelsForProviderInstance({
+    apiKey: "test",
+    createdAt: "2026-06-07T10:00:00.000Z",
+    customModels: [
+      { contextWindow: 24_000, id: catalogModel.id, maxOutputTokens: 4096 },
+    ],
+    id: "instance-one",
+    label: "Instance one",
+    type: "openai",
+  });
+
+  expect(model?.contextWindow).toBe(24_000);
+  expect(model?.maxOutputTokens).toBe(4096);
 });
 
 test("instances without a shortlist expose their provider catalog", () => {

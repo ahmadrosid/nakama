@@ -486,6 +486,32 @@ describe("applyProviderInstanceUpdate", () => {
 });
 
 describe("buildProviderInstanceFromCreateRequest", () => {
+  test("keeps Cloudflare models picked during setup", () => {
+    const baseUrl =
+      "https://api.cloudflare.com/client/v4/accounts/abc123/ai/v1";
+
+    const instance = buildProviderInstanceFromCreateRequest(
+      {
+        baseUrl,
+        customModels: [
+          { contextWindow: 128_000, id: "@cf/openai/gpt-oss-120b" },
+        ],
+        type: "cloudflare",
+      },
+      []
+    );
+
+    expect(instance.customModels).toEqual([
+      { contextWindow: 128_000, id: "@cf/openai/gpt-oss-120b" },
+    ]);
+    expect(() =>
+      buildProviderInstanceFromCreateRequest(
+        { baseUrl, customModels: [{ id: "gpt-oss-120b" }], type: "cloudflare" },
+        []
+      )
+    ).toThrow("Use @cf/ or @hf/ format.");
+  });
+
   test("preserves the requested Ollama label", () => {
     const instance = buildProviderInstanceFromCreateRequest(
       {

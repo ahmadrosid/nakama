@@ -244,7 +244,10 @@ function ProviderManageModelsFields({
           onCustomModelsChange={card.handleManageModelsChange}
           provider={card.providerType}
           providerId={
-            card.providerType === "fireworks" ? instance.id : undefined
+            card.providerType === "fireworks" ||
+            card.providerType === "cloudflare"
+              ? instance.id
+              : undefined
           }
         />
       ) : null}

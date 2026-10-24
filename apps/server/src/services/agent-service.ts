@@ -140,6 +140,7 @@ import {
   buildToolExecutionContext,
   buildUserContextStatus,
   chatgptOAuthNeedsRefresh,
+  cloudflareBaseUrlFromAccountId,
   composeKnowledgeBaseCatalog,
   composeSoulSystemPrompt,
   createErrorTrackingSink,
@@ -201,6 +202,7 @@ import {
   removeTelegramAccessRequest,
   replaceImagePartsWithDescriptions,
   requireToolOrgMember,
+  resolveCloudflareAccountInput,
   resolveDiscordApplicationId,
   resolveOllamaHostMode,
   saveDiscordConfig,
@@ -248,6 +250,7 @@ import {
   catalogCustomModelsToCatalog,
   createProviderForInstance,
   createProviderFromActiveConfig,
+  fetchCloudflareWorkersAiModels,
   fetchFireworksGatewayModels,
   fetchNetraModels,
   fetchOllamaModels,
@@ -3618,6 +3621,41 @@ export class AgentService {
       };
     }
 
+    if (request.provider === "cloudflare") {
+      const apiKey = request.apiKey?.trim() ?? "";
+      const baseUrl = resolveCloudflareAccountInput(request.baseUrl ?? "");
+
+      if (!(apiKey && baseUrl)) {
+        throw new NakamaApiError(
+          "An API key and account ID are required to discover Cloudflare models.",
+          400
+        );
+      }
+
+      const entries = await fetchCloudflareWorkersAiModels(baseUrl, apiKey);
+
+      const probeInstance = {
+        apiKey,
+        baseUrl,
+        createdAt: new Date(0).toISOString(),
+        customModels: entries,
+        id: "discover",
+        label: "Cloudflare Worker AI",
+        type: "cloudflare" as const,
+      };
+
+      return {
+        baseUrl,
+        catalog: AVAILABLE_MODELS,
+        currentProviderId: null,
+        customModels: entries,
+        displayName: null,
+        models: getModelsForProviderInstance(probeInstance),
+        provider: "cloudflare",
+        providers: [],
+      };
+    }
+
     const isNetra = request.provider === "netra";
 
     const baseUrl = isNetra
@@ -3795,6 +3833,45 @@ export class AgentService {
         displayName: instance.label,
         models,
         provider: "fireworks",
+        providers: [],
+      };
+    }
+
+    if (instance.type === "cloudflare") {
+      const apiKey =
+        overrides?.apiKey?.trim() ||
+        instance.apiKey.trim() ||
+        readEnvValue(
+          process.env,
+          apiKeyEnvVarForProvider("cloudflare") ?? ""
+        ) ||
+        "";
+
+      const accountId = readEnvValue(process.env, "CLOUDFLARE_ACCOUNT_ID");
+
+      const baseUrl =
+        overrides?.baseUrl ||
+        instance.baseUrl?.trim() ||
+        (accountId ? cloudflareBaseUrlFromAccountId(accountId) : "");
+
+      if (!(apiKey && baseUrl)) {
+        throw new NakamaApiError(
+          "Add an API key and account ID before discovering Cloudflare models.",
+          400
+        );
+      }
+
+      const entries = await fetchCloudflareWorkersAiModels(baseUrl, apiKey);
+      const remoteInstance = { ...instance, customModels: entries };
+
+      return {
+        baseUrl,
+        catalog: AVAILABLE_MODELS,
+        currentProviderId: providerId,
+        customModels: entries,
+        displayName: instance.label,
+        models: getModelsForProviderInstance(remoteInstance),
+        provider: "cloudflare",
         providers: [],
       };
     }

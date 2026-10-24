@@ -228,10 +228,7 @@ export function getDefaultModel(
   }
 
   if (customModels?.length) {
-    // Cloudflare has a built-in catalog, so its saved list only narrows
-    // explicit selections (see resolveModel), not the default.
-    const resolver =
-      provider === "cloudflare" ? undefined : SHORTLIST_RESOLVERS[provider];
+    const resolver = SHORTLIST_RESOLVERS[provider];
 
     if (resolver) {
       return resolver(customModels);
@@ -308,6 +305,7 @@ export function resolveModel(
 // Shortlist providers know vision only from the saved entry or the catalog.
 const SHORTLIST_VISION_PROVIDERS: ReadonlySet<ProviderName> = new Set([
   "cerebras",
+  "cloudflare",
   "fireworks",
   "ollama",
 ]);
