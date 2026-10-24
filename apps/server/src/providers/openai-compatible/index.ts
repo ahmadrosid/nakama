@@ -337,6 +337,7 @@ async function requestChatCompletion(
     });
 
     const message = completion.choices[0]?.message;
+    const truncated = completion.choices[0]?.finish_reason === "length";
 
     const toolCalls = parseOpenAIToolCalls(
       // SAFETY: The upstream payload is validated or constructed by the provider adapter before this conversion.
@@ -352,7 +353,11 @@ async function requestChatCompletion(
     const thinking = readReasoningText(message);
     const reasoningDetails = options.netra ? readReasoningDetails(message) : [];
 
-    if (!content.trim() && toolCalls.length === 0 && !thinking?.trim()) {
+    if (
+      !(truncated || content.trim()) &&
+      toolCalls.length === 0 &&
+      !thinking?.trim()
+    ) {
       throw new Error(`${label} returned an empty response.`);
     }
 
@@ -361,6 +366,7 @@ async function requestChatCompletion(
       providerContent: reasoningDetails,
       thinking,
       toolCalls,
+      truncated,
       usage: extractOpenAITokenUsage(completion.usage),
     });
   } catch (error) {
@@ -442,6 +448,7 @@ async function streamChatCompletion(options: {
   let content = "";
   let thinking = "";
   let usage: ChatCompletionResult["usage"];
+  let truncated = false;
   const reasoningDetails: unknown[] = [];
   const pending = new Map<number, PendingToolCall>();
 
@@ -451,6 +458,7 @@ async function streamChatCompletion(options: {
       error?: ProviderJsonRecord | string;
       usage?: ProviderJsonRecord;
       choices?: Array<{
+        finish_reason?: string | null;
         delta?: {
           content?: string | null;
           tool_calls?: Array<{
@@ -471,6 +479,10 @@ async function streamChatCompletion(options: {
     }
 
     usage = extractOpenAITokenUsage(payload.usage) ?? usage;
+
+    if (payload.choices?.[0]?.finish_reason === "length") {
+      truncated = true;
+    }
 
     const delta = payload.choices?.[0]?.delta;
 
@@ -514,7 +526,11 @@ async function streamChatCompletion(options: {
 
   const toolCalls = finalizePendingToolCalls(pending);
 
-  if (!content.trim() && toolCalls.length === 0 && !thinking.trim()) {
+  if (
+    !(truncated || content.trim()) &&
+    toolCalls.length === 0 &&
+    !thinking.trim()
+  ) {
     throw new Error(`${options.label} returned an empty response.`);
   }
 
@@ -523,6 +539,7 @@ async function streamChatCompletion(options: {
     providerContent: reasoningDetails,
     thinking,
     toolCalls,
+    truncated,
     usage,
   });
 }

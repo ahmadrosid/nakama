@@ -140,6 +140,7 @@ export function buildChatCompletionResult(options: {
   providerContent?: unknown[];
   toolCalls: ToolCall[];
   thinking?: string | null | undefined;
+  truncated?: boolean;
   usage?: ChatCompletionResult["usage"];
 }): ChatCompletionResult {
   const content = options.content?.trim() ?? "";
@@ -167,6 +168,10 @@ export function buildChatCompletionResult(options: {
     content,
     toolCalls: options.toolCalls,
   };
+
+  if (options.truncated) {
+    result.truncated = true;
+  }
 
   if (options.usage) {
     result.usage = options.usage;

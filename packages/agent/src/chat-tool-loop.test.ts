@@ -1117,6 +1117,106 @@ describe("agent chat tool loop", () => {
     });
   });
 
+  test("does not run a tool call cut off at the output limit", async () => {
+    let toolRuns = 0;
+    const lastMessages: ChatMessage[] = [];
+
+    const tool: ToolDefinition = {
+      ...sampleTool,
+      run(input) {
+        toolRuns += 1;
+
+        return Promise.resolve(input);
+      },
+    };
+
+    const provider = createMockProvider([
+      {
+        ...toolTurn([{ arguments: {}, id: "c1", name: "sample" }]),
+        truncated: true,
+      },
+      textReply("Final"),
+    ]);
+
+    const generateChat = provider.generateChat.bind(provider);
+    provider.generateChat = (input) => {
+      const last = input.messages.at(-1);
+
+      if (last) {
+        lastMessages.push(last);
+      }
+
+      return generateChat(input);
+    };
+
+    const session = createAgentChatSession({ provider }, { tools: [tool] });
+
+    const reply = await session.send("go");
+    expect(reply).toBe("Final");
+    expect(toolRuns).toBe(0);
+    expect(lastMessages[1]).toMatchObject({ role: "tool", toolCallId: "c1" });
+    expect(JSON.parse(String(lastMessages[1]?.content))).toHaveProperty(
+      "error"
+    );
+  });
+
+  test("retries without thinking when thinking used the whole output limit", async () => {
+    const seen: GenerateChatInput[] = [];
+
+    const provider: ProviderClient = {
+      ...createMockProvider([]),
+      generateChat(input: GenerateChatInput) {
+        seen.push(input);
+
+        return Promise.resolve(
+          seen.length === 1
+            ? { ...textReply(""), truncated: true }
+            : textReply("Final")
+        );
+      },
+    };
+
+    const session = createAgentChatSession(
+      {
+        chatOptions: { thinking: { effort: "high", enabled: true } },
+        provider,
+      },
+      { tools: [sampleTool] }
+    );
+
+    const reply = await session.send("go");
+    expect(reply).toBe("Final");
+    expect(seen[0]?.providerOptions?.thinking?.enabled).toBe(true);
+    expect(seen[1]?.providerOptions?.thinking).toBeUndefined();
+    expect(seen[1]?.tools?.length ?? 0).toBe(0);
+  });
+
+  test("keeps thinking on the retry after an empty reply under the limit", async () => {
+    const seen: GenerateChatInput[] = [];
+
+    const provider: ProviderClient = {
+      ...createMockProvider([]),
+      generateChat(input: GenerateChatInput) {
+        seen.push(input);
+
+        return Promise.resolve(
+          seen.length === 1 ? textReply("") : textReply("Final")
+        );
+      },
+    };
+
+    const session = createAgentChatSession(
+      {
+        chatOptions: { thinking: { effort: "high", enabled: true } },
+        provider,
+      },
+      { tools: [sampleTool] }
+    );
+
+    await session.send("go");
+    expect(seen[1]?.providerOptions?.thinking?.enabled).toBe(true);
+  });
+
   test.each([
     ["send", ""],
     ["send", "Working"],

@@ -3038,6 +3038,11 @@ export interface ChatCompletionResult {
   }>;
   content: string;
   toolCalls: ToolCall[];
+  /**
+   * The provider stopped because the reply reached its output token limit, so
+   * the text or the last tool call may be cut off.
+   */
+  truncated?: boolean;
   usage?: ChatUsage;
 }
 

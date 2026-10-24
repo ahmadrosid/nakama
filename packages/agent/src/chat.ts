@@ -87,6 +87,12 @@ const EMPTY_REPLY_NUDGE =
 const EMPTY_REPLY_NOTICE =
   "The model finished without writing a reply. Send another message to continue.";
 
+const OUTPUT_LIMIT_NOTICE =
+  "The model reached its output token limit before it wrote a reply. Send another message to continue.";
+
+const TRUNCATED_TOOL_CALL_ERROR =
+  "Not run: your reply reached the output token limit, so the arguments of this call were cut off. Split the work into smaller calls.";
+
 interface StreamHandlers {
   onChunk: (delta: string) => void;
   onSubAgentActivity?: (event: {
@@ -739,6 +745,7 @@ async function runConversation(
   let producedTokens = 0;
   let stoppedReply = "";
   let finalReplyOnly = false;
+  let finalReplyWithoutThinking = false;
   let openTodoNudges = 0;
   let openTodosReminder: string | null = null;
 
@@ -776,6 +783,13 @@ async function runConversation(
     const releaseReservation =
       await toolContext?.assertCanStartLlmTurn?.(reservedTokens);
 
+    const { thinking: _thinking, ...optionsWithoutThinking } =
+      providerOptions ?? {};
+
+    const finalReplyOptions: ProviderChatOptions = finalReplyWithoutThinking
+      ? { ...optionsWithoutThinking, webSearch: false }
+      : { ...providerOptions, webSearch: false };
+
     const toolGroupId = createId("toolgroup");
     let result: Awaited<ReturnType<typeof generateReply>>;
 
@@ -785,9 +799,7 @@ async function runConversation(
         iterationPrompt,
         history,
         llmTools,
-        finalReplyOnly
-          ? { ...providerOptions, webSearch: false }
-          : providerOptions,
+        finalReplyOnly ? finalReplyOptions : providerOptions,
         mode,
         handlers,
         rehydrateMessagesForProvider,
@@ -856,16 +868,22 @@ async function runConversation(
     ) {
       if (!finalReplyOnly) {
         finalReplyOnly = true;
+        // Thinking used the whole output limit, so the retry must not think.
+        finalReplyWithoutThinking = Boolean(result.truncated);
         continue;
       }
 
-      history.push({ content: EMPTY_REPLY_NOTICE, role: "assistant" });
+      const notice = result.truncated
+        ? OUTPUT_LIMIT_NOTICE
+        : EMPTY_REPLY_NOTICE;
+
+      history.push({ content: notice, role: "assistant" });
 
       if (mode === "stream") {
-        handlers?.onChunk(EMPTY_REPLY_NOTICE);
+        handlers?.onChunk(notice);
       }
 
-      return EMPTY_REPLY_NOTICE;
+      return notice;
     }
 
     // Steps the provider already ran are saved in order, each with the text before it,
@@ -889,6 +907,35 @@ async function runConversation(
         ? { ...result.assistantMessage, usage: result.usage }
         : result.assistantMessage
     );
+
+    if (enableToolLoop && result.truncated && result.toolCalls.length > 0) {
+      // The last call was cut off at the output limit, so its arguments are
+      // broken. Tell the model and let it try again in smaller parts.
+      for (const call of result.toolCalls) {
+        const toolResult = { error: TRUNCATED_TOOL_CALL_ERROR };
+
+        handlers?.onToolStart?.({
+          input: call.arguments,
+          tool: call.name,
+          toolCallId: call.id,
+          toolGroupId,
+        });
+        handlers?.onToolEnd?.({
+          result: toolResult,
+          tool: call.name,
+          toolCallId: call.id,
+          toolGroupId,
+        });
+        history.push({
+          content: JSON.stringify(toolResult),
+          name: call.name,
+          role: "tool",
+          toolCallId: call.id,
+        });
+      }
+
+      continue;
+    }
 
     if (!enableToolLoop || result.toolCalls.length === 0) {
       if (
