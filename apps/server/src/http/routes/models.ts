@@ -417,7 +417,13 @@ export function registerModelRoutes(
       baseUrl: z.string().optional(),
       hostMode: z.enum(["local", "cloud"]).optional(),
       provider: z
-        .enum(["ollama", "openai_compatible", "fireworks", "netra"])
+        .enum([
+          "ollama",
+          "openai_compatible",
+          "fireworks",
+          "netra",
+          "cloudflare",
+        ])
         .optional(),
       providerId: z.string().optional(),
     })
