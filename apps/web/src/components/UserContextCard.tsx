@@ -31,6 +31,8 @@ function formatUserContextError(error: Error): string {
 
 interface UserContextEditorDialogProps {
   onOpenChange: (open: boolean) => void;
+  /** Runs after USER.md is written, before the dialog closes. */
+  onSaved?: () => void;
   open: boolean;
 }
 
@@ -38,6 +40,7 @@ interface UserContextEditorDialogProps {
 export function UserContextEditorDialog({
   open,
   onOpenChange,
+  onSaved,
 }: UserContextEditorDialogProps) {
   const { activeOrg } = useAuth();
 
@@ -45,6 +48,7 @@ export function UserContextEditorDialog({
     <UserContextDialogSession
       key={activeOrg?.id}
       onOpenChange={onOpenChange}
+      onSaved={onSaved}
       open
     />
   ) : null;
@@ -53,6 +57,7 @@ export function UserContextEditorDialog({
 function UserContextDialogSession({
   open,
   onOpenChange,
+  onSaved,
 }: UserContextEditorDialogProps) {
   const { activeOrg, user } = useAuth();
   const orgId = activeOrg?.id ?? null;
@@ -101,6 +106,7 @@ function UserContextDialogSession({
       setSavedContent(content);
       clearUserContextDraft(orgId);
       setHint("Saved. Start a new chat to apply.");
+      onSaved?.();
       onOpenChange(false);
       await refetch();
     } catch (error) {

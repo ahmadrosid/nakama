@@ -1,4 +1,4 @@
-import type { AgentChannel } from "@nakama/core/contract";
+import type { AgentChannel, SetupChecklistItem } from "@nakama/core/contract";
 import { parseUserContext } from "@nakama/core/user-context";
 import type { ChatListItem, FailedChatTurn } from "@/lib/chat-history";
 import { createClientId } from "@/lib/client-id";
@@ -48,6 +48,185 @@ export function shouldShowGoalPrompt({
   }
 
   return !parseUserContext(userContext).answers.help?.trim();
+}
+
+const SETUP_CHECKLIST_STORAGE_PREFIX = "nakama:setup-checklist:";
+
+/** The checklist a user got from their goal, and what they did with it. */
+export interface StoredSetupChecklist {
+  /** Keys the user finished where the app cannot see the result itself. */
+  done: string[];
+  goal: string | null;
+  items: SetupChecklistItem[];
+  skipped: string[];
+}
+
+type SetupItemStatus = "done" | "open" | "skipped";
+
+export interface SetupChecklistRow {
+  item: SetupChecklistItem;
+  key: string;
+  status: SetupItemStatus;
+}
+
+function setupItemKey(item: SetupChecklistItem): string {
+  switch (item.kind) {
+    case "connect_toolkit":
+      return `toolkit:${item.toolkitSlug}`;
+    case "enable_skill":
+      return `skill:${item.skillId}`;
+    case "write_context":
+      return `context:${item.scope}`;
+    default:
+      throw new Error("Unknown setup checklist item.");
+  }
+}
+
+function setupChecklistStorageKey(orgId: string, userId: string): string {
+  return `${SETUP_CHECKLIST_STORAGE_PREFIX}${orgId}:${userId}`;
+}
+
+/** A stored item as it may come back from storage: any field can be wrong. */
+interface UncheckedSetupItem {
+  kind?: string;
+  scope?: string;
+  skillId?: string;
+  title?: string;
+  toolkitSlug?: string;
+}
+
+/** Stored state before checks; each field is verified in readSetupChecklist. */
+interface UncheckedSetupChecklist {
+  done?: string[];
+  goal?: string | null;
+  items?: UncheckedSetupItem[];
+  skipped?: string[];
+}
+
+function isText(value: string | undefined): value is string {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
+  return typeof value === "string";
+}
+
+function toSetupChecklistItem(
+  item: UncheckedSetupItem | null
+): SetupChecklistItem | null {
+  if (!(item && isText(item.title))) {
+    return null;
+  }
+
+  if (item.kind === "connect_toolkit" && isText(item.toolkitSlug)) {
+    return {
+      kind: item.kind,
+      title: item.title,
+      toolkitSlug: item.toolkitSlug,
+    };
+  }
+
+  if (item.kind === "enable_skill" && isText(item.skillId)) {
+    return { kind: item.kind, skillId: item.skillId, title: item.title };
+  }
+
+  if (item.kind === "write_context" && item.scope === "org") {
+    return { kind: item.kind, scope: item.scope, title: item.title };
+  }
+
+  return null;
+}
+
+function storedStrings(list: string[] | undefined): string[] {
+  return Array.isArray(list) ? list.filter(isText) : [];
+}
+
+/**
+ * Per browser on purpose: the checklist is a first-run aid, so losing it on
+ * another device costs a re-ask at most. A bad or missing value reads as none.
+ */
+export function readSetupChecklist(
+  orgId: string,
+  userId: string
+): StoredSetupChecklist | null {
+  try {
+    const raw = localStorage.getItem(setupChecklistStorageKey(orgId, userId));
+
+    if (!raw) {
+      return null;
+    }
+
+    // SAFETY: JSON.parse returns the values checked by the validation that follows.
+    const parsed = JSON.parse(raw) as UncheckedSetupChecklist;
+
+    if (!Array.isArray(parsed.items)) {
+      return null;
+    }
+
+    return {
+      done: storedStrings(parsed.done),
+      goal: isText(parsed.goal ?? undefined) ? (parsed.goal ?? null) : null,
+      items: parsed.items
+        .map(toSetupChecklistItem)
+        .filter((item) => item !== null),
+      skipped: storedStrings(parsed.skipped),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function writeSetupChecklist(
+  orgId: string,
+  userId: string,
+  value: StoredSetupChecklist
+): void {
+  try {
+    localStorage.setItem(
+      setupChecklistStorageKey(orgId, userId),
+      JSON.stringify(value)
+    );
+  } catch {
+    // Storage can be full or blocked; the checklist still works for this visit.
+  }
+}
+
+/**
+ * Status per item from what the app already loads, so a return visit costs no
+ * model call: a connected toolkit, a skill the agent has, or org memory with
+ * a fact. Members cannot edit org memory, so their business context counts as
+ * done once they save About you.
+ */
+export function setupChecklistRows(
+  stored: StoredSetupChecklist,
+  facts: {
+    assignedSkillIds: readonly string[];
+    connectedToolkits: readonly string[];
+    orgHasFacts: boolean;
+  }
+): SetupChecklistRow[] {
+  const finished = new Set(stored.done);
+  const skipped = new Set(stored.skipped);
+  const assigned = new Set(facts.assignedSkillIds);
+  const connected = new Set(facts.connectedToolkits);
+
+  return stored.items.map((item) => {
+    const key = setupItemKey(item);
+
+    const done =
+      finished.has(key) ||
+      (item.kind === "connect_toolkit" && connected.has(item.toolkitSlug)) ||
+      (item.kind === "enable_skill" && assigned.has(item.skillId)) ||
+      (item.kind === "write_context" && facts.orgHasFacts);
+
+    return {
+      item,
+      key,
+      status: done ? "done" : skipped.has(key) ? "skipped" : "open",
+    };
+  });
+}
+
+/** Org memory starts as headings only; a bullet is the first real fact. */
+export function orgMemoryHasFacts(content: string | null | undefined): boolean {
+  return (content ?? "").split("\n").some((line) => /^\s*[-*]\s+\S/.test(line));
 }
 
 export function findRetryPrompt(

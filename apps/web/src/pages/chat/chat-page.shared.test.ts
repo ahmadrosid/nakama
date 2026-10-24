@@ -12,11 +12,16 @@ import {
   markStreamingTurnFailed,
   messagesWithoutFailedTurn,
   nextSuccessfulTurnAt,
+  orgMemoryHasFacts,
   planPromptBranch,
+  readSetupChecklist,
   releaseChatStream,
+  type StoredSetupChecklist,
+  setupChecklistRows,
   shouldShowCognitoControl,
   shouldShowGoalPrompt,
   welcomeAnimationKey,
+  writeSetupChecklist,
 } from "@/pages/chat/chat-page.shared";
 
 function user(
@@ -140,33 +145,33 @@ describe("failed turn retry helpers", () => {
   });
 });
 
-describe("failed chat turn storage", () => {
-  function withLocalStorage<T>(run: (store: Map<string, string>) => T): T {
-    const store = new Map<string, string>();
-    const previousLocalStorage = globalThis.localStorage;
+function withLocalStorage<T>(run: (store: Map<string, string>) => T): T {
+  const store = new Map<string, string>();
+  const previousLocalStorage = globalThis.localStorage;
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => store.get(key) ?? null,
+      removeItem: (key: string) => {
+        store.delete(key);
+      },
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+    },
+  });
+
+  try {
+    return run(store);
+  } finally {
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
-      value: {
-        getItem: (key: string) => store.get(key) ?? null,
-        removeItem: (key: string) => {
-          store.delete(key);
-        },
-        setItem: (key: string, value: string) => {
-          store.set(key, value);
-        },
-      },
+      value: previousLocalStorage,
     });
-
-    try {
-      return run(store);
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: previousLocalStorage,
-      });
-    }
   }
+}
 
+describe("failed chat turn storage", () => {
   test("round-trips a failed turn and clears it", () => {
     withLocalStorage(() => {
       const sessionId = `session_failed_${Date.now()}`;
@@ -375,5 +380,105 @@ describe("shouldShowGoalPrompt", () => {
         userContext: "# About Me\n\n- Name / nickname: Alex\n- Help with:\n",
       })
     ).toBe(true);
+  });
+});
+
+describe("setup checklist", () => {
+  const stored: StoredSetupChecklist = {
+    done: [],
+    goal: "Manage my ads",
+    items: [
+      {
+        kind: "connect_toolkit",
+        title: "Connect Meta Ads",
+        toolkitSlug: "metaads",
+      },
+      {
+        kind: "enable_skill",
+        skillId: "skill-ads",
+        title: "Turn on the Ads skill",
+      },
+      {
+        kind: "write_context",
+        scope: "org",
+        title: "Tell the agent about your business",
+      },
+    ],
+    skipped: [],
+  };
+
+  const noFacts: Parameters<typeof setupChecklistRows>[1] = {
+    assignedSkillIds: [],
+    connectedToolkits: [],
+    orgHasFacts: false,
+  };
+
+  const statuses = (value: StoredSetupChecklist, facts = noFacts) =>
+    setupChecklistRows(value, facts).map((row) => row.status);
+
+  test("starts with every item open", () => {
+    expect(statuses(stored)).toEqual(["open", "open", "open"]);
+  });
+
+  test("marks items done from what the app already knows", () => {
+    expect(
+      statuses(stored, {
+        assignedSkillIds: ["skill-ads"],
+        connectedToolkits: ["metaads"],
+        orgHasFacts: true,
+      })
+    ).toEqual(["done", "done", "done"]);
+  });
+
+  test("keeps skipped items, and done wins over skipped", () => {
+    expect(
+      statuses(
+        { ...stored, skipped: ["toolkit:metaads", "skill:skill-ads"] },
+        { ...noFacts, assignedSkillIds: ["skill-ads"] }
+      )
+    ).toEqual(["skipped", "done", "open"]);
+  });
+
+  test("counts business context done once a member saves About you", () => {
+    expect(statuses({ ...stored, done: ["context:org"] })).toEqual([
+      "open",
+      "open",
+      "done",
+    ]);
+  });
+
+  test("survives a round trip through storage", () => {
+    withLocalStorage(() => {
+      writeSetupChecklist("org-a", "user-a", stored);
+
+      expect(readSetupChecklist("org-a", "user-a")).toEqual(stored);
+      expect(readSetupChecklist("org-b", "user-a")).toBeNull();
+    });
+  });
+
+  test("reads a broken value as no checklist", () => {
+    withLocalStorage((store) => {
+      store.set("nakama:setup-checklist:org-c:user-c", "{not json");
+      expect(readSetupChecklist("org-c", "user-c")).toBeNull();
+    });
+  });
+
+  test("drops stored items it does not know", () => {
+    withLocalStorage((store) => {
+      store.set(
+        "nakama:setup-checklist:org-d:user-d",
+        JSON.stringify({
+          ...stored,
+          items: [...stored.items, { kind: "connect_mcp" }],
+        })
+      );
+
+      expect(readSetupChecklist("org-d", "user-d")?.items).toHaveLength(3);
+    });
+  });
+
+  test("org memory with only headings has no facts", () => {
+    expect(orgMemoryHasFacts("# Org Memory\n\n## Pinned\n")).toBe(false);
+    expect(orgMemoryHasFacts("## Pinned\n- We sell coffee beans\n")).toBe(true);
   });
 });

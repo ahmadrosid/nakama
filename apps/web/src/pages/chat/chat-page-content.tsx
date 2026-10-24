@@ -2,7 +2,6 @@ import {
   formatAgentQuestionnaireAnswersMessage,
   hasActiveAgentQuestionnaire,
 } from "@nakama/core/agent-questionnaire";
-import { parseUserContext, renderUserContext } from "@nakama/core/user-context";
 import {
   Dialog,
   DialogContent,
@@ -17,29 +16,25 @@ import { BrowserLiveViewPanelBridge } from "@/components/chat/browser-live-view-
 import { ChatCognitoControl } from "@/components/chat/chat-cognito-control";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
+import { UserContextEditorDialog } from "@/components/UserContextCard";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
-import { useAppContext } from "@/context/use-app-context";
-import { useAuth } from "@/context/use-auth";
 import { useChatUsageVisible } from "@/hooks/use-chat-usage-visible";
 import { usePostTurnSkillReviewOverlay } from "@/hooks/use-post-turn-skill-review-overlay";
-import {
-  useHistorySessionsQuery,
-  useUserContextQuery,
-  useWriteUserContextMutation,
-} from "@/hooks/use-resource-mutations";
 import { formatSessionChannelLabel } from "@/lib/chat-history";
 import { sumChatUsage } from "@/lib/chat-usage";
-import { formatError } from "@/lib/client";
 import { extractModelId } from "@/lib/models";
 import {
-  shouldShowCognitoControl,
-  shouldShowGoalPrompt,
-} from "@/pages/chat/chat-page.shared";
-import {
   ChatGoalPrompt,
-  ChatPageColumn,
-  ChatWelcome,
-} from "@/pages/chat/chat-page-layout";
+  ChatSetupChecklist,
+  ChatSetupFinding,
+  ChatSetupPill,
+} from "@/pages/chat/chat-onboarding";
+import { shouldShowCognitoControl } from "@/pages/chat/chat-page.shared";
+import { ChatPageColumn, ChatWelcome } from "@/pages/chat/chat-page-layout";
+import {
+  type Onboarding,
+  useOnboarding,
+} from "@/pages/chat/use-chat-onboarding";
 import type { ChatPageState } from "@/pages/chat/use-chat-page";
 
 const ProviderSetupForm = lazy(async () => ({
@@ -100,7 +95,7 @@ export function ChatPageContent({
 
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
 
-  const goalPrompt = useGoalPrompt({
+  const onboarding = useOnboarding({
     cognito,
     cognitoLocked,
     isEmptyState,
@@ -196,26 +191,17 @@ export function ChatPageContent({
       <ChatPageColumn centered cognito={cognitoSurface}>
         {cognitoControl}
         <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col gap-1">
-          {goalPrompt.show ? (
-            <ChatGoalPrompt
-              error={goalPrompt.error}
-              onSave={goalPrompt.save}
-              onSkip={goalPrompt.skip}
-              saving={goalPrompt.saving}
+          <EmptyChatBody onboarding={onboarding}>
+            <ChatWelcome
+              cognito={cognito}
+              onProfileSwitch={handleProfileSwitch}
+              profile={activeProfile}
+              profileId={profileId}
+              profileSwitchDisabled={busy}
+              profiles={profiles}
             />
-          ) : (
-            <>
-              <ChatWelcome
-                cognito={cognito}
-                onProfileSwitch={handleProfileSwitch}
-                profile={activeProfile}
-                profileId={profileId}
-                profileSwitchDisabled={busy}
-                profiles={profiles}
-              />
-              {composer}
-            </>
-          )}
+            {composer}
+          </EmptyChatBody>
         </div>
       </ChatPageColumn>
     </ChatAttachmentPanelProvider>
@@ -254,65 +240,63 @@ export function ChatPageContent({
   );
 }
 
-/**
- * Decides whether the empty chat asks for a goal, and saves the answer to
- * USER.md "Help with". Waits for both reads, so a returning user never sees
- * the prompt flash before their history loads.
- */
-function useGoalPrompt({
-  cognito,
-  cognitoLocked,
-  isEmptyState,
-  profileId,
-  readOnlySession,
+/** Swaps the welcome and composer for the onboarding step that is active. */
+function EmptyChatBody({
+  children,
+  onboarding,
 }: {
-  cognito: boolean;
-  cognitoLocked: boolean;
-  isEmptyState: boolean;
-  profileId: string;
-  readOnlySession: boolean;
+  children: ReactNode;
+  onboarding: Onboarding;
 }) {
-  const { health } = useAppContext();
-  const { activeOrg } = useAuth();
+  const dialog = (
+    <UserContextEditorDialog
+      onOpenChange={onboarding.setAboutYouOpen}
+      onSaved={onboarding.markAboutYouSaved}
+      open={onboarding.aboutYouOpen}
+    />
+  );
 
-  const enabled =
-    health?.onboardingEnabled === true &&
-    isEmptyState &&
-    !cognito &&
-    !cognitoLocked &&
-    !readOnlySession;
-
-  const orgId = activeOrg?.id ?? null;
-  const [skipped, setSkipped] = useState(false);
-  const userContext = useUserContextQuery({ includeContent: true, orgId });
-  const history = useHistorySessionsQuery(profileId);
-  const writeUserContext = useWriteUserContextMutation();
-
-  const show =
-    enabled &&
-    !skipped &&
-    userContext.isSuccess &&
-    !history.isLoading &&
-    !history.error &&
-    shouldShowGoalPrompt({
-      orgRole: activeOrg?.role,
-      sessions: history.data,
-      userContext: userContext.data.content,
-    });
-
-  return {
-    error: writeUserContext.error ? formatError(writeUserContext.error) : null,
-    save: (goal: string) => {
-      const { answers, extra } = parseUserContext(userContext.data?.content);
-
-      writeUserContext.mutate(
-        renderUserContext({ ...answers, help: goal }, extra)
+  switch (onboarding.view) {
+    case "goal":
+      return (
+        <ChatGoalPrompt
+          error={onboarding.goalError}
+          onSave={onboarding.saveGoal}
+          onSkip={onboarding.skipGoal}
+          saving={onboarding.savingGoal}
+        />
       );
-    },
-    saving: writeUserContext.isPending,
-    show,
-    skip: () => setSkipped(true),
-  };
+    case "finding":
+      return <ChatSetupFinding goal={onboarding.goal} />;
+    case "checklist":
+      return (
+        <>
+          <ChatSetupChecklist
+            busyKey={onboarding.busyKey}
+            error={onboarding.actionError}
+            goal={onboarding.goal}
+            onAction={onboarding.runAction}
+            onFinish={onboarding.finish}
+            onSkip={onboarding.skipItem}
+            rows={onboarding.rows}
+          />
+          {dialog}
+        </>
+      );
+    default:
+      return (
+        <>
+          {onboarding.pill ? (
+            <ChatSetupPill
+              done={onboarding.pill.done}
+              onOpen={onboarding.openChecklist}
+              total={onboarding.pill.total}
+            />
+          ) : null}
+          {children}
+        </>
+      );
+  }
 }
 
 function ChatConversation({

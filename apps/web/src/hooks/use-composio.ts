@@ -64,8 +64,8 @@ const composioToolkitsQueryOptions = queryOptions({
   queryKey: queryKeys.composio.toolkits,
 });
 
-export function useComposioToolkits() {
-  return useQuery(composioToolkitsQueryOptions);
+export function useComposioToolkits(options: { enabled?: boolean } = {}) {
+  return useQuery({ ...composioToolkitsQueryOptions, ...options });
 }
 
 export function useEnableComposioToolkit() {
