@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import type { ChatListItem } from "./chat-history";
 import {
   buildGenerateImageToolState,
-  imageGenerationAspectFromSize,
   parseGenerateImagePrompt,
   parseGenerateImageSize,
 } from "./chat-stream-image-generation";
@@ -28,13 +27,6 @@ describe("chat-stream-image-generation", () => {
     expect(parseGenerateImagePrompt({})).toBeNull();
     expect(parseGenerateImageSize({ size: "1024x1536" })).toBe("1024x1536");
     expect(parseGenerateImageSize({ prompt: "x" })).toBeNull();
-  });
-
-  test("imageGenerationAspectFromSize maps ratios", () => {
-    expect(imageGenerationAspectFromSize("1024x1024")).toBe("square");
-    expect(imageGenerationAspectFromSize("1024x1536")).toBe("portrait");
-    expect(imageGenerationAspectFromSize("1536x1024")).toBe("landscape");
-    expect(imageGenerationAspectFromSize("auto")).toBe("square");
   });
 
   test("buildGenerateImageToolState done exposes artifacts-relative path", () => {

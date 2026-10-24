@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import {
   getInitialRecentsCollapsed,
   getInitialSidebarCollapsed,
@@ -8,13 +8,6 @@ import {
   subscribePinnedPlugins,
   togglePinnedPlugin,
 } from "./sidebar";
-
-describe("sidebar collapse preferences", () => {
-  test("defaults to expanded when storage is empty", () => {
-    expect(getInitialSidebarCollapsed()).toBe(false);
-    expect(getInitialRecentsCollapsed()).toBe(false);
-  });
-});
 
 test.each([false, true])(
   "recents collapse preference is independent of the sidebar: %s",

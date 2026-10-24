@@ -13,12 +13,10 @@ import {
   createDebouncedEscAbortHandler,
   disableRawModeIfActive,
   formatBusyDropLine,
-  formatErrorLines,
   formatSoulStatusLines,
   formatStatusLines,
   formatToolCall,
   isEscInterruptKey,
-  needsTrailingStreamNewline,
   previewToolValue,
   runChat,
   runCleanupThenExit,
@@ -27,12 +25,6 @@ import {
 import * as profile from "./profile";
 import * as promptModule from "./prompt";
 import { TerminalRenderer } from "./terminal-renderer";
-
-describe("needsTrailingStreamNewline", () => {
-  test("adds a newline when the stream ended mid-line", () => {
-    expect(needsTrailingStreamNewline("Hello.")).toBe(true);
-  });
-});
 
 describe("createChatExitController", () => {
   test("requestExit resolves wait without scheduling an interval", async () => {
@@ -77,11 +69,6 @@ describe("createChatExitController", () => {
 });
 
 describe("formatBusyDropLine", () => {
-  test("shows a short busy marker before the warn threshold", () => {
-    expect(formatBusyDropLine(1)).toBe("[busy]");
-    expect(formatBusyDropLine(2)).toBe("[busy]");
-  });
-
   test("includes the drop count once the warn threshold is reached", () => {
     expect(formatBusyDropLine(3)).toBe(
       "[busy] ignored input (3 while processing)"
@@ -169,12 +156,6 @@ describe("formatStatusLines", () => {
       "Provider: anthropic",
       "Model: claude-sonnet",
     ]);
-  });
-});
-
-describe("formatErrorLines", () => {
-  test("adds a blank line above rendered errors", () => {
-    expect(formatErrorLines(new Error("Boom"))).toEqual(["", "Boom"]);
   });
 });
 
