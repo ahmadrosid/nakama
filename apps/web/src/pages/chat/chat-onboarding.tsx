@@ -254,6 +254,7 @@ function SetupProgressBar({ done, total }: { done: number; total: number }) {
 }
 
 const RING_RADIUS = 11;
+
 const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
 
 function SetupProgressRing({ done, total }: { done: number; total: number }) {
