@@ -55,7 +55,7 @@ function PluginReleasesList({
               {release.source === "local" || release.source === "agent" ? (
                 <span className="text-xs">
                   {release.source === "agent"
-                    ? "Made by Super Nakama"
+                    ? "Made by an agent"
                     : "From a folder"}
                 </span>
               ) : null}

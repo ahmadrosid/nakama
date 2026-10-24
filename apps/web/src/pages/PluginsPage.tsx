@@ -366,7 +366,7 @@ function PluginPageHeader({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-52">
                 <DropdownMenuItem onClick={onInstallFromFolder}>
-                  Made by Super Nakama
+                  Made by an agent
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onInstall(installRef.current)}>
                   From npm package

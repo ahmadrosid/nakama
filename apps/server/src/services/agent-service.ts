@@ -6077,6 +6077,19 @@ export class AgentService {
             tool.name !== "create_group" || profile.groupsEnabled !== false
         ),
       ];
+    } else if (
+      this.skillsService &&
+      (await this.skillsService.listSkillsForProfile(profile.id)).some(
+        (skill) => skill.name === "create-plugin"
+      )
+    ) {
+      // Any agent given create-plugin hands its draft to the same admin review.
+      resolved = [
+        ...resolved,
+        ...this.superNakamaTools.filter(
+          (tool) => tool.name === "submit_plugin_draft"
+        ),
+      ];
     }
 
     if (hasOwnTools) {
