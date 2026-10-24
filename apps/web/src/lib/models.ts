@@ -400,13 +400,17 @@ export function validateOpenCodeGoModelsInput(
 
 export type ShortlistCapabilityProvider = Extract<
   SelectedProvider,
-  "cerebras" | "fireworks"
+  "cerebras" | "cloudflare" | "fireworks"
 >;
 
 export function isShortlistCapabilityProvider(
   provider: SelectedProvider
 ): provider is ShortlistCapabilityProvider {
-  return provider === "cerebras" || provider === "fireworks";
+  return (
+    provider === "cerebras" ||
+    provider === "cloudflare" ||
+    provider === "fireworks"
+  );
 }
 
 type ShortlistModelRow = {
