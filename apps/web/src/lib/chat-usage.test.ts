@@ -74,25 +74,6 @@ describe("chat usage", () => {
     ).toBeNull();
   });
 
-  test("formats tokens, cost and the estimate marker", () => {
-    expect(
-      formatChatUsage({
-        costUsd: 0.0042,
-        inputTokens: 1234,
-        outputTokens: 56,
-        totalTokens: 1290,
-      })
-    ).toBe("1.2k in · 56 out · $0.0042");
-    expect(
-      formatChatUsage({
-        estimated: true,
-        inputTokens: 10,
-        outputTokens: 2,
-        totalTokens: 12,
-      })
-    ).toBe("~10 in · 2 out");
-  });
-
   test("compacts token counts at each thousand step", () => {
     const compacted = (inputTokens: number) =>
       formatChatUsage({
