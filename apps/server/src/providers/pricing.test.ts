@@ -149,6 +149,46 @@ describe("estimateUsageCostUsd", () => {
     }
   });
 
+  test("prices a saved Cloudflare list from its entries and never guesses", () => {
+    const providerInstance = {
+      apiKey: "test",
+      createdAt: "2026-10-24T00:00:00.000Z",
+      customModels: [
+        {
+          id: "@cf/openai/gpt-oss-120b",
+          inputPerMillionUsd: 0.35,
+          outputPerMillionUsd: 0.75,
+        },
+        { id: "@cf/swiss-ai/apertus-v1.5-8b" },
+      ],
+      id: "cloudflare-one",
+      label: "Cloudflare Worker AI",
+      type: "cloudflare" as const,
+    };
+
+    expect(
+      getModelPricing("@cf/openai/gpt-oss-120b", {
+        provider: "cloudflare",
+        providerInstance,
+      })
+    ).toEqual({ inputPerMillionUsd: 0.35, outputPerMillionUsd: 0.75 });
+    // Cloudflare publishes no rate for this one, so cost stays unknown
+    // instead of falling back to the house guess.
+    expect(
+      getModelPricing("@cf/swiss-ai/apertus-v1.5-8b", {
+        provider: "cloudflare",
+        providerInstance,
+      })
+    ).toBeNull();
+    // Without a saved list the built-in catalog still prices its models.
+    expect(
+      getModelPricing("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
+        provider: "cloudflare",
+        providerInstance: { ...providerInstance, customModels: undefined },
+      })
+    ).toEqual({ inputPerMillionUsd: 0.293, outputPerMillionUsd: 2.253 });
+  });
+
   test("uses fallback pricing for unknown models", () => {
     const pricing = getModelPricing("vendor/custom-model");
     expect(pricing?.inputPerMillionUsd).toBe(1);

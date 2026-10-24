@@ -93,6 +93,12 @@ const USER_PRICED_PROVIDERS = new Set<ProviderName>([
 function isUserPriced(context: PricingContext): boolean {
   const provider = context.provider ?? context.providerInstance?.type ?? null;
 
+  // A saved Cloudflare list replaces the catalog and carries the rates the
+  // search API published; without one, the built-in catalog prices apply.
+  if (provider === "cloudflare") {
+    return Boolean(context.providerInstance?.customModels?.length);
+  }
+
   return provider !== null && USER_PRICED_PROVIDERS.has(provider);
 }
 
