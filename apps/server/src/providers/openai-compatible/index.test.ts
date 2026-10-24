@@ -208,10 +208,12 @@ describe("OpenAI-compatible provider", () => {
           ])
         )
       );
+
       const result = await netraProvider().streamChat(
         { messages: [{ content: "Hi", role: "user" }], system: "Help" },
         { onChunk: () => {} }
       );
+
       expect(result.truncated).toBe(true);
       expect(result.toolCalls).toHaveLength(calls);
     }
