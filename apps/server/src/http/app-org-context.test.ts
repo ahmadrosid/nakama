@@ -74,6 +74,58 @@ function createServerOptions() {
 
 describe("createHonoApp", () => {
   describe("org context middleware", () => {
+    test("organization list returns saved curator clocks and turn quota", async () => {
+      const options = createServerOptions();
+      const app = createHonoApp(options);
+
+      const session = await setupFreshInstallSession(
+        app,
+        options.databaseAdapter
+      );
+
+      const saved = await app.fetch(
+        new Request(`http://localhost:4310/v1/orgs/${session.orgId}`, {
+          body: JSON.stringify({
+            monthlyLlmTurnLimit: 500,
+            skillsCuratorArchiveAfterDays: 120,
+            skillsCuratorStaleAfterDays: 45,
+          }),
+          headers: session.headers({
+            "Content-Type": "application/json",
+            "X-CSRF-Token": session.csrfToken,
+          }),
+          method: "PATCH",
+        })
+      );
+
+      expect(saved.status).toBe(200);
+      await expect(saved.json()).resolves.toMatchObject({
+        organization: {
+          monthlyLlmTurnLimit: 500,
+          skillsCuratorArchiveAfterDays: 120,
+          skillsCuratorStaleAfterDays: 45,
+        },
+      });
+
+      const listed = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/orgs", {
+          headers: session.headers(),
+        })
+      );
+
+      expect(listed.status).toBe(200);
+      await expect(listed.json()).resolves.toMatchObject({
+        orgs: [
+          {
+            id: session.orgId,
+            monthlyLlmTurnLimit: 500,
+            skillsCuratorArchiveAfterDays: 120,
+            skillsCuratorStaleAfterDays: 45,
+          },
+        ],
+      });
+    });
+
     test("setup stores active org on the session", async () => {
       const options = createServerOptions();
       const app = createHonoApp(options);
