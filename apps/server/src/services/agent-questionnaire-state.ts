@@ -32,6 +32,7 @@ export class AgentQuestionnaireState {
         choices: question.choices.map((choice) => ({
           id: choice.id.trim(),
           label: choice.label.trim(),
+          recommended: choice.recommended || undefined,
         })),
         id: question.id.trim(),
         placeholder: question.placeholder?.trim() || undefined,
