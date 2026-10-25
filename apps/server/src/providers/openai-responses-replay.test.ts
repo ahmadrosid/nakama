@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { ChatMessage } from "@nakama/core";
-import { generateOpenAIResponsesChat, toResponsesInput } from "./openai";
+import {
+  generateOpenAIResponsesChat,
+  toOpenAIMessages,
+  toResponsesInput,
+} from "./openai";
+import { readRecord } from "./shared";
 import { asTestFetch } from "./test-helpers";
 
 const originalFetch = globalThis.fetch;
@@ -35,6 +40,15 @@ const RESPONSE_PAYLOAD = {
   ],
   usage: { input_tokens: 10, output_tokens: 5 },
 };
+
+// What a DeepSeek turn through Netra saves as providerContent.
+const NETRA_REASONING = [
+  {
+    format: "unknown",
+    text: "The user wants to log the receipt.",
+    type: "reasoning.text",
+  },
+];
 
 function itemsCarrying(items: unknown[], text: string): unknown[] {
   return items.filter((item) => JSON.stringify(item).includes(text));
@@ -92,6 +106,146 @@ describe("OpenAI Responses assistant replay", () => {
       role: "assistant",
       type: "message",
     });
+  });
+
+  test("drops Netra reasoning items and sends the text instead", async () => {
+    const replay = await toResponsesInput([
+      { content: "log this receipt", role: "user" },
+      {
+        content: "Saved.",
+        providerContent: NETRA_REASONING,
+        role: "assistant",
+        thinking: "The user wants to log the receipt.",
+      },
+      { content: "and the next one", role: "user" },
+    ]);
+
+    expect(JSON.stringify(replay)).not.toContain("reasoning.text");
+    expect(replay[1]).toEqual({
+      content: [{ text: "Saved.", type: "output_text" }],
+      role: "assistant",
+      type: "message",
+    });
+  });
+
+  test("drops Netra reasoning items on a tool call turn", async () => {
+    const replay = await toResponsesInput([
+      { content: "log this receipt", role: "user" },
+      {
+        content: "Saving it now.",
+        providerContent: NETRA_REASONING,
+        role: "assistant",
+        toolCalls: [
+          { arguments: { amount: 45_000 }, id: "call_1", name: "add_expense" },
+        ],
+      },
+      {
+        content: "ok",
+        name: "add_expense",
+        role: "tool",
+        toolCallId: "call_1",
+      },
+    ]);
+
+    expect(JSON.stringify(replay)).not.toContain("reasoning.text");
+    expect(itemsCarrying(replay, "Saving it now.")).toHaveLength(1);
+    expect(replay.map((item) => readRecord(item).type ?? "user")).toEqual([
+      "user",
+      "message",
+      "function_call",
+      "function_call_output",
+    ]);
+  });
+
+  test("replays Responses items unchanged", async () => {
+    const providerContent = [
+      { id: "rs_1", summary: [], type: "reasoning" },
+      ...RESPONSE_PAYLOAD.output,
+    ];
+
+    const replay = await toResponsesInput([
+      {
+        content: ASSISTANT_TEXT,
+        providerContent,
+        role: "assistant",
+        toolCalls: [
+          {
+            arguments: { query: "invoice" },
+            id: "call_1",
+            name: "search_invoices",
+          },
+        ],
+      },
+    ]);
+
+    expect(replay.slice(0, 2)).toEqual(providerContent.slice(0, 2));
+    expect(itemsCarrying(replay, ASSISTANT_TEXT)).toHaveLength(1);
+  });
+
+  test("a DeepSeek turn on Netra followed by an OpenAI turn sends no Netra items", async () => {
+    let body = "";
+    globalThis.fetch = asTestFetch(
+      mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        body = String(init?.body);
+
+        return new Response(JSON.stringify(RESPONSE_PAYLOAD), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      })
+    );
+
+    await generateOpenAIResponsesChat({
+      apiKey: "sk-test",
+      input: {
+        messages: [
+          { content: "17 * 23?", role: "user" },
+          {
+            content: "391.",
+            providerContent: NETRA_REASONING,
+            role: "assistant",
+          },
+          { content: "add 9", role: "user" },
+        ],
+        system: "s",
+      },
+      model: "gpt-5.4",
+      stream: false,
+    });
+
+    expect(body).not.toContain("reasoning.text");
+    expect(body).toContain("391.");
+  });
+
+  test("Netra gets only reasoning_details items after an OpenAI turn", async () => {
+    const messages = await toOpenAIMessages(
+      "s",
+      [
+        { content: "invoices", role: "user" },
+        {
+          content: ASSISTANT_TEXT,
+          providerContent: [
+            { id: "rs_1", summary: [], type: "reasoning" },
+            RESPONSE_PAYLOAD.output[0],
+          ],
+          role: "assistant",
+          thinking: "Look up the invoices.",
+        },
+        {
+          content: "Done.",
+          providerContent: NETRA_REASONING,
+          role: "assistant",
+          thinking: "The user wants to log the receipt.",
+        },
+      ],
+      "netra"
+    );
+
+    expect(readRecord(messages[2]).reasoning_details).toBeUndefined();
+    expect(readRecord(messages[2]).reasoning_content).toBe(
+      "Look up the invoices."
+    );
+    expect(readRecord(messages[3]).reasoning_details).toEqual(NETRA_REASONING);
   });
 
   test("sends store false", async () => {

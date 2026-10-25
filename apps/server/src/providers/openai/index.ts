@@ -31,6 +31,7 @@ import {
   notifyToolInputDelta,
   type PendingToolCall,
   parseJsonRecord,
+  readRecord,
   readSseEvents,
   sanitizeToolCallHistory,
 } from "../shared";
@@ -409,12 +410,21 @@ function toOpenAIAssistantMessage(
     role: "assistant",
   };
 
-  if (thinking && !(provider === "netra" && message.providerContent?.length)) {
+  // providerContent may hold another provider's items (OpenAI Responses
+  // output after a model switch); Netra only takes reasoning_details items.
+  const reasoningDetails =
+    provider === "netra"
+      ? message.providerContent?.filter((item) =>
+          String(readRecord(item).type ?? "").startsWith("reasoning.")
+        )
+      : undefined;
+
+  if (thinking && !reasoningDetails?.length) {
     result.reasoning_content = thinking;
   }
 
-  if (provider === "netra" && message.providerContent?.length) {
-    result.reasoning_details = message.providerContent;
+  if (reasoningDetails?.length) {
+    result.reasoning_details = reasoningDetails;
   }
 
   if (message.toolCalls?.length) {

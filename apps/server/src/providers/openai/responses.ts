@@ -33,6 +33,44 @@ const responseContentPartSchema = z
   })
   .passthrough();
 
+// Input item types the Responses API accepts, as listed in its
+// invalid_request_error for an unknown type.
+const RESPONSES_INPUT_ITEM_TYPES: ReadonlySet<string> = new Set([
+  "additional_tools",
+  "agent_message",
+  "apply_patch_call",
+  "apply_patch_call_output",
+  "code_interpreter_call",
+  "compaction",
+  "compaction_trigger",
+  "computer_call",
+  "computer_call_output",
+  "custom_tool_call",
+  "custom_tool_call_output",
+  "file_search_call",
+  "function_call",
+  "function_call_output",
+  "image_generation_call",
+  "item_reference",
+  "local_shell_call",
+  "local_shell_call_output",
+  "mcp_approval_request",
+  "mcp_approval_response",
+  "mcp_call",
+  "mcp_list_tools",
+  "message",
+  "multi_agent_call",
+  "multi_agent_call_output",
+  "program",
+  "program_output",
+  "reasoning",
+  "shell_call",
+  "shell_call_output",
+  "tool_search_call",
+  "tool_search_output",
+  "web_search_call",
+]);
+
 const responseItemSchema = z
   .object({
     action: z.unknown().optional(),
@@ -309,20 +347,29 @@ function toResponsesAssistantInput(
 ): ResponsesInputItem[] {
   const input: ResponsesInputItem[] = [];
 
+  // providerContent may come from another provider in the same chat, such as
+  // Netra's reasoning_details ("reasoning.text"). The Responses API rejects
+  // the whole request on an unknown item type, so replay only its own items.
   const providerContent = message.providerContent?.flatMap((part) => {
     const parsed = responseItemSchema.safeParse(part);
 
-    return parsed.success ? [parsed.data] : [];
+    return parsed.success && RESPONSES_INPUT_ITEM_TYPES.has(parsed.data.type)
+      ? [parsed.data]
+      : [];
   });
+
+  // A replayed message item already carries the assistant text; sending
+  // message.content as well would replay the same text twice.
+  const replaysText = providerContent?.some((item) => item.type === "message");
 
   if (message.toolCalls?.length) {
     if (providerContent?.length) {
-      // providerContent already carries the assistant message item; pushing
-      // message.content as well would replay the same text twice.
       input.push(
         ...providerContent.filter((item) => item.type !== "function_call")
       );
-    } else if (message.content.trim()) {
+    }
+
+    if (!replaysText && message.content.trim()) {
       input.push(toResponsesAssistantTextMessage(message.content));
     }
 
@@ -340,11 +387,9 @@ function toResponsesAssistantInput(
 
   if (providerContent?.length) {
     input.push(...providerContent);
-
-    return input;
   }
 
-  if (message.content.trim()) {
+  if (!replaysText && message.content.trim()) {
     input.push(toResponsesAssistantTextMessage(message.content));
   }
 
