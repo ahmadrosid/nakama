@@ -118,7 +118,14 @@ export function AgentQuestionnaireQuestion({
                 >
                   {choiceIndex + 1}.
                 </span>
-                {choice.label}
+                <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+                  {choice.label}
+                  {choice.recommended ? (
+                    <span className="ml-auto shrink-0 rounded-full bg-primary/10 px-2 py-0.5 font-medium text-primary text-xs">
+                      Recommended
+                    </span>
+                  ) : null}
+                </span>
               </button>
             );
           })}
