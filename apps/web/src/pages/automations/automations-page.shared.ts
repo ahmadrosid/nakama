@@ -191,13 +191,16 @@ export function formatRunDuration(
   return remainder > 0 ? `${minutes}m ${remainder}s` : `${minutes}m`;
 }
 
+// Steps that divide 24, so the gap across midnight matches the others.
+export const HOURLY_INTERVALS = ["1", "2", "3", "4", "6", "8", "12"];
+
 export function readSchedulePreset(trigger: AutomationTrigger) {
   if (trigger.type !== "schedule") {
     return null;
   }
 
   const match =
-    /^(\d|[0-5]\d) (\d|1\d|2[0-3]) (\*|[1-9]|[12]\d|3[01]) \* (\*|1-5|[0-6])$/.exec(
+    /^(\d|[0-5]\d) (\*(?:\/\d{1,2})?|\d|1\d|2[0-3]) (\*|[1-9]|[12]\d|3[01]) \* (\*|1-5|[0-6])$/.exec(
       trigger.cron.trim()
     );
 
@@ -207,16 +210,29 @@ export function readSchedulePreset(trigger: AutomationTrigger) {
 
   const [, minute, hour, day, weekday] = match;
 
-  if (day !== "*" && weekday !== "*") {
+  const hourly = hour.startsWith("*");
+
+  const everyHours = hour === "*" ? "1" : hour.slice(2);
+
+  if (
+    (day !== "*" && weekday !== "*") ||
+    (hourly &&
+      (day !== "*" ||
+        weekday !== "*" ||
+        !HOURLY_INTERVALS.includes(everyHours)))
+  ) {
     return null;
   }
 
   return {
     day,
+    everyHours,
     frequency:
       day === "*"
         ? weekday === "*"
-          ? "daily"
+          ? hourly
+            ? "hourly"
+            : "daily"
           : weekday === "1-5"
             ? "weekdays"
             : "weekly"
@@ -253,8 +269,17 @@ export function schedulePresetTrigger(
           : "1"
         : "*";
 
+  const hour =
+    frequency === "hourly"
+      ? preset?.frequency === "hourly"
+        ? preset.hour
+        : "*"
+      : preset && preset.frequency !== "hourly"
+        ? preset.hour
+        : "7";
+
   return {
-    cron: `${preset?.minute ?? "0"} ${preset?.hour ?? "7"} ${day} * ${weekday}`,
+    cron: `${preset?.minute ?? "0"} ${hour} ${day} * ${weekday}`,
     timezone: trigger.type === "manual" ? undefined : trigger.timezone,
     type: "schedule",
   };
