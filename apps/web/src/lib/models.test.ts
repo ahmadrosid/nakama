@@ -367,10 +367,6 @@ describe("effectiveProfileModelSelection", () => {
   });
 });
 
-describe("knownModelSelection", () => {
-  const groups = group("openai-1", "openai");
-});
-
 describe("isOpenCodeZenBaseUrl", () => {
   test("matches Zen v1 and rejects OpenCode Go", () => {
     expect(isOpenCodeZenBaseUrl("https://opencode.ai/zen/v1")).toBe(true);
