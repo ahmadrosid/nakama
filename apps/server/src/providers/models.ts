@@ -8,6 +8,7 @@ import {
 } from "@nakama/core";
 import {
   NETRA_AGENT_MODEL_ID,
+  netraModelSupportsVision,
   resolveNetraModelId,
 } from "@nakama/core/discovery-providers";
 import {
@@ -325,6 +326,12 @@ export function modelSupportsVision(
   provider: ProviderName,
   customModels?: CustomModelEntry[]
 ): boolean | undefined {
+  // Netra serves a fixed set of models, so its own catalog wins over saved
+  // entries, which may carry a stale flag or none.
+  if (provider === "netra") {
+    return netraModelSupportsVision(modelId);
+  }
+
   const custom = findCustomModel(customModels, modelId);
 
   if (custom?.supportsVision !== undefined) {
