@@ -75,6 +75,12 @@ test("daily cron reads as plain words and other triggers stay readable", () => {
   expect(describeTrigger({ cron: "*/5 * * * *", type: "schedule" }).label).toBe(
     "Custom schedule"
   );
+  expect(describeTrigger({ cron: "5 * * * *", type: "schedule" }).label).toBe(
+    "Every hour at :05"
+  );
+  expect(
+    describeTrigger({ cron: "30 */3 * * *", type: "schedule" }).label
+  ).toBe("Every 3 hours at :30");
   expect(describeTrigger({ type: "manual" }).label).toBe("Manual only");
 });
 

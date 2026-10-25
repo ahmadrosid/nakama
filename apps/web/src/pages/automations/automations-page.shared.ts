@@ -82,6 +82,15 @@ export function describeTrigger(
     return { label: `Once, ${trigger.at}`, note: trigger.timezone };
   }
 
+  const preset = readSchedulePreset(trigger);
+
+  if (preset?.frequency === "hourly") {
+    return {
+      label: `${preset.everyHours === "1" ? "Every hour" : `Every ${preset.everyHours} hours`} at :${preset.minute.padStart(2, "0")}`,
+      note: trigger.timezone,
+    };
+  }
+
   const daily = DAILY_CRON.exec(trigger.cron.trim());
 
   if (daily) {
