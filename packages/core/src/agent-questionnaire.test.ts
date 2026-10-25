@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   formatAgentQuestionnaireAnswersMessage,
+  formatAgentQuestionnaireMessage,
   tryParseChannelQuestionnaireAnswers,
 } from "./agent-questionnaire";
 import type { AgentQuestionnaire } from "./contract";
@@ -83,4 +84,28 @@ describe("tryParseChannelQuestionnaireAnswers", () => {
       "Answers"
     );
   });
+});
+
+test("channel questionnaires flag the recommended choice", () => {
+  const [question] = singleQuestion.questions;
+
+  const text = formatAgentQuestionnaireMessage({
+    ...singleQuestion,
+    questions: [
+      {
+        ...question!,
+        choices: [
+          {
+            id: "playwright",
+            label: "Build Playwright e2e",
+            recommended: true,
+          },
+          { id: "manual", label: "Manual steps only" },
+        ],
+      },
+    ],
+  });
+
+  expect(text).toContain("a) Build Playwright e2e (recommended)");
+  expect(text).toContain("b) Manual steps only\n");
 });

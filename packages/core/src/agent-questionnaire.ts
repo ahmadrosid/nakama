@@ -29,7 +29,9 @@ export function formatAgentQuestionnaireMessage(
     lines.push(`${questionIndex + 1}. ${question.prompt.trim()}`);
 
     question.choices.forEach((choice, choiceIndex) => {
-      lines.push(`   ${choiceLetter(choiceIndex)}) ${choice.label.trim()}`);
+      lines.push(
+        `   ${choiceLetter(choiceIndex)}) ${choice.label.trim()}${choice.recommended ? " (recommended)" : ""}`
+      );
     });
 
     if (question.allowCustomAnswer) {
