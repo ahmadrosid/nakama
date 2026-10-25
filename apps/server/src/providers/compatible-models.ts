@@ -615,6 +615,8 @@ export async function fetchRemoteOpenAIModels(
 
 const netraOutputLimits = new Map<string, Promise<number | undefined>>();
 
+const NETRA_MODELS_TIMEOUT_MS = 3000;
+
 const netraModelsSchema = z.object({
   data: z.array(
     z.object({
@@ -647,6 +649,9 @@ export function fetchNetraMaxOutputTokens(
         Accept: "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
+      // Each chat request waits on this lookup, so a slow /v1/models must
+      // not hold the reply: give up and send the 32k fallback.
+      signal: AbortSignal.timeout(NETRA_MODELS_TIMEOUT_MS),
     });
 
     if (!response.ok) {

@@ -101,6 +101,36 @@ test("Netra output limit is read once and a failed read is retried", async () =>
   expect(calls).toBe(2);
 });
 
+test("a Netra output limit lookup that times out falls back and is retried", async () => {
+  let calls = 0;
+  globalThis.fetch = asTestFetch(
+    async (_input: RequestInfo | URL, init?: RequestInit) => {
+      calls += 1;
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+
+      if (calls === 1) {
+        throw new DOMException("The operation timed out.", "TimeoutError");
+      }
+
+      return Response.json({
+        data: [
+          {
+            id: "deepseek/deepseek-v4.1-flash",
+            top_provider: { max_completion_tokens: 131_072 },
+          },
+        ],
+      });
+    }
+  );
+
+  const read = () =>
+    fetchNetraMaxOutputTokens("timeout-key", "deepseek/deepseek-v4.1-flash");
+
+  expect(await read()).toBeUndefined();
+  expect(await read()).toBe(131_072);
+  expect(calls).toBe(2);
+});
+
 test("Netra discovery keeps only the migration target", async () => {
   globalThis.fetch = asTestFetch(
     mock(async (input: RequestInfo | URL, init?: RequestInit) => {
