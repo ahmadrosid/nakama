@@ -11,6 +11,7 @@ import {
   resolveNetraModelId,
 } from "@nakama/core/discovery-providers";
 import OpenAI from "openai";
+import { z } from "zod";
 import { AVAILABLE_MODELS, type ProviderModelOption } from "./model-catalog";
 import { openRouterSlugSupportsThinking } from "./openrouter/thinking";
 import {
@@ -610,6 +611,61 @@ export async function fetchRemoteOpenAIModels(
   }
 
   return fetchRemoteOpenAIModelsRaw(normalized, apiKey);
+}
+
+const netraOutputLimits = new Map<string, Promise<number | undefined>>();
+
+const netraModelsSchema = z.object({
+  data: z.array(
+    z.object({
+      id: z.string(),
+      top_provider: z
+        .object({
+          max_completion_tokens: z.number().int().positive().nullish(),
+        })
+        .nullish(),
+    })
+  ),
+});
+
+/** The output limit `/v1/models` reports for a Netra model, read once per
+ * process. A failed lookup is not cached, so the next request tries again. */
+export function fetchNetraMaxOutputTokens(
+  apiKey: string,
+  modelId: string
+): Promise<number | undefined> {
+  const key = `${apiKey}\u0000${modelId}`;
+  const cached = netraOutputLimits.get(key);
+
+  if (cached) {
+    return cached;
+  }
+
+  const lookup: Promise<number | undefined> = (async () => {
+    const response = await fetch(`${defaultDiscoveryBaseUrl("netra")}/models`, {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Netra models request failed (${response.status}).`);
+    }
+
+    const { data } = netraModelsSchema.parse(await response.json());
+
+    return (
+      data.find((entry) => entry.id === modelId)?.top_provider
+        ?.max_completion_tokens ?? undefined
+    );
+  })().catch((): undefined => {
+    netraOutputLimits.delete(key);
+  });
+
+  netraOutputLimits.set(key, lookup);
+
+  return lookup;
 }
 
 export async function fetchNetraModels(

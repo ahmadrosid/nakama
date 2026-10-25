@@ -5,6 +5,7 @@ import { serve } from "bun";
 import {
   compatibleModelSupportsThinking,
   customModelEntryFromRemoteRecord,
+  fetchNetraMaxOutputTokens,
   fetchNetraModels,
   fetchRemoteOpenAIModels,
   getModelsForProviderInstance,
@@ -70,6 +71,34 @@ test("instances without a shortlist expose their provider catalog", () => {
       catalog.map((model) => model.id)
     );
   }
+});
+
+test("Netra output limit is read once and a failed read is retried", async () => {
+  let calls = 0;
+  globalThis.fetch = asTestFetch(async () => {
+    calls += 1;
+
+    if (calls === 1) {
+      return new Response("busy", { status: 503 });
+    }
+
+    return Response.json({
+      data: [
+        {
+          id: "deepseek/deepseek-v4.1-flash",
+          top_provider: { max_completion_tokens: 131_072 },
+        },
+      ],
+    });
+  });
+
+  const read = () =>
+    fetchNetraMaxOutputTokens("cache-key", "deepseek/deepseek-v4.1-flash");
+
+  expect(await read()).toBeUndefined();
+  expect(await read()).toBe(131_072);
+  expect(await read()).toBe(131_072);
+  expect(calls).toBe(2);
 });
 
 test("Netra discovery keeps only the migration target", async () => {
