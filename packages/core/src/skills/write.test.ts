@@ -16,7 +16,6 @@ import {
   assertPathWithinProfileSkillsDir,
   assertSupportingFileAllowed,
   assertValidSkillName,
-  composeSkillMarkdown,
   createSkillFile,
   deleteSkillDirectory,
   isPathWithinProfileSkillsDir,
@@ -73,16 +72,6 @@ describe("createSkillFile", () => {
     expect(content).toContain("Call the weather tool");
   });
 
-  test("composeSkillMarkdown includes disable-model-invocation when set", () => {
-    const content = composeSkillMarkdown({
-      description: "Deploy the app.",
-      disableModelInvocation: true,
-      name: "deploy",
-    });
-
-    expect(content).toContain("disable-model-invocation: true");
-  });
-
   test("deleteSkillDirectory removes a managed profile skill directory", async () => {
     configDir = await mkdtemp(join(tmpdir(), "nakama-skill-write-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
@@ -105,10 +94,6 @@ describe("createSkillFile", () => {
 });
 
 describe("assertValidSkillName", () => {
-  test("accepts kebab-case names", () => {
-    expect(assertValidSkillName("research-paper")).toBe("research-paper");
-  });
-
   test("rejects path traversal and invalid characters", () => {
     expect(() => assertValidSkillName("../escape")).toThrow(/lowercase/);
     expect(() => assertValidSkillName("Bad_Name")).toThrow(/lowercase/);

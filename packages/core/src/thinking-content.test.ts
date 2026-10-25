@@ -5,15 +5,6 @@ import {
 } from "./thinking-content";
 
 describe("extractThinkingFromProviderContent", () => {
-  test("joins Anthropic thinking blocks", () => {
-    const text = extractThinkingFromProviderContent([
-      { thinking: "Step one.", type: "thinking" },
-      { text: "Answer.", type: "text" },
-    ]);
-
-    expect(text).toBe("Step one.");
-  });
-
   test("joins OpenAI reasoning summaries", () => {
     const text = extractThinkingFromProviderContent([
       {

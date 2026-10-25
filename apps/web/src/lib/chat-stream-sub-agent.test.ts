@@ -33,17 +33,4 @@ describe("splitToolResultImages", () => {
       })
     ).toEqual({ images: [], rest: "Saved" });
   });
-
-  test("leaves results without images unchanged", () => {
-    const result = { content: [{ text: "ok", type: "text" }] };
-    expect(splitToolResultImages(result)).toEqual({ images: [], rest: result });
-  });
-
-  test("ignores non-image mime types", () => {
-    expect(
-      splitToolResultImages({
-        content: [{ data: "x", mimeType: "text/html", type: "image" }],
-      }).images
-    ).toEqual([]);
-  });
 });

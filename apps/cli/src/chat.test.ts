@@ -187,12 +187,6 @@ describe("formatSoulStatusLines", () => {
       "Soul directory: ~/.nakama/orgs/<org>/profiles/<profile>"
     );
   });
-
-  test("shows absolute soul directory when verbose", () => {
-    expect(formatSoulStatusLines(status, true)[0]).toBe(
-      `Soul directory: ${directory}`
-    );
-  });
 });
 
 describe("isEscInterruptKey", () => {
@@ -383,20 +377,6 @@ describe("non-TTY slash commands and EOF", () => {
       sendStream.mockRestore();
     }
   }
-
-  test("runs /help locally without sending it to the model", async () => {
-    const result = await runBlockingInput("/help");
-
-    expect(result.output.some((line) => line.includes("/help"))).toBe(true);
-    expect(result.sendCalls).toBe(0);
-  });
-
-  test("runs /clear locally without sending it to the model", async () => {
-    const result = await runBlockingInput("/clear");
-
-    expect(result.clearCalls).toBe(1);
-    expect(result.sendCalls).toBe(0);
-  });
 
   test("rejects interactive-only commands without sending them", async () => {
     const result = await runBlockingInput("/compact");

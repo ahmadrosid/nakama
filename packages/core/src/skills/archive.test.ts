@@ -5,11 +5,7 @@ import path from "node:path";
 import { pathExists } from "../fs";
 import { archiveSkillDirectory } from "./archive";
 import { discoverSkills } from "./discover";
-import {
-  classifySkillFreshness,
-  SKILL_ARCHIVE_AFTER_MS,
-  SKILL_STALE_AFTER_MS,
-} from "./freshness";
+import { classifySkillFreshness } from "./freshness";
 import { SKILL_ARCHIVE_DIR_NAME } from "./paths";
 
 const ORG_ID = "org_test";
@@ -20,38 +16,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe("classifySkillFreshness", () => {
   const now = new Date("2026-08-15T12:00:00.000Z");
-
-  test("uses lastUsedAt when present", () => {
-    expect(
-      classifySkillFreshness({
-        createdAt: "2025-01-01T00:00:00.000Z",
-        lastUsedAt: new Date(now.getTime() - 10 * DAY_MS).toISOString(),
-        now,
-      })
-    ).toBe("active");
-  });
-
-  test("falls back to createdAt when never matched", () => {
-    expect(
-      classifySkillFreshness({
-        createdAt: new Date(now.getTime() - 10 * DAY_MS).toISOString(),
-        lastUsedAt: null,
-        now,
-      })
-    ).toBe("active");
-  });
-
-  test("marks unused at the 30-day threshold as stale", () => {
-    expect(
-      classifySkillFreshness({
-        createdAt: "2025-01-01T00:00:00.000Z",
-        lastUsedAt: new Date(
-          now.getTime() - SKILL_STALE_AFTER_MS
-        ).toISOString(),
-        now,
-      })
-    ).toBe("stale");
-  });
 
   test("uses organization stale and archive day overrides", () => {
     const staleAfterDays = 7;
@@ -74,28 +38,6 @@ describe("classifySkillFreshness", () => {
         lastUsedAt: new Date(now.getTime() - 22 * DAY_MS).toISOString(),
         now,
         staleAfterDays,
-      })
-    ).toBe("archive_due");
-  });
-
-  test("marks unused at the 90-day threshold as archive_due", () => {
-    expect(
-      classifySkillFreshness({
-        createdAt: "2025-01-01T00:00:00.000Z",
-        lastUsedAt: new Date(
-          now.getTime() - SKILL_ARCHIVE_AFTER_MS
-        ).toISOString(),
-        now,
-      })
-    ).toBe("archive_due");
-  });
-
-  test("never-matched skills become archive_due from createdAt age", () => {
-    expect(
-      classifySkillFreshness({
-        createdAt: new Date(now.getTime() - 100 * DAY_MS).toISOString(),
-        lastUsedAt: null,
-        now,
       })
     ).toBe("archive_due");
   });

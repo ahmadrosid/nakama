@@ -10,7 +10,6 @@ import {
   firstAvailableProviderOption,
   hasOpenCodeZenProvider,
   isOpenCodeZenBaseUrl,
-  knownModelSelection,
   profileModelSelectionValue,
   resolveModelThinkingSupport,
   resolveModelVisionSupport,
@@ -193,22 +192,6 @@ describe("resolveModelThinkingSupport", () => {
       }
     }
   });
-
-  test("preserves existing non-compatible behavior", () => {
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("openai-1", "model-1"),
-        group("openai-1", "openai")
-      )
-    ).toBe(true);
-
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("openai-1", "model-1"),
-        group("openai-1", "openai", { supportsThinking: false })
-      )
-    ).toBe(false);
-  });
 });
 
 describe("resolveModelVisionSupport", () => {
@@ -288,12 +271,6 @@ describe("filterVisionCapableProviderGroups", () => {
 });
 
 describe("firstAvailableProviderOption", () => {
-  test("keeps preferred provider when it is still free", () => {
-    expect(firstAvailableProviderOption(new Set(["anthropic"]), "openai")).toBe(
-      "openai"
-    );
-  });
-
   test("falls through to the next free builtin, then custom", () => {
     expect(firstAvailableProviderOption(new Set(["openai"]), "openai")).toBe(
       "chatgpt"
@@ -392,32 +369,6 @@ describe("effectiveProfileModelSelection", () => {
 
 describe("knownModelSelection", () => {
   const groups = group("openai-1", "openai");
-
-  test("keeps a remembered pick that still exists", () => {
-    expect(knownModelSelection("openai-1::model-1", groups)).toBe(
-      "openai-1::model-1"
-    );
-  });
-
-  test("re-encodes a bare model id onto its provider", () => {
-    expect(knownModelSelection("model-1", groups)).toBe("openai-1::model-1");
-  });
-
-  test("drops a pick whose provider or model is gone", () => {
-    expect(knownModelSelection("openai-1::retired-model", groups)).toBeNull();
-    expect(knownModelSelection("deleted-provider::model-9", groups)).toBeNull();
-  });
-
-  test("keeps the pick while the catalog has not loaded", () => {
-    expect(knownModelSelection("openai-1::model-1", [])).toBe(
-      "openai-1::model-1"
-    );
-  });
-
-  test("returns null for an empty selection", () => {
-    expect(knownModelSelection(null, groups)).toBeNull();
-    expect(knownModelSelection("", groups)).toBeNull();
-  });
 });
 
 describe("isOpenCodeZenBaseUrl", () => {

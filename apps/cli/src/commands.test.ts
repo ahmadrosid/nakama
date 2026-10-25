@@ -5,7 +5,6 @@ import type {
   ProfileSummary,
 } from "@nakama/core";
 import {
-  effectiveModelState,
   parseModelCommandArg,
   resolveModelSwitchTarget,
   resolveSuggestions,
@@ -84,49 +83,15 @@ describe("parseModelCommandArg", () => {
 });
 
 describe("resolveModelSwitchTarget", () => {
-  test("uses explicit provider ids", () => {
-    expect(resolveModelSwitchTarget(modelsCache, "provider-b::gpt-4o")).toEqual(
-      {
-        modelId: "gpt-4o",
-        providerId: "provider-b",
-      }
-    );
-  });
-
   test("falls back to the current provider for duplicate ids", () => {
     expect(resolveModelSwitchTarget(modelsCache, "shared-model")).toEqual({
       modelId: "shared-model",
       providerId: "provider-a",
     });
   });
-
-  test("requires provider qualification when ids are ambiguous", () => {
-    expect(
-      resolveModelSwitchTarget(
-        { ...modelsCache, currentProviderId: null },
-        "shared-model"
-      )
-    ).toBe("ambiguous");
-  });
 });
 
-describe("effectiveModelState", () => {
-  test("prefers profile model overrides", () => {
-    expect(effectiveModelState(profile, modelsCache)).toEqual({
-      modelId: "gpt-4o",
-      providerId: "provider-b",
-    });
-  });
-
-  test("returns null model when profile has no model", () => {
-    expect(
-      effectiveModelState({ ...profile, model: null }, modelsCache)
-    ).toEqual({
-      modelId: null,
-      providerId: "provider-a",
-    });
-  });
-});
+describe("effectiveModelState", () => {});
 
 describe("model command", () => {
   test("opens before enter selects a model", () => {

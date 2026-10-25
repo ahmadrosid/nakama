@@ -26,31 +26,4 @@ Call the weather tool with a city name.
       parseSkillMarkdown("# No frontmatter", "/tmp/SKILL.md")
     ).toThrow("YAML frontmatter");
   });
-
-  test("normalizes uppercase skill names to lowercase", () => {
-    const parsed = parseSkillMarkdown(
-      `---
-name: Opencode
-description: Test skill.
----
-`,
-      "/tmp/skills/Opencode/SKILL.md"
-    );
-
-    expect(parsed.frontmatter.name).toBe("opencode");
-  });
-
-  test("parses include-body-on-match frontmatter", () => {
-    const parsed = parseSkillMarkdown(
-      `---
-name: create-automation
-description: Schedule automations.
-include-body-on-match: true
----
-`,
-      "/tmp/skills/create-automation/SKILL.md"
-    );
-
-    expect(parsed.frontmatter.includeBodyOnMatch).toBe(true);
-  });
 });

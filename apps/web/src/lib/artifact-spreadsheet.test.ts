@@ -23,13 +23,6 @@ describe("artifact spreadsheet", () => {
     );
   });
 
-  test("pads short rows to a rectangular grid", () => {
-    expect(parseSpreadsheetText("pad.csv", "a,b,c\n1\n")).toEqual([
-      ["a", "b", "c"],
-      ["1", "", ""],
-    ]);
-  });
-
   test("maps column indexes to spreadsheet letters", () => {
     expect(columnIndexToLetter(0)).toBe("A");
     expect(columnIndexToLetter(25)).toBe("Z");

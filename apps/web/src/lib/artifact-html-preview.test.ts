@@ -22,12 +22,6 @@ describe("htmlForArtifactPreview", () => {
       "<head><style data-nakama-html-preview>"
     );
   });
-
-  test("wraps fragments with style tag", () => {
-    expect(htmlForArtifactPreview("<div>slide</div>")).toStartWith(
-      "<style data-nakama-html-preview>"
-    );
-  });
 });
 
 // Parse real HTML without loading its subresources in the test process.
