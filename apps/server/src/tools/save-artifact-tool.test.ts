@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   getProfileSoulDir,
+  runDeleteFile,
   runWriteFile,
   type ToolContext,
 } from "@nakama/core";
@@ -335,9 +336,45 @@ describe("write_file under artifacts/", () => {
       runWriteFile({ content: "x", path: "artifacts/a.md" }, scope)
     ).rejects.toThrow();
 
+    const existing = await runWriteFile(
+      { content: "x", path: "artifacts/b.md" },
+      { orgId: "org_a", profileId: "profile_a" }
+    );
+
+    await expect(
+      runWriteFile({ content: "y", path: existing.path }, scope)
+    ).rejects.toThrow();
+
+    expect(await readFile(existing.path, "utf8")).toBe("x");
+
     const other = await runWriteFile({ content: "x", path: "notes.md" }, scope);
 
     expect(await readFile(other.path, "utf8")).toBe("x");
+  });
+
+  test("delete_file is refused under artifacts/ when save_artifact is assigned", async () => {
+    const owner = { orgId: "org_a", profileId: "profile_a" };
+    const scope = { ...owner, forbidArtifactFileWrites: true };
+
+    const artifact = await runWriteFile(
+      { content: "x", path: "artifacts/a.md" },
+      owner
+    );
+
+    await expect(
+      runDeleteFile({ path: "artifacts/a.md" }, scope)
+    ).rejects.toThrow();
+    await expect(
+      runDeleteFile({ path: artifact.path }, scope)
+    ).rejects.toThrow();
+
+    expect(await readFile(artifact.path, "utf8")).toBe("x");
+
+    const other = await runWriteFile({ content: "x", path: "notes.md" }, scope);
+
+    await runDeleteFile({ path: "notes.md" }, scope);
+
+    await expect(access(other.path)).rejects.toThrow();
   });
 
   test("still works when save_artifact is not assigned", async () => {
