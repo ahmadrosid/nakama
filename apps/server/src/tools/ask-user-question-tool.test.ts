@@ -115,6 +115,40 @@ test("ask_user_question accepts legacy choice objects", async () => {
   });
 });
 
+test("ask_user_question lists one recommended choice first without the marker", async () => {
+  const { tool, state } = await createTool();
+
+  await tool.run(
+    {
+      questions: [
+        {
+          choices: ["Postgres", "SQLite (Recommended)", "MySQL (Recommended)"],
+          prompt: "Which database?",
+        },
+      ],
+      title: "Need input",
+    },
+    { sessionId: "session_test" }
+  );
+
+  const stored = await state.get("session_test");
+  expect(stored?.questions[0]?.choices).toEqual([
+    { id: "sqlite", label: "SQLite", recommended: true },
+    { id: "postgres", label: "Postgres" },
+    { id: "mysql", label: "MySQL" },
+  ]);
+
+  await expect(
+    tool.run(
+      {
+        questions: [{ choices: ["(Recommended)"], prompt: "Which database?" }],
+        title: "Need input",
+      },
+      { sessionId: "session_test" }
+    )
+  ).rejects.toThrow();
+});
+
 test("ask_user_question rejects invalid questions without storing partial data", async () => {
   const { tool, state } = await createTool();
 
