@@ -51,6 +51,7 @@ import {
 import {
   automationRunMessages,
   formatRunDuration,
+  HOURLY_INTERVALS,
   previewAutomationSchedule,
   readSchedulePreset,
   runPreviewText,
@@ -220,6 +221,10 @@ const TIME_OPTIONS = Array.from({ length: 96 }, (_, index) => {
     value: `${String(hour).padStart(2, "0")}:${minute}`,
   };
 });
+
+function hoursLabel(hours: string) {
+  return hours === "1" ? "1 hour" : `${hours} hours`;
+}
 
 const WEEKDAYS = [
   "Sunday",
@@ -428,6 +433,7 @@ function AutomationScheduleFields({
           {(
             [
               ["manual", "Only when I ask"],
+              ["hourly", "Hourly"],
               ["daily", "Every day"],
               ["weekdays", "Weekdays"],
               ["weekly", "Weekly"],
@@ -477,6 +483,60 @@ function AutomationScheduleFields({
               </SelectContent>
             </Select>
           </Field>
+        ) : null}
+        {preset?.frequency === "hourly" && scheduleTrigger ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Every">
+              <Select
+                disabled={busy}
+                onValueChange={(value) =>
+                  onChange({
+                    trigger: {
+                      ...scheduleTrigger,
+                      cron: `${preset.minute} ${value === "1" ? "*" : `*/${value}`} * * *`,
+                    },
+                  })
+                }
+                value={preset.everyHours}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue>{hoursLabel(preset.everyHours)}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {HOURLY_INTERVALS.map((hours) => (
+                    <SelectItem key={hours} value={hours}>
+                      {hoursLabel(hours)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="At minute">
+              <Select
+                disabled={busy}
+                onValueChange={(value) =>
+                  onChange({
+                    trigger: {
+                      ...scheduleTrigger,
+                      cron: `${value} ${preset.hour} * * *`,
+                    },
+                  })
+                }
+                value={preset.minute}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue>:{preset.minute.padStart(2, "0")}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 60 }, (_, index) => (
+                    <SelectItem key={index} value={String(index)}>
+                      :{String(index).padStart(2, "0")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
         ) : null}
         {preset?.frequency === "monthly" && scheduleTrigger ? (
           <Field label="Day of the month">
@@ -592,7 +652,7 @@ function AutomationTimeFields({
 
   return (
     <>
-      {preset ? (
+      {preset && preset.frequency !== "hourly" ? (
         <fieldset className="min-w-0">
           <legend className="mb-2 font-semibold text-sm">What time?</legend>
           <div className="grid grid-cols-2 gap-2">
