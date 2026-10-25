@@ -149,6 +149,13 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         throw new Error("This Netra model needs a verified tool-turn test.");
       }
 
+      // Start the one lookup now, so it is usually done by the first request.
+      if (
+        !findCustomModel(options.instance?.customModels, model)?.maxOutputTokens
+      ) {
+        fetchNetraMaxOutputTokens(options.apiKey, model);
+      }
+
       return createOpenAICompatibleProvider({
         apiKey: options.apiKey,
         baseUrl: discoveryBaseUrl!,

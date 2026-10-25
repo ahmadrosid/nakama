@@ -613,9 +613,16 @@ export async function fetchRemoteOpenAIModels(
   return fetchRemoteOpenAIModelsRaw(normalized, apiKey);
 }
 
-const netraOutputLimits = new Map<string, Promise<number | undefined>>();
+type NetraOutputLimit = {
+  lookup: Promise<number | undefined>;
+  failedAt?: number;
+};
+
+const netraOutputLimits = new Map<string, NetraOutputLimit>();
 
 const NETRA_MODELS_TIMEOUT_MS = 3000;
+
+const NETRA_MODELS_RETRY_MS = 10 * 60_000;
 
 const netraModelsSchema = z.object({
   data: z.array(
@@ -631,25 +638,34 @@ const netraModelsSchema = z.object({
 });
 
 /** The output limit `/v1/models` reports for a Netra model, read once per
- * process. A failed lookup is not cached, so the next request tries again. */
+ * process and API key. A failed lookup resolves to undefined and is retried
+ * no sooner than NETRA_MODELS_RETRY_MS, so a down endpoint costs one request,
+ * not one per chat turn. */
 export function fetchNetraMaxOutputTokens(
   apiKey: string,
-  modelId: string
+  modelId: string,
+  now = Date.now()
 ): Promise<number | undefined> {
   const key = `${apiKey}\u0000${modelId}`;
   const cached = netraOutputLimits.get(key);
 
-  if (cached) {
-    return cached;
+  if (
+    cached &&
+    (cached.failedAt === undefined ||
+      now - cached.failedAt < NETRA_MODELS_RETRY_MS)
+  ) {
+    return cached.lookup;
   }
 
-  const lookup: Promise<number | undefined> = (async () => {
+  const entry: NetraOutputLimit = { lookup: Promise.resolve(undefined) };
+
+  entry.lookup = (async () => {
     const response = await fetch(`${defaultDiscoveryBaseUrl("netra")}/models`, {
       headers: {
         Accept: "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      // Each chat request waits on this lookup, so a slow /v1/models must
+      // A chat request may wait on this lookup, so a slow /v1/models must
       // not hold the reply: give up and send the 32k fallback.
       signal: AbortSignal.timeout(NETRA_MODELS_TIMEOUT_MS),
     });
@@ -665,12 +681,12 @@ export function fetchNetraMaxOutputTokens(
         ?.max_completion_tokens ?? undefined
     );
   })().catch((): undefined => {
-    netraOutputLimits.delete(key);
+    entry.failedAt = Date.now();
   });
 
-  netraOutputLimits.set(key, lookup);
+  netraOutputLimits.set(key, entry);
 
-  return lookup;
+  return entry.lookup;
 }
 
 export async function fetchNetraModels(
