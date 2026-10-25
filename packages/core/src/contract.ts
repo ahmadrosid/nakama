@@ -1102,6 +1102,8 @@ export interface AgentTodo {
 export interface AgentQuestionChoice {
   id: string;
   label: string;
+  /** The agent's suggested answer, listed first. */
+  recommended?: boolean;
 }
 
 export interface AgentQuestionItem {
