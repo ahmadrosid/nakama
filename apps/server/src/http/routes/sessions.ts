@@ -152,6 +152,7 @@ export function registerSessionRoutes(
     .object({
       id: z.string(),
       label: z.string(),
+      recommended: z.boolean().optional(),
     })
     .openapi("AgentQuestionChoice");
 
