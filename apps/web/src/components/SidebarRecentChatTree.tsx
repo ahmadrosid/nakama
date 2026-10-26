@@ -78,12 +78,34 @@ export function useRecentChatTree(
     return a.sortPosition - b.sortPosition;
   });
 
-  const recentIds = new Set(orderedRecent.map((session) => session.id));
+  const recentById = new Map(
+    orderedRecent.map((session) => [session.id, session])
+  );
 
-  const parentOf = (session: SessionSummary) =>
-    session.parentSessionId && recentIds.has(session.parentSessionId)
-      ? session.parentSessionId
-      : null;
+  // The tree is two levels deep: nested chats hang off their top-level chat.
+  const parentOf = (session: SessionSummary) => {
+    let parentId: string | null = null;
+    let current = session;
+    const seen = new Set([session.id]);
+
+    while (current.parentSessionId) {
+      const parent = recentById.get(current.parentSessionId);
+
+      if (!parent) {
+        break;
+      }
+
+      if (seen.has(parent.id)) {
+        return null;
+      }
+
+      seen.add(parent.id);
+      parentId = parent.id;
+      current = parent;
+    }
+
+    return parentId;
+  };
 
   const childrenByParent = new Map<string | null, SessionSummary[]>();
 
@@ -391,7 +413,7 @@ export function useRecentChatTree(
       return (
         <div
           className={cn(
-            "relative rounded-md",
+            "group/branch relative rounded-md",
             // Draw the drag card inset so it looks tighter than the row slot.
             draggingId === session.id &&
               "z-10 before:absolute before:inset-x-0 before:inset-y-1 before:-z-10 before:rounded-md before:bg-sidebar before:shadow-xs before:ring-1 before:ring-border/40 [&_.sidebar-chat-row]:bg-transparent!"
@@ -406,27 +428,20 @@ export function useRecentChatTree(
           }}
         >
           {depth > 0 ? (
-            index === siblings.length - 1 ? (
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute top-0 left-0 h-[18px] w-3 rounded-bl-md border-border/60 border-b border-l"
-              />
-            ) : (
-              <>
-                <span
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-y-0 left-0 border-border/60 border-l"
-                />
-                <span
-                  aria-hidden="true"
-                  className="pointer-events-none absolute top-[17px] left-0 w-3 border-border/60 border-t"
-                />
-              </>
-            )
+            <span
+              aria-hidden="true"
+              className={cn(
+                "pointer-events-none absolute top-0 left-0 border-muted-foreground/25 border-l group-has-[[data-active]]/branch:border-muted-foreground/60",
+                // The last chat ends the line with a curve into its row.
+                index === siblings.length - 1
+                  ? "h-[18px] w-2 rounded-bl-md border-b"
+                  : "bottom-0"
+              )}
+            />
           ) : null}
           {renderSession(session, depth)}
           {children.length > 0 ? (
-            <div className="ml-4">{renderTree(session.id, depth + 1)}</div>
+            <div className="ml-2">{renderTree(session.id, depth + 1)}</div>
           ) : null}
         </div>
       );
