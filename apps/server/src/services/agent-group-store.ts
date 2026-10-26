@@ -34,7 +34,8 @@ const SCHEMA = `PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
 
 // Latest main-chat message across the group's sessions, for the list preview.
 const LAST_MESSAGE = (column: string) =>
-  `(SELECT lm.${column} FROM messages lm WHERE lm.group_id = g.id AND lm.thread_root_id IS NULL ORDER BY lm.id DESC LIMIT 1)`;
+  `(SELECT lm.${column} FROM messages lm WHERE lm.group_id = g.id AND lm.thread_root_id IS NULL
+    AND (lm.author_profile_id IS NULL OR lm.content <> '') ORDER BY lm.id DESC LIMIT 1)`;
 
 const GROUP_COLUMNS = `g.id, g.name, g.brief, g.member_ids, g.created_at, a.updated_at AS avatar_version,
   ${LAST_MESSAGE("content")} AS last_content,
@@ -543,17 +544,19 @@ export function deleteGroupSession(
   );
 }
 
-/** The newest `limit` messages of a session's main chat, oldest first. */
+/** The newest `limit` main-chat messages, oldest first; context reads omit notices before limiting. */
 export function listAgentGroupMessages(
   orgId: string,
   sessionId: string,
-  limit = 200
+  limit = 200,
+  includeNotices = true
 ): AgentGroupMessage[] {
   return withGroupDb(orgId, (db) =>
     db
       .query<MessageRow, [string, number]>(
         `SELECT * FROM (SELECT ${MESSAGE_COLUMNS}
           WHERE m.session_id = ? AND m.thread_root_id IS NULL
+          ${includeNotices ? "" : "AND (m.author_profile_id IS NULL OR m.content <> '')"}
           ORDER BY m.id DESC LIMIT ?) ORDER BY id`
       )
       .all(sessionId, limit)

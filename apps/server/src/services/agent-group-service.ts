@@ -428,8 +428,9 @@ export class AgentGroupService {
       hopsLeft: 0,
       inbox: [content],
       lastSpeaker:
-        listAgentGroupMessages(orgId, sessionId).findLast(
-          (message) => message.authorProfileId !== null
+        listAgentGroupMessages(orgId, sessionId, undefined, false).findLast(
+          (message) =>
+            message.authorProfileId !== null && message.content !== ""
         )?.authorProfileId ?? null,
       queue: [],
       speakerProfileId: null,

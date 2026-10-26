@@ -1,9 +1,10 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
 import type { AgentGroupMemoryChange } from "@nakama/core/agent-groups";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, useSearchParams } from "react-router-dom";
+import { client as apiClient } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 import { GroupMemoryPanel } from "./group-memory-panel";
 import { GroupMessageMemoryChanges } from "./group-message-files";
@@ -16,7 +17,13 @@ afterEach(async () => {
   await act(async () => root.render(null));
 });
 
-function NoticeAndPanel({ changes }: { changes?: AgentGroupMemoryChange[] }) {
+function NoticeAndPanel({
+  changes,
+  groupId = "test-memory",
+}: {
+  changes?: AgentGroupMemoryChange[];
+  groupId?: string;
+}) {
   const [params] = useSearchParams();
 
   return (
@@ -28,7 +35,7 @@ function NoticeAndPanel({ changes }: { changes?: AgentGroupMemoryChange[] }) {
             avatarVersion: null,
             brief: "",
             createdAt: "",
-            id: "test-memory",
+            id: groupId,
             lastMessage: null,
             memberIds: [],
             name: "Team",
@@ -46,6 +53,11 @@ test("ordered changes open memory and select only an entry that still exists", a
   });
 
   const content = "- Keep this\n- New price";
+
+  const read = spyOn(apiClient, "getAgentGroupMemory").mockResolvedValue({
+    content,
+    limit: 4096,
+  });
 
   const changes = [
     { newEntry: "- Added then changed", oldEntry: null },
@@ -81,12 +93,97 @@ test("ordered changes open memory and select only an entry that still exists", a
   expect(editor.value.slice(editor.selectionStart, editor.selectionEnd)).toBe(
     "- New price"
   );
-  // An old or removed line must not replace current memory or throw.
-  await act(async () => rows[0]!.querySelector("button")!.click());
-  expect(editor.value).toBe(content);
-  await act(async () => rows[2]!.querySelector("button")!.click());
-  expect(editor.value).toBe(content);
+
+  // Missing and removed entries must clear a previous entry's selection.
+  for (const index of [0, 2]) {
+    await act(async () => rows[1]!.querySelector("button")!.click());
+    await act(async () => rows[index]!.querySelector("button")!.click());
+    expect(editor.value).toBe(content);
+    expect(editor.selectionStart).toBe(editor.selectionEnd);
+  }
+
+  const setValue = Object.getOwnPropertyDescriptor(
+    window.HTMLTextAreaElement.prototype,
+    "value"
+  )?.set;
+
+  await act(async () => {
+    setValue?.call(editor, "- Unsaved draft");
+    editor.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+  expect(
+    container.querySelector<HTMLButtonElement>("#btn-save-group-memory")
+      ?.disabled
+  ).toBe(false);
+  editor.setSelectionRange(2, 9);
+  read.mockResolvedValue({ content: "- Agent changed memory", limit: 4096 });
+
+  for (const index of [1, 0, 2]) {
+    await act(async () => rows[index]!.querySelector("button")!.click());
+    await act(async () => {
+      await Bun.sleep(20);
+    });
+    expect(editor.value).toBe("- Unsaved draft");
+    expect(editor.selectionStart).toBe(2);
+    expect(editor.selectionEnd).toBe(9);
+  }
+
   client.clear();
+  read.mockRestore();
+});
+
+test("opening a notice refreshes an open panel, including repeated clicks", async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+
+  let content = "- Original fact";
+
+  const read = spyOn(apiClient, "getAgentGroupMemory").mockImplementation(
+    async () => ({ content, limit: 4096 })
+  );
+
+  try {
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <MemoryRouter initialEntries={["/?memory=1"]}>
+            <NoticeAndPanel
+              changes={[{ newEntry: "- Added fact", oldEntry: null }]}
+              groupId="refresh-memory"
+            />
+          </MemoryRouter>
+        </QueryClientProvider>
+      )
+    );
+    await act(async () => {
+      await Bun.sleep(20);
+    });
+    const editor = container.querySelector("textarea")!;
+    expect(editor.value).toBe(content);
+
+    for (const next of [
+      "- Original fact\n- Added fact",
+      "- Original fact",
+      "- Added fact",
+    ]) {
+      content = next;
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>("li button")!.click()
+      );
+      await act(async () => {
+        await Bun.sleep(20);
+      });
+      expect(editor.value).toBe(content);
+      expect(
+        editor.value.slice(editor.selectionStart, editor.selectionEnd)
+      ).toBe(content.includes("- Added fact") ? "- Added fact" : "");
+    }
+  } finally {
+    await act(async () => root.render(null));
+    client.clear();
+    read.mockRestore();
+  }
 });
 
 test("messages without changes have no notice", async () => {

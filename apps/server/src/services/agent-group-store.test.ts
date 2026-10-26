@@ -138,6 +138,38 @@ describe("agent group store", () => {
     ]);
   });
 
+  test("memory-only notices preserve the group preview across sessions", () => {
+    const group = createAgentGroup(ORG_ID, "u1", "Team", ["p1", "p2"]);
+    const first = createGroupSession(ORG_ID, group.id, "First");
+    const second = createGroupSession(ORG_ID, group.id, "Second");
+    appendAgentGroupMessage(ORG_ID, first, "p1", "Answer");
+    const preview = getAgentGroup(ORG_ID, "u1", group.id)?.lastMessage;
+
+    appendAgentGroupMessage(
+      ORG_ID,
+      second,
+      "p2",
+      "",
+      undefined,
+      [],
+      [{ newEntry: "- Saved fact", oldEntry: null }]
+    );
+    expect(getAgentGroup(ORG_ID, "u1", group.id)?.lastMessage).toEqual(preview);
+    expect(listAgentGroups(ORG_ID, "u1")[0]?.lastMessage).toEqual(preview);
+    expect(
+      listAgentGroupMessages(ORG_ID, second.id)[0]?.memoryChanges
+    ).toHaveLength(1);
+
+    // Empty user messages can carry attachments and must not be skipped.
+    appendAgentGroupMessage(ORG_ID, second, null, "", undefined, [
+      { filename: "notes.txt", text: "Attached fact" },
+    ]);
+    expect(getAgentGroup(ORG_ID, "u1", group.id)?.lastMessage).toMatchObject({
+      authorProfileId: null,
+      content: "",
+    });
+  });
+
   test("renames and pins a session, and deleting it drops its messages", () => {
     const group = createAgentGroup(ORG_ID, "u1", "Launch", ["p1", "p2"]);
     const session = createGroupSession(ORG_ID, group.id, "Kickoff");
