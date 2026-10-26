@@ -2386,6 +2386,8 @@ export interface CreateMcpServerRequest {
   name: string;
   /** When testing an existing server, merges blank header/env values with stored secrets. */
   serverId?: string;
+  /** Start the browser sign-in even when the server answers without credentials. */
+  signIn?: boolean;
   transport: McpTransport;
 }
 
