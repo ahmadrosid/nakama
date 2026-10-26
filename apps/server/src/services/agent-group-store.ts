@@ -505,38 +505,39 @@ export function updateGroupSession(
   return true;
 }
 
-/** Deletes a session, returning the paths of the images its messages carried, or null when it was not found. */
 export function deleteGroupSession(
   orgId: string,
   ownerId: string,
   groupId: string,
   sessionId: string
-): string[] | null {
-  return withGroupDb(orgId, (db) =>
-    db.transaction(() => {
-      const rows = db
-        .query<{ documents: string }, [string]>(
-          "SELECT documents FROM messages WHERE session_id = ? AND documents IS NOT NULL"
+): boolean {
+  return withGroupDb(
+    orgId,
+    (db) =>
+      db
+        .query(
+          `DELETE FROM group_sessions WHERE id = ? AND group_id IN
+            (SELECT id FROM groups WHERE id = ? AND owner_user_id = ?)`
         )
-        .all(sessionId);
+        .run(sessionId, groupId, ownerId).changes > 0
+  );
+}
 
-      const removed =
-        db
-          .query(
-            `DELETE FROM group_sessions WHERE id = ? AND group_id IN
-              (SELECT id FROM groups WHERE id = ? AND owner_user_id = ?)`
-          )
-          .run(sessionId, groupId, ownerId).changes > 0;
+/** The shared-folder paths of the images posted in a session. */
+export function listGroupSessionImages(
+  orgId: string,
+  sessionId: string
+): string[] {
+  const rows = withGroupDb(orgId, (db) =>
+    db
+      .query<{ documents: string }, [string]>(
+        "SELECT documents FROM messages WHERE session_id = ? AND documents IS NOT NULL"
+      )
+      .all(sessionId)
+  );
 
-      // SAFETY: documents is only ever written by this store as a GroupDocument array.
-      return removed
-        ? rows.flatMap((row) =>
-            (JSON.parse(row.documents) as GroupDocument[]).flatMap((d) =>
-              d.path ? [d.path] : []
-            )
-          )
-        : null;
-    })()
+  return rows.flatMap((row) =>
+    parseDocuments(row.documents).flatMap((d) => (d.path ? [d.path] : []))
   );
 }
 
@@ -611,10 +612,12 @@ export function listGroupMessageDocuments(
       .all(...messageIds)
   );
 
+  return new Map(rows.map((row) => [row.id, parseDocuments(row.documents)]));
+}
+
+function parseDocuments(documents: string): GroupDocument[] {
   // SAFETY: documents is only ever written by this store as a GroupDocument array.
-  return new Map(
-    rows.map((row) => [row.id, JSON.parse(row.documents) as GroupDocument[]])
-  );
+  return JSON.parse(documents) as GroupDocument[];
 }
 
 /**

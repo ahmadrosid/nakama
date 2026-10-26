@@ -22,7 +22,6 @@ import {
 } from "./agent-group-lookup";
 import {
   addressedMembers,
-  ensureGroupSharedDir,
   groupMembers,
   groupTurn,
   isPassReply,
@@ -42,6 +41,7 @@ import {
   listAgentGroupMessages,
   listAgentGroups,
   listAgentGroupThreadMessages,
+  listGroupSessionImages,
   listGroupSessions,
   type StoredGroupSession,
   setAgentGroupAvatar,
@@ -51,8 +51,6 @@ import {
 import { retitleGroupSession } from "./agent-group-title";
 import { type PostedDocument, workspaceOfGroup } from "./agent-group-workspace";
 import type { AgentService } from "./agent-service";
-
-export { readGroupDocuments } from "./agent-group-prompt";
 
 /** Agent replies allowed per user message, so two agents cannot loop forever. */
 const MAX_GROUP_HOPS = 6;
@@ -345,7 +343,7 @@ export class AgentGroupService {
       groupId,
       groupSessionTitle(
         content ||
-          (documents.find((d) => "text" in d && !d.path)?.filename ?? "")
+          (documents.find((d) => !("image" in d || d.path))?.filename ?? "")
       )
     );
 
@@ -379,9 +377,9 @@ export class AgentGroupService {
     groupId: string,
     sessionId: string
   ): void {
-    const images = deleteGroupSession(orgId, userId, groupId, sessionId);
+    const images = listGroupSessionImages(orgId, sessionId);
 
-    if (!images) {
+    if (!deleteGroupSession(orgId, userId, groupId, sessionId)) {
       throw new NakamaApiError("Session not found", 404);
     }
 
@@ -628,7 +626,7 @@ export class AgentGroupService {
       }
 
       const handles = memberHandles(members);
-      const sharedDir = ensureGroupSharedDir(orgId, group.id);
+      const sharedDir = workspaceOfGroup(orgId, group.id).open();
 
       const result = await this.agent
         .runSubAgentPrompt({

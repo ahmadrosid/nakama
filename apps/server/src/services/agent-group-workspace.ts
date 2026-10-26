@@ -6,7 +6,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, extname, join } from "node:path";
+import { dirname, extname, join, resolve } from "node:path";
 import {
   getGroupMemoryPath,
   getGroupSharedDir,
@@ -77,13 +77,11 @@ export function groupWorkspace(sharedDir: string) {
           return memory;
         }
 
-        let next = [...lines, `- ${fact}`];
-
-        if (target) {
-          next = fact
+        const next = target
+          ? fact
             ? lines.with(index, `- ${fact}`)
-            : lines.toSpliced(index, 1);
-        }
+            : lines.toSpliced(index, 1)
+          : [...lines, `- ${fact}`];
 
         const content = next.join("\n");
 
@@ -154,10 +152,14 @@ export function groupWorkspace(sharedDir: string) {
 
     /** Removes saved images, given their paths in the shared folder. */
     removeImages(paths: string[]): void {
+      const uploads = join(sharedDir, "uploads");
+
       for (const path of paths) {
+        const file = resolve(sharedDir, path);
+
         // Only what saveImages wrote; a stored path never leaves uploads/.
-        if (/^uploads\/[^/\\]+$/.test(path) && !path.includes("..")) {
-          rmSync(join(sharedDir, path), { force: true });
+        if (dirname(file) === uploads) {
+          rmSync(file, { force: true });
         }
       }
     },

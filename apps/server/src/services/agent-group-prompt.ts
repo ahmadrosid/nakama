@@ -2,7 +2,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { DocumentAttachment, ProfileSummary } from "@nakama/core";
 import {
-  getGroupSharedDir,
   getProfileSoulDir,
   resolveDocumentPartForProvider,
   SOUL_FILES,
@@ -22,7 +21,11 @@ import {
   listAgentGroupThreadMessages,
   listGroupMessageDocuments,
 } from "./agent-group-store";
-import { groupWorkspace, type PostedDocument } from "./agent-group-workspace";
+import {
+  groupWorkspace,
+  type PostedDocument,
+  workspaceOfGroup,
+} from "./agent-group-workspace";
 
 const CONTEXT_MESSAGES = 40;
 
@@ -40,11 +43,6 @@ const CHAT_STYLE =
 const ARTIFACT_GUIDANCE =
   "For a file the user asked for (page, report, deck, code, data), save it with save_artifact and name its path, like artifacts/report.html, in your short reply. Never paste the file into the chat.";
 
-/** The group's shared folder, created on first use. */
-export function ensureGroupSharedDir(orgId: string, groupId: string): string {
-  return groupWorkspace(getGroupSharedDir(orgId, groupId)).open();
-}
-
 const sharedGuidance = (sharedDir: string) =>
   `The group has a shared folder at ${sharedDir}. Every member can read and write it with the file tools, using absolute paths. Keep files the team builds on (outline, notes, drafts) there and read what others wrote before you answer. When you mention a file to the user, write its path inside the folder, like shared/plan.md, never the full path.`;
 
@@ -61,13 +59,13 @@ export function groupMembers(
 const MEMORY_GUIDANCE =
   "When the user states or agrees to something worth keeping across chats, like a decision, a name or a preference, save it as one short entry with update_group_memory, or fix a wrong entry there. A suggestion from you or a teammate is not a decision until the user agrees to it. Never save secrets.";
 
-/** The group's memory, cut at the cap, and how to add to it. */
+/** The group's memory as members see it, and how to add to it. */
 function memorySection(sharedDir: string): string[] {
-  const shown = groupWorkspace(sharedDir).memory.forPrompt();
+  const memory = groupWorkspace(sharedDir).memory.forPrompt();
 
   return [
-    shown
-      ? `Group memory, kept across every chat in this group:\n${shown}`
+    memory
+      ? `Group memory, kept across every chat in this group:\n${memory}`
       : "The group memory is empty.",
     MEMORY_GUIDANCE,
   ];
@@ -172,7 +170,7 @@ export function groupTurn(
   speaker: ProfileSummary,
   handles: Map<string, string>
 ) {
-  const sharedDir = ensureGroupSharedDir(orgId, group.id);
+  const sharedDir = workspaceOfGroup(orgId, group.id).open();
 
   const optional = mayPass(
     listAgentGroupMessages(orgId, sessionId),

@@ -52,7 +52,7 @@ describe("agent group store", () => {
         new Uint8Array([1])
       )
     ).toBe(false);
-    expect(deleteGroupSession(ORG_ID, "u2", group.id, session.id)).toBeNull();
+    expect(deleteGroupSession(ORG_ID, "u2", group.id, session.id)).toBe(false);
     expect(deleteAgentGroup(ORG_ID, "u2", group.id)).toBe(false);
   });
 
@@ -121,7 +121,7 @@ describe("agent group store", () => {
       title: "Plan",
     });
 
-    expect(deleteGroupSession(ORG_ID, "u1", group.id, session.id)).toEqual([]);
+    expect(deleteGroupSession(ORG_ID, "u1", group.id, session.id)).toBe(true);
     expect(listAgentGroupMessages(ORG_ID, session.id)).toEqual([]);
     expect(() =>
       appendAgentGroupMessage(ORG_ID, session, "p1", "late")
