@@ -83,6 +83,7 @@ import type {
   StoredSkillRecord,
   StoredSkillUsageRecord,
 } from "@nakama/db";
+import { z } from "zod";
 import { isCloudBrowserRuntime } from "./agent-browser-service";
 import { loadJavascriptSkillTool } from "./javascript-tool-loader";
 import type { PluginService } from "./plugin-service";
@@ -124,7 +125,46 @@ function assertEditableSkill(record: StoredSkillRecord): void {
   }
 }
 
-export function parseSkillsAddCommand(command: string): string {
+// The skills CLI finds a skill by its folder name anywhere in the repo, not at the root.
+async function findSkillDirectory(
+  ownerRepo: string,
+  skillName: string
+): Promise<string | null> {
+  const slug = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/[\s_]+/g, "-")
+      .replace(/[^a-z0-9-]/g, "");
+
+  try {
+    const response = await fetch(
+      `https://api.github.com/repos/${ownerRepo}/git/trees/HEAD?recursive=1`,
+      {
+        headers: { "User-Agent": "nakama-skill-install" },
+        signal: AbortSignal.timeout(10_000),
+      }
+    );
+
+    const { tree } = z
+      .object({ tree: z.array(z.object({ path: z.string() })) })
+      .parse(await response.json());
+
+    const match = tree.find(
+      ({ path }) =>
+        path.endsWith("/SKILL.md") &&
+        slug(path.split("/").at(-2)!) === slug(skillName)
+    );
+
+    return match ? match.path.slice(0, -"/SKILL.md".length) : null;
+  } catch {
+    // Rate limited or unreachable: fall back to a folder at the repo root.
+    return null;
+  }
+}
+
+export async function resolveSkillsAddCommand(
+  command: string
+): Promise<string> {
   const tokens = command
     .match(/"[^"]*"|'[^']*'|\S+/g)
     ?.map((token) => token.replace(/^("|')|("|')$/g, ""));
@@ -176,7 +216,11 @@ export function parseSkillsAddCommand(command: string): string {
     );
   }
 
-  return `${baseUrl.origin}${baseUrl.pathname}/tree/HEAD/${encodeURIComponent(skillName)}`;
+  const directory =
+    (await findSkillDirectory(baseUrl.pathname.slice(1), skillName)) ??
+    skillName;
+
+  return `${baseUrl.origin}${baseUrl.pathname}/tree/HEAD/${directory.split("/").map(encodeURIComponent).join("/")}`;
 }
 
 export class SkillsService {
@@ -592,7 +636,7 @@ export class SkillsService {
       throw new NakamaApiError("Profile not found.", 404);
     }
 
-    const commandUrl = command ? parseSkillsAddCommand(command) : "";
+    const commandUrl = command ? await resolveSkillsAddCommand(command) : "";
 
     const bundle = request.zipBase64
       ? (() => {

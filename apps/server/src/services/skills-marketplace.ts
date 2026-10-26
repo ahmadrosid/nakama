@@ -9,7 +9,7 @@ import type {
   SkillsMarketplaceResponse,
 } from "@nakama/core/contract";
 import { z } from "zod";
-import { parseSkillsAddCommand } from "./skills-service";
+import { resolveSkillsAddCommand } from "./skills-service";
 
 // The skills CLI calls this endpoint without auth; the documented /api/v1 one needs Vercel OIDC.
 const SKILLS_SEARCH_URL = "https://skills.sh/api/search";
@@ -67,7 +67,7 @@ export async function searchSkillsMarketplace(
 export async function previewSkillInstall(
   command: string
 ): Promise<SkillInstallPreviewResponse> {
-  const url = parseSkillsAddCommand(command);
+  const url = await resolveSkillsAddCommand(command);
   const bundle = await fetchGitHubSkillBundle(url);
   let frontmatter: SkillFrontmatter;
 

@@ -111,25 +111,35 @@ describe("skills.sh marketplace", () => {
     expect((await search(adminSession, adminSession.orgId!)).status).toBe(502);
   });
 
-  test("preview lists supporting files, flags scripts and installs nothing", async () => {
+  test("preview finds a skill below the repo root, flags scripts and installs nothing", async () => {
     // SAFETY: This test controls the fixture shape at this boundary.
     globalThis.fetch = asTestFetch(
-      mock(
-        async () =>
-          new Response(
-            zipSync({
-              "skills-main/pdf/SKILL.md": new TextEncoder().encode(SKILL),
-              "skills-main/pdf/bin/tool": new TextEncoder().encode(
-                "#!/bin/sh\necho hi\n"
-              ),
-              "skills-main/pdf/references/guide.md": new TextEncoder().encode(
-                "Read me"
-              ),
-              "skills-main/pdf/scripts/fill.py": new TextEncoder().encode(
-                "print(1)"
-              ),
+      mock(async (input) =>
+        String(input).startsWith("https://api.github.com/")
+          ? Response.json({
+              tree: [
+                { path: "README.md" },
+                { path: "skills/pdf/SKILL.md" },
+                { path: "template/SKILL.md" },
+              ],
             })
-          )
+          : new Response(
+              zipSync({
+                "skills-main/skills/pdf/SKILL.md": new TextEncoder().encode(
+                  SKILL
+                ),
+                "skills-main/skills/pdf/bin/tool": new TextEncoder().encode(
+                  "#!/bin/sh\necho hi\n"
+                ),
+                "skills-main/skills/pdf/references/guide.md":
+                  new TextEncoder().encode("Read me"),
+                "skills-main/skills/pdf/scripts/fill.py":
+                  new TextEncoder().encode("print(1)"),
+                "skills-main/template/SKILL.md": new TextEncoder().encode(
+                  SKILL.replace("name: pdf", "name: template")
+                ),
+              })
+            )
       )
     );
 
