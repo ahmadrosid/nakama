@@ -52,6 +52,16 @@ export function toolSecretEnvName(orgId: string, toolId: string): string {
   return `NAKAMA_TOOL_API_KEY_${digest}`;
 }
 
+export function decodeSecretsKey(encodedKey: string): Buffer {
+  const key = Buffer.from(encodedKey, "base64");
+
+  if (key.length !== 32 || key.toString("base64") !== encodedKey) {
+    throw new Error("NAKAMA_SECRETS_KEY must be 32 random bytes in base64.");
+  }
+
+  return key;
+}
+
 export class ManagedSecrets {
   private readonly key: Buffer | null;
 
@@ -65,13 +75,7 @@ export class ManagedSecrets {
       return;
     }
 
-    const key = Buffer.from(encodedKey, "base64");
-
-    if (key.length !== 32 || key.toString("base64") !== encodedKey) {
-      throw new Error("NAKAMA_SECRETS_KEY must be 32 random bytes in base64.");
-    }
-
-    this.key = key;
+    this.key = decodeSecretsKey(encodedKey);
   }
 
   async checkIntegrity(): Promise<void> {

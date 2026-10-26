@@ -72,11 +72,14 @@ import { ComposioService } from "./services/composio-service";
 import { claimLegacyCustomTools } from "./services/custom-tool-handlers";
 import { setToolSecrets } from "./services/custom-tool-shared";
 
-import { retireAppUserData } from "./services/data-portability";
+import {
+  createNakamaDataExport,
+  retireAppUserData,
+} from "./services/data-portability";
 import { openaiProviderKey } from "./services/google-meet/actions";
 import { GoogleMeetService } from "./services/google-meet/service";
 import { LlmUsageTracker } from "./services/llm-usage-tracker";
-import { ManagedSecrets } from "./services/managed-secrets";
+import { decodeSecretsKey, ManagedSecrets } from "./services/managed-secrets";
 import { McpClientManager } from "./services/mcp-client-manager";
 import {
   createMcpAwareEmailOutboundAdapter,
@@ -94,6 +97,10 @@ import {
   resolveDefaultModelForInstance,
   resolveProfileProviderSelection,
 } from "./services/provider-instance-helpers";
+import {
+  assertBackupDirOutsideRoot,
+  startScheduledBackups,
+} from "./services/scheduled-backup";
 import { SkillCuratorService } from "./services/skill-curator-service";
 import { SkillProposalService } from "./services/skill-proposal-service";
 import { SkillSuggestionService } from "./services/skill-suggestion-service";
@@ -433,6 +440,27 @@ const pluginService = new PluginService(database.adapter, getUserConfigDir(), {
 });
 
 await googleMeetService.initialize();
+
+const backupDir = process.env.NAKAMA_BACKUP_DIR?.trim();
+
+if (backupDir) {
+  try {
+    assertBackupDirOutsideRoot(backupDir, getUserConfigDir());
+    await startScheduledBackups({
+      dir: backupDir,
+      exportZip: async () =>
+        (await googleMeetService.withSnapshot(() => createNakamaDataExport()))
+          .data,
+      key: decodeSecretsKey(process.env.NAKAMA_SECRETS_KEY ?? ""),
+    });
+  } catch (error) {
+    console.error(
+      `Nakama cannot start backups: ${error instanceof Error ? error.message : String(error)}`
+    );
+    database.release();
+    process.exit(1);
+  }
+}
 
 try {
   await pluginService.recoverInterruptedPluginOperations();

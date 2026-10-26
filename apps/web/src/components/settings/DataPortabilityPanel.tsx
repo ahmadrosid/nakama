@@ -149,7 +149,7 @@ export function DataPortabilityPanel() {
             {selectedFile ? "Choose a different file" : "Choose backup file"}
           </Button>
           <input
-            accept=".zip,application/zip"
+            accept=".zip,.enc,application/zip"
             aria-label="Choose a backup file"
             className="sr-only"
             disabled={isBusy}

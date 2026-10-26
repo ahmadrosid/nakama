@@ -23,6 +23,14 @@ The ZIP does not contain `NAKAMA_SECRETS_KEY` or plaintext Settings keys.
 Keep the matching master key in a separate backup. Supply it before importing the ZIP.
 Nakama rejects an import when it cannot decrypt the saved keys.
 
+## Scheduled backups
+
+Set `NAKAMA_BACKUP_DIR` to a directory outside the data root, and the server writes the same export there once a day as `nakama-<time>.zip.enc`. It keeps the newest 7.
+
+Each file is encrypted with `NAKAMA_SECRETS_KEY`, which a restore needs anyway. Import accepts the `.enc` file directly and decrypts it with the current key. After a key rotation, older backups need the old key.
+
+The first backup after a restart is due a day after the newest file already there, so restarts do not push older backups out. The server refuses to start if the directory is inside the data root.
+
 ## Import
 
 Importing is a whole-install restore:

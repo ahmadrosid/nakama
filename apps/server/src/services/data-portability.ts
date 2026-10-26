@@ -49,13 +49,14 @@ import {
   resolveDatabasePath,
 } from "@nakama/db";
 import { unzipSync, zipSync } from "fflate";
-import { ManagedSecrets } from "./managed-secrets";
+import { decodeSecretsKey, ManagedSecrets } from "./managed-secrets";
 import {
   PluginExportBarrierError,
   quarantineInvalidPluginReleases,
   runWithPluginExportBarrier,
   vacuumPluginDatabaseInto,
 } from "./plugin-service";
+import { decryptBackup, isEncryptedBackup } from "./scheduled-backup";
 
 export const NAKAMA_EXPORT_MANIFEST = "nakama-export.json";
 
@@ -945,7 +946,23 @@ export function decodeArchiveRequestData(data: string): Buffer {
     throw new NakamaApiError("Import archive data is required.", 400);
   }
 
-  return Buffer.from(trimmed, "base64");
+  const archive = Buffer.from(trimmed, "base64");
+
+  if (!isEncryptedBackup(archive)) {
+    return archive;
+  }
+
+  try {
+    return decryptBackup(
+      archive,
+      decodeSecretsKey(process.env.NAKAMA_SECRETS_KEY ?? "")
+    );
+  } catch {
+    throw new NakamaApiError(
+      "Cannot decrypt this backup with NAKAMA_SECRETS_KEY.",
+      400
+    );
+  }
 }
 
 function megabytes(bytes: number): string {
