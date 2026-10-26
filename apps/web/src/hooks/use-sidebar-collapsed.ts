@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useAuth } from "@/context/use-auth";
 import {
   getInitialSidebarCollapsed,
@@ -20,14 +20,44 @@ export function useLocalStorageFlag(key: string, getInitial: () => boolean) {
     }
   }, [collapsed, key]);
 
-  return {
-    collapsed,
-    toggle: () => setCollapsed((current) => !current),
-  };
+  const toggle = useCallback(() => setCollapsed((current) => !current), []);
+
+  return { collapsed, toggle };
 }
 
-export function useSidebarCollapsed() {
-  return useLocalStorageFlag(SIDEBAR_COLLAPSED_KEY, getInitialSidebarCollapsed);
+/** With `shortcut`, Ctrl+B / Cmd+B toggles the sidebar. */
+export function useSidebarCollapsed({ shortcut = false } = {}) {
+  const flag = useLocalStorageFlag(
+    SIDEBAR_COLLAPSED_KEY,
+    getInitialSidebarCollapsed
+  );
+  const { toggle } = flag;
+
+  useEffect(() => {
+    if (!shortcut) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.key.toLowerCase() !== "b" ||
+        !(event.metaKey || event.ctrlKey) ||
+        event.altKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      toggle();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [shortcut, toggle]);
+
+  return flag;
 }
 
 export function usePinnedPlugins() {
