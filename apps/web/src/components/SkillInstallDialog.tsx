@@ -922,7 +922,7 @@ function SkillsMarketplace({
       ) : null}
 
       {skills?.length ? (
-        <ul className="max-h-56 divide-y overflow-y-auto rounded-md border">
+        <ul className="max-h-48 divide-y overflow-y-auto rounded-md border">
           {skills.map((skill) => (
             <li key={skillsAddCommand(skill)}>
               <button
@@ -1008,7 +1008,7 @@ function SkillsMarketplacePreview({
           skills.sh
         </a>
       </div>
-      <p className="text-muted-foreground">{description}</p>
+      <p className="line-clamp-3 text-muted-foreground">{description}</p>
       <p className="text-muted-foreground text-xs">
         About {estimatedTokens.toLocaleString()} tokens, {files.length}{" "}
         supporting files
