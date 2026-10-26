@@ -1,5 +1,5 @@
 import type { ProfileSummary } from "@nakama/core";
-import type { SubAgentRunInput } from "../tools/sub-agent-shared";
+import type { GroupTurnRunInput } from "../tools/sub-agent-shared";
 import { AgentGroupService } from "./agent-group-service";
 
 export const ORG_ID = "org_test";
@@ -8,7 +8,7 @@ export const USER_ID = "u1";
 
 /** A service with three profiles and an agent that answers with `reply`. */
 export function setup(
-  reply: (input: SubAgentRunInput) => string | Promise<string>
+  reply: (input: GroupTurnRunInput) => string | Promise<string>
 ) {
   // SAFETY: The service reads only these ProfileSummary fields.
   const profiles = [
@@ -36,7 +36,7 @@ export function setup(
   const agent = {
     generateSessionTitle: async () => state.title || null,
     listProfiles: async () => ({ profiles }),
-    runSubAgentPrompt: async (input: SubAgentRunInput) => {
+    runGroupTurn: async (input: GroupTurnRunInput) => {
       calls.push(input.profileId);
       const output = await reply(input);
 

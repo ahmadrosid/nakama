@@ -347,13 +347,16 @@ describe("AgentGroupService", () => {
     expect(calls).toEqual([]);
   });
 
-  test("stop ends the run after the current hop", async () => {
+  test("stop aborts the running reply and keeps what it wrote so far", async () => {
     const started = Promise.withResolvers<void>();
-    const held = Promise.withResolvers<void>();
 
-    const { calls, service } = setup(async () => {
+    const { calls, contents, service } = setup(async ({ onText, signal }) => {
+      onText?.("half a thought");
       started.resolve();
-      await held.promise;
+
+      await new Promise((_, reject) => {
+        signal?.addEventListener("abort", () => reject(signal.reason));
+      });
 
       return "@beta next";
     });
@@ -370,13 +373,61 @@ describe("AgentGroupService", () => {
     await started.promise;
     expect(service.sessions(ORG_ID, USER_ID, group.id)[0]?.active).toBe(true);
     service.stop(ORG_ID, USER_ID, group.id, session.id);
-    held.resolve();
     await run;
 
     expect(calls).toEqual(["a"]);
+    expect(contents(group.id, session.id)).toEqual([
+      "@alpha go",
+      "half a thought",
+    ]);
     expect(
       service.session(ORG_ID, USER_ID, group.id, session.id).run
     ).toBeNull();
+  });
+
+  test("a failed turn stores the same error in the main chat and in a thread", async () => {
+    const state = { fail: false };
+
+    const { chat, contents, service } = setup(() => {
+      if (state.fail) {
+        throw new Error("boom");
+      }
+
+      return "ok";
+    });
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+    const sessionId = await chat(group.id, "@alpha hi");
+
+    const [, root] = service.session(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      sessionId
+    ).messages;
+
+    state.fail = true;
+    await service.post(ORG_ID, USER_ID, group.id, sessionId, "@alpha again");
+    await service.postThread(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      sessionId,
+      root!.id,
+      "more?"
+    );
+
+    expect(contents(group.id, sessionId)).toEqual([
+      "@alpha hi",
+      "ok",
+      "@alpha again",
+      "_boom_",
+    ]);
+    expect(
+      service
+        .thread(ORG_ID, USER_ID, group.id, sessionId, root!.id)
+        .messages.map((message) => message.content)
+    ).toEqual(["ok", "more?", "_boom_"]);
   });
 
   test("a running turn exposes the agent's steps and text so far", async () => {

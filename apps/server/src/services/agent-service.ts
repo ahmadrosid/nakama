@@ -302,6 +302,7 @@ import {
   buildSubAgentResult,
   DEFAULT_SUB_AGENT_TIMEOUT_MS,
   failSubAgentResult,
+  type GroupTurnRunInput,
   MAX_SUB_AGENT_TIMEOUT_MS,
   type SubAgentRunInput,
   type SubAgentRunResult,
@@ -2299,7 +2300,39 @@ export class AgentService {
     }
   }
 
-  async runSubAgentPrompt(input: SubAgentRunInput): Promise<SubAgentRunResult> {
+  runSubAgentPrompt(input: SubAgentRunInput): Promise<SubAgentRunResult> {
+    return this.runOneShotTurn(input, {
+      instructions: [
+        "You are running as a focused sub-agent delegated from a parent conversation.",
+        "Complete the assigned task and return a clear final answer.",
+      ],
+      log: "sub_agent",
+      tools: [],
+    });
+  }
+
+  /** One member's turn in an agent group chat; `signal` stops it mid-reply. */
+  runGroupTurn(input: GroupTurnRunInput): Promise<SubAgentRunResult> {
+    return this.runOneShotTurn(input, {
+      instructions: [
+        "You are taking a turn in a group chat with the user and other agents.",
+        "Follow the turn's instructions and reply as yourself.",
+      ],
+      log: "group_turn",
+      tools: [groupMemoryTool],
+    });
+  }
+
+  /**
+   * A single tool-using turn outside a chat session, for a sub-agent or a group
+   * member. It ends on a reply, on the timeout, or when `input.signal` aborts,
+   * which rejects with the abort reason.
+   */
+  private async runOneShotTurn(
+    input: SubAgentRunInput &
+      Partial<Pick<GroupTurnRunInput, "sharedDir" | "signal">>,
+    mode: { instructions: string[]; log: string; tools: ToolDefinition[] }
+  ): Promise<SubAgentRunResult> {
     const startedAt = Date.now();
 
     if (!this._providerConfigured) {
@@ -2327,8 +2360,7 @@ export class AgentService {
         includeTodoTools: false,
         userId: input.userId,
       })),
-      // Only a group turn carries a shared folder, and with it a group memory.
-      ...(input.sharedDir ? [groupMemoryTool] : []),
+      ...mode.tools,
     ];
 
     const { systemPrompt, soulActive } = await this.resolveProfileSystemPrompt(
@@ -2341,8 +2373,7 @@ export class AgentService {
     const childSystemPrompt = [
       systemPrompt.trim(),
       "",
-      "You are running as a focused sub-agent delegated from a parent conversation.",
-      "Complete the assigned task and return a clear final answer.",
+      ...mode.instructions,
       "Do not spawn sub-agents.",
     ].join("\n");
 
@@ -2399,8 +2430,15 @@ export class AgentService {
 
     emitActivity("Starting…");
 
-    const sendPromise = session
-      .sendStream(prompt, {
+    const timeout = AbortSignal.timeout(timeoutMs);
+
+    const signal = input.signal
+      ? AbortSignal.any([input.signal, timeout])
+      : timeout;
+
+    const sent = session.sendStream(
+      prompt,
+      {
         onChunk: (chunk) => {
           input.onText?.(chunk);
 
@@ -2422,34 +2460,49 @@ export class AgentService {
         onToolStart: (event) => {
           emitActivity(formatToolActivityLabel(event.tool, event.input));
         },
-      })
-      .then((reply) => ({
-        kind: "success" as const,
-        reply: reply.trim(),
-      }));
-
-    const timeoutPromise = new Promise<{ kind: "timeout" }>((resolve) => {
-      setTimeout(() => resolve({ kind: "timeout" }), timeoutMs);
-    });
-
-    // A timed-out sub-agent's ACP process is stopped here too, not left running.
-    const outcome = await Promise.race([sendPromise, timeoutPromise]).finally(
-      () => endOneShotAcp(acpKey)
+      },
+      { signal }
     );
 
-    const durationMs = Date.now() - startedAt;
+    // A harness that ignores the signal is not waited for.
+    const aborted = new Promise<never>((_, reject) => {
+      if (signal.aborted) {
+        reject(signal.reason);
+      }
 
-    if (outcome.kind === "timeout") {
+      signal.addEventListener("abort", () => reject(signal.reason), {
+        once: true,
+      });
+    });
+
+    // The loser of the race below settles later with no one listening.
+    sent.catch(() => undefined);
+    aborted.catch(() => undefined);
+
+    let reply: string;
+
+    try {
+      // A stopped or timed-out turn's ACP process is stopped here too, not left running.
+      reply = (await Promise.race([sent, aborted])).trim();
+    } catch (error) {
+      if (!timeout.aborted) {
+        throw error;
+      }
+
       console.info(
-        `[sub_agent] timeout org=${input.orgId} profile=${input.profileId} durationMs=${durationMs}`
+        `[${mode.log}] timeout org=${input.orgId} profile=${input.profileId} durationMs=${Date.now() - startedAt}`
       );
 
       return buildSubAgentResult("timeout", "", "Sub-agent timed out.");
+    } finally {
+      endOneShotAcp(acpKey);
     }
 
-    if (!outcome.reply) {
+    const durationMs = Date.now() - startedAt;
+
+    if (!reply) {
       console.info(
-        `[sub_agent] fail org=${input.orgId} profile=${input.profileId} durationMs=${durationMs} reason=empty_reply`
+        `[${mode.log}] fail org=${input.orgId} profile=${input.profileId} durationMs=${durationMs} reason=empty_reply`
       );
 
       return buildSubAgentResult(
@@ -2460,10 +2513,10 @@ export class AgentService {
     }
 
     console.info(
-      `[sub_agent] success org=${input.orgId} profile=${input.profileId} durationMs=${durationMs}`
+      `[${mode.log}] success org=${input.orgId} profile=${input.profileId} durationMs=${durationMs}`
     );
 
-    return buildSubAgentResult("success", outcome.reply);
+    return buildSubAgentResult("success", reply);
   }
 
   async runAutomation(automationId: string) {

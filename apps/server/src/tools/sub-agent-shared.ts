@@ -21,11 +21,17 @@ export interface SubAgentRunInput {
   orgRole?: OrgRole;
   profileId: string;
   sessionId?: string;
-  /** Agent group folder the child's file tools may also use. */
-  sharedDir?: string;
   task: string;
   timeoutMs?: number;
   userId?: string;
+}
+
+export interface GroupTurnRunInput
+  extends Omit<SubAgentRunInput, "clientOrigin" | "sessionId" | "timeoutMs"> {
+  /** The group's shared folder, which the member's file tools may also use. */
+  sharedDir: string;
+  /** Aborts the turn, as when the user presses Stop. */
+  signal?: AbortSignal;
 }
 
 export interface SubAgentRunResult {
