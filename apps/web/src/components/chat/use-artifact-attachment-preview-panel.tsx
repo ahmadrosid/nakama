@@ -1,5 +1,6 @@
 import { DropdownMenuItem } from "@nakama/ui/dropdown-menu";
-import { PencilEdit01Icon } from "hugeicons-react";
+import { toast } from "@nakama/ui/toast";
+import { Pdf01Icon, PencilEdit01Icon } from "hugeicons-react";
 import { useEffect, useState } from "react";
 import { ArtifactAttachmentPanelActions } from "@/components/chat/artifact-attachment-panel-actions";
 import { ArtifactAttachmentPanelBody } from "@/components/chat/artifact-attachment-panel-body";
@@ -28,6 +29,10 @@ import {
 import { useAuth } from "@/context/use-auth";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import { useWriteArtifactMutation } from "@/hooks/use-resource-mutations";
+import {
+  printArtifactHtml,
+  resolveArtifactHtmlAssets,
+} from "@/lib/artifact-html-preview";
 import {
   artifactCodeLanguage,
   buildArtifactContentUrl,
@@ -59,6 +64,7 @@ function ArtifactAttachmentPreviewHeaderActions({
   fullscreen,
   loading,
   onCopy,
+  onDownloadPdf,
   onEdit,
   onToggleFullscreen,
   share,
@@ -74,6 +80,7 @@ function ArtifactAttachmentPreviewHeaderActions({
   fullscreen: boolean;
   loading: boolean;
   onCopy: () => void;
+  onDownloadPdf: (() => void) | null;
   onEdit: () => void;
   onToggleFullscreen: () => void;
   share: ArtifactShareControlsState;
@@ -83,6 +90,16 @@ function ArtifactAttachmentPreviewHeaderActions({
       <ArtifactAttachmentPanelActions
         additionalMenuItems={
           <>
+            {onDownloadPdf ? (
+              <DropdownMenuItem
+                className="cursor-pointer"
+                disabled={loading || content === null}
+                onClick={onDownloadPdf}
+              >
+                <Pdf01Icon aria-hidden />
+                Download as PDF
+              </DropdownMenuItem>
+            ) : null}
             {canEdit ? (
               <DropdownMenuItem
                 className="cursor-pointer"
@@ -288,6 +305,30 @@ export function useArtifactAttachmentPreviewPanel({
     }
   }
 
+  async function downloadPdf() {
+    if (content === null) {
+      return;
+    }
+
+    try {
+      const scopedClient = client.forOrg(activeOrg?.id ?? null);
+
+      const resolved = await resolveArtifactHtmlAssets(
+        content,
+        artifact.path,
+        (path) =>
+          scopedClient.readProfileArtifactContent(profileId, path, {
+            inline: true,
+          }),
+        new AbortController().signal
+      );
+
+      printArtifactHtml(resolved, header.title);
+    } catch (downloadError) {
+      toast(formatError(downloadError));
+    }
+  }
+
   function buildPanelBody(
     loadingOverride?: boolean,
     mode: ArtifactPreviewMode = previewMode
@@ -448,6 +489,7 @@ export function useArtifactAttachmentPreviewPanel({
               setCopied,
             })
           }
+          onDownloadPdf={isHtml ? () => void downloadPdf() : null}
           onEdit={() => {
             setSaveError(null);
 
