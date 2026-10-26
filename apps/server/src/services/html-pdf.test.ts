@@ -5,7 +5,11 @@ import path from "node:path";
 import { inflateSync } from "node:zlib";
 import { convertHtmlArtifactToPdf } from "./html-pdf";
 
+// The fake interpreter is a shell script, and CI has WeasyPrint only on POSIX.
+const isWindows = process.platform === "win32";
+
 const hasWeasyPrint =
+  !isWindows &&
   Bun.spawnSync(["python3", "-c", "import weasyprint"]).exitCode === 0;
 
 let dir: string;
@@ -37,17 +41,20 @@ afterEach(async () => {
   await rm(dir, { force: true, recursive: true });
 });
 
-test("reports 501 when the server's Python has no WeasyPrint", async () => {
-  const python = path.join(dir, "python3");
-  await writeFile(python, "#!/bin/sh\nexit 3\n");
-  await chmod(python, 0o755);
-  const html = path.join(dir, "deck.html");
-  await writeFile(html, "<p>Deck</p>");
+test.skipIf(isWindows)(
+  "reports 501 when the server's Python has no WeasyPrint",
+  async () => {
+    const python = path.join(dir, "python3");
+    await writeFile(python, "#!/bin/sh\nexit 3\n");
+    await chmod(python, 0o755);
+    const html = path.join(dir, "deck.html");
+    await writeFile(html, "<p>Deck</p>");
 
-  await expect(
-    convertHtmlArtifactToPdf(html, dir, python)
-  ).rejects.toMatchObject({ status: 501 });
-});
+    await expect(
+      convertHtmlArtifactToPdf(html, dir, python)
+    ).rejects.toMatchObject({ status: 501 });
+  }
+);
 
 test.skipIf(!hasWeasyPrint)(
   "renders every hidden slide of a deck as its own page",
