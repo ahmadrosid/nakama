@@ -11,9 +11,9 @@ import type {
   ListRailPinsResponse,
 } from "@nakama/core/agent-groups";
 import type { Context } from "hono";
-import { readGroupDocuments } from "../../services/agent-group-prompt";
 import { AgentGroupService } from "../../services/agent-group-service";
 import { listRailPins, setRailPin } from "../../services/agent-group-store";
+import { readGroupDocuments } from "../../services/agent-group-turn";
 import {
   GROUP_MEMORY_CHARS,
   workspaceOfGroup,

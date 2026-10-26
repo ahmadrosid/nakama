@@ -4,12 +4,12 @@ import { getProfileSoulDir, SOUL_TEMPLATE } from "@nakama/core";
 import { memberHandles } from "@nakama/core/agent-groups";
 import { setupTestConfigDir } from "../test-config-dir";
 import { groupMemoryTool } from "../tools/group-memory-tool";
-import { threadTranscript, transcript } from "./agent-group-prompt";
 import {
   appendAgentGroupMessage,
   closeAgentGroupDatabases,
 } from "./agent-group-store";
 import { ORG_ID, setup, USER_ID } from "./agent-group-test-setup";
+import { threadTranscript, transcript } from "./agent-group-turn";
 import { GROUP_MEMORY_CHARS, groupWorkspace } from "./agent-group-workspace";
 
 // Before the config dir cleanup, which Windows refuses while a file is open.
@@ -585,13 +585,16 @@ describe("AgentGroupService", () => {
     expect(calls).toEqual([]);
   });
 
-  test("stop ends the run after the current hop", async () => {
+  test("stop aborts the running reply and keeps what it wrote so far", async () => {
     const started = Promise.withResolvers<void>();
-    const held = Promise.withResolvers<void>();
 
-    const { calls, service } = setup(async () => {
+    const { calls, contents, service } = setup(async ({ onText, signal }) => {
+      onText?.("half a thought");
       started.resolve();
-      await held.promise;
+
+      await new Promise((_, reject) => {
+        signal?.addEventListener("abort", () => reject(signal.reason));
+      });
 
       return "@beta next";
     });
@@ -608,13 +611,109 @@ describe("AgentGroupService", () => {
     await started.promise;
     expect(service.sessions(ORG_ID, USER_ID, group.id)[0]?.active).toBe(true);
     service.stop(ORG_ID, USER_ID, group.id, session.id);
-    held.resolve();
     await run;
 
     expect(calls).toEqual(["a"]);
+    expect(contents(group.id, session.id)).toEqual([
+      "@alpha go",
+      "half a thought",
+    ]);
     expect(
       service.session(ORG_ID, USER_ID, group.id, session.id).run
     ).toBeNull();
+  });
+
+  test("a stopped turn keeps a memory write even when it wrote no text", async () => {
+    const started = Promise.withResolvers<void>();
+
+    const { service } = setup(
+      async ({ onGroupMemoryChange, sharedDir, signal }) => {
+        const result = await groupMemoryTool.run(
+          { entry: "Genre is noir" },
+          { sharedDir }
+        );
+
+        if (result.change) {
+          onGroupMemoryChange?.(result.change);
+        }
+
+        started.resolve();
+
+        await new Promise((_, reject) => {
+          signal?.addEventListener("abort", () => reject(signal.reason));
+        });
+
+        return "never";
+      }
+    );
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+
+    const { run, session } = service.start(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      "@alpha go"
+    );
+
+    await started.promise;
+    service.stop(ORG_ID, USER_ID, group.id, session.id);
+    await run;
+
+    const stopped = service
+      .session(ORG_ID, USER_ID, group.id, session.id)
+      .messages.at(-1);
+
+    expect(stopped).toMatchObject({
+      authorProfileId: "a",
+      content: "",
+      memoryChanges: [{ newEntry: "- Genre is noir", oldEntry: null }],
+    });
+  });
+
+  test("a failed turn stores the same error in the main chat and in a thread", async () => {
+    const state = { fail: false };
+
+    const { chat, contents, service } = setup(() => {
+      if (state.fail) {
+        throw new Error("boom");
+      }
+
+      return "ok";
+    });
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+    const sessionId = await chat(group.id, "@alpha hi");
+
+    const [, root] = service.session(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      sessionId
+    ).messages;
+
+    state.fail = true;
+    await service.post(ORG_ID, USER_ID, group.id, sessionId, "@alpha again");
+    await service.postThread(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      sessionId,
+      root!.id,
+      "more?"
+    );
+
+    expect(contents(group.id, sessionId)).toEqual([
+      "@alpha hi",
+      "ok",
+      "@alpha again",
+      "_boom_",
+    ]);
+    expect(
+      service
+        .thread(ORG_ID, USER_ID, group.id, sessionId, root!.id)
+        .messages.map((message) => message.content)
+    ).toEqual(["ok", "more?", "_boom_"]);
   });
 
   test("a running turn exposes the agent's steps and text so far", async () => {
