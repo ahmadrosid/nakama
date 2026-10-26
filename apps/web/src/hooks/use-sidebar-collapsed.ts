@@ -31,6 +31,7 @@ export function useSidebarCollapsed({ shortcut = false } = {}) {
     SIDEBAR_COLLAPSED_KEY,
     getInitialSidebarCollapsed
   );
+
   const { toggle } = flag;
 
   useEffect(() => {

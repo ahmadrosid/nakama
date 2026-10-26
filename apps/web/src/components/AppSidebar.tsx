@@ -44,9 +44,11 @@ export function AppSidebar({
   const { user, activeOrg } = useAuth();
   const prefetchAppData = usePrefetchAppData();
   const { data: automationUnreadTotal = 0 } = useAutomationUnreadTotal();
+
   const { collapsed: shellCollapsed, toggle } = useSidebarCollapsed({
     shortcut: variant === "shell",
   });
+
   const collapsed = variant === "shell" && shellCollapsed;
 
   const items = visibleNavGroups({

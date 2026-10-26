@@ -20,6 +20,7 @@ beforeEach(() => {
 
 afterEach(() => {
   document.body.innerHTML = "";
+
   if (previousLocalStorage) {
     Object.defineProperty(globalThis, "localStorage", previousLocalStorage);
   } else {
@@ -50,6 +51,7 @@ function press(init: KeyboardEventInit) {
     key: "b",
     ...init,
   });
+
   act(() => {
     window.dispatchEvent(event);
   });
