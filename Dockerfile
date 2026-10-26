@@ -72,8 +72,11 @@ RUN set -eu; \
 FROM oven/bun:1.4.3-slim@sha256:14a223fa35747ec728bce300ef85888bc5f7958164d15bbba6a54b22b52a3288 AS runtime
 WORKDIR /app
 
-# weasyprint + a font: HTML artifact → PDF export (services/html-pdf.ts).
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl sudo python3 python3-venv weasyprint fonts-dejavu-core \
+# HTML artifact → PDF export (services/html-pdf.ts). WeasyPrint comes from pip:
+# Debian's 62.x drops clamp()/vw sizes, so decks print with default text.
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl sudo python3 python3-venv \
+    python3-pip libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core \
+  && pip3 install --no-cache-dir --break-system-packages weasyprint==70.0 \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=ffmpeg-binaries /ffmpeg /ffprobe /usr/local/bin/
 
