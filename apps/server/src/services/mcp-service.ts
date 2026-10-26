@@ -1,4 +1,7 @@
-import { auth } from "@modelcontextprotocol/sdk/client/auth.js";
+import {
+  auth,
+  UnauthorizedError,
+} from "@modelcontextprotocol/sdk/client/auth.js";
 import type {
   CreateMcpServerRequest,
   ListMcpServersResponse,
@@ -79,6 +82,25 @@ function buildOAuthProvider(
   }
 
   return provider;
+}
+
+/**
+ * Some servers answer initialize and tools/list anonymously and refuse only
+ * the tool call, so a connect never meets the 401 that starts a sign-in. When
+ * one is wanted, start it up front and throw what the transport would have,
+ * so the caller's authorization branch takes it from there.
+ */
+async function signInBeforeConnect(
+  provider: McpServerOAuthProvider,
+  serverUrl: string
+): Promise<void> {
+  if (!(await serverAdvertisesOAuth(serverUrl))) {
+    return;
+  }
+
+  if ((await auth(provider, { serverUrl })) === "REDIRECT") {
+    throw new UnauthorizedError();
+  }
 }
 
 function withOAuthGrant(
@@ -176,6 +198,13 @@ export class McpService {
       });
 
       try {
+        if (request.signIn && provider) {
+          await signInBeforeConnect(
+            provider,
+            resolveMcpConfig("http", record.config).url
+          );
+        }
+
         const cachedTools = await this.manager.connect(
           record,
           provider ? { authProvider: provider } : undefined
