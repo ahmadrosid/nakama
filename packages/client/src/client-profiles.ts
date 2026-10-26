@@ -24,7 +24,9 @@ import type {
   RunToolResponse,
   SkillFileResponse,
   SkillFilesResponse,
+  SkillInstallPreviewResponse,
   SkillResponse,
+  SkillsMarketplaceResponse,
   SuggestToolParamsRequest,
   SuggestToolParamsResponse,
   SyncSkillsResponse,
@@ -457,6 +459,23 @@ export class ProfilesClient extends SettingsClient {
       body: JSON.stringify(request),
       method: "POST",
     });
+  }
+
+  async searchSkillsMarketplace(
+    query: string
+  ): Promise<SkillsMarketplaceResponse> {
+    return this.request<SkillsMarketplaceResponse>(
+      `/v1/skills/marketplace?${new URLSearchParams({ q: query })}`
+    );
+  }
+
+  async previewSkillInstall(
+    command: string
+  ): Promise<SkillInstallPreviewResponse> {
+    return this.request<SkillInstallPreviewResponse>(
+      "/v1/skills/install/preview",
+      { body: JSON.stringify({ command }), method: "POST" }
+    );
   }
 
   async getSkill(skillId: string): Promise<SkillResponse> {

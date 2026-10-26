@@ -1,4 +1,8 @@
-import type { InstallSkillRequest, SkillSummary } from "@nakama/core/contract";
+import type {
+  InstallSkillRequest,
+  SkillSummary,
+  SkillsMarketplaceSkill,
+} from "@nakama/core/contract";
 import {
   BUNDLED_SKILL_NAMES,
   RUNTIME_ONLY_BUNDLED_SKILL_NAMES,
@@ -14,15 +18,17 @@ import {
 } from "@nakama/ui/dialog";
 import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
+import { useQuery } from "@tanstack/react-query";
 import { Delete02Icon } from "hugeicons-react";
-import { type ChangeEvent, type SubmitEvent, useState } from "react";
+import { type ChangeEvent, type SubmitEvent, useEffect, useState } from "react";
 import { useAuth } from "@/context/use-auth";
 import {
   useAgentBrowserSettings,
   useInstallAgentBrowser,
 } from "@/hooks/use-agent-browser-settings";
 import { isPluginOwned } from "@/hooks/use-plugins";
-import { formatError } from "@/lib/client";
+import { client, formatError } from "@/lib/client";
+import { queryKeys } from "@/lib/query-keys";
 
 const bundledNames = new Set<string>(BUNDLED_SKILL_NAMES);
 
@@ -651,6 +657,7 @@ function AddSkillDialogContent({
         />
       ) : (
         <InstallSkillForm
+          bashAssigned={bashAssigned}
           busy={locked}
           onOpenChange={onOpenChange}
           onSubmit={onInstall}
@@ -662,32 +669,54 @@ function AddSkillDialogContent({
   );
 }
 
+async function zipToBase64(zip: File) {
+  const bytes = new Uint8Array(await zip.arrayBuffer());
+  let binary = "";
+
+  for (let index = 0; index < bytes.length; index += 32_768) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + 32_768));
+  }
+
+  return btoa(binary);
+}
+
 function InstallSkillForm({
+  bashAssigned,
   busy,
   profileId,
   onOpenChange,
   onSubmit,
   setRunning,
 }: {
+  bashAssigned: boolean;
   busy: boolean;
   profileId: string | null;
   onOpenChange: (open: boolean) => void;
   onSubmit: (request: InstallSkillRequest) => Promise<void>;
   setRunning: (running: boolean) => void;
 }) {
-  const [method, setMethod] = useState<"command" | "github" | "upload">(
-    "github"
-  );
+  const [method, setMethod] = useState<
+    "command" | "github" | "marketplace" | "upload"
+  >("marketplace");
 
   const [command, setCommand] = useState("");
+
+  const [marketplaceSkill, setMarketplaceSkill] =
+    useState<SkillsMarketplaceSkill | null>(null);
+
   const [url, setUrl] = useState("");
   const [zip, setZip] = useState<File | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  const commandValue =
+    method === "marketplace"
+      ? marketplaceSkill && skillsAddCommand(marketplaceSkill)
+      : command.trim();
+
   const canSubmit =
-    (method === "command" && command.trim().length > 0) ||
-    (method === "github" && url.trim().length > 0) ||
-    (method === "upload" && zip !== null);
+    method === "upload"
+      ? zip !== null
+      : Boolean(method === "github" ? url.trim() : commandValue);
 
   function handleZipChange(event: ChangeEvent<HTMLInputElement>) {
     setZip(event.target.files?.[0] ?? null);
@@ -705,20 +734,11 @@ function InstallSkillForm({
 
     try {
       if (method === "upload" && zip) {
-        const bytes = new Uint8Array(await zip.arrayBuffer());
-        let binary = "";
-
-        for (let index = 0; index < bytes.length; index += 32_768) {
-          binary += String.fromCharCode(
-            ...bytes.subarray(index, index + 32_768)
-          );
-        }
-
-        await onSubmit({ profileId, zipBase64: btoa(binary) });
-      } else if (method === "command") {
-        await onSubmit({ command: command.trim(), profileId });
-      } else {
+        await onSubmit({ profileId, zipBase64: await zipToBase64(zip) });
+      } else if (method === "github") {
         await onSubmit({ profileId, url: url.trim() });
+      } else {
+        await onSubmit({ command: commandValue ?? "", profileId });
       }
     } catch (error) {
       setSubmitError(
@@ -731,9 +751,10 @@ function InstallSkillForm({
 
   return (
     <form className="space-y-6" onSubmit={handleSubmit}>
-      <div className="grid grid-cols-3 gap-2" role="tablist">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="tablist">
         {(
           [
+            ["marketplace", "skills.sh"],
             ["github", "GitHub URL"],
             ["command", "npx command"],
             ["upload", "Upload ZIP"],
@@ -751,6 +772,15 @@ function InstallSkillForm({
           </Button>
         ))}
       </div>
+
+      {method === "marketplace" ? (
+        <SkillsMarketplace
+          bashAssigned={bashAssigned}
+          busy={busy}
+          onSelect={setMarketplaceSkill}
+          selected={marketplaceSkill}
+        />
+      ) : null}
 
       {method === "github" ? (
         <div className="space-y-2.5">
@@ -832,5 +862,176 @@ function InstallSkillForm({
         </Button>
       </DialogFooter>
     </form>
+  );
+}
+
+function skillsAddCommand(skill: SkillsMarketplaceSkill) {
+  return `npx skills add ${skill.source} --skill ${skill.skillId}`;
+}
+
+function SkillsMarketplace({
+  bashAssigned,
+  busy,
+  onSelect,
+  selected,
+}: {
+  bashAssigned: boolean;
+  busy: boolean;
+  onSelect: (skill: SkillsMarketplaceSkill) => void;
+  selected: SkillsMarketplaceSkill | null;
+}) {
+  const [search, setSearch] = useState("");
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setQuery(search.trim()), 300);
+
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const results = useQuery({
+    enabled: query.length >= 2,
+    queryFn: () => client.searchSkillsMarketplace(query),
+    queryKey: queryKeys.skills.marketplace(query),
+    staleTime: 60_000,
+  });
+
+  const skills = results.data?.skills;
+
+  return (
+    <div className="space-y-3">
+      <label
+        className="block font-medium text-foreground text-sm"
+        htmlFor="skill-marketplace-search"
+      >
+        Search skills.sh
+      </label>
+      <Input
+        autoFocus
+        disabled={busy}
+        id="skill-marketplace-search"
+        onChange={(event) => setSearch(event.target.value)}
+        placeholder="pdf, react, testing"
+        value={search}
+      />
+
+      <QueryStatus error={results.error} loading={results.isFetching} />
+
+      {skills?.length === 0 ? (
+        <p className="text-muted-foreground text-sm">No skills found.</p>
+      ) : null}
+
+      {skills?.length ? (
+        <ul className="max-h-56 divide-y overflow-y-auto rounded-md border">
+          {skills.map((skill) => (
+            <li key={skillsAddCommand(skill)}>
+              <button
+                aria-pressed={
+                  selected !== null &&
+                  skillsAddCommand(selected) === skillsAddCommand(skill)
+                }
+                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-muted aria-pressed:bg-muted"
+                disabled={busy}
+                onClick={() => onSelect(skill)}
+                type="button"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">
+                    {skill.name}
+                  </span>
+                  <span className="block truncate text-muted-foreground text-xs">
+                    {skill.source}
+                  </span>
+                </span>
+                <span className="shrink-0 text-muted-foreground text-xs">
+                  {skill.installs.toLocaleString()} installs
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {selected ? (
+        <SkillsMarketplacePreview
+          bashAssigned={bashAssigned}
+          skill={selected}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function QueryStatus({ error, loading }: { error: unknown; loading: boolean }) {
+  if (error) {
+    return (
+      <p className="text-destructive text-sm" role="alert">
+        {formatError(error)}
+      </p>
+    );
+  }
+
+  return loading ? <Spinner className="size-4" /> : null;
+}
+
+function SkillsMarketplacePreview({
+  bashAssigned,
+  skill,
+}: {
+  bashAssigned: boolean;
+  skill: SkillsMarketplaceSkill;
+}) {
+  const command = skillsAddCommand(skill);
+
+  const preview = useQuery({
+    queryFn: () => client.previewSkillInstall(command),
+    queryKey: queryKeys.skills.marketplacePreview(command),
+    staleTime: 60_000,
+  });
+
+  if (!preview.data) {
+    return <QueryStatus error={preview.error} loading={preview.isFetching} />;
+  }
+
+  const { description, estimatedTokens, files } = preview.data;
+
+  return (
+    <div className="space-y-2 rounded-md border p-3 text-sm">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="font-medium">{preview.data.name}</span>
+        <a
+          className="text-muted-foreground text-xs underline"
+          href={`https://skills.sh/${skill.source}/${skill.skillId}`}
+          rel="noreferrer"
+          target="_blank"
+        >
+          skills.sh
+        </a>
+      </div>
+      <p className="text-muted-foreground">{description}</p>
+      <p className="text-muted-foreground text-xs">
+        About {estimatedTokens.toLocaleString()} tokens, {files.length}{" "}
+        supporting files
+      </p>
+      <ul className="max-h-32 overflow-y-auto font-mono text-xs">
+        {files.map((file) => (
+          <li key={file.path}>
+            {file.path}
+            {file.executable ? (
+              <span className="ml-2 text-amber-600">script</span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {bashAssigned && files.some((file) => file.executable) ? (
+        <p
+          className="rounded-md bg-amber-500/10 px-3 py-2 text-amber-700 dark:text-amber-400"
+          role="alert"
+        >
+          This profile has bash, so the agent can run these scripts on the
+          server.
+        </p>
+      ) : null}
+    </div>
   );
 }

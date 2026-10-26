@@ -1,5 +1,5 @@
-import { afterEach, expect, test } from "bun:test";
-import type { SkillSummary } from "@nakama/core/contract";
+import { afterEach, expect, spyOn, test } from "bun:test";
+import type { InstallSkillRequest, SkillSummary } from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -8,6 +8,7 @@ import {
   AuthContext,
   type AuthContextValue,
 } from "@/context/auth-context-shared";
+import { client } from "@/lib/client";
 
 const now = "2026-10-04T00:00:00Z";
 
@@ -113,4 +114,111 @@ test("keeps only unadded skills selected after a partial failure", async () => {
   });
   expect(assigned).toEqual(["one", "two", "three"]);
   expect(open).toBe(false);
+});
+
+test("installs a skill picked from skills.sh with the npx command", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const installs: InstallSkillRequest[] = [];
+
+  const search = spyOn(client, "searchSkillsMarketplace").mockResolvedValue({
+    skills: [
+      {
+        installs: 1200,
+        name: "pdf",
+        skillId: "pdf",
+        source: "anthropics/skills",
+      },
+    ],
+  });
+
+  const preview = spyOn(client, "previewSkillInstall").mockResolvedValue({
+    description: "Work with PDFs",
+    estimatedTokens: 900,
+    files: [{ executable: true, path: "scripts/fill.py" }],
+    name: "pdf",
+  });
+
+  cleanups.push(() => {
+    act(() => root.unmount());
+    container.remove();
+    search.mockRestore();
+    preview.mockRestore();
+  });
+
+  // SAFETY: AddSkillDialog reads only user.isPlatformAdmin from this fixture.
+  const auth = { user: { isPlatformAdmin: true } } as AuthContextValue;
+
+  await act(async () => {
+    root.render(
+      <QueryClientProvider client={new QueryClient()}>
+        <AuthContext.Provider value={auth}>
+          <AddSkillDialog
+            assignedSkillIds={new Set()}
+            bashAssigned
+            busy={false}
+            onAssign={async () => {}}
+            onAssignBash={async () => {}}
+            onInstall={async (request) => {
+              installs.push(request);
+            }}
+            onOpenChange={() => {}}
+            open
+            orgId="org-a"
+            profileId="profile-a"
+            skills={skills}
+            skillsError={null}
+            skillsLoading={false}
+          />
+        </AuthContext.Provider>
+      </QueryClientProvider>
+    );
+  });
+
+  const button = (text: string) =>
+    [...document.querySelectorAll("button")].find((element) =>
+      element.textContent?.includes(text)
+    );
+
+  await act(async () => button("Install new")?.click());
+
+  const input = document.querySelector<HTMLInputElement>(
+    "#skill-marketplace-search"
+  )!;
+
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value"
+    )!.set!.call(input, "pdf");
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  });
+
+  const settle = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+
+  expect(search).toHaveBeenCalledWith("pdf");
+  await settle();
+
+  await act(async () => button("anthropics/skills")?.click());
+  await settle();
+
+  expect(preview).toHaveBeenCalledWith(
+    "npx skills add anthropics/skills --skill pdf"
+  );
+  expect(document.body.textContent).toContain("scripts/fill.py");
+  expect(document.querySelectorAll('[role="alert"]')).toHaveLength(1);
+
+  await act(async () => button("Install skill")?.click());
+
+  expect(installs).toEqual([
+    {
+      command: "npx skills add anthropics/skills --skill pdf",
+      profileId: "profile-a",
+    },
+  ]);
 });

@@ -139,6 +139,10 @@ export const queryKeys = {
   skills: {
     all: ["skills"] as const,
     detail: (skillId: string) => ["skills", skillId] as const,
+    // Outside "skills" so invalidating installed skills does not refetch skills.sh.
+    marketplace: (query: string) => ["skills-marketplace", query] as const,
+    marketplacePreview: (command: string) =>
+      ["skills-marketplace", "preview", command] as const,
     published: (orgId: string, publicationId: string) =>
       ["skills", "published", orgId, publicationId] as const,
   },

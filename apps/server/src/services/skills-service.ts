@@ -124,7 +124,7 @@ function assertEditableSkill(record: StoredSkillRecord): void {
   }
 }
 
-function parseSkillsAddCommand(command: string): string {
+export function parseSkillsAddCommand(command: string): string {
   const tokens = command
     .match(/"[^"]*"|'[^']*'|\S+/g)
     ?.map((token) => token.replace(/^("|')|("|')$/g, ""));

@@ -49,6 +49,7 @@ import { registerSetupImportRoutes } from "./routes/setup-import";
 import { registerSkillProposalRoutes } from "./routes/skill-proposals";
 import { registerSkillSuggestionRoutes } from "./routes/skill-suggestions";
 import { registerSkillRoutes } from "./routes/skills";
+import { registerSkillsMarketplaceRoutes } from "./routes/skills-marketplace";
 import {
   ARTIFACT_FRAME_CSP,
   ARTIFACT_FRAME_PATH,
@@ -404,6 +405,7 @@ export function createHonoApp(options: ServerOptions) {
   registerProfilePortabilityRoutes(app, options);
   registerArtifactShareRoutes(app, options);
   registerMcpRoutes(app, options);
+  registerSkillsMarketplaceRoutes(app);
   registerSkillRoutes(app, options);
   registerToolRoutes(app, options);
   registerPluginRoutes(app, options);

@@ -2304,6 +2304,24 @@ export interface InstallSkillRequest {
   zipBase64?: string;
 }
 
+export interface SkillsMarketplaceSkill {
+  installs: number;
+  name: string;
+  skillId: string;
+  source: string;
+}
+
+export interface SkillsMarketplaceResponse {
+  skills: SkillsMarketplaceSkill[];
+}
+
+export interface SkillInstallPreviewResponse {
+  description: string;
+  estimatedTokens: number;
+  files: { executable: boolean; path: string }[];
+  name: string;
+}
+
 export interface PatchSkillRequest {
   body?: string;
   description?: string;
