@@ -4,7 +4,6 @@ import { Window } from "happy-dom";
 import {
   ARTIFACT_HTML_IFRAME_SANDBOX,
   htmlForArtifactPreview,
-  printArtifactHtml,
   resolveArtifactHtmlAssets,
 } from "./artifact-html-preview";
 
@@ -279,70 +278,5 @@ test("relative base directories resolve within the profile artifact root", async
     expect(calls).toEqual(["cover.png"]);
   } finally {
     controller.abort();
-  }
-});
-
-function frameMessage(data: string, source: MessageEventSource): Event {
-  // Bun's global MessageEvent rejects happy-dom windows as `source`.
-  return new window.MessageEvent("message", {
-    data,
-    // SAFETY: happy-dom uses its own Window type for the same runtime object.
-    source: source as never,
-  });
-}
-
-test("printing an artifact posts its HTML to a print frame and removes the frame after printing", () => {
-  const originalWindow = globalThis.window;
-  const originalDocument = globalThis.document;
-  Object.defineProperty(globalThis, "window", {
-    configurable: true,
-    value: dom,
-  });
-  Object.defineProperty(globalThis, "document", {
-    configurable: true,
-    value: dom.document,
-  });
-
-  try {
-    printArtifactHtml("<p>Report</p>", "report");
-
-    const frame = document.querySelector<HTMLIFrameElement>(
-      "iframe[data-nakama-artifact-print]"
-    );
-
-    expect(frame?.getAttribute("sandbox")?.split(" ")).toContain(
-      "allow-modals"
-    );
-
-    const posted: object[] = [];
-    const source = frame?.contentWindow;
-
-    if (!source) {
-      throw new Error("print frame has no window");
-    }
-
-    source.postMessage = (message: { nakamaArtifactHtml: string }) => {
-      posted.push(message);
-    };
-
-    window.dispatchEvent(frameMessage("nakama-artifact-frame-ready", source));
-    expect(posted).toHaveLength(1);
-    expect(posted[0]).toMatchObject({
-      nakamaArtifactHtml: expect.stringContaining("<p>Report</p>"),
-    });
-
-    window.dispatchEvent(frameMessage("nakama-artifact-print-done", source));
-    expect(document.querySelector("iframe[data-nakama-artifact-print]")).toBe(
-      null
-    );
-  } finally {
-    Object.defineProperty(globalThis, "window", {
-      configurable: true,
-      value: originalWindow,
-    });
-    Object.defineProperty(globalThis, "document", {
-      configurable: true,
-      value: originalDocument,
-    });
   }
 });

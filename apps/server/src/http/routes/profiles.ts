@@ -22,6 +22,7 @@ import type {
 import {
   attachSharedKnowledgeBaseDocument,
   detachSharedKnowledgeBaseDocument,
+  getProfileArtifactsDir,
   getProfileSharedDocumentIds,
   getWorkspaceEntry,
   KnowledgeBaseDocumentInUseError,
@@ -31,10 +32,12 @@ import {
   readWorkspaceFile,
   renameWorkspaceEntry,
 } from "@nakama/core";
+import { isHtmlArtifactMimeType } from "@nakama/core/artifact-mime";
 import { filterProfilesForChatAccess } from "@nakama/core/profiles";
 import type { Context } from "hono";
 import { listAcpAgentPresets } from "../../providers/acp/acp-agent-presets";
 import { ArtifactShareService } from "../../services/artifact-share-service";
+import { convertHtmlArtifactToPdf } from "../../services/html-pdf";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
@@ -1672,6 +1675,36 @@ export function registerProfileRoutes(
 
     if (!artifactPath) {
       return json({ error: "path is required" }, 400);
+    }
+
+    if (c.req.query("render") === "pdf") {
+      const html = await agent.readProfileArtifact(
+        orgId,
+        profileId,
+        artifactPath,
+        { headOnly: true }
+      );
+
+      if (!isHtmlArtifactMimeType(html.contentType)) {
+        return json(
+          { error: "Only HTML artifacts can be exported as PDF" },
+          400
+        );
+      }
+
+      const pdf = await convertHtmlArtifactToPdf(
+        html.filePath,
+        getProfileArtifactsDir(orgId, profileId)
+      );
+
+      const pdfName = `${(artifactPath.split("/").pop() ?? "artifact").replace(/\.html?$/i, "")}.pdf`;
+
+      return new Response(new Uint8Array(pdf), {
+        headers: {
+          "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(pdfName)}`,
+          "Content-Type": "application/pdf",
+        },
+      });
     }
 
     const render =

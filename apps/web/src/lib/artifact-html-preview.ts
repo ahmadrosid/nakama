@@ -14,47 +14,6 @@ export const ARTIFACT_FRAME_URL = "/artifact-frame";
 
 export const ARTIFACT_FRAME_READY = "nakama-artifact-frame-ready";
 
-const ARTIFACT_PRINT_DONE = "nakama-artifact-print-done";
-
-/**
- * Opens the browser print dialog for the artifact so the user can save it as
- * PDF. A hidden frame keeps the artifact's own scripts and styles intact.
- */
-export function printArtifactHtml(html: string, title: string): void {
-  document.querySelector("iframe[data-nakama-artifact-print]")?.remove();
-  const frame = document.createElement("iframe");
-  frame.dataset.nakamaArtifactPrint = "";
-  frame.setAttribute("sandbox", "allow-scripts allow-modals");
-  frame.src = ARTIFACT_FRAME_URL;
-  frame.title = title;
-  // Off screen but laid out, so scripts that measure the viewport still draw.
-  frame.style.cssText =
-    "position:fixed;left:-10000px;top:0;width:1024px;height:768px;border:0";
-
-  // `<` escaped so the title cannot close the injected script early.
-  const script = `<script>addEventListener("load",()=>setTimeout(()=>{if(!document.title)document.title=${JSON.stringify(title).replaceAll("<", "\\u003c")};addEventListener("afterprint",()=>parent.postMessage("${ARTIFACT_PRINT_DONE}","*"));print()},300))</script>`;
-
-  const onMessage = (event: MessageEvent) => {
-    if (event.source !== frame.contentWindow) {
-      return;
-    }
-
-    if (event.data === ARTIFACT_FRAME_READY) {
-      // The sandboxed frame has an opaque origin, so "*" is the only target.
-      frame.contentWindow?.postMessage(
-        { nakamaArtifactHtml: `${html}${script}` },
-        "*"
-      );
-    } else if (event.data === ARTIFACT_PRINT_DONE) {
-      window.removeEventListener("message", onMessage);
-      frame.remove();
-    }
-  };
-
-  window.addEventListener("message", onMessage);
-  document.body.append(frame);
-}
-
 export function htmlForArtifactPreview(html: string): string {
   if (new TextEncoder().encode(html).byteLength > MAX_HTML_ARTIFACT_BYTES) {
     return `<p role="alert">HTML artifacts cannot exceed ${MAX_HTML_ARTIFACT_BYTES} bytes.</p>`;
