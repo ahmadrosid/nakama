@@ -3,14 +3,20 @@ import { join } from "node:path";
 import { getProfileSoulDir, SOUL_TEMPLATE } from "@nakama/core";
 import { setupTestConfigDir } from "../test-config-dir";
 import { groupMemoryTool } from "../tools/group-memory-tool";
-import { GROUP_MEMORY_CHARS, writeGroupMemory } from "./agent-group-memory";
 import { closeAgentGroupDatabases } from "./agent-group-store";
 import { ORG_ID, setup, USER_ID } from "./agent-group-test-setup";
+import { GROUP_MEMORY_CHARS, groupWorkspace } from "./agent-group-workspace";
 
 // Before the config dir cleanup, which Windows refuses while a file is open.
 afterEach(closeAgentGroupDatabases);
 
 setupTestConfigDir("nakama-agent-group-service-");
+
+/** Writes the whole memory, as the user's editor would. */
+function seedMemory(sharedDir: string, content: string) {
+  const { memory } = groupWorkspace(sharedDir);
+  memory.replace(content, memory.read());
+}
 
 describe("AgentGroupService", () => {
   test("rejects an agent the user cannot chat with", async () => {
@@ -156,7 +162,7 @@ describe("AgentGroupService", () => {
 
     const { chat, service } = setup(({ sharedDir, task }) => {
       tasks.push(task);
-      writeGroupMemory(sharedDir!, `- ${"a".repeat(GROUP_MEMORY_CHARS)}-tail`);
+      seedMemory(sharedDir!, `- ${"a".repeat(GROUP_MEMORY_CHARS)}-tail`);
 
       return "ok";
     });
@@ -176,7 +182,7 @@ describe("AgentGroupService", () => {
 
     const { chat, service } = setup(({ sharedDir, task }) => {
       tasks.push(task);
-      writeGroupMemory(sharedDir!, `${first}\n- ${"b".repeat(200)}`);
+      seedMemory(sharedDir!, `${first}\n- ${"b".repeat(200)}`);
 
       return "ok";
     });

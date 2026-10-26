@@ -1,11 +1,9 @@
-import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { extname, join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { DocumentAttachment, ProfileSummary } from "@nakama/core";
 import {
   getGroupSharedDir,
   getProfileSoulDir,
-  NakamaApiError,
   resolveDocumentPartForProvider,
   SOUL_FILES,
   SOUL_TEMPLATE,
@@ -19,14 +17,12 @@ import {
   validateDocumentAttachments,
   validateImageAttachments,
 } from "@nakama/core/message-content";
-import { GROUP_MEMORY_CHARS, readGroupMemory } from "./agent-group-memory";
 import {
-  type GroupDocument,
-  getAgentGroup,
   listAgentGroupMessages,
   listAgentGroupThreadMessages,
   listGroupMessageDocuments,
 } from "./agent-group-store";
+import { groupWorkspace, type PostedDocument } from "./agent-group-workspace";
 
 const CONTEXT_MESSAGES = 40;
 
@@ -46,11 +42,7 @@ const ARTIFACT_GUIDANCE =
 
 /** The group's shared folder, created on first use. */
 export function ensureGroupSharedDir(orgId: string, groupId: string): string {
-  const dir = getGroupSharedDir(orgId, groupId);
-
-  mkdirSync(dir, { recursive: true });
-
-  return dir;
+  return groupWorkspace(getGroupSharedDir(orgId, groupId)).open();
 }
 
 const sharedGuidance = (sharedDir: string) =>
@@ -71,17 +63,7 @@ const MEMORY_GUIDANCE =
 
 /** The group's memory, cut at the cap, and how to add to it. */
 function memorySection(sharedDir: string): string[] {
-  const memory = readGroupMemory(sharedDir);
-  const head = memory.slice(0, GROUP_MEMORY_CHARS);
-
-  // Cut at the last full line, so no fact is half shown; one line past the cap is cut where it is.
-  const lastLineEnd =
-    memory[GROUP_MEMORY_CHARS] === "\n" ? head.length : head.lastIndexOf("\n");
-
-  const shown =
-    memory.length > GROUP_MEMORY_CHARS
-      ? `${lastLineEnd > 0 ? head.slice(0, lastLineEnd) : head}\n[truncated]`
-      : memory;
+  const shown = groupWorkspace(sharedDir).memory.forPrompt();
 
   return [
     shown
@@ -342,45 +324,24 @@ export function threadTranscript(
 
 /**
  * The text of attached documents, read before a message is saved so a bad file
- * fails the send instead of an agent's turn. An image is saved in the group's
- * shared folder, and the agents get its path to open with read_file.
+ * fails the send instead of an agent's turn. Nothing is written here: an image
+ * is saved to the group's folder only once the post is known to be valid.
  */
 export async function readGroupDocuments(
-  orgId: string,
-  userId: string,
-  groupId: string,
   attachments: DocumentAttachment[]
-): Promise<GroupDocument[]> {
+): Promise<PostedDocument[]> {
   const isImage = (attachment: DocumentAttachment) =>
     attachment.mediaType.startsWith("image/");
 
   validateImageAttachments(attachments.filter(isImage));
   validateDocumentAttachments(attachments.filter((a) => !isImage(a)));
 
-  // Checked before an image is written to the group's folder.
-  if (attachments.some(isImage) && !getAgentGroup(orgId, userId, groupId)) {
-    throw new NakamaApiError("Group not found", 404);
-  }
-
   return await Promise.all(
     attachments.map(async (document) => {
       const filename = document.filename.trim() || "image";
 
       if (isImage(document)) {
-        const sharedDir = ensureGroupSharedDir(orgId, groupId);
-        const path = `uploads/${randomUUID().slice(0, 8)}${extname(filename) || ".png"}`;
-
-        mkdirSync(join(sharedDir, "uploads"), { recursive: true });
-        writeFileSync(
-          join(sharedDir, path),
-          Buffer.from(document.data, "base64")
-        );
-
-        return {
-          filename,
-          path,
-          text: `Image saved at ${join(sharedDir, path)}. Open it with read_file to see it.`,
-        };
+        return { filename, image: Buffer.from(document.data, "base64") };
       }
 
       // A provider with no native documents always gets them as text.
