@@ -12,6 +12,7 @@
     "coolify",
     "tailscale",
     "deployment-hardening",
+    "secret-managers",
     "outbound-connections",
     "backup-restore",
     "error-tracking",

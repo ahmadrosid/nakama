@@ -93,6 +93,7 @@ In Kubernetes, mount the master key as a Secret-backed environment variable name
 Keep it outside the Nakama data volume. Give every process that shares the database the same value.
 Set provider or integration overrides as separate Secret-backed variables or `_FILE` mounts.
 Back up the master key separately from data exports and volumes.
+To load it from Vault, AWS Secrets Manager or GCP Secret Manager, see [Secret managers](/secret-managers).
 
 To rotate the master key, stop every Nakama process and make a backup.
 Start the server once with the old `NAKAMA_SECRETS_KEY` and a new `NAKAMA_SECRETS_KEY_NEXT`.
