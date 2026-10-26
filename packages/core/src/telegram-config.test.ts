@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, symlink } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, symlink, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { withTempHome } from "./channel-test-helpers";
 import {
   claimLegacyTelegramConfig,
   getTelegramConfigDir,
@@ -21,6 +23,7 @@ import {
   describeSharedChannelConfigTests,
   withTempHomedir,
 } from "./testing/channel-config-fixtures";
+import { getUserConfigDir } from "./user-config";
 
 describe("parseAllowedUserIds", () => {
   test("parses comma-separated ids", () => {
@@ -189,6 +192,65 @@ describe("telegram access requests", () => {
       );
 
       expect(await listTelegramAccessRequests(null)).toHaveLength(20);
+    });
+  });
+});
+
+describe("telegram bot claims", () => {
+  const token = "123456789:AAEexampletoken";
+
+  test("a claim with no connection behind it is taken over", async () => {
+    await withTempHome("nakama-telegram-stale-claim-", async () => {
+      const dir = join(getUserConfigDir(), "channel-claims", "telegram");
+
+      const claim = join(
+        dir,
+        createHash("sha256").update("123456789").digest("hex")
+      );
+
+      await mkdir(dir, { recursive: true });
+
+      await writeFile(claim, JSON.stringify(["org_a", "gone"]));
+
+      const hourAgo = new Date(Date.now() - 3_600_000);
+
+      await utimes(claim, hourAgo, hourAgo);
+
+      await saveTelegramConfig(
+        { orgId: "org_a", profileId: "fresh" },
+        { botToken: token }
+      );
+
+      expect(JSON.parse(await readFile(claim, "utf8"))).toEqual([
+        "org_a",
+        "fresh",
+      ]);
+    });
+  });
+
+  test("a live connection still blocks, and says which org holds it", async () => {
+    await withTempHome("nakama-telegram-live-claim-", async () => {
+      await saveTelegramConfig(
+        { orgId: "org_a", profileId: "alpha" },
+        { botToken: token }
+      );
+
+      // A revoked and reissued token keeps the bot id the claim is keyed on.
+      const reissued = "123456789:AAEreissuedtoken";
+
+      await expect(
+        saveTelegramConfig(
+          { orgId: "org_a", profileId: "beta" },
+          { botToken: reissued }
+        )
+      ).rejects.toThrow(/in this organization/);
+
+      await expect(
+        saveTelegramConfig(
+          { orgId: "org_b", profileId: "gamma" },
+          { botToken: reissued }
+        )
+      ).rejects.toThrow(/in another organization/);
     });
   });
 });

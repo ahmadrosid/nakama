@@ -34,6 +34,7 @@ import {
 import {
   assertChannelPath,
   type ChannelConfigScope,
+  ChannelIdentityInUseError,
   type ChannelOwner,
   type ChannelPlatform,
   claimChannelIdentity,
@@ -313,11 +314,7 @@ export class WorkerManagerService {
       } catch (error) {
         if (
           platform !== "whatsapp" ||
-          !(
-            error instanceof Error &&
-            error.message ===
-              "This channel account is already in use by another agent."
-          )
+          !(error instanceof ChannelIdentityInUseError)
         ) {
           throw error;
         }

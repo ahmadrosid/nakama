@@ -5,6 +5,7 @@ import {
   mkdir,
   readFile,
   rm,
+  stat,
   unlink,
   writeFile,
 } from "node:fs/promises";
@@ -142,8 +143,17 @@ export async function listChannelOwners(
 export class ChannelIdentityInUseError extends Error {
   readonly owner: ChannelOwner | null;
 
-  constructor(owner: ChannelOwner | null) {
-    super("This channel account is already in use by another agent.");
+  constructor(owner: ChannelOwner | null, claimant?: ChannelOwner) {
+    // Tells the user where to look; naming the agent would need the database.
+    super(
+      `This channel account is already in use by another agent${
+        owner && claimant
+          ? owner.orgId === claimant.orgId
+            ? " in this organization"
+            : " in another organization"
+          : ""
+      }.`
+    );
     this.name = "ChannelIdentityInUseError";
     this.owner = owner;
   }
@@ -163,6 +173,8 @@ function parseClaimOwner(value: string): ChannelOwner | null {
     return null;
   }
 }
+
+const STALE_CLAIM_MS = 60_000;
 
 /** Exclusive creation makes duplicate account claims atomic across server processes. */
 export async function claimChannelIdentity(
@@ -198,11 +210,25 @@ export async function claimChannelIdentity(
 
     const existing = await readFile(path, "utf8");
 
-    if (existing !== value) {
-      throw new ChannelIdentityInUseError(parseClaimOwner(existing));
+    if (existing === value) {
+      return async () => {};
     }
 
-    return async () => {};
+    const holder = parseClaimOwner(existing);
+
+    // A claim with no connection behind it was left over, so it must not block.
+    // A young one may be a save in flight that has not written its config yet.
+    if (
+      !holder ||
+      Date.now() - (await stat(path)).mtimeMs < STALE_CLAIM_MS ||
+      (await readTextOrNull(
+        join(getChannelConfigDir(platform, holder), "config.ini")
+      ))
+    ) {
+      throw new ChannelIdentityInUseError(holder, owner);
+    }
+
+    await writeFile(path, value, { mode: 0o600 });
   }
 
   return async () => {
