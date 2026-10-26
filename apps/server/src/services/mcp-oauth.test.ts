@@ -271,6 +271,57 @@ describe("MCP browser authorization", () => {
     await manager.disconnectAll();
   });
 
+  test("resumes an unfinished sign-in instead of connecting anonymously", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const manager = new McpClientManager();
+    const service = new McpService(db, manager);
+
+    const created = await service.createServer(
+      {
+        config: { url: remote.openUrl },
+        connect: true,
+        name: "open-unfinished",
+        signIn: true,
+        transport: "http",
+      },
+      { callbackBaseUrl: CALLBACK_BASE_URL }
+    );
+
+    // An unattended reconnect must not cover the unfinished sign-in with an
+    // anonymous connection.
+    const unattended = await service.connectServer(created.server.id, {
+      reauthorize: false,
+    });
+
+    expect(unattended.authorizationUrl).toBeUndefined();
+    expect(unattended.server.status).toBe("needs_auth");
+
+    // Sign in from the list again: still a sign-in, not an anonymous connect.
+    const retried = await service.connectServer(created.server.id, {
+      callbackBaseUrl: CALLBACK_BASE_URL,
+    });
+
+    expect(retried.server.status).toBe("needs_auth");
+
+    const state = new URL(
+      z.string().parse(retried.authorizationUrl)
+    ).searchParams.get("state");
+
+    const completed = await service.completeOAuth(created.server.id, {
+      callbackBaseUrl: CALLBACK_BASE_URL,
+      code: "fake-auth-code",
+      state: z.string().parse(state),
+    });
+
+    expect(completed.server.status).toBe("connected");
+    expect(
+      readMcpOAuthGrant((await db.getMcpServer(created.server.id))?.config)
+        ?.tokens?.access_token
+    ).toBe(ACCESS_TOKEN);
+
+    await manager.disconnectAll();
+  });
+
   test("reports a sign-in requirement from a test instead of a failure", async () => {
     const service = new McpService(
       createInMemoryDatabaseAdapter(),

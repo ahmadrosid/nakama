@@ -355,7 +355,24 @@ export class McpService {
       this.saveOAuthGrant(serverId, grant)
     );
 
+    // A grant without tokens is a sign-in that was started and never finished.
+    const grant = readMcpOAuthGrant(server.config);
+    const signInPending = grant !== undefined && !grant.tokens;
+
+    // Nobody is here to open a link, and an anonymous connection would hide
+    // that the sign-in is still owed.
+    if (signInPending && !provider) {
+      return { server: toMcpServerDetail(server) };
+    }
+
     try {
+      if (signInPending && provider) {
+        await signInBeforeConnect(
+          provider,
+          resolveMcpConfig("http", server.config).url
+        );
+      }
+
       const cachedTools = await this.manager.connect(
         server,
         provider ? { authProvider: provider } : undefined
