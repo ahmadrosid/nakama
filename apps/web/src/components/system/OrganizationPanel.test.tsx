@@ -453,6 +453,60 @@ test.each(["team", "parent", "standalone"] as const)(
   }
 );
 
+test("an admin revokes a pending invite from the members tab", async () => {
+  const queries = new QueryClient({
+    defaultOptions: { queries: { enabled: false, retry: false } },
+  });
+
+  const org = { ...organization("standalone"), role: "admin" as const };
+
+  const invite = {
+    createdAt: "2026-10-27T00:00:00Z",
+    email: "guest@example.com",
+    expiresAt: "2026-11-03T00:00:00Z",
+    id: "invite_1",
+    orgId: org.id,
+    role: "member" as const,
+  };
+
+  queries.setQueryData(queryKeys.orgMembers(org.id), { members: [] });
+
+  const list = spyOn(client, "listOrgInvites").mockResolvedValue({
+    invites: [invite],
+  });
+
+  const revoke = spyOn(client, "revokeOrgInvite").mockResolvedValue();
+
+  cleanups.push(() => {
+    list.mockRestore();
+    revoke.mockRestore();
+  });
+
+  const { container, render } = mount(
+    queries,
+    undefined,
+    undefined,
+    undefined,
+    <OrgMembersCard />
+  );
+
+  await render(org);
+
+  const button = container.querySelector<HTMLButtonElement>(
+    'button[aria-label="Revoke invite for guest@example.com"]'
+  )!;
+
+  expect(button).not.toBeNull();
+  list.mockResolvedValue({ invites: [] });
+  await act(async () => {
+    button.click();
+    await settle();
+  });
+
+  expect(revoke).toHaveBeenCalledWith(org.id, invite.id);
+  expect(container.querySelector('[aria-label="Pending invites"]')).toBeNull();
+});
+
 test("admin settings remain available and disappear after a role change", async () => {
   const queries = new QueryClient({
     defaultOptions: {
