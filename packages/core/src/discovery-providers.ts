@@ -9,6 +9,17 @@ export function resolveNetraModelId(model: string): string {
     : model;
 }
 
+// Netra's /v1/models reports input_modalities ["text", "image"] for V4.1
+// Flash. Saved entries predate that: tenant setup stores no flag, and older
+// configs keep supportsVision false from the retired text-only 0731 model.
+const NETRA_VISION_MODEL_IDS: ReadonlySet<string> = new Set([
+  NETRA_AGENT_MODEL_ID,
+]);
+
+export function netraModelSupportsVision(model: string): boolean {
+  return NETRA_VISION_MODEL_IDS.has(resolveNetraModelId(model.trim()));
+}
+
 // Providers whose model lists are discovered live from the platform's
 // /models endpoint and stored as instance custom models, instead of a
 // hardcoded catalog. Adding a discovery-based provider is one entry here

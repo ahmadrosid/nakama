@@ -75,6 +75,7 @@ export function registerSessionRoutes(
     .openapi("ApiErrorResponse");
 
   const agentChannelSchema = z.enum(AGENT_CHANNELS).openapi("AgentChannel");
+  const thinkingEffortSchema = z.enum(["low", "medium", "high"]);
 
   const createSessionRequestSchema = z
     .object({
@@ -83,6 +84,7 @@ export function registerSessionRoutes(
       codingWorkspaceRoot: z.string().optional(),
       model: z.string().trim().min(1).optional(),
       profileId: z.string().optional(),
+      thinkingEffort: thinkingEffortSchema.optional(),
     })
     .openapi("CreateSessionRequest");
 
@@ -150,6 +152,7 @@ export function registerSessionRoutes(
     .object({
       id: z.string(),
       label: z.string(),
+      recommended: z.boolean().optional(),
     })
     .openapi("AgentQuestionChoice");
 
@@ -178,6 +181,7 @@ export function registerSessionRoutes(
       messages: z.array(z.object({}).passthrough()),
       model: z.string().nullable(),
       questionnaire: agentQuestionnaireSchema.nullable(),
+      thinkingEffort: thinkingEffortSchema.nullable(),
       todos: z.array(agentTodoSchema),
     })
     .openapi("SessionMessagesResponse");
@@ -199,6 +203,7 @@ export function registerSessionRoutes(
       model: z.string().trim().min(1).nullable().optional(),
       pinned: z.boolean().optional(),
       parentSessionId: z.null().optional(),
+      thinkingEffort: thinkingEffortSchema.nullable().optional(),
       title: z.string().trim().min(1).max(200).optional(),
     })
     .refine(
@@ -206,6 +211,7 @@ export function registerSessionRoutes(
         body.model !== undefined ||
         body.pinned !== undefined ||
         body.parentSessionId !== undefined ||
+        body.thinkingEffort !== undefined ||
         body.title !== undefined,
       "At least one session field is required."
     )
@@ -724,6 +730,7 @@ export function registerSessionRoutes(
         isPlatformAdmin: auth.isPlatformAdmin,
         model: body.model,
         orgRole: auth.orgRole,
+        thinkingEffort: body.thinkingEffort,
       }
     );
 
@@ -826,6 +833,18 @@ export function registerSessionRoutes(
         sessionId,
         orgId,
         body.model
+      );
+
+      if (!updated) {
+        return errorResponse("Session not found", 404);
+      }
+    }
+
+    if (body.thinkingEffort !== undefined) {
+      const updated = await agent.updateSessionThinkingEffort(
+        sessionId,
+        orgId,
+        body.thinkingEffort
       );
 
       if (!updated) {
@@ -991,6 +1010,7 @@ export function registerSessionRoutes(
       messages: result.messages,
       model: result.model,
       questionnaire,
+      thinkingEffort: result.thinkingEffort,
       todos,
     });
   });

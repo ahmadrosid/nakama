@@ -45,8 +45,8 @@ describe("resolveModel", () => {
     ];
 
     for (const provider of USER_PROVIDER_NAMES) {
-      if (provider === "cloudflare" || provider === "netra") {
-        // Cloudflare uses its fixed catalog; Netra uses its explicit allowlist.
+      if (provider === "netra") {
+        // Netra uses its explicit allowlist.
         continue;
       }
 
@@ -373,6 +373,11 @@ describe("modelSupportsVision", () => {
         expect(modelSupportsVision("private-model", provider)).toBe(false);
       }
 
+      // Netra uses its own fixed catalog; see the Netra test below.
+      if (provider === "netra") {
+        continue;
+      }
+
       for (const supportsVision of [false, true]) {
         expect(
           modelSupportsVision("private-model", provider, [
@@ -381,6 +386,14 @@ describe("modelSupportsVision", () => {
         ).toBe(supportsVision);
       }
     }
+  });
+
+  test("treats a saved Cloudflare model without a vision flag as text-only", () => {
+    expect(
+      modelSupportsVision("@cf/qwen/qwen3.8-27b", "cloudflare", [
+        { id: "@cf/qwen/qwen3.8-27b" },
+      ])
+    ).toBe(false);
   });
 
   test("keeps Moonshot models opt-in only (discovered lists)", () => {
@@ -409,6 +422,31 @@ describe("modelSupportsVision", () => {
         { id: "qwen-vl", supportsVision: true },
       ])
     ).toBe(true);
+  });
+
+  test("Netra V4.1 Flash reads images whatever the saved entry says", () => {
+    const v41 = "deepseek/deepseek-v4.1-flash";
+    const retired = "deepseek/deepseek-v4-flash-0731";
+
+    // Tenant setup saves the model with no flag.
+    expect(modelSupportsVision(v41, "netra", [{ id: v41 }])).toBe(true);
+    // Older configs kept supportsVision false from the text-only 0731 model.
+    expect(
+      modelSupportsVision(v41, "netra", [
+        { id: retired, supportsVision: false },
+      ])
+    ).toBe(true);
+    expect(
+      modelSupportsVision(retired, "netra", [
+        { id: retired, supportsVision: false },
+      ])
+    ).toBe(true);
+    expect(modelSupportsVision("unverified-model", "netra")).toBe(false);
+    expect(
+      modelSupportsVision("unverified-model", "netra", [
+        { id: "unverified-model", supportsVision: true },
+      ])
+    ).toBe(false);
   });
 
   test("keeps OpenCode Go models opt-in only", () => {

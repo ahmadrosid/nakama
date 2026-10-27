@@ -6,6 +6,8 @@ export * from "./chatgpt";
 
 export * from "./cloudflare";
 
+export { fetchCloudflareWorkersAiModels } from "./cloudflare/catalog";
+
 export * from "./compatible-models";
 
 export * from "./create";

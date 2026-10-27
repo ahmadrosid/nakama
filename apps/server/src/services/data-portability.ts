@@ -49,12 +49,14 @@ import {
   resolveDatabasePath,
 } from "@nakama/db";
 import { unzipSync, zipSync } from "fflate";
+import { decodeSecretsKey, ManagedSecrets } from "./managed-secrets";
 import {
   PluginExportBarrierError,
   quarantineInvalidPluginReleases,
   runWithPluginExportBarrier,
   vacuumPluginDatabaseInto,
 } from "./plugin-service";
+import { decryptBackup, isEncryptedBackup } from "./scheduled-backup";
 
 export const NAKAMA_EXPORT_MANIFEST = "nakama-export.json";
 
@@ -411,7 +413,20 @@ export async function createNakamaDataExport(
 
           for (const file of files) {
             validateArchivePath(file.relativePath);
-            entries[file.relativePath] = await readFile(file.absolutePath);
+            const data = await readFile(file.absolutePath);
+
+            if (
+              (file.relativePath === "config.ini" ||
+                file.relativePath === "composio/config.ini") &&
+              /(?:^|\n)\s*(?:api_key|password)\s*=/m.test(data.toString("utf8"))
+            ) {
+              throw new NakamaApiError(
+                "Legacy plaintext secrets must migrate before export.",
+                409
+              );
+            }
+
+            entries[file.relativePath] = data;
           }
 
           for (const [relativePath, absolutePath] of snapshots) {
@@ -931,7 +946,23 @@ export function decodeArchiveRequestData(data: string): Buffer {
     throw new NakamaApiError("Import archive data is required.", 400);
   }
 
-  return Buffer.from(trimmed, "base64");
+  const archive = Buffer.from(trimmed, "base64");
+
+  if (!isEncryptedBackup(archive)) {
+    return archive;
+  }
+
+  try {
+    return decryptBackup(
+      archive,
+      decodeSecretsKey(process.env.NAKAMA_SECRETS_KEY ?? "")
+    );
+  } catch {
+    throw new NakamaApiError(
+      "Cannot decrypt this backup with NAKAMA_SECRETS_KEY.",
+      400
+    );
+  }
 }
 
 function megabytes(bytes: number): string {
@@ -1026,6 +1057,50 @@ export async function restoreNakamaDataImport(
     for (const candidate of stagedDatabases) {
       if (candidate && (await pathExists(candidate))) {
         await retireAppUserData(stagedRoot, candidate);
+      }
+    }
+
+    const secretDatabasePath =
+      stagedDatabasePath && (await pathExists(stagedDatabasePath))
+        ? stagedDatabasePath
+        : (
+            await Promise.all(
+              stagedDatabases
+                .values()
+                .filter(Boolean)
+                .map(async (candidate) =>
+                  candidate && (await pathExists(candidate)) ? candidate : null
+                )
+                .toArray()
+            )
+          ).find(Boolean);
+
+    const hasLegacySecrets = (
+      await Promise.all(
+        ["config.ini", "composio/config.ini"].map(async (name) => {
+          const file = join(stagedRoot, name);
+
+          return (
+            (await pathExists(file)) &&
+            /(?:^|\n)\s*(?:api_key|password)\s*=/m.test(
+              await readFile(file, "utf8")
+            )
+          );
+        })
+      )
+    ).some(Boolean);
+
+    if (secretDatabasePath || hasLegacySecrets) {
+      const stagedDatabase = await createSqliteDatabase(
+        `file:${secretDatabasePath ?? join(stagedRoot, "sqlite", "nakama.sqlite")}`
+      );
+
+      try {
+        await new ManagedSecrets(stagedDatabase.adapter).migrateLegacyFiles(
+          stagedRoot
+        );
+      } finally {
+        stagedDatabase.release();
       }
     }
 

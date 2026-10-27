@@ -2,6 +2,7 @@ import type {
   EmailSettingsResponse,
   UpdateEmailSettingsRequest,
 } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +21,7 @@ import {
   useSaveEmailSettings,
   useSendEmailTest,
 } from "@/hooks/use-app-queries";
-import { formatError } from "@/lib/client";
+import { client, formatError } from "@/lib/client";
 
 type EmailSettingsState = {
   imapHost: string;
@@ -120,6 +121,7 @@ export function EmailSettingsDialog({
     data: settings,
     isLoading,
     error: loadError,
+    refetch,
   } = useQuery({
     ...emailSettingsQueryOptions,
     enabled: open,
@@ -133,9 +135,11 @@ export function EmailSettingsDialog({
     initialEmailSettingsState
   );
 
-  const passwordPlaceholder = settings?.passwordMasked
-    ? `Saved (${settings.passwordMasked})`
-    : "App password";
+  const passwordPlaceholder = {
+    environment: "Managed by environment",
+    missing: "App password",
+    settings: "Saved",
+  }[settings?.source ?? "missing"];
 
   useEffect(() => {
     if (!open) {
@@ -213,6 +217,18 @@ export function EmailSettingsDialog({
     );
   };
 
+  const handleManageSecret = async (action: "clear" | "use-stored") => {
+    try {
+      await client.manageSettingSecret("email", action);
+      await refetch();
+    } catch (error) {
+      dispatch({
+        type: "patch",
+        values: { formError: formatError(error) },
+      });
+    }
+  };
+
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-2xl">
@@ -283,6 +299,7 @@ export function EmailSettingsDialog({
                 dispatch({ type: "patch", values: { username: value } })
               }
               password={state.password}
+              passwordManaged={settings?.source === "environment"}
               passwordPlaceholder={passwordPlaceholder}
               showPassword={state.showPassword}
               smtpHost={state.smtpHost}
@@ -304,9 +321,40 @@ export function EmailSettingsDialog({
               testPending={testMutation.isPending}
               testRecipient={state.testRecipient}
             />
+            <EmailSettingsSecretAction
+              onManage={handleManageSecret}
+              savedAvailable={settings?.savedAvailable === true}
+              source={settings?.source}
+            />
           </>
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function EmailSettingsSecretAction({
+  onManage,
+  savedAvailable,
+  source,
+}: {
+  onManage: (action: "clear" | "use-stored") => void;
+  savedAvailable: boolean;
+  source?: EmailSettingsResponse["source"];
+}) {
+  if (source !== "settings" && !(source === "missing" && savedAvailable)) {
+    return null;
+  }
+
+  return (
+    <div className="px-4 pb-4">
+      <Button
+        onClick={() => onManage(source === "settings" ? "clear" : "use-stored")}
+        type="button"
+        variant="outline"
+      >
+        {source === "settings" ? "Clear saved password" : "Use saved password"}
+      </Button>
+    </div>
   );
 }

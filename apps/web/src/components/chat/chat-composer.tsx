@@ -50,6 +50,7 @@ import {
 import {
   createContext,
   type ReactNode,
+  type RefObject,
   useCallback,
   useContext,
   useEffect,
@@ -59,6 +60,7 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  type AttachmentsContext,
   PromptInput,
   PromptInputBody,
   PromptInputFooter,
@@ -113,8 +115,6 @@ import type { ChatContextUsage } from "@/lib/chat-context-usage";
 import { storeComposerDraft } from "@/lib/chat-history";
 import {
   ALL_ATTACHMENT_ACCEPT,
-  DOCUMENT_ACCEPT,
-  IMAGE_ACCEPT,
   isImageFilePart,
   MAX_FOLDER_FILES,
   selectFolderFiles,
@@ -153,6 +153,11 @@ interface ChatComposerBaseProps {
   onStop?: () => void;
   onSubmit: (text: string, files: FileUIPart[]) => void;
   placeholder?: string;
+  /**
+   * Owned by the caller so it survives the composer remounting when the
+   * first send in a new chat changes `session` from null to a real id.
+   */
+  promptHistoryRef?: RefObject<string[]>;
   queuedMessages?: QueuedComposerMessage[];
   todos?: AgentTodo[];
 }
@@ -699,6 +704,16 @@ const ConnectorsContext = createContext<{
 /** True when `/btw` is offered: only the composer that can open a side chat. */
 const BtwCommandContext = createContext(false);
 
+const PromptHistoryContext = createContext<{
+  promptHistoryRef: RefObject<string[]>;
+  historyPointer: number | null;
+  setHistoryPointer: (pointer: number | null) => void;
+}>({
+  historyPointer: null,
+  promptHistoryRef: { current: [] },
+  setHistoryPointer: () => undefined,
+});
+
 const CommandPrefixContext = createContext<{
   prefix: string | null;
   setPrefix: (prefix: string | null) => void;
@@ -775,6 +790,14 @@ function useOpenPluginContext(profileId: string | null) {
 export function ChatComposer(props: ChatComposerProps) {
   const { activeOrg, updateOrg, user } = useAuth();
   const { textInput } = usePromptInputController();
+  const ownPromptHistoryRef = useRef<string[]>([]);
+  const promptHistoryRef = props.promptHistoryRef ?? ownPromptHistoryRef;
+  const [historyPointer, setHistoryPointer] = useState<number | null>(null);
+
+  const promptHistoryContext = useMemo(
+    () => ({ historyPointer, promptHistoryRef, setHistoryPointer }),
+    [historyPointer, promptHistoryRef]
+  );
 
   const [addDialog, setAddDialog] = useState<ComposerAddCommandAction | null>(
     null
@@ -873,6 +896,8 @@ export function ChatComposer(props: ChatComposerProps) {
         return;
       }
 
+      promptHistoryRef.current.push(text);
+      setHistoryPointer(null);
       clearDraft();
       props.onSubmit(text, files);
     },
@@ -913,41 +938,43 @@ export function ChatComposer(props: ChatComposerProps) {
       <BtwCommandContext.Provider value={Boolean(onBtw)}>
         <OpenPluginContext.Provider value={pluginsMenuContext}>
           <ConnectorsContext.Provider value={connectorsContext}>
-            <div className={cn("w-full shrink-0", props.className)}>
-              {layout.showOfflineHint && isFullComposer(props) ? (
-                <ChatComposerOfflineHint
-                  onConnectProvider={props.onConnectProvider}
+            <PromptHistoryContext.Provider value={promptHistoryContext}>
+              <div className={cn("w-full shrink-0", props.className)}>
+                {layout.showOfflineHint && isFullComposer(props) ? (
+                  <ChatComposerOfflineHint
+                    onConnectProvider={props.onConnectProvider}
+                  />
+                ) : null}
+                <ChatComposerMain
+                  displayError={displayError}
+                  layout={layout}
+                  onAddCommand={openAddCommand}
+                  props={composerProps}
+                  setAttachmentError={setAttachmentError}
                 />
-              ) : null}
-              <ChatComposerMain
-                displayError={displayError}
-                layout={layout}
-                onAddCommand={openAddCommand}
-                props={composerProps}
-                setAttachmentError={setAttachmentError}
-              />
-              {addProfileId ? (
-                <ChatAddCapabilitiesDialogs
-                  mcpOpen={addDialog === "add-mcp"}
-                  onMcpOpenChange={(open) => {
-                    setAddDialog(open ? "add-mcp" : null);
-                  }}
-                  onPluginOpenChange={(open) =>
-                    setAddDialog(open ? "add-plugin" : null)
-                  }
-                  onSkillOpenChange={(open) => {
-                    setAddDialog(open ? "add-skill" : null);
-                  }}
-                  onToolOpenChange={(open) => {
-                    setAddDialog(open ? "add-tool" : null);
-                  }}
-                  pluginOpen={addDialog === "add-plugin"}
-                  profileId={addProfileId}
-                  skillOpen={addDialog === "add-skill"}
-                  toolOpen={addDialog === "add-tool"}
-                />
-              ) : null}
-            </div>
+                {addProfileId ? (
+                  <ChatAddCapabilitiesDialogs
+                    mcpOpen={addDialog === "add-mcp"}
+                    onMcpOpenChange={(open) => {
+                      setAddDialog(open ? "add-mcp" : null);
+                    }}
+                    onPluginOpenChange={(open) =>
+                      setAddDialog(open ? "add-plugin" : null)
+                    }
+                    onSkillOpenChange={(open) => {
+                      setAddDialog(open ? "add-skill" : null);
+                    }}
+                    onToolOpenChange={(open) => {
+                      setAddDialog(open ? "add-tool" : null);
+                    }}
+                    pluginOpen={addDialog === "add-plugin"}
+                    profileId={addProfileId}
+                    skillOpen={addDialog === "add-skill"}
+                    toolOpen={addDialog === "add-tool"}
+                  />
+                ) : null}
+              </div>
+            </PromptHistoryContext.Provider>
           </ConnectorsContext.Provider>
         </OpenPluginContext.Provider>
       </BtwCommandContext.Provider>
@@ -971,6 +998,7 @@ function ChatComposerTextarea({
   longPasteWordThreshold?: number;
 }) {
   const controller = usePromptInputController();
+  const attachments = usePromptInputAttachments();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [slashRange, setSlashRange] = useState<SkillSlashRange | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -1102,6 +1130,10 @@ function ChatComposerTextarea({
   );
 
   const { prefix, setPrefix } = useContext(CommandPrefixContext);
+
+  const { promptHistoryRef, historyPointer, setHistoryPointer } =
+    useContext(PromptHistoryContext);
+
   const value = controller.textInput.value;
   const setInput = controller.textInput.setInput;
 
@@ -1137,16 +1169,64 @@ function ChatComposerTextarea({
         disabled={disabled}
         longPasteWordThreshold={longPasteWordThreshold}
         onChange={(event) => {
+          if (historyPointer !== null) {
+            setHistoryPointer(null);
+          }
+
           updateSlashRange(
             event.currentTarget.value,
             event.currentTarget.selectionStart
           );
         }}
         onKeyDown={(event) => {
+          if (
+            !disabled &&
+            (event.ctrlKey || event.metaKey) &&
+            event.key.toLowerCase() === "u"
+          ) {
+            event.preventDefault();
+            openAttachmentPicker(attachments, ALL_ATTACHMENT_ACCEPT);
+
+            return;
+          }
+
           if (!pickerOpen) {
             if (event.key === "Escape" && prefix) {
               event.preventDefault();
               setPrefix(null);
+            }
+
+            if (
+              event.currentTarget.selectionStart === 0 &&
+              event.currentTarget.selectionEnd === 0
+            ) {
+              if (event.key === "ArrowUp") {
+                if (promptHistoryRef.current.length === 0) {
+                  return;
+                }
+
+                const nextPointer =
+                  historyPointer === null
+                    ? promptHistoryRef.current.length - 1
+                    : Math.max(historyPointer - 1, 0);
+
+                event.preventDefault();
+                setHistoryPointer(nextPointer);
+                setInput(promptHistoryRef.current[nextPointer]);
+              }
+
+              if (event.key === "ArrowDown" && historyPointer !== null) {
+                event.preventDefault();
+
+                if (historyPointer >= promptHistoryRef.current.length - 1) {
+                  setHistoryPointer(null);
+                  setInput("");
+                } else {
+                  const nextPointer = historyPointer + 1;
+                  setHistoryPointer(nextPointer);
+                  setInput(promptHistoryRef.current[nextPointer]);
+                }
+              }
             }
 
             return;
@@ -1680,6 +1760,24 @@ function typeSlashCommand(textarea: HTMLTextAreaElement) {
   textarea.dispatchEvent(new window.Event("input", { bubbles: true }));
 }
 
+/** Shared by the + menu item and the Ctrl+U/Cmd+U composer shortcut. */
+function openAttachmentPicker(attachments: AttachmentsContext, accept: string) {
+  const input = attachments.fileInputRef.current;
+
+  if (!input) {
+    attachments.openFileDialog();
+
+    return;
+  }
+
+  input.accept = accept;
+  input.click();
+}
+
+function addFilesShortcutLabel(): string {
+  return navigator.userAgent.includes("Mac") ? "⌘U" : "Ctrl U";
+}
+
 function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
   const attachments = usePromptInputAttachments();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -1718,19 +1816,6 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
     input.click();
   };
 
-  const openPicker = (accept: string) => {
-    const input = attachments.fileInputRef.current;
-
-    if (!input) {
-      attachments.openFileDialog();
-
-      return;
-    }
-
-    input.accept = accept;
-    input.click();
-  };
-
   return (
     <DropdownMenu>
       <Tooltip>
@@ -1760,7 +1845,7 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
       </Tooltip>
       <DropdownMenuContent
         align="start"
-        className="min-w-40"
+        className="min-w-56"
         finalFocus={() => {
           const textarea = focusAfterCloseRef.current;
 
@@ -1771,17 +1856,15 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
       >
         <DropdownMenuItem
           disabled={disabled}
-          onClick={() => openPicker(IMAGE_ACCEPT)}
+          onClick={() =>
+            openAttachmentPicker(attachments, ALL_ATTACHMENT_ACCEPT)
+          }
         >
           <Image01Icon aria-hidden className="size-4 text-muted-foreground" />
-          Image
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={disabled}
-          onClick={() => openPicker(DOCUMENT_ACCEPT)}
-        >
-          <File01Icon aria-hidden className="size-4 text-muted-foreground" />
-          Document
+          <span className="whitespace-nowrap">Add files or photos</span>
+          <kbd className="ml-auto whitespace-nowrap font-sans text-2xs text-muted-foreground">
+            {addFilesShortcutLabel()}
+          </kbd>
         </DropdownMenuItem>
         <DropdownMenuItem disabled={disabled} onClick={openFolderPicker}>
           <Folder01Icon aria-hidden className="size-4 text-muted-foreground" />

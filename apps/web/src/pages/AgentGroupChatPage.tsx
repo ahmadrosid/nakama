@@ -246,7 +246,6 @@ function GroupHeader({
 
   const actions = (
     <>
-      <GroupActionsMenu onEdit={() => setEditing(true)} />
       <Button
         onClick={() => navigate(groupPath(group.id))}
         size="sm"
@@ -255,6 +254,7 @@ function GroupHeader({
         <MessageAdd01Icon aria-hidden />
         <span className="max-sm:sr-only">New chat</span>
       </Button>
+      <GroupActionsMenu onEdit={() => setEditing(true)} />
     </>
   );
 

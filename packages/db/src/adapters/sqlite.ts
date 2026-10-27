@@ -39,6 +39,7 @@ import type {
   StoredLlmUsageDailyStatsRecord,
   StoredLlmUsageModelStatsRecord,
   StoredLlmUsageStatsRecord,
+  StoredManagedSecret,
   StoredMcpServerRecord,
   StoredNotificationDestinationRecord,
   StoredOrganizationRecord,
@@ -208,6 +209,7 @@ interface SessionRow {
   parent_session_id: string | null;
   pinned: number;
   profile_id: string;
+  thinking_effort?: string | null;
   title: string | null;
   updated_at?: string | null;
   user_id?: string | null;
@@ -701,6 +703,51 @@ export async function createSqliteDatabase(
 const NOTIFICATION_WEBHOOK_DELIVERY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
+  const getManagedSecretStmt = db.prepare(
+    "SELECT scope, name, source, encrypted_value, version FROM managed_secrets WHERE scope = ? AND name = ?"
+  );
+
+  const listManagedSecretsStmt = db.prepare(
+    "SELECT scope, name, source, encrypted_value, version FROM managed_secrets"
+  );
+
+  const putManagedSecretStmt = db.prepare(`
+    INSERT INTO managed_secrets (scope, name, source, encrypted_value)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(scope, name) DO UPDATE SET
+      source = excluded.source,
+      encrypted_value = excluded.encrypted_value,
+      version = managed_secrets.version + 1
+  `);
+
+  const deleteManagedSecretStmt = db.prepare(
+    "DELETE FROM managed_secrets WHERE scope = ? AND name = ?"
+  );
+
+  const replaceManagedSecretStmt = db.prepare(
+    "UPDATE managed_secrets SET encrypted_value = ?, version = version + 1 WHERE scope = ? AND name = ?"
+  );
+
+  const replaceManagedSecretsTransaction = db.transaction(
+    (
+      secrets: Array<
+        Pick<StoredManagedSecret, "scope" | "name" | "encryptedValue">
+      >
+    ) => {
+      for (const secret of secrets) {
+        if (
+          replaceManagedSecretStmt.run(
+            secret.encryptedValue,
+            secret.scope,
+            secret.name
+          ).changes !== 1
+        ) {
+          throw new Error("Managed secret changed during key rotation.");
+        }
+      }
+    }
+  );
+
   const listAutomationsStmt = db.prepare<AutomationRow, SQLQueryBindings[]>(
     "SELECT * FROM automations"
   );
@@ -1362,8 +1409,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
   // org_id follows the profile's org. The profile move path keeps it in sync.
   const upsertSessionStmt = db.prepare(`
-    INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, app_user_id, user_id, model, org_id, pinned, parent_session_id, branch_message_index)
-    VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)
+    INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, app_user_id, user_id, model, org_id, pinned, parent_session_id, branch_message_index, thinking_effort)
+    VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       profile_id = excluded.profile_id,
       channel = excluded.channel,
@@ -1383,6 +1430,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
   const updateSessionModelStmt = db.prepare(
     "UPDATE sessions SET model = ? WHERE id = ? AND app_user_id IS NULL"
+  );
+
+  const updateSessionThinkingEffortStmt = db.prepare(
+    "UPDATE sessions SET thinking_effort = ? WHERE id = ? AND app_user_id IS NULL"
   );
 
   const updateSessionPinnedStmt = db.prepare(
@@ -3989,9 +4040,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       o.name,
       o.slug,
       o.allowed_invite_domains,
+      o.monthly_llm_token_limit,
+      o.monthly_llm_turn_limit,
+      o.monthly_llm_warning_percent,
       o.skills_write_approval,
       o.skills_post_turn_review,
       o.skills_curator_enabled,
+      o.skills_curator_stale_after_days,
+      o.skills_curator_archive_after_days,
       o.skills_curator_consolidate_enabled,
       o.skills_curator_last_run_at,
       o.archived_at,
@@ -4741,6 +4797,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
       return result.changes > 0;
     },
+    async deleteManagedSecret(scope, name) {
+      deleteManagedSecretStmt.run(scope, name);
+    },
 
     async deleteMcpServer(id) {
       const result = deleteMcpServerEverywhereTransaction(id);
@@ -4972,6 +5031,26 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const row = getLlmUsageStatsStmt.get(orgId, LLM_USAGE_STATS_ID);
 
       return row ? toLlmUsageStatsRecord(row) : null;
+    },
+    async getManagedSecret(scope, name) {
+      // SAFETY: managed_secrets columns and its source constraint match this row type.
+      const row = getManagedSecretStmt.get(scope, name) as {
+        scope: string;
+        name: string;
+        source: StoredManagedSecret["source"];
+        encrypted_value: string | null;
+        version: number;
+      } | null;
+
+      return row
+        ? {
+            encryptedValue: row.encrypted_value,
+            name: row.name,
+            scope: row.scope,
+            source: row.source,
+            version: row.version,
+          }
+        : null;
     },
 
     async getMcpServer(id) {
@@ -5573,6 +5652,24 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         .all(orgId)
         .map((row) => toLlmUsageModelStatsRecord(row));
     },
+    async listManagedSecrets() {
+      // SAFETY: managed_secrets columns and its source constraint match this row type.
+      const rows = listManagedSecretsStmt.all() as Array<{
+        scope: string;
+        name: string;
+        source: StoredManagedSecret["source"];
+        encrypted_value: string | null;
+        version: number;
+      }>;
+
+      return rows.map((row) => ({
+        encryptedValue: row.encrypted_value,
+        name: row.name,
+        scope: row.scope,
+        source: row.source,
+        version: row.version,
+      }));
+    },
 
     async listMcpServerProfileCounts() {
       const counts: Record<string, number> = {};
@@ -5889,6 +5986,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async publishOrgSharedResource(record) {
       return publishOrgSharedResourceTransaction(record);
     },
+    async putManagedSecret(secret) {
+      putManagedSecretStmt.run(
+        secret.scope,
+        secret.name,
+        secret.source,
+        secret.encryptedValue
+      );
+    },
 
     async releaseMonthlyLlmQuota(orgId, reservationId) {
       releaseMonthlyLlmQuotaStmt.run(reservationId, orgId);
@@ -5926,6 +6031,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const result = renameSessionTitleStmt.run(title, sessionId);
 
       return result.changes > 0;
+    },
+    async replaceManagedSecrets(secrets) {
+      replaceManagedSecretsTransaction(secrets);
     },
 
     async replaceMessagesForSession(sessionId, messages) {
@@ -6122,6 +6230,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         questionnaire ? JSON.stringify(questionnaire) : null,
         sessionId
       );
+    },
+    async updateSessionThinkingEffort(sessionId, effort) {
+      const result = updateSessionThinkingEffortStmt.run(effort, sessionId);
+
+      return result.changes > 0;
     },
 
     async updateSessionTitle(sessionId, title) {
@@ -6333,7 +6446,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         orgId,
         record.pinned ? 1 : 0,
         record.parentSessionId ?? null,
-        record.branchMessageIndex ?? null
+        record.branchMessageIndex ?? null,
+        record.thinkingEffort ?? null
       );
     },
     async upsertSkill(record) {
@@ -6828,6 +6942,12 @@ function parseAgentQuestionnaire(
   }
 }
 
+function parseThinkingEffort(value: string | null | undefined) {
+  return value === "low" || value === "medium" || value === "high"
+    ? value
+    : null;
+}
+
 function toSessionRecord(row: SessionRow): StoredSessionRecord {
   return {
     agentQuestionnaire: parseAgentQuestionnaire(row.agent_questionnaire),
@@ -6840,6 +6960,7 @@ function toSessionRecord(row: SessionRow): StoredSessionRecord {
     parentSessionId: row.parent_session_id,
     pinned: row.pinned === 1,
     profileId: row.profile_id,
+    thinkingEffort: parseThinkingEffort(row.thinking_effort),
     title: row.title ?? null,
     userId: row.user_id ?? null,
   };

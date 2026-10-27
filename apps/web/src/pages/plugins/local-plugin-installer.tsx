@@ -252,17 +252,15 @@ function LocalPluginDraftPicker({
         }}
         value={profileId}
       >
-        <SelectTrigger aria-label="Super Nakama">
-          <SelectValue placeholder="Super Nakama" />
+        <SelectTrigger aria-label="Agent">
+          <SelectValue placeholder="Agent" />
         </SelectTrigger>
         <SelectContent>
-          {(profiles.data?.profiles ?? [])
-            .filter((profile) => profile.isSuper)
-            .map((profile) => (
-              <SelectItem key={profile.id} value={profile.id}>
-                {profile.name}
-              </SelectItem>
-            ))}
+          {(profiles.data?.profiles ?? []).map((profile) => (
+            <SelectItem key={profile.id} value={profile.id}>
+              {profile.name}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
       <Input
@@ -499,7 +497,7 @@ export function LocalPluginInstaller({
       )}
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Install a plugin made by Super Nakama</DialogTitle>
+          <DialogTitle>Install a plugin made by an agent</DialogTitle>
         </DialogHeader>
         {draft ? (
           error ? (

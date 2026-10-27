@@ -7,6 +7,7 @@
  *   - "mcp-tools" asks the Nakama MCP endpoint for its tools and reports them
  *   - "mcp"   reports how many MCP servers the session was created with, and its _meta
  *   - "thought" sends a thought chunk before the reply
+ *   - "env"   lists which secret-shaped env vars the agent process can see
  *   - anything else echoes the prompt back
  */
 import { Readable, Writable } from "node:stream";
@@ -39,6 +40,12 @@ function initialConfigOptions(): acp.SessionConfigOption[] {
     },
   ];
 }
+
+const ENV_PROBE = [
+  "NAKAMA_SECRETS_KEY",
+  "NAKAMA_PROVIDER_API_KEY_OPENAI",
+  "ANTHROPIC_API_KEY",
+];
 
 class FakeAgent implements acp.Agent {
   private mcpServerCount = 0;
@@ -145,11 +152,13 @@ class FakeAgent implements acp.Agent {
 
     const modelTag = this.currentModel() === "fake-smart" ? "[smart] " : "";
 
-    const reply = text.includes("mcp-tools")
-      ? await this.listMcpTools()
-      : text.includes("mcp")
-        ? `mcp servers: ${this.mcpServerCount} meta: ${this.sessionMeta}`
-        : `${modelTag}fake: ${text}`;
+    const reply = text.includes("env")
+      ? `env: ${ENV_PROBE.filter((key) => process.env[key]).join(",")}`
+      : text.includes("mcp-tools")
+        ? await this.listMcpTools()
+        : text.includes("mcp")
+          ? `mcp servers: ${this.mcpServerCount} meta: ${this.sessionMeta}`
+          : `${modelTag}fake: ${text}`;
 
     await this.send(params.sessionId, {
       content: { text: reply, type: "text" },

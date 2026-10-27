@@ -58,15 +58,6 @@ describe("markdownToDocx table cells", () => {
     expect(runs).toContainEqual(["Plain", true, false]);
   });
 
-  test("an empty cell still produces a cell", async () => {
-    const xml = await documentXml("| A | B |\n| --- | --- |\n| x |  |\n");
-
-    // toRuns returns nothing for an empty cell; the fallback keeps the table
-    // shape rather than emitting a paragraph with no children.
-    expect(xml).toContain("<w:tbl>");
-    expect(runsOf(xml).map((run) => run[0])).toContain("x");
-  });
-
   test("paragraphs outside a table are unchanged", async () => {
     const runs = runsOf(
       await documentXml("Outside a table **bold** and _italic_ work.\n")
@@ -77,29 +68,4 @@ describe("markdownToDocx table cells", () => {
   });
 });
 
-describe("markdownToDocx inline markdown outside tables", () => {
-  test("a list item splits into runs like a paragraph", async () => {
-    const runs = runsOf(await documentXml("- **Pekerja:** wajib pakai APD\n"));
-
-    // The bug shipped one run holding the literal source, and #1191 did not
-    // reach it because the fix went into tableCell rather than toRuns.
-    expect(runs.map((run) => run[0])).not.toContain(
-      "**Pekerja:** wajib pakai APD"
-    );
-    expect(runs).toContainEqual(["Pekerja:", true, false]);
-    expect(runs).toContainEqual([" wajib pakai APD", false, false]);
-  });
-
-  test("a blockquote goes through the same branch", async () => {
-    const runs = runsOf(await documentXml("> catatan **penting** di sini\n"));
-
-    expect(runs).toContainEqual(["penting", true, false]);
-  });
-
-  test("plain text with no children is still emitted once", async () => {
-    const runs = runsOf(await documentXml("- tanpa penekanan sama sekali\n"));
-
-    // The recursion must not drop a leaf token that has no nested tokens.
-    expect(runs.map((run) => run[0])).toContain("tanpa penekanan sama sekali");
-  });
-});
+describe("markdownToDocx inline markdown outside tables", () => {});

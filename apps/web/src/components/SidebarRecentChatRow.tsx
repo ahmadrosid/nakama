@@ -5,12 +5,14 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@nakama/ui/dropdown-menu";
 import { toast } from "@nakama/ui/toast";
 import { cn } from "@nakama/ui/utils";
 import {
   ArrowDown02Icon,
+  ArrowMoveUpLeftIcon,
   ArrowUp02Icon,
   Delete02Icon,
   Link01Icon,
@@ -74,6 +76,7 @@ function RecentChatMenuItems({
         <Link01Icon aria-hidden="true" className="size-4" />
         Copy link
       </DropdownMenuItem>
+      <DropdownMenuSeparator />
       <DropdownMenuItem onClick={() => onRename({ id, title })}>
         <PencilEdit02Icon aria-hidden="true" className="size-4" />
         Rename
@@ -88,27 +91,31 @@ function RecentChatMenuItems({
       </DropdownMenuItem>
       {onDetach ? (
         <DropdownMenuItem onClick={onDetach}>
+          <ArrowMoveUpLeftIcon aria-hidden="true" className="size-4" />
           Detach from parent
         </DropdownMenuItem>
       ) : null}
-      {onMove ? (
+      {onMove && (canMoveUp || canMoveDown) ? (
         <>
-          <DropdownMenuItem disabled={!canMoveUp} onClick={() => onMove("up")}>
-            <ArrowUp02Icon aria-hidden="true" className="size-4" />
-            Move up
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={!canMoveDown}
-            onClick={() => onMove("down")}
-          >
-            <ArrowDown02Icon aria-hidden="true" className="size-4" />
-            Move down
-          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          {canMoveUp ? (
+            <DropdownMenuItem onClick={() => onMove("up")}>
+              <ArrowUp02Icon aria-hidden="true" className="size-4" />
+              Move up
+            </DropdownMenuItem>
+          ) : null}
+          {canMoveDown ? (
+            <DropdownMenuItem onClick={() => onMove("down")}>
+              <ArrowDown02Icon aria-hidden="true" className="size-4" />
+              Move down
+            </DropdownMenuItem>
+          ) : null}
         </>
       ) : null}
+      <DropdownMenuSeparator />
       <DropdownMenuItem
-        className="text-destructive"
         onClick={() => onDelete({ id, title })}
+        variant="destructive"
       >
         <Delete02Icon aria-hidden="true" className="size-4" />
         Delete
@@ -130,7 +137,7 @@ export function RecentChatContextMenu({
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Positioner className="isolate z-50 outline-none">
-          <ContextMenu.Popup className="z-50 min-w-36 rounded-lg bg-popover p-1 text-popover-foreground shadow-md outline-none ring-1 ring-foreground/10">
+          <ContextMenu.Popup className="z-50 min-w-48 whitespace-nowrap rounded-lg bg-popover p-1 text-popover-foreground shadow-md outline-none ring-1 ring-foreground/10">
             <RecentChatMenuItems {...menu} />
           </ContextMenu.Popup>
         </ContextMenu.Positioner>
@@ -156,7 +163,10 @@ function RecentChatActions(props: RecentChatMenuProps) {
         >
           <MoreHorizontalIcon aria-hidden="true" className="size-4" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent
+          align="end"
+          className="w-auto min-w-48 whitespace-nowrap"
+        >
           <RecentChatMenuItems {...props} />
         </DropdownMenuContent>
       </DropdownMenu>

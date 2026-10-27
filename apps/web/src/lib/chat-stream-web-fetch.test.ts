@@ -6,7 +6,6 @@ import { WebSearchToolRow } from "@/components/chat/WebSearchToolRow";
 import type { ChatListItem } from "./chat-history";
 import {
   buildWebFetchToolState,
-  formatWebFetchHeaderText,
   parseExaWebFetchTextResult,
   parseWebFetchSourcesFromResult,
   parseWebFetchUrls,
@@ -73,19 +72,6 @@ describe("chat-stream-web-fetch", () => {
         urls: ["https://example.com/a", "https://example.org/b"],
       })
     ).toEqual(["https://example.com/a", "https://example.org/b"]);
-  });
-
-  test("formatWebFetchHeaderText uses hostname or page count", () => {
-    expect(formatWebFetchHeaderText(["https://docs.example.com/guide"])).toBe(
-      "docs.example.com/guide"
-    );
-    expect(
-      formatWebFetchHeaderText([
-        "https://example.com/a",
-        "https://example.com/b",
-        "https://example.com/c",
-      ])
-    ).toBe("3 pages");
   });
 
   test("parseExaWebFetchTextResult handles markdown crawl blocks", () => {

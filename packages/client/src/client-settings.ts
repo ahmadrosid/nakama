@@ -1,5 +1,6 @@
 import type {
   AgentBrowserStatusResponse,
+  ComposioSettingsResponse,
   EmailSettingsResponse,
   ErrorTrackingSettingsResponse,
   GenerateImageRequest,
@@ -28,6 +29,7 @@ import type {
   UpdateWebSearchSettingsRequest,
   VisionSettings,
   VisionSettingsResponse,
+  WebSearchProvider,
   WebSearchSettingsResponse,
 } from "@nakama/core/contract";
 import { withDisabledFetchIdle } from "@nakama/core/fetch-idle";
@@ -196,6 +198,35 @@ export class SettingsClient extends SystemClient {
     });
   }
 
+  async setWebSearchSecret(
+    provider: WebSearchProvider,
+    apiKey: string
+  ): Promise<WebSearchSettingsResponse> {
+    return this.request<WebSearchSettingsResponse>(
+      "/v1/settings/web-search/secret",
+      {
+        body: JSON.stringify({ apiKey, provider }),
+        method: "PUT",
+      }
+    );
+  }
+
+  async manageSettingSecret<T extends "email" | "web-search" | "composio">(
+    kind: T,
+    action: "clear" | "use-stored"
+  ): Promise<
+    T extends "email"
+      ? EmailSettingsResponse
+      : T extends "web-search"
+        ? WebSearchSettingsResponse
+        : ComposioSettingsResponse
+  > {
+    return this.request(
+      `/v1/settings/${kind}/secret${action === "use-stored" ? "/use-stored" : ""}`,
+      { method: action === "clear" ? "DELETE" : "POST" }
+    );
+  }
+
   async getEmailSettings(): Promise<EmailSettingsResponse> {
     return this.request<EmailSettingsResponse>("/v1/settings/email");
   }
@@ -205,6 +236,13 @@ export class SettingsClient extends SystemClient {
   ): Promise<EmailSettingsResponse> {
     return this.request<EmailSettingsResponse>("/v1/settings/email", {
       body: JSON.stringify(request),
+      method: "PUT",
+    });
+  }
+
+  async setEmailSecret(password: string): Promise<EmailSettingsResponse> {
+    return this.request<EmailSettingsResponse>("/v1/settings/email/secret", {
+      body: JSON.stringify({ password }),
       method: "PUT",
     });
   }

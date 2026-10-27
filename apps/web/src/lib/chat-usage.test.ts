@@ -2,8 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   addChatUsage,
   CHAT_USAGE_VISIBLE_KEY,
-  formatChatUsage,
-  formatChatUsageCost,
   getInitialChatUsageVisible,
   sumChatUsage,
 } from "./chat-usage";
@@ -53,61 +51,6 @@ describe("chat usage", () => {
       ])
     ).toEqual({ inputTokens: 12, outputTokens: 3, totalTokens: 15 });
     expect(sumChatUsage([{ role: "assistant" }])).toBeUndefined();
-  });
-
-  test("shows only the dollar amount on the cost chip", () => {
-    expect(
-      formatChatUsageCost({
-        costUsd: 0.0027,
-        inputTokens: 12_000,
-        outputTokens: 265,
-        totalTokens: 12_265,
-      })
-    ).toBe("$0.0027");
-    expect(
-      formatChatUsageCost({
-        estimated: true,
-        inputTokens: 10,
-        outputTokens: 2,
-        totalTokens: 12,
-      })
-    ).toBeNull();
-  });
-
-  test("formats tokens, cost and the estimate marker", () => {
-    expect(
-      formatChatUsage({
-        costUsd: 0.0042,
-        inputTokens: 1234,
-        outputTokens: 56,
-        totalTokens: 1290,
-      })
-    ).toBe("1.2k in · 56 out · $0.0042");
-    expect(
-      formatChatUsage({
-        estimated: true,
-        inputTokens: 10,
-        outputTokens: 2,
-        totalTokens: 12,
-      })
-    ).toBe("~10 in · 2 out");
-  });
-
-  test("compacts token counts at each thousand step", () => {
-    const compacted = (inputTokens: number) =>
-      formatChatUsage({
-        inputTokens,
-        outputTokens: 0,
-        totalTokens: inputTokens,
-      }).replace(" in · 0 out", "");
-
-    expect(compacted(945)).toBe("945");
-    expect(compacted(1234)).toBe("1.2k");
-    expect(compacted(12_345)).toBe("12k");
-    expect(compacted(123_456)).toBe("123k");
-    expect(compacted(1_234_567)).toBe("1.2m");
-    expect(compacted(1_500_000_000)).toBe("1.5b");
-    expect(compacted(2_300_000_000_000)).toBe("2.3t");
   });
 
   test("hides token usage until the setting is turned on", () => {

@@ -26,6 +26,7 @@ import { artifactShareStorageKey } from "@/lib/artifact-share-storage";
 import { client } from "@/lib/client";
 import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
+import { useSaveGroup } from "./use-agent-groups";
 import {
   useConfigureProviderMutation,
   useCreateProviderMutation,
@@ -564,7 +565,18 @@ for (const kind of [
         undefined
       );
 
-      const requests = [create, configure, update, remove, deleteTool];
+      const saveSecret = spyOn(client, "setProviderSecret").mockResolvedValue({
+        provider,
+      });
+
+      const requests = [
+        create,
+        configure,
+        update,
+        remove,
+        deleteTool,
+        saveSecret,
+      ];
 
       if (fails) {
         for (const request of requests) {
@@ -674,7 +686,18 @@ for (const kind of [
         );
 
         if (kind === "create") {
-          expect(create).toHaveBeenCalledWith(createInput);
+          expect(create).toHaveBeenCalledWith({
+            label: provider.label,
+            type: provider.type,
+          });
+          expect(saveSecret).toHaveBeenCalledTimes(fails ? 0 : 1);
+
+          if (!fails) {
+            expect(saveSecret).toHaveBeenCalledWith(
+              provider.id,
+              createInput.apiKey
+            );
+          }
         } else if (kind === "configure") {
           expect(configure).toHaveBeenCalledWith(configureInput);
         } else if (kind === "update") {
@@ -1657,5 +1680,89 @@ test("useArtifactsExist hides only the artifacts the server reports missing", as
   } finally {
     exists.mockRestore();
     existsClient.clear();
+  }
+});
+
+test("create group with invalid group photo", async () => {
+  const group = {
+    avatarVersion: null,
+    brief: "",
+    createdAt: "2026-10-22T00:00:00Z",
+    id: "group-1",
+    lastMessage: null,
+    memberIds: ["agent-1", "agent-2"],
+    name: "Test group",
+  };
+
+  const draft = {
+    brief: group.brief,
+    image: {
+      data: "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      mediaType: "image/gif",
+    },
+    memberIds: group.memberIds,
+    name: group.name,
+  };
+
+  const uploadError = new Error("Photo upload failed");
+
+  const create = spyOn(client, "createAgentGroup")
+    .mockResolvedValueOnce(group)
+    .mockResolvedValueOnce({ ...group, id: "group-2" });
+
+  const update = spyOn(client, "updateAgentGroup").mockResolvedValue(group);
+
+  const upload = spyOn(client, "uploadAgentGroupAvatar")
+    .mockRejectedValueOnce(uploadError)
+    .mockResolvedValueOnce(undefined);
+
+  const testQueryClient = new QueryClient({
+    defaultOptions: { mutations: { retry: false } },
+  });
+
+  const root = createRoot(document.createElement("div"));
+  let save!: ReturnType<typeof useSaveGroup>;
+
+  function Probe() {
+    save = useSaveGroup();
+
+    return null;
+  }
+
+  try {
+    await act(async () => {
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client: testQueryClient },
+          createElement(Probe)
+        )
+      );
+    });
+
+    await act(async () => {
+      await expect(save.mutateAsync(draft)).rejects.toBe(uploadError);
+    });
+
+    await act(async () => {
+      await save.mutateAsync(draft);
+    });
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith(group.id, {
+      brief: draft.brief,
+      memberIds: draft.memberIds,
+      name: draft.name,
+    });
+    expect(upload).toHaveBeenCalledTimes(2);
+    expect(upload).toHaveBeenNthCalledWith(1, group.id, draft.image);
+    expect(upload).toHaveBeenNthCalledWith(2, group.id, draft.image);
+  } finally {
+    await act(async () => root.unmount());
+    testQueryClient.clear();
+    create.mockRestore();
+    update.mockRestore();
+    upload.mockRestore();
   }
 });

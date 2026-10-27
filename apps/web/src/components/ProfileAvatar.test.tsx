@@ -217,7 +217,7 @@ test.each([
   ["/chat/agent-a/session-a", true],
   ["/profiles", false],
   ["/automations", false],
-] as const)("rail uses chat-only motion on %s", async (pathname, animated) => {
+] as const)("rail marks the active agent on %s", async (pathname, animated) => {
   const previousState = useActiveChatProfileStore.getState();
   useActiveChatProfileStore.setState({ orgId: null, profileId: profile.id });
 
@@ -283,6 +283,15 @@ test.each([
       animated
     );
     expect(readSvg(inactiveImage).querySelector("animate")).toBeNull();
+    expect(inactiveImage.className).not.toContain("grayscale");
+
+    const bars = container.querySelectorAll(
+      '[aria-label="Profiles"] button > span[aria-hidden="true"]'
+    );
+
+    expect(
+      [...bars].map((bar) => bar.parentElement?.getAttribute("aria-label"))
+    ).toEqual(["Agent A"]);
   } finally {
     await act(async () => root.unmount());
     useActiveChatProfileStore.setState(previousState);

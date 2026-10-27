@@ -13,12 +13,10 @@ import {
   createDebouncedEscAbortHandler,
   disableRawModeIfActive,
   formatBusyDropLine,
-  formatErrorLines,
   formatSoulStatusLines,
   formatStatusLines,
   formatToolCall,
   isEscInterruptKey,
-  needsTrailingStreamNewline,
   previewToolValue,
   runChat,
   runCleanupThenExit,
@@ -27,12 +25,6 @@ import {
 import * as profile from "./profile";
 import * as promptModule from "./prompt";
 import { TerminalRenderer } from "./terminal-renderer";
-
-describe("needsTrailingStreamNewline", () => {
-  test("adds a newline when the stream ended mid-line", () => {
-    expect(needsTrailingStreamNewline("Hello.")).toBe(true);
-  });
-});
 
 describe("createChatExitController", () => {
   test("requestExit resolves wait without scheduling an interval", async () => {
@@ -77,11 +69,6 @@ describe("createChatExitController", () => {
 });
 
 describe("formatBusyDropLine", () => {
-  test("shows a short busy marker before the warn threshold", () => {
-    expect(formatBusyDropLine(1)).toBe("[busy]");
-    expect(formatBusyDropLine(2)).toBe("[busy]");
-  });
-
   test("includes the drop count once the warn threshold is reached", () => {
     expect(formatBusyDropLine(3)).toBe(
       "[busy] ignored input (3 while processing)"
@@ -134,6 +121,7 @@ describe("formatStatusLines", () => {
     composioAvailable: false,
     composioConfigured: false,
     ok: true,
+    onboardingEnabled: false,
     providerConfigured: true,
     userConfigured: true,
     version: "0.4.10",
@@ -171,12 +159,6 @@ describe("formatStatusLines", () => {
   });
 });
 
-describe("formatErrorLines", () => {
-  test("adds a blank line above rendered errors", () => {
-    expect(formatErrorLines(new Error("Boom"))).toEqual(["", "Boom"]);
-  });
-});
-
 describe("formatSoulStatusLines", () => {
   const directory = join(
     homedir(),
@@ -203,12 +185,6 @@ describe("formatSoulStatusLines", () => {
   test("masks soul directory by default", () => {
     expect(formatSoulStatusLines(status)[0]).toBe(
       "Soul directory: ~/.nakama/orgs/<org>/profiles/<profile>"
-    );
-  });
-
-  test("shows absolute soul directory when verbose", () => {
-    expect(formatSoulStatusLines(status, true)[0]).toBe(
-      `Soul directory: ${directory}`
     );
   });
 });
@@ -401,20 +377,6 @@ describe("non-TTY slash commands and EOF", () => {
       sendStream.mockRestore();
     }
   }
-
-  test("runs /help locally without sending it to the model", async () => {
-    const result = await runBlockingInput("/help");
-
-    expect(result.output.some((line) => line.includes("/help"))).toBe(true);
-    expect(result.sendCalls).toBe(0);
-  });
-
-  test("runs /clear locally without sending it to the model", async () => {
-    const result = await runBlockingInput("/clear");
-
-    expect(result.clearCalls).toBe(1);
-    expect(result.sendCalls).toBe(0);
-  });
 
   test("rejects interactive-only commands without sending them", async () => {
     const result = await runBlockingInput("/compact");

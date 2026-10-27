@@ -8,9 +8,9 @@
 >
   <title id="title">How a plugin reaches your team</title>
   <desc id="desc">
-    A plugin comes from npm, the official catalog, or a Super Nakama draft. A
-    platform admin reviews and installs it. An org admin enables it. A platform
-    admin connects it to profiles. Members then use its page and chat tools.
+    A plugin comes from npm, the official catalog, or an agent draft. A platform
+    admin reviews and installs it. An org admin enables it. A platform admin
+    connects it to profiles. Members then use its page and chat tools.
   </desc>
   <style>
   .bg {
@@ -132,9 +132,7 @@
   <text class="sub" text-anchor="middle" x="340" y="74">Ships with Nakama</text>
 
   <rect class="src" height="56" rx="8" width="180" x="460" y="32" />
-  <text class="title" text-anchor="middle" x="550" y="55">
-    Super Nakama draft
-  </text>
+  <text class="title" text-anchor="middle" x="550" y="55">Agent draft</text>
   <text class="sub" text-anchor="middle" x="550" y="74">Built in chat</text>
 
   <path class="arr" d="M130 88 L265 138" marker-end="url(#a)" />

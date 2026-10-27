@@ -142,6 +142,7 @@ export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
       enabled: z.boolean().optional(),
       name: z.string(),
       serverId: z.string().optional(),
+      signIn: z.boolean().optional(),
       transport: transportSchema,
     })
     .passthrough()

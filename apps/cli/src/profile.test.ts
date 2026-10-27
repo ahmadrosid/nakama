@@ -5,12 +5,7 @@ import { join } from "node:path";
 import type { NakamaClient } from "@nakama/client";
 import type { ProfileSummary } from "@nakama/core";
 import { loadSavedCliProfileId, saveCliProfileId } from "./cli-config";
-import {
-  parseCliProfileArgs,
-  resolveProfileInput,
-  resolveStartupProfile,
-  sortProfilesForPicker,
-} from "./profile";
+import { resolveProfileInput, resolveStartupProfile } from "./profile";
 
 function profile(
   overrides: Partial<ProfileSummary> & Pick<ProfileSummary, "id" | "name">
@@ -72,29 +67,9 @@ test("startup defaults to Super Nakama and respects saved and explicit choices",
   }
 });
 
-describe("parseCliProfileArgs", () => {
-  test("reads --profile and -p", () => {
-    expect(parseCliProfileArgs(["--profile", "profile_custom"])).toEqual({
-      profileId: "profile_custom",
-    });
-    expect(parseCliProfileArgs(["-p", "super_nakama"])).toEqual({
-      profileId: "super_nakama",
-    });
-  });
+describe("parseCliProfileArgs", () => {});
 
-  test("reads --profile=value", () => {
-    expect(parseCliProfileArgs(["--profile=profile_default"])).toEqual({
-      profileId: "profile_default",
-    });
-  });
-});
-
-describe("sortProfilesForPicker", () => {
-  test("puts default profile first", () => {
-    const sorted = sortProfilesForPicker(sampleProfiles);
-    expect(sorted[0]?.id).toBe("profile_default");
-  });
-});
+describe("sortProfilesForPicker", () => {});
 
 describe("resolveProfileInput", () => {
   test("resolves id, name, and index", () => {

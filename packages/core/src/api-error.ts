@@ -40,6 +40,14 @@ export class NakamaAuthExpiredError extends NakamaApiError {
   }
 }
 
+/** A provider stream broke after it started. One more try can work. */
+export class ProviderStreamInterruptedError extends NakamaApiError {
+  constructor(message: string) {
+    super(message, 502);
+    this.name = "ProviderStreamInterruptedError";
+  }
+}
+
 export async function readApiErrorDetails(response: Response): Promise<{
   message: string;
   totpEnabled?: boolean;

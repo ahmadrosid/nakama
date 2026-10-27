@@ -3,6 +3,9 @@ import { mkdtempSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { readEnvValue, setManagedSecretResolver } from "@nakama/core";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { ManagedSecrets } from "./services/managed-secrets";
 
 export async function withTestEnv<T>(
   vars: Record<string, string | undefined>,
@@ -81,4 +84,34 @@ export async function removeTestDir(dir: string): Promise<void> {
       await Bun.sleep(100 * (attempt + 1));
     }
   }
+}
+
+/**
+ * A fresh encrypted secret store per test, behind the resolver that code
+ * reading saved secrets uses. Returns a getter for the current test's store.
+ */
+export function setupTestManagedSecrets(): () => ManagedSecrets {
+  let secrets: ManagedSecrets;
+
+  beforeEach(() => {
+    secrets = new ManagedSecrets(
+      createInMemoryDatabaseAdapter(),
+      Buffer.alloc(32, 1).toString("base64")
+    );
+    setManagedSecretResolver(
+      async (scope, name, envNames) =>
+        (await secrets.resolve(scope, name, envNames)).value
+    );
+  });
+
+  afterEach(() => {
+    // Back to the default: env overrides only.
+    setManagedSecretResolver(
+      async (_scope, _name, envNames) =>
+        envNames.map((key) => readEnvValue(process.env, key)).find(Boolean) ??
+        null
+    );
+  });
+
+  return () => secrets;
 }

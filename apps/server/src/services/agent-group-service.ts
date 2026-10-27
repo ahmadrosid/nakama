@@ -17,8 +17,12 @@ import { filterProfilesForChatAccess } from "@nakama/core/profiles";
 import type { DatabaseAdapter } from "@nakama/db";
 import { failSubAgentResult } from "../tools/sub-agent-shared";
 import {
+  requireGroup,
+  requireSession,
+  requireThreadRoot,
+} from "./agent-group-lookup";
+import {
   addressedMembers,
-  ensureGroupSharedDir,
   groupMembers,
   groupTurn,
   isPassReply,
@@ -33,14 +37,12 @@ import {
   deleteAgentGroup,
   deleteAgentGroupAvatar,
   deleteGroupSession,
-  type GroupDocument,
   getAgentGroup,
   getAgentGroupAvatar,
-  getAgentGroupMessage,
-  getGroupSession,
   listAgentGroupMessages,
   listAgentGroups,
   listAgentGroupThreadMessages,
+  listGroupSessionImages,
   listGroupSessions,
   type StoredGroupSession,
   setAgentGroupAvatar,
@@ -48,9 +50,8 @@ import {
   updateGroupSession,
 } from "./agent-group-store";
 import { retitleGroupSession } from "./agent-group-title";
+import { type PostedDocument, workspaceOfGroup } from "./agent-group-workspace";
 import type { AgentService } from "./agent-service";
-
-export { readGroupDocuments } from "./agent-group-prompt";
 
 /** Agent replies allowed per user message, so two agents cannot loop forever. */
 const MAX_GROUP_HOPS = 6;
@@ -143,6 +144,8 @@ export class AgentGroupService {
         halt(run);
       }
     }
+
+    workspaceOfGroup(orgId, groupId).remove();
   }
 
   setAvatar(
@@ -273,12 +276,13 @@ export class AgentGroupService {
     sessionId: string,
     rootId: number,
     content: string,
-    documents: GroupDocument[] = []
+    posted: PostedDocument[] = []
   ): Promise<void> {
     const session = requireSession(orgId, userId, groupId, sessionId);
     const root = requireThreadRoot(orgId, sessionId, rootId);
     const key = threadKey(sessionId, rootId);
     const active = this.threadRuns.get(key);
+    const documents = workspaceOfGroup(orgId, groupId).saveImages(posted);
 
     appendAgentGroupMessage(orgId, session, null, content, rootId, documents);
 
@@ -331,7 +335,7 @@ export class AgentGroupService {
     userId: string,
     groupId: string,
     content: string,
-    documents: GroupDocument[] = []
+    documents: PostedDocument[] = []
   ) {
     requireGroup(orgId, userId, groupId);
 
@@ -339,7 +343,8 @@ export class AgentGroupService {
       orgId,
       groupId,
       groupSessionTitle(
-        content || (documents.find((d) => !d.path)?.filename ?? "")
+        content ||
+          (documents.find((d) => !("image" in d || d.path))?.filename ?? "")
       )
     );
 
@@ -373,11 +378,14 @@ export class AgentGroupService {
     groupId: string,
     sessionId: string
   ): void {
+    const images = listGroupSessionImages(orgId, sessionId);
+
     if (!deleteGroupSession(orgId, userId, groupId, sessionId)) {
       throw new NakamaApiError("Session not found", 404);
     }
 
     this.stopRun(sessionId);
+    workspaceOfGroup(orgId, groupId).removeImages(images);
   }
 
   stop(
@@ -401,10 +409,11 @@ export class AgentGroupService {
     groupId: string,
     sessionId: string,
     content: string,
-    documents: GroupDocument[] = []
+    posted: PostedDocument[] = []
   ): Promise<void> {
     const session = requireSession(orgId, userId, groupId, sessionId);
     const active = this.runs.get(sessionId);
+    const documents = workspaceOfGroup(orgId, groupId).saveImages(posted);
 
     if (active) {
       appendAgentGroupMessage(
@@ -636,7 +645,7 @@ export class AgentGroupService {
       }
 
       const handles = memberHandles(members);
-      const sharedDir = ensureGroupSharedDir(orgId, group.id);
+      const sharedDir = workspaceOfGroup(orgId, group.id).open();
       const memoryChanges: AgentGroupMemoryChange[] = [];
 
       const result = await this.agent
@@ -761,48 +770,4 @@ function enqueue(queue: string[], ids: string[]): void {
 
 function threadKey(sessionId: string, rootId: number): string {
   return `${sessionId}:${rootId}`;
-}
-
-/** A thread opens on an agent's message in the main chat. */
-function requireThreadRoot(
-  orgId: string,
-  sessionId: string,
-  rootId: number
-): AgentGroupMessage {
-  const root = getAgentGroupMessage(orgId, sessionId, rootId);
-
-  if (!root?.authorProfileId) {
-    throw new NakamaApiError("Message not found", 404);
-  }
-
-  return root;
-}
-
-function requireGroup(
-  orgId: string,
-  userId: string,
-  groupId: string
-): AgentGroup {
-  const group = getAgentGroup(orgId, userId, groupId);
-
-  if (!group) {
-    throw new NakamaApiError("Group not found", 404);
-  }
-
-  return group;
-}
-
-function requireSession(
-  orgId: string,
-  userId: string,
-  groupId: string,
-  sessionId: string
-): StoredGroupSession {
-  const session = getGroupSession(orgId, userId, groupId, sessionId);
-
-  if (!session) {
-    throw new NakamaApiError("Session not found", 404);
-  }
-
-  return session;
 }

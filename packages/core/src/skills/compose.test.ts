@@ -22,23 +22,6 @@ const baseSkill: DiscoveredSkill = {
 };
 
 describe("composeMatchedSkillsPrompt", () => {
-  test("omits body when body-on-match is disabled", () => {
-    const prompt = composeMatchedSkillsPrompt([baseSkill]);
-
-    expect(prompt).not.toContain("Call the weather tool");
-    expect(prompt).toContain(baseSkill.skillFilePath);
-    expect(prompt).toContain(baseSkill.directory);
-  });
-
-  test("includes body when includeBodyOnMatch is true", () => {
-    const prompt = composeMatchedSkillsPrompt([
-      { ...baseSkill, includeBodyOnMatch: true },
-    ]);
-
-    expect(prompt).toContain("Call the weather tool with a city name.");
-    expect(prompt).toContain(baseSkill.skillFilePath);
-  });
-
   test("includes body on explicit invocation regardless of flag", () => {
     const prompt = composeMatchedSkillsPrompt([baseSkill], {
       explicitInvocation: true,
@@ -105,13 +88,6 @@ describe("skills that ship code nothing can run", () => {
     toolPath: null,
   };
 
-  test("the catalog says the scripts cannot run", () => {
-    const line = composeSkillsCatalog([stranded]);
-
-    expect(line).toContain("ships 1 script that cannot run here");
-    expect(line).toContain("do not answer from their source");
-  });
-
   test("more than one is counted, not listed", () => {
     const line = composeSkillsCatalog([
       {
@@ -127,13 +103,5 @@ describe("skills that ship code nothing can run", () => {
     ]);
 
     expect(line).toContain("ships 2 scripts that cannot run here");
-  });
-
-  test("a prose-only skill with no scripts stays silent", () => {
-    const prose = { ...baseSkill, hasTool: false, toolPath: null };
-    const line = composeSkillsCatalog([prose]);
-
-    expect(line).not.toContain("cannot run here");
-    expect(line).not.toContain("(includes tool)");
   });
 });

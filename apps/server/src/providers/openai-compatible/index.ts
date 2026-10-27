@@ -10,7 +10,11 @@ import type {
   StreamChatHandlers,
   WireApi,
 } from "@nakama/core";
-import { fetchWithoutIdleTimeout, normalizeBaseUrl } from "@nakama/core";
+import {
+  fetchWithoutIdleTimeout,
+  normalizeBaseUrl,
+  ProviderStreamInterruptedError,
+} from "@nakama/core";
 import OpenAI from "openai";
 import {
   parseOpenAIToolCalls,
@@ -22,6 +26,7 @@ import { openAIModelRejectsChatToolsWithReasoning } from "../openai/thinking";
 import {
   buildChatCompletionResult,
   buildProviderHttpError,
+  buildProviderResponseError,
   extractOpenAITokenUsage,
   finalizePendingToolCalls,
   mergePendingToolCall,
@@ -48,6 +53,9 @@ export interface OpenAICompatibleProviderOptions {
   displayName: string;
   model: string;
   providerName?: ProviderClient["name"];
+  /** Gives the `max_tokens` sent on each chat request. Unset, or a result of
+   * undefined, leaves the provider default. */
+  resolveMaxOutputTokens?: () => Promise<number | undefined>;
   supportsThinking: boolean;
   /** `responses` targets `/responses`; anything else stays on `/chat/completions`. */
   wireApi?: WireApi;
@@ -89,6 +97,7 @@ export function createOpenAICompatibleProvider(
         messages: input.messages,
         model,
         netra: options.providerName === "netra",
+        resolveMaxOutputTokens: options.resolveMaxOutputTokens,
         signal: input.signal,
         system: input.system,
         thinking: options.supportsThinking
@@ -121,7 +130,9 @@ export function createOpenAICompatibleProvider(
         const content = result.content.trim();
 
         if (!content) {
-          throw new Error(`${label} returned an empty response.`);
+          throw buildProviderResponseError(
+            `${label} returned an empty response.`
+          );
         }
 
         const textResult: GenerateTextResult = { content };
@@ -168,6 +179,7 @@ export function createOpenAICompatibleProvider(
         messages: input.messages,
         model,
         netra: options.providerName === "netra",
+        resolveMaxOutputTokens: options.resolveMaxOutputTokens,
         signal: input.signal,
         system: input.system,
         thinking: options.supportsThinking
@@ -303,6 +315,7 @@ async function requestChatCompletion(
   client: OpenAI,
   label: string,
   options: {
+    resolveMaxOutputTokens?: OpenAICompatibleProviderOptions["resolveMaxOutputTokens"];
     model: string;
     system: string;
     messages: ChatMessage[];
@@ -332,11 +345,18 @@ async function requestChatCompletion(
       request.tools = toOpenAITools(options.tools);
     }
 
+    const maxTokens = await options.resolveMaxOutputTokens?.();
+
+    if (maxTokens) {
+      request.max_tokens = maxTokens;
+    }
+
     const completion = await client.chat.completions.create(request, {
       signal: options.signal,
     });
 
     const message = completion.choices[0]?.message;
+    const truncated = completion.choices[0]?.finish_reason === "length";
 
     const toolCalls = parseOpenAIToolCalls(
       // SAFETY: The upstream payload is validated or constructed by the provider adapter before this conversion.
@@ -352,8 +372,12 @@ async function requestChatCompletion(
     const thinking = readReasoningText(message);
     const reasoningDetails = options.netra ? readReasoningDetails(message) : [];
 
-    if (!content.trim() && toolCalls.length === 0 && !thinking?.trim()) {
-      throw new Error(`${label} returned an empty response.`);
+    if (
+      !(truncated || content.trim()) &&
+      toolCalls.length === 0 &&
+      !thinking?.trim()
+    ) {
+      throw buildProviderResponseError(`${label} returned an empty response.`);
     }
 
     return buildChatCompletionResult({
@@ -361,6 +385,7 @@ async function requestChatCompletion(
       providerContent: reasoningDetails,
       thinking,
       toolCalls,
+      truncated,
       usage: extractOpenAITokenUsage(completion.usage),
     });
   } catch (error) {
@@ -370,6 +395,7 @@ async function requestChatCompletion(
 
 async function streamChatCompletion(options: {
   label: string;
+  resolveMaxOutputTokens?: OpenAICompatibleProviderOptions["resolveMaxOutputTokens"];
   baseUrl: string;
   apiKey: string;
   model: string;
@@ -400,6 +426,12 @@ async function streamChatCompletion(options: {
   if (options.tools?.length) {
     requestBody.tool_choice = "auto";
     requestBody.tools = toOpenAITools(options.tools);
+  }
+
+  const maxTokens = await options.resolveMaxOutputTokens?.();
+
+  if (maxTokens) {
+    requestBody.max_tokens = maxTokens;
   }
 
   const response = await fetchWithoutIdleTimeout(
@@ -436,12 +468,15 @@ async function streamChatCompletion(options: {
   }
 
   if (!response.body) {
-    throw new Error(`${options.label} returned an empty stream.`);
+    throw buildProviderResponseError(
+      `${options.label} returned an empty stream.`
+    );
   }
 
   let content = "";
   let thinking = "";
   let usage: ChatCompletionResult["usage"];
+  let truncated = false;
   const reasoningDetails: unknown[] = [];
   const pending = new Map<number, PendingToolCall>();
 
@@ -451,6 +486,7 @@ async function streamChatCompletion(options: {
       error?: ProviderJsonRecord | string;
       usage?: ProviderJsonRecord;
       choices?: Array<{
+        finish_reason?: string | null;
         delta?: {
           content?: string | null;
           tool_calls?: Array<{
@@ -465,12 +501,16 @@ async function streamChatCompletion(options: {
     if (options.netra && (event === "error" || payload.error)) {
       const detail = payload.error ? readStreamErrorMessage(payload.error) : "";
 
-      throw new Error(
+      throw new ProviderStreamInterruptedError(
         `${options.label} stream failed after it started${detail ? `: ${detail}` : "."}`
       );
     }
 
     usage = extractOpenAITokenUsage(payload.usage) ?? usage;
+
+    if (payload.choices?.[0]?.finish_reason === "length") {
+      truncated = true;
+    }
 
     const delta = payload.choices?.[0]?.delta;
 
@@ -509,13 +549,21 @@ async function streamChatCompletion(options: {
   });
 
   if (options.netra && !ended) {
-    throw new Error(`${options.label} stream ended before [DONE].`);
+    throw new ProviderStreamInterruptedError(
+      `${options.label} stream ended before [DONE].`
+    );
   }
 
   const toolCalls = finalizePendingToolCalls(pending);
 
-  if (!content.trim() && toolCalls.length === 0 && !thinking.trim()) {
-    throw new Error(`${options.label} returned an empty response.`);
+  if (
+    !(truncated || content.trim()) &&
+    toolCalls.length === 0 &&
+    !thinking.trim()
+  ) {
+    throw buildProviderResponseError(
+      `${options.label} returned an empty response.`
+    );
   }
 
   return buildChatCompletionResult({
@@ -523,6 +571,7 @@ async function streamChatCompletion(options: {
     providerContent: reasoningDetails,
     thinking,
     toolCalls,
+    truncated,
     usage,
   });
 }
@@ -551,7 +600,7 @@ async function requestCompletion(
     const content = completion.choices[0]?.message?.content?.trim();
 
     if (!content) {
-      throw new Error(`${label} returned an empty response.`);
+      throw buildProviderResponseError(`${label} returned an empty response.`);
     }
 
     const usage = extractOpenAITokenUsage(completion.usage);

@@ -283,6 +283,66 @@ describe("OpenAI provider streaming", () => {
     expect(result.content).toBe("Hi");
   });
 
+  test("streams function call argument deltas as tool input deltas", async () => {
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(
+            streamFromChunks([
+              'data:{"type":"response.output_item.added","output_index":0,"item":{"id":"fc_1","type":"function_call","call_id":"call_abc","name":"write_file","arguments":""}}\r\n\r\n',
+              'data:{"type":"response.function_call_arguments.delta","item_id":"fc_1","output_index":0,"delta":"{\\"path\\":"}\r\n\r\n',
+              'data:{"type":"response.function_call_arguments.delta","item_id":"fc_1","output_index":0,"delta":"\\"index.html\\"}"}\r\n\r\n',
+              'data:{"type":"response.output_item.done","output_index":0,"item":{"id":"fc_1","type":"function_call","call_id":"call_abc","name":"write_file","arguments":"{\\"path\\":\\"index.html\\"}"}}\r\n\r\n',
+              'data:{"type":"response.completed","response":{"output":[]}}\r\n\r\n',
+            ]),
+            { status: 200 }
+          )
+      )
+    );
+
+    const toolInputDeltas: Array<{
+      accumulatedArguments: string;
+      delta: string;
+      tool: string;
+      toolCallId: string;
+    }> = [];
+
+    const result = await createOpenAIProvider({
+      apiKey: "sk-test",
+      model: "gpt-6.1-sol",
+    }).streamChat(
+      {
+        messages: [{ content: "Write a page", role: "user" }],
+        providerOptions: { thinking: { enabled: true } },
+        system: "Be brief.",
+      },
+      {
+        onChunk: () => {},
+        onToolInputDelta: (event) => {
+          toolInputDeltas.push(event);
+        },
+      }
+    );
+
+    expect(toolInputDeltas).toEqual([
+      {
+        accumulatedArguments: '{"path":',
+        delta: '{"path":',
+        tool: "write_file",
+        toolCallId: "call_abc",
+      },
+      {
+        accumulatedArguments: '{"path":"index.html"}',
+        delta: '"index.html"}',
+        tool: "write_file",
+        toolCallId: "call_abc",
+      },
+    ]);
+    expect(result.toolCalls).toEqual([
+      { arguments: { path: "index.html" }, id: "call_abc", name: "write_file" },
+    ]);
+  });
+
   test("reports a failed Responses stream", async () => {
     globalThis.fetch = asTestFetch(
       mock(

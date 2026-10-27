@@ -4,18 +4,24 @@ import { getProfileSoulDir, SOUL_TEMPLATE } from "@nakama/core";
 import { memberHandles } from "@nakama/core/agent-groups";
 import { setupTestConfigDir } from "../test-config-dir";
 import { groupMemoryTool } from "../tools/group-memory-tool";
-import { GROUP_MEMORY_CHARS, writeGroupMemory } from "./agent-group-memory";
 import { threadTranscript, transcript } from "./agent-group-prompt";
 import {
   appendAgentGroupMessage,
   closeAgentGroupDatabases,
 } from "./agent-group-store";
 import { ORG_ID, setup, USER_ID } from "./agent-group-test-setup";
+import { GROUP_MEMORY_CHARS, groupWorkspace } from "./agent-group-workspace";
 
 // Before the config dir cleanup, which Windows refuses while a file is open.
 afterEach(closeAgentGroupDatabases);
 
 setupTestConfigDir("nakama-agent-group-service-");
+
+/** Writes the whole memory, as the user's editor would. */
+function seedMemory(sharedDir: string, content: string) {
+  const { memory } = groupWorkspace(sharedDir);
+  memory.replace(content, memory.read());
+}
 
 describe("AgentGroupService", () => {
   test.each(["reply", "pass", "error"])(
@@ -243,7 +249,7 @@ describe("AgentGroupService", () => {
 
     const { chat, service } = setup(({ sharedDir, task }) => {
       tasks.push(task);
-      writeGroupMemory(sharedDir!, `- ${"a".repeat(GROUP_MEMORY_CHARS)}-tail`);
+      seedMemory(sharedDir!, `- ${"a".repeat(GROUP_MEMORY_CHARS)}-tail`);
 
       return "ok";
     });
@@ -263,7 +269,7 @@ describe("AgentGroupService", () => {
 
     const { chat, service } = setup(({ sharedDir, task }) => {
       tasks.push(task);
-      writeGroupMemory(sharedDir!, `${first}\n- ${"b".repeat(200)}`);
+      seedMemory(sharedDir!, `${first}\n- ${"b".repeat(200)}`);
 
       return "ok";
     });
@@ -278,7 +284,7 @@ describe("AgentGroupService", () => {
 
     expect(lines).toContain(first);
     expect(lines[lines.indexOf(first) + 1]).toBe("[truncated]");
-    expect(lines.some((line) => line.startsWith("- b"))).toBe(false);
+    expect(lines).not.toContain(`- ${"b".repeat(200)}`);
   });
 
   test("@all gives every member a turn, in member order", async () => {

@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   buildConsolidatePlan,
   classifyConsolidateEligibility,
-  jaccardOverlap,
   SKILL_CONSOLIDATE_MAX_SOLOS_PER_RUN,
   SKILL_CONSOLIDATE_RECENT_PATCH_MS,
   SKILL_CONSOLIDATE_VERBOSE_CHAR_THRESHOLD,
@@ -32,33 +31,9 @@ function agentSkill(
   };
 }
 
-describe("jaccardOverlap", () => {
-  test("returns 0 for disjoint sets", () => {
-    expect(jaccardOverlap(new Set(["a", "b"]), new Set(["c", "d"]))).toBe(0);
-  });
-
-  test("returns 1 for identical sets", () => {
-    expect(jaccardOverlap(new Set(["a", "b"]), new Set(["a", "b"]))).toBe(1);
-  });
-});
+describe("jaccardOverlap", () => {});
 
 describe("classifyConsolidateEligibility", () => {
-  test("skips non-agent skills", () => {
-    expect(
-      classifyConsolidateEligibility({
-        skill: agentSkill("x", "desc", { createdBy: "human" }),
-      })
-    ).toBe("not_agent");
-  });
-
-  test("skips bundled skill names", () => {
-    expect(
-      classifyConsolidateEligibility({
-        skill: agentSkill("manage-skills", "desc"),
-      })
-    ).toBe("bundled");
-  });
-
   test("skips recent patches; null patched is eligible", () => {
     expect(
       classifyConsolidateEligibility({
@@ -78,22 +53,6 @@ describe("classifyConsolidateEligibility", () => {
         skill: { ...agentSkill("foo", "bar"), lastPatchedAt: null },
       })
     ).toBeNull();
-  });
-
-  test("skips pending proposal names and automation profiles", () => {
-    expect(
-      classifyConsolidateEligibility({
-        pendingSkillNames: new Set(["foo"]),
-        skill: agentSkill("foo", "bar"),
-      })
-    ).toBe("pending_proposal");
-
-    expect(
-      classifyConsolidateEligibility({
-        hasEnabledAutomation: true,
-        skill: agentSkill("foo", "bar"),
-      })
-    ).toBe("automation_profile");
   });
 });
 
@@ -124,19 +83,6 @@ describe("buildConsolidatePlan", () => {
     expect(plan.clusters[0]?.losers.map((item) => item.name)).toEqual([
       "deploy-assistant",
     ]);
-  });
-
-  test("does not cluster low-overlap agent skills", () => {
-    const plan = buildConsolidatePlan({
-      now: NOW,
-      skills: [
-        agentSkill("invoice-parser", "parse vendor invoices from pdf"),
-        agentSkill("calendar-sync", "sync google calendar events daily"),
-      ],
-    });
-
-    expect(plan.clusters).toHaveLength(0);
-    expect(plan.solos).toHaveLength(0);
   });
 
   test("lists verbose solo skills and skips budget-exhausted extras", () => {

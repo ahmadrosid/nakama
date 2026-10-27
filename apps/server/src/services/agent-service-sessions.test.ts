@@ -159,6 +159,87 @@ describe("AgentService branching", () => {
     expect((await db.getSession(sessionId))?.model).toBeNull();
   });
 
+  test("keeps thinking effort scoped to the chat session", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile({
+      ...createDefaultProfile(),
+      model: "provider-1::thinker",
+    });
+
+    const service = new AgentService(
+      {
+        defaultProviderId: "provider-1",
+        providers: [
+          {
+            apiKey: "",
+            baseUrl: "https://api.example.com/v1",
+            createdAt: new Date().toISOString(),
+            customModels: [
+              { default: true, id: "thinker", supportsThinking: true },
+            ],
+            id: "provider-1",
+            label: "Test provider",
+            type: "openai_compatible",
+          },
+        ],
+        thinkingEffort: "medium",
+        thinkingEnabled: true,
+      },
+      null,
+      db
+    );
+
+    const builtEfforts: string[] = [];
+
+    const { resolveChatProviderOptions } =
+      privateServiceAccess<AgentServiceProviderOptionsAccess>(service);
+
+    Object.defineProperty(service, "resolveChatProviderOptions", {
+      value: (
+        ...args: Parameters<typeof resolveChatProviderOptions>
+      ): ReturnType<typeof resolveChatProviderOptions> => {
+        builtEfforts.push(args[1].effort);
+
+        return resolveChatProviderOptions.apply(service, args);
+      },
+    });
+
+    const sessionId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      null,
+      { thinkingEffort: "low" }
+    );
+
+    expect((await db.getSession(sessionId))?.thinkingEffort).toBe("low");
+    expect(builtEfforts.at(-1)).toBe("low");
+    expect(
+      (await service.getSessionMessages(sessionId, ORG_ID))?.thinkingEffort
+    ).toBe("low");
+
+    sessionTurnRegistry.beginTurn(sessionId);
+    await expect(
+      service.updateSessionThinkingEffort(sessionId, ORG_ID, "high")
+    ).rejects.toThrow("Wait for the current response");
+    sessionTurnRegistry.cancelTurn(sessionId);
+    expect((await db.getSession(sessionId))?.thinkingEffort).toBe("low");
+
+    expect(
+      await service.updateSessionThinkingEffort(sessionId, ORG_ID, "high")
+    ).toBe(true);
+    expect((await db.getSession(sessionId))?.thinkingEffort).toBe("high");
+    await service.getSessionMessages(sessionId, ORG_ID);
+    expect(builtEfforts.at(-1)).toBe("high");
+
+    expect(
+      await service.updateSessionThinkingEffort(sessionId, ORG_ID, null)
+    ).toBe(true);
+    expect((await db.getSession(sessionId))?.thinkingEffort).toBeNull();
+    await service.getSessionMessages(sessionId, ORG_ID);
+    expect(builtEfforts.at(-1)).toBe("medium");
+  });
+
   test("branches a new session from the selected message index", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertProfile(createDefaultProfile());

@@ -18,7 +18,7 @@ export function isListWorkflowsTool(tool: string | undefined): boolean {
   );
 }
 
-export interface ListedWorkflow {
+interface ListedWorkflow {
   description: string;
   enabled: boolean;
   id: string;
@@ -28,7 +28,7 @@ export interface ListedWorkflow {
 }
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
-export function parseListWorkflowsResult(result: unknown): ListedWorkflow[] {
+function parseListWorkflowsResult(result: unknown): ListedWorkflow[] {
   if (!Array.isArray(result)) {
     return [];
   }
@@ -220,7 +220,7 @@ export interface WorkflowStepView {
   tool: string | null;
 }
 
-export function buildWorkflowStepViews(
+function buildWorkflowStepViews(
   steps: WorkflowStep[],
   run: WorkflowRunRecord | null
 ): WorkflowStepView[] {
@@ -277,7 +277,7 @@ function markLivePendingStepRunning(
   );
 }
 
-export function activeWorkflowStepIndex(views: WorkflowStepView[]): number {
+function activeWorkflowStepIndex(views: WorkflowStepView[]): number {
   const running = views.findIndex((step) => step.status === "running");
 
   if (running >= 0) {

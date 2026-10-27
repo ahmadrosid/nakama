@@ -9,6 +9,7 @@ import type {
   AgentGroupMessage,
   AgentGroupSession,
 } from "@nakama/core/agent-groups";
+import { migrateGroupDatabase } from "./agent-group-store-migrations";
 
 const SCHEMA = `PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
   CREATE TABLE IF NOT EXISTS groups (
@@ -115,10 +116,7 @@ function withGroupDb<T>(orgId: string, run: (db: Database) => T): T {
     try {
       chmodSync(path, 0o600);
       db.exec(SCHEMA);
-      addThreadColumn(db);
-      addBriefColumn(db);
-      addDocumentsColumn(db);
-      addMemoryChangesColumn(db);
+      migrateGroupDatabase(db);
     } catch (error) {
       db.close();
       throw error;
@@ -128,53 +126,6 @@ function withGroupDb<T>(orgId: string, run: (db: Database) => T): T {
   }
 
   return run(db);
-}
-
-/** Threads came after the first release, so older files lack the column. */
-function addThreadColumn(db: Database): void {
-  const columns = db
-    .query<{ name: string }, []>("PRAGMA table_info(messages)")
-    .all();
-
-  if (!columns.some((column) => column.name === "thread_root_id")) {
-    db.exec(
-      `ALTER TABLE messages ADD COLUMN thread_root_id INTEGER;
-        CREATE INDEX IF NOT EXISTS messages_thread ON messages (thread_root_id, id);`
-    );
-  }
-}
-
-/** Briefs came after the first release, so older files lack the column. */
-function addBriefColumn(db: Database): void {
-  const columns = db
-    .query<{ name: string }, []>("PRAGMA table_info(groups)")
-    .all();
-
-  if (!columns.some((column) => column.name === "brief")) {
-    db.exec("ALTER TABLE groups ADD COLUMN brief TEXT NOT NULL DEFAULT ''");
-  }
-}
-
-/** Attachments came after the first release, so older files lack the column. */
-function addDocumentsColumn(db: Database): void {
-  const columns = db
-    .query<{ name: string }, []>("PRAGMA table_info(messages)")
-    .all();
-
-  if (!columns.some((column) => column.name === "documents")) {
-    db.exec("ALTER TABLE messages ADD COLUMN documents TEXT");
-  }
-}
-
-/** Older messages have no recorded memory changes. */
-function addMemoryChangesColumn(db: Database): void {
-  const columns = db
-    .query<{ name: string }, []>("PRAGMA table_info(messages)")
-    .all();
-
-  if (!columns.some((column) => column.name === "memory_changes")) {
-    db.exec("ALTER TABLE messages ADD COLUMN memory_changes TEXT");
-  }
 }
 
 /**
@@ -544,6 +495,24 @@ export function deleteGroupSession(
   );
 }
 
+/** The shared-folder paths of the images posted in a session. */
+export function listGroupSessionImages(
+  orgId: string,
+  sessionId: string
+): string[] {
+  const rows = withGroupDb(orgId, (db) =>
+    db
+      .query<{ documents: string }, [string]>(
+        "SELECT documents FROM messages WHERE session_id = ? AND documents IS NOT NULL"
+      )
+      .all(sessionId)
+  );
+
+  return rows.flatMap((row) =>
+    parseDocuments(row.documents).flatMap((d) => (d.path ? [d.path] : []))
+  );
+}
+
 /** The newest `limit` main-chat messages, oldest first; context reads omit notices before limiting. */
 export function listAgentGroupMessages(
   orgId: string,
@@ -617,10 +586,12 @@ export function listGroupMessageDocuments(
       .all(...messageIds)
   );
 
+  return new Map(rows.map((row) => [row.id, parseDocuments(row.documents)]));
+}
+
+function parseDocuments(documents: string): GroupDocument[] {
   // SAFETY: documents is only ever written by this store as a GroupDocument array.
-  return new Map(
-    rows.map((row) => [row.id, JSON.parse(row.documents) as GroupDocument[]])
-  );
+  return JSON.parse(documents) as GroupDocument[];
 }
 
 /**

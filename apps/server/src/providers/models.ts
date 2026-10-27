@@ -8,6 +8,7 @@ import {
 } from "@nakama/core";
 import {
   NETRA_AGENT_MODEL_ID,
+  netraModelSupportsVision,
   resolveNetraModelId,
 } from "@nakama/core/discovery-providers";
 import {
@@ -228,10 +229,7 @@ export function getDefaultModel(
   }
 
   if (customModels?.length) {
-    // Cloudflare has a built-in catalog, so its saved list only narrows
-    // explicit selections (see resolveModel), not the default.
-    const resolver =
-      provider === "cloudflare" ? undefined : SHORTLIST_RESOLVERS[provider];
+    const resolver = SHORTLIST_RESOLVERS[provider];
 
     if (resolver) {
       return resolver(customModels);
@@ -308,6 +306,7 @@ export function resolveModel(
 // Shortlist providers know vision only from the saved entry or the catalog.
 const SHORTLIST_VISION_PROVIDERS: ReadonlySet<ProviderName> = new Set([
   "cerebras",
+  "cloudflare",
   "fireworks",
   "ollama",
 ]);
@@ -325,6 +324,12 @@ export function modelSupportsVision(
   provider: ProviderName,
   customModels?: CustomModelEntry[]
 ): boolean | undefined {
+  // Netra serves a fixed set of models, so its own catalog wins over saved
+  // entries, which may carry a stale flag or none.
+  if (provider === "netra") {
+    return netraModelSupportsVision(modelId);
+  }
+
   const custom = findCustomModel(customModels, modelId);
 
   if (custom?.supportsVision !== undefined) {

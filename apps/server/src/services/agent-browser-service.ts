@@ -7,6 +7,7 @@ import {
   parseIniWithSections,
   REDACTED_SECRET_VALUE,
   readTextOrNull,
+  resolveManagedSecret,
   type SessionBrowserResponse,
   type UpdateAgentBrowserSettingsRequest,
   writeParsedConfigIni,
@@ -29,6 +30,11 @@ import {
   getKernelBrowser,
   userBrowserName,
 } from "./kernel-browser";
+import {
+  KERNEL_API_KEY_ENV,
+  KERNEL_BROWSER_SECRET,
+  type ManagedSecrets,
+} from "./managed-secrets";
 
 const AGENT_BROWSER_PACKAGE = "agent-browser";
 
@@ -99,7 +105,11 @@ async function loadAgentBrowserConfig(): Promise<AgentBrowserConfig | null> {
     return null;
   }
 
-  return { apiKey: section.api_key?.trim() ?? "", provider: "kernel" };
+  // config.ini keeps only the provider; the key is an encrypted Settings secret.
+  return {
+    apiKey: (await resolveManagedSecret("global", KERNEL_BROWSER_SECRET)) ?? "",
+    provider: "kernel",
+  };
 }
 
 /**
@@ -119,7 +129,7 @@ export async function resolveAgentBrowserConfig(
   }
 
   return {
-    apiKey: env.KERNEL_API_KEY?.trim() || saved?.apiKey || "",
+    apiKey: env[KERNEL_API_KEY_ENV]?.trim() || saved?.apiKey || "",
     provider: "kernel",
   };
 }
@@ -130,6 +140,7 @@ export async function isCloudBrowserRuntime(): Promise<boolean> {
 
 export async function saveAgentBrowserConfig(
   input: UpdateAgentBrowserSettingsRequest,
+  secrets: Pick<ManagedSecrets, "delete" | "save">,
   env: Record<string, string | undefined> = process.env
 ): Promise<void> {
   const raw = await readTextOrNull(getUserConfigPath());
@@ -140,6 +151,7 @@ export async function saveAgentBrowserConfig(
   if (input.provider === null) {
     delete parsed.sections[AGENT_BROWSER_SECTION];
     await writeParsedConfigIni(parsed.global, parsed.sections);
+    await secrets.delete("global", KERNEL_BROWSER_SECRET);
 
     return;
   }
@@ -151,20 +163,24 @@ export async function saveAgentBrowserConfig(
     );
   }
 
-  const existing = await loadAgentBrowserConfig();
   const typed = input.apiKey?.trim() ?? "";
+  const newKey = typed && typed !== REDACTED_SECRET_VALUE ? typed : "";
 
-  const apiKey =
-    typed && typed !== REDACTED_SECRET_VALUE ? typed : (existing?.apiKey ?? "");
-
-  if (!(apiKey || env.KERNEL_API_KEY?.trim())) {
+  if (
+    !(
+      newKey ||
+      env[KERNEL_API_KEY_ENV]?.trim() ||
+      (await resolveManagedSecret("global", KERNEL_BROWSER_SECRET))
+    )
+  ) {
     throw new NakamaApiError("A Kernel API key is required.", 400);
   }
 
-  parsed.sections[AGENT_BROWSER_SECTION] = {
-    api_key: apiKey,
-    provider: "kernel",
-  };
+  if (newKey) {
+    await secrets.save("global", KERNEL_BROWSER_SECRET, newKey);
+  }
+
+  parsed.sections[AGENT_BROWSER_SECTION] = { provider: "kernel" };
   await writeParsedConfigIni(parsed.global, parsed.sections);
 }
 

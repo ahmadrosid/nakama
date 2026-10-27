@@ -136,6 +136,24 @@ function isArtifactPath(relativePath: string): boolean {
   );
 }
 
+/**
+ * Whether a file tool call targets an artifact, by the requested path or by where it
+ * resolved. The guard realpaths `resolvedPath`, so the root is realpath'd too: on a
+ * symlinked root (macOS /var -> /private/var) an absolute path would otherwise slip by.
+ */
+function targetsArtifact(
+  requestedPath: string,
+  resolvedPath: string,
+  workspaceRoot: string
+): boolean {
+  return (
+    isArtifactPath(requestedPath) ||
+    isArtifactPath(
+      path.relative(resolveWithRealpath(workspaceRoot), resolvedPath)
+    )
+  );
+}
+
 function artifactRemapKey(context: ToolContext, relativePath: string): string {
   return `${context.sessionId ?? "default"}:${normalizeArtifactPath(relativePath)}`;
 }
@@ -398,8 +416,7 @@ export async function runWriteFile(
 
   if (
     context.forbidArtifactFileWrites &&
-    (isArtifactPath(parsed.path) ||
-      isArtifactPath(path.relative(workspaceRoot, filePath)))
+    targetsArtifact(parsed.path, filePath, workspaceRoot)
   ) {
     throw new Error(
       "write_file cannot save files under artifacts/. Use save_artifact to save an artifact; use edit_file to change an existing one."
@@ -523,6 +540,22 @@ export async function runDeleteFile(
     fileToolWorkspaceRoot(context, options)
   );
   refuseSkillLocalToolFileWrite(guarded.resolved);
+
+  // Same rule as write_file: without it a model blocked from overwriting an
+  // artifact deletes it and saves a new one under the old name, losing the original.
+  if (
+    context.forbidArtifactFileWrites &&
+    targetsArtifact(
+      parsed.path,
+      guarded.resolved,
+      fileToolWorkspaceRoot(context, options)
+    )
+  ) {
+    throw new Error(
+      "delete_file cannot delete files under artifacts/. Use edit_file to change an existing artifact; only the user can delete artifacts."
+    );
+  }
+
   await context.memoryFiles?.remove(guarded.resolved);
   await unlink(guarded.resolved);
 

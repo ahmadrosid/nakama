@@ -19,7 +19,6 @@ interface ChatComposerControlsInput {
   acpAgentKey: string;
   acpEnabled: boolean;
   busy: boolean;
-  canManageInstallSettings: boolean;
   currentProviderId: string | null | undefined;
   models: ProviderModelOption[] | undefined;
   profileId: string | null;
@@ -28,6 +27,8 @@ interface ChatComposerControlsInput {
   saveThinkingPending: boolean;
   sessionId: string | null;
   sessionModel: string | null;
+  /** This chat's own effort. Null follows the install effort. */
+  sessionThinkingEffort: ThinkingEffort | null;
   thinkingSettingsEffort: ThinkingEffort | undefined;
   thinkingSettingsLoading: boolean;
 }
@@ -40,7 +41,6 @@ export function useChatComposerControls({
   acpAgentKey,
   acpEnabled,
   busy,
-  canManageInstallSettings,
   currentProviderId,
   models,
   profileId,
@@ -49,6 +49,7 @@ export function useChatComposerControls({
   saveThinkingPending,
   sessionId,
   sessionModel,
+  sessionThinkingEffort,
   thinkingSettingsEffort,
   thinkingSettingsLoading,
 }: ChatComposerControlsInput) {
@@ -97,13 +98,15 @@ export function useChatComposerControls({
       }
     : {
         disabled:
-          !canManageInstallSettings ||
           busy ||
           thinkingSettingsLoading ||
           saveThinkingPending ||
           readOnlySession,
         options: undefined,
-        value: thinkingSettingsEffort ?? DEFAULT_THINKING_EFFORT,
+        value:
+          sessionThinkingEffort ??
+          thinkingSettingsEffort ??
+          DEFAULT_THINKING_EFFORT,
         visible: shouldShowThinkingEffort(activeModelSupportsThinking),
       };
 

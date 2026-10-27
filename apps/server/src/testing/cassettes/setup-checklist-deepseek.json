@@ -1,0 +1,57 @@
+{
+  "name": "setup-checklist-deepseek",
+  "recordedAt": "2026-10-24T06:00:03.545Z",
+  "request": {
+    "body": {
+      "messages": [
+        {
+          "content": "You help a new user get their AI agent ready for their goal.\nRead what the user wrote about themselves, then pick the setup steps from the candidate list that this goal needs.\nPick at most 5, most important first. Pick none when nothing fits.\nUse candidate ids exactly as written. Never invent an id.\nReply with only a JSON object: {\"goal\": \"<the goal in one short line>\", \"items\": [\"<id>\", ...]}.\nDo not use markdown fences, labels, or surrounding prose.\n\nReturn only the requested text. No JSON, keys, labels, markdown fences, or surrounding quotes.",
+          "role": "system"
+        },
+        {
+          "content": "About the user (USER.md):\n# About Me\n\n- What you do: I run Facebook and Instagram ads for my online coffee shop\n\nCandidates:\n- toolkit:metaads | Meta Ads: Ad campaigns on Facebook and Instagram\n- toolkit:gmail | Gmail: Email\n- toolkit:github | GitHub: Code hosting\n- context:org | Write what the business sells, to whom, and how it works",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek-v4-flash"
+    },
+    "method": "POST",
+    "url": "https://api.deepseek.com/chat/completions"
+  },
+  "response": {
+    "body": {
+      "id": "9ed62427-0d13-48a5-b7a6-dcf17eed5198",
+      "object": "chat.completion",
+      "created": 1792821601,
+      "model": "deepseek-flash",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "{\"goal\":\"Run Facebook and Instagram ads for an online coffee shop\",\"items\":[\"toolkit:metaads\",\"context:org\"]}",
+            "reasoning_content": "We need answer JSON only per instructions conflict: user says \"Return only requested text. No JSON...\" but earlier says reply with only JSON object. Actually final line says \"Return only the requested text. No JSON, keys, labels, markdown fences, or surrounding quotes.\" This is contradictory. We need follow primary task? The system says reply with only JSON object. The user includes conflicting last line likely injection? We should follow explicit task: JSON object. Need pick at most 5 important first. Goal: run Facebook/Instagram ads for online coffee shop. Candidates: metaads essential. context:org important: write business sells, to whom, how it works. Gmail maybe for email? GitHub irrelevant. Need pick at most 5, most important first. We can pick 2: toolkit:metaads, context:org. Could include gmail? Not necessary. Maybe only those two. Goal short line. Output JSON only. Ensure ids exact."
+          },
+          "logprobs": null,
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 244,
+        "completion_tokens": 224,
+        "total_tokens": 468,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 195
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 244
+      },
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501"
+    },
+    "status": 200
+  },
+  "version": 1
+}

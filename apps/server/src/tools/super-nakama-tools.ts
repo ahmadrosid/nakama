@@ -4,11 +4,12 @@ import {
   emptyObjectSchema,
   getCustomToolsDir,
   getProfileSoulDir,
-  type JsonValue,
+  jsonSchemaFromZod,
   type ListSkillsResponse,
   loadSoulStack,
   type ModelsResponse,
   type ProfileResponse,
+  parseToolInput,
   type ToolContext,
   type ToolDefinition,
   type UpdateProfileRequest,
@@ -59,18 +60,129 @@ const SOUL_STACK_FILES = [
   { fileName: "STYLE.md", key: "style" },
 ] as const;
 
-const soulFilesParameterSchema = {
-  additionalProperties: false,
-  description:
-    "Soul file contents. Supported keys: SOUL.md, STYLE.md, INSTRUCTIONS.md, MEMORY.md. Only provided keys are written.",
-  properties: {
-    "INSTRUCTIONS.md": { type: "string" },
-    "MEMORY.md": { type: "string" },
-    "SOUL.md": { type: "string" },
-    "STYLE.md": { type: "string" },
-  },
-  type: "object",
-} as const;
+const soulFilesSchema = z
+  .object({
+    "INSTRUCTIONS.md": z.string().optional(),
+    "MEMORY.md": z.string().optional(),
+    "SOUL.md": z.string().optional(),
+    "STYLE.md": z.string().optional(),
+  })
+  .strict();
+
+const SOUL_FILES_DESCRIPTION =
+  "Soul file contents. Supported keys: SOUL.md, STYLE.md, INSTRUCTIONS.md, MEMORY.md. Only provided keys are written.";
+
+const proposeToolSchema = z
+  .object({
+    description: z
+      .string()
+      .trim()
+      .min(1)
+      .max(2000)
+      .describe("What the tool does."),
+    name: z.string().trim().min(1).max(128).describe("Unique tool name."),
+    plan: z
+      .string()
+      .trim()
+      .min(1)
+      .max(8000)
+      .describe(
+        "User-facing plan: inputs, outputs, external effects, and provider if applicable."
+      ),
+    profileId: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe(
+        "Optional suggested existing agent. The user can change it in the card."
+      ),
+    requiresApiKey: z.boolean(),
+  })
+  .strict();
+
+const createGroupSchema = z
+  .object({
+    brief: z
+      .string()
+      .trim()
+      .max(4000)
+      .default("")
+      .describe("What the group is for. Every agent in the group reads it."),
+    memberIds: z
+      .array(z.string().min(1))
+      .min(2)
+      .max(12)
+      .describe("Profile ids of the agents to add. 2 to 12."),
+    name: z
+      .string()
+      .trim()
+      .min(1)
+      .max(80)
+      .describe(
+        'Group name in short, readable title case, like "Rosid\'s Brand Team". Never a slug or hyphenated.'
+      ),
+  })
+  .strict();
+
+const createProfileSchema = z.object({
+  isSuper: z
+    .boolean()
+    .optional()
+    .catch(undefined)
+    .describe("Whether this profile is a super nakama."),
+  model: z
+    .union([z.string(), z.null()])
+    .optional()
+    .catch(undefined)
+    .describe(
+      "Model id from list_models (providerId::modelId). Omit to use your own model."
+    ),
+  name: z
+    .string()
+    .trim()
+    .min(1)
+    .describe(
+      "Display name for the profile: a human first name such as Maya or Theo, never a job title. Put the role in the soul files."
+    ),
+  soulFiles: soulFilesSchema
+    .optional()
+    .describe(
+      "Optional generated soul file contents for the new profile. Supported keys: SOUL.md, STYLE.md, INSTRUCTIONS.md, MEMORY.md."
+    ),
+  systemPrompt: z
+    .string()
+    .trim()
+    .min(1)
+    .optional()
+    .catch(undefined)
+    .describe("System prompt for the bot."),
+});
+
+const updateProfileSchema = z.object({
+  model: z
+    .string()
+    .trim()
+    .min(1)
+    .optional()
+    .catch(undefined)
+    .describe(
+      "Model id from list_models (providerId::modelId). Omit to leave unchanged."
+    ),
+  profileId: z
+    .string({ error: "profileId is required." })
+    .trim()
+    .min(1, "profileId is required.")
+    .describe("Profile id to update."),
+  soulFiles: soulFilesSchema.optional().describe(SOUL_FILES_DESCRIPTION),
+  systemPrompt: z
+    .string()
+    .optional()
+    .catch(undefined)
+    .describe(
+      "Replacement system prompt stored on the profile. Pass an empty string to clear it. Omit to leave unchanged."
+    ),
+});
 
 function requireOrgId(context: ToolContext): string {
   const orgId = context.orgId?.trim();
@@ -176,26 +288,7 @@ export function createSuperNakamaTools(
       description:
         "Present a custom tool build plan for one-click approval, optional API key, and agent assignment. Call before writing code, then end the turn. Never accept API keys in tool inputs or chat. After approval, build and register with create_tool using the returned setupId. Works for any JavaScript or Python tool.",
       name: "propose_tool",
-      parameters: {
-        additionalProperties: false,
-        properties: {
-          description: { description: "What the tool does.", type: "string" },
-          name: { description: "Unique tool name.", type: "string" },
-          plan: {
-            description:
-              "User-facing plan: inputs, outputs, external effects, and provider if applicable.",
-            type: "string",
-          },
-          profileId: {
-            description:
-              "Optional suggested existing agent. The user can change it in the card.",
-            type: "string",
-          },
-          requiresApiKey: { type: "boolean" },
-        },
-        required: ["name", "description", "plan", "requiresApiKey"],
-        type: "object",
-      },
+      parameters: jsonSchemaFromZod(proposeToolSchema),
       async run(input, context) {
         const orgId = requireOrgId(context);
 
@@ -203,16 +296,7 @@ export function createSuperNakamaTools(
           throw new Error("A chat session is required to propose a tool.");
         }
 
-        const parsed = z
-          .object({
-            description: z.string().trim().min(1).max(2000),
-            name: z.string().trim().min(1).max(128),
-            plan: z.string().trim().min(1).max(8000),
-            profileId: z.string().trim().min(1).optional(),
-            requiresApiKey: z.boolean(),
-          })
-          .strict()
-          .parse(input);
+        const parsed = proposeToolSchema.parse(input);
 
         if (parsed.profileId) {
           await profileService.getProfile(orgId, parsed.profileId);
@@ -220,6 +304,7 @@ export function createSuperNakamaTools(
 
         const plan = {
           ...parsed,
+          createdAt: new Date().toISOString(),
           id: crypto.randomUUID(),
           sessionId: context.sessionId,
           status: "pending" as const,
@@ -278,57 +363,29 @@ export function createSuperNakamaTools(
     {
       description: "Create a new bot profile.",
       name: "create_profile",
-      parameters: {
-        additionalProperties: false,
-        properties: {
-          isSuper: {
-            description: "Whether this profile is a super nakama.",
-            type: "boolean",
-          },
-          model: {
-            description:
-              "Model id from list_models (providerId::modelId). Omit to use your own model.",
-            type: ["string", "null"],
-          },
-          name: {
-            description:
-              "Display name for the profile: a human first name such as Maya or Theo, never a job title. Put the role in the soul files.",
-            type: "string",
-          },
-          soulFiles: {
-            ...soulFilesParameterSchema,
-            description:
-              "Optional generated soul file contents for the new profile. Supported keys: SOUL.md, STYLE.md, INSTRUCTIONS.md, MEMORY.md.",
-          },
-          systemPrompt: {
-            description: "System prompt for the bot.",
-            type: "string",
-          },
-        },
-        required: ["name"],
-        type: "object",
-      },
+      parameters: jsonSchemaFromZod(createProfileSchema),
       async run(input, context: ToolContext) {
-        const toolInput = SuperNakamaInputSchema.parse(input);
-        const name = readString(toolInput, "name");
-
-        if (!name) {
-          throw new Error("name is required.");
-        }
+        const {
+          isSuper,
+          model: requestedModel,
+          name,
+          soulFiles,
+          systemPrompt,
+        } = createProfileSchema.parse(input);
 
         const orgId = requireOrgId(context);
-        let model = readOptionalString(toolInput, "model");
+        let model = requestedModel;
 
         if (model === undefined && context.profileId) {
           model = await inheritModel(orgId, context);
         }
 
         const result = await profileService.createProfile(orgId, {
-          isSuper: readBoolean(toolInput, "isSuper") ?? false,
+          isSuper: isSuper ?? false,
           model,
           name,
-          soulFiles: readSoulFiles(toolInput),
-          systemPrompt: readString(toolInput, "systemPrompt") ?? undefined,
+          soulFiles,
+          systemPrompt,
         });
 
         return {
@@ -341,28 +398,7 @@ export function createSuperNakamaTools(
       description:
         "Create a group chat where the user talks with several agents at once. Get the member ids from list_profiles. Confirm the name, members, and brief with the user before calling this. The brief is shared with every agent in the group as context.",
       name: "create_group",
-      parameters: {
-        additionalProperties: false,
-        properties: {
-          brief: {
-            description:
-              "What the group is for. Every agent in the group reads it.",
-            type: "string",
-          },
-          memberIds: {
-            description: "Profile ids of the agents to add. 2 to 12.",
-            items: { type: "string" },
-            type: "array",
-          },
-          name: {
-            description:
-              'Group name in short, readable title case, like "Rosid\'s Brand Team". Never a slug or hyphenated.',
-            type: "string",
-          },
-        },
-        required: ["name", "memberIds"],
-        type: "object",
-      },
+      parameters: jsonSchemaFromZod(createGroupSchema),
       async run(input, context: ToolContext) {
         const orgId = requireOrgId(context);
         const userId = context.userId?.trim();
@@ -371,14 +407,7 @@ export function createSuperNakamaTools(
           throw new Error("Creating groups needs a signed-in user.");
         }
 
-        const parsed = z
-          .object({
-            brief: z.string().trim().max(4000).default(""),
-            memberIds: z.array(z.string().min(1)).min(2).max(12),
-            name: z.string().trim().min(1).max(80),
-          })
-          .strict()
-          .parse(input);
+        const parsed = createGroupSchema.parse(input);
 
         const group = await services.createGroup(
           orgId,
@@ -395,40 +424,14 @@ export function createSuperNakamaTools(
       description:
         "Update a profile's stored system prompt, soul files, and/or model. Draft changes in chat, wait for explicit user confirmation, then call this. Use get_profile first when you need the current prompt or soul files.",
       name: "update_profile",
-      parameters: {
-        additionalProperties: false,
-        properties: {
-          model: {
-            description:
-              "Model id from list_models (providerId::modelId). Omit to leave unchanged.",
-            type: "string",
-          },
-          profileId: {
-            description: "Profile id to update.",
-            type: "string",
-          },
-          soulFiles: soulFilesParameterSchema,
-          systemPrompt: {
-            description:
-              "Replacement system prompt stored on the profile. Pass an empty string to clear it. Omit to leave unchanged.",
-            type: "string",
-          },
-        },
-        required: ["profileId"],
-        type: "object",
-      },
+      parameters: jsonSchemaFromZod(updateProfileSchema),
       async run(input, context: ToolContext) {
-        const toolInput = SuperNakamaInputSchema.parse(input);
-        const profileId = readString(toolInput, "profileId");
-        const systemPrompt = readStringAllowEmpty(toolInput, "systemPrompt");
-        const soulFiles = readSoulFiles(toolInput);
-        const model = readString(toolInput, "model");
+        const { profileId, systemPrompt, soulFiles, model } = parseToolInput(
+          updateProfileSchema,
+          input
+        );
 
-        if (!profileId) {
-          throw new Error("profileId is required.");
-        }
-
-        if (systemPrompt === null && soulFiles === undefined && !model) {
+        if (systemPrompt === undefined && soulFiles === undefined && !model) {
           throw new Error("Provide systemPrompt, soulFiles, and/or model.");
         }
 
@@ -438,7 +441,7 @@ export function createSuperNakamaTools(
 
         const request: UpdateProfileRequest = {};
 
-        if (systemPrompt !== null) {
+        if (systemPrompt !== undefined) {
           request.systemPrompt = systemPrompt;
         }
 
@@ -715,7 +718,7 @@ export function createSuperNakamaTools(
         }
 
         const handler = CUSTOM_TOOL_HANDLERS[handlerType];
-        const rawHandlerConfig = readObject(toolInput, "handlerConfig");
+        const rawHandlerConfig = toolInput.handlerConfig;
 
         const parsedHandlerConfig = z
           .record(z.string(), z.json())
@@ -729,7 +732,7 @@ export function createSuperNakamaTools(
           handlerConfig.requiresApiKey = setup.requiresApiKey;
         }
 
-        const modulePath = readModulePath(handlerConfig);
+        const modulePath = readString(handlerConfig, "modulePath");
 
         if (!modulePath?.endsWith(handler.extension)) {
           throw new Error(
@@ -806,40 +809,9 @@ export function createSuperNakamaTools(
 }
 
 function readString(input: SuperNakamaInput, key: string): string | null {
-  const value = readStringAllowEmpty(input, key);
+  const value = z.string().safeParse(input[key]).data;
 
-  return value?.trim() ? value.trim() : null;
-}
-
-function readStringAllowEmpty(
-  input: SuperNakamaInput,
-  key: string
-): string | null {
-  return z.string().safeParse(input[key]).data ?? null;
-}
-
-function readOptionalString(
-  input: SuperNakamaInput,
-  key: string
-): string | null | undefined {
-  const value = input[key];
-
-  if (value === null) {
-    return null;
-  }
-
-  return z.string().safeParse(value).data;
-}
-
-function readBoolean(input: SuperNakamaInput, key: string): boolean | null {
-  return z.boolean().safeParse(input[key]).data ?? null;
-}
-
-function readObject(
-  input: SuperNakamaInput,
-  key: string
-): JsonValue | undefined {
-  return input[key];
+  return value?.trim() || null;
 }
 
 function readSoulFiles(
@@ -848,37 +820,11 @@ function readSoulFiles(
   | CreateProfileRequest["soulFiles"]
   | UpdateProfileRequest["soulFiles"]
   | undefined {
-  const raw = readObject(input, "soulFiles");
+  const raw = input.soulFiles;
 
   if (raw === undefined) {
     return;
   }
 
-  const allowed = new Set<string>(SUPPORTED_SOUL_FILE_NAMES);
-  const result: NonNullable<CreateProfileRequest["soulFiles"]> = {};
-  const files = z.record(z.string(), z.string()).safeParse(raw);
-
-  if (!files.success) {
-    throw new Error("soulFiles must be an object with string values.");
-  }
-
-  for (const [key, value] of Object.entries(files.data)) {
-    const supportedName = SUPPORTED_SOUL_FILE_NAMES.find(
-      (name) => name === key
-    );
-
-    if (!(supportedName && allowed.has(key))) {
-      throw new Error(`Unsupported soul file: ${key}`);
-    }
-
-    result[supportedName] = value;
-  }
-
-  return result;
-}
-
-function readModulePath(
-  handlerConfig: Record<string, JsonValue>
-): string | null {
-  return readString(handlerConfig, "modulePath");
+  return soulFilesSchema.parse(raw);
 }

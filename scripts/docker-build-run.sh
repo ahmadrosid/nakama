@@ -6,6 +6,11 @@ CONTAINER_NAME="${NAKAMA_CONTAINER_NAME:-nakama}"
 IMAGE_NAME="${NAKAMA_IMAGE_NAME:-nakama}"
 HOST_PORT="${NAKAMA_HOST_PORT:-4310}"
 VOLUME_NAME="${NAKAMA_DATA_VOLUME:-nakama-data}"
+SECRETS_ENV_FILE="${NAKAMA_SECRETS_ENV_FILE:-${HOME}/.nakama/docker-secrets.env}"
+if [[ ! -f "${SECRETS_ENV_FILE}" ]]; then
+  mkdir -p "$(dirname "${SECRETS_ENV_FILE}")"
+  (umask 077; printf 'NAKAMA_SECRETS_KEY=%s\n' "$(openssl rand -base64 32)" > "${SECRETS_ENV_FILE}")
+fi
 
 echo "Building ${IMAGE_NAME}..."
 # buildx handles cross-platform builds; legacy `docker build` fails on Apple Silicon
@@ -25,6 +30,7 @@ docker rm -f "${CONTAINER_NAME}" 2>/dev/null || true
 
 echo "Starting ${CONTAINER_NAME}..."
 docker run -d \
+  --env-file "${SECRETS_ENV_FILE}" \
   -p "${HOST_PORT}:4310" \
   -v "${VOLUME_NAME}:/nakama/data" \
   --name "${CONTAINER_NAME}" \

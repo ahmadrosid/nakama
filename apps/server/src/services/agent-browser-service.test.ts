@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { REDACTED_SECRET_VALUE } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { createHonoApp } from "../http/app";
 import { setupFreshInstallSession } from "../http/test-session-helpers";
@@ -19,6 +20,7 @@ import { AgentService } from "../services/agent-service";
 import { AuthService } from "../services/auth-service";
 import { ensureKernelBrowser } from "../services/kernel-browser";
 import { OrgService } from "../services/org-service";
+import { setupTestManagedSecrets } from "../test-config-dir";
 import * as cliPackageInstall from "./cli-package-install";
 import {
   waitForExit,
@@ -414,6 +416,7 @@ describe("Kernel browser runtime", () => {
   );
 
   let configDir = "";
+  const store = setupTestManagedSecrets();
   let requests: Array<{ body: unknown; method: string; url: string }> = [];
   let browsers: Map<string, Record<string, string>>;
 
@@ -502,7 +505,10 @@ describe("Kernel browser runtime", () => {
   });
 
   test("keeps another user off the first user's browser", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await saveAgentBrowserConfig(
+      { apiKey: "kernel-key", provider: "kernel" },
+      store()
+    );
     await ensureKernelBrowser("kernel-key", "org-a", "user-1");
 
     expect((await getUserBrowser("org-a", "user-2")).liveViewUrl).toBeNull();
@@ -510,27 +516,67 @@ describe("Kernel browser runtime", () => {
 
   test("requires a Kernel API key to save", async () => {
     await expect(
-      saveAgentBrowserConfig({ provider: "kernel" })
+      saveAgentBrowserConfig({ provider: "kernel" }, store())
     ).rejects.toThrow();
 
     process.env.KERNEL_API_KEY = "env-key";
 
-    await saveAgentBrowserConfig({ provider: "kernel" });
+    await saveAgentBrowserConfig({ provider: "kernel" }, store());
     expect((await getAgentBrowserStatus()).provider).toBe("kernel");
   });
 
+  test("keeps the Kernel key out of config.ini", async () => {
+    await saveAgentBrowserConfig(
+      { apiKey: "kernel-key", provider: "kernel" },
+      store()
+    );
+
+    const config = await readFile(join(configDir, "config.ini"), "utf8");
+
+    expect(config).toContain("provider=kernel");
+    expect(config).not.toContain("kernel-key");
+    expect((await store().resolve("global", "kernel-browser")).value).toBe(
+      "kernel-key"
+    );
+    expect((await getAgentBrowserStatus()).apiKeyMasked).not.toBeNull();
+  });
+
+  test("keeps the saved key when the redacted value comes back", async () => {
+    await saveAgentBrowserConfig(
+      { apiKey: "kernel-key", provider: "kernel" },
+      store()
+    );
+    await saveAgentBrowserConfig(
+      { apiKey: REDACTED_SECRET_VALUE, provider: "kernel" },
+      store()
+    );
+
+    expect((await store().resolve("global", "kernel-browser")).value).toBe(
+      "kernel-key"
+    );
+  });
+
   test("restores local Chrome when the provider is cleared", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
-    await saveAgentBrowserConfig({ provider: null });
+    await saveAgentBrowserConfig(
+      { apiKey: "kernel-key", provider: "kernel" },
+      store()
+    );
+    await saveAgentBrowserConfig({ provider: null }, store());
 
     const status = await getAgentBrowserStatus();
 
     expect(status.provider).toBeNull();
     expect(status.apiKeyMasked).toBeNull();
+    expect(
+      (await store().resolve("global", "kernel-browser")).value
+    ).toBeNull();
   });
 
   test("does not show one org the browser of another org", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await saveAgentBrowserConfig(
+      { apiKey: "kernel-key", provider: "kernel" },
+      store()
+    );
     await ensureKernelBrowser("kernel-key", "org-a", "user-1");
 
     expect((await getUserBrowser("org-a", "user-1")).liveViewUrl).toBe(
@@ -540,7 +586,10 @@ describe("Kernel browser runtime", () => {
   });
 
   test("stops the session browser", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await saveAgentBrowserConfig(
+      { apiKey: "kernel-key", provider: "kernel" },
+      store()
+    );
     await ensureKernelBrowser("kernel-key", "org-a", "user-1");
 
     await stopUserBrowser("org-a", "user-1");

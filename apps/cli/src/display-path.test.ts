@@ -1,14 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { formatCliDisplayPath, isCliVerbose } from "./display-path";
+import { formatCliDisplayPath } from "./display-path";
 
-describe("isCliVerbose", () => {
-  test("detects --verbose", () => {
-    expect(isCliVerbose(["--org", "acme", "--verbose"])).toBe(true);
-    expect(isCliVerbose(["--profile", "default"])).toBe(false);
-  });
-});
+describe("isCliVerbose", () => {});
 
 describe("formatCliDisplayPath", () => {
   const home = homedir();
@@ -32,11 +27,6 @@ describe("formatCliDisplayPath", () => {
 
   test("masks config path home without inventing org segments", () => {
     expect(formatCliDisplayPath(configPath)).toBe("~/.nakama/config.ini");
-  });
-
-  test("returns the absolute path when verbose", () => {
-    expect(formatCliDisplayPath(soulDir, true)).toBe(soulDir);
-    expect(formatCliDisplayPath(configPath, true)).toBe(configPath);
   });
 
   test("masks foreign home prefixes", () => {

@@ -84,11 +84,15 @@ Explicit user instructions override this default.
    No drive-by refactors beyond the findings.
 3. Run the smallest relevant tests and required checks for the touched files.
 4. Commit with a clear message focused on the fixes. Follow the user's git
-   commit rules. Push the new branch to a repository you can write to; use
-   a fork if necessary.
+   commit rules. Push to the original PR's base repository, or to your own
+   fork if you cannot write there. Never push to the original author's fork.
 5. Open one ready-for-review PR containing the fixes:
-   - Original PR open: target its head branch in its head repository so the
-     diff contains only the fixes, without waiting for the original to merge.
+   - Always open the fix PR in the original PR's base repository, targeting
+     its base branch. Never open a PR in the original author's fork or target
+     the author's branch.
+   - Original PR open: base the fix branch on its reviewed head and state that
+     the fix depends on the original PR. Its diff will narrow after the
+     original PR merges. Do not merge the fix PR first.
    - Original PR merged: start from the updated base branch, apply only fixes
      still needed, test, and target that base branch.
    - Original PR closed without merging: report this in chat; do not reopen

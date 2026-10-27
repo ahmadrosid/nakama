@@ -161,7 +161,7 @@ interface RunChatOptions {
   verbose?: boolean;
 }
 
-export function needsTrailingStreamNewline(lastChunk: string | null): boolean {
+function needsTrailingStreamNewline(lastChunk: string | null): boolean {
   return lastChunk === null || !lastChunk.endsWith("\n");
 }
 
@@ -1562,7 +1562,7 @@ function formatError(cause: unknown): string {
   return formatClientError(cause);
 }
 
-export function formatErrorLines(cause: unknown): string[] {
+function formatErrorLines(cause: unknown): string[] {
   return ["", ...formatError(cause).split(/\r?\n/)];
 }
 

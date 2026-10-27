@@ -1,6 +1,8 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import type { AgentChatSession } from "@nakama/agent";
 import type { StreamEvent } from "@nakama/core";
+import { createOpenAICompatibleProvider } from "../../providers/openai-compatible";
+import { asTestFetch, streamFromChunks } from "../../providers/test-helpers";
 import { sessionTurnRegistry } from "../../services/session-turn-registry";
 import { streamMessage, streamTurnSubscribe } from "../shared";
 
@@ -333,6 +335,52 @@ describe("streamMessage timeout", () => {
 
       timeoutSpy.mockRestore();
       clearSpy.mockRestore();
+    }
+  });
+
+  test("a provider stream that fails shows the provider's message", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = asTestFetch(
+      async () =>
+        new Response(
+          streamFromChunks([
+            'data: {"choices":[{"delta":{"content":""},"finish_reason":"error"}],"error":{"message":"upstream error"}}\n\n',
+          ]),
+          { headers: { "Content-Type": "text/event-stream" } }
+        )
+    );
+
+    const provider = createOpenAICompatibleProvider({
+      apiKey: "test-key",
+      baseUrl: "https://api.netraruntime.com/v1",
+      displayName: "Netra Runtime",
+      model: "deepseek/deepseek-v4.1-flash",
+      providerName: "netra",
+    });
+
+    const sessionId = `session_provider_error_${Date.now()}`;
+    expect(sessionTurnRegistry.beginTurn(sessionId).started).toBe(true);
+
+    try {
+      const response = streamMessage(
+        sessionId,
+        {
+          getContextUsage: () => null,
+          getTurnUsage: () => null,
+          sendStream: (_input, handlers) =>
+            provider
+              .streamChat({ messages: [], system: "" }, handlers)
+              .then((result) => result.content),
+        },
+        { message: "hi" }
+      );
+
+      const body = await new Response(response.body).text();
+      await waitForTurnToEnd(sessionId);
+
+      expect(body).toContain("upstream error");
+    } finally {
+      globalThis.fetch = originalFetch;
     }
   });
 });

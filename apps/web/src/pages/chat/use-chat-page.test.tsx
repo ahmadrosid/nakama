@@ -758,7 +758,7 @@ test("waits for the active org profile query before selecting a profile", async 
 
   // SAFETY: The deferred result supplies the profile rows asserted by this test.
   const listProfiles = spyOn(client, "listProfiles").mockImplementation(
-    () => profiles.promise as never
+    () => profiles.promise as ReturnType<typeof client.listProfiles>
   );
 
   // SAFETY: The page test reads only profile id, name, and skills.
@@ -856,6 +856,126 @@ test("waits for the active org profile query before selecting a profile", async 
       mock.mockRestore();
     }
 
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: previousStorage,
+    });
+  }
+});
+
+test("a member changes thinking effort for this chat only", async () => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+
+  const previousStorage = globalThis.localStorage;
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: { getItem: () => null, removeItem() {}, setItem() {} },
+  });
+
+  const updateSession = spyOn(client, "updateSession").mockResolvedValue();
+  const setThinking = spyOn(client, "setThinkingSettings");
+
+  const spies = [
+    // SAFETY: The mock covers only the fields this page test reads.
+    spyOn(client, "getMe").mockResolvedValue({
+      activeOrgId: "org1",
+      id: "u1",
+      isPlatformAdmin: false,
+      orgId: "org1",
+    } as never),
+    // SAFETY: This test supplies only the organization row used by the page.
+    spyOn(client, "listUserOrgs").mockResolvedValue({
+      orgs: [{ id: "org1", name: "Org" }],
+    } as never),
+    spyOn(client, "getSessionMessages").mockResolvedValue({
+      channel: "web",
+      messageMeta: [],
+      messages: [],
+      model: null,
+      questionnaire: null,
+      thinkingEffort: "low",
+      todos: [],
+    }),
+    // SAFETY: The page reads only `active` from this session status fixture.
+    spyOn(client, "getSessionStatus").mockResolvedValue({
+      active: false,
+    } as never),
+    spyOn(client, "getThinkingSettings").mockResolvedValue({
+      effort: "medium",
+      enabled: true,
+    }),
+    // SAFETY: The test reads only profile id and skills from this fixture.
+    spyOn(client, "getProfile").mockResolvedValue({
+      profile: { id: "p1", skills: [] },
+    } as never),
+    // SAFETY: This fixture supplies the profile row used by the page test.
+    spyOn(client, "listProfiles").mockResolvedValue({
+      profiles: [{ id: "p1", name: "P1" }],
+    } as never),
+  ];
+
+  let page!: ChatPageState;
+
+  function Probe() {
+    page = useChatPage();
+
+    return null;
+  }
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  const settle = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter initialEntries={["/chat/p1/s1"]}>
+          <QueryClientProvider client={queryClient}>
+            <AuthProvider>
+              <AppProvider>
+                <Routes>
+                  <Route
+                    element={<Probe />}
+                    path="/chat/:profileId?/:sessionId?"
+                  />
+                </Routes>
+              </AppProvider>
+            </AuthProvider>
+          </QueryClientProvider>
+        </MemoryRouter>
+      )
+    );
+    await settle();
+
+    expect(page.thinkingEffort).toBe("low");
+    expect(page.thinkingEffortDisabled).toBe(false);
+
+    await act(async () => page.handleThinkingEffortChange("high"));
+    await settle();
+
+    expect(updateSession).toHaveBeenCalledWith("s1", {
+      thinkingEffort: "high",
+    });
+    expect(setThinking).not.toHaveBeenCalled();
+    expect(page.thinkingEffort).toBe("high");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    updateSession.mockRestore();
+    setThinking.mockRestore();
+
+    for (const spy of spies) {
+      spy.mockRestore();
+    }
+
+    queryClient.clear();
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
       value: previousStorage,

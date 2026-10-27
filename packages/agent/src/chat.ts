@@ -16,7 +16,7 @@ import type {
   ToolContext,
   ToolDefinition,
 } from "@nakama/core";
-import { createId } from "@nakama/core";
+import { createId, ProviderStreamInterruptedError } from "@nakama/core";
 import { z } from "zod";
 
 export interface AgentRequest {
@@ -86,6 +86,15 @@ const EMPTY_REPLY_NUDGE =
 
 const EMPTY_REPLY_NOTICE =
   "The model finished without writing a reply. Send another message to continue.";
+
+const OUTPUT_LIMIT_NOTICE =
+  "The model reached its output token limit before it wrote a reply. Send another message to continue.";
+
+const STREAM_INTERRUPTED_NOTE =
+  "Your previous response was cut off by a provider error. Continue from where it stopped without repeating it. Split large content into smaller tool calls.";
+
+const TRUNCATED_TOOL_CALL_ERROR =
+  "Not run: your reply reached the output token limit, so the arguments of this call were cut off. Split the work into smaller calls.";
 
 interface StreamHandlers {
   onChunk: (delta: string) => void;
@@ -739,6 +748,9 @@ async function runConversation(
   let producedTokens = 0;
   let stoppedReply = "";
   let finalReplyOnly = false;
+  let thinkingOff = false;
+  let streamRetried = false;
+  let streamInterrupted = false;
   let openTodoNudges = 0;
   let openTodosReminder: string | null = null;
 
@@ -765,6 +777,11 @@ async function runConversation(
       openTodosReminder = null;
     }
 
+    if (streamInterrupted) {
+      iterationPrompt = `${iterationPrompt}\n\n${STREAM_INTERRUPTED_NOTE}`;
+      streamInterrupted = false;
+    }
+
     const reservedTokens =
       estimateHistoryTokens(
         history,
@@ -776,6 +793,11 @@ async function runConversation(
     const releaseReservation =
       await toolContext?.assertCanStartLlmTurn?.(reservedTokens);
 
+    const { thinking: _thinking, ...optionsWithoutThinking } =
+      providerOptions ?? {};
+
+    const stepOptions = thinkingOff ? optionsWithoutThinking : providerOptions;
+
     const toolGroupId = createId("toolgroup");
     let result: Awaited<ReturnType<typeof generateReply>>;
 
@@ -785,9 +807,7 @@ async function runConversation(
         iterationPrompt,
         history,
         llmTools,
-        finalReplyOnly
-          ? { ...providerOptions, webSearch: false }
-          : providerOptions,
+        finalReplyOnly ? { ...stepOptions, webSearch: false } : stepOptions,
         mode,
         handlers,
         rehydrateMessagesForProvider,
@@ -818,6 +838,20 @@ async function runConversation(
       } catch {
         // never let accounting break a turn
       }
+    } catch (error) {
+      // A stream that broke mid-reply often works on the next try. Retry once
+      // per turn; the partial reply is already in history.
+      if (
+        error instanceof ProviderStreamInterruptedError &&
+        !streamRetried &&
+        !signal?.aborted
+      ) {
+        streamRetried = true;
+        streamInterrupted = true;
+        continue;
+      }
+
+      throw error;
     } finally {
       // The hold covers one provider call. Usage is on the ledger by now if the
       // call returned, and a call that threw or was aborted spent nothing.
@@ -854,18 +888,29 @@ async function runConversation(
       result.toolCalls.length === 0 &&
       !result.content.trim()
     ) {
+      // Thinking used the whole output limit. Try the same step again with
+      // the tools, and do not think for the rest of this turn.
+      if (result.truncated && !thinkingOff) {
+        thinkingOff = true;
+        continue;
+      }
+
       if (!finalReplyOnly) {
         finalReplyOnly = true;
         continue;
       }
 
-      history.push({ content: EMPTY_REPLY_NOTICE, role: "assistant" });
+      const notice = result.truncated
+        ? OUTPUT_LIMIT_NOTICE
+        : EMPTY_REPLY_NOTICE;
+
+      history.push({ content: notice, role: "assistant" });
 
       if (mode === "stream") {
-        handlers?.onChunk(EMPTY_REPLY_NOTICE);
+        handlers?.onChunk(notice);
       }
 
-      return EMPTY_REPLY_NOTICE;
+      return notice;
     }
 
     // Steps the provider already ran are saved in order, each with the text before it,
@@ -889,6 +934,35 @@ async function runConversation(
         ? { ...result.assistantMessage, usage: result.usage }
         : result.assistantMessage
     );
+
+    if (enableToolLoop && result.truncated && result.toolCalls.length > 0) {
+      // The last call was cut off at the output limit, so its arguments are
+      // broken. Tell the model and let it try again in smaller parts.
+      for (const call of result.toolCalls) {
+        const toolResult = { error: TRUNCATED_TOOL_CALL_ERROR };
+
+        handlers?.onToolStart?.({
+          input: call.arguments,
+          tool: call.name,
+          toolCallId: call.id,
+          toolGroupId,
+        });
+        handlers?.onToolEnd?.({
+          result: toolResult,
+          tool: call.name,
+          toolCallId: call.id,
+          toolGroupId,
+        });
+        history.push({
+          content: JSON.stringify(toolResult),
+          name: call.name,
+          role: "tool",
+          toolCallId: call.id,
+        });
+      }
+
+      continue;
+    }
 
     if (!enableToolLoop || result.toolCalls.length === 0) {
       if (
@@ -1231,6 +1305,7 @@ async function generateReply(
     let thinking = "";
     let thinkingStartedAt: number | undefined;
     let thinkingDurationMs: number | undefined;
+    const pendingToolInputs = new Map<string, string>();
 
     const finishThinking = () => {
       if (thinkingStartedAt !== undefined) {
@@ -1272,10 +1347,12 @@ async function generateReply(
         onToolEnd: (event) => handlers.onToolEnd?.({ ...event, toolGroupId }),
         onToolInputDelta: (event) => {
           finishThinking();
+          pendingToolInputs.set(event.toolCallId, event.tool);
           handlers.onToolInputDelta?.({ ...event, toolGroupId });
         },
         onToolStart: (event) => {
           finishThinking();
+          pendingToolInputs.delete(event.toolCallId);
           handlers.onToolStart?.({ ...event, toolGroupId });
         },
       });
@@ -1293,7 +1370,21 @@ async function generateReply(
             },
           };
     } catch (error) {
-      if (signal?.aborted && (content || thinking)) {
+      const interrupted = error instanceof ProviderStreamInterruptedError;
+
+      // Tool calls cut off by the broken stream never run; close their steps.
+      if (interrupted) {
+        for (const [toolCallId, tool] of pendingToolInputs) {
+          handlers.onToolEnd?.({
+            result: { error: error.message },
+            tool,
+            toolCallId,
+            toolGroupId,
+          });
+        }
+      }
+
+      if ((signal?.aborted || interrupted) && (content || thinking)) {
         finishThinking();
 
         const message: ChatMessage = {

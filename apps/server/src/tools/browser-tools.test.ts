@@ -3,10 +3,15 @@ import type { JsonValue, ToolContext, ToolDefinition } from "@nakama/core";
 import { z } from "zod";
 import { asTestFetch } from "../providers/test-helpers";
 import { saveAgentBrowserConfig } from "../services/agent-browser-service";
-import { setupTestConfigDir } from "../test-config-dir";
+import {
+  setupTestConfigDir,
+  setupTestManagedSecrets,
+} from "../test-config-dir";
 import { createBrowserTools } from "./browser-tools";
 
 setupTestConfigDir("nakama-browser-tools-test-");
+
+const secrets = setupTestManagedSecrets();
 
 interface KernelCall {
   body: Record<string, JsonValue> | null;
@@ -156,7 +161,10 @@ describe("browser tools", () => {
   });
 
   test("refuse to run without a signed-in user", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await saveAgentBrowserConfig(
+      { apiKey: "kernel-key", provider: "kernel" },
+      secrets()
+    );
 
     await expect(
       tool("browser_read").run({}, { ...context, userId: undefined })
@@ -170,7 +178,10 @@ describe("browser tools", () => {
   });
 
   test("run on the caller's own browser, in the chat's own tab", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await saveAgentBrowserConfig(
+      { apiKey: "kernel-key", provider: "kernel" },
+      secrets()
+    );
 
     await tool("browser_navigate").run({ url: "https://example.com" }, context);
 
@@ -190,7 +201,10 @@ describe("browser tools", () => {
   });
 
   test("navigate refuses addresses that are not http or https", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await saveAgentBrowserConfig(
+      { apiKey: "kernel-key", provider: "kernel" },
+      secrets()
+    );
 
     await expect(
       tool("browser_navigate").run({ url: "javascript:alert(1)" }, context)
@@ -201,7 +215,10 @@ describe("browser tools", () => {
   });
 
   test("start a missing browser at the small screen size", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await saveAgentBrowserConfig(
+      { apiKey: "kernel-key", provider: "kernel" },
+      secrets()
+    );
     browserExists = false;
 
     await tool("browser_screenshot").run({}, context);
@@ -218,7 +235,10 @@ describe("browser tools", () => {
   });
 
   test("fall back to the default tab when the executor limit is reached", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await saveAgentBrowserConfig(
+      { apiKey: "kernel-key", provider: "kernel" },
+      secrets()
+    );
     executorLimitReached = true;
 
     const result = await tool("browser_scroll").run({}, context);
@@ -235,7 +255,10 @@ describe("browser tools", () => {
   });
 
   test("read caps the page text and keeps the links", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await saveAgentBrowserConfig(
+      { apiKey: "kernel-key", provider: "kernel" },
+      secrets()
+    );
 
     playwrightResponse = () =>
       Response.json({
@@ -273,7 +296,10 @@ describe("browser tools", () => {
   });
 
   test("a new chat tab closes the oldest chat tabs", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await saveAgentBrowserConfig(
+      { apiKey: "kernel-key", provider: "kernel" },
+      secrets()
+    );
 
     playwrightResponse = () =>
       Response.json({ result: {}, success: true, tab: { created: true } });
@@ -292,7 +318,10 @@ describe("browser tools", () => {
   });
 
   test("read from an offset returns only the text after it", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await saveAgentBrowserConfig(
+      { apiKey: "kernel-key", provider: "kernel" },
+      secrets()
+    );
 
     playwrightResponse = () =>
       Response.json({
@@ -310,7 +339,10 @@ describe("browser tools", () => {
   });
 
   test("playwright reports a failed step as an error", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await saveAgentBrowserConfig(
+      { apiKey: "kernel-key", provider: "kernel" },
+      secrets()
+    );
 
     playwrightResponse = () =>
       Response.json({ error: "locator timed out", success: false });
@@ -321,7 +353,10 @@ describe("browser tools", () => {
   });
 
   test("screenshot and mouse actions bring the chat's tab to the front first", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await saveAgentBrowserConfig(
+      { apiKey: "kernel-key", provider: "kernel" },
+      secrets()
+    );
 
     await tool("browser_screenshot").run({}, context);
     await tool("browser_computer").run(
@@ -351,7 +386,10 @@ describe("browser tools", () => {
   });
 
   test("screenshot returns the image to the model", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await saveAgentBrowserConfig(
+      { apiKey: "kernel-key", provider: "kernel" },
+      secrets()
+    );
 
     const result = ImagesResultSchema.parse(
       await tool("browser_screenshot").run({}, context)
@@ -366,7 +404,10 @@ describe("browser tools", () => {
   });
 
   test("computer maps actions to Kernel and returns a screenshot", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await saveAgentBrowserConfig(
+      { apiKey: "kernel-key", provider: "kernel" },
+      secrets()
+    );
 
     const result = ImagesResultSchema.parse(
       await tool("browser_computer").run(
@@ -396,7 +437,10 @@ describe("browser tools", () => {
   });
 
   test("computer refuses too many actions", async () => {
-    await saveAgentBrowserConfig({ apiKey: "kernel-key", provider: "kernel" });
+    await saveAgentBrowserConfig(
+      { apiKey: "kernel-key", provider: "kernel" },
+      secrets()
+    );
 
     await expect(
       tool("browser_computer").run(

@@ -1,10 +1,23 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readWorkerDesiredState, setWorkerDesiredRunning } from "@nakama/core";
 import { saveWhatsAppConfig } from "@nakama/core/whatsapp-config";
 import { WorkerManagerService } from "./worker-manager-service";
+
+interface Pm2Common {
+  prepareAppConf(
+    options: { cwd: string },
+    app: Parameters<Pm2Client["start"]>[0]
+  ): { env: Record<string, string | undefined> };
+}
+
+// SAFETY: pm2 ships no types for this module; this is its exported shape.
+const { prepareAppConf } = createRequire(import.meta.url)(
+  "pm2/lib/Common.js"
+) as Pm2Common;
 
 type Pm2Client = NonNullable<
   ConstructorParameters<typeof WorkerManagerService>[1]
@@ -201,6 +214,42 @@ describe("WorkerManagerService", () => {
       expect(opts.script).toBe("bun");
       expect(opts.args).toContain("apps/platform/whatsapp/src/index.ts");
       expect(opts.interpreter).toBeUndefined();
+    });
+
+    test("keeps secrets out of the worker environment", async () => {
+      const secrets = [
+        "NAKAMA_SECRETS_KEY",
+        "NAKAMA_SECRETS_KEY_NEXT",
+        "NAKAMA_EMAIL_PASSWORD",
+        "OPENAI_API_KEY",
+      ];
+
+      for (const key of secrets) {
+        process.env[key] = "server-only-secret";
+      }
+
+      process.env.NAKAMA_WORKER_TEST_PLAIN = "kept";
+
+      try {
+        const mockPm2 = createMockPm2();
+        const service = new WorkerManagerService(projectRoot, mockPm2);
+
+        await service.startWorker("telegram");
+
+        // SAFETY: The test fixture matches the contract used by this test.
+        const opts = (mockPm2.start as ReturnType<typeof mock>).mock
+          .calls[0][0];
+
+        const app = prepareAppConf({ cwd: projectRoot }, { ...opts });
+
+        expect(secrets.filter((key) => key in app.env)).toEqual([]);
+        expect(app.env.NAKAMA_WORKER_TEST_PLAIN).toBe("kept");
+        expect(app.env.NAKAMA_CONFIG_DIR).toBe(configDir ?? undefined);
+      } finally {
+        for (const key of [...secrets, "NAKAMA_WORKER_TEST_PLAIN"]) {
+          delete process.env[key];
+        }
+      }
     });
 
     test("rejects an unscoped whatsapp worker when org accounts exist", async () => {

@@ -1,4 +1,8 @@
-import type { ProviderName, UserConfig } from "@nakama/core";
+import {
+  isSecretEnvKey,
+  type ProviderName,
+  type UserConfig,
+} from "@nakama/core";
 import type { StoredCodingAgentHarnessKind } from "@nakama/db";
 import {
   createHarnessConfigDir,
@@ -243,6 +247,7 @@ async function buildOpenCodeSpawnEnv(
   return {
     cleanup: configDir.cleanup,
     env: {
+      NAKAMA_HARNESS_API_KEY: routing.apiKey,
       XDG_CONFIG_HOME: configDir.dir,
     },
   };
@@ -259,14 +264,14 @@ export async function buildPiSpawnEnv(
   // pi does not read OPENAI_BASE_URL / ANTHROPIC_BASE_URL env vars.
   // The base URL is hardcoded per built-in provider and can only be overridden
   // via models.json in the pi config directory (PI_CODING_AGENT_DIR).
-  // We create a temp config dir with a models.json that overrides the
-  // provider's baseUrl + apiKey, then point pi to it.
+  // The temp models.json names an environment variable; it never stores the key.
   const configDir = await createHarnessConfigDir("nakama-pi-config-");
   await writePiModelsJson(configDir.dir, routing, providerType);
 
   return {
     cleanup: configDir.cleanup,
     env: {
+      NAKAMA_HARNESS_API_KEY: routing.apiKey,
       PI_CODING_AGENT_DIR: configDir.dir,
     },
   };
@@ -304,13 +309,15 @@ export async function buildSpawnEnvForHarness(
     const configDir = await createHarnessConfigDir("nakama-codex-config-");
     await writeCodexConfigToml(configDir.dir, routing, "codex", providerType);
 
-    return {
-      cleanup: configDir.cleanup,
-      env: {
-        CODEX_HOME: configDir.dir,
-        ...env,
-      },
+    const codexEnv: CodingAgentSpawnEnvResult["env"] = {
+      CODEX_HOME: configDir.dir,
     };
+
+    if (routing.apiKey) {
+      codexEnv.NAKAMA_HARNESS_API_KEY = routing.apiKey;
+    }
+
+    return { cleanup: configDir.cleanup, env: codexEnv };
   }
 
   return buildOpenCodeSpawnEnv(routing, providerType);
@@ -341,19 +348,28 @@ export function mergeCodingAgentSpawnEnv(
   const merged: Record<string, string> = {};
 
   for (const [key, value] of Object.entries(baseEnv)) {
-    if (value !== undefined) {
+    if (value !== undefined && !isSecretEnvKey(key)) {
       merged[key] = value;
     }
   }
 
   for (const [key, value] of Object.entries(spawnEnv)) {
-    if (!HIJACKING_ENV_KEY.test(key)) {
+    if (
+      !(
+        HIJACKING_ENV_KEY.test(key) ||
+        key.startsWith("NAKAMA_PROVIDER_API_KEY_") ||
+        key.startsWith("NAKAMA_TOOL_API_KEY_")
+      ) &&
+      key !== "NAKAMA_SECRETS_KEY" &&
+      key !== "NAKAMA_SECRETS_KEY_NEXT" &&
+      key !== "NAKAMA_EMAIL_PASSWORD"
+    ) {
       merged[key] = value;
     }
   }
 
   for (const [key, value] of Object.entries(callerEnv)) {
-    if (HIJACKING_ENV_KEY.test(key)) {
+    if (HIJACKING_ENV_KEY.test(key) || isSecretEnvKey(key)) {
       continue;
     }
 

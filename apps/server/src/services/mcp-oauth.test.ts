@@ -108,20 +108,39 @@ function startOAuthProtectedMcpServer() {
         });
       }
 
-      if (url.pathname === "/mcp") {
-        if (request.headers.get("authorization") !== `Bearer ${ACCESS_TOKEN}`) {
-          return Response.json(
-            { error: "unauthorized" },
-            {
-              headers: {
-                "www-authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource"`,
-              },
-              status: 401,
-            }
-          );
-        }
+      const signedIn =
+        request.headers.get("authorization") === `Bearer ${ACCESS_TOKEN}`;
 
-        return await handleMcpRequest(request);
+      const unauthorized = () =>
+        Response.json(
+          { error: "unauthorized" },
+          {
+            headers: {
+              "www-authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource"`,
+            },
+            status: 401,
+          }
+        );
+
+      if (url.pathname === "/mcp") {
+        return signedIn ? await handleMcpRequest(request) : unauthorized();
+      }
+
+      // Lists its tools to anyone and asks for a token only on a tool call, so
+      // connecting alone never meets the 401 that starts a sign-in.
+      if (url.pathname === "/mcp/open") {
+        const body = await request
+          .clone()
+          .json()
+          .catch(() => null);
+
+        const isToolCall =
+          z.object({ method: z.string() }).safeParse(body).data?.method ===
+          "tools/call";
+
+        return isToolCall && !signedIn
+          ? unauthorized()
+          : await handleMcpRequest(request);
       }
 
       return new Response("not found", { status: 404 });
@@ -130,6 +149,7 @@ function startOAuthProtectedMcpServer() {
   });
 
   return {
+    openUrl: `http://127.0.0.1:${server.port}/mcp/open`,
     stop: () => server.stop(true),
     tokenRequests,
     url: `http://127.0.0.1:${server.port}/mcp`,
@@ -211,6 +231,93 @@ describe("MCP browser authorization", () => {
     // Single use: the callback spent the state and the verifier.
     expect(grant?.state).toBeUndefined();
     expect(grant?.codeVerifier).toBeUndefined();
+
+    await manager.disconnectAll();
+  });
+
+  test("starts the requested sign-in on a server that lists tools anonymously", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const manager = new McpClientManager();
+    const service = new McpService(db, manager);
+
+    // Without the request the anonymous connection still stands.
+    const anonymous = await service.createServer(
+      {
+        config: { url: remote.openUrl },
+        connect: true,
+        name: "open-anonymous",
+        transport: "http",
+      },
+      { callbackBaseUrl: CALLBACK_BASE_URL }
+    );
+
+    expect(anonymous.authorizationUrl).toBeUndefined();
+    expect(anonymous.server.status).toBe("connected");
+
+    const created = await service.createServer(
+      {
+        config: { url: remote.openUrl },
+        connect: true,
+        name: "open-sign-in",
+        signIn: true,
+        transport: "http",
+      },
+      { callbackBaseUrl: CALLBACK_BASE_URL }
+    );
+
+    expect(created.server.status).toBe("needs_auth");
+    expect(created.authorizationUrl).toBeTruthy();
+
+    await manager.disconnectAll();
+  });
+
+  test("resumes an unfinished sign-in instead of connecting anonymously", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const manager = new McpClientManager();
+    const service = new McpService(db, manager);
+
+    const created = await service.createServer(
+      {
+        config: { url: remote.openUrl },
+        connect: true,
+        name: "open-unfinished",
+        signIn: true,
+        transport: "http",
+      },
+      { callbackBaseUrl: CALLBACK_BASE_URL }
+    );
+
+    // An unattended reconnect must not cover the unfinished sign-in with an
+    // anonymous connection.
+    const unattended = await service.connectServer(created.server.id, {
+      reauthorize: false,
+    });
+
+    expect(unattended.authorizationUrl).toBeUndefined();
+    expect(unattended.server.status).toBe("needs_auth");
+
+    // Sign in from the list again: still a sign-in, not an anonymous connect.
+    const retried = await service.connectServer(created.server.id, {
+      callbackBaseUrl: CALLBACK_BASE_URL,
+    });
+
+    expect(retried.server.status).toBe("needs_auth");
+
+    const state = new URL(
+      z.string().parse(retried.authorizationUrl)
+    ).searchParams.get("state");
+
+    const completed = await service.completeOAuth(created.server.id, {
+      callbackBaseUrl: CALLBACK_BASE_URL,
+      code: "fake-auth-code",
+      state: z.string().parse(state),
+    });
+
+    expect(completed.server.status).toBe("connected");
+    expect(
+      readMcpOAuthGrant((await db.getMcpServer(created.server.id))?.config)
+        ?.tokens?.access_token
+    ).toBe(ACCESS_TOKEN);
 
     await manager.disconnectAll();
   });

@@ -15,6 +15,7 @@ type LlmCassetteExchange = {
   };
   response: {
     status: number;
+    contentType?: string;
     body: z.infer<ReturnType<typeof z.json>>;
   };
 };
@@ -39,7 +40,11 @@ const cassetteSchema = z.object({
           method: z.string(),
           url: z.string(),
         }),
-        response: z.object({ body: z.json(), status: z.number() }),
+        response: z.object({
+          body: z.json(),
+          contentType: z.string().optional(),
+          status: z.number(),
+        }),
       })
     )
     .optional(),
@@ -52,7 +57,13 @@ const cassetteSchema = z.object({
       url: z.string(),
     })
     .optional(),
-  response: z.object({ body: z.json(), status: z.number() }).optional(),
+  response: z
+    .object({
+      body: z.json(),
+      contentType: z.string().optional(),
+      status: z.number(),
+    })
+    .optional(),
   version: z.union([z.literal(1), z.literal(2)]),
 });
 
@@ -141,6 +152,15 @@ export async function withMswCassette<T>(
     mode?: LlmCassetteMode;
     /** URL pattern for MSW. Defaults to OpenAI chat completions. */
     url?: string | RegExp;
+    /** Opt-in request matching for tapes that must detect input regressions. */
+    matchRequest?: (
+      actual: z.infer<ReturnType<typeof z.json>>,
+      recorded: z.infer<ReturnType<typeof z.json>>
+    ) => boolean;
+    /** Remove provider identity metadata before saving or returning a recording. */
+    redactResponse?: (
+      body: z.infer<ReturnType<typeof z.json>>
+    ) => z.infer<ReturnType<typeof z.json>>;
   } = {}
 ): Promise<T> {
   const mode = resolveMode(options.mode);
@@ -172,22 +192,6 @@ export async function withMswCassette<T>(
 
   server.use(
     http.post(url, async ({ request }) => {
-      if (shouldReplay) {
-        const exchange = replayExchanges[replayIndex];
-
-        if (!exchange) {
-          throw new Error(
-            `MSW cassette ${name} ran out of exchanges at index ${replayIndex}. Re-record with LLM_VCR_MODE=record.`
-          );
-        }
-
-        replayIndex += 1;
-
-        return HttpResponse.json(exchange.response.body, {
-          status: exchange.response.status,
-        });
-      }
-
       const requestBodyText = await request.clone().text();
       let requestBody: unknown = requestBodyText;
 
@@ -197,10 +201,51 @@ export async function withMswCassette<T>(
         // keep raw text
       }
 
+      if (shouldReplay) {
+        const exchange = replayExchanges[replayIndex];
+
+        if (!exchange) {
+          throw new Error(
+            `MSW cassette ${name} ran out of exchanges at index ${replayIndex}. Re-record with LLM_VCR_MODE=record.`
+          );
+        }
+
+        if (
+          options.matchRequest &&
+          !options.matchRequest(
+            z.json().parse(requestBody),
+            z.json().parse(exchange.request.body)
+          )
+        ) {
+          throw new Error(
+            `MSW cassette ${name} request mismatch at index ${replayIndex}.`
+          );
+        }
+
+        replayIndex += 1;
+
+        if (
+          exchange.response.contentType !== undefined &&
+          !exchange.response.contentType.includes("application/json")
+        ) {
+          return new HttpResponse(
+            new TextEncoder().encode(z.string().parse(exchange.response.body)),
+            {
+              headers: { "Content-Type": exchange.response.contentType },
+              status: exchange.response.status,
+            }
+          );
+        }
+
+        return HttpResponse.json(exchange.response.body, {
+          status: exchange.response.status,
+        });
+      }
+
       const response = await fetch(bypass(request));
       const contentType = response.headers.get("content-type") ?? "";
 
-      const body = contentType.includes("application/json")
+      let body = contentType.includes("application/json")
         ? await response.json()
         : await response.text();
 
@@ -212,6 +257,10 @@ export async function withMswCassette<T>(
         throw new Error(`LLM request failed (${response.status}): ${detail}`);
       }
 
+      if (options.redactResponse) {
+        body = options.redactResponse(z.json().parse(body));
+      }
+
       recordedExchanges.push({
         request: {
           body: requestBody,
@@ -220,18 +269,40 @@ export async function withMswCassette<T>(
         },
         response: {
           body,
+          contentType,
           status: response.status,
         },
       });
+
+      if (!contentType.includes("application/json")) {
+        return new HttpResponse(
+          new TextEncoder().encode(z.string().parse(body)),
+          {
+            headers: { "Content-Type": contentType },
+            status: response.status,
+          }
+        );
+      }
 
       return HttpResponse.json(body, { status: response.status });
     })
   );
 
-  server.listen({ onUnhandledRequest: "bypass" });
+  server.listen({
+    onUnhandledRequest:
+      shouldReplay && options.matchRequest ? "error" : "bypass",
+  });
 
   try {
     const result = await fn();
+
+    if (
+      shouldReplay &&
+      options.matchRequest &&
+      replayIndex !== replayExchanges.length
+    ) {
+      throw new Error(`MSW cassette ${name} has unused exchanges.`);
+    }
 
     if (recordedExchanges.length > 0) {
       const first = recordedExchanges[0]!;

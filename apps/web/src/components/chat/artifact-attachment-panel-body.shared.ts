@@ -56,7 +56,7 @@ export function artifactCanTogglePreviewSource({
   return isHtml || isMarkdown || isSpreadsheet;
 }
 
-export function artifactPanelHeadingName(filename: string): string {
+function artifactPanelHeadingName(filename: string): string {
   const slash = filename.lastIndexOf("/");
   const base = slash >= 0 ? filename.slice(slash + 1) : filename;
   const dot = base.lastIndexOf(".");
@@ -68,7 +68,7 @@ export function artifactPanelHeadingName(filename: string): string {
   return base.slice(0, dot);
 }
 
-export function artifactPanelTypeLabel({
+function artifactPanelTypeLabel({
   filename,
   mimeType,
 }: {

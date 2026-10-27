@@ -7,6 +7,7 @@ import type {
   ToolContext,
   ToolDefinition,
 } from "@nakama/core";
+import { ProviderStreamInterruptedError } from "@nakama/core";
 import { createAgentChatSession } from "./index";
 
 function createCountingProvider(responses: ChatCompletionResult[]) {
@@ -202,5 +203,72 @@ describe("agent chat cancellation", () => {
     // Without this the provider request outlives the cancel and the session
     // stays locked until the model finishes on its own.
     expect(providerSignal).toBe(controller.signal);
+  });
+});
+
+describe("agent chat stream interruption", () => {
+  function breakingProvider(breaks: number) {
+    let calls = 0;
+
+    const provider: ProviderClient = {
+      generateChat: () => Promise.reject(new Error("stream only")),
+      generateText: () => Promise.resolve({ content: "{}" }),
+      name: "netra",
+      streamChat(_input, handlers) {
+        calls += 1;
+
+        if (calls <= breaks) {
+          handlers.onChunk("Part");
+          handlers.onToolInputDelta?.({
+            delta: "{",
+            tool: "save",
+            toolCallId: `c${calls}`,
+          });
+
+          return Promise.reject(new ProviderStreamInterruptedError("broke"));
+        }
+
+        handlers.onChunk(" Final");
+
+        return Promise.resolve({
+          assistantMessage: { content: " Final", role: "assistant" },
+          content: " Final",
+          toolCalls: [],
+        });
+      },
+    };
+
+    return { calls: () => calls, provider };
+  }
+
+  test("retries once and keeps the partial reply", async () => {
+    const { calls, provider } = breakingProvider(1);
+    const ended: string[] = [];
+    const session = createAgentChatSession({ provider }, {});
+
+    const reply = await session.sendStream("go", {
+      onChunk() {},
+      onToolEnd: (event) => ended.push(event.toolCallId),
+    });
+
+    expect(reply.trim()).toBe("Final");
+    expect(calls()).toBe(2);
+    expect(ended).toEqual(["c1"]);
+    expect(
+      session
+        .getHistory()
+        .filter((message) => message.role === "assistant")
+        .map((message) => message.content)
+    ).toEqual(["Part", " Final"]);
+  });
+
+  test("fails the turn when the stream breaks again", async () => {
+    const { calls, provider } = breakingProvider(2);
+    const session = createAgentChatSession({ provider }, {});
+
+    await expect(
+      session.sendStream("go", { onChunk() {} })
+    ).rejects.toBeInstanceOf(ProviderStreamInterruptedError);
+    expect(calls()).toBe(2);
   });
 });

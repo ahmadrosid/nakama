@@ -80,6 +80,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateRemoveGoogleMeetPlugin);
   atomic(migrateFilePinsTable);
   atomic(migrateNotificationWebhookDeliveriesTable);
+  atomic(migrateManagedSecretsTable);
   atomic(migrateArtifactsTable);
   atomic((database) =>
     addNullableTextColumnIfMissing(database, "profiles", "acp_agent")
@@ -198,6 +199,20 @@ AFTER DELETE ON profiles
 BEGIN
   DELETE FROM shared_agent_instances WHERE profile_id = OLD.id;
 END;
+  `);
+}
+
+function migrateManagedSecretsTable(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS managed_secrets (
+      scope TEXT NOT NULL,
+      name TEXT NOT NULL,
+      source TEXT NOT NULL CHECK(source IN ('environment', 'settings')),
+      encrypted_value TEXT,
+      version INTEGER NOT NULL DEFAULT 1,
+      PRIMARY KEY (scope, name)
+    );
+
   `);
 }
 
@@ -1932,6 +1947,8 @@ function migrateSessionsTable(db: Database): void {
       ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
     `);
   }
+
+  addNullableTextColumnIfMissing(db, "sessions", "thinking_effort");
 }
 
 function migrateSessionTree(db: Database): void {

@@ -1,6 +1,7 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
+import { isSecretEnvKey } from "@nakama/core";
 
 export interface AcpAgentLaunch {
   args: string[];
@@ -17,6 +18,16 @@ export interface AcpAgentProcess {
   kill(): void;
 }
 
+// The agent logs in with its own keys (ANTHROPIC_API_KEY, OPENAI_API_KEY), so only
+// Nakama's own secrets are cut, not every key-shaped variable.
+function agentEnv(): NodeJS.ProcessEnv {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([key]) => !(key.startsWith("NAKAMA_") && isSecretEnvKey(key))
+    )
+  );
+}
+
 /**
  * Starts an ACP agent as a child process that speaks JSON-RPC over stdio, then
  * runs `initialize`. Nakama never gives the agent file or terminal access:
@@ -31,7 +42,7 @@ export async function startAcpAgentProcess(
     launch.args,
     {
       cwd: launch.cwd,
-      env: { ...process.env, ...launch.env },
+      env: { ...agentEnv(), ...launch.env },
       stdio: ["pipe", "pipe", "pipe"],
     }
   );

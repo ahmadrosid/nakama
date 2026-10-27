@@ -21,7 +21,7 @@ The same note you create on the page is the one the agent reads. Another organiz
 
 A plugin goes through three gates before your team uses it. Each gate has an owner.
 
-![A plugin comes from npm, the official catalog, or a Super Nakama draft. A platform admin reviews and installs it, an org admin enables it, and a platform admin connects it to profiles. Members then use its page and chat tools.](/diagrams/plugin-lifecycle.svg)
+![A plugin comes from npm, the official catalog, or an agent draft. A platform admin reviews and installs it, an org admin enables it, and a platform admin connects it to profiles. Members then use its page and chat tools.](/diagrams/plugin-lifecycle.svg)
 
 1. **Review and install.** A platform admin checks the package and installs it. Nothing runs yet. Official plugins skip the separate platform approval.
 2. **Enable.** An org admin turns the plugin on for one organization. This creates that organization's plugin data and starts any background workers the plugin needs.
@@ -48,15 +48,18 @@ When someone uses the plugin, the page and the chat both run the same plugin act
 
 **5. Update or remove (org admin).** Choose **Update** to move to a newer approved release. A platform admin also sees an **Update** tag on a plugin when the registry has a version nobody approved yet. Choosing **Update** there opens the same package review as the first install, then updates the plugin, so the package name is typed only once. An enabled plugin is switched off for the update and back on afterwards, so its tools are unavailable for a moment. To remove a plugin, uninstall it. Uninstall keeps the organization's plugin data until you confirm a separate delete.
 
-## Create a plugin with Super Nakama
+## Create a plugin with an agent
 
 Ask Super Nakama to create a plugin when your team needs a custom page or agent
-tool. Super Nakama starts from a template, prepares source files and built output,
+tool. Any other agent can do the same once an admin assigns it the
+`create-plugin` skill (see [Skills](/skills)), so the agent already doing the
+work can change the plugin it needs. An agent without the skill cannot submit a
+draft. The agent starts from a template, prepares source files and built output,
 and shows a plugin card in the chat. The draft stays uninstalled.
 
 ### What to ask for
 
-A clear request gives a draft that needs fewer changes. Tell Super Nakama:
+A clear request gives a draft that needs fewer changes. Tell the agent:
 
 - **What it does.** One sentence for each action, with the inputs it needs.
 - **Who can run it.** Every member, or admins only.
@@ -72,9 +75,10 @@ For example:
 > picker, a text box, a Save button, and today's notes. Let profiles use
 > `list_notes` as a tool.
 
-To change a draft, ask Super Nakama in the same chat, for example "add a delete
-button to each note". It updates and rebuilds the same draft, then shows a
-new card. Review and install from the new card.
+To change a plugin, ask an agent with the skill, for example "add a delete
+button to each note". It edits its own draft, or first copies the installed
+release when another agent built the plugin or changed it since. It rebuilds,
+then shows a new card. Review and install from the new card.
 
 The card walks through five steps: **Drafted**, **Review and install**,
 **Enable**, **Connect to profiles**, and **Try it**. Each step shows its button
@@ -88,7 +92,7 @@ only to the people who can do it, and the card updates as each step finishes.
 6. Ask one of those profiles to run the tool.
 
 You can also review a draft from **System → Plugins → Install from folder**:
-select the Super Nakama, enter the draft ID, and choose **Preview draft**.
+select the agent that built the draft, enter the draft ID, and choose **Preview draft**.
 
 First installation stays disabled. First enable runs migrations and starts
 workers. Reinstall resumes a previously enabled plugin after a successful
@@ -96,7 +100,7 @@ update. If migration fails, the plugin stays disabled with its previous data.
 Changes to reviewed files require another preview.
 
 Only platform admins can review or install local drafts. Plugin code has full
-host access. Approve only code you trust. Super Nakama needs an assigned shell tool
+host access. Approve only code you trust. The agent needs an assigned shell tool
 and Bun on the server to build; it reports missing prerequisites.
 
 ## Supermemory

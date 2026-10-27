@@ -17,8 +17,10 @@ import {
 import { z } from "zod";
 import {
   buildProviderHttpError,
+  buildProviderResponseError,
   buildTokenUsage,
   normalizeThinkingEffort,
+  notifyToolInputDelta,
   parseJsonRecord,
   readRecord,
   readSseEvents,
@@ -31,6 +33,44 @@ const responseContentPartSchema = z
     type: z.string().optional(),
   })
   .passthrough();
+
+// Input item types the Responses API accepts, as listed in its
+// invalid_request_error for an unknown type.
+const RESPONSES_INPUT_ITEM_TYPES: ReadonlySet<string> = new Set([
+  "additional_tools",
+  "agent_message",
+  "apply_patch_call",
+  "apply_patch_call_output",
+  "code_interpreter_call",
+  "compaction",
+  "compaction_trigger",
+  "computer_call",
+  "computer_call_output",
+  "custom_tool_call",
+  "custom_tool_call_output",
+  "file_search_call",
+  "function_call",
+  "function_call_output",
+  "image_generation_call",
+  "item_reference",
+  "local_shell_call",
+  "local_shell_call_output",
+  "mcp_approval_request",
+  "mcp_approval_response",
+  "mcp_call",
+  "mcp_list_tools",
+  "message",
+  "multi_agent_call",
+  "multi_agent_call_output",
+  "program",
+  "program_output",
+  "reasoning",
+  "shell_call",
+  "shell_call_output",
+  "tool_search_call",
+  "tool_search_output",
+  "web_search_call",
+]);
 
 const responseItemSchema = z
   .object({
@@ -59,6 +99,8 @@ const responsePayloadSchema = z.object({
 const responseEventSchema = z.object({
   delta: z.string().optional(),
   item: responseItemSchema.optional(),
+  item_id: z.string().optional(),
+  output_index: z.number().optional(),
   // Lifecycle events (response.created, response.in_progress) send these as null.
   response: z
     .object({
@@ -162,7 +204,7 @@ export async function generateOpenAIResponsesChat(options: {
 
   if (options.stream) {
     if (!response.body) {
-      throw new Error(`${label} returned an empty stream.`);
+      throw buildProviderResponseError(`${label} returned an empty stream.`);
     }
 
     return readOpenAIResponsesStream(response.body, options.handlers);
@@ -308,20 +350,29 @@ function toResponsesAssistantInput(
 ): ResponsesInputItem[] {
   const input: ResponsesInputItem[] = [];
 
+  // providerContent may come from another provider in the same chat, such as
+  // Netra's reasoning_details ("reasoning.text"). The Responses API rejects
+  // the whole request on an unknown item type, so replay only its own items.
   const providerContent = message.providerContent?.flatMap((part) => {
     const parsed = responseItemSchema.safeParse(part);
 
-    return parsed.success ? [parsed.data] : [];
+    return parsed.success && RESPONSES_INPUT_ITEM_TYPES.has(parsed.data.type)
+      ? [parsed.data]
+      : [];
   });
+
+  // A replayed message item already carries the assistant text; sending
+  // message.content as well would replay the same text twice.
+  const replaysText = providerContent?.some((item) => item.type === "message");
 
   if (message.toolCalls?.length) {
     if (providerContent?.length) {
-      // providerContent already carries the assistant message item; pushing
-      // message.content as well would replay the same text twice.
       input.push(
         ...providerContent.filter((item) => item.type !== "function_call")
       );
-    } else if (message.content.trim()) {
+    }
+
+    if (!replaysText && message.content.trim()) {
       input.push(toResponsesAssistantTextMessage(message.content));
     }
 
@@ -339,11 +390,9 @@ function toResponsesAssistantInput(
 
   if (providerContent?.length) {
     input.push(...providerContent);
-
-    return input;
   }
 
-  if (message.content.trim()) {
+  if (!replaysText && message.content.trim()) {
     input.push(toResponsesAssistantTextMessage(message.content));
   }
 
@@ -513,6 +562,13 @@ async function readOpenAIResponsesStream(
   const output: ResponseItem[] = [];
   const outputIndex = new Map<string, ResponseItem>();
 
+  // Function calls in flight, keyed by item id (and output index as a
+  // fallback) so argument deltas can be streamed as tool input deltas.
+  const pendingFunctionCalls = new Map<
+    string,
+    { arguments: string; id: string; name: string }
+  >();
+
   await readSseEvents(body, ({ data }) => {
     const payload = responseEventSchema.parse(JSON.parse(data));
     const type = payload.type;
@@ -568,6 +624,36 @@ async function readOpenAIResponsesStream(
 
       if (itemId) {
         outputIndex.set(itemId, item);
+      }
+
+      if (item.type === "function_call") {
+        const call = {
+          arguments: "",
+          // Same id parseResponsesOutput gives the final tool call.
+          id: String(item.call_id ?? item.id ?? ""),
+          name: String(item.name ?? ""),
+        };
+
+        if (itemId) {
+          pendingFunctionCalls.set(itemId, call);
+        }
+
+        if (payload.output_index !== undefined) {
+          pendingFunctionCalls.set(`#${payload.output_index}`, call);
+        }
+      }
+    }
+
+    if (type === "response.function_call_arguments.delta") {
+      const call =
+        pendingFunctionCalls.get(payload.item_id ?? "") ??
+        pendingFunctionCalls.get(`#${payload.output_index}`);
+
+      const delta = payload.delta ?? "";
+
+      if (call && delta) {
+        call.arguments += delta;
+        notifyToolInputDelta(handlers, call, delta);
       }
     }
 

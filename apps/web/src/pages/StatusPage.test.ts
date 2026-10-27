@@ -46,6 +46,7 @@ const healthyStatus: SystemStatusResponse = {
     composioAvailable: false,
     composioConfigured: false,
     ok: true,
+    onboardingEnabled: false,
     providerConfigured: true,
     userConfigured: true,
     version: "0.4.10",

@@ -140,6 +140,7 @@ export function buildChatCompletionResult(options: {
   providerContent?: unknown[];
   toolCalls: ToolCall[];
   thinking?: string | null | undefined;
+  truncated?: boolean;
   usage?: ChatCompletionResult["usage"];
 }): ChatCompletionResult {
   const content = options.content?.trim() ?? "";
@@ -167,6 +168,10 @@ export function buildChatCompletionResult(options: {
     content,
     toolCalls: options.toolCalls,
   };
+
+  if (options.truncated) {
+    result.truncated = true;
+  }
 
   if (options.usage) {
     result.usage = options.usage;
@@ -471,6 +476,11 @@ export function formatHttpErrorBody(
  * the global error handler's `status >= 500` check never reports it. Anything
  * else from the provider (rate limits, 5xx, timeouts) stays worth seeing.
  */
+/** A provider answered but the answer is unusable. The user sees the message. */
+export function buildProviderResponseError(message: string): NakamaApiError {
+  return new NakamaApiError(message, 502);
+}
+
 export function buildProviderHttpError(
   label: string,
   status: number,

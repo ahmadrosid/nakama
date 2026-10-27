@@ -32,6 +32,54 @@ async function seedTwoActiveOrgs(db: DatabaseAdapter, createdAt: string) {
 }
 
 describe("organization archive persistence", () => {
+  test("membership lists preserve each organization's curator clocks and quotas", async () => {
+    const db = createSqliteMemoryAdapter();
+    const now = "2026-10-25T00:00:00.000Z";
+    await seedTwoActiveOrgs(db, now);
+    await db.upsertOrganization({
+      createdAt: now,
+      id: "org_a",
+      monthlyLlmTokenLimit: 7000,
+      monthlyLlmTurnLimit: 500,
+      monthlyLlmWarningPercent: 55,
+      name: "A",
+      skillsCuratorArchiveAfterDays: 120,
+      skillsCuratorStaleAfterDays: 45,
+      slug: "a",
+      updatedAt: now,
+    });
+
+    for (const orgId of ["org_a", "org_b"]) {
+      await db.upsertOrgMember({
+        createdAt: now,
+        orgId,
+        role: "admin",
+        userId: "user_1",
+      });
+    }
+
+    const memberships = await db.listUserOrganizations("user_1");
+    expect(memberships.map((entry) => entry.organization)).toMatchObject([
+      {
+        id: "org_a",
+        monthlyLlmTokenLimit: 7000,
+        monthlyLlmTurnLimit: 500,
+        monthlyLlmWarningPercent: 55,
+        skillsCuratorArchiveAfterDays: 120,
+        skillsCuratorStaleAfterDays: 45,
+      },
+      {
+        id: "org_b",
+        monthlyLlmTokenLimit: undefined,
+        monthlyLlmTurnLimit: 0,
+        monthlyLlmWarningPercent: 80,
+        skillsCuratorArchiveAfterDays: 90,
+        skillsCuratorStaleAfterDays: 30,
+      },
+    ]);
+    expect(await db.listUserOrganizations("user_other")).toEqual([]);
+  });
+
   test("parent round-trips through lookups and survives ordinary updates", async () => {
     const db = createSqliteMemoryAdapter();
     const now = "2026-10-11T00:00:00.000Z";

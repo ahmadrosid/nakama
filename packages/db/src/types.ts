@@ -154,6 +154,8 @@ export interface StoredSessionRecord {
   parentSessionId?: string | null;
   pinned?: boolean;
   profileId: string;
+  /** Null uses the install thinking effort. */
+  thinkingEffort?: ThinkingEffort | null;
   title: string | null;
   userId?: string | null;
 }
@@ -804,6 +806,14 @@ export interface StoredAuditEvent {
   resourceType: string;
 }
 
+export interface StoredManagedSecret {
+  encryptedValue: string | null;
+  name: string;
+  scope: string;
+  source: "environment" | "settings";
+  version: number;
+}
+
 export interface DatabaseAdapter {
   abortOrgTeamCreation(
     parentOrgId: string,
@@ -958,6 +968,7 @@ export interface DatabaseAdapter {
   deleteAutomation(id: string): Promise<boolean>;
   deleteComposioToolkit(id: string): Promise<boolean>;
   deleteComposioUserConnection(id: string): Promise<boolean>;
+  deleteManagedSecret(scope: string, name: string): Promise<void>;
   deleteMcpServer(id: string): Promise<boolean>;
   deleteMessagesForSession(sessionId: string): Promise<void>;
   deleteMfaBackupCodes(userId: string): Promise<void>;
@@ -1048,6 +1059,10 @@ export interface DatabaseAdapter {
   getDefaultProfileForOrg(orgId: string): Promise<StoredProfileRecord | null>;
 
   getLlmUsageStats(orgId: string): Promise<StoredLlmUsageStatsRecord | null>;
+  getManagedSecret(
+    scope: string,
+    name: string
+  ): Promise<StoredManagedSecret | null>;
   getMcpServer(id: string): Promise<StoredMcpServerRecord | null>;
   getMcpServerByName(name: string): Promise<StoredMcpServerRecord | null>;
   getNotificationDestination(
@@ -1288,6 +1303,7 @@ export interface DatabaseAdapter {
   listLlmUsageStatsByModel(
     orgId: string
   ): Promise<StoredLlmUsageModelStatsRecord[]>;
+  listManagedSecrets(): Promise<StoredManagedSecret[]>;
   listMcpServerProfileCounts(): Promise<Record<string, number>>;
 
   listMcpServers(): Promise<StoredMcpServerRecord[]>;
@@ -1416,8 +1432,10 @@ export interface DatabaseAdapter {
   publishOrgSharedResource(
     record: StoredOrgSharedResourceRecord
   ): Promise<StoredOrgSharedResourceRecord>;
+  putManagedSecret(secret: Omit<StoredManagedSecret, "version">): Promise<void>;
   /** Gives back one hold taken by tryReserveMonthlyLlmQuota, at most once. */
   releaseMonthlyLlmQuota(orgId: string, reservationId: string): Promise<void>;
+
   renameFilePins(
     orgId: string,
     profileId: string,
@@ -1425,6 +1443,11 @@ export interface DatabaseAdapter {
     newPath: string
   ): Promise<void>;
   renameSessionTitle(sessionId: string, title: string): Promise<boolean>;
+  replaceManagedSecrets(
+    secrets: Array<
+      Pick<StoredManagedSecret, "scope" | "name" | "encryptedValue">
+    >
+  ): Promise<void>;
   replaceMessagesForSession(
     sessionId: string,
     messages: StoredSessionMessageRecord[]
@@ -1546,6 +1569,10 @@ export interface DatabaseAdapter {
     sessionId: string,
     questionnaire: AgentQuestionnaire | null
   ): Promise<void>;
+  updateSessionThinkingEffort(
+    sessionId: string,
+    effort: ThinkingEffort | null
+  ): Promise<boolean>;
   updateSessionTitle(sessionId: string, title: string): Promise<boolean>;
   updateSessionTodos(sessionId: string, todos: AgentTodo[]): Promise<void>;
   updateSkillProposalStatus(

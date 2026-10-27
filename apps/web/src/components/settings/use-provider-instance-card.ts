@@ -55,6 +55,7 @@ export function useProviderInstanceCard({
   catalog,
   onUpdate,
   onDelete,
+  onManage,
   onError,
 }: {
   instance: ProviderInstanceSummary;
@@ -64,6 +65,10 @@ export function useProviderInstanceCard({
     request: UpdateProviderRequest
   ) => Promise<void>;
   onDelete: (providerId: string) => Promise<void>;
+  onManage?: (
+    providerId: string,
+    action: "clear" | "use-stored"
+  ) => Promise<void>;
   onError: (error: string | null) => void;
 }) {
   const [replaceKeyOpen, setReplaceKeyOpen] = useState(false);
@@ -175,6 +180,24 @@ export function useProviderInstanceCard({
     });
   };
 
+  const handleManageKey = async (action: "clear" | "use-stored") => {
+    if (!onManage) {
+      return;
+    }
+
+    setBusy(true);
+    setDialogError(null);
+
+    try {
+      await onManage(instance.id, action);
+      setReplaceKeyOpen(false);
+    } catch (error) {
+      setDialogError(formatError(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleDelete = async () => {
     setBusy(true);
     onError(null);
@@ -272,6 +295,7 @@ export function useProviderInstanceCard({
     editOpen,
     editWireApi,
     handleDelete,
+    handleManageKey,
     handleManageModelsChange,
     handleReplaceKey,
     isCatalogShortlist,

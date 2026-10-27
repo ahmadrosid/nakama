@@ -11,7 +11,7 @@ import {
 import type { AgentGroupMemoryChange } from "@nakama/core/agent-groups";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
-import { readGroupMemory } from "./agent-group-memory";
+import { groupWorkspace } from "./agent-group-workspace";
 import { AgentService } from "./agent-service";
 import { createDefaultProfile } from "./agent-service-test-fixtures";
 import { resolveDefaultModelForInstance } from "./provider-instance-helpers";
@@ -301,7 +301,7 @@ describe("AgentService sub-agent roles", () => {
     expect(changes).toEqual([{ newEntry: "- Before timeout", oldEntry: null }]);
     resume.resolve();
     await finished.promise;
-    expect(readGroupMemory(sharedDir)).toBe("- Before timeout");
+    expect(groupWorkspace(sharedDir).memory.read()).toBe("- Before timeout");
     expect(changes).toHaveLength(1);
   });
 

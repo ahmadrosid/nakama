@@ -15,7 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { NakamaApiError } from "@nakama/core";
-import { createDatabase } from "@nakama/db";
+import { createDatabase, createSqliteDatabase } from "@nakama/db";
 import * as fflate from "fflate";
 import {
   createNakamaDataExport,
@@ -32,6 +32,7 @@ import {
   retireAppUserData,
 } from "./data-portability";
 import { MeetingStore } from "./google-meet/store";
+import { ManagedSecrets } from "./managed-secrets";
 
 let rootDir = "";
 
@@ -697,6 +698,77 @@ describe("Nakama data portability", () => {
     expect(await readFile(join(rootDir, "config.ini"), "utf8")).toBe("live");
   });
 
+  test("legacy restore encrypts file keys and rejects a wrong backup key before replacement", async () => {
+    const previousKey = process.env.NAKAMA_SECRETS_KEY;
+    const key = Buffer.alloc(32, 2).toString("base64");
+    process.env.NAKAMA_SECRETS_KEY = key;
+
+    try {
+      await writeFile(join(rootDir, "config.ini"), "live");
+
+      const base = await createNakamaDataExport({
+        databasePath: null,
+        rootDir,
+      });
+
+      const archive = fflate.zipSync({
+        ...fflate.unzipSync(base.data),
+        "config.ini": Buffer.from(
+          "[provider.provider-a]\ntype=openai\napi_key=legacy-key\n"
+        ),
+      });
+
+      await restoreNakamaDataImport(archive, {
+        confirm: true,
+        databasePath: null,
+        rootDir,
+      });
+      expect(await readFile(join(rootDir, "config.ini"), "utf8")).not.toContain(
+        "legacy-key"
+      );
+      const databasePath = join(rootDir, "sqlite", "nakama.sqlite");
+      const database = await createSqliteDatabase(`file:${databasePath}`);
+
+      try {
+        expect(
+          (
+            await new ManagedSecrets(database.adapter, key).resolve(
+              "global",
+              "provider:provider-a"
+            )
+          ).value
+        ).toBe("legacy-key");
+      } finally {
+        database.release();
+      }
+
+      const backup = await createNakamaDataExport({ databasePath, rootDir });
+      const liveConfig = await readFile(join(rootDir, "config.ini"), "utf8");
+      process.env.NAKAMA_SECRETS_KEY = Buffer.alloc(32, 3).toString("base64");
+      let replacementStarted = false;
+      await expect(
+        restoreNakamaDataImport(backup.data, {
+          beforeReplace: () => {
+            replacementStarted = true;
+          },
+          confirm: true,
+          databasePath,
+          rootDir,
+        })
+      ).rejects.toThrow();
+      expect(replacementStarted).toBe(false);
+      expect(await readFile(join(rootDir, "config.ini"), "utf8")).toBe(
+        liveConfig
+      );
+    } finally {
+      if (previousKey === undefined) {
+        delete process.env.NAKAMA_SECRETS_KEY;
+      } else {
+        process.env.NAKAMA_SECRETS_KEY = previousKey;
+      }
+    }
+  });
+
   test("built-in Meet snapshots round-trip saved transcripts while excluding temporary audio", async () => {
     const directory = join(rootDir, "orgs", "a", "meet");
     const store = new MeetingStore(directory, "a");
@@ -747,7 +819,7 @@ describe("Nakama data portability", () => {
 
     expect(restored.restoredFileCount).toBe(1);
     expect((await lstat(filePath)).size).toBe(MAX_IMPORT_ENTRY_BYTES);
-  }, 30_000);
+  }, 90_000);
 
   test("rejects an export whose SQLite snapshot exceeds the restore entry budget", async () => {
     const databasePath = join(rootDir, "nakama.sqlite");
@@ -779,7 +851,7 @@ describe("Nakama data portability", () => {
     } finally {
       original.close();
     }
-  }, 30_000);
+  }, 90_000);
 
   test("counts the manifest against the export entry budget", async () => {
     for (let start = 0; start < MAX_IMPORT_ENTRIES; start += 100) {

@@ -2,6 +2,7 @@ import type { AgentGroup } from "@nakama/core/agent-groups";
 import type { ImageAttachment } from "@nakama/core/contract";
 import { toast } from "@nakama/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRef } from "react";
 import { client, formatError } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -98,12 +99,23 @@ export interface GroupDraft {
 /** Creates a group, or saves an edit when `groupId` is given, image included. */
 export function useSaveGroup(groupId?: string) {
   const queryClient = useQueryClient();
+  const createdGroupId = useRef<string | null>(null);
 
   return useMutation({
     mutationFn: async ({ brief, image, memberIds, name }: GroupDraft) => {
-      const group = groupId
-        ? await client.updateAgentGroup(groupId, { brief, memberIds, name })
+      const savedGroupId = groupId ?? createdGroupId.current;
+
+      const group = savedGroupId
+        ? await client.updateAgentGroup(savedGroupId, {
+            brief,
+            memberIds,
+            name,
+          })
         : await client.createAgentGroup({ brief, memberIds, name });
+
+      if (!savedGroupId) {
+        createdGroupId.current = group.id;
+      }
 
       if (image) {
         await client.uploadAgentGroupAvatar(group.id, image);

@@ -1,6 +1,6 @@
 {
   "name": "nakama",
-  "version": "0.4.55",
+  "version": "0.4.60",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -50,7 +50,7 @@
     "husky": "^9.1.7",
     "jscpd": "4.3.0",
     "knip": "6.38.0",
-    "oxlint": "1.87.0",
+    "oxlint": "1.89.0",
     "react-doctor": "0.9.18",
     "ultracite": "7.11.0"
   },

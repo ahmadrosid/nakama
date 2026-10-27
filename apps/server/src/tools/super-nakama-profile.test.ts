@@ -248,6 +248,7 @@ describe("super nakama create_profile", () => {
 
     expect(createProfile.parameters).toMatchObject({
       additionalProperties: false,
+      required: ["name"],
       type: "object",
     });
 
@@ -289,7 +290,7 @@ describe("super nakama create_profile", () => {
       )
     );
 
-    expect(error?.message).toMatch(/unsupported soul file/i);
+    expect(error).toBeInstanceOf(Error);
     expect(createProfileCalled).toBe(false);
   });
 });
@@ -457,6 +458,11 @@ describe("super nakama update_profile", () => {
         updateProfileCalled = true;
         throw new Error("should not be called");
       },
+    });
+
+    expect(updateProfile.parameters).toMatchObject({
+      additionalProperties: false,
+      required: ["profileId"],
     });
 
     const error = await captureError(

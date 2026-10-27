@@ -1,6 +1,13 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import type { ProviderInstance } from "@nakama/core";
 import { createProviderForInstance } from "./create";
+import { asTestFetch, streamFromChunks } from "./test-helpers";
+
+const originalFetch = globalThis.fetch;
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
 
 describe("compatible provider routing", () => {
   test("allows verified Netra V4.1 and maps retired selections", () => {
@@ -24,6 +31,59 @@ describe("compatible provider routing", () => {
       createProviderForInstance(instance, "unverified-model")
     ).toThrow();
   });
+
+  test.each([
+    ["key-reported", undefined, 131_072, 131_072],
+    ["key-saved", 4096, 131_072, 4096],
+    ["key-unknown", undefined, null, 32_000],
+  ])(
+    "Netra asks for an output limit (%s)",
+    async (apiKey, limit, reported, sent) => {
+      let maxTokens: unknown;
+      globalThis.fetch = asTestFetch(async (url, init) => {
+        if (String(url).endsWith("/models")) {
+          return Response.json({
+            data: [
+              {
+                id: "deepseek/deepseek-v4.1-flash",
+                top_provider: { max_completion_tokens: reported },
+              },
+            ],
+          });
+        }
+
+        maxTokens = JSON.parse(String(init?.body)).max_tokens;
+
+        return new Response(
+          streamFromChunks([
+            'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n',
+            "data: [DONE]\n\n",
+          ]),
+          { headers: { "Content-Type": "text/event-stream" } }
+        );
+      });
+
+      const client = createProviderForInstance(
+        {
+          apiKey,
+          createdAt: "2026-10-05T00:00:00.000Z",
+          customModels: [
+            { id: "deepseek/deepseek-v4.1-flash", maxOutputTokens: limit },
+          ],
+          id: "netra-1",
+          label: "Netra Runtime",
+          type: "netra",
+        },
+        "deepseek/deepseek-v4.1-flash"
+      );
+
+      await client!.streamChat(
+        { messages: [{ content: "Hi", role: "user" }], system: "" },
+        { onChunk: () => {} }
+      );
+      expect(maxTokens).toBe(sent);
+    }
+  );
 
   test("routes xiaomi instances to the configured base URL with auth", async () => {
     let seenPath = "";

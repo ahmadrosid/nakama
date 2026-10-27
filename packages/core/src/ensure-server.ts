@@ -2,6 +2,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { NAKAMA_API_VERSION } from "./contract";
+import { withDevSecretsKey } from "./dev-secrets-key";
 import { resolveServerUrl } from "./runtime";
 
 const STARTUP_TIMEOUT_MS = 30_000;
@@ -39,7 +40,7 @@ export async function ensureServerRunning(
 
   const child = Bun.spawn(["bun", "run", serverEntry], {
     cwd: projectRoot,
-    env: process.env,
+    env: withDevSecretsKey(),
     stderr: "inherit",
     stdin: "ignore",
     stdout: "inherit",

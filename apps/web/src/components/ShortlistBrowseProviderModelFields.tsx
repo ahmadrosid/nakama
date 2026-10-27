@@ -1,5 +1,6 @@
 import { BrowsableModelFields } from "@/components/BrowsableModelFields";
 import { CerebrasModelsBrowseList } from "@/components/CerebrasModelsBrowseList";
+import { CloudflareModelsBrowseList } from "@/components/CloudflareModelsBrowseList";
 import { FireworksModelsBrowseList } from "@/components/FireworksModelsBrowseList";
 import type { ModelListRow } from "@/components/ModelListEditor";
 import { capabilityBrowseRowToModelListRow } from "@/components/model-browse-utils";
@@ -10,6 +11,8 @@ import {
 
 interface ShortlistBrowseProviderModelFieldsProps {
   apiKey?: string;
+  /** Cloudflare only: the account's Workers AI URL before the provider is saved. */
+  baseUrl?: string;
   customModels: ModelListRow[];
   density?: "default" | "compact";
   disabled?: boolean;
@@ -27,6 +30,7 @@ export function ShortlistBrowseProviderModelFields({
   modelsError,
   onCustomModelsChange,
   apiKey,
+  baseUrl,
   providerId,
 }: ShortlistBrowseProviderModelFieldsProps) {
   const copy = SHORTLIST_BROWSE_COPY[provider];
@@ -49,6 +53,16 @@ export function ShortlistBrowseProviderModelFields({
             onAddMany={onAddMany}
             onSelect={onSelect}
           />
+        ) : provider === "cloudflare" ? (
+          <CloudflareModelsBrowseList
+            apiKey={apiKey}
+            baseUrl={baseUrl}
+            className="h-72 rounded-md border border-border"
+            multiSelect={multiSelect}
+            onAddMany={onAddMany}
+            onSelect={onSelect}
+            providerId={providerId}
+          />
         ) : (
           <FireworksModelsBrowseList
             apiKey={apiKey}
@@ -60,7 +74,8 @@ export function ShortlistBrowseProviderModelFields({
           />
         )
       }
-      showThinking
+      // The Cloudflare client sends no thinking options.
+      showThinking={provider !== "cloudflare"}
       showVision
       toModelRow={capabilityBrowseRowToModelListRow}
     />

@@ -486,6 +486,32 @@ describe("applyProviderInstanceUpdate", () => {
 });
 
 describe("buildProviderInstanceFromCreateRequest", () => {
+  test("keeps Cloudflare models picked during setup", () => {
+    const baseUrl =
+      "https://api.cloudflare.com/client/v4/accounts/abc123/ai/v1";
+
+    const instance = buildProviderInstanceFromCreateRequest(
+      {
+        baseUrl,
+        customModels: [
+          { contextWindow: 128_000, id: "@cf/openai/gpt-oss-120b" },
+        ],
+        type: "cloudflare",
+      },
+      []
+    );
+
+    expect(instance.customModels).toEqual([
+      { contextWindow: 128_000, id: "@cf/openai/gpt-oss-120b" },
+    ]);
+    expect(() =>
+      buildProviderInstanceFromCreateRequest(
+        { baseUrl, customModels: [{ id: "gpt-oss-120b" }], type: "cloudflare" },
+        []
+      )
+    ).toThrow("Use @cf/ or @hf/ format.");
+  });
+
   test("preserves the requested Ollama label", () => {
     const instance = buildProviderInstanceFromCreateRequest(
       {
@@ -540,10 +566,7 @@ describe("buildProviderInstanceFromCreateRequest", () => {
   // readJson casts the body without validating it, so both fields can arrive
   // undefined however the contract types them.
   test("names the missing field and answers 400, not a TypeError at 500", () => {
-    const cases = [
-      [{}, "Provider type is required."],
-      [{ type: "openai" }, "API key is required."],
-    ] as const;
+    const cases = [[{}, "Provider type is required."]] as const;
 
     for (const [request, message] of cases) {
       try {

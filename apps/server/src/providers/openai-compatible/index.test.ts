@@ -191,6 +191,34 @@ describe("OpenAI-compatible provider", () => {
     expect(chunks).toEqual(["Part"]);
   });
 
+  test.each([
+    [
+      '{"tool_calls":[{"index":0,"id":"c1","function":{"name":"a","arguments":"{"}}]}',
+      1,
+    ],
+    ["{}", 0],
+  ])(
+    "Netra marks a reply cut off at the output limit",
+    async (delta, calls) => {
+      globalThis.fetch = asTestFetch(
+        mock(async () =>
+          netraStream([
+            `data: {"choices":[{"delta":${delta},"finish_reason":"length"}]}\n\n`,
+            "data: [DONE]\n\n",
+          ])
+        )
+      );
+
+      const result = await netraProvider().streamChat(
+        { messages: [{ content: "Hi", role: "user" }], system: "Help" },
+        { onChunk: () => {} }
+      );
+
+      expect(result.truncated).toBe(true);
+      expect(result.toolCalls).toHaveLength(calls);
+    }
+  );
+
   test("Netra rejects a stream that closes before DONE", async () => {
     globalThis.fetch = asTestFetch(
       mock(async () =>

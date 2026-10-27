@@ -41,6 +41,7 @@
     "./provider-label": "./src/provider-label.ts",
     "./provider-resolution": "./src/provider-resolution.ts",
     "./runtime": "./src/runtime.ts",
+    "./dev-secrets-key": "./src/dev-secrets-key.ts",
     "./ensure-server": "./src/ensure-server.ts",
     "./fetch-idle": "./src/fetch-idle.ts",
     "./local-auth": "./src/local-auth.ts",

@@ -1,11 +1,21 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { getGroupSharedDir } from "@nakama/core";
 import { setupTestConfigDir } from "../test-config-dir";
-import { readGroupDocuments } from "./agent-group-service";
+import { readGroupDocuments } from "./agent-group-prompt";
 import { closeAgentGroupDatabases } from "./agent-group-store";
 import { ORG_ID, setup, USER_ID } from "./agent-group-test-setup";
+import { groupWorkspace } from "./agent-group-workspace";
+
+const PNG = {
+  data: Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString("base64"),
+  filename: "image.png",
+  mediaType: "image/png",
+};
+
+const uploadsOf = (groupId: string) =>
+  join(getGroupSharedDir(ORG_ID, groupId), "uploads");
 
 // Before the config dir cleanup, which Windows refuses while a file is open.
 afterEach(closeAgentGroupDatabases);
@@ -24,7 +34,7 @@ describe("group attachments", () => {
 
     const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
 
-    const documents = await readGroupDocuments(ORG_ID, USER_ID, group.id, [
+    const documents = await readGroupDocuments([
       {
         data: Buffer.from("Q3 revenue was 42").toString("base64"),
         filename: "notes.txt",
@@ -67,7 +77,7 @@ describe("group attachments", () => {
     const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-    const documents = await readGroupDocuments(ORG_ID, USER_ID, group.id, [
+    const documents = await readGroupDocuments([
       {
         data: png.toString("base64"),
         filename: "image.png",
@@ -107,18 +117,85 @@ describe("group attachments", () => {
     ).toEqual([path]);
   });
 
-  test("an image for a group the user cannot open is not saved", async () => {
-    await expect(
-      readGroupDocuments(ORG_ID, "someone-else", "missing", [
-        { data: "AAAA", filename: "image.png", mediaType: "image/png" },
-      ])
-    ).rejects.toThrow();
-    expect(existsSync(getGroupSharedDir(ORG_ID, "missing"))).toBe(false);
+  test("an image posted to a missing session is not saved", async () => {
+    const { service } = setup(() => "ok");
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+    const documents = await readGroupDocuments([PNG]);
+
+    expect(() =>
+      service.post(ORG_ID, USER_ID, group.id, "missing", "hi", documents)
+    ).toThrow(expect.objectContaining({ status: 404 }));
+    expect(() =>
+      service.postThread(
+        ORG_ID,
+        USER_ID,
+        group.id,
+        "missing",
+        1,
+        "hi",
+        documents
+      )
+    ).toThrow(expect.objectContaining({ status: 404 }));
+    expect(existsSync(uploadsOf(group.id))).toBe(false);
+  });
+
+  test("deleting a session removes its images and keeps the rest of the folder", async () => {
+    const { service } = setup(() => "ok");
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+
+    const first = service.start(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      "one",
+      await readGroupDocuments([PNG])
+    );
+
+    const second = service.start(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      "two",
+      await readGroupDocuments([PNG])
+    );
+
+    await Promise.all([first.run, second.run]);
+    writeFileSync(join(getGroupSharedDir(ORG_ID, group.id), "plan.md"), "x");
+
+    service.deleteSession(ORG_ID, USER_ID, group.id, first.session.id);
+
+    const [kept] = service.session(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      second.session.id
+    ).messages;
+
+    expect(readdirSync(uploadsOf(group.id))).toEqual(
+      (kept?.images ?? []).map((path) => path.replace("uploads/", ""))
+    );
+    expect(
+      existsSync(join(getGroupSharedDir(ORG_ID, group.id), "plan.md"))
+    ).toBe(true);
+  });
+
+  test("deleting a group removes its folder and memory", async () => {
+    const { chat, service } = setup(() => "ok");
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+    const sharedDir = getGroupSharedDir(ORG_ID, group.id);
+
+    await chat(group.id, "hi");
+    groupWorkspace(sharedDir).memory.replace("- noir", "");
+    writeFileSync(join(sharedDir, "plan.md"), "x");
+
+    service.delete(ORG_ID, USER_ID, group.id);
+
+    expect(existsSync(dirname(sharedDir))).toBe(false);
   });
 
   test("a document of an unsupported type is rejected", async () => {
     await expect(
-      readGroupDocuments(ORG_ID, USER_ID, "g", [
+      readGroupDocuments([
         {
           data: "AAAA",
           filename: "run.exe",

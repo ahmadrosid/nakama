@@ -15,7 +15,11 @@ export interface CapabilityBrowseRow {
 type CapabilityModelListRow = Pick<
   CapabilityBrowseRow,
   "id" | "name" | "inputPerMillionUsd" | "outputPerMillionUsd"
-> & { supportsThinking: boolean; supportsVision: boolean };
+> & {
+  contextWindow?: number;
+  supportsThinking: boolean;
+  supportsVision: boolean;
+};
 
 export function formatBrowseCapabilities(row: {
   tools?: boolean;
@@ -53,6 +57,11 @@ export function capabilityBrowseRowToModelListRow(row: CapabilityBrowseRow) {
 
   if (row.outputPerMillionUsd !== undefined) {
     model.outputPerMillionUsd = row.outputPerMillionUsd;
+  }
+
+  // Saved so compaction sizes to the real window, not the 128k fallback.
+  if (row.contextLength !== undefined) {
+    model.contextWindow = row.contextLength;
   }
 
   return model;

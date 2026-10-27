@@ -485,7 +485,7 @@ export class PluginService {
     };
   }
 
-  /** Super Nakama's handoff: validates its own draft without approving it. */
+  /** An agent's handoff: validates its own draft without approving it. */
   async describeLocalPlugin(draft: LocalPluginDraftRequest) {
     const inspected = await this.inspectLocalPlugin(draft);
 
@@ -622,13 +622,7 @@ export class PluginService {
     const org = await this.db.getOrganizationById(draft.orgId);
     const profile = await this.db.getProfile(draft.profileId);
 
-    if (
-      !org ||
-      org.archivedAt ||
-      !profile ||
-      profile.orgId !== draft.orgId ||
-      !profile.isSuper
-    ) {
+    if (!org || org.archivedAt || !profile || profile.orgId !== draft.orgId) {
       throw new PluginHostError("not_found");
     }
 
@@ -674,7 +668,7 @@ export class PluginService {
 
     const { id, minNakamaVersion } = validated.manifest;
 
-    // HTTP maps only the code; the reason lets Super Nakama fix its own draft.
+    // HTTP maps only the code; the reason lets the agent fix its own draft.
     const failures: Array<[boolean, string]> = [
       [
         packageJson.version !== validated.manifest.version,

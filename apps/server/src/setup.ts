@@ -16,6 +16,10 @@ import {
   resolveNetraModelId,
 } from "@nakama/core/discovery-providers";
 import { createProviderFromActiveConfig } from "./providers";
+import {
+  type ManagedSecrets,
+  providerSecretEnvNames,
+} from "./services/managed-secrets";
 
 export interface ProviderBootstrap {
   provider: ProviderClient | null;
@@ -68,12 +72,40 @@ async function bootstrapProviderFromEnv(
   return config;
 }
 
-export async function ensureProviderConfigured(): Promise<ProviderBootstrap> {
+export async function ensureProviderConfigured(
+  secrets?: ManagedSecrets
+): Promise<ProviderBootstrap> {
   await ensureUserConfigDir();
   let userConfig = await loadUserConfig();
 
+  const hydrate = async (
+    config: UserConfig | null
+  ): Promise<UserConfig | null> =>
+    config && secrets
+      ? {
+          ...config,
+          providers: await Promise.all(
+            config.providers.map(async (instance) => ({
+              ...instance,
+              apiKey:
+                (
+                  await secrets.resolve(
+                    "global",
+                    `provider:${instance.id}`,
+                    providerSecretEnvNames(instance.id, instance.type)
+                  )
+                ).value ?? "",
+            }))
+          ),
+        }
+      : config;
+
+  userConfig = await hydrate(userConfig);
+
   if (!isProviderConfigured(userConfig, process.env)) {
-    userConfig = (await bootstrapProviderFromEnv(process.env)) ?? userConfig;
+    userConfig =
+      (await hydrate(await bootstrapProviderFromEnv(process.env))) ??
+      userConfig;
   }
 
   const provider = createProviderFromActiveConfig(userConfig, process.env);

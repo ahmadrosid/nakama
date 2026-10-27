@@ -33,6 +33,7 @@ import {
   type UpdateSlackSettingsRequest,
   type VisionSettingsResponse,
   WEB_SEARCH_PROVIDERS,
+  type WebSearchProvider,
   type WebSearchSettingsResponse,
   type WhatsAppSettingsResponse,
 } from "@nakama/core";
@@ -57,11 +58,7 @@ import {
   fetchXaiOAuthModels,
   startXaiOAuthDeviceSession,
 } from "../../providers/xai-oauth/oauth";
-import {
-  getAgentBrowserStatus,
-  installAgentBrowser,
-  saveAgentBrowserConfig,
-} from "../../services/agent-browser-service";
+import { installAgentBrowser } from "../../services/agent-browser-service";
 import {
   getExternalModelCatalog,
   isExternalModelCatalogId,
@@ -418,6 +415,16 @@ export function registerModelRoutes(
     .object({
       apiKey: z.string().optional(),
       baseUrl: z.string().optional(),
+      hostMode: z.enum(["local", "cloud"]).optional(),
+      provider: z
+        .enum([
+          "ollama",
+          "openai_compatible",
+          "fireworks",
+          "netra",
+          "cloudflare",
+        ])
+        .optional(),
       providerId: z.string().optional(),
     })
     .openapi("DiscoverModelsRequest");
@@ -653,6 +660,56 @@ export function registerModelRoutes(
       tags: ["Models"],
     })
   );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "put",
+      operationId: "setProviderSecret",
+      path: "/v1/providers/{providerId}/secret",
+      request: {
+        params: providerIdParam,
+        body: {
+          content: {
+            "application/json": { schema: z.object({ apiKey: z.string() }) },
+          },
+          required: true,
+        },
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: updateProviderResponseSchema },
+          },
+          description: "Provider key saved",
+        },
+      },
+      summary: "Save a provider API key",
+      tags: ["Models"],
+    })
+  );
+
+  for (const [method, suffix, operationId] of [
+    ["delete", "", "clearProviderSecret"],
+    ["post", "/use-stored", "useStoredProviderSecret"],
+  ] as const) {
+    app.openAPIRegistry.registerPath(
+      createRoute({
+        method,
+        operationId,
+        path: `/v1/providers/{providerId}/secret${suffix}`,
+        request: { params: providerIdParam },
+        responses: {
+          200: {
+            content: {
+              "application/json": { schema: updateProviderResponseSchema },
+            },
+            description: "Provider key status",
+          },
+        },
+        tags: ["Models"],
+      })
+    );
+  }
+
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "put",
@@ -1379,6 +1436,38 @@ export function registerModelRoutes(
       tags: ["Models"],
     })
   );
+
+  for (const [kind, requestSchema, responseSchema] of [
+    ["email", z.object({ password: z.string() }), emailSettingsSchema],
+    [
+      "web-search",
+      z.object({ provider: z.enum(WEB_SEARCH_PROVIDERS), apiKey: z.string() }),
+      webSearchSettingsSchema,
+    ],
+    ["composio", z.object({ apiKey: z.string() }), composioSettingsSchema],
+  ] as const) {
+    app.openAPIRegistry.registerPath(
+      createRoute({
+        method: "put",
+        operationId: `set${kind.replace("-", "")}Secret`,
+        path: `/v1/settings/${kind}/secret`,
+        request: {
+          body: {
+            content: { "application/json": { schema: requestSchema } },
+            required: true,
+          },
+        },
+        responses: {
+          200: {
+            content: { "application/json": { schema: responseSchema } },
+            description: "Secret status",
+          },
+        },
+        tags: ["Models"],
+      })
+    );
+  }
+
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "get",
@@ -1708,9 +1797,28 @@ export function registerModelRoutes(
   });
 
   app.get("/v1/providers", async (c) => {
-    getRequestAuth(c);
+    const auth = getRequestAuth(c);
 
-    return json<ListProvidersResponse>(await agent.listProviders());
+    const result = await agent.listProviders();
+
+    // The sibling provider endpoints are platform-admin-only. Non-admin
+    // callers still see the provider list in the UI, so they get the
+    // identifying fields only — no baseUrl, key status, custom model
+    // inventory, or routing details.
+    const providers = auth.isPlatformAdmin
+      ? result.providers
+      : result.providers.map((provider) => ({
+          createdAt: provider.createdAt,
+          id: provider.id,
+          label: provider.label,
+          modelCount: provider.modelCount,
+          type: provider.type,
+        }));
+
+    return json<ListProvidersResponse>({
+      defaultProviderId: result.defaultProviderId,
+      providers,
+    });
   });
 
   app.post("/v1/providers", async (c) => {
@@ -1759,6 +1867,42 @@ export function registerModelRoutes(
       await agent.deleteProvider(decodeURIComponent(c.req.param("providerId")))
     );
   });
+
+  app.put("/v1/providers/:providerId/secret", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const body = await readJson<{ apiKey: string }>(c.req.raw);
+
+    try {
+      return json<UpdateProviderResponse>(
+        await agent.setProviderSecret(
+          decodeURIComponent(c.req.param("providerId")),
+          body.apiKey
+        )
+      );
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      return errorResponse(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
+    }
+  });
+
+  for (const [method, suffix, action] of [
+    ["delete", "", "clear"],
+    ["post", "/use-stored", "use-stored"],
+  ] as const) {
+    app[method](`/v1/providers/:providerId/secret${suffix}`, async (c) => {
+      requirePlatformAdminFromContext(c);
+
+      return json<UpdateProviderResponse>(
+        await agent.manageProviderSecret(c.req.param("providerId"), action)
+      );
+    });
+  }
 
   app.post("/v1/xai-oauth/device/start", async (c) => {
     const auth = requirePlatformAdminFromContext(c);
@@ -2068,6 +2212,26 @@ export function registerModelRoutes(
     }
   });
 
+  app.put("/v1/settings/email/secret", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const body = await readJson<{ password: string }>(c.req.raw);
+
+    try {
+      return json<EmailSettingsResponse>(
+        await agent.setEmailSecret(body.password)
+      );
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      return errorResponse(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
+    }
+  });
+
   app.post("/v1/settings/email/test", async (c) => {
     const auth = requirePlatformAdminFromContext(c);
     const body = await readOptionalJson<SendEmailTestRequest>(c.req.raw, {});
@@ -2112,6 +2276,30 @@ export function registerModelRoutes(
     }
   });
 
+  app.put("/v1/settings/web-search/secret", async (c) => {
+    requirePlatformAdminFromContext(c);
+
+    const body = await readJson<{
+      provider: WebSearchProvider;
+      apiKey: string;
+    }>(c.req.raw);
+
+    try {
+      return json<WebSearchSettingsResponse>(
+        await agent.setWebSearchSecret(body.provider, body.apiKey)
+      );
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      return errorResponse(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
+    }
+  });
+
   app.get("/v1/settings/agent-browser", async (c) => {
     requireOrgAdminFromContext(c);
 
@@ -2125,9 +2313,9 @@ export function registerModelRoutes(
     const body = await readJson(c.req.raw, updateAgentBrowserRequestSchema);
 
     try {
-      await saveAgentBrowserConfig(body);
-
-      return json<AgentBrowserStatusResponse>(await getAgentBrowserStatus());
+      return json<AgentBrowserStatusResponse>(
+        await agent.saveAgentBrowserSettings(body)
+      );
     } catch (error) {
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
@@ -2581,6 +2769,48 @@ export function registerModelRoutes(
       return errorResponse(message, 400);
     }
   });
+  app.put("/v1/settings/composio/secret", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const body = await readJson<{ apiKey: string }>(c.req.raw);
+
+    try {
+      return json<ComposioSettingsResponse>(
+        await agent.setComposioSecret(body.apiKey)
+      );
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      return errorResponse(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
+    }
+  });
+
+  for (const kind of ["email", "web-search", "composio"] as const) {
+    for (const [method, suffix, action] of [
+      ["delete", "", "clear"],
+      ["post", "/use-stored", "use-stored"],
+    ] as const) {
+      app.openAPIRegistry.registerPath(
+        createRoute({
+          method,
+          operationId: `${action === "clear" ? "clear" : "useStored"}${kind.replace("-", "")}Secret`,
+          path: `/v1/settings/${kind}/secret${suffix}`,
+          responses: { 200: { description: "Secret status" } },
+          tags: ["Settings"],
+        })
+      );
+      app[method](`/v1/settings/${kind}/secret${suffix}`, async (c) => {
+        requirePlatformAdminFromContext(c);
+
+        return json(await agent.manageSettingSecret(kind, action));
+      });
+    }
+  }
+
   app.get("/v1/settings/error-tracking", async (c) => {
     getRequestAuth(c);
 

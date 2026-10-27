@@ -1,0 +1,41 @@
+---
+title: "Supported deployments"
+description: "Which ways of running Nakama are supported, and how much data a restore can lose."
+---
+
+Nakama is a single-node application. One server process owns one data root and the SQLite database inside it. The channel workers that the server starts itself are part of that one instance.
+
+## What is supported
+
+| Setup | Supported | Why |
+| --- | --- | --- |
+| [Docker](/docker), one container per data volume | Yes | |
+| [Coolify](/coolify), one instance | Yes | |
+| [Desktop app](/desktop) | Yes | |
+| From source with `bun` | Yes | |
+| Two or more server processes on one data root | No | The automation scheduler and its run lock live in memory per process, so every process would run every automation. |
+| Kubernetes with more than one replica | No | Same reason. One replica with its own volume works. |
+| Postgres or another external database | No | SQLite only. |
+| Data root on a network filesystem (NFS, SMB) | No | SQLite runs in WAL mode, which needs shared memory on the local machine. |
+
+The database runs with `journal_mode = WAL`, `synchronous = FULL` and a 5 second busy timeout. Keep it inside the data root: an export skips a `DATABASE_URL` that points outside it.
+
+## How much data a restore can lose
+
+| Backup in place | Data at risk |
+| --- | --- |
+| [Scheduled backups](/backup-restore#scheduled-backups) in `NAKAMA_BACKUP_DIR` | Up to 24 hours |
+| Manual **Export ZIP** only | Everything since the last export |
+| Volume snapshot with the container stopped | Everything since the last snapshot |
+
+`NAKAMA_BACKUP_DIR` sits on the same host. If the host is lost, so are those files, so copy them somewhere else on your own schedule. For a lost host, the data at risk is everything since that copy.
+
+## How long a restore takes
+
+Dashboard import replaces the whole data root while the server pauses its workers, so plan downtime for the length of the restore. Restore into an isolated instance first and time it there.
+
+Import accepts an archive up to 100 MB, and up to 500 MB uncompressed. An install past that cannot restore its own backup from the dashboard. Restore it from a volume snapshot, or stop the server and copy the data root back.
+
+Every path needs the same `NAKAMA_SECRETS_KEY` the backup was made with. Without it Nakama cannot read the saved Settings keys or open a `.enc` backup. Keep the key outside the data root and outside the backups.
+
+See [Deployment hardening](/deployment-hardening#back-up-for-recovery-not-just-retention) for a restore checklist.

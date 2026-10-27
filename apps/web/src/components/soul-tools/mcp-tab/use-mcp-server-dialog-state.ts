@@ -224,6 +224,12 @@ function buildMcpServerRequest({
     request.serverId = server.id;
   }
 
+  // A server may list its tools without credentials and only refuse the tool
+  // call, so the sign-in has to be asked for rather than waited on.
+  if (signIn && !isEdit) {
+    request.signIn = true;
+  }
+
   return request;
 }
 

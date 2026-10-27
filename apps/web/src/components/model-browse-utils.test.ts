@@ -1,20 +1,18 @@
-import { describe, expect, test } from "bun:test";
-import { capabilityBrowseRowToModelListRow } from "@/components/model-browse-utils";
-import { FIREWORKS_FALLBACK_ROWS } from "@/hooks/use-fireworks-discover-models";
+import { expect, test } from "bun:test";
+import { capabilityBrowseRowToModelListRow } from "./model-browse-utils";
 
-describe("capabilityBrowseRowToModelListRow", () => {
-  test("maps reasoning and vision flags from browse rows", () => {
-    const row = FIREWORKS_FALLBACK_ROWS.find(
-      (entry) => entry.id === "accounts/fireworks/models/kimi-k2p5"
-    )!;
-
-    expect(capabilityBrowseRowToModelListRow(row)).toEqual({
-      id: "accounts/fireworks/models/kimi-k2p5",
-      inputPerMillionUsd: 0.6,
-      name: "Kimi K2.5",
-      outputPerMillionUsd: 2.5,
-      supportsThinking: true,
-      supportsVision: true,
-    });
+test("keeps the browsed context window on the saved row", () => {
+  expect(
+    capabilityBrowseRowToModelListRow({
+      contextLength: 24_000,
+      id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      name: "llama-3.3-70b-instruct-fp8-fast",
+    })
+  ).toEqual({
+    contextWindow: 24_000,
+    id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    name: "llama-3.3-70b-instruct-fp8-fast",
+    supportsThinking: false,
+    supportsVision: false,
   });
 });

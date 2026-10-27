@@ -86,7 +86,9 @@ enabling channel workers.
 ```bash
 # Pull and run the latest image
 docker pull ghcr.io/ahmadrosid/nakama:latest
-docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahmadrosid/nakama:latest
+umask 077
+printf 'NAKAMA_SECRETS_KEY=%s\n' "$(openssl rand -base64 32)" > nakama-secrets.env
+docker run -d -p 4310:4310 -v nakama-data:/nakama/data --env-file nakama-secrets.env --name nakama ghcr.io/ahmadrosid/nakama:latest
 ```
 
 **Build from source:**
@@ -125,6 +127,17 @@ Interactive API docs are at `http://127.0.0.1:4310/docs`.
 ## License
 
 MIT
+
+## Maintainers
+
+<p align="center">
+  <a href="https://github.com/ahmadrosid"><img src="https://images.weserv.nl/?url=github.com/ahmadrosid.png&mask=circle&w=96&h=96" width="96" alt="ahmadrosid" /></a>
+  <a href="https://github.com/fajarhide"><img src="https://images.weserv.nl/?url=github.com/fajarhide.png&mask=circle&w=96&h=96" width="96" alt="fajarhide" /></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/ahmadrosid">@ahmadrosid</a> and <a href="https://github.com/fajarhide">@fajarhide</a>
+</p>
 
 ## Contributors
 

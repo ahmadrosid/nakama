@@ -1,13 +1,9 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
-import { readFile, rm, stat, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import {
-  getUserConfigPath,
-  type JsonValue,
-  parseIniWithSections,
-  writeParsedConfigIni,
-} from "@nakama/core";
+import { getUserConfigPath, type JsonValue } from "@nakama/core";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import {
   loadToolApiKey,
   loadToolEnv,
@@ -15,12 +11,14 @@ import {
   resolveCustomToolModulePath,
   saveToolApiKey,
   saveToolEnv,
+  setToolSecrets,
 } from "./custom-tool-shared";
 import {
   makeCustomToolRecord,
   setupCustomToolsDir,
 } from "./custom-tool-test-helpers";
 import { loadJavascriptTool } from "./javascript-tool-loader";
+import { ManagedSecrets } from "./managed-secrets";
 import { loadPythonTool } from "./python-tool-loader";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
@@ -30,6 +28,13 @@ const setupToolsDir = setupCustomToolsDir;
 const makeRecord = makeCustomToolRecord;
 
 describe("javascript tool loader", () => {
+  let secretDb = createInMemoryDatabaseAdapter();
+  beforeEach(() => {
+    secretDb = createInMemoryDatabaseAdapter();
+    setToolSecrets(
+      new ManagedSecrets(secretDb, Buffer.alloc(32, 1).toString("base64"))
+    );
+  });
   let configDir = "";
 
   afterEach(async () => {
@@ -159,40 +164,18 @@ if __name__ == "__main__":
     const { configDir: dir } = await setupToolsDir();
     configDir = dir;
     await saveToolApiKey("org_a", "tool_x", "plain-secret-value");
-    expect(await readFile(getUserConfigPath(), "utf8")).not.toContain(
-      "plain-secret-value"
-    );
-    const keyFile = await stat(path.join(dir, "tool-credentials.key"));
-
-    // Windows does not expose POSIX owner/group permission bits.
-    if (process.platform !== "win32") {
-      expect(keyFile.mode % 0o1000).toBe(0o600);
-    }
-
+    const saved = await secretDb.getManagedSecret("org_a", "tool:tool_x");
+    expect(saved?.encryptedValue).toBeTruthy();
+    expect(saved?.encryptedValue).not.toContain("plain-secret-value");
     expect(await loadToolApiKey("org_a", "tool_x")).toBe("plain-secret-value");
-
-    const parsed = parseIniWithSections(
-      await readFile(getUserConfigPath(), "utf8")
-    );
-
-    const [sectionA] = Object.keys(parsed.sections);
     await saveToolApiKey("org_b", "tool_x", "org-b-value");
-
-    const afterB = parseIniWithSections(
-      await readFile(getUserConfigPath(), "utf8")
-    );
-
-    const sectionB = Object.keys(afterB.sections).find(
-      (name) => name !== sectionA
-    )!;
-
-    afterB.sections[sectionB] = parsed.sections[sectionA!]!;
-    await writeParsedConfigIni(afterB.global, afterB.sections);
+    await secretDb.putManagedSecret({
+      encryptedValue: saved!.encryptedValue,
+      name: "tool:tool_x",
+      scope: "org_b",
+      source: "settings",
+    });
     await expect(loadToolApiKey("org_b", "tool_x")).rejects.toThrow();
-
-    afterB.sections[sectionB] = { api_key: "legacy-plain" };
-    await writeParsedConfigIni(afterB.global, afterB.sections);
-    expect(await loadToolApiKey("org_b", "tool_x")).toBe("legacy-plain");
   });
 
   test("declared env values reach the tool, and only secrets are redacted", async () => {

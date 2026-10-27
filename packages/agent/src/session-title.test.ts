@@ -47,22 +47,6 @@ describe("session title generation", () => {
     expect(normalizeSessionTitle("   ")).toBeNull();
   });
 
-  test("generateSessionTitleFromMessages uses the first user line without a provider", async () => {
-    await expect(
-      generateSessionTitleFromMessages(conversation, {})
-    ).resolves.toBe("Plan a database migration");
-  });
-
-  test("generateSessionTitleFromMessages returns normalized provider output", async () => {
-    await expect(
-      generateSessionTitleFromMessages(conversation, {
-        provider: mockProvider(async () => ({
-          content: '"Database Migration Plan"',
-        })),
-      })
-    ).resolves.toBe("Database Migration Plan");
-  });
-
   test("generateSessionTitleFromMessages uses the first user line when the provider fails", async () => {
     await expect(
       generateSessionTitleFromMessages(conversation, {

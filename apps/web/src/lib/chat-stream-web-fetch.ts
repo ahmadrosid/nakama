@@ -227,7 +227,7 @@ export function parseWebFetchSourcesFromResult(
   return parseBuiltinWebFetchResult(record);
 }
 
-export function formatWebFetchHeaderText(urls: string[]): string {
+function formatWebFetchHeaderText(urls: string[]): string {
   if (urls.length === 0) {
     return "page";
   }

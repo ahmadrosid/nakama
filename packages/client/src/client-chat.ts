@@ -16,6 +16,8 @@ import type {
   SessionMessagesResponse,
   SessionStatusResponse,
   SessionSummary,
+  SetupChecklistRequest,
+  SetupChecklistResponse,
   UpdateSessionRequest,
   UpdateUserContextRequest,
   UserContextStatusResponse,
@@ -50,6 +52,7 @@ export class ChatClient extends ProfileFilesClient {
         cognito: options.cognito,
         model: options.model,
         profileId: options.profileId,
+        thinkingEffort: options.thinkingEffort,
       }),
       method: "POST",
     });
@@ -261,6 +264,13 @@ export class ChatClient extends ProfileFilesClient {
     await this.request("/v1/user/context", {
       body: JSON.stringify({ content } satisfies UpdateUserContextRequest),
       method: "PUT",
+    });
+  }
+
+  async getSetupChecklist(profileId: string): Promise<SetupChecklistResponse> {
+    return this.request<SetupChecklistResponse>("/v1/user/setup-checklist", {
+      body: JSON.stringify({ profileId } satisfies SetupChecklistRequest),
+      method: "POST",
     });
   }
 

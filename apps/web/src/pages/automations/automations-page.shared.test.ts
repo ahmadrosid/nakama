@@ -5,6 +5,7 @@ import {
   describeTrigger,
   previewAutomationSchedule,
   readSchedulePreset,
+  schedulePresetTrigger,
 } from "./automations-page.shared";
 
 test("run conversations retain tools and text and only animate a running run", () => {
@@ -74,11 +75,20 @@ test("daily cron reads as plain words and other triggers stay readable", () => {
   expect(describeTrigger({ cron: "*/5 * * * *", type: "schedule" }).label).toBe(
     "Custom schedule"
   );
+  expect(describeTrigger({ cron: "5 * * * *", type: "schedule" }).label).toBe(
+    "Every hour at :05"
+  );
+  expect(
+    describeTrigger({ cron: "30 */3 * * *", type: "schedule" }).label
+  ).toBe("Every 3 hours at :30");
   expect(describeTrigger({ type: "manual" }).label).toBe("Manual only");
 });
 
 test("schedule presets recognize supported frequencies without changing custom schedules", () => {
   for (const [cron, frequency] of [
+    ["15 * * * *", "hourly"],
+    ["0 */2 * * *", "hourly"],
+    ["0 */12 * * *", "hourly"],
     ["0 7 * * *", "daily"],
     ["30 12 * * 1-5", "weekdays"],
     ["0 18 * * 0", "weekly"],
@@ -92,11 +102,38 @@ test("schedule presets recognize supported frequencies without changing custom s
   for (const cron of [
     "*/15 * * * *",
     "0 7 1 * 1",
+    "0 * * * 1-5",
+    "0 * 1 * *",
+    "0 */5 * * *",
+    "0 */2 * * 1",
     "0 25 * * *",
     "60 7 * * *",
   ]) {
     expect(readSchedulePreset({ cron, type: "schedule" })).toBeNull();
   }
+});
+
+test("switching to and from hourly keeps the minute and resets the hour", () => {
+  const hourly = schedulePresetTrigger("hourly", {
+    cron: "30 18 * * 1-5",
+    type: "schedule",
+  });
+
+  expect(hourly).toEqual({ cron: "30 * * * *", type: "schedule" });
+  expect(schedulePresetTrigger("weekly", hourly)).toEqual({
+    cron: "30 7 * * 1",
+    type: "schedule",
+  });
+  expect(
+    schedulePresetTrigger("hourly", { cron: "0 */4 * * *", type: "schedule" })
+  ).toEqual({ cron: "0 */4 * * *", type: "schedule" });
+  expect(
+    schedulePresetTrigger("daily", { cron: "0 */4 * * *", type: "schedule" })
+  ).toEqual({ cron: "0 7 * * *", type: "schedule" });
+  expect(schedulePresetTrigger("hourly", { type: "manual" })).toEqual({
+    cron: "0 * * * *",
+    type: "schedule",
+  });
 });
 
 test("next-run preview uses the draft schedule and its time zone", () => {

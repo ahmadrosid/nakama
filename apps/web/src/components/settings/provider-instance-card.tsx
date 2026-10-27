@@ -172,7 +172,11 @@ function ProviderInstanceTableRow({
             </ProviderActionButton>
           ) : null}
           <ProviderActionButton
-            label={providerKeyActionLabel(card, instance.hasApiKey)}
+            label={
+              instance.secretSource === "environment"
+                ? `Managed by ${instance.secretEnvName}`
+                : providerKeyActionLabel(card, instance.hasApiKey)
+            }
             onClick={() => card.setReplaceKeyOpen(true)}
           >
             <Key01Icon className="size-3.5" />
@@ -240,7 +244,10 @@ function ProviderManageModelsFields({
           onCustomModelsChange={card.handleManageModelsChange}
           provider={card.providerType}
           providerId={
-            card.providerType === "fireworks" ? instance.id : undefined
+            card.providerType === "fireworks" ||
+            card.providerType === "cloudflare"
+              ? instance.id
+              : undefined
           }
         />
       ) : null}
@@ -308,6 +315,7 @@ function ProviderInstanceCardDialogs({
           dialogError={card.dialogError}
           instance={instance}
           onApiKeyChange={card.setApiKey}
+          onManage={(action) => void card.handleManageKey(action)}
           onOpenChange={card.setReplaceKeyOpen}
           onSave={() => void card.handleReplaceKey()}
           onToggleShowApiKey={() => card.setShowApiKey((current) => !current)}
@@ -367,6 +375,7 @@ export function ProviderInstanceCard({
   catalog,
   onUpdate,
   onDelete,
+  onManage,
   onError,
   isSole = false,
 }: {
@@ -377,6 +386,10 @@ export function ProviderInstanceCard({
     request: UpdateProviderRequest
   ) => Promise<void>;
   onDelete: (providerId: string) => Promise<void>;
+  onManage?: (
+    providerId: string,
+    action: "clear" | "use-stored"
+  ) => Promise<void>;
   onError: (error: string | null) => void;
   isSole?: boolean;
 }) {
@@ -385,6 +398,7 @@ export function ProviderInstanceCard({
     instance,
     onDelete,
     onError,
+    onManage,
     onUpdate,
   });
 

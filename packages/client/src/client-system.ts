@@ -373,7 +373,12 @@ export class SystemClient extends NakamaClientCore {
     baseUrl?: string;
     apiKey?: string;
     providerId?: string;
-    provider?: "ollama" | "openai_compatible" | "fireworks" | "netra";
+    provider?:
+      | "ollama"
+      | "openai_compatible"
+      | "fireworks"
+      | "netra"
+      | "cloudflare";
     hostMode?: "local" | "cloud";
   }): Promise<ModelsResponse> {
     return this.request<ModelsResponse>("/v1/models/discover", {
@@ -405,6 +410,26 @@ export class SystemClient extends NakamaClientCore {
         body: JSON.stringify(request),
         method: "PATCH",
       }
+    );
+  }
+
+  async setProviderSecret(
+    providerId: string,
+    apiKey: string
+  ): Promise<UpdateProviderResponse> {
+    return this.request<UpdateProviderResponse>(
+      `/v1/providers/${encodeURIComponent(providerId)}/secret`,
+      { body: JSON.stringify({ apiKey }), method: "PUT" }
+    );
+  }
+
+  async manageProviderSecret(
+    providerId: string,
+    action: "clear" | "use-stored"
+  ): Promise<UpdateProviderResponse> {
+    return this.request<UpdateProviderResponse>(
+      `/v1/providers/${encodeURIComponent(providerId)}/secret${action === "use-stored" ? "/use-stored" : ""}`,
+      { method: action === "clear" ? "DELETE" : "POST" }
     );
   }
 

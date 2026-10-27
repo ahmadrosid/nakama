@@ -229,6 +229,16 @@ export class ChannelsClient extends AutomationsClient {
       method: "PUT",
     });
   }
+
+  async setComposioSecret(apiKey: string): Promise<ComposioSettingsResponse> {
+    return this.request<ComposioSettingsResponse>(
+      "/v1/settings/composio/secret",
+      {
+        body: JSON.stringify({ apiKey }),
+        method: "PUT",
+      }
+    );
+  }
   async listNotificationDestinations(): Promise<ListNotificationDestinationsResponse> {
     return this.request<ListNotificationDestinationsResponse>(
       "/v1/notification-destinations"

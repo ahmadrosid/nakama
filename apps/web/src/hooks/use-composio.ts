@@ -47,7 +47,9 @@ export function useSaveComposioSettings() {
 
   return useMutation({
     mutationFn: (request: UpdateComposioSettingsRequest) =>
-      client.setComposioSettings(request),
+      request.apiKey?.trim()
+        ? client.setComposioSecret(request.apiKey)
+        : client.getComposioSettings(),
     onSuccess: async (saved) => {
       queryClient.setQueryData(queryKeys.composio.settings, saved);
       await invalidateQueries(
@@ -64,8 +66,8 @@ const composioToolkitsQueryOptions = queryOptions({
   queryKey: queryKeys.composio.toolkits,
 });
 
-export function useComposioToolkits() {
-  return useQuery(composioToolkitsQueryOptions);
+export function useComposioToolkits(options: { enabled?: boolean } = {}) {
+  return useQuery({ ...composioToolkitsQueryOptions, ...options });
 }
 
 export function useEnableComposioToolkit() {

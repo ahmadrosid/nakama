@@ -23,6 +23,7 @@ import { z } from "zod";
 import {
   buildChatCompletionResult,
   buildProviderHttpError,
+  buildProviderResponseError,
   extractOpenAITokenUsage,
   finalizePendingToolCalls,
   mergePendingToolCall,
@@ -30,6 +31,7 @@ import {
   notifyToolInputDelta,
   type PendingToolCall,
   parseJsonRecord,
+  readRecord,
   readSseEvents,
   sanitizeToolCallHistory,
 } from "../shared";
@@ -408,12 +410,21 @@ function toOpenAIAssistantMessage(
     role: "assistant",
   };
 
-  if (thinking && !(provider === "netra" && message.providerContent?.length)) {
+  // providerContent may hold another provider's items (OpenAI Responses
+  // output after a model switch); Netra only takes reasoning_details items.
+  const reasoningDetails =
+    provider === "netra"
+      ? message.providerContent?.filter((item) =>
+          String(readRecord(item).type ?? "").startsWith("reasoning.")
+        )
+      : undefined;
+
+  if (thinking && !reasoningDetails?.length) {
     result.reasoning_content = thinking;
   }
 
-  if (provider === "netra" && message.providerContent?.length) {
-    result.reasoning_details = message.providerContent;
+  if (reasoningDetails?.length) {
+    result.reasoning_details = reasoningDetails;
   }
 
   if (message.toolCalls?.length) {
@@ -713,7 +724,9 @@ async function requestChatCompletion(
   const thinking = readReasoningContent(message);
 
   if (!content.trim() && toolCalls.length === 0 && !thinking) {
-    throw new Error(`${client.label} returned an empty response.`);
+    throw buildProviderResponseError(
+      `${client.label} returned an empty response.`
+    );
   }
 
   return buildChatCompletionResult({
@@ -765,7 +778,9 @@ async function streamChatCompletion(
   }
 
   if (!response.body) {
-    throw new Error(`${client.label} returned an empty stream.`);
+    throw buildProviderResponseError(
+      `${client.label} returned an empty stream.`
+    );
   }
 
   return readOpenAIStream(
@@ -818,7 +833,9 @@ async function requestCompletion(
   const usage = extractOpenAITokenUsage(payload.usage);
 
   if (!content) {
-    throw new Error(`${client.label} returned an empty response.`);
+    throw buildProviderResponseError(
+      `${client.label} returned an empty response.`
+    );
   }
 
   const result: GenerateTextResult = { content };
@@ -892,7 +909,7 @@ async function readOpenAIStream(
   }
 
   if (!content.trim() && toolCalls.length === 0 && !thinkingText) {
-    throw new Error(`${label} returned an empty response.`);
+    throw buildProviderResponseError(`${label} returned an empty response.`);
   }
 
   return buildChatCompletionResult({

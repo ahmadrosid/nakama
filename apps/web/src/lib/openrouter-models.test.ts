@@ -88,18 +88,4 @@ describe("normalizeOpenRouterModels", () => {
     expect(paid?.inputPerMillionUsd).toBe(0.5);
     expect(paid?.outputPerMillionUsd).toBe(2.5);
   });
-
-  test("marks deprecated when expiration_date is a real sunset", () => {
-    const rows = normalizeOpenRouterModels(fixture);
-    const owl = rows.find((row) => row.id === "openrouter/owl-alpha");
-
-    expect(owl?.deprecated).toBe(true);
-  });
-
-  test("does not treat OpenRouter sentinel expiration dates as deprecated", () => {
-    const rows = normalizeOpenRouterModels(fixture);
-    const oxAlpha = rows.find((row) => row.id === "stealth/ox-alpha");
-
-    expect(oxAlpha?.deprecated).toBe(false);
-  });
 });

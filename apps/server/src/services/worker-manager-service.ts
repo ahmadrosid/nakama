@@ -23,6 +23,7 @@ import type {
 } from "@nakama/core";
 import {
   getUserConfigDir,
+  isSecretEnvKey,
   type PlatformWorkerName,
   type PluginWorkerContribution,
   readRuntimeServerUrl,
@@ -33,6 +34,7 @@ import {
 import {
   assertChannelPath,
   type ChannelConfigScope,
+  ChannelIdentityInUseError,
   type ChannelOwner,
   type ChannelPlatform,
   claimChannelIdentity,
@@ -75,9 +77,25 @@ const VALID_WORKERS = [...WORKER_SCRIPTS.keys()];
 /**
  * pm2 stops Windows processes with `taskkill /F`, so no signal handler runs.
  * A "shutdown" message lets the worker clean up before pm2 escalates.
+ *
+ * pm2 copies the server's environment into every worker. `filter_env` keeps
+ * the same secrets the bash tool drops out of channel and plugin workers.
  */
-const PM2_SHUTDOWN_OPTIONS =
-  process.platform === "win32" ? { shutdown_with_message: true } : {};
+function pm2StartOptions(): Pick<
+  WorkerStartOptions,
+  "filter_env" | "shutdown_with_message"
+> {
+  const options: Pick<
+    WorkerStartOptions,
+    "filter_env" | "shutdown_with_message"
+  > = { filter_env: Object.keys(process.env).filter(isSecretEnvKey) };
+
+  if (process.platform === "win32") {
+    options.shutdown_with_message = true;
+  }
+
+  return options;
+}
 
 export interface PluginWorkerRegistration {
   configDir?: string;
@@ -104,6 +122,7 @@ interface WorkerStartOptions {
   cwd: string;
   env: WorkerProcessEnv;
   error?: string;
+  filter_env?: string[];
   name: string;
   output?: string;
   script?: string;
@@ -295,11 +314,7 @@ export class WorkerManagerService {
       } catch (error) {
         if (
           platform !== "whatsapp" ||
-          !(
-            error instanceof Error &&
-            error.message ===
-              "This channel account is already in use by another agent."
-          )
+          !(error instanceof ChannelIdentityInUseError)
         ) {
           throw error;
         }
@@ -885,7 +900,7 @@ export class WorkerManagerService {
             name,
             output: join(worker.directory, "stdout.log"),
             script: process.env.NAKAMA_BUN_BIN ?? "bun",
-            ...PM2_SHUTDOWN_OPTIONS,
+            ...pm2StartOptions(),
           },
           (error) => cb(error)
         )
@@ -1012,7 +1027,7 @@ export class WorkerManagerService {
         env,
         name: processName,
         script: "bun",
-        ...PM2_SHUTDOWN_OPTIONS,
+        ...pm2StartOptions(),
       };
 
       if (isChannelOwner(scope)) {

@@ -74,6 +74,25 @@ describe("SQLite session model persistence", () => {
         pinned: true,
         title: "Renamed chat",
       });
+
+      expect(
+        (await database.adapter.getSession("session_test"))?.thinkingEffort
+      ).toBeNull();
+      expect(
+        await database.adapter.updateSessionThinkingEffort(
+          "session_test",
+          "high"
+        )
+      ).toBe(true);
+      expect(
+        (await database.adapter.getSession("session_test"))?.thinkingEffort
+      ).toBe("high");
+      expect(
+        await database.adapter.updateSessionThinkingEffort("session_test", null)
+      ).toBe(true);
+      expect(
+        (await database.adapter.getSession("session_test"))?.thinkingEffort
+      ).toBeNull();
     } finally {
       database.close();
     }
