@@ -127,7 +127,7 @@ test("with the updater running, Update sends the release and Restore asks first"
     root.render(
       <AuthContext.Provider value={auth}>
         <QueryClientProvider client={new QueryClient()}>
-          <VersionSettingsRow version="0.4.59" />
+          <VersionSettingsRow updateCheckEnabled version="0.4.59" />
         </QueryClientProvider>
       </AuthContext.Provider>
     );
@@ -165,4 +165,37 @@ test("with the updater running, Update sends the release and Restore asks first"
   await settle();
 
   expect(start.mock.calls[1]).toEqual(["0.4.58", true]);
+});
+
+test("NAKAMA_DISABLE_UPDATE_CHECK hides the check, Update and Restore", async () => {
+  const check = spyOn(client, "getNakamaVersion");
+  const upgradeState = spyOn(client, "getNakamaUpgrade");
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  cleanups.push(() => {
+    check.mockRestore();
+    upgradeState.mockRestore();
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  // SAFETY: VersionSettingsRow reads only user.isPlatformAdmin from this fixture.
+  const auth = { user: { isPlatformAdmin: true } } as AuthContextValue;
+
+  await act(async () => {
+    root.render(
+      <AuthContext.Provider value={auth}>
+        <QueryClientProvider client={new QueryClient()}>
+          <VersionSettingsRow updateCheckEnabled={false} version="0.4.59" />
+        </QueryClientProvider>
+      </AuthContext.Provider>
+    );
+  });
+  await settle();
+
+  expect(check).not.toHaveBeenCalled();
+  expect(upgradeState).not.toHaveBeenCalled();
+  expect(container.querySelectorAll("button")).toHaveLength(0);
 });
