@@ -57,6 +57,7 @@ const WORKER_SCRIPTS = new Map(
     automation: "apps/platform/automation/src/index.ts",
     discord: "apps/platform/discord/src/index.ts",
     slack: "apps/platform/slack/src/index.ts",
+    teams: "apps/platform/teams/src/index.ts",
     telegram: "apps/platform/telegram/src/index.ts",
     whatsapp: "apps/platform/whatsapp/src/index.ts",
   } satisfies Record<PlatformWorkerName, string>)
@@ -67,6 +68,7 @@ const WORKER_DIST_SCRIPTS = new Map(
     automation: "apps/platform/automation/dist/index.js",
     discord: "apps/platform/discord/dist/index.js",
     slack: "apps/platform/slack/dist/index.js",
+    teams: "apps/platform/teams/dist/index.js",
     telegram: "apps/platform/telegram/dist/index.js",
     whatsapp: "apps/platform/whatsapp/dist/index.js",
   } satisfies Partial<Record<PlatformWorkerName, string>>)
@@ -565,6 +567,7 @@ export class WorkerManagerService {
         "discord",
         "whatsapp",
         "slack",
+        "teams",
       ] as const) {
         if (
           !existsSync(join(getChannelConfigDir(platform, owner), "config.ini"))
@@ -1173,6 +1176,7 @@ export class WorkerManagerService {
       "discord",
       "whatsapp",
       "slack",
+      "teams",
     ] as const) {
       for (const owner of await listChannelOwners(platform)) {
         if (
@@ -1194,6 +1198,7 @@ export class WorkerManagerService {
       "discord",
       "whatsapp",
       "slack",
+      "teams",
     ] as const) {
       for (const owner of await listChannelOwners(platform)) {
         if (!(await readWorkerDesiredState(owner))[platform]) {
@@ -1558,6 +1563,7 @@ function getPlatformWorkerName(name: string): PlatformWorkerName {
     name === "automation" ||
     name === "discord" ||
     name === "slack" ||
+    name === "teams" ||
     name === "telegram" ||
     name === "whatsapp"
   ) {
@@ -1575,6 +1581,7 @@ function readChannelPlatform(name: string): ChannelPlatform {
   if (
     name === "discord" ||
     name === "slack" ||
+    name === "teams" ||
     name === "telegram" ||
     name === "whatsapp"
   ) {

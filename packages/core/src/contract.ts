@@ -310,6 +310,7 @@ export interface SystemStatusResponse {
   mcp: McpStatus;
   server: HealthResponse;
   slackWorker: SlackWorkerStatus;
+  teamsWorker: TeamsWorkerStatus;
   telegramWorker: TelegramWorkerStatus;
   whatsappWorker: WhatsAppWorkerStatus;
 }

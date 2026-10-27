@@ -58,6 +58,13 @@ const healthyStatus: SystemStatusResponse = {
     paired: false,
     running: false,
   },
+  teamsWorker: {
+    configured: false,
+    connected: false,
+    ok: true,
+    paired: false,
+    running: false,
+  },
   telegramWorker: { configured: true, ok: true, paired: true, running: true },
   whatsappWorker: {
     configured: true,
