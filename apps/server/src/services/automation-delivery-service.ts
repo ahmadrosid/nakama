@@ -62,10 +62,13 @@ export class AutomationDeliveryService {
     const bodySource =
       run.status === "failed" ? (run.error ?? run.output) : run.output;
 
-    const body = truncateForChannel(
-      bodySource?.trim() || "(no output)",
-      delivery.channel
-    );
+    const fullBody = bodySource?.trim() || "(no output)";
+
+    // Telegram and Discord adapters split long text into several messages.
+    const body =
+      delivery.channel === "telegram" || delivery.channel === "discord"
+        ? fullBody
+        : truncateForChannel(fullBody, delivery.channel);
 
     const completedAt = run.completedAt ?? new Date().toISOString();
 

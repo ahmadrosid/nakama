@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { splitTelegramChunks, truncateForChannel } from "./message-format";
 
 describe("truncateForChannel", () => {
-  test("truncates long discord messages to 2000", () => {
-    const text = "x".repeat(2500);
-    const truncated = truncateForChannel(text, "discord");
+  test("truncates long whatsapp messages to 4096", () => {
+    const text = "x".repeat(5000);
+    const truncated = truncateForChannel(text, "whatsapp");
 
-    expect(truncated.length).toBeLessThanOrEqual(2000);
+    expect(truncated.length).toBeLessThanOrEqual(4096);
     expect(truncated).toContain("truncated");
   });
 });

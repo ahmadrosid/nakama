@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  createTelegramOutboundAdapter,
   getDiscordConfigDir,
   getDiscordConfigPath,
   getTelegramConfigDir,
@@ -10,6 +11,8 @@ import {
   NakamaApiError,
 } from "@nakama/core";
 import type { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { z } from "zod";
+import { asTestFetch } from "../providers/test-helpers";
 import type { AgentService } from "./agent-service";
 import { AutomationDeliveryService } from "./automation-delivery-service";
 import { AutomationRunner } from "./automation-runner";
@@ -1309,6 +1312,96 @@ describe("AutomationRunner", () => {
 
     const runs = await service.listRuns("automation_delivery_test");
     expect(runs[0]?.deliveryStatus).toBe("sent");
+  });
+
+  test("sends long telegram output as several messages without truncation", async () => {
+    const db = await createTestDb();
+
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+
+    const owner = { orgId: ORG_ID, profileId: PROFILE_ID };
+    const configDir = await mkdtemp(join(tmpdir(), "nakama-automation-tg-"));
+    const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    try {
+      await mkdir(getTelegramConfigDir(owner), { recursive: true });
+      await writeFile(
+        getTelegramConfigPath(owner),
+        "bot_token=test-token\npaired_user_ids=111\n",
+        "utf8"
+      );
+
+      const now = new Date().toISOString();
+      await db.upsertAutomation({
+        createdAt: now,
+        definition: {
+          delivery: { channel: "telegram" },
+          description: "Daily digest",
+          prompt: "Summarize news",
+          steps: [],
+          trigger: { type: "manual" },
+          version: 1,
+        },
+        enabled: true,
+        id: "automation_long_telegram_test",
+        name: "Digest",
+        orgId: ORG_ID,
+        profileId: PROFILE_ID,
+        updatedAt: now,
+        version: 1,
+      });
+
+      const lines = Array.from(
+        { length: 200 },
+        (_, index) => `- News item ${index}: ${"detail ".repeat(10)}end`
+      );
+
+      const output = lines.join("\n");
+      const sentTexts: string[] = [];
+
+      const deliveryService = new AutomationDeliveryService(service, {
+        telegram: createTelegramOutboundAdapter({
+          fetchImpl: asTestFetch(async (_input, init) => {
+            const payload = z
+              .object({ text: z.string() })
+              .parse(JSON.parse(String(init?.body)));
+
+            sentTexts.push(payload.text);
+
+            return new Response("ok", { status: 200 });
+          }),
+        }),
+      });
+
+      const runner = new AutomationRunner(
+        service,
+        // SAFETY: This test double supplies only the fields exercised by this test.
+        { runAutomationPrompt: async () => output } as never,
+        deliveryService
+      );
+
+      await runner.run("automation_long_telegram_test");
+
+      const runs = await service.listRuns("automation_long_telegram_test");
+      expect(runs[0]?.deliveryStatus).toBe("sent");
+      expect(sentTexts.length).toBeGreaterThan(1);
+      expect(sentTexts.every((text) => text.length <= 4096)).toBe(true);
+
+      const delivered = sentTexts.join("\n");
+      expect(delivered).not.toContain("(truncated)");
+      expect(delivered).toContain(lines.at(-1) ?? "");
+    } finally {
+      if (previousConfigDir === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+      }
+
+      await rm(configDir, { force: true, recursive: true });
+    }
   });
 
   test("records discord delivery status after successful runs", async () => {
