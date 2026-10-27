@@ -12,6 +12,7 @@ import {
   getGroupSharedDir,
   NakamaApiError,
 } from "@nakama/core";
+import type { AgentGroupMemoryChange } from "@nakama/core/agent-groups";
 import type { GroupDocument } from "./agent-group-store";
 
 /** A posted attachment: a document's text, or an image not saved yet. */
@@ -54,9 +55,10 @@ export function groupWorkspace(sharedDir: string) {
        * An agent's save: adds `entry` as a fact, or with `replaces` swaps that
        * entry for it, or removes that entry when `entry` is empty. A repeat is
        * skipped. Synchronous, so two turns in the same process cannot
-       * interleave and drop an entry.
+       * interleave and drop an entry. `change` is set only when memory.md was
+       * written, so the chat can show exactly what moved.
        */
-      addFact(entry: string, replaces = ""): string {
+      addFact(entry: string, replaces = "") {
         const memory = readMemory();
         const fact = factOf(entry);
         const target = factOf(replaces);
@@ -74,7 +76,7 @@ export function groupWorkspace(sharedDir: string) {
         }
 
         if (!target && lines.some((line) => factOf(line) === fact)) {
-          return memory;
+          return { change: undefined, memory };
         }
 
         const next = target
@@ -84,6 +86,10 @@ export function groupWorkspace(sharedDir: string) {
           : [...lines, `- ${fact}`];
 
         const content = next.join("\n");
+
+        if (content === memory) {
+          return { change: undefined, memory };
+        }
 
         // Memory the user wrote past the cap may still shrink.
         if (
@@ -97,7 +103,13 @@ export function groupWorkspace(sharedDir: string) {
 
         writeMemory(content);
 
-        return readMemory();
+        return {
+          change: {
+            newEntry: fact ? `- ${fact}` : null,
+            oldEntry: target ? (lines[index] ?? null) : null,
+          } satisfies AgentGroupMemoryChange,
+          memory: readMemory(),
+        };
       },
 
       /** The memory cut at the cap on a full line, as members see it. */

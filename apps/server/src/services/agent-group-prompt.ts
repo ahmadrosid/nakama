@@ -122,7 +122,10 @@ function mayPass(
   );
 
   return (
-    since.length > 1 &&
+    since.some(
+      ({ authorProfileId, content }) =>
+        authorProfileId !== null && content !== ""
+    ) &&
     !since.some(({ authorProfileId, content }) =>
       mentionedMemberIds(
         content,
@@ -173,7 +176,7 @@ export function groupTurn(
   const sharedDir = workspaceOfGroup(orgId, group.id).open();
 
   const optional = mayPass(
-    listAgentGroupMessages(orgId, sessionId),
+    listAgentGroupMessages(orgId, sessionId, undefined, false),
     speaker.id,
     handles
   );
@@ -239,7 +242,11 @@ function labelled(
     )
   );
 
-  return messages.map(({ authorProfileId, content, id }) => {
+  return messages.flatMap(({ authorProfileId, content, id }) => {
+    if (authorProfileId !== null && content === "") {
+      return [];
+    }
+
     if (authorProfileId === null) {
       const attached = (documents.get(id) ?? []).map(
         ({ filename, text }) => `[File: ${filename}]\n${text}`
@@ -270,7 +277,7 @@ export function transcript(
 ): string {
   return labelled(
     orgId,
-    listAgentGroupMessages(orgId, sessionId, CONTEXT_MESSAGES),
+    listAgentGroupMessages(orgId, sessionId, CONTEXT_MESSAGES, false),
     handles,
     members
   )
@@ -306,7 +313,8 @@ export function threadTranscript(
   const main = listAgentGroupMessages(
     orgId,
     sessionId,
-    CONTEXT_MESSAGES
+    CONTEXT_MESSAGES,
+    false
   ).filter((message) => message.id <= rootId);
 
   const thread = listAgentGroupThreadMessages(orgId, sessionId, rootId);

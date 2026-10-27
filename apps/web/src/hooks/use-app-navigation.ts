@@ -22,13 +22,17 @@ export function useAppNavigation() {
     },
     navigateToNewChat(
       profileId?: string | null,
-      options?: { draft?: string; intent?: "automation" }
+      options?: { draft?: string; intent?: "automation"; send?: boolean }
     ) {
       const draft = options?.draft?.trim();
       const url = new URL(buildNewChatPath(profileId), "http://nakama.local");
 
       if (options?.intent) {
         url.searchParams.set("intent", options.intent);
+      }
+
+      if (options?.send) {
+        url.searchParams.set("send", "1");
       }
 
       if (draft && draft.length <= MAX_URL_CHAT_DRAFT_LENGTH) {

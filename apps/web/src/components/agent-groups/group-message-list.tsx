@@ -26,6 +26,7 @@ import {
 import {
   GroupMessageArtifacts,
   GroupMessageImage,
+  GroupMessageMemoryChanges,
 } from "@/components/agent-groups/group-message-files";
 import {
   Conversation,
@@ -449,32 +450,37 @@ export function GroupMessageList({
                               {author?.name ?? "Unavailable agent"}
                             </div>
                           ) : null}
-                          <div
-                            className={cn(
-                              "relative max-w-full rounded-[1.25rem] bg-muted px-3.5 py-2",
-                              endsGroup && "rounded-bl-md"
-                            )}
-                          >
-                            <Message
-                              className="mr-0 ml-0 max-w-full items-start justify-start"
-                              from="assistant"
+                          {message.content ? (
+                            <div
+                              className={cn(
+                                "relative max-w-full rounded-[1.25rem] bg-muted px-3.5 py-2",
+                                endsGroup && "rounded-bl-md"
+                              )}
                             >
-                              <MessageContent className="ml-0 w-full max-w-full gap-1 group-[.is-user]:ml-0">
-                                <MessageResponse
-                                  components={markdownComponents}
-                                >
-                                  {markMentions(
-                                    shortenSharedPaths(message.content),
-                                    handles
-                                  )}
-                                </MessageResponse>
-                              </MessageContent>
-                            </Message>
-                            <MessageActions
-                              onReply={() => onOpenThread(message.id)}
-                              text={message.content}
-                            />
-                          </div>
+                              <Message
+                                className="mr-0 ml-0 max-w-full items-start justify-start"
+                                from="assistant"
+                              >
+                                <MessageContent className="ml-0 w-full max-w-full gap-1 group-[.is-user]:ml-0">
+                                  <MessageResponse
+                                    components={markdownComponents}
+                                  >
+                                    {markMentions(
+                                      shortenSharedPaths(message.content),
+                                      handles
+                                    )}
+                                  </MessageResponse>
+                                </MessageContent>
+                              </Message>
+                              <MessageActions
+                                onReply={() => onOpenThread(message.id)}
+                                text={message.content}
+                              />
+                            </div>
+                          ) : null}
+                          <GroupMessageMemoryChanges
+                            changes={message.memoryChanges}
+                          />
                           {message.authorProfileId ? (
                             <GroupMessageArtifacts
                               content={message.content}

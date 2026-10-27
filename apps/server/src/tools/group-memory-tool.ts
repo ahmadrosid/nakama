@@ -12,7 +12,7 @@ const GroupMemoryInputSchema = z.object({
  * one whose shared folder the turn carries, so an agent can only reach the
  * memory of a group it is answering in.
  */
-export const groupMemoryTool: ToolDefinition = {
+export const groupMemoryTool = {
   description:
     "Save a fact to this group's memory, which every member reads in every chat of the group, or fix or remove an entry. One short fact per entry: a decision, a name, a preference, as the user stated or agreed to it. Never save an agent's suggestion the user has not agreed to, or secrets.",
   name: "update_group_memory",
@@ -43,8 +43,6 @@ export const groupMemoryTool: ToolDefinition = {
 
     const { entry, replaces } = GroupMemoryInputSchema.parse(input);
 
-    return {
-      memory: groupWorkspace(sharedDir).memory.addFact(entry, replaces),
-    };
+    return groupWorkspace(sharedDir).memory.addFact(entry, replaces);
   },
-};
+} satisfies ToolDefinition;

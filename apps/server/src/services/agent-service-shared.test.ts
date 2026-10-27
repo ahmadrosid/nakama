@@ -8,8 +8,10 @@ import {
   type ToolContext,
   type ToolDefinition,
 } from "@nakama/core";
+import type { AgentGroupMemoryChange } from "@nakama/core/agent-groups";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
+import { groupWorkspace } from "./agent-group-workspace";
 import { AgentService } from "./agent-service";
 import { createDefaultProfile } from "./agent-service-test-fixtures";
 import { resolveDefaultModelForInstance } from "./provider-instance-helpers";
@@ -219,6 +221,89 @@ describe("Super Nakama provider inheritance", () => {
 
 describe("AgentService sub-agent roles", () => {
   setupTestConfigDir("nakama-sub-agent-role-");
+
+  test("reports completed memory writes but refuses a provider's late write after timeout", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const profile = createDefaultProfile();
+    await db.upsertProfile(profile);
+    const service = new AgentService(null, null, db);
+
+    const sharedDir = path.join(
+      process.env.NAKAMA_CONFIG_DIR!,
+      "group",
+      "shared"
+    );
+
+    const resume = Promise.withResolvers<void>();
+    const finished = Promise.withResolvers<void>();
+    const changes: AgentGroupMemoryChange[] = [];
+    let calls = 0;
+    Object.assign(service, {
+      _providerConfigured: true,
+      createHarnessForProfile: () => ({
+        provider: {
+          name: "openai",
+          async streamChat(input: GenerateChatInput) {
+            calls += 1;
+
+            if (calls === 2) {
+              await resume.promise;
+            }
+
+            const content = calls === 3 ? "Done" : "";
+
+            const toolCalls =
+              calls === 3
+                ? []
+                : [
+                    {
+                      arguments: {
+                        entry: calls === 1 ? "Before timeout" : "After timeout",
+                      },
+                      id: `memory-${calls}`,
+                      name: "update_group_memory",
+                    },
+                  ];
+
+            if (calls === 3) {
+              expect(
+                JSON.parse(String(input.messages.at(-1)?.content))
+              ).toHaveProperty("error");
+              finished.resolve();
+            }
+
+            return {
+              assistantMessage: { content, role: "assistant", toolCalls },
+              content,
+              toolCalls,
+            };
+          },
+        },
+      }),
+      resolveProfileSystemPrompt: async () => ({
+        soulActive: false,
+        systemPrompt: "Test",
+      }),
+      resolveProfileTools: async () => [],
+    });
+
+    const result = await service.runSubAgentPrompt({
+      agentDepth: 1,
+      onGroupMemoryChange: (change) => changes.push(change),
+      orgId: ORG_ID,
+      profileId: profile.id,
+      sharedDir,
+      task: "Save memory",
+      timeoutMs: 100,
+    });
+
+    expect(result.status).toBe("timeout");
+    expect(changes).toEqual([{ newEntry: "- Before timeout", oldEntry: null }]);
+    resume.resolve();
+    await finished.promise;
+    expect(groupWorkspace(sharedDir).memory.read()).toBe("- Before timeout");
+    expect(changes).toHaveLength(1);
+  });
 
   test("uses the inherited role for the child prompt and tool execution", async () => {
     const db = createInMemoryDatabaseAdapter();

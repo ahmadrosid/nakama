@@ -2,6 +2,7 @@ import type { ImageAttachment, OrgRole, ProfileSummary } from "@nakama/core";
 import { NakamaApiError } from "@nakama/core";
 import {
   type AgentGroup,
+  type AgentGroupMemoryChange,
   type AgentGroupMessage,
   type AgentGroupRun,
   type AgentGroupSession,
@@ -436,8 +437,9 @@ export class AgentGroupService {
       hopsLeft: 0,
       inbox: [content],
       lastSpeaker:
-        listAgentGroupMessages(orgId, sessionId).findLast(
-          (message) => message.authorProfileId !== null
+        listAgentGroupMessages(orgId, sessionId, undefined, false).findLast(
+          (message) =>
+            message.authorProfileId !== null && message.content !== ""
         )?.authorProfileId ?? null,
       queue: [],
       speakerProfileId: null,
@@ -536,6 +538,7 @@ export class AgentGroupService {
       const turn = groupTurn(orgId, session.id, group, speaker, handles);
       run.steps = [];
       run.text = "";
+      const memoryChanges: AgentGroupMemoryChange[] = [];
 
       // ponytail: Stop and the hop timeout cannot abort a running hop, add an
       // AbortSignal to SubAgentRunInput if that cost matters.
@@ -547,6 +550,7 @@ export class AgentGroupService {
             run.activity = label;
             run.steps.push(label);
           },
+          onGroupMemoryChange: (change) => memoryChanges.push(change),
           onText: (chunk) => {
             run.text += chunk;
           },
@@ -565,8 +569,20 @@ export class AgentGroupService {
 
       const text = result.output.trim();
 
-      // A pass is silence, not a reply: nothing is saved and no hop is spent.
+      // A pass spends no hop, but a completed memory write must remain visible.
       if (turn.mayPass && result.status === "success" && isPassReply(text)) {
+        if (memoryChanges.length > 0) {
+          appendAgentGroupMessage(
+            orgId,
+            session,
+            profileId,
+            "",
+            undefined,
+            [],
+            memoryChanges
+          );
+        }
+
         continue;
       }
 
@@ -577,7 +593,10 @@ export class AgentGroupService {
         profileId,
         result.status === "success" && text
           ? text
-          : `_${result.error ?? "No reply."}_`
+          : `_${result.error ?? "No reply."}_`,
+        undefined,
+        [],
+        memoryChanges
       );
 
       if (result.status === "success" && text) {
@@ -627,6 +646,7 @@ export class AgentGroupService {
 
       const handles = memberHandles(members);
       const sharedDir = workspaceOfGroup(orgId, group.id).open();
+      const memoryChanges: AgentGroupMemoryChange[] = [];
 
       const result = await this.agent
         .runSubAgentPrompt({
@@ -641,6 +661,7 @@ export class AgentGroupService {
           onActivity: (label) => {
             run.activity = label;
           },
+          onGroupMemoryChange: (change) => memoryChanges.push(change),
           orgId,
           orgRole: access.orgRole,
           profileId,
@@ -663,7 +684,9 @@ export class AgentGroupService {
         result.status === "success" && text
           ? text
           : `_${result.error ?? "No reply."}_`,
-        root.id
+        root.id,
+        [],
+        memoryChanges
       );
       run.activity = null;
     }

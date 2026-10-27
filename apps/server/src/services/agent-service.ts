@@ -2322,7 +2322,9 @@ export class AgentService {
       input.profileId
     );
 
-    const tools = [
+    let groupTurnActive = true;
+
+    const tools: ToolDefinition[] = [
       ...(await this.resolveProfileTools(profile, {
         includeAutomationTools: false,
         includeQuestionTools: false,
@@ -2331,7 +2333,31 @@ export class AgentService {
         userId: input.userId,
       })),
       // Only a group turn carries a shared folder, and with it a group memory.
-      ...(input.sharedDir ? [groupMemoryTool] : []),
+      ...(input.sharedDir
+        ? [
+            {
+              ...groupMemoryTool,
+              async run(
+                toolInput: Parameters<typeof groupMemoryTool.run>[0],
+                context: ToolContext
+              ) {
+                // A timed-out provider can still call tools. Its message is already
+                // saved, so refuse new writes rather than losing their notices.
+                if (!groupTurnActive) {
+                  throw new Error("This group turn has ended.");
+                }
+
+                const result = await groupMemoryTool.run(toolInput, context);
+
+                if (result.change) {
+                  input.onGroupMemoryChange?.(result.change);
+                }
+
+                return result;
+              },
+            },
+          ]
+        : []),
     ];
 
     const { systemPrompt, soulActive } = await this.resolveProfileSystemPrompt(
@@ -2437,7 +2463,10 @@ export class AgentService {
 
     // A timed-out sub-agent's ACP process is stopped here too, not left running.
     const outcome = await Promise.race([sendPromise, timeoutPromise]).finally(
-      () => endOneShotAcp(acpKey)
+      () => {
+        groupTurnActive = false;
+        endOneShotAcp(acpKey);
+      }
     );
 
     const durationMs = Date.now() - startedAt;

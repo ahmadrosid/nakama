@@ -4,7 +4,8 @@ import { Button, Textarea } from "@nakama/ui";
 import { Spinner } from "@nakama/ui/spinner";
 import { toast } from "@nakama/ui/toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useGroupPanelWidth } from "@/components/agent-groups/group-thread-panel";
 import { AttachmentDetailPanel } from "@/components/chat/attachment-detail-panel";
 import { client, formatError } from "@/lib/client";
@@ -42,17 +43,52 @@ const memoryDrafts = new Map<string, MemoryDraft>();
 function GroupMemoryEditor({ groupId }: { groupId: string }) {
   const queryClient = useQueryClient();
   const queryKey = queryKeys.agentGroups.memory(groupId);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const { data, error, isLoading } = useQuery({
+  // Written by the message notice, kept out of URLs and browser access logs.
+  const { state }: { state: { groupMemoryEntry?: string | null } | null } =
+    useLocation();
+
+  const { data, error, isLoading, refetch } = useQuery({
     queryFn: () => client.getAgentGroupMemory(groupId),
     queryKey,
   });
+
+  useEffect(() => {
+    if (state?.groupMemoryEntry !== undefined) {
+      void refetch();
+    }
+  }, [refetch, state]);
 
   // Null until the user types, so a fact an agent saves meanwhile still shows.
   // `base` is the memory the edit started from, so a refetch cannot move it.
   const [draft, setDraftState] = useState<MemoryDraft | null>(
     () => memoryDrafts.get(groupId) ?? null
   );
+
+  useEffect(() => {
+    const entry = state?.groupMemoryEntry;
+
+    // A historical entry can be gone. Never alter an unsaved draft to find it.
+    if (entry === undefined || !data || draft) {
+      return;
+    }
+
+    let start = 0;
+
+    for (const line of data.content.split("\n")) {
+      if (line === entry) {
+        textareaRef.current?.focus();
+        textareaRef.current?.setSelectionRange(start, start + line.length);
+
+        return;
+      }
+
+      start += line.length + 1;
+    }
+
+    textareaRef.current?.setSelectionRange(0, 0);
+  }, [data, draft, state]);
 
   // Kept per group, so an unsaved edit is still there when the panel opens again.
   function setDraft(next: MemoryDraft | null) {
@@ -131,6 +167,7 @@ function GroupMemoryEditor({ groupId }: { groupId: string }) {
           })
         }
         placeholder="- The genre is noir"
+        ref={textareaRef}
         value={content}
       />
       <div className="flex items-center gap-3">

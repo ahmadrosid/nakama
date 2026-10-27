@@ -23,6 +23,7 @@ describe("audit event coverage", () => {
       ["POST", "/v1/auth/setup/import/restore", "data.import"],
       ["POST", "/v1/orgs/org_1/invites", "invite.create"],
       ["DELETE", "/v1/orgs/org_1/invites/invite_1", "invite.revoke"],
+      ["POST", "/v1/auth/accept-invite", "invite.accept"],
       ["PATCH", "/v1/orgs/org_1/members/user_1", "member.role_update"],
       ["PUT", "/v1/settings/email", "settings.update"],
       ["PATCH", "/v1/providers/provider_1", "provider.update"],
@@ -316,6 +317,61 @@ describe("audit event API", () => {
         orgId: null,
         resourceId: "user_erase_audit",
         resourceType: "user",
+      }),
+    ]);
+  });
+
+  // Accepting an invite is the one invite event that runs on a public route,
+  // without a session to attribute it to, so it is recorded from the response.
+  test("records an accepted invite against the organization", async () => {
+    const { app, authService, databaseAdapter } = createMinimalHonoApp();
+    const fetchApp: AppFetch = app;
+
+    await seedOrgAdmin(databaseAdapter, { authService });
+
+    const admin = await loginUserSession(
+      fetchApp,
+      "admin@example.com",
+      "password123"
+    );
+
+    const created = await app.fetch(
+      new Request("http://localhost:4310/v1/orgs/org_test/invites", {
+        body: JSON.stringify({ email: "invited@example.com", role: "member" }),
+        headers: admin.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": admin.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    expect(created.status).toBe(201);
+
+    // SAFETY: The token is only absent when a mailer delivered it, and no
+    // mailbox is configured here; the assertion below pins that.
+    const { token } = (await created.json()) as { token: string | null };
+
+    expect(token).toBeTruthy();
+
+    const accepted = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/accept-invite", {
+        body: JSON.stringify({ password: "invited-password", token }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+
+    expect(accepted.status).toBe(200);
+
+    expect(
+      await databaseAdapter.listAuditEvents({ action: "invite.accept" })
+    ).toEqual([
+      expect.objectContaining({
+        action: "invite.accept",
+        metadata: { outcome: "success", status: 200 },
+        orgId: "org_test",
+        resourceType: "invite",
       }),
     ]);
   });

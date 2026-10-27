@@ -122,8 +122,7 @@ export function AutomationsPageLayout(state: AutomationsPageState) {
             ) : showEmptyState ? (
               <AutomationPanelPlaceholder>
                 <AutomationExample
-                  onStartFromScratch={() => goToCreateAutomation()}
-                  onUse={goToCreateAutomation}
+                  onUse={(draft) => goToCreateAutomation(draft, { send: true })}
                 />
               </AutomationPanelPlaceholder>
             ) : selected ? (

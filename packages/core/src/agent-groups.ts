@@ -18,6 +18,12 @@ export interface AgentGroup {
   name: string;
 }
 
+/** One completed tool write, in order; null means the entry was absent. */
+export interface AgentGroupMemoryChange {
+  newEntry: string | null;
+  oldEntry: string | null;
+}
+
 export interface AgentGroupMessage {
   /** `null` for the user who owns the group. */
   authorProfileId: string | null;
@@ -28,6 +34,7 @@ export interface AgentGroupMessage {
   id: number;
   /** Images the user pasted, as paths in the group's shared folder. */
   images?: string[];
+  memoryChanges?: AgentGroupMemoryChange[];
   /** Replies in the thread opened on this message; always 0 inside a thread. */
   threadReplies: number;
 }

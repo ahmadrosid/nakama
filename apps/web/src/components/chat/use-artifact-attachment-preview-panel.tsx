@@ -1,5 +1,6 @@
 import { DropdownMenuItem } from "@nakama/ui/dropdown-menu";
-import { PencilEdit01Icon } from "hugeicons-react";
+import { toast } from "@nakama/ui/toast";
+import { Pdf01Icon, PencilEdit01Icon } from "hugeicons-react";
 import { useEffect, useState } from "react";
 import { ArtifactAttachmentPanelActions } from "@/components/chat/artifact-attachment-panel-actions";
 import { ArtifactAttachmentPanelBody } from "@/components/chat/artifact-attachment-panel-body";
@@ -59,6 +60,7 @@ function ArtifactAttachmentPreviewHeaderActions({
   fullscreen,
   loading,
   onCopy,
+  onDownloadPdf,
   onEdit,
   onToggleFullscreen,
   share,
@@ -74,6 +76,7 @@ function ArtifactAttachmentPreviewHeaderActions({
   fullscreen: boolean;
   loading: boolean;
   onCopy: () => void;
+  onDownloadPdf: (() => void) | null;
   onEdit: () => void;
   onToggleFullscreen: () => void;
   share: ArtifactShareControlsState;
@@ -83,6 +86,16 @@ function ArtifactAttachmentPreviewHeaderActions({
       <ArtifactAttachmentPanelActions
         additionalMenuItems={
           <>
+            {onDownloadPdf ? (
+              <DropdownMenuItem
+                className="cursor-pointer"
+                disabled={loading}
+                onClick={onDownloadPdf}
+              >
+                <Pdf01Icon aria-hidden />
+                Download as PDF
+              </DropdownMenuItem>
+            ) : null}
             {canEdit ? (
               <DropdownMenuItem
                 className="cursor-pointer"
@@ -288,6 +301,29 @@ export function useArtifactAttachmentPreviewPanel({
     }
   }
 
+  async function downloadPdf() {
+    try {
+      const pdf = await client
+        .forOrg(activeOrg?.id ?? null)
+        .readProfileArtifactContent(profileId, artifact.path, {
+          render: "pdf",
+        });
+
+      const url = URL.createObjectURL(
+        new Blob([pdf.data], { type: "application/pdf" })
+      );
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${header.title}.pdf`;
+      link.click();
+      // Revoking in the same tick can cancel the download in some browsers.
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (downloadError) {
+      toast(formatError(downloadError));
+    }
+  }
+
   function buildPanelBody(
     loadingOverride?: boolean,
     mode: ArtifactPreviewMode = previewMode
@@ -448,6 +484,7 @@ export function useArtifactAttachmentPreviewPanel({
               setCopied,
             })
           }
+          onDownloadPdf={isHtml ? () => void downloadPdf() : null}
           onEdit={() => {
             setSaveError(null);
 

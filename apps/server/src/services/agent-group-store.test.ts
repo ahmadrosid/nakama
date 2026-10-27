@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
@@ -32,6 +33,38 @@ afterEach(closeAgentGroupDatabases);
 setupTestConfigDir("nakama-agent-group-store-");
 
 describe("agent group store", () => {
+  test("migrates existing messages without inventing memory changes", () => {
+    const group = createAgentGroup(ORG_ID, "u1", "Team", ["p1"]);
+    const session = createGroupSession(ORG_ID, group.id, "Existing chat");
+    appendAgentGroupMessage(ORG_ID, session, "p1", "Old reply");
+    closeAgentGroupDatabases();
+
+    const old = new Database(
+      join(getOrgConfigDir(ORG_ID), "agent-groups.sqlite")
+    );
+
+    old.exec("ALTER TABLE messages DROP COLUMN memory_changes");
+    old.close();
+
+    expect(
+      listAgentGroupMessages(ORG_ID, session.id)[0]?.memoryChanges
+    ).toBeUndefined();
+    const changes = [{ newEntry: "- New", oldEntry: "- Old" }];
+    appendAgentGroupMessage(
+      ORG_ID,
+      session,
+      "p1",
+      "New reply",
+      undefined,
+      [],
+      changes
+    );
+    closeAgentGroupDatabases();
+    expect(
+      listAgentGroupMessages(ORG_ID, session.id)[1]?.memoryChanges
+    ).toEqual(changes);
+  });
+
   test("only the owner sees a group, its sessions, and its image", () => {
     const group = createAgentGroup(ORG_ID, "u1", "Launch", ["p1", "p2"]);
     const session = createGroupSession(ORG_ID, group.id, "Kickoff");
@@ -103,6 +136,38 @@ describe("agent group store", () => {
       first.id,
       second.id,
     ]);
+  });
+
+  test("memory-only notices preserve the group preview across sessions", () => {
+    const group = createAgentGroup(ORG_ID, "u1", "Team", ["p1", "p2"]);
+    const first = createGroupSession(ORG_ID, group.id, "First");
+    const second = createGroupSession(ORG_ID, group.id, "Second");
+    appendAgentGroupMessage(ORG_ID, first, "p1", "Answer");
+    const preview = getAgentGroup(ORG_ID, "u1", group.id)?.lastMessage;
+
+    appendAgentGroupMessage(
+      ORG_ID,
+      second,
+      "p2",
+      "",
+      undefined,
+      [],
+      [{ newEntry: "- Saved fact", oldEntry: null }]
+    );
+    expect(getAgentGroup(ORG_ID, "u1", group.id)?.lastMessage).toEqual(preview);
+    expect(listAgentGroups(ORG_ID, "u1")[0]?.lastMessage).toEqual(preview);
+    expect(
+      listAgentGroupMessages(ORG_ID, second.id)[0]?.memoryChanges
+    ).toHaveLength(1);
+
+    // Empty user messages can carry attachments and must not be skipped.
+    appendAgentGroupMessage(ORG_ID, second, null, "", undefined, [
+      { filename: "notes.txt", text: "Attached fact" },
+    ]);
+    expect(getAgentGroup(ORG_ID, "u1", group.id)?.lastMessage).toMatchObject({
+      authorProfileId: null,
+      content: "",
+    });
   });
 
   test("renames and pins a session, and deleting it drops its messages", () => {
