@@ -78,15 +78,24 @@ test("ordered changes open memory and select only an entry that still exists", a
       </QueryClientProvider>
     )
   );
-  const notice = container.querySelector("details")!;
-  expect(notice.open).toBe(false);
-  notice.open = true;
-  const rows = [...notice.querySelectorAll("li")];
+  expect(container.querySelectorAll("li")).toHaveLength(1);
+
+  const toggle = container.querySelector<HTMLButtonElement>(
+    "button[aria-expanded]"
+  )!;
+
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  await act(async () => toggle.click());
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  const rows = [...container.querySelectorAll("li")];
   expect(rows).toHaveLength(3);
-  expect(rows[0]?.textContent).toContain(changes[0]!.newEntry!);
-  expect(rows[1]?.textContent).toContain(changes[1]!.oldEntry!);
-  expect(rows[1]?.textContent).toContain(changes[1]!.newEntry!);
-  expect(rows[2]?.textContent).toContain(changes[2]!.oldEntry!);
+  // Rows show each line without its markdown list marker.
+  const text = (entry: string | null) => entry!.replace(/^- /, "");
+  expect(rows[0]?.textContent).toContain(text(changes[0]!.newEntry));
+  expect(rows[0]?.textContent).not.toContain(changes[0]!.newEntry!);
+  expect(rows[1]?.textContent).toContain(text(changes[1]!.oldEntry));
+  expect(rows[1]?.textContent).toContain(text(changes[1]!.newEntry));
+  expect(rows[2]?.textContent).toContain(text(changes[2]!.oldEntry));
   await act(async () => rows[1]!.querySelector("button")!.click());
   const editor = container.querySelector("textarea")!;
   expect(editor.value).toBe(content);
@@ -194,5 +203,5 @@ test("messages without changes have no notice", async () => {
       </MemoryRouter>
     )
   );
-  expect(container.querySelector("details")).toBeNull();
+  expect(container.innerHTML).toBe("");
 });

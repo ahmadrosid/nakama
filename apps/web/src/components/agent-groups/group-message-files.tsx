@@ -1,6 +1,11 @@
 import type { AgentGroupMemoryChange } from "@nakama/core/agent-groups";
+import { cn } from "@nakama/ui/utils";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpRight01Icon, File01Icon } from "hugeicons-react";
+import {
+  ArrowDown01Icon,
+  ArrowUpRight01Icon,
+  File01Icon,
+} from "hugeicons-react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useArtifactAttachmentPreviewPanel } from "@/components/chat/use-artifact-attachment-preview-panel";
@@ -13,6 +18,25 @@ import {
 } from "@/lib/chat-artifacts";
 import { client } from "@/lib/client";
 
+/** Memory lines are saved as markdown list items; the notice shows the text. */
+function memoryLineText(entry: string) {
+  return entry.replace(/^\s*[-*]\s+/, "");
+}
+
+function memoryChangeSummary(changes: AgentGroupMemoryChange[]) {
+  const added = changes.filter((change) => change.oldEntry === null).length;
+  const removed = changes.filter((change) => change.newEntry === null).length;
+  const changed = changes.length - added - removed;
+
+  return [
+    added ? `${added} added` : null,
+    changed ? `${changed} changed` : null,
+    removed ? `${removed} removed` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 /** Completed writes stay with the reply, even if memory changes again later. */
 export function GroupMessageMemoryChanges({
   changes,
@@ -20,44 +44,34 @@ export function GroupMessageMemoryChanges({
   changes?: AgentGroupMemoryChange[];
 }) {
   const [, setSearchParams] = useSearchParams();
+  const [open, setOpen] = useState(false);
 
   if (!changes?.length) {
     return null;
   }
 
+  // The same write can repeat in one message; count repeats for a stable key.
+  const seen = new Map<string, number>();
+
+  const shown = (open ? changes : changes.slice(0, 1)).map((change) => {
+    const base = `${change.oldEntry}\u0000${change.newEntry}`;
+    const count = (seen.get(base) ?? 0) + 1;
+
+    seen.set(base, count);
+
+    return { change, key: `${base}\u0000${count}` };
+  });
+
+  const canExpand = changes.length > 1;
+  const summary = memoryChangeSummary(changes);
+
   return (
-    <details className="max-w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
-      <summary className="cursor-pointer rounded text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        Updated group memory
-      </summary>
-      <ol className="mt-2 space-y-3">
-        {changes.map((change, index) => (
-          // Writes can repeat; their position is stable in this saved message.
-          <li
-            className="space-y-1 break-words"
-            key={`${index}-${change.oldEntry}-${change.newEntry}`}
-          >
-            <span className="font-medium">
-              {change.oldEntry === null
-                ? "Added"
-                : change.newEntry === null
-                  ? "Removed"
-                  : "Replaced"}
-            </span>
-            {change.oldEntry === null ? null : (
-              <p>
-                <span className="text-muted-foreground">Old: </span>
-                {change.oldEntry}
-              </p>
-            )}
-            {change.newEntry === null ? null : (
-              <p>
-                <span className="text-muted-foreground">New: </span>
-                {change.newEntry}
-              </p>
-            )}
+    <div className="w-72 max-w-full overflow-hidden rounded-[1.25rem] bg-muted text-sm">
+      <ol className="flex flex-col gap-1 bg-background/50 p-1.5">
+        {shown.map(({ change, key }) => (
+          <li key={key}>
             <button
-              className="rounded text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="group/row flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-left hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() =>
                 setSearchParams(
                   (current) => withPanel(current, "memory", "1"),
@@ -67,14 +81,75 @@ export function GroupMessageMemoryChanges({
                   }
                 )
               }
+              title="Open in Memory"
               type="button"
             >
-              Open Memory
+              {change.oldEntry === null ? (
+                <span
+                  aria-label="Added"
+                  className="w-2.5 shrink-0 font-semibold text-blue-600 dark:text-blue-400"
+                >
+                  +
+                </span>
+              ) : change.newEntry === null ? (
+                <span
+                  aria-label="Removed"
+                  className="w-2.5 shrink-0 font-semibold text-orange-700 dark:text-orange-300"
+                >
+                  −
+                </span>
+              ) : (
+                <span
+                  aria-label="Changed"
+                  className="w-2.5 shrink-0 font-semibold text-muted-foreground"
+                >
+                  ~
+                </span>
+              )}
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5 break-words">
+                {change.oldEntry === null ? null : (
+                  <s className="text-muted-foreground">
+                    {memoryLineText(change.oldEntry)}
+                  </s>
+                )}
+                {change.newEntry === null ? null : (
+                  <span>{memoryLineText(change.newEntry)}</span>
+                )}
+              </span>
+              <ArrowUpRight01Icon
+                aria-hidden
+                className="mt-0.5 size-3.5 shrink-0 text-muted-foreground opacity-0 group-hover/row:opacity-100 group-focus-visible/row:opacity-100"
+              />
             </button>
           </li>
         ))}
       </ol>
-    </details>
+      {canExpand ? (
+        <button
+          aria-expanded={open}
+          className="flex w-full items-center justify-between gap-2 px-3.5 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          onClick={() => setOpen((value) => !value)}
+          type="button"
+        >
+          <span className="flex min-w-0 flex-col">
+            <span className="font-semibold">Group memory</span>
+            <span className="text-muted-foreground text-xs">{summary}</span>
+          </span>
+          <ArrowDown01Icon
+            aria-hidden
+            className={cn(
+              "size-4 shrink-0 text-muted-foreground transition-transform",
+              open && "rotate-180"
+            )}
+          />
+        </button>
+      ) : (
+        <div className="flex flex-col px-3.5 py-2">
+          <span className="font-semibold">Group memory</span>
+          <span className="text-muted-foreground text-xs">{summary}</span>
+        </div>
+      )}
+    </div>
   );
 }
 
