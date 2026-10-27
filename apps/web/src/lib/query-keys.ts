@@ -71,6 +71,7 @@ export const queryKeys = {
   },
   models: ["models"] as const,
   modelsDev: ["modelsDev"] as const,
+  nakamaUpgrade: ["system", "upgrade"] as const,
   nakamaVersion: ["system", "version"] as const,
   notificationDestinations: (orgId: string) =>
     ["notificationDestinations", orgId] as const,

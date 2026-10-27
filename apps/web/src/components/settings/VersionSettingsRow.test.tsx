@@ -34,11 +34,17 @@ test("shows the newer release with its upgrade command and checks again on click
     })
   );
 
+  const upgradeState = spyOn(client, "getNakamaUpgrade").mockResolvedValue({
+    available: false,
+    status: null,
+  });
+
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   cleanups.push(() => {
     check.mockRestore();
+    upgradeState.mockRestore();
     act(() => root.unmount());
     container.remove();
   });
@@ -75,4 +81,67 @@ test("shows the newer release with its upgrade command and checks again on click
 
   expect(check).toHaveBeenCalledTimes(2);
   expect(container.querySelector("pre")).toBeNull();
+});
+
+test("with the updater running, Update sends the release and shows a rollback", async () => {
+  const check = spyOn(client, "getNakamaVersion").mockResolvedValue({
+    current: "0.4.59",
+    latest: "0.4.60",
+    releaseUrl: "https://github.com/ahmadrosid/nakama/releases/tag/v0.4.60",
+    updateAvailable: true,
+  });
+
+  const upgradeState = spyOn(client, "getNakamaUpgrade").mockResolvedValue({
+    available: true,
+    status: {
+      at: "2026-10-27T00:00:00Z",
+      message: "0.4.60 did not become healthy. Restored 0.4.59 and its data.",
+      state: "rolled_back",
+      version: "0.4.59",
+    },
+  });
+
+  const start = spyOn(client, "startNakamaUpgrade").mockResolvedValue({
+    available: true,
+    status: null,
+  });
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  cleanups.push(() => {
+    check.mockRestore();
+    upgradeState.mockRestore();
+    start.mockRestore();
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  // SAFETY: VersionSettingsRow reads only user.isPlatformAdmin from this fixture.
+  const auth = { user: { isPlatformAdmin: true } } as AuthContextValue;
+
+  await act(async () => {
+    root.render(
+      <AuthContext.Provider value={auth}>
+        <QueryClientProvider client={new QueryClient()}>
+          <VersionSettingsRow version="0.4.59" />
+        </QueryClientProvider>
+      </AuthContext.Provider>
+    );
+  });
+  await settle();
+
+  expect(container.querySelector("pre")).toBeNull();
+  expect(container.querySelector(".text-destructive")?.textContent).toContain(
+    "Restored 0.4.59"
+  );
+
+  const button = [...container.querySelectorAll("button")].find(
+    (node) => node.textContent === "Update to 0.4.60"
+  );
+
+  await act(async () => button?.click());
+  await settle();
+
+  expect(start).toHaveBeenCalledWith("0.4.60");
 });

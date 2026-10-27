@@ -609,6 +609,28 @@ export function useNakamaVersionQuery(enabled: boolean) {
   });
 }
 
+/** Polls while the updater runs, and keeps polling through the restart. */
+export function useNakamaUpgradeQuery(enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryFn: () => client.getNakamaUpgrade(),
+    queryKey: queryKeys.nakamaUpgrade,
+    refetchInterval: (query) =>
+      query.state.data?.available || query.state.error ? 3000 : false,
+    retry: false,
+  });
+}
+
+export function useStartNakamaUpgrade() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (version: string) => client.startNakamaUpgrade(version),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.nakamaUpgrade }),
+  });
+}
+
 export function useHealthQuery() {
   return useQuery(healthQueryOptions);
 }

@@ -451,6 +451,17 @@ export interface NakamaVersionResponse {
   updateAvailable: boolean;
 }
 
+export interface NakamaUpgradeResponse {
+  /** False until the Compose updater service is running. */
+  available: boolean;
+  status: {
+    at: string;
+    message: string;
+    state: "running" | "done" | "failed" | "rolled_back";
+    version: string;
+  } | null;
+}
+
 export interface WebPublicUrlSettingsResponse {
   /** Set when NAKAMA_WEB_PUBLIC_URL / NAKAMA_PUBLIC_URL overrides the saved value. */
   envOverride: string | null;

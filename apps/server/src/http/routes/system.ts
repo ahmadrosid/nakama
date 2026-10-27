@@ -15,6 +15,8 @@ import {
   checkNakamaVersion,
   isOnboardingEnabled,
   isUpdateCheckEnabled,
+  readUpgradeState,
+  requestUpgrade,
 } from "../../services/system-status-service";
 import type { ServerOptions } from "../context";
 import {
@@ -250,6 +252,76 @@ export function registerSystemRoutes(
     tags: ["Health"],
   });
 
+  const upgradeStateSchema = z
+    .object({
+      available: z.boolean(),
+      status: z
+        .object({
+          at: z.string(),
+          message: z.string(),
+          state: z.enum(["running", "done", "failed", "rolled_back"]),
+          version: z.string(),
+        })
+        .nullable(),
+    })
+    .openapi("NakamaUpgradeResponse");
+
+  const upgradeStateRoute = createRoute({
+    method: "get",
+    operationId: "getNakamaUpgrade",
+    path: "/v1/system/upgrade",
+    responses: {
+      200: {
+        content: { "application/json": { schema: upgradeStateSchema } },
+        description: "Whether the updater runs, and the last upgrade",
+      },
+      403: {
+        content: { "application/json": { schema: errorSchema } },
+        description: "Platform admin required",
+      },
+    },
+    summary: "Read the upgrade status",
+    tags: ["Health"],
+  });
+
+  const startUpgradeRoute = createRoute({
+    method: "post",
+    operationId: "startNakamaUpgrade",
+    path: "/v1/system/upgrade",
+    request: {
+      body: {
+        content: {
+          "application/json": {
+            schema: z
+              .object({ version: z.string() })
+              .openapi("StartNakamaUpgradeRequest"),
+          },
+        },
+        required: true,
+      },
+    },
+    responses: {
+      202: {
+        content: { "application/json": { schema: upgradeStateSchema } },
+        description: "Upgrade handed to the updater",
+      },
+      400: {
+        content: { "application/json": { schema: errorSchema } },
+        description: "Not a newer release",
+      },
+      403: {
+        content: { "application/json": { schema: errorSchema } },
+        description: "Platform admin required",
+      },
+      409: {
+        content: { "application/json": { schema: errorSchema } },
+        description: "No updater, or an upgrade is running",
+      },
+    },
+    summary: "Upgrade this install to a newer release",
+    tags: ["Health"],
+  });
+
   const getWebPublicUrlRoute = createRoute({
     method: "get",
     operationId: "getWebPublicUrl",
@@ -359,6 +431,25 @@ export function registerSystemRoutes(
     }
 
     return c.json(await checkNakamaVersion(getNakamaVersion()), 200);
+  });
+
+  app.openapi(upgradeStateRoute, async (c) => {
+    requirePlatformAdminFromContext(c);
+
+    return c.json(await readUpgradeState(), 200);
+  });
+
+  app.openAPIRegistry.registerPath(startUpgradeRoute);
+
+  app.post("/v1/system/upgrade", async (c) => {
+    requirePlatformAdminFromContext(c);
+
+    const body = await readJson(
+      c.req.raw,
+      z.object({ version: z.string().regex(/^\d+\.\d+\.\d+$/) }).strict()
+    );
+
+    return c.json(await requestUpgrade(body.version, getNakamaVersion()), 202);
   });
 
   app.openapi(getWebPublicUrlRoute, async (c) => {

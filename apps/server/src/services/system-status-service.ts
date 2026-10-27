@@ -1,7 +1,10 @@
+import { readFile, stat, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type {
   HealthResponse,
   LlmUsageStats,
   LlmUsageStatus,
+  NakamaUpgradeResponse,
   NakamaVersionResponse,
   SystemStatusResponse,
   WorkerProcessInfo,
@@ -382,4 +385,68 @@ export async function checkNakamaVersion(
     releaseUrl: cachedRelease.releaseUrl,
     updateAvailable: isNewer(cachedRelease.latest, current),
   };
+}
+
+const UPDATER_STALE_MS = 30_000;
+
+const upgradeStatusSchema = z.object({
+  at: z.string(),
+  message: z.string(),
+  state: z.enum(["running", "done", "failed", "rolled_back"]),
+  version: z.string(),
+});
+
+function updaterDir(): string | null {
+  return process.env.NAKAMA_UPDATER_DIR?.trim() || null;
+}
+
+/** The updater touches its heartbeat every two seconds while it waits. */
+export async function readUpgradeState(
+  now = Date.now()
+): Promise<NakamaUpgradeResponse> {
+  const dir = updaterDir();
+
+  if (!dir) {
+    return { available: false, status: null };
+  }
+
+  const beat = await stat(join(dir, "heartbeat")).catch(() => null);
+
+  const status = upgradeStatusSchema.safeParse(
+    await readFile(join(dir, "status.json"), "utf8")
+      .then(JSON.parse)
+      .catch(() => null)
+  );
+
+  return {
+    available: beat !== null && now - beat.mtimeMs < UPDATER_STALE_MS,
+    status: status.success ? status.data : null,
+  };
+}
+
+export async function requestUpgrade(
+  version: string,
+  current: string
+): Promise<NakamaUpgradeResponse> {
+  const state = await readUpgradeState();
+  const dir = updaterDir();
+
+  if (!(dir && state.available)) {
+    throw new NakamaApiError("The updater service is not running.", 409);
+  }
+
+  if (state.status?.state === "running") {
+    throw new NakamaApiError("An upgrade is already running.", 409);
+  }
+
+  if (!isNewer(version, current)) {
+    throw new NakamaApiError(
+      `${version} is not a release newer than ${current}.`,
+      400
+    );
+  }
+
+  await writeFile(join(dir, "request"), `${version}\n`);
+
+  return state;
 }

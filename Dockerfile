@@ -95,8 +95,9 @@ RUN if [ "$INSTALL_MEET_DEPS" = "true" ]; then \
       && bun install --frozen-lockfile --production --ignore-scripts; \
     fi
 
-# A named volume copies this owner on first mount, so uid 1000 can write backups there.
-RUN mkdir -p /nakama/data /nakama/backups \
+# A named volume copies this owner on first mount, so uid 1000 can write
+# backups and upgrade requests there.
+RUN mkdir -p /nakama/data /nakama/backups /nakama/updates \
   && if getent group 1000 >/dev/null; then \
        G=$(getent group 1000 | cut -d: -f1); \
        [ "$G" = nakama ] || groupmod -n nakama "$G"; \
@@ -107,9 +108,10 @@ RUN mkdir -p /nakama/data /nakama/backups \
        U=$(getent passwd 1000 | cut -d: -f1); \
        usermod -l nakama -g nakama -d /nakama/data "$U"; \
      else useradd --system --uid 1000 --gid nakama --home-dir /nakama/data --create-home nakama; fi \
-  && chown nakama:nakama /nakama/data /nakama/backups
+  && chown nakama:nakama /nakama/data /nakama/backups /nakama/updates
 
 COPY --chown=1000:1000 package.json ./
+COPY --chown=1000:1000 scripts/nakama-updater.sh scripts/nakama-updater.sh
 COPY --chown=1000:1000 apps/server apps/server
 COPY --chown=1000:1000 packages packages
 COPY --chown=1000:1000 --from=build-assets /app/apps/web/dist apps/web/dist

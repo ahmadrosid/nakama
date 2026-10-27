@@ -13,6 +13,7 @@ import type {
   HealthResponse,
   ListProvidersResponse,
   ModelsResponse,
+  NakamaUpgradeResponse,
   NakamaVersionResponse,
   PluginWorkerStatus,
   PreviewDataImportRequest,
@@ -92,6 +93,17 @@ export class SystemClient extends NakamaClientCore {
 
   async getNakamaVersion(): Promise<NakamaVersionResponse> {
     return this.request<NakamaVersionResponse>("/v1/system/version");
+  }
+
+  async getNakamaUpgrade(): Promise<NakamaUpgradeResponse> {
+    return this.request<NakamaUpgradeResponse>("/v1/system/upgrade");
+  }
+
+  async startNakamaUpgrade(version: string): Promise<NakamaUpgradeResponse> {
+    return this.request<NakamaUpgradeResponse>("/v1/system/upgrade", {
+      body: JSON.stringify({ version }),
+      method: "POST",
+    });
   }
 
   async getWebPublicUrl(): Promise<WebPublicUrlSettingsResponse> {

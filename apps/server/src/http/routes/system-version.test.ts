@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { getNakamaVersion } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { asTestFetch } from "../../providers/test-helpers";
@@ -131,5 +134,80 @@ describe("GET /v1/system/version", () => {
     );
 
     expect(updates).toEqual([false, true, true, false, false]);
+  });
+
+  test("the Update button hands a newer version to a running updater, platform admins only", async () => {
+    const { app, authService, databaseAdapter } = createMinimalHonoApp({
+      agent: { listProfiles: async () => ({ profiles: [] }) },
+      databaseAdapter: createInMemoryDatabaseAdapter(),
+    });
+
+    const admin = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "admin-upgrade@org.com"
+    );
+
+    const upgrade = (session: typeof admin, orgId: string, version: string) =>
+      app.fetch(
+        new Request("http://localhost:4310/v1/system/upgrade", {
+          body: JSON.stringify({ version }),
+          headers: session.headers(
+            {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": session.csrfToken,
+            },
+            orgId
+          ),
+          method: "POST",
+        })
+      );
+
+    const dir = mkdtempSync(join(tmpdir(), "nakama-updates-"));
+
+    process.env.NAKAMA_UPDATER_DIR = dir;
+
+    try {
+      expect((await upgrade(admin, admin.orgId!, "999.0.0")).status).toBe(409);
+
+      writeFileSync(join(dir, "heartbeat"), "");
+
+      expect((await upgrade(admin, admin.orgId!, "latest")).status).toBe(400);
+      expect((await upgrade(admin, admin.orgId!, "0.0.1")).status).toBe(400);
+      expect((await upgrade(admin, admin.orgId!, "999.0.0")).status).toBe(202);
+      expect(readFileSync(join(dir, "request"), "utf8")).toBe("999.0.0\n");
+
+      writeFileSync(
+        join(dir, "status.json"),
+        JSON.stringify({
+          at: "2026-10-27T00:00:00Z",
+          message: "Starting 999.0.0.",
+          state: "running",
+          version: "999.0.0",
+        })
+      );
+
+      expect((await upgrade(admin, admin.orgId!, "999.0.0")).status).toBe(409);
+
+      const tenantAdmin = await seedOrgAdmin(databaseAdapter, {
+        authService,
+        email: "tenant-upgrade@example.com",
+        orgId: "upgrade-tenant",
+        userId: "user_upgrade_tenant",
+      });
+
+      const tenantSession = await loginUserSession(
+        app,
+        tenantAdmin.email,
+        tenantAdmin.password,
+        tenantAdmin.orgId
+      );
+
+      expect(
+        (await upgrade(tenantSession, tenantAdmin.orgId, "999.0.0")).status
+      ).toBe(403);
+    } finally {
+      delete process.env.NAKAMA_UPDATER_DIR;
+    }
   });
 });

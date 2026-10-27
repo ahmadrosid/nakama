@@ -69,6 +69,19 @@ The newest backup can be up to a day old. For a fresh one, use **Export ZIP** in
 
 To roll back, set the previous version and run `docker compose up -d` again. Database migrations only move forward, so if the newer version already started, restore the backup taken before the upgrade as well.
 
+### Upgrade from Settings
+
+The Compose file has an optional `updater` service. With it running, a platform admin sees **Update available** next to the version in the account menu, and **Settings → Version** shows an **Update to** button. Turn it on in `.env`:
+
+```bash
+echo COMPOSE_PROFILES=updater >> .env
+docker compose up -d
+```
+
+The updater downloads the new image, archives the data volume to `nakama-backups` as `pre-upgrade-<version>-<time>.tar.gz` (the newest three are kept), starts the new version and compares the row count of every table. If the new version is not healthy within four minutes, or a table has fewer rows, it restores the archive and the previous version. The result shows in Settings.
+
+The updater mounts the Docker socket, which gives it root on the host. It opens no port and only acts on requests from Nakama. Leave the profile off if you prefer to upgrade by hand.
+
 Without `NAKAMA_VERSION` the file follows `latest`, and `docker compose pull` takes whatever was released last.
 
 ## Build from source
