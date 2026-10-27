@@ -35,6 +35,13 @@ describe("stripCursorPositionReports", () => {
 });
 
 describe("consumeTerminalInput", () => {
+  test("keeps mouse and key events but filters terminal responses", () => {
+    expect(consumeTerminalInput("\x1b[<64;12;8M\x1b[12;1R\x1b[A")).toEqual({
+      events: ["\x1b[<64;12;8M", "\x1b[A"],
+      pending: "",
+    });
+  });
+
   test("keeps Kitty key events intact across chunk boundaries", () => {
     const sequence = "\x1b[104:72;2:1u";
 

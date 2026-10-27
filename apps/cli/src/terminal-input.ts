@@ -57,19 +57,12 @@ export function stripCursorPositionReports(pending: string) {
 }
 
 export function isTerminalResponse(chunk: string): boolean {
-  if (CURSOR_POSITION_REPORT.test(chunk)) {
-    return true;
-  }
-
-  if (chunk === "\x1b[I" || chunk === "\x1b[O") {
-    return true;
-  }
-
-  if (/^\x1b\[\?\d+;\d+\$y$/.test(chunk)) {
-    return true;
-  }
-
-  return false;
+  return (
+    CURSOR_POSITION_REPORT.test(chunk) ||
+    chunk === "\x1b[I" ||
+    chunk === "\x1b[O" ||
+    /^\x1b\[\?\d+;\d+\$y$/.test(chunk)
+  );
 }
 
 export function isMouseEventReport(chunk: string): boolean {
@@ -132,9 +125,10 @@ export function consumeTerminalInput(buffer: string) {
 
       const sequence = match[0];
 
-      if (isMouseEventReport(sequence)) {
-        events.push(sequence);
-      } else if (!(isTerminalResponse(sequence) || isKeyRelease(sequence))) {
+      if (
+        isMouseEventReport(sequence) ||
+        !(isTerminalResponse(sequence) || isKeyRelease(sequence))
+      ) {
         events.push(sequence);
       }
 
