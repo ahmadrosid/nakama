@@ -62,21 +62,67 @@ export function splitTelegramChunks(
 
   const chunks: string[] = [];
   let remaining = trimmed;
+  // Opening line of a code fence that the previous chunk closed early.
+  let openFence: string | null = null;
 
-  while (remaining.length > maxLength) {
-    let splitAt = remaining.lastIndexOf("\n", maxLength);
+  while (remaining) {
+    const prefix = openFence === null ? "" : `${openFence}\n`;
 
-    if (splitAt <= 0) {
-      splitAt = maxLength;
+    if (prefix.length + remaining.length <= maxLength) {
+      chunks.push(prefix + remaining);
+      break;
     }
 
-    chunks.push(remaining.slice(0, splitAt).trimEnd());
-    remaining = remaining.slice(splitAt).trimStart();
-  }
+    const budget = Math.max(1, maxLength - prefix.length - FENCE_CLOSE.length);
+    const splitAt = findSplitIndex(remaining, budget);
+    const body = remaining.slice(0, splitAt).trimEnd();
+    const fenceAfter = fenceStateAfter(body, openFence);
 
-  if (remaining) {
-    chunks.push(remaining);
+    chunks.push(`${prefix}${body}${fenceAfter === null ? "" : FENCE_CLOSE}`);
+    openFence = fenceAfter;
+
+    let rest = remaining.slice(splitAt);
+
+    if (rest.startsWith("\n") || rest.startsWith(" ")) {
+      rest = rest.slice(1);
+    }
+
+    // Keep code indentation; outside a fence, drop extra blank space.
+    remaining = openFence === null ? rest.trimStart() : rest;
   }
 
   return chunks;
+}
+
+const FENCE_CLOSE = "\n```";
+
+/** Last newline in the budget, else last space, else a hard cut. */
+function findSplitIndex(text: string, budget: number): number {
+  const newline = text.lastIndexOf("\n", budget);
+
+  if (newline >= budget / 2) {
+    return newline;
+  }
+
+  const splitAt = Math.max(newline, text.lastIndexOf(" ", budget));
+
+  return splitAt > 0 ? splitAt : budget;
+}
+
+/** Fence opening line still open after `body`, or null when closed. */
+function fenceStateAfter(
+  body: string,
+  openFence: string | null
+): string | null {
+  let state = openFence;
+
+  for (const line of body.split("\n")) {
+    const trimmedLine = line.trim();
+
+    if (trimmedLine.startsWith("```")) {
+      state = state === null ? trimmedLine : null;
+    }
+  }
+
+  return state;
 }
