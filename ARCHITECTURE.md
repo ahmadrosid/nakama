@@ -141,9 +141,9 @@ These route groups run after org middleware: `system`, `audit-events`, `auth`, `
 
 ## Multi-tenancy
 
-Org-scoped authenticated requests need an active org. The middleware resolves it from `X-Org-Id`, the plugin UI path, or the active org in the auth context or session. Local-token requests can fall back to the user's first org. Auth and platform routes skip this check.
+Org-scoped authenticated requests need an active org. The middleware resolves it from `X-Org-Id`, the plugin UI path, or the active org in the auth context or session. A local-token request with no org uses the user's org only when they belong to exactly one; with more, it returns 400. Auth and platform routes skip this check.
 
-Org roles are `admin`, `member`, and `viewer`. A platform admin uses `/v1/platform/*`.
+Org roles are `admin` and `member`. A platform admin uses `/v1/platform/*`.
 
 - [`org-middleware.ts`](./apps/server/src/http/org-middleware.ts)
 - [`org-guards.ts`](./apps/server/src/http/org-guards.ts)
@@ -159,7 +159,7 @@ Prompt layers:
 
 1. [`soul/compose.ts`](./packages/core/src/soul/compose.ts) supplies soul content.
 2. [`skills/compose.ts`](./packages/core/src/skills/compose.ts) supplies the skills catalog and agent-browser text.
-3. The service adds org memory from `~/.nakama/orgs/{orgId}/MEMORY.md` for roles that are not `viewer`.
+3. The service adds org memory from `~/.nakama/orgs/{orgId}/MEMORY.md` for every org role.
 4. [`chat-prompt.ts`](./packages/agent/src/chat-prompt.ts) supplies structure and tool instructions.
 5. [`chat.ts`](./packages/agent/src/chat.ts) generates the per-turn reply.
 

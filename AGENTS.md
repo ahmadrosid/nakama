@@ -146,13 +146,13 @@ Path bugs (tool resolves under repo instead of `~/.nakama`) → start here.
 | Path | Purpose |
 |---|---|
 | `~/.nakama/orgs/{orgId}/profiles/{profileId}/` | Profile workspace / soul — `getProfileSoulDir()` |
-| `~/.nakama/tools/*.js`, `*.py` | Custom JS / Python tools — `getCustomToolsDir()` |
+| `~/.nakama/orgs/{orgId}/tools/*.js`, `*.py` | Custom JS / Python tools — `getCustomToolsDir(orgId)` (`~/.nakama/tools/` only when there is no org) |
 
 Always build context with `buildToolExecutionContext()` (`packages/core/src/tools/context.ts`) so `workspaceRoot` = soul dir. Custom JS: `context.workspaceRoot`, **not** `process.cwd()`. Custom Python: `NAKAMA_WORKSPACE_ROOT` env.
 
 | | Built-in | Custom JS | Custom Python |
 |---|---|---|---|
-| Code | `packages/core/src/tools/`, `apps/server/src/tools/` | `~/.nakama/tools/*.js` | `~/.nakama/tools/*.py` |
+| Code | `packages/core/src/tools/`, `apps/server/src/tools/` | `~/.nakama/orgs/{orgId}/tools/*.js` | `~/.nakama/orgs/{orgId}/tools/*.py` |
 | Workspace | `getProfileSoulDir` inside handler | `context.workspaceRoot` | `NAKAMA_WORKSPACE_ROOT` env |
 | Loader | builtins map | `javascript-tool-loader.ts` | `python-tool-loader.ts` |
 
@@ -163,9 +163,9 @@ Always build context with `buildToolExecutionContext()` (`packages/core/src/tool
 | Playground | `POST /v1/tools/:toolId/run` → `runToolPlayground()` |
 | Param suggest | `POST /v1/tools/:toolId/params/suggest` |
 
-**Parallel tool calls:** `parallelSafe: true` on read/search/fetch builtins (`read_file`, `search_files`, `knowledge_base_search`, `web_search`, `web_fetch`). Mutating / shell / delegation stay sequential. Custom JS opts in via `handlerConfig.parallelSafe`; Python always sequential. Mixed turn → whole turn sequential.
+**Parallel tool calls:** `parallelSafe: true` on read/search/fetch builtins (`read_file`, `search_files`, `knowledge_base_search`, `web_search`, `web_fetch`). Mutating / shell stay sequential; `sub_agent` is the exception and runs in parallel. Custom JS opts in via `handlerConfig.parallelSafe`; Python always sequential. Mixed turn → whole turn sequential.
 
-**Debug:** (1) path under `~/.nakama/tools/`, (2) `buildToolExecutionContext` + real `profileId`, (3) monorepo-root paths ⇒ missing `workspaceRoot`, (4) test files in the assigned profile workspace. Super Nakama rules: `SUPER_NAKAMA_SYSTEM_PROMPT` in `packages/db/src/constants.ts`.
+**Debug:** (1) path under `~/.nakama/orgs/{orgId}/tools/`, (2) `buildToolExecutionContext` + real `profileId`, (3) monorepo-root paths ⇒ missing `workspaceRoot`, (4) test files in the assigned profile workspace. Super Nakama rules: `SUPER_NAKAMA_SYSTEM_PROMPT` in `packages/db/src/constants.ts`.
 
 **Playground UI:** `/system/playground/:toolId` — `ToolPlaygroundPage.tsx`, `ToolPlaygroundPanel.tsx`; admin-only via `canUseToolPlayground()`.
 
@@ -177,6 +177,6 @@ Always build context with `buildToolExecutionContext()` (`packages/core/src/tool
 - `packages/db` — DB
 - `packages/client` — API client
 
-Server: Hono in `apps/server/src/http/app.ts`. Middleware: auth → org → routes (`routes/*`). OpenAPI: `openapi.ts` (`/openapi.json`). Viewers are blocked by `requireNotViewer` (worker control, agent invoke).
+Server: Hono in `apps/server/src/http/app.ts`. Middleware: auth → org → routes (`routes/*`). OpenAPI: `openapi.ts` (`/openapi.json`). Routes that need an org admin or member call `requireOrgAdmin` / `requireOrgMember` (`http/org-guards.ts`).
 
 Don't use compound engineering skills!
