@@ -5,6 +5,7 @@ import {
   Message01Icon,
   SlackIcon,
   SmartPhone01Icon,
+  UserGroupIcon,
 } from "hugeicons-react";
 
 type ServiceStatusTone = "ok" | "warn" | "bad" | "muted";
@@ -18,6 +19,7 @@ export function buildServiceColumns(status: SystemStatusResponse) {
     whatsappWorker,
     discordWorker,
     slackWorker,
+    teamsWorker,
   } = status;
 
   return [
@@ -46,6 +48,11 @@ export function buildServiceColumns(status: SystemStatusResponse) {
       title: "Slack",
       // Same configured / running / paired shape as the Discord bridge.
       ...discordServiceStatus(slackWorker),
+    },
+    {
+      icon: UserGroupIcon,
+      title: "Microsoft Teams",
+      ...teamsServiceStatus(teamsWorker),
     },
   ] satisfies Array<{
     icon: typeof Clock01Icon;
@@ -107,6 +114,29 @@ function whatsappServiceStatus(
   }
 
   return { status: "Online", tone: "ok" };
+}
+
+/**
+ * A running Teams worker is a local listener. Whether Microsoft can reach it
+ * depends on the public messaging endpoint, which this status cannot see, so
+ * it is never reported as online.
+ */
+function teamsServiceStatus(
+  teamsWorker: SystemStatusResponse["teamsWorker"]
+): ServiceStatus {
+  if (!teamsWorker.configured) {
+    return { status: "Not set up", tone: "muted" };
+  }
+
+  if (!teamsWorker.running) {
+    return { status: "Offline", tone: "bad" };
+  }
+
+  if (!teamsWorker.paired) {
+    return { status: "No users allowed", tone: "warn" };
+  }
+
+  return { status: "Listening locally", tone: "ok" };
 }
 
 function discordServiceStatus(

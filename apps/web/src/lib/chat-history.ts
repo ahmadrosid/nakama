@@ -599,6 +599,8 @@ export function formatSessionChannelLabel(channel: AgentChannel): string {
       return "Discord";
     case "slack":
       return "Slack";
+    case "teams":
+      return "Microsoft Teams";
     case "web":
       return "Web";
     default:

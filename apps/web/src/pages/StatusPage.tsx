@@ -149,6 +149,7 @@ function StatusDashboard({
     whatsappWorker,
     discordWorker,
     slackWorker,
+    teamsWorker,
   } = status;
 
   const workerByTitle = new Map<
@@ -165,6 +166,7 @@ function StatusDashboard({
     ["Automation", { worker: automationWorker, workerName: "automation" }],
     ["Discord", { worker: discordWorker, workerName: "discord" }],
     ["Slack", { worker: slackWorker, workerName: "slack" }],
+    ["Microsoft Teams", { worker: teamsWorker, workerName: "teams" }],
     ["Telegram", { worker: telegramWorker, workerName: "telegram" }],
     [
       "WhatsApp",
