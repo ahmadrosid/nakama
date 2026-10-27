@@ -99,6 +99,7 @@ export const AGENT_CHANNELS = [
   "whatsapp",
   "discord",
   "slack",
+  "teams",
   "automation",
   "task",
   "subagent",
@@ -183,6 +184,15 @@ export interface DiscordWorkerStatus {
 }
 
 export interface SlackWorkerStatus {
+  configured: boolean;
+  connected: boolean;
+  ok: boolean;
+  paired: boolean;
+  process?: WorkerProcessInfo;
+  running: boolean;
+}
+
+export interface TeamsWorkerStatus {
   configured: boolean;
   connected: boolean;
   ok: boolean;
@@ -1684,6 +1694,24 @@ export interface DiscordSettingsResponse {
   inviteUrl: string | null;
   pairedUserIds: string[];
   profileId: string;
+}
+
+export interface TeamsSettingsResponse {
+  allowedUserIds: string[];
+  clientId: string | null;
+  clientSecretConfigured: boolean;
+  configured: boolean;
+  messagingEndpoint: string | null;
+  profileId: string;
+  tenantId: string | null;
+}
+
+export interface UpdateTeamsSettingsRequest {
+  allowedUserIds?: string;
+  clientId?: string;
+  clientSecret?: string;
+  profileId?: string;
+  tenantId?: string;
 }
 
 export interface UpdateDiscordSettingsRequest {
