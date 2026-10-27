@@ -66,12 +66,12 @@ export function GroupMessageMemoryChanges({
   const summary = memoryChangeSummary(changes);
 
   return (
-    <div className="w-72 max-w-full overflow-hidden rounded-[1.25rem] bg-muted text-sm">
-      <ol className="flex flex-col gap-1 bg-background/50 p-1.5">
+    <div className="w-72 max-w-full overflow-hidden rounded-[1.25rem] border border-border bg-background text-sm">
+      <ol className="flex flex-col gap-1 p-1.5">
         {shown.map(({ change, key }) => (
           <li key={key}>
             <button
-              className="group/row flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-left hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="group/row flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() =>
                 setSearchParams(
                   (current) => withPanel(current, "memory", "1"),
@@ -87,21 +87,21 @@ export function GroupMessageMemoryChanges({
               {change.oldEntry === null ? (
                 <span
                   aria-label="Added"
-                  className="w-2.5 shrink-0 font-semibold text-blue-600 dark:text-blue-400"
+                  className="w-2.5 shrink-0 font-semibold text-primary"
                 >
                   +
                 </span>
               ) : change.newEntry === null ? (
                 <span
                   aria-label="Removed"
-                  className="w-2.5 shrink-0 font-semibold text-orange-700 dark:text-orange-300"
+                  className="w-2.5 shrink-0 font-semibold text-destructive"
                 >
                   −
                 </span>
               ) : (
                 <span
                   aria-label="Changed"
-                  className="w-2.5 shrink-0 font-semibold text-muted-foreground"
+                  className="w-2.5 shrink-0 font-semibold text-foreground/70"
                 >
                   ~
                 </span>
@@ -127,26 +127,26 @@ export function GroupMessageMemoryChanges({
       {canExpand ? (
         <button
           aria-expanded={open}
-          className="flex w-full items-center justify-between gap-2 px-3.5 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          className="flex w-full items-center justify-between gap-2 border-border border-t bg-muted px-3.5 py-2 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
           onClick={() => setOpen((value) => !value)}
           type="button"
         >
           <span className="flex min-w-0 flex-col">
             <span className="font-semibold">Group memory</span>
-            <span className="text-muted-foreground text-xs">{summary}</span>
+            <span className="text-foreground/70 text-xs">{summary}</span>
           </span>
           <ArrowDown01Icon
             aria-hidden
             className={cn(
-              "size-4 shrink-0 text-muted-foreground transition-transform",
+              "size-4 shrink-0 text-foreground/70 transition-transform",
               open && "rotate-180"
             )}
           />
         </button>
       ) : (
-        <div className="flex flex-col px-3.5 py-2">
+        <div className="flex flex-col border-border border-t bg-muted px-3.5 py-2">
           <span className="font-semibold">Group memory</span>
-          <span className="text-muted-foreground text-xs">{summary}</span>
+          <span className="text-foreground/70 text-xs">{summary}</span>
         </div>
       )}
     </div>
