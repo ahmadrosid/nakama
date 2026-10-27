@@ -1,12 +1,15 @@
 services:
   nakama:
-    image: ghcr.io/ahmadrosid/nakama:latest
+    # Set NAKAMA_VERSION (e.g. 0.4.57) to pin a release; a rollback is the previous number.
+    image: ghcr.io/ahmadrosid/nakama:${NAKAMA_VERSION:-latest}
     ports:
       - "4310:4310"
     env_file:
       - nakama-secrets.env
     environment:
       - NAKAMA_CONFIG_DIR=/nakama/data
+      # Daily encrypted export, newest 7 kept. Must stay outside the data volume.
+      - NAKAMA_BACKUP_DIR=/nakama/backups
       # Optional: skip the browser setup wizard on first boot.
       # All three must be set together or none at all.
       # - NAKAMA_SEED_ADMIN_EMAIL=admin@example.com
@@ -17,7 +20,9 @@ services:
       # - NAKAMA_WEB_PUBLIC_URL=https://nakama.example.com
     volumes:
       - nakama-data:/nakama/data
+      - nakama-backups:/nakama/backups
     restart: unless-stopped
 
 volumes:
   nakama-data:
+  nakama-backups:

@@ -48,6 +48,29 @@ Open `http://localhost:4310`. The container serves the API, web dashboard, and p
 
 Data is stored at `/nakama/data` inside the container. The `-v nakama-data:/nakama/data` volume persists orgs, profiles, sessions, provider settings, and the local SQLite database across restarts.
 
+## Upgrade
+
+The Compose file pins the image with `NAKAMA_VERSION` and writes a daily encrypted backup to the `nakama-backups` volume. Put the version in a `.env` file beside `docker-compose.yaml`:
+
+```bash
+echo NAKAMA_VERSION=0.4.57 > .env
+docker compose up -d
+```
+
+To upgrade, check that a backup exists, then change the number:
+
+```bash
+docker compose exec nakama ls -l /nakama/backups
+sed -i 's/^NAKAMA_VERSION=.*/NAKAMA_VERSION=0.4.58/' .env
+docker compose pull && docker compose up -d
+```
+
+The newest backup can be up to a day old. For a fresh one, use **Export ZIP** in the dashboard first ([Backup and restore](/backup-restore)).
+
+To roll back, set the previous version and run `docker compose up -d` again. Database migrations only move forward, so if the newer version already started, restore the backup taken before the upgrade as well.
+
+Without `NAKAMA_VERSION` the file follows `latest`, and `docker compose pull` takes whatever was released last.
+
 ## Build from source
 
 From the repository root:

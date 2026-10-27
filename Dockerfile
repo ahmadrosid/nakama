@@ -90,7 +90,8 @@ RUN if [ "$INSTALL_MEET_DEPS" = "true" ]; then \
       && bun install --frozen-lockfile --production --ignore-scripts; \
     fi
 
-RUN mkdir -p /nakama/data \
+# A named volume copies this owner on first mount, so uid 1000 can write backups there.
+RUN mkdir -p /nakama/data /nakama/backups \
   && if getent group 1000 >/dev/null; then \
        G=$(getent group 1000 | cut -d: -f1); \
        [ "$G" = nakama ] || groupmod -n nakama "$G"; \
@@ -101,7 +102,7 @@ RUN mkdir -p /nakama/data \
        U=$(getent passwd 1000 | cut -d: -f1); \
        usermod -l nakama -g nakama -d /nakama/data "$U"; \
      else useradd --system --uid 1000 --gid nakama --home-dir /nakama/data --create-home nakama; fi \
-  && chown nakama:nakama /nakama/data
+  && chown nakama:nakama /nakama/data /nakama/backups
 
 COPY --chown=1000:1000 package.json ./
 COPY --chown=1000:1000 apps/server apps/server
