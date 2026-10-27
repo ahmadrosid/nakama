@@ -66,7 +66,7 @@ export function GroupMessageMemoryChanges({
   const summary = memoryChangeSummary(changes);
 
   return (
-    <div className="w-fit min-w-48 max-w-72 overflow-hidden rounded-2xl border border-border bg-background text-sm">
+    <div className="w-fit min-w-80 max-w-96 overflow-hidden rounded-2xl border border-border bg-background text-sm">
       <ol className="flex flex-col p-1">
         {shown.map(({ change, key }) => (
           <li key={key}>
