@@ -76,7 +76,8 @@ WORKDIR /app
 # Debian's 62.x drops clamp()/vw sizes, so decks print with default text.
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl sudo python3 python3-venv \
     python3-pip libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core \
-  && pip3 install --no-cache-dir --break-system-packages weasyprint==70.0 \
+  && PIP_NO_COMPILE=1 pip3 install --no-cache-dir --break-system-packages weasyprint==70.0 \
+  && apt-get purge -y python3-pip && apt-get autoremove -y \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=ffmpeg-binaries /ffmpeg /ffprobe /usr/local/bin/
 
