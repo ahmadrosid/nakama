@@ -286,9 +286,13 @@ export function useAutomationsPage() {
     ]);
   }
 
-  function goToCreateAutomation(draft?: string) {
+  function goToCreateAutomation(draft?: string, options?: { send?: boolean }) {
     if (profileId) {
-      navigateToNewChat(profileId, { draft, intent: "automation" });
+      navigateToNewChat(profileId, {
+        draft,
+        intent: "automation",
+        send: options?.send,
+      });
 
       return;
     }
@@ -302,6 +306,7 @@ export function useAutomationsPage() {
     navigateToNewChat(superNakamaProfile.id, {
       draft,
       intent: "automation",
+      send: options?.send,
     });
   }
 

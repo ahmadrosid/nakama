@@ -302,6 +302,14 @@ export function useChatPage() {
   const messageQueueRef = useRef<QueuedSend[]>([]);
   const isSendingRef = useRef(false);
   const skipNextProfileSessionRef = useRef(false);
+
+  const pendingSendRef = useRef<{ profileId: string; text: string } | null>(
+    null
+  );
+
+  // The new-chat link that already queued its send; StrictMode reruns effects.
+  const queuedSendSearchRef = useRef<string | null>(null);
+
   const loadedRouteRef = useRef<string | null>(null);
   const profileIdRef = useRef(profileId);
   const busyRef = useRef(busy);
@@ -1002,7 +1010,10 @@ export function useChatPage() {
   // Layout effect so session is cleared before the syncChatUrl effect can
   // re-push the previous /chat/:profile/:session URL (first-click blink).
   useLayoutEffect(() => {
-    if (searchParams.get("new") !== "1") {
+    if (
+      searchParams.get("new") !== "1" ||
+      queuedSendSearchRef.current === location.search
+    ) {
       return;
     }
 
@@ -1062,11 +1073,20 @@ export function useChatPage() {
         ? AUTOMATION_COMPOSER_PLACEHOLDER
         : undefined;
 
-    if (requestedDraft !== null) {
+    const send =
+      requestedDraft && targetProfileId && searchParams.get("send") === "1";
+
+    if (send) {
+      queuedSendSearchRef.current = location.search;
+      pendingSendRef.current = {
+        profileId: targetProfileId,
+        text: requestedDraft,
+      };
+    } else if (requestedDraft !== null) {
       storeComposerDraft(targetDraftKey, requestedDraft);
     }
 
-    if (requestedDraft !== null || placeholder) {
+    if ((requestedDraft !== null && !pendingSendRef.current) || placeholder) {
       setComposerEntry((current) => ({
         initialInput: requestedDraft ?? current.initialInput,
         placeholder,
@@ -1538,6 +1558,18 @@ export function useChatPage() {
     },
     [executeSend, profileId, readOnlySession]
   );
+
+  // A new chat opened with send=1 sends its draft once its profile is active.
+  useEffect(() => {
+    const pending = pendingSendRef.current;
+
+    if (!pending || pending.profileId !== profileId) {
+      return;
+    }
+
+    pendingSendRef.current = null;
+    sendMessage(pending.text).catch(() => undefined);
+  }, [profileId, sendMessage]);
 
   /**
    * Branch the session at the checkpoint before `prompt`, then send `text` into

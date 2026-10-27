@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act } from "react";
+import { act, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import {
@@ -982,3 +982,151 @@ test("a member changes thinking effort for this chat only", async () => {
     });
   }
 });
+
+test.each([false, true])(
+  "a new chat with a draft sends it at once only when asked (send: %s)",
+  async (send) => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    const previousStorage = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "localStorage"
+    );
+
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: window.localStorage,
+    });
+    const previousProfile = useActiveChatProfileStore.getState();
+    useActiveChatProfileStore.setState({
+      orgId: "orgA",
+      profileId: "profileA",
+    });
+    queryClient.setQueryData(queryKeys.profiles.all, [
+      { id: "profileA", name: "A" },
+    ]);
+
+    const sent: string[] = [];
+    const streamMocks: ReturnType<typeof spyOn>[] = [];
+
+    const createSession = spyOn(client, "createSession").mockImplementation(
+      async () => {
+        const chat = client.createChatSession("created", "web");
+        streamMocks.push(
+          spyOn(chat, "sendStream").mockImplementation(async (input) => {
+            sent.push(input instanceof Object ? input.message : input);
+
+            return "reply";
+          })
+        );
+
+        return chat;
+      }
+    );
+
+    const spies = [
+      // SAFETY: These fixture fields cover the session view used by this test.
+      spyOn(client, "getSessionMessages").mockResolvedValue({
+        channel: "web",
+        messageMeta: [],
+        messages: [],
+        model: null,
+        questionnaire: null,
+        todos: [],
+      } as never),
+      // SAFETY: The page reads only `active` from this session status fixture.
+      spyOn(client, "getSessionStatus").mockResolvedValue({
+        active: false,
+      } as never),
+      // SAFETY: The test does not use thinking settings.
+      spyOn(client, "getThinkingSettings").mockResolvedValue({} as never),
+      // SAFETY: The test reads only profile id and skills from this fixture.
+      spyOn(client, "getProfile").mockResolvedValue({
+        profile: { id: "profileA", skills: [] },
+      } as never),
+      // SAFETY: The page reads only profile id and name from this fixture.
+      spyOn(client, "listProfiles").mockResolvedValue({
+        profiles: [{ id: "profileA", name: "A" }],
+      } as never),
+    ];
+
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const draft = "Create an automation. Every hour, check my email.";
+
+    const search = new URLSearchParams({
+      draft,
+      intent: "automation",
+      new: "1",
+      profile: "profileA",
+    });
+
+    if (send) {
+      search.set("send", "1");
+    }
+
+    function Probe() {
+      useChatPage();
+
+      return null;
+    }
+
+    try {
+      await act(async () =>
+        root.render(
+          <StrictMode>
+            <MemoryRouter initialEntries={[`/chat?${search}`]}>
+              <QueryClientProvider client={queryClient}>
+                <AuthContext.Provider
+                  value={
+                    /* SAFETY: The test supplies every auth value read by this page. */
+                    {
+                      activeOrg: { id: "orgA", name: "orgA" },
+                      isAuthenticated: true,
+                      isLoading: false,
+                      user: { activeOrgId: "orgA", id: "user", orgId: "orgA" },
+                    } as never
+                  }
+                >
+                  <AppProvider>
+                    <Routes>
+                      <Route
+                        element={<Probe />}
+                        path="/chat/:profileId?/:sessionId?"
+                      />
+                    </Routes>
+                  </AppProvider>
+                </AuthContext.Provider>
+              </QueryClientProvider>
+            </MemoryRouter>
+          </StrictMode>
+        )
+      );
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+
+      expect(sent).toEqual(send ? [draft] : []);
+      expect(createSession).toHaveBeenCalledTimes(send ? 1 : 0);
+    } finally {
+      await act(async () => root.unmount());
+      createSession.mockRestore();
+
+      for (const spy of [...spies, ...streamMocks]) {
+        spy.mockRestore();
+      }
+
+      queryClient.clear();
+      useActiveChatProfileStore.setState(previousProfile);
+      window.localStorage.clear();
+
+      if (previousStorage) {
+        Object.defineProperty(globalThis, "localStorage", previousStorage);
+      } else {
+        Reflect.deleteProperty(globalThis, "localStorage");
+      }
+    }
+  }
+);
