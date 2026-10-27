@@ -11,6 +11,7 @@
   "dependencies": {
     "@microsoft/teams.apps": "2.1.1",
     "@nakama/client": "workspace:*",
-    "@nakama/core": "workspace:*"
+    "@nakama/core": "workspace:*",
+    "zod": "^4.6.5"
   }
 }

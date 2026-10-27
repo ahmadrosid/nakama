@@ -77,9 +77,11 @@ function createHarness(
 
       return makeSession(id);
     },
-    forOrg: () => client,
+    forOrg: (_orgId: string | null) => client,
+    health: async () => ({ ok: true, providerConfigured: true }),
     listProfiles: async () => ({ profiles: [{ id: "default" }] }),
     listUserOrgs: async () => ({ orgs: createDefaultTestOrgs() }),
+    setOrgId: () => {},
   } as NakamaClient;
 
   const sessionStore = new ChannelSessionStore(

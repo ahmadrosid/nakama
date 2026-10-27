@@ -60,7 +60,11 @@ function startFakeWorker(
 
   servers.push(server);
 
-  return server;
+  if (server.port === undefined) {
+    throw new Error("The fake worker did not bind a port.");
+  }
+
+  return { port: server.port };
 }
 
 async function setupOwnedProfile() {
