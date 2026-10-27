@@ -10,7 +10,10 @@ import {
   getWebPublicUrlSettings,
   persistWebPublicUrl,
 } from "../../services/composio-callback-url";
-import { isOnboardingEnabled } from "../../services/system-status-service";
+import {
+  checkNakamaVersion,
+  isOnboardingEnabled,
+} from "../../services/system-status-service";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
@@ -204,6 +207,39 @@ export function registerSystemRoutes(
     tags: ["Health"],
   });
 
+  const versionRoute = createRoute({
+    method: "get",
+    operationId: "getNakamaVersion",
+    path: "/v1/system/version",
+    responses: {
+      200: {
+        content: {
+          "application/json": {
+            schema: z
+              .object({
+                current: z.string(),
+                latest: z.string(),
+                releaseUrl: z.string(),
+                updateAvailable: z.boolean(),
+              })
+              .openapi("NakamaVersionResponse"),
+          },
+        },
+        description: "Running version and the newest GitHub release",
+      },
+      403: {
+        content: { "application/json": { schema: errorSchema } },
+        description: "Platform admin required",
+      },
+      502: {
+        content: { "application/json": { schema: errorSchema } },
+        description: "GitHub releases unreachable",
+      },
+    },
+    summary: "Check for a newer Nakama release",
+    tags: ["Health"],
+  });
+
   const getWebPublicUrlRoute = createRoute({
     method: "get",
     operationId: "getWebPublicUrl",
@@ -302,6 +338,12 @@ export function registerSystemRoutes(
       ),
       200
     );
+  });
+
+  app.openapi(versionRoute, async (c) => {
+    requirePlatformAdminFromContext(c);
+
+    return c.json(await checkNakamaVersion(getNakamaVersion()), 200);
   });
 
   app.openapi(getWebPublicUrlRoute, async (c) => {

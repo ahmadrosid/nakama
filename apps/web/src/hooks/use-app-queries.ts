@@ -599,6 +599,16 @@ export function AppQueryPrefetch() {
   return null;
 }
 
+export function useNakamaVersionQuery(enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryFn: () => client.getNakamaVersion(),
+    queryKey: queryKeys.nakamaVersion,
+    retry: false,
+    staleTime: 60 * 60 * 1000,
+  });
+}
+
 export function useHealthQuery() {
   return useQuery(healthQueryOptions);
 }

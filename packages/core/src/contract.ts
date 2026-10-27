@@ -442,6 +442,13 @@ export interface UpdateWebPublicUrlRequest {
   webPublicUrl: string;
 }
 
+export interface NakamaVersionResponse {
+  current: string;
+  latest: string;
+  releaseUrl: string;
+  updateAvailable: boolean;
+}
+
 export interface WebPublicUrlSettingsResponse {
   /** Set when NAKAMA_WEB_PUBLIC_URL / NAKAMA_PUBLIC_URL overrides the saved value. */
   envOverride: string | null;

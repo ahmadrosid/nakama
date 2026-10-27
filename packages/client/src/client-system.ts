@@ -13,6 +13,7 @@ import type {
   HealthResponse,
   ListProvidersResponse,
   ModelsResponse,
+  NakamaVersionResponse,
   PluginWorkerStatus,
   PreviewDataImportRequest,
   ProfilePackImportRequest,
@@ -87,6 +88,10 @@ export class SystemClient extends NakamaClientCore {
         method: "PUT",
       }
     );
+  }
+
+  async getNakamaVersion(): Promise<NakamaVersionResponse> {
+    return this.request<NakamaVersionResponse>("/v1/system/version");
   }
 
   async getWebPublicUrl(): Promise<WebPublicUrlSettingsResponse> {
