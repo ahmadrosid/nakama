@@ -1328,6 +1328,11 @@ export interface DatabaseAdapter {
     orgId: string
   ): Promise<StoredOrgSharedResourceRecord[]>;
   listPasskeys(userId: string): Promise<StoredPasskeyRecord[]>;
+  /** Not accepted, not revoked and not expired at `now`, newest first. */
+  listPendingOrgInvites(
+    orgId: string,
+    now: string
+  ): Promise<StoredOrgInviteRecord[]>;
 
   listPlatformAdminUsers(): Promise<StoredUserRecord[]>;
 
@@ -1484,6 +1489,12 @@ export interface DatabaseAdapter {
     sessionId: string | null,
     revokedAt: string
   ): Promise<number>;
+  /** Only a pending invite of this org; the org check is in the statement. */
+  revokeOrgInvite(
+    orgId: string,
+    id: string,
+    revokedAt: string
+  ): Promise<boolean>;
   setFilePinned(
     orgId: string,
     userId: string,

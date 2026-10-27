@@ -3238,6 +3238,24 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     LIMIT 1
   `);
 
+  const listPendingOrgInvitesStmt = db.prepare<
+    OrgInviteRow,
+    SQLQueryBindings[]
+  >(`
+    SELECT
+      id, org_id, email, role, token_hash, invited_by_user_id,
+      expires_at, accepted_at, revoked_at, created_at
+    FROM org_invites
+    WHERE org_id = ? AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > ?
+    ORDER BY created_at DESC
+  `);
+
+  const revokeOrgInviteStmt = db.prepare(`
+    UPDATE org_invites
+    SET revoked_at = ?
+    WHERE id = ? AND org_id = ? AND accepted_at IS NULL AND revoked_at IS NULL
+  `);
+
   const markOrgInviteAcceptedStmt = db.prepare(`
     UPDATE org_invites
     SET accepted_at = ?
@@ -5756,6 +5774,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return listPasskeysStmt.all(userId).map((row) => toPasskeyRecord(row));
     },
 
+    async listPendingOrgInvites(orgId, now) {
+      return listPendingOrgInvitesStmt.all(orgId, now).map(toOrgInviteRecord);
+    },
+
     async listPlatformAdminUsers() {
       const rows = listPlatformAdminUsersStmt.all();
 
@@ -6080,6 +6102,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
 
       return result.changes;
+    },
+
+    async revokeOrgInvite(orgId, id, revokedAt) {
+      return revokeOrgInviteStmt.run(revokedAt, id, orgId).changes > 0;
     },
     async setFilePinned(orgId, userId, profileId, path, pinned) {
       if (pinned) {

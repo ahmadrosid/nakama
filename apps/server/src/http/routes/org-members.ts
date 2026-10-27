@@ -2,6 +2,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import type {
   AddOrgMemberResponse,
   CreateOrganizationResponse,
+  ListOrgInvitesResponse,
   ListOrgMembersResponse,
   ListOrgSharedResourcesResponse,
   OrganizationOverviewResponse,
@@ -101,6 +102,10 @@ export function registerOrgMemberRoutes(
 
   const orgMemberParams = orgIdParam.extend({
     userId: z.string().openapi({ param: { in: "path", name: "userId" } }),
+  });
+
+  const orgInviteParams = orgIdParam.extend({
+    inviteId: z.string().openapi({ param: { in: "path", name: "inviteId" } }),
   });
 
   const resourceKindSchema = z.enum([
@@ -674,6 +679,95 @@ export function registerOrgMemberRoutes(
     });
 
     return json<OrgInviteCreatedResponse>(invite, 201);
+  });
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "listOrgInvites",
+      path: "/v1/orgs/{orgId}/invites",
+      request: { params: orgIdParam },
+      responses: {
+        200: {
+          content: {
+            "application/json": {
+              schema: z
+                .object({})
+                .passthrough()
+                .openapi("ListOrgInvitesResponse"),
+            },
+          },
+          description: "Pending invites listed",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "List pending organization invites",
+      tags: ["Organizations"],
+    })
+  );
+
+  app.get("/v1/orgs/:orgId/invites", async (c) => {
+    const auth = requireOrgAdminFromContext(c);
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+
+    if (auth.activeOrgId !== orgId) {
+      return errorResponse("Not found", 404);
+    }
+
+    if (!orgService) {
+      return errorResponse("Organization service not configured", 500);
+    }
+
+    return json<ListOrgInvitesResponse>(await orgService.listInvites(orgId));
+  });
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "delete",
+      operationId: "revokeOrgInvite",
+      path: "/v1/orgs/{orgId}/invites/{inviteId}",
+      request: { params: orgInviteParams },
+      responses: {
+        204: { description: "Invite revoked" },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Revoke a pending organization invite",
+      tags: ["Organizations"],
+    })
+  );
+
+  app.delete("/v1/orgs/:orgId/invites/:inviteId", async (c) => {
+    const auth = requireOrgAdminFromContext(c);
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+
+    if (auth.activeOrgId !== orgId) {
+      return errorResponse("Not found", 404);
+    }
+
+    if (!orgService) {
+      return errorResponse("Organization service not configured", 500);
+    }
+
+    await orgService.revokeInvite(
+      orgId,
+      decodeURIComponent(c.req.param("inviteId"))
+    );
+
+    return new Response(null, { status: 204 });
   });
 
   app.openAPIRegistry.registerPath(

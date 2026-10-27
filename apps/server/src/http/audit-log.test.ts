@@ -22,6 +22,7 @@ describe("audit event coverage", () => {
       ["POST", "/v1/auth/active-org", "auth.active_org"],
       ["POST", "/v1/auth/setup/import/restore", "data.import"],
       ["POST", "/v1/orgs/org_1/invites", "invite.create"],
+      ["DELETE", "/v1/orgs/org_1/invites/invite_1", "invite.revoke"],
       ["PATCH", "/v1/orgs/org_1/members/user_1", "member.role_update"],
       ["PUT", "/v1/settings/email", "settings.update"],
       ["PATCH", "/v1/providers/provider_1", "provider.update"],

@@ -40,6 +40,7 @@ import type {
   CreateOrganizationRequest,
   CreateOrganizationResponse,
   CreateTeamRequest,
+  ListOrgInvitesResponse,
   ListOrgMembersResponse,
   ListOrgSharedResourcesResponse,
   ListUserOrgsResponse,
@@ -2070,6 +2071,31 @@ export class OrgService {
       invite: toOrgInviteSummary(record),
       token: delivery.ok ? null : token,
     };
+  }
+
+  async listInvites(orgId: string): Promise<ListOrgInvitesResponse> {
+    await this.requireActiveOrganization(orgId);
+
+    const records = await this.databaseAdapter.listPendingOrgInvites(
+      orgId,
+      new Date().toISOString()
+    );
+
+    return { invites: records.map(toOrgInviteSummary) };
+  }
+
+  async revokeInvite(orgId: string, inviteId: string): Promise<void> {
+    await this.requireActiveOrganization(orgId);
+
+    const revoked = await this.databaseAdapter.revokeOrgInvite(
+      orgId,
+      inviteId,
+      new Date().toISOString()
+    );
+
+    if (!revoked) {
+      throw new NakamaApiError("Not found", 404);
+    }
   }
 
   async acceptInvite(request: AcceptOrgInviteRequest): Promise<{

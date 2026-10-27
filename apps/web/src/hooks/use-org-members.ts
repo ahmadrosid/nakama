@@ -114,6 +114,23 @@ function invalidateOrgMembers(
   ]);
 }
 
+export function useOrgInvites(orgId: string | null) {
+  return useQuery({
+    enabled: Boolean(orgId),
+    queryFn: () => client.listOrgInvites(orgId ?? ""),
+    queryKey: queryKeys.orgInvites(orgId ?? ""),
+  });
+}
+
+export function useRevokeOrgInvite(orgId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (inviteId: string) => client.revokeOrgInvite(orgId, inviteId),
+    onSuccess: () => invalidateOrgMembers(queryClient, orgId),
+  });
+}
+
 export function useInviteOrgMember(orgId: string) {
   const queryClient = useQueryClient();
 

@@ -21,8 +21,10 @@ import { useAuth } from "@/context/use-auth";
 import {
   useAddOrgMember,
   useInviteOrgMember,
+  useOrgInvites,
   useOrgMembers,
   useRemoveOrgMember,
+  useRevokeOrgInvite,
   useSetOrgMemberDisabled,
   useUpdateOrgMember,
 } from "@/hooks/use-org-members";
@@ -484,6 +486,8 @@ export function OrgMembersCard() {
                   updatePending={updateMemberMutation.isPending}
                 />
 
+                <PendingInvites orgId={activeOrg.id} />
+
                 {statusLine ? (
                   <p
                     className="px-4 pt-2 pb-3 text-destructive text-sm"
@@ -511,6 +515,52 @@ export function OrgMembersCard() {
         updatePending={updateMemberMutation.isPending}
       />
     </>
+  );
+}
+
+function PendingInvites({ orgId }: { orgId: string }) {
+  const invites = useOrgInvites(orgId).data?.invites ?? [];
+  const revoke = useRevokeOrgInvite(orgId);
+
+  if (invites.length === 0) {
+    return null;
+  }
+
+  return (
+    <section aria-label="Pending invites" className="border-border border-t">
+      <h3 className="bg-muted/40 px-4 py-2.5 text-muted-foreground text-sm">
+        Pending invites
+      </h3>
+      <ul className="divide-y divide-border border-border border-t text-sm">
+        {invites.map((invite) => (
+          <li
+            className="flex items-center justify-between gap-3 px-4 py-2"
+            key={invite.id}
+          >
+            <p className="min-w-0 truncate">
+              {invite.email}
+              <span className="ml-1.5 text-muted-foreground capitalize">
+                {invite.role}
+              </span>
+            </p>
+            <Button
+              aria-label={`Revoke invite for ${invite.email}`}
+              disabled={revoke.isPending}
+              onClick={() =>
+                revoke.mutate(invite.id, {
+                  onError: (error) => toast(formatError(error)),
+                })
+              }
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              Revoke
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

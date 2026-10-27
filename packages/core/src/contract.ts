@@ -773,6 +773,10 @@ export interface ListOrgMembersResponse {
   members: OrgMemberSummary[];
 }
 
+export interface ListOrgInvitesResponse {
+  invites: OrgInviteSummary[];
+}
+
 export interface AddOrgMemberRequest {
   email: string;
   name: string;
