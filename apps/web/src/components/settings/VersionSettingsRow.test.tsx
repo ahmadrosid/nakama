@@ -36,6 +36,7 @@ test("shows the newer release with its upgrade command and checks again on click
 
   const upgradeState = spyOn(client, "getNakamaUpgrade").mockResolvedValue({
     available: false,
+    rollbacks: [],
     status: null,
   });
 
@@ -83,7 +84,7 @@ test("shows the newer release with its upgrade command and checks again on click
   expect(container.querySelector("pre")).toBeNull();
 });
 
-test("with the updater running, Update sends the release and shows a rollback", async () => {
+test("with the updater running, Update sends the release and Restore asks first", async () => {
   const check = spyOn(client, "getNakamaVersion").mockResolvedValue({
     current: "0.4.59",
     latest: "0.4.60",
@@ -93,6 +94,7 @@ test("with the updater running, Update sends the release and shows a rollback", 
 
   const upgradeState = spyOn(client, "getNakamaUpgrade").mockResolvedValue({
     available: true,
+    rollbacks: [{ at: "2026-10-20T01:00:00Z", version: "0.4.58" }],
     status: {
       at: "2026-10-27T00:00:00Z",
       message: "0.4.60 did not become healthy. Restored 0.4.59 and its data.",
@@ -103,6 +105,7 @@ test("with the updater running, Update sends the release and shows a rollback", 
 
   const start = spyOn(client, "startNakamaUpgrade").mockResolvedValue({
     available: true,
+    rollbacks: [],
     status: null,
   });
 
@@ -143,5 +146,23 @@ test("with the updater running, Update sends the release and shows a rollback", 
   await act(async () => button?.click());
   await settle();
 
-  expect(start).toHaveBeenCalledWith("0.4.60");
+  expect(start.mock.calls[0]?.[0]).toBe("0.4.60");
+
+  const restore = [...container.querySelectorAll("button")].find(
+    (node) => node.textContent === "Restore"
+  );
+
+  await act(async () => restore?.click());
+  await settle();
+
+  expect(start).toHaveBeenCalledTimes(1);
+
+  const confirm = [...document.querySelectorAll("button")].find(
+    (node) => node.textContent === "Restore" && !container.contains(node)
+  );
+
+  await act(async () => confirm?.click());
+  await settle();
+
+  expect(start.mock.calls[1]).toEqual(["0.4.58", true]);
 });

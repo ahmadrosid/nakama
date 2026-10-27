@@ -454,6 +454,8 @@ export interface NakamaVersionResponse {
 export interface NakamaUpgradeResponse {
   /** False until the Compose updater service is running. */
   available: boolean;
+  /** Versions with an archive of their data, newest first, current excluded. */
+  rollbacks: Array<{ at: string; version: string }>;
   status: {
     at: string;
     message: string;

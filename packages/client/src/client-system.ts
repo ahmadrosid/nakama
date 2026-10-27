@@ -99,9 +99,12 @@ export class SystemClient extends NakamaClientCore {
     return this.request<NakamaUpgradeResponse>("/v1/system/upgrade");
   }
 
-  async startNakamaUpgrade(version: string): Promise<NakamaUpgradeResponse> {
+  async startNakamaUpgrade(
+    version: string,
+    rollback = false
+  ): Promise<NakamaUpgradeResponse> {
     return this.request<NakamaUpgradeResponse>("/v1/system/upgrade", {
-      body: JSON.stringify({ version }),
+      body: JSON.stringify({ rollback, version }),
       method: "POST",
     });
   }

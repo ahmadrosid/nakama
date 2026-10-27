@@ -255,6 +255,7 @@ export function registerSystemRoutes(
   const upgradeStateSchema = z
     .object({
       available: z.boolean(),
+      rollbacks: z.array(z.object({ at: z.string(), version: z.string() })),
       status: z
         .object({
           at: z.string(),
@@ -293,7 +294,10 @@ export function registerSystemRoutes(
         content: {
           "application/json": {
             schema: z
-              .object({ version: z.string() })
+              .object({
+                rollback: z.boolean().optional(),
+                version: z.string(),
+              })
               .openapi("StartNakamaUpgradeRequest"),
           },
         },
@@ -436,7 +440,7 @@ export function registerSystemRoutes(
   app.openapi(upgradeStateRoute, async (c) => {
     requirePlatformAdminFromContext(c);
 
-    return c.json(await readUpgradeState(), 200);
+    return c.json(await readUpgradeState(getNakamaVersion()), 200);
   });
 
   app.openAPIRegistry.registerPath(startUpgradeRoute);
@@ -446,10 +450,22 @@ export function registerSystemRoutes(
 
     const body = await readJson(
       c.req.raw,
-      z.object({ version: z.string().regex(/^\d+\.\d+\.\d+$/) }).strict()
+      z
+        .object({
+          rollback: z.boolean().optional(),
+          version: z.string().regex(/^\d+\.\d+\.\d+$/),
+        })
+        .strict()
     );
 
-    return c.json(await requestUpgrade(body.version, getNakamaVersion()), 202);
+    return c.json(
+      await requestUpgrade(
+        body.version,
+        getNakamaVersion(),
+        body.rollback ? "rollback" : "upgrade"
+      ),
+      202
+    );
   });
 
   app.openapi(getWebPublicUrlRoute, async (c) => {

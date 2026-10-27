@@ -148,10 +148,15 @@ describe("GET /v1/system/version", () => {
       "admin-upgrade@org.com"
     );
 
-    const upgrade = (session: typeof admin, orgId: string, version: string) =>
+    const upgrade = (
+      session: typeof admin,
+      orgId: string,
+      version: string,
+      rollback?: boolean
+    ) =>
       app.fetch(
         new Request("http://localhost:4310/v1/system/upgrade", {
-          body: JSON.stringify({ version }),
+          body: JSON.stringify({ rollback, version }),
           headers: session.headers(
             {
               "Content-Type": "application/json",
@@ -164,8 +169,19 @@ describe("GET /v1/system/version", () => {
       );
 
     const dir = mkdtempSync(join(tmpdir(), "nakama-updates-"));
+    const backups = mkdtempSync(join(tmpdir(), "nakama-backups-"));
+
+    for (const name of [
+      "pre-upgrade-0.4.59-20261020T010000Z.tar.gz",
+      "pre-upgrade-0.4.59-20261027T033509Z.tar.gz",
+      `pre-upgrade-${getNakamaVersion()}-20261027T040000Z.tar.gz`,
+      "nakama-2026-10-27T033320Z.zip.enc",
+    ]) {
+      writeFileSync(join(backups, name), "");
+    }
 
     process.env.NAKAMA_UPDATER_DIR = dir;
+    process.env.NAKAMA_BACKUP_DIR = backups;
 
     try {
       expect((await upgrade(admin, admin.orgId!, "999.0.0")).status).toBe(409);
@@ -175,7 +191,29 @@ describe("GET /v1/system/version", () => {
       expect((await upgrade(admin, admin.orgId!, "latest")).status).toBe(400);
       expect((await upgrade(admin, admin.orgId!, "0.0.1")).status).toBe(400);
       expect((await upgrade(admin, admin.orgId!, "999.0.0")).status).toBe(202);
-      expect(readFileSync(join(dir, "request"), "utf8")).toBe("999.0.0\n");
+      expect(readFileSync(join(dir, "request"), "utf8")).toBe(
+        "upgrade 999.0.0\n"
+      );
+
+      const state = await app.fetch(
+        new Request("http://localhost:4310/v1/system/upgrade", {
+          headers: admin.headers({}, admin.orgId!),
+        })
+      );
+
+      // Newest archive per version, and never the running one.
+      expect((await state.json()).rollbacks).toEqual([
+        { at: "2026-10-27T03:35:09Z", version: "0.4.59" },
+      ]);
+      expect((await upgrade(admin, admin.orgId!, "0.4.58", true)).status).toBe(
+        400
+      );
+      expect((await upgrade(admin, admin.orgId!, "0.4.59", true)).status).toBe(
+        202
+      );
+      expect(readFileSync(join(dir, "request"), "utf8")).toBe(
+        "rollback 0.4.59\n"
+      );
 
       writeFileSync(
         join(dir, "status.json"),
@@ -211,6 +249,7 @@ describe("GET /v1/system/version", () => {
       }
     } finally {
       delete process.env.NAKAMA_UPDATER_DIR;
+      delete process.env.NAKAMA_BACKUP_DIR;
     }
   });
 });

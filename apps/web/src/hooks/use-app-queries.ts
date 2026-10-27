@@ -625,7 +625,8 @@ export function useStartNakamaUpgrade() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (version: string) => client.startNakamaUpgrade(version),
+    mutationFn: (request: { rollback?: boolean; version: string }) =>
+      client.startNakamaUpgrade(request.version, request.rollback),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: queryKeys.nakamaUpgrade }),
   });

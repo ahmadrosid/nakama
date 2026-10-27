@@ -1,8 +1,9 @@
 #!/bin/sh
 # Runs as the Compose "updater" service, the only service with the Docker
-# socket. Nakama writes a version to /updates/request; this script upgrades the
-# nakama service to it and puts the old image and data back when the new one is
-# not healthy or a table lost rows. Progress goes to /updates/status.json.
+# socket. Nakama writes "upgrade X" or "rollback X" to /updates/request.
+# Upgrade moves the nakama service to X and puts the old image and data back
+# when X is not healthy or a table lost rows. Rollback returns to X, older or
+# newer, with the data archived when X was left. Progress goes to /updates/status.json.
 set -u
 
 REPO=ghcr.io/ahmadrosid/nakama
@@ -82,41 +83,57 @@ restore() {
   fi
 }
 
-upgrade() {
+# Checks the request and archives the current data with nakama stopped. Sets
+# NAKAMA, DATA, BACKUPS, FROM and ARCHIVE for the caller.
+prepare() {
   TO=$1
   case "$TO" in
-    *[!0-9.]* | "" | .* | *. | *..*) status failed "$TO" "Not a release version."; return ;;
+    *[!0-9.]* | "" | .* | *. | *..*) status failed "$TO" "Not a release version."; return 1 ;;
   esac
-  [ "$(echo "$TO" | tr -cd . | wc -c)" -eq 2 ] || { status failed "$TO" "Not a release version."; return; }
+  [ "$(echo "$TO" | tr -cd . | wc -c)" -eq 2 ] || { status failed "$TO" "Not a release version."; return 1; }
 
   NAKAMA=$(compose ps -q nakama)
-  [ -n "$NAKAMA" ] || { status failed "$TO" "The nakama service is not running."; return; }
+  [ -n "$NAKAMA" ] || { status failed "$TO" "The nakama service is not running."; return 1; }
   DATA=$(mount_of "$NAKAMA" /nakama/data)
   BACKUPS=$(mount_of "$NAKAMA" /nakama/backups)
-  [ -n "$DATA" ] && [ -n "$BACKUPS" ] || { status failed "$TO" "Nakama needs named data and backup volumes."; return; }
+  [ -n "$DATA" ] && [ -n "$BACKUPS" ] || { status failed "$TO" "Nakama needs named data and backup volumes."; return 1; }
   FROM=$(running_version)
+  [ "$FROM" != "$TO" ] || { status failed "$TO" "Already on $TO."; return 1; }
 
   status running "$TO" "Downloading $TO."
   docker image inspect "$REPO:$TO" >/dev/null 2>&1 || docker pull -q "$REPO:$TO" >/dev/null ||
-    { status failed "$TO" "Could not download $TO. Nothing was changed."; return; }
-  # Rollback names the old version, so make sure that tag exists even on :latest.
+    { status failed "$TO" "Could not download $TO. Nothing was changed."; return 1; }
+  # Going back names the old version, so make sure that tag exists even on :latest.
   docker tag "$(docker inspect "$NAKAMA" --format '{{.Image}}')" "$REPO:$FROM"
 
   status running "$TO" "Backing up the data."
-  BEFORE=$(counts) || { status failed "$TO" "Could not read the database. Nothing was changed."; return; }
+  BEFORE=$(counts) || { status failed "$TO" "Could not read the database. Nothing was changed."; return 1; }
   compose stop nakama >/dev/null 2>&1
   ARCHIVE="pre-upgrade-$FROM-$(date -u +%Y%m%dT%H%M%SZ).tar.gz"
   if ! docker run --rm --entrypoint tar -v "$DATA:/nakama/data:ro" -v "$BACKUPS:/backup" "$REPO:$FROM" \
     czf "/backup/$ARCHIVE" -C /nakama/data .; then
     compose start nakama >/dev/null 2>&1
     status failed "$TO" "Backup failed. Nothing was changed."
-    return
+    return 1
   fi
+}
 
+start() {
   status running "$TO" "Starting $TO."
   set_version "$TO"
   compose up -d --no-deps nakama >/dev/null 2>&1
-  wait_healthy "$TO" || { restore "$TO did not become healthy."; return; }
+  wait_healthy "$TO"
+}
+
+# Each archive is a full copy of the data, so keep only the newest three.
+prune() {
+  docker run --rm --entrypoint sh -v "$BACKUPS:/backup" "$REPO:$TO" \
+    -c 'ls -1t /backup/pre-upgrade-*.tar.gz | tail -n +4 | xargs -r rm -f'
+}
+
+upgrade() {
+  prepare "$1" || return
+  start || { restore "$TO did not become healthy."; return; }
 
   AFTER=$(counts) || { restore "Could not read the database on $TO."; return; }
   LOST=$(printf '%s\n' "$BEFORE" | while read -r name before; do
@@ -125,10 +142,24 @@ upgrade() {
   done)
   [ -z "$LOST" ] || { restore "$TO lost rows in: $(echo $LOST)."; return; }
 
-  # Each archive is a full copy of the data, so keep only the newest three.
-  docker run --rm --entrypoint sh -v "$BACKUPS:/backup" "$REPO:$TO" \
-    -c 'ls -1t /backup/pre-upgrade-*.tar.gz | tail -n +4 | xargs -r rm -f'
+  prune
   status done "$TO" "Updated from $FROM to $TO."
+}
+
+# The data goes back to the archive taken when $1 was left, so anything written
+# since then is only in the archive prepare() just made of the current state.
+rollback() {
+  SOURCE=$(docker run --rm --entrypoint sh -v "$(mount_of "$(compose ps -q nakama)" /nakama/backups):/backup:ro" \
+    "$REPO:$(running_version)" -c "ls -1t /backup/pre-upgrade-$1-*.tar.gz 2>/dev/null | head -1")
+  [ -n "$SOURCE" ] || { status failed "$1" "No archive of $1 to return to."; return; }
+  prepare "$1" || return
+
+  docker run --rm --entrypoint sh -v "$DATA:/nakama/data" -v "$BACKUPS:/backup:ro" "$REPO:$TO" \
+    -c "find /nakama/data -mindepth 1 -delete && tar xzf $SOURCE -C /nakama/data"
+  start || { restore "$TO did not become healthy."; return; }
+
+  prune
+  status done "$TO" "Restored $TO with its data from when it was left. $FROM is archived."
 }
 
 mkdir -p "$UPDATES"
@@ -136,9 +167,12 @@ echo "updater: watching $UPDATES for project $PROJECT"
 while true; do
   touch "$UPDATES/heartbeat"
   if [ -f "$UPDATES/request" ]; then
-    version=$(tr -d ' \n' < "$UPDATES/request")
+    read -r action version < "$UPDATES/request"
     rm -f "$UPDATES/request"
-    upgrade "$version"
+    case "$action" in
+      rollback) rollback "$version" ;;
+      *) upgrade "$version" ;;
+    esac
   fi
   sleep 2
 done

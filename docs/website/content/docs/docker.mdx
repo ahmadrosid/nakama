@@ -80,6 +80,8 @@ docker compose up -d
 
 The updater downloads the new image, archives the data volume to `nakama-backups` as `pre-upgrade-<version>-<time>.tar.gz` (the newest three are kept), starts the new version and compares the row count of every table. If the new version is not healthy within four minutes, or a table has fewer rows, it restores the archive and the previous version. The result shows in Settings.
 
+To go back by choice, **Settings → Version** lists the versions that have an archive under **Previous versions**. **Restore** returns to that version and to the data as it was when you left it. The current data is archived first, so it shows up in the same list and you can restore it again.
+
 The updater mounts the Docker socket, which gives it root on the host. It opens no port and only acts on requests from Nakama. Leave the profile off if you prefer to upgrade by hand.
 
 Without `NAKAMA_VERSION` the file follows `latest`, and `docker compose pull` takes whatever was released last.

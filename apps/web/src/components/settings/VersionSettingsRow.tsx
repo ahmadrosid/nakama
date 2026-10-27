@@ -1,8 +1,9 @@
 import type { NakamaUpgradeResponse } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
+import { ConfirmDialog } from "@nakama/ui/dialog";
 import { Spinner } from "@nakama/ui/spinner";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/context/use-auth";
 import {
   useNakamaUpgradeQuery,
@@ -75,7 +76,7 @@ function UpgradeAction({
     <div className="flex flex-wrap items-center gap-3">
       <Button
         disabled={busy}
-        onClick={() => start.mutate(latest)}
+        onClick={() => start.mutate({ version: latest })}
         size="sm"
         type="button"
       >
@@ -86,6 +87,50 @@ function UpgradeAction({
         <p className="text-destructive text-xs" role="alert">
           {formatError(start.error)}
         </p>
+      ) : null}
+    </div>
+  );
+}
+
+function RollbackAction({
+  rollbacks,
+}: {
+  rollbacks: NakamaUpgradeResponse["rollbacks"];
+}) {
+  const start = useStartNakamaUpgrade();
+
+  const [target, setTarget] = useState<(typeof rollbacks)[number] | null>(null);
+
+  return (
+    <div className="space-y-1">
+      <p className="text-muted-foreground text-xs">Previous versions</p>
+      {rollbacks.map((entry) => (
+        <div className="flex items-center gap-3" key={entry.version}>
+          <p className="font-mono text-sm tabular-nums">{entry.version}</p>
+          <p className="text-muted-foreground text-xs">
+            {new Date(entry.at).toLocaleString()}
+          </p>
+          <Button
+            disabled={start.isPending}
+            onClick={() => setTarget(entry)}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            Restore
+          </Button>
+        </div>
+      ))}
+      {target ? (
+        <ConfirmDialog
+          confirmLabel="Restore"
+          description={`Nakama goes back to ${target.version} with its data from ${new Date(target.at).toLocaleString()}. The current data is archived, so you can restore it from this list.`}
+          onClose={() => setTarget(null)}
+          onConfirm={() =>
+            start.mutateAsync({ rollback: true, version: target.version })
+          }
+          title={`Restore ${target.version}?`}
+        />
       ) : null}
     </div>
   );
@@ -165,6 +210,11 @@ export function VersionSettingsRow({
           ) : null}
         </div>
       </div>
+      {upgrade.data?.available &&
+      upgrade.data.rollbacks.length > 0 &&
+      status?.state !== "running" ? (
+        <RollbackAction rollbacks={upgrade.data.rollbacks} />
+      ) : null}
       {latest ? (
         <UpgradeAction
           available={upgrade.data?.available === true}
