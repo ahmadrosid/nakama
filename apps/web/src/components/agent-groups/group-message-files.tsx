@@ -66,12 +66,12 @@ export function GroupMessageMemoryChanges({
   const summary = memoryChangeSummary(changes);
 
   return (
-    <div className="w-72 max-w-full overflow-hidden rounded-[1.25rem] border border-border bg-background text-sm">
-      <ol className="flex flex-col gap-1 p-1.5">
+    <div className="w-fit min-w-48 max-w-72 overflow-hidden rounded-2xl border border-border bg-background text-sm">
+      <ol className="flex flex-col p-1">
         {shown.map(({ change, key }) => (
           <li key={key}>
             <button
-              className="group/row flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="group/row flex w-full items-start gap-2 rounded-xl px-2.5 py-1.5 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() =>
                 setSearchParams(
                   (current) => withPanel(current, "memory", "1"),
@@ -127,26 +127,26 @@ export function GroupMessageMemoryChanges({
       {canExpand ? (
         <button
           aria-expanded={open}
-          className="flex w-full items-center justify-between gap-2 border-border border-t bg-muted px-3.5 py-2 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          className="flex w-full items-center justify-between gap-2 border-border border-t bg-muted px-3.5 py-1.5 text-left text-xs hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
           onClick={() => setOpen((value) => !value)}
           type="button"
         >
-          <span className="flex min-w-0 flex-col">
+          <span className="min-w-0 truncate">
             <span className="font-semibold">Group memory</span>
-            <span className="text-foreground/70 text-xs">{summary}</span>
+            <span className="text-foreground/70"> · {summary}</span>
           </span>
           <ArrowDown01Icon
             aria-hidden
             className={cn(
-              "size-4 shrink-0 text-foreground/70 transition-transform",
+              "size-3.5 shrink-0 text-foreground/70 transition-transform",
               open && "rotate-180"
             )}
           />
         </button>
       ) : (
-        <div className="flex flex-col border-border border-t bg-muted px-3.5 py-2">
+        <div className="truncate border-border border-t bg-muted px-3.5 py-1.5 text-xs">
           <span className="font-semibold">Group memory</span>
-          <span className="text-foreground/70 text-xs">{summary}</span>
+          <span className="text-foreground/70"> · {summary}</span>
         </div>
       )}
     </div>
