@@ -81,6 +81,24 @@ describe("email tool", () => {
     expect(sender.sent).toHaveLength(1);
   });
 
+  test("only org admins, platform admins and automation turns reach the mailbox", async () => {
+    const run = (context: Parameters<typeof emailTool.run>[1]) =>
+      emailTool.run({ action: "list", limit: 1 }, context);
+
+    const refused = { error: "Only org admins can use the email tool." };
+
+    expect(await run({ orgRole: "member" })).toEqual(refused);
+    expect(await run({})).toEqual(refused);
+
+    for (const context of [
+      { orgRole: "admin" as const },
+      { isPlatformAdmin: true, orgRole: "member" as const },
+      { automationId: "automation_1", orgRole: "member" as const },
+    ]) {
+      expect(await run(context)).not.toEqual(refused);
+    }
+  });
+
   test("returns configuration error when mailbox is incomplete", async () => {
     const reader = createFakeMailReader();
     const sender = createFakeMailSender();

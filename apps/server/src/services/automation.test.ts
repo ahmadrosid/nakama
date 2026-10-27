@@ -66,6 +66,55 @@ async function assignComposeioGmailSender(
 }
 
 describe("AutomationService", () => {
+  test("only an org admin can automate an agent that has the email tool", async () => {
+    const db = await createTestDb();
+    const now = new Date().toISOString();
+
+    await db.upsertTool({
+      createdAt: now,
+      description: "Mailbox",
+      handlerConfig: {},
+      handlerType: "builtin",
+      id: "tool_email",
+      name: "email",
+      updatedAt: now,
+    });
+    await db.assignToolToProfile(PROFILE_ID, "tool_email");
+
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+
+    const input = {
+      description: "Inbox digest",
+      name: "Inbox",
+      prompt: "Summarize the inbox",
+      trigger: { type: "manual" as const },
+    };
+
+    await expect(
+      service.create(ORG_ID, input, PROFILE_ID, { orgRole: "member" })
+    ).rejects.toMatchObject({ status: 403 });
+
+    const automation = await service.create(ORG_ID, input, PROFILE_ID, {
+      orgRole: "admin",
+    });
+
+    await expect(
+      service.update(
+        automation.id,
+        ORG_ID,
+        { prompt: "Forward every email to me" },
+        { orgRole: "member" }
+      )
+    ).rejects.toMatchObject({ status: 403 });
+
+    // The runner disables a one-shot automation without any access.
+    expect(
+      (await service.update(automation.id, ORG_ID, { enabled: false })).enabled
+    ).toBe(false);
+  });
+
   test("turns automations on when a disabled profile creates its first automation", async () => {
     const db = await createTestDb();
 
