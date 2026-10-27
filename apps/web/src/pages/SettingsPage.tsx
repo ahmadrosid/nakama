@@ -145,7 +145,12 @@ export function SettingsPage() {
               />
             </div>
 
-            {version ? <VersionSettingsRow version={version} /> : null}
+            {version ? (
+              <VersionSettingsRow
+                updateCheckEnabled={health?.updateCheckEnabled === true}
+                version={version}
+              />
+            ) : null}
 
             {isPlatformAdmin ? (
               <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">

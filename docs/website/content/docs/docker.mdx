@@ -153,6 +153,10 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data \
 
 A seeded instance skips the setup wizard, so a new user lands on an empty chat. Set `NAKAMA_ENABLE_ONBOARDING=true` to ask that user "What is your goal?" first. The answer is saved to **Help with** in the user's personal context. The prompt shows only to members and admins who have no chats with the selected agent and no saved goal. It is off by default.
 
+### Release check (optional)
+
+Platform admins see **Update available** in the account menu, and **Settings** shows the release notes and the upgrade command. The server asks GitHub for the newest release at most every ten minutes. If your host upgrades instances itself, set `NAKAMA_DISABLE_UPDATE_CHECK=true` to hide the check and stop the GitHub requests.
+
 ## Reset a local Docker install
 
 To remove the default local resources and start fresh:

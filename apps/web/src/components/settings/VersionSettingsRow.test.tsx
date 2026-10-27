@@ -50,7 +50,7 @@ test("shows the newer release with its upgrade command and checks again on click
     root.render(
       <AuthContext.Provider value={auth}>
         <QueryClientProvider client={new QueryClient()}>
-          <VersionSettingsRow version="0.4.59" />
+          <VersionSettingsRow updateCheckEnabled version="0.4.59" />
         </QueryClientProvider>
       </AuthContext.Provider>
     );

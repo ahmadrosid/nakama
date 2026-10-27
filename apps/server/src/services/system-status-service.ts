@@ -293,6 +293,7 @@ export class SystemStatusService {
       ok: true,
       onboardingEnabled: isOnboardingEnabled(),
       providerConfigured: this.agent.providerConfigured,
+      updateCheckEnabled: isUpdateCheckEnabled(),
       userConfigured: humanUserCount > 0,
       version: getNakamaVersion(),
     };
@@ -304,6 +305,13 @@ export function isOnboardingEnabled(): boolean {
   const value = process.env.NAKAMA_ENABLE_ONBOARDING?.trim().toLowerCase();
 
   return value === "1" || value === "true";
+}
+
+/** On unless the operator turns it off with `NAKAMA_DISABLE_UPDATE_CHECK`, e.g. a host that upgrades instances itself. */
+export function isUpdateCheckEnabled(): boolean {
+  const value = process.env.NAKAMA_DISABLE_UPDATE_CHECK?.trim().toLowerCase();
+
+  return !(value === "1" || value === "true");
 }
 
 function isString<T>(value: T): value is T & string {

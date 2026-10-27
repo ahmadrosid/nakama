@@ -18,6 +18,7 @@ describe("GET /v1/system/version", () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    delete process.env.NAKAMA_DISABLE_UPDATE_CHECK;
   });
 
   test("compares the running version with the newest release, platform admins only", async () => {
@@ -80,6 +81,36 @@ describe("GET /v1/system/version", () => {
     );
 
     expect((await check(tenantSession, tenantAdmin.orgId)).status).toBe(403);
+  });
+
+  test("NAKAMA_DISABLE_UPDATE_CHECK answers 404 without calling GitHub", async () => {
+    process.env.NAKAMA_DISABLE_UPDATE_CHECK = "true";
+
+    const { app, databaseAdapter } = createMinimalHonoApp({
+      agent: { listProfiles: async () => ({ profiles: [] }) },
+      databaseAdapter: createInMemoryDatabaseAdapter(),
+    });
+
+    const admin = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "admin-version-off@org.com"
+    );
+
+    const github = mock(async () => Response.json({}));
+    globalThis.fetch = asTestFetch(github);
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/system/version", {
+        headers: admin.headers({}, admin.orgId!),
+      })
+    );
+
+    expect(response.status).toBe(404);
+    expect(github).not.toHaveBeenCalled();
+
+    const health = await app.fetch(new Request("http://localhost:4310/health"));
+    expect((await health.json()).updateCheckEnabled).toBe(false);
   });
 
   test("only a higher X.Y.Z release counts as an update", async () => {

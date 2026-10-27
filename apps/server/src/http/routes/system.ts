@@ -4,6 +4,7 @@ import {
   getNakamaVersion,
   isComposioConfiguredAsync,
   NAKAMA_API_VERSION,
+  NakamaApiError,
 } from "@nakama/core";
 import { BUILTIN_TOOL_IDS } from "@nakama/core/tools/protected";
 import {
@@ -13,6 +14,7 @@ import {
 import {
   checkNakamaVersion,
   isOnboardingEnabled,
+  isUpdateCheckEnabled,
 } from "../../services/system-status-service";
 import type { ServerOptions } from "../context";
 import {
@@ -115,6 +117,10 @@ export function registerSystemRoutes(
           "Whether NAKAMA_ENABLE_ONBOARDING is on. The web app then asks a new user for a goal.",
       }),
       providerConfigured: z.boolean(),
+      updateCheckEnabled: z.boolean().openapi({
+        description:
+          "False when NAKAMA_DISABLE_UPDATE_CHECK is set. The web app then hides the release check.",
+      }),
       userConfigured: z.boolean(),
       version: z.string(),
     })
@@ -231,6 +237,10 @@ export function registerSystemRoutes(
         content: { "application/json": { schema: errorSchema } },
         description: "Platform admin required",
       },
+      404: {
+        content: { "application/json": { schema: errorSchema } },
+        description: "NAKAMA_DISABLE_UPDATE_CHECK is set",
+      },
       502: {
         content: { "application/json": { schema: errorSchema } },
         description: "GitHub releases unreachable",
@@ -305,6 +315,7 @@ export function registerSystemRoutes(
         ok: true,
         onboardingEnabled: isOnboardingEnabled(),
         providerConfigured: agent.providerConfigured,
+        updateCheckEnabled: isUpdateCheckEnabled(),
         userConfigured: humanUserCount > 0,
         version: getNakamaVersion(),
       },
@@ -342,6 +353,10 @@ export function registerSystemRoutes(
 
   app.openapi(versionRoute, async (c) => {
     requirePlatformAdminFromContext(c);
+
+    if (!isUpdateCheckEnabled()) {
+      throw new NakamaApiError("Update check is disabled.", 404);
+    }
 
     return c.json(await checkNakamaVersion(getNakamaVersion()), 200);
   });

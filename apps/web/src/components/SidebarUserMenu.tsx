@@ -64,10 +64,12 @@ export function SidebarUserMenu() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [personalisationOpen, setPersonalisationOpen] = useState(false);
   const version = health?.version?.trim();
-  const isPlatformAdmin = user?.isPlatformAdmin === true;
+
+  const canCheckUpdates =
+    user?.isPlatformAdmin === true && health?.updateCheckEnabled === true;
 
   const updateAvailable =
-    useNakamaVersionQuery(isPlatformAdmin).data?.updateAvailable === true;
+    useNakamaVersionQuery(canCheckUpdates).data?.updateAvailable === true;
 
   if (!user) {
     return null;
@@ -221,7 +223,7 @@ export function SidebarUserMenu() {
                   {version ? (
                     <>
                       <div className="h-px bg-border" />
-                      {isPlatformAdmin ? (
+                      {canCheckUpdates ? (
                         <DropdownMenuItem
                           className="rounded-none px-3.5 py-2 font-mono text-2xs text-muted-foreground tabular-nums"
                           render={<Link to={PAGE_PATHS.settings} />}

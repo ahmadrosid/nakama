@@ -40,9 +40,16 @@ function VersionStatus({
   );
 }
 
-export function VersionSettingsRow({ version }: { version: string }) {
+export function VersionSettingsRow({
+  updateCheckEnabled,
+  version,
+}: {
+  updateCheckEnabled: boolean;
+  version: string;
+}) {
   const isPlatformAdmin = useAuth().user?.isPlatformAdmin === true;
-  const query = useNakamaVersionQuery(isPlatformAdmin);
+  const canCheck = updateCheckEnabled && isPlatformAdmin;
+  const query = useNakamaVersionQuery(canCheck);
   const latest = query.data?.updateAvailable ? query.data.latest : null;
 
   return (
@@ -56,7 +63,7 @@ export function VersionSettingsRow({ version }: { version: string }) {
           <p className="font-mono text-muted-foreground text-sm tabular-nums">
             {version}
           </p>
-          {isPlatformAdmin ? (
+          {canCheck ? (
             <Button
               disabled={query.isFetching}
               onClick={() => {

@@ -123,6 +123,7 @@ describe("formatStatusLines", () => {
     ok: true,
     onboardingEnabled: false,
     providerConfigured: true,
+    updateCheckEnabled: true,
     userConfigured: true,
     version: "0.4.10",
   };
