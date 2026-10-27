@@ -136,7 +136,7 @@ describe("GET /v1/system/version", () => {
     expect(updates).toEqual([false, true, true, false, false]);
   });
 
-  test("the Update button hands a newer version to a running updater, platform admins only", async () => {
+  test("the Update button hands a newer version to a running updater, platform admins only, not org admins or members", async () => {
     const { app, authService, databaseAdapter } = createMinimalHonoApp({
       agent: { listProfiles: async () => ({ profiles: [] }) },
       databaseAdapter: createInMemoryDatabaseAdapter(),
@@ -189,23 +189,26 @@ describe("GET /v1/system/version", () => {
 
       expect((await upgrade(admin, admin.orgId!, "999.0.0")).status).toBe(409);
 
-      const tenantAdmin = await seedOrgAdmin(databaseAdapter, {
-        authService,
-        email: "tenant-upgrade@example.com",
-        orgId: "upgrade-tenant",
-        userId: "user_upgrade_tenant",
-      });
+      for (const role of ["admin", "member"] as const) {
+        const tenant = await seedOrgAdmin(databaseAdapter, {
+          authService,
+          email: `tenant-${role}-upgrade@example.com`,
+          orgId: "upgrade-tenant",
+          role,
+          userId: `user_upgrade_${role}`,
+        });
 
-      const tenantSession = await loginUserSession(
-        app,
-        tenantAdmin.email,
-        tenantAdmin.password,
-        tenantAdmin.orgId
-      );
+        const session = await loginUserSession(
+          app,
+          tenant.email,
+          tenant.password,
+          tenant.orgId
+        );
 
-      expect(
-        (await upgrade(tenantSession, tenantAdmin.orgId, "999.0.0")).status
-      ).toBe(403);
+        expect((await upgrade(session, tenant.orgId, "999.0.0")).status).toBe(
+          403
+        );
+      }
     } finally {
       delete process.env.NAKAMA_UPDATER_DIR;
     }
