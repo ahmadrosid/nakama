@@ -155,9 +155,9 @@ $AB --session "$SESSION" wait 1000
 $AB --session "$SESSION" screenshot "$SCREENSHOT_DIR/telegram-worker-logs.png"
 
 # ---------------------------------------------------------------------------
-# Step 3: Control center -> AI Providers -> Audio transcription model picker.
+# Step 3: Settings -> AI Providers -> Audio transcription model picker.
 # ---------------------------------------------------------------------------
-$AB --session "$SESSION" open "${BASE_URL}/customize/providers"
+$AB --session "$SESSION" open "${BASE_URL}/settings/providers"
 $AB --session "$SESSION" wait 2500
 $AB --session "$SESSION" set viewport "$VIEWPORT_WIDTH" 1000
 $AB --session "$SESSION" set media light
@@ -167,9 +167,9 @@ $AB --session "$SESSION" wait 400
 $AB --session "$SESSION" screenshot "$SCREENSHOT_DIR/telegram-audio-transcription.png"
 
 # ---------------------------------------------------------------------------
-# Outbound notifications: Control center -> Notifications destination form.
+# Outbound notifications: Settings -> Notifications destination form.
 # ---------------------------------------------------------------------------
-$AB --session "$SESSION" open "${BASE_URL}/customize/connections/notifications"
+$AB --session "$SESSION" open "${BASE_URL}/settings/connections/notifications"
 $AB --session "$SESSION" wait 2500
 $AB --session "$SESSION" set viewport "$VIEWPORT_WIDTH" 760
 $AB --session "$SESSION" set media light

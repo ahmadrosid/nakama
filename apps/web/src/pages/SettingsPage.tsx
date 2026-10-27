@@ -92,7 +92,7 @@ export function SettingsPage() {
         onOpenChange={(open) => {
           if (!open) {
             setMfaRequiredNotice(false);
-            navigate("/settings", { replace: true });
+            navigate("/settings/preferences", { replace: true });
           }
         }}
         open={mfaRequiredNotice}
@@ -110,7 +110,7 @@ export function SettingsPage() {
               <Button
                 onClick={() => {
                   setMfaRequiredNotice(false);
-                  navigate("/settings", { replace: true });
+                  navigate("/settings/preferences", { replace: true });
                 }}
                 type="button"
               >

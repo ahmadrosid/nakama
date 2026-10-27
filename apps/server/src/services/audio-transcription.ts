@@ -6,7 +6,7 @@ import {
 } from "./provider-instance-helpers";
 
 export const TRANSCRIPTION_MODEL_REQUIRED_MESSAGE =
-  "Configure an audio transcription model in Control center → AI Providers (/customize/providers#transcription) before sending voice messages.";
+  "Configure an audio transcription model in Settings → AI Providers (/settings/providers#transcription) before sending voice messages.";
 
 export function resolveTranscriptionProviderSelection(
   userConfig: UserConfig | null | undefined
@@ -16,9 +16,9 @@ export function resolveTranscriptionProviderSelection(
     userConfig?.transcriptionModel,
     {
       invalid:
-        "Configured audio transcription model is invalid. Update it in Control center → AI Providers (/customize/providers#transcription).",
+        "Configured audio transcription model is invalid. Update it in Settings → AI Providers (/settings/providers#transcription).",
       missingProvider:
-        "Configured audio transcription provider is missing. Update it in Control center → AI Providers (/customize/providers#transcription).",
+        "Configured audio transcription provider is missing. Update it in Settings → AI Providers (/settings/providers#transcription).",
     }
   );
 
@@ -37,7 +37,7 @@ export function resolveTranscriptionProviderSelection(
     )
   ) {
     throw new NakamaApiError(
-      "Audio transcription requires an OpenAI or OpenAI-compatible provider with a base URL. Update it in Control center → AI Providers (/customize/providers#transcription).",
+      "Audio transcription requires an OpenAI or OpenAI-compatible provider with a base URL. Update it in Settings → AI Providers (/settings/providers#transcription).",
       400
     );
   }

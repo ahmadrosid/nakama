@@ -384,7 +384,7 @@ function ComposioNotConfiguredState({
             Save it in{" "}
             <Link
               className="text-foreground underline underline-offset-3"
-              to="/settings#composio"
+              to="/settings/preferences#composio"
             >
               Settings
             </Link>

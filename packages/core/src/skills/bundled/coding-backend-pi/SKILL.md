@@ -7,7 +7,7 @@ You are preparing a coding agent run for [pi.dev](https://github.com/earendil-wo
 
 ## Prerequisites
 - pi installed: `npm install -g @earendil-works/pi-coding-agent` or `bun install -g --trust @earendil-works/pi-coding-agent`.
-- Provider auth configured in Control center → AI Providers (/customize/providers). Nakama writes a temporary `models.json` (via `PI_CODING_AGENT_DIR`) that overrides the pi provider's `baseUrl` and `apiKey` so requests route through your configured provider.
+- Provider auth configured in Settings → AI Providers (/settings/providers). Nakama writes a temporary `models.json` (via `PI_CODING_AGENT_DIR`) that overrides the pi provider's `baseUrl` and `apiKey` so requests route through your configured provider.
 
 ## Command Usage
 For non-interactive print mode tasks, Nakama passes `--provider` and `--model` from your configured provider:

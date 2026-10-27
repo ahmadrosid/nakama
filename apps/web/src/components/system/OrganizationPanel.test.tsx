@@ -4261,7 +4261,7 @@ test("platform admins retain provider management", async () => {
     await settle();
   });
   expect(container.querySelector("[data-chat-location]")?.textContent).toBe(
-    "/customize/providers"
+    "/settings/providers"
   );
 });
 

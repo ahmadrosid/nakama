@@ -79,7 +79,7 @@ By default, skill changes apply immediately. Turn on **write approval** when you
 
 ### Turn it on
 
-Org admins: **Control center → Workspace → Organization → How bots learn skills → Customize → Ask me before a bot saves a skill → Settings**.
+Org admins: **Settings → Workspace → Organization → How bots learn skills → Customize → Ask me before a bot saves a skill → Settings**.
 
 - Flip the toggle to require approval for skill writes org-wide.
 - Optionally override per profile: flip that profile's switch. **Use org default** follows the org again.
@@ -110,7 +110,7 @@ In-session saves can still miss a good workflow: the agent finishes a long tool-
 
 ### Turn it on
 
-Org admins: **Control center → Workspace → Organization → How bots learn skills → Customize**, on the **Bots learn from chats** card. Agent owners and platform admins can also flip **Learn from chats** under **Agent → your agent → Behavior**.
+Org admins: **Settings → Workspace → Organization → How bots learn skills → Customize**, on the **Bots learn from chats** card. Agent owners and platform admins can also flip **Learn from chats** under **Agent → your agent → Behavior**.
 
 - Default is **off** (no extra review pass).
 - Optionally override per profile: flip that profile's switch. **Use org default** follows the org again.
@@ -149,7 +149,7 @@ Both help agents stay consistent across your team, but they solve different prob
 | **What it stores** | Repeatable workflows for one bot | Shared facts for the whole org |
 | **Example** | "How we triage support tickets" | "Support hours are 9–6 SGT" |
 | **Who approves agent writes** | Optional — only when write approval is on | Always — members propose, admins approve |
-| **Where admins manage it** | **Control center → Workspace → Organization → How bots learn skills** | **Control center → Workspace → Organization → Org Memory** |
+| **Where admins manage it** | **Settings → Workspace → Organization → How bots learn skills** | **Settings → Workspace → Organization → Org Memory** |
 
 Use org memory for facts everyone should know. Use skills for how a specific bot should run a task.
 
@@ -184,7 +184,7 @@ Default is **off**. The first scheduled pass after you enable it only records a 
 
 ### Turn it on
 
-Org admins: **Control center → Workspace → Organization → How bots learn skills → Customize → Auto clean-up of skills**.
+Org admins: **Settings → Workspace → Organization → How bots learn skills → Customize → Auto clean-up of skills**.
 
 - Set **Freshness clocks**. Defaults are 30 days stale and 90 days archive; stale must be before archive.
 - Set **Automation worker poll interval** if this installation needs a different schedule reload cadence. It is workspace-global and defaults to 5 minutes.

@@ -208,7 +208,7 @@ function PluginIdentity({
           to={
             canOpen
               ? pluginPagePath(pluginId)
-              : `/customize/plugins/${encodeURIComponent(pluginId)}`
+              : `/settings/plugins/${encodeURIComponent(pluginId)}`
           }
         />
       )}
@@ -483,7 +483,7 @@ function PluginRowMenu({
         {detail ? null : (
           <DropdownMenuItem
             render={
-              <Link to={`/customize/plugins/${encodeURIComponent(pluginId)}`} />
+              <Link to={`/settings/plugins/${encodeURIComponent(pluginId)}`} />
             }
           >
             View details

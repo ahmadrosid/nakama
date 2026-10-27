@@ -1,6 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { type ComponentType, lazy, useEffect } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthGuard } from "@/components/AuthGuard";
 import { PlatformAdminGuard } from "@/components/PlatformAdminGuard";
 import { RouteBoundary } from "@/components/RouteBoundary";
@@ -8,7 +8,7 @@ import { SetupGuard } from "@/components/SetupGuard";
 import { AppProvider } from "@/context/app-context";
 import { AuthProvider } from "@/context/auth-context";
 import { AppQueryPrefetch } from "@/hooks/use-app-queries";
-import { PAGE_PATHS } from "@/lib/navigation";
+import { PAGE_PATHS, settingsPathFromLegacy } from "@/lib/navigation";
 import { onGlobalQueryError, queryClient } from "@/lib/query-client";
 
 const lazyPage = <Name extends string>(
@@ -157,6 +157,17 @@ function QueryCacheListener() {
   return null;
 }
 
+function LegacySettingsRedirect() {
+  const { hash, pathname, search } = useLocation();
+
+  return (
+    <Navigate
+      replace
+      to={`${settingsPathFromLegacy(pathname) ?? PAGE_PATHS.customize}${search}${hash}`}
+    />
+  );
+}
+
 function AppShell() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -227,7 +238,14 @@ function AppShell() {
                     element={<ChatPage />}
                     path="/chat/:profileId/:sessionId"
                   />
-                  <Route element={<CustomizePage />} path="/customize" />
+                  <Route
+                    element={<CustomizePage />}
+                    path={PAGE_PATHS.customize}
+                  />
+                  <Route
+                    element={<LegacySettingsRedirect />}
+                    path="/customize/*"
+                  />
                   <Route element={<PlatformAdminGuard />}>
                     <Route element={<SkillsPage />} path={PAGE_PATHS.skills} />
                   </Route>
@@ -249,14 +267,11 @@ function AppShell() {
                   <Route element={<PlatformAdminGuard allowOrgAdmin />}>
                     <Route
                       element={<PluginsPage />}
-                      path="/customize/plugins/:pluginId"
+                      path="/settings/plugins/:pluginId"
                     />
                   </Route>
                   <Route element={<PlatformAdminGuard allowOrgAdmin />}>
-                    <Route
-                      element={<PluginsPage />}
-                      path="/customize/plugins"
-                    />
+                    <Route element={<PluginsPage />} path="/settings/plugins" />
                     <Route
                       element={<PluginsPage />}
                       path="/system/plugins/:pluginId"
@@ -305,7 +320,7 @@ function AppShell() {
                   <Route element={<IntegrationsPage />} path="/connectors" />
                   <Route
                     element={<IntegrationsPage />}
-                    path="/customize/connections/:section"
+                    path="/settings/connections/:section"
                   />
                   <Route element={<OrganizationPage />} path="/organization" />
                   <Route
@@ -319,10 +334,13 @@ function AppShell() {
                   <Route element={<PlatformAdminGuard />}>
                     <Route
                       element={<LlmProvidersPage />}
-                      path="/customize/providers"
+                      path="/settings/providers"
                     />
                   </Route>
-                  <Route element={<SettingsPage />} path="/settings" />
+                  <Route
+                    element={<SettingsPage />}
+                    path={PAGE_PATHS.settings}
+                  />
                   <Route element={<Navigate replace to="/chat" />} path="*" />
                 </Route>
               </Route>

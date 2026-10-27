@@ -14,6 +14,7 @@ import {
   integrationSectionPath,
   PAGE_PATHS,
   pageIdFromPath,
+  settingsPathFromLegacy,
   visibleIntegrationSections,
   visibleNavGroups,
 } from "./navigation";
@@ -84,11 +85,24 @@ describe("visibleNavGroups", () => {
 });
 
 test("Customize is reachable for every organization role", () => {
-  expect(pageIdFromPath("/customize")).toBe("customize");
+  expect(pageIdFromPath("/settings")).toBe("customize");
 
   for (const role of ["admin", "member"]) {
     expect(pageIdsFor(false, role)).toContain("customize");
   }
+});
+
+test("old /customize links still resolve to Settings pages", () => {
+  expect(pageIdFromPath("/settings/preferences")).toBe("settings");
+  expect(pageIdFromPath("/customize")).toBe("customize");
+  expect(pageIdFromPath("/customize/providers")).toBe("providers");
+  expect(pageIdFromPath("/customize/connections/notifications")).toBe(
+    "customize"
+  );
+  expect(settingsPathFromLegacy("/customize/plugins/abc")).toBe(
+    "/settings/plugins/abc"
+  );
+  expect(settingsPathFromLegacy("/customizer")).toBeNull();
 });
 
 describe("plugin navigation", () => {
@@ -194,7 +208,7 @@ describe("page paths named to the agent", () => {
 
         const text = await readRepoText(file);
 
-        // UI destinations are written as "Control center → Page (/path)".
+        // UI destinations are written as "Settings → Page (/path)".
         for (const [, pagePath] of text.matchAll(
           /→[^()\n"`]*\((\/[a-z/-]+)\)/g
         )) {
@@ -214,8 +228,8 @@ describe("inAppLinkPath", () => {
   const origin = "http://localhost:4310";
 
   test("keeps a relative path to a known page with its hash", () => {
-    expect(inAppLinkPath("/customize/providers#image-generation", origin)).toBe(
-      "/customize/providers#image-generation"
+    expect(inAppLinkPath("/settings/providers#image-generation", origin)).toBe(
+      "/settings/providers#image-generation"
     );
   });
 

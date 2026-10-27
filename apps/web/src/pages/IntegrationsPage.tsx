@@ -74,7 +74,7 @@ export function IntegrationsPage() {
 
   if (!section) {
     if (searchParams.get("section") === "token") {
-      return <Navigate replace to="/settings#local-token" />;
+      return <Navigate replace to="/settings/preferences#local-token" />;
     }
 
     const target = resolveSection(searchParams.get("section"));
@@ -99,7 +99,7 @@ export function IntegrationsPage() {
   ).find((item) => item.id === section);
 
   if (!selected) {
-    return <Navigate replace to="/customize" />;
+    return <Navigate replace to="/settings" />;
   }
 
   return (
@@ -112,9 +112,9 @@ export function IntegrationsPage() {
       {onConnectors ? null : (
         <Link
           className="block w-fit text-muted-foreground text-sm hover:text-foreground"
-          to="/customize"
+          to="/settings"
         >
-          ← Back to Control center
+          ← Back to Settings
         </Link>
       )}
       {onConnectors ? null : (

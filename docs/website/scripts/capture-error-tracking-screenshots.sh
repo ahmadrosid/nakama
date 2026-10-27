@@ -68,7 +68,7 @@ CSRF_VAL=$(awk '$6=="nakama_csrf"{print $7}' "$COOKIE_JAR")
 SESSION_VAL=$(awk '$6=="nakama_session"{print $7}' "$COOKIE_JAR")
 
 # Without a provider the SetupGuard redirects every page to the setup wizard, so
-# the control center never renders. The key is a placeholder and is never used.
+# the Settings hub never renders. The key is a placeholder and is never used.
 curl -sf -b "$COOKIE_JAR" -X POST "${BASE_URL}/v1/providers" \
   -H 'Content-Type: application/json' \
   -H "X-CSRF-Token: ${CSRF_VAL}" \
@@ -83,7 +83,7 @@ $AB --session "$SESSION" cookies set nakama_csrf "$CSRF_VAL" \
 # ---------------------------------------------------------------------------
 # Shot 1: no DSN saved. The badge reads Off and nothing is sent.
 # ---------------------------------------------------------------------------
-$AB --session "$SESSION" open "${BASE_URL}/customize/connections/error-tracking"
+$AB --session "$SESSION" open "${BASE_URL}/settings/connections/error-tracking"
 $AB --session "$SESSION" wait 2500
 $AB --session "$SESSION" set viewport "$VIEWPORT_WIDTH" 620
 $AB --session "$SESSION" set media light

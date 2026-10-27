@@ -21,9 +21,9 @@ export function AuthGuard() {
   if (
     user?.mfaRequired &&
     !user.mfaEnrolled &&
-    location.pathname !== "/settings"
+    location.pathname !== "/settings/preferences"
   ) {
-    return <Navigate replace to="/settings?mfa=required" />;
+    return <Navigate replace to="/settings/preferences?mfa=required" />;
   }
 
   return <Outlet />;

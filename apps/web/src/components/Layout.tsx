@@ -239,7 +239,7 @@ function AppShellHeader({
     {
       customize: "Back to Chat",
       plugins: "Back to Plugins",
-    }[page as string] ?? "Back to Control center";
+    }[page as string] ?? "Back to Settings";
 
   // SAFETY: PageId is a string union; the lookup falls back when the key is absent.
   const backPath =

@@ -235,7 +235,7 @@ function Settings({
           {!configured && (
             <p className="meet-status">
               Add an OpenAI provider in{" "}
-              <a href="/customize/providers">AI Providers</a> to transcribe
+              <a href="/settings/providers">AI Providers</a> to transcribe
               meetings.
             </p>
           )}

@@ -82,7 +82,7 @@ test("the Plugins tab stays reachable when Composio is not configured", async ()
     );
 
   for (let tries = 0; tries < 50; tries++) {
-    if (hrefs().includes("/settings#composio")) {
+    if (hrefs().includes("/settings/preferences#composio")) {
       break;
     }
 
@@ -90,5 +90,5 @@ test("the Plugins tab stays reachable when Composio is not configured", async ()
   }
 
   expect(hrefs()).toContain(PAGE_PATHS["plugin-management"]);
-  expect(hrefs()).toContain("/settings#composio");
+  expect(hrefs()).toContain("/settings/preferences#composio");
 });

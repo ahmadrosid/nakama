@@ -54,7 +54,7 @@ export function ChatComposerError({ message }: { message: string }) {
                 {before}
                 <Link
                   className="font-medium underline underline-offset-2 hover:text-destructive"
-                  to="/settings"
+                  to="/settings/preferences"
                 >
                   Settings
                 </Link>

@@ -91,11 +91,11 @@ Nakama hides this property from the model and adds it to the MCP call. `nakamaCo
 
 ## Setup
 
-Platform admins manage servers in **Control center → Agent tools → MCP** and assign them by opening **Agent**, selecting a profile, and choosing **MCP**. Registering a server does not assign it to any profile.
+Platform admins manage servers in **Settings → Agent tools → MCP** and assign them by opening **Agent**, selecting a profile, and choosing **MCP**. Registering a server does not assign it to any profile.
 
 ### Add a server
 
-1. Open **Control center → Agent tools → MCP**, then select **Add server**
+1. Open **Settings → Agent tools → MCP**, then select **Add server**
 2. Pick the server type: **HTTP** (a URL, with an API key header if it needs one),
    **Sign-in** (a URL that authenticates through your browser) or **Command** (a local
    process), then enter the name and config
@@ -111,7 +111,7 @@ Platform admins manage servers in **Control center → Agent tools → MCP** and
 
 A platform admin can delete a custom MCP server even when profiles use it. Nakama disconnects the server and removes its assignment from every profile. Its tools stop appearing in later chats.
 
-1. Open **Control center → Agent tools → MCP** and select **Delete** on the server
+1. Open **Settings → Agent tools → MCP** and select **Delete** on the server
 2. Review the number of assigned profiles in the dialog
 3. Select **Force delete** to delete the server and remove those assignments
 
@@ -193,7 +193,7 @@ Two things this needs:
 
 - **A reachable public URL.** The provider redirects your browser back to
   `{your Nakama URL}/v1/mcp/oauth/callback/{serverId}`, so set the public URL under
-  **Control center → Workspace → Settings → Public web URL** (or `NAKAMA_WEB_PUBLIC_URL`) for anything other than a local install
+  **Settings → Workspace → Preferences → Public web URL** (or `NAKAMA_WEB_PUBLIC_URL`) for anything other than a local install
 - **Dynamic client registration**, which Nakama uses to register itself with the provider.
   Servers that instead hand you a `client_id` and `client_secret` to paste in are not
   supported yet

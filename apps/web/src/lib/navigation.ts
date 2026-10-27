@@ -120,7 +120,7 @@ const NAV_GROUPS: NavGroup[] = [
       ),
       navItem(
         "customize",
-        "Control center",
+        "Settings",
         "Manage Nakama settings, tools, and integrations",
         SlidersHorizontalIcon
       ),
@@ -167,7 +167,7 @@ const NAV_GROUPS: NavGroup[] = [
       ),
       navItem(
         "settings",
-        "Settings",
+        "Preferences",
         "Appearance and preferences",
         Settings01Icon
       ),
@@ -490,28 +490,28 @@ export const PAGE_PATHS: Record<PageId, string> = {
   automations: "/automations",
   chat: "/chat",
   composio: "/connectors",
-  customize: "/customize",
+  customize: "/settings",
   files: "/files",
   "google-meet": "/google-meet",
   groups: "/groups",
-  mcp: "/customize/mcp",
+  mcp: "/settings/mcp",
   notifications: "/notifications",
   organization: "/organization",
-  "plugin-management": "/customize/plugins",
+  "plugin-management": "/settings/plugins",
   plugins: PLUGIN_PAGE_PREFIX,
   profiles: "/profiles",
-  providers: "/customize/providers",
-  settings: "/settings",
-  skills: "/customize/skills",
+  providers: "/settings/providers",
+  settings: "/settings/preferences",
+  skills: "/settings/skills",
   soul: "/system",
-  tools: "/customize/tools",
-  usage: "/customize/usage",
+  tools: "/settings/tools",
+  usage: "/settings/usage",
   workers: "/workers",
 };
 
 const PREFIX_PAGE_IDS: readonly [string, PageId][] = [
   [PAGE_PATHS.composio, "composio"],
-  ["/customize/connections", "customize"],
+  ["/settings/connections", "customize"],
   [PAGE_PATHS["plugin-management"], "plugin-management"],
   [PAGE_PATHS.chat, "chat"],
   [PAGE_PATHS.groups, "groups"],
@@ -549,9 +549,24 @@ export function findNavItem(pageId: PageId): NavItem | undefined {
   );
 }
 
+/** Settings pages lived under /customize before; old links still point there. */
+export function settingsPathFromLegacy(pathname: string): string | null {
+  if (pathname === "/customize" || pathname.startsWith("/customize/")) {
+    return `/settings${pathname.slice("/customize".length)}`;
+  }
+
+  return null;
+}
+
 export function pageIdFromPath(pathname: string): PageId | null {
   if (pathname === "/tasks") {
     return "automations";
+  }
+
+  const settingsPath = settingsPathFromLegacy(pathname);
+
+  if (settingsPath) {
+    return pageIdFromPath(settingsPath);
   }
 
   const prefixPage = PREFIX_PAGE_IDS.find(
@@ -619,7 +634,7 @@ export type IntegrationSectionId = (typeof INTEGRATION_SECTIONS)[number]["id"];
 export function integrationSectionPath(id: IntegrationSectionId): string {
   return id === "composio"
     ? PAGE_PATHS.composio
-    : `/customize/connections/${id}`;
+    : `/settings/connections/${id}`;
 }
 
 export function visibleIntegrationSections(

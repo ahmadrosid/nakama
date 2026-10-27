@@ -335,7 +335,7 @@ function PluginPageHeader({
       {detail ? (
         <Link
           className="block w-fit text-muted-foreground text-sm hover:text-foreground"
-          to="/customize/plugins"
+          to="/settings/plugins"
         >
           ← Back to plugins
         </Link>

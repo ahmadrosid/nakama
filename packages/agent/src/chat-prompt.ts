@@ -288,7 +288,7 @@ export function buildChatSystemPrompt(
 
   if (options.channel === "web") {
     sections.push(
-      "When you point the user to a Nakama page, including a page path from a tool error, write a Markdown link with the path, for example [AI Providers](/customize/providers#image-generation). It opens in the same tab."
+      "When you point the user to a Nakama page, including a page path from a tool error, write a Markdown link with the path, for example [AI Providers](/settings/providers#image-generation). It opens in the same tab."
     );
   }
 

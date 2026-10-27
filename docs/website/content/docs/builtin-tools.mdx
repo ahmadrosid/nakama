@@ -130,13 +130,13 @@ The `email` tool uses a deployment-global mailbox. Required keys in `~/.nakama/c
 - Resolvable `from` address
 - TLS flags as needed
 
-Org admins configure these from **Control center → Agent tools → Tools**.
+Org admins configure these from **Settings → Agent tools → Tools**.
 
 ### Web search
 
 Requires an OpenAI or Anthropic provider with a configured API key, or an Exa, Firecrawl or Serply search back-end.
 
-Org admins can point `web_search` at an external search API from **Control center → Agent tools → AI Providers → Web search**: pick **Exa**, **Firecrawl** or **Serply**, then supply the API key. The key is stored in the `[web_search]` section of `~/.nakama/config.ini` and is only ever returned masked.
+Org admins can point `web_search` at an external search API from **Settings → Agent tools → AI Providers → Web search**: pick **Exa**, **Firecrawl** or **Serply**, then supply the API key. The key is stored in the `[web_search]` section of `~/.nakama/config.ini` and is only ever returned masked.
 
 Leave the provider on **Built-in** to keep using the model provider's own hosted search.
 
@@ -146,7 +146,7 @@ Upload documents via the profile dashboard or API. Search only indexes extracted
 
 ### Data portability
 
-Platform admins can export and import the whole local Nakama data root from **Control center → Workspace → Settings**.
+Platform admins can export and import the whole local Nakama data root from **Settings → Workspace → Preferences**.
 Use **Export ZIP** to download a backup.
 Exports are `.zip` backups and should be handled as sensitive files because they can include local auth, provider configuration, custom tools, skills, profile workspaces, and a local SQLite database.
 
@@ -155,7 +155,7 @@ Confirmed restore replaces the current local data root; selective merge, schedul
 
 ## Custom tools
 
-Custom tools live in `~/.nakama/tools/` (follows `NAKAMA_CONFIG_DIR` if set) and are registered by a platform admin from **Control center → Agent tools → Tools**. Each tool points at a module file and can then be assigned to agents like any builtin.
+Custom tools live in `~/.nakama/tools/` (follows `NAKAMA_CONFIG_DIR` if set) and are registered by a platform admin from **Settings → Agent tools → Tools**. Each tool points at a module file and can then be assigned to agents like any builtin.
 
 Two handler types are supported, and both run as a subprocess per call rather than inside the Nakama server process:
 

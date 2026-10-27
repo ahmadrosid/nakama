@@ -279,7 +279,7 @@ async function sendEmail(
 
 export const emailTool: ToolDefinition<EmailToolInput, EmailToolResult> = {
   description:
-    "List, read, search, and send email through the deployment mailbox configured in Control center → Tools (/customize/tools). Read exposes documentRef values for supported document attachments; pass one to extract_document_text when you need document text.",
+    "List, read, search, and send email through the deployment mailbox configured in Settings → Tools (/settings/tools). Read exposes documentRef values for supported document attachments; pass one to extract_document_text when you need document text.",
   name: "email",
   parameters: emailParameters(),
   run(input, context) {

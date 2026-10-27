@@ -153,18 +153,18 @@ function incompatibilityMessage(
   providerType: ProviderName
 ): string {
   if (harnessKind === "claude_code") {
-    return `Claude Code requires an Anthropic provider (got ${providerType}). Configure an Anthropic provider in Control center → AI Providers (/customize/providers).`;
+    return `Claude Code requires an Anthropic provider (got ${providerType}). Configure an Anthropic provider in Settings → AI Providers (/settings/providers).`;
   }
 
   if (harnessKind === "codex") {
-    return `Codex does not support the ${providerType} provider. Choose a compatible provider in Control center → AI Providers (/customize/providers).`;
+    return `Codex does not support the ${providerType} provider. Choose a compatible provider in Settings → AI Providers (/settings/providers).`;
   }
 
   if (harnessKind === "pi") {
-    return `pi does not support the ${providerType} provider. Choose a compatible provider in Control center → AI Providers (/customize/providers).`;
+    return `pi does not support the ${providerType} provider. Choose a compatible provider in Settings → AI Providers (/settings/providers).`;
   }
 
-  return `OpenCode does not support the ${providerType} provider. Choose a compatible provider in Control center → AI Providers (/customize/providers).`;
+  return `OpenCode does not support the ${providerType} provider. Choose a compatible provider in Settings → AI Providers (/settings/providers).`;
 }
 
 export function resolveCodingAgentProviderRouting(options: {
@@ -195,7 +195,7 @@ export function resolveCodingAgentProviderRouting(options: {
     return {
       ...empty,
       error:
-        "No LLM provider is configured. Add one in Control center → AI Providers (/customize/providers).",
+        "No LLM provider is configured. Add one in Settings → AI Providers (/settings/providers).",
     };
   }
 
@@ -234,7 +234,7 @@ export function resolveCodingAgentProviderRouting(options: {
       ...empty,
       compatible: true,
       configured: true,
-      error: `Provider "${providerLabel}" has no API key. Add one in Control center → AI Providers (/customize/providers).`,
+      error: `Provider "${providerLabel}" has no API key. Add one in Settings → AI Providers (/settings/providers).`,
       model,
       providerLabel,
       providerType: instance.type,
@@ -250,7 +250,7 @@ export function resolveCodingAgentProviderRouting(options: {
         compatible: true,
         configured: true,
         error:
-          "Ollama Cloud requires an API key in Control center → AI Providers (/customize/providers).",
+          "Ollama Cloud requires an API key in Settings → AI Providers (/settings/providers).",
         model,
         providerLabel,
         providerType: instance.type,

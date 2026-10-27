@@ -66,7 +66,7 @@ $AB --session "$SESSION" cookies set nakama_session "$SESSION_VAL" \
   --url "${BASE_URL}/" --httpOnly --sameSite Lax
 $AB --session "$SESSION" cookies set nakama_csrf "$CSRF_VAL" \
   --url "${BASE_URL}/" --sameSite Lax
-$AB --session "$SESSION" open "${BASE_URL}/customize/mcp"
+$AB --session "$SESSION" open "${BASE_URL}/settings/mcp"
 $AB --session "$SESSION" wait 3000
 $AB --session "$SESSION" set viewport "$VIEWPORT_WIDTH" "$VIEWPORT_HEIGHT"
 $AB --session "$SESSION" set media light

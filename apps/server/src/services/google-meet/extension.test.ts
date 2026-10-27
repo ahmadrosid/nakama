@@ -316,7 +316,7 @@ test.each(["connected", "throw", "reject", "invalidated"])(
     const location = {
       hostname: "localhost",
       origin: "http://localhost:3003",
-      pathname: "/customize",
+      pathname: "/settings",
     };
 
     runInNewContext(

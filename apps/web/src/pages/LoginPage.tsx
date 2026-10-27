@@ -380,7 +380,7 @@ export function LoginPage() {
       });
 
       if (response.mfaRequired && !response.mfaEnrolled) {
-        navigate("/settings?mfa=required", { replace: true });
+        navigate("/settings/preferences?mfa=required", { replace: true });
       } else {
         navigate(resolvePostAuthPath(from), { replace: true });
       }
@@ -423,7 +423,7 @@ export function LoginPage() {
       });
 
       if (response.mfaRequired && !response.mfaEnrolled) {
-        navigate("/settings?mfa=required", { replace: true });
+        navigate("/settings/preferences?mfa=required", { replace: true });
       } else {
         navigate(resolvePostAuthPath(from), { replace: true });
       }

@@ -164,7 +164,7 @@ export function OrgMemberInviteForm({
             its token manually.{" "}
             <Link
               className="font-medium text-foreground underline-offset-4 hover:underline"
-              to="/customize/tools"
+              to="/settings/tools"
             >
               Configure in Customize → Tools
             </Link>
