@@ -9,7 +9,7 @@ import {
   Search01Icon,
 } from "hugeicons-react";
 import { useEffect, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { SessionTarget } from "@/components/SidebarRecentChatRow";
 import { useRecentChatTree } from "@/components/SidebarRecentChatTree";
 import { RecentChatsDialogs } from "@/components/sidebar-recents";
@@ -23,6 +23,7 @@ import {
 } from "@/hooks/use-resource-mutations";
 import { useLocalStorageFlag } from "@/hooks/use-sidebar-collapsed";
 import {
+  buildChatPath,
   chatProfileIdFromPath,
   resolveRecentChatsProfileId,
 } from "@/lib/chat-history";
@@ -149,6 +150,7 @@ function PinnedChats({
 
 export function RecentChats() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { activeOrg } = useAuth();
   const { profileId: liveChatProfileId, orgId } = useActiveChatProfile();
   const { data: profiles = [] } = useProfilesQuery();
@@ -313,6 +315,10 @@ export function RecentChats() {
 
           await deleteSession.mutateAsync(deleteTarget.id);
           setDeleteTarget(null);
+
+          if (location.pathname === buildChatPath(profileId, deleteTarget.id)) {
+            navigate(navHrefForPage("chat", profileId), { replace: true });
+          }
         }}
         onRename={async (event) => {
           event.preventDefault();

@@ -1,4 +1,5 @@
 import type { RemoteChatSession } from "@nakama/client";
+import { NakamaApiError } from "@nakama/core/api-error";
 import type {
   AgentChannel,
   AgentQuestionAnswer,
@@ -900,6 +901,13 @@ export function useChatPage() {
           return;
         }
 
+        // The chat was deleted: open a new chat instead of an error.
+        if (err instanceof NakamaApiError && err.status === 404) {
+          navigate(buildNewChatPath(nextProfileId), { replace: true });
+
+          return;
+        }
+
         setError(formatError(err));
       } finally {
         setBusy((current) => (isCurrentLoad() ? false : current));
@@ -910,7 +918,7 @@ export function useChatPage() {
         }
       }
     },
-    [profileId, releaseActiveStream, setProfileId, syncChatUrl]
+    [navigate, profileId, releaseActiveStream, setProfileId, syncChatUrl]
   );
 
   const handleBranchMessage = useCallback(
