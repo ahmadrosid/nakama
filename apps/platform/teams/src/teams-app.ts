@@ -28,8 +28,17 @@ export interface TeamsAppHandle {
   stop: () => Promise<void>;
 }
 
-/** Turns allowed to run at once; Teams retries what it does not get an ACK for. */
+/**
+ * Where replies go. The SDK sends the bot's token with each one and would read
+ * SERVICE_URL from the environment when this is not passed.
+ */
+const TEAMS_SERVICE_URL = "https://smba.trafficmanager.net/teams";
+
+/** Turns allowed to run or wait at once, across every chat. */
 const MAX_BACKGROUND_TURNS = 16;
+
+/** Turns one chat may have running or waiting, so it cannot take every slot. */
+const MAX_TURNS_PER_CONVERSATION = 4;
 
 type LogLine = (...message: unknown[]) => void;
 
@@ -38,7 +47,7 @@ type LogLine = (...message: unknown[]) => void;
  * Authorization header or Microsoft's raw response. Only its message text, and
  * only warnings and errors, reaches the worker log.
  */
-function createSafeLogger() {
+export function createSafeLogger() {
   const keepText =
     (write: (text: string) => void): LogLine =>
     (...message) => {
@@ -82,16 +91,13 @@ function toTeamsActivity(activity: {
   };
 }
 
-export async function startTeamsApp(
-  deps: TeamsAppDeps
-): Promise<TeamsAppHandle> {
-  const logger = createSafeLogger();
-  // A server we own, so we choose the interface. The adapter attaches its own
-  // request handler to it; its start() would listen on every interface.
-  const server = createServer();
-  const adapter = new ExpressAdapter(server, { logger });
-
-  const app = new App({
+/** The SDK app, with every option the environment could otherwise decide. */
+export function createTeamsSdkApp(
+  deps: Pick<TeamsAppDeps, "cloud" | "config">,
+  adapter: ExpressAdapter,
+  logger: ReturnType<typeof createSafeLogger>
+): App {
+  return new App({
     clientId: deps.config.clientId,
     clientSecret: deps.config.clientSecret,
     cloud: deps.cloud,
@@ -100,19 +106,39 @@ export async function startTeamsApp(
     dangerouslyAllowUnauthenticatedRequests: false,
     httpServerAdapter: adapter,
     logger,
+    serviceUrl: TEAMS_SERVICE_URL,
     tenantId: deps.config.tenantId,
   });
+}
+
+export async function startTeamsApp(
+  deps: TeamsAppDeps
+): Promise<TeamsAppHandle> {
+  const logger = createSafeLogger();
+  // A server we own, so we choose the interface. The adapter attaches its own
+  // request handler to it; its start() would listen on every interface.
+  const server = createServer();
+  const adapter = new ExpressAdapter(server, { logger });
+  const app = createTeamsSdkApp(deps, adapter, logger);
 
   let running = 0;
+  const perConversation = new Map<string, number>();
 
   app.on("message", ({ activity }) => {
-    if (running >= MAX_BACKGROUND_TURNS) {
-      console.warn("[teams] busy, dropping an activity Teams will retry");
+    const conversationId = activity.conversation.id;
+    const waiting = perConversation.get(conversationId) ?? 0;
 
-      return Promise.resolve();
+    // Thrown, so the SDK answers 500 instead of acknowledging a message that
+    // would never run.
+    if (
+      running >= MAX_BACKGROUND_TURNS ||
+      waiting >= MAX_TURNS_PER_CONVERSATION
+    ) {
+      throw new Error("The Teams worker is busy; refused an activity.");
     }
 
     running += 1;
+    perConversation.set(conversationId, waiting + 1);
 
     deps
       .onActivity(toTeamsActivity(activity))
@@ -121,6 +147,13 @@ export async function startTeamsApp(
       })
       .finally(() => {
         running -= 1;
+        const left = (perConversation.get(conversationId) ?? 1) - 1;
+
+        if (left > 0) {
+          perConversation.set(conversationId, left);
+        } else {
+          perConversation.delete(conversationId);
+        }
       });
 
     return Promise.resolve();

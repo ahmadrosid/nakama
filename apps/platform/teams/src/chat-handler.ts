@@ -1,4 +1,6 @@
 import type { NakamaClient, RemoteChatSession } from "@nakama/client";
+import { splitTelegramChunks } from "@nakama/core";
+import { formatClientError } from "@nakama/core/api-error";
 import { createChatLock } from "@nakama/core/channel-chat-lock";
 import type { ChannelOwner } from "@nakama/core/channel-config-shared";
 import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
@@ -30,6 +32,12 @@ const chatLock = createChatLock({ waitMs: 15 * 60 * 1000 });
 
 /** Teams retries an activity it thinks was not acknowledged. */
 const SEEN_ACTIVITY_LIMIT = 500;
+
+/**
+ * Teams refuses a message of about 28 KB. Even at four bytes a character this
+ * stays under it, with room for the activity around the text.
+ */
+const TEAMS_MAX_MESSAGE_CHARS = 6000;
 
 function isPersonalMessage(activity: TeamsActivity): boolean {
   return (
@@ -135,16 +143,23 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
         return;
       }
 
-      // Every request for this chat runs as the owning organization.
-      const session = await resolveSession(
-        client.forOrg(owner.orgId),
-        sessionKey
-      );
+      let reply: string;
 
-      const reply = await session.send({ message: activity.text.trim() });
+      try {
+        // Every request for this chat runs as the owning organization.
+        const session = await resolveSession(
+          client.forOrg(owner.orgId),
+          sessionKey
+        );
 
-      if (reply.trim()) {
-        await send(activity.conversationId, reply);
+        reply = await session.send({ message: activity.text.trim() });
+      } catch (error) {
+        // The sender passed every access check, so they hear why nothing came.
+        reply = formatClientError(error);
+      }
+
+      for (const chunk of splitTelegramChunks(reply, TEAMS_MAX_MESSAGE_CHARS)) {
+        await send(activity.conversationId, chunk);
       }
     });
   };

@@ -260,46 +260,73 @@ test("a running worker is listed as listening, not as connected to Teams", () =>
   expect(teams?.connected).toBe(false);
 });
 
-test("Start runs the Teams worker for the selected agent", async () => {
-  const { api } = stubApi(
-    settings({ clientSecretConfigured: true, configured: true })
-  );
+// Stop asks for confirmation in a dialog rendered outside the card.
+for (const [label, running, method, confirms] of [
+  ["Start", false, "startWorker", false],
+  ["Stop", true, "stopWorker", true],
+] as const) {
+  test(`${label} controls the Teams worker of the selected agent`, async () => {
+    const { api } = stubApi(
+      settings({ clientSecretConfigured: true, configured: true })
+    );
 
-  // SAFETY: The card reads only teamsWorker from the status response.
-  const status = spyOn(api, "getSystemStatus").mockResolvedValue({
-    teamsWorker: {
-      configured: true,
-      connected: false,
-      ok: true,
-      paired: true,
-      process: { managed: true },
-      running: false,
-    },
-  } as never);
+    // SAFETY: The card reads only teamsWorker from the status response.
+    const status = spyOn(api, "getSystemStatus").mockResolvedValue({
+      teamsWorker: {
+        configured: true,
+        connected: false,
+        ok: true,
+        paired: true,
+        process: { managed: true },
+        running,
+      },
+    } as never);
 
-  const start = spyOn(api, "startWorker").mockResolvedValue({ ok: true });
+    const control = spyOn(api, method).mockResolvedValue({ ok: true });
 
-  cleanups.push(() => {
-    status.mockRestore();
-    start.mockRestore();
-  });
+    cleanups.push(() => {
+      status.mockRestore();
+      control.mockRestore();
+    });
 
-  const container = await renderCard();
+    const container = await renderCard();
 
-  await act(async () => {
-    const deadline = Date.now() + 2000;
+    await act(async () => {
+      const deadline = Date.now() + 2000;
 
-    while (
-      !Array.from(container.querySelectorAll("button")).some(
-        (item) => item.textContent?.trim() === "Start" && !item.disabled
-      ) &&
-      Date.now() < deadline
-    ) {
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      while (
+        !Array.from(container.querySelectorAll("button")).some(
+          (item) => item.textContent?.trim() === label && !item.disabled
+        ) &&
+        Date.now() < deadline
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+    });
+
+    await clickButton(container, label);
+
+    if (confirms) {
+      await act(async () => {
+        const deadline = Date.now() + 2000;
+
+        while (
+          !document.querySelector("[role='dialog']") &&
+          Date.now() < deadline
+        ) {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+      });
+
+      const dialog = document.querySelector<HTMLElement>("[role='dialog']");
+
+      expect(dialog).not.toBeNull();
+
+      if (dialog) {
+        await clickButton(dialog, label);
+      }
     }
+
+    expect(control).toHaveBeenCalledWith("teams", "profile-a");
   });
-
-  await clickButton(container, "Start");
-
-  expect(start).toHaveBeenCalledWith("teams", "profile-a");
-});
+}

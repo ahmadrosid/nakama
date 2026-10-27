@@ -39,6 +39,12 @@ let app: TeamsAppHandle | null = null;
 
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
+/**
+ * Set once no other live worker holds this connection. Only then is the saved
+ * port this process's to clear.
+ */
+let ownsConnection = false;
+
 async function shutdown(code: number): Promise<never> {
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
@@ -47,8 +53,12 @@ async function shutdown(code: number): Promise<never> {
   await app?.stop();
 
   // The server forwards only to a port with a live heartbeat, so clearing both
-  // means nothing reaches this worker once it is gone.
-  await saveTeamsInboundPort(null, owner).catch(() => {});
+  // means nothing reaches this worker once it is gone. A process refused by
+  // the check below leaves alone the port a running worker saved.
+  if (ownsConnection) {
+    await saveTeamsInboundPort(null, owner).catch(() => {});
+  }
+
   await heartbeat.clear();
 
   if (hasActiveStreams()) {
@@ -83,6 +93,8 @@ try {
       `Another Nakama Teams bridge already runs this connection (pid ${existing.pid}).`
     );
   }
+
+  ownsConnection = true;
 
   const config = await loadTeamsConfigFile(owner);
 

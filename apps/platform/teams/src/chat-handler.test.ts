@@ -247,6 +247,43 @@ describe("teams chat handler", () => {
     });
   });
 
+  test("a failed turn tells the user instead of going silent", async () => {
+    await withTempHome("nakama-teams-handler-", async (homeDir) => {
+      const { handle, replies } = createHarness(homeDir, {
+        onSend: async () => {
+          throw new Error("No model provider is configured.");
+        },
+      });
+
+      await handle(activity());
+
+      expect(replies).toEqual([
+        { conversationId: "conv_1", text: "No model provider is configured." },
+      ]);
+    });
+  });
+
+  test("a long reply arrives as several messages Teams accepts", async () => {
+    await withTempHome("nakama-teams-handler-", async (homeDir) => {
+      const reply = Array.from(
+        { length: 4000 },
+        (_, index) => `word${index}`
+      ).join(" ");
+
+      const { handle, replies } = createHarness(homeDir, {
+        onSend: async () => reply,
+      });
+
+      await handle(activity());
+
+      expect(replies.length).toBeGreaterThan(1);
+      expect(replies.every((message) => message.text.length <= 6000)).toBe(
+        true
+      );
+      expect(replies.map((message) => message.text).join(" ")).toBe(reply);
+    });
+  });
+
   test("a saved session is reused after a restart", async () => {
     await withTempHome("nakama-teams-handler-", async (homeDir) => {
       const first = createHarness(homeDir);

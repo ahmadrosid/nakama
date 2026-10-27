@@ -24,6 +24,13 @@ let app: TeamsAppHandle;
 
 const received: TeamsActivity[] = [];
 
+const record = async (activity: TeamsActivity) => {
+  received.push(activity);
+};
+
+/** What the app runs for each delivered message; a test may swap it. */
+let runTurn: (activity: TeamsActivity) => Promise<void> = record;
+
 function base64url(value: Buffer | string): string {
   return Buffer.from(value).toString("base64url");
 }
@@ -68,12 +75,12 @@ function claims(patch: Partial<TokenClaims> = {}): TokenClaims {
   };
 }
 
-function message(id: string) {
+function message(id: string, conversationId = `conv_${id}`) {
   return {
     channelId: "msteams",
     conversation: {
       conversationType: "personal",
-      id: `conv_${id}`,
+      id: conversationId,
       tenantId: "33333333-3333-4333-8333-333333333333",
     },
     from: {
@@ -89,9 +96,9 @@ function message(id: string) {
   };
 }
 
-function post(id: string, token: string) {
+function post(id: string, token: string, conversationId?: string) {
   return fetch(`http://127.0.0.1:${app.port}/api/messages`, {
-    body: JSON.stringify(message(id)),
+    body: JSON.stringify(message(id, conversationId)),
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
@@ -149,9 +156,7 @@ beforeAll(async () => {
       clientSecret: "teams-secret",
       tenantId: "33333333-3333-4333-8333-333333333333",
     },
-    onActivity: async (activity) => {
-      received.push(activity);
-    },
+    onActivity: (activity) => runTurn(activity),
   });
 });
 
@@ -202,4 +207,67 @@ describe("teams app service token verification", () => {
       );
     });
   }
+});
+
+describe("teams app turn scheduling", () => {
+  test("Teams is answered while the turn is still running", async () => {
+    let release = () => {};
+
+    runTurn = () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      });
+
+    try {
+      const answered = await Promise.race([
+        post("act_slow", signToken(claims())).then(
+          (response) => response.status
+        ),
+        Bun.sleep(2000).then(() => 0),
+      ]);
+
+      expect(answered).toBeGreaterThanOrEqual(200);
+      expect(answered).toBeLessThan(300);
+    } finally {
+      runTurn = record;
+      release();
+    }
+  });
+
+  test("a chat with turns already waiting is refused, and other chats still get through", async () => {
+    const releases: (() => void)[] = [];
+
+    runTurn = () =>
+      new Promise<void>((resolve) => {
+        releases.push(resolve);
+      });
+
+    try {
+      const statuses: number[] = [];
+
+      // Four turns may wait in one chat; the fifth is refused, not dropped.
+      for (let index = 0; index < 5; index += 1) {
+        const response = await post(
+          `act_busy_${index}`,
+          signToken(claims()),
+          "conv_busy"
+        );
+
+        statuses.push(response.status);
+      }
+
+      const quiet = await post("act_quiet", signToken(claims()), "conv_quiet");
+
+      expect(statuses.slice(0, 4).every((status) => status < 300)).toBe(true);
+      expect(statuses[4]).toBeGreaterThanOrEqual(500);
+      expect(quiet.status).toBeLessThan(300);
+      expect(releases).toHaveLength(5);
+    } finally {
+      runTurn = record;
+
+      for (const release of releases) {
+        release();
+      }
+    }
+  });
 });

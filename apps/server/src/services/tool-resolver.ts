@@ -297,7 +297,8 @@ export function pluginActorFromContext(
     context.channel === "telegram" ||
     context.channel === "whatsapp" ||
     context.channel === "discord" ||
-    context.channel === "slack";
+    context.channel === "slack" ||
+    context.channel === "teams";
 
   return {
     id: context.userId?.trim() ?? "",

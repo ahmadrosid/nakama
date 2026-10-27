@@ -11,11 +11,15 @@ import {
 import type { MiddlewareHandler } from "hono";
 import { resolveChannelOwner } from "../channel-owner";
 import type { ServerOptions } from "../context";
+import { requireOrgAdminOrPlatformAdminFromContext } from "../org-guards";
 import { errorResponse, json, readJson } from "../shared";
 import type { AppEnv, HonoApp } from "../types";
 
-/** Teams posts activities as JSON; anything larger is not a message we serve. */
-const MAX_FORWARDED_BODY_BYTES = 1_000_000;
+/**
+ * The worker's SDK parses with express.json(), whose default limit is 100 KiB;
+ * a larger body is refused here instead of by an error page from the worker.
+ */
+const MAX_FORWARDED_BODY_BYTES = 102_400;
 
 const FORWARD_TIMEOUT_MS = 20_000;
 
@@ -31,7 +35,7 @@ const updateTeamsSettingsSchema = z.object({
 });
 
 export function registerTeamsRoutes(app: HonoApp, options: ServerOptions) {
-  const { agent, databaseAdapter } = options;
+  const { agent, databaseAdapter, workerManager } = options;
 
   // Access is decided before a handler reads a body or turns an error into 400.
   const requireChannelAccess: MiddlewareHandler<AppEnv> = async (c, next) => {
@@ -50,13 +54,23 @@ export function registerTeamsRoutes(app: HonoApp, options: ServerOptions) {
   app.put("/v1/settings/teams", async (c) => {
     const owner = await resolveChannelOwner(c, agent);
 
+    // Members may manage their own agent's other channels, but a Teams bot
+    // admits users from outside the organization, so only admins connect one.
+    requireOrgAdminOrPlatformAdminFromContext(c);
+
     const body = await readJson<UpdateTeamsSettingsRequest>(
       c.req.raw,
       updateTeamsSettingsSchema
     );
 
     try {
-      return json<TeamsSettingsResponse>(await saveTeamsConfig(body, owner));
+      // Stops the worker, saves, then starts it again if it should run, so a
+      // running worker never keeps the credentials it started with.
+      return json<TeamsSettingsResponse>(
+        await workerManager.saveChannelConfig("teams", owner, () =>
+          saveTeamsConfig(body, owner)
+        )
+      );
     } catch (error) {
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
@@ -126,6 +140,15 @@ export function registerTeamsRoutes(app: HonoApp, options: ServerOptions) {
           signal: AbortSignal.timeout(FORWARD_TIMEOUT_MS),
         }
       );
+
+      // Outside production express answers a bad request with a page that
+      // carries a stack trace and file paths, so a refusal keeps only its status.
+      if (!response.ok) {
+        return errorResponse(
+          "Teams connection refused the request",
+          response.status
+        );
+      }
 
       return new Response(response.body, {
         headers: {

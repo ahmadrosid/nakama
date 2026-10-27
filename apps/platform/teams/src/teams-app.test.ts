@@ -1,6 +1,13 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { createServer } from "node:http";
+import { ExpressAdapter } from "@microsoft/teams.apps";
 import type { TeamsActivity } from "./chat-handler";
-import { startTeamsApp, type TeamsAppHandle } from "./teams-app";
+import {
+  createSafeLogger,
+  createTeamsSdkApp,
+  startTeamsApp,
+  type TeamsAppHandle,
+} from "./teams-app";
 
 const CONFIG = {
   clientId: "22222222-2222-4222-8222-222222222222",
@@ -31,6 +38,7 @@ afterEach(async () => {
   }
 
   delete process.env.DANGEROUSLY_ALLOW_UNAUTHENTICATED_REQUESTS;
+  delete process.env.SERVICE_URL;
 });
 
 async function start() {
@@ -103,5 +111,44 @@ describe("teams app host", () => {
     handles.splice(handles.indexOf(handle), 1);
 
     await expect(post(port)).rejects.toThrow();
+  });
+
+  test("replies go to Microsoft's service even when SERVICE_URL names another host", async () => {
+    // The SDK sends the bot's token with every reply to this address.
+    process.env.SERVICE_URL = "https://attacker.example.com/teams";
+
+    const logger = createSafeLogger();
+
+    const app = createTeamsSdkApp(
+      { config: CONFIG },
+      new ExpressAdapter(createServer(), { logger }),
+      logger
+    );
+
+    expect(app.api.serviceUrl).toBe("https://smba.trafficmanager.net/teams");
+  });
+
+  test("the SDK log keeps only message text, never the objects beside it", () => {
+    const errors = spyOn(console, "error").mockImplementation(() => {});
+    const warnings = spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      const logger = createSafeLogger();
+
+      logger.error("Error processing activity:", {
+        headers: { authorization: "Bearer teams-service-token" },
+      });
+      logger.error({ clientSecret: "teams-secret" });
+      logger.warn("token refresh", "teams-secret");
+      logger.info("Handling activity", { text: "private message" });
+
+      expect(errors.mock.calls).toEqual([
+        ["[teams-sdk] Error processing activity:"],
+      ]);
+      expect(warnings.mock.calls).toEqual([["[teams-sdk] token refresh"]]);
+    } finally {
+      errors.mockRestore();
+      warnings.mockRestore();
+    }
   });
 });
