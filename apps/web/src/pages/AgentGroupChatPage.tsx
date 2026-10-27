@@ -11,7 +11,7 @@ import type { DocumentAttachment } from "@nakama/core/contract";
 import { Button } from "@nakama/ui";
 import { Spinner } from "@nakama/ui/spinner";
 import { toast } from "@nakama/ui/toast";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { MessageAdd01Icon } from "hugeicons-react";
 import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -34,15 +34,14 @@ import {
 } from "@/components/agent-groups/group-thread-panel";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
-import { useAgentGroupQuery } from "@/hooks/use-agent-groups";
-import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
-  type PANELS,
   PENDING_RUN,
   pendingMessage,
-  withPanel,
-  withPendingMessage,
-} from "@/lib/agent-group-pending";
+  useAgentGroupQuery,
+  useGroupConversation,
+} from "@/hooks/use-agent-groups";
+import { useProfilesQuery } from "@/hooks/use-app-queries";
+import { type PANELS, withPanel } from "@/lib/agent-group-panels";
 import { client, formatError } from "@/lib/client";
 import { groupPath, PAGE_PATHS } from "@/lib/navigation";
 import { queryKeys } from "@/lib/query-keys";
@@ -386,10 +385,7 @@ function GroupDraft({
     content: string,
     documents: DocumentAttachment[] = []
   ) {
-    const message = pendingMessage(
-      content,
-      documents.map((document) => document.filename)
-    );
+    const message = pendingMessage(content, documents);
 
     const request = client.createAgentGroupSession(
       group.id,
@@ -549,60 +545,10 @@ function GroupSession({
   profiles: ProfileSummary[];
   sessionId: string;
 }) {
-  const queryClient = useQueryClient();
-  const sessionKey = queryKeys.agentGroups.session(group.id, sessionId);
-  // A poll answered before the server saw the message would erase it.
-  const [sending, setSending] = useState(false);
-
-  const { data, error, isLoading } = useQuery({
-    queryFn: () => client.getAgentGroupSession(group.id, sessionId),
-    queryKey: sessionKey,
-    // Poll only while agents are replying.
-    refetchInterval: (query) =>
-      !sending &&
-      (query.state.data?.run || query.state.data?.threadRunIds?.length)
-        ? 1500
-        : false,
-  });
-
-  const refresh = () =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: sessionKey }),
-      queryClient.invalidateQueries({
-        exact: true,
-        queryKey: queryKeys.agentGroups.sessions(group.id),
-      }),
-    ]).then(() => undefined);
-
-  /** Shows the message at once, then lets the server confirm or roll it back. */
-  async function send(content: string, documents: DocumentAttachment[] = []) {
-    setSending(true);
-    await queryClient.cancelQueries({ exact: true, queryKey: sessionKey });
-    queryClient.setQueryData<AgentGroupSessionDetail>(sessionKey, (detail) =>
-      detail
-        ? withPendingMessage(
-            detail,
-            content,
-            documents.map((document) => document.filename)
-          )
-        : detail
-    );
-
-    try {
-      await client.sendAgentGroupMessage(
-        group.id,
-        sessionId,
-        content,
-        documents
-      );
-    } catch (sendError) {
-      toast(formatError(sendError));
-      throw sendError;
-    } finally {
-      setSending(false);
-      void refresh();
-    }
-  }
+  const { data, error, isLoading, send, stop } = useGroupConversation(
+    group.id,
+    sessionId
+  );
 
   if (isLoading) {
     return (
@@ -625,12 +571,7 @@ function GroupSession({
       onOpenLive={onOpenLive}
       onOpenThread={onOpenThread}
       onSend={send}
-      onStop={() =>
-        void client
-          .stopAgentGroupSession(group.id, sessionId)
-          .then(refresh)
-          .catch((stopError) => toast(formatError(stopError)))
-      }
+      onStop={stop}
       profiles={profiles}
       run={data.run}
       threadRunIds={data.threadRunIds}

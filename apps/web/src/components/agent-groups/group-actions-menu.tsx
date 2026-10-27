@@ -12,7 +12,7 @@ import {
   PencilEdit02Icon,
 } from "hugeicons-react";
 import { useSearchParams } from "react-router-dom";
-import { withPanel } from "@/lib/agent-group-pending";
+import { withPanel } from "@/lib/agent-group-panels";
 
 /** Edit group, and the group's shared folder or memory in the side panel, behind one menu. */
 export function GroupActionsMenu({ onEdit }: { onEdit: () => void }) {

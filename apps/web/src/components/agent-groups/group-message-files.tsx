@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useArtifactAttachmentPreviewPanel } from "@/components/chat/use-artifact-attachment-preview-panel";
 import { useArtifactsExist } from "@/hooks/use-resource-mutations";
-import { sharedFileMentions, withPanel } from "@/lib/agent-group-pending";
+import { sharedFileMentions, withPanel } from "@/lib/agent-group-panels";
 import {
   type ChatArtifactRef,
   extractArtifactPathsFromText,

@@ -38,7 +38,7 @@ import {
   MessageResponse,
 } from "@/components/ai-elements/message";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
-import { shortenSharedPaths } from "@/lib/agent-group-pending";
+import { shortenSharedPaths } from "@/lib/agent-group-panels";
 
 /** Same threshold as the agent chat list. */
 const AT_BOTTOM_PX = 80;

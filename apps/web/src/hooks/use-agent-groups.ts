@@ -1,8 +1,17 @@
-import type { AgentGroup } from "@nakama/core/agent-groups";
-import type { ImageAttachment } from "@nakama/core/contract";
+import type {
+  AgentGroup,
+  AgentGroupMessage,
+  AgentGroupRun,
+  AgentGroupSessionDetail,
+  AgentGroupThreadDetail,
+} from "@nakama/core/agent-groups";
+import type {
+  DocumentAttachment,
+  ImageAttachment,
+} from "@nakama/core/contract";
 import { toast } from "@nakama/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { client, formatError } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -31,6 +40,150 @@ export function useGroupSessionsQuery(groupId: string) {
     refetchInterval: (query) =>
       query.state.data?.some((session) => session.active) ? 3000 : false,
   });
+}
+
+/** Shown until the server confirms a reply run, so the page reacts at once. */
+export const PENDING_RUN: AgentGroupRun = {
+  activity: null,
+  speakerProfileId: null,
+  stopping: false,
+};
+
+/**
+ * The user's message as it will look once saved. Attached documents show by
+ * name; a pasted image shows once the server has saved it. A negative id never
+ * clashes with the server's, which start at 1.
+ */
+export function pendingMessage(
+  content: string,
+  documents: DocumentAttachment[] = []
+): AgentGroupMessage {
+  const files = documents.flatMap((document) =>
+    document.mediaType.startsWith("image/") ? [] : [document.filename]
+  );
+
+  return {
+    authorProfileId: null,
+    content,
+    createdAt: new Date().toISOString(),
+    ...(files.length > 0 && { files }),
+    id: -Date.now(),
+    threadReplies: 0,
+  };
+}
+
+interface GroupConversation<Detail> {
+  data: Detail | undefined;
+  error: Error | null;
+  isLoading: boolean;
+  /** Shows the message at once; rejects, after a toast, when the send fails. */
+  send: (content: string, documents?: DocumentAttachment[]) => Promise<void>;
+  stop: () => void;
+}
+
+/**
+ * A group chat, or with `rootId` the thread on that message: polled while
+ * agents reply. A sent message shows at once, and polls wait until the server
+ * has it, so an early poll cannot erase it. The refresh after the send keeps
+ * it, or rolls it back when the send failed.
+ */
+export function useGroupConversation(
+  groupId: string,
+  sessionId: string
+): GroupConversation<AgentGroupSessionDetail>;
+
+export function useGroupConversation(
+  groupId: string,
+  sessionId: string,
+  rootId: number
+): GroupConversation<AgentGroupThreadDetail>;
+
+export function useGroupConversation(
+  groupId: string,
+  sessionId: string,
+  rootId?: number
+): GroupConversation<AgentGroupSessionDetail | AgentGroupThreadDetail> {
+  const queryClient = useQueryClient();
+  const [sending, setSending] = useState(false);
+  const sessionKey = queryKeys.agentGroups.session(groupId, sessionId);
+
+  const key =
+    rootId === undefined
+      ? sessionKey
+      : queryKeys.agentGroups.thread(groupId, sessionId, rootId);
+
+  const { data, error, isLoading } = useQuery<
+    AgentGroupSessionDetail | AgentGroupThreadDetail
+  >({
+    queryFn: () =>
+      rootId === undefined
+        ? client.getAgentGroupSession(groupId, sessionId)
+        : client.getAgentGroupThread(groupId, sessionId, rootId),
+    queryKey: key,
+    // Poll only while agents are replying, here or in one of its threads.
+    refetchInterval: (query) => {
+      const detail = query.state.data;
+
+      const threads =
+        detail && "threadRunIds" in detail ? detail.threadRunIds.length : 0;
+
+      return !sending && (detail?.run || threads > 0) ? 1500 : false;
+    },
+  });
+
+  // The session key is the thread key's parent, so a thread's reply count
+  // refreshes with it.
+  const refresh = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: sessionKey }),
+      queryClient.invalidateQueries({
+        exact: true,
+        queryKey: queryKeys.agentGroups.sessions(groupId),
+      }),
+    ]).then(() => undefined);
+
+  async function send(content: string, documents: DocumentAttachment[] = []) {
+    setSending(true);
+    await queryClient.cancelQueries({ exact: true, queryKey: key });
+    queryClient.setQueryData<AgentGroupSessionDetail | AgentGroupThreadDetail>(
+      key,
+      (detail) =>
+        detail && {
+          ...detail,
+          messages: [...detail.messages, pendingMessage(content, documents)],
+          run: detail.run ?? PENDING_RUN,
+        }
+    );
+
+    try {
+      await (rootId === undefined
+        ? client.sendAgentGroupMessage(groupId, sessionId, content, documents)
+        : client.sendAgentGroupThreadMessage(
+            groupId,
+            sessionId,
+            rootId,
+            content,
+            documents
+          ));
+    } catch (sendError) {
+      toast(formatError(sendError));
+      throw sendError;
+    } finally {
+      setSending(false);
+      void refresh();
+    }
+  }
+
+  const stop = () =>
+    void (
+      rootId === undefined
+        ? client.stopAgentGroupSession(groupId, sessionId)
+        : client.stopAgentGroupThread(groupId, sessionId, rootId)
+    )
+      .then(refresh)
+      .catch((stopError) => toast(formatError(stopError)));
+
+  return { data, error, isLoading, send, stop };
 }
 
 export function useUpdateGroupSession(groupId: string) {

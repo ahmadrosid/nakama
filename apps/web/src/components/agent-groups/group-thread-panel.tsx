@@ -1,11 +1,7 @@
 import type { ProfileSummary } from "@nakama/core";
-import type {
-  AgentGroup,
-  AgentGroupThreadDetail,
-} from "@nakama/core/agent-groups";
-import type { DocumentAttachment, WorkspaceEntry } from "@nakama/core/contract";
-import { toast } from "@nakama/ui/toast";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { AgentGroup } from "@nakama/core/agent-groups";
+import type { WorkspaceEntry } from "@nakama/core/contract";
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GroupComposer } from "@/components/agent-groups/group-composer";
 import { GroupMessageArtifacts } from "@/components/agent-groups/group-message-files";
@@ -23,11 +19,8 @@ import {
   artifactMatchesTypeFilter,
   availableArtifactTypeFilters,
 } from "@/components/soul-tools/artifacts-tab-filters";
-import {
-  PENDING_RUN,
-  pendingMessage,
-  shortenSharedPaths,
-} from "@/lib/agent-group-pending";
+import { useGroupConversation } from "@/hooks/use-agent-groups";
+import { shortenSharedPaths } from "@/lib/agent-group-panels";
 import { inferArtifactMimeType } from "@/lib/chat-artifacts";
 import { client, formatError } from "@/lib/client";
 import {
@@ -82,22 +75,14 @@ export function GroupThreadPanel({
   profiles: ProfileSummary[];
   sessionId: string;
 }) {
-  const queryClient = useQueryClient();
   const bottomRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useGroupPanelWidth();
 
-  const threadKey = queryKeys.agentGroups.thread(
+  const { data, error, send, stop } = useGroupConversation(
     group.id,
     sessionId,
     messageId
   );
-
-  const { data, error } = useQuery({
-    queryFn: () => client.getAgentGroupThread(group.id, sessionId, messageId),
-    queryKey: threadKey,
-    // Poll only while the agent is replying.
-    refetchInterval: (query) => (query.state.data?.run ? 1500 : false),
-  });
 
   const agent = profiles.find((p) => p.id === data?.profileId);
   // The agent's own message is already in the group chat; show only the replies.
@@ -107,46 +92,6 @@ export function GroupThreadPanel({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
   }, [replies.length, data?.run]);
-
-  const refresh = () =>
-    // The session key is the thread key's parent: it refreshes the reply count.
-    queryClient.invalidateQueries({
-      queryKey: queryKeys.agentGroups.session(group.id, sessionId),
-    });
-
-  async function send(content: string, documents: DocumentAttachment[] = []) {
-    await queryClient.cancelQueries({ exact: true, queryKey: threadKey });
-    queryClient.setQueryData<AgentGroupThreadDetail>(threadKey, (detail) =>
-      detail
-        ? {
-            ...detail,
-            messages: [
-              ...detail.messages,
-              pendingMessage(
-                content,
-                documents.map((document) => document.filename)
-              ),
-            ],
-            run: detail.run ?? PENDING_RUN,
-          }
-        : detail
-    );
-
-    try {
-      await client.sendAgentGroupThreadMessage(
-        group.id,
-        sessionId,
-        messageId,
-        content,
-        documents
-      );
-    } catch (sendError) {
-      toast(formatError(sendError));
-      throw sendError;
-    } finally {
-      void refresh();
-    }
-  }
 
   return (
     <AttachmentDetailPanel
@@ -227,17 +172,7 @@ export function GroupThreadPanel({
           handles={noHandles}
           members={agent ? [agent] : []}
           onSend={send}
-          onStop={() =>
-            void client
-              .stopAgentGroupThread(group.id, sessionId, messageId)
-              .then(() =>
-                queryClient.invalidateQueries({
-                  exact: true,
-                  queryKey: threadKey,
-                })
-              )
-              .catch((stopError) => toast(formatError(stopError)))
-          }
+          onStop={stop}
           placeholder={`Reply to ${agent?.name ?? "agent"}`}
           stopping={data?.run?.stopping ?? false}
         />
