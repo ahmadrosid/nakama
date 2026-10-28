@@ -2,6 +2,10 @@ import { cn } from "@nakama/ui/utils";
 import { File01Icon } from "hugeicons-react";
 import { useEffect, useId, useState } from "react";
 import { ArtifactAttachmentPanelBody } from "@/components/chat/artifact-attachment-panel-body";
+import {
+  artifactPanelBodyClassName,
+  artifactPanelDefaultWidth,
+} from "@/components/chat/artifact-attachment-panel-body.shared";
 import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import {
   artifactCodeLanguage,
@@ -211,8 +215,18 @@ export function DocumentAttachmentPreview({
       return;
     }
 
+    const isMarkdown = isMarkdownArtifactMimeType(
+      resolveArtifactMimeType(file.mediaType, file.filename)
+    );
+
     show({
+      bodyClassName: artifactPanelBodyClassName({
+        isHtml: false,
+        isImage: false,
+        isMarkdown,
+      }),
       content: <DocumentAttachmentPanelContent file={file} />,
+      defaultWidth: artifactPanelDefaultWidth(file.filename, file.mediaType),
       id: panelId,
       title: file.filename,
     });
