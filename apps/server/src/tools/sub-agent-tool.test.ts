@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { canRunToolCallsInParallel } from "@nakama/agent";
-import type { AgentService } from "../services/agent-service";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { AgentService } from "../services/agent-service";
+import { createDefaultProfile } from "../services/agent-service-test-fixtures";
 import { formatToolActivityLabel } from "./sub-agent-activity";
 import type { SubAgentRunResult } from "./sub-agent-shared";
 import { createSubAgentTool, runSubAgentTool } from "./sub-agent-tool";
@@ -148,4 +150,69 @@ test("tool activity accepts missing details for every tool branch", () => {
   expect(
     formatToolActivityLabel("write_file", { path: "/tmp/report.md" })
   ).toBe("Writing report.md");
+});
+
+describe("sub_agent background", () => {
+  test("starts a child chat, one level deep and at most five per chat", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    const agent = new AgentService(null, null, db);
+
+    const parentId = await agent.createSession(ORG_ID, "web", PROFILE_ID);
+    const parentContext = { ...TOOL_CONTEXT, sessionId: parentId };
+
+    const started = await runSubAgentTool(
+      { background: true, task: "Draft the marketing plan" },
+      parentContext,
+      agent
+    );
+
+    expect(started.status).toBe("success");
+    expect(await db.getSession(started.sessionId ?? "")).toMatchObject({
+      parentSessionId: parentId,
+      title: "Draft the marketing plan",
+    });
+
+    const fromChild = await runSubAgentTool(
+      { background: true, task: "Go deeper" },
+      { ...TOOL_CONTEXT, sessionId: started.sessionId },
+      agent
+    );
+
+    expect(fromChild.status).toBe("fail");
+
+    for (let index = 0; index < 4; index += 1) {
+      expect(
+        (
+          await runSubAgentTool(
+            { background: true, task: `Topic ${index}` },
+            parentContext,
+            agent
+          )
+        ).status
+      ).toBe("success");
+    }
+
+    expect(
+      (
+        await runSubAgentTool(
+          { background: true, task: "One too many" },
+          parentContext,
+          agent
+        )
+      ).status
+    ).toBe("fail");
+
+    const stranger = await agent.createSession(ORG_ID, "web", PROFILE_ID);
+
+    expect(
+      (
+        await runSubAgentTool(
+          { background: true, sessionId: stranger, task: "Continue" },
+          parentContext,
+          agent
+        )
+      ).status
+    ).toBe("fail");
+  });
 });

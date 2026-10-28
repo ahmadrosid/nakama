@@ -436,8 +436,12 @@ export interface CreateSessionOptions {
   isPlatformAdmin?: boolean;
   model?: string | null;
   orgRole?: OrgRole | null;
+  parentSessionId?: string;
   thinkingEffort?: ThinkingEffort | null;
 }
+
+/** Background sub_agent chats one parent may start; the same cap the issue proposed. */
+const MAX_CHILD_SESSIONS = 5;
 
 type ChatProfileAccess = Pick<
   CreateSessionOptions,
@@ -2548,6 +2552,7 @@ export class AgentService {
       createdAt: new Date().toISOString(),
       id: sessionId,
       model: modelOverride,
+      parentSessionId: options?.parentSessionId ?? null,
       profileId: resolvedProfileId,
       thinkingEffort: options?.thinkingEffort ?? null,
       title: null,
@@ -2604,6 +2609,60 @@ export class AgentService {
     });
 
     return sessionId;
+  }
+
+  /**
+   * A chat a background sub_agent runs in, nested under the chat that started
+   * it so the user can open and continue it. One level deep, like sub_agent.
+   */
+  async createChildSession(
+    parentSessionId: string,
+    orgId: string,
+    title: string,
+    access: Pick<CreateSessionOptions, "isPlatformAdmin" | "orgRole">
+  ): Promise<string> {
+    if (this.ephemeralSessions.has(parentSessionId)) {
+      throw new NakamaApiError("A cognito chat cannot start other chats.", 400);
+    }
+
+    const parent = await this.getSessionRecordForOrg(parentSessionId, orgId);
+
+    if (!parent) {
+      throw new NakamaApiError("Session not found.", 404);
+    }
+
+    if (parent.parentSessionId) {
+      throw new NakamaApiError(
+        "A chat started from another chat cannot start more chats.",
+        400
+      );
+    }
+
+    const siblings = parent.userId
+      ? await this.db.listSessionsForUser(parent.userId)
+      : await this.db.listSessions();
+
+    if (
+      siblings.filter((session) => session.parentSessionId === parentSessionId)
+        .length >= MAX_CHILD_SESSIONS
+    ) {
+      throw new NakamaApiError(
+        `This chat already started ${MAX_CHILD_SESSIONS} chats.`,
+        400
+      );
+    }
+
+    const childId = await this.createSession(
+      orgId,
+      parseAgentChannel(parent.channel) ?? "web",
+      parent.profileId,
+      parent.userId,
+      { ...access, parentSessionId }
+    );
+
+    await this.db.renameSessionTitle(childId, title);
+
+    return childId;
   }
 
   async assertSessionProfileAccess(
