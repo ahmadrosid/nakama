@@ -26,6 +26,7 @@ import {
   notifyToolInputDelta,
   parseJsonRecord,
   readRecord,
+  toModelToolContent,
 } from "../shared";
 
 const MAX_PAUSE_CONTINUATIONS = 5;
@@ -145,7 +146,7 @@ export async function toAnthropicMessages(
     const last = result[result.length - 1];
 
     const toolResult: ToolResultBlockParam = {
-      content: message.content,
+      content: toModelToolContent(message.content),
       tool_use_id: message.toolCallId,
       type: "tool_result",
     };
