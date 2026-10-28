@@ -34,6 +34,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("moonshot_cn")).toBe("moonshot_cn");
     expect(parseProviderName("xai")).toBe("xai");
     expect(parseProviderName("groq")).toBe("groq");
+    expect(parseProviderName("cheaper_inference")).toBe("cheaper_inference");
     expect(parseProviderName("together")).toBe("together");
     expect(parseProviderName("qwen")).toBe("qwen");
     expect(parseProviderName("qwen_cn")).toBe("qwen_cn");
@@ -55,6 +56,11 @@ describe("apiKeyEnvVarForProvider", () => {
   });
   test("Groq uses its documented API key variable", () => {
     expect(apiKeyEnvVarForProvider("groq")).toBe("GROQ_API_KEY");
+  });
+  test("Cheaper Inference uses its documented API key variable", () => {
+    expect(apiKeyEnvVarForProvider("cheaper_inference")).toBe(
+      "CHEAPER_INFERENCE_API_KEY"
+    );
   });
   test("chatgpt uses OAuth, not an API key env var", () => {
     expect(apiKeyEnvVarForProvider("chatgpt")).toBeNull();
@@ -167,6 +173,7 @@ describe("isDiscoveryModelProvider", () => {
     expect(isDiscoveryModelProvider("zhipu_cn")).toBe(true);
     expect(isDiscoveryModelProvider("xai")).toBe(true);
     expect(isDiscoveryModelProvider("groq")).toBe(true);
+    expect(isDiscoveryModelProvider("cheaper_inference")).toBe(true);
     expect(isDiscoveryModelProvider("moonshot")).toBe(true);
     expect(isDiscoveryModelProvider("moonshot_cn")).toBe(true);
   });
@@ -207,6 +214,9 @@ describe("defaultDiscoveryBaseUrl", () => {
     );
     expect(defaultDiscoveryBaseUrl("groq")).toBe(
       "https://api.groq.com/openai/v1"
+    );
+    expect(defaultDiscoveryBaseUrl("cheaper_inference")).toBe(
+      "https://api.cheaperinference.com/v1"
     );
   });
 

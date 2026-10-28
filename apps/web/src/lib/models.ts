@@ -71,6 +71,7 @@ export function formatProviderLabel(
     provider === "zhipu_cn" ||
     provider === "xai" ||
     provider === "groq" ||
+    provider === "cheaper_inference" ||
     provider === "together" ||
     provider === "xiaomi" ||
     provider === "meta" ||
@@ -111,6 +112,7 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
     { id: "minimax", label: "MiniMax" },
     { id: "xai", label: "xAI Grok" },
     { id: "groq", label: "Groq" },
+    { id: "cheaper_inference", label: "Cheaper Inference" },
     { id: "minimax_cn", label: "MiniMax (CN)" },
     { id: "moonshot", label: "Moonshot Kimi" },
     { id: "moonshot_cn", label: "Moonshot Kimi (CN)" },
