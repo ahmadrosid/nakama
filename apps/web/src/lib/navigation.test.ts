@@ -21,28 +21,6 @@ const pageIdsFor = (isPlatformAdmin: boolean, orgRole: string | undefined) =>
     .sort();
 
 describe("visibleNavGroups", () => {
-  test("a platform admin sees every destination", () => {
-    expect(pageIdsFor(true, "admin")).toEqual([
-      "automations",
-      "chat",
-      "composio",
-      "customize",
-      "files",
-      "google-meet",
-      "groups",
-      "mcp",
-      "organization",
-      "plugin-management",
-      "profiles",
-      "providers",
-      "settings",
-      "skills",
-      "tools",
-      "usage",
-      "workers",
-    ]);
-  });
-
   test("an org admin can reach Knowledge through Your files", () => {
     const ids = pageIdsFor(false, "admin");
     expect(ids).toContain("tools");

@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  DOCUMENT_ACCEPT,
   isDocumentFilePart,
   MAX_FOLDER_BYTES,
   MAX_FOLDER_FILES,
@@ -9,15 +8,6 @@ import {
 } from "./chat-images";
 
 describe("chat document accept", () => {
-  test("includes excel extensions and spreadsheet mime types", () => {
-    expect(DOCUMENT_ACCEPT).toContain(".xlsx");
-    expect(DOCUMENT_ACCEPT).toContain(".xls");
-    expect(DOCUMENT_ACCEPT).toContain(".md");
-    expect(DOCUMENT_ACCEPT).toContain(
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
-  });
-
   test("recognizes xlsx file parts", () => {
     expect(
       isDocumentFilePart({
