@@ -392,7 +392,7 @@ export interface ChatListItem {
   artifactStreaming?: boolean;
   content: string;
   createdAt?: string;
-  documents?: Array<{ filename: string; mediaType: string }>;
+  documents?: Array<{ contentUrl?: string; filename: string; mediaType: string }>;
   /** Client-only: turn failed (e.g. upstream 429); not part of server history. */
   failed?: boolean;
   historyIndex?: number;
