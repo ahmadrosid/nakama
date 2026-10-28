@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { fileURLToPath } from "node:url";
 import { withTempHome } from "@nakama/core/channel-test-helpers";
 import {
   loadTeamsConfigFile,
@@ -53,7 +54,7 @@ test("a second worker that refuses to start leaves the running worker's port alo
       cmd: [
         process.execPath,
         "--no-install",
-        new URL("./index.ts", import.meta.url).pathname,
+        fileURLToPath(new URL("./index.ts", import.meta.url)),
       ],
       env: {
         ...process.env,
