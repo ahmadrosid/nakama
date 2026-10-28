@@ -390,16 +390,16 @@ export function registerSessionRoutes(
       request: { params: z.object({ attachmentId: z.string() }) },
       responses: {
         200: {
-          description: "Image bytes",
+          description: "Attachment bytes",
           content: {
             "image/*": { schema: z.string().openapi({ format: "binary" }) },
           },
         },
         401: { description: "Authentication required" },
         403: { description: "Profile access denied" },
-        404: { description: "Image not found" },
+        404: { description: "Attachment not found" },
       },
-      summary: "Read an image attached to chat",
+      summary: "Read a file attached to chat",
       tags: ["Chat"],
     })
   );
@@ -666,14 +666,14 @@ export function registerSessionRoutes(
   });
 
   app.get("/v1/attachments/:attachmentId/content", async (c) => {
-    const attachment = await agent.readChatImageAttachment(
+    const attachment = await agent.readChatAttachment(
       requireActiveOrgIdFromContext(c),
       c.req.param("attachmentId"),
       getRequestAuth(c)
     );
 
     if (!attachment) {
-      return errorResponse("Image not found", 404);
+      return errorResponse("Attachment not found", 404);
     }
 
     return new Response(new Uint8Array(attachment.bytes), {
