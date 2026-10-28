@@ -2,6 +2,7 @@ import type {
   HealthResponse,
   LlmUsageStats,
   LlmUsageStatus,
+  NakamaVersionResponse,
   SystemStatusResponse,
   WorkerProcessInfo,
 } from "@nakama/core";
@@ -13,6 +14,7 @@ import {
   getWhatsAppWorkerStatus,
   isComposioConfiguredAsync,
   NAKAMA_API_VERSION,
+  NakamaApiError,
 } from "@nakama/core";
 import {
   type ChannelConfigScope,
@@ -21,6 +23,7 @@ import {
 } from "@nakama/core/channel-config-shared";
 import { getSlackWorkerStatus } from "@nakama/core/slack-worker";
 import type { DatabaseAdapter } from "@nakama/db";
+import { z } from "zod";
 import type { AgentService } from "./agent-service";
 import type { AutomationRunner } from "./automation-runner";
 import type { ComposioService } from "./composio-service";
@@ -290,6 +293,7 @@ export class SystemStatusService {
       ok: true,
       onboardingEnabled: isOnboardingEnabled(),
       providerConfigured: this.agent.providerConfigured,
+      updateCheckEnabled: isUpdateCheckEnabled(),
       userConfigured: humanUserCount > 0,
       version: getNakamaVersion(),
     };
@@ -303,6 +307,79 @@ export function isOnboardingEnabled(): boolean {
   return value === "1" || value === "true";
 }
 
+/** On unless the operator turns it off with `NAKAMA_DISABLE_UPDATE_CHECK`, e.g. a host that upgrades instances itself. */
+export function isUpdateCheckEnabled(): boolean {
+  const value = process.env.NAKAMA_DISABLE_UPDATE_CHECK?.trim().toLowerCase();
+
+  return !(value === "1" || value === "true");
+}
+
 function isString<T>(value: T): value is T & string {
   return Object.prototype.toString.call(value) === "[object String]";
+}
+
+const LATEST_RELEASE_URL =
+  "https://api.github.com/repos/ahmadrosid/nakama/releases/latest";
+
+const RELEASE_CACHE_MS = 10 * 60 * 1000;
+
+const releaseSchema = z.object({
+  html_url: z.string(),
+  tag_name: z.string(),
+});
+
+let cachedRelease: { at: number; latest: string; releaseUrl: string } | null =
+  null;
+
+function versionParts(version: string): number[] | null {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
+
+  return match ? match.slice(1).map(Number) : null;
+}
+
+function isNewer(latest: string, current: string): boolean {
+  const a = versionParts(latest);
+  const b = versionParts(current);
+
+  if (!(a && b)) {
+    return false;
+  }
+
+  const diff = a.map((part, index) => part - (b[index] ?? 0)).find(Boolean);
+
+  return (diff ?? 0) > 0;
+}
+
+/** Cached for 10 minutes: anonymous GitHub API calls are limited to 60 per hour per IP. */
+export async function checkNakamaVersion(
+  current: string,
+  now = Date.now()
+): Promise<NakamaVersionResponse> {
+  if (!cachedRelease || now - cachedRelease.at > RELEASE_CACHE_MS) {
+    const response = await fetch(LATEST_RELEASE_URL, {
+      headers: { Accept: "application/vnd.github+json" },
+      signal: AbortSignal.timeout(10_000),
+    }).catch(() => null);
+
+    const parsed = releaseSchema.safeParse(
+      response?.ok ? await response.json() : null
+    );
+
+    if (!parsed.success) {
+      throw new NakamaApiError("Could not reach GitHub releases.", 502);
+    }
+
+    cachedRelease = {
+      at: now,
+      latest: parsed.data.tag_name.replace(/^v/i, ""),
+      releaseUrl: parsed.data.html_url,
+    };
+  }
+
+  return {
+    current,
+    latest: cachedRelease.latest,
+    releaseUrl: cachedRelease.releaseUrl,
+    updateAvailable: isNewer(cachedRelease.latest, current),
+  };
 }
