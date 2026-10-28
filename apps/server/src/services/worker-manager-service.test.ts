@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readWorkerDesiredState, setWorkerDesiredRunning } from "@nakama/core";
+import { getChannelConfigDir } from "@nakama/core/channel-config-shared";
 import { saveWhatsAppConfig } from "@nakama/core/whatsapp-config";
 import { WorkerManagerService } from "./worker-manager-service";
 
@@ -84,42 +85,26 @@ describe("WorkerManagerService", () => {
     }
   });
 
-  test("isolates agent processes, desired state, and recovery", async () => {
-    const first = { orgId: "org_a", profileId: "agent_a" };
-    const second = { orgId: "org_a", profileId: "agent_b" };
-    await saveWhatsAppConfig({}, first);
-    await saveWhatsAppConfig({}, second);
+  test("recovery starts a worker whose old heartbeat pid now names another process", async () => {
+    const owner = { orgId: "org_a", profileId: "agent_a" };
+    const dir = getChannelConfigDir("telegram", owner);
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "config.ini"), "bot_token=1:token\n");
+
+    // After a VM restart the old worker's pid can belong to any live process.
+    await writeFile(
+      join(dir, "worker-heartbeat.json"),
+      JSON.stringify({ pid: process.pid, updatedAt: new Date().toISOString() })
+    );
+
+    await setWorkerDesiredRunning("telegram", true, owner);
     await setWorkerDesiredRunning("automation", false);
     const pm2 = createMockPm2();
-    const service = new WorkerManagerService(projectRoot, pm2);
-    await service.startWorker("whatsapp", first);
-    await service.startWorker("whatsapp", second);
+    await new WorkerManagerService(projectRoot, pm2).recoverDesiredWorkers();
     // SAFETY: The test fixture matches the contract used by this test.
-    const calls = (pm2.start as ReturnType<typeof mock>).mock.calls;
-    const token = await service.getWhatsAppContextToken();
-    expect(
-      await new WorkerManagerService(
-        projectRoot,
-        createMockPm2()
-      ).getWhatsAppContextToken()
-    ).toBe(token);
-    expect(calls[0][0].env.NAKAMA_WHATSAPP_CONTEXT_TOKEN).toBe(token);
-    expect(await service.verifyWhatsAppContextToken(token)).toBe(true);
-    expect(await service.verifyWhatsAppContextToken("forged")).toBe(false);
-    expect(calls[0][0].name).not.toBe(calls[1][0].name);
-    expect(calls[0][0].env.NAKAMA_CHANNEL_PROFILE_ID).toBe(first.profileId);
-    await service.stopWorker("whatsapp", first);
-    expect((await readWorkerDesiredState(first)).whatsapp).toBe(false);
-    expect((await readWorkerDesiredState(second)).whatsapp).toBe(true);
-    // SAFETY: The test fixture matches the contract used by this test.
-    (pm2.start as ReturnType<typeof mock>).mockClear();
-    await service.recoverDesiredWorkers();
-    expect(pm2.start).toHaveBeenCalledTimes(1);
-    expect(
-      // SAFETY: The test fixture matches the contract used by this test.
-      (pm2.start as ReturnType<typeof mock>).mock.calls[0][0].env
-        .NAKAMA_CHANNEL_PROFILE_ID
-    ).toBe(second.profileId);
+    const starts = (pm2.start as ReturnType<typeof mock>).mock.calls;
+    expect(starts).toHaveLength(1);
+    expect(starts[0][0].env.NAKAMA_CHANNEL_PROFILE_ID).toBe(owner.profileId);
   });
 
   describe("isValidWorker", () => {

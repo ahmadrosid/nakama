@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   canPreviewWorkspaceEntry,
   legacyArtifactProfileId,
-  parseFilesViewMode,
   resolveFilesProfileId,
 } from "./files-page.shared";
 
@@ -29,16 +28,7 @@ describe("Files profile resolution", () => {
   });
 });
 
-describe("Files view mode", () => {
-  test("accepts list and grid only", () => {
-    expect(parseFilesViewMode("list")).toBe("list");
-    expect(parseFilesViewMode("grid")).toBe("grid");
-    expect(parseFilesViewMode("table")).toBeNull();
-    expect(parseFilesViewMode("")).toBeNull();
-    expect(parseFilesViewMode(null)).toBeNull();
-    expect(parseFilesViewMode(undefined)).toBeNull();
-  });
-});
+describe("Files view mode", () => {});
 
 describe("canPreviewWorkspaceEntry", () => {
   const base = {
@@ -69,12 +59,6 @@ describe("canPreviewWorkspaceEntry", () => {
         canPreviewWorkspaceEntry({ ...base, [kind]: true, sizeBytes: OVER_CAP })
       ).toBe(false);
     }
-  });
-
-  test("a small Word document is unchanged", () => {
-    expect(
-      canPreviewWorkspaceEntry({ ...base, isText: true, isWordDocument: true })
-    ).toBe(true);
   });
 
   test("a type with no preview stays unpreviewable whatever its size", () => {

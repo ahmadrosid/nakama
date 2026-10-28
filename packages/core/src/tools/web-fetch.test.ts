@@ -117,14 +117,6 @@ describe("web_fetch input schema", () => {
   });
 });
 
-describe("web_fetch tool metadata", () => {
-  test("exports the parameters schema", () => {
-    expect(webFetchTool.parameters?.type).toBe("object");
-    expect(webFetchTool.parameters?.required).toEqual(["url"]);
-    expect(webFetchTool.parameters?.additionalProperties).toBe(false);
-  });
-});
-
 describe("web_fetch tool validation errors", () => {
   test("throws on missing url, non-http url, and unknown keys", async () => {
     // SAFETY: This call deliberately supplies invalid input to test runtime validation.

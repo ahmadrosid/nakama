@@ -52,8 +52,8 @@ import {
 import { segmentAssistantTurn } from "@/components/chat/assistant-tool-group.shared";
 import { ToolCredentialCard } from "@/components/chat/chat-add-capabilities-dialogs";
 import { ChatUsageBadge } from "@/components/chat/chat-usage-badge";
-import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { DocumentAttachmentPreview } from "@/components/chat/document-attachment-preview";
+import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { PluginDrafts } from "@/components/chat/PluginDraftCard";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
@@ -1145,10 +1145,8 @@ function UserMessageContent({ message }: { message: ChatListItem }) {
         <div className="flex flex-wrap gap-2">
           {otherDocuments.map((document) => (
             <DocumentAttachmentPreview
-              contentUrl={document.contentUrl}
-              filename={document.filename}
-              key={`${document.filename}-${document.mediaType}`}
-              mediaType={document.mediaType}
+              document={document}
+              key={document.attachmentId ?? document.url ?? document.filename}
             />
           ))}
         </div>

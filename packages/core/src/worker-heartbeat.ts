@@ -27,7 +27,7 @@ export type WorkerHeartbeatBase = {
   updatedAt: string;
 };
 
-export function isProcessAlive(pid: number): boolean {
+function isProcessAlive(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) {
     return false;
   }
@@ -75,6 +75,10 @@ export function createWorkerHeartbeatStore<
   isAliveExtra?: (heartbeat: T) => boolean;
 }) {
   const getPath = (): string => join(options.getDir(), HEARTBEAT_FILENAME);
+
+  const getLeasePath = (): string =>
+    join(options.getDir(), "worker-lock.sqlite");
+
   let lease: Database | null = null;
   let usesLease = false;
 
@@ -87,7 +91,7 @@ export function createWorkerHeartbeatStore<
     }
 
     await ensureDir(options.getDir());
-    const path = join(options.getDir(), "worker-lock.sqlite");
+    const path = getLeasePath();
     const candidate = new Database(path, { create: true });
 
     try {
@@ -173,9 +177,42 @@ export function createWorkerHeartbeatStore<
     return options.isAliveExtra ? options.isAliveExtra(heartbeat) : true;
   };
 
+  /**
+   * True while a live worker holds this connection's lock. After a restart a
+   * heartbeat pid can belong to another process; the OS lock cannot.
+   */
+  const isLeaseHeld = async (): Promise<boolean> => {
+    if (!(await pathExists(getLeasePath()))) {
+      return false;
+    }
+
+    const probe = new Database(getLeasePath());
+
+    try {
+      probe.exec("BEGIN EXCLUSIVE");
+      probe.exec("ROLLBACK");
+
+      return false;
+    } catch {
+      return true;
+    } finally {
+      probe.close();
+    }
+  };
+
   const isRunning = async (
     maxAgeMs = DEFAULT_WORKER_HEARTBEAT_MAX_AGE_MS
   ): Promise<boolean> => isAlive(await read(), maxAgeMs);
 
-  return { acquire, clear, getPath, isAlive, isRunning, parse, read, write };
+  return {
+    acquire,
+    clear,
+    getPath,
+    isAlive,
+    isLeaseHeld,
+    isRunning,
+    parse,
+    read,
+    write,
+  };
 }

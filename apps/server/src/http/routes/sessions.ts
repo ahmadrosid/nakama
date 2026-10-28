@@ -392,7 +392,7 @@ export function registerSessionRoutes(
         200: {
           description: "Attachment bytes",
           content: {
-            "image/*": { schema: z.string().openapi({ format: "binary" }) },
+            "*/*": { schema: z.string().openapi({ format: "binary" }) },
           },
         },
         401: { description: "Authentication required" },

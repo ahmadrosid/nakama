@@ -34,7 +34,7 @@ export function skillSuggestionPreview(suggestion: SkillSuggestion) {
   return { description, excerpt, title };
 }
 
-export function extractSkillDescription(content: string): string | null {
+function extractSkillDescription(content: string): string | null {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
 
   if (!match) {

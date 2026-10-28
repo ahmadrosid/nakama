@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  DOCUMENT_ACCEPT,
   isDocumentFilePart,
   MAX_FOLDER_BYTES,
   MAX_FOLDER_FILES,
@@ -9,15 +8,6 @@ import {
 } from "./chat-images";
 
 describe("chat document accept", () => {
-  test("includes excel extensions and spreadsheet mime types", () => {
-    expect(DOCUMENT_ACCEPT).toContain(".xlsx");
-    expect(DOCUMENT_ACCEPT).toContain(".xls");
-    expect(DOCUMENT_ACCEPT).toContain(".md");
-    expect(DOCUMENT_ACCEPT).toContain(
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
-  });
-
   test("recognizes xlsx file parts", () => {
     expect(
       isDocumentFilePart({
@@ -53,7 +43,13 @@ describe("userContentToDisplayDocuments", () => {
           type: "document",
         },
       ])
-    ).toEqual([{ filename: "cla.pdf", mediaType: "application/pdf" }]);
+    ).toEqual([
+      {
+        filename: "cla.pdf",
+        mediaType: "application/pdf",
+        url: "data:application/pdf;base64,YWJj",
+      },
+    ]);
   });
 
   test("reads a persisted document_ref part", () => {
@@ -67,7 +63,13 @@ describe("userContentToDisplayDocuments", () => {
           type: "document_ref",
         },
       ])
-    ).toEqual([{ filename: "cla.pdf", mediaType: "application/pdf" }]);
+    ).toEqual([
+      {
+        attachmentId: "att-1",
+        filename: "cla.pdf",
+        mediaType: "application/pdf",
+      },
+    ]);
   });
 });
 

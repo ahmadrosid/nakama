@@ -672,6 +672,47 @@ describe("Nakama data portability", () => {
     expect(await readFile(join(target, "MEMORY.md"), "utf8")).toBe("secret");
   });
 
+  test("retirement skips stray files where org or profile directories are expected", async () => {
+    const profile = join(
+      rootDir,
+      "orgs",
+      "o",
+      "profiles",
+      "p",
+      "users",
+      "alice"
+    );
+
+    await mkdir(profile, { recursive: true });
+    await writeFile(join(profile, "MEMORY.md"), "secret");
+    // Finder drops regular files into walked directories; neither may crash boot.
+    await writeFile(join(rootDir, "orgs", ".DS_Store"), "finder metadata");
+    await writeFile(
+      join(rootDir, "orgs", "o", "profiles", ".DS_Store"),
+      "finder metadata"
+    );
+
+    await retireAppUserData(rootDir, null);
+
+    expect(
+      await readFile(
+        join(
+          rootDir,
+          "retired-app-users",
+          "o",
+          "p",
+          "users",
+          "alice",
+          "MEMORY.md"
+        ),
+        "utf8"
+      )
+    ).toBe("secret");
+    expect(await readFile(join(rootDir, "orgs", ".DS_Store"), "utf8")).toBe(
+      "finder metadata"
+    );
+  });
+
   test("legacy restore sanitation failure leaves live data and runtime untouched", async () => {
     await writeFile(join(rootDir, "config.ini"), "live");
 

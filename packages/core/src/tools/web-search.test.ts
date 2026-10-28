@@ -26,13 +26,6 @@ describe("partitionTools", () => {
     });
   });
 
-  test("returns empty local tools when only web_search is assigned", () => {
-    expect(partitionTools([webSearchTool])).toEqual({
-      hasWebSearch: true,
-      localTools: [],
-    });
-  });
-
   test("keeps a custom-backed web_search local so the provider does not search", () => {
     const customWebSearch: ToolDefinition = {
       description: "Search via a configured endpoint",

@@ -4,6 +4,7 @@ import {
   chmod,
   copyFile,
   mkdtemp,
+  readdir,
   rm,
   stat,
   writeFile,
@@ -706,6 +707,55 @@ describe("plugin portability", () => {
     } finally {
       await rm(restoreRoot, { force: true, recursive: true });
     }
+  });
+
+  test("orphan restored integrity markers are removed without failing quarantine", async () => {
+    const databasePath = join(configDir, "nakama.db");
+    const database = await createSqliteDatabase(`file:${databasePath}`);
+    const now = new Date().toISOString();
+    await database.adapter.upsertOrganization({
+      createdAt: now,
+      id: ORG,
+      name: "Source",
+      slug: "source",
+      updatedAt: now,
+    });
+
+    const service = new PluginService(database.adapter, configDir, {
+      officialPackagesDir: resolve(
+        import.meta.dir,
+        "../../../../packages/plugins"
+      ),
+      onHostRequest: async () => [{ id: "agent", name: "Agent" }],
+      workerManager: {
+        registerPluginWorkers: async () => {},
+        unregisterPluginWorkers: async () => {},
+      },
+    });
+
+    await service.installOfficialPlugin(ORG, "supermemory", ACTOR);
+
+    await database.close();
+
+    const pluginDir = join(configDir, "plugins", "supermemory");
+    // Restored exports can carry a marker whose release directory was empty
+    // and never made it into the archive.
+    const orphanMarker = join(pluginDir, "0.0.0+dev.abc1234.integrity");
+    await writeFile(orphanMarker, "orphan\n");
+
+    const quarantined = await quarantineInvalidPluginReleases(configDir);
+
+    expect(quarantined).toEqual(["supermemory@0.0.0+dev.abc1234"]);
+    expect(await pathExists(orphanMarker)).toBe(false);
+    const entries = await readdir(pluginDir, { withFileTypes: true });
+    expect(entries.find((entry) => entry.isDirectory())?.name).toMatch(
+      /^\d+\.\d+\.\d+$/
+    );
+    expect(
+      entries.find(
+        (entry) => entry.isFile() && entry.name.endsWith(".integrity")
+      )?.name
+    ).toMatch(/^\d+\.\d+\.\d+\.integrity$/);
   });
 
   test("export fails and releases the barrier when a plugin write cannot drain", async () => {

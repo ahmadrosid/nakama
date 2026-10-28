@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { createSlackEventHandler } from "./chat-handler";
 import { connectSlackSocket, type SlackMessageEvent } from "./socket";
 
 const realFetch = globalThis.fetch;
@@ -78,4 +79,90 @@ test("acks envelopes, drops redelivered events, and reconnects on disconnect", a
   expect(events.map((event) => event.text)).toEqual(["hi"]);
   expect(opens).toBe(2);
   expect(statuses.slice(0, 3)).toEqual([true, false, true]);
+});
+
+test("a handler that throws produces the error reply in the event thread", async () => {
+  const acks: string[] = [];
+
+  const posted: Array<{ channel: string; text: string; threadTs?: string }> =
+    [];
+
+  const server = Bun.serve({
+    fetch: (request, srv) =>
+      srv.upgrade(request) ? undefined : new Response("no", { status: 400 }),
+    port: 0,
+    websocket: {
+      message: (_socket, raw) => {
+        // SAFETY: The test server sends only serialized ack envelopes here.
+        acks.push(
+          (JSON.parse(String(raw)) as { envelope_id: string }).envelope_id
+        );
+      },
+      open: (socket) => {
+        socket.send(JSON.stringify({ type: "hello" }));
+
+        const envelope = {
+          envelope_id: "env-err-1",
+          payload: {
+            event: {
+              channel: "C_FAIL",
+              text: "trigger failure",
+              ts: "123.456",
+              type: "message",
+            },
+            event_id: "EvFail1",
+          },
+          type: "events_api",
+        };
+
+        socket.send(JSON.stringify(envelope));
+      },
+    },
+  });
+
+  // SAFETY: The mock ignores request arguments and returns a valid fetch response.
+  globalThis.fetch = (async () =>
+    Response.json({
+      ok: true,
+      url: `ws://localhost:${server.port}`,
+    })) as typeof fetch;
+
+  const slack = {
+    postMessage: async (channel: string, text: string, threadTs?: string) => {
+      posted.push({ channel, text, threadTs });
+    },
+  };
+
+  const onEvent = createSlackEventHandler({
+    handleEvent: async () => {
+      throw new Error("turn execution failed");
+    },
+    slack,
+  });
+
+  const statuses: boolean[] = [];
+
+  const socket = connectSlackSocket({
+    appToken: "xapp-test",
+    onEvent,
+    onStatus: (connected) => statuses.push(connected),
+  });
+
+  const deadline = Date.now() + 5000;
+
+  while ((acks.length === 0 || posted.length === 0) && Date.now() < deadline) {
+    await Bun.sleep(20);
+  }
+
+  socket.close();
+  server.stop(true);
+
+  expect(acks).toEqual(["env-err-1"]);
+  expect(posted).toEqual([
+    {
+      channel: "C_FAIL",
+      text: "turn execution failed",
+      threadTs: "123.456",
+    },
+  ]);
 });

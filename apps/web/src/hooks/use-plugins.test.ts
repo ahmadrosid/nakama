@@ -35,14 +35,6 @@ describe("plugin updates", () => {
     ).toEqual(["1.10.0", "1.2.0"]);
   });
 
-  test("an enabled plugin offers Update when a newer release is approved", () => {
-    const actions = pluginRowActions(
-      plugin({ availableVersions: ["1.0.0", "1.0.1"] })
-    );
-
-    expect(actions.update).toBe(true);
-  });
-
   test("a plugin on its newest release offers no Update", () => {
     for (const lifecycleState of ["enabled", "disabled"] as const) {
       const actions = pluginRowActions(

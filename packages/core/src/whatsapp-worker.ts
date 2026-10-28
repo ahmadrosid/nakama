@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { ChannelConfigScope, ChannelOwner } from "./channel-config-shared";
 import type { WhatsAppWorkerStatus } from "./contract";
 import { pathExists, readTextOrNull, removeFile, writeTextFile } from "./fs";
+import { getUserConfigDir } from "./user-config";
 import {
   getWhatsAppConfigDir,
   loadWhatsAppSettingsPublic,
@@ -20,6 +21,41 @@ export interface WhatsAppWorkerHeartbeat extends WorkerHeartbeatBase {
 }
 
 const QR_CODE_FILENAME = "worker-qr.txt";
+
+const HostChannelsSchema = z.array(
+  z.object({ orgId: z.string(), profileId: z.string() })
+);
+
+/** Agent connections the shared WhatsApp host process must keep running. */
+function getWhatsAppHostChannelsPath(): string {
+  return join(getUserConfigDir(), "whatsapp-host-channels.json");
+}
+
+export async function readWhatsAppHostChannels(): Promise<ChannelOwner[]> {
+  const raw = await readTextOrNull(getWhatsAppHostChannelsPath());
+
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = HostChannelsSchema.safeParse(JSON.parse(raw));
+
+    return parsed.success ? parsed.data : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function writeWhatsAppHostChannels(
+  owners: ChannelOwner[]
+): Promise<void> {
+  await writeTextFile(
+    getWhatsAppHostChannelsPath(),
+    `${JSON.stringify(owners)}\n`,
+    { ensureDir: getUserConfigDir() }
+  );
+}
 
 export function createWhatsAppWorkerHeartbeat(
   orgId: ChannelConfigScope = null

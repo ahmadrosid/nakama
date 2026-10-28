@@ -248,7 +248,11 @@ export async function retireAppUserData(
         // NTFS file ids pass 2^53; as numbers two files can share an ino.
         result = await lstat(current, { bigint: true });
       } catch (error) {
-        if (getNodeErrorCode(error) === "ENOENT") {
+        const code = getNodeErrorCode(error);
+
+        // ENOTDIR: a regular file occupies a directory segment's place
+        // (e.g. a stray .DS_Store) — treat the target as absent.
+        if (code === "ENOENT" || code === "ENOTDIR") {
           return null;
         }
 
@@ -321,8 +325,12 @@ export async function retireAppUserData(
   const orgsDir = join(root, "orgs");
 
   if (await checkedStat(orgsDir)) {
-    for (const orgId of await readdir(orgsDir)) {
-      const profilesDir = join(orgsDir, orgId, "profiles");
+    for (const entry of await readdir(orgsDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+
+      const profilesDir = join(orgsDir, entry.name, "profiles");
 
       if (!(await checkedStat(profilesDir))) {
         continue;
@@ -331,7 +339,7 @@ export async function retireAppUserData(
       for (const profileId of await readdir(profilesDir)) {
         await moveRetiredPath(
           join(profilesDir, profileId, "users"),
-          join(retired, orgId, profileId, "users")
+          join(retired, entry.name, profileId, "users")
         );
       }
     }
@@ -1095,10 +1103,24 @@ export async function restoreNakamaDataImport(
         `file:${secretDatabasePath ?? join(stagedRoot, "sqlite", "nakama.sqlite")}`
       );
 
+      const secrets = new ManagedSecrets(stagedDatabase.adapter);
+
       try {
-        await new ManagedSecrets(stagedDatabase.adapter).migrateLegacyFiles(
-          stagedRoot
-        );
+        // Named check: migrateLegacyFiles re-runs it, but its plain Error would
+        // reach restore clients as a generic "unexpected server error".
+        try {
+          await secrets.checkIntegrity();
+        } catch (error) {
+          // formatServerError only logs non-NakamaApiError causes; log here so
+          // the underlying failure stays diagnosable.
+          console.error("Restored secrets integrity check failed:", error);
+          throw new NakamaApiError(
+            "Saved secrets in this backup cannot be decrypted with this install's NAKAMA_SECRETS_KEY. Re-enter provider keys after restore, or remove saved secrets from the backup.",
+            400
+          );
+        }
+
+        await secrets.migrateLegacyFiles(stagedRoot);
       } finally {
         stagedDatabase.release();
       }

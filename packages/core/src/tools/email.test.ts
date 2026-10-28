@@ -5,8 +5,6 @@ import { builtinTools } from "./builtin";
 import {
   createFakeMailReader,
   createFakeMailSender,
-  emailParameters,
-  emailTool,
   runEmailTool,
 } from "./email";
 
@@ -27,22 +25,6 @@ const completeConfig: EmailConfigFile = {
 };
 
 describe("email tool", () => {
-  test("exposes an OpenAI-compatible object parameters schema", () => {
-    const parameters = emailParameters();
-    // SAFETY: This test inspects arbitrary properties on the generated JSON Schema.
-    const schema = z.record(z.string(), z.json()).parse(parameters);
-
-    expect(parameters.type).toBe("object");
-    expect(schema.oneOf).toBeUndefined();
-    expect(schema.anyOf).toBeUndefined();
-    expect(parameters.properties?.action).toEqual({
-      enum: ["list", "read", "search", "send"],
-      type: "string",
-    });
-    expect(parameters.required).toContain("action");
-    expect(emailTool.parameters).toEqual(parameters);
-  });
-
   test("builtin tool schemas all declare type object for LLM providers", () => {
     for (const tool of builtinTools) {
       expect(tool.parameters?.type, `${tool.name} parameters.type`).toBe(

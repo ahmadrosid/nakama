@@ -3480,6 +3480,16 @@ export async function quarantineInvalidPluginReleases(
       }
 
       const version = entry.name.slice(0, -".integrity".length);
+      const integrityPath = join(pluginDir, entry.name);
+      const releaseDir = getPluginReleaseDir(plugin.name, version, configDir);
+
+      if (!(await pathExists(releaseDir))) {
+        // An orphan marker (restored from an export whose release dir was
+        // empty) has nothing to hash; hashing it crashes restore finalization.
+        await rm(integrityPath, { force: true });
+        quarantined.push(`${plugin.name}@${version}`);
+        continue;
+      }
 
       if (
         await pluginReleaseIntegrityMatches(plugin.name, version, configDir)
@@ -3487,12 +3497,8 @@ export async function quarantineInvalidPluginReleases(
         continue;
       }
 
-      const releaseDir = getPluginReleaseDir(plugin.name, version, configDir);
-
-      if (await pathExists(releaseDir)) {
-        await rename(releaseDir, `${releaseDir}.unavailable`);
-        quarantined.push(`${plugin.name}@${version}`);
-      }
+      await rename(releaseDir, `${releaseDir}.unavailable`);
+      quarantined.push(`${plugin.name}@${version}`);
     }
   }
 

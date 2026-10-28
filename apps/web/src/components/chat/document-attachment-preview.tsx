@@ -1,173 +1,204 @@
 import { cn } from "@nakama/ui/utils";
 import { File01Icon } from "hugeicons-react";
 import { useEffect, useId, useState } from "react";
+import { ArtifactAttachmentPanelBody } from "@/components/chat/artifact-attachment-panel-body";
+import {
+  artifactPanelBodyClassName,
+  artifactPanelDefaultWidth,
+} from "@/components/chat/artifact-attachment-panel-body.shared";
 import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
+import {
+  artifactCodeLanguage,
+  isMarkdownArtifactMimeType,
+  isTextArtifactMimeType,
+  resolveArtifactMimeType,
+} from "@/lib/chat-artifacts";
+import { client, formatError } from "@/lib/client";
+import type { DisplayDocument } from "@/lib/pasted-text";
 
 interface DocumentAttachmentPreviewProps {
-  contentUrl?: string;
-  filename: string;
-  mediaType: string;
+  className?: string;
+  document: DisplayDocument;
 }
 
-type PreviewKind = "image" | "pdf" | "text" | "unsupported";
+/** A freshly sent `document` part carries its bytes as a `data:` URL; decode
+ * them locally instead of fetching, since the app CSP does not allow `data:`
+ * requests. */
+function blobFromDataUrl(dataUrl: string, mediaType: string): Blob {
+  const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
 
-function previewKind(mediaType: string): PreviewKind {
-  const base = mediaType.split(";")[0]?.trim().toLowerCase() ?? "";
-
-  if (base.startsWith("image/")) {
-    return "image";
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
   }
 
-  if (base === "application/pdf") {
-    return "pdf";
-  }
-
-  if (base.startsWith("text/")) {
-    return "text";
-  }
-
-  return "unsupported";
+  return new Blob([bytes], { type: mediaType });
 }
 
-/** Text beyond this is cut in the panel; the download link keeps the rest. */
-const MAX_TEXT_PREVIEW_CHARS = 500_000;
+function downloadUrlFor(file: DisplayDocument): string | undefined {
+  if (file.attachmentId) {
+    return `/v1/attachments/${encodeURIComponent(file.attachmentId)}/content`;
+  }
 
-function TextPanelContent({
-  filename,
-  url,
-}: {
-  filename: string;
-  url: string;
-}) {
-  const [state, setState] = useState<
-    | { status: "loading" }
-    | { status: "error" }
-    | { status: "ready"; text: string; truncated: boolean }
-  >({ status: "loading" });
+  return file.url;
+}
+
+function useDocumentAttachmentContent(file: DisplayDocument) {
+  const resolvedMimeType = resolveArtifactMimeType(
+    file.mediaType,
+    file.filename
+  );
+
+  const isPdf = resolvedMimeType === "application/pdf";
+  const isText = isTextArtifactMimeType(resolvedMimeType);
+  const canPreview = isPdf || isText;
+
+  const [blob, setBlob] = useState<Blob | null>(null);
+  const [text, setText] = useState<string | null>(null);
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(canPreview);
 
   useEffect(() => {
+    if (!canPreview) {
+      setLoading(false);
+
+      return;
+    }
+
     let cancelled = false;
+    setLoading(true);
+    setError(null);
 
-    fetch(url)
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`Preview failed: ${response.status}`);
+    const loadBlob = file.attachmentId
+      ? client.readAttachmentContent(file.attachmentId)
+      : Promise.resolve(
+          file.url ? blobFromDataUrl(file.url, resolvedMimeType) : null
+        );
+
+    loadBlob
+      .then((loaded): Promise<{ content: string | null; loaded: Blob }> => {
+        if (!loaded) {
+          throw new Error("Could not load this file.");
         }
 
-        return response.text();
+        return isText
+          ? loaded.text().then((content) => ({ content, loaded }))
+          : Promise.resolve({ content: null, loaded });
       })
-      .then((text) => {
-        if (cancelled) {
-          return;
-        }
-
-        setState({
-          status: "ready",
-          text:
-            text.length > MAX_TEXT_PREVIEW_CHARS
-              ? text.slice(0, MAX_TEXT_PREVIEW_CHARS)
-              : text,
-          truncated: text.length > MAX_TEXT_PREVIEW_CHARS,
-        });
-      })
-      .catch(() => {
+      .then(({ content, loaded }) => {
         if (!cancelled) {
-          setState({ status: "error" });
+          setBlob(loaded);
+          setText(content);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(formatError(err));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [url]);
+  }, [canPreview, file.attachmentId, file.url, isText, resolvedMimeType]);
 
-  if (state.status === "loading") {
-    return <p className="text-muted-foreground text-sm">Loading…</p>;
-  }
+  useEffect(() => {
+    if (!blob) {
+      return;
+    }
 
-  if (state.status === "error") {
-    return (
-      <div className="space-y-2">
-        <p className="text-foreground text-sm">
-          Couldn&apos;t load a preview of this file.
-        </p>
-        <a
-          className="text-foreground text-sm underline"
-          download={filename}
-          href={url}
-        >
-          Download {filename}
-        </a>
-      </div>
-    );
-  }
+    const url = URL.createObjectURL(blob);
+    setObjectUrl(url);
+
+    return () => URL.revokeObjectURL(url);
+  }, [blob]);
+
+  return { canPreview, error, isPdf, isText, loading, objectUrl, text };
+}
+
+function DocumentUnavailablePreview({ file }: { file: DisplayDocument }) {
+  const href = downloadUrlFor(file);
 
   return (
-    <div className="space-y-2">
-      <pre className="whitespace-pre-wrap break-words text-foreground text-sm">
-        {state.text}
-      </pre>
-      {state.truncated ? (
-        <p className="text-muted-foreground text-xs">
-          Preview truncated. Download the file for the full content.
-        </p>
+    <div className="flex flex-col items-center gap-3 p-6 text-center">
+      <File01Icon aria-hidden className="size-8 text-muted-foreground" />
+      <p className="text-muted-foreground text-sm">
+        Preview is not available for this file type.
+      </p>
+      {href ? (
+        <a
+          className="text-primary text-sm underline underline-offset-2"
+          download={file.filename}
+          href={href}
+        >
+          Download {file.filename}
+        </a>
       ) : null}
     </div>
   );
 }
 
-function PanelContent({
-  filename,
-  kind,
-  url,
-}: {
-  filename: string;
-  kind: PreviewKind;
-  url: string;
-}) {
-  if (kind === "image") {
+function DocumentAttachmentPanelContent({ file }: { file: DisplayDocument }) {
+  const { canPreview, error, isPdf, loading, objectUrl, text } =
+    useDocumentAttachmentContent(file);
+
+  if (!canPreview) {
+    return <DocumentUnavailablePreview file={file} />;
+  }
+
+  const artifact = {
+    filename: file.filename,
+    mimeType: file.mediaType,
+    path: file.filename,
+    savedAt: "",
+    sizeBytes: 0,
+  };
+
+  if (isPdf) {
     return (
-      <img
-        alt=""
-        className="max-h-[min(50vh,28rem)] w-full rounded-lg border border-border object-contain"
-        src={url}
+      <ArtifactAttachmentPanelBody
+        artifact={artifact}
+        canPreview={canPreview}
+        error={error}
+        kind="pdf"
+        loading={loading}
+        pdfPreviewUrl={objectUrl}
       />
     );
   }
 
-  if (kind === "pdf") {
-    return (
-      <div className="space-y-2">
-        <iframe
-          className="h-[60vh] w-full rounded-lg border border-border"
-          src={url}
-          title={filename}
-        />
-        <a
-          className="text-foreground text-sm underline"
-          download={filename}
-          href={url}
-        >
-          Download {filename}
-        </a>
-      </div>
-    );
-  }
+  const isMarkdown = isMarkdownArtifactMimeType(file.mediaType);
 
-  return <TextPanelContent filename={filename} url={url} />;
+  return (
+    <ArtifactAttachmentPanelBody
+      artifact={artifact}
+      canPreview={canPreview}
+      content={text}
+      error={error}
+      format={isMarkdown ? "markdown" : "plain"}
+      kind="text"
+      language={isMarkdown ? null : artifactCodeLanguage(file.filename)}
+      loading={loading}
+    />
+  );
 }
 
 export function DocumentAttachmentPreview({
-  contentUrl,
-  filename,
-  mediaType,
+  document: file,
+  className,
 }: DocumentAttachmentPreviewProps) {
   const panelId = useId();
   const attachmentPanel = useOptionalChatAttachmentPanel();
   const show = attachmentPanel?.show;
   const hide = attachmentPanel?.hide;
-
-  const kind = previewKind(mediaType);
+  const interactive = Boolean(show);
 
   useEffect(() => {
     if (!hide) {
@@ -179,64 +210,60 @@ export function DocumentAttachmentPreview({
     };
   }, [hide, panelId]);
 
-  const chipContent = (
+  function openPanel() {
+    if (!show) {
+      return;
+    }
+
+    const isMarkdown = isMarkdownArtifactMimeType(
+      resolveArtifactMimeType(file.mediaType, file.filename)
+    );
+
+    show({
+      bodyClassName: artifactPanelBodyClassName({
+        isHtml: false,
+        isImage: false,
+        isMarkdown,
+      }),
+      content: <DocumentAttachmentPanelContent file={file} />,
+      defaultWidth: artifactPanelDefaultWidth(file.filename, file.mediaType),
+      id: panelId,
+      title: file.filename,
+    });
+  }
+
+  const chip = (
     <>
-      <File01Icon
-        aria-hidden
-        className="size-4 shrink-0 text-muted-foreground"
-      />
-      <span className="truncate text-foreground text-sm">{filename}</span>
+      <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-background">
+        <File01Icon aria-hidden className="size-4 text-muted-foreground" />
+      </div>
+      <span className="truncate text-foreground text-sm">{file.filename}</span>
     </>
   );
 
-  // Without a fetchable URL there is nothing to open or download.
-  if (!contentUrl) {
+  if (interactive) {
     return (
-      <div className="inline-flex max-w-full items-center gap-2 rounded-md border border-border bg-muted px-3 py-2">
-        {chipContent}
-      </div>
-    );
-  }
-
-  // Unsupported types never get a content preview: icon, filename, and a
-  // working download link instead.
-  if (kind === "unsupported") {
-    return (
-      <a
-        className="inline-flex max-w-full items-center gap-2 rounded-md border border-border bg-muted px-3 py-2 transition-colors hover:bg-muted/70"
-        download={filename}
-        href={contentUrl}
+      <button
+        className={cn(
+          "inline-flex max-w-full items-center gap-2 rounded-md border border-border bg-muted px-3 py-2 text-left transition-colors hover:bg-muted/70",
+          className
+        )}
+        onClick={openPanel}
+        type="button"
       >
-        {chipContent}
-      </a>
-    );
-  }
-
-  if (!show) {
-    return (
-      <div className="inline-flex max-w-full items-center gap-2 rounded-md border border-border bg-muted px-3 py-2">
-        {chipContent}
-      </div>
+        {chip}
+      </button>
     );
   }
 
   return (
-    <button
+    <div
       className={cn(
-        "inline-flex max-w-full items-center gap-2 rounded-md border border-border bg-muted px-3 py-2 text-left transition-colors hover:bg-muted/70"
+        "inline-flex max-w-full items-center gap-2 rounded-md border border-border bg-muted px-3 py-2",
+        className
       )}
-      onClick={() =>
-        show({
-          content: (
-            <PanelContent filename={filename} kind={kind} url={contentUrl} />
-          ),
-          id: panelId,
-          title: filename,
-        })
-      }
-      type="button"
     >
-      {chipContent}
-    </button>
+      {chip}
+    </div>
   );
 }
