@@ -17,7 +17,6 @@ import {
   CheckmarkCircle01Icon,
   Copy01Icon,
   Edit03Icon,
-  File01Icon,
   GitBranchIcon,
   MoreHorizontalIcon,
   Rotate02Icon,
@@ -54,6 +53,7 @@ import { segmentAssistantTurn } from "@/components/chat/assistant-tool-group.sha
 import { ToolCredentialCard } from "@/components/chat/chat-add-capabilities-dialogs";
 import { ChatUsageBadge } from "@/components/chat/chat-usage-badge";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
+import { DocumentAttachmentPreview } from "@/components/chat/document-attachment-preview";
 import { PluginDrafts } from "@/components/chat/PluginDraftCard";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
@@ -1144,18 +1144,12 @@ function UserMessageContent({ message }: { message: ChatListItem }) {
       {otherDocuments.length ? (
         <div className="flex flex-wrap gap-2">
           {otherDocuments.map((document) => (
-            <div
-              className="inline-flex max-w-full items-center gap-2 rounded-md border border-border bg-muted px-3 py-2"
+            <DocumentAttachmentPreview
+              contentUrl={document.contentUrl}
+              filename={document.filename}
               key={`${document.filename}-${document.mediaType}`}
-            >
-              <File01Icon
-                aria-hidden
-                className="size-4 shrink-0 text-muted-foreground"
-              />
-              <span className="truncate text-foreground text-sm">
-                {document.filename}
-              </span>
-            </div>
+              mediaType={document.mediaType}
+            />
           ))}
         </div>
       ) : null}
