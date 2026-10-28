@@ -506,7 +506,7 @@ function ChatComposerBarePrompt({
                 onActiveChange={setDictationActive}
               />
 
-              {dictationActive ? null : (
+              {dictationActive && !canStop ? null : (
                 <ChatComposerSubmitButton
                   busy={busy}
                   canStop={canStop}
@@ -1593,7 +1593,7 @@ function ChatComposerFullFooter({
           onActiveChange={onDictationActiveChange}
         />
 
-        {dictationActive ? null : (
+        {dictationActive && !canStop ? null : (
           <ChatComposerSubmitButton
             busy={busy}
             canStop={canStop}

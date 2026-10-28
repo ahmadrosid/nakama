@@ -54,6 +54,8 @@ export function useDictationRecorder({
   const maxTimerRef = useRef<number | null>(null);
   const tickRef = useRef<number | null>(null);
   const startedAtRef = useRef(0);
+  const startingRef = useRef(false);
+  const mountedRef = useRef(true);
 
   const stopStream = () => {
     streamRef.current?.getTracks().forEach((track) => {
@@ -64,6 +66,7 @@ export function useDictationRecorder({
 
   useEffect(
     () => () => {
+      mountedRef.current = false;
       if (maxTimerRef.current !== null) {
         window.clearTimeout(maxTimerRef.current);
       }
@@ -103,7 +106,7 @@ export function useDictationRecorder({
     setState("transcribing");
 
     try {
-      const mediaType = mimeType.split(";")[0] ?? "audio/webm";
+      const mediaType = mimeType.split(";")[0] || "audio/webm";
       const data = await blobToBase64(blob);
 
       const { text } = await client.transcribeAudio({
@@ -162,81 +165,107 @@ export function useDictationRecorder({
       return;
     }
 
-    let stream: MediaStream;
-
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch {
-      toast(
-        "Microphone access was blocked. Allow microphone permission for this site and try again."
-      );
-
+    if (startingRef.current) {
       return;
     }
 
-    streamRef.current = stream;
-    chunksRef.current = [];
-    discardRef.current = false;
-    const session = ++sessionRef.current;
-    formRef.current = buttonRef.current?.closest("form") ?? null;
+    startingRef.current = true;
 
-    const mimeType = pickMimeType();
+    try {
+      let stream: MediaStream;
 
-    const recorder = new MediaRecorder(
-      stream,
-      mimeType ? { mimeType } : undefined
-    );
-
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        chunksRef.current.push(event.data);
-      }
-    };
-
-    recorder.onstop = () => {
-      if (maxTimerRef.current !== null) {
-        window.clearTimeout(maxTimerRef.current);
-        maxTimerRef.current = null;
-      }
-
-      if (tickRef.current !== null) {
-        window.clearInterval(tickRef.current);
-        tickRef.current = null;
-      }
-
-      const blob = new Blob(chunksRef.current, { type: recorder.mimeType });
-      const discard = discardRef.current;
-
-      chunksRef.current = [];
-      recorderRef.current = null;
-      waveform.stopWaveform();
-      stopStream();
-
-      if (discard) {
-        setState("idle");
-        onActiveChange?.(false);
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch {
+        toast(
+          "Microphone access was blocked. Allow microphone permission for this site and try again."
+        );
 
         return;
       }
 
-      void finishRecording(blob, recorder.mimeType, session);
-    };
+      if (!mountedRef.current) {
+        stream.getTracks().forEach((track) => {
+          track.stop();
+        });
 
-    recorderRef.current = recorder;
-    recorder.start();
-    startedAtRef.current = Date.now();
-    setElapsed(0);
-    setState("recording");
-    onActiveChange?.(true);
-    waveform.startWaveform(stream);
-    tickRef.current = window.setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startedAtRef.current) / 1000));
-    }, 250);
-    maxTimerRef.current = window.setTimeout(() => {
-      recorderRef.current?.stop();
-    }, MAX_RECORDING_MS);
+        return;
+      }
+
+      streamRef.current = stream;
+      chunksRef.current = [];
+      discardRef.current = false;
+      const session = ++sessionRef.current;
+      formRef.current = buttonRef.current?.closest("form") ?? null;
+
+      const mimeType = pickMimeType();
+
+      try {
+        const recorder = new MediaRecorder(
+          stream,
+          mimeType ? { mimeType } : undefined
+        );
+
+        recorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            chunksRef.current.push(event.data);
+          }
+        };
+
+        recorder.onstop = () => {
+          if (maxTimerRef.current !== null) {
+            window.clearTimeout(maxTimerRef.current);
+            maxTimerRef.current = null;
+          }
+
+          if (tickRef.current !== null) {
+            window.clearInterval(tickRef.current);
+            tickRef.current = null;
+          }
+
+          const blob = new Blob(chunksRef.current, { type: recorder.mimeType });
+          const discard = discardRef.current;
+
+          chunksRef.current = [];
+          recorderRef.current = null;
+          waveform.stopWaveform();
+          stopStream();
+
+          if (discard) {
+            setState("idle");
+            onActiveChange?.(false);
+
+            return;
+          }
+
+          void finishRecording(blob, recorder.mimeType, session);
+        };
+
+        recorderRef.current = recorder;
+        recorder.start();
+      } catch {
+        recorderRef.current = null;
+        stopStream();
+        toast("Voice recording could not start in this browser.");
+
+        return;
+      }
+
+      startedAtRef.current = Date.now();
+      setElapsed(0);
+      setState("recording");
+      onActiveChange?.(true);
+      waveform.startWaveform(stream);
+      tickRef.current = window.setInterval(() => {
+        setElapsed(Math.floor((Date.now() - startedAtRef.current) / 1000));
+      }, 250);
+      maxTimerRef.current = window.setTimeout(() => {
+        recorderRef.current?.stop();
+      }, MAX_RECORDING_MS);
+    } finally {
+      startingRef.current = false;
+    }
   };
-
   const discardRecording = () => {
     discardRef.current = true;
     recorderRef.current?.stop();
