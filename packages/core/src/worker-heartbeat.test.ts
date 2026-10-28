@@ -30,6 +30,31 @@ describe("worker-heartbeat store", () => {
       await rm(dir, { force: true, recursive: true });
     }
   });
+  test("a reused pid in an old heartbeat does not count as a running worker", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nakama-worker-reused-pid-"));
+    const previous = createWorkerHeartbeatStore({ getDir: () => dir });
+    const checker = createWorkerHeartbeatStore({ getDir: () => dir });
+
+    try {
+      expect(await checker.isLeaseHeld()).toBe(false);
+      await previous.acquire();
+      await previous.write({
+        pid: process.pid,
+        updatedAt: new Date().toISOString(),
+      });
+      expect(await checker.isLeaseHeld()).toBe(true);
+      await previous.clear();
+      // The worker is gone, but its pid now names a live process.
+      await createWorkerHeartbeatStore({ getDir: () => dir }).write({
+        pid: process.pid,
+        updatedAt: new Date().toISOString(),
+      });
+      expect(await checker.isLeaseHeld()).toBe(false);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   test("isHeartbeatAlive rejects stale, missing, and invalid heartbeats", () => {
     expect(isHeartbeatAlive(null)).toBe(false);
     expect(
@@ -96,8 +121,10 @@ test("a killed worker releases its operating-system connection lock", async () =
     expect(new TextDecoder().decode(ready.value)).toContain("ready");
     reader.releaseLock();
     await expect(replacement.acquire()).rejects.toThrow();
+    expect(await replacement.isLeaseHeld()).toBe(true);
     child.kill("SIGKILL");
     await child.exited;
+    expect(await replacement.isLeaseHeld()).toBe(false);
     await replacement.acquire();
     await replacement.write({
       pid: process.pid,

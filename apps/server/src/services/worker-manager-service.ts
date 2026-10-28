@@ -50,10 +50,7 @@ import {
   readWhatsAppHostChannels,
   writeWhatsAppHostChannels,
 } from "@nakama/core/whatsapp-worker";
-import {
-  createWorkerHeartbeatStore,
-  isProcessAlive,
-} from "@nakama/core/worker-heartbeat";
+import { createWorkerHeartbeatStore } from "@nakama/core/worker-heartbeat";
 import type { DatabaseAdapter } from "@nakama/db";
 
 const WORKER_SCRIPTS = new Map(
@@ -255,9 +252,8 @@ export class WorkerManagerService {
       this.deletePluginProcess(pm2, this.processName(platform, scope))
     );
     const heartbeat = createWorkerHeartbeatStore({ getDir: () => source });
-    const running = await heartbeat.read();
 
-    if (running && isProcessAlive(running.pid)) {
+    if (await heartbeat.isLeaseHeld()) {
       throw new Error(
         "Stop the manually started legacy worker before claiming its connection"
       );
@@ -1271,11 +1267,11 @@ export class WorkerManagerService {
 
       if (!pluginWorker) {
         if (isChannelOwner(orgId)) {
-          const heartbeat = await createWorkerHeartbeatStore({
+          const heartbeat = createWorkerHeartbeatStore({
             getDir: () => getChannelConfigDir(readChannelPlatform(name), orgId),
-          }).read();
+          });
 
-          if (heartbeat && isProcessAlive(heartbeat.pid)) {
+          if (await heartbeat.isLeaseHeld()) {
             throw new Error("Stop the manually started agent worker first");
           }
         }
@@ -1337,11 +1333,12 @@ export class WorkerManagerService {
           continue;
         }
 
-        const heartbeat = await createWorkerHeartbeatStore({
-          getDir: () => getChannelConfigDir(platform, owner),
-        }).read();
-
-        if (heartbeat && isProcessAlive(heartbeat.pid)) {
+        // A pid in an old heartbeat may now belong to another process.
+        if (
+          await createWorkerHeartbeatStore({
+            getDir: () => getChannelConfigDir(platform, owner),
+          }).isLeaseHeld()
+        ) {
           continue;
         }
 
