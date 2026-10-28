@@ -28,6 +28,7 @@ const CONFIG: TeamsConfigFile = {
 
 function activity(patch: Partial<TeamsActivity> = {}): TeamsActivity {
   return {
+    channelId: "msteams",
     conversationId: "conv_1",
     conversationType: "personal",
     id: `act_${Math.random().toString(16).slice(2)}`,
@@ -154,6 +155,7 @@ describe("teams chat handler", () => {
     ],
     ["a group conversation", { conversationType: "groupChat" }],
     ["an empty message", { text: "   " }],
+    ["another Bot Framework channel", { channelId: "webchat" }],
   ] as const) {
     test(`${name} never reaches the agent`, async () => {
       await withTempHome("nakama-teams-handler-", async (homeDir) => {
@@ -242,6 +244,40 @@ describe("teams chat handler", () => {
       const duplicate = activity({ text: "only once" });
 
       await Promise.all([handle(duplicate), handle(duplicate)]);
+
+      expect(turns).toHaveLength(1);
+    });
+  });
+
+  test("the same id in two chats, or no id at all, is not a duplicate", async () => {
+    await withTempHome("nakama-teams-handler-", async (homeDir) => {
+      const { handle, turns } = createHarness(homeDir);
+
+      await handle(activity({ conversationId: "conv_a", id: "act_same" }));
+      await handle(activity({ conversationId: "conv_b", id: "act_same" }));
+      await handle(activity({ conversationId: "conv_a", id: "" }));
+      await handle(activity({ conversationId: "conv_a", id: "" }));
+
+      expect(turns).toHaveLength(4);
+    });
+  });
+
+  test("tenant and user ids match regardless of letter case", async () => {
+    await withTempHome("nakama-teams-handler-", async (homeDir) => {
+      // Ids with letters, so changing their case changes them.
+      const tenantId = "aaaabbbb-cccc-4ddd-8eee-ffff00001111";
+      const senderId = "bbbbcccc-dddd-4eee-8fff-aaaa00002222";
+
+      const { handle, turns } = createHarness(homeDir, {
+        config: { ...CONFIG, allowedUserIds: [senderId], tenantId },
+      });
+
+      await handle(
+        activity({
+          senderId: senderId.toUpperCase(),
+          tenantId: tenantId.toUpperCase(),
+        })
+      );
 
       expect(turns).toHaveLength(1);
     });

@@ -24,6 +24,7 @@
     "dev:docs": "bun run --cwd docs/website dev",
     "dev:server": "bun run apps/server/src/dev.ts",
     "dev:slack": "bun run --filter @nakama/slack dev",
+    "dev:teams": "bun run --filter @nakama/teams dev",
     "dev:telegram": "bun run --filter @nakama/telegram dev",
     "dev:web": "bun run --filter @nakama/web dev",
     "dev:whatsapp": "bun run --filter @nakama/whatsapp dev",

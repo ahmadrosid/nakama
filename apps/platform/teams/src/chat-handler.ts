@@ -8,6 +8,8 @@ import type { TeamsConfigFile } from "@nakama/core/teams-config";
 
 /** The parts of a Teams message activity this slice acts on. */
 export interface TeamsActivity {
+  /** The Bot Framework channel; only "msteams" is served. */
+  channelId: string;
   conversationId: string;
   /** "personal" is a one-to-one chat; group chats and channels are ignored. */
   conversationType: string;
@@ -41,6 +43,7 @@ const TEAMS_MAX_MESSAGE_CHARS = 6000;
 
 function isPersonalMessage(activity: TeamsActivity): boolean {
   return (
+    activity.channelId === "msteams" &&
     activity.conversationType === "personal" &&
     !activity.isBot &&
     activity.text.trim().length > 0 &&
@@ -48,15 +51,18 @@ function isPersonalMessage(activity: TeamsActivity): boolean {
   );
 }
 
-/** An empty allowlist denies everyone, which is what an unset one means. */
+/**
+ * An empty allowlist denies everyone, which is what an unset one means. Entra
+ * ids are GUIDs, which compare without regard to letter case.
+ */
 function allows(
   config: TeamsConfigFile | null,
   activity: TeamsActivity
 ): boolean {
   return (
     config !== null &&
-    config.tenantId === activity.tenantId &&
-    config.allowedUserIds.includes(activity.senderId)
+    config.tenantId.toLowerCase() === activity.tenantId.toLowerCase() &&
+    config.allowedUserIds.includes(activity.senderId.toLowerCase())
   );
 }
 
@@ -115,18 +121,25 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
     }
 
     // Checked before the first await so a retry that arrives while the first
-    // delivery is still running cannot start a second turn.
-    if (seenActivities.has(activity.id)) {
-      return;
-    }
+    // delivery is still running cannot start a second turn. Ids are unique
+    // within a chat; one without an id cannot be told apart from a retry.
+    const deliveryKey = activity.id
+      ? `${activity.conversationId}:${activity.id}`
+      : null;
 
-    seenActivities.add(activity.id);
+    if (deliveryKey !== null) {
+      if (seenActivities.has(deliveryKey)) {
+        return;
+      }
 
-    if (seenActivities.size > SEEN_ACTIVITY_LIMIT) {
-      const oldest = seenActivities.values().next().value;
+      seenActivities.add(deliveryKey);
 
-      if (oldest !== undefined) {
-        seenActivities.delete(oldest);
+      if (seenActivities.size > SEEN_ACTIVITY_LIMIT) {
+        const oldest = seenActivities.values().next().value;
+
+        if (oldest !== undefined) {
+          seenActivities.delete(oldest);
+        }
       }
     }
 

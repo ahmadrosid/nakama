@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import {
   createTeamsWorkerHeartbeat,
   saveTeamsConfig,
   saveTeamsInboundPort,
 } from "@nakama/core";
+import { getTeamsConfigPath } from "@nakama/core/teams-config";
 import { setupTestConfigDir } from "../../test-config-dir";
 import {
   CREDENTIALS,
@@ -154,7 +157,9 @@ describe("teams webhook proxy", () => {
     expect(reached).toBe(1);
   });
 
-  test("refuses an unknown agent without reaching any worker", async () => {
+  // An unauthenticated caller cannot tell an unknown agent, an unreadable
+  // configuration or a stopped worker apart.
+  test("refuses an unknown agent the way it refuses a stopped worker", async () => {
     const { app } = await setupOwnedProfile();
 
     const response = await app.fetch(
@@ -168,7 +173,110 @@ describe("teams webhook proxy", () => {
       )
     );
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(503);
+  });
+
+  test("an agent id that decodes to a stray percent sign is refused, not an error", async () => {
+    const { app } = await setupOwnedProfile();
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/channels/teams/a%25b/messages", {
+        body: JSON.stringify({ type: "message" }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(503);
+  });
+
+  test("an unreadable configuration is refused, not an error", async () => {
+    const { app, profileId } = await setupOwnedProfile();
+
+    await mkdir(dirname(getTeamsConfigPath({ orgId: "org_test", profileId })), {
+      recursive: true,
+    });
+    await writeFile(
+      getTeamsConfigPath({ orgId: "org_test", profileId }),
+      "not a teams configuration"
+    );
+
+    const response = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/channels/teams/${profileId}/messages`,
+        {
+          body: JSON.stringify({ type: "message" }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        }
+      )
+    );
+
+    expect(response.status).toBe(503);
+  });
+
+  test("refuses an archived organization's agent even with a live worker", async () => {
+    const { app, databaseAdapter, profileId } = await setupOwnedProfile();
+    let reached = false;
+
+    await configureLiveWorker(profileId, () => {
+      reached = true;
+
+      return Response.json({ ok: true });
+    });
+
+    const organization = await databaseAdapter.getOrganizationById("org_test");
+
+    if (!organization) {
+      throw new Error("The seeded organization is missing.");
+    }
+
+    await databaseAdapter.upsertOrganization({
+      ...organization,
+      archivedAt: new Date().toISOString(),
+    });
+
+    const response = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/channels/teams/${profileId}/messages`,
+        {
+          body: JSON.stringify({ type: "message" }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        }
+      )
+    );
+
+    expect(response.status).toBe(503);
+    expect(reached).toBe(false);
+  });
+
+  test("refuses a declared oversized body before reading it", async () => {
+    const { app, profileId } = await setupOwnedProfile();
+    let reached = false;
+
+    await configureLiveWorker(profileId, () => {
+      reached = true;
+
+      return Response.json({ ok: true });
+    });
+
+    const response = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/channels/teams/${profileId}/messages`,
+        {
+          body: JSON.stringify({ type: "message" }),
+          headers: {
+            "Content-Length": "200000",
+            "Content-Type": "application/json",
+          },
+          method: "POST",
+        }
+      )
+    );
+
+    expect(response.status).toBe(413);
+    expect(reached).toBe(false);
   });
 
   test("refuses a body larger than the forwarding limit", async () => {

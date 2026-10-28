@@ -5,7 +5,6 @@ import {
   installErrorTrackingSink,
   log,
 } from "@nakama/core";
-import { hasActiveStreams } from "@nakama/core/channel-active-stream";
 import { channelOwnerFromEnv } from "@nakama/core/channel-config-shared";
 import { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import {
@@ -60,14 +59,7 @@ async function shutdown(code: number): Promise<never> {
   }
 
   await heartbeat.clear();
-
-  if (hasActiveStreams()) {
-    console.warn(
-      "Leaving the spawned Nakama server running so in-flight agent turns can finish; the next worker start will reuse it."
-    );
-  } else {
-    stopSpawnedServer(spawnedChild);
-  }
+  stopSpawnedServer(spawnedChild);
 
   process.exit(code);
 }

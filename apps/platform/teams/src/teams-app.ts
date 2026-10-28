@@ -75,12 +75,14 @@ export function createSafeLogger() {
 
 /** Reads the fields this slice acts on from an SDK message activity. */
 function toTeamsActivity(activity: {
+  channelId: string;
   conversation: { conversationType?: string; id: string; tenantId?: string };
   from: { aadObjectId?: string; role?: string };
   id?: string;
   text?: string;
 }): TeamsActivity {
   return {
+    channelId: activity.channelId,
     conversationId: activity.conversation.id,
     conversationType: activity.conversation.conversationType ?? "",
     id: activity.id ?? "",
