@@ -1,7 +1,4 @@
-import {
-  type ChannelOwner,
-  channelOwnerFromEnv,
-} from "@nakama/core/channel-config-shared";
+import type { ChannelOwner } from "@nakama/core/channel-config-shared";
 import { loadWhatsAppConfigFile } from "@nakama/core/whatsapp-config";
 
 export interface WhatsAppBridgeConfig {
@@ -12,9 +9,8 @@ export interface WhatsAppBridgeConfig {
 }
 
 export async function loadConfig(
-  env: Record<string, string | undefined> = process.env
+  owner: ChannelOwner
 ): Promise<WhatsAppBridgeConfig> {
-  const owner = channelOwnerFromEnv(env);
   const config = await loadWhatsAppConfigFile(owner);
 
   if (!config) {

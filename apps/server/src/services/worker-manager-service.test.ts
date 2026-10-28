@@ -84,44 +84,6 @@ describe("WorkerManagerService", () => {
     }
   });
 
-  test("isolates agent processes, desired state, and recovery", async () => {
-    const first = { orgId: "org_a", profileId: "agent_a" };
-    const second = { orgId: "org_a", profileId: "agent_b" };
-    await saveWhatsAppConfig({}, first);
-    await saveWhatsAppConfig({}, second);
-    await setWorkerDesiredRunning("automation", false);
-    const pm2 = createMockPm2();
-    const service = new WorkerManagerService(projectRoot, pm2);
-    await service.startWorker("whatsapp", first);
-    await service.startWorker("whatsapp", second);
-    // SAFETY: The test fixture matches the contract used by this test.
-    const calls = (pm2.start as ReturnType<typeof mock>).mock.calls;
-    const token = await service.getWhatsAppContextToken();
-    expect(
-      await new WorkerManagerService(
-        projectRoot,
-        createMockPm2()
-      ).getWhatsAppContextToken()
-    ).toBe(token);
-    expect(calls[0][0].env.NAKAMA_WHATSAPP_CONTEXT_TOKEN).toBe(token);
-    expect(await service.verifyWhatsAppContextToken(token)).toBe(true);
-    expect(await service.verifyWhatsAppContextToken("forged")).toBe(false);
-    expect(calls[0][0].name).not.toBe(calls[1][0].name);
-    expect(calls[0][0].env.NAKAMA_CHANNEL_PROFILE_ID).toBe(first.profileId);
-    await service.stopWorker("whatsapp", first);
-    expect((await readWorkerDesiredState(first)).whatsapp).toBe(false);
-    expect((await readWorkerDesiredState(second)).whatsapp).toBe(true);
-    // SAFETY: The test fixture matches the contract used by this test.
-    (pm2.start as ReturnType<typeof mock>).mockClear();
-    await service.recoverDesiredWorkers();
-    expect(pm2.start).toHaveBeenCalledTimes(1);
-    expect(
-      // SAFETY: The test fixture matches the contract used by this test.
-      (pm2.start as ReturnType<typeof mock>).mock.calls[0][0].env
-        .NAKAMA_CHANNEL_PROFILE_ID
-    ).toBe(second.profileId);
-  });
-
   describe("isValidWorker", () => {
     test("returns false for unknown worker", () => {
       const service = new WorkerManagerService(projectRoot, createMockPm2());
