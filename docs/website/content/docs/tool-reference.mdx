@@ -254,15 +254,15 @@ Multiple `sub_agent` calls in one turn can run **in parallel** when the model ba
 | `background` | boolean | No | Start the task in its own chat under the current one and return at once |
 | `sessionId` | string | No | With `background`: send the task to a chat the current one started earlier |
 
-**Returns:** `{ status, summary, output, error? }` where `status` is `success`, `fail`, or `timeout`. With `background` it also returns the new chat's `sessionId`.
+**Returns:** `{ status, summary, output, error?, sessionId? }` where `status` is `success`, `fail`, or `timeout`, and `sessionId` is the chat the run happened in.
 
-**Background chats:** ask the agent to "start 3 separate chats for X, Y and Z" and it opens one chat per task, nested under the current chat in **Recents**. Each one answers its first message on its own while you keep working, and you can open and continue it like any chat. A chat started this way cannot start more, and one chat can start at most 5.
+**Sub-agent chats:** every run from a chat happens in its own chat, nested under the current one in **Recents**, so you can open and continue it like any chat. Ask the agent to "start 3 separate chats for X, Y and Z" and it uses `background`: each chat answers its first message on its own while you keep working. A sub-agent chat cannot start more, and one chat can start at most 5.
 
 **Limits (v1):**
 
 - Same profile only — no cross-profile targeting
 - One level of nesting — sub-agents cannot call `sub_agent` again
-- Without `background`, no persisted child chat session: audit via parent tool result + server logs
+- A run from a chat is saved as a chat under it. A run with no chat (an automation turn) is not saved: audit via the tool result and server logs
 - Child runs share the profile workspace; side effects persist even if the parent times out
 - Default timeout counts toward the parent web stream budget (10 minute total turn limit)
 
