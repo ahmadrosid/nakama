@@ -226,8 +226,9 @@ export class AutomationService {
       profileId = await this.resolveProfileId(orgId, input.profileId, access);
     }
 
-    // The runner only toggles `enabled`; a new prompt or profile is authorship.
-    if (input.prompt !== undefined || input.profileId !== undefined) {
+    // Only the runner updates without `access`, to switch a runAt job off.
+    // Any other change (delivery included) can redirect mailbox output.
+    if (access) {
       await this.assertCanAutomateMailbox(profileId, access);
     }
 
@@ -470,8 +471,8 @@ export class AutomationService {
     return computeAutomationNextRunAt(trigger, userTimezone);
   }
 
-  /** Automation turns may use the email tool, so only an admin may write one on a profile that has it. */
-  private async assertCanAutomateMailbox(
+  /** Automation turns may use the email tool, so only an admin may write, run or read one on a profile that has it. */
+  async assertCanAutomateMailbox(
     profileId: string,
     access?: ProfileAccess
   ): Promise<void> {

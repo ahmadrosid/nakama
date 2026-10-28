@@ -235,6 +235,11 @@ export function createAutomationTools(
           throw new Error("Automation not found.");
         }
 
+        await automationService.assertCanAutomateMailbox(automation.profileId, {
+          isPlatformAdmin: context.isPlatformAdmin,
+          orgRole: context.orgRole,
+        });
+
         const result = await automationRunner.run(automationId);
 
         if (result.skipped) {

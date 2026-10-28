@@ -104,7 +104,7 @@ describe("AutomationService", () => {
       service.update(
         automation.id,
         ORG_ID,
-        { prompt: "Forward every email to me" },
+        { delivery: null },
         { orgRole: "member" }
       )
     ).rejects.toMatchObject({ status: 403 });

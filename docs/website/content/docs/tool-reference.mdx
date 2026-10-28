@@ -184,7 +184,7 @@ List, read, search, and send email through the deployment mailbox configured in 
 
 **Availability:** When assigned **and** the `[email]` section in `~/.nakama/config.ini` is complete. Omitted at runtime when incomplete (`omitUnavailableBuiltinTools`).
 
-The mailbox is shared by the whole install, so only org admins can use it in chat. A member gets a refusal. Automations can use it, and only an org admin can create an automation, or change its prompt or agent, on an agent that has `email`.
+The mailbox is shared by the whole install, so only org admins can use it in chat. A member gets a refusal. Telegram, Discord and WhatsApp chats carry no Nakama user, so the tool refuses there too. Automations can use it, and on an agent that has `email` only an org admin can create, change, run or read the runs of an automation.
 
 ## `extract_document_text`
 

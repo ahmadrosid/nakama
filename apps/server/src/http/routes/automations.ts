@@ -491,6 +491,11 @@ export function registerAutomationRoutes(
       return errorResponse("Automation not found", 404);
     }
 
+    await automationService.assertCanAutomateMailbox(automation.profileId, {
+      isPlatformAdmin: auth.isPlatformAdmin,
+      orgRole: auth.orgRole,
+    });
+
     const result = await agent.runAutomation(automationId);
 
     if (result.skipped) {
@@ -517,6 +522,16 @@ export function registerAutomationRoutes(
     const orgId = requireActiveOrgIdFromContext(c);
     const auth = getRequestAuth(c);
     const automationId = decodeURIComponent(c.req.param("automationId"));
+    const automation = await automationService.get(automationId, orgId);
+
+    if (!automation) {
+      return errorResponse("Automation not found.", 404);
+    }
+
+    await automationService.assertCanAutomateMailbox(automation.profileId, {
+      isPlatformAdmin: auth.isPlatformAdmin,
+      orgRole: auth.orgRole,
+    });
 
     try {
       const runs = await automationService.listRuns(

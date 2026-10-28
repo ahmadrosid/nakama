@@ -259,4 +259,55 @@ describe("automation destination authorization over HTTP", () => {
       await rm(configDir, { force: true, recursive: true });
     }
   });
+
+  test("a member cannot run, read or change an automation on a mailbox agent", async () => {
+    const fixture = createFixture();
+    const { orgId, session } = await loginMember(fixture);
+    const now = new Date().toISOString();
+
+    await fixture.databaseAdapter.upsertTool({
+      createdAt: now,
+      description: "Mailbox",
+      handlerConfig: {},
+      handlerType: "builtin",
+      id: "tool_email",
+      name: "email",
+      updatedAt: now,
+    });
+    await fixture.databaseAdapter.assignToolToProfile(PROFILE_ID, "tool_email");
+
+    const created = await fixture.automationService.create(
+      orgId,
+      {
+        description: "Inbox digest",
+        name: "Inbox",
+        prompt: "Summarize the inbox",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID,
+      { isPlatformAdmin: false, orgRole: "admin" }
+    );
+
+    const call = (path: string, method: string, body?: string) =>
+      fixture.app.fetch(
+        new Request(
+          `http://localhost:4310/v1/automations/${created.id}${path}`,
+          {
+            body,
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": session.csrfToken,
+              ...session.headers(),
+            },
+            method,
+          }
+        )
+      );
+
+    expect((await call("/runs", "GET")).status).toBe(403);
+    expect((await call("/run", "POST")).status).toBe(403);
+    expect(
+      (await call("", "PUT", JSON.stringify({ enabled: false }))).status
+    ).toBe(403);
+  });
 });
