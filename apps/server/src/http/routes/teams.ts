@@ -34,30 +34,6 @@ const updateTeamsSettingsSchema = z.object({
   tenantId: z.string().optional(),
 });
 
-/** The loopback port of the agent's running worker, or null if there is none. */
-async function liveWorkerPort(
-  databaseAdapter: NonNullable<ServerOptions["databaseAdapter"]>,
-  profileId: string
-): Promise<number | null> {
-  const profile = await databaseAdapter.getProfile(profileId);
-
-  if (!profile?.orgId) {
-    return null;
-  }
-
-  const organization = await databaseAdapter.getOrganizationById(profile.orgId);
-
-  if (!organization || organization.archivedAt) {
-    return null;
-  }
-
-  const owner = { orgId: profile.orgId, profileId: profile.id };
-  const config = await loadTeamsConfigFile(owner).catch(() => null);
-  const status = await getTeamsWorkerStatus(owner).catch(() => null);
-
-  return config?.inboundPort && status?.running ? config.inboundPort : null;
-}
-
 export function registerTeamsRoutes(app: HonoApp, options: ServerOptions) {
   const { agent, databaseAdapter, workerManager } = options;
 
@@ -125,17 +101,34 @@ export function registerTeamsRoutes(app: HonoApp, options: ServerOptions) {
       return errorResponse("Request too large", 413);
     }
 
+    // One answer for an unknown agent, an archived organization, an unreadable
+    // configuration and a stopped worker, so a caller learns none of them.
+    const notRunning = () =>
+      errorResponse("Teams connection is not running", 503);
+
     // Hono has already decoded the path parameter.
-    const port = await liveWorkerPort(
-      databaseAdapter,
-      c.req.param("profileId")
+    const profile = await databaseAdapter.getProfile(c.req.param("profileId"));
+
+    if (!profile?.orgId) {
+      return notRunning();
+    }
+
+    const organization = await databaseAdapter.getOrganizationById(
+      profile.orgId
     );
 
-    // One answer for an unknown agent, an archived organization, an unreadable
-    // configuration and a stopped worker, so a caller learns none of them. A
-    // port saved by a worker that has since died is never forwarded to.
-    if (port === null) {
-      return errorResponse("Teams connection is not running", 503);
+    if (!organization || organization.archivedAt) {
+      return notRunning();
+    }
+
+    const owner = { orgId: profile.orgId, profileId: profile.id };
+    const config = await loadTeamsConfigFile(owner).catch(() => null);
+    const status = await getTeamsWorkerStatus(owner).catch(() => null);
+    const port = config?.inboundPort;
+
+    // A port saved by a worker that has since died is never forwarded to.
+    if (!(port && status?.running)) {
+      return notRunning();
     }
 
     const body = await c.req.raw.arrayBuffer();
