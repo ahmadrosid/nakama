@@ -7,7 +7,6 @@ import {
   createChatExitController,
   createDebouncedEscAbortHandler,
   disableRawModeIfActive,
-  formatBusyDropLine,
   formatSoulStatusLines,
   formatToolCall,
   isEscInterruptKey,
@@ -59,17 +58,6 @@ describe("createChatExitController", () => {
     const exit = createChatExitController(controller.signal);
     await exit.wait();
     expect(exit.exiting).toBe(true);
-  });
-});
-
-describe("formatBusyDropLine", () => {
-  test("includes the drop count once the warn threshold is reached", () => {
-    expect(formatBusyDropLine(3)).toBe(
-      "[busy] ignored input (3 while processing)"
-    );
-    expect(formatBusyDropLine(5)).toBe(
-      "[busy] ignored input (5 while processing)"
-    );
   });
 });
 

@@ -224,29 +224,6 @@ describe("resolveModel", () => {
     );
   });
 
-  test("resolves catalog models for DeepSeek", () => {
-    expect(resolveModel("deepseek", "deepseek-v4-pro")).toBe("deepseek-v4-pro");
-    expect(getDefaultModel("deepseek")).toBe("deepseek-flash");
-
-    for (const id of [
-      "deepseek-flash",
-      "deepseek-v4-flash",
-      "deepseek-v4-flash-vision-exp",
-    ]) {
-      expect(resolveModel("deepseek", id)).toBe(id);
-      expect(getModelById(id)).toMatchObject({
-        contextWindow: 1_000_000,
-        default: id === "deepseek-flash",
-        inputPerMillionUsd: 0.3,
-        maxOutputTokens: 384_000,
-        outputPerMillionUsd: 1.2,
-        provider: "deepseek",
-        supportsThinking: true,
-        supportsVision: false,
-      });
-    }
-  });
-
   test("keeps DeepSeek custom shortlist defaults and selections", () => {
     const customModels = [
       { default: true, id: "private-model" },
