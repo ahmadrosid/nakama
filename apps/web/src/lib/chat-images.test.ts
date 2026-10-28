@@ -53,7 +53,13 @@ describe("userContentToDisplayDocuments", () => {
           type: "document",
         },
       ])
-    ).toEqual([{ filename: "cla.pdf", mediaType: "application/pdf" }]);
+    ).toEqual([
+      {
+        filename: "cla.pdf",
+        mediaType: "application/pdf",
+        url: "data:application/pdf;base64,YWJj",
+      },
+    ]);
   });
 
   test("reads a persisted document_ref part", () => {
@@ -67,7 +73,13 @@ describe("userContentToDisplayDocuments", () => {
           type: "document_ref",
         },
       ])
-    ).toEqual([{ filename: "cla.pdf", mediaType: "application/pdf" }]);
+    ).toEqual([
+      {
+        attachmentId: "att-1",
+        filename: "cla.pdf",
+        mediaType: "application/pdf",
+      },
+    ]);
   });
 });
 
