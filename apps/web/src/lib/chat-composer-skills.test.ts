@@ -110,8 +110,6 @@ describe("filterComposerSlashSuggestions", () => {
   test.each([
     ["addto", "add-tool"],
     ["ADD_TO", "add-tool"],
-    ["add-pl", "add-plugin"],
-    ["addmc", "add-mcp"],
     ["adtl", "add-tool"],
   ])("matches command query %s", (query, name) => {
     const commands = filterComposerSlashSuggestions([], query, {

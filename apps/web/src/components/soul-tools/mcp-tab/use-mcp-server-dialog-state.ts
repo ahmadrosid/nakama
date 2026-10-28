@@ -24,7 +24,7 @@ import {
 
 export type McpServerKind = "http" | "signin" | "stdio";
 
-export function mcpServerKind(
+function mcpServerKind(
   transport: McpTransport,
   signIn: boolean
 ): McpServerKind {

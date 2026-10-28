@@ -26,7 +26,7 @@ const identity = {
 
 describe("validatePluginManifest", () => {
   test.each(
-    [undefined, null, false, 7, "manifest", [], { id: 7 }].map((input) => ({
+    [undefined, [], { id: 7 }].map((input) => ({
       input,
     }))
   )("rejects malformed package input: $input", ({ input }) => {

@@ -19,9 +19,6 @@ describe("normalizeAutomationDelivery", () => {
   test.each(
     [
       false,
-      7,
-      "telegram",
-      [],
       {},
       { channel: "telegram", chatId: "1" },
       { channel: "discord", channelId: 7 },

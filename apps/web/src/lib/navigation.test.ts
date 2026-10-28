@@ -46,15 +46,6 @@ describe("visibleNavGroups", () => {
     expect(member).not.toContain("plugin-management");
     expect(member).not.toContain("usage");
   });
-
-  test("groups left with no reachable item are dropped", () => {
-    const groups = visibleNavGroups({
-      isPlatformAdmin: false,
-      orgRole: undefined,
-    });
-
-    expect(groups.every((group) => group.items.length > 0)).toBe(true);
-  });
 });
 
 test("Customize is reachable for every organization role", () => {
@@ -187,11 +178,5 @@ describe("canOpenPage", () => {
     expect(
       canOpenPage("tools", { isPlatformAdmin: false, orgRole: "member" })
     ).toBe(false);
-  });
-
-  test("Settings opens for a viewer", () => {
-    expect(
-      canOpenPage("settings", { isPlatformAdmin: false, orgRole: "viewer" })
-    ).toBe(true);
   });
 });

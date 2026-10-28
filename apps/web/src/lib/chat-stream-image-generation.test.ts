@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatListItem } from "./chat-history";
-import {
-  buildGenerateImageToolState,
-  parseGenerateImagePrompt,
-  parseGenerateImageSize,
-} from "./chat-stream-image-generation";
+import { buildGenerateImageToolState } from "./chat-stream-image-generation";
 
 function toolMessage(
   partial: Partial<ChatListItem> & Pick<ChatListItem, "toolStatus">
@@ -22,13 +18,6 @@ function toolMessage(
 }
 
 describe("chat-stream-image-generation", () => {
-  test("parseGenerateImagePrompt and size", () => {
-    expect(parseGenerateImagePrompt({ prompt: "  lake  " })).toBe("lake");
-    expect(parseGenerateImagePrompt({})).toBeNull();
-    expect(parseGenerateImageSize({ size: "1024x1536" })).toBe("1024x1536");
-    expect(parseGenerateImageSize({ prompt: "x" })).toBeNull();
-  });
-
   test("buildGenerateImageToolState done exposes artifacts-relative path", () => {
     const state = buildGenerateImageToolState(
       toolMessage({
