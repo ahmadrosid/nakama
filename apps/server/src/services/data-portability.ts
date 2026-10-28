@@ -1108,18 +1108,18 @@ export async function restoreNakamaDataImport(
       try {
         // Named check: migrateLegacyFiles re-runs it, but its plain Error would
         // reach restore clients as a generic "unexpected server error".
-        await secrets.checkIntegrity();
-      } catch (error) {
-        // formatServerError only logs non-NakamaApiError causes; log here so
-        // the underlying failure stays diagnosable.
-        console.error("Restored secrets integrity check failed:", error);
-        throw new NakamaApiError(
-          "Saved secrets in this backup cannot be decrypted with this install's NAKAMA_SECRETS_KEY. Re-enter provider keys after restore, or remove saved secrets from the backup.",
-          400
-        );
-      }
+        try {
+          await secrets.checkIntegrity();
+        } catch (error) {
+          // formatServerError only logs non-NakamaApiError causes; log here so
+          // the underlying failure stays diagnosable.
+          console.error("Restored secrets integrity check failed:", error);
+          throw new NakamaApiError(
+            "Saved secrets in this backup cannot be decrypted with this install's NAKAMA_SECRETS_KEY. Re-enter provider keys after restore, or remove saved secrets from the backup.",
+            400
+          );
+        }
 
-      try {
         await secrets.migrateLegacyFiles(stagedRoot);
       } finally {
         stagedDatabase.release();
