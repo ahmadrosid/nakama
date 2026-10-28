@@ -24,6 +24,7 @@ import {
   parseJsonRecord,
   readRecord,
   readSseEvents,
+  toModelToolContent,
 } from "../shared";
 import { openAIModelSupportsThinking } from "./thinking";
 
@@ -414,7 +415,7 @@ function toResponsesToolOutput(
 ): Extract<ResponsesInputItem, { type: "function_call_output" }> {
   return {
     call_id: message.toolCallId,
-    output: message.content,
+    output: toModelToolContent(message.content),
     type: "function_call_output",
   };
 }
