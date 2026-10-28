@@ -2,15 +2,41 @@ import { toast } from "@nakama/ui/toast";
 import { useEffect, useRef, useState } from "react";
 import { usePromptInputController } from "@/components/ai-elements/prompt-input-context";
 import { client, formatError } from "@/lib/client";
-import {
-  blobToBase64,
-  extensionFor,
-  pickMimeType,
-} from "./chat-dictation-audio";
+import { readFileAsDataUrl } from "@/lib/read-file-as-data-url";
 
 export type DictationState = "idle" | "recording" | "transcribing";
 
 const MAX_RECORDING_MS = 60_000;
+
+const MIME_CANDIDATES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/mp4",
+  "audio/ogg;codecs=opus",
+  "audio/ogg",
+];
+
+function pickMimeType(): string | undefined {
+  if (typeof MediaRecorder === "undefined") {
+    return undefined;
+  }
+
+  return MIME_CANDIDATES.find((candidate) =>
+    MediaRecorder.isTypeSupported(candidate)
+  );
+}
+
+function extensionFor(mediaType: string): string {
+  if (mediaType.includes("mp4")) {
+    return "m4a";
+  }
+
+  if (mediaType.includes("ogg")) {
+    return "ogg";
+  }
+
+  return "webm";
+}
 
 /**
  * Owns the dictation recording lifecycle: mic capture, the 60-second
@@ -50,7 +76,6 @@ export function useDictationRecorder({
   const chunksRef = useRef<Blob[]>([]);
   const discardRef = useRef(false);
   const sessionRef = useRef(0);
-  const formRef = useRef<HTMLFormElement | null>(null);
   const maxTimerRef = useRef<number | null>(null);
   const tickRef = useRef<number | null>(null);
   const startedAtRef = useRef(0);
@@ -67,6 +92,7 @@ export function useDictationRecorder({
   useEffect(
     () => () => {
       mountedRef.current = false;
+
       if (maxTimerRef.current !== null) {
         window.clearTimeout(maxTimerRef.current);
       }
@@ -80,12 +106,6 @@ export function useDictationRecorder({
       recorderRef.current?.stop();
       waveformRef.current.stopWaveform();
       stopStream();
-    },
-    []
-  );
-
-  useEffect(
-    () => () => {
       onActiveChangeRef.current?.(false);
     },
     []
@@ -98,7 +118,7 @@ export function useDictationRecorder({
   ) => {
     if (blob.size === 0) {
       setState("idle");
-      onActiveChange?.(false);
+      onActiveChangeRef.current?.(false);
 
       return;
     }
@@ -107,7 +127,7 @@ export function useDictationRecorder({
 
     try {
       const mediaType = mimeType.split(";")[0] || "audio/webm";
-      const data = await blobToBase64(blob);
+      const data = (await readFileAsDataUrl(blob)).split(",")[1] ?? "";
 
       const { text } = await client.transcribeAudio({
         data,
@@ -128,17 +148,15 @@ export function useDictationRecorder({
       if (trimmed) {
         // Read the draft as it is NOW, not as it was when recording
         // started: the user may have kept typing while transcription
-        // was pending, and that text must be preserved. The textarea
-        // holds the live value; the controller ref tracks the latest
-        // render's API.
+        // was pending, and that text must be preserved. The controller
+        // ref tracks the latest render's API, which already holds the
+        // live draft value.
         const liveController = controllerRef.current;
-        const textarea = formRef.current?.querySelector("textarea");
-        const current = textarea?.value ?? liveController.textInput.value;
+        const current = liveController.textInput.value;
 
         liveController.textInput.setInput(
           current.trim() ? `${current.trimEnd()} ${trimmed}` : trimmed
         );
-        textarea?.focus();
       }
     } catch (error) {
       if (session === sessionRef.current) {
@@ -147,7 +165,7 @@ export function useDictationRecorder({
     } finally {
       if (session === sessionRef.current) {
         setState("idle");
-        onActiveChange?.(false);
+        onActiveChangeRef.current?.(false);
       }
     }
   };
@@ -196,7 +214,6 @@ export function useDictationRecorder({
       chunksRef.current = [];
       discardRef.current = false;
       const session = ++sessionRef.current;
-      formRef.current = buttonRef.current?.closest("form") ?? null;
 
       const mimeType = pickMimeType();
 
@@ -233,7 +250,7 @@ export function useDictationRecorder({
 
           if (discard) {
             setState("idle");
-            onActiveChange?.(false);
+            onActiveChangeRef.current?.(false);
 
             return;
           }
@@ -254,7 +271,7 @@ export function useDictationRecorder({
       startedAtRef.current = Date.now();
       setElapsed(0);
       setState("recording");
-      onActiveChange?.(true);
+      onActiveChangeRef.current?.(true);
       waveform.startWaveform(stream);
       tickRef.current = window.setInterval(() => {
         setElapsed(Math.floor((Date.now() - startedAtRef.current) / 1000));
@@ -283,4 +300,160 @@ export function useDictationRecorder({
     startRecording,
     state,
   };
+}
+
+const MAX_BARS = 56;
+
+/** Live waveform for the recording bar: RMS samples drawn on a canvas. */
+export function useDictationWaveform() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const barsRef = useRef<number[]>([]);
+  const rafRef = useRef<number | null>(null);
+  const lastSampleRef = useRef(0);
+  const canvasElRef = useRef<HTMLCanvasElement | null>(null);
+  const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
+  const colorRef = useRef<string | null>(null);
+  const samplesRef = useRef<Float32Array | null>(null);
+
+  const stopWaveform = () => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+
+    if (audioCtxRef.current) {
+      void audioCtxRef.current.close().catch(() => undefined);
+      audioCtxRef.current = null;
+    }
+
+    analyserRef.current = null;
+    barsRef.current = [];
+    canvasElRef.current = null;
+    ctxRef.current = null;
+    colorRef.current = null;
+    samplesRef.current = null;
+  };
+
+  const drawWaveform = () => {
+    // Reschedule first: the canvas only mounts after the recording state
+    // renders, so early frames must keep the loop alive until it appears.
+    rafRef.current = requestAnimationFrame(drawWaveform);
+
+    const canvas = canvasRef.current;
+    const analyser = analyserRef.current;
+
+    if (!(canvas && analyser)) {
+      return;
+    }
+
+    // Cache the context and fill colour per canvas element: both are
+    // stable for a mounted canvas, and getComputedStyle forces a style
+    // recalc on every call. (The canvas mounts after recording starts,
+    // so the cache fills lazily on the first frame that sees it.)
+    if (canvasElRef.current !== canvas) {
+      canvasElRef.current = canvas;
+      ctxRef.current = canvas.getContext("2d");
+      colorRef.current = getComputedStyle(canvas).color;
+    }
+
+    const ctx = ctxRef.current;
+
+    if (!ctx) {
+      return;
+    }
+
+    const dpr = window.devicePixelRatio || 1;
+    const width = canvas.clientWidth * dpr;
+    const height = canvas.clientHeight * dpr;
+
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
+
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = colorRef.current ?? "";
+
+    const now = performance.now();
+
+    if (now - lastSampleRef.current >= 55) {
+      lastSampleRef.current = now;
+
+      if (
+        samplesRef.current === null ||
+        samplesRef.current.length !== analyser.fftSize
+      ) {
+        samplesRef.current = new Float32Array(analyser.fftSize);
+      }
+
+      const samples = samplesRef.current;
+
+      analyser.getFloatTimeDomainData(samples);
+
+      let sum = 0;
+
+      for (const sample of samples) {
+        sum += sample * sample;
+      }
+
+      const rms = Math.sqrt(sum / samples.length);
+
+      barsRef.current.push(Math.min(1, rms * 3.2));
+
+      if (barsRef.current.length > MAX_BARS) {
+        barsRef.current.shift();
+      }
+    }
+
+    const bars = barsRef.current;
+    const barWidth = 3.5 * dpr;
+    const gap = 2.5 * dpr;
+    const step = barWidth + gap;
+    const maxBarsVisible = Math.max(1, Math.floor(width / step));
+    const visible = bars.slice(-maxBarsVisible);
+    const mid = height / 2;
+
+    visible.forEach((level, index) => {
+      const barHeight = Math.max(2 * dpr, level * height * 0.92);
+      const x = width - (visible.length - index) * step + gap / 2;
+
+      ctx.beginPath();
+      ctx.roundRect(x, mid - barHeight / 2, barWidth, barHeight, barWidth / 2);
+      ctx.fill();
+    });
+  };
+
+  const startWaveform = (stream: MediaStream) => {
+    // SAFETY: webkitAudioContext is the legacy Safari name for AudioContext; it is
+    // only read when window.AudioContext is absent, and the result is null-checked
+    // before use.
+    const AudioCtor =
+      window.AudioContext ??
+      (window as typeof window & { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+
+    if (!AudioCtor) {
+      return;
+    }
+
+    try {
+      const audioCtx = new AudioCtor();
+      const analyser = audioCtx.createAnalyser();
+
+      analyser.fftSize = 2048;
+      audioCtx.createMediaStreamSource(stream).connect(analyser);
+      audioCtxRef.current = audioCtx;
+      analyserRef.current = analyser;
+      barsRef.current = [];
+      lastSampleRef.current = 0;
+      void audioCtx.resume();
+      rafRef.current = requestAnimationFrame(drawWaveform);
+    } catch {
+      // Waveform is decorative; recording continues without it.
+    }
+  };
+
+  return { canvasRef, startWaveform, stopWaveform };
 }
