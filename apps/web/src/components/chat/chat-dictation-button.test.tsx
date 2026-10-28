@@ -351,6 +351,7 @@ test("double click while the permission prompt is pending acquires one stream", 
     value: {
       getUserMedia: () => {
         gumCalls += 1;
+
         return gum.promise;
       },
     },

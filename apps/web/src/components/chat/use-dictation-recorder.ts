@@ -283,6 +283,7 @@ export function useDictationRecorder({
       startingRef.current = false;
     }
   };
+
   const discardRecording = () => {
     discardRef.current = true;
     recorderRef.current?.stop();
