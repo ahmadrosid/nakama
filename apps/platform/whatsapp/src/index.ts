@@ -5,17 +5,13 @@ import {
   installErrorTrackingSink,
   log,
 } from "@nakama/core";
-import { hasActiveStreams } from "@nakama/core/channel-active-stream";
 import {
   type ChannelOwner,
   channelOwnerFromEnv,
 } from "@nakama/core/channel-config-shared";
 import { ChannelOrgStore } from "@nakama/core/channel-org";
 import { ChannelSessionStore } from "@nakama/core/channel-session-store";
-import {
-  ensureServerRunning,
-  stopSpawnedServer,
-} from "@nakama/core/ensure-server";
+import { ensureServerRunning } from "@nakama/core/ensure-server";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { resolveWebPublicUrl } from "@nakama/core/runtime";
 import {
@@ -53,8 +49,6 @@ installErrorHandlers("worker:whatsapp");
 void installErrorTrackingSink();
 
 const restoreBaileysConsole = installBaileysConsoleRedaction();
-
-let spawnedChild: Bun.Subprocess | null = null;
 
 async function startWhatsAppChannel(
   owner: ChannelOwner,
@@ -236,51 +230,33 @@ async function startWhatsAppChannel(
   }
 }
 
-const HOST_POLL_MS = 1000;
-
-let hostTimer: ReturnType<typeof setInterval> | null = null;
-
 let stopChannels: () => Promise<void> = async () => {};
 
 registerProcessLifecycleHandlers(async () => {
-  if (hostTimer) {
-    clearInterval(hostTimer);
-  }
-
   await stopChannels();
   restoreBaileysConsole();
-
-  if (hasActiveStreams()) {
-    console.warn(
-      "Leaving the spawned Nakama server running so in-flight agent turns can finish; the next worker start will reuse it."
-    );
-  } else {
-    stopSpawnedServer(spawnedChild);
-  }
 });
 
 try {
-  const { serverUrl, spawnedChild: child } = await ensureServerRunning({
-    spawn: false,
-  });
-
-  spawnedChild = child;
+  const { serverUrl } = await ensureServerRunning({ spawn: false });
 
   if (hostMode) {
-    const host = createWhatsAppHost({
+    const syncChannels = createWhatsAppHost({
       getLogDir: (owner) => getWhatsAppConfigDir(owner),
-      readOwners: readWhatsAppHostChannels,
       start: (owner) => startWhatsAppChannel(owner, serverUrl),
     });
 
-    stopChannels = host.stopAll;
-    await host.reconcile();
-    hostTimer = setInterval(() => {
-      void host.reconcile();
-    }, HOST_POLL_MS);
-    console.log(
-      `Nakama WhatsApp host · ${serverUrl} · ${host.runningCount()} channels`
-    );
+    const poll = async () => syncChannels(await readWhatsAppHostChannels());
+    const timer = setInterval(poll, 1000);
+
+    stopChannels = () => {
+      clearInterval(timer);
+
+      return syncChannels([]);
+    };
+
+    await poll();
+    console.log(`Nakama WhatsApp host · ${serverUrl}`);
   } else {
     const channel = await startWhatsAppChannel(
       channelOwnerFromEnv(),
@@ -292,6 +268,5 @@ try {
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   console.error(message);
-  stopSpawnedServer(spawnedChild);
   process.exit(1);
 }

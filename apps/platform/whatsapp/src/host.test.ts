@@ -2,7 +2,6 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ChannelOwner } from "@nakama/core/channel-config-shared";
 import { createWhatsAppHost, installChannelLogRouting } from "./host";
 
 const first = { orgId: "org_a", profileId: "agent_a" };
@@ -21,16 +20,11 @@ afterEach(async () => {
   await rm(root, { force: true, recursive: true });
 });
 
-function createTestHost(options: {
-  owners: ChannelOwner[];
-  failing?: Set<string>;
-  retryMs?: number;
-}) {
+function createTestHost(options: { failing?: Set<string>; retryMs?: number }) {
   const events: string[] = [];
 
-  const host = createWhatsAppHost({
+  const sync = createWhatsAppHost({
     getLogDir: (owner) => join(root, owner.profileId),
-    readOwners: async () => options.owners,
     retryMs: options.retryMs,
     start: async (owner) => {
       if (options.failing?.has(owner.profileId)) {
@@ -47,83 +41,75 @@ function createTestHost(options: {
     },
   });
 
-  return { events, host };
+  return { events, sync };
 }
 
 test("starts and stops channels to match the wanted list", async () => {
-  const owners = [first, second];
-  const { events, host } = createTestHost({ owners });
+  const { events, sync } = createTestHost({});
 
-  await host.reconcile();
-  await host.reconcile();
+  await sync([first, second]);
+  await sync([first, second]);
   expect(events).toEqual(["start agent_a", "start agent_b"]);
-  expect(host.runningCount()).toBe(2);
 
-  owners.splice(0, 1);
-  await host.reconcile();
+  await sync([second]);
   expect(events.at(-1)).toBe("stop agent_a");
-  expect(host.runningCount()).toBe(1);
 
-  await host.stopAll();
-  expect(events.at(-1)).toBe("stop agent_b");
-  expect(host.runningCount()).toBe(0);
+  await sync([]);
+  expect(events).toEqual([
+    "start agent_a",
+    "start agent_b",
+    "stop agent_a",
+    "stop agent_b",
+  ]);
 });
 
 test("a channel that fails to start does not stop the others", async () => {
   const failing = new Set([first.profileId]);
+  const { events, sync } = createTestHost({ failing, retryMs: 60_000 });
 
-  const { events, host } = createTestHost({
-    failing,
-    owners: [first, second],
-    retryMs: 60_000,
-  });
-
-  await host.reconcile();
+  await sync([first, second]);
   expect(events).toEqual(["start agent_b"]);
-  expect(host.runningCount()).toBe(1);
+
   expect(
     (await readFile(join(root, first.profileId, "stderr.log"), "utf8")).length
   ).toBeGreaterThan(0);
 
   failing.clear();
-  await host.reconcile();
-  expect(host.runningCount()).toBe(1);
+  await sync([first, second]);
+  expect(events).toEqual(["start agent_b"]);
 });
 
 test("retries a failed channel after the retry delay", async () => {
   const failing = new Set([first.profileId]);
+  const { events, sync } = createTestHost({ failing, retryMs: 0 });
 
-  const { events, host } = createTestHost({
-    failing,
-    owners: [first],
-    retryMs: 0,
-  });
-
-  await host.reconcile();
-  expect(host.runningCount()).toBe(0);
+  await sync([first]);
+  expect(events).toEqual([]);
 
   failing.clear();
-  await host.reconcile();
+  await sync([first]);
   expect(events).toEqual(["start agent_a"]);
-  expect(host.runningCount()).toBe(1);
 });
 
 test("console output from a channel goes to that channel's log files", async () => {
   const lines: string[] = [];
 
+  const write = (...args: unknown[]) => {
+    lines.push(args.join(" "));
+  };
+
   const target = {
-    debug: (...args: unknown[]) => lines.push(args.join(" ")),
-    error: (...args: unknown[]) => lines.push(args.join(" ")),
-    info: (...args: unknown[]) => lines.push(args.join(" ")),
-    log: (...args: unknown[]) => lines.push(args.join(" ")),
-    warn: (...args: unknown[]) => lines.push(args.join(" ")),
+    debug: write,
+    error: write,
+    info: write,
+    log: write,
+    warn: write,
   };
 
   installChannelLogRouting(target);
 
-  const host = createWhatsAppHost({
+  const sync = createWhatsAppHost({
     getLogDir: (owner) => join(root, owner.profileId),
-    readOwners: async () => [first, second],
     start: async (owner) => {
       target.log(`hello from ${owner.profileId}`);
       setTimeout(() => target.error(`later from ${owner.profileId}`), 0);
@@ -133,14 +119,16 @@ test("console output from a channel goes to that channel's log files", async () 
     },
   });
 
-  await host.reconcile();
+  await sync([first, second]);
   target.log("host line");
-  await host.stopAll();
+  await sync([]);
 
   expect(lines).toEqual(["host line"]);
+
   expect(
     await readFile(join(root, first.profileId, "stdout.log"), "utf8")
   ).toBe("hello from agent_a\n");
+
   expect(
     await readFile(join(root, second.profileId, "stderr.log"), "utf8")
   ).toBe("later from agent_b\n");

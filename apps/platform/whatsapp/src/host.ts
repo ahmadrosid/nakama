@@ -1,18 +1,9 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createWriteStream, type WriteStream } from "node:fs";
 import { join } from "node:path";
+import { finished } from "node:stream/promises";
 import { format } from "node:util";
 import type { ChannelOwner } from "@nakama/core/channel-config-shared";
-
-type ConsoleWriter = (...args: unknown[]) => void;
-
-interface ConsoleTarget {
-  debug: ConsoleWriter;
-  error: ConsoleWriter;
-  info: ConsoleWriter;
-  log: ConsoleWriter;
-  warn: ConsoleWriter;
-}
 
 interface ChannelLogs {
   stderr: WriteStream;
@@ -25,14 +16,12 @@ export interface WhatsAppChannelHandle {
 
 const channelLogs = new AsyncLocalStorage<ChannelLogs>();
 
-const STDERR_METHODS = new Set(["error", "warn"]);
-
 /**
  * One process serves many numbers, so console output from a channel's async
  * work goes to that channel's own stdout.log / stderr.log, as with pm2 before.
  */
 export function installChannelLogRouting(
-  target: ConsoleTarget = console
+  target: Pick<Console, "debug" | "error" | "info" | "log" | "warn"> = console
 ): void {
   for (const method of ["debug", "error", "info", "log", "warn"] as const) {
     const original = target[method].bind(target);
@@ -46,30 +35,16 @@ export function installChannelLogRouting(
         return;
       }
 
-      const stream = STDERR_METHODS.has(method) ? logs.stderr : logs.stdout;
-      stream.write(`${format(...args)}\n`);
+      const toStderr = method === "error" || method === "warn";
+      (toStderr ? logs.stderr : logs.stdout).write(`${format(...args)}\n`);
     };
   }
 }
 
-function openChannelLogs(directory: string): ChannelLogs {
-  return {
-    stderr: createWriteStream(join(directory, "stderr.log"), { flags: "a" }),
-    stdout: createWriteStream(join(directory, "stdout.log"), { flags: "a" }),
-  };
-}
-
-function closeChannelLogs(logs: ChannelLogs): Promise<void> {
-  const close = (stream: WriteStream) =>
-    new Promise<void>((resolve) => {
-      stream.end(resolve);
-    });
-
-  return Promise.all([close(logs.stdout), close(logs.stderr)]).then(() => {});
-}
-
-function ownerKey(owner: ChannelOwner): string {
-  return JSON.stringify([owner.orgId, owner.profileId]);
+async function closeChannelLogs(logs: ChannelLogs): Promise<void> {
+  logs.stdout.end();
+  logs.stderr.end();
+  await Promise.all([finished(logs.stdout), finished(logs.stderr)]);
 }
 
 /**
@@ -78,7 +53,6 @@ function ownerKey(owner: ChannelOwner): string {
  */
 export function createWhatsAppHost(options: {
   getLogDir: (owner: ChannelOwner) => string;
-  readOwners: () => Promise<ChannelOwner[]>;
   retryMs?: number;
   start: (owner: ChannelOwner) => Promise<WhatsAppChannelHandle>;
 }) {
@@ -94,12 +68,12 @@ export function createWhatsAppHost(options: {
 
   const stopChannel = async (key: string) => {
     const channel = running.get(key);
+    running.delete(key);
+    failedAt.delete(key);
 
     if (!channel) {
       return;
     }
-
-    running.delete(key);
 
     try {
       await channelLogs.run(channel.logs, () => channel.handle.stop());
@@ -111,7 +85,12 @@ export function createWhatsAppHost(options: {
   };
 
   const startChannel = async (key: string, owner: ChannelOwner) => {
-    const logs = openChannelLogs(options.getLogDir(owner));
+    const directory = options.getLogDir(owner);
+
+    const logs = {
+      stderr: createWriteStream(join(directory, "stderr.log"), { flags: "a" }),
+      stdout: createWriteStream(join(directory, "stdout.log"), { flags: "a" }),
+    };
 
     try {
       const handle = await channelLogs.run(logs, () => options.start(owner));
@@ -126,52 +105,33 @@ export function createWhatsAppHost(options: {
     }
   };
 
-  const reconcile = async () => {
+  const sync = async (owners: ChannelOwner[]) => {
     const wanted = new Map(
-      (await options.readOwners()).map((owner) => [ownerKey(owner), owner])
+      owners.map((owner) => [
+        JSON.stringify([owner.orgId, owner.profileId]),
+        owner,
+      ])
     );
 
-    for (const key of [...running.keys()]) {
+    for (const key of new Set([...running.keys(), ...failedAt.keys()])) {
       if (!wanted.has(key)) {
         await stopChannel(key);
       }
     }
 
-    for (const key of [...failedAt.keys()]) {
-      if (!wanted.has(key)) {
-        failedAt.delete(key);
-      }
-    }
-
     for (const [key, owner] of wanted) {
-      const failed = failedAt.get(key);
+      const failed = failedAt.get(key) ?? Number.NEGATIVE_INFINITY;
 
-      if (
-        running.has(key) ||
-        (failed !== undefined && Date.now() - failed < retryMs)
-      ) {
-        continue;
+      if (!running.has(key) && Date.now() - failed >= retryMs) {
+        await startChannel(key, owner);
       }
-
-      await startChannel(key, owner);
     }
   };
 
-  const enqueue = (work: () => Promise<void>) => {
-    const next = queue.catch(() => {}).then(work);
-    queue = next;
+  /** Runs one sync at a time, so a poll never overlaps a stop. */
+  return (owners: ChannelOwner[]) => {
+    queue = queue.catch(() => {}).then(() => sync(owners));
 
-    return next;
-  };
-
-  return {
-    reconcile: () => enqueue(reconcile),
-    runningCount: () => running.size,
-    stopAll: () =>
-      enqueue(async () => {
-        for (const key of [...running.keys()]) {
-          await stopChannel(key);
-        }
-      }),
+    return queue;
   };
 }

@@ -81,7 +81,9 @@ const VALID_WORKERS = [...WORKER_SCRIPTS.keys()];
 /** One pm2 process runs the WhatsApp number of every agent connection. */
 const WHATSAPP_HOST_PROCESS = "whatsapp-host";
 
-const WHATSAPP_CHANNEL_STOP_TIMEOUT_MS = 20_000;
+function isWhatsAppHostChannel(channel: ChannelOwner, owner: ChannelOwner) {
+  return channel.orgId === owner.orgId && channel.profileId === owner.profileId;
+}
 
 /**
  * pm2 stops Windows processes with `taskkill /F`, so no signal handler runs.
@@ -1108,8 +1110,7 @@ export class WorkerManagerService {
     const channels = await readWhatsAppHostChannels();
 
     const remaining = channels.filter(
-      (channel) =>
-        channel.orgId !== owner.orgId || channel.profileId !== owner.profileId
+      (channel) => !isWhatsAppHostChannel(channel, owner)
     );
 
     if (remaining.length === channels.length) {
@@ -1118,15 +1119,16 @@ export class WorkerManagerService {
 
     await writeWhatsAppHostChannels(remaining);
 
-    const [host] = await promisifyPm2<Pm2ProcessDescription[]>((cb) =>
-      pm2.describe(WHATSAPP_HOST_PROCESS, cb)
-    );
-
     if (!remaining.length) {
+      // Deleting the host stops its last channel before pm2 returns.
       await this.deletePluginProcess(pm2, WHATSAPP_HOST_PROCESS);
 
       return;
     }
+
+    const [host] = await promisifyPm2<Pm2ProcessDescription[]>((cb) =>
+      pm2.describe(WHATSAPP_HOST_PROCESS, cb)
+    );
 
     if (!(host?.pid && host.pm2_env?.status === "online")) {
       return;
@@ -1136,7 +1138,7 @@ export class WorkerManagerService {
       getDir: () => getChannelConfigDir("whatsapp", owner),
     });
 
-    const deadline = Date.now() + WHATSAPP_CHANNEL_STOP_TIMEOUT_MS;
+    const deadline = Date.now() + 20_000;
 
     while ((await heartbeat.read())?.pid === host.pid) {
       if (Date.now() > deadline) {
@@ -1151,9 +1153,8 @@ export class WorkerManagerService {
     list: Pm2ProcessDescription[],
     owner: ChannelOwner
   ): Promise<WorkerProcessInfo> {
-    const listed = (await readWhatsAppHostChannels()).some(
-      (channel) =>
-        channel.orgId === owner.orgId && channel.profileId === owner.profileId
+    const listed = (await readWhatsAppHostChannels()).some((channel) =>
+      isWhatsAppHostChannel(channel, owner)
     );
 
     return this.pm2ProcessToInfo(
