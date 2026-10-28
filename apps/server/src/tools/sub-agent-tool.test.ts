@@ -203,6 +203,28 @@ describe("sub_agent background", () => {
       ).status
     ).toBe("fail");
 
+    const branch = await agent.createSession(ORG_ID, "web", PROFILE_ID);
+    const branchRecord = await db.getSession(branch);
+
+    if (branchRecord) {
+      await db.upsertSession({
+        ...branchRecord,
+        branchMessageIndex: 0,
+        parentSessionId: parentId,
+      });
+    }
+
+    // A branch also has a parent, and must keep sub_agent.
+    expect(
+      (
+        await runSubAgentTool(
+          { background: true, task: "From a branch" },
+          { ...TOOL_CONTEXT, sessionId: branch },
+          agent
+        )
+      ).status
+    ).toBe("success");
+
     const stranger = await agent.createSession(ORG_ID, "web", PROFILE_ID);
 
     expect(
@@ -214,5 +236,23 @@ describe("sub_agent background", () => {
         )
       ).status
     ).toBe("fail");
+  });
+
+  test("a foreground run also gets its own chat under the parent", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    const agent = new AgentService(null, null, db);
+    const parentId = await agent.createSession(ORG_ID, "web", PROFILE_ID);
+
+    // No provider here, so the turn fails; the chat it ran in is what counts.
+    const result = await runSubAgentTool(
+      { task: "Summarize the plan", timeoutMs: 60_000 },
+      { ...TOOL_CONTEXT, sessionId: parentId },
+      agent
+    );
+
+    expect((await db.getSession(result.sessionId ?? ""))?.parentSessionId).toBe(
+      parentId
+    );
   });
 });

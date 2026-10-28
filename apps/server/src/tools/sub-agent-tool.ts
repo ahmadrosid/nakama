@@ -1,10 +1,12 @@
-import type { ToolContext, ToolDefinition } from "@nakama/core";
+import type { StreamEvent, ToolContext, ToolDefinition } from "@nakama/core";
 import { z } from "zod";
 import { streamMessage } from "../http/shared";
 import type { AgentService } from "../services/agent-service";
 import { sessionTurnRegistry } from "../services/session-turn-registry";
+import { formatToolActivityLabel } from "./sub-agent-activity";
 import {
   buildSubAgentPrompt,
+  buildSubAgentResult,
   DEFAULT_SUB_AGENT_TIMEOUT_MS,
   failSubAgentResult,
   MAX_SUB_AGENT_TIMEOUT_MS,
@@ -26,7 +28,7 @@ const SubAgentInputSchema = z.object({
 export function createSubAgentTool(agentService: AgentService): ToolDefinition {
   return {
     description:
-      "Delegate work to a same-profile sub-agent. Two modes. Default: runs a focused task (research, review, planning, debugging) and returns status, summary, and output for you to synthesize; several can run in parallel. background=true: use it whenever the user asks for separate or new chats, or for work they will open later. Each task starts in its own chat under this one, shown in Recents, and the call returns its session id at once without waiting. Sub-agents cannot nest sub-agents. For repo coding work, use bash with coding-agent instead.",
+      "Delegate work to a same-profile sub-agent (research, review, planning, debugging). Each run happens in its own chat under this one, shown in Recents, so the user can open and continue it. By default the call waits and returns status, summary, output, and the chat's sessionId for you to synthesize; several can run in parallel. Set background=true whenever the user asks for separate or new chats, or for work they will open later: the call returns the sessionId at once without waiting. Sub-agents cannot nest sub-agents. For repo coding work, use bash with coding-agent instead.",
     name: SUB_AGENT_TOOL_NAME,
     parallelSafe: true,
     parameters: {
@@ -34,7 +36,7 @@ export function createSubAgentTool(agentService: AgentService): ToolDefinition {
       properties: {
         background: {
           description:
-            "Start the task in a new chat under this one and return at once, instead of waiting for the answer. Up to 5 per chat. The user opens it from Recents; read its reply later with read_profile_session.",
+            "Return at once instead of waiting for the answer. Up to 5 sub-agent chats per chat. Read the reply later with read_profile_session.",
           type: "boolean",
         },
         context: {
@@ -43,7 +45,7 @@ export function createSubAgentTool(agentService: AgentService): ToolDefinition {
         },
         sessionId: {
           description:
-            "With background: send the task to a chat this one started earlier, instead of a new chat.",
+            "Send the task to a sub-agent chat this one started earlier, instead of a new chat.",
           type: "string",
         },
         task: {
@@ -96,39 +98,43 @@ export async function runSubAgentTool(
   }
 
   const scopedContext = input.context?.trim();
-
-  if (input.background) {
-    try {
-      return await startChildSessionTurn(
-        buildSubAgentPrompt(task, scopedContext),
-        task,
-        input.sessionId?.trim(),
-        { ...context, orgId },
-        agentService
-      );
-    } catch (error) {
-      return failSubAgentResult(
-        error instanceof Error ? error.message : String(error)
-      );
-    }
-  }
-
   const timeoutMs = readTimeoutMs(input.timeoutMs ?? null);
 
   try {
-    return await agentService.runSubAgentPrompt({
-      agentDepth: depth + 1,
-      clientOrigin: context.clientOrigin,
-      context: scopedContext,
-      onActivity: context.emitSubAgentActivity,
-      orgId,
-      orgRole: context.orgRole,
-      profileId,
-      sessionId: context.sessionId,
-      task,
-      timeoutMs,
-      userId: context.userId,
-    });
+    // Automation and other session-less turns keep the in-memory run: there
+    // is no chat to hang a child under.
+    if (!context.sessionId) {
+      if (input.background) {
+        return failSubAgentResult("background needs a chat session.");
+      }
+
+      return await agentService.runSubAgentPrompt({
+        agentDepth: depth + 1,
+        clientOrigin: context.clientOrigin,
+        context: scopedContext,
+        onActivity: context.emitSubAgentActivity,
+        orgId,
+        orgRole: context.orgRole,
+        profileId,
+        sessionId: context.sessionId,
+        task,
+        timeoutMs,
+        userId: context.userId,
+      });
+    }
+
+    return await runInChildSession(
+      {
+        background: input.background === true,
+        childSessionId: input.sessionId?.trim(),
+        parentSessionId: context.sessionId,
+        prompt: buildSubAgentPrompt(task, scopedContext),
+        task,
+        timeoutMs,
+      },
+      { ...context, orgId },
+      agentService
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
@@ -136,20 +142,32 @@ export async function runSubAgentTool(
   }
 }
 
-async function startChildSessionTurn(
-  prompt: string,
-  task: string,
-  childSessionId: string | undefined,
+interface ChildRun {
+  background: boolean;
+  childSessionId?: string;
+  parentSessionId: string;
+  prompt: string;
+  task: string;
+  timeoutMs: number;
+}
+
+/** Runs the task as a chat under the parent, so the user can open and continue it. */
+async function runInChildSession(
+  run: ChildRun,
   context: ToolContext & { orgId: string },
   agentService: AgentService
 ): Promise<SubAgentToolOutput> {
-  const parentSessionId = context.sessionId?.trim();
+  const parent = await agentService.getSessionSummary(
+    run.parentSessionId,
+    context.orgId
+  );
 
-  if (!parentSessionId) {
-    return failSubAgentResult("background needs a chat session.");
+  // A branch has a parent too, but it also has the message it branched at.
+  if (parent?.parentSessionId && parent.branchMessageIndex === null) {
+    return failSubAgentResult("Nested sub-agent execution is not allowed.");
   }
 
-  let sessionId = childSessionId;
+  let sessionId = run.childSessionId;
 
   if (sessionId) {
     const child = await agentService.getSessionSummary(
@@ -157,16 +175,16 @@ async function startChildSessionTurn(
       context.orgId
     );
 
-    if (child?.parentSessionId !== parentSessionId) {
+    if (child?.parentSessionId !== run.parentSessionId) {
       return failSubAgentResult(
         `Session ${sessionId} was not started from this chat.`
       );
     }
   } else {
     sessionId = await agentService.createChildSession(
-      parentSessionId,
+      run.parentSessionId,
       context.orgId,
-      task.slice(0, 80),
+      run.task.slice(0, 80),
       { isPlatformAdmin: context.isPlatformAdmin, orgRole: context.orgRole }
     );
   }
@@ -190,19 +208,64 @@ async function startChildSessionTurn(
   }
 
   const childId = sessionId;
+  const activity = run.background ? null : followActivity(childId, context);
 
-  // Nothing reads this stream. The turn runs anyway and publishes to the turn
-  // registry, which is what a browser tab opening the chat subscribes to.
-  void streamMessage(
-    childId,
-    session,
-    { clientOrigin: context.clientOrigin, message: prompt },
-    () => agentService.scheduleSessionTitleGeneration(childId)
-  ).body?.pipeTo(new WritableStream());
+  const terminal = new Promise<StreamEvent>((resolve) => {
+    // Nothing reads this stream. The turn runs anyway and publishes to the
+    // turn registry, which is what a browser tab opening the chat follows.
+    void streamMessage(
+      childId,
+      session,
+      { clientOrigin: context.clientOrigin, message: run.prompt },
+      (event) => {
+        agentService.scheduleSessionTitleGeneration(childId);
+        resolve(event);
+      },
+      undefined,
+      run.timeoutMs
+    ).body?.pipeTo(new WritableStream());
+  });
 
-  const output = `Started in a new chat (session ${childId}). The user can open it from Recents. Do not wait for it; read its reply later with read_profile_session.`;
+  if (run.background) {
+    const output = `Started in a new chat (session ${childId}). The user can open it from Recents. Do not wait for it; read its reply later with read_profile_session.`;
 
-  return { output, sessionId: childId, status: "success", summary: output };
+    return { output, sessionId: childId, status: "success", summary: output };
+  }
+
+  const event = await terminal.finally(() => activity?.unsubscribe());
+
+  return {
+    ...(event.type === "done"
+      ? buildSubAgentResult("success", event.reply)
+      : buildSubAgentResult(
+          "fail",
+          "",
+          event.type === "error" ? event.error : "Sub-agent failed."
+        )),
+    sessionId: childId,
+  };
+}
+
+/** Feeds the parent's sub-agent row the same live labels the in-memory run gave it. */
+function followActivity(sessionId: string, context: ToolContext) {
+  let writing = false;
+  let planning = false;
+
+  context.emitSubAgentActivity?.("Starting…");
+
+  return sessionTurnRegistry.subscribe(sessionId, (event) => {
+    if (event.type === "tool_start") {
+      context.emitSubAgentActivity?.(
+        formatToolActivityLabel(event.tool, event.input)
+      );
+    } else if (event.type === "thinking" && !planning) {
+      planning = true;
+      context.emitSubAgentActivity?.("Planning…");
+    } else if (event.type === "chunk" && !writing) {
+      writing = true;
+      context.emitSubAgentActivity?.("Writing answer…");
+    }
+  });
 }
 
 function readTimeoutMs(value: number | null): number {

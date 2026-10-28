@@ -440,7 +440,7 @@ export interface CreateSessionOptions {
   thinkingEffort?: ThinkingEffort | null;
 }
 
-/** Background sub_agent chats one parent may start; the same cap the issue proposed. */
+/** sub_agent chats one parent may start; the cap proposed on #2036. */
 const MAX_CHILD_SESSIONS = 5;
 
 type ChatProfileAccess = Pick<
@@ -2612,8 +2612,8 @@ export class AgentService {
   }
 
   /**
-   * A chat a background sub_agent runs in, nested under the chat that started
-   * it so the user can open and continue it. One level deep, like sub_agent.
+   * A chat a sub_agent run happens in, nested under the chat that started it
+   * so the user can open and continue it. One level deep, like sub_agent.
    */
   async createChildSession(
     parentSessionId: string,
@@ -2631,7 +2631,11 @@ export class AgentService {
       throw new NakamaApiError("Session not found.", 404);
     }
 
-    if (parent.parentSessionId) {
+    // A branch has a parent too, but it also has the message it branched at.
+    if (
+      parent.parentSessionId &&
+      (parent.branchMessageIndex ?? null) === null
+    ) {
       throw new NakamaApiError(
         "A chat started from another chat cannot start more chats.",
         400
