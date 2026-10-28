@@ -42,6 +42,7 @@ import {
   parseJsonRecord,
   readProviderString,
   readRecord,
+  toModelToolContent,
 } from "../shared";
 import { openRouterModelSupportsThinking } from "./thinking";
 
@@ -212,7 +213,7 @@ function openAIMessageToSdkMessage(message: OpenAIMessage): ChatMessages {
 
   if (message.role === "tool") {
     return {
-      content: message.content,
+      content: toModelToolContent(message.content),
       role: "tool",
       toolCallId: message.tool_call_id,
     };
