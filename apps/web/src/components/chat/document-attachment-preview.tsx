@@ -1,8 +1,7 @@
-import { CodeBlock } from "@nakama/ui/code-block";
-import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
 import { File01Icon } from "hugeicons-react";
-import { lazy, Suspense, useEffect, useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
+import { ArtifactAttachmentPanelBody } from "@/components/chat/artifact-attachment-panel-body";
 import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import {
   artifactCodeLanguage,
@@ -10,151 +9,118 @@ import {
   isTextArtifactMimeType,
   resolveArtifactMimeType,
 } from "@/lib/chat-artifacts";
+import { client, formatError } from "@/lib/client";
 import type { DisplayDocument } from "@/lib/pasted-text";
-
-const MessageResponse = lazy(async () => ({
-  default: (await import("@/components/ai-elements/message")).MessageResponse,
-}));
 
 interface DocumentAttachmentPreviewProps {
   className?: string;
   document: DisplayDocument;
 }
 
-function resolvePreviewUrl(file: DisplayDocument): string | undefined {
-  if (file.url) {
-    return file.url;
+/** A freshly sent `document` part carries its bytes as a `data:` URL; decode
+ * them locally instead of fetching, since the app CSP does not allow `data:`
+ * requests. */
+function blobFromDataUrl(dataUrl: string, mediaType: string): Blob {
+  const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
   }
 
-  if (file.attachmentId) {
-    return `/v1/attachments/${encodeURIComponent(file.attachmentId)}/content?inline=1`;
-  }
-
-  return undefined;
+  return new Blob([bytes], { type: mediaType });
 }
 
-function DocumentTextPreview({
-  filename,
-  mediaType,
-  url,
-}: {
-  filename: string;
-  mediaType: string;
-  url: string;
-}) {
-  const [state, setState] = useState<{
-    content: string | null;
-    error: string | null;
-    loading: boolean;
-  }>({ content: null, error: null, loading: true });
+function downloadUrlFor(file: DisplayDocument): string | undefined {
+  if (file.attachmentId) {
+    return `/v1/attachments/${encodeURIComponent(file.attachmentId)}/content`;
+  }
+
+  return file.url;
+}
+
+function useDocumentAttachmentContent(file: DisplayDocument) {
+  const resolvedMimeType = resolveArtifactMimeType(
+    file.mediaType,
+    file.filename
+  );
+
+  const isPdf = resolvedMimeType === "application/pdf";
+  const isText = isTextArtifactMimeType(resolvedMimeType);
+  const canPreview = isPdf || isText;
+
+  const [blob, setBlob] = useState<Blob | null>(null);
+  const [text, setText] = useState<string | null>(null);
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(canPreview);
 
   useEffect(() => {
+    if (!canPreview) {
+      setLoading(false);
+
+      return;
+    }
+
     let cancelled = false;
-    setState({ content: null, error: null, loading: true });
+    setLoading(true);
+    setError(null);
 
-    fetch(url)
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error("Failed to load file content.");
+    const loadBlob = file.attachmentId
+      ? client.readAttachmentContent(file.attachmentId)
+      : Promise.resolve(
+          file.url ? blobFromDataUrl(file.url, resolvedMimeType) : null
+        );
+
+    loadBlob
+      .then((loaded): Promise<{ content: string | null; loaded: Blob }> => {
+        if (!loaded) {
+          throw new Error("Could not load this file.");
         }
 
-        return response.arrayBuffer();
+        return isText
+          ? loaded.text().then((content) => ({ content, loaded }))
+          : Promise.resolve({ content: null, loaded });
       })
-      .then((buffer) => {
+      .then(({ content, loaded }) => {
         if (!cancelled) {
-          setState({
-            content: new TextDecoder().decode(buffer),
-            error: null,
-            loading: false,
-          });
+          setBlob(loaded);
+          setText(content);
         }
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (!cancelled) {
-          setState({
-            content: null,
-            error: "Could not load this file.",
-            loading: false,
-          });
+          setError(formatError(err));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [url]);
+  }, [canPreview, file.attachmentId, file.url, isText, resolvedMimeType]);
 
-  if (state.loading) {
-    return (
-      <div className="flex items-center gap-2 p-4 text-muted-foreground text-sm">
-        <Spinner className="size-4" />
-        Loading preview…
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (!blob) {
+      return;
+    }
 
-  if (state.error || state.content === null) {
-    return (
-      <p className="p-4 text-destructive text-sm">
-        {state.error ?? "Could not load this file."}
-      </p>
-    );
-  }
+    const url = URL.createObjectURL(blob);
+    setObjectUrl(url);
 
-  if (isMarkdownArtifactMimeType(mediaType)) {
-    return (
-      <Suspense fallback={<Spinner className="size-6" />}>
-        <MessageResponse className="p-4 text-sm">
-          {state.content}
-        </MessageResponse>
-      </Suspense>
-    );
-  }
+    return () => URL.revokeObjectURL(url);
+  }, [blob]);
 
-  return (
-    <CodeBlock
-      className="rounded-none border-0"
-      code={state.content}
-      lang={artifactCodeLanguage(filename)}
-    />
-  );
+  return { canPreview, error, isPdf, isText, loading, objectUrl, text };
 }
 
-function DocumentAttachmentPanelContent({
-  filename,
-  mediaType,
-  url,
-}: {
-  filename: string;
-  mediaType: string;
-  url: string;
-}) {
-  const resolvedMimeType = resolveArtifactMimeType(mediaType, filename);
-
-  if (resolvedMimeType === "application/pdf") {
-    return (
-      <object
-        aria-label={filename}
-        className="min-h-[70vh] w-full flex-1 border-0"
-        data={url}
-        type="application/pdf"
-      >
-        <a download={filename} href={url}>
-          Download PDF
-        </a>
-      </object>
-    );
-  }
-
-  if (isTextArtifactMimeType(resolvedMimeType)) {
-    return (
-      <DocumentTextPreview
-        filename={filename}
-        mediaType={resolvedMimeType}
-        url={url}
-      />
-    );
-  }
+function DocumentUnavailablePreview({ file }: { file: DisplayDocument }) {
+  const href = downloadUrlFor(file);
 
   return (
     <div className="flex flex-col items-center gap-3 p-6 text-center">
@@ -162,14 +128,61 @@ function DocumentAttachmentPanelContent({
       <p className="text-muted-foreground text-sm">
         Preview is not available for this file type.
       </p>
-      <a
-        className="text-primary text-sm underline underline-offset-2"
-        download={filename}
-        href={url}
-      >
-        Download {filename}
-      </a>
+      {href ? (
+        <a
+          className="text-primary text-sm underline underline-offset-2"
+          download={file.filename}
+          href={href}
+        >
+          Download {file.filename}
+        </a>
+      ) : null}
     </div>
+  );
+}
+
+function DocumentAttachmentPanelContent({ file }: { file: DisplayDocument }) {
+  const { canPreview, error, isPdf, loading, objectUrl, text } =
+    useDocumentAttachmentContent(file);
+
+  if (!canPreview) {
+    return <DocumentUnavailablePreview file={file} />;
+  }
+
+  const artifact = {
+    filename: file.filename,
+    mimeType: file.mediaType,
+    path: file.filename,
+    savedAt: "",
+    sizeBytes: 0,
+  };
+
+  if (isPdf) {
+    return (
+      <ArtifactAttachmentPanelBody
+        artifact={artifact}
+        canPreview={canPreview}
+        error={error}
+        kind="pdf"
+        loading={loading}
+        pdfPreviewUrl={objectUrl}
+      />
+    );
+  }
+
+  const isMarkdown = isMarkdownArtifactMimeType(file.mediaType);
+
+  return (
+    <ArtifactAttachmentPanelBody
+      artifact={artifact}
+      canPreview={canPreview}
+      content={text}
+      error={error}
+      format={isMarkdown ? "markdown" : "plain"}
+      kind="text"
+      language={isMarkdown ? null : artifactCodeLanguage(file.filename)}
+      loading={loading}
+    />
   );
 }
 
@@ -181,8 +194,7 @@ export function DocumentAttachmentPreview({
   const attachmentPanel = useOptionalChatAttachmentPanel();
   const show = attachmentPanel?.show;
   const hide = attachmentPanel?.hide;
-  const previewUrl = resolvePreviewUrl(file);
-  const interactive = Boolean(show) && Boolean(previewUrl);
+  const interactive = Boolean(show);
 
   useEffect(() => {
     if (!hide) {
@@ -195,18 +207,12 @@ export function DocumentAttachmentPreview({
   }, [hide, panelId]);
 
   function openPanel() {
-    if (!(show && previewUrl)) {
+    if (!show) {
       return;
     }
 
     show({
-      content: (
-        <DocumentAttachmentPanelContent
-          filename={file.filename}
-          mediaType={file.mediaType}
-          url={previewUrl}
-        />
-      ),
+      content: <DocumentAttachmentPanelContent file={file} />,
       id: panelId,
       title: file.filename,
     });

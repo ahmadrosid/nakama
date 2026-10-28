@@ -2623,7 +2623,7 @@ export class AgentService {
     }
   }
 
-  async readChatImageAttachment(
+  async readChatAttachment(
     orgId: string,
     attachmentId: string,
     access: ChatProfileAccess

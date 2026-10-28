@@ -60,6 +60,14 @@ export class ChatClient extends ProfileFilesClient {
     return this.createChatSession(response.sessionId, channel);
   }
 
+  async readAttachmentContent(attachmentId: string): Promise<Blob> {
+    const response = await this.fetchRaw(
+      `/v1/attachments/${encodeURIComponent(attachmentId)}/content`
+    );
+
+    return response.blob();
+  }
+
   async getSessionMessages(
     sessionId: string,
     options: { signal?: AbortSignal } = {}

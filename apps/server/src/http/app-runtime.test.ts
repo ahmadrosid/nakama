@@ -466,22 +466,9 @@ describe("createHonoApp", () => {
       "img-src 'self' data: blob: https://logos.composio.dev;"
     );
     expect(csp).toContain("media-src 'self' blob:");
-    expect(csp).toContain("object-src 'self' blob:");
+    expect(csp).toContain("object-src blob:");
     expect(csp).toContain("frame-src 'self' blob:");
     expect(response.headers.get("X-Frame-Options")).toBe("DENY");
     expect(csp).not.toContain("frame-ancestors");
-  });
-
-  test("chat attachment content route allows same-origin framing for PDF preview", async () => {
-    const options = createServerOptions();
-    const app = createHonoApp(options);
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/attachments/att_1/content", {
-        headers: { Authorization: "Bearer invalid_token" },
-      })
-    );
-
-    expect(response.headers.get("X-Frame-Options")).toBe("SAMEORIGIN");
   });
 });

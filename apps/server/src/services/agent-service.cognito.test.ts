@@ -436,7 +436,7 @@ describe("attachments left by a cognito session", () => {
       { user: { id: "owner" } },
       { isPlatformAdmin: true, user: { id: "admin" } },
     ]) {
-      const image = await service.readChatImageAttachment(
+      const image = await service.readChatAttachment(
         ORG_ID,
         attachmentId,
         access
@@ -449,7 +449,7 @@ describe("attachments left by a cognito session", () => {
 
     for (const orgRole of ["member", "admin"] as const) {
       await expect(
-        service.readChatImageAttachment(ORG_ID, attachmentId, {
+        service.readChatAttachment(ORG_ID, attachmentId, {
           orgRole,
           user: { id: "teammate" },
         })
@@ -459,7 +459,7 @@ describe("attachments left by a cognito session", () => {
     // A restart loses the session map before the attachment sweep runs.
     const restarted = new AgentService(null, null, db);
     expect(
-      await restarted.readChatImageAttachment(ORG_ID, attachmentId, {
+      await restarted.readChatAttachment(ORG_ID, attachmentId, {
         user: { id: "owner" },
       })
     ).toBeNull();

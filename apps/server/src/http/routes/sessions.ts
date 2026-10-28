@@ -666,7 +666,7 @@ export function registerSessionRoutes(
   });
 
   app.get("/v1/attachments/:attachmentId/content", async (c) => {
-    const attachment = await agent.readChatImageAttachment(
+    const attachment = await agent.readChatAttachment(
       requireActiveOrgIdFromContext(c),
       c.req.param("attachmentId"),
       getRequestAuth(c)
@@ -676,12 +676,10 @@ export function registerSessionRoutes(
       return errorResponse("Attachment not found", 404);
     }
 
-    const disposition = c.req.query("inline") === "1" ? "inline" : "attachment";
-
     return new Response(new Uint8Array(attachment.bytes), {
       headers: {
         "Cache-Control": "private, no-store",
-        "Content-Disposition": disposition,
+        "Content-Disposition": "attachment",
         "Content-Type": attachment.mediaType,
         "X-Content-Type-Options": "nosniff",
       },

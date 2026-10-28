@@ -1122,7 +1122,12 @@ function UserMessageContent({ message }: { message: ChatListItem }) {
       {message.images?.length ? (
         <div className="flex flex-wrap gap-2">
           {message.images.map((image) => (
-            <ImageAttachmentPreview key={image.url} url={image.url} />
+            <img
+              alt=""
+              className="max-h-40 max-w-full rounded-md border border-border object-contain"
+              key={image.url}
+              src={image.url}
+            />
           ))}
         </div>
       ) : null}
@@ -1141,7 +1146,7 @@ function UserMessageContent({ message }: { message: ChatListItem }) {
           {otherDocuments.map((document) => (
             <DocumentAttachmentPreview
               document={document}
-              key={`${document.filename}-${document.mediaType}`}
+              key={document.attachmentId ?? document.url ?? document.filename}
             />
           ))}
         </div>

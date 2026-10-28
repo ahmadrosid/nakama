@@ -253,7 +253,7 @@ describe("session routes are scoped to the caller's active org", () => {
     ).toBe(404);
   });
 
-  test("document content is readable, org-scoped, and honors ?inline=1", async () => {
+  test("document content is readable and org-scoped", async () => {
     const { app, databaseAdapter, victimSessionId } = await createScenario();
 
     const saved = await createAttachmentSaver(databaseAdapter, {
@@ -291,14 +291,6 @@ describe("session routes are scoped to the caller's active org", () => {
     expect(response.headers.get("Content-Type")).toBe("application/pdf");
     expect(response.headers.get("Content-Disposition")).toBe("attachment");
     expect(await response.text()).toBe("private-pdf-bytes");
-
-    const inlineResponse = await app.fetch(
-      new Request(`${url}?inline=1`, {
-        headers: { Cookie: owner.cookieHeader },
-      })
-    );
-
-    expect(inlineResponse.headers.get("Content-Disposition")).toBe("inline");
 
     expect(
       (await app.fetch(new Request(url, { headers: attacker.headers() })))
