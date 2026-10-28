@@ -3304,6 +3304,26 @@ export class AgentService {
     }
   }
 
+  /**
+   * Takes a chat out of Recents and stops its running turn. Search and its
+   * link still reach it, and its next message brings it back.
+   */
+  async closeSession(sessionId: string, orgId: string): Promise<boolean> {
+    if (this.ephemeralSessions.has(sessionId)) {
+      return false;
+    }
+
+    const record = await this.getSessionRecordForOrg(sessionId, orgId);
+
+    if (!record) {
+      return false;
+    }
+
+    sessionTurnRegistry.stopTurn(sessionId);
+
+    return this.db.updateSessionClosedAt(sessionId, new Date().toISOString());
+  }
+
   async renameSession(
     sessionId: string,
     orgId: string,
@@ -3380,6 +3400,10 @@ export class AgentService {
 
     if (!turn.started) {
       return false;
+    }
+
+    if (record.closedAt) {
+      await this.db.updateSessionClosedAt(sessionId, null);
     }
 
     try {

@@ -836,6 +836,7 @@ export function streamMessage(
   // runs to completion and endTurn is late, which is what returned 409 to the next
   // message in the session.
   const turnAbort = new AbortController();
+  sessionTurnRegistry.attachAbort(sessionId, turnAbort);
 
   const turnSignal = requestSignal
     ? AbortSignal.any([turnAbort.signal, requestSignal])

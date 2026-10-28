@@ -203,6 +203,7 @@ interface SessionRow {
   agent_todos: string;
   branch_message_index: number | null;
   channel: string;
+  closed_at?: string | null;
   created_at: string;
   id: string;
   model: string | null;
@@ -1432,6 +1433,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     "UPDATE sessions SET model = ? WHERE id = ? AND app_user_id IS NULL"
   );
 
+  const updateSessionClosedAtStmt = db.prepare(
+    "UPDATE sessions SET closed_at = ? WHERE id = ? AND app_user_id IS NULL"
+  );
+
   const updateSessionThinkingEffortStmt = db.prepare(
     "UPDATE sessions SET thinking_effort = ? WHERE id = ? AND app_user_id IS NULL"
   );
@@ -1637,6 +1642,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           OR s.channel IN (SELECT value FROM json_each(?11))
         )
         AND s.app_user_id IS NULL
+        -- A closed chat leaves Recents but a search or a lookup by id still finds it.
+        AND (s.closed_at IS NULL OR ?8 IS NOT NULL OR ?9 IS NOT NULL)
         -- Only message text is searched: content is a string or an array of
         -- parts, and matching the raw JSON would let "role" hit every chat.
         -- LIKE ignores case for ASCII letters only, so "école" does not find
@@ -6209,6 +6216,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       updatePasskeyCounterStmt.run(counter, userId, credentialId);
     },
 
+    async updateSessionClosedAt(sessionId, closedAt) {
+      return updateSessionClosedAtStmt.run(closedAt, sessionId).changes > 0;
+    },
+
     async updateSessionModel(sessionId, model) {
       const result = updateSessionModelStmt.run(model, sessionId);
 
@@ -6954,6 +6965,7 @@ function toSessionRecord(row: SessionRow): StoredSessionRecord {
     agentTodos: parseAgentTodos(row.agent_todos),
     branchMessageIndex: row.branch_message_index,
     channel: row.channel,
+    closedAt: row.closed_at ?? null,
     createdAt: row.created_at,
     id: row.id,
     model: row.model ?? null,

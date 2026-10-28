@@ -38,6 +38,52 @@ async function seedFirstMessage(
 describe("listSessions reports the live turn", () => {
   setupTestConfigDir("nakama-session-list-");
 
+  test("a closed chat stops, leaves the list, stays searchable, and comes back on its next turn", async () => {
+    const { db, service } = await createService();
+
+    const sessionId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      USER.id
+    );
+
+    await seedFirstMessage(db, sessionId);
+
+    const listed = async (query?: string) =>
+      (
+        await service.listSessions(
+          ORG_ID,
+          "profile_default",
+          "web",
+          { isPlatformAdmin: true, user: USER },
+          undefined,
+          query
+        )
+      ).sessions.map((session) => session.id);
+
+    const abort = new AbortController();
+    expect(sessionTurnRegistry.beginTurn(sessionId).started).toBe(true);
+    sessionTurnRegistry.attachAbort(sessionId, abort);
+
+    expect(await service.closeSession(sessionId, ORG_ID)).toBe(true);
+    expect(abort.signal.aborted).toBe(true);
+
+    // The aborted turn still ends through its own endTurn.
+    sessionTurnRegistry.endTurn(sessionId, {
+      error: "Turn cancelled.",
+      type: "error",
+    });
+
+    expect(await listed()).toEqual([]);
+    expect(await listed("hello")).toEqual([sessionId]);
+
+    expect(await service.beginSessionTurn(sessionId, ORG_ID)).toBe(true);
+    sessionTurnRegistry.cancelTurn(sessionId);
+
+    expect(await listed()).toEqual([sessionId]);
+  });
+
   test("a session is active only while its turn is running", async () => {
     const { db, service } = await createService();
 

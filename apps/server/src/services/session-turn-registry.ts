@@ -21,6 +21,8 @@ type Subscriber = {
 };
 
 type ActiveTurn = {
+  /** Set by the stream running the turn; aborting it unwinds the turn cooperatively. */
+  abort?: AbortController;
   startedAt: string;
   events: StreamEvent[];
   bufferBytes: number;
@@ -214,6 +216,22 @@ export class SessionTurnRegistry {
 
   isActive(sessionId: string): boolean {
     return this.turns.has(sessionId);
+  }
+
+  attachAbort(sessionId: string, abort: AbortController): void {
+    const turn = this.turns.get(sessionId);
+
+    if (turn) {
+      turn.abort = abort;
+    }
+  }
+
+  /**
+   * Asks the running turn to stop. The turn still ends through its own
+   * endTurn, so history is never touched while a tool is mid-call.
+   */
+  stopTurn(sessionId: string): void {
+    this.turns.get(sessionId)?.abort?.abort();
   }
 
   cancelTurn(sessionId: string): void {

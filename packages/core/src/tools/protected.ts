@@ -26,6 +26,8 @@ export const LIST_PROFILE_SESSIONS_TOOL_ID = "tool_list_profile_sessions";
 
 export const READ_PROFILE_SESSION_TOOL_ID = "tool_read_profile_session";
 
+export const CLOSE_SESSION_TOOL_ID = "tool_close_session";
+
 /** Kernel cloud browser tools, one per user; see apps/server/src/tools/browser-tools.ts. */
 export const BROWSER_TOOL_IDS = {
   browser_computer: "tool_browser_computer",
@@ -44,6 +46,7 @@ export const PROTECTED_TOOL_IDS = new Set<string>([
   SAVE_ARTIFACT_TOOL_ID,
   LIST_PROFILE_SESSIONS_TOOL_ID,
   READ_PROFILE_SESSION_TOOL_ID,
+  CLOSE_SESSION_TOOL_ID,
   ...Object.values(BROWSER_TOOL_IDS),
 ]);
 

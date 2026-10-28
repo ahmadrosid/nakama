@@ -7,6 +7,7 @@ import {
   BASH_TOOL_ID,
   BROWSER_TOOL_IDS,
   BUILTIN_TOOL_IDS,
+  CLOSE_SESSION_TOOL_ID,
   GENERATE_IMAGE_TOOL_ID,
   LIST_PROFILE_SESSIONS_TOOL_ID,
   READ_PROFILE_SESSION_TOOL_ID,
@@ -268,6 +269,12 @@ export async function ensureSessionToolDefinitions(
         "Read the stored transcript of a session belonging to another agent profile in this organization.",
       id: READ_PROFILE_SESSION_TOOL_ID,
       name: "read_profile_session",
+    },
+    {
+      description:
+        "Close one of the user's chats: stop its running turn and take it out of Recents. It can be found again by search.",
+      id: CLOSE_SESSION_TOOL_ID,
+      name: "close_session",
     },
   ];
 
