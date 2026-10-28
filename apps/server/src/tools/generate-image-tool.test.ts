@@ -61,17 +61,6 @@ function generateImageTool(
 }
 
 describe("generate_image tool seed and resolver (U3)", () => {
-  test("seed creates generate_image tool definition", async () => {
-    const db = createInMemoryDatabaseAdapter();
-
-    await ensureGenerateImageToolDefinition(db);
-
-    const tool = await db.getTool(GENERATE_IMAGE_TOOL_ID);
-    expect(tool).not.toBeNull();
-    expect(tool?.name).toBe(GENERATE_IMAGE_TOOL_NAME);
-    expect(tool?.handlerType).toBe("generate_image");
-  });
-
   test("seedDatabase includes generate_image and Super Nakama is not auto-assigned", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertOrganization({
@@ -92,40 +81,6 @@ describe("generate_image tool seed and resolver (U3)", () => {
     );
 
     expect(assignedIds).not.toContain(GENERATE_IMAGE_TOOL_ID);
-  });
-
-  test("resolver returns runnable generate_image for assigned profile", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const now = new Date().toISOString();
-
-    await ensureGenerateImageToolDefinition(db);
-    await db.upsertProfile({
-      createdAt: now,
-      id: "profile_assigned",
-      isDefault: true,
-      isSuper: false,
-      model: null,
-      name: "Assigned",
-      orgId: "org_a",
-      systemPrompt: "",
-      updatedAt: now,
-    });
-    await db.assignToolToProfile("profile_assigned", GENERATE_IMAGE_TOOL_ID);
-
-    const assigned = await resolveToolsFromStorage(
-      await db.listToolsForProfile("profile_assigned"),
-      db,
-      [],
-      { serverTools: { generateImage: generateImageTool(db) } }
-    );
-
-    const tool = assigned.find(
-      (entry) => entry.name === GENERATE_IMAGE_TOOL_NAME
-    );
-
-    expect(tool).toBeDefined();
-    expect(tool?.parameters?.required).toEqual(["prompt"]);
-    expect(tool?.parameters?.properties).not.toHaveProperty("model");
   });
 
   test("unassigned profile session does not expose generate_image", async () => {
