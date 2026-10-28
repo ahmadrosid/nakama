@@ -34,6 +34,7 @@ import {
   readRecord,
   readSseEvents,
   sanitizeToolCallHistory,
+  toModelToolContent,
 } from "../shared";
 import { generateOpenAIResponsesChat } from "./responses";
 import {
@@ -393,7 +394,7 @@ async function toOpenAIMessage(
   }
 
   return {
-    content: message.content,
+    content: toModelToolContent(message.content),
     role: "tool",
     tool_call_id: message.toolCallId,
   };
