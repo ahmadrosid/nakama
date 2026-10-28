@@ -2630,7 +2630,11 @@ export class AgentService {
   ): Promise<LoadedAttachmentBytes | null> {
     const record = await this.db.getAttachment(attachmentId);
 
-    if (!record || record.orgId !== orgId || record.kind !== "image") {
+    if (
+      !record ||
+      record.orgId !== orgId ||
+      (record.kind !== "image" && record.kind !== "document")
+    ) {
       return null;
     }
 

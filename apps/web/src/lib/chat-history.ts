@@ -20,6 +20,7 @@ import {
 } from "@/lib/chat-stream-web-search";
 import { addChatUsage } from "@/lib/chat-usage";
 import { createClientId } from "@/lib/client-id";
+import type { DisplayDocument } from "@/lib/pasted-text";
 
 export interface RequestedChatSession {
   profileId: string;
@@ -392,7 +393,7 @@ export interface ChatListItem {
   artifactStreaming?: boolean;
   content: string;
   createdAt?: string;
-  documents?: Array<{ filename: string; mediaType: string }>;
+  documents?: DisplayDocument[];
   /** Client-only: turn failed (e.g. upstream 429); not part of server history. */
   failed?: boolean;
   historyIndex?: number;

@@ -230,7 +230,14 @@ export function createHonoApp(options: ServerOptions) {
         (/^\/v1\/profiles\/[^/]+\/artifacts\/content$/.test(c.req.path) &&
           isHtmlArtifactMimeType(headers.get("Content-Type") ?? ""));
 
-      if (!isArtifactFrame) {
+      // Chat attachment bytes render inside a same-origin <object> for PDF
+      // preview; DENY would block that embed outright.
+      const isChatAttachmentContent =
+        /^\/v1\/attachments\/[^/]+\/content$/.test(c.req.path);
+
+      if (isChatAttachmentContent) {
+        headers.set("X-Frame-Options", "SAMEORIGIN");
+      } else if (!isArtifactFrame) {
         headers.set("X-Frame-Options", "DENY");
       }
 
@@ -260,7 +267,7 @@ export function createHonoApp(options: ServerOptions) {
         "Content-Security-Policy",
         isArtifactDocument
           ? ARTIFACT_FRAME_CSP
-          : `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'${docsScripts}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://logos.composio.dev; media-src 'self' blob:; object-src blob:; frame-src 'self' blob: https://*.kernel.sh:* https://*.onkernel.com:*; font-src 'self' data:${docsFonts}; connect-src 'self'${docsConnections};`
+          : `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'${docsScripts}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://logos.composio.dev; media-src 'self' blob:; object-src 'self' blob:; frame-src 'self' blob: https://*.kernel.sh:* https://*.onkernel.com:*; font-src 'self' data:${docsFonts}; connect-src 'self'${docsConnections};`
       );
 
       // Also true behind a TLS terminator, which is where HSTS matters most.

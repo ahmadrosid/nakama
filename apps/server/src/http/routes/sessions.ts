@@ -390,16 +390,16 @@ export function registerSessionRoutes(
       request: { params: z.object({ attachmentId: z.string() }) },
       responses: {
         200: {
-          description: "Image bytes",
+          description: "Attachment bytes",
           content: {
-            "image/*": { schema: z.string().openapi({ format: "binary" }) },
+            "*/*": { schema: z.string().openapi({ format: "binary" }) },
           },
         },
         401: { description: "Authentication required" },
         403: { description: "Profile access denied" },
-        404: { description: "Image not found" },
+        404: { description: "Attachment not found" },
       },
-      summary: "Read an image attached to chat",
+      summary: "Read a file attached to chat",
       tags: ["Chat"],
     })
   );
@@ -673,13 +673,15 @@ export function registerSessionRoutes(
     );
 
     if (!attachment) {
-      return errorResponse("Image not found", 404);
+      return errorResponse("Attachment not found", 404);
     }
+
+    const disposition = c.req.query("inline") === "1" ? "inline" : "attachment";
 
     return new Response(new Uint8Array(attachment.bytes), {
       headers: {
         "Cache-Control": "private, no-store",
-        "Content-Disposition": "attachment",
+        "Content-Disposition": disposition,
         "Content-Type": attachment.mediaType,
         "X-Content-Type-Options": "nosniff",
       },
