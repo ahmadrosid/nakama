@@ -10,6 +10,9 @@ const second = { orgId: "org_a", profileId: "agent_b" };
 
 let root = "";
 
+// Stop what a test left running, so no log stream opens after the dir is gone.
+let hosts: ReturnType<typeof createWhatsAppHost>[] = [];
+
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "nakama-whatsapp-host-"));
   await mkdir(join(root, first.profileId));
@@ -17,6 +20,8 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  await Promise.all(hosts.map((sync) => sync([])));
+  hosts = [];
   await rm(root, { force: true, recursive: true });
 });
 
@@ -40,6 +45,8 @@ function createTestHost(options: { failing?: Set<string>; retryMs?: number }) {
       };
     },
   });
+
+  hosts.push(sync);
 
   return { events, sync };
 }
