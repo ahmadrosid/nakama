@@ -179,7 +179,7 @@ describe("teams chat handler", () => {
     });
   });
 
-  test("access removed while a turn waits stops the queued turn", async () => {
+  test("access removed during a turn stops the next message", async () => {
     await withTempHome("nakama-teams-handler-", async (homeDir) => {
       let allowed = true;
 
