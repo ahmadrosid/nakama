@@ -1,4 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
+import { NakamaClient } from "@nakama/client";
+import type { AgentChannel, ChatMessage } from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -12,6 +14,7 @@ import {
 } from "react-router-dom";
 import { useActiveChatProfileStore } from "@/context/active-chat-profile-store";
 import { AppProvider } from "@/context/app-context";
+import { AppContext } from "@/context/app-context-shared";
 import { AuthProvider } from "@/context/auth-context";
 import { AuthContext } from "@/context/auth-context-shared";
 import { client } from "@/lib/client";
@@ -267,6 +270,217 @@ const navigationScenarios = [
   "stale status",
   "draft",
 ];
+
+const retryChannelCases = [
+  ["first web reply", "web", 1, "web"],
+  ["later web reply", "web", 3, "web"],
+  ["first CLI reply", "cli", 1, "web"],
+  ["later CLI reply", "cli", 3, "cli"],
+  ["first task reply", "task", 1, "web"],
+  ["later task reply", "task", 3, "task"],
+  ["first read-only reply", "telegram", 1, null],
+  ["later read-only reply", "telegram", 3, null],
+] as const;
+
+test.each(retryChannelCases)(
+  "retry keeps the destination channel: %s",
+  async (_name, sourceChannel, historyIndex, expectedChannel) => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    const previousStorage = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "localStorage"
+    );
+
+    const previousProfile = useActiveChatProfileStore.getState();
+    const stored = new Map<string, string>();
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => stored.get(key) ?? null,
+        removeItem: (key: string) => stored.delete(key),
+        setItem: (key: string, value: string) => stored.set(key, value),
+      },
+    });
+    useActiveChatProfileStore.setState({ orgId: null, profileId: "default" });
+    const destinationId = historyIndex === 1 ? "fresh" : "branched";
+    const sent: string[] = [];
+
+    const automationBodies: Array<{ channel: AgentChannel; prompt: string }> =
+      [];
+
+    const transport = new NakamaClient({
+      baseUrl: "http://retry.test",
+      fetch: async (url, options) => {
+        if (String(url) !== "http://retry.test/v1/automations/draft") {
+          throw new Error(`Unexpected request: ${url}`);
+        }
+
+        automationBodies.push(JSON.parse(String(options?.body)));
+
+        return Response.json({ automation: null });
+      },
+    });
+
+    const streamSpies: ReturnType<typeof spyOn>[] = [];
+
+    const makeSession = (id: string, channel: AgentChannel) => {
+      const chat = transport.createChatSession(id, channel);
+      streamSpies.push(
+        spyOn(chat, "sendStream").mockImplementation(async () => {
+          sent.push(id);
+
+          return "retried answer";
+        })
+      );
+
+      return chat;
+    };
+
+    const messages: ChatMessage[] = [
+      { content: "first prompt", role: "user" },
+      { content: "first answer", role: "assistant" },
+      { content: "second prompt", role: "user" },
+      { content: "second answer", role: "assistant" },
+    ];
+
+    const spies = [
+      spyOn(client, "getMe").mockRejectedValue(new Error("Unauthenticated")),
+      spyOn(client, "listUserOrgs").mockResolvedValue({ orgs: [] }),
+      spyOn(client, "listProfiles").mockResolvedValue({ profiles: [] }),
+      spyOn(client, "getThinkingSettings").mockResolvedValue({
+        effort: "medium",
+        enabled: false,
+      }),
+      spyOn(client, "getSessionStatus").mockResolvedValue({ active: false }),
+      spyOn(client, "getSessionMessages").mockImplementation(async (id) => ({
+        channel:
+          id === "source" ? sourceChannel : (expectedChannel ?? sourceChannel),
+        messageMeta: [],
+        messages,
+        model: null,
+        questionnaire: null,
+        todos: [],
+      })),
+      spyOn(client, "createChatSession").mockImplementation(makeSession),
+    ];
+
+    const createSession = spyOn(client, "createSession").mockImplementation(
+      async (channel) => makeSession("fresh", channel)
+    );
+
+    const branchSession = spyOn(client, "branchSession").mockResolvedValue({
+      sessionId: "branched",
+    });
+
+    let page!: ChatPageState;
+    let pathname = "";
+
+    function Probe() {
+      page = useChatPage();
+      pathname = useLocation().pathname;
+
+      return null;
+    }
+
+    const root = createRoot(document.createElement("div"));
+
+    try {
+      await act(async () =>
+        root.render(
+          <MemoryRouter initialEntries={["/chat/default/source"]}>
+            <QueryClientProvider client={queryClient}>
+              <AuthProvider>
+                <AppContext.Provider
+                  value={{
+                    configureProvider: async () => {
+                      throw new Error("Unexpected write");
+                    },
+                    createProvider: async () => {
+                      throw new Error("Unexpected write");
+                    },
+                    error: null,
+                    health: null,
+                    loading: false,
+                    models: null,
+                  }}
+                >
+                  <Routes>
+                    <Route
+                      element={<Probe />}
+                      path="/chat/:profileId?/:sessionId?"
+                    />
+                  </Routes>
+                </AppContext.Provider>
+              </AuthProvider>
+            </QueryClientProvider>
+          </MemoryRouter>
+        )
+      );
+      expect(page.session?.id).toBe("source");
+      expect(page.sessionChannel).toBe(sourceChannel);
+
+      const reply = page.messages.find(
+        (message) => message.historyIndex === historyIndex
+      );
+
+      expect(reply).toBeDefined();
+
+      if (!reply) {
+        throw new Error("Missing reply fixture");
+      }
+
+      await act(async () => page.handleTryAgainMessage(reply));
+      expect(page.error).toBeNull();
+
+      if (expectedChannel === null) {
+        expect(page.session?.id).toBe("source");
+        expect(page.sessionChannel).toBe(sourceChannel);
+        expect(page.readOnlySession).toBe(true);
+        expect(sent).toEqual([]);
+        expect(createSession).not.toHaveBeenCalled();
+        expect(branchSession).not.toHaveBeenCalled();
+
+        return;
+      }
+
+      expect(page.session?.id).toBe(destinationId);
+      expect(pathname).toBe(`/chat/default/${destinationId}`);
+      expect(sent).toEqual([destinationId]);
+      expect(createSession).toHaveBeenCalledTimes(historyIndex === 1 ? 1 : 0);
+      expect(branchSession).toHaveBeenCalledTimes(historyIndex === 3 ? 1 : 0);
+      expect(page.sessionChannel).toBe(expectedChannel);
+      expect(page.readOnlySession).toBe(false);
+      // The real serializer exposes the session's captured channel.
+      await page.session?.createAutomation("retry follow-up");
+      expect(automationBodies).toEqual([
+        { channel: expectedChannel, prompt: "retry follow-up" },
+      ]);
+    } finally {
+      await act(async () => root.unmount());
+      queryClient.clear();
+
+      for (const spy of [
+        ...spies,
+        ...streamSpies,
+        createSession,
+        branchSession,
+      ]) {
+        spy.mockRestore();
+      }
+
+      useActiveChatProfileStore.setState(previousProfile);
+
+      if (previousStorage) {
+        Object.defineProperty(globalThis, "localStorage", previousStorage);
+      } else {
+        Reflect.deleteProperty(globalThis, "localStorage");
+      }
+    }
+  }
+);
 
 test.each(navigationScenarios)(
   "session navigation keeps the requested chat: %s",

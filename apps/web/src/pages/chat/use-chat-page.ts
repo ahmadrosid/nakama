@@ -1718,6 +1718,7 @@ export function useChatPage() {
       setError(null);
 
       try {
+        const retryChannel = plan ? sessionChannel : "web";
         let retrySession: RemoteChatSession;
         let initialMessages: ChatListItem[] = [];
 
@@ -1728,10 +1729,13 @@ export function useChatPage() {
             sessionId: session.id,
           });
 
-          retrySession = client.createChatSession(result.sessionId, "web");
+          retrySession = client.createChatSession(
+            result.sessionId,
+            retryChannel
+          );
           initialMessages = plan.initialMessages;
         } else {
-          retrySession = await client.createSession("web", {
+          retrySession = await client.createSession(retryChannel, {
             cognito: cognitoRef.current || undefined,
             model: sessionModel ?? undefined,
             profileId,
@@ -1740,6 +1744,7 @@ export function useChatPage() {
         }
 
         setSession(retrySession);
+        setSessionChannel(retryChannel);
 
         if (cognitoRef.current) {
           activeSessionIdRef.current = retrySession.id;
@@ -1765,6 +1770,7 @@ export function useChatPage() {
       readOnlySession,
       sendMessage,
       session,
+      sessionChannel,
       sessionModel,
       sessionThinkingEffort,
       syncChatUrl,
