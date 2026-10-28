@@ -854,8 +854,7 @@ function LlmUsageSection({ usage }: { usage: LlmUsageStatus }) {
 
       <div className="px-4">
         <p className="text-muted-foreground text-xs">
-          Tracking since {formatDate(usage.trackedSince)}. Figures reset when
-          the server restarts.
+          Tracking since {formatDate(usage.trackedSince)}.
         </p>
       </div>
     </section>
