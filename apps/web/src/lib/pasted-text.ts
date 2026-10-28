@@ -52,6 +52,9 @@ export function wordCountFromPastedFilename(filename: string): number | null {
 }
 
 export interface DisplayDocument {
+  /** Where the panel fetches the bytes from: the attachment route for
+   * persisted parts, a data URL for inline parts and just-sent files. */
+  contentUrl?: string;
   filename: string;
   mediaType: string;
 }
@@ -59,7 +62,16 @@ export interface DisplayDocument {
 export function documentDisplayFromContentPart(
   part: Extract<MessageContentPart, { type: "document" | "document_ref" }>
 ): DisplayDocument {
+  if (part.type === "document_ref") {
+    return {
+      contentUrl: `/v1/attachments/${encodeURIComponent(part.attachmentId)}/content`,
+      filename: part.filename,
+      mediaType: part.mediaType,
+    };
+  }
+
   return {
+    contentUrl: `data:${part.mediaType};base64,${part.data}`,
     filename: part.filename,
     mediaType: part.mediaType,
   };
@@ -67,6 +79,7 @@ export function documentDisplayFromContentPart(
 
 export function documentDisplayFromFilePart(file: FileUIPart): DisplayDocument {
   return {
+    contentUrl: file.url || undefined,
     filename: file.filename?.trim() || "document",
     mediaType: file.mediaType ?? "",
   };
