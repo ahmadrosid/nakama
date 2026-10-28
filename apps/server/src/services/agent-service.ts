@@ -2623,14 +2623,17 @@ export class AgentService {
     }
   }
 
-  async readChatImageAttachment(
+  async readChatAttachment(
     orgId: string,
     attachmentId: string,
     access: ChatProfileAccess
   ): Promise<LoadedAttachmentBytes | null> {
     const record = await this.db.getAttachment(attachmentId);
 
-    if (!record || record.orgId !== orgId || record.kind !== "image") {
+    // Any stored kind (image or document) may be served here; the org,
+    // profile, and session-owner checks below still apply, so another
+    // org's attachment keeps returning 404.
+    if (!record || record.orgId !== orgId) {
       return null;
     }
 
