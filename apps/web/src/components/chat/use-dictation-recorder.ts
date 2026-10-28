@@ -315,7 +315,7 @@ export function useDictationWaveform() {
   const canvasElRef = useRef<HTMLCanvasElement | null>(null);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
   const colorRef = useRef<string | null>(null);
-  const samplesRef = useRef<Float32Array | null>(null);
+  const samplesRef = useRef<Float32Array<ArrayBuffer> | null>(null);
 
   const stopWaveform = () => {
     if (rafRef.current !== null) {
