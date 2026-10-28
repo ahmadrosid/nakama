@@ -89,7 +89,7 @@ function useDocumentAttachmentContent(file: DisplayDocument) {
           setText(content);
         }
       })
-      .catch((err: unknown) => {
+      .catch((err) => {
         if (!cancelled) {
           setError(formatError(err));
         }
