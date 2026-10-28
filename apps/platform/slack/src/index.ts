@@ -164,13 +164,15 @@ try {
 
   await sessionStore.load();
 
+  const slackApi = createSlackApi(config.botToken);
+
   const handleEvent = createChatHandler({
     botTeamId: identity.team_id,
     botUserId: identity.user_id,
     client,
     owner,
     sessionStore,
-    slack: createSlackApi(config.botToken),
+    slack: slackApi,
   });
 
   closeSocket = connectSlackSocket({
@@ -182,8 +184,27 @@ try {
         );
       }
 
-      handleEvent(event).catch((error) => {
+      handleEvent(event).catch(async (error) => {
         console.error("Slack message handler error:", error);
+
+        // The envelope was already acked, so Slack never redelivers: a
+        // failed turn must not look like the bot ignoring the user.
+        // Mirror the handler's thread: DMs stay unthreaded, channel
+        // messages reply in their thread (or under the message itself).
+        const threadTs =
+          event.channel_type === "im"
+            ? event.thread_ts
+            : (event.thread_ts ?? event.ts);
+
+        try {
+          await slackApi.postMessage(
+            event.channel,
+            "Something went wrong while handling your message. Please try again.",
+            threadTs
+          );
+        } catch (replyError) {
+          console.error("Slack error reply failed:", replyError);
+        }
       });
     },
     onStatus: (next) => {
