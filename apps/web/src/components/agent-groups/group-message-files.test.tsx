@@ -198,9 +198,11 @@ test("opening a notice refreshes an open panel, including repeated clicks", asyn
 test("messages without changes have no notice", async () => {
   await act(async () =>
     root.render(
-      <MemoryRouter>
-        <GroupMessageMemoryChanges />
-      </MemoryRouter>
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <GroupMessageMemoryChanges />
+        </MemoryRouter>
+      </QueryClientProvider>
     )
   );
   expect(container.innerHTML).toBe("");

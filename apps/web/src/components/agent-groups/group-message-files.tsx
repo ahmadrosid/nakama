@@ -1,6 +1,6 @@
 import type { AgentGroupMemoryChange } from "@nakama/core/agent-groups";
 import { cn } from "@nakama/ui/utils";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDown01Icon,
   ArrowUpRight01Icon,
@@ -17,6 +17,7 @@ import {
   inferArtifactMimeType,
 } from "@/lib/chat-artifacts";
 import { client } from "@/lib/client";
+import { queryKeys } from "@/lib/query-keys";
 
 /** Memory lines are saved as markdown list items; the notice shows the text. */
 function memoryLineText(entry: string) {
@@ -43,6 +44,7 @@ export function GroupMessageMemoryChanges({
 }: {
   changes?: AgentGroupMemoryChange[];
 }) {
+  const queryClient = useQueryClient();
   const [, setSearchParams] = useSearchParams();
   const [open, setOpen] = useState(false);
 
@@ -72,15 +74,20 @@ export function GroupMessageMemoryChanges({
           <li key={key}>
             <button
               className="group/row flex w-full items-start gap-2 rounded-xl px-2.5 py-1.5 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() =>
+              onClick={() => {
                 setSearchParams(
                   (current) => withPanel(current, "memory", "1"),
                   {
                     replace: true,
                     state: { groupMemoryEntry: change.newEntry },
                   }
-                )
-              }
+                );
+                // Show the saved write, also in a panel that is already open.
+                void queryClient.invalidateQueries({
+                  predicate: (query) => query.queryKey[2] === "memory",
+                  queryKey: queryKeys.agentGroups.all,
+                });
+              }}
               title="Open in Memory"
               type="button"
             >
