@@ -13,6 +13,7 @@ import {
   readRecord,
   readSseEvents,
   sanitizeToolCallHistory,
+  toModelToolContent,
 } from "./shared";
 import { streamFromChunks } from "./test-helpers";
 
@@ -202,5 +203,65 @@ describe("buildProviderHttpError", () => {
   test("maps every other provider failure to 502", () => {
     expect(buildProviderHttpError("OpenAI", 429, "").status).toBe(502);
     expect(buildProviderHttpError("OpenAI", 500, "").status).toBe(502);
+  });
+});
+
+describe("toModelToolContent", () => {
+  const uniform = JSON.stringify([
+    { file: "src/a.ts", line: 10, text: "hello" },
+    { file: "src/b.ts", line: 20, text: "world" },
+  ]);
+
+  function withFlag(value: string | undefined, fn: () => void): void {
+    const previous = process.env.NAKAMA_TOON_TOOL_RESULTS;
+
+    if (value === undefined) {
+      delete process.env.NAKAMA_TOON_TOOL_RESULTS;
+    } else {
+      process.env.NAKAMA_TOON_TOOL_RESULTS = value;
+    }
+
+    try {
+      fn();
+    } finally {
+      if (previous === undefined) {
+        delete process.env.NAKAMA_TOON_TOOL_RESULTS;
+      } else {
+        process.env.NAKAMA_TOON_TOOL_RESULTS = previous;
+      }
+    }
+  }
+
+  test("passes content through byte-identical when the flag is off", () => {
+    withFlag(undefined, () => {
+      expect(toModelToolContent(uniform)).toBe(uniform);
+    });
+  });
+
+  test("passes plain text, invalid JSON, and non-uniform shapes through when on", () => {
+    withFlag("1", () => {
+      expect(toModelToolContent("just some text")).toBe("just some text");
+      expect(toModelToolContent("{bad json")).toBe("{bad json");
+      expect(toModelToolContent('{"a":1}')).toBe('{"a":1}');
+      expect(toModelToolContent("[]")).toBe("[]");
+      expect(
+        toModelToolContent(
+          JSON.stringify([{ a: 1 }, { a: 1, b: 2 }])
+        )
+      ).toBe(JSON.stringify([{ a: 1 }, { a: 1, b: 2 }]));
+    });
+  });
+
+  test("encodes a uniform array of objects as TOON when on, idempotently", () => {
+    withFlag("1", () => {
+      const encoded = toModelToolContent(uniform);
+
+      expect(encoded).not.toBe(uniform);
+      expect(encoded).toContain("file,line,text");
+      expect(encoded).toContain("src/a.ts");
+      expect(encoded).toContain("hello");
+      expect(encoded).not.toContain('"file"');
+      expect(toModelToolContent(encoded)).toBe(encoded);
+    });
   });
 });
