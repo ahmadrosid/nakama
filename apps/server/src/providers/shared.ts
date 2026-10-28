@@ -6,6 +6,7 @@ import type {
   ToolCall,
 } from "@nakama/core";
 import { NakamaApiError } from "@nakama/core";
+import { encode as encodeToon } from "@toon-format/toon";
 import { z } from "zod";
 
 export type ProviderJsonValue =
@@ -23,6 +24,77 @@ export interface ProviderJsonRecord {
 const providerNumberSchema = z.number().finite();
 
 const providerStringSchema = z.string();
+
+/**
+ * Opt-in tabular tool results for the model, gated by the server env flag
+ * NAKAMA_TOON_TOOL_RESULTS=1 (default off). When enabled, a tool result that
+ * parses as a uniform array of objects (same keys on every row, e.g. search
+ * results) is encoded as TOON; everything else — plain text, errors, acks,
+ * non-uniform or nested shapes, invalid JSON — passes through byte-identical.
+ * The transcript keeps the original JSON; only provider adapters call this,
+ * at the point a role:"tool" message becomes a provider payload. Encoding
+ * failures fall back to the original content, and the helper is idempotent:
+ * TOON output is not JSON, so a second pass returns it unchanged.
+ */
+export function isToonToolResultsEnabled(): boolean {
+  return process.env.NAKAMA_TOON_TOOL_RESULTS === "1";
+}
+
+export function toModelToolContent(content: string): string {
+  if (!isToonToolResultsEnabled()) {
+    return content;
+  }
+
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return content;
+  }
+
+  if (!isUniformObjectArray(parsed)) {
+    return content;
+  }
+
+  try {
+    return encodeToon(parsed);
+  } catch {
+    return content;
+  }
+}
+
+function isUniformObjectArray(
+  value: unknown
+): value is Record<string, unknown>[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    return false;
+  }
+
+  const firstKeys = objectKeys(value[0]);
+
+  if (firstKeys === null) {
+    return false;
+  }
+
+  return value.every((entry) => {
+    const keys = objectKeys(entry);
+
+    return (
+      keys !== null &&
+      keys.length === firstKeys.length &&
+      firstKeys.every((key) => keys.includes(key))
+    );
+  });
+}
+
+function objectKeys(value: unknown): string[] | null {
+  if (!(value instanceof Object) || Array.isArray(value)) {
+    return null;
+  }
+
+  return Object.keys(value);
+}
 
 export function readProviderNumber<Value>(value: Value): number | undefined {
   const parsed = providerNumberSchema.safeParse(value);
