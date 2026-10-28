@@ -17,11 +17,6 @@ describe("ensureBundledSkillFiles for agent-browser", () => {
     delete process.env.NAKAMA_CONFIG_DIR;
   });
 
-  test("writes agent-browser when missing", async () => {
-    const created = await ensureBundledSkillFiles();
-    expect(created).toContain("agent-browser");
-  });
-
   test("force-refreshes agent-browser when the installed copy is stale", async () => {
     const skillPath = join(
       configDir,

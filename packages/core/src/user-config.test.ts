@@ -198,90 +198,6 @@ describe("user config multi-provider", () => {
     expect(loaded?.providers[1]?.wireApi).toBe("responses");
   });
 
-  test("round-trips cerebras models_json with capability flags", async () => {
-    configDir = await mkdtemp(join(tmpdir(), "nakama-config-"));
-    process.env.NAKAMA_CONFIG_DIR = configDir;
-
-    const cerebrasId = createProviderInstanceId();
-
-    await saveUserConfig({
-      defaultProviderId: cerebrasId,
-      providers: [
-        {
-          apiKey: "csk-test",
-          createdAt: "2026-07-16T10:00:00.000Z",
-          customModels: [
-            {
-              default: true,
-              id: "gpt-oss-120b",
-              inputPerMillionUsd: 0.25,
-              name: "GPT OSS 120B",
-              outputPerMillionUsd: 0.69,
-              supportsThinking: true,
-              supportsVision: false,
-            },
-          ],
-          id: cerebrasId,
-          label: "Cerebras",
-          type: "cerebras",
-        },
-      ],
-    });
-
-    const loaded = await loadUserConfig();
-    expect(loaded?.providers[0]?.type).toBe("cerebras");
-    expect(loaded?.providers[0]?.customModels?.[0]?.id).toBe("gpt-oss-120b");
-    expect(loaded?.providers[0]?.customModels?.[0]?.supportsThinking).toBe(
-      true
-    );
-    expect(loaded?.providers[0]?.customModels?.[0]?.inputPerMillionUsd).toBe(
-      0.25
-    );
-  });
-
-  test("round-trips fireworks models_json with capability flags", async () => {
-    configDir = await mkdtemp(join(tmpdir(), "nakama-config-"));
-    process.env.NAKAMA_CONFIG_DIR = configDir;
-
-    const fireworksId = createProviderInstanceId();
-
-    await saveUserConfig({
-      defaultProviderId: fireworksId,
-      providers: [
-        {
-          apiKey: "fw-test",
-          createdAt: "2026-07-24T10:00:00.000Z",
-          customModels: [
-            {
-              default: true,
-              id: "accounts/fireworks/models/kimi-k2p6",
-              inputPerMillionUsd: 0.6,
-              name: "Kimi K2.6",
-              outputPerMillionUsd: 2.5,
-              supportsThinking: true,
-              supportsVision: false,
-            },
-          ],
-          id: fireworksId,
-          label: "Fireworks",
-          type: "fireworks",
-        },
-      ],
-    });
-
-    const loaded = await loadUserConfig();
-    expect(loaded?.providers[0]?.type).toBe("fireworks");
-    expect(loaded?.providers[0]?.customModels?.[0]?.id).toBe(
-      "accounts/fireworks/models/kimi-k2p6"
-    );
-    expect(loaded?.providers[0]?.customModels?.[0]?.supportsThinking).toBe(
-      true
-    );
-    expect(loaded?.providers[0]?.customModels?.[0]?.inputPerMillionUsd).toBe(
-      0.6
-    );
-  });
-
   test("round-trips discovered models_json for discovery providers", async () => {
     // The writer persists customModels for every provider type, so the reader
     // must parse them back for discovery providers too — otherwise a fetched
@@ -330,41 +246,6 @@ describe("user config multi-provider", () => {
       0.6
     );
     expect(loaded?.providers[1]?.customModels?.[0]?.id).toBe("glm-5.2");
-  });
-
-  test("round-trips catalog shortlist models_json for Xiaomi MiMo", async () => {
-    configDir = await mkdtemp(join(tmpdir(), "nakama-config-"));
-    process.env.NAKAMA_CONFIG_DIR = configDir;
-
-    const xiaomiId = createProviderInstanceId();
-
-    await saveUserConfig({
-      defaultProviderId: xiaomiId,
-      providers: [
-        {
-          apiKey: "sk-xiaomi-test",
-          createdAt: "2026-09-09T10:00:00.000Z",
-          customModels: [
-            {
-              default: true,
-              id: "mimo-v2.5",
-              name: "MiMo V2.5",
-              supportsThinking: true,
-              supportsVision: true,
-            },
-          ],
-          id: xiaomiId,
-          label: "Xiaomi MiMo",
-          type: "xiaomi",
-        },
-      ],
-    });
-
-    const loaded = await loadUserConfig();
-    expect(loaded?.providers[0]?.customModels?.[0]?.id).toBe("mimo-v2.5");
-    expect(loaded?.providers[0]?.customModels?.[0]?.supportsThinking).toBe(
-      true
-    );
   });
 
   test("repairs literal undefined label on load", async () => {

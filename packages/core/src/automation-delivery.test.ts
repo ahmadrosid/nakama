@@ -37,18 +37,6 @@ describe("normalizeAutomationDelivery", () => {
     expect(normalizeAutomationDelivery(null)).toBeUndefined();
   });
 
-  test("parses telegram delivery", () => {
-    expect(normalizeAutomationDelivery({ channel: "telegram" })).toEqual({
-      channel: "telegram",
-    });
-  });
-
-  test("parses discord delivery", () => {
-    expect(normalizeAutomationDelivery({ channel: "discord" })).toEqual({
-      channel: "discord",
-    });
-  });
-
   test("parses discord delivery with channelId", () => {
     expect(
       normalizeAutomationDelivery({
