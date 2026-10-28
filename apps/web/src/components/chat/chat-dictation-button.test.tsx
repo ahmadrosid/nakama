@@ -1,6 +1,6 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act } from "react";
+import { act, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
 import { usePromptInputController } from "@/components/ai-elements/prompt-input-context";
@@ -44,6 +44,19 @@ function DraftProbe() {
   const controller = usePromptInputController();
 
   return <div data-testid="draft-value">{controller.textInput.value}</div>;
+}
+
+/** Lets tests type through the provider, like real typing does. */
+let setDraftInput: ((value: string) => void) | null = null;
+
+function DraftWriter() {
+  const controller = usePromptInputController();
+
+  useEffect(() => {
+    setDraftInput = (value: string) => controller.textInput.setInput(value);
+  }, [controller]);
+
+  return null;
 }
 
 class MockMediaRecorder {
@@ -131,6 +144,7 @@ async function renderDictation(initialTextarea: string) {
         <QueryClientProvider client={queryClient}>
           <PromptInputProvider>
             <DraftProbe />
+            <DraftWriter />
             <form>
               <textarea
                 data-testid="draft-textarea"
@@ -213,13 +227,11 @@ test("appends a late transcription to the current draft without replacing typed 
     () => document.body.textContent?.includes("Transcribing…") ?? false
   );
 
-  // The user keeps typing while transcription is pending.
-  const textarea = draftTextarea();
-  expect(textarea).not.toBeNull();
-
-  if (textarea) {
-    textarea.value = "konten awal dan menunggu";
-  }
+  // The user keeps typing while transcription is pending. Type through
+  // the provider, like the real controlled textarea does.
+  await act(async () => {
+    setDraftInput?.("konten awal dan menunggu");
+  });
 
   await act(async () => {
     tx.resolve({ text: "12345678" });
@@ -283,4 +295,125 @@ test("a late result after leaving the chat never touches any draft", async () =>
   await act(() => Bun.sleep(10));
   expect(draftValue()).toBe("");
   expect(draftTextarea()?.value).toBe("konten awal");
+});
+
+test("empty recorder mime type falls back to audio/webm", async () => {
+  installMediaMocks();
+  mockModel("9router-stt::selfhosted-stt/whisper-1");
+
+  class EmptyMimeRecorder extends MockMediaRecorder {
+    override mimeType = "";
+  }
+
+  Object.defineProperty(globalThis, "MediaRecorder", {
+    configurable: true,
+    value: EmptyMimeRecorder,
+    writable: true,
+  });
+
+  const transcribeSpy = spyOn(client, "transcribeAudio").mockResolvedValue({
+    text: "hi",
+  });
+
+  cleanups.push(async () => {
+    transcribeSpy.mockRestore();
+  });
+
+  await renderDictation("");
+  await waitFor(() => queryButton("Dictate with microphone") !== null);
+  await click("Dictate with microphone");
+  await waitFor(() => queryButton("Send voice") !== null);
+  await click("Send voice");
+  await waitFor(() => transcribeSpy.mock.calls.length > 0);
+
+  const [request] = transcribeSpy.mock.calls[0];
+  expect(request.mediaType).toBe("audio/webm");
+  expect(request.filename).toBe("dictation.webm");
+});
+
+test("double click while the permission prompt is pending acquires one stream", async () => {
+  installMediaMocks();
+  mockModel("9router-stt::selfhosted-stt/whisper-1");
+
+  const transcribeSpy = spyOn(client, "transcribeAudio").mockResolvedValue({
+    text: "NOPE",
+  });
+
+  cleanups.push(async () => {
+    transcribeSpy.mockRestore();
+  });
+
+  let gumCalls = 0;
+  const gum = deferred<{ getTracks: () => Array<{ stop: () => void }> }>();
+
+  Object.defineProperty(navigator, "mediaDevices", {
+    configurable: true,
+    value: {
+      getUserMedia: () => {
+        gumCalls += 1;
+        return gum.promise;
+      },
+    },
+  });
+
+  await renderDictation("");
+  await waitFor(() => queryButton("Dictate with microphone") !== null);
+  await click("Dictate with microphone");
+  await click("Dictate with microphone");
+
+  expect(gumCalls).toBe(1);
+
+  await act(async () => {
+    gum.resolve({ getTracks: () => [] });
+  });
+  await waitFor(() => queryButton("Send voice") !== null);
+  await click("Discard recording");
+  await waitFor(() => queryButton("Dictate with microphone") !== null);
+
+  expect(transcribeSpy.mock.calls.length).toBe(0);
+});
+
+test("unmount while the permission prompt is pending stops the stream and never transcribes", async () => {
+  installMediaMocks();
+  mockModel("9router-stt::selfhosted-stt/whisper-1");
+
+  const transcribeSpy = spyOn(client, "transcribeAudio").mockResolvedValue({
+    text: "NOPE",
+  });
+
+  cleanups.push(async () => {
+    transcribeSpy.mockRestore();
+  });
+
+  let stopped = 0;
+  const gum = deferred<{ getTracks: () => Array<{ stop: () => void }> }>();
+
+  Object.defineProperty(navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: () => gum.promise },
+  });
+
+  const { renderTree } = await renderDictation("");
+  await waitFor(() => queryButton("Dictate with microphone") !== null);
+  await click("Dictate with microphone");
+
+  // Leaving the chat unmounts the button while the prompt is pending.
+  await renderTree(false);
+
+  await act(async () => {
+    gum.resolve({
+      getTracks: () => [
+        {
+          stop: () => {
+            stopped += 1;
+          },
+        },
+      ],
+    });
+  });
+  await waitFor(() => stopped === 1);
+
+  expect(stopped).toBe(1);
+  expect(transcribeSpy.mock.calls.length).toBe(0);
+  expect(queryButton("Send voice")).toBeNull();
 });
