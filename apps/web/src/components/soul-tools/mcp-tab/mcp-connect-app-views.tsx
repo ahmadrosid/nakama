@@ -14,7 +14,7 @@ import {
   Tick02Icon,
 } from "hugeicons-react";
 import type { FormEvent, ReactNode } from "react";
-import type { POPULAR_SERVERS } from "@/components/soul-tools/mcp-tab/popular-mcp-servers";
+import { POPULAR_SERVERS } from "@/components/soul-tools/mcp-tab/popular-mcp-servers";
 import type { McpServerKind } from "@/components/soul-tools/mcp-tab/use-mcp-server-dialog-state";
 import { useMcpServerDetailQuery } from "@/hooks/use-app-queries";
 import { queryKeys } from "@/lib/query-keys";
@@ -71,6 +71,88 @@ function BackButton({ onClick }: { onClick: () => void }) {
   );
 }
 
+type AppCard = {
+  description: string;
+  key: string;
+  name: string;
+  onPick: () => void;
+  preset?: PopularServer;
+  ready: boolean;
+};
+
+/** Apps the org already has come first and add in one click; the rest connect. */
+function appCards({
+  onAssign,
+  onConnect,
+  popular,
+  registered,
+}: {
+  onAssign?: (serverId: string) => void;
+  onConnect: (preset: PopularServer) => void;
+  popular: readonly PopularServer[];
+  registered: McpServerSummary[];
+}): AppCard[] {
+  const ready: AppCard[] = onAssign
+    ? registered.map((server) => {
+        const preset = POPULAR_SERVERS.find(
+          (item) => item.name.toLowerCase() === server.name.toLowerCase()
+        );
+
+        return {
+          description:
+            preset?.description ??
+            `${server.toolCount} tool${server.toolCount === 1 ? "" : "s"}`,
+          key: server.id,
+          name: preset?.name ?? server.name,
+          onPick: () => onAssign(server.id),
+          preset,
+          ready: true,
+        };
+      })
+    : [];
+
+  const connect = popular.map((preset) => ({
+    description: preset.description,
+    key: preset.url,
+    name: preset.name,
+    onPick: () => onConnect(preset),
+    preset,
+    ready: false,
+  }));
+
+  return [...ready, ...connect];
+}
+
+function AppCardButton({ busy, card }: { busy: boolean; card: AppCard }) {
+  return (
+    <button
+      aria-label={
+        card.ready ? `Add ${card.name} to agent` : `Connect ${card.name}`
+      }
+      className="flex h-full w-full flex-col items-start gap-3 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:bg-muted/50 disabled:opacity-50"
+      disabled={busy}
+      onClick={card.onPick}
+      type="button"
+    >
+      <AppLogo name={card.name} preset={card.preset} />
+      <span className="flex flex-1 flex-col gap-1">
+        <span className="font-medium text-foreground text-sm">{card.name}</span>
+        <span className="text-muted-foreground text-xs leading-snug">
+          {card.description}
+        </span>
+      </span>
+      {card.ready ? (
+        <span className="inline-flex items-center gap-1 font-medium text-emerald-700 text-xs dark:text-emerald-400">
+          <Tick02Icon aria-hidden className="size-3.5" />
+          Ready to add
+        </span>
+      ) : (
+        <span className="font-medium text-primary text-xs">Connect</span>
+      )}
+    </button>
+  );
+}
+
 export function McpAppPicker({
   busy,
   onAssign,
@@ -91,12 +173,13 @@ export function McpAppPicker({
   registered: McpServerSummary[];
 }) {
   const needle = query.trim().toLowerCase();
-  const matches = (name: string) => name.toLowerCase().includes(needle);
-  const shownPopular = popular.filter((item) => matches(item.name));
 
-  const shownRegistered = onAssign
-    ? registered.filter((item) => matches(item.name))
-    : [];
+  const cards = appCards({
+    onAssign,
+    onConnect,
+    popular,
+    registered,
+  }).filter((card) => card.name.toLowerCase().includes(needle));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -118,65 +201,13 @@ export function McpAppPicker({
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-7 overflow-y-auto px-6 py-6">
-        {shownPopular.length > 0 ? (
-          <section className="flex flex-col gap-3">
-            <h3 className="font-medium text-muted-foreground text-xs">
-              Popular
-            </h3>
-            <ul className="grid gap-3 sm:grid-cols-3">
-              {shownPopular.map((item) => (
-                <li key={item.name}>
-                  <button
-                    className="flex h-full w-full flex-col items-start gap-3 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:bg-muted/50 disabled:opacity-50"
-                    disabled={busy}
-                    onClick={() => onConnect(item)}
-                    type="button"
-                  >
-                    <AppLogo name={item.name} preset={item} />
-                    <span className="flex flex-col gap-1">
-                      <span className="font-medium text-foreground text-sm">
-                        {item.name}
-                      </span>
-                      <span className="text-muted-foreground text-xs leading-snug">
-                        {item.description}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-
-        {shownRegistered.length > 0 && onAssign ? (
-          <section className="flex flex-col gap-3">
-            <h3 className="font-medium text-muted-foreground text-xs">
-              Already set up in your organization
-            </h3>
-            <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
-              {shownRegistered.map((item) => (
-                <li className="flex items-center gap-3 px-4 py-3" key={item.id}>
-                  <AppLogo name={item.name} />
-                  <span className="min-w-0 flex-1 truncate font-medium text-sm">
-                    {item.name}
-                  </span>
-                  <Button
-                    aria-label={`Add ${item.name} to agent`}
-                    disabled={busy}
-                    onClick={() => onAssign(item.id)}
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                  >
-                    Add to agent
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-      </div>
+      <ul className="grid min-h-0 flex-1 auto-rows-min gap-3 overflow-y-auto px-6 py-6 sm:grid-cols-3">
+        {cards.map((card) => (
+          <li key={card.key}>
+            <AppCardButton busy={busy} card={card} />
+          </li>
+        ))}
+      </ul>
 
       <div className="flex items-center justify-between gap-3 border-border border-t px-6 py-3">
         <span className="text-muted-foreground text-sm">
