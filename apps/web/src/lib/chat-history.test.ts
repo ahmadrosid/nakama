@@ -575,12 +575,18 @@ describe("formatSessionTimestamp", () => {
 // table fails one of these, which is what the tables are for: a channel that
 // joins AGENT_CHANNELS has to be decided rather than dropping out in silence.
 describe("session channel tables", () => {
-  test("marks the four messaging channels read only and no others", () => {
+  test("marks the five messaging channels read only and no others", () => {
     const readOnly = AGENT_CHANNELS.filter((channel) =>
       isReadOnlySessionChannel(channel)
     );
 
-    expect(readOnly).toEqual(["telegram", "whatsapp", "discord", "slack"]);
+    expect(readOnly).toEqual([
+      "telegram",
+      "whatsapp",
+      "discord",
+      "slack",
+      "teams",
+    ]);
   });
 });
 

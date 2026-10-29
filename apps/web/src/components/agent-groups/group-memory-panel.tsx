@@ -49,16 +49,11 @@ function GroupMemoryEditor({ groupId }: { groupId: string }) {
   const { state }: { state: { groupMemoryEntry?: string | null } | null } =
     useLocation();
 
-  const { data, error, isLoading, refetch } = useQuery({
+  // The message notice invalidates this query, so its click shows fresh memory.
+  const { data, error, isLoading } = useQuery({
     queryFn: () => client.getAgentGroupMemory(groupId),
     queryKey,
   });
-
-  useEffect(() => {
-    if (state?.groupMemoryEntry !== undefined) {
-      void refetch();
-    }
-  }, [refetch, state]);
 
   // Null until the user types, so a fact an agent saves meanwhile still shows.
   // `base` is the memory the edit started from, so a refetch cannot move it.

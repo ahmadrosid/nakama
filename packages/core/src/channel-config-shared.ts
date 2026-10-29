@@ -39,7 +39,12 @@ export {
   PAIRING_CODE_TTL_MS,
 } from "./pairing-code";
 
-export type ChannelPlatform = "telegram" | "discord" | "whatsapp" | "slack";
+export type ChannelPlatform =
+  | "telegram"
+  | "discord"
+  | "whatsapp"
+  | "slack"
+  | "teams";
 
 export interface ChannelOwner {
   orgId: string;

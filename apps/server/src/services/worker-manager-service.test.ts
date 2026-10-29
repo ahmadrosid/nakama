@@ -181,6 +181,7 @@ describe("WorkerManagerService", () => {
         automation: true,
         discord: false,
         slack: false,
+        teams: false,
         telegram: true,
         whatsapp: false,
       });
@@ -266,6 +267,7 @@ describe("WorkerManagerService", () => {
         automation: true,
         discord: false,
         slack: false,
+        teams: false,
         telegram: false,
         whatsapp: false,
       });
@@ -392,6 +394,7 @@ describe("WorkerManagerService", () => {
         automation: true,
         discord: false,
         slack: false,
+        teams: false,
         telegram: false,
         whatsapp: false,
       });

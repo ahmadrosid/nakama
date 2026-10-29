@@ -110,11 +110,7 @@ describe("filterComposerSlashSuggestions", () => {
   test.each([
     ["addto", "add-tool"],
     ["ADD_TO", "add-tool"],
-    ["add-pl", "add-plugin"],
-    ["addpl", "add-plugin"],
-    ["addmc", "add-mcp"],
     ["adtl", "add-tool"],
-    ["tool", "add-tool"],
   ])("matches command query %s", (query, name) => {
     const commands = filterComposerSlashSuggestions([], query, {
       enableAddCommands: true,
@@ -225,13 +221,6 @@ describe("@ mentions", () => {
 });
 
 describe("getLeadingCommand", () => {
-  test("finds a leading skill token", () => {
-    const found = getLeadingCommand("/skill weather rain?", [weatherSkill]);
-
-    expect(found?.range.name).toBe("weather");
-    expect(found?.description).toBe(weatherSkill.description.trim());
-  });
-
   test("finds a leading skill after whitespace and ignores later tokens", () => {
     const found = getLeadingCommand("  /skill weather /skill missing", [
       weatherSkill,

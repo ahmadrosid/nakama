@@ -666,6 +666,7 @@ export class ProfileService {
       "discord",
       "whatsapp",
       "slack",
+      "teams",
     ] as const) {
       if (
         (await listChannelOwners(platform)).some(

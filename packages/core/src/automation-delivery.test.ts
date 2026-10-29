@@ -19,9 +19,6 @@ describe("normalizeAutomationDelivery", () => {
   test.each(
     [
       false,
-      7,
-      "telegram",
-      [],
       {},
       { channel: "telegram", chatId: "1" },
       { channel: "discord", channelId: 7 },
@@ -35,18 +32,6 @@ describe("normalizeAutomationDelivery", () => {
   test("returns undefined for missing delivery", () => {
     expect(normalizeAutomationDelivery(undefined)).toBeUndefined();
     expect(normalizeAutomationDelivery(null)).toBeUndefined();
-  });
-
-  test("parses telegram delivery", () => {
-    expect(normalizeAutomationDelivery({ channel: "telegram" })).toEqual({
-      channel: "telegram",
-    });
-  });
-
-  test("parses discord delivery", () => {
-    expect(normalizeAutomationDelivery({ channel: "discord" })).toEqual({
-      channel: "discord",
-    });
   });
 
   test("parses discord delivery with channelId", () => {

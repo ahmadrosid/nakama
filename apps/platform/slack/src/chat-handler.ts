@@ -84,6 +84,43 @@ export function normalizeSlackText(text: string, botUserId: string): string {
     .trim();
 }
 
+/** Sends a message to the channel or thread matching the inbound Slack event. */
+export function replyToSlackEvent(
+  slack: Pick<SlackApi, "postMessage">,
+  event: SlackMessageEvent,
+  message: string
+): Promise<void> {
+  const isDm = event.channel_type === "im";
+  const threadTs = isDm ? event.thread_ts : (event.thread_ts ?? event.ts);
+
+  return slack.postMessage(event.channel, message, threadTs);
+}
+
+/** Wraps event processing to log and send an error reply when handleEvent rejects. */
+export function createSlackEventHandler(deps: {
+  handleEvent: (event: SlackMessageEvent) => Promise<void>;
+  slack: Pick<SlackApi, "postMessage">;
+}): (event: SlackMessageEvent) => void {
+  return (event: SlackMessageEvent) => {
+    if (process.env.NAKAMA_CH_DEBUG === "1") {
+      console.log(
+        `[slack] ${event.type} channel_type=${event.channel_type} subtype=${event.subtype ?? "-"} user=${event.user ?? "-"} thread=${event.thread_ts ? "yes" : "no"}`
+      );
+    }
+
+    deps
+      .handleEvent(event)
+      .catch((error) => {
+        console.error("Slack message handler error:", error);
+
+        return replyToSlackEvent(deps.slack, event, formatClientError(error));
+      })
+      .catch((replyError) => {
+        console.error("Failed to post Slack error reply:", replyError);
+      });
+  };
+}
+
 export function createChatHandler(deps: ChatHandlerDeps) {
   const { botTeamId, botUserId, owner, sessionStore, slack } = deps;
   const memberCache = new Map<string, { at: number; member: boolean }>();
@@ -147,8 +184,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       return;
     }
 
-    const reply = (message: string) =>
-      slack.postMessage(event.channel, message, threadTs);
+    const reply = (message: string) => replyToSlackEvent(slack, event, message);
 
     const config = await loadSlackConfigFile(owner);
 

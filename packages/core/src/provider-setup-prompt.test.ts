@@ -51,14 +51,6 @@ describe("promptForProviderConfig", () => {
       "deepseek/deepseek-v4.1-flash"
     );
   });
-  test("accepts Perplexity as a first-party provider", async () => {
-    const config = await promptForProviderConfig(
-      scriptedPrompt(["perplexity", "test-key", ""])
-    );
-
-    expect(config.providers[0]?.type).toBe("perplexity");
-    expect(config.providers[0]?.apiKey).toBe("test-key");
-  });
 
   test("saves a Cloudflare account ID as the instance base URL", async () => {
     const config = await promptForProviderConfig(

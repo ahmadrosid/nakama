@@ -71,6 +71,8 @@ export const queryKeys = {
   },
   models: ["models"] as const,
   modelsDev: ["modelsDev"] as const,
+  nakamaUpgrade: ["system", "upgrade"] as const,
+  nakamaVersion: ["system", "version"] as const,
   notificationDestinations: (orgId: string) =>
     ["notificationDestinations", orgId] as const,
   openRouterModels: ["openRouterModels"] as const,
@@ -78,6 +80,8 @@ export const queryKeys = {
     ["organizationOverview", parentOrgId, activeOrgId] as const,
   organizationPublicationCatalog: (orgId: string, kind: string) =>
     ["organizationPublicationCatalog", orgId, kind] as const,
+  // Under orgMembers, so a new invite refreshes this list too.
+  orgInvites: (orgId: string) => ["orgMembers", orgId, "invites"] as const,
   orgMembers: (orgId: string) => ["orgMembers", orgId] as const,
   orgMemory: (orgId: string) => ["orgMemory", orgId] as const,
   orgMemoryHistory: (orgId: string) => ["orgMemoryHistory", orgId] as const,
@@ -153,6 +157,9 @@ export const queryKeys = {
     profile: (profileId: string) => ["soul", "profile", profileId] as const,
   },
   systemStatus: ["systemStatus"] as const,
+  teams: {
+    settings: ["teams", "settings"] as const,
+  },
   telegram: {
     requests: ["telegram", "requests"] as const,
     settings: ["telegram", "settings"] as const,

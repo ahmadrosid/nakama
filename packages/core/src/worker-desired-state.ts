@@ -13,12 +13,14 @@ export type PlatformWorkerName =
   | "whatsapp"
   | "discord"
   | "slack"
+  | "teams"
   | "automation";
 
 export interface WorkerDesiredState {
   automation: boolean;
   discord: boolean;
   slack: boolean;
+  teams: boolean;
   telegram: boolean;
   whatsapp: boolean;
 }
@@ -27,6 +29,7 @@ const DEFAULT_STATE: WorkerDesiredState = {
   automation: true,
   discord: false,
   slack: false,
+  teams: false,
   telegram: false,
   whatsapp: false,
 };
@@ -56,6 +59,7 @@ export function parseWorkerDesiredState(raw: string): WorkerDesiredState {
         record.automation === undefined ? true : record.automation === true,
       discord: record.discord === true,
       slack: record.slack === true,
+      teams: record.teams === true,
       telegram: record.telegram === true,
       whatsapp: record.whatsapp === true,
     };
@@ -75,6 +79,7 @@ export async function readWorkerDesiredState(
       "discord",
       "whatsapp",
       "slack",
+      "teams",
     ] as const) {
       state[platform] =
         (

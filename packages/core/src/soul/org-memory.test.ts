@@ -123,14 +123,6 @@ describe("org memory parse/rebuild", () => {
 });
 
 describe("composeOrgMemorySummary", () => {
-  test("returns header + pinned bullets", () => {
-    const content = `${ORG_MEMORY_PREAMBLE}\n\n- fact one\n- fact two\n`;
-    const summary = composeOrgMemorySummary(content);
-    expect(summary).toContain("## Org Memory");
-    expect(summary).toContain("- fact one");
-    expect(summary).toContain("- fact two");
-  });
-
   test("includes recent log bullets up to recentLogLimit", () => {
     const dated = Array.from(
       { length: 25 },

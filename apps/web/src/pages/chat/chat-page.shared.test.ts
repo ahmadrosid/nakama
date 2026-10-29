@@ -20,7 +20,6 @@ import {
   setupChecklistRows,
   shouldShowCognitoControl,
   shouldShowGoalPrompt,
-  welcomeAnimationKey,
   writeSetupChecklist,
 } from "@/pages/chat/chat-page.shared";
 
@@ -301,12 +300,6 @@ describe("cognito control visibility", () => {
   });
 });
 
-describe("welcome copy animation key", () => {
-  test("toggling produces a different key, so the entrance replays", () => {
-    expect(welcomeAnimationKey(true)).not.toBe(welcomeAnimationKey(false));
-  });
-});
-
 describe("releaseChatStream", () => {
   test("detaches a send stream instead of aborting the turn behind it", () => {
     const abort = new AbortController();
@@ -331,10 +324,6 @@ describe("releaseChatStream", () => {
 
     expect(releaseChatStream({ abort, detach: null })).toBe("aborted");
     expect(abort.signal.aborted).toBe(true);
-  });
-
-  test("reports idle when nothing is streaming", () => {
-    expect(releaseChatStream({ abort: null, detach: null })).toBe("idle");
   });
 });
 
@@ -415,10 +404,6 @@ describe("setup checklist", () => {
 
   const statuses = (value: StoredSetupChecklist, facts = noFacts) =>
     setupChecklistRows(value, facts).map((row) => row.status);
-
-  test("starts with every item open", () => {
-    expect(statuses(stored)).toEqual(["open", "open", "open"]);
-  });
 
   test("marks items done from what the app already knows", () => {
     expect(

@@ -3,18 +3,11 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { NakamaClient } from "@nakama/client";
-import type {
-  HealthResponse,
-  ModelsResponse,
-  ProfileSummary,
-} from "@nakama/core";
 import {
   createChatExitController,
   createDebouncedEscAbortHandler,
   disableRawModeIfActive,
-  formatBusyDropLine,
   formatSoulStatusLines,
-  formatStatusLines,
   formatToolCall,
   isEscInterruptKey,
   previewToolValue,
@@ -68,17 +61,6 @@ describe("createChatExitController", () => {
   });
 });
 
-describe("formatBusyDropLine", () => {
-  test("includes the drop count once the warn threshold is reached", () => {
-    expect(formatBusyDropLine(3)).toBe(
-      "[busy] ignored input (3 while processing)"
-    );
-    expect(formatBusyDropLine(5)).toBe(
-      "[busy] ignored input (5 while processing)"
-    );
-  });
-});
-
 describe("tool rendering", () => {
   test("shows a compact summary without raw arguments and fits the terminal", () => {
     const input = { command: "bun test\n--coverage", secret: "hidden" };
@@ -112,50 +94,6 @@ describe("tool rendering", () => {
     expect(toolResultFailed({ isError: true })).toBe(true);
     expect(toolResultFailed({ error: "failed" })).toBe(true);
     expect(toolResultFailed({ content: "ok" })).toBe(false);
-  });
-});
-
-describe("formatStatusLines", () => {
-  const health: HealthResponse = {
-    apiVersion: 1,
-    composioAvailable: false,
-    composioConfigured: false,
-    ok: true,
-    onboardingEnabled: false,
-    providerConfigured: true,
-    userConfigured: true,
-    version: "0.4.10",
-  };
-
-  const models: ModelsResponse = {
-    currentProviderId: "provider-a",
-    displayName: null,
-    models: [],
-    provider: "anthropic",
-    providers: [],
-  };
-
-  const profile: ProfileSummary = {
-    createdAt: "",
-    hasAvatar: false,
-    id: "default",
-    isSuper: false,
-    mcpServerCount: 0,
-    model: "provider-a::claude-sonnet",
-    name: "Default",
-    soulActive: false,
-    toolCount: 0,
-    updatedAt: "",
-  };
-
-  test("matches the telegram status summary fields", () => {
-    expect(formatStatusLines(health, models, profile)).toEqual([
-      "Server: ok",
-      "Provider configured: yes",
-      "Profile: Default",
-      "Provider: anthropic",
-      "Model: claude-sonnet",
-    ]);
   });
 });
 

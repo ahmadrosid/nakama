@@ -1,7 +1,11 @@
+import { readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type {
   HealthResponse,
   LlmUsageStats,
   LlmUsageStatus,
+  NakamaUpgradeResponse,
+  NakamaVersionResponse,
   SystemStatusResponse,
   WorkerProcessInfo,
 } from "@nakama/core";
@@ -13,6 +17,7 @@ import {
   getWhatsAppWorkerStatus,
   isComposioConfiguredAsync,
   NAKAMA_API_VERSION,
+  NakamaApiError,
 } from "@nakama/core";
 import {
   type ChannelConfigScope,
@@ -20,7 +25,9 @@ import {
   isChannelOwner,
 } from "@nakama/core/channel-config-shared";
 import { getSlackWorkerStatus } from "@nakama/core/slack-worker";
+import { getTeamsWorkerStatus } from "@nakama/core/teams-worker";
 import type { DatabaseAdapter } from "@nakama/db";
+import { z } from "zod";
 import type { AgentService } from "./agent-service";
 import type { AutomationRunner } from "./automation-runner";
 import type { ComposioService } from "./composio-service";
@@ -101,6 +108,15 @@ export class SystemStatusService {
       slackStatus.running = slackProcess.status === "online";
     }
 
+    const teamsProcess = statuses.teams;
+
+    const teamsStatus = await getTeamsWorkerStatus(orgId);
+
+    if (isChannelOwner(orgId) && teamsProcess?.managed) {
+      teamsStatus.process = teamsProcess;
+      teamsStatus.running = teamsProcess.status === "online";
+    }
+
     return {
       automationWorker: {
         activeRuns: this.automationRunner.getActiveRunCount(),
@@ -131,6 +147,7 @@ export class SystemStatusService {
         : { assignedProfileCount: 0, connectedCount: 0, serverCount: 0 },
       server: await this.getServerStatus(),
       slackWorker: slackStatus,
+      teamsWorker: teamsStatus,
       telegramWorker: telegramStatus,
       whatsappWorker: await this.nameWhatsAppLinkOwner(
         whatsappStatus,
@@ -290,6 +307,7 @@ export class SystemStatusService {
       ok: true,
       onboardingEnabled: isOnboardingEnabled(),
       providerConfigured: this.agent.providerConfigured,
+      updateCheckEnabled: isUpdateCheckEnabled(),
       userConfigured: humanUserCount > 0,
       version: getNakamaVersion(),
     };
@@ -303,6 +321,180 @@ export function isOnboardingEnabled(): boolean {
   return value === "1" || value === "true";
 }
 
+/** On unless the operator turns it off with `NAKAMA_DISABLE_UPDATE_CHECK`, e.g. a host that upgrades instances itself. */
+export function isUpdateCheckEnabled(): boolean {
+  const value = process.env.NAKAMA_DISABLE_UPDATE_CHECK?.trim().toLowerCase();
+
+  return !(value === "1" || value === "true");
+}
+
 function isString<T>(value: T): value is T & string {
   return Object.prototype.toString.call(value) === "[object String]";
+}
+
+const LATEST_RELEASE_URL =
+  "https://api.github.com/repos/ahmadrosid/nakama/releases/latest";
+
+const RELEASE_CACHE_MS = 10 * 60 * 1000;
+
+const releaseSchema = z.object({
+  html_url: z.string(),
+  tag_name: z.string(),
+});
+
+let cachedRelease: { at: number; latest: string; releaseUrl: string } | null =
+  null;
+
+function versionParts(version: string): number[] | null {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
+
+  return match ? match.slice(1).map(Number) : null;
+}
+
+function isNewer(latest: string, current: string): boolean {
+  const a = versionParts(latest);
+  const b = versionParts(current);
+
+  if (!(a && b)) {
+    return false;
+  }
+
+  const diff = a.map((part, index) => part - (b[index] ?? 0)).find(Boolean);
+
+  return (diff ?? 0) > 0;
+}
+
+/** Cached for 10 minutes: anonymous GitHub API calls are limited to 60 per hour per IP. */
+export async function checkNakamaVersion(
+  current: string,
+  now = Date.now()
+): Promise<NakamaVersionResponse> {
+  if (!cachedRelease || now - cachedRelease.at > RELEASE_CACHE_MS) {
+    const response = await fetch(LATEST_RELEASE_URL, {
+      headers: { Accept: "application/vnd.github+json" },
+      signal: AbortSignal.timeout(10_000),
+    }).catch(() => null);
+
+    const parsed = releaseSchema.safeParse(
+      response?.ok ? await response.json() : null
+    );
+
+    if (!parsed.success) {
+      throw new NakamaApiError("Could not reach GitHub releases.", 502);
+    }
+
+    cachedRelease = {
+      at: now,
+      latest: parsed.data.tag_name.replace(/^v/i, ""),
+      releaseUrl: parsed.data.html_url,
+    };
+  }
+
+  return {
+    current,
+    latest: cachedRelease.latest,
+    releaseUrl: cachedRelease.releaseUrl,
+    updateAvailable: isNewer(cachedRelease.latest, current),
+  };
+}
+
+const UPDATER_STALE_MS = 30_000;
+
+const upgradeStatusSchema = z.object({
+  at: z.string(),
+  message: z.string(),
+  state: z.enum(["running", "done", "failed", "rolled_back"]),
+  version: z.string(),
+});
+
+function updaterDir(): string | null {
+  return process.env.NAKAMA_UPDATER_DIR?.trim() || null;
+}
+
+const ARCHIVE_NAME = /^pre-upgrade-(\d+\.\d+\.\d+)-(\d{8}T\d{6}Z)\.tar\.gz$/;
+
+/** The updater archives the data each time it leaves a version. */
+async function listRollbacks(
+  current: string
+): Promise<NakamaUpgradeResponse["rollbacks"]> {
+  const dir = process.env.NAKAMA_BACKUP_DIR?.trim();
+  const names = dir ? await readdir(dir).catch(() => []) : [];
+  const newest = new Map<string, string>();
+
+  for (const name of names.sort().reverse()) {
+    const [, version, stamp] = ARCHIVE_NAME.exec(name) ?? [];
+
+    if (version && stamp && version !== current && !newest.has(version)) {
+      newest.set(version, stamp);
+    }
+  }
+
+  return [...newest].map(([version, stamp]) => ({
+    at: stamp.replace(
+      /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/,
+      "$1-$2-$3T$4:$5:$6Z"
+    ),
+    version,
+  }));
+}
+
+/** The updater touches its heartbeat every two seconds while it waits. */
+export async function readUpgradeState(
+  current: string,
+  now = Date.now()
+): Promise<NakamaUpgradeResponse> {
+  const dir = updaterDir();
+
+  if (!dir) {
+    return { available: false, rollbacks: [], status: null };
+  }
+
+  const beat = await stat(join(dir, "heartbeat")).catch(() => null);
+
+  const status = upgradeStatusSchema.safeParse(
+    await readFile(join(dir, "status.json"), "utf8")
+      .then(JSON.parse)
+      .catch(() => null)
+  );
+
+  return {
+    available: beat !== null && now - beat.mtimeMs < UPDATER_STALE_MS,
+    rollbacks: await listRollbacks(current),
+    status: status.success ? status.data : null,
+  };
+}
+
+export async function requestUpgrade(
+  version: string,
+  current: string,
+  action: "upgrade" | "rollback" = "upgrade"
+): Promise<NakamaUpgradeResponse> {
+  const state = await readUpgradeState(current);
+  const dir = updaterDir();
+
+  if (!(dir && state.available)) {
+    throw new NakamaApiError("The updater service is not running.", 409);
+  }
+
+  if (state.status?.state === "running") {
+    throw new NakamaApiError("An upgrade is already running.", 409);
+  }
+
+  if (
+    action === "rollback" &&
+    !state.rollbacks.some((entry) => entry.version === version)
+  ) {
+    throw new NakamaApiError(`There is no archive of ${version}.`, 400);
+  }
+
+  if (action === "upgrade" && !isNewer(version, current)) {
+    throw new NakamaApiError(
+      `${version} is not a release newer than ${current}.`,
+      400
+    );
+  }
+
+  await writeFile(join(dir, "request"), `${action} ${version}\n`);
+
+  return state;
 }

@@ -52,16 +52,29 @@ export function wordCountFromPastedFilename(filename: string): number | null {
 }
 
 export interface DisplayDocument {
+  /** Present for persisted `document_ref` parts; fetch content via `/v1/attachments/{id}/content`. */
+  attachmentId?: string;
   filename: string;
   mediaType: string;
+  /** Present for inline/fresh `document` parts (a `data:` URL). */
+  url?: string;
 }
 
 export function documentDisplayFromContentPart(
   part: Extract<MessageContentPart, { type: "document" | "document_ref" }>
 ): DisplayDocument {
+  if (part.type === "document_ref") {
+    return {
+      attachmentId: part.attachmentId,
+      filename: part.filename,
+      mediaType: part.mediaType,
+    };
+  }
+
   return {
     filename: part.filename,
     mediaType: part.mediaType,
+    url: `data:${part.mediaType};base64,${part.data}`,
   };
 }
 
@@ -69,5 +82,6 @@ export function documentDisplayFromFilePart(file: FileUIPart): DisplayDocument {
   return {
     filename: file.filename?.trim() || "document",
     mediaType: file.mediaType ?? "",
+    url: file.url,
   };
 }

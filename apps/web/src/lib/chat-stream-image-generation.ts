@@ -42,7 +42,7 @@ export function isGenerateImageTool(tool: string | undefined): boolean {
 }
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The tool-call boundary supplies an unvalidated argument object.
-export function parseGenerateImagePrompt(input: unknown): string | null {
+function parseGenerateImagePrompt(input: unknown): string | null {
   const record = readRecord(input);
 
   if (!record) {
@@ -53,7 +53,7 @@ export function parseGenerateImagePrompt(input: unknown): string | null {
 }
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The tool-call boundary supplies an unvalidated argument object.
-export function parseGenerateImageSize(input: unknown): string | null {
+function parseGenerateImageSize(input: unknown): string | null {
   const record = readRecord(input);
 
   if (!record) {

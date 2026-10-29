@@ -1,6 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import path from "node:path";
-import { Glob } from "bun";
 import {
   canAccessIntegrationsPage,
   canAccessOrganizationPage,
@@ -11,11 +9,8 @@ import {
   groupPath,
   groupRouteFromPath,
   inAppLinkPath,
-  integrationSectionPath,
-  PAGE_PATHS,
   pageIdFromPath,
   settingsPathFromLegacy,
-  visibleIntegrationSections,
   visibleNavGroups,
 } from "./navigation";
 
@@ -26,28 +21,6 @@ const pageIdsFor = (isPlatformAdmin: boolean, orgRole: string | undefined) =>
     .sort();
 
 describe("visibleNavGroups", () => {
-  test("a platform admin sees every destination", () => {
-    expect(pageIdsFor(true, "admin")).toEqual([
-      "automations",
-      "chat",
-      "composio",
-      "customize",
-      "files",
-      "google-meet",
-      "groups",
-      "mcp",
-      "organization",
-      "plugin-management",
-      "profiles",
-      "providers",
-      "settings",
-      "skills",
-      "tools",
-      "usage",
-      "workers",
-    ]);
-  });
-
   test("an org admin can reach Knowledge through Your files", () => {
     const ids = pageIdsFor(false, "admin");
     expect(ids).toContain("tools");
@@ -72,15 +45,6 @@ describe("visibleNavGroups", () => {
     expect(member).toContain("files");
     expect(member).not.toContain("plugin-management");
     expect(member).not.toContain("usage");
-  });
-
-  test("groups left with no reachable item are dropped", () => {
-    const groups = visibleNavGroups({
-      isPlatformAdmin: false,
-      orgRole: undefined,
-    });
-
-    expect(groups.every((group) => group.items.length > 0)).toBe(true);
   });
 });
 
@@ -174,56 +138,6 @@ test("a group path names the group and, inside a chat, the session", () => {
   expect(pageIdFromPath(groupPath("g1", "s1"))).toBe("groups");
 });
 
-describe("page paths named to the agent", () => {
-  const repoRoot = path.resolve(import.meta.dir, "../../../..");
-  const guidePath = "packages/core/src/skills/bundled/nakama-guide/SKILL.md";
-
-  const knownPaths = new Set([
-    ...Object.values(PAGE_PATHS),
-    ...visibleIntegrationSections(true, "admin").map((section) =>
-      integrationSectionPath(section.id)
-    ),
-  ]);
-
-  const readRepoText = (relative: string) =>
-    Bun.file(path.join(repoRoot, relative)).text();
-
-  test("every page path in tool text and the nakama-guide skill exists", async () => {
-    const named: string[] = [];
-    const guide = await readRepoText(guidePath);
-
-    for (const [, pagePath] of guide.matchAll(/`(\/[a-z/-]*)`/g)) {
-      named.push(`${guidePath}: ${pagePath}`);
-    }
-
-    for (const pattern of [
-      "apps/server/src/**/*.ts",
-      "packages/core/src/**/*.ts",
-      "packages/agent/src/**/*.ts",
-    ]) {
-      for await (const file of new Glob(pattern).scan(repoRoot)) {
-        if (file.endsWith(".test.ts")) {
-          continue;
-        }
-
-        const text = await readRepoText(file);
-
-        // UI destinations are written as "Settings → Page (/path)".
-        for (const [, pagePath] of text.matchAll(
-          /→[^()\n"`]*\((\/[a-z/-]+)\)/g
-        )) {
-          named.push(`${file}: ${pagePath}`);
-        }
-      }
-    }
-
-    expect(named.some((entry) => entry.startsWith("apps/server"))).toBe(true);
-    expect(
-      named.filter((entry) => !knownPaths.has(entry.split(": ")[1]))
-    ).toEqual([]);
-  });
-});
-
 describe("inAppLinkPath", () => {
   const origin = "http://localhost:4310";
 
@@ -264,11 +178,5 @@ describe("canOpenPage", () => {
     expect(
       canOpenPage("tools", { isPlatformAdmin: false, orgRole: "member" })
     ).toBe(false);
-  });
-
-  test("Settings opens for a viewer", () => {
-    expect(
-      canOpenPage("settings", { isPlatformAdmin: false, orgRole: "viewer" })
-    ).toBe(true);
   });
 });

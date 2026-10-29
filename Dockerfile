@@ -22,7 +22,8 @@ RUN bun install --frozen-lockfile --ignore-scripts \
   && bun run --filter @nakama/telegram build \
   && bun run --filter @nakama/whatsapp build \
   && bun run --filter @nakama/discord build \
-  && bun run --filter @nakama/slack build
+  && bun run --filter @nakama/slack build \
+  && bun run --filter @nakama/teams build
 
 FROM scratch AS build-assets
 COPY --from=web-builder /app/apps/web/dist /app/apps/web/dist
@@ -32,6 +33,7 @@ COPY --from=web-builder /app/apps/platform/telegram/dist /app/apps/platform/tele
 COPY --from=web-builder /app/apps/platform/whatsapp/dist /app/apps/platform/whatsapp/dist
 COPY --from=web-builder /app/apps/platform/discord/dist /app/apps/platform/discord/dist
 COPY --from=web-builder /app/apps/platform/slack/dist /app/apps/platform/slack/dist
+COPY --from=web-builder /app/apps/platform/teams/dist /app/apps/platform/teams/dist
 
 # Production runtime dependencies are installed from a committed manifest and
 # lockfile. Re-resolving version ranges at image build time let two builds of
@@ -95,8 +97,9 @@ RUN if [ "$INSTALL_MEET_DEPS" = "true" ]; then \
       && bun install --frozen-lockfile --production --ignore-scripts; \
     fi
 
-# A named volume copies this owner on first mount, so uid 1000 can write backups there.
-RUN mkdir -p /nakama/data /nakama/backups \
+# A named volume copies this owner on first mount, so uid 1000 can write
+# backups and upgrade requests there.
+RUN mkdir -p /nakama/data /nakama/backups /nakama/updates \
   && if getent group 1000 >/dev/null; then \
        G=$(getent group 1000 | cut -d: -f1); \
        [ "$G" = nakama ] || groupmod -n nakama "$G"; \
@@ -107,9 +110,10 @@ RUN mkdir -p /nakama/data /nakama/backups \
        U=$(getent passwd 1000 | cut -d: -f1); \
        usermod -l nakama -g nakama -d /nakama/data "$U"; \
      else useradd --system --uid 1000 --gid nakama --home-dir /nakama/data --create-home nakama; fi \
-  && chown nakama:nakama /nakama/data /nakama/backups
+  && chown nakama:nakama /nakama/data /nakama/backups /nakama/updates
 
 COPY --chown=1000:1000 package.json ./
+COPY --chown=1000:1000 scripts/nakama-updater.sh scripts/nakama-updater.sh
 COPY --chown=1000:1000 apps/server apps/server
 COPY --chown=1000:1000 packages packages
 COPY --chown=1000:1000 --from=build-assets /app/apps/web/dist apps/web/dist
@@ -119,6 +123,7 @@ COPY --chown=1000:1000 --from=build-assets /app/apps/platform/telegram/dist apps
 COPY --chown=1000:1000 --from=build-assets /app/apps/platform/whatsapp/dist apps/platform/whatsapp/dist
 COPY --chown=1000:1000 --from=build-assets /app/apps/platform/discord/dist apps/platform/discord/dist
 COPY --chown=1000:1000 --from=build-assets /app/apps/platform/slack/dist apps/platform/slack/dist
+COPY --chown=1000:1000 --from=build-assets /app/apps/platform/teams/dist apps/platform/teams/dist
 COPY --chown=1000:1000 --from=runtime-deps /runtime-deps/node_modules node_modules
 
 RUN test -f apps/server/src/services/javascript-tool-runner.js \

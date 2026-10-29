@@ -33,6 +33,7 @@ import { ExportProfileDialog } from "@/components/profiles/ExportProfileDialog";
 import { ProfileSkillsSettingsSection } from "@/components/profiles/ProfileSkillsSettingsSection";
 import { SlackSettingsCard } from "@/components/SlackSettingsCard";
 import { SoulTab } from "@/components/soul-tools/SoulTab";
+import { TeamsSettingsCard } from "@/components/TeamsSettingsCard";
 import { TelegramSettingsCard } from "@/components/TelegramSettingsCard";
 import { WhatsAppSettingsCard } from "@/components/WhatsAppSettingsCard";
 import { useAuth } from "@/context/use-auth";
@@ -47,6 +48,7 @@ import { client, formatError } from "@/lib/client";
 import { profilePath } from "@/lib/navigation";
 import { isProfileOwner } from "@/lib/profiles";
 import { queryKeys } from "@/lib/query-keys";
+import { buildProfileChannels } from "@/pages/profiles/profile-channels";
 import { ProfileConfigAssignmentsSection } from "@/pages/profiles/profile-config-assignments-section";
 import {
   ProfileConfigIdentitySection,
@@ -333,61 +335,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
 
 function useProfileChannels() {
   const { data: status, isPending, error } = useSystemStatusQuery();
-
-  // Brand SVGs: Simple Icons v16 (CC0), https://simpleicons.org. Slack is from
-  // v13.21.0, the last release that still ships it.
-  const channels = [
-    {
-      id: "telegram",
-      name: "Telegram",
-      worker: status?.telegramWorker,
-    },
-    {
-      id: "whatsapp",
-      name: "WhatsApp",
-      worker: status?.whatsappWorker,
-    },
-    {
-      id: "discord",
-      name: "Discord",
-      worker: status?.discordWorker,
-    },
-    {
-      id: "slack",
-      name: "Slack",
-      worker: status?.slackWorker,
-    },
-  ].map((channel) => {
-    const worker = channel.worker;
-
-    const connected = Boolean(
-      !error &&
-        worker?.running &&
-        worker.paired &&
-        ("connected" in worker ? worker.connected : true)
-    );
-
-    const unavailable = Boolean(error || !worker);
-
-    const action =
-      unavailable || worker?.configured || worker?.paired
-        ? "Settings"
-        : "Connect";
-
-    const statusLabel = isPending
-      ? "Checking…"
-      : unavailable
-        ? "Status unavailable"
-        : connected
-          ? "Connected"
-          : worker?.paired
-            ? "Offline"
-            : worker?.configured
-              ? "Setup incomplete"
-              : "Not connected";
-
-    return { ...channel, action, connected, statusLabel };
-  });
+  const { channels } = buildProfileChannels(status, Boolean(error), isPending);
 
   return { channels, error, isPending };
 }
@@ -458,6 +406,7 @@ export function ProfileChannelSettingsPage() {
   const settings = {
     discord: { Component: DiscordSettingsCard, name: "Discord" },
     slack: { Component: SlackSettingsCard, name: "Slack" },
+    teams: { Component: TeamsSettingsCard, name: "Microsoft Teams" },
     telegram: { Component: TelegramSettingsCard, name: "Telegram" },
     whatsapp: { Component: WhatsAppSettingsCard, name: "WhatsApp" },
   };
@@ -466,7 +415,8 @@ export function ProfileChannelSettingsPage() {
     channel === "telegram" ||
     channel === "whatsapp" ||
     channel === "discord" ||
-    channel === "slack"
+    channel === "slack" ||
+    channel === "teams"
       ? settings[channel]
       : undefined;
 

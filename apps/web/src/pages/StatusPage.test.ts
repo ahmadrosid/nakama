@@ -48,10 +48,18 @@ const healthyStatus: SystemStatusResponse = {
     ok: true,
     onboardingEnabled: false,
     providerConfigured: true,
+    updateCheckEnabled: true,
     userConfigured: true,
     version: "0.4.10",
   },
   slackWorker: {
+    configured: false,
+    connected: false,
+    ok: true,
+    paired: false,
+    running: false,
+  },
+  teamsWorker: {
     configured: false,
     connected: false,
     ok: true,
@@ -85,4 +93,36 @@ describe("StatusPage helpers", () => {
       tone: "warn",
     });
   });
+
+  // Only the worker's loopback listener is known, never whether Microsoft
+  // reaches it, so a working Teams connection is not reported as connected.
+  for (const [state, worker, status] of [
+    [
+      "not set up",
+      { configured: false, paired: false, running: false },
+      "Not set up",
+    ],
+    ["stopped", { configured: true, paired: true, running: false }, "Offline"],
+    [
+      "listening without users",
+      { configured: true, paired: false, running: true },
+      "No users allowed",
+    ],
+    [
+      "listening",
+      { configured: true, paired: true, running: true },
+      "Listening locally",
+    ],
+  ] as const) {
+    test(`a ${state} Teams worker reads ${status}`, () => {
+      const columns = buildServiceColumns({
+        ...healthyStatus,
+        teamsWorker: { connected: true, ok: true, ...worker },
+      });
+
+      expect(
+        columns.find((column) => column.title === "Microsoft Teams")?.status
+      ).toBe(status);
+    });
+  }
 });

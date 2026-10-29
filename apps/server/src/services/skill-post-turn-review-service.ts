@@ -27,6 +27,7 @@ const POST_TURN_REVIEW_CHANNELS = {
   slack: true,
   subagent: false,
   task: false,
+  teams: true,
   telegram: true,
   web: true,
   whatsapp: true,

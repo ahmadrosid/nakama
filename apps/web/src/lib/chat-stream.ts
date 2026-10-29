@@ -17,6 +17,7 @@ import {
 } from "@/lib/chat-stream-workflow";
 import { addChatUsage } from "@/lib/chat-usage";
 import { createClientId } from "@/lib/client-id";
+import type { DisplayDocument } from "@/lib/pasted-text";
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
 function formatBashToolResult(result: unknown): string | null {
@@ -950,7 +951,7 @@ type OutgoingMessageOptions = {
 function buildOutgoingUserMessage(
   text: string,
   images: Array<{ mediaType: string; url: string }> = [],
-  documents: Array<{ filename: string; mediaType: string }> = [],
+  documents: DisplayDocument[] = [],
   options: OutgoingMessageOptions = {}
 ): ChatListItem {
   return {
@@ -985,7 +986,7 @@ export function appendOutgoingMessages(
   setMessages: Dispatch<SetStateAction<ChatListItem[]>>,
   text: string,
   images: Array<{ mediaType: string; url: string }> = [],
-  documents: Array<{ filename: string; mediaType: string }> = [],
+  documents: DisplayDocument[] = [],
   options: OutgoingMessageOptions = {}
 ): void {
   setMessages((current) => [

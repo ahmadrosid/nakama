@@ -21,6 +21,7 @@ import {
   validateAutomationInput,
 } from "@nakama/core";
 import { canAccessSuperNakamaProfile } from "@nakama/core/profiles";
+import { BUILTIN_TOOL_IDS } from "@nakama/core/tools/protected";
 import { type DatabaseAdapter, DatabaseAutomationStore } from "@nakama/db";
 import { z } from "zod";
 
@@ -133,6 +134,8 @@ export class AutomationService {
       access
     );
 
+    await this.assertCanAutomateMailbox(profileId, access);
+
     const delivery = normalizeAutomationDelivery(input.delivery);
     await validateAutomationDelivery(delivery, {
       access: {
@@ -221,6 +224,12 @@ export class AutomationService {
       }
 
       profileId = await this.resolveProfileId(orgId, input.profileId, access);
+    }
+
+    // Only the runner updates without `access`, to switch a runAt job off.
+    // Any other change (delivery included) can redirect mailbox output.
+    if (access) {
+      await this.assertCanAutomateMailbox(profileId, access);
     }
 
     let delivery = existing.delivery;
@@ -460,6 +469,25 @@ export class AutomationService {
     userTimezone = DEFAULT_TIMEZONE
   ): string | null {
     return computeAutomationNextRunAt(trigger, userTimezone);
+  }
+
+  /** Automation turns may use the email tool, so only an admin may write, run or read one on a profile that has it. */
+  async assertCanAutomateMailbox(
+    profileId: string,
+    access?: ProfileAccess
+  ): Promise<void> {
+    if (access?.isPlatformAdmin || access?.orgRole === "admin") {
+      return;
+    }
+
+    const tools = await this.db.listToolsForProfile(profileId);
+
+    if (tools.some((tool) => tool.id === BUILTIN_TOOL_IDS.email)) {
+      throw new NakamaApiError(
+        "Only org admins can automate an agent that has the email tool.",
+        403
+      );
+    }
   }
 
   private async resolveProfileId(

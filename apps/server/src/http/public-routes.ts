@@ -35,6 +35,10 @@ export function isPublicRouteRequest(
     (method === "GET" &&
       /^\/v1\/mcp\/oauth\/callback\/[^/]+$/.test(pathname)) ||
     (method === "GET" &&
-      /^\/v1\/public\/artifact-shares\/[^/]+$/.test(pathname))
+      /^\/v1\/public\/artifact-shares\/[^/]+$/.test(pathname)) ||
+    // Microsoft posts Teams activities with its own service token; the worker's
+    // SDK verifies it. Only this method and path skip Nakama authentication.
+    (method === "POST" &&
+      /^\/v1\/channels\/teams\/[^/]+\/messages$/.test(pathname))
   );
 }

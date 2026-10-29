@@ -204,7 +204,7 @@ export function createChatExitController(signal?: AbortSignal) {
   };
 }
 
-export function formatBusyDropLine(dropCount: number): string {
+function formatBusyDropLine(dropCount: number): string {
   if (dropCount >= 3) {
     return `[busy] ignored input (${dropCount} while processing)`;
   }
@@ -1511,7 +1511,7 @@ async function printCurrentModel(
   write(`Model: ${active.modelId}`);
 }
 
-export function formatStatusLines(
+function formatStatusLines(
   health: HealthResponse,
   models: ModelsResponse | null,
   profile: ProfileSummary | null

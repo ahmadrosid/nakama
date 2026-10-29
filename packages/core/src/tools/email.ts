@@ -283,6 +283,21 @@ export const emailTool: ToolDefinition<EmailToolInput, EmailToolResult> = {
   name: "email",
   parameters: emailParameters(),
   run(input, context) {
+    // One mailbox serves the whole install, so members must not reach it
+    // (#1269). Automation turns run as "member"; who may author one on a
+    // profile with this tool is checked in AutomationService instead.
+    if (
+      !(
+        context.orgRole === "admin" ||
+        context.isPlatformAdmin ||
+        context.automationId
+      )
+    ) {
+      return Promise.resolve({
+        error: "Only org admins can use the email tool.",
+      });
+    }
+
     return runEmailTool(input, {}, context);
   },
 };

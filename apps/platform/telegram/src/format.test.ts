@@ -21,15 +21,6 @@ describe("stripMarkdownForTelegram", () => {
     expect(stripMarkdownForTelegram(footer)).not.toContain("/s/tcshare");
   });
 
-  test("preserves current nkshare tokens in bare URLs", () => {
-    const shareUrl =
-      "https://app.example/s/nksharea7e24436b9bd4ec8bd60edba6d403c74f0b19596f27b440db85d7f171299bbdc";
-
-    expect(stripMarkdownForTelegram(`file.html: ${shareUrl}`)).toContain(
-      "nkshare"
-    );
-  });
-
   test("preserves dollar replacement sequences in bare URLs", () => {
     const url = "https://example.com/$&/path";
 

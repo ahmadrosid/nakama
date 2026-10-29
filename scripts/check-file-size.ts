@@ -53,8 +53,12 @@ for (const file of staged) {
 
   const tokens = tokensOf(`:${file}`);
 
-  // A file already over the limit at HEAD predates this check.
-  if (tokens > MAX_TOKENS && tokensOf(`HEAD:${file}`) <= MAX_TOKENS) {
+  // A file already over the limit in either merge parent predates this commit.
+  if (
+    tokens > MAX_TOKENS &&
+    tokensOf(`HEAD:${file}`) <= MAX_TOKENS &&
+    tokensOf(`MERGE_HEAD:${file}`) <= MAX_TOKENS
+  ) {
     tooBig.push({ file, tokens });
   }
 }

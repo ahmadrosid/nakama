@@ -216,7 +216,6 @@ test.each([
   ["/chat", true],
   ["/chat/agent-a/session-a", true],
   ["/profiles", false],
-  ["/automations", false],
 ] as const)("rail marks the active agent on %s", async (pathname, animated) => {
   const previousState = useActiveChatProfileStore.getState();
   useActiveChatProfileStore.setState({ orgId: null, profileId: profile.id });

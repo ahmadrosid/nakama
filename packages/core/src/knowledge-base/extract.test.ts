@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  buildExtractedTextHeader,
   extractText,
   isSupportedKnowledgeBaseMediaType,
   normalizeKnowledgeBaseMediaType,
@@ -58,18 +57,6 @@ describe("knowledge base extract", () => {
     ).toBe(
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     );
-  });
-
-  test("builds extracted text headers", () => {
-    const header = buildExtractedTextHeader({
-      filename: "report.pdf",
-      mediaType: "application/pdf",
-      uploadedAt: "2026-06-13T00:00:00.000Z",
-    });
-
-    expect(header).toContain("# source: report.pdf");
-    expect(header).toContain("# mediaType: application/pdf");
-    expect(header).toContain("# uploadedAt: 2026-06-13T00:00:00.000Z");
   });
 });
 

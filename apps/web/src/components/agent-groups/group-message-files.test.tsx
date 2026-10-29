@@ -3,7 +3,7 @@ import type { AgentGroupMemoryChange } from "@nakama/core/agent-groups";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { MemoryRouter, useSearchParams } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useSearchParams } from "react-router-dom";
 import { client as apiClient } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 import { GroupMemoryPanel } from "./group-memory-panel";
@@ -72,8 +72,13 @@ test("ordered changes open memory and select only an entry that still exists", a
   await act(async () =>
     root.render(
       <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={["/?thread=9"]}>
-          <NoticeAndPanel changes={changes} />
+        <MemoryRouter initialEntries={["/groups/test-memory?thread=9"]}>
+          <Routes>
+            <Route
+              element={<NoticeAndPanel changes={changes} />}
+              path="/groups/:groupId"
+            />
+          </Routes>
         </MemoryRouter>
       </QueryClientProvider>
     )
@@ -156,11 +161,18 @@ test("opening a notice refreshes an open panel, including repeated clicks", asyn
     await act(async () =>
       root.render(
         <QueryClientProvider client={client}>
-          <MemoryRouter initialEntries={["/?memory=1"]}>
-            <NoticeAndPanel
-              changes={[{ newEntry: "- Added fact", oldEntry: null }]}
-              groupId="refresh-memory"
-            />
+          <MemoryRouter initialEntries={["/groups/refresh-memory?memory=1"]}>
+            <Routes>
+              <Route
+                element={
+                  <NoticeAndPanel
+                    changes={[{ newEntry: "- Added fact", oldEntry: null }]}
+                    groupId="refresh-memory"
+                  />
+                }
+                path="/groups/:groupId"
+              />
+            </Routes>
           </MemoryRouter>
         </QueryClientProvider>
       )
@@ -198,9 +210,11 @@ test("opening a notice refreshes an open panel, including repeated clicks", asyn
 test("messages without changes have no notice", async () => {
   await act(async () =>
     root.render(
-      <MemoryRouter>
-        <GroupMessageMemoryChanges />
-      </MemoryRouter>
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <GroupMessageMemoryChanges />
+        </MemoryRouter>
+      </QueryClientProvider>
     )
   );
   expect(container.innerHTML).toBe("");
