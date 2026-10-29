@@ -157,6 +157,11 @@ const installLocks = new Map<string, Promise<unknown>>();
 
 const officialInstallLocks = new Map<string, Promise<unknown>>();
 
+// A local install writes under the config tree that holds the draft, so a
+// second install's draft read would see changed ancestors. Installs in one org
+// read and publish one at a time.
+const localInstallLocks = new Map<string, Promise<unknown>>();
+
 // Shipped composition, rather than package author/id claims, grants official status.
 const OFFICIAL_PLUGINS = new Map<
   string,
@@ -535,71 +540,80 @@ export class PluginService {
     actor: { id: string; isPlatformAdmin: boolean }
   ) {
     this.assertLocalPluginApprover(actor);
-    const inspected = await this.inspectLocalPlugin(request);
-
-    if (inspected.digest !== request.expectedDigest) {
-      throw new PluginHostError("digest_mismatch");
-    }
-
-    const pluginId = inspected.manifest.id;
 
     return withKeyedLock(
-      officialInstallLocks,
-      `${this.configDir}:${request.orgId}:${pluginId}`,
+      localInstallLocks,
+      `${this.configDir}:${request.orgId}`,
       async () => {
-        let install = await this.db.getOrgPlugin(request.orgId, pluginId);
+        const inspected = await this.inspectLocalPlugin(request);
 
-        if ((install?.revision ?? null) !== request.expectedRevision) {
-          throw new PluginHostError("stale_revision");
+        if (inspected.digest !== request.expectedDigest) {
+          throw new PluginHostError("digest_mismatch");
         }
 
-        if (
-          install &&
-          !["disabled", "enabled", "retained"].includes(install.lifecycleState)
-        ) {
-          throw new PluginHostError("invalid_state");
-        }
+        const pluginId = inspected.manifest.id;
 
-        const shouldEnable = install?.lifecycleState === "enabled";
-        await withPluginMutation(() =>
-          withKeyedLock(
-            installLocks,
-            `${pluginId}@${inspected.manifest.version}`,
-            () =>
-              withKeyedLock(stagingLocks, "staging", () =>
-                this.publishInspectedPackage(inspected)
+        return withKeyedLock(
+          officialInstallLocks,
+          `${this.configDir}:${request.orgId}:${pluginId}`,
+          async () => {
+            let install = await this.db.getOrgPlugin(request.orgId, pluginId);
+
+            if ((install?.revision ?? null) !== request.expectedRevision) {
+              throw new PluginHostError("stale_revision");
+            }
+
+            if (
+              install &&
+              !["disabled", "enabled", "retained"].includes(
+                install.lifecycleState
               )
-          )
+            ) {
+              throw new PluginHostError("invalid_state");
+            }
+
+            const shouldEnable = install?.lifecycleState === "enabled";
+            await withPluginMutation(() =>
+              withKeyedLock(
+                installLocks,
+                `${pluginId}@${inspected.manifest.version}`,
+                () =>
+                  withKeyedLock(stagingLocks, "staging", () =>
+                    this.publishInspectedPackage(inspected)
+                  )
+              )
+            );
+
+            if (!install || install.lifecycleState === "retained") {
+              return this.addOrgPlugin(
+                request.orgId,
+                pluginId,
+                inspected.manifest.version
+              );
+            }
+
+            if (install.lifecycleState === "enabled") {
+              install = await this.disableOrgPlugin(
+                request.orgId,
+                pluginId,
+                install.revision
+              );
+            }
+
+            if (install.selectedVersion !== inspected.manifest.version) {
+              install = await this.updateOrgPlugin(
+                request.orgId,
+                pluginId,
+                inspected.manifest.version,
+                install.revision
+              );
+            }
+
+            return shouldEnable
+              ? this.enableOrgPlugin(request.orgId, pluginId, install.revision)
+              : install;
+          }
         );
-
-        if (!install || install.lifecycleState === "retained") {
-          return this.addOrgPlugin(
-            request.orgId,
-            pluginId,
-            inspected.manifest.version
-          );
-        }
-
-        if (install.lifecycleState === "enabled") {
-          install = await this.disableOrgPlugin(
-            request.orgId,
-            pluginId,
-            install.revision
-          );
-        }
-
-        if (install.selectedVersion !== inspected.manifest.version) {
-          install = await this.updateOrgPlugin(
-            request.orgId,
-            pluginId,
-            inspected.manifest.version,
-            install.revision
-          );
-        }
-
-        return shouldEnable
-          ? this.enableOrgPlugin(request.orgId, pluginId, install.revision)
-          : install;
       }
     );
   }

@@ -542,8 +542,22 @@ describe("PluginService", () => {
       expectedRevision: null,
     };
 
+    // Hold the second draft read until the first install has published.
+    const seen = new Set<string>();
+    let first: Promise<unknown> = Promise.resolve();
+    setPluginLifecycleTestHooks({
+      async beforeLocalFileRead(path) {
+        if (seen.has(path)) {
+          await first.catch(() => undefined);
+        }
+
+        seen.add(path);
+      },
+    });
+    first = service.installLocalPlugin(request, actor);
+
     const results = await Promise.allSettled([
-      service.installLocalPlugin(request, actor),
+      first,
       service.installLocalPlugin(request, actor),
     ]);
 
