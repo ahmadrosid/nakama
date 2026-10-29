@@ -46,6 +46,7 @@ test("rejects redirects, invalid JSON and oversized responses", async () => {
 test("aborts a stalled request within the configured timeout", async () => {
   // Shrink the 10s budget so the test does not wait for it.
   const timeout = AbortSignal.timeout.bind(AbortSignal);
+
   const spy = spyOn(AbortSignal, "timeout").mockImplementation(() =>
     timeout(20)
   );
