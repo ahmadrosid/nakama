@@ -2614,6 +2614,7 @@ export class AgentService {
       agentQuestionnaire: null,
       agentTodos: [],
       channel,
+      codingWorkspaceRoot: options?.codingWorkspaceRoot ?? null,
       createdAt: new Date().toISOString(),
       id: sessionId,
       model: modelOverride,
@@ -2648,7 +2649,7 @@ export class AgentService {
       userId ?? null,
       options?.orgRole,
       options?.isPlatformAdmin,
-      options?.codingWorkspaceRoot,
+      record.codingWorkspaceRoot ?? undefined,
       cognito ? {} : undefined,
       record.thinkingEffort
     );
@@ -2873,7 +2874,7 @@ export class AgentService {
       entry.record.userId ?? null,
       orgRole,
       isPlatformAdmin,
-      undefined,
+      entry.record.codingWorkspaceRoot ?? undefined,
       { initialHistory: [...entry.session.getHistory()] },
       entry.record.thinkingEffort
     );
@@ -3051,6 +3052,7 @@ export class AgentService {
       agentTodos: [],
       branchMessageIndex: messageIndex,
       channel: record.channel,
+      codingWorkspaceRoot: record.codingWorkspaceRoot ?? null,
       createdAt: new Date().toISOString(),
       id: nextSessionId,
       model: record.model,
@@ -3095,7 +3097,7 @@ export class AgentService {
       record.userId ?? null,
       branchOrgRole,
       branchIsPlatformAdmin,
-      undefined,
+      record.codingWorkspaceRoot ?? undefined,
       undefined,
       record.thinkingEffort
     );
@@ -3323,7 +3325,7 @@ export class AgentService {
       record.userId ?? null,
       resumeOrgRole,
       resumeIsPlatformAdmin,
-      undefined,
+      record.codingWorkspaceRoot ?? undefined,
       undefined,
       record.thinkingEffort
     );

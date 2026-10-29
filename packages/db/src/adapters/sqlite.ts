@@ -204,6 +204,7 @@ interface SessionRow {
   branch_message_index: number | null;
   channel: string;
   closed_at?: string | null;
+  coding_workspace_root?: string | null;
   created_at: string;
   id: string;
   model: string | null;
@@ -1410,8 +1411,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
   // org_id follows the profile's org. The profile move path keeps it in sync.
   const upsertSessionStmt = db.prepare(`
-    INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, app_user_id, user_id, model, org_id, pinned, parent_session_id, branch_message_index, thinking_effort)
-    VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, app_user_id, user_id, model, org_id, pinned, parent_session_id, branch_message_index, thinking_effort, coding_workspace_root)
+    VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       profile_id = excluded.profile_id,
       channel = excluded.channel,
@@ -6484,7 +6485,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.pinned ? 1 : 0,
         record.parentSessionId ?? null,
         record.branchMessageIndex ?? null,
-        record.thinkingEffort ?? null
+        record.thinkingEffort ?? null,
+        record.codingWorkspaceRoot ?? null
       );
     },
     async upsertSkill(record) {
@@ -6992,6 +6994,7 @@ function toSessionRecord(row: SessionRow): StoredSessionRecord {
     branchMessageIndex: row.branch_message_index,
     channel: row.channel,
     closedAt: row.closed_at ?? null,
+    codingWorkspaceRoot: row.coding_workspace_root ?? null,
     createdAt: row.created_at,
     id: row.id,
     model: row.model ?? null,

@@ -769,7 +769,7 @@ export async function createNakamaOrgDataExport(
     profileIds.has(session.profileId)
   );
 
-  for (const session of orgSessions) {
+  for (const { codingWorkspaceRoot: _hostPath, ...session } of orgSessions) {
     const attachments = [];
 
     for (const attachment of await databaseAdapter.listAttachmentsForSession(

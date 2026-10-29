@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import type { ProviderInstance } from "@nakama/core";
+import * as core from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
@@ -474,6 +475,44 @@ describe("AgentService session org scope", () => {
     expect(
       await service.getSessionMessages(evicted ?? "", ORG_ID)
     ).not.toBeNull();
+  });
+
+  test("keeps the CLI coding workspace root when it rebuilds a session from the DB", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    const service = new AgentService(null, null, db);
+
+    const { sessions } = privateServiceAccess<{
+      sessions: Map<string, unknown>;
+    }>(service);
+
+    using buildContext = spyOn(core, "buildToolExecutionContext");
+
+    const sessionId = await service.createSession(
+      ORG_ID,
+      "cli",
+      "profile_default",
+      undefined,
+      { codingWorkspaceRoot: "/tmp/repo" }
+    );
+
+    await db.replaceMessagesForSession(sessionId, [
+      {
+        createdAt: new Date().toISOString(),
+        id: "msg_1",
+        payload: { content: "hi", role: "user" },
+        seq: 0,
+        sessionId,
+      },
+    ]);
+
+    sessions.clear();
+    await service.resolveSession(sessionId, ORG_ID);
+    await service.branchSession(sessionId, 0, ORG_ID);
+
+    expect(
+      buildContext.mock.calls.map(([input]) => input.codingWorkspaceRoot)
+    ).toEqual(["/tmp/repo", "/tmp/repo", "/tmp/repo"]);
   });
 
   test("by-id reads return null for a session in another org", async () => {

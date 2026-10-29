@@ -149,6 +149,8 @@ export interface StoredSessionRecord {
   channel: string;
   /** Set while the chat is hidden from Recents; the next message clears it. */
   closedAt?: string | null;
+  /** Local CLI launch folder for bash and coding agents. Never sent to clients. */
+  codingWorkspaceRoot?: string | null;
   createdAt: string;
   id: string;
   model: string | null;
