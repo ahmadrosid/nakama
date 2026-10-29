@@ -3387,18 +3387,20 @@ export class AgentService {
 
       let updated = true;
 
-      if (next.model !== undefined) {
-        updated = await this.db.updateSessionModel(sessionId, next.model);
-      }
+      try {
+        if (next.model !== undefined) {
+          updated = await this.db.updateSessionModel(sessionId, next.model);
+        }
 
-      if (updated && next.thinkingEffort !== undefined) {
-        updated = await this.db.updateSessionThinkingEffort(
-          sessionId,
-          next.thinkingEffort
-        );
-      }
-
-      if (updated) {
+        if (updated && next.thinkingEffort !== undefined) {
+          updated = await this.db.updateSessionThinkingEffort(
+            sessionId,
+            next.thinkingEffort
+          );
+        }
+      } finally {
+        // One write can land before the next fails. Drop the cached chat so
+        // the next turn is built from the stored row, not the old settings.
         this.sessions.delete(sessionId);
       }
 
