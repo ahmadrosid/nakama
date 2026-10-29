@@ -37,7 +37,7 @@
     "prepare": "husky",
     "preview:docs": "bun run --cwd docs/website preview",
     "start": "bun run apps/server/dist/index.js",
-    "test": "bun test --path-ignore-patterns '**/apps/web/**' && bun run --cwd apps/web test --parallel=4",
+    "test": "bun test --parallel=4 --path-ignore-patterns '**/apps/web/**' && bun run --cwd apps/web test --parallel=4",
     "view:cassettes": "bun run apps/server/src/testing/cassettes/serve.ts"
   },
   "overrides": {
