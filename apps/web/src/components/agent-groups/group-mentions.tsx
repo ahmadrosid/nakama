@@ -1,5 +1,5 @@
 import type { ProfileSummary } from "@nakama/core";
-import { type MentionRange, mentionRanges } from "@nakama/core/agent-groups";
+import type { GroupRoster, MentionRange } from "@nakama/core/agent-groups";
 import type { MessageResponseProps } from "@/components/ai-elements/message";
 
 type MarkdownComponents = NonNullable<MessageResponseProps["components"]>;
@@ -27,18 +27,18 @@ function MentionChip({
 
 /** Plain text with each member mention shown as a chip. */
 export function MentionText({
-  handles,
   profiles,
+  roster,
   text,
 }: {
-  handles: Map<string, string>;
   profiles: ProfileSummary[];
+  roster: GroupRoster;
   text: string;
 }) {
   const parts: React.ReactNode[] = [];
   let cursor = 0;
 
-  for (const range of mentionRanges(text, handles)) {
+  for (const range of roster.ranges(text)) {
     parts.push(
       text.slice(cursor, range.start),
       <MentionChip key={range.start} profiles={profiles} range={range} />
@@ -56,10 +56,7 @@ export function MentionText({
  * renders those as chips. Strikethrough is the one inline mark the chat
  * markdown leaves free to override.
  */
-export function markMentions(
-  markdown: string,
-  handles: Map<string, string>
-): string {
+export function markMentions(markdown: string, roster: GroupRoster): string {
   const code = [...markdown.matchAll(CODE_SPANS)].map((match) => [
     match.index,
     match.index + match[0].length,
@@ -68,7 +65,7 @@ export function markMentions(
   let marked = "";
   let cursor = 0;
 
-  for (const range of mentionRanges(markdown, handles)) {
+  for (const range of roster.ranges(markdown)) {
     if (
       code.some(
         ([start = 0, end = 0]) => range.start >= start && range.start < end
@@ -85,14 +82,14 @@ export function markMentions(
 }
 
 export function mentionMarkdownComponents(
-  handles: Map<string, string>,
+  roster: GroupRoster,
   profiles: ProfileSummary[]
 ): MarkdownComponents {
   return {
     del: ({ children, node: _node, ...props }) => {
       // A mention marker holds only text, so anything else stays a plain del.
       const text = String(children);
-      const [range] = mentionRanges(text, handles);
+      const [range] = roster.ranges(text);
 
       return range && range.start === 0 && range.end === text.length ? (
         <MentionChip profiles={profiles} range={range} />

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { getOrgConfigDir } from "@nakama/core";
 import { setupTestConfigDir } from "../test-config-dir";
 import {
+  addAgentGroupHandles,
   appendAgentGroupMessage,
   closeAgentGroupDatabases,
   createAgentGroup,
@@ -98,6 +99,43 @@ describe("agent group store", () => {
     expect(getAgentGroup(ORG_ID, "u1", group.id)).toMatchObject({
       memberIds: ["p2", "p3"],
       name: "Ship",
+    });
+  });
+
+  test("migrates groups saved before handles with none", () => {
+    const group = createAgentGroup(ORG_ID, "u1", "Team", ["p1"], "", {
+      p1: "writer",
+    });
+
+    closeAgentGroupDatabases();
+
+    const old = new Database(
+      join(getOrgConfigDir(ORG_ID), "agent-groups.sqlite")
+    );
+
+    old.exec("ALTER TABLE groups DROP COLUMN handles");
+    old.close();
+
+    expect(getAgentGroup(ORG_ID, "u1", group.id)?.handles).toEqual({});
+  });
+
+  test("only adds handles: a saved handle never changes", () => {
+    const group = createAgentGroup(ORG_ID, "u1", "Launch", ["p1", "p2"], "", {
+      p1: "writer",
+      p2: "writer-2",
+    });
+
+    updateAgentGroup(ORG_ID, "u1", group.id, "Launch", ["p2", "p3"], "", {
+      p2: "editor",
+      p3: "writer-3",
+    });
+    addAgentGroupHandles(ORG_ID, group.id, { p3: "other", p4: "ads" });
+
+    expect(getAgentGroup(ORG_ID, "u1", group.id)?.handles).toEqual({
+      p1: "writer",
+      p2: "writer-2",
+      p3: "writer-3",
+      p4: "ads",
     });
   });
 

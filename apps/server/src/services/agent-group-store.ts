@@ -38,7 +38,7 @@ const LAST_MESSAGE = (column: string) =>
   `(SELECT lm.${column} FROM messages lm WHERE lm.group_id = g.id AND lm.thread_root_id IS NULL
     AND (lm.author_profile_id IS NULL OR lm.content <> '') ORDER BY lm.id DESC LIMIT 1)`;
 
-const GROUP_COLUMNS = `g.id, g.name, g.brief, g.member_ids, g.created_at, a.updated_at AS avatar_version,
+const GROUP_COLUMNS = `g.id, g.name, g.brief, g.member_ids, g.handles, g.created_at, a.updated_at AS avatar_version,
   ${LAST_MESSAGE("content")} AS last_content,
   ${LAST_MESSAGE("author_profile_id")} AS last_author_profile_id,
   ${LAST_MESSAGE("created_at")} AS last_created_at
@@ -52,6 +52,7 @@ interface GroupRow {
   avatar_version: string | null;
   brief: string;
   created_at: string;
+  handles: string;
   id: string;
   last_author_profile_id: string | null;
   last_content: string | null;
@@ -149,6 +150,8 @@ function toGroup(row: GroupRow): AgentGroup {
     avatarVersion: row.avatar_version,
     brief: row.brief,
     createdAt: row.created_at,
+    // SAFETY: only this store writes handles, as a JSON object of strings.
+    handles: JSON.parse(row.handles) as Record<string, string>,
     id: row.id,
     lastMessage:
       row.last_content === null || row.last_created_at === null
@@ -229,12 +232,14 @@ export function createAgentGroup(
   ownerId: string,
   name: string,
   memberIds: string[],
-  brief = ""
+  brief = "",
+  handles: Record<string, string> = {}
 ): AgentGroup {
   const group: AgentGroup = {
     avatarVersion: null,
     brief,
     createdAt: new Date().toISOString(),
+    handles,
     id: randomUUID(),
     lastMessage: null,
     memberIds,
@@ -244,7 +249,7 @@ export function createAgentGroup(
   withGroupDb(orgId, (db) =>
     db
       .query(
-        "INSERT INTO groups (id, owner_user_id, name, brief, member_ids, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+        "INSERT INTO groups (id, owner_user_id, name, brief, member_ids, handles, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
       )
       .run(
         group.id,
@@ -252,6 +257,7 @@ export function createAgentGroup(
         group.name,
         brief,
         JSON.stringify(memberIds),
+        JSON.stringify(handles),
         group.createdAt
       )
   );
@@ -259,24 +265,47 @@ export function createAgentGroup(
   return group;
 }
 
-/** Renames the group and replaces its members; false when it is not this owner's. */
+/**
+ * Renames the group and replaces its members; false when it is not this
+ * owner's. `handles` only adds: a saved handle is never changed or dropped.
+ */
 export function updateAgentGroup(
   orgId: string,
   ownerId: string,
   groupId: string,
   name: string,
   memberIds: string[],
-  brief = ""
+  brief = "",
+  handles: Record<string, string> = {}
 ): boolean {
   return withGroupDb(
     orgId,
     (db) =>
       db
         .query(
-          "UPDATE groups SET name = ?, brief = ?, member_ids = ? WHERE id = ? AND owner_user_id = ?"
+          "UPDATE groups SET name = ?, brief = ?, member_ids = ?, handles = json_patch(?, handles) WHERE id = ? AND owner_user_id = ?"
         )
-        .run(name, brief, JSON.stringify(memberIds), groupId, ownerId).changes >
-      0
+        .run(
+          name,
+          brief,
+          JSON.stringify(memberIds),
+          JSON.stringify(handles),
+          groupId,
+          ownerId
+        ).changes > 0
+  );
+}
+
+/** Adds handles for members that have none; saved handles stay as they are. */
+export function addAgentGroupHandles(
+  orgId: string,
+  groupId: string,
+  handles: Record<string, string>
+): void {
+  withGroupDb(orgId, (db) =>
+    db
+      .query("UPDATE groups SET handles = json_patch(?, handles) WHERE id = ?")
+      .run(JSON.stringify(handles), groupId)
   );
 }
 

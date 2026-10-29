@@ -7,12 +7,11 @@ import {
   SOUL_FILES,
   SOUL_TEMPLATE,
 } from "@nakama/core";
-import {
-  type AgentGroup,
-  type AgentGroupMemoryChange,
-  type AgentGroupMessage,
-  memberHandles,
-  mentionedMemberIds,
+import type {
+  AgentGroup,
+  AgentGroupMemoryChange,
+  AgentGroupMessage,
+  GroupRoster,
 } from "@nakama/core/agent-groups";
 import {
   validateDocumentAttachments,
@@ -52,16 +51,6 @@ const ARTIFACT_GUIDANCE =
 const sharedGuidance = (sharedDir: string) =>
   `The group has a shared folder at ${sharedDir}. Every member can read and write it with the file tools, using absolute paths. Keep files the team builds on (outline, notes, drafts) there and read what others wrote before you answer. When you mention a file to the user, write its path inside the folder, like shared/plan.md, never the full path.`;
 
-/** The group's members the user can still reach, in member order. */
-export function groupMembers(
-  group: AgentGroup,
-  profiles: ProfileSummary[]
-): ProfileSummary[] {
-  return group.memberIds.flatMap(
-    (id) => profiles.find((profile) => profile.id === id) ?? []
-  );
-}
-
 const MEMORY_GUIDANCE =
   "When the user states or agrees to something worth keeping across chats, like a decision, a name or a preference, save it as one short entry with update_group_memory, or fix a wrong entry there. A suggestion from you or a teammate is not a decision until the user agrees to it. Never save secrets.";
 
@@ -82,10 +71,6 @@ function briefSection(group: AgentGroup): string[] {
   return group.brief ? [`Group brief from the user:\n${group.brief}`] : [];
 }
 
-function handleOf(handles: Map<string, string>, profileId: string): string {
-  return [...handles].find(([, id]) => id === profileId)?.[0] ?? "";
-}
-
 /** What an agent replies when it has nothing to add. */
 const PASS = "(pass)";
 
@@ -100,11 +85,11 @@ function isPassReply(text: string): boolean {
  */
 export function addressedMembers(
   message: string,
-  members: ProfileSummary[],
-  handles: Map<string, string>,
+  roster: GroupRoster,
   lastSpeaker: string | null
 ): string[] {
-  const mentioned = mentionedMemberIds(message, handles);
+  const { members } = roster;
+  const mentioned = roster.mentions(message);
   const first = members.find((p) => p.id === lastSpeaker) ?? members[0];
 
   if (mentioned.length > 0 || !first) {
@@ -121,7 +106,7 @@ export function addressedMembers(
 function mayPass(
   messages: AgentGroupMessage[],
   profileId: string,
-  handles: Map<string, string>
+  roster: GroupRoster
 ): boolean {
   const since = messages.slice(
     messages.findLastIndex((message) => message.authorProfileId === null)
@@ -133,11 +118,7 @@ function mayPass(
         authorProfileId !== null && content !== ""
     ) &&
     !since.some(({ authorProfileId, content }) =>
-      mentionedMemberIds(
-        content,
-        handles,
-        authorProfileId ?? undefined
-      ).includes(profileId)
+      roster.mentions(content, authorProfileId ?? undefined).includes(profileId)
     )
   );
 }
@@ -175,20 +156,20 @@ function memberRoles(orgId: string, ids: string[]): Map<string, string> {
 function groupTask(
   group: AgentGroup,
   speaker: ProfileSummary,
-  handles: Map<string, string>,
+  roster: GroupRoster,
   roles: Map<string, string>,
   sharedDir: string,
   mayPass: boolean
 ): string {
-  const roster = [...handles].map(([handle, id]) => {
+  const lines = roster.members.map(({ id }) => {
     const role = roles.get(id);
 
-    return `- @${handle}${id === speaker.id ? " (you)" : ""}${role ? `: ${role}` : ""}`;
+    return `- @${roster.handleOf(id)}${id === speaker.id ? " (you)" : ""}${role ? `: ${role}` : ""}`;
   });
 
   return [
-    `You are ${speaker.name} (@${handleOf(handles, speaker.id)}) in the group chat "${group.name}" with the user and these agents:`,
-    ...roster,
+    `You are ${speaker.name} (@${roster.handleOf(speaker.id)}) in the group chat "${group.name}" with the user and these agents:`,
+    ...lines,
     ...briefSection(group),
     ...memorySection(sharedDir),
     "The conversation so far is under Context, newest last. Reply to it as yourself.",
@@ -208,8 +189,7 @@ function groupTask(
 function labelled(
   orgId: string,
   messages: AgentGroupMessage[],
-  handles: Map<string, string>,
-  members: ProfileSummary[]
+  roster: GroupRoster
 ): string[] {
   const documents = listGroupMessageDocuments(
     orgId,
@@ -236,10 +216,10 @@ function labelled(
         .trim();
     }
 
-    const author = members.find((p) => p.id === authorProfileId);
+    const author = roster.members.find((p) => p.id === authorProfileId);
 
     return author
-      ? `${author.name} (@${handleOf(handles, author.id)}): ${content}`
+      ? `${author.name} (@${roster.handleOf(author.id)}): ${content}`
       : `Unavailable agent: ${content}`;
   });
 }
@@ -248,14 +228,12 @@ function labelled(
 export function transcript(
   orgId: string,
   sessionId: string,
-  handles: Map<string, string>,
-  members: ProfileSummary[]
+  roster: GroupRoster
 ): string {
   return labelled(
     orgId,
     listAgentGroupMessages(orgId, sessionId, CONTEXT_MESSAGES, false),
-    handles,
-    members
+    roster
   )
     .join("\n\n")
     .slice(-CONTEXT_CHARS);
@@ -264,11 +242,11 @@ export function transcript(
 function threadTask(
   group: AgentGroup,
   speaker: ProfileSummary,
-  handles: Map<string, string>,
+  roster: GroupRoster,
   sharedDir: string
 ): string {
   return [
-    `You are ${speaker.name} (@${handleOf(handles, speaker.id)}) in the group chat "${group.name}".`,
+    `You are ${speaker.name} (@${roster.handleOf(speaker.id)}) in the group chat "${group.name}".`,
     ...briefSection(group),
     ...memorySection(sharedDir),
     "The user opened a private thread with you on one of your messages. The group chat up to that message, then the thread, are under Context, newest last.",
@@ -283,8 +261,7 @@ export function threadTranscript(
   orgId: string,
   sessionId: string,
   rootId: number,
-  handles: Map<string, string>,
-  members: ProfileSummary[]
+  roster: GroupRoster
 ): string {
   const main = listAgentGroupMessages(
     orgId,
@@ -296,9 +273,9 @@ export function threadTranscript(
   const thread = listAgentGroupThreadMessages(orgId, sessionId, rootId);
 
   return [
-    ...labelled(orgId, main, handles, members),
+    ...labelled(orgId, main, roster),
     "--- Thread with the user ---",
-    ...labelled(orgId, thread, handles, members),
+    ...labelled(orgId, thread, roster),
   ]
     .join("\n\n")
     .slice(-CONTEXT_CHARS);
@@ -349,8 +326,6 @@ export async function readGroupDocuments(
 export interface GroupTurn {
   /** Null once the group is gone; the turn is then skipped. */
   group: AgentGroup | null;
-  /** The group's members the user can still reach, in member order. */
-  members: ProfileSummary[];
   onActivity?: (label: string) => void;
   onText?: (chunk: string) => void;
   orgId: string;
@@ -358,6 +333,7 @@ export interface GroupTurn {
   profileId: string;
   /** The thread's first message; the turn is in the main chat without it. */
   root?: AgentGroupMessage;
+  roster: GroupRoster;
   session: Pick<StoredGroupSession, "groupId" | "id">;
   /** Stops the turn mid-reply; what was written so far is kept. */
   signal?: AbortSignal;
@@ -381,8 +357,8 @@ export async function takeGroupTurn(
   agent: Pick<AgentService, "runGroupTurn">,
   turn: GroupTurn
 ): Promise<GroupTurnOutcome> {
-  const { group, members, orgId, profileId, root, session } = turn;
-  const speaker = members.find((p) => p.id === profileId);
+  const { group, orgId, profileId, root, roster, session } = turn;
+  const speaker = roster.members.find((p) => p.id === profileId);
 
   // Memory writes the turn saved, shown on its message in order. An empty
   // message carries them alone, and stays out of the agents' context.
@@ -405,7 +381,6 @@ export async function takeGroupTurn(
     return { kind: "silent" };
   }
 
-  const handles = memberHandles(members);
   const sharedDir = workspaceOfGroup(orgId, group.id).open();
 
   // A thread is a direct ask, so its turn never passes.
@@ -414,7 +389,7 @@ export async function takeGroupTurn(
     mayPass(
       listAgentGroupMessages(orgId, session.id, undefined, false),
       profileId,
-      handles
+      roster
     );
 
   let written = "";
@@ -423,8 +398,8 @@ export async function takeGroupTurn(
     .runGroupTurn({
       agentDepth: 1,
       context: root
-        ? threadTranscript(orgId, session.id, root.id, handles, members)
-        : transcript(orgId, session.id, handles, members),
+        ? threadTranscript(orgId, session.id, root.id, roster)
+        : transcript(orgId, session.id, roster),
       onActivity: turn.onActivity,
       onGroupMemoryChange: (change) => memoryChanges.push(change),
       onText: (chunk) => {
@@ -437,12 +412,15 @@ export async function takeGroupTurn(
       sharedDir,
       signal: turn.signal,
       task: root
-        ? threadTask(group, speaker, handles, sharedDir)
+        ? threadTask(group, speaker, roster, sharedDir)
         : groupTask(
             group,
             speaker,
-            handles,
-            memberRoles(orgId, [...handles.values()]),
+            roster,
+            memberRoles(
+              orgId,
+              roster.members.map((member) => member.id)
+            ),
             sharedDir,
             optional
           ),

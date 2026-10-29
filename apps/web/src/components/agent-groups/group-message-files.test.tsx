@@ -35,6 +35,7 @@ function NoticeAndPanel({
             avatarVersion: null,
             brief: "",
             createdAt: "",
+            handles: {},
             id: groupId,
             lastMessage: null,
             memberIds: [],

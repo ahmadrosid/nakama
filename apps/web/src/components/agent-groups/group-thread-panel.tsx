@@ -1,8 +1,8 @@
 import type { ProfileSummary } from "@nakama/core";
-import type { AgentGroup } from "@nakama/core/agent-groups";
+import { type AgentGroup, groupRoster } from "@nakama/core/agent-groups";
 import type { WorkspaceEntry } from "@nakama/core/contract";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { GroupComposer } from "@/components/agent-groups/group-composer";
 import {
   GroupMessageArtifacts,
@@ -41,6 +41,9 @@ import {
 } from "@/pages/files/files-artifact-list-view";
 import { FilesSearchRow } from "@/pages/files/files-search-row";
 import { FilesToolbar } from "@/pages/files/files-toolbar";
+
+/** A thread is with one agent, so nobody is @mentioned in it. */
+const NO_ROSTER = groupRoster({ handles: {}, memberIds: [] }, []);
 
 const THREAD_PANEL_WIDTH = 448;
 
@@ -90,7 +93,6 @@ export function GroupThreadPanel({
   const agent = profiles.find((p) => p.id === data?.profileId);
   // The agent's own message is already in the group chat; show only the replies.
   const replies = data?.messages.slice(1) ?? [];
-  const noHandles = useMemo(() => new Map<string, string>(), []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
@@ -173,11 +175,10 @@ export function GroupThreadPanel({
         <GroupComposer
           allowDocuments
           busy={data?.run != null}
-          handles={noHandles}
-          members={agent ? [agent] : []}
           onSend={send}
           onStop={stop}
           placeholder={`Reply to ${agent?.name ?? "agent"}`}
+          roster={NO_ROSTER}
           stopping={data?.run?.stopping ?? false}
         />
       </div>

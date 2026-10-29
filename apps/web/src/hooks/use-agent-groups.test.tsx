@@ -52,6 +52,7 @@ function sessionDetail(
       avatarVersion: null,
       brief: "",
       createdAt: CREATED,
+      handles: {},
       id: "g",
       lastMessage: null,
       memberIds: ["a"],
