@@ -335,28 +335,38 @@ export function registerSessionRoutes(
     sessionId: z.string().openapi({ param: { in: "path", name: "sessionId" } }),
   });
 
-  const sessionListQuerySchema = z.object({
-    channel: agentChannelSchema.optional(),
-    channels: z.string().optional().openapi({
-      description: "Comma-separated channels, listed as one merged list.",
-    }),
-    cursor: z.string().optional().openapi({
-      description: "`nextCursor` from the previous page.",
-    }),
-    limit: z
-      .string()
-      .optional()
-      .openapi({
-        description: `Page size, 1 to ${MAX_SESSION_PAGE_SIZE}. Without it every session is returned.`,
+  const sessionListQuerySchema = z
+    .object({
+      channel: agentChannelSchema.optional().openapi({
+        description: "Single-channel filter. One of the two filters is required.",
+        param: { required: true },
       }),
-    profileId: z.string().optional(),
-    q: z
-      .string()
-      .optional()
-      .openapi({
-        description: `Keeps the sessions whose title or message text contains it, up to ${MAX_SESSION_SEARCH_LENGTH} characters.`,
+      channels: z.string().optional().openapi({
+        description:
+          "Comma-separated channels, listed as one merged list. Required unless `channel` is set.",
+        param: { required: true },
       }),
-  });
+      cursor: z.string().optional().openapi({
+        description: "`nextCursor` from the previous page.",
+      }),
+      limit: z
+        .string()
+        .optional()
+        .openapi({
+          description: `Page size, 1 to ${MAX_SESSION_PAGE_SIZE}. Without it every session is returned.`,
+        }),
+      profileId: z.string().optional(),
+      q: z
+        .string()
+        .optional()
+        .openapi({
+          description: `Keeps the sessions whose title or message text contains it, up to ${MAX_SESSION_SEARCH_LENGTH} characters.`,
+        }),
+    })
+    .refine(
+      (query) => Boolean(query.channel || query.channels),
+      "Provide `channel` or `channels`."
+    );
 
   const streamQuerySchema = z.object({
     stream: z.enum(["true", "false"]).optional(),
