@@ -38,7 +38,9 @@ function AppLogo({
       aria-hidden
       className={cn(
         "flex shrink-0 items-center justify-center bg-muted font-semibold text-foreground/80",
-        size === "lg" ? "size-16 rounded-2xl text-xl" : "size-10 rounded-xl"
+        size === "lg"
+          ? "size-16 rounded-2xl text-xl"
+          : "size-9 rounded-lg text-sm"
       )}
     >
       {preset ? (
@@ -129,25 +131,29 @@ function AppCardButton({ busy, card }: { busy: boolean; card: AppCard }) {
       aria-label={
         card.ready ? `Add ${card.name} to agent` : `Connect ${card.name}`
       }
-      className="flex h-full w-full flex-col items-start gap-3 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:bg-muted/50 disabled:opacity-50"
+      className="flex h-full w-full items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted/50 disabled:opacity-50"
       disabled={busy}
       onClick={card.onPick}
       type="button"
     >
       <AppLogo name={card.name} preset={card.preset} />
-      <span className="flex flex-1 flex-col gap-1">
-        <span className="font-medium text-foreground text-sm">{card.name}</span>
-        <span className="text-muted-foreground text-xs leading-snug">
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate font-medium text-foreground text-sm">
+          {card.name}
+        </span>
+        <span className="truncate text-muted-foreground text-xs">
           {card.description}
         </span>
       </span>
       {card.ready ? (
-        <span className="inline-flex items-center gap-1 font-medium text-emerald-700 text-xs dark:text-emerald-400">
+        <span className="inline-flex shrink-0 items-center gap-1 font-medium text-emerald-700 text-xs dark:text-emerald-400">
           <Tick02Icon aria-hidden className="size-3.5" />
-          Ready to add
+          Ready
         </span>
       ) : (
-        <span className="font-medium text-primary text-xs">Connect</span>
+        <span className="shrink-0 font-medium text-primary text-xs">
+          Connect
+        </span>
       )}
     </button>
   );
@@ -201,7 +207,7 @@ export function McpAppPicker({
         </div>
       </div>
 
-      <ul className="grid min-h-0 flex-1 auto-rows-min gap-3 overflow-y-auto px-6 py-6 sm:grid-cols-3">
+      <ul className="grid min-h-0 flex-1 auto-rows-min gap-2 overflow-y-auto px-6 py-5 sm:grid-cols-2">
         {cards.map((card) => (
           <li key={card.key}>
             <AppCardButton busy={busy} card={card} />
@@ -213,7 +219,7 @@ export function McpAppPicker({
         <span className="text-muted-foreground text-sm">
           Don't see your app?
         </span>
-        <Button onClick={onCustom} size="sm" type="button" variant="ghost">
+        <Button onClick={onCustom} size="sm" type="button">
           Add a custom connection
         </Button>
       </div>
