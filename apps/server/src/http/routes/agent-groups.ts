@@ -95,7 +95,7 @@ interface GroupRequest<
 > {
   orgId: string;
   params: Record<PathParams<P>, string>;
-  /** Parses the body; handlers call it after their own 404 and id checks. */
+  /** Parses the body; a handler that must 404 before a 400 calls it after that check. */
   readBody: S extends z.ZodType ? () => Promise<z.output<S>> : undefined;
   readQuery: Q extends z.ZodObject ? () => z.output<Q> : undefined;
   /** The documented success status; send this one. */

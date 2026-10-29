@@ -104,18 +104,21 @@ const proposeToolSchema = z
   })
   .strict();
 
-// Same rules as the HTTP API; the descriptions are for the model only.
-const createGroupSchema = agentGroupInputSchema.extend({
-  brief: agentGroupInputSchema.shape.brief.describe(
-    "What the group is for. Every agent in the group reads it."
-  ),
-  memberIds: agentGroupInputSchema.shape.memberIds.describe(
-    "Profile ids of the agents to add. 2 to 12."
-  ),
-  name: agentGroupInputSchema.shape.name.describe(
-    'Group name in short, readable title case, like "Rosid\'s Brand Team". Never a slug or hyphenated.'
-  ),
-});
+// Same rules as the HTTP API; the descriptions are for the model only. Strict,
+// so a model that invents a key is told so.
+const createGroupSchema = agentGroupInputSchema
+  .extend({
+    brief: agentGroupInputSchema.shape.brief.describe(
+      "What the group is for. Every agent in the group reads it."
+    ),
+    memberIds: agentGroupInputSchema.shape.memberIds.describe(
+      "Profile ids of the agents to add. 2 to 12."
+    ),
+    name: agentGroupInputSchema.shape.name.describe(
+      'Group name in short, readable title case, like "Rosid\'s Brand Team". Never a slug or hyphenated.'
+    ),
+  })
+  .strict();
 
 const createProfileSchema = z.object({
   isSuper: z

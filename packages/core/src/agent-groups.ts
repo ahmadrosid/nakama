@@ -4,15 +4,13 @@ import { slugifyProfileName } from "./profiles";
 
 /**
  * What creates or edits a group: the HTTP API and the `create_group` tool.
- * Strict, so both reject the same inputs.
+ * Unknown keys are dropped, so API clients can send a group back as read.
  */
-export const agentGroupInputSchema = z
-  .object({
-    brief: z.string().trim().max(4000).default(""),
-    memberIds: z.array(z.string().min(1)).min(2).max(12),
-    name: z.string().trim().min(1).max(80),
-  })
-  .strict();
+export const agentGroupInputSchema = z.object({
+  brief: z.string().trim().max(4000).default(""),
+  memberIds: z.array(z.string().min(1)).min(2).max(12),
+  name: z.string().trim().min(1).max(80),
+});
 
 export type AgentGroupInput = z.input<typeof agentGroupInputSchema>;
 

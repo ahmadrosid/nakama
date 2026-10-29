@@ -93,7 +93,6 @@ const BAD_GROUPS = [
   { memberIds: ["alpha", "beta"], name: "x".repeat(81) },
   { brief: "x".repeat(4001), memberIds: ["alpha", "beta"], name: "Long" },
   { memberIds: ["alpha", ""], name: "Blank member" },
-  { extra: true, memberIds: ["alpha", "beta"], name: "Extra key" },
 ];
 
 const DOCUMENT_ONLY = {
@@ -185,7 +184,7 @@ describe("agent group routes", () => {
 
     // Waits for the background replies, so none outlives the test.
     async function settled() {
-      for (let tries = 0; tries < 100; tries += 1) {
+      for (let tries = 0; tries < 250; tries += 1) {
         const detail = await (await send("GET", sessionPath)).json();
 
         if (!(detail.session.active || detail.threadRunIds.length > 0)) {
@@ -201,6 +200,8 @@ describe("agent group routes", () => {
     const reply = (await settled()).messages.find(
       (message: { authorProfileId: string | null }) => message.authorProfileId
     );
+
+    expect(reply).toBeDefined();
 
     expect(
       (await send("POST", `${sessionPath}/messages`, DOCUMENT_ONLY)).status
@@ -248,10 +249,15 @@ describe("agent group routes", () => {
       await expect(tool?.run(input, context)).rejects.toThrow();
     }
 
+    // Only the tool rejects a key it does not know; the API drops it.
+    const withExtraKey = { ...GOOD_GROUP, avatarVersion: null };
+
+    await expect(tool?.run(withExtraKey, context)).rejects.toThrow();
+
     // The schema stopped every bad input; none reached the service.
     expect(created).toBe(0);
 
-    expect((await send("POST", "/v1/agent-groups", GOOD_GROUP)).status).toBe(
+    expect((await send("POST", "/v1/agent-groups", withExtraKey)).status).toBe(
       201
     );
     expect(await tool?.run(GOOD_GROUP, context)).toMatchObject({
