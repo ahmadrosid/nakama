@@ -82,7 +82,7 @@ type AppCard = {
   ready: boolean;
 };
 
-/** Apps the org already has come first and add in one click; the rest connect. */
+/** Popular apps first, then the org's own. Apps the org has add in one click; the rest connect. */
 function appCards({
   onAssign,
   onConnect,
@@ -122,7 +122,13 @@ function appCards({
     ready: false,
   }));
 
-  return [...ready, ...connect];
+  const rank = (card: AppCard) => {
+    const index = card.preset ? POPULAR_SERVERS.indexOf(card.preset) : -1;
+
+    return index === -1 ? POPULAR_SERVERS.length : index;
+  };
+
+  return [...ready, ...connect].sort((a, b) => rank(a) - rank(b));
 }
 
 function AppCardButton({ busy, card }: { busy: boolean; card: AppCard }) {
