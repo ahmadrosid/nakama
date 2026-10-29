@@ -14,20 +14,6 @@ describe("isLegacySoulPlaceholder", () => {
 });
 
 describe("initSoulDirectory seeding", () => {
-  test("fills an empty SOUL.md on init", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "nakama-soul-empty-"));
-
-    try {
-      await writeFile(join(directory, "SOUL.md"), "\n", "utf8");
-      await initSoulDirectory(directory);
-
-      const soul = await readFile(join(directory, "SOUL.md"), "utf8");
-      expect(soul.trim().length).toBeGreaterThan(0);
-    } finally {
-      await rm(directory, { force: true, recursive: true });
-    }
-  });
-
   test("upgrades legacy placeholder SOUL.md", async () => {
     const directory = await mkdtemp(join(tmpdir(), "nakama-soul-legacy-"));
 

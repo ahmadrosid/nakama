@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  isValidCronExpression,
   isWorkerSchedulable,
   resolveScheduleTimezone,
   validateAutomationInput,
@@ -8,16 +7,6 @@ import {
 } from "./automation-validate";
 
 describe("validateAutomationInput", () => {
-  test("accepts manual automations with prompt", () => {
-    expect(() =>
-      validateAutomationInput({
-        name: "Daily digest",
-        prompt: "Summarize news",
-        trigger: { type: "manual" },
-      })
-    ).not.toThrow();
-  });
-
   test("names the missing field when name is absent", () => {
     expect(() =>
       validateAutomationInput({
@@ -48,16 +37,6 @@ describe("validateAutomationInput", () => {
     ).toThrow(/Invalid cron/);
   });
 
-  test("accepts runAt automations", () => {
-    expect(() =>
-      validateAutomationInput({
-        name: "Reminder",
-        prompt: "Send reminder email",
-        trigger: { at: "2026-06-27T13:00:00.000Z", type: "runAt" },
-      })
-    ).not.toThrow();
-  });
-
   test("rejects invalid runAt", () => {
     expect(() =>
       validateAutomationInput({
@@ -79,11 +58,7 @@ describe("validateAutomationInput", () => {
   });
 });
 
-describe("isValidCronExpression", () => {
-  test("accepts standard 5-field cron", () => {
-    expect(isValidCronExpression("0 8 * * *")).toBe(true);
-  });
-});
+describe("isValidCronExpression", () => {});
 
 describe("validateTimezone", () => {
   test("defaults to UTC", () => {

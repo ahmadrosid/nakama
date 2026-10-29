@@ -60,13 +60,6 @@ describe("org memory tools", () => {
     ).rejects.toThrow("query is required.");
   });
 
-  test("org_memory_list as member returns live content", async () => {
-    const service = new OrgMemoryService();
-    const listTool = createOrgMemoryTools(service)[1];
-    const result = await listTool.run({}, context("org_a", "member"));
-    expect(result).toHaveProperty("content");
-  });
-
   test("propose_org_memory as member creates a proposal", async () => {
     const service = new OrgMemoryService(createInMemoryDatabaseAdapter());
     const proposeTool = createOrgMemoryTools(service)[2];

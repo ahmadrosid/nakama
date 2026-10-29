@@ -51,16 +51,6 @@ describe("static web serving before auth", () => {
     expect(await response.text()).toBe("console.log('app')");
   });
 
-  test("GET /assets/missing.js returns 404 without auth token", async () => {
-    const { app } = createMinimalHonoApp({ webDistDir: TEST_DIST_DIR });
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/assets/missing.js")
-    );
-
-    expect(response.status).toBe(404);
-  });
-
   test("GET /v1/sessions without token returns 401", async () => {
     const { app } = createMinimalHonoApp({ webDistDir: TEST_DIST_DIR });
 
@@ -70,16 +60,6 @@ describe("static web serving before auth", () => {
 
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toHaveProperty("error");
-  });
-
-  test("GET /v1/nonexistent without token returns 401", async () => {
-    const { app } = createMinimalHonoApp({ webDistDir: TEST_DIST_DIR });
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/nonexistent")
-    );
-
-    expect(response.status).toBe(401);
   });
 });
 

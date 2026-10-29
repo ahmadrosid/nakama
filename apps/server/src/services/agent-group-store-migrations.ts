@@ -6,6 +6,7 @@ export function migrateGroupDatabase(db: Database): void {
   addBriefColumn(db);
   addDocumentsColumn(db);
   addMemoryChangesColumn(db);
+  addHandlesColumn(db);
 }
 
 /** Threads came after the first release, so older files lack the column. */
@@ -52,5 +53,16 @@ function addMemoryChangesColumn(db: Database): void {
 
   if (!columns.some((column) => column.name === "memory_changes")) {
     db.exec("ALTER TABLE messages ADD COLUMN memory_changes TEXT");
+  }
+}
+
+/** Older groups kept no handles; they get them on their next save or run. */
+function addHandlesColumn(db: Database): void {
+  const columns = db
+    .query<{ name: string }, []>("PRAGMA table_info(groups)")
+    .all();
+
+  if (!columns.some((column) => column.name === "handles")) {
+    db.exec("ALTER TABLE groups ADD COLUMN handles TEXT NOT NULL DEFAULT '{}'");
   }
 }

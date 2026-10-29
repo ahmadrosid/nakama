@@ -7,9 +7,10 @@ import {
   type AgentGroupSession,
   type AgentGroupSessionDetail,
   type AgentGroupThreadDetail,
+  assignHandles,
+  type GroupRoster,
+  groupRoster,
   groupSessionTitle,
-  memberHandles,
-  mentionedMemberIds,
 } from "@nakama/core/agent-groups";
 import { validateImageAttachments } from "@nakama/core/message-content";
 import { filterProfilesForChatAccess } from "@nakama/core/profiles";
@@ -20,6 +21,7 @@ import {
   requireThreadRoot,
 } from "./agent-group-lookup";
 import {
+  addAgentGroupHandles,
   appendAgentGroupMessage,
   createAgentGroup,
   createGroupSession,
@@ -39,11 +41,7 @@ import {
   updateGroupSession,
 } from "./agent-group-store";
 import { retitleGroupSession } from "./agent-group-title";
-import {
-  addressedMembers,
-  groupMembers,
-  takeGroupTurn,
-} from "./agent-group-turn";
+import { addressedMembers, takeGroupTurn } from "./agent-group-turn";
 import { type PostedDocument, workspaceOfGroup } from "./agent-group-workspace";
 import type { AgentService } from "./agent-service";
 
@@ -111,9 +109,9 @@ export class AgentGroupService {
     memberIds: string[],
     brief = ""
   ): Promise<AgentGroup> {
-    await this.assertMembers(orgId, userId, memberIds, []);
+    const handles = await this.assertMembers(orgId, userId, memberIds, {});
 
-    return createAgentGroup(orgId, userId, name, memberIds, brief);
+    return createAgentGroup(orgId, userId, name, memberIds, brief, handles);
   }
 
   /** Members kept from before may have lost access; only new ones are checked. */
@@ -126,8 +124,8 @@ export class AgentGroupService {
     brief = ""
   ): Promise<AgentGroup> {
     const group = requireGroup(orgId, userId, groupId);
-    await this.assertMembers(orgId, userId, memberIds, group.memberIds);
-    updateAgentGroup(orgId, userId, groupId, name, memberIds, brief);
+    const handles = await this.assertMembers(orgId, userId, memberIds, group);
+    updateAgentGroup(orgId, userId, groupId, name, memberIds, brief, handles);
 
     return requireGroup(orgId, userId, groupId);
   }
@@ -484,16 +482,10 @@ export class AgentGroupService {
       // membership may change mid-run.
       const group = getAgentGroup(orgId, userId, session.groupId);
       const access = await this.access(orgId, userId);
-      const members = group ? groupMembers(group, access.profiles) : [];
-      const handles = memberHandles(members);
+      const roster = this.roster(orgId, group, access);
 
       for (const message of run.inbox.splice(0)) {
-        const woken = addressedMembers(
-          message,
-          members,
-          handles,
-          run.lastSpeaker
-        );
+        const woken = addressedMembers(message, roster, run.lastSpeaker);
 
         // Everyone woken gets a turn, even past the cap (`@all`).
         run.hopsLeft = Math.max(MAX_GROUP_HOPS, woken.length);
@@ -529,7 +521,6 @@ export class AgentGroupService {
 
       const outcome = await takeGroupTurn(this.agent, {
         group,
-        members,
         onActivity: (label) => {
           run.activity = label;
           run.steps.push(label);
@@ -540,6 +531,7 @@ export class AgentGroupService {
         orgId,
         orgRole: access.orgRole,
         profileId,
+        roster,
         session,
         signal: run.hop.signal,
         userId,
@@ -561,10 +553,7 @@ export class AgentGroupService {
           profileId,
           outcome.text
         );
-        enqueue(
-          run.queue,
-          mentionedMemberIds(outcome.text, handles, profileId)
-        );
+        enqueue(run.queue, roster.mentions(outcome.text, profileId));
       }
     }
   }
@@ -593,7 +582,6 @@ export class AgentGroupService {
 
       const outcome = await takeGroupTurn(this.agent, {
         group,
-        members: group ? groupMembers(group, access.profiles) : [],
         onActivity: (label) => {
           run.activity = label;
         },
@@ -601,6 +589,7 @@ export class AgentGroupService {
         orgRole: access.orgRole,
         profileId,
         root,
+        roster: this.roster(orgId, group, access),
         session,
         signal: run.hop.signal,
         userId,
@@ -614,12 +603,13 @@ export class AgentGroupService {
     }
   }
 
+  /** Checks the new members and returns the handles to save for them. */
   private async assertMembers(
     orgId: string,
     userId: string,
     memberIds: string[],
-    kept: string[]
-  ): Promise<void> {
+    kept: Partial<Pick<AgentGroup, "handles" | "memberIds">>
+  ): Promise<Record<string, string>> {
     if (new Set(memberIds).size !== memberIds.length) {
       throw new NakamaApiError("Each agent can join a group once.", 400);
     }
@@ -627,12 +617,48 @@ export class AgentGroupService {
     const { profiles } = await this.access(orgId, userId);
 
     const allowed = memberIds.every(
-      (id) => kept.includes(id) || profiles.some((p) => p.id === id)
+      (id) => kept.memberIds?.includes(id) || profiles.some((p) => p.id === id)
     );
 
     if (!allowed) {
       throw new NakamaApiError("You cannot use one of these agents.", 403);
     }
+
+    // A group saved before handles were kept gets its old ones first, in the
+    // old member order, so the edit does not move a handle to another agent.
+    const before = assignHandles(
+      kept.handles ?? {},
+      kept.memberIds ?? [],
+      profiles
+    );
+
+    return assignHandles(before, memberIds, profiles);
+  }
+
+  /**
+   * The group's roster for a turn. A group saved before handles were kept
+   * saves them here, before any agent reads a mention.
+   */
+  private roster(
+    orgId: string,
+    group: AgentGroup | null,
+    access: GroupAccess
+  ): GroupRoster {
+    if (!group) {
+      return groupRoster({ handles: {}, memberIds: [] }, []);
+    }
+
+    const handles = assignHandles(
+      group.handles,
+      group.memberIds,
+      access.profiles
+    );
+
+    if (Object.keys(handles).length > Object.keys(group.handles).length) {
+      addAgentGroupHandles(orgId, group.id, handles);
+    }
+
+    return groupRoster({ ...group, handles }, access.profiles);
   }
 
   /** The agents this user may chat with right now; none once they leave the org. */

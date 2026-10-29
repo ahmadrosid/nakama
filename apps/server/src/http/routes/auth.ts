@@ -1668,6 +1668,12 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       assertBrowserCsrf(c.req.raw, auth, authService);
     }
 
+    // Public routes skip the auth middleware. Keep a signed-in caller so the
+    // audit row names who asked for the reset.
+    if (auth) {
+      c.set("auth", auth);
+    }
+
     return json<RequestPasswordResetResponse>(
       await orgService.requestPasswordReset(body.email, allowManualToken)
     );
@@ -1684,7 +1690,9 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       resetPasswordSchema
     );
 
-    await orgService.resetPassword(body);
+    // The route is public, so the audit row has no caller to name. Tell it
+    // whose password changed.
+    c.set("auditResourceId", await orgService.resetPassword(body));
 
     return c.json({ ok: true }, 200);
   });

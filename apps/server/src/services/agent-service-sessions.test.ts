@@ -110,11 +110,9 @@ describe("AgentService branching", () => {
 
     sessionTurnRegistry.beginTurn(sessionId);
     await expect(
-      service.updateSessionModel(
-        sessionId,
-        ORG_ID,
-        "provider-1::next-chat-model"
-      )
+      service.updateSessionRunSettings(sessionId, ORG_ID, {
+        model: "provider-1::next-chat-model",
+      })
     ).rejects.toThrow("Wait for the current response");
     sessionTurnRegistry.cancelTurn(sessionId);
     expect((await db.getSession(sessionId))?.model).toBe(
@@ -122,17 +120,17 @@ describe("AgentService branching", () => {
     );
 
     expect(
-      await service.updateSessionModel(
-        sessionId,
-        ORG_ID,
-        "provider-1::next-chat-model"
-      )
+      await service.updateSessionRunSettings(sessionId, ORG_ID, {
+        model: "provider-1::next-chat-model",
+      })
     ).toBe(true);
     expect((await db.getSession(sessionId))?.model).toBe(
       "provider-1::next-chat-model"
     );
     await expect(
-      service.updateSessionModel(sessionId, ORG_ID, "provider-1::unknown")
+      service.updateSessionRunSettings(sessionId, ORG_ID, {
+        model: "provider-1::unknown",
+      })
     ).rejects.toThrow("Select a configured model");
     expect((await db.getSession(sessionId))?.model).toBe(
       "provider-1::next-chat-model"
@@ -153,9 +151,9 @@ describe("AgentService branching", () => {
       "provider-1::next-chat-model"
     );
 
-    expect(await service.updateSessionModel(sessionId, ORG_ID, null)).toBe(
-      true
-    );
+    expect(
+      await service.updateSessionRunSettings(sessionId, ORG_ID, { model: null })
+    ).toBe(true);
     expect((await db.getSession(sessionId))?.model).toBeNull();
   });
 
@@ -220,20 +218,26 @@ describe("AgentService branching", () => {
 
     sessionTurnRegistry.beginTurn(sessionId);
     await expect(
-      service.updateSessionThinkingEffort(sessionId, ORG_ID, "high")
+      service.updateSessionRunSettings(sessionId, ORG_ID, {
+        thinkingEffort: "high",
+      })
     ).rejects.toThrow("Wait for the current response");
     sessionTurnRegistry.cancelTurn(sessionId);
     expect((await db.getSession(sessionId))?.thinkingEffort).toBe("low");
 
     expect(
-      await service.updateSessionThinkingEffort(sessionId, ORG_ID, "high")
+      await service.updateSessionRunSettings(sessionId, ORG_ID, {
+        thinkingEffort: "high",
+      })
     ).toBe(true);
     expect((await db.getSession(sessionId))?.thinkingEffort).toBe("high");
     await service.getSessionMessages(sessionId, ORG_ID);
     expect(builtEfforts.at(-1)).toBe("high");
 
     expect(
-      await service.updateSessionThinkingEffort(sessionId, ORG_ID, null)
+      await service.updateSessionRunSettings(sessionId, ORG_ID, {
+        thinkingEffort: null,
+      })
     ).toBe(true);
     expect((await db.getSession(sessionId))?.thinkingEffort).toBeNull();
     await service.getSessionMessages(sessionId, ORG_ID);

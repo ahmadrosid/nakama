@@ -5,7 +5,7 @@ import {
   type AgentGroupRun,
   type AgentGroupSession,
   type AgentGroupSessionDetail,
-  memberHandles,
+  groupRoster,
 } from "@nakama/core/agent-groups";
 import type { DocumentAttachment } from "@nakama/core/contract";
 import { Button } from "@nakama/ui";
@@ -220,18 +220,6 @@ function GroupMissing({ message }: { message?: string }) {
   );
 }
 
-function useMembers(group: AgentGroup, profiles: ProfileSummary[]) {
-  const members = useMemo(
-    () =>
-      group.memberIds.flatMap(
-        (id) => profiles.find((profile) => profile.id === id) ?? []
-      ),
-    [group.memberIds, profiles]
-  );
-
-  return { handles: useMemo(() => memberHandles(members), [members]), members };
-}
-
 /** The group's name, its agents' avatars and count, and the edit group and new chat buttons. */
 function GroupHeader({
   group,
@@ -319,7 +307,8 @@ function GroupConversation({
   run: AgentGroupRun | null;
   threadRunIds?: number[];
 }) {
-  const { handles, members } = useMembers(group, profiles);
+  const roster = useMemo(() => groupRoster(group, profiles), [group, profiles]);
+  const { members } = roster;
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -331,11 +320,11 @@ function GroupConversation({
         >
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <GroupMessageList
-              handles={handles}
               messages={messages}
               onOpenLive={() => onOpenLive?.()}
               onOpenThread={(messageId) => onOpenThread?.(messageId)}
               profiles={profiles}
+              roster={roster}
               run={run}
               threadRunIds={threadRunIds}
             />
@@ -344,10 +333,9 @@ function GroupConversation({
             <GroupComposer
               allowDocuments
               busy={run !== null}
-              handles={handles}
-              members={members}
               onSend={onSend}
               onStop={onStop}
+              roster={roster}
               stopping={run?.stopping ?? false}
             />
           </div>
@@ -371,15 +359,12 @@ function GroupDraft({
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { handles, members } = useMembers(group, profiles);
+  const roster = useMemo(() => groupRoster(group, profiles), [group, profiles]);
+  const { members } = roster;
   const [pending, setPending] = useState<AgentGroupMessage | null>(null);
   const [restored, setRestored] = useState("");
   const [editing, setEditing] = useState(false);
   const creating = useRef<Promise<AgentGroupSession> | null>(null);
-
-  // `handles` maps handle to member id.
-  const handleOf = (id: string) =>
-    [...handles].find(([, memberId]) => memberId === id)?.[0] ?? "";
 
   async function sendFirst(
     content: string,
@@ -486,12 +471,11 @@ function GroupDraft({
           <GroupComposer
             allowDocuments
             busy={false}
-            handles={handles}
             initialInput={restored}
             key={restored}
-            members={members}
             onSend={sendFirst}
             onStop={() => undefined}
+            roster={roster}
             stopping={false}
           />
           <div className="flex flex-wrap justify-center gap-2 px-4">
@@ -509,7 +493,7 @@ function GroupDraft({
                 key={member.id}
                 onClick={() =>
                   void sendFirst(
-                    `@${handleOf(member.id)} what can you help with?`
+                    `@${roster.handleOf(member.id)} what can you help with?`
                   )
                 }
                 type="button"

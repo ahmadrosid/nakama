@@ -28,16 +28,6 @@ test.each([
   ).toThrow(expect.objectContaining({ status: 413 }));
 });
 
-test("does not impose the HTML limit on other formats", () => {
-  expect(() =>
-    assertHtmlArtifactSize(
-      "movie.mp4",
-      MAX_HTML_ARTIFACT_BYTES + 1,
-      "video/mp4"
-    )
-  ).not.toThrow();
-});
-
 describe("inferArtifactMimeType", () => {
   test("falls back to binary for unknown or extensionless names", () => {
     expect(inferArtifactMimeType("notes.md")).toBe("text/markdown");

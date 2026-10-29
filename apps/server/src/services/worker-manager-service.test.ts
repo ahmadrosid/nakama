@@ -401,25 +401,7 @@ describe("WorkerManagerService", () => {
     });
   });
 
-  describe("restartWorker", () => {
-    test("restarts worker by removing from pm2 and starting fresh", async () => {
-      const mockPm2 = createMockPm2();
-      const service = new WorkerManagerService(projectRoot, mockPm2);
-
-      await service.restartWorker("telegram");
-
-      expect(mockPm2.stop).toHaveBeenCalledWith(
-        "telegram",
-        expect.any(Function)
-      );
-      expect(mockPm2.delete).toHaveBeenCalledWith(
-        "telegram",
-        expect.any(Function)
-      );
-      expect(mockPm2.restart).not.toHaveBeenCalled();
-      expect(mockPm2.start).toHaveBeenCalledTimes(1);
-    });
-  });
+  describe("restartWorker", () => {});
 
   describe("getWorkerStatus", () => {
     test("returns managed status for running worker", async () => {

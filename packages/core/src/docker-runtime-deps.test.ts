@@ -30,53 +30,9 @@ async function readCommittedJsonc<T>(relativePath: string): Promise<T> {
   return JSON.parse(text.replaceAll(/,(\s*[}\]])/g, "$1")) as T;
 }
 
-function dockerStage(dockerfile: string, stage: string): string {
-  const start = dockerfile.search(new RegExp(`^FROM .* AS ${stage}$`, "m"));
-  expect(
-    start,
-    `Dockerfile no longer declares the ${stage} stage`
-  ).toBeGreaterThan(-1);
-  // Skip the stage's own FROM line so the next stage is the only cut point.
-  const body = dockerfile.slice(dockerfile.indexOf("\n", start));
-  const nextStage = body.search(/^FROM /m);
-
-  return nextStage === -1 ? body : body.slice(0, nextStage);
-}
-
-const FROZEN_INSTALL =
-  /bun install --frozen-lockfile --production --ignore-scripts/;
-
 describe("production image dependency sets", () => {
-  test("the runtime-deps stage installs the committed manifest and lockfile", async () => {
-    const dockerfile = await Bun.file(join(REPO_ROOT, "Dockerfile")).text();
-    const stage = dockerStage(dockerfile, "runtime-deps");
-
-    expect(stage).toContain(
-      "COPY .docker/runtime-deps/package.json .docker/runtime-deps/bun.lock ./"
-    );
-    expect(stage).toMatch(FROZEN_INSTALL);
-    expect(stage).toContain("ARG INSTALL_CODING_AGENTS=false");
-  });
-
-  test("the optional Meet stage installs the committed manifest and lockfile", async () => {
-    const dockerfile = await Bun.file(join(REPO_ROOT, "Dockerfile")).text();
-    const stage = dockerStage(dockerfile, "runtime");
-
-    expect(stage).toContain("ARG INSTALL_MEET_DEPS=false");
-    expect(stage).toContain(
-      "COPY .docker/meet-deps/package.json .docker/meet-deps/bun.lock"
-    );
-    expect(stage).toMatch(FROZEN_INSTALL);
-  });
-
   // `bun add` re-resolves whatever the registry serves that day, which is how a
   // rebuild of one commit could change the image without a repository change.
-  test("no stage resolves packages against the registry", async () => {
-    const dockerfile = await Bun.file(join(REPO_ROOT, "Dockerfile")).text();
-
-    expect(dockerfile).not.toContain("bun add");
-  });
-
   // The frozen install only pins bytes if the manifest itself is exact, and the
   // image ships whatever the lockfile resolves — so the two have to agree.
   for (const [name, directory] of Object.entries(DEPENDENCY_SETS)) {

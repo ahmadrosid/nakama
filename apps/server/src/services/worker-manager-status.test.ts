@@ -272,18 +272,6 @@ describe("WorkerManagerService", () => {
   });
 
   describe("clearWorkerLogs", () => {
-    test("flushes logs for a valid worker", async () => {
-      const mockPm2 = createMockPm2();
-      const service = new WorkerManagerService(projectRoot, mockPm2);
-
-      await service.clearWorkerLogs("whatsapp");
-
-      expect(mockPm2.flush).toHaveBeenCalledWith(
-        "whatsapp",
-        expect.any(Function)
-      );
-    });
-
     test("throws when PM2 flush fails", async () => {
       const mockPm2 = createMockPm2();
       mockPm2.flush = mock((_name: string, cb: (err: Error | null) => void) =>

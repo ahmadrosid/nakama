@@ -237,7 +237,7 @@ function findPreviousSummary(
   }
 }
 
-export function buildCompactionPrompt(previousSummary?: string): string {
+function buildCompactionPrompt(previousSummary?: string): string {
   const anchor = previousSummary
     ? [
         "Update the anchored summary below using the conversation history above.",

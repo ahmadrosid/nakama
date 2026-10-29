@@ -70,6 +70,7 @@
     "./tools/protected": "./src/tools/protected.ts",
     "./tools/email": "./src/tools/email.ts",
     "./tools/custom-web-search": "./src/tools/custom-web-search.ts",
+    "./tools/paths": "./src/tools/paths.ts",
     "./mcp/preinstalled": "./src/mcp/preinstalled.ts"
   },
   "scripts": {

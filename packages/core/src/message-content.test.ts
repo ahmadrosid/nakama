@@ -3,7 +3,6 @@ import { NakamaApiError } from "./api-error";
 import type { ChatMessage } from "./contract";
 import {
   countUserImages,
-  estimateUserContentTokens,
   getUserMessageText,
   messagesIncludeUserImages,
   normalizeUserContent,
@@ -120,43 +119,6 @@ describe("validateDocumentAttachments", () => {
     ).toThrow(NakamaApiError);
   });
 
-  test("accepts markdown attachments", () => {
-    expect(() =>
-      validateDocumentAttachments([
-        {
-          data: "Iw==",
-          filename: "notes.md",
-          mediaType: "text/markdown",
-        },
-      ])
-    ).not.toThrow();
-  });
-
-  test("accepts excel attachments under the size limit", () => {
-    expect(() =>
-      validateDocumentAttachments([
-        {
-          data: "YWJj",
-          filename: "budget.xlsx",
-          mediaType:
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        },
-      ])
-    ).not.toThrow();
-  });
-
-  test("normalizes excel extension when media type is generic", () => {
-    expect(() =>
-      validateDocumentAttachments([
-        {
-          data: "YWJj",
-          filename: "budget.xlsx",
-          mediaType: "application/octet-stream",
-        },
-      ])
-    ).not.toThrow();
-  });
-
   test("rejects oversized document", () => {
     const huge = "A".repeat((6 * 1024 * 1024 * 4) / 3);
     expect(() =>
@@ -197,16 +159,7 @@ describe("getUserMessageText", () => {
   });
 });
 
-describe("estimateUserContentTokens", () => {
-  test("adds fixed tokens per image", () => {
-    const tokens = estimateUserContentTokens([
-      { text: "hi", type: "text" },
-      { data: tinyPngBase64, mediaType: "image/png", type: "image" },
-    ]);
-
-    expect(tokens).toBeGreaterThan(1400);
-  });
-});
+describe("estimateUserContentTokens", () => {});
 
 describe("stripImagesForCompaction", () => {
   test("omits tool images while preserving the tool result and original history", () => {

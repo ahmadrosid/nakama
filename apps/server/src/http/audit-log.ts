@@ -13,6 +13,22 @@ const FIXED_EVENTS = new Map<string, AuditDescriptor>([
   ["PATCH /v1/auth/me", event("account.update", "user")],
   ["POST /v1/auth/accept-invite", event("invite.accept", "invite")],
   ["POST /v1/auth/change-password", event("auth.password_change", "user")],
+  [
+    "POST /v1/auth/password-reset/request",
+    event("auth.password_reset_request", "user"),
+  ],
+  [
+    "POST /v1/auth/password-reset/complete",
+    event("auth.password_reset_complete", "user"),
+  ],
+  ["POST /v1/auth/mfa/totp/verify", event("auth.mfa_totp_enable", "user")],
+  ["POST /v1/auth/mfa/disable", event("auth.mfa_disable", "user")],
+  ["POST /v1/auth/mfa/passkey/verify", event("auth.passkey_register", "user")],
+  ["POST /v1/auth/mfa/passkey/disable", event("auth.passkey_disable", "user")],
+  [
+    "POST /v1/auth/mfa/backup-codes",
+    event("auth.backup_codes_regenerate", "user"),
+  ],
   ["POST /v1/auth/local-token/rotate", event("auth.token_rotate", "token")],
   ["POST /v1/auth/login", event("auth.login", "user")],
   ["POST /v1/auth/logout", event("auth.logout", "session")],
@@ -34,7 +50,8 @@ const FIXED_EVENTS = new Map<string, AuditDescriptor>([
 
 /**
  * Security-event coverage checklist:
- * - authentication: setup, login success/failure, logout, password change, token rotation
+ * - authentication: setup, login success/failure, logout, password change and
+ *   reset, MFA/passkey enrollment and removal, token rotation
  * - authorization: organization/member/invite lifecycle and role changes
  * - configuration: providers and installation settings
  * - sensitive resources: profile/org CRUD, export/import, session revocation
@@ -206,10 +223,27 @@ export function describeAuditEvent(
     return event("profile.export", "profile", match[1]);
   }
 
+  // DELETE /v1/sessions/:id clears or purges a chat session (routes/sessions.ts).
   match = pathname.match(/^\/v1\/sessions\/([^/]+)$/);
 
   if (match && method === "DELETE") {
+    return event("session.delete", "session", match[1]);
+  }
+
+  // DELETE /v1/auth/sessions/:id revokes a browser login session.
+  match = pathname.match(/^\/v1\/auth\/sessions\/([^/]+)$/);
+
+  if (match && method === "DELETE") {
     return event("session.revoke", "session", match[1]);
+  }
+
+  match = pathname.match(/^\/v1\/auth\/users\/([^/]+)\/sessions$/);
+
+  if (match && method === "DELETE") {
+    return {
+      ...event("session.revoke_all", "user", match[1]),
+      orgId: null,
+    };
   }
 
   return null;
@@ -227,10 +261,18 @@ export function createAuditLogMiddleware(
       return;
     }
 
+    // Login names its actor by email. A reset request names its target by
+    // email, and the caller is often anonymous, so that user is the resource.
     let attemptedUserId: string | null = null;
+    let targetUserId: string | null = null;
 
     if (descriptor.action === "auth.login") {
-      attemptedUserId = await resolveLoginUserId(c.req.raw, databaseAdapter);
+      attemptedUserId = await resolveBodyEmailUserId(
+        c.req.raw,
+        databaseAdapter
+      );
+    } else if (descriptor.action === "auth.password_reset_request") {
+      targetUserId = await resolveBodyEmailUserId(c.req.raw, databaseAdapter);
     }
 
     await next();
@@ -268,6 +310,8 @@ export function createAuditLogMiddleware(
         requestId: c.get("requestId") ?? null,
         resourceId:
           descriptor.resourceId ??
+          c.get("auditResourceId") ??
+          targetUserId ??
           responseIdentity.resourceId ??
           (descriptor.resourceType === "user" ? actorUserId : null),
         resourceType: descriptor.resourceType,
@@ -306,20 +350,22 @@ function decodePathPart(value: string | undefined): string | null {
   }
 }
 
-async function resolveLoginUserId(
+async function resolveBodyEmailUserId(
   request: Request,
   databaseAdapter: DatabaseAdapter
 ): Promise<string | null> {
   try {
-    const parsed = loginIdentitySchema.safeParse(await request.clone().json());
+    const parsed = bodyEmailSchema.safeParse(await request.clone().json());
 
-    if (!(parsed.success && parsed.data.email)) {
+    const email = parsed.success
+      ? parsed.data.email?.trim().toLowerCase()
+      : undefined;
+
+    if (!email) {
       return null;
     }
 
-    return (
-      (await databaseAdapter.getUserByEmail(parsed.data.email))?.id ?? null
-    );
+    return (await databaseAdapter.getUserByEmail(email))?.id ?? null;
   } catch {
     return null;
   }
@@ -372,7 +418,7 @@ async function resolveResponseIdentity(response: Response): Promise<{
 
 const optionalIdentityString = z.string().optional().catch(undefined);
 
-const loginIdentitySchema = z.object({
+const bodyEmailSchema = z.object({
   email: optionalIdentityString,
 });
 

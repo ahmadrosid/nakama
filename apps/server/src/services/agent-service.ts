@@ -449,6 +449,18 @@ export interface CreateSessionOptions {
   thinkingEffort?: ThinkingEffort | null;
 }
 
+/** Per-session settings a chat is built with. Branches copy them. */
+type SessionRunSettings = Pick<StoredSessionRecord, "model" | "thinkingEffort">;
+
+/** What a chat is built with besides its stored session record. */
+interface ChatSessionBuildContext {
+  channel: AgentChannel;
+  cognito?: CognitoSessionOptions;
+  isPlatformAdmin?: boolean;
+  orgId: string;
+  orgRole?: OrgRole | null;
+}
+
 /** sub_agent chats one parent may start; the cap proposed on #2036. */
 const MAX_CHILD_SESSIONS = 5;
 
@@ -497,6 +509,8 @@ function assertSessionOwner(
 export class AgentService {
   private userConfig: UserConfig | null;
   private readonly db: DatabaseAdapter;
+  /** The one group service; its in-memory run state lives as long as this. */
+  readonly groups: AgentGroupService;
   private readonly profileService: ProfileService;
   private readonly superNakamaSessionState = new SuperNakamaSessionState();
   private readonly agentTodoState: AgentTodoState;
@@ -550,6 +564,7 @@ export class AgentService {
   ) {
     this.userConfig = userConfig;
     this.db = db;
+    this.groups = new AgentGroupService(db, this);
     this.memoryBackend = new MemoryBackendService(db);
     this.profileService = new ProfileService(db);
     this.orgUsageQuotaService = new OrgUsageQuotaService(db);
@@ -597,13 +612,7 @@ export class AgentService {
         assignSkill: (orgId, profileId, request, meta) =>
           this.assignSkill(orgId, profileId, request, meta),
         createGroup: (orgId, userId, name, memberIds, brief) =>
-          new AgentGroupService(this.db, this).create(
-            orgId,
-            userId,
-            name,
-            memberIds,
-            brief
-          ),
+          this.groups.create(orgId, userId, name, memberIds, brief),
         getModels: () => this.getModels(),
         listSkills: (orgId) => this.listSkills(orgId),
       }
@@ -2641,19 +2650,13 @@ export class AgentService {
       );
     }
 
-    const session = await this.buildChatSession(
+    const session = await this.buildChatSession(record, {
       channel,
+      cognito: cognito ? {} : undefined,
+      isPlatformAdmin: options?.isPlatformAdmin,
       orgId,
-      resolvedProfileId,
-      sessionId,
-      modelOverride,
-      userId ?? null,
-      options?.orgRole,
-      options?.isPlatformAdmin,
-      record.codingWorkspaceRoot ?? undefined,
-      cognito ? {} : undefined,
-      record.thinkingEffort
-    );
+      orgRole: options?.orgRole,
+    });
 
     if (cognito) {
       await this.ephemeralSessions.set({
@@ -2861,7 +2864,7 @@ export class AgentService {
   private async rebuildEphemeralSession(
     entry: EphemeralSession,
     orgId: string,
-    model: string | null
+    settings: Partial<SessionRunSettings> = {}
   ): Promise<boolean> {
     const channel = parseAgentChannel(entry.record.channel);
 
@@ -2880,20 +2883,17 @@ export class AgentService {
     );
 
     const session = await this.buildChatSession(
-      channel,
-      orgId,
-      entry.record.profileId,
-      entry.record.id,
-      model,
-      entry.record.userId ?? null,
-      orgRole,
-      isPlatformAdmin,
-      entry.record.codingWorkspaceRoot ?? undefined,
-      { initialHistory: [...entry.session.getHistory()] },
-      entry.record.thinkingEffort
+      { ...entry.record, ...settings },
+      {
+        channel,
+        cognito: { initialHistory: [...entry.session.getHistory()] },
+        isPlatformAdmin,
+        orgId,
+        orgRole,
+      }
     );
 
-    entry.record.model = model;
+    Object.assign(entry.record, settings);
     entry.session = session;
     entry.sharedCapabilityRevision = sharedCapabilityRevision;
     await this.ephemeralSessions.set(entry);
@@ -3061,7 +3061,7 @@ export class AgentService {
       ? `${sourceTitle} (Branch)`
       : "Untitled (Branch)";
 
-    await this.db.upsertSession({
+    const branchRecord: StoredSessionRecord = {
       agentQuestionnaire: null,
       agentTodos: [],
       branchMessageIndex: messageIndex,
@@ -3075,7 +3075,9 @@ export class AgentService {
       thinkingEffort: record.thinkingEffort ?? null,
       title: null,
       userId: record.userId ?? null,
-    });
+    };
+
+    await this.db.upsertSession(branchRecord);
 
     await copySessionHistoryArchive(this.db, orgId, sessionId, nextSessionId);
     await this.db.replaceMessagesForSession(
@@ -3102,19 +3104,12 @@ export class AgentService {
     const { isPlatformAdmin: branchIsPlatformAdmin, orgRole: branchOrgRole } =
       await this.resolveSessionAccess(profileOrgId, record.userId);
 
-    const session = await this.buildChatSession(
+    const session = await this.buildChatSession(branchRecord, {
       channel,
-      profileOrgId,
-      record.profileId,
-      nextSessionId,
-      record.model,
-      record.userId ?? null,
-      branchOrgRole,
-      branchIsPlatformAdmin,
-      record.codingWorkspaceRoot ?? undefined,
-      undefined,
-      record.thinkingEffort
-    );
+      isPlatformAdmin: branchIsPlatformAdmin,
+      orgId: profileOrgId,
+      orgRole: branchOrgRole,
+    });
 
     this.cacheSession(nextSessionId, {
       channel,
@@ -3297,7 +3292,7 @@ export class AgentService {
       if (
         (ephemeral.sharedCapabilityRevision ?? "") !==
           sharedCapabilityRevision &&
-        !(await this.rebuildEphemeralSession(ephemeral, orgId, record.model))
+        !(await this.rebuildEphemeralSession(ephemeral, orgId))
       ) {
         throw new NakamaApiError("Session refresh failed. Try again.", 503);
       }
@@ -3330,19 +3325,12 @@ export class AgentService {
     const { isPlatformAdmin: resumeIsPlatformAdmin, orgRole: resumeOrgRole } =
       await this.resolveSessionAccess(profileOrgId, record.userId);
 
-    const session = await this.buildChatSession(
+    const session = await this.buildChatSession(record, {
       channel,
-      profileOrgId,
-      record.profileId,
-      sessionId,
-      record.model,
-      record.userId ?? null,
-      resumeOrgRole,
-      resumeIsPlatformAdmin,
-      record.codingWorkspaceRoot ?? undefined,
-      undefined,
-      record.thinkingEffort
-    );
+      isPlatformAdmin: resumeIsPlatformAdmin,
+      orgId: profileOrgId,
+      orgRole: resumeOrgRole,
+    });
 
     this.cacheSession(sessionId, {
       channel,
@@ -3355,10 +3343,14 @@ export class AgentService {
     return session;
   }
 
-  async updateSessionModel(
+  /**
+   * Changes the settings a chat is built with. It waits for the running turn,
+   * because the next turn needs a chat built with the new settings.
+   */
+  async updateSessionRunSettings(
     sessionId: string,
     orgId: string,
-    model: string | null
+    changes: Partial<SessionRunSettings>
   ): Promise<boolean> {
     const record = await this.getSessionRecordForOrg(sessionId, orgId);
 
@@ -3370,85 +3362,55 @@ export class AgentService {
 
     if (!turn.started) {
       throw new NakamaApiError(
-        "Wait for the current response before changing models.",
+        "Wait for the current response before changing chat settings.",
         409
       );
     }
 
     try {
-      const normalizedModel = this.normalizeSessionModelOverride(model);
+      const next: Partial<SessionRunSettings> = {};
 
-      if (record.model === normalizedModel) {
+      if (changes.model !== undefined) {
+        const model = this.normalizeSessionModelOverride(changes.model);
+
+        if (model !== record.model) {
+          next.model = model;
+        }
+      }
+
+      if (
+        changes.thinkingEffort !== undefined &&
+        changes.thinkingEffort !== (record.thinkingEffort ?? null)
+      ) {
+        next.thinkingEffort = changes.thinkingEffort;
+      }
+
+      if (next.model === undefined && next.thinkingEffort === undefined) {
         return true;
       }
 
       const ephemeral = this.ephemeralSessions.get(sessionId);
 
       if (ephemeral) {
-        return await this.rebuildEphemeralSession(
-          ephemeral,
-          orgId,
-          normalizedModel
-        );
+        return await this.rebuildEphemeralSession(ephemeral, orgId, next);
       }
 
-      const updated = await this.db.updateSessionModel(
-        sessionId,
-        normalizedModel
-      );
+      let updated = true;
 
-      if (updated) {
-        this.sessions.delete(sessionId);
-      }
+      try {
+        if (next.model !== undefined) {
+          updated = await this.db.updateSessionModel(sessionId, next.model);
+        }
 
-      return updated;
-    } finally {
-      sessionTurnRegistry.cancelTurn(sessionId);
-    }
-  }
-  async updateSessionThinkingEffort(
-    sessionId: string,
-    orgId: string,
-    effort: ThinkingEffort | null
-  ): Promise<boolean> {
-    const record = await this.getSessionRecordForOrg(sessionId, orgId);
-
-    if (!record) {
-      return false;
-    }
-
-    const turn = sessionTurnRegistry.beginTurn(sessionId);
-
-    if (!turn.started) {
-      throw new NakamaApiError(
-        "Wait for the current response before changing thinking effort.",
-        409
-      );
-    }
-
-    try {
-      if ((record.thinkingEffort ?? null) === effort) {
-        return true;
-      }
-
-      const ephemeral = this.ephemeralSessions.get(sessionId);
-
-      if (ephemeral) {
-        ephemeral.record.thinkingEffort = effort;
-
-        return await this.rebuildEphemeralSession(
-          ephemeral,
-          orgId,
-          ephemeral.record.model
-        );
-      }
-
-      const updated = await this.db.updateSessionThinkingEffort(
-        sessionId,
-        effort
-      );
-
-      if (updated) {
+        if (updated && next.thinkingEffort !== undefined) {
+          updated = await this.db.updateSessionThinkingEffort(
+            sessionId,
+            next.thinkingEffort
+          );
+        }
+      } finally {
+        // One write can land before the next fails. Drop the cached chat so
+        // the next turn is built from the stored row, not the old settings.
         this.sessions.delete(sessionId);
       }
 
@@ -6446,24 +6408,24 @@ export class AgentService {
   }
 
   private async buildChatSession(
-    channel: AgentChannel,
-    orgId: string,
-    profileId: string,
-    sessionId: string,
-    modelOverride: string | null,
-    userId?: string | null,
-    orgRole?: OrgRole | null,
-    isPlatformAdmin?: boolean,
-    codingWorkspaceRoot?: string,
-    cognito?: CognitoSessionOptions,
-    thinkingEffort?: ThinkingEffort | null
+    record: StoredSessionRecord,
+    {
+      channel,
+      cognito,
+      isPlatformAdmin,
+      orgId,
+      orgRole,
+    }: ChatSessionBuildContext
   ): Promise<AgentChatSession> {
+    const { id: sessionId, model: modelOverride, profileId, userId } = record;
     await this.refreshManagedProviderKeys();
     await this.ensureVisionSettingsLoaded();
     const profile = await this.requireExecutionProfile(orgId, profileId);
 
     // A stored CLI folder can be moved or deleted after the chat started.
     // Then the chat goes back to the profile workspace.
+    const { codingWorkspaceRoot } = record;
+
     const codingRoot =
       codingWorkspaceRoot && existsSync(codingWorkspaceRoot)
         ? codingWorkspaceRoot
@@ -6476,11 +6438,10 @@ export class AgentService {
     // A chat sub_agent started runs with nobody watching, so it gets the same
     // limits as the in-memory sub-agent run. A branch has a parent too, but it
     // also has the message it branched at.
-    const sessionRecord = cognito ? null : await this.db.getSession(sessionId);
-
     const subAgentChat = Boolean(
-      sessionRecord?.parentSessionId &&
-        (sessionRecord.branchMessageIndex ?? null) === null
+      !cognito &&
+        record.parentSessionId &&
+        (record.branchMessageIndex ?? null) === null
     );
 
     const pluginOrgRole =
@@ -6572,7 +6533,7 @@ export class AgentService {
       undefined,
       {
         ...workspaceThinking,
-        effort: thinkingEffort ?? workspaceThinking.effort,
+        effort: record.thinkingEffort ?? workspaceThinking.effort,
       }
     );
 

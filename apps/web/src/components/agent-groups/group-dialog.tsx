@@ -1,5 +1,5 @@
 import type { ProfileSummary } from "@nakama/core";
-import type { AgentGroup } from "@nakama/core/agent-groups";
+import { type AgentGroup, groupRoster } from "@nakama/core/agent-groups";
 import type { ImageAttachment } from "@nakama/core/contract";
 import { MAX_IMAGE_BYTES, parseDataUrl } from "@nakama/core/message-content";
 import {
@@ -36,10 +36,8 @@ function MemberPicker({
 }) {
   const [search, setSearch] = useState("");
   const needle = search.trim().toLowerCase();
-  const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
   const chosen = new Set(memberIds);
-
-  const selected = memberIds.flatMap((id) => profileById.get(id) ?? []);
+  const selected = groupRoster({ handles: {}, memberIds }, profiles).members;
 
   const matches = profiles.filter(
     (profile) =>

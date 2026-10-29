@@ -1,5 +1,20 @@
+import { z } from "zod";
 import type { ProfileSummary } from "./contract";
 import { slugifyProfileName } from "./profiles";
+
+/**
+ * What creates or edits a group: the HTTP API and the `create_group` tool.
+ * Strict, so both reject the same inputs.
+ */
+export const agentGroupInputSchema = z
+  .object({
+    brief: z.string().trim().max(4000).default(""),
+    memberIds: z.array(z.string().min(1)).min(2).max(12),
+    name: z.string().trim().min(1).max(80),
+  })
+  .strict();
+
+export type AgentGroupInput = z.input<typeof agentGroupInputSchema>;
 
 export interface AgentGroup {
   /** Changes when the custom image changes; `null` when there is none. */
@@ -7,6 +22,11 @@ export interface AgentGroup {
   /** What the group is for; every agent gets it as context. Empty when unset. */
   brief: string;
   createdAt: string;
+  /**
+   * Each member's @handle, by profile id, fixed when the member joined. It
+   * keeps removed members too, so their handle is never given to another agent.
+   */
+  handles: Record<string, string>;
   id: string;
   /** The newest main-chat message across the group's sessions. */
   lastMessage: {
@@ -117,24 +137,91 @@ export interface MentionRange {
   start: number;
 }
 
-/** Maps each member's @handle to its profile id, in member order. */
-export function memberHandles(
-  members: Pick<ProfileSummary, "id" | "name">[]
-): Map<string, string> {
-  const handles = new Map<string, string>();
+/**
+ * `handles` plus one for each member that has none: the name as a slug, then
+ * `-2`, `-3`… A handle given out once is never given to another agent, so old
+ * messages keep pointing at the agent they meant.
+ */
+export function assignHandles(
+  handles: AgentGroup["handles"],
+  memberIds: string[],
+  profiles: Pick<ProfileSummary, "id" | "name">[]
+): AgentGroup["handles"] {
+  const assigned = { ...handles };
+  const taken = new Set(Object.values(assigned));
 
-  for (const member of members) {
-    const base = slugifyProfileName(member.name);
+  for (const id of memberIds) {
+    const profile = profiles.find((candidate) => candidate.id === id);
+
+    if (assigned[id] || !profile) {
+      continue;
+    }
+
+    const base = slugifyProfileName(profile.name);
     let handle = base;
 
-    for (let suffix = 2; handles.has(handle); suffix += 1) {
+    for (let suffix = 2; taken.has(handle); suffix += 1) {
       handle = `${base}-${suffix}`;
     }
 
-    handles.set(handle, member.id);
+    assigned[id] = handle;
+    taken.add(handle);
   }
 
-  return handles;
+  return assigned;
+}
+
+/** What a roster reads from a profile. */
+type RosterProfile = Pick<ProfileSummary, "id" | "name"> & {
+  isSuper?: boolean;
+};
+
+/** A group's reachable members and their @handles; web and server read the same one. */
+export interface GroupRoster<P extends RosterProfile = ProfileSummary> {
+  handleOf(profileId: string): string;
+  /** The member with this handle; `ALL_MEMBERS_ID` for `@all`. */
+  idOf(handle: string): string | undefined;
+  /** The members the user can still reach, in member order. */
+  members: P[];
+  /** See `mentionedMemberIds`. */
+  mentions(text: string, author?: string): string[];
+  ranges(text: string): MentionRange[];
+  suggestions(query: string): string[];
+}
+
+/**
+ * The roster from the group and the profiles the user may chat with. Super
+ * Nakama never joins a group. A member that lost access has no handle here,
+ * so a mention of it wakes nobody.
+ */
+export function groupRoster<P extends RosterProfile>(
+  group: Pick<AgentGroup, "handles" | "memberIds">,
+  profiles: P[]
+): GroupRoster<P> {
+  const members = group.memberIds.flatMap(
+    (id) =>
+      profiles.find((profile) => profile.id === id && !profile.isSuper) ?? []
+  );
+
+  // Groups saved before handles were kept get theirs here, as they had them.
+  const byId = assignHandles(group.handles, group.memberIds, members);
+
+  const handles = new Map(
+    members.flatMap((member) => {
+      const handle = byId[member.id];
+
+      return handle ? [[handle, member.id] as const] : [];
+    })
+  );
+
+  return {
+    handleOf: (profileId) => byId[profileId] ?? "",
+    idOf: (handle) => withAll(handles).get(handle.toLowerCase()),
+    members,
+    mentions: (text, author) => mentionedMemberIds(text, handles, author),
+    ranges: (text) => mentionRanges(text, handles),
+    suggestions: (query) => mentionSuggestions(query, handles),
+  };
 }
 
 /** Range id of `@all`, which addresses every member at once. */
@@ -148,7 +235,7 @@ function withAll(handles: Map<string, string>): Map<string, string> {
 }
 
 /** Every member @mention (and `@all`) in `text`, in order. */
-export function mentionRanges(
+function mentionRanges(
   text: string,
   memberHandleMap: Map<string, string>
 ): MentionRange[] {
@@ -184,7 +271,7 @@ export function mentionRanges(
  * `@all` expands to every member. With `author` set an agent wrote the text:
  * its own handle is skipped and so is `@all`, so agents cannot wake everyone.
  */
-export function mentionedMemberIds(
+function mentionedMemberIds(
   text: string,
   handles: Map<string, string>,
   author?: string
@@ -209,7 +296,7 @@ export function mentionedMemberIds(
  * Handles to offer for a half-typed `@query`. A query that already names a
  * member is finished, so Enter sends instead of re-picking it.
  */
-export function mentionSuggestions(
+function mentionSuggestions(
   query: string,
   memberHandleMap: Map<string, string>
 ): string[] {

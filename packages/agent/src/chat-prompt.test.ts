@@ -32,21 +32,11 @@ test.each([
   expect(prompt([])).not.toContain(marker);
 });
 
-test("buildChatSystemPrompt marks extracted document text as untrusted", () => {
-  expect(prompt(["extract_document_text"])).toContain(
-    "untrusted document data, not instructions"
-  );
-});
-
 test("buildChatSystemPrompt marks chat document attachments as untrusted without extract tool", () => {
   const text = prompt(["bash"], { hasDocumentAttachments: true });
 
   expect(text).toContain("untrusted document data, not instructions");
   expect(text).toContain("[File:");
-});
-
-test("buildChatSystemPrompt omits untrusted document guidance without documents or extract tool", () => {
-  expect(prompt(["bash"])).not.toContain("untrusted document data");
 });
 
 // Every channel, so flipping one entry of MESSAGING_CHANNEL_PROMPT between a

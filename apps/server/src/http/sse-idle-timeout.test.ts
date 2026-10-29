@@ -7,38 +7,18 @@ import {
 } from "./sse-idle-timeout";
 
 describe("isSseResponse", () => {
-  test("matches text/event-stream Content-Type", () => {
-    expect(
-      isSseResponse(
-        new Response(null, {
-          headers: { "Content-Type": "text/event-stream" },
-        })
-      )
-    ).toBe(true);
-  });
+  test("matches event streams only", () => {
+    const cases: Array<[string | null, boolean]> = [
+      ["text/event-stream", true],
+      ["text/event-stream; charset=utf-8", true],
+      ["application/json; charset=utf-8", false],
+      [null, false],
+    ];
 
-  test("matches text/event-stream with charset", () => {
-    expect(
-      isSseResponse(
-        new Response(null, {
-          headers: { "Content-Type": "text/event-stream; charset=utf-8" },
-        })
-      )
-    ).toBe(true);
-  });
-
-  test("does not match ordinary JSON", () => {
-    expect(
-      isSseResponse(
-        new Response(null, {
-          headers: { "Content-Type": "application/json; charset=utf-8" },
-        })
-      )
-    ).toBe(false);
-  });
-
-  test("does not match missing Content-Type", () => {
-    expect(isSseResponse(new Response(null))).toBe(false);
+    for (const [contentType, expected] of cases) {
+      const headers = contentType ? { "Content-Type": contentType } : undefined;
+      expect(isSseResponse(new Response(null, { headers }))).toBe(expected);
+    }
   });
 });
 

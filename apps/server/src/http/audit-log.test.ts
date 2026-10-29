@@ -18,6 +18,21 @@ describe("audit event coverage", () => {
       ["POST", "/v1/auth/login", "auth.login"],
       ["POST", "/v1/auth/logout", "auth.logout"],
       ["POST", "/v1/auth/change-password", "auth.password_change"],
+      [
+        "POST",
+        "/v1/auth/password-reset/request",
+        "auth.password_reset_request",
+      ],
+      [
+        "POST",
+        "/v1/auth/password-reset/complete",
+        "auth.password_reset_complete",
+      ],
+      ["POST", "/v1/auth/mfa/totp/verify", "auth.mfa_totp_enable"],
+      ["POST", "/v1/auth/mfa/disable", "auth.mfa_disable"],
+      ["POST", "/v1/auth/mfa/passkey/verify", "auth.passkey_register"],
+      ["POST", "/v1/auth/mfa/passkey/disable", "auth.passkey_disable"],
+      ["POST", "/v1/auth/mfa/backup-codes", "auth.backup_codes_regenerate"],
       ["POST", "/v1/auth/local-token/rotate", "auth.token_rotate"],
       ["POST", "/v1/auth/active-org", "auth.active_org"],
       ["POST", "/v1/auth/setup/import/restore", "data.import"],
@@ -56,7 +71,9 @@ describe("audit event coverage", () => {
         "/v1/profiles/profile_1/soul/files/USER.md",
         "profile.soul_update",
       ],
-      ["DELETE", "/v1/sessions/session_1", "session.revoke"],
+      ["DELETE", "/v1/sessions/session_1", "session.delete"],
+      ["DELETE", "/v1/auth/sessions/session_1", "session.revoke"],
+      ["DELETE", "/v1/auth/users/user_1/sessions", "session.revoke_all"],
     ] as const) {
       expect(describeAuditEvent(method, path)?.action).toBe(action);
     }
@@ -118,6 +135,28 @@ describe("audit event coverage", () => {
         "PUT",
         "/v1/profiles/:profileId/soul/files/:fileKey",
         "/v1/profiles/profile_1/soul/files/USER.md",
+      ],
+      [
+        "POST",
+        "/v1/auth/password-reset/request",
+        "/v1/auth/password-reset/request",
+      ],
+      [
+        "POST",
+        "/v1/auth/password-reset/complete",
+        "/v1/auth/password-reset/complete",
+      ],
+      ["POST", "/v1/auth/mfa/totp/verify", "/v1/auth/mfa/totp/verify"],
+      ["POST", "/v1/auth/mfa/disable", "/v1/auth/mfa/disable"],
+      ["POST", "/v1/auth/mfa/passkey/verify", "/v1/auth/mfa/passkey/verify"],
+      ["POST", "/v1/auth/mfa/passkey/disable", "/v1/auth/mfa/passkey/disable"],
+      ["POST", "/v1/auth/mfa/backup-codes", "/v1/auth/mfa/backup-codes"],
+      ["DELETE", "/v1/auth/sessions/:sessionId", "/v1/auth/sessions/session_1"],
+      ["DELETE", "/v1/sessions/:sessionId", "/v1/sessions/session_1"],
+      [
+        "DELETE",
+        "/v1/auth/users/:userId/sessions",
+        "/v1/auth/users/user_1/sessions",
       ],
     ] as const;
 
@@ -372,6 +411,153 @@ describe("audit event API", () => {
         metadata: { outcome: "success", status: 200 },
         orgId: "org_test",
         resourceType: "invite",
+      }),
+    ]);
+  });
+
+  test("records the target of an anonymous password reset request", async () => {
+    const { app, databaseAdapter } = createMinimalHonoApp();
+    await seedOrgAdmin(databaseAdapter);
+
+    const requested = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/password-reset/request", {
+        body: JSON.stringify({ email: " Admin@Example.com " }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+
+    expect(requested.status).toBe(200);
+
+    expect(
+      await databaseAdapter.listAuditEvents({
+        action: "auth.password_reset_request",
+      })
+    ).toEqual([
+      expect.objectContaining({
+        actorUserId: null,
+        metadata: { outcome: "success", status: 200 },
+        resourceId: "user_admin",
+        resourceType: "user",
+      }),
+    ]);
+  });
+
+  test("records whose password a platform admin reset", async () => {
+    const { app, authService, databaseAdapter } = createMinimalHonoApp();
+    const fetchApp: AppFetch = app;
+    await seedOrgAdmin(databaseAdapter, { authService });
+
+    const session = await loginPlatformAdminSession(
+      fetchApp,
+      authService,
+      databaseAdapter
+    );
+
+    const platformUser = await databaseAdapter.getUserByEmail(
+      "platform@example.com"
+    );
+
+    const requested = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/password-reset/request", {
+        body: JSON.stringify({ email: "admin@example.com" }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    expect(requested.status).toBe(200);
+
+    // SAFETY: No mailer is configured, so a platform admin gets the token
+    // back in the response body; the assertion below pins that.
+    const { token } = (await requested.json()) as { token: string | null };
+    expect(token).toBeTruthy();
+
+    const completed = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/password-reset/complete", {
+        body: JSON.stringify({ newPassword: "new-password-123", token }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+
+    expect(completed.status).toBe(200);
+
+    expect(
+      await databaseAdapter.listAuditEvents({
+        action: "auth.password_reset_request",
+      })
+    ).toEqual([
+      expect.objectContaining({
+        actorUserId: platformUser?.id,
+        resourceId: "user_admin",
+      }),
+    ]);
+    expect(
+      await databaseAdapter.listAuditEvents({
+        action: "auth.password_reset_complete",
+      })
+    ).toEqual([
+      expect.objectContaining({
+        actorUserId: null,
+        metadata: { outcome: "success", status: 200 },
+        resourceId: "user_admin",
+        resourceType: "user",
+      }),
+    ]);
+  });
+
+  test("records a session revocation", async () => {
+    const { app, databaseAdapter } = createMinimalHonoApp();
+    const fetchApp: AppFetch = app;
+
+    const member = await seedOrgAdmin(databaseAdapter);
+
+    const session = await loginUserSession(
+      fetchApp,
+      member.email,
+      member.password,
+      member.orgId
+    );
+
+    const listed = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/sessions", {
+        headers: session.headers(),
+      })
+    );
+
+    expect(listed.status).toBe(200);
+
+    // SAFETY: GET /v1/auth/sessions answers with ListBrowserSessionsResponse.
+    const { sessions } = (await listed.json()) as {
+      sessions: { id: string; current: boolean }[];
+    };
+
+    expect(sessions.length).toBeGreaterThan(0);
+    const target = sessions.find((s) => !s.current)?.id ?? sessions[0]!.id;
+
+    const revoked = await app.fetch(
+      new Request(`http://localhost:4310/v1/auth/sessions/${target}`, {
+        headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
+        method: "DELETE",
+      })
+    );
+
+    expect(revoked.status).toBe(200);
+
+    const events = await databaseAdapter.listAuditEvents({
+      action: "session.revoke",
+    });
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        action: "session.revoke",
+        metadata: { outcome: "success", status: 200 },
+        resourceId: target,
+        resourceType: "session",
       }),
     ]);
   });

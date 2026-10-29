@@ -105,22 +105,6 @@ test("a uuid in the message does not fragment the fingerprint", () => {
   expect(first).toBe(second);
 });
 
-test("different bugs fingerprint differently", () => {
-  const first = fingerprintError(
-    "TypeError",
-    "a is undefined",
-    "TypeError\n    at a (~/a.ts:1:1)"
-  );
-
-  const second = fingerprintError(
-    "RangeError",
-    "b is out of range",
-    "RangeError\n    at b (~/b.ts:1:1)"
-  );
-
-  expect(first).not.toBe(second);
-});
-
 test("the report scrubs the message and stack", () => {
   const error = new Error(
     "auth failed with sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345"

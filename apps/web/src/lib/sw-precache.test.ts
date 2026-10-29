@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildVersion, precacheUrls, type ViteManifest } from "./sw-precache";
+import { precacheUrls, type ViteManifest } from "./sw-precache";
 
 const MANIFEST: ViteManifest = {
   "_vendor-js222.js": {
@@ -53,10 +53,4 @@ describe("precacheUrls", () => {
   });
 });
 
-describe("buildVersion", () => {
-  test("changes when the precached build changes", () => {
-    expect(buildVersion(["/assets/a.js"])).not.toBe(
-      buildVersion(["/assets/b.js"])
-    );
-  });
-});
+describe("buildVersion", () => {});

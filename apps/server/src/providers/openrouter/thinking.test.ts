@@ -16,21 +16,13 @@ describe("openRouterModelSupportsThinking", () => {
     ).toBe(false);
   });
 
-  test("denies catalog Llama model", () => {
-    expect(openRouterModelSupportsThinking("meta-llama/llama-4-maverick")).toBe(
-      false
-    );
-  });
-
-  test("denies unknown custom Llama slugs", () => {
-    expect(openRouterModelSupportsThinking("meta-llama/llama-3.3-70b")).toBe(
-      false
-    );
-  });
-
-  test("denies unknown custom slugs by default", () => {
-    expect(openRouterModelSupportsThinking("some-vendor/some-model")).toBe(
-      false
-    );
+  test("denies Llama and unknown slugs by default", () => {
+    for (const model of [
+      "meta-llama/llama-4-maverick",
+      "meta-llama/llama-3.3-70b",
+      "some-vendor/some-model",
+    ]) {
+      expect(openRouterModelSupportsThinking(model)).toBe(false);
+    }
   });
 });

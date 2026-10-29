@@ -2,6 +2,7 @@ import type { ProfileSummary } from "@nakama/core";
 import type {
   AgentGroupMessage,
   AgentGroupRun,
+  GroupRoster,
 } from "@nakama/core/agent-groups";
 import { cn } from "@nakama/ui/utils";
 import {
@@ -219,19 +220,19 @@ function TypingRow({
 
 /** The group transcript, laid out and pinned to the bottom like agent chat. */
 export function GroupMessageList({
-  handles,
   messages,
   onOpenLive,
   onOpenThread,
   profiles,
+  roster,
   run,
   threadRunIds,
 }: {
-  handles: Map<string, string>;
   messages: AgentGroupMessage[];
   onOpenLive: () => void;
   onOpenThread: (messageId: number) => void;
   profiles: ProfileSummary[];
+  roster: GroupRoster;
   run: AgentGroupRun | null;
   threadRunIds: number[];
 }) {
@@ -241,8 +242,8 @@ export function GroupMessageList({
   const [isAtBottom, setIsAtBottom] = useState(true);
 
   const markdownComponents = useMemo(
-    () => mentionMarkdownComponents(handles, profiles),
-    [handles, profiles]
+    () => mentionMarkdownComponents(roster, profiles),
+    [roster, profiles]
   );
 
   const pin = useCallback((behavior: ScrollBehavior) => {
@@ -417,8 +418,8 @@ export function GroupMessageList({
                             ))}
                             {message.content ? (
                               <MentionText
-                                handles={handles}
                                 profiles={profiles}
+                                roster={roster}
                                 text={message.content}
                               />
                             ) : null}
@@ -467,7 +468,7 @@ export function GroupMessageList({
                                   >
                                     {markMentions(
                                       shortenSharedPaths(message.content),
-                                      handles
+                                      roster
                                     )}
                                   </MessageResponse>
                                 </MessageContent>

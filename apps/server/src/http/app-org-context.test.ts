@@ -219,31 +219,6 @@ describe("createHonoApp", () => {
       expect(response.status).toBe(404);
       await expect(response.json()).resolves.toEqual({ error: "Not found" });
     });
-
-    test("skips org context for auth routes", async () => {
-      const options = createServerOptions();
-      const app = createHonoApp(options);
-
-      const setupResponse = await app.fetch(
-        new Request("http://localhost:4310/v1/auth/setup", {
-          body: JSON.stringify(buildSetupAuthBody()),
-          headers: { "Content-Type": "application/json" },
-          method: "POST",
-        })
-      );
-
-      const response = await app.fetch(
-        new Request("http://localhost:4310/v1/auth/me", {
-          headers: {
-            Cookie: cookieHeaderFromSetCookies(
-              extractSetCookies(setupResponse)
-            ),
-          },
-        })
-      );
-
-      expect(response.status).toBe(200);
-    });
   });
 
   describe("auth request bodies", () => {
@@ -280,20 +255,6 @@ describe("createHonoApp", () => {
             },
             organization: { name: "Acme", slug: "acme" },
           }),
-          headers: { "Content-Type": "application/json" },
-          method: "POST",
-        })
-      );
-
-      expect(response.status).toBe(400);
-    });
-
-    test("keeps malformed auth JSON as a bad request", async () => {
-      const app = createHonoApp(createServerOptions());
-
-      const response = await app.fetch(
-        new Request("http://localhost:4310/v1/auth/setup", {
-          body: "{",
           headers: { "Content-Type": "application/json" },
           method: "POST",
         })

@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { getProfileSoulDir, SOUL_TEMPLATE } from "@nakama/core";
-import { memberHandles } from "@nakama/core/agent-groups";
+import { groupRoster } from "@nakama/core/agent-groups";
 import { setupTestConfigDir } from "../test-config-dir";
 import { groupMemoryTool } from "../tools/group-memory-tool";
 import {
   appendAgentGroupMessage,
   closeAgentGroupDatabases,
+  createAgentGroup,
 } from "./agent-group-store";
 import { ORG_ID, setup, USER_ID } from "./agent-group-test-setup";
 import { threadTranscript, transcript } from "./agent-group-turn";
@@ -498,18 +499,12 @@ describe("AgentGroupService", () => {
       ).id;
     }
 
-    const handles = memberHandles(profiles);
-    const mainBefore = transcript(ORG_ID, sessionId, handles, profiles);
+    const roster = groupRoster(group, profiles);
+    const mainBefore = transcript(ORG_ID, sessionId, roster);
     expect(mainBefore).not.toContain("@alpha hello");
     expect(mainBefore).toContain("Answer");
 
-    const threadBefore = threadTranscript(
-      ORG_ID,
-      sessionId,
-      rootId,
-      handles,
-      profiles
-    );
+    const threadBefore = threadTranscript(ORG_ID, sessionId, rootId, roster);
 
     // More notices than the entire context window must still consume no slots.
     for (const threadRootId of [
@@ -527,8 +522,8 @@ describe("AgentGroupService", () => {
       );
     }
 
-    expect(transcript(ORG_ID, sessionId, handles, profiles)).toBe(mainBefore);
-    expect(threadTranscript(ORG_ID, sessionId, rootId, handles, profiles)).toBe(
+    expect(transcript(ORG_ID, sessionId, roster)).toBe(mainBefore);
+    expect(threadTranscript(ORG_ID, sessionId, rootId, roster)).toBe(
       threadBefore
     );
     expect(
@@ -573,6 +568,53 @@ describe("AgentGroupService", () => {
     expect(
       service.session(ORG_ID, USER_ID, group.id, sessionId).messages.at(-1)
     ).toMatchObject({ authorProfileId: "b", content: "_Skipped: no access_" });
+  });
+
+  test("@alpha-2 keeps its agent after the first Alpha loses access", async () => {
+    const tasks: string[] = [];
+
+    const { calls, chat, profiles, service } = setup(({ task }) => {
+      tasks.push(task);
+
+      return "ok";
+    });
+
+    profiles.push({ ...profiles[0]!, id: "c" });
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "c"]);
+    Object.assign(profiles[0]!, { ownerUserId: "u2", sharedWithTeam: false });
+
+    await chat(group.id, "@alpha-2 hi");
+
+    expect(calls).toEqual(["c"]);
+    expect(tasks[0]).toContain("(@alpha-2)");
+  });
+
+  test("a group saved without handles saves them on its first run", async () => {
+    const { chat, service } = setup(() => "ok");
+    const group = createAgentGroup(ORG_ID, USER_ID, "Team", ["b", "a"]);
+
+    await chat(group.id, "hi");
+
+    expect(service.get(ORG_ID, USER_ID, group.id).handles).toEqual({
+      a: "alpha",
+      b: "beta",
+    });
+  });
+
+  test("an edit of a group saved without handles keeps its old ones", async () => {
+    const { calls, chat, profiles, service } = setup(() => "ok");
+    profiles.push({ ...profiles[0]!, id: "c" });
+    const group = createAgentGroup(ORG_ID, USER_ID, "Team", ["a", "c"]);
+
+    await service.update(ORG_ID, USER_ID, group.id, "Team", ["c"]);
+    await chat(group.id, "@alpha-2 hi");
+
+    expect(service.get(ORG_ID, USER_ID, group.id).handles).toEqual({
+      a: "alpha",
+      c: "alpha-2",
+    });
+    expect(calls).toEqual(["c"]);
   });
 
   test("a user who left the org gets no replies", async () => {

@@ -1688,6 +1688,7 @@ test("create group with invalid group photo", async () => {
     avatarVersion: null,
     brief: "",
     createdAt: "2026-10-22T00:00:00Z",
+    handles: {},
     id: "group-1",
     lastMessage: null,
     memberIds: ["agent-1", "agent-2"],

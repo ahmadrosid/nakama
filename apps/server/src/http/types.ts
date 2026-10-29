@@ -15,6 +15,8 @@ export type AppEnv = {
     server?: RequestAddressSource;
   };
   Variables: RequestIdVariables & {
+    /** Resource id a route resolved itself, for the audit row. */
+    auditResourceId?: string;
     auth: RequestAuthContext;
   };
 };

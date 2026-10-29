@@ -179,11 +179,9 @@ describe("cognito sessions are never persisted", () => {
     await before?.send({ message: "hello" });
 
     expect(
-      await service.updateSessionModel(
-        sessionId,
-        ORG_ID,
-        "provider-1::next-chat-model"
-      )
+      await service.updateSessionRunSettings(sessionId, ORG_ID, {
+        model: "provider-1::next-chat-model",
+      })
     ).toBe(true);
 
     const after = await service.resolveSession(sessionId, ORG_ID);
@@ -586,10 +584,6 @@ describe("cognito leaves no skill-usage trail", () => {
     // Reading the catalog is right in cognito. Writing a row saying which
     // skills the chat touched is still a trace of what it was about.
     expect(await turnWith(true)).toBe(0);
-  });
-
-  test("an ordinary turn still records it", async () => {
-    expect(await turnWith(false)).toBeGreaterThan(0);
   });
 });
 

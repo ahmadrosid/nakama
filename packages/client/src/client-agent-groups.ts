@@ -1,5 +1,6 @@
 import type {
   AgentGroup,
+  AgentGroupInput,
   AgentGroupMemory,
   AgentGroupSession,
   AgentGroupSessionDetail,
@@ -14,12 +15,6 @@ import type {
   ListWorkspaceFilesResponse,
 } from "@nakama/core/contract";
 import { OrgMemoryClient } from "./client-org-memory";
-
-interface AgentGroupInput {
-  brief?: string;
-  memberIds: string[];
-  name: string;
-}
 
 function agentGroupPath(groupId: string): string {
   return `/v1/agent-groups/${encodeURIComponent(groupId)}`;
