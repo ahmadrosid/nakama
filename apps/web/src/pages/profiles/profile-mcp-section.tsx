@@ -1,6 +1,18 @@
 import type { McpServerSummary, ProfileDetail } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
-import { Add01Icon, Delete02Icon, McpServerIcon } from "hugeicons-react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  Add01Icon,
+  Delete02Icon,
+  Loading03Icon as LoaderIcon,
+  McpServerIcon,
+  RefreshIcon,
+} from "hugeicons-react";
+import { useState } from "react";
+import { McpServerAuthorizeDialog } from "@/components/soul-tools/mcp-tab/McpServerAuthorizeDialog";
+import { useConnectMcpServerMutation } from "@/hooks/use-resource-mutations";
+import { formatError } from "@/lib/client";
+import { queryKeys } from "@/lib/query-keys";
 import type { RemoveAssignmentTarget } from "@/pages/profiles/profiles-page.shared";
 
 export function ProfileMcpSection({
@@ -18,6 +30,37 @@ export function ProfileMcpSection({
   onCreateOpen: () => void;
   onRemove: (target: RemoveAssignmentTarget) => void;
 }) {
+  const queryClient = useQueryClient();
+  const connectMutation = useConnectMcpServerMutation();
+
+  const [reconnectingId, setReconnectingId] = useState<string | null>(null);
+  const [reconnectError, setReconnectError] = useState<string | null>(null);
+
+  const [pendingAuth, setPendingAuth] = useState<{
+    name: string;
+    url: string;
+  } | null>(null);
+
+  async function handleReconnect(serverId: string) {
+    setReconnectError(null);
+    setReconnectingId(serverId);
+
+    try {
+      const response = await connectMutation.mutateAsync(serverId);
+
+      if (response.authorizationUrl) {
+        setPendingAuth({
+          name: response.server.name,
+          url: response.authorizationUrl,
+        });
+      }
+    } catch (err) {
+      setReconnectError(formatError(err));
+    } finally {
+      setReconnectingId(null);
+    }
+  }
+
   if (detail.mcpServers.length === 0) {
     return (
       <div className="flex flex-col gap-7 pt-5">
@@ -97,6 +140,26 @@ export function ProfileMcpSection({
         </Button>
       </div>
 
+      {reconnectError ? (
+        <p className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
+          {reconnectError}
+        </p>
+      ) : null}
+
+      <McpServerAuthorizeDialog
+        authorizationUrl={pendingAuth?.url ?? null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setPendingAuth(null);
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.profiles.all,
+            });
+          }
+        }}
+        open={pendingAuth !== null}
+        serverName={pendingAuth?.name ?? ""}
+      />
+
       <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
         {detail.mcpServers.map((server) => (
           <li
@@ -112,19 +175,40 @@ export function ProfileMcpSection({
                 {server.toolCount === 1 ? "" : "s"}
               </p>
             </div>
-            <Button
-              aria-label={`Delete ${server.name}`}
-              className="shrink-0 text-muted-foreground hover:text-destructive"
-              disabled={busy}
-              onClick={() =>
-                onRemove({ id: server.id, kind: "mcp", name: server.name })
-              }
-              size="icon-sm"
-              type="button"
-              variant="ghost"
-            >
-              <Delete02Icon aria-hidden className="size-4" />
-            </Button>
+            <div className="flex shrink-0 items-center gap-1">
+              <Button
+                aria-busy={reconnectingId === server.id}
+                aria-label={`Reconnect ${server.name}`}
+                className="text-muted-foreground"
+                disabled={busy || reconnectingId !== null}
+                onClick={() => void handleReconnect(server.id)}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                {reconnectingId === server.id ? (
+                  <LoaderIcon
+                    aria-hidden
+                    className="size-4 motion-safe:animate-spin"
+                  />
+                ) : (
+                  <RefreshIcon aria-hidden className="size-4" />
+                )}
+              </Button>
+              <Button
+                aria-label={`Delete ${server.name}`}
+                className="text-muted-foreground hover:text-destructive"
+                disabled={busy}
+                onClick={() =>
+                  onRemove({ id: server.id, kind: "mcp", name: server.name })
+                }
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <Delete02Icon aria-hidden className="size-4" />
+              </Button>
+            </div>
           </li>
         ))}
       </ul>
