@@ -120,13 +120,11 @@ export function ProfileMcpSection({
   return (
     <div className="pt-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="font-normal text-muted-foreground/55 text-sm">
-            MCP servers
-          </h3>
-          <p className="type-body mt-1 text-xs">
-            {detail.mcpServers.length} assigned
-          </p>
+        <div className="flex items-center gap-2.5">
+          <h3 className="font-semibold text-foreground text-sm">MCP servers</h3>
+          <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground text-xs tabular-nums">
+            {detail.mcpServers.length}
+          </span>
         </div>
         <Button
           disabled={busy}
@@ -160,13 +158,19 @@ export function ProfileMcpSection({
         serverName={pendingAuth?.name ?? ""}
       />
 
-      <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+      <ul className="flex flex-col gap-2">
         {detail.mcpServers.map((server) => (
           <li
-            className="flex items-center justify-between gap-2 px-4 py-3"
+            className="flex items-center gap-3.5 rounded-xl border border-border bg-muted/40 py-3 pr-3 pl-3.5"
             key={server.id}
           >
-            <div className="min-w-0">
+            <div
+              aria-hidden
+              className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-card font-semibold text-muted-foreground text-sm"
+            >
+              {server.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
               <p className="truncate font-medium text-foreground text-sm leading-tight">
                 {server.name}
               </p>
@@ -175,16 +179,16 @@ export function ProfileMcpSection({
                 {server.toolCount === 1 ? "" : "s"}
               </p>
             </div>
-            <div className="flex shrink-0 items-center gap-1">
+            <div className="flex shrink-0 items-center gap-1.5">
               <Button
                 aria-busy={reconnectingId === server.id}
                 aria-label={`Reconnect ${server.name}`}
-                className="text-muted-foreground"
+                className="bg-card"
                 disabled={busy || reconnectingId !== null}
                 onClick={() => void handleReconnect(server.id)}
-                size="icon-sm"
+                size="sm"
                 type="button"
-                variant="ghost"
+                variant="outline"
               >
                 {reconnectingId === server.id ? (
                   <LoaderIcon
@@ -194,6 +198,7 @@ export function ProfileMcpSection({
                 ) : (
                   <RefreshIcon aria-hidden className="size-4" />
                 )}
+                Reconnect
               </Button>
               <Button
                 aria-label={`Delete ${server.name}`}
