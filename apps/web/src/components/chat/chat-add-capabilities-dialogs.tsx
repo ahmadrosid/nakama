@@ -703,34 +703,16 @@ export function ChatAddCapabilitiesDialogs({
         profileId,
         serverId: response.server.id,
       });
-      onMcpOpenChange(false);
+
+      if (!response.authorizationUrl) {
+        onMcpOpenChange(false);
+      }
+
+      return response;
     } catch (err) {
       const message = formatError(err);
       setError(message);
       throw new Error(message);
-    }
-  }
-
-  async function handleTestMcp(server: (typeof availableMcpServers)[number]) {
-    setError(null);
-
-    try {
-      const result = await client.testMcpServer({
-        config: server.transport === "http" ? { url: "" } : { command: "" },
-        name: server.name,
-        serverId: server.id,
-        transport: server.transport,
-      });
-
-      if (result.ok) {
-        setNotice(
-          `Connection successful. Found ${result.toolCount} tool${result.toolCount === 1 ? "" : "s"}.`
-        );
-      } else {
-        setError(result.error ?? "Connection test failed.");
-      }
-    } catch (err) {
-      setError(formatError(err));
     }
   }
 
@@ -770,7 +752,6 @@ export function ChatAddCapabilitiesDialogs({
           onMcpOpenChange(open);
         }}
         onSubmit={handleCreateMcp}
-        onTestConnection={(server) => void handleTestMcp(server)}
         open={mcpOpen}
       />
       <ChatSkillDialog

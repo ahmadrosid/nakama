@@ -2,6 +2,7 @@ import type {
   CachedMcpToolSummary,
   CreateMcpServerRequest,
   McpHttpConfig,
+  McpServerResponse,
   McpServerSummary,
   McpStdioConfig,
   McpTransport,
@@ -309,7 +310,10 @@ export function useMcpServerDialogState({
   open: boolean;
   busy: boolean;
   server?: McpServerSummary | null;
-  onSubmit: (request: CreateMcpServerRequest) => Promise<void>;
+  /** Return the response so a server that needs a browser sign-in can start it here. */
+  onSubmit: (
+    request: CreateMcpServerRequest
+  ) => Promise<McpServerResponse | void>;
 }) {
   const isEdit = server != null;
 
@@ -330,6 +334,12 @@ export function useMcpServerDialogState({
   const [importOpen, setImportOpen] = useState(false);
   const [importDraft, setImportDraft] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
+
+  const [pendingAuth, setPendingAuth] = useState<{
+    name: string;
+    serverId: string;
+    url: string;
+  } | null>(null);
 
   const transport: McpTransport = kind === "stdio" ? "stdio" : "http";
   const signIn = kind === "signin";
@@ -373,6 +383,7 @@ export function useMcpServerDialogState({
 
   if (formResetKey !== prevFormResetKey) {
     setPrevFormResetKey(formResetKey);
+    setPendingAuth(null);
     applyMcpFormReset({ detail, open, server, setters: formSetters });
   }
 
@@ -480,7 +491,15 @@ export function useMcpServerDialogState({
     setSubmitError(null);
 
     try {
-      await onSubmit(buildRequest());
+      const response = await onSubmit(buildRequest());
+
+      if (response?.authorizationUrl) {
+        setPendingAuth({
+          name: response.server.name,
+          serverId: response.server.id,
+          url: response.authorizationUrl,
+        });
+      }
     } catch (error) {
       setSubmitError(
         error instanceof Error ? error.message : formatError(error)
@@ -509,6 +528,7 @@ export function useMcpServerDialogState({
     loadingForm,
     name,
     openImportDialog,
+    pendingAuth,
     selectKind,
     setArgs,
     setCommand,

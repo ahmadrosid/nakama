@@ -745,10 +745,14 @@ export function mcpServerDetailQueryOptions(serverId: string) {
   });
 }
 
-export function useMcpServerDetailQuery(serverId: string | null) {
+export function useMcpServerDetailQuery(
+  serverId: string | null,
+  { refetchInterval }: { refetchInterval?: number } = {}
+) {
   return useQuery({
     ...mcpServerDetailQueryOptions(serverId ?? ""),
     enabled: Boolean(serverId),
+    refetchInterval,
   });
 }
 

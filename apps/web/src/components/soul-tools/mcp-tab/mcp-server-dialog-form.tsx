@@ -35,12 +35,6 @@ function testResultTone(
   return result.requiresAuthorization ? "pending" : "bad";
 }
 
-const KIND_TITLE: Record<McpServerKind, string> = {
-  http: "HTTP server",
-  signin: "Hosted server",
-  stdio: "Command server",
-};
-
 function kindHint(kind: McpServerKind): string {
   if (kind === "signin") {
     return "A hosted server that signs you in through your browser (OAuth). Nakama registers itself with the provider and stores the grant, so there is no key to paste.";
@@ -166,12 +160,7 @@ export function McpServerDialogForm({
           </div>
           <p className="mt-2 text-muted-foreground text-xs">{kindHint(kind)}</p>
         </McpFormField>
-      ) : (
-        <div className="flex flex-col gap-1">
-          <h3 className="font-semibold text-base">{KIND_TITLE[kind]}</h3>
-          <p className="text-muted-foreground text-sm">{kindHint(kind)}</p>
-        </div>
-      )}
+      ) : null}
 
       <McpFormField htmlFor={`${idPrefix}-name`} label="Name">
         <Input
