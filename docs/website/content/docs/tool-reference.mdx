@@ -311,7 +311,7 @@ Read the stored transcript of a session belonging to **another agent profile in 
 
 ## `close_session`
 
-Close one of the user's chats when they ask, for example a chat `sub_agent` started. A running turn is asked to stop, and the chat leaves **Recents**. Nothing is deleted: the chat still shows up in Recents search and at its link, and sending it a message brings it back.
+Close one of the user's chats when they ask, for example a chat `sub_agent` started. A running turn is asked to stop, and the chat leaves **Recents**, with any chats `sub_agent` started from it. Branches stay. Nothing is deleted: the chat still shows up in Recents search and at its link, and sending it a message brings it back.
 
 | Parameter | Type | Required | Notes |
 |-----------|------|----------|-------|

@@ -172,6 +172,49 @@ describe("listSessions reports the live turn", () => {
     sessionTurnRegistry.cancelTurn(sessionId);
   });
 
+  test("closing a chat closes the chats sub_agent started from it, not its branches", async () => {
+    const { db, service } = await createService();
+
+    const parentId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      USER.id
+    );
+
+    await seedFirstMessage(db, parentId);
+
+    const childId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      USER.id,
+      { parentSessionId: parentId }
+    );
+
+    await seedFirstMessage(db, childId);
+
+    const branch = await service.branchSession(parentId, 0, ORG_ID);
+
+    expect(await db.getSession(branch?.sessionId ?? "")).not.toBeNull();
+
+    const childAbort = new AbortController();
+    expect(sessionTurnRegistry.beginTurn(childId).started).toBe(true);
+    sessionTurnRegistry.attachAbort(childId, childAbort);
+
+    expect(await service.closeSession(parentId, ORG_ID, { user: USER })).toBe(
+      true
+    );
+
+    expect(childAbort.signal.aborted).toBe(true);
+    expect((await db.getSession(childId))?.closedAt).toBeString();
+    expect(
+      (await db.getSession(branch?.sessionId ?? ""))?.closedAt ?? null
+    ).toBeNull();
+
+    sessionTurnRegistry.cancelTurn(childId);
+  });
+
   test("a session is active only while its turn is running", async () => {
     const { db, service } = await createService();
 

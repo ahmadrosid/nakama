@@ -3472,17 +3472,31 @@ export class AgentService {
       throw new NakamaApiError("Session not found", 404);
     }
 
+    const closedAt = new Date().toISOString();
+
     // Write first: a row the update cannot reach must keep its turn running.
-    if (
-      !(await this.db.updateSessionClosedAt(
-        sessionId,
-        new Date().toISOString()
-      ))
-    ) {
+    if (!(await this.db.updateSessionClosedAt(sessionId, closedAt))) {
       return false;
     }
 
     sessionTurnRegistry.stopTurn(sessionId);
+
+    // Chats sub_agent started here go with it, or Recents keeps them without
+    // their parent. A branch has a parent too but stays: it is its own chat.
+    const sessions = record.userId
+      ? await this.db.listSessionsForUser(record.userId)
+      : await this.db.listSessions();
+
+    for (const child of sessions) {
+      if (
+        child.parentSessionId === sessionId &&
+        (child.branchMessageIndex ?? null) === null &&
+        !child.closedAt &&
+        (await this.db.updateSessionClosedAt(child.id, closedAt))
+      ) {
+        sessionTurnRegistry.stopTurn(child.id);
+      }
+    }
 
     return true;
   }
