@@ -624,7 +624,15 @@ export class AgentGroupService {
       throw new NakamaApiError("You cannot use one of these agents.", 403);
     }
 
-    return assignHandles(kept.handles ?? {}, memberIds, profiles);
+    // A group saved before handles were kept gets its old ones first, in the
+    // old member order, so the edit does not move a handle to another agent.
+    const before = assignHandles(
+      kept.handles ?? {},
+      kept.memberIds ?? [],
+      profiles
+    );
+
+    return assignHandles(before, memberIds, profiles);
   }
 
   /**

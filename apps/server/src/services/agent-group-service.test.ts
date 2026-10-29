@@ -602,6 +602,21 @@ describe("AgentGroupService", () => {
     });
   });
 
+  test("an edit of a group saved without handles keeps its old ones", async () => {
+    const { calls, chat, profiles, service } = setup(() => "ok");
+    profiles.push({ ...profiles[0]!, id: "c" });
+    const group = createAgentGroup(ORG_ID, USER_ID, "Team", ["a", "c"]);
+
+    await service.update(ORG_ID, USER_ID, group.id, "Team", ["c"]);
+    await chat(group.id, "@alpha-2 hi");
+
+    expect(service.get(ORG_ID, USER_ID, group.id).handles).toEqual({
+      a: "alpha",
+      c: "alpha-2",
+    });
+    expect(calls).toEqual(["c"]);
+  });
+
   test("a user who left the org gets no replies", async () => {
     const { calls, chat, service, state } = setup(() => "ok");
     const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
