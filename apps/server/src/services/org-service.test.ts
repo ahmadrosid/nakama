@@ -3746,7 +3746,9 @@ if __name__ == "__main__":
         expect(second.getHistory()).toEqual(history);
         expect(selections).toEqual(["second::same-model", "first::same-model"]);
         expect(
-          await agent.updateSessionModel(id, "org_team_a", "second::same-model")
+          await agent.updateSessionRunSettings(id, "org_team_a", {
+            model: "second::same-model",
+          })
         ).toBe(true);
         const overridden = (await agent.resolveSession(id, "org_team_a"))!;
         expect(overridden.getHistory()).toEqual(history);

@@ -1,8 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import type { ProviderInstance } from "@nakama/core";
+import type { AgentDependencies } from "@nakama/agent";
+import type {
+  ProviderInstance,
+  ToolContext,
+  ToolDefinition,
+} from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
+  type StoredProfileRecord,
 } from "@nakama/db";
 import { AgentService } from "./agent-service";
 import { createDefaultProfile } from "./agent-service-test-fixtures";
@@ -15,6 +21,20 @@ interface AgentServiceProviderOptionsAccess {
     providerInstance: ProviderInstance,
     thinkingSettings: { enabled: boolean; effort: "low" | "medium" | "high" }
   ) => { thinking?: { enabled: boolean; effort: string } } | undefined;
+}
+
+type CreateHarnessForProfile = (
+  profile: StoredProfileRecord,
+  selectedModel: string | null,
+  userId?: string | null,
+  acpSessionKey?: string,
+  acpTools?: { context: ToolContext; tools: ToolDefinition[] },
+  thinking?: { effort?: string }
+) => AgentDependencies;
+
+interface AgentServiceHarnessAccess {
+  createHarnessForProfile: CreateHarnessForProfile;
+  sessions: Map<string, unknown>;
 }
 
 function privateServiceAccess<T>(service: AgentService): T {
@@ -110,11 +130,9 @@ describe("AgentService branching", () => {
 
     sessionTurnRegistry.beginTurn(sessionId);
     await expect(
-      service.updateSessionModel(
-        sessionId,
-        ORG_ID,
-        "provider-1::next-chat-model"
-      )
+      service.updateSessionRunSettings(sessionId, ORG_ID, {
+        model: "provider-1::next-chat-model",
+      })
     ).rejects.toThrow("Wait for the current response");
     sessionTurnRegistry.cancelTurn(sessionId);
     expect((await db.getSession(sessionId))?.model).toBe(
@@ -122,17 +140,17 @@ describe("AgentService branching", () => {
     );
 
     expect(
-      await service.updateSessionModel(
-        sessionId,
-        ORG_ID,
-        "provider-1::next-chat-model"
-      )
+      await service.updateSessionRunSettings(sessionId, ORG_ID, {
+        model: "provider-1::next-chat-model",
+      })
     ).toBe(true);
     expect((await db.getSession(sessionId))?.model).toBe(
       "provider-1::next-chat-model"
     );
     await expect(
-      service.updateSessionModel(sessionId, ORG_ID, "provider-1::unknown")
+      service.updateSessionRunSettings(sessionId, ORG_ID, {
+        model: "provider-1::unknown",
+      })
     ).rejects.toThrow("Select a configured model");
     expect((await db.getSession(sessionId))?.model).toBe(
       "provider-1::next-chat-model"
@@ -153,9 +171,9 @@ describe("AgentService branching", () => {
       "provider-1::next-chat-model"
     );
 
-    expect(await service.updateSessionModel(sessionId, ORG_ID, null)).toBe(
-      true
-    );
+    expect(
+      await service.updateSessionRunSettings(sessionId, ORG_ID, { model: null })
+    ).toBe(true);
     expect((await db.getSession(sessionId))?.model).toBeNull();
   });
 
@@ -220,24 +238,124 @@ describe("AgentService branching", () => {
 
     sessionTurnRegistry.beginTurn(sessionId);
     await expect(
-      service.updateSessionThinkingEffort(sessionId, ORG_ID, "high")
+      service.updateSessionRunSettings(sessionId, ORG_ID, {
+        thinkingEffort: "high",
+      })
     ).rejects.toThrow("Wait for the current response");
     sessionTurnRegistry.cancelTurn(sessionId);
     expect((await db.getSession(sessionId))?.thinkingEffort).toBe("low");
 
     expect(
-      await service.updateSessionThinkingEffort(sessionId, ORG_ID, "high")
+      await service.updateSessionRunSettings(sessionId, ORG_ID, {
+        thinkingEffort: "high",
+      })
     ).toBe(true);
     expect((await db.getSession(sessionId))?.thinkingEffort).toBe("high");
     await service.getSessionMessages(sessionId, ORG_ID);
     expect(builtEfforts.at(-1)).toBe("high");
 
     expect(
-      await service.updateSessionThinkingEffort(sessionId, ORG_ID, null)
+      await service.updateSessionRunSettings(sessionId, ORG_ID, {
+        thinkingEffort: null,
+      })
     ).toBe(true);
     expect((await db.getSession(sessionId))?.thinkingEffort).toBeNull();
     await service.getSessionMessages(sessionId, ORG_ID);
     expect(builtEfforts.at(-1)).toBe("medium");
+  });
+
+  test("keeps run settings through create, branch and restore", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile({
+      ...createDefaultProfile(),
+      model: "provider-1::base",
+    });
+
+    const service = new AgentService(
+      {
+        defaultProviderId: "provider-1",
+        providers: [
+          {
+            apiKey: "",
+            baseUrl: "https://api.example.com/v1",
+            createdAt: new Date().toISOString(),
+            customModels: [
+              { default: true, id: "base" },
+              { id: "a" },
+              { id: "b" },
+            ],
+            id: "provider-1",
+            label: "Test provider",
+            type: "openai_compatible",
+          },
+        ],
+      },
+      null,
+      db
+    );
+
+    const access = privateServiceAccess<AgentServiceHarnessAccess>(service);
+    const { createHarnessForProfile } = access;
+    const built: { effort: string | undefined; model: string | null }[] = [];
+
+    Object.defineProperty(service, "createHarnessForProfile", {
+      value: (...args: Parameters<CreateHarnessForProfile>) => {
+        built.push({ effort: args[5]?.effort, model: args[1] });
+
+        return createHarnessForProfile.apply(service, args);
+      },
+    });
+
+    const expectSettings = async (
+      sessionId: string,
+      model: string,
+      effort: "low" | "medium" | "high"
+    ) => {
+      const record = await db.getSession(sessionId);
+      expect(record?.model).toBe(model);
+      expect(record?.thinkingEffort).toBe(effort);
+      expect(built.at(-1)).toEqual({ effort, model });
+    };
+
+    const sessionId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      null,
+      { model: "provider-1::a", thinkingEffort: "low" }
+    );
+
+    await expectSettings(sessionId, "provider-1::a", "low");
+
+    await db.replaceMessagesForSession(sessionId, [
+      {
+        createdAt: "2026-10-30T00:00:00.000Z",
+        id: "msg_run_settings",
+        payload: { content: "Keep the settings", role: "user" },
+        seq: 0,
+        sessionId,
+      },
+    ]);
+
+    const branchId = (await service.branchSession(sessionId, 0, ORG_ID))!
+      .sessionId;
+
+    await expectSettings(branchId, "provider-1::a", "low");
+
+    expect(
+      await service.updateSessionRunSettings(sessionId, ORG_ID, {
+        model: "provider-1::b",
+        thinkingEffort: "high",
+      })
+    ).toBe(true);
+
+    access.sessions.clear();
+    await service.resolveSession(sessionId, ORG_ID);
+    await expectSettings(sessionId, "provider-1::b", "high");
+
+    access.sessions.clear();
+    await service.resolveSession(branchId, ORG_ID);
+    await expectSettings(branchId, "provider-1::a", "low");
   });
 
   test("branches a new session from the selected message index", async () => {

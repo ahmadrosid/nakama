@@ -828,24 +828,11 @@ export function registerSessionRoutes(
 
     const body: UpdateSessionRequest = parsedBody.data;
 
-    if (body.model !== undefined) {
-      const updated = await agent.updateSessionModel(
-        sessionId,
-        orgId,
-        body.model
-      );
-
-      if (!updated) {
-        return errorResponse("Session not found", 404);
-      }
-    }
-
-    if (body.thinkingEffort !== undefined) {
-      const updated = await agent.updateSessionThinkingEffort(
-        sessionId,
-        orgId,
-        body.thinkingEffort
-      );
+    if (body.model !== undefined || body.thinkingEffort !== undefined) {
+      const updated = await agent.updateSessionRunSettings(sessionId, orgId, {
+        model: body.model,
+        thinkingEffort: body.thinkingEffort,
+      });
 
       if (!updated) {
         return errorResponse("Session not found", 404);
