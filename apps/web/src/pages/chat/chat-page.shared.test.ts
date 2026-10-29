@@ -331,7 +331,9 @@ describe("shouldShowGoalPrompt", () => {
   const empty = { orgRole: "member", sessions: [], userContext: "" };
 
   test("shows only to members with no web chat and no goal", () => {
-    const cases: Array<[Partial<typeof empty>, boolean]> = [
+    const cases: Array<
+      [Partial<Parameters<typeof shouldShowGoalPrompt>[0]>, boolean]
+    > = [
       [{}, true],
       [{ orgRole: "viewer" }, false],
       [{ sessions: [{ channel: "web" }] }, false],
