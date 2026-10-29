@@ -127,6 +127,10 @@ export * from "./skills";
 
 export * from "./soul";
 
+export * from "./teams-config";
+
+export * from "./teams-worker";
+
 export * from "./telegram-config";
 
 export * from "./telegram-worker";

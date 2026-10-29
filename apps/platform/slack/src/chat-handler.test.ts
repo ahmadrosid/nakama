@@ -15,6 +15,7 @@ import {
 import {
   createChatHandler,
   normalizeSlackText,
+  replyToSlackEvent,
   type SlackApi,
 } from "./chat-handler";
 import type { SlackMessageEvent } from "./socket";
@@ -437,5 +438,98 @@ describe("normalizeSlackText", () => {
         BOT
       )
     ).toBe("see docs (https://example.com) & https://a.b 1 < 2");
+  });
+});
+
+describe("replyToSlackEvent", () => {
+  test("replies in the event thread for a channel message without a thread", async () => {
+    const posted: Posted[] = [];
+
+    const slack = {
+      postMessage: async (channel: string, text: string, threadTs?: string) => {
+        posted.push({ channel, text, threadTs });
+      },
+    };
+
+    await replyToSlackEvent(
+      slack,
+      { channel: "C1", ts: "100.000", type: "message" },
+      "error reply"
+    );
+
+    expect(posted).toEqual([
+      { channel: "C1", text: "error reply", threadTs: "100.000" },
+    ]);
+  });
+
+  test("replies in the existing thread for a channel thread message", async () => {
+    const posted: Posted[] = [];
+
+    const slack = {
+      postMessage: async (channel: string, text: string, threadTs?: string) => {
+        posted.push({ channel, text, threadTs });
+      },
+    };
+
+    await replyToSlackEvent(
+      slack,
+      {
+        channel: "C1",
+        thread_ts: "100.000",
+        ts: "101.000",
+        type: "message",
+      },
+      "error reply"
+    );
+
+    expect(posted).toEqual([
+      { channel: "C1", text: "error reply", threadTs: "100.000" },
+    ]);
+  });
+
+  test("replies without threadTs for a top-level DM message", async () => {
+    const posted: Posted[] = [];
+
+    const slack = {
+      postMessage: async (channel: string, text: string, threadTs?: string) => {
+        posted.push({ channel, text, threadTs });
+      },
+    };
+
+    await replyToSlackEvent(
+      slack,
+      { channel: "D1", channel_type: "im", ts: "100.000", type: "message" },
+      "error reply"
+    );
+
+    expect(posted).toEqual([
+      { channel: "D1", text: "error reply", threadTs: undefined },
+    ]);
+  });
+
+  test("replies in existing thread for a threaded DM message", async () => {
+    const posted: Posted[] = [];
+
+    const slack = {
+      postMessage: async (channel: string, text: string, threadTs?: string) => {
+        posted.push({ channel, text, threadTs });
+      },
+    };
+
+    await replyToSlackEvent(
+      slack,
+      {
+        channel: "D1",
+        channel_type: "im",
+        thread_ts: "100.000",
+        ts: "101.000",
+        type: "message",
+      },
+      "error reply"
+    );
+
+    expect(posted).toEqual([
+      { channel: "D1", text: "error reply", threadTs: "100.000" },
+    ]);
   });
 });

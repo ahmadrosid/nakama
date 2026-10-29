@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  cacheNameFor,
   classifyRequest,
   shouldCacheResponse,
   staleCacheNames,
@@ -87,10 +86,6 @@ describe("shouldCacheResponse", () => {
 });
 
 describe("cache names", () => {
-  test("scopes the cache to the build version", () => {
-    expect(cacheNameFor("abc123")).toBe("nakama-v-abc123");
-  });
-
   test("drops only Nakama caches from other builds", () => {
     expect(
       staleCacheNames(

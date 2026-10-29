@@ -31,6 +31,7 @@ import { UserContextEditorDialog } from "@/components/UserContextCard";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
+import { useNakamaVersionQuery } from "@/hooks/use-app-queries";
 import { client, formatError } from "@/lib/client";
 import { canAccessOrganizationPage, PAGE_PATHS } from "@/lib/navigation";
 import type { Theme } from "@/lib/theme";
@@ -63,6 +64,12 @@ export function SidebarUserMenu() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [personalisationOpen, setPersonalisationOpen] = useState(false);
   const version = health?.version?.trim();
+
+  const canCheckUpdates =
+    user?.isPlatformAdmin === true && health?.updateCheckEnabled === true;
+
+  const updateAvailable =
+    useNakamaVersionQuery(canCheckUpdates).data?.updateAvailable === true;
 
   if (!user) {
     return null;
@@ -216,9 +223,24 @@ export function SidebarUserMenu() {
                   {version ? (
                     <>
                       <div className="h-px bg-border" />
-                      <p className="px-3.5 py-2 font-mono text-2xs text-muted-foreground tabular-nums">
-                        Nakama {version}
-                      </p>
+                      {canCheckUpdates ? (
+                        <DropdownMenuItem
+                          className="rounded-none px-3.5 py-2 font-mono text-2xs text-muted-foreground tabular-nums"
+                          render={<Link to={PAGE_PATHS.settings} />}
+                        >
+                          Nakama {version}
+                          {updateAvailable ? (
+                            <span className="text-primary">
+                              {" "}
+                              · Update available
+                            </span>
+                          ) : null}
+                        </DropdownMenuItem>
+                      ) : (
+                        <p className="px-3.5 py-2 font-mono text-2xs text-muted-foreground tabular-nums">
+                          Nakama {version}
+                        </p>
+                      )}
                     </>
                   ) : null}
                 </DropdownMenuContent>

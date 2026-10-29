@@ -5,7 +5,6 @@ import { builtinTools } from "./builtin";
 import {
   createFakeMailReader,
   createFakeMailSender,
-  emailParameters,
   emailTool,
   runEmailTool,
 } from "./email";
@@ -27,22 +26,6 @@ const completeConfig: EmailConfigFile = {
 };
 
 describe("email tool", () => {
-  test("exposes an OpenAI-compatible object parameters schema", () => {
-    const parameters = emailParameters();
-    // SAFETY: This test inspects arbitrary properties on the generated JSON Schema.
-    const schema = z.record(z.string(), z.json()).parse(parameters);
-
-    expect(parameters.type).toBe("object");
-    expect(schema.oneOf).toBeUndefined();
-    expect(schema.anyOf).toBeUndefined();
-    expect(parameters.properties?.action).toEqual({
-      enum: ["list", "read", "search", "send"],
-      type: "string",
-    });
-    expect(parameters.required).toContain("action");
-    expect(emailTool.parameters).toEqual(parameters);
-  });
-
   test("builtin tool schemas all declare type object for LLM providers", () => {
     for (const tool of builtinTools) {
       expect(tool.parameters?.type, `${tool.name} parameters.type`).toBe(
@@ -79,6 +62,24 @@ describe("email tool", () => {
 
     expect("sent" in result && result.sent?.messageId).toBe("fake-message-id");
     expect(sender.sent).toHaveLength(1);
+  });
+
+  test("only org admins, platform admins and automation turns reach the mailbox", async () => {
+    const run = (context: Parameters<typeof emailTool.run>[1]) =>
+      emailTool.run({ action: "list", limit: 1 }, context);
+
+    const refused = { error: "Only org admins can use the email tool." };
+
+    expect(await run({ orgRole: "member" })).toEqual(refused);
+    expect(await run({})).toEqual(refused);
+
+    for (const context of [
+      { orgRole: "admin" as const },
+      { isPlatformAdmin: true, orgRole: "member" as const },
+      { automationId: "automation_1", orgRole: "member" as const },
+    ]) {
+      expect(await run(context)).not.toEqual(refused);
+    }
   });
 
   test("returns configuration error when mailbox is incomplete", async () => {

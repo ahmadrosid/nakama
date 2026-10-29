@@ -56,6 +56,7 @@ const PROVIDER_CHOICES: Array<{ id: UserProviderName; label: string }> = [
   { id: "perplexity", label: "Perplexity Sonar" },
   { id: "xai", label: "xAI Grok" },
   { id: "groq", label: "Groq" },
+  { id: "cheaper_inference", label: "Cheaper Inference" },
   { id: "cerebras", label: "Cerebras" },
   { id: "cloudflare", label: "Cloudflare Worker AI" },
   { id: "fireworks", label: "Fireworks" },
@@ -280,6 +281,7 @@ function resolveProviderChoice(input: string): UserProviderName | null {
     normalized === "zhipu_cn" ||
     normalized === "xai" ||
     normalized === "groq" ||
+    normalized === "cheaper_inference" ||
     normalized === "together" ||
     normalized === "xiaomi" ||
     normalized === "meta" ||

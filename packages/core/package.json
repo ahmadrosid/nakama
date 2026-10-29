@@ -56,6 +56,8 @@
     "./discord-worker": "./src/discord-worker.ts",
     "./slack-config": "./src/slack-config.ts",
     "./slack-worker": "./src/slack-worker.ts",
+    "./teams-config": "./src/teams-config.ts",
+    "./teams-worker": "./src/teams-worker.ts",
     "./whatsapp-config": "./src/whatsapp-config.ts",
     "./whatsapp-phones": "./src/whatsapp-phones.ts",
     "./whatsapp-worker": "./src/whatsapp-worker.ts",

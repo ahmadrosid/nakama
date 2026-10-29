@@ -254,13 +254,12 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
               connect: true,
             });
 
-            setCreateOpen(false);
-
-            if (startAuthorization(response)) {
-              return;
+            if (!response.authorizationUrl) {
+              setCreateOpen(false);
+              setExpandedServerId(response.server.id);
             }
 
-            setExpandedServerId(response.server.id);
+            return response;
           } catch (err) {
             const message = formatError(err);
             setActionError(message);

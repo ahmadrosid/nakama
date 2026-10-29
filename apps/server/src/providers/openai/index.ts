@@ -180,6 +180,10 @@ function providerLabel(providerName: ProviderName): string {
     return "Groq";
   }
 
+  if (providerName === "cheaper_inference") {
+    return "Cheaper Inference";
+  }
+
   if (providerName === "vercel_ai_gateway") {
     return "Vercel AI Gateway";
   }

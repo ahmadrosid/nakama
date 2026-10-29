@@ -20,6 +20,7 @@ import {
 } from "@/lib/chat-stream-web-search";
 import { addChatUsage } from "@/lib/chat-usage";
 import { createClientId } from "@/lib/client-id";
+import type { DisplayDocument } from "@/lib/pasted-text";
 
 export interface RequestedChatSession {
   profileId: string;
@@ -392,7 +393,7 @@ export interface ChatListItem {
   artifactStreaming?: boolean;
   content: string;
   createdAt?: string;
-  documents?: Array<{ filename: string; mediaType: string }>;
+  documents?: DisplayDocument[];
   /** Client-only: turn failed (e.g. upstream 429); not part of server history. */
   failed?: boolean;
   historyIndex?: number;
@@ -540,6 +541,7 @@ const HISTORY_SESSION_CHANNEL = {
   slack: true,
   subagent: false,
   task: false,
+  teams: true,
   telegram: true,
   web: true,
   whatsapp: true,
@@ -559,6 +561,7 @@ const READ_ONLY_SESSION_CHANNEL = {
   slack: true,
   subagent: false,
   task: false,
+  teams: true,
   telegram: true,
   web: false,
   whatsapp: true,
@@ -597,6 +600,8 @@ export function formatSessionChannelLabel(channel: AgentChannel): string {
       return "Discord";
     case "slack":
       return "Slack";
+    case "teams":
+      return "Microsoft Teams";
     case "web":
       return "Web";
     default:

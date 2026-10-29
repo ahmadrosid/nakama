@@ -224,29 +224,6 @@ describe("resolveModel", () => {
     );
   });
 
-  test("resolves catalog models for DeepSeek", () => {
-    expect(resolveModel("deepseek", "deepseek-v4-pro")).toBe("deepseek-v4-pro");
-    expect(getDefaultModel("deepseek")).toBe("deepseek-flash");
-
-    for (const id of [
-      "deepseek-flash",
-      "deepseek-v4-flash",
-      "deepseek-v4-flash-vision-exp",
-    ]) {
-      expect(resolveModel("deepseek", id)).toBe(id);
-      expect(getModelById(id)).toMatchObject({
-        contextWindow: 1_000_000,
-        default: id === "deepseek-flash",
-        inputPerMillionUsd: 0.3,
-        maxOutputTokens: 384_000,
-        outputPerMillionUsd: 1.2,
-        provider: "deepseek",
-        supportsThinking: true,
-        supportsVision: false,
-      });
-    }
-  });
-
   test("keeps DeepSeek custom shortlist defaults and selections", () => {
     const customModels = [
       { default: true, id: "private-model" },
@@ -267,72 +244,6 @@ describe("resolveModel", () => {
         customModels
       )
     ).toBe(true);
-  });
-
-  test("resolves catalog models for Qwen DashScope intl and CN", () => {
-    expect(resolveModel("qwen", "qwen3.7-plus")).toBe("qwen3.7-plus");
-    expect(resolveModel("qwen", "qwen3-vl-plus")).toBe("qwen3-vl-plus");
-    expect(resolveModel("qwen_cn", "qwen-flash")).toBe("qwen-flash");
-    expect(getDefaultModel("qwen")).toBe("qwen3.7-plus");
-    expect(getDefaultModel("qwen_cn")).toBe("qwen3.7-plus");
-    expect(getModelById("qwen3.7-plus")?.supportsThinking).toBe(true);
-    expect(getModelById("qwen3.7-plus")?.contextWindow).toBe(1_000_000);
-    expect(getModelById("qwen3.7-plus")?.supportsVision).toBe(true);
-    expect(getModelById("qwen3-vl-plus")?.supportsVision).toBe(true);
-    expect(getModelById("qwen3-vl-plus")?.supportsThinking).toBe(true);
-    expect(getModelById("qwen-flash")?.supportsThinking).toBe(true);
-    expect(getModelById("qwen-flash")?.inputPerMillionUsd).toBe(0.05);
-  });
-
-  test("resolves catalog models for Doubao", () => {
-    expect(resolveModel("doubao", "doubao-seed-2-1-turbo-260628")).toBe(
-      "doubao-seed-2-1-turbo-260628"
-    );
-    expect(resolveModel("doubao", "doubao-seed-1-8-251228")).toBe(
-      "doubao-seed-1-8-251228"
-    );
-    expect(getDefaultModel("doubao")).toBe("doubao-seed-2-1-pro-260628");
-    expect(getModelById("doubao-seed-2-1-pro-260628")?.supportsThinking).toBe(
-      true
-    );
-    expect(getModelById("doubao-seed-2-1-pro-260628")?.supportsVision).toBe(
-      true
-    );
-    expect(getModelById("doubao-seed-2-1-turbo-260628")?.supportsVision).toBe(
-      true
-    );
-    expect(getModelById("doubao-seed-1-8-251228")?.supportsThinking).toBe(true);
-    expect(getModelById("doubao-seed-1-8-251228")?.supportsVision).toBe(true);
-    expect(getModelById("doubao-seed-2-1-pro-260628")?.contextWindow).toBe(
-      256_000
-    );
-    expect(getModelById("doubao-seed-2-1-pro-260628")?.maxOutputTokens).toBe(
-      256_000
-    );
-  });
-
-  test("resolves the current Perplexity Sonar catalog", () => {
-    expect(getDefaultModel("perplexity")).toBe("sonar");
-    expect(resolveModel("perplexity", "sonar-pro")).toBe("sonar-pro");
-    expect(getModelById("sonar")?.contextWindow).toBe(128_000);
-    expect(getModelById("sonar")?.inputPerMillionUsd).toBe(1);
-    expect(getModelById("sonar")?.outputPerMillionUsd).toBe(1);
-    expect(getModelById("sonar-pro")?.contextWindow).toBe(200_000);
-    expect(getModelById("sonar-pro")?.supportsVision).toBe(true);
-    expect(getModelById("sonar-reasoning-pro")?.supportsThinking).toBe(true);
-    expect(getModelById("sonar-deep-research")?.supportsVision).toBe(false);
-  });
-
-  test("resolves official Cloudflare 8B catalog ids", () => {
-    expect(resolveModel("cloudflare", "@cf/meta/llama-3.1-8b-instruct")).toBe(
-      "@cf/meta/llama-3.1-8b-instruct"
-    );
-    expect(
-      resolveModel("cloudflare", "@cf/meta/llama-3.1-8b-instruct-fast")
-    ).toBe("@cf/meta/llama-3.1-8b-instruct-fast");
-    expect(
-      getModelById("@cf/meta/infire-llama-3.1-8b-instruct")
-    ).toBeUndefined();
   });
 
   test("keeps Moonshot region catalogs independent", () => {

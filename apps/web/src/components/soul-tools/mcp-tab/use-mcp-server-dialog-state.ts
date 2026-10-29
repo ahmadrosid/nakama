@@ -2,6 +2,7 @@ import type {
   CachedMcpToolSummary,
   CreateMcpServerRequest,
   McpHttpConfig,
+  McpServerResponse,
   McpServerSummary,
   McpStdioConfig,
   McpTransport,
@@ -24,7 +25,7 @@ import {
 
 export type McpServerKind = "http" | "signin" | "stdio";
 
-export function mcpServerKind(
+function mcpServerKind(
   transport: McpTransport,
   signIn: boolean
 ): McpServerKind {
@@ -300,6 +301,24 @@ function tryImportMcpJson(
   return null;
 }
 
+/** Points the tab opened on submit at the sign-in page, or closes it when there is none. */
+function sendSignInTab(tab: Window | null, url: string | undefined): boolean {
+  if (!tab) {
+    return false;
+  }
+
+  if (!url) {
+    tab.close();
+
+    return false;
+  }
+
+  tab.opener = null;
+  tab.location.href = url;
+
+  return true;
+}
+
 export function useMcpServerDialogState({
   open,
   busy,
@@ -309,7 +328,10 @@ export function useMcpServerDialogState({
   open: boolean;
   busy: boolean;
   server?: McpServerSummary | null;
-  onSubmit: (request: CreateMcpServerRequest) => Promise<void>;
+  /** Return the response so a server that needs a browser sign-in can start it here. */
+  onSubmit: (
+    request: CreateMcpServerRequest
+  ) => Promise<McpServerResponse | void>;
 }) {
   const isEdit = server != null;
 
@@ -330,6 +352,13 @@ export function useMcpServerDialogState({
   const [importOpen, setImportOpen] = useState(false);
   const [importDraft, setImportDraft] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
+
+  const [pendingAuth, setPendingAuth] = useState<{
+    name: string;
+    opened: boolean;
+    serverId: string;
+    url: string;
+  } | null>(null);
 
   const transport: McpTransport = kind === "stdio" ? "stdio" : "http";
   const signIn = kind === "signin";
@@ -373,6 +402,7 @@ export function useMcpServerDialogState({
 
   if (formResetKey !== prevFormResetKey) {
     setPrevFormResetKey(formResetKey);
+    setPendingAuth(null);
     applyMcpFormReset({ detail, open, server, setters: formSetters });
   }
 
@@ -479,9 +509,23 @@ export function useMcpServerDialogState({
 
     setSubmitError(null);
 
+    // Opened during the click: a tab opened after the request is a popup blocker's target.
+    const signInTab = signIn && !isEdit ? window.open("", "_blank") : null;
+
     try {
-      await onSubmit(buildRequest());
+      const response = await onSubmit(buildRequest());
+      const opened = sendSignInTab(signInTab, response?.authorizationUrl);
+
+      if (response?.authorizationUrl) {
+        setPendingAuth({
+          name: response.server.name,
+          opened,
+          serverId: response.server.id,
+          url: response.authorizationUrl,
+        });
+      }
     } catch (error) {
+      signInTab?.close();
       setSubmitError(
         error instanceof Error ? error.message : formatError(error)
       );
@@ -509,6 +553,7 @@ export function useMcpServerDialogState({
     loadingForm,
     name,
     openImportDialog,
+    pendingAuth,
     selectKind,
     setArgs,
     setCommand,

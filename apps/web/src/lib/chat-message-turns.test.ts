@@ -300,3 +300,38 @@ describe("groupMessagesIntoTurns", () => {
 });
 
 describe("turnKey", () => {});
+
+describe("segmentAssistantTurn tool URL copies", () => {
+  const signed = `https://media.example.com/v2/image/id:abc?exp=1&fallback=${"a1b2".repeat(30)}4b2e830&sig=xyz`;
+  const broken = signed.replace("4b2e830", "2e830");
+
+  function textOf(content: string, tool: Partial<ChatListItem>) {
+    const [, text] = segmentAssistantTurn([
+      item({ ...tool, id: "t1", role: "tool", toolStatus: "done" }),
+      item({ content, id: "a1", role: "assistant" }),
+    ]);
+
+    return text?.kind === "text" ? text.message.content : null;
+  }
+
+  test("uses the tool URL when the reply copied it with a few wrong characters", () => {
+    expect(
+      textOf(`![poster](${broken})`, {
+        toolResult: { pages: [{ url: signed }] },
+      })
+    ).toBe(`![poster](${signed})`);
+  });
+
+  test("keeps URLs that match no tool URL", () => {
+    const other = signed.replace("media.example.com", "cdn.example.org");
+
+    expect(textOf(`![poster](${other})`, { toolResult: { url: signed } })).toBe(
+      `![poster](${other})`
+    );
+    expect(
+      textOf("[a](https://a.com/x?p=2)", {
+        toolResult: "https://a.com/x?p=1",
+      })
+    ).toBe("[a](https://a.com/x?p=2)");
+  });
+});

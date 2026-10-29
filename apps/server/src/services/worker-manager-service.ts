@@ -50,10 +50,7 @@ import {
   readWhatsAppHostChannels,
   writeWhatsAppHostChannels,
 } from "@nakama/core/whatsapp-worker";
-import {
-  createWorkerHeartbeatStore,
-  isProcessAlive,
-} from "@nakama/core/worker-heartbeat";
+import { createWorkerHeartbeatStore } from "@nakama/core/worker-heartbeat";
 import type { DatabaseAdapter } from "@nakama/db";
 
 const WORKER_SCRIPTS = new Map(
@@ -61,6 +58,7 @@ const WORKER_SCRIPTS = new Map(
     automation: "apps/platform/automation/src/index.ts",
     discord: "apps/platform/discord/src/index.ts",
     slack: "apps/platform/slack/src/index.ts",
+    teams: "apps/platform/teams/src/index.ts",
     telegram: "apps/platform/telegram/src/index.ts",
     whatsapp: "apps/platform/whatsapp/src/index.ts",
   } satisfies Record<PlatformWorkerName, string>)
@@ -71,6 +69,7 @@ const WORKER_DIST_SCRIPTS = new Map(
     automation: "apps/platform/automation/dist/index.js",
     discord: "apps/platform/discord/dist/index.js",
     slack: "apps/platform/slack/dist/index.js",
+    teams: "apps/platform/teams/dist/index.js",
     telegram: "apps/platform/telegram/dist/index.js",
     whatsapp: "apps/platform/whatsapp/dist/index.js",
   } satisfies Partial<Record<PlatformWorkerName, string>>)
@@ -255,9 +254,8 @@ export class WorkerManagerService {
       this.deletePluginProcess(pm2, this.processName(platform, scope))
     );
     const heartbeat = createWorkerHeartbeatStore({ getDir: () => source });
-    const running = await heartbeat.read();
 
-    if (running && isProcessAlive(running.pid)) {
+    if (await heartbeat.isLeaseHeld()) {
       throw new Error(
         "Stop the manually started legacy worker before claiming its connection"
       );
@@ -577,6 +575,7 @@ export class WorkerManagerService {
         "discord",
         "whatsapp",
         "slack",
+        "teams",
       ] as const) {
         if (
           !existsSync(join(getChannelConfigDir(platform, owner), "config.ini"))
@@ -1271,11 +1270,11 @@ export class WorkerManagerService {
 
       if (!pluginWorker) {
         if (isChannelOwner(orgId)) {
-          const heartbeat = await createWorkerHeartbeatStore({
+          const heartbeat = createWorkerHeartbeatStore({
             getDir: () => getChannelConfigDir(readChannelPlatform(name), orgId),
-          }).read();
+          });
 
-          if (heartbeat && isProcessAlive(heartbeat.pid)) {
+          if (await heartbeat.isLeaseHeld()) {
             throw new Error("Stop the manually started agent worker first");
           }
         }
@@ -1297,6 +1296,7 @@ export class WorkerManagerService {
       "discord",
       "whatsapp",
       "slack",
+      "teams",
     ] as const) {
       for (const owner of await listChannelOwners(platform)) {
         if (
@@ -1318,6 +1318,7 @@ export class WorkerManagerService {
       "discord",
       "whatsapp",
       "slack",
+      "teams",
     ] as const) {
       for (const owner of await listChannelOwners(platform)) {
         if (platform === "whatsapp") {
@@ -1337,11 +1338,12 @@ export class WorkerManagerService {
           continue;
         }
 
-        const heartbeat = await createWorkerHeartbeatStore({
-          getDir: () => getChannelConfigDir(platform, owner),
-        }).read();
-
-        if (heartbeat && isProcessAlive(heartbeat.pid)) {
+        // A pid in an old heartbeat may now belong to another process.
+        if (
+          await createWorkerHeartbeatStore({
+            getDir: () => getChannelConfigDir(platform, owner),
+          }).isLeaseHeld()
+        ) {
           continue;
         }
 
@@ -1702,6 +1704,7 @@ function getPlatformWorkerName(name: string): PlatformWorkerName {
     name === "automation" ||
     name === "discord" ||
     name === "slack" ||
+    name === "teams" ||
     name === "telegram" ||
     name === "whatsapp"
   ) {
@@ -1719,6 +1722,7 @@ function readChannelPlatform(name: string): ChannelPlatform {
   if (
     name === "discord" ||
     name === "slack" ||
+    name === "teams" ||
     name === "telegram" ||
     name === "whatsapp"
   ) {

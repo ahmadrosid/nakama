@@ -84,6 +84,7 @@ export const SKILL_MANAGE_CHANNELS = {
   slack: false,
   subagent: false,
   task: false,
+  teams: false,
   telegram: false,
   web: true,
   whatsapp: false,

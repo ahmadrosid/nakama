@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readWorkerDesiredState, setWorkerDesiredRunning } from "@nakama/core";
+import { getChannelConfigDir } from "@nakama/core/channel-config-shared";
 import { saveWhatsAppConfig } from "@nakama/core/whatsapp-config";
 import { WorkerManagerService } from "./worker-manager-service";
 
@@ -84,6 +85,28 @@ describe("WorkerManagerService", () => {
     }
   });
 
+  test("recovery starts a worker whose old heartbeat pid now names another process", async () => {
+    const owner = { orgId: "org_a", profileId: "agent_a" };
+    const dir = getChannelConfigDir("telegram", owner);
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "config.ini"), "bot_token=1:token\n");
+
+    // After a VM restart the old worker's pid can belong to any live process.
+    await writeFile(
+      join(dir, "worker-heartbeat.json"),
+      JSON.stringify({ pid: process.pid, updatedAt: new Date().toISOString() })
+    );
+
+    await setWorkerDesiredRunning("telegram", true, owner);
+    await setWorkerDesiredRunning("automation", false);
+    const pm2 = createMockPm2();
+    await new WorkerManagerService(projectRoot, pm2).recoverDesiredWorkers();
+    // SAFETY: The test fixture matches the contract used by this test.
+    const starts = (pm2.start as ReturnType<typeof mock>).mock.calls;
+    expect(starts).toHaveLength(1);
+    expect(starts[0][0].env.NAKAMA_CHANNEL_PROFILE_ID).toBe(owner.profileId);
+  });
+
   describe("isValidWorker", () => {
     test("returns false for unknown worker", () => {
       const service = new WorkerManagerService(projectRoot, createMockPm2());
@@ -158,6 +181,7 @@ describe("WorkerManagerService", () => {
         automation: true,
         discord: false,
         slack: false,
+        teams: false,
         telegram: true,
         whatsapp: false,
       });
@@ -243,6 +267,7 @@ describe("WorkerManagerService", () => {
         automation: true,
         discord: false,
         slack: false,
+        teams: false,
         telegram: false,
         whatsapp: false,
       });
@@ -369,6 +394,7 @@ describe("WorkerManagerService", () => {
         automation: true,
         discord: false,
         slack: false,
+        teams: false,
         telegram: false,
         whatsapp: false,
       });

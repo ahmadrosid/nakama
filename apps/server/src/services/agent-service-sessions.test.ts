@@ -442,6 +442,40 @@ describe("AgentService branching", () => {
 });
 
 describe("AgentService session org scope", () => {
+  test("keeps at most 50 sessions in memory and still reads an evicted one", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    const service = new AgentService(null, null, db);
+
+    const { sessions } = privateServiceAccess<{
+      sessions: Map<string, unknown>;
+    }>(service);
+
+    const first = await service.createSession(ORG_ID, "web", "profile_default");
+    sessionTurnRegistry.beginTurn(first);
+
+    try {
+      for (let index = 0; index < 60; index += 1) {
+        await service.createSession(ORG_ID, "web", "profile_default");
+      }
+
+      // A session mid-turn survives eviction even when it is the oldest.
+      expect(sessions.size).toBe(50);
+      expect(sessions.has(first)).toBe(true);
+    } finally {
+      sessionTurnRegistry.cancelTurn(first);
+    }
+
+    const evicted = (await db.listSessions())
+      .map((session) => session.id)
+      .find((id) => !sessions.has(id));
+
+    expect(evicted).toBeDefined();
+    expect(
+      await service.getSessionMessages(evicted ?? "", ORG_ID)
+    ).not.toBeNull();
+  });
+
   test("by-id reads return null for a session in another org", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertProfile(createDefaultProfile());

@@ -41,6 +41,7 @@ describe("parseWorkerDesiredState", () => {
       automation: true,
       discord: false,
       slack: false,
+      teams: false,
       telegram: true,
       whatsapp: false,
     });
@@ -51,6 +52,7 @@ describe("parseWorkerDesiredState", () => {
       automation: true,
       discord: false,
       slack: false,
+      teams: false,
       telegram: false,
       whatsapp: false,
     });
@@ -64,6 +66,7 @@ describe("worker desired state persistence", () => {
         automation: true,
         discord: false,
         slack: false,
+        teams: false,
         telegram: false,
         whatsapp: false,
       });
@@ -77,6 +80,7 @@ describe("worker desired state persistence", () => {
         automation: true,
         discord: false,
         slack: false,
+        teams: false,
         telegram: true,
         whatsapp: false,
       });
@@ -86,6 +90,7 @@ describe("worker desired state persistence", () => {
         automation: true,
         discord: false,
         slack: false,
+        teams: false,
         telegram: true,
         whatsapp: true,
       });
@@ -95,6 +100,7 @@ describe("worker desired state persistence", () => {
         automation: false,
         discord: false,
         slack: false,
+        teams: false,
         telegram: true,
         whatsapp: true,
       });
@@ -104,6 +110,7 @@ describe("worker desired state persistence", () => {
         automation: false,
         discord: false,
         slack: false,
+        teams: false,
         telegram: false,
         whatsapp: true,
       });

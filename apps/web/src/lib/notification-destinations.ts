@@ -22,7 +22,7 @@ export function buildNotificationWebhookUrl(
   return `${base}${webhookPath}`;
 }
 
-export function formatTelegramDestinationLabel(
+function formatTelegramDestinationLabel(
   telegram: TelegramNotificationDestinationConfig
 ): string {
   if (telegram.topicId) {

@@ -20,7 +20,7 @@ function requireWorkerAuthorization(
   name: string,
   manager: ServerOptions["workerManager"]
 ): void {
-  if (["telegram", "discord", "whatsapp", "slack"].includes(name)) {
+  if (["telegram", "discord", "whatsapp", "slack", "teams"].includes(name)) {
     requireOrgAdminOrPlatformAdminFromContext(c);
 
     return;
@@ -51,7 +51,7 @@ export function registerWorkerRoutes(
   const { workerManager } = options;
 
   async function workerScope(c: Context<AppEnv>, name: string) {
-    if (!["telegram", "discord", "whatsapp", "slack"].includes(name)) {
+    if (!["telegram", "discord", "whatsapp", "slack", "teams"].includes(name)) {
       return null;
     }
 
@@ -240,7 +240,7 @@ export function registerWorkerRoutes(
 
           await workerManager.disconnectChannel(
             // SAFETY: The validated value satisfies the contract checked by this assertion.
-            name as "telegram" | "discord" | "whatsapp" | "slack",
+            name as "telegram" | "discord" | "whatsapp" | "slack" | "teams",
             owner
           );
         } else if (action === "start") {

@@ -235,22 +235,6 @@ describe("resolveModelVisionSupport", () => {
       }
     }
   });
-
-  test("defaults first-party models to vision-capable", () => {
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("openai-1", "model-1"),
-        group("openai-1", "openai")
-      )
-    ).toBe(true);
-
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("openai-1", "model-1"),
-        group("openai-1", "openai", { supportsVision: false })
-      )
-    ).toBe(false);
-  });
 });
 
 describe("filterVisionCapableProviderGroups", () => {

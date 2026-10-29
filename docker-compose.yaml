@@ -10,6 +10,8 @@ services:
       - NAKAMA_CONFIG_DIR=/nakama/data
       # Daily encrypted export, newest 7 kept. Must stay outside the data volume.
       - NAKAMA_BACKUP_DIR=/nakama/backups
+      # Where the Update button leaves requests for the updater service below.
+      - NAKAMA_UPDATER_DIR=/nakama/updates
       # Optional: skip the browser setup wizard on first boot.
       # All three must be set together or none at all.
       # - NAKAMA_SEED_ADMIN_EMAIL=admin@example.com
@@ -21,8 +23,31 @@ services:
     volumes:
       - nakama-data:/nakama/data
       - nakama-backups:/nakama/backups
+      - nakama-updates:/nakama/updates
+    restart: unless-stopped
+
+  # Optional: the Update button in Settings. Turn it on with
+  # COMPOSE_PROFILES=updater in .env. It holds the Docker socket, which is root
+  # on this host, so it opens no port and only upgrades the nakama service.
+  updater:
+    image: docker:29-cli
+    profiles: ["updater"]
+    environment:
+      # The docker:cli image defaults to tcp://docker:2375.
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - NAKAMA_IMAGE=ghcr.io/ahmadrosid/nakama:${NAKAMA_VERSION:-latest}
+    # The script ships inside the Nakama image, so it updates with Nakama.
+    entrypoint:
+      - sh
+      - -c
+      - docker run --rm --entrypoint cat "$$NAKAMA_IMAGE" /app/scripts/nakama-updater.sh > /tmp/updater.sh && exec sh /tmp/updater.sh
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/compose
+      - nakama-updates:/updates
     restart: unless-stopped
 
 volumes:
   nakama-data:
   nakama-backups:
+  nakama-updates:

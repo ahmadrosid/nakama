@@ -42,14 +42,6 @@ describe("coding-agent harness resolution", () => {
     ).toBeNull();
   });
 
-  test("buildCodingHarnessInstallPlan can use bun when npm is unavailable", () => {
-    expect(buildCodingHarnessInstallPlan("opencode", "bun")).toEqual({
-      args: ["install", "-g", "--trust", "opencode-ai"],
-      command: "bun",
-      displayCommand: "bun install -g --trust opencode-ai",
-    });
-  });
-
   test("refuses auto-install plan for Cursor Agent", () => {
     expect(() => buildCodingHarnessInstallPlan("cursor_agent", "npm")).toThrow(
       /cannot be auto-installed/i

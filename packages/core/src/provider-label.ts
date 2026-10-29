@@ -7,6 +7,7 @@ const BUILTIN_LABELS: Record<
   anthropic: "Anthropic",
   cerebras: "Cerebras",
   chatgpt: "ChatGPT (Plus/Pro)",
+  cheaper_inference: "Cheaper Inference",
   cloudflare: "Cloudflare Worker AI",
   deepseek: "DeepSeek",
   doubao: "Doubao (Volcengine)",

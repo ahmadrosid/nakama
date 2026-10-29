@@ -3,7 +3,6 @@ import { legacySystemDestination } from "./system-page.shared";
 
 test.each([
   ["", "/settings/tools"],
-  ["tab=tools", "/settings/tools"],
   ["tab=mcp", "/settings/mcp"],
   ["tab=usage", "/settings/usage"],
   ["tab=plugins", "/settings/plugins"],

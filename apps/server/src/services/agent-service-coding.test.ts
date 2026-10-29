@@ -1,27 +1,16 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { ensureBundledSkillFiles, type ToolDefinition } from "@nakama/core";
 import type { StoredProfileRecord } from "@nakama/db";
-import {
-  createInMemoryDatabaseAdapter,
-  mergeWorkspaceSettings,
-  WORKSPACE_SETTINGS_ID,
-} from "@nakama/db";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AgentService } from "./agent-service";
 import { createDefaultProfile } from "./agent-service-test-fixtures";
 
 import { SkillsService } from "./skills-service";
 
 const ORG_ID = "org_test";
-
-interface AgentServiceCodingContextAccess {
-  formatCodingDelegationContext(
-    orgId: string,
-    profileId: string
-  ): Promise<string>;
-}
 
 interface AgentServiceProfileToolsAccess {
   resolveProfileTools(
@@ -39,167 +28,6 @@ function privateServiceAccess<T>(service: AgentService): T {
   // SAFETY: Tests use named interfaces for private service members.
   return Object.create(service) as T;
 }
-
-describe("AgentService coding delegation context", () => {
-  const originalPath = process.env.PATH ?? "";
-  const originalDisableFixPath = process.env.NAKAMA_DISABLE_FIX_PATH;
-  let tempBinDir = "";
-
-  beforeEach(async () => {
-    tempBinDir = await mkdtemp(
-      path.join(tmpdir(), "nakama-agent-delegation-bin-")
-    );
-    process.env.PATH = tempBinDir;
-    process.env.NAKAMA_DISABLE_FIX_PATH = "1";
-  });
-
-  afterEach(async () => {
-    process.env.PATH = originalPath;
-
-    if (originalDisableFixPath === undefined) {
-      delete process.env.NAKAMA_DISABLE_FIX_PATH;
-    } else {
-      process.env.NAKAMA_DISABLE_FIX_PATH = originalDisableFixPath;
-    }
-
-    if (tempBinDir) {
-      await rm(tempBinDir, { force: true, recursive: true });
-      tempBinDir = "";
-    }
-  });
-
-  test("includes harness command template and backend guidance for bash delegation", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    await db.upsertProfile({ ...createDefaultProfile(), id: "profile_test" });
-    await installFakeOpenCode(tempBinDir);
-    await db.upsertWorkspaceSettings(
-      mergeWorkspaceSettings(null, {
-        codingAgentHarnesses: [
-          {
-            args: [],
-            command: "opencode",
-            enabled: true,
-            id: "coding-harness-opencode",
-            kind: "opencode",
-            name: "OpenCode",
-          },
-        ],
-        id: WORKSPACE_SETTINGS_ID,
-        imageModel: null,
-        selectedCodingAgentHarness: null,
-        transcriptionModel: null,
-        updatedAt: new Date().toISOString(),
-        visionModel: null,
-      })
-    );
-
-    const service = new AgentService(null, null, db);
-
-    // SAFETY: This test checks output for the configured coding-agent fixture.
-    const context = await privateServiceAccess<AgentServiceCodingContextAccess>(
-      service
-    ).formatCodingDelegationContext("org_test", "profile_test");
-
-    expect(context).toContain("bash");
-    expect(context).toContain("opencode run");
-    expect(context).not.toContain("delegate_coding_task");
-    expect(context).not.toContain("workspace settings");
-  });
-
-  test("lists install commands when no coding agent CLI is installed", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    await db.upsertProfile({ ...createDefaultProfile(), id: "profile_test" });
-    await db.upsertWorkspaceSettings(
-      mergeWorkspaceSettings(null, {
-        codingAgentHarnesses: [],
-        id: WORKSPACE_SETTINGS_ID,
-        imageModel: null,
-        selectedCodingAgentHarness: null,
-        transcriptionModel: null,
-        updatedAt: new Date().toISOString(),
-        visionModel: null,
-      })
-    );
-
-    const service = new AgentService(null, null, db);
-
-    // SAFETY: This test checks output for the configured coding-agent fixture.
-    const context = await privateServiceAccess<AgentServiceCodingContextAccess>(
-      service
-    ).formatCodingDelegationContext("org_test", "profile_test");
-
-    expect(context).toContain("No coding agent CLI is installed");
-    expect(context).toContain("npm install -g");
-    expect(context).toContain("Cursor Agent CLI");
-    expect(context).toContain("cannot be auto-installed");
-    expect(context).not.toContain("workspace settings");
-    expect(context).not.toContain("delegate_coding_task");
-  });
-
-  test("asks the user when multiple coding agent CLIs are installed", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    await db.upsertProfile({ ...createDefaultProfile(), id: "profile_test" });
-    await installFakeOpenCode(tempBinDir);
-    await Bun.write(
-      path.join(
-        tempBinDir,
-        process.platform === "win32" ? "claude.cmd" : "claude"
-      ),
-      process.platform === "win32"
-        ? "@echo off\r\necho claude\r\n"
-        : "#!/bin/sh\necho claude\n"
-    );
-    await chmod(
-      path.join(
-        tempBinDir,
-        process.platform === "win32" ? "claude.cmd" : "claude"
-      ),
-      0o755
-    );
-
-    await db.upsertWorkspaceSettings(
-      mergeWorkspaceSettings(null, {
-        codingAgentHarnesses: [
-          {
-            args: [],
-            command: "opencode",
-            enabled: true,
-            id: "coding-harness-opencode",
-            kind: "opencode",
-            name: "OpenCode",
-          },
-          {
-            args: [],
-            command: "claude",
-            enabled: true,
-            id: "coding-harness-claude-code",
-            kind: "claude_code",
-            name: "Claude Code",
-          },
-        ],
-        id: WORKSPACE_SETTINGS_ID,
-        imageModel: null,
-        selectedCodingAgentHarness: "coding-harness-opencode",
-        transcriptionModel: null,
-        updatedAt: new Date().toISOString(),
-        visionModel: null,
-      })
-    );
-
-    const service = new AgentService(null, null, db);
-
-    // SAFETY: This test checks output for the configured coding-agent fixture.
-    const context = await privateServiceAccess<AgentServiceCodingContextAccess>(
-      service
-    ).formatCodingDelegationContext("org_test", "profile_test");
-
-    expect(context).toContain("Multiple coding agent CLIs are installed");
-    expect(context).toContain("Ask the user which one to use");
-    expect(context).toContain("OpenCode");
-    expect(context).toContain("Claude Code");
-    expect(context).not.toContain("opencode run");
-  });
-});
 
 describe("AgentService skill_manage injection", () => {
   let configDir = "";
@@ -517,28 +345,3 @@ describe("AgentService skill_manage injection", () => {
     expect(userMessage?.content).toBe("/learn");
   });
 });
-
-async function installFakeOpenCode(binDir: string): Promise<void> {
-  if (process.platform === "win32") {
-    await writeFile(
-      path.join(binDir, "opencode.cmd"),
-      "@echo off\r\necho fake opencode\r\n"
-    );
-
-    return;
-  }
-
-  const scriptPath = path.join(binDir, "opencode");
-  await writeFile(
-    scriptPath,
-    [
-      "#!/bin/sh",
-      'if [ "$1" = "--version" ]; then',
-      '  echo "fake opencode"',
-      "  exit 0",
-      "fi",
-      "printf '%s' \"$*\"",
-    ].join("\n")
-  );
-  await chmod(scriptPath, 0o755);
-}

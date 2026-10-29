@@ -49,6 +49,7 @@ function GroupMemoryEditor({ groupId }: { groupId: string }) {
   const { state }: { state: { groupMemoryEntry?: string | null } | null } =
     useLocation();
 
+  // The message notice invalidates this query, so its click shows fresh memory.
   const { data, error, isLoading } = useQuery({
     queryFn: () => client.getAgentGroupMemory(groupId),
     queryKey,

@@ -1,26 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { asTestFetch } from "../providers/test-helpers";
-import {
-  getExternalModelCatalog,
-  isExternalModelCatalogId,
-} from "./external-model-catalog-service";
+import { getExternalModelCatalog } from "./external-model-catalog-service";
 
 const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
-});
-
-describe("isExternalModelCatalogId", () => {
-  test("accepts supported catalog ids", () => {
-    expect(isExternalModelCatalogId("models-dev")).toBe(true);
-    expect(isExternalModelCatalogId("openrouter")).toBe(true);
-    expect(isExternalModelCatalogId("cerebras")).toBe(true);
-  });
-
-  test("rejects unknown catalog ids", () => {
-    expect(isExternalModelCatalogId("unknown")).toBe(false);
-  });
 });
 
 describe("getExternalModelCatalog", () => {

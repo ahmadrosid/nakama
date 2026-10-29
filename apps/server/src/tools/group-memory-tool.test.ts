@@ -43,7 +43,9 @@ test("adds, replaces and removes entries, and skips a repeat", async () => {
     (await save({ entry: "Genre is noir", replaces: "Genre is noir" })).change
   ).toBeUndefined();
 
-  expect(groupWorkspace(sharedDir).memory.read()).toBe("- Genre is noir\n- Lead is Mara");
+  expect(groupWorkspace(sharedDir).memory.read()).toBe(
+    "- Genre is noir\n- Lead is Mara"
+  );
 
   expect(
     (await save({ entry: "Genre is sci-fi", replaces: "Genre is noir" })).change

@@ -13,6 +13,8 @@ import type {
   HealthResponse,
   ListProvidersResponse,
   ModelsResponse,
+  NakamaUpgradeResponse,
+  NakamaVersionResponse,
   PluginWorkerStatus,
   PreviewDataImportRequest,
   ProfilePackImportRequest,
@@ -87,6 +89,24 @@ export class SystemClient extends NakamaClientCore {
         method: "PUT",
       }
     );
+  }
+
+  async getNakamaVersion(): Promise<NakamaVersionResponse> {
+    return this.request<NakamaVersionResponse>("/v1/system/version");
+  }
+
+  async getNakamaUpgrade(): Promise<NakamaUpgradeResponse> {
+    return this.request<NakamaUpgradeResponse>("/v1/system/upgrade");
+  }
+
+  async startNakamaUpgrade(
+    version: string,
+    rollback = false
+  ): Promise<NakamaUpgradeResponse> {
+    return this.request<NakamaUpgradeResponse>("/v1/system/upgrade", {
+      body: JSON.stringify({ rollback, version }),
+      method: "POST",
+    });
   }
 
   async getWebPublicUrl(): Promise<WebPublicUrlSettingsResponse> {

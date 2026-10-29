@@ -1,0 +1,528 @@
+import type { McpServerSummary } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import { buttonVariants } from "@nakama/ui/button-variants";
+import { DialogTitle } from "@nakama/ui/dialog";
+import { Input } from "@nakama/ui/input";
+import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  Add01Icon,
+  ArrowLeft01Icon,
+  CheckmarkCircle02Icon,
+  CodeIcon,
+  Search01Icon,
+  Tick02Icon,
+} from "hugeicons-react";
+import { type FormEvent, type ReactNode, useState } from "react";
+import { POPULAR_SERVERS } from "@/components/soul-tools/mcp-tab/popular-mcp-servers";
+import type { McpServerKind } from "@/components/soul-tools/mcp-tab/use-mcp-server-dialog-state";
+import { useMcpServerDetailQuery } from "@/hooks/use-app-queries";
+import { queryKeys } from "@/lib/query-keys";
+
+export type PopularServer = (typeof POPULAR_SERVERS)[number];
+
+/** The OAuth callback connects the server on its own, so its status is re-read until it lands. */
+const SIGN_IN_POLL_INTERVAL_MS = 3000;
+
+function AppLogo({
+  name,
+  preset,
+  size = "md",
+}: {
+  name: string;
+  preset?: PopularServer;
+  size?: "md" | "lg";
+}) {
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        "flex shrink-0 items-center justify-center bg-muted font-semibold text-foreground/80",
+        size === "lg"
+          ? "size-16 rounded-2xl text-xl"
+          : "size-9 rounded-lg text-sm"
+      )}
+    >
+      {preset ? (
+        <svg
+          className={size === "lg" ? "size-8" : "size-5"}
+          fill="currentColor"
+          viewBox={preset.viewBox}
+        >
+          <path d={preset.path} />
+        </svg>
+      ) : (
+        name.charAt(0).toUpperCase()
+      )}
+    </div>
+  );
+}
+
+function BackButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button
+      className="-ml-2 self-start text-muted-foreground"
+      onClick={onClick}
+      size="sm"
+      type="button"
+      variant="ghost"
+    >
+      <ArrowLeft01Icon aria-hidden />
+      All apps
+    </Button>
+  );
+}
+
+type AppCard = {
+  description: string;
+  key: string;
+  name: string;
+  onPick: () => void;
+  preset?: PopularServer;
+  ready: boolean;
+};
+
+/** Popular apps first, then the org's own. Apps the org has add in one click; the rest connect. */
+function appCards({
+  onAssign,
+  onConnect,
+  popular,
+  registered,
+}: {
+  onAssign?: (serverId: string) => void;
+  onConnect: (preset: PopularServer) => void;
+  popular: readonly PopularServer[];
+  registered: McpServerSummary[];
+}): AppCard[] {
+  const ready: AppCard[] = onAssign
+    ? registered.map((server) => {
+        const preset = POPULAR_SERVERS.find(
+          (item) => item.name.toLowerCase() === server.name.toLowerCase()
+        );
+
+        return {
+          description:
+            preset?.description ??
+            `${server.toolCount} tool${server.toolCount === 1 ? "" : "s"}`,
+          key: server.id,
+          name: preset?.name ?? server.name,
+          onPick: () => onAssign(server.id),
+          preset,
+          ready: true,
+        };
+      })
+    : [];
+
+  const connect = popular.map((preset) => ({
+    description: preset.description,
+    key: preset.url,
+    name: preset.name,
+    onPick: () => onConnect(preset),
+    preset,
+    ready: false,
+  }));
+
+  const rank = (card: AppCard) => {
+    const index = card.preset ? POPULAR_SERVERS.indexOf(card.preset) : -1;
+
+    return index === -1 ? POPULAR_SERVERS.length : index;
+  };
+
+  return [...ready, ...connect].sort((a, b) => rank(a) - rank(b));
+}
+
+function AppCardButton({ busy, card }: { busy: boolean; card: AppCard }) {
+  return (
+    <button
+      aria-label={
+        card.ready ? `Add ${card.name} to agent` : `Connect ${card.name}`
+      }
+      className="flex h-full w-full items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted/50 disabled:opacity-50"
+      disabled={busy}
+      onClick={card.onPick}
+      type="button"
+    >
+      <AppLogo name={card.name} preset={card.preset} />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate font-medium text-foreground text-sm">
+          {card.name}
+        </span>
+        <span className="truncate text-muted-foreground text-xs">
+          {card.description}
+        </span>
+      </span>
+      {card.ready ? (
+        <span className="inline-flex shrink-0 items-center gap-1 font-medium text-emerald-700 text-xs dark:text-emerald-400">
+          <Tick02Icon aria-hidden className="size-3.5" />
+          Ready
+        </span>
+      ) : (
+        <span className="shrink-0 font-medium text-primary text-xs">
+          Connect
+        </span>
+      )}
+    </button>
+  );
+}
+
+type AppFilter = "all" | "ready" | "new";
+
+function matchesFilter(card: AppCard, filter: AppFilter): boolean {
+  if (filter === "all") {
+    return true;
+  }
+
+  return filter === "ready" ? card.ready : !card.ready;
+}
+
+function AppFilterChips({
+  counts,
+  filter,
+  onChange,
+}: {
+  counts: { new: number; ready: number };
+  filter: AppFilter;
+  onChange: (filter: AppFilter) => void;
+}) {
+  const chips = [
+    { id: "all", label: "All" },
+    { id: "ready", label: `In your org ${counts.ready}` },
+    { id: "new", label: `New ${counts.new}` },
+  ] as const satisfies readonly { id: AppFilter; label: string }[];
+
+  return (
+    <div
+      aria-label="Show apps"
+      className="flex shrink-0 gap-1 rounded-lg bg-muted p-1"
+      role="group"
+    >
+      {chips.map((chip) => (
+        <button
+          aria-pressed={filter === chip.id}
+          className={cn(
+            "h-7 whitespace-nowrap rounded-md px-3 font-medium text-muted-foreground text-xs transition-colors hover:text-foreground",
+            filter === chip.id && "bg-background text-foreground shadow-xs"
+          )}
+          key={chip.id}
+          onClick={() => onChange(chip.id)}
+          type="button"
+        >
+          {chip.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function McpAppPicker({
+  busy,
+  onAssign,
+  onConnect,
+  onCustom,
+  onQueryChange,
+  popular,
+  query,
+  registered,
+}: {
+  busy: boolean;
+  onAssign?: (serverId: string) => void;
+  onConnect: (preset: PopularServer) => void;
+  onCustom: () => void;
+  onQueryChange: (value: string) => void;
+  popular: readonly PopularServer[];
+  query: string;
+  registered: McpServerSummary[];
+}) {
+  const [filter, setFilter] = useState<AppFilter>("all");
+  const needle = query.trim().toLowerCase();
+
+  const searched = appCards({
+    onAssign,
+    onConnect,
+    popular,
+    registered,
+  }).filter((card) => card.name.toLowerCase().includes(needle));
+
+  const counts = {
+    new: searched.filter((card) => !card.ready).length,
+    ready: searched.filter((card) => card.ready).length,
+  };
+
+  // Chips only help when the list holds both kinds of app.
+  const showChips = counts.new > 0 && counts.ready > 0;
+
+  const cards = searched.filter(
+    (card) => !showChips || matchesFilter(card, filter)
+  );
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex flex-col gap-4 px-6 pt-6">
+        <DialogTitle className="pr-8 text-xl">Connect an app</DialogTitle>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-48 flex-1">
+            <Search01Icon
+              aria-hidden
+              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              aria-label="Search apps"
+              className="pl-9"
+              onChange={(event) => onQueryChange(event.target.value)}
+              placeholder="Search apps"
+              type="search"
+              value={query}
+            />
+          </div>
+          {showChips ? (
+            <AppFilterChips
+              counts={counts}
+              filter={filter}
+              onChange={setFilter}
+            />
+          ) : null}
+        </div>
+      </div>
+
+      <ul className="grid min-h-0 flex-1 auto-rows-min gap-2 overflow-y-auto px-6 py-5 sm:grid-cols-2">
+        {cards.map((card) => (
+          <li key={card.key}>
+            <AppCardButton busy={busy} card={card} />
+          </li>
+        ))}
+        <li>
+          <button
+            className="flex h-full w-full items-center gap-3 rounded-lg border border-border border-dashed px-3 py-2.5 text-left text-muted-foreground text-sm transition-colors hover:bg-muted/50 hover:text-foreground"
+            onClick={onCustom}
+            type="button"
+          >
+            <span
+              aria-hidden
+              className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted"
+            >
+              <Add01Icon className="size-4" />
+            </span>
+            <span className="font-medium">Add a custom connection</span>
+          </button>
+        </li>
+      </ul>
+    </div>
+  );
+}
+
+const SIGN_IN_CHOICES = [
+  { id: "signin", label: "Sign in with my account" },
+  { id: "http", label: "Use an API key" },
+] as const satisfies readonly { id: McpServerKind; label: string }[];
+
+export function McpCustomConnection({
+  children,
+  kind,
+  onBack,
+  onImport,
+  onKindChange,
+}: {
+  children: ReactNode;
+  kind: McpServerKind;
+  onBack: () => void;
+  onImport: () => void;
+  onKindChange: (kind: McpServerKind) => void;
+}) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-6">
+      <BackButton onClick={onBack} />
+      <DialogTitle className="text-xl">Add a custom connection</DialogTitle>
+
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-2 font-medium text-sm">
+          How does it sign in?
+        </legend>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {SIGN_IN_CHOICES.map((choice) => (
+            <label
+              className={cn(
+                "flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-sm",
+                kind === choice.id
+                  ? "border-primary bg-primary/5 font-medium"
+                  : "border-border"
+              )}
+              key={choice.id}
+            >
+              <input
+                checked={kind === choice.id}
+                className="size-4 accent-primary"
+                name="mcp-sign-in"
+                onChange={() => onKindChange(choice.id)}
+                type="radio"
+              />
+              {choice.label}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      <details
+        className="text-muted-foreground text-sm"
+        open={kind === "stdio"}
+      >
+        <summary className="cursor-pointer py-1">For developers</summary>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button
+            aria-pressed={kind === "stdio"}
+            onClick={() => onKindChange("stdio")}
+            size="sm"
+            type="button"
+            variant={kind === "stdio" ? "secondary" : "outline"}
+          >
+            Run a command
+          </Button>
+          <Button onClick={onImport} size="sm" type="button" variant="outline">
+            <CodeIcon aria-hidden />
+            Import JSON
+          </Button>
+        </div>
+      </details>
+
+      {children}
+    </div>
+  );
+}
+
+export function McpConnectApp({
+  busy,
+  canSubmit,
+  onBack,
+  onSubmit,
+  preset,
+  submitError,
+}: {
+  busy: boolean;
+  canSubmit: boolean;
+  onBack: () => void;
+  onSubmit: (event: FormEvent) => void;
+  preset: PopularServer;
+  submitError: string | null;
+}) {
+  return (
+    <form
+      className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-6"
+      onSubmit={onSubmit}
+    >
+      <BackButton onClick={onBack} />
+      <div className="mx-auto flex w-full max-w-md flex-col gap-6">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <AppLogo name={preset.name} preset={preset} size="lg" />
+          <DialogTitle className="text-xl">Connect {preset.name}</DialogTitle>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <h3 className="font-medium text-muted-foreground text-xs">
+            Your agent will be able to
+          </h3>
+          <ul className="flex flex-col gap-2">
+            {preset.abilities.map((ability) => (
+              <li className="flex items-center gap-2 text-sm" key={ability}>
+                <Tick02Icon
+                  aria-hidden
+                  className="size-4 text-emerald-600 dark:text-emerald-400"
+                />
+                {ability}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <p className="rounded-lg bg-muted/60 px-4 py-3 text-muted-foreground text-sm">
+          {preset.name} opens in a new tab. Sign in there to approve access.
+        </p>
+
+        {submitError ? (
+          <p
+            className="rounded-md bg-destructive/10 px-3 py-2.5 text-destructive text-sm"
+            role="alert"
+          >
+            {submitError}
+          </p>
+        ) : null}
+
+        <Button disabled={busy || !canSubmit} size="lg" type="submit">
+          {busy ? <Spinner className="size-4" /> : `Continue to ${preset.name}`}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+export function McpSignInPending({
+  name,
+  onDone,
+  opened,
+  preset,
+  serverId,
+  url,
+}: {
+  name: string;
+  onDone: () => void;
+  opened: boolean;
+  preset?: PopularServer;
+  serverId: string;
+  url: string;
+}) {
+  const queryClient = useQueryClient();
+
+  const { data: server } = useMcpServerDetailQuery(serverId, {
+    refetchInterval: SIGN_IN_POLL_INTERVAL_MS,
+  });
+
+  const connected = server?.status === "connected";
+
+  function finish() {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.mcp.all });
+    onDone();
+  }
+
+  if (connected) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
+        <CheckmarkCircle02Icon
+          aria-hidden
+          className="size-14 text-emerald-600 dark:text-emerald-400"
+        />
+        <DialogTitle className="text-xl">{name} is connected</DialogTitle>
+        <Button className="min-w-40" onClick={finish} size="lg" type="button">
+          Done
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
+      <AppLogo name={name} preset={preset} size="lg" />
+      <DialogTitle className="text-xl">Finish signing in to {name}</DialogTitle>
+      <p className="max-w-sm text-muted-foreground text-sm">
+        Approve access in the {name} tab. This window updates by itself.
+      </p>
+      <a
+        className={cn(
+          buttonVariants({
+            size: "lg",
+            variant: opened ? "outline" : "default",
+          }),
+          "min-w-56"
+        )}
+        href={url}
+        rel="noreferrer"
+        target="_blank"
+      >
+        {opened ? `Open ${name} again` : `Open ${name}`}
+      </a>
+      <p className="flex items-center gap-2 text-muted-foreground text-sm">
+        <Spinner className="size-4" />
+        Waiting for approval
+      </p>
+    </div>
+  );
+}

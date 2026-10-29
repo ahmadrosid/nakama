@@ -1003,7 +1003,12 @@ export function useProfilesPage() {
         profileId: selectedId,
         serverId: response.server.id,
       });
-      setMcpCreateOpen(false);
+
+      if (!response.authorizationUrl) {
+        setMcpCreateOpen(false);
+      }
+
+      return response;
     } catch (err) {
       const message = formatError(err);
       setError(message);

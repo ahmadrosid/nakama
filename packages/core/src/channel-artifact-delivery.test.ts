@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   type DeliverableChannelArtifact,
   deliverTurnArtifactShares,
-  formatArtifactShareFooter,
   isAttachIntent,
   isAttachOnlyCommand,
   mintDeliverableArtifacts,
@@ -132,32 +131,6 @@ describe("resolveShareUrlForPublish", () => {
     );
 
     expect(resolved.shareUrl).toBe("https://app.example/s/tok_1");
-  });
-});
-
-describe("formatArtifactShareFooter", () => {
-  test("formats absolute links", () => {
-    expect(
-      formatArtifactShareFooter(
-        [
-          {
-            filename: "report.md",
-            sharePath: "/s/tok_1",
-            shareUrl: "https://app.example/s/tok_1",
-          },
-        ],
-        { webPublicUrlConfigured: true }
-      )
-    ).toBe("report.md: https://app.example/s/tok_1");
-  });
-
-  test("adds hint when public URL is not configured", () => {
-    expect(
-      formatArtifactShareFooter(
-        [{ filename: "report.md", sharePath: "/s/tok_1", shareUrl: null }],
-        { webPublicUrlConfigured: false }
-      )
-    ).toContain("Set Web Public URL");
   });
 });
 

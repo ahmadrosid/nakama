@@ -80,6 +80,7 @@ jobs:
               bun run --filter @nakama/whatsapp build
               bun run --filter @nakama/discord build
               bun run --filter @nakama/slack build
+              bun run --filter @nakama/teams build
 
           - name: Set up Electron
             run: |

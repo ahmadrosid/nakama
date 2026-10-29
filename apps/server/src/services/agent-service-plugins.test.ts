@@ -278,6 +278,19 @@ describe("AgentService plugin capabilities", () => {
       })
     ).toEqual({ id: "telegram_user", role: "member" });
 
+    // The Teams worker also reaches the API as the shared local client, which
+    // is an org admin; its users must not inherit that role.
+    expect(
+      pluginActorFromContext({
+        channel: "teams",
+        isPlatformAdmin: true,
+        orgId: ORG_ID,
+        orgRole: "admin",
+        profileId: profile.id,
+        userId: "teams_user",
+      })
+    ).toEqual({ id: "teams_user", role: "member" });
+
     expect(
       pluginActorFromContext({
         isPlatformAdmin: true,

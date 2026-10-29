@@ -422,6 +422,13 @@ interface StoredSession {
   sharedCapabilityRevision?: string;
 }
 
+/**
+ * Every opened session used to stay in memory with its history until a
+ * restart, which is most of a long-lived instance's RAM growth. An evicted
+ * session is rebuilt from SQLite on its next turn, as after a restart.
+ */
+const MAX_CACHED_SESSIONS = 50;
+
 export type { SubAgentRunInput, SubAgentRunResult };
 
 interface CognitoSessionOptions {
@@ -451,6 +458,7 @@ type ChatProfileAccess = Pick<
 const SHARED_HISTORY_CHANNELS: readonly AgentChannel[] = [
   "discord",
   "slack",
+  "teams",
   "telegram",
   "whatsapp",
 ];
@@ -2595,7 +2603,7 @@ export class AgentService {
       return sessionId;
     }
 
-    this.sessions.set(sessionId, {
+    this.cacheSession(sessionId, {
       channel,
       pluginRevision: await this.pluginCapabilityRevision(orgId),
       profileId: resolvedProfileId,
@@ -2623,14 +2631,18 @@ export class AgentService {
     }
   }
 
-  async readChatImageAttachment(
+  async readChatAttachment(
     orgId: string,
     attachmentId: string,
     access: ChatProfileAccess
   ): Promise<LoadedAttachmentBytes | null> {
     const record = await this.db.getAttachment(attachmentId);
 
-    if (!record || record.orgId !== orgId || record.kind !== "image") {
+    if (
+      !record ||
+      record.orgId !== orgId ||
+      (record.kind !== "image" && record.kind !== "document")
+    ) {
       return null;
     }
 
@@ -2968,7 +2980,7 @@ export class AgentService {
       record.thinkingEffort
     );
 
-    this.sessions.set(nextSessionId, {
+    this.cacheSession(nextSessionId, {
       channel,
       pluginRevision: await this.pluginCapabilityRevision(profileOrgId),
       profileId: record.profileId,
@@ -3160,6 +3172,8 @@ export class AgentService {
       stored.pluginRevision === pluginRevision &&
       (stored.sharedCapabilityRevision ?? "") === sharedCapabilityRevision
     ) {
+      this.cacheSession(sessionId, stored);
+
       return stored.session;
     }
 
@@ -3190,7 +3204,7 @@ export class AgentService {
       record.thinkingEffort
     );
 
-    this.sessions.set(sessionId, {
+    this.cacheSession(sessionId, {
       channel,
       pluginRevision,
       profileId: record.profileId,
@@ -6246,7 +6260,8 @@ export class AgentService {
       channel === "telegram" ||
       channel === "whatsapp" ||
       channel === "discord" ||
-      channel === "slack"
+      channel === "slack" ||
+      channel === "teams"
         ? "member"
         : orgRole;
 
@@ -6950,6 +6965,22 @@ export class AgentService {
     }
 
     throw new Error("No profile available for playground execution.");
+  }
+
+  /** Least recently used first out; a session mid-turn is never evicted. */
+  private cacheSession(sessionId: string, stored: StoredSession): void {
+    this.sessions.delete(sessionId);
+    this.sessions.set(sessionId, stored);
+
+    for (const id of this.sessions.keys()) {
+      if (this.sessions.size <= MAX_CACHED_SESSIONS) {
+        break;
+      }
+
+      if (!sessionTurnRegistry.isActive(id)) {
+        this.sessions.delete(id);
+      }
+    }
   }
 
   private resolveCompactionConfig(

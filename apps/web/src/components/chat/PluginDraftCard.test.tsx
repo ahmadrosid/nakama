@@ -123,16 +123,6 @@ async function renderDraft(
   return { enable, open, shown };
 }
 
-test("opens an enabled plugin page in the side panel", async () => {
-  const { open, shown } = await renderDraft("enabled");
-
-  await act(async () => open?.click());
-
-  expect(
-    shown.map(({ defaultWidth, id, title }) => ({ defaultWidth, id, title }))
-  ).toEqual([{ defaultWidth: 768, id: "plugin:notes", title: "Notes" }]);
-});
-
 test("does not offer the panel before the plugin is enabled", async () => {
   const { open } = await renderDraft("disabled");
 

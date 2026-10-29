@@ -128,8 +128,10 @@ test("the Connectors submenu assigns an org MCP server to the chat's agent", asy
   );
 
   await act(async () => trigger?.click());
-  await waitFor(() => Boolean(findByText('[role="menuitem"]', "Connectors")));
-  await act(async () => findByText('[role="menuitem"]', "Connectors")?.click());
+  await waitFor(() => Boolean(findByText('[role="menuitem"]', "MCP servers")));
+  await act(async () =>
+    findByText('[role="menuitem"]', "MCP servers")?.click()
+  );
 
   const item = (name: string) => findByText('[role="menuitemcheckbox"]', name);
 

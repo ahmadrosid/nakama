@@ -44,6 +44,7 @@ export function GroupMessageMemoryChanges({
 }: {
   changes?: AgentGroupMemoryChange[];
 }) {
+  const { groupId = "" } = useParams();
   const queryClient = useQueryClient();
   const [, setSearchParams] = useSearchParams();
   const [open, setOpen] = useState(false);
@@ -75,6 +76,10 @@ export function GroupMessageMemoryChanges({
             <button
               className="group/row flex w-full items-start gap-2 rounded-xl px-2.5 py-1.5 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() => {
+                // An agent can change memory after this reply; show it fresh.
+                void queryClient.invalidateQueries({
+                  queryKey: queryKeys.agentGroups.memory(groupId),
+                });
                 setSearchParams(
                   (current) => withPanel(current, "memory", "1"),
                   {
@@ -82,11 +87,6 @@ export function GroupMessageMemoryChanges({
                     state: { groupMemoryEntry: change.newEntry },
                   }
                 );
-                // Show the saved write, also in a panel that is already open.
-                void queryClient.invalidateQueries({
-                  predicate: (query) => query.queryKey[2] === "memory",
-                  queryKey: queryKeys.agentGroups.all,
-                });
               }}
               title="Open in Memory"
               type="button"

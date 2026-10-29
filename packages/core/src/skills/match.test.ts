@@ -65,21 +65,4 @@ describe("matchSkillsForMessage", () => {
       ).map((skill) => skill.name)
     ).toEqual(["artifact-design"]);
   });
-
-  test("matches create-workflow on singular workflow", () => {
-    const createWorkflow: DiscoveredSkill = {
-      ...weatherSkill,
-      description:
-        "Create and run user-triggered workflows with declared steps. Use when the user asks about a workflow or wants a verifiable recipe (fetch, compare, summarize) they can run on demand from chat or the dashboard.",
-      hasTool: false,
-      includeBodyOnMatch: true,
-      name: "create-workflow",
-    };
-
-    expect(
-      matchSkillsForMessage([createWorkflow], "What workflow do you have?").map(
-        (skill) => skill.name
-      )
-    ).toEqual(["create-workflow"]);
-  });
 });

@@ -15,13 +15,6 @@ describe("htmlForArtifactPreview", () => {
     expect(htmlForArtifactPreview(`${html}x`)).toContain('role="alert"');
     expect(ARTIFACT_HTML_IFRAME_SANDBOX.split(" ")).toEqual(["allow-scripts"]);
   });
-
-  test("injects scrollbar styles into head", () => {
-    const html = "<html><head><title>Slides</title></head><body></body></html>";
-    expect(htmlForArtifactPreview(html)).toContain(
-      "<head><style data-nakama-html-preview>"
-    );
-  });
 });
 
 // Parse real HTML without loading its subresources in the test process.

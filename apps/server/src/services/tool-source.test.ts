@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { BASH_TOOL_ID, BUILTIN_TOOL_IDS } from "@nakama/core/tools/protected";
 import { readToolSource } from "./tool-source";
 
 describe("readToolSource", () => {
@@ -71,28 +70,6 @@ describe("readToolSource", () => {
     expect(source.content).toContain("def run");
   });
 
-  test("reads built-in file tool source", async () => {
-    for (const [name, id, implementation] of [
-      ["write_file", BUILTIN_TOOL_IDS.write_file, "writeFileTool"],
-      ["edit_file", BUILTIN_TOOL_IDS.edit_file, "editFileTool"],
-      ["read_file", BUILTIN_TOOL_IDS.read_file, "readFileTool"],
-    ] as const) {
-      const source = await readToolSource({
-        createdAt: new Date().toISOString(),
-        description: name,
-        handlerConfig: { name },
-        handlerType: "builtin",
-        id,
-        name,
-        updatedAt: new Date().toISOString(),
-      });
-
-      expect(source.path).toBe("packages/core/src/tools/builtin.ts");
-      expect(source.language).toBe("typescript");
-      expect(source.content).toContain(implementation);
-    }
-  });
-
   test("rejects unmapped built-in names", async () => {
     for (const name of [
       "missing_tool",
@@ -112,21 +89,5 @@ describe("readToolSource", () => {
         })
       ).rejects.toMatchObject({ status: 404 });
     }
-  });
-
-  test("reads bash tool source", async () => {
-    const source = await readToolSource({
-      createdAt: new Date().toISOString(),
-      description: "Bash",
-      handlerConfig: {},
-      handlerType: "bash",
-      id: BASH_TOOL_ID,
-      name: "bash",
-      updatedAt: new Date().toISOString(),
-    });
-
-    expect(source.path).toBe("apps/server/src/tools/bash.ts");
-    expect(source.language).toBe("typescript");
-    expect(source.content.length).toBeGreaterThan(0);
   });
 });

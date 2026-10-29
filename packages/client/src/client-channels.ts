@@ -13,6 +13,7 @@ import type {
   RegenerateNotificationDestinationKeyResponse,
   SlackSettingsResponse,
   StartTelegramPairingRequest,
+  TeamsSettingsResponse,
   TelegramAccessRequestsResponse,
   TelegramPairingStartResponse,
   TelegramPairingStatusResponse,
@@ -22,6 +23,7 @@ import type {
   UpdateNotificationDestinationRequest,
   UpdateProfileComposioToolkitsRequest,
   UpdateSlackSettingsRequest,
+  UpdateTeamsSettingsRequest,
   UpdateTelegramSettingsRequest,
   UpdateWhatsAppSettingsRequest,
   WhatsAppSettingsResponse,
@@ -199,6 +201,25 @@ export class ChannelsClient extends AutomationsClient {
   ): Promise<SlackSettingsResponse> {
     return this.request<SlackSettingsResponse>(
       `/v1/settings/slack?profileId=${encodeURIComponent(profileId ?? "")}`,
+      {
+        body: JSON.stringify(request),
+        method: "PUT",
+      }
+    );
+  }
+
+  async getTeamsSettings(profileId?: string): Promise<TeamsSettingsResponse> {
+    return this.request<TeamsSettingsResponse>(
+      `/v1/settings/teams?profileId=${encodeURIComponent(profileId ?? "")}`
+    );
+  }
+
+  async setTeamsSettings(
+    request: UpdateTeamsSettingsRequest,
+    profileId?: string
+  ): Promise<TeamsSettingsResponse> {
+    return this.request<TeamsSettingsResponse>(
+      `/v1/settings/teams?profileId=${encodeURIComponent(profileId ?? "")}`,
       {
         body: JSON.stringify(request),
         method: "PUT",

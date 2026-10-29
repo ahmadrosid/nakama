@@ -7,6 +7,7 @@ import type {
   CreateTeamRequest,
   InviteOrgMemberRequest,
   ListOrganizationsResponse,
+  ListOrgInvitesResponse,
   ListOrgMembersResponse,
   ListOrgSharedResourcesResponse,
   ListSkillCuratorOrgsResponse,
@@ -334,6 +335,19 @@ export class OrgsClient extends AuthClient {
         body: JSON.stringify(request),
         method: "POST",
       }
+    );
+  }
+
+  async listOrgInvites(orgId: string): Promise<ListOrgInvitesResponse> {
+    return this.request<ListOrgInvitesResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/invites`
+    );
+  }
+
+  async revokeOrgInvite(orgId: string, inviteId: string): Promise<void> {
+    await this.request(
+      `/v1/orgs/${encodeURIComponent(orgId)}/invites/${encodeURIComponent(inviteId)}`,
+      { method: "DELETE" }
     );
   }
 

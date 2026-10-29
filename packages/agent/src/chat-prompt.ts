@@ -39,6 +39,13 @@ const MESSAGING_CHANNEL_PROMPT = {
   },
   subagent: null,
   task: null,
+  teams: {
+    format: [
+      "Use simple Markdown and keep responses suitable for a personal Teams chat. File delivery is not available on this connection.",
+    ],
+    label: "Microsoft Teams",
+    supportsGroupAudience: false,
+  },
   telegram: {
     chat: [
       "When you save an artifact, Nakama posts a share link after your reply. When the user asks to send or attach the file (or uses /attach), Nakama sends a Telegram document — do not say you cannot attach or send files, and do not redirect them only to the Artifacts tab for that request.",

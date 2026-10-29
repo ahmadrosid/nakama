@@ -10,8 +10,8 @@ const second = { orgId: "org_a", profileId: "agent_b" };
 
 let root = "";
 
-// Channels still running when a test ends open their log files late.
-const hosts: ReturnType<typeof createWhatsAppHost>[] = [];
+// Stop what a test left running, so no log stream opens after the dir is gone.
+let hosts: ReturnType<typeof createWhatsAppHost>[] = [];
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "nakama-whatsapp-host-"));
@@ -20,7 +20,8 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await Promise.all(hosts.splice(0).map((sync) => sync([])));
+  await Promise.all(hosts.map((sync) => sync([])));
+  hosts = [];
   await rm(root, { force: true, recursive: true });
 });
 
@@ -124,8 +125,6 @@ test("console output from a channel goes to that channel's log files", async () 
       return { stop: async () => {} };
     },
   });
-
-  hosts.push(sync);
 
   await sync([first, second]);
   target.log("host line");

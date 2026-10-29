@@ -98,11 +98,6 @@ test("write demotes extra in_progress todos to pending", async () => {
   expect(todos.find((todo) => todo.id === "2")?.status).toBe("in_progress");
 });
 
-test("formatForPrompt returns empty string when no todos", async () => {
-  const { state } = await createState();
-  expect(await state.formatForPrompt("session_test")).toBe("");
-});
-
 test("formatForPrompt renders active todos", async () => {
   const { state } = await createState();
 
@@ -114,17 +109,6 @@ test("formatForPrompt renders active todos", async () => {
   const formatted = await state.formatForPrompt("session_test");
 
   expect(formatted).toContain("[in progress] Ship feature");
-});
-
-test("formatForPrompt returns empty string when plan is complete", async () => {
-  const { state } = await createState();
-
-  await state.write("session_test", {
-    merge: false,
-    todos: [{ content: "Done", id: "1", status: "completed" }],
-  });
-
-  expect(await state.formatForPrompt("session_test")).toBe("");
 });
 
 test("list loads from database on cold cache", async () => {

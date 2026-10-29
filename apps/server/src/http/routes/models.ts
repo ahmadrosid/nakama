@@ -64,6 +64,7 @@ import {
   isExternalModelCatalogId,
 } from "../../services/external-model-catalog-service";
 import { getTimezoneCatalog } from "../../services/timezone-catalog-service";
+import { resolveChannelOwner } from "../channel-owner";
 import { streamAgentBrowserInstall } from "../coding-harness-install-stream";
 import type { ServerOptions } from "../context";
 import {
@@ -72,7 +73,6 @@ import {
   requireOrgAdminOrPlatformAdminFromContext,
   requireOrgMemberFromContext,
   requirePlatformAdminFromContext,
-  requireProfileManageFromContext,
 } from "../org-guards";
 import {
   errorResponse,
@@ -2451,39 +2451,7 @@ export function registerModelRoutes(
     return json({ ok: true });
   });
 
-  async function channelOwner(c: Context<AppEnv>) {
-    const orgId = requireActiveOrgIdFromContext(c);
-    const profileId = c.req.query("profileId")?.trim();
-
-    if (!profileId) {
-      // Without an agent there is nothing a member could own.
-      requireOrgAdminOrPlatformAdminFromContext(c);
-
-      throw new NakamaApiError(
-        "Choose an agent to manage this connection.",
-        400
-      );
-    }
-
-    // Admins manage any agent's connections. Members manage their own agent's.
-    await requireProfileManageFromContext(c, agent, {
-      allowOrgAdmin: true,
-      profileId,
-    });
-
-    const { profile } = await agent.getProfile(orgId, profileId);
-
-    // A channel worker talks to the server as the local client, and the server
-    // refuses that client for Super Nakama, so such a bridge can never answer.
-    if (profile.isSuper) {
-      throw new NakamaApiError(
-        "Super Nakama cannot be connected to a channel. Choose another agent.",
-        400
-      );
-    }
-
-    return { orgId, profileId };
-  }
+  const channelOwner = (c: Context<AppEnv>) => resolveChannelOwner(c, agent);
 
   // Check access before any handler reads a body or catches errors into a 400.
   for (const channel of ["telegram", "discord", "whatsapp", "slack"]) {

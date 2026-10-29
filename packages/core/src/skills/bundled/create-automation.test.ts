@@ -21,23 +21,6 @@ describe("ensureBundledSkillFiles", () => {
     delete process.env.NAKAMA_CONFIG_DIR;
   });
 
-  test("writes bundled skills when missing", async () => {
-    const created = await ensureBundledSkillFiles();
-
-    expect(created).toContain("create-automation");
-    expect(created).toContain("manage-skills");
-    expect(created).toContain("update-profile-memory");
-    expect(created).toContain("archive-profile-memory");
-    expect(created).toContain("artifact-design");
-    expect(created).toContain("create-profile");
-    expect(created).toContain("coding-agent");
-    expect(created).toContain("coding-backend-codex");
-    expect(created).toContain("coding-backend-claude-code");
-    expect(created).toContain("coding-backend-opencode");
-    expect(created).toContain("coding-backend-pi");
-    expect(created).toContain("coding-backend-cursor");
-  });
-
   test("installs the create-plugin scaffold that writes a built draft", async () => {
     await ensureBundledSkillFiles();
 

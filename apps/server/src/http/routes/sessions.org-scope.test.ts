@@ -253,6 +253,51 @@ describe("session routes are scoped to the caller's active org", () => {
     ).toBe(404);
   });
 
+  test("document content is readable and org-scoped", async () => {
+    const { app, databaseAdapter, victimSessionId } = await createScenario();
+
+    const saved = await createAttachmentSaver(databaseAdapter, {
+      channel: "web",
+      orgId: VICTIM_ORG,
+      profileId: "profile_victim",
+      sessionId: victimSessionId,
+    })({
+      bytes: Buffer.from("private-pdf-bytes"),
+      kind: "document",
+      mediaType: "application/pdf",
+    });
+
+    const owner = await loginUserSession(
+      app,
+      "victim@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+
+    const attacker = await loginUserSession(
+      app,
+      "attacker@example.com",
+      PASSWORD,
+      ATTACKER_ORG
+    );
+
+    const url = `http://localhost:4310/v1/attachments/${saved.attachmentId}/content`;
+
+    const response = await app.fetch(
+      new Request(url, { headers: { Cookie: owner.cookieHeader } })
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("application/pdf");
+    expect(response.headers.get("Content-Disposition")).toBe("attachment");
+    expect(await response.text()).toBe("private-pdf-bytes");
+
+    expect(
+      (await app.fetch(new Request(url, { headers: attacker.headers() })))
+        .status
+    ).toBe(404);
+  });
+
   for (const route of CROSS_ORG_ROUTES) {
     test(`${route.method} ${route.path(":id")} -> 404 across orgs`, async () => {
       const { app, databaseAdapter, victimSessionId } = await createScenario();

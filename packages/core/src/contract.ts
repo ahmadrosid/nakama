@@ -99,6 +99,7 @@ export const AGENT_CHANNELS = [
   "whatsapp",
   "discord",
   "slack",
+  "teams",
   "automation",
   "task",
   "subagent",
@@ -131,6 +132,8 @@ export interface HealthResponse {
   /** `NAKAMA_ENABLE_ONBOARDING` is on: a new user gets the goal prompt. */
   onboardingEnabled: boolean;
   providerConfigured: boolean;
+  /** `NAKAMA_DISABLE_UPDATE_CHECK` is not set: platform admins see newer releases. */
+  updateCheckEnabled: boolean;
   userConfigured: boolean;
   /** App version (`NAKAMA_VERSION` or package.json). Not `apiVersion`. */
   version: string;
@@ -183,6 +186,15 @@ export interface DiscordWorkerStatus {
 }
 
 export interface SlackWorkerStatus {
+  configured: boolean;
+  connected: boolean;
+  ok: boolean;
+  paired: boolean;
+  process?: WorkerProcessInfo;
+  running: boolean;
+}
+
+export interface TeamsWorkerStatus {
   configured: boolean;
   connected: boolean;
   ok: boolean;
@@ -300,6 +312,7 @@ export interface SystemStatusResponse {
   mcp: McpStatus;
   server: HealthResponse;
   slackWorker: SlackWorkerStatus;
+  teamsWorker: TeamsWorkerStatus;
   telegramWorker: TelegramWorkerStatus;
   whatsappWorker: WhatsAppWorkerStatus;
 }
@@ -440,6 +453,26 @@ export interface SetupAuthRequest {
 
 export interface UpdateWebPublicUrlRequest {
   webPublicUrl: string;
+}
+
+export interface NakamaVersionResponse {
+  current: string;
+  latest: string;
+  releaseUrl: string;
+  updateAvailable: boolean;
+}
+
+export interface NakamaUpgradeResponse {
+  /** False until the Compose updater service is running. */
+  available: boolean;
+  /** Versions with an archive of their data, newest first, current excluded. */
+  rollbacks: Array<{ at: string; version: string }>;
+  status: {
+    at: string;
+    message: string;
+    state: "running" | "done" | "failed" | "rolled_back";
+    version: string;
+  } | null;
 }
 
 export interface WebPublicUrlSettingsResponse {
@@ -771,6 +804,10 @@ export interface OrgMemberSummary {
 
 export interface ListOrgMembersResponse {
   members: OrgMemberSummary[];
+}
+
+export interface ListOrgInvitesResponse {
+  invites: OrgInviteSummary[];
 }
 
 export interface AddOrgMemberRequest {
@@ -1684,6 +1721,24 @@ export interface DiscordSettingsResponse {
   inviteUrl: string | null;
   pairedUserIds: string[];
   profileId: string;
+}
+
+export interface TeamsSettingsResponse {
+  allowedUserIds: string[];
+  clientId: string | null;
+  clientSecretConfigured: boolean;
+  configured: boolean;
+  messagingEndpoint: string | null;
+  profileId: string;
+  tenantId: string | null;
+}
+
+export interface UpdateTeamsSettingsRequest {
+  allowedUserIds?: string;
+  clientId?: string;
+  clientSecret?: string;
+  profileId?: string;
+  tenantId?: string;
 }
 
 export interface UpdateDiscordSettingsRequest {
@@ -2913,6 +2968,7 @@ export type ProviderName =
   | "zhipu_cn"
   | "xai"
   | "groq"
+  | "cheaper_inference"
   | "together"
   | "xiaomi"
   | "meta"
