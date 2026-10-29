@@ -522,7 +522,10 @@ setInterval(() => {}, 1000);
           cwd: dir,
           input: {},
           label: "process tree test",
-          transport: { timeoutMs: mode === "timeout" ? 1000 : 30_000 },
+          transport: {
+            sigkillGraceMs: 100,
+            timeoutMs: mode === "timeout" ? 1000 : 30_000,
+          },
         });
 
         // Attach immediately: the parent can exit before the PID is read.

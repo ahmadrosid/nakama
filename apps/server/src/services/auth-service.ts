@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 
-const SALT_ROUNDS = 10;
+// `bun test` sets NODE_ENV=test. bcrypt's lowest cost keeps test logins fast.
+const SALT_ROUNDS = process.env.NODE_ENV === "test" ? 4 : 10;
 
 const SESSION_EXPIRY_DAYS = 7;
 

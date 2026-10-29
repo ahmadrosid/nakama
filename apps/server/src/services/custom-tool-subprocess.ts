@@ -115,6 +115,8 @@ interface SpawnJsonToolTransport {
   includeConfigDir?: boolean;
   // oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- The host callback receives IPC data before its caller validates it.
   onHostRequest?: (request: unknown, signal: AbortSignal) => Promise<unknown>;
+  /** How long a child gets to honour SIGTERM before SIGKILL. */
+  sigkillGraceMs?: number;
   timeoutMs?: number;
 }
 
@@ -152,6 +154,7 @@ export async function spawnJsonTool(
   );
 
   const timeoutMs = transport?.timeoutMs ?? resolveCustomToolTimeoutMs();
+  const sigkillGraceMs = transport?.sigkillGraceMs ?? SIGKILL_GRACE_MS;
   Object.assign(env, options.env);
 
   const result = await new Promise<{ stderr: string; stdout: string }>(
@@ -236,7 +239,7 @@ export async function spawnJsonTool(
         void killProcessTree(child, "SIGTERM");
         setTimeout(() => {
           void killProcessTree(child, "SIGKILL");
-        }, SIGKILL_GRACE_MS).unref();
+        }, sigkillGraceMs).unref();
       };
 
       const onAbort = () => {
