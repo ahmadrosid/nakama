@@ -261,10 +261,18 @@ export function createAuditLogMiddleware(
       return;
     }
 
+    // Login names its actor by email. A reset request names its target by
+    // email, and the caller is often anonymous, so that user is the resource.
     let attemptedUserId: string | null = null;
+    let targetUserId: string | null = null;
 
     if (descriptor.action === "auth.login") {
-      attemptedUserId = await resolveLoginUserId(c.req.raw, databaseAdapter);
+      attemptedUserId = await resolveBodyEmailUserId(
+        c.req.raw,
+        databaseAdapter
+      );
+    } else if (descriptor.action === "auth.password_reset_request") {
+      targetUserId = await resolveBodyEmailUserId(c.req.raw, databaseAdapter);
     }
 
     await next();
@@ -302,6 +310,8 @@ export function createAuditLogMiddleware(
         requestId: c.get("requestId") ?? null,
         resourceId:
           descriptor.resourceId ??
+          c.get("auditResourceId") ??
+          targetUserId ??
           responseIdentity.resourceId ??
           (descriptor.resourceType === "user" ? actorUserId : null),
         resourceType: descriptor.resourceType,
@@ -340,20 +350,22 @@ function decodePathPart(value: string | undefined): string | null {
   }
 }
 
-async function resolveLoginUserId(
+async function resolveBodyEmailUserId(
   request: Request,
   databaseAdapter: DatabaseAdapter
 ): Promise<string | null> {
   try {
-    const parsed = loginIdentitySchema.safeParse(await request.clone().json());
+    const parsed = bodyEmailSchema.safeParse(await request.clone().json());
 
-    if (!(parsed.success && parsed.data.email)) {
+    const email = parsed.success
+      ? parsed.data.email?.trim().toLowerCase()
+      : undefined;
+
+    if (!email) {
       return null;
     }
 
-    return (
-      (await databaseAdapter.getUserByEmail(parsed.data.email))?.id ?? null
-    );
+    return (await databaseAdapter.getUserByEmail(email))?.id ?? null;
   } catch {
     return null;
   }
@@ -406,7 +418,7 @@ async function resolveResponseIdentity(response: Response): Promise<{
 
 const optionalIdentityString = z.string().optional().catch(undefined);
 
-const loginIdentitySchema = z.object({
+const bodyEmailSchema = z.object({
   email: optionalIdentityString,
 });
 

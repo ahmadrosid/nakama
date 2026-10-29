@@ -896,11 +896,12 @@ export interface DatabaseAdapter {
     type: PasskeyChallengeType,
     consumedAt: string
   ): Promise<boolean>;
+  /** Returns the id of the user whose password changed, or null. */
   consumePasswordResetToken(
     tokenHash: string,
     passwordHash: string,
     consumedAt: string
-  ): Promise<boolean>;
+  ): Promise<string | null>;
   /** Users excluding the auto-created CLI bearer-auth identity. */
   countHumanUsers(): Promise<number>;
   countOrgMemoryProposals(

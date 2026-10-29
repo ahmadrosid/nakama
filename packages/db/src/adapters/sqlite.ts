@@ -2920,14 +2920,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const token = getUsablePasswordResetTokenStmt.get(tokenHash, consumedAt);
 
       if (!token) {
-        return false;
+        return null;
       }
 
       consumePasswordResetTokensForUserStmt.run(consumedAt, token.user_id);
       updateUserPasswordStmt.run(passwordHash, consumedAt, token.user_id);
       revokeBrowserSessionsForUserStmt.run(consumedAt, token.user_id);
 
-      return true;
+      return token.user_id;
     }
   );
 

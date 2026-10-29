@@ -415,11 +415,107 @@ describe("audit event API", () => {
     ]);
   });
 
+  test("records the target of an anonymous password reset request", async () => {
+    const { app, databaseAdapter } = createMinimalHonoApp();
+    await seedOrgAdmin(databaseAdapter);
+
+    const requested = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/password-reset/request", {
+        body: JSON.stringify({ email: " Admin@Example.com " }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+
+    expect(requested.status).toBe(200);
+
+    expect(
+      await databaseAdapter.listAuditEvents({
+        action: "auth.password_reset_request",
+      })
+    ).toEqual([
+      expect.objectContaining({
+        actorUserId: null,
+        metadata: { outcome: "success", status: 200 },
+        resourceId: "user_admin",
+        resourceType: "user",
+      }),
+    ]);
+  });
+
+  test("records whose password a platform admin reset", async () => {
+    const { app, authService, databaseAdapter } = createMinimalHonoApp();
+    const fetchApp: AppFetch = app;
+    await seedOrgAdmin(databaseAdapter, { authService });
+
+    const session = await loginPlatformAdminSession(
+      fetchApp,
+      authService,
+      databaseAdapter
+    );
+
+    const platformUser = await databaseAdapter.getUserByEmail(
+      "platform@example.com"
+    );
+
+    const requested = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/password-reset/request", {
+        body: JSON.stringify({ email: "admin@example.com" }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    expect(requested.status).toBe(200);
+
+    // SAFETY: No mailer is configured, so a platform admin gets the token
+    // back in the response body; the assertion below pins that.
+    const { token } = (await requested.json()) as { token: string | null };
+    expect(token).toBeTruthy();
+
+    const completed = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/password-reset/complete", {
+        body: JSON.stringify({ newPassword: "new-password-123", token }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+
+    expect(completed.status).toBe(200);
+
+    expect(
+      await databaseAdapter.listAuditEvents({
+        action: "auth.password_reset_request",
+      })
+    ).toEqual([
+      expect.objectContaining({
+        actorUserId: platformUser?.id,
+        resourceId: "user_admin",
+      }),
+    ]);
+    expect(
+      await databaseAdapter.listAuditEvents({
+        action: "auth.password_reset_complete",
+      })
+    ).toEqual([
+      expect.objectContaining({
+        actorUserId: null,
+        metadata: { outcome: "success", status: 200 },
+        resourceId: "user_admin",
+        resourceType: "user",
+      }),
+    ]);
+  });
+
   test("records a session revocation", async () => {
     const { app, databaseAdapter } = createMinimalHonoApp();
     const fetchApp: AppFetch = app;
 
     const member = await seedOrgAdmin(databaseAdapter);
+
     const session = await loginUserSession(
       fetchApp,
       member.email,
@@ -432,11 +528,14 @@ describe("audit event API", () => {
         headers: session.headers(),
       })
     );
+
     expect(listed.status).toBe(200);
 
+    // SAFETY: GET /v1/auth/sessions answers with ListBrowserSessionsResponse.
     const { sessions } = (await listed.json()) as {
       sessions: { id: string; current: boolean }[];
     };
+
     expect(sessions.length).toBeGreaterThan(0);
     const target = sessions.find((s) => !s.current)?.id ?? sessions[0]!.id;
 
@@ -446,11 +545,13 @@ describe("audit event API", () => {
         method: "DELETE",
       })
     );
+
     expect(revoked.status).toBe(200);
 
     const events = await databaseAdapter.listAuditEvents({
       action: "session.revoke",
     });
+
     expect(events).toEqual([
       expect.objectContaining({
         action: "session.revoke",
