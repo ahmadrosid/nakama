@@ -180,6 +180,7 @@ function McpCreateBody({
       <McpSignInPending
         name={state.pendingAuth.name}
         onDone={() => onOpenChange(false)}
+        opened={state.pendingAuth.opened}
         preset={preset ?? undefined}
         serverId={state.pendingAuth.serverId}
         url={state.pendingAuth.url}

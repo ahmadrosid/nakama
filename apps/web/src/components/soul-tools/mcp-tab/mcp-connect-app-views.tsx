@@ -336,12 +336,14 @@ export function McpConnectApp({
 export function McpSignInPending({
   name,
   onDone,
+  opened,
   preset,
   serverId,
   url,
 }: {
   name: string;
   onDone: () => void;
+  opened: boolean;
   preset?: PopularServer;
   serverId: string;
   url: string;
@@ -383,12 +385,18 @@ export function McpSignInPending({
         Approve access in the {name} tab. This window updates by itself.
       </p>
       <a
-        className={cn(buttonVariants({ size: "lg" }), "min-w-56")}
+        className={cn(
+          buttonVariants({
+            size: "lg",
+            variant: opened ? "outline" : "default",
+          }),
+          "min-w-56"
+        )}
         href={url}
         rel="noreferrer"
         target="_blank"
       >
-        Open {name}
+        {opened ? `Open ${name} again` : `Open ${name}`}
       </a>
       <p className="flex items-center gap-2 text-muted-foreground text-sm">
         <Spinner className="size-4" />
