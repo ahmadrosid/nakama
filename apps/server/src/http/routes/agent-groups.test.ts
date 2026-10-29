@@ -89,6 +89,7 @@ const BAD_GROUPS = [
   { memberIds: ["alpha", "beta"], name: "x".repeat(81) },
   { brief: "x".repeat(4001), memberIds: ["alpha", "beta"], name: "Long" },
   { memberIds: ["alpha", ""], name: "Blank member" },
+  { extra: true, memberIds: ["alpha", "beta"], name: "Extra key" },
 ];
 
 const DOCUMENT_ONLY = {
@@ -143,6 +144,22 @@ describe("agent group routes", () => {
     expect(bodyOf("/v1/agent-groups/{groupId}/sessions")).toEqual(
       bodyOf(`${session}/messages`)
     );
+
+    expect(spec.paths?.[session]?.get?.parameters).toMatchObject([
+      { in: "path", name: "groupId" },
+      { in: "path", name: "sessionId" },
+    ]);
+    expect(
+      spec.paths?.["/v1/agent-groups/{groupId}/files/content"]?.get?.parameters
+    ).toContainEqual(
+      expect.objectContaining({ in: "query", name: "path", required: true })
+    );
+    expect(
+      Object.keys(
+        spec.paths?.["/v1/agent-groups/{groupId}/sessions"]?.post?.responses ??
+          {}
+      )
+    ).toEqual(["201"]);
   });
 
   test("message routes accept a message that holds only a document", async () => {
@@ -203,6 +220,8 @@ describe("agent group routes", () => {
   test("create_group and POST /v1/agent-groups reject the same inputs", async () => {
     const { agent, send } = await createScenario();
 
+    let created = 0;
+
     const tool = createSuperNakamaTools(
       // SAFETY: create_group never touches the profile service.
       {} as never,
@@ -210,8 +229,11 @@ describe("agent group routes", () => {
       undefined,
       undefined,
       {
-        createGroup: (orgId, userId, name, memberIds, brief) =>
-          agent.groups.create(orgId, userId, name, memberIds, brief),
+        createGroup: (orgId, userId, name, memberIds, brief) => {
+          created += 1;
+
+          return agent.groups.create(orgId, userId, name, memberIds, brief);
+        },
       }
     ).find((candidate) => candidate.name === "create_group");
 
@@ -221,6 +243,9 @@ describe("agent group routes", () => {
       expect((await send("POST", "/v1/agent-groups", input)).status).toBe(400);
       await expect(tool?.run(input, context)).rejects.toThrow();
     }
+
+    // The schema stopped every bad input; none reached the service.
+    expect(created).toBe(0);
 
     expect((await send("POST", "/v1/agent-groups", GOOD_GROUP)).status).toBe(
       201
@@ -241,5 +266,24 @@ describe("agent group routes", () => {
     expect(
       (await send("GET", "/v1/agent-groups/missing/sessions")).status
     ).toBe(404);
+    expect(
+      (await send("PUT", "/v1/agent-groups/missing/memory", { content: " " }))
+        .status
+    ).toBe(404);
+    expect(
+      (await send("GET", "/v1/agent-groups/missing/files/content")).status
+    ).toBe(404);
+  });
+
+  test("a file download without a path is a bad request", async () => {
+    const { send } = await createScenario();
+
+    const group = await (
+      await send("POST", "/v1/agent-groups", GOOD_GROUP)
+    ).json();
+
+    expect(
+      (await send("GET", `/v1/agent-groups/${group.id}/files/content`)).status
+    ).toBe(400);
   });
 });

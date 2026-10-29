@@ -2,6 +2,7 @@ import {
   createInMemoryDatabaseAdapter,
   type DatabaseAdapter,
 } from "@nakama/db";
+import { AgentGroupService } from "../services/agent-group-service";
 import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
 import { SkillCuratorService } from "../services/skill-curator-service";
@@ -57,7 +58,11 @@ export function createMinimalHonoApp(
 
   // SAFETY: Route tests provide every service method their requests call.
   const app = createHonoApp({
-    agent: (overrides.agent ?? defaultAgent) as ServerOptions["agent"],
+    agent: (overrides.agent ?? {
+      ...defaultAgent,
+      // Group routes read the agent's one group service; replies never run here.
+      groups: new AgentGroupService(databaseAdapter, defaultAgent as never),
+    }) as ServerOptions["agent"],
     authService,
     automationService: (overrides.automationService ??
       {}) as ServerOptions["automationService"],

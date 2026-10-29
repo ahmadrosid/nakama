@@ -73,29 +73,50 @@ type PathParams<P extends string> =
     ? Name | PathParams<Rest>
     : never;
 
-interface GroupRoute<P extends string, S extends z.ZodType | undefined> {
+type RouteStatus = 200 | 201 | 204;
+
+interface GroupRoute<
+  P extends string,
+  S extends z.ZodType | undefined,
+  Q extends z.ZodObject | undefined,
+> {
   body?: S;
   method: "delete" | "get" | "patch" | "post" | "put";
   path: P;
-  status: number;
+  query?: Q;
+  status: RouteStatus;
   summary: string;
 }
 
+interface GroupRequest<
+  P extends string,
+  S extends z.ZodType | undefined,
+  Q extends z.ZodObject | undefined,
+> {
+  orgId: string;
+  params: Record<PathParams<P>, string>;
+  /** Parses the body; handlers call it after their own 404 and id checks. */
+  readBody: S extends z.ZodType ? () => Promise<z.output<S>> : undefined;
+  readQuery: Q extends z.ZodObject ? () => z.output<Q> : undefined;
+  /** The documented success status; send this one. */
+  status: RouteStatus;
+  userId: string;
+}
+
 /**
- * Serves one route and documents it in /openapi.json from the same path and
- * body schema, so the docs cannot drift from what the handler accepts.
+ * Serves one route and documents it in /openapi.json from the same path,
+ * query, body schema and status, so the docs cannot drift from the handler.
  */
-function route<P extends string, S extends z.ZodType | undefined = undefined>(
+function route<
+  P extends string,
+  S extends z.ZodType | undefined = undefined,
+  Q extends z.ZodObject | undefined = undefined,
+>(
   app: HonoApp,
-  { body, method, path, status, summary }: GroupRoute<P, S>,
+  { body, method, path, query, status, summary }: GroupRoute<P, S, Q>,
   handler: (
     c: Context<AppEnv>,
-    request: {
-      body: S extends z.ZodType ? z.output<S> : undefined;
-      orgId: string;
-      params: Record<PathParams<P>, string>;
-      userId: string;
-    }
+    request: GroupRequest<P, S, Q>
   ) => Response | Promise<Response>
 ): void {
   const names = [...path.matchAll(/\{(\w+)\}/g)].map((match) => match[1]);
@@ -111,6 +132,7 @@ function route<P extends string, S extends z.ZodType | undefined = undefined>(
         params: z.object(
           Object.fromEntries(names.map((name) => [name, z.string()]))
         ),
+        ...(query && { query }),
       },
       responses: { [status]: { description: summary } },
       summary,
@@ -118,12 +140,10 @@ function route<P extends string, S extends z.ZodType | undefined = undefined>(
     })
   );
 
-  app[method](path.replaceAll(/\{(\w+)\}/g, ":$1"), async (c) => {
-    // Every group route is for org members; check that before the body.
+  app[method](path.replaceAll(/\{(\w+)\}/g, ":$1"), (c) => {
+    // Every group route is for org members; check that before anything else.
     const userId = requireOrgMemberFromContext(c).user.id;
     const orgId = requireActiveOrgIdFromContext(c);
-
-    const parsed = body ? await readJson(c.req.raw, body) : undefined;
 
     // SAFETY: `names` are the `{name}` parts of `path`, and Hono matched the
     // request on that same path, so each one is set.
@@ -131,15 +151,43 @@ function route<P extends string, S extends z.ZodType | undefined = undefined>(
       names.map((name) => [name, c.req.param(name) ?? ""])
     ) as Record<PathParams<P>, string>;
 
+    const readBody = body && (() => readJson(c.req.raw, body));
+
+    const readQuery =
+      query &&
+      (() => {
+        const parsed = query.safeParse(c.req.query());
+
+        if (!parsed.success) {
+          throw new NakamaApiError(
+            parsed.error.issues[0]?.message ?? "Invalid query.",
+            400
+          );
+        }
+
+        return parsed.data;
+      });
+
     return handler(c, {
-      // SAFETY: `parsed` is `body`'s output when `body` is set, else undefined.
-      body: parsed as S extends z.ZodType ? z.output<S> : undefined,
       orgId,
       params,
+      // SAFETY: `readBody` is set exactly when `body` is set.
+      readBody: readBody as GroupRequest<P, S, Q>["readBody"],
+      // SAFETY: `readQuery` is set exactly when `query` is set.
+      readQuery: readQuery as GroupRequest<P, S, Q>["readQuery"],
+      status,
       userId,
     });
   });
 }
+
+const filesQuerySchema = z.object({ folder: z.string().optional() });
+
+const fileContentQuerySchema = z.object({
+  inline: z.string().optional(),
+  path: z.string({ error: "path is required" }).min(1, "path is required"),
+  render: z.string().optional(),
+});
 
 function logRunFailure(groupId: string) {
   return (error: Error) => {
@@ -175,10 +223,11 @@ export function registerAgentGroupRoutes(
       status: 200,
       summary: "List your agent groups",
     },
-    (c, { orgId, userId }) =>
-      json<ListAgentGroupsResponse>({
-        groups: service.list(orgId, userId),
-      })
+    (_c, { orgId, status, userId }) =>
+      json<ListAgentGroupsResponse>(
+        { groups: service.list(orgId, userId) },
+        status
+      )
   );
 
   route(
@@ -190,8 +239,10 @@ export function registerAgentGroupRoutes(
       status: 201,
       summary: "Create an agent group",
     },
-    async (c, { body, orgId, userId }) =>
-      json<AgentGroup>(
+    async (_c, { orgId, readBody, status, userId }) => {
+      const body = await readBody();
+
+      return json<AgentGroup>(
         await service.create(
           orgId,
           userId,
@@ -199,8 +250,9 @@ export function registerAgentGroupRoutes(
           body.memberIds,
           body.brief
         ),
-        201
-      )
+        status
+      );
+    }
   );
 
   route(
@@ -211,8 +263,8 @@ export function registerAgentGroupRoutes(
       status: 200,
       summary: "Get an agent group",
     },
-    (c, { params, orgId, userId }) =>
-      json<AgentGroup>(service.get(orgId, userId, params.groupId))
+    (_c, { params, orgId, status, userId }) =>
+      json<AgentGroup>(service.get(orgId, userId, params.groupId), status)
   );
 
   route(
@@ -224,8 +276,10 @@ export function registerAgentGroupRoutes(
       status: 200,
       summary: "Edit a group",
     },
-    async (c, { body, params, orgId, userId }) =>
-      json<AgentGroup>(
+    async (_c, { params, orgId, readBody, status, userId }) => {
+      const body = await readBody();
+
+      return json<AgentGroup>(
         await service.update(
           orgId,
           userId,
@@ -233,8 +287,10 @@ export function registerAgentGroupRoutes(
           body.name,
           body.memberIds,
           body.brief
-        )
-      )
+        ),
+        status
+      );
+    }
   );
 
   route(
@@ -245,10 +301,10 @@ export function registerAgentGroupRoutes(
       status: 204,
       summary: "Delete a group and its chats",
     },
-    (c, { params, orgId, userId }) => {
+    (c, { params, orgId, status, userId }) => {
       service.delete(orgId, userId, params.groupId);
 
-      return c.body(null, 204);
+      return c.body(null, status);
     }
   );
 
@@ -260,11 +316,12 @@ export function registerAgentGroupRoutes(
       status: 200,
       summary: "Get a group's photo",
     },
-    (c, { params, orgId, userId }) => {
+    (_c, { params, orgId, status, userId }) => {
       const avatar = service.avatar(orgId, userId, params.groupId);
 
       return new Response(new Uint8Array(avatar.bytes), {
         headers: { "Content-Type": avatar.mediaType },
+        status,
       });
     }
   );
@@ -278,10 +335,10 @@ export function registerAgentGroupRoutes(
       status: 204,
       summary: "Replace a group's photo",
     },
-    (c, { body, params, orgId, userId }) => {
-      service.setAvatar(orgId, userId, params.groupId, body);
+    async (c, { params, orgId, readBody, status, userId }) => {
+      service.setAvatar(orgId, userId, params.groupId, await readBody());
 
-      return c.body(null, 204);
+      return c.body(null, status);
     }
   );
 
@@ -293,10 +350,10 @@ export function registerAgentGroupRoutes(
       status: 204,
       summary: "Remove a group's photo",
     },
-    (c, { params, orgId, userId }) => {
+    (c, { params, orgId, status, userId }) => {
       service.removeAvatar(orgId, userId, params.groupId);
 
-      return c.body(null, 204);
+      return c.body(null, status);
     }
   );
 
@@ -305,13 +362,15 @@ export function registerAgentGroupRoutes(
     {
       method: "get",
       path: `${GROUP_PATH}/files`,
+      query: filesQuerySchema,
       status: 200,
       summary: "List a shared folder",
     },
-    async (c, { params, orgId, userId }) => {
+    async (_c, { params, orgId, readQuery, status, userId }) => {
       const group = service.get(orgId, userId, params.groupId);
+      const { folder } = readQuery();
 
-      return json(await listGroupFiles(orgId, group.id, c.req.query("folder")));
+      return json(await listGroupFiles(orgId, group.id, folder), status);
     }
   );
 
@@ -320,34 +379,30 @@ export function registerAgentGroupRoutes(
     {
       method: "get",
       path: `${GROUP_PATH}/files/content`,
+      query: fileContentQuerySchema,
       status: 200,
       summary: "Download a file from a group's shared folder",
     },
-    async (c, { params, orgId, userId }) => {
+    async (_c, { params, orgId, readQuery, status, userId }) => {
       const group = service.get(orgId, userId, params.groupId);
-      const filename = c.req.query("path");
+      const query = readQuery();
 
-      if (!filename) {
-        return json({ error: "path is required" }, 400);
-      }
-
-      const file = await readGroupFile(orgId, group.id, filename, {
-        render: c.req.query("render") === "markdown" ? "markdown" : undefined,
+      const file = await readGroupFile(orgId, group.id, query.path, {
+        render: query.render === "markdown" ? "markdown" : undefined,
       });
 
-      const disposition =
-        c.req.query("inline") === "1" ? "inline" : "attachment";
-
+      const disposition = query.inline === "1" ? "inline" : "attachment";
       const body = "markdown" in file ? file.markdown : Bun.file(file.filePath);
 
       return new Response(body, {
         headers: {
           "Content-Type": file.contentType,
-          "Content-Disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(filename.split("/").pop() ?? "file")}`,
+          "Content-Disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(query.path.split("/").pop() ?? "file")}`,
           "Content-Security-Policy": "sandbox",
           "X-Content-Type-Options": "nosniff",
           "Cache-Control": "no-store",
         },
+        status,
       });
     }
   );
@@ -360,13 +415,16 @@ export function registerAgentGroupRoutes(
       status: 200,
       summary: "Read a group's memory",
     },
-    (c, { params, orgId, userId }) => {
+    (_c, { params, orgId, status, userId }) => {
       const group = service.get(orgId, userId, params.groupId);
 
-      return json<AgentGroupMemory>({
-        content: workspaceOfGroup(orgId, group.id).memory.read(),
-        limit: GROUP_MEMORY_CHARS,
-      });
+      return json<AgentGroupMemory>(
+        {
+          content: workspaceOfGroup(orgId, group.id).memory.read(),
+          limit: GROUP_MEMORY_CHARS,
+        },
+        status
+      );
     }
   );
 
@@ -379,14 +437,16 @@ export function registerAgentGroupRoutes(
       status: 200,
       summary: "Replace a group's memory",
     },
-    (c, { body, params, orgId, userId }) => {
+    async (_c, { params, orgId, readBody, status, userId }) => {
+      // An unknown group is a 404 even when the body is bad.
       const group = service.get(orgId, userId, params.groupId);
+      const { base, content } = await readBody();
       const { memory } = workspaceOfGroup(orgId, group.id);
 
-      return json<AgentGroupMemory>({
-        content: memory.replace(body.content, body.base),
-        limit: GROUP_MEMORY_CHARS,
-      });
+      return json<AgentGroupMemory>(
+        { content: memory.replace(content, base), limit: GROUP_MEMORY_CHARS },
+        status
+      );
     }
   );
 
@@ -398,10 +458,11 @@ export function registerAgentGroupRoutes(
       status: 200,
       summary: "List a group's chats",
     },
-    (c, { params, orgId, userId }) =>
-      json<ListAgentGroupSessionsResponse>({
-        sessions: service.sessions(orgId, userId, params.groupId),
-      })
+    (_c, { params, orgId, status, userId }) =>
+      json<ListAgentGroupSessionsResponse>(
+        { sessions: service.sessions(orgId, userId, params.groupId) },
+        status
+      )
   );
 
   route(
@@ -413,19 +474,21 @@ export function registerAgentGroupRoutes(
       status: 201,
       summary: "Start a chat with its first message",
     },
-    async (c, { body, params, orgId, userId }) => {
+    async (_c, { params, orgId, readBody, status, userId }) => {
+      const { content, documents } = await readBody();
+
       const { run, session } = service.start(
         orgId,
         userId,
         params.groupId,
-        body.content,
-        await readGroupDocuments(body.documents)
+        content,
+        await readGroupDocuments(documents)
       );
 
       // The reply run outlives the request; the page polls the session for it.
       run.catch(logRunFailure(params.groupId));
 
-      return json<AgentGroupSession>(session, 201);
+      return json<AgentGroupSession>(session, status);
     }
   );
 
@@ -437,9 +500,10 @@ export function registerAgentGroupRoutes(
       status: 200,
       summary: "Get a chat, its messages and its run",
     },
-    (c, { params, orgId, userId }) =>
+    (_c, { params, orgId, status, userId }) =>
       json<AgentGroupSessionDetail>(
-        service.session(orgId, userId, params.groupId, params.sessionId)
+        service.session(orgId, userId, params.groupId, params.sessionId),
+        status
       )
   );
 
@@ -452,16 +516,16 @@ export function registerAgentGroupRoutes(
       status: 204,
       summary: "Rename or pin a chat",
     },
-    (c, { body, params, orgId, userId }) => {
+    async (c, { params, orgId, readBody, status, userId }) => {
       service.updateSession(
         orgId,
         userId,
         params.groupId,
         params.sessionId,
-        body
+        await readBody()
       );
 
-      return c.body(null, 204);
+      return c.body(null, status);
     }
   );
 
@@ -473,10 +537,10 @@ export function registerAgentGroupRoutes(
       status: 204,
       summary: "Delete a chat",
     },
-    (c, { params, orgId, userId }) => {
+    (c, { params, orgId, status, userId }) => {
       service.deleteSession(orgId, userId, params.groupId, params.sessionId);
 
-      return c.body(null, 204);
+      return c.body(null, status);
     }
   );
 
@@ -489,19 +553,21 @@ export function registerAgentGroupRoutes(
       status: 204,
       summary: "Send a message; mentioned agents reply in the background",
     },
-    async (c, { body, params, orgId, userId }) => {
+    async (c, { params, orgId, readBody, status, userId }) => {
+      const { content, documents } = await readBody();
+
       service
         .post(
           orgId,
           userId,
           params.groupId,
           params.sessionId,
-          body.content,
-          await readGroupDocuments(body.documents)
+          content,
+          await readGroupDocuments(documents)
         )
         .catch(logRunFailure(params.groupId));
 
-      return c.body(null, 204);
+      return c.body(null, status);
     }
   );
 
@@ -513,10 +579,10 @@ export function registerAgentGroupRoutes(
       status: 204,
       summary: "Stop after the current reply",
     },
-    (c, { params, orgId, userId }) => {
+    (c, { params, orgId, status, userId }) => {
       service.stop(orgId, userId, params.groupId, params.sessionId);
 
-      return c.body(null, 204);
+      return c.body(null, status);
     }
   );
 
@@ -528,7 +594,7 @@ export function registerAgentGroupRoutes(
       status: 200,
       summary: "Get a thread on an agent's message",
     },
-    (c, { params, orgId, userId }) =>
+    (_c, { params, orgId, status, userId }) =>
       json<AgentGroupThreadDetail>(
         service.thread(
           orgId,
@@ -536,7 +602,8 @@ export function registerAgentGroupRoutes(
           params.groupId,
           params.sessionId,
           messageIdOf(params.messageId)
-        )
+        ),
+        status
       )
   );
 
@@ -550,8 +617,10 @@ export function registerAgentGroupRoutes(
       summary:
         "Send a message in a thread; its agent replies in the background",
     },
-    async (c, { body, params, orgId, userId }) => {
+    async (c, { params, orgId, readBody, status, userId }) => {
+      // A bad message id is reported before a bad body.
       const messageId = messageIdOf(params.messageId);
+      const { content, documents } = await readBody();
 
       service
         .postThread(
@@ -560,12 +629,12 @@ export function registerAgentGroupRoutes(
           params.groupId,
           params.sessionId,
           messageId,
-          body.content,
-          await readGroupDocuments(body.documents)
+          content,
+          await readGroupDocuments(documents)
         )
         .catch(logRunFailure(params.groupId));
 
-      return c.body(null, 204);
+      return c.body(null, status);
     }
   );
 
@@ -577,7 +646,7 @@ export function registerAgentGroupRoutes(
       status: 204,
       summary: "Stop a thread's reply",
     },
-    (c, { params, orgId, userId }) => {
+    (c, { params, orgId, status, userId }) => {
       service.stopThread(
         orgId,
         userId,
@@ -586,7 +655,7 @@ export function registerAgentGroupRoutes(
         messageIdOf(params.messageId)
       );
 
-      return c.body(null, 204);
+      return c.body(null, status);
     }
   );
 
@@ -599,10 +668,11 @@ export function registerAgentGroupRoutes(
       status: 200,
       summary: "List the agents and groups pinned in the rail",
     },
-    (c, { orgId, userId }) =>
-      json<ListRailPinsResponse>({
-        itemIds: listRailPins(orgId, userId),
-      })
+    (_c, { orgId, status, userId }) =>
+      json<ListRailPinsResponse>(
+        { itemIds: listRailPins(orgId, userId) },
+        status
+      )
   );
 
   for (const [method, summary] of [
@@ -612,14 +682,14 @@ export function registerAgentGroupRoutes(
     route(
       app,
       { method, path: "/v1/rail-pins/{itemId}", status: 204, summary },
-      (c, { params, orgId, userId }) => {
+      (c, { params, orgId, status, userId }) => {
         if (params.itemId.length > 200) {
           throw new NakamaApiError("Invalid item id", 400);
         }
 
         setRailPin(orgId, userId, params.itemId, method === "put");
 
-        return c.body(null, 204);
+        return c.body(null, status);
       }
     );
   }
