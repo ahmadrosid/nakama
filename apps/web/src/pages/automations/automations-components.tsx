@@ -426,7 +426,7 @@ function AutomationScheduleFields({
 
   return (
     <>
-      <fieldset className="min-w-0 space-y-3">
+      <fieldset className="min-w-0 space-y-2">
         <legend className="mb-2 font-semibold text-sm">How often?</legend>
         <div className="flex flex-wrap gap-2">
           {(
@@ -441,7 +441,7 @@ function AutomationScheduleFields({
           ).map(([value, label]) => (
             <Button
               aria-pressed={frequency === value}
-              className="h-auto min-h-11 rounded-full px-3 py-2 aria-pressed:border-primary aria-pressed:bg-primary/5 aria-pressed:text-foreground aria-pressed:ring-1 aria-pressed:ring-primary sm:min-h-10"
+              className="h-auto min-h-9 rounded-full px-3 py-1 aria-pressed:border-primary aria-pressed:bg-primary/5 aria-pressed:text-foreground aria-pressed:ring-1 aria-pressed:ring-primary sm:min-h-8"
               disabled={busy}
               key={value}
               onClick={() =>
@@ -605,7 +605,7 @@ function AutomationNextRun({ automation }: { automation: StoredAutomation }) {
   return (
     <p
       aria-live="polite"
-      className="rounded-xl bg-muted/40 px-3 py-3 text-muted-foreground text-sm"
+      className="rounded-lg bg-muted/40 px-3 py-2 text-muted-foreground text-sm"
     >
       Next run: <span className="font-semibold text-foreground">{label}</span>
     </p>
@@ -654,7 +654,7 @@ function AutomationTimeFields({
       {preset && preset.frequency !== "hourly" ? (
         <fieldset className="min-w-0">
           <legend className="mb-2 font-semibold text-sm">What time?</legend>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {(
               [
                 ["07:00", "Morning", "7:00 AM"],
@@ -665,7 +665,7 @@ function AutomationTimeFields({
               <Button
                 aria-label={label}
                 aria-pressed={!customTime && timeValue === value}
-                className="h-auto min-h-14 flex-col items-start gap-0 rounded-xl px-3 py-2 text-left aria-pressed:border-primary aria-pressed:bg-primary/5 aria-pressed:text-foreground aria-pressed:ring-1 aria-pressed:ring-primary"
+                className="h-auto min-h-11 flex-col items-start gap-0 rounded-lg px-3 py-1.5 text-left aria-pressed:border-primary aria-pressed:bg-primary/5 aria-pressed:text-foreground aria-pressed:ring-1 aria-pressed:ring-primary"
                 disabled={busy}
                 key={value}
                 onClick={() => {
@@ -676,7 +676,7 @@ function AutomationTimeFields({
                 variant="outline"
               >
                 <span>{label}</span>
-                <span className="font-normal text-muted-foreground">
+                <span className="font-normal text-muted-foreground text-xs">
                   {time}
                 </span>
               </Button>
@@ -687,7 +687,7 @@ function AutomationTimeFields({
                   <Button
                     aria-label="Pick a time"
                     aria-pressed={Boolean(customTime)}
-                    className="h-auto min-h-14 flex-col items-start gap-0 rounded-xl border-dashed px-3 py-2 text-left aria-pressed:border-primary aria-pressed:bg-primary/5 aria-pressed:ring-1 aria-pressed:ring-primary"
+                    className="h-auto min-h-11 flex-col items-start gap-0 rounded-lg border-dashed px-3 py-1.5 text-left aria-pressed:border-primary aria-pressed:bg-primary/5 aria-pressed:ring-1 aria-pressed:ring-primary"
                     disabled={busy}
                     type="button"
                     variant="outline"
@@ -695,7 +695,7 @@ function AutomationTimeFields({
                 }
               >
                 <span>Pick a time</span>
-                <span className="font-normal text-muted-foreground">
+                <span className="font-normal text-muted-foreground text-xs">
                   {customTime ? timeValue : "Any time of day"}
                 </span>
               </PopoverTrigger>
@@ -1255,12 +1255,12 @@ function DeliverySettingsFields({
       <legend className="mb-2 font-semibold text-sm">
         Send me the result on
       </legend>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="flex flex-wrap gap-2">
         {(["none", "telegram", "whatsapp", "email", "discord"] as const).map(
           (value) => (
             <Button
               aria-pressed={channel === value}
-              className="min-h-11 rounded-xl aria-pressed:border-primary aria-pressed:bg-primary/5 aria-pressed:text-foreground aria-pressed:ring-1 aria-pressed:ring-primary sm:min-h-10"
+              className="h-auto min-h-9 rounded-full px-3 py-1 aria-pressed:border-primary aria-pressed:bg-primary/5 aria-pressed:text-foreground aria-pressed:ring-1 aria-pressed:ring-primary sm:min-h-8"
               disabled={busy}
               key={value}
               onClick={() => {
@@ -1306,7 +1306,7 @@ function DeliverySettingsFields({
           )
         )}
       </div>
-      <p className="text-muted-foreground text-sm">
+      <p className="text-muted-foreground text-xs">
         Results always stay in the run history.
       </p>
 
