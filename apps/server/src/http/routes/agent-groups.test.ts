@@ -1,13 +1,17 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import type { AgentGroupInput } from "@nakama/core/agent-groups";
 import type { DocumentAttachment } from "@nakama/core/contract";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { closeAgentGroupDatabases } from "../../services/agent-group-store";
 import { AgentService } from "../../services/agent-service";
 import { SuperNakamaSessionState } from "../../services/super-nakama-session-state";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createSuperNakamaTools } from "../../tools/super-nakama-tools";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import { loginUserSession, seedOrgAdmin } from "../test-session-helpers";
+
+// Before the config dir cleanup, which Windows refuses while a file is open.
+afterEach(closeAgentGroupDatabases);
 
 setupTestConfigDir("nakama-agent-group-routes-");
 
