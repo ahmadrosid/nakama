@@ -6,7 +6,7 @@ import { readFileAsDataUrl } from "@/lib/read-file-as-data-url";
 
 export type DictationState = "idle" | "recording" | "transcribing";
 
-const MAX_RECORDING_MS = 60_000;
+const MAX_RECORDING_MS = 120_000;
 
 const MIME_CANDIDATES = [
   "audio/webm;codecs=opus",
@@ -39,7 +39,7 @@ function extensionFor(mediaType: string): string {
 }
 
 /**
- * Owns the dictation recording lifecycle: mic capture, the 60-second
+ * Owns the dictation recording lifecycle: mic capture, the 2-minute
  * cap, the per-recording session token, and the transcription call.
  * A result only ever reaches the draft while its session token is still
  * active; a discard, a new recording, or unmount invalidates it.
@@ -89,8 +89,10 @@ export function useDictationRecorder({
     streamRef.current = null;
   };
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
       mountedRef.current = false;
 
       if (maxTimerRef.current !== null) {
@@ -107,9 +109,8 @@ export function useDictationRecorder({
       waveformRef.current.stopWaveform();
       stopStream();
       onActiveChangeRef.current?.(false);
-    },
-    []
-  );
+    };
+  }, []);
 
   const finishRecording = async (
     blob: Blob,
