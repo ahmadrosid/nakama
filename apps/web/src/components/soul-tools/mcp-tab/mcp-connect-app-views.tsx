@@ -14,7 +14,7 @@ import {
   Search01Icon,
   Tick02Icon,
 } from "hugeicons-react";
-import type { FormEvent, ReactNode } from "react";
+import { type FormEvent, type ReactNode, useState } from "react";
 import { POPULAR_SERVERS } from "@/components/soul-tools/mcp-tab/popular-mcp-servers";
 import type { McpServerKind } from "@/components/soul-tools/mcp-tab/use-mcp-server-dialog-state";
 import { useMcpServerDetailQuery } from "@/hooks/use-app-queries";
@@ -166,6 +166,55 @@ function AppCardButton({ busy, card }: { busy: boolean; card: AppCard }) {
   );
 }
 
+type AppFilter = "all" | "ready" | "new";
+
+function matchesFilter(card: AppCard, filter: AppFilter): boolean {
+  if (filter === "all") {
+    return true;
+  }
+
+  return filter === "ready" ? card.ready : !card.ready;
+}
+
+function AppFilterChips({
+  counts,
+  filter,
+  onChange,
+}: {
+  counts: { new: number; ready: number };
+  filter: AppFilter;
+  onChange: (filter: AppFilter) => void;
+}) {
+  const chips = [
+    { id: "all", label: "All" },
+    { id: "ready", label: `In your org ${counts.ready}` },
+    { id: "new", label: `New ${counts.new}` },
+  ] as const satisfies readonly { id: AppFilter; label: string }[];
+
+  return (
+    <div
+      aria-label="Show apps"
+      className="flex shrink-0 gap-1 rounded-lg bg-muted p-1"
+      role="group"
+    >
+      {chips.map((chip) => (
+        <button
+          aria-pressed={filter === chip.id}
+          className={cn(
+            "h-7 whitespace-nowrap rounded-md px-3 font-medium text-muted-foreground text-xs transition-colors hover:text-foreground",
+            filter === chip.id && "bg-background text-foreground shadow-xs"
+          )}
+          key={chip.id}
+          onClick={() => onChange(chip.id)}
+          type="button"
+        >
+          {chip.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function McpAppPicker({
   busy,
   onAssign,
@@ -185,32 +234,54 @@ export function McpAppPicker({
   query: string;
   registered: McpServerSummary[];
 }) {
+  const [filter, setFilter] = useState<AppFilter>("all");
   const needle = query.trim().toLowerCase();
 
-  const cards = appCards({
+  const searched = appCards({
     onAssign,
     onConnect,
     popular,
     registered,
   }).filter((card) => card.name.toLowerCase().includes(needle));
 
+  const counts = {
+    new: searched.filter((card) => !card.ready).length,
+    ready: searched.filter((card) => card.ready).length,
+  };
+
+  // Chips only help when the list holds both kinds of app.
+  const showChips = counts.new > 0 && counts.ready > 0;
+
+  const cards = searched.filter(
+    (card) => !showChips || matchesFilter(card, filter)
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-col gap-4 px-6 pt-6 pr-14">
         <DialogTitle className="text-xl">Connect an app</DialogTitle>
-        <div className="relative">
-          <Search01Icon
-            aria-hidden
-            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
-            aria-label="Search apps"
-            className="pl-9"
-            onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Search apps"
-            type="search"
-            value={query}
-          />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-48 flex-1">
+            <Search01Icon
+              aria-hidden
+              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              aria-label="Search apps"
+              className="pl-9"
+              onChange={(event) => onQueryChange(event.target.value)}
+              placeholder="Search apps"
+              type="search"
+              value={query}
+            />
+          </div>
+          {showChips ? (
+            <AppFilterChips
+              counts={counts}
+              filter={filter}
+              onChange={setFilter}
+            />
+          ) : null}
         </div>
       </div>
 
