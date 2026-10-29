@@ -7,6 +7,7 @@ import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  Add01Icon,
   ArrowLeft01Icon,
   CheckmarkCircle02Icon,
   CodeIcon,
@@ -219,16 +220,22 @@ export function McpAppPicker({
             <AppCardButton busy={busy} card={card} />
           </li>
         ))}
+        <li>
+          <button
+            className="flex h-full w-full items-center gap-3 rounded-lg border border-border border-dashed px-3 py-2.5 text-left text-muted-foreground text-sm transition-colors hover:bg-muted/50 hover:text-foreground"
+            onClick={onCustom}
+            type="button"
+          >
+            <span
+              aria-hidden
+              className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted"
+            >
+              <Add01Icon className="size-4" />
+            </span>
+            <span className="font-medium">Add a custom connection</span>
+          </button>
+        </li>
       </ul>
-
-      <div className="flex items-center justify-between gap-3 border-border border-t px-6 py-3">
-        <span className="text-muted-foreground text-sm">
-          Don't see your app?
-        </span>
-        <Button onClick={onCustom} size="sm" type="button">
-          Add a custom connection
-        </Button>
-      </div>
     </div>
   );
 }
