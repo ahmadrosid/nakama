@@ -258,8 +258,8 @@ export function McpAppPicker({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-col gap-4 px-6 pt-6 pr-14">
-        <DialogTitle className="text-xl">Connect an app</DialogTitle>
+      <div className="flex flex-col gap-4 px-6 pt-6">
+        <DialogTitle className="pr-8 text-xl">Connect an app</DialogTitle>
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-48 flex-1">
             <Search01Icon
