@@ -5,6 +5,7 @@ import { builtinTools } from "./builtin";
 import {
   createFakeMailReader,
   createFakeMailSender,
+  emailTool,
   runEmailTool,
 } from "./email";
 
