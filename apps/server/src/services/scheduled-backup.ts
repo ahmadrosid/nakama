@@ -7,7 +7,8 @@ import {
   unlink,
   writeFile,
 } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
+import { comparablePath, resolveWithRealpath } from "@nakama/core/tools/paths";
 
 const MAGIC = Buffer.from("NKBK1\n");
 
@@ -44,9 +45,14 @@ export function decryptBackup(data: Uint8Array, key: Buffer): Buffer {
 
 /** A backup kept inside the data root would be swept into the next export. */
 export function assertBackupDirOutsideRoot(dir: string, rootDir: string): void {
-  const inside = relative(resolve(rootDir), resolve(dir));
+  const inside = relative(
+    comparablePath(resolveWithRealpath(rootDir)),
+    comparablePath(resolveWithRealpath(dir))
+  );
 
-  if (!(inside.startsWith("..") || isAbsolute(inside))) {
+  if (
+    !(inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute(inside))
+  ) {
     throw new Error(
       `NAKAMA_BACKUP_DIR must be outside the Nakama data root (${rootDir}).`
     );

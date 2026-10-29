@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodeArchiveRequestData } from "./data-portability";
@@ -74,6 +82,80 @@ describe("scheduled backups", () => {
     expect(() =>
       assertBackupDirOutsideRoot("/srv/backups", "/srv/nakama")
     ).not.toThrow();
+  });
+
+  test("refuses aliases into the data root, including missing child folders", async () => {
+    const dir = await tempDir();
+    const root = join(dir, "data");
+    const nested = join(root, "backups");
+    const alias = join(dir, "backup-alias");
+    const rootAlias = join(dir, "data-alias");
+    const linkType = process.platform === "win32" ? "junction" : "dir";
+    await mkdir(nested, { recursive: true });
+    await symlink(nested, alias, linkType);
+    await symlink(root, rootAlias, linkType);
+
+    for (const target of [
+      root,
+      alias,
+      join(alias, "new", "daily"),
+      join(root, "..backups"),
+    ]) {
+      expect(() => assertBackupDirOutsideRoot(target, root)).toThrow();
+      expect(() => assertBackupDirOutsideRoot(target, rootAlias)).toThrow();
+    }
+
+    expect(() => assertBackupDirOutsideRoot(rootAlias, root)).toThrow();
+    expect(await readdir(nested)).toEqual([]);
+  });
+
+  test("allows external folders through aliases and creates missing backup folders", async () => {
+    const dir = await tempDir();
+    const root = join(dir, "data");
+    const external = join(dir, "data-backups");
+    const alias = join(dir, "external-alias");
+    const linkType = process.platform === "win32" ? "junction" : "dir";
+    await mkdir(root);
+    await mkdir(external);
+    await symlink(external, alias, linkType);
+    const missing = join(alias, "new", "daily");
+
+    for (const target of [
+      external,
+      alias,
+      missing,
+      join(dir, "new", "backups"),
+    ]) {
+      expect(() => assertBackupDirOutsideRoot(target, root)).not.toThrow();
+    }
+
+    expect(() =>
+      assertBackupDirOutsideRoot(external, join(root, "new"))
+    ).not.toThrow();
+
+    let exports = 0;
+
+    const stop = await startScheduledBackups({
+      dir: missing,
+      exportZip: async () => {
+        exports += 1;
+
+        return Buffer.from("zip");
+      },
+      key,
+    });
+
+    try {
+      await Bun.sleep(50);
+      expect(exports).toBe(1);
+      expect(await realpath(missing)).toBe(
+        await realpath(join(external, "new", "daily"))
+      );
+      expect(await readdir(missing)).toHaveLength(1);
+      expect(await readdir(root)).toEqual([]);
+    } finally {
+      stop();
+    }
   });
 
   test("a restart writes at once only when no recent backup exists", async () => {
