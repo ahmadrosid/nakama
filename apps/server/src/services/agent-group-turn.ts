@@ -364,9 +364,13 @@ export interface GroupTurn {
   userId: string;
 }
 
+/**
+ * `silent`: a skip or a pass, which spends no hop. `ended`: an error or a
+ * Stop, which spends a hop but wakes nobody.
+ */
 export type GroupTurnOutcome =
   | { kind: "replied"; text: string }
-  | { kind: "passed" | "failed" | "skipped" | "stopped" };
+  | { kind: "silent" | "ended" };
 
 /**
  * Runs one member's turn and stores what it said: the reply, the error, a skip
@@ -398,7 +402,7 @@ export async function takeGroupTurn(
   if (!(group && speaker)) {
     store("_Skipped: no access_");
 
-    return { kind: "skipped" };
+    return { kind: "silent" };
   }
 
   const handles = memberHandles(members);
@@ -453,7 +457,7 @@ export async function takeGroupTurn(
       store(written.trim());
     }
 
-    return { kind: "stopped" };
+    return { kind: "ended" };
   }
 
   const text = result.output.trim();
@@ -464,7 +468,7 @@ export async function takeGroupTurn(
       store("");
     }
 
-    return { kind: "passed" };
+    return { kind: "silent" };
   }
 
   if (result.status === "success" && text) {
@@ -475,5 +479,5 @@ export async function takeGroupTurn(
 
   store(`_${result.error ?? "No reply."}_`);
 
-  return { kind: "failed" };
+  return { kind: "ended" };
 }

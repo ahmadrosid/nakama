@@ -545,7 +545,7 @@ export class AgentGroupService {
         userId,
       });
 
-      if (outcome.kind === "skipped" || outcome.kind === "passed") {
+      if (outcome.kind === "silent") {
         continue;
       }
 
@@ -583,6 +583,12 @@ export class AgentGroupService {
 
       const group = getAgentGroup(orgId, userId, session.groupId);
       const access = await this.access(orgId, userId);
+
+      // Stop may land while access loads, before there is a hop to abort.
+      if (run.stopping) {
+        return;
+      }
+
       run.hop = new AbortController();
 
       const outcome = await takeGroupTurn(this.agent, {
@@ -602,7 +608,7 @@ export class AgentGroupService {
 
       run.activity = null;
 
-      if (outcome.kind === "skipped") {
+      if (outcome.kind === "silent") {
         return;
       }
     }

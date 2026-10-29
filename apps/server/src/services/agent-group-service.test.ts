@@ -894,6 +894,40 @@ describe("AgentGroupService", () => {
     ).toMatchObject({ threadReplies: 2 });
   });
 
+  test("stop right after a thread message cancels the reply", async () => {
+    const { calls, chat, service } = setup(() => "ok");
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+    const sessionId = await chat(group.id, "@alpha hi");
+
+    const [, root] = service.session(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      sessionId
+    ).messages;
+
+    calls.length = 0;
+
+    const run = service.postThread(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      sessionId,
+      root!.id,
+      "more?"
+    );
+
+    service.stopThread(ORG_ID, USER_ID, group.id, sessionId, root!.id);
+    await run;
+
+    expect(calls).toEqual([]);
+    expect(
+      service
+        .thread(ORG_ID, USER_ID, group.id, sessionId, root!.id)
+        .messages.map((message) => message.content)
+    ).toEqual(["ok", "more?"]);
+  });
+
   test("a thread cannot open on the user's own message", async () => {
     const { chat, service } = setup(() => "ok");
     const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
