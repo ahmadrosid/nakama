@@ -9,6 +9,33 @@ permissions:
   contents: read
 
 jobs:
+  # Same check as unit-tests.yml: does this PR touch only apps/web?
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      web_only: ${{ steps.scope.outputs.web_only }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+
+      - name: Check PR files
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          web_only=false
+          files=$(git diff --name-only --no-renames "$BASE_SHA" "$HEAD_SHA")
+          if [[ -n "$files" ]]; then
+            web_only=true
+            while IFS= read -r file; do
+              [[ "$file" == apps/web/* ]] || { web_only=false; break; }
+            done <<< "$files"
+          fi
+          echo "web_only=$web_only" >> "$GITHUB_OUTPUT"
+
   check:
     runs-on: ubuntu-latest
     steps:
@@ -46,9 +73,13 @@ jobs:
         run: cat .jscpd-report/jscpd-report.md >> "$GITHUB_STEP_SUMMARY"
 
   coverage:
+    needs: changes
     runs-on: ubuntu-latest
     # A report, not a gate. Unit Tests is what blocks a merge.
     continue-on-error: true
+    env:
+      # A PR that only touches apps/web reports apps/web coverage only.
+      WEB_ONLY: ${{ needs.changes.outputs.web_only }}
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -64,11 +95,13 @@ jobs:
       # Same as unit-tests.yml: GitHub releases + cache, so a slow Ubuntu
       # mirror cannot stall the job. Keep the version the same there.
       - name: Install FFmpeg
+        if: env.WEB_ONLY != 'true'
         uses: AnimMouse/setup-ffmpeg@178e0b4a408f06ce40d896c3cd79f50fa6f8b0c3 # v1.2.5
         with:
           version: "8.1"
 
       - name: Set up Electron
+        if: env.WEB_ONLY != 'true'
         run: |
           bun apps/desktop/node_modules/electron/install.js
           sudo chown root:root apps/desktop/node_modules/electron/dist/chrome-sandbox
@@ -82,7 +115,9 @@ jobs:
           mkdir -p coverage
           status=0
           # Match the root workspace globs, but keep each workspace's config and report.
-          for workspace in apps/* apps/platform/* packages/* packages/plugins/*; do
+          workspaces=(apps/* apps/platform/* packages/* packages/plugins/*)
+          if [[ "$WEB_ONLY" == true ]]; then workspaces=(apps/web); fi
+          for workspace in "${workspaces[@]}"; do
             [ -f "$workspace/package.json" ] || continue
             bun -e 'process.exit(require("./" + process.argv[1]).scripts?.test ? 0 : 1)' "$workspace/package.json" || continue
             report="coverage/${workspace//\//-}"

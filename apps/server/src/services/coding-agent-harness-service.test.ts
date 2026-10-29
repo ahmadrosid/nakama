@@ -158,76 +158,80 @@ describe("coding-agent harness resolution", () => {
   for (const parentIgnoresTerm of [false, true]) {
     testPosix(
       `readiness timeout kills descendants when the parent ${parentIgnoresTerm ? "ignores SIGTERM" : "exits"}`,
-      async () => {
-        const dir = await mkdtemp(
-          path.join(tmpdir(), "nakama-stubborn-harness-")
-        );
+      // Short SIGKILL grace, so the test does not wait the 2s default.
+      () =>
+        withFastCliProbes(async () => {
+          const dir = await mkdtemp(
+            path.join(tmpdir(), "nakama-stubborn-harness-")
+          );
 
-        const command = path.join(dir, "stubborn");
-        const pidFile = path.join(dir, "descendant.pid");
+          const command = path.join(dir, "stubborn");
+          const pidFile = path.join(dir, "descendant.pid");
 
-        const descendantCode = [
-          'process.on("SIGTERM", () => {});',
-          `require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));`,
-          "setInterval(() => {}, 1000);",
-        ].join("\n");
-
-        let descendantPid: number | undefined;
-        await writeFile(
-          command,
-          [
-            `#!${process.execPath}`,
-            'if (process.argv[2] === "--version") { console.log("1.0.0"); process.exit(0); }',
-            `require("node:child_process").spawn(process.execPath, ["-e", ${JSON.stringify(descendantCode)}], { stdio: "ignore" });`,
-            ...(parentIgnoresTerm ? ['process.on("SIGTERM", () => {});'] : []),
+          const descendantCode = [
+            'process.on("SIGTERM", () => {});',
+            `require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));`,
             "setInterval(() => {}, 1000);",
-            "",
-          ].join("\n"),
-          { mode: 0o755 }
-        );
+          ].join("\n");
 
-        try {
-          const db = createInMemoryDatabaseAdapter();
-          await db.upsertWorkspaceSettings(
-            mergeWorkspaceSettings(null, {
-              codingAgentHarnesses: [
-                {
-                  args: [],
-                  command,
-                  enabled: true,
-                  id: "coding-harness-claude-code",
-                  kind: "claude_code",
-                  name: "Claude Code",
-                },
-              ],
-              id: "workspace-settings",
-              imageModel: null,
-              selectedCodingAgentHarness: "coding-harness-claude-code",
-              transcriptionModel: null,
-              updatedAt: new Date().toISOString(),
-              visionModel: null,
-            })
+          let descendantPid: number | undefined;
+          await writeFile(
+            command,
+            [
+              `#!${process.execPath}`,
+              'if (process.argv[2] === "--version") { console.log("1.0.0"); process.exit(0); }',
+              `require("node:child_process").spawn(process.execPath, ["-e", ${JSON.stringify(descendantCode)}], { stdio: "ignore" });`,
+              ...(parentIgnoresTerm
+                ? ['process.on("SIGTERM", () => {});']
+                : []),
+              "setInterval(() => {}, 1000);",
+              "",
+            ].join("\n"),
+            { mode: 0o755 }
           );
 
-          const pending = refreshCodingAgentHarnessProbe(
-            db,
-            "coding-harness-claude-code",
-            { probeTimeoutMs: 1000 }
-          );
+          try {
+            const db = createInMemoryDatabaseAdapter();
+            await db.upsertWorkspaceSettings(
+              mergeWorkspaceSettings(null, {
+                codingAgentHarnesses: [
+                  {
+                    args: [],
+                    command,
+                    enabled: true,
+                    id: "coding-harness-claude-code",
+                    kind: "claude_code",
+                    name: "Claude Code",
+                  },
+                ],
+                id: "workspace-settings",
+                imageModel: null,
+                selectedCodingAgentHarness: "coding-harness-claude-code",
+                transcriptionModel: null,
+                updatedAt: new Date().toISOString(),
+                visionModel: null,
+              })
+            );
 
-          descendantPid = await waitForPidFile(pidFile, 2000);
-          const probed = await pending;
-          expect(await waitForExit(descendantPid, 3000)).toBe(true);
-          expect(probed.installed).toBe(true);
-          expect(probed.ready).toBe(false);
-        } finally {
-          if (descendantPid && !(await waitForExit(descendantPid, 100))) {
-            process.kill(descendantPid, "SIGKILL");
+            const pending = refreshCodingAgentHarnessProbe(
+              db,
+              "coding-harness-claude-code",
+              { probeTimeoutMs: 1000 }
+            );
+
+            descendantPid = await waitForPidFile(pidFile, 2000);
+            const probed = await pending;
+            expect(await waitForExit(descendantPid, 3000)).toBe(true);
+            expect(probed.installed).toBe(true);
+            expect(probed.ready).toBe(false);
+          } finally {
+            if (descendantPid && !(await waitForExit(descendantPid, 100))) {
+              process.kill(descendantPid, "SIGKILL");
+            }
+
+            await rm(dir, { force: true, recursive: true });
           }
-
-          await rm(dir, { force: true, recursive: true });
-        }
-      },
+        }),
       7000
     );
   }

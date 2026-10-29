@@ -45,8 +45,12 @@ jobs:
           echo "web_only=$web_only" >> "$GITHUB_OUTPUT"
 
   test:
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # A PR that only touches apps/web runs the web build and tests, not the rest.
+      WEB_ONLY: ${{ needs.changes.outputs.web_only }}
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -64,6 +68,7 @@ jobs:
       # cannot stall the job. Pin the version: a new FFmpeg release can be
       # listed before its file is ready. Bump it when BtbN drops this version.
       - name: Install FFmpeg
+        if: env.WEB_ONLY != 'true'
         uses: AnimMouse/setup-ffmpeg@178e0b4a408f06ce40d896c3cd79f50fa6f8b0c3 # v1.2.5
         with:
           version: "8.1"
@@ -74,6 +79,7 @@ jobs:
           - name: Build what the image builds
             run: |
               bun run --filter @nakama/web build
+              [[ "$WEB_ONLY" == true ]] && exit 0
               bun run --filter @nakama/server build
               bun run --filter @nakama/automation build
               bun run --filter @nakama/telegram build
@@ -84,12 +90,18 @@ jobs:
 
           - name: Set up Electron
             run: |
+              [[ "$WEB_ONLY" == true ]] && exit 0
               bun apps/desktop/node_modules/electron/install.js
               sudo chown root:root apps/desktop/node_modules/electron/dist/chrome-sandbox
               sudo chmod 4755 apps/desktop/node_modules/electron/dist/chrome-sandbox
 
       - name: Run tests
-        run: xvfb-run -a bun run test
+        run: |
+          if [[ "$WEB_ONLY" == true ]]; then
+            bun run --cwd apps/web test --parallel=4
+          else
+            xvfb-run -a bun run test
+          fi
 
   # Windows tests cover server and shared packages, not apps/web.
   test-windows:

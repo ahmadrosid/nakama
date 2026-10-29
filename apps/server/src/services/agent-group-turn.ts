@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { DocumentAttachment, ProfileSummary } from "@nakama/core";
+import type { DocumentAttachment, OrgRole, ProfileSummary } from "@nakama/core";
 import {
   getProfileSoulDir,
   resolveDocumentPartForProvider,
@@ -9,23 +9,29 @@ import {
 } from "@nakama/core";
 import {
   type AgentGroup,
+  type AgentGroupMemoryChange,
   type AgentGroupMessage,
+  memberHandles,
   mentionedMemberIds,
 } from "@nakama/core/agent-groups";
 import {
   validateDocumentAttachments,
   validateImageAttachments,
 } from "@nakama/core/message-content";
+import { failSubAgentResult } from "../tools/sub-agent-shared";
 import {
+  appendAgentGroupMessage,
   listAgentGroupMessages,
   listAgentGroupThreadMessages,
   listGroupMessageDocuments,
+  type StoredGroupSession,
 } from "./agent-group-store";
 import {
   groupWorkspace,
   type PostedDocument,
   workspaceOfGroup,
 } from "./agent-group-workspace";
+import type { AgentService } from "./agent-service";
 
 const CONTEXT_MESSAGES = 40;
 
@@ -84,7 +90,7 @@ function handleOf(handles: Map<string, string>, profileId: string): string {
 const PASS = "(pass)";
 
 /** A pass, loosely ("pass", "(pass).") or an empty reply. */
-export function isPassReply(text: string): boolean {
+function isPassReply(text: string): boolean {
   return /^\(?\s*pass\s*\)?\.?$/i.test(text) || text === "";
 }
 
@@ -163,36 +169,6 @@ function memberRoles(orgId: string, ids: string[]): Map<string, string> {
       return [id, tagline === STOCK_TAGLINE ? "" : tagline];
     })
   );
-}
-
-/** What the speaker gets this turn, and whether it may pass. */
-export function groupTurn(
-  orgId: string,
-  sessionId: string,
-  group: AgentGroup,
-  speaker: ProfileSummary,
-  handles: Map<string, string>
-) {
-  const sharedDir = workspaceOfGroup(orgId, group.id).open();
-
-  const optional = mayPass(
-    listAgentGroupMessages(orgId, sessionId, undefined, false),
-    speaker.id,
-    handles
-  );
-
-  return {
-    mayPass: optional,
-    sharedDir,
-    task: groupTask(
-      group,
-      speaker,
-      handles,
-      memberRoles(orgId, [...handles.values()]),
-      sharedDir,
-      optional
-    ),
-  };
 }
 
 /** `mayPass`: a teammate already answered, so the speaker may stay silent. */
@@ -285,7 +261,7 @@ export function transcript(
     .slice(-CONTEXT_CHARS);
 }
 
-export function threadTask(
+function threadTask(
   group: AgentGroup,
   speaker: ProfileSummary,
   handles: Map<string, string>,
@@ -367,4 +343,141 @@ export async function readGroupDocuments(
       };
     })
   );
+}
+
+/** One member's turn: who answers, and in the main chat or a thread. */
+export interface GroupTurn {
+  /** Null once the group is gone; the turn is then skipped. */
+  group: AgentGroup | null;
+  /** The group's members the user can still reach, in member order. */
+  members: ProfileSummary[];
+  onActivity?: (label: string) => void;
+  onText?: (chunk: string) => void;
+  orgId: string;
+  orgRole?: OrgRole;
+  profileId: string;
+  /** The thread's first message; the turn is in the main chat without it. */
+  root?: AgentGroupMessage;
+  session: Pick<StoredGroupSession, "groupId" | "id">;
+  /** Stops the turn mid-reply; what was written so far is kept. */
+  signal?: AbortSignal;
+  userId: string;
+}
+
+/**
+ * `silent`: a skip or a pass, which spends no hop. `ended`: an error or a
+ * Stop, which spends a hop but wakes nobody.
+ */
+export type GroupTurnOutcome =
+  | { kind: "replied"; text: string }
+  | { kind: "silent" | "ended" };
+
+/**
+ * Runs one member's turn and stores what it said: the reply, the error, a skip
+ * when the member is out of reach, or the text so far when it was stopped. A
+ * pass is silence, so nothing is stored.
+ */
+export async function takeGroupTurn(
+  agent: Pick<AgentService, "runGroupTurn">,
+  turn: GroupTurn
+): Promise<GroupTurnOutcome> {
+  const { group, members, orgId, profileId, root, session } = turn;
+  const speaker = members.find((p) => p.id === profileId);
+
+  // Memory writes the turn saved, shown on its message in order. An empty
+  // message carries them alone, and stays out of the agents' context.
+  const memoryChanges: AgentGroupMemoryChange[] = [];
+
+  const store = (content: string) =>
+    appendAgentGroupMessage(
+      orgId,
+      session,
+      profileId,
+      content,
+      root?.id,
+      [],
+      memoryChanges
+    );
+
+  if (!(group && speaker)) {
+    store("_Skipped: no access_");
+
+    return { kind: "silent" };
+  }
+
+  const handles = memberHandles(members);
+  const sharedDir = workspaceOfGroup(orgId, group.id).open();
+
+  // A thread is a direct ask, so its turn never passes.
+  const optional =
+    !root &&
+    mayPass(
+      listAgentGroupMessages(orgId, session.id, undefined, false),
+      profileId,
+      handles
+    );
+
+  let written = "";
+
+  const result = await agent
+    .runGroupTurn({
+      agentDepth: 1,
+      context: root
+        ? threadTranscript(orgId, session.id, root.id, handles, members)
+        : transcript(orgId, session.id, handles, members),
+      onActivity: turn.onActivity,
+      onGroupMemoryChange: (change) => memoryChanges.push(change),
+      onText: (chunk) => {
+        written += chunk;
+        turn.onText?.(chunk);
+      },
+      orgId,
+      orgRole: turn.orgRole,
+      profileId,
+      sharedDir,
+      signal: turn.signal,
+      task: root
+        ? threadTask(group, speaker, handles, sharedDir)
+        : groupTask(
+            group,
+            speaker,
+            handles,
+            memberRoles(orgId, [...handles.values()]),
+            sharedDir,
+            optional
+          ),
+      userId: turn.userId,
+    })
+    .catch((error) =>
+      failSubAgentResult(error instanceof Error ? error.message : String(error))
+    );
+
+  if (turn.signal?.aborted) {
+    if (written.trim() || memoryChanges.length > 0) {
+      store(written.trim());
+    }
+
+    return { kind: "ended" };
+  }
+
+  const text = result.output.trim();
+
+  // A pass spends no hop, but a completed memory write must stay visible.
+  if (optional && result.status === "success" && isPassReply(text)) {
+    if (memoryChanges.length > 0) {
+      store("");
+    }
+
+    return { kind: "silent" };
+  }
+
+  if (result.status === "success" && text) {
+    store(text);
+
+    return { kind: "replied", text };
+  }
+
+  store(`_${result.error ?? "No reply."}_`);
+
+  return { kind: "ended" };
 }

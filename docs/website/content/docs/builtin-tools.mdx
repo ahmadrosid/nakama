@@ -62,6 +62,7 @@ Nakama includes these builtins:
 | `sub_agent` | No | No | Opt-in: delegate to a same-profile sub-agent (see below) |
 | `list_profile_sessions` | Super Nakama only | No | Opt-in: read another profile's session list (see below) |
 | `read_profile_session` | Super Nakama only | No | Opt-in: read another profile's stored transcript (see below) |
+| `close_session` | No | No | Opt-in: close one of the user's chats from the chat (see [Tool reference](/tool-reference#close_session)) |
 
 **New custom profiles** receive `read_file`, `write_file`, `save_artifact`, `edit_file`, `search_files`, `knowledge_base_search`, and `web_fetch` until a platform admin assigns additional tools. Memory writes, archives, and artifact saves use bundled skills with those file tools — see [Skills](/skills#bundled-system-skills). Word documents use `write_docx` (system profiles only by default). Coding-agent workflows use `bash` with the `coding-agent` skill — see [Coding agent](/coding-agent). Interactive browser automation (login walls, forms, clicks) uses `bash` with the opt-in `agent-browser` skill — see [Agent browser](/agent-browser). The `sub_agent` tool is seeded but **not** auto-assigned — platform admins opt in per profile. System profiles (`default`, `super_nakama`) get the full seeded builtin set; Super Nakama also receives `bash`, `list_profile_sessions`, and `read_profile_session`. The two session readers are seeded like `sub_agent` and assigned per profile; Super Nakama receives them at seed time, and that assignment is re-applied on every boot.
 

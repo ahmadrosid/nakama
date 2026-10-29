@@ -4,7 +4,8 @@ import {
 } from "@nakama/core/local-auth";
 import type { DatabaseAdapter } from "./types";
 
-const SALT_ROUNDS = 10;
+// `bun test` sets NODE_ENV=test. bcrypt's lowest cost keeps app setup fast in tests.
+const SALT_ROUNDS = process.env.NODE_ENV === "test" ? 4 : 10;
 
 const PLACEHOLDER_HASH = "unused";
 

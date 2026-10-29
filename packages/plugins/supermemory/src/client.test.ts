@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { normalizeUrl, SupermemoryClient } from "./client";
 
 test("connection endpoints reject token leaks and insecure public HTTP", () => {
@@ -44,6 +44,13 @@ test("rejects redirects, invalid JSON and oversized responses", async () => {
 });
 
 test("aborts a stalled request within the configured timeout", async () => {
+  // Shrink the 10s budget so the test does not wait for it.
+  const timeout = AbortSignal.timeout.bind(AbortSignal);
+
+  const spy = spyOn(AbortSignal, "timeout").mockImplementation(() =>
+    timeout(20)
+  );
+
   const client = new SupermemoryClient(
     { token: "secret", url: "http://localhost:3000" },
     (_url, init) =>
@@ -56,10 +63,14 @@ test("aborts a stalled request within the configured timeout", async () => {
       })
   );
 
-  await expect(client.request("POST", "/v4/search", {})).rejects.toThrow(
-    "timed out"
-  );
-}, 15_000);
+  try {
+    await expect(client.request("POST", "/v4/search", {})).rejects.toThrow(
+      "timed out"
+    );
+  } finally {
+    spy.mockRestore();
+  }
+});
 
 test("whole-document reads can use an explicitly larger bounded response budget", async () => {
   const content = "a".repeat(2_200_000);

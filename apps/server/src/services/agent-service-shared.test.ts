@@ -287,7 +287,7 @@ describe("AgentService sub-agent roles", () => {
       resolveProfileTools: async () => [],
     });
 
-    const result = await service.runSubAgentPrompt({
+    const result = await service.runGroupTurn({
       agentDepth: 1,
       onGroupMemoryChange: (change) => changes.push(change),
       orgId: ORG_ID,
@@ -300,7 +300,9 @@ describe("AgentService sub-agent roles", () => {
     expect(result.status).toBe("timeout");
     expect(changes).toEqual([{ newEntry: "- Before timeout", oldEntry: null }]);
     resume.resolve();
-    await finished.promise;
+    // The timeout aborts the tool loop, so the late write usually never runs;
+    // when a harness keeps going anyway, the tool refuses it.
+    await Promise.race([finished.promise, Bun.sleep(200)]);
     expect(groupWorkspace(sharedDir).memory.read()).toBe("- Before timeout");
     expect(changes).toHaveLength(1);
   });

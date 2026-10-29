@@ -309,6 +309,20 @@ Read the stored transcript of a session belonging to **another agent profile in 
 
 **Availability:** When assigned to the profile. Super Nakama receives it at seed time.
 
+## `close_session`
+
+Close one of the user's chats when they ask, for example a chat `sub_agent` started. A running turn is asked to stop, and the chat leaves **Recents**. Nothing is deleted: the chat still shows up in Recents search and at its link, and sending it a message brings it back.
+
+| Parameter | Type | Required | Notes |
+|-----------|------|----------|-------|
+| `sessionId` | string | Yes | Chat to close |
+
+**Returns:** `{ closed, sessionId }`.
+
+**Limits:** only chats the user can already open. No tool deletes a chat; deleting stays a UI action.
+
+**Availability:** When assigned to the profile (opt-in).
+
 ## `org_memory_search`
 
 Search the organization's shared memory — live pinned bullets and the full archive — for facts relevant to a query. Use when the injected org memory summary is missing detail or when you need historical facts that were archived.

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { getToolExecutionEnv } from "../lib/ensure-process-path";
 
-export const CLI_SIGTERM_GRACE_MS = 2000;
+const CLI_SIGTERM_GRACE_MS = 2000;
 
 const CLI_INSTALL_TIMEOUT_MS = 120_000;
 
@@ -19,6 +19,13 @@ function readPositiveEnvMs(name: string): number | undefined {
   const parsed = Number(process.env[name]);
 
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+/** How long a timed-out CLI child gets to honour SIGTERM before SIGKILL. */
+export function resolveCliSigtermGraceMs(): number {
+  return (
+    readPositiveEnvMs("NAKAMA_CLI_SIGTERM_GRACE_MS") ?? CLI_SIGTERM_GRACE_MS
+  );
 }
 
 export interface GlobalPackageInstallPlan {
@@ -424,8 +431,7 @@ export async function probeCliVersion(command: string): Promise<{
   const { spawn } = await import("node:child_process");
   const timeoutMs = readPositiveEnvMs("NAKAMA_CLI_PROBE_TIMEOUT_MS") ?? 5000;
 
-  const sigtermGraceMs =
-    readPositiveEnvMs("NAKAMA_CLI_SIGTERM_GRACE_MS") ?? CLI_SIGTERM_GRACE_MS;
+  const sigtermGraceMs = resolveCliSigtermGraceMs();
 
   return new Promise((resolve) => {
     let child: ReturnType<typeof spawn>;

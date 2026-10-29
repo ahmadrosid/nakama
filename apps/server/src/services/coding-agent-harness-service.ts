@@ -18,9 +18,9 @@ import {
 } from "../lib/ensure-process-path";
 import {
   buildGlobalPackageInstallPlan,
-  CLI_SIGTERM_GRACE_MS,
   detectNpmOrBun,
   probeCliVersion,
+  resolveCliSigtermGraceMs,
 } from "./cli-package-install";
 import { buildHarnessNonInteractiveArgs } from "./coding-agent-command";
 import {
@@ -30,9 +30,6 @@ import {
   resolveCodingAgentSpawnBundle,
 } from "./coding-agent-spawn-env";
 import { killProcessTree } from "./custom-tool-subprocess";
-
-/** How long a timed-out child gets to honour SIGTERM before it is killed. */
-const SIGTERM_GRACE_MS = CLI_SIGTERM_GRACE_MS;
 
 export interface CodingAgentHarnessStatus
   extends StoredCodingAgentHarnessRecord {
@@ -885,7 +882,7 @@ async function runProbeCommand(
         void killProcessTree(child, "SIGTERM");
         killTimeoutId = setTimeout(() => {
           void killProcessTree(child, "SIGKILL");
-        }, SIGTERM_GRACE_MS);
+        }, resolveCliSigtermGraceMs());
       }
 
       // Resolve here rather than waiting for `close`: a child that ignores

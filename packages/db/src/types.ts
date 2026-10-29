@@ -147,6 +147,8 @@ export interface StoredSessionRecord {
   agentTodos: AgentTodo[];
   branchMessageIndex?: number | null;
   channel: string;
+  /** Set while the chat is hidden from Recents; the next message clears it. */
+  closedAt?: string | null;
   createdAt: string;
   id: string;
   model: string | null;
@@ -1570,6 +1572,10 @@ export interface DatabaseAdapter {
     credentialId: string,
     counter: number
   ): Promise<void>;
+  updateSessionClosedAt(
+    sessionId: string,
+    closedAt: string | null
+  ): Promise<boolean>;
   updateSessionModel(sessionId: string, model: string | null): Promise<boolean>;
   updateSessionParent(
     sessionId: string,

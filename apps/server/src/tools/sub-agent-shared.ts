@@ -16,18 +16,25 @@ export interface SubAgentRunInput {
   clientOrigin?: string;
   context?: string;
   onActivity?: (label: string) => void;
-  onGroupMemoryChange?: (change: AgentGroupMemoryChange) => void;
   /** Answer text as the model writes it. */
   onText?: (chunk: string) => void;
   orgId: string;
   orgRole?: OrgRole;
   profileId: string;
   sessionId?: string;
-  /** Agent group folder the child's file tools may also use. */
-  sharedDir?: string;
   task: string;
   timeoutMs?: number;
   userId?: string;
+}
+
+export interface GroupTurnRunInput
+  extends Omit<SubAgentRunInput, "clientOrigin" | "sessionId"> {
+  /** A group memory write the turn saved, in order. */
+  onGroupMemoryChange?: (change: AgentGroupMemoryChange) => void;
+  /** The group's shared folder, which the member's file tools may also use. */
+  sharedDir: string;
+  /** Aborts the turn, as when the user presses Stop. */
+  signal?: AbortSignal;
 }
 
 export interface SubAgentRunResult {

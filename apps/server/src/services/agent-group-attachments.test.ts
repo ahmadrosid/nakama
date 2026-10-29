@@ -3,9 +3,9 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { getGroupSharedDir } from "@nakama/core";
 import { setupTestConfigDir } from "../test-config-dir";
-import { readGroupDocuments } from "./agent-group-prompt";
 import { closeAgentGroupDatabases } from "./agent-group-store";
 import { ORG_ID, setup, USER_ID } from "./agent-group-test-setup";
+import { readGroupDocuments } from "./agent-group-turn";
 import { groupWorkspace } from "./agent-group-workspace";
 
 const PNG = {
