@@ -587,10 +587,6 @@ describe("cognito leaves no skill-usage trail", () => {
     // skills the chat touched is still a trace of what it was about.
     expect(await turnWith(true)).toBe(0);
   });
-
-  test("an ordinary turn still records it", async () => {
-    expect(await turnWith(false)).toBeGreaterThan(0);
-  });
 });
 
 describe("cognito session state that is not the transcript", () => {

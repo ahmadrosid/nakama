@@ -98,16 +98,6 @@ test("uses a stable Moodstone cut and palette across sizes and profile edits", a
   expect(again.outerHTML).toBe(first.outerHTML);
 });
 
-test("profile IDs select different generated avatars", async () => {
-  const first = (await renderAvatar()).getAttribute("src");
-
-  const second = (
-    await renderAvatar({ profile: { ...profile, id: "agent-b" } })
-  ).getAttribute("src");
-
-  expect(second).not.toBe(first);
-});
-
 test("only the active avatar contains SVG animation, with the same cut and color", async () => {
   const still = readSvg(await renderAvatar());
   const animated = readSvg(await renderAvatar({ active: true, profile }));

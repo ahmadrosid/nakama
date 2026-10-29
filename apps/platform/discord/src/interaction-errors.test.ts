@@ -7,11 +7,8 @@ import {
 } from "./interaction-errors";
 
 describe("isIgnorableInteractionError", () => {
-  test("treats Unknown interaction (10062) as ignorable", () => {
+  test("ignores unknown (10062) and already acknowledged (40060) interactions", () => {
     expect(isIgnorableInteractionError({ code: 10_062 })).toBe(true);
-  });
-
-  test("treats already acknowledged (40060) as ignorable", () => {
     expect(isIgnorableInteractionError({ code: 40_060 })).toBe(true);
   });
 

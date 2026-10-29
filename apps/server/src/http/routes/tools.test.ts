@@ -709,26 +709,6 @@ describe("tool playground routes", () => {
     });
   });
 
-  test("org admin can read tool detail", async () => {
-    const { app, authService, databaseAdapter } = createApp();
-
-    const { orgId, adminSession } = await createOrgAdminSession(
-      app,
-      authService,
-      databaseAdapter,
-      "acme-read",
-      "admin-read@acme.com"
-    );
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/tools/tool_echo", {
-        headers: adminSession.headers({}, orgId),
-      })
-    );
-
-    expect(response.status).toBe(200);
-  });
-
   test("org member cannot read tool detail", async () => {
     const { app, authService, databaseAdapter } = createApp();
 

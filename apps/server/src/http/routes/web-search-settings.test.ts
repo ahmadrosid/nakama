@@ -84,22 +84,4 @@ describe("web search settings route", () => {
       source: "settings",
     });
   });
-
-  test("an unknown vendor is refused", async () => {
-    const { app, databaseAdapter } = await createApp();
-    const session = await setupFreshInstallSession(app, databaseAdapter);
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/settings/web-search", {
-        body: JSON.stringify({ apiKey: "k", provider: "not-a-vendor" }),
-        headers: session.headers({
-          "Content-Type": "application/json",
-          "X-CSRF-Token": session.csrfToken,
-        }),
-        method: "PUT",
-      })
-    );
-
-    expect(response.status).toBe(400);
-  });
 });

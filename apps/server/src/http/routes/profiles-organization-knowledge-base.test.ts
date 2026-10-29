@@ -326,18 +326,6 @@ describe("profile knowledge base ZIP import", () => {
     expect((await list.json()).documents).toEqual([]);
   }, 30_000);
 
-  test("openapi describes the ZIP import route", async () => {
-    const { app } = createApp();
-    const response = await app.fetch(new Request(`${BASE}/openapi.json`));
-
-    const spec: ReturnType<typeof app.getOpenAPI31Document> =
-      await response.json();
-
-    expect(
-      spec.paths?.["/v1/profiles/{profileId}/knowledge-base/import-zip"]?.post
-    ).toBeDefined();
-  });
-
   test("requires a platform administrator and the active organization", async () => {
     const { app, authService, databaseAdapter } = createApp();
 

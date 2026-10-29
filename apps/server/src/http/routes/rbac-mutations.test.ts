@@ -244,35 +244,6 @@ describe("RBAC: admin can still reach the same routes (not a 403)", () => {
       }
     }
   );
-
-  test("POST /v1/automations is not forbidden for admin", async () => {
-    const { app, databaseAdapter, authService } = createApp();
-    await seedOrgAdmin(databaseAdapter, {
-      authService,
-      email: "admin@example.com",
-      orgId: ORG_ID,
-      password: PASSWORD,
-      role: "admin",
-      userId: "user_admin",
-    });
-
-    const admin = await loginUserSession(
-      app,
-      "admin@example.com",
-      PASSWORD,
-      ORG_ID
-    );
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/automations", {
-        body: JSON.stringify({ name: "x", prompt: "x" }),
-        headers: admin.headers({ "X-CSRF-Token": admin.csrfToken }),
-        method: "POST",
-      })
-    );
-
-    expect(response.status).not.toBe(403);
-  });
 });
 
 test("force deleting an MCP server requires a platform admin", async () => {

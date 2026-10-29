@@ -330,45 +330,27 @@ describe("releaseChatStream", () => {
 describe("shouldShowGoalPrompt", () => {
   const empty = { orgRole: "member", sessions: [], userContext: "" };
 
-  test("shows for a member with no web chat and no goal", () => {
-    expect(shouldShowGoalPrompt(empty)).toBe(true);
-  });
+  test("shows only to members with no web chat and no goal", () => {
+    const cases: Array<[Partial<typeof empty>, boolean]> = [
+      [{}, true],
+      [{ orgRole: "viewer" }, false],
+      [{ sessions: [{ channel: "web" }] }, false],
+      [
+        { sessions: [{ channel: "telegram" }, { channel: "automation" }] },
+        true,
+      ],
+      [{ userContext: "# About Me\n\n- Help with: Manage my ads\n" }, false],
+      [
+        {
+          userContext: "# About Me\n\n- Name / nickname: Alex\n- Help with:\n",
+        },
+        true,
+      ],
+    ];
 
-  test("hides for a viewer", () => {
-    expect(shouldShowGoalPrompt({ ...empty, orgRole: "viewer" })).toBe(false);
-  });
-
-  test("hides once the user has a web chat", () => {
-    expect(
-      shouldShowGoalPrompt({ ...empty, sessions: [{ channel: "web" }] })
-    ).toBe(false);
-  });
-
-  test("ignores chats from other channels", () => {
-    expect(
-      shouldShowGoalPrompt({
-        ...empty,
-        sessions: [{ channel: "telegram" }, { channel: "automation" }],
-      })
-    ).toBe(true);
-  });
-
-  test("hides once USER.md has a goal", () => {
-    expect(
-      shouldShowGoalPrompt({
-        ...empty,
-        userContext: "# About Me\n\n- Help with: Manage my ads\n",
-      })
-    ).toBe(false);
-  });
-
-  test("shows when the goal bullet is blank", () => {
-    expect(
-      shouldShowGoalPrompt({
-        ...empty,
-        userContext: "# About Me\n\n- Name / nickname: Alex\n- Help with:\n",
-      })
-    ).toBe(true);
+    for (const [overrides, expected] of cases) {
+      expect(shouldShowGoalPrompt({ ...empty, ...overrides })).toBe(expected);
+    }
   });
 });
 

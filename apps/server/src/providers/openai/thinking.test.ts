@@ -26,17 +26,14 @@ afterEach(() => {
 });
 
 describe("openAIModelSupportsThinking", () => {
-  test("denies gpt-4o-mini from the catalog", () => {
-    expect(openAIModelSupportsThinking("gpt-4o-mini")).toBe(false);
-  });
-
   test("allows gpt-5 and gpt-6 models", () => {
     expect(openAIModelSupportsThinking("gpt-5.4")).toBe(true);
     expect(openAIModelSupportsThinking("gpt-5.3-codex")).toBe(true);
     expect(openAIModelSupportsThinking("gpt-6-future")).toBe(true);
   });
 
-  test("denies gpt-4o variants by prefix", () => {
+  test("denies gpt-4o models from the catalog and by prefix", () => {
+    expect(openAIModelSupportsThinking("gpt-4o-mini")).toBe(false);
     expect(openAIModelSupportsThinking("gpt-4o-2025-08")).toBe(false);
   });
 

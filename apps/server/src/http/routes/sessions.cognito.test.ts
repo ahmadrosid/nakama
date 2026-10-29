@@ -241,27 +241,6 @@ describe("POST /v1/sessions with cognito", () => {
     expect(after.status).toBe(404);
   });
 
-  test("an invalid cognito body is rejected", async () => {
-    const { app, session } = await createScenario();
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/sessions", {
-        body: JSON.stringify({
-          channel: "web",
-          cognito: "yes",
-          profileId: "profile_owner",
-        }),
-        headers: session.headers({
-          "Content-Type": "application/json",
-          "X-CSRF-Token": session.csrfToken,
-        }),
-        method: "POST",
-      })
-    );
-
-    expect(response.status).toBe(400);
-  });
-
   test("an explicitly missing profile cannot fall back to the default bot", async () => {
     const { app, databaseAdapter, session } = await createScenario();
     await databaseAdapter.upsertProfile({

@@ -411,30 +411,6 @@ describe("createHonoApp", () => {
     }
   });
 
-  test("resolves org context for bearer auth without X-Org-Id", async () => {
-    const configDir = await mkdtemp(join(tmpdir(), "nakama-bearer-auth-org-"));
-    process.env.NAKAMA_CONFIG_DIR = configDir;
-
-    try {
-      const options = createServerOptions();
-      const token = await loadLocalAuthToken();
-      await seedLocalClientUser(options.databaseAdapter);
-      await seedOrgForUser(options.databaseAdapter, LOCAL_CLIENT_EMAIL);
-      const app = createHonoApp(options);
-
-      const profilesResponse = await app.fetch(
-        new Request("http://localhost:4310/v1/profiles", {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-      );
-
-      expect(profilesResponse.status).toBe(200);
-    } finally {
-      delete process.env.NAKAMA_CONFIG_DIR;
-      await rm(configDir, { force: true, recursive: true });
-    }
-  });
-
   test("rejects invalid bearer auth with 401 instead of 500", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);

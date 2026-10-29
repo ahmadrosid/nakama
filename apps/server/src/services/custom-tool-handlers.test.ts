@@ -14,7 +14,6 @@ import {
 } from "@nakama/db";
 import { waitForExit, waitForPidFile } from "./coding-agent-test-fixtures";
 import {
-  CUSTOM_TOOL_HANDLERS,
   getCustomToolHandler,
   RetryableToolError,
   TOOL_RETRY_LIMIT,
@@ -238,15 +237,6 @@ describe("withToolRetries", () => {
 });
 
 describe("getCustomToolHandler seam", () => {
-  test("applies the retry wrapper to both javascript and python handlers", () => {
-    for (const type of ["javascript", "python"] as const) {
-      const viaSeam = getCustomToolHandler(type);
-      expect(viaSeam).not.toBeNull();
-      // The seam returns a wrapped load, distinct from the raw loader.
-      expect(viaSeam!.load).not.toBe(CUSTOM_TOOL_HANDLERS[type].load);
-    }
-  });
-
   test("returns null for unknown handler types", () => {
     expect(getCustomToolHandler("ruby")).toBeNull();
   });

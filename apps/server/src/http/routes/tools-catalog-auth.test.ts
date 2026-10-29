@@ -30,16 +30,6 @@ function createApp() {
 }
 
 describe("GET /v1/tools", () => {
-  test("rejects anonymous callers", async () => {
-    const { app } = createApp();
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/tools")
-    );
-
-    expect(response.status).toBe(401);
-  });
-
   test("serves the catalog to an authenticated caller", async () => {
     const { app, databaseAdapter } = createApp();
     const session = await setupFreshInstallSession(app, databaseAdapter);

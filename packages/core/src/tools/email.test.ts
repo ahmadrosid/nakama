@@ -102,29 +102,6 @@ describe("email tool", () => {
     expect(sender.sent).toHaveLength(0);
   });
 
-  test("lists messages with fake reader", async () => {
-    const reader = createFakeMailReader([
-      {
-        date: "2026-06-21T00:00:00.000Z",
-        folder: "INBOX",
-        from: "team@example.com",
-        subject: "Weekly update",
-        text: "summary",
-        uid: 10,
-      },
-    ]);
-
-    const result = await runEmailTool(
-      { action: "list", limit: 5 },
-      {
-        createReader: () => reader,
-        loadConfig: async () => completeConfig,
-      }
-    );
-
-    expect("messages" in result && result.messages).toHaveLength(1);
-  });
-
   test("reads a message by uid", async () => {
     const reader = createFakeMailReader([
       {

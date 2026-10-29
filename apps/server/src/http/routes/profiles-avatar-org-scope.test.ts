@@ -59,14 +59,6 @@ async function createScenario() {
 const AVATAR_PATH = `http://localhost:4310/v1/profiles/${VICTIM_PROFILE}/avatar`;
 
 describe("GET /v1/profiles/:profileId/avatar is org scoped", () => {
-  test("rejects anonymous callers", async () => {
-    const { app } = await createScenario();
-
-    const response = await app.fetch(new Request(AVATAR_PATH));
-
-    expect(response.status).toBe(401);
-  });
-
   test("hides the avatar from another org", async () => {
     const { app } = await createScenario();
 

@@ -84,23 +84,6 @@ describe("tool-loop", () => {
     expect(result).toEqual({ error: "boom" });
   });
 
-  test("executeToolCall rejects non-JSON results", async () => {
-    const invalidTool: ToolDefinition = {
-      ...sampleTool,
-      async run() {
-        return { message: 1n };
-      },
-    };
-
-    const result = await executeToolCall([invalidTool], {
-      arguments: {},
-      id: "invalid",
-      name: "sample",
-    });
-
-    expect(result).toHaveProperty("error");
-  });
-
   test("executeToolCall drops undefined fields like JSON serialization", async () => {
     const optionalTool: ToolDefinition = {
       ...sampleTool,

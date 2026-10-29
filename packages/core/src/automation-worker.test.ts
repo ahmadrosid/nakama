@@ -64,37 +64,24 @@ describe("automation-worker heartbeat", () => {
     }
   });
 
-  test("stale heartbeat is not alive", () => {
-    const heartbeat = {
+  test("only a fresh, running heartbeat is alive", () => {
+    const fresh = {
       pid: process.pid,
       running: true,
       scheduledJobs: 1,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const stale = {
+      ...fresh,
       updatedAt: new Date(Date.now() - 60_000).toISOString(),
     };
 
-    expect(isAutomationHeartbeatAlive(heartbeat, 45_000)).toBe(false);
-  });
-
-  test("fresh heartbeat with current pid is alive", () => {
-    const heartbeat = {
-      pid: process.pid,
-      running: true,
-      scheduledJobs: 1,
-      updatedAt: new Date().toISOString(),
-    };
-
-    expect(isAutomationHeartbeatAlive(heartbeat)).toBe(true);
-  });
-
-  test("heartbeat with running=false is not alive", () => {
-    const heartbeat = {
-      pid: process.pid,
-      running: false,
-      scheduledJobs: 0,
-      updatedAt: new Date().toISOString(),
-    };
-
-    expect(isAutomationHeartbeatAlive(heartbeat)).toBe(false);
+    expect(isAutomationHeartbeatAlive(fresh)).toBe(true);
+    expect(isAutomationHeartbeatAlive(stale, 45_000)).toBe(false);
+    expect(isAutomationHeartbeatAlive({ ...fresh, running: false })).toBe(
+      false
+    );
   });
 
   test("malformed heartbeat is parsed as null", () => {

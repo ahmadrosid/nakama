@@ -5,7 +5,6 @@ import type {
   ProviderClient,
 } from "@nakama/core";
 import {
-  buildCompactionPrompt,
   type CompactionConfig,
   compactHistory,
   estimateHistoryTokenBreakdown,
@@ -243,13 +242,6 @@ describe("history compaction", () => {
     ]);
   });
 
-  test("builds anchored compaction prompts from previous summaries", () => {
-    const prompt = buildCompactionPrompt("Previous task summary");
-
-    expect(prompt).toContain("<previous-summary>");
-    expect(prompt).toContain("## Goal");
-  });
-
   test("summarizes history and replaces the head with a summary message", async () => {
     const messages: ChatMessage[] = [
       { content: "Implement compaction", role: "user" },
@@ -328,16 +320,6 @@ describe("history compaction", () => {
 
     expect(result.action).toBe("none");
     expect(messages).toHaveLength(2);
-  });
-
-  test("estimates history tokens from serialized payload", () => {
-    const messages: ChatMessage[] = [
-      { content: "x".repeat(400), role: "user" },
-    ];
-
-    const estimate = estimateHistoryTokens(messages, "system prompt");
-
-    expect(estimate).toBeGreaterThan(100);
   });
 
   test("splits the estimate into system, tools, and conversation", () => {

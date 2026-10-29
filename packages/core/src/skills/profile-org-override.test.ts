@@ -2,11 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { resolveProfileOrgBooleanOverride } from "./profile-org-override";
 
 describe("resolveProfileOrgBooleanOverride", () => {
-  test("defaults to false when both unset", () => {
+  test("falls back to the org, then to false", () => {
     expect(resolveProfileOrgBooleanOverride(undefined, undefined)).toBe(false);
-  });
-
-  test("org true when profile inherits", () => {
     expect(resolveProfileOrgBooleanOverride(null, true)).toBe(true);
   });
 

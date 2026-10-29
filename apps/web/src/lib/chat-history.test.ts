@@ -605,25 +605,23 @@ describe("isEditableUserMessage", () => {
     expect(isEditableUserMessage(userMessage())).toBe(true);
   });
 
-  test("rejects a prompt that is not in server history yet", () => {
-    expect(
-      isEditableUserMessage(userMessage({ historyIndex: undefined }))
-    ).toBe(false);
-  });
+  test("rejects rows that cannot be edited and resent", () => {
+    const rows: Partial<ChatListItem>[] = [
+      { historyIndex: undefined },
+      { role: "assistant" },
+      { role: "tool" },
+      { failed: true },
+      { content: "   " },
+      {
+        questionnaireAnswers: [
+          { answer: "yes", prompt: "Ship it?", questionId: "q1" },
+        ],
+      },
+    ];
 
-  test("rejects assistant and tool rows", () => {
-    expect(isEditableUserMessage(userMessage({ role: "assistant" }))).toBe(
-      false
-    );
-    expect(isEditableUserMessage(userMessage({ role: "tool" }))).toBe(false);
-  });
-
-  test("rejects a failed turn", () => {
-    expect(isEditableUserMessage(userMessage({ failed: true }))).toBe(false);
-  });
-
-  test("rejects blank content", () => {
-    expect(isEditableUserMessage(userMessage({ content: "   " }))).toBe(false);
+    for (const overrides of rows) {
+      expect(isEditableUserMessage(userMessage(overrides))).toBe(false);
+    }
   });
 
   test("rejects prompts carrying attachments", () => {
@@ -643,18 +641,6 @@ describe("isEditableUserMessage", () => {
       isEditableUserMessage(
         userMessage({
           documents: [{ filename: "spec.pdf", mediaType: "application/pdf" }],
-        })
-      )
-    ).toBe(false);
-  });
-
-  test("rejects a questionnaire answer bubble", () => {
-    expect(
-      isEditableUserMessage(
-        userMessage({
-          questionnaireAnswers: [
-            { answer: "yes", prompt: "Ship it?", questionId: "q1" },
-          ],
         })
       )
     ).toBe(false);

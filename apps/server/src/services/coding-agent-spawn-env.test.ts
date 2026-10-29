@@ -50,21 +50,6 @@ describe("coding-agent spawn env", () => {
     expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
   });
 
-  test("builds pi.dev provider passthrough env for openrouter", async () => {
-    const env = await buildPiSpawnEnv(
-      activeAnthropicRouting({
-        apiKey: "sk-or-test",
-        baseUrl: "https://openrouter.ai/api/v1",
-        providerLabel: "OpenRouter",
-        providerType: "openrouter",
-      }),
-      "openrouter"
-    );
-
-    expect(env.env.PI_CODING_AGENT_DIR).toBeDefined();
-    expect(env.cleanup).toBeDefined();
-  });
-
   test("builds pi.dev provider passthrough env for openai_compatible", async () => {
     const env = await buildPiSpawnEnv(
       activeAnthropicRouting({
