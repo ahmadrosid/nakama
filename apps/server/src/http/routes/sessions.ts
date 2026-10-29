@@ -60,12 +60,18 @@ export function registerSessionRoutes(
   // createSession refuses Super Nakama to non-admins. Every route that names an
   // existing session repeats the check, or holding the ID would be enough.
   const requireSessionAccess = async (
-    c: Parameters<typeof requireActiveOrgIdFromContext>[0]
+    c: Parameters<typeof requireActiveOrgIdFromContext>[0],
+    { runsTools = false }: { runsTools?: boolean } = {}
   ) => {
     const auth = getRequestAuth(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const sessionId = decodeURIComponent(c.req.param("sessionId") ?? "");
-    await agent.assertSessionProfileAccess(sessionId, orgId, auth);
+    await agent.assertSessionProfileAccess(
+      sessionId,
+      orgId,
+      auth,
+      runsTools ? { localClient: auth.mode === "local-token" } : {}
+    );
 
     return { orgId, sessionId };
   };
@@ -1050,7 +1056,11 @@ export function registerSessionRoutes(
 
   app.post("/v1/sessions/:sessionId/branch", async (c) => {
     requireOrgMemberFromContext(c);
-    const { orgId, sessionId } = await requireSessionAccess(c);
+
+    const { orgId, sessionId } = await requireSessionAccess(c, {
+      runsTools: true,
+    });
+
     const body = await readJson(c.req.raw, branchSessionRequestSchema);
 
     const result = await agent.branchSession(
@@ -1068,7 +1078,10 @@ export function registerSessionRoutes(
 
   app.post("/v1/sessions/:sessionId/messages", async (c) => {
     requireOrgMemberFromContext(c);
-    const { orgId, sessionId } = await requireSessionAccess(c);
+
+    const { orgId, sessionId } = await requireSessionAccess(c, {
+      runsTools: true,
+    });
 
     const turnStarted = await agent.beginSessionTurn(sessionId, orgId);
 

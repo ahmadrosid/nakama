@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import {
   type AgentChatSession,
@@ -2727,7 +2728,11 @@ export class AgentService {
       parseAgentChannel(parent.channel) ?? "web",
       parent.profileId,
       parent.userId,
-      { ...access, parentSessionId }
+      {
+        ...access,
+        codingWorkspaceRoot: parent.codingWorkspaceRoot ?? undefined,
+        parentSessionId,
+      }
     );
 
     await this.db.renameSessionTitle(childId, title);
@@ -2738,7 +2743,8 @@ export class AgentService {
   async assertSessionProfileAccess(
     sessionId: string,
     orgId: string,
-    access: ChatProfileAccess
+    access: ChatProfileAccess,
+    options: { localClient?: boolean } = {}
   ): Promise<void> {
     const record = await this.getSessionRecordForOrg(sessionId, orgId);
 
@@ -2749,6 +2755,14 @@ export class AgentService {
         access
       );
       assertSessionOwner(record, access);
+
+      // Only the local CLI can set this folder, so only it can run tools there.
+      if (options.localClient === false && record.codingWorkspaceRoot) {
+        throw new NakamaApiError(
+          "This chat runs in a local folder. Continue it from the CLI.",
+          403
+        );
+      }
     }
   }
 
@@ -6447,6 +6461,14 @@ export class AgentService {
     await this.refreshManagedProviderKeys();
     await this.ensureVisionSettingsLoaded();
     const profile = await this.requireExecutionProfile(orgId, profileId);
+
+    // A stored CLI folder can be moved or deleted after the chat started.
+    // Then the chat goes back to the profile workspace.
+    const codingRoot =
+      codingWorkspaceRoot && existsSync(codingWorkspaceRoot)
+        ? codingWorkspaceRoot
+        : undefined;
+
     // skill_manage writes skills and expands /learn, both of which outlive the
     // chat, so a cognito session never gets it whatever the channel allows.
     const includeSkillManageTools = !cognito && SKILL_MANAGE_CHANNELS[channel];
@@ -6600,7 +6622,7 @@ export class AgentService {
       assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
       channel,
       ...this.knowledgeToolContext(orgId, profileId),
-      codingWorkspaceRoot,
+      codingWorkspaceRoot: codingRoot,
       forbidArtifactFileWrites: tools.some(
         (tool) => tool.name === SAVE_ARTIFACT_TOOL_NAME
       ),
@@ -6801,7 +6823,7 @@ export class AgentService {
                       await this.formatCodingDelegationContext(
                         orgId,
                         profileId,
-                        codingWorkspaceRoot
+                        codingRoot
                       )
                     );
                   }
