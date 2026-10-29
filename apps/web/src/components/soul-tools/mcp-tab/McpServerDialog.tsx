@@ -14,9 +14,13 @@ import {
 import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
 import { CodeIcon } from "hugeicons-react";
-import { type ComponentProps, useState } from "react";
+import { type ComponentProps, type ReactNode, useState } from "react";
 import { McpImportConfigDialog } from "@/components/soul-tools/mcp-tab/mcp-import-config-dialog";
 import { McpServerDialogForm } from "@/components/soul-tools/mcp-tab/mcp-server-dialog-form";
+import {
+  type POPULAR_SERVERS,
+  unregisteredPopularServers,
+} from "@/components/soul-tools/mcp-tab/popular-mcp-servers";
 import {
   type McpServerKind,
   useMcpServerDialogState,
@@ -164,12 +168,14 @@ function RailHeading({ children }: { children: string }) {
 function RailItem({
   active,
   disabled,
+  icon,
   label,
   onClick,
   tag,
 }: {
   active: boolean;
   disabled: boolean;
+  icon?: ReactNode;
   label: string;
   onClick: () => void;
   tag: string;
@@ -185,11 +191,97 @@ function RailItem({
       onClick={onClick}
       type="button"
     >
-      <span className="truncate">{label}</span>
+      <span className="flex min-w-0 items-center gap-2">
+        {icon}
+        <span className="truncate">{label}</span>
+      </span>
       <span className="shrink-0 font-normal text-muted-foreground/70 text-xs">
         {tag}
       </span>
     </button>
+  );
+}
+
+function pickNewKind(
+  state: McpServerDialogState,
+  kind: McpServerKind,
+  clearPreset: boolean
+) {
+  if (clearPreset) {
+    state.setName("");
+    state.setUrl("");
+  }
+
+  state.selectKind(kind);
+}
+
+function NewRailSection({
+  activeKind,
+  disabled,
+  onPick,
+}: {
+  activeKind: McpServerKind | null;
+  disabled: boolean;
+  onPick: (kind: McpServerKind) => void;
+}) {
+  return (
+    <>
+      <RailHeading>New</RailHeading>
+      {NEW_KINDS.map((item) => (
+        <RailItem
+          active={activeKind === item.id}
+          disabled={disabled}
+          key={item.id}
+          label={item.label}
+          onClick={() => onPick(item.id)}
+          tag={item.tag}
+        />
+      ))}
+    </>
+  );
+}
+
+type PopularServer = (typeof POPULAR_SERVERS)[number];
+
+function PopularRailSection({
+  activeUrl,
+  disabled,
+  onPick,
+  servers,
+}: {
+  activeUrl: string | null;
+  disabled: boolean;
+  onPick: (server: PopularServer) => void;
+  servers: readonly PopularServer[];
+}) {
+  if (servers.length === 0) {
+    return null;
+  }
+
+  return (
+    <>
+      <RailHeading>Popular</RailHeading>
+      {servers.map((item) => (
+        <RailItem
+          active={activeUrl === item.url}
+          disabled={disabled}
+          icon={
+            <svg
+              aria-hidden="true"
+              className="size-4 shrink-0"
+              fill="currentColor"
+              viewBox={item.viewBox}
+            >
+              <path d={item.path} />
+            </svg>
+          }
+          key={item.name}
+          label={item.name}
+          onClick={() => onPick(item)}
+          tag="OAuth"
+        />
+      ))}
+    </>
   );
 }
 
@@ -265,6 +357,91 @@ function McpRegisteredPane({
   );
 }
 
+function McpServerDialogRail({
+  availableServers,
+  busy,
+  onSelect,
+  registered,
+  selectedId,
+  state,
+}: {
+  availableServers?: McpServerSummary[];
+  busy: boolean;
+  onSelect: (serverId: string | null) => void;
+  registered: McpServerSummary[];
+  selectedId: string | null;
+  state: McpServerDialogState;
+}) {
+  const popular = unregisteredPopularServers(availableServers);
+
+  const popularActive =
+    state.kind === "signin" && popular.some((item) => item.url === state.url);
+
+  const railKind = selectedId || popularActive ? null : state.kind;
+
+  return (
+    <nav
+      aria-label="Add MCP server"
+      className="flex max-h-48 shrink-0 flex-col gap-0.5 overflow-y-auto bg-muted/50 p-3 sm:max-h-none sm:w-56"
+    >
+      <DialogTitle className="px-2.5 pb-2">Add MCP server</DialogTitle>
+      <DialogDescription className="sr-only">
+        Pick a server type to create, or add a registered server.
+      </DialogDescription>
+      <NewRailSection
+        activeKind={railKind}
+        disabled={state.formDisabled}
+        onPick={(kind) => {
+          onSelect(null);
+          pickNewKind(state, kind, popularActive);
+        }}
+      />
+      <PopularRailSection
+        activeUrl={
+          selectedId === null && state.kind === "signin" ? state.url : null
+        }
+        disabled={state.formDisabled}
+        onPick={(item) => {
+          onSelect(null);
+          state.selectKind("signin");
+          state.setName(item.name);
+          state.setUrl(item.url);
+        }}
+        servers={popular}
+      />
+      {registered.length > 0 ? (
+        <>
+          <RailHeading>Registered</RailHeading>
+          {registered.map((item) => (
+            <RailItem
+              active={selectedId === item.id}
+              disabled={busy}
+              key={item.id}
+              label={item.name}
+              onClick={() => onSelect(item.id)}
+              tag={item.transport}
+            />
+          ))}
+        </>
+      ) : null}
+      <Button
+        className="mt-auto justify-start text-muted-foreground hover:text-foreground sm:mt-auto"
+        disabled={state.formDisabled}
+        onClick={() => {
+          onSelect(null);
+          state.openImportDialog();
+        }}
+        size="sm"
+        type="button"
+        variant="ghost"
+      >
+        <CodeIcon aria-hidden />
+        Import JSON
+      </Button>
+    </nav>
+  );
+}
+
 export function McpServerDialog({
   open,
   busy,
@@ -325,60 +502,14 @@ export function McpServerDialog({
         ) : (
           <DialogContent className="top-4 -translate-y-0 gap-0 overflow-hidden p-0 sm:top-[8dvh] sm:h-[36rem] sm:max-h-[84dvh] sm:max-w-3xl">
             <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
-              <nav
-                aria-label="Add MCP server"
-                className="flex max-h-48 shrink-0 flex-col gap-0.5 overflow-y-auto bg-muted/50 p-3 sm:max-h-none sm:w-56"
-              >
-                <DialogTitle className="px-2.5 pb-2">
-                  Add MCP server
-                </DialogTitle>
-                <DialogDescription className="sr-only">
-                  Pick a server type to create, or add a registered server.
-                </DialogDescription>
-                <RailHeading>New</RailHeading>
-                {NEW_KINDS.map((item) => (
-                  <RailItem
-                    active={selectedServer === null && state.kind === item.id}
-                    disabled={state.formDisabled}
-                    key={item.id}
-                    label={item.label}
-                    onClick={() => {
-                      setSelectedId(null);
-                      state.selectKind(item.id);
-                    }}
-                    tag={item.tag}
-                  />
-                ))}
-                {registered.length > 0 ? (
-                  <>
-                    <RailHeading>Registered</RailHeading>
-                    {registered.map((item) => (
-                      <RailItem
-                        active={selectedId === item.id}
-                        disabled={busy}
-                        key={item.id}
-                        label={item.name}
-                        onClick={() => setSelectedId(item.id)}
-                        tag={item.transport}
-                      />
-                    ))}
-                  </>
-                ) : null}
-                <Button
-                  className="mt-auto justify-start text-muted-foreground hover:text-foreground sm:mt-auto"
-                  disabled={state.formDisabled}
-                  onClick={() => {
-                    setSelectedId(null);
-                    state.openImportDialog();
-                  }}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  <CodeIcon aria-hidden />
-                  Import JSON
-                </Button>
-              </nav>
+              <McpServerDialogRail
+                availableServers={availableServers}
+                busy={busy}
+                onSelect={setSelectedId}
+                registered={registered}
+                selectedId={selectedServer?.id ?? null}
+                state={state}
+              />
               <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-6">
                 {error ? (
                   <p className="text-destructive text-sm" role="alert">
