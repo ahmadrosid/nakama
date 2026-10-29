@@ -2012,7 +2012,7 @@ function ChatConnectorsSubmenuItems({
       <DropdownMenuSub>
         <DropdownMenuSubTrigger disabled={disabled}>
           <Plug01Icon aria-hidden className="size-4 text-muted-foreground" />
-          Connectors
+          MCP servers
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent className="min-w-56">
           <DropdownMenuItem
@@ -2022,11 +2022,11 @@ function ChatConnectorsSubmenuItems({
               aria-hidden
               className="size-4 text-muted-foreground"
             />
-            Manage connectors
+            Manage MCP servers
           </DropdownMenuItem>
           <DropdownMenuItem onClick={onAdd}>
             <Add01Icon aria-hidden className="size-4 text-muted-foreground" />
-            Add connector
+            Add MCP server
           </DropdownMenuItem>
           {servers.data && servers.data.length > 0 ? (
             <DropdownMenuSeparator />
