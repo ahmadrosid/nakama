@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { canRunToolCallsInParallel } from "@nakama/agent";
+import type { ChatCompletionResult, GenerateChatInput } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AgentService } from "../services/agent-service";
 import { createDefaultProfile } from "../services/agent-service-test-fixtures";
+import { sessionTurnRegistry } from "../services/session-turn-registry";
+import { setupTestConfigDir } from "../test-config-dir";
 import { formatToolActivityLabel } from "./sub-agent-activity";
 import type { SubAgentRunResult } from "./sub-agent-shared";
 import { createSubAgentTool, runSubAgentTool } from "./sub-agent-tool";
@@ -254,5 +257,165 @@ describe("sub_agent background", () => {
     expect((await db.getSession(result.sessionId ?? ""))?.parentSessionId).toBe(
       parentId
     );
+  });
+});
+
+describe("sub_agent child chats", () => {
+  setupTestConfigDir("nakama-sub-agent-child-");
+
+  interface Captured {
+    names: string[];
+    system: string;
+  }
+
+  /** Each turn goes through `respond`; the last call's tools and prompt land in `captured`. */
+  async function createService(
+    respond: (input: GenerateChatInput) => Promise<ChatCompletionResult>
+  ) {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+
+    // Platform tool groups only attach when the profile owns at least one tool.
+    const now = new Date().toISOString();
+    await db.upsertTool({
+      createdAt: now,
+      description: "Test tool",
+      handlerConfig: { modulePath: "test.js" },
+      handlerType: "javascript",
+      id: "tool_sub_agent_seed",
+      name: "test_tool",
+      updatedAt: now,
+    });
+    await db.assignToolToProfile(PROFILE_ID, "tool_sub_agent_seed");
+
+    const service = new AgentService(null, null, db);
+    const captured: Captured = { names: [], system: "" };
+
+    const record = (input: GenerateChatInput) => {
+      captured.names = (input.tools ?? []).map((tool) => tool.name);
+      captured.system = input.system;
+
+      return respond(input);
+    };
+
+    Object.assign(service, {
+      _providerConfigured: true,
+      createHarnessForProfile: () => ({
+        provider: { generateChat: record, name: "openai", streamChat: record },
+      }),
+    });
+
+    return { captured, db, service };
+  }
+
+  const answer = (reply: string): Promise<ChatCompletionResult> =>
+    Promise.resolve({
+      assistantMessage: { content: reply, role: "assistant", toolCalls: [] },
+      content: reply,
+      toolCalls: [],
+    });
+
+  test("a child chat has no question, todo or sub_agent tools", async () => {
+    const { captured, service } = await createService(() => answer("Done"));
+    const parentId = await service.createSession(ORG_ID, "web", PROFILE_ID);
+
+    const parent = await service.resolveSession(parentId, ORG_ID);
+    await parent?.send({ message: "hi" });
+    expect(captured.names).toContain("ask_user_question");
+    expect(captured.names).toContain("todo_write");
+
+    const result = await runSubAgentTool(
+      { task: "Summarize the plan" },
+      { ...TOOL_CONTEXT, sessionId: parentId },
+      service
+    );
+
+    expect(result).toMatchObject({ output: "Done", status: "success" });
+    expect(captured.names).not.toContain("ask_user_question");
+    expect(captured.names).not.toContain("todo_write");
+    expect(captured.names).not.toContain("sub_agent");
+    expect(captured.system).toContain("Do not spawn sub-agents.");
+  });
+
+  test("a cognito chat runs sub_agent in memory and leaves no chat", async () => {
+    const { db, service } = await createService(() => answer("Done"));
+
+    const parentId = await service.createSession(
+      ORG_ID,
+      "web",
+      PROFILE_ID,
+      null,
+      { cognito: true }
+    );
+
+    const context = { ...TOOL_CONTEXT, sessionId: parentId };
+
+    expect(
+      await runSubAgentTool({ task: "Research it" }, context, service)
+    ).toMatchObject({ output: "Done", status: "success" });
+
+    expect(
+      (
+        await runSubAgentTool(
+          { background: true, task: "Research it" },
+          context,
+          service
+        )
+      ).status
+    ).toBe("fail");
+
+    expect(await db.listSessions()).toHaveLength(0);
+  });
+
+  test("stopping the parent stops the child it waits for", async () => {
+    const { service } = await createService(
+      (input) =>
+        new Promise((_, reject) => {
+          input.signal?.addEventListener("abort", () =>
+            reject(new Error("aborted"))
+          );
+        })
+    );
+
+    const parentId = await service.createSession(ORG_ID, "web", PROFILE_ID);
+    const stop = new AbortController();
+
+    const pending = runSubAgentTool(
+      { task: "Take forever", timeoutMs: 60_000 },
+      { ...TOOL_CONTEXT, sessionId: parentId, signal: stop.signal },
+      service
+    );
+
+    setTimeout(() => stop.abort(), 20);
+    const result = await pending;
+
+    expect(result.status).toBe("fail");
+    // The child turn ended, so the child chat takes a new message.
+    expect(await service.beginSessionTurn(result.sessionId ?? "", ORG_ID)).toBe(
+      true
+    );
+    // The registry is shared by every test file; leave no turn running.
+    sessionTurnRegistry.cancelTurn(result.sessionId ?? "");
+  });
+
+  test("a child that runs past timeoutMs reports timeout", async () => {
+    const { service } = await createService(
+      (input) =>
+        new Promise((_, reject) => {
+          input.signal?.addEventListener("abort", () =>
+            reject(new Error("aborted"))
+          );
+        })
+    );
+
+    const parentId = await service.createSession(ORG_ID, "web", PROFILE_ID);
+
+    const result = await runSubAgentTool(
+      { task: "Take forever", timeoutMs: 50 },
+      { ...TOOL_CONTEXT, sessionId: parentId },
+      service
+    );
+
+    expect(result.status).toBe("timeout");
   });
 });

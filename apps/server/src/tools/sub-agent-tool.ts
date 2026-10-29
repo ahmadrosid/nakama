@@ -101,11 +101,14 @@ export async function runSubAgentTool(
   const timeoutMs = readTimeoutMs(input.timeoutMs ?? null);
 
   try {
-    // Automation and other session-less turns keep the in-memory run: there
-    // is no chat to hang a child under.
-    if (!context.sessionId) {
-      if (input.background) {
-        return failSubAgentResult("background needs a chat session.");
+    // Automation turns have no chat to hang a child under, and a cognito chat
+    // must leave no chats behind, so both keep the in-memory run.
+    if (
+      !context.sessionId ||
+      agentService.isCognitoSession(context.sessionId)
+    ) {
+      if (input.background || input.sessionId) {
+        return failSubAgentResult("Separate chats need a saved chat session.");
       }
 
       return await agentService.runSubAgentPrompt({
@@ -209,6 +212,7 @@ async function runInChildSession(
 
   const childId = sessionId;
   const activity = run.background ? null : followActivity(childId, context);
+  const startedAt = Date.now();
 
   const terminal = new Promise<StreamEvent>((resolve) => {
     // Nothing reads this stream. The turn runs anyway and publishes to the
@@ -221,9 +225,15 @@ async function runInChildSession(
         agentService.scheduleSessionTitleGeneration(childId);
         resolve(event);
       },
-      undefined,
+      // Stop on the parent also stops a child it is waiting for. A background
+      // child outlives the parent turn on purpose.
+      run.background ? undefined : context.signal,
       run.timeoutMs
-    ).body?.pipeTo(new WritableStream());
+    )
+      .body?.pipeTo(new WritableStream())
+      .catch(() => {
+        // The turn already reported its end through onComplete.
+      });
   });
 
   if (run.background) {
@@ -234,14 +244,27 @@ async function runInChildSession(
 
   const event = await terminal.finally(() => activity?.unsubscribe());
 
+  if (event.type === "done") {
+    return {
+      ...buildSubAgentResult("success", event.reply),
+      sessionId: childId,
+    };
+  }
+
+  // The turn's own deadline fires at timeoutMs, so an earlier error is a failure.
+  if (Date.now() - startedAt >= run.timeoutMs) {
+    return {
+      ...buildSubAgentResult("timeout", "", "Sub-agent timed out."),
+      sessionId: childId,
+    };
+  }
+
   return {
-    ...(event.type === "done"
-      ? buildSubAgentResult("success", event.reply)
-      : buildSubAgentResult(
-          "fail",
-          "",
-          event.type === "error" ? event.error : "Sub-agent failed."
-        )),
+    ...buildSubAgentResult(
+      "fail",
+      "",
+      event.type === "error" ? event.error : "Sub-agent failed."
+    ),
     sessionId: childId,
   };
 }
