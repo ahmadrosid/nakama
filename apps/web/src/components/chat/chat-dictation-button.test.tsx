@@ -1,6 +1,6 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, useEffect } from "react";
+import { act, StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
 import { usePromptInputController } from "@/components/ai-elements/prompt-input-context";
@@ -132,7 +132,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-async function renderDictation(initialTextarea: string) {
+async function renderDictation(initialTextarea: string, strict = false) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -140,7 +140,7 @@ async function renderDictation(initialTextarea: string) {
 
   const renderTree = async (showButton: boolean) => {
     await act(async () => {
-      root.render(
+      const tree = (
         <QueryClientProvider client={queryClient}>
           <PromptInputProvider>
             <DraftProbe />
@@ -155,6 +155,8 @@ async function renderDictation(initialTextarea: string) {
           </PromptInputProvider>
         </QueryClientProvider>
       );
+
+      root.render(strict ? <StrictMode>{tree}</StrictMode> : tree);
     });
   };
 
@@ -417,4 +419,14 @@ test("unmount while the permission prompt is pending stops the stream and never 
   expect(stopped).toBe(1);
   expect(transcribeSpy.mock.calls.length).toBe(0);
   expect(queryButton("Send voice")).toBeNull();
+});
+
+test("starts recording under StrictMode (mounted ref resets on remount)", async () => {
+  installMediaMocks();
+  mockModel("9router-stt::selfhosted-stt/whisper-1");
+  await renderDictation("", true);
+  await waitFor(() => queryButton("Dictate with microphone") !== null);
+  await click("Dictate with microphone");
+  await waitFor(() => queryButton("Send voice") !== null);
+  expect(queryButton("Send voice")).not.toBeNull();
 });
