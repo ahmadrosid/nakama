@@ -496,6 +496,8 @@ function assertSessionOwner(
 export class AgentService {
   private userConfig: UserConfig | null;
   private readonly db: DatabaseAdapter;
+  /** The one group service; its in-memory run state lives as long as this. */
+  readonly groups: AgentGroupService;
   private readonly profileService: ProfileService;
   private readonly superNakamaSessionState = new SuperNakamaSessionState();
   private readonly agentTodoState: AgentTodoState;
@@ -549,6 +551,7 @@ export class AgentService {
   ) {
     this.userConfig = userConfig;
     this.db = db;
+    this.groups = new AgentGroupService(db, this);
     this.memoryBackend = new MemoryBackendService(db);
     this.profileService = new ProfileService(db);
     this.orgUsageQuotaService = new OrgUsageQuotaService(db);
@@ -596,13 +599,7 @@ export class AgentService {
         assignSkill: (orgId, profileId, request, meta) =>
           this.assignSkill(orgId, profileId, request, meta),
         createGroup: (orgId, userId, name, memberIds, brief) =>
-          new AgentGroupService(this.db, this).create(
-            orgId,
-            userId,
-            name,
-            memberIds,
-            brief
-          ),
+          this.groups.create(orgId, userId, name, memberIds, brief),
         getModels: () => this.getModels(),
         listSkills: (orgId) => this.listSkills(orgId),
       }

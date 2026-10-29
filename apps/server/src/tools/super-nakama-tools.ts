@@ -14,7 +14,10 @@ import {
   type ToolDefinition,
   type UpdateProfileRequest,
 } from "@nakama/core";
-import type { AgentGroup } from "@nakama/core/agent-groups";
+import {
+  type AgentGroup,
+  agentGroupInputSchema,
+} from "@nakama/core/agent-groups";
 import { z } from "zod";
 import { modelSupportsVision } from "../providers/models";
 import {
@@ -101,29 +104,7 @@ const proposeToolSchema = z
   })
   .strict();
 
-const createGroupSchema = z
-  .object({
-    brief: z
-      .string()
-      .trim()
-      .max(4000)
-      .default("")
-      .describe("What the group is for. Every agent in the group reads it."),
-    memberIds: z
-      .array(z.string().min(1))
-      .min(2)
-      .max(12)
-      .describe("Profile ids of the agents to add. 2 to 12."),
-    name: z
-      .string()
-      .trim()
-      .min(1)
-      .max(80)
-      .describe(
-        'Group name in short, readable title case, like "Rosid\'s Brand Team". Never a slug or hyphenated.'
-      ),
-  })
-  .strict();
+const createGroupSchema = agentGroupInputSchema.strict();
 
 const createProfileSchema = z.object({
   isSuper: z
