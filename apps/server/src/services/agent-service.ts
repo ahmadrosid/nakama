@@ -3440,9 +3440,13 @@ export class AgentService {
    * Takes a chat out of Recents and stops its running turn. Search and its
    * link still reach it, and its next message brings it back.
    */
-  async closeSession(sessionId: string, orgId: string): Promise<boolean> {
+  async closeSession(
+    sessionId: string,
+    orgId: string,
+    access: ChatProfileAccess
+  ): Promise<boolean> {
     if (this.ephemeralSessions.has(sessionId)) {
-      return false;
+      throw new NakamaApiError("An incognito chat cannot be closed.", 400);
     }
 
     const record = await this.getSessionRecordForOrg(sessionId, orgId);
@@ -3451,9 +3455,36 @@ export class AgentService {
       return false;
     }
 
+    this.assertChatProfileAccess(
+      await this.requireProfile(orgId, record.profileId),
+      access
+    );
+
+    // Everyone on the agent can read a messaging-app chat, but stopping its
+    // turn hits the person who started it, so closing needs the owner or an admin.
+    if (
+      !(
+        access.isPlatformAdmin ||
+        access.orgRole === "admin" ||
+        (access.user && record.userId === access.user.id)
+      )
+    ) {
+      throw new NakamaApiError("Session not found", 404);
+    }
+
+    // Write first: a row the update cannot reach must keep its turn running.
+    if (
+      !(await this.db.updateSessionClosedAt(
+        sessionId,
+        new Date().toISOString()
+      ))
+    ) {
+      return false;
+    }
+
     sessionTurnRegistry.stopTurn(sessionId);
 
-    return this.db.updateSessionClosedAt(sessionId, new Date().toISOString());
+    return true;
   }
 
   async renameSession(
@@ -3534,11 +3565,11 @@ export class AgentService {
       return false;
     }
 
-    if (record.closedAt) {
-      await this.db.updateSessionClosedAt(sessionId, null);
-    }
-
     try {
+      if (record.closedAt) {
+        await this.db.updateSessionClosedAt(sessionId, null);
+      }
+
       await this.resolveSharedAgentProfile(orgId, record.profileId);
 
       if (

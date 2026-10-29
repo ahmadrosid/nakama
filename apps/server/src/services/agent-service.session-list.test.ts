@@ -66,7 +66,9 @@ describe("listSessions reports the live turn", () => {
     expect(sessionTurnRegistry.beginTurn(sessionId).started).toBe(true);
     sessionTurnRegistry.attachAbort(sessionId, abort);
 
-    expect(await service.closeSession(sessionId, ORG_ID)).toBe(true);
+    expect(await service.closeSession(sessionId, ORG_ID, { user: USER })).toBe(
+      true
+    );
     expect(abort.signal.aborted).toBe(true);
 
     // The aborted turn still ends through its own endTurn.
@@ -82,6 +84,92 @@ describe("listSessions reports the live turn", () => {
     sessionTurnRegistry.cancelTurn(sessionId);
 
     expect(await listed()).toEqual([sessionId]);
+  });
+
+  test("a close the database does not record leaves the turn running", async () => {
+    const { db, service } = await createService();
+
+    const sessionId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      USER.id
+    );
+
+    db.updateSessionClosedAt = () => Promise.resolve(false);
+
+    const abort = new AbortController();
+    expect(sessionTurnRegistry.beginTurn(sessionId).started).toBe(true);
+    sessionTurnRegistry.attachAbort(sessionId, abort);
+
+    expect(await service.closeSession(sessionId, ORG_ID, { user: USER })).toBe(
+      false
+    );
+    expect(abort.signal.aborted).toBe(false);
+
+    sessionTurnRegistry.cancelTurn(sessionId);
+  });
+
+  test("a member cannot stop or hide a messaging chat someone else started", async () => {
+    const { db, service } = await createService();
+
+    const sessionId = await service.createSession(
+      ORG_ID,
+      "telegram",
+      "profile_default",
+      USER.id
+    );
+
+    await seedFirstMessage(db, sessionId);
+
+    const abort = new AbortController();
+    expect(sessionTurnRegistry.beginTurn(sessionId).started).toBe(true);
+    sessionTurnRegistry.attachAbort(sessionId, abort);
+
+    await expect(
+      service.closeSession(sessionId, ORG_ID, {
+        orgRole: "member",
+        user: { id: "user_other" },
+      })
+    ).rejects.toThrow();
+    expect(abort.signal.aborted).toBe(false);
+    expect((await db.getSession(sessionId))?.closedAt ?? null).toBeNull();
+
+    // Positive control: an org admin may close it.
+    expect(
+      await service.closeSession(sessionId, ORG_ID, {
+        orgRole: "admin",
+        user: { id: "user_other" },
+      })
+    ).toBe(true);
+    expect(abort.signal.aborted).toBe(true);
+
+    sessionTurnRegistry.cancelTurn(sessionId);
+  });
+
+  test("a failed reopen frees the turn instead of locking the chat", async () => {
+    const { db, service } = await createService();
+
+    const sessionId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      USER.id
+    );
+
+    expect(await service.closeSession(sessionId, ORG_ID, { user: USER })).toBe(
+      true
+    );
+
+    const update = db.updateSessionClosedAt.bind(db);
+    db.updateSessionClosedAt = () => Promise.reject(new Error("busy"));
+
+    await expect(service.beginSessionTurn(sessionId, ORG_ID)).rejects.toThrow();
+    expect(sessionTurnRegistry.isActive(sessionId)).toBe(false);
+
+    db.updateSessionClosedAt = update;
+    expect(await service.beginSessionTurn(sessionId, ORG_ID)).toBe(true);
+    sessionTurnRegistry.cancelTurn(sessionId);
   });
 
   test("a session is active only while its turn is running", async () => {

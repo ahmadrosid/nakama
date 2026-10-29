@@ -420,3 +420,30 @@ describe("session reader tools", () => {
     ).resolves.toMatchObject({ totalMessages: 3 });
   });
 });
+
+describe("close_session", () => {
+  test("refuses to close the chat it runs in and closes another one", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const { webSessionId, cliSessionId } = await setUp(db);
+
+    const closeTool = createSessionTools(new AgentService(null, null, db)).find(
+      (tool) => tool.name === "close_session"
+    );
+
+    expect(
+      await captureError(
+        closeTool!.run(
+          { sessionId: webSessionId },
+          { ...context(ORG_A), sessionId: webSessionId }
+        )
+      )
+    ).not.toBeNull();
+    expect((await db.getSession(webSessionId))?.closedAt ?? null).toBeNull();
+
+    await closeTool!.run(
+      { sessionId: cliSessionId },
+      { ...context(ORG_A), sessionId: webSessionId }
+    );
+    expect((await db.getSession(cliSessionId))?.closedAt).toBeString();
+  });
+});

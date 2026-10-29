@@ -1152,13 +1152,15 @@ export function registerSessionRoutes(
       );
     }
 
+    // close_session stops a turn through this controller, as streamMessage does.
+    const turnAbort = new AbortController();
+    sessionTurnRegistry.attachAbort(sessionId, turnAbort);
+
     try {
-      const reply = await session.send(
-        input,
-        body.whatsappMessage
-          ? { whatsappMessage: body.whatsappMessage }
-          : undefined
-      );
+      const reply = await session.send(input, {
+        signal: turnAbort.signal,
+        whatsappMessage: body.whatsappMessage,
+      });
 
       const contextUsage = session.getContextUsage() ?? undefined;
       const usage = session.getTurnUsage() ?? undefined;

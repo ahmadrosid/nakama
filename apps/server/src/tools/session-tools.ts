@@ -255,13 +255,20 @@ export function createSessionTools(agent: AgentService): ToolDefinition[] {
           throw new Error("sessionId is required.");
         }
 
-        await agent.assertSessionProfileAccess(sessionId, orgId, {
+        // Closing the running chat would abort the turn that runs this tool.
+        if (sessionId === context.sessionId?.trim()) {
+          throw new Error(
+            "This chat cannot close itself. The user can close it from Recents."
+          );
+        }
+
+        const closed = await agent.closeSession(sessionId, orgId, {
           isPlatformAdmin: context.isPlatformAdmin,
           orgRole: context.orgRole,
           user: context.userId ? { id: context.userId } : undefined,
         });
 
-        if (!(await agent.closeSession(sessionId, orgId))) {
+        if (!closed) {
           throw new Error("Session not found.");
         }
 
