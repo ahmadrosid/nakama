@@ -8,12 +8,11 @@ import {
   type TeamsSettingsResponse,
   type UpdateTeamsSettingsRequest,
 } from "@nakama/core";
-import type { MiddlewareHandler } from "hono";
 import { resolveChannelOwner } from "../channel-owner";
 import type { ServerOptions } from "../context";
 import { requireOrgAdminOrPlatformAdminFromContext } from "../org-guards";
 import { errorResponse, json, readJson } from "../shared";
-import type { AppEnv, HonoApp } from "../types";
+import type { HonoApp } from "../types";
 
 /**
  * The worker's SDK parses with express.json(), whose default limit is 100 KiB;
@@ -36,14 +35,6 @@ const updateTeamsSettingsSchema = z.object({
 
 export function registerTeamsRoutes(app: HonoApp, options: ServerOptions) {
   const { agent, databaseAdapter, workerManager } = options;
-
-  // Access is decided before a handler reads a body or turns an error into 400.
-  const requireChannelAccess: MiddlewareHandler<AppEnv> = async (c, next) => {
-    await resolveChannelOwner(c, agent);
-    await next();
-  };
-
-  app.use("/v1/settings/teams", requireChannelAccess);
 
   app.get("/v1/settings/teams", async (c) =>
     json<TeamsSettingsResponse>(
