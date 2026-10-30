@@ -73,11 +73,17 @@ A `run` call stops at 30 s. Record each part in its own `run`, with at most
 ```js
 const RELAY = browser.page(RELAY_ID);
 const REC = { target: TARGET_ID, on: true, buf: [], n: 0 };
+// On a failed POST the frames go back in the buffer for the next flush. It never throws.
 async function flush() {
   if (!REC.buf.length) return;
-  const items = REC.buf;
-  REC.buf = [];
-  await RELAY.evaluate((it) => fetch("/frames", { method: "POST", body: JSON.stringify(it) }).then((r) => r.text()), items);
+  const items = REC.buf.splice(0);
+  try {
+    const status = await RELAY.evaluate((it) => fetch("/frames", { method: "POST", headers: { "x-frame-relay": "1" }, body: JSON.stringify(it) }).then((r) => r.status), items);
+    if (status !== 200) throw new Error("frame server status " + status);
+  } catch (e) {
+    REC.buf.unshift(...items);
+    REC.err = String(e);
+  }
 }
 async function recLoop(ms) {
   const end = Date.now() + ms;
@@ -139,6 +145,8 @@ try {
 REC.on = false;
 await rec;
 out.frames = REC.n;
+out.unsent = REC.buf.length;
+if (REC.err) out.flushErr = REC.err;
 return out;
 ```
 
@@ -151,6 +159,8 @@ Tips:
 3. While the agent replies, record more 25 s parts. Stop when the snapshot
    has no `Stop response` button.
 4. One frame takes about 40 ms. A part gives about 15 frames per second.
+5. If `unsent` is more than 0, the frame server did not get those frames.
+   Read `flushErr` and `frame-server.log`, fix the cause, and record the part again.
 
 ### 5. Check the frames
 

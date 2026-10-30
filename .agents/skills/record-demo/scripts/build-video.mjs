@@ -4,12 +4,14 @@
 //   bun build-video.mjs sheet <video.mp4> <out.jpg> [every-seconds]
 //
 // plan.json: { "segments": [{ "n": 1 }, { "n": 6, "speed": [[0, 4]] }, { "n": 10, "trim": 2.9 }],
-//              "maxFrame": 0.4, "hold": 2.5, "width": 1920 }
+//              "maxFrame": 0.4, "hold": 2.5, "width": 1920, "height": 1310 }
+// "height" is optional; the default keeps the first frame's aspect ratio. Other frames are padded to fit.
 // "speed" is a list of [from-second, factor]; "trim" drops the first seconds of a segment.
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 
 const SEGMENT_GAP_MS = 2000;
+const FRAME_NAME = /^f\d{6}\.jpg$/;
 
 function readSegments(framesDir) {
   const rows = readFileSync(join(framesDir, "index.txt"), "utf8")
@@ -19,7 +21,7 @@ function readSegments(framesDir) {
       const [name, time] = line.split(" ");
       return { name, time: Number(time) };
     })
-    .filter((row) => row.time > 0);
+    .filter((row) => FRAME_NAME.test(row.name) && row.time > 0);
   const segments = [[rows[0]]];
 
   for (let index = 1; index < rows.length; index += 1) {
@@ -43,6 +45,35 @@ async function ffmpeg(args) {
   if ((await proc.exited) !== 0) {
     throw new Error(`ffmpeg failed: ${args.join(" ")}`);
   }
+}
+
+const even = (value) => Math.max(2, Math.round(value / 2) * 2);
+
+async function frameSize(path) {
+  const proc = Bun.spawn(
+    [
+      "ffprobe",
+      "-v",
+      "error",
+      "-select_streams",
+      "v:0",
+      "-show_entries",
+      "stream=width,height",
+      "-of",
+      "csv=p=0:s=x",
+      path,
+    ],
+    { stderr: "inherit" }
+  );
+  const text = await new Response(proc.stdout).text();
+
+  if ((await proc.exited) !== 0) {
+    throw new Error(`ffprobe failed: ${path}`);
+  }
+
+  const [width, height] = text.trim().split("x").map(Number);
+
+  return { height, width };
 }
 
 function listSegments(framesDir) {
@@ -100,7 +131,11 @@ async function build(framesDir, planPath, out) {
   lines.push(`file '${join(relativeDir, frames.at(-1).name)}'`);
   writeFileSync(concatPath, `${lines.join("\n")}\n`);
 
-  const width = plan.width ?? 1920;
+  // One fixed output size: frames from a popup or sign-in tab can have another
+  // size, and libx264 cannot change size in the middle of a stream.
+  const width = even(plan.width ?? 1920);
+  const first = await frameSize(join(framesDir, frames[0].name));
+  const height = even(plan.height ?? (first.height * width) / first.width);
 
   await ffmpeg([
     "-f",
@@ -110,7 +145,7 @@ async function build(framesDir, planPath, out) {
     "-i",
     concatPath,
     "-vf",
-    `scale=${width}:-2:flags=lanczos,fps=30,format=yuv420p`,
+    `scale=${width}:${height}:force_original_aspect_ratio=decrease:flags=lanczos,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=white,setsar=1,fps=30,format=yuv420p`,
     "-c:v",
     "libx264",
     "-preset",
