@@ -25,11 +25,13 @@ import {
   loginUserSession,
 } from "../http/test-session-helpers";
 import { AgentService } from "./agent-service";
-import { createDefaultProfile } from "./agent-service-test-fixtures";
+import {
+  createDefaultProfile,
+  startStoppedTurn,
+} from "./agent-service-test-fixtures";
 import { AuthService } from "./auth-service";
 import { OrgService } from "./org-service";
 import { ProfileService } from "./profile-service";
-import { sessionTurnRegistry } from "./session-turn-registry";
 import { SkillCuratorService } from "./skill-curator-service";
 import { SkillProposalService } from "./skill-proposal-service";
 import { SkillsService } from "./skills-service";
@@ -1001,14 +1003,13 @@ if __name__ == "__main__":
         questionnaire
       );
       failBuild = false;
-      expect(await agent.beginSessionTurn(id, "team_a")).toBe(true);
+      expect(await startStoppedTurn(agent, id, "team_a")).toBe("started");
       const second = (await agent.sessions.get(id, "team_a"))!;
       expect(second).not.toBe(first);
       expect(second.getHistory()).toEqual(first.getHistory());
       expect(await agent.getSessionQuestionnaire(id, "team_a")).toEqual(
         questionnaire
       );
-      sessionTurnRegistry.cancelTurn(id);
       await second.send("Second");
       expect(turns[1]!.tools?.map((tool) => tool.name)).toContain(
         "shared-notes"

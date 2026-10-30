@@ -417,6 +417,7 @@ import {
   resolveProfileStoredTools,
   type ServerToolOverrides,
 } from "./tool-resolver";
+import { TurnRunner } from "./turn-runner";
 import type { WorkerManagerService } from "./worker-manager-service";
 
 export type { SubAgentRunInput, SubAgentRunResult };
@@ -526,6 +527,16 @@ export class AgentService {
         await this.capabilityRevisionForProfile(orgId, profileId),
         await this.pluginCapabilityRevision(orgId),
       ]),
+  });
+  readonly turns = new TurnRunner({
+    loadRecord: (sessionId, orgId) =>
+      this.getSessionRecordForOrg(sessionId, orgId),
+    prepare: (record, orgId) => this.prepareTurn(record, orgId),
+    scheduleSkillReview: (sessionId) =>
+      this.schedulePostTurnSkillReview(sessionId),
+    scheduleTitle: (sessionId) =>
+      this.scheduleSessionTitleGeneration(sessionId),
+    sessions: this.sessions,
   });
   private readonly sessionTitleService: SessionTitleService;
   private readonly orgUsageQuotaService: OrgUsageQuotaService;
@@ -3336,42 +3347,24 @@ export class AgentService {
     await this.db.setSessionOrder(userId, sessionIds);
   }
 
-  async beginSessionTurn(
-    sessionId: string,
+  /** Runs once a turn holds the session's lock, before its chat is fetched. */
+  private async prepareTurn(
+    record: StoredSessionRecord,
     orgId: string
-  ): Promise<boolean | null> {
-    const record = await this.getSessionRecordForOrg(sessionId, orgId);
-
-    if (!record) {
-      return null;
+  ): Promise<void> {
+    if (record.closedAt) {
+      await this.db.updateSessionClosedAt(record.id, null);
     }
 
-    const turn = sessionTurnRegistry.beginTurn(sessionId);
+    await this.resolveSharedAgentProfile(orgId, record.profileId);
 
-    if (!turn.started) {
-      return false;
-    }
-
-    try {
-      if (record.closedAt) {
-        await this.db.updateSessionClosedAt(sessionId, null);
+    // A held chat may be out of date; one not held is built fresh anyway.
+    if (this.sessions.peek(record.id)) {
+      if (record.model) {
+        this.normalizeSessionModelOverride(record.model);
       }
 
-      await this.resolveSharedAgentProfile(orgId, record.profileId);
-
-      // A held chat may be out of date; one not held is built fresh anyway.
-      if (this.sessions.peek(sessionId)) {
-        if (record.model) {
-          this.normalizeSessionModelOverride(record.model);
-        }
-
-        await this.sessions.get(sessionId, orgId, { forNewTurn: true });
-      }
-
-      return true;
-    } catch (error) {
-      sessionTurnRegistry.cancelTurn(sessionId);
-      throw error;
+      await this.sessions.get(record.id, orgId, { forNewTurn: true });
     }
   }
 

@@ -33,7 +33,6 @@ function createServerOptions() {
   return {
     agent: {
       assertSessionProfileAccess: async () => {},
-      beginSessionTurn: async () => true,
       createSession: async () => "session_1",
       getProfile: async () => ({ profile: { id: "default" } }),
       getSessionMessages: async () => ({
@@ -58,9 +57,17 @@ function createServerOptions() {
       }),
       listSkills: async () => ({ skills: [] }),
       providerConfigured: true,
-      sessions: {
-        get: async () => ({
-          send: async (input: { message: string }) => `reply:${input.message}`,
+      turns: {
+        start: async (
+          _sessionId: string,
+          _orgId: string,
+          input: { message: string }
+        ) => ({
+          done: Promise.resolve({
+            kind: "done",
+            reply: `reply:${input.message}`,
+          }),
+          status: "started",
         }),
       },
     } as any,

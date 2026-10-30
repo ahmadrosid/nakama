@@ -16,6 +16,10 @@ _Avoid_: Session row, stored session
 A session made ready to take a turn: its history loaded, its tools, prompt and model set.
 _Avoid_: Session object, live session
 
+**Turn**:
+One message from a person and the agent's whole answer to it, tools included. A session runs one turn at a time.
+_Avoid_: Run, request
+
 **Branch**:
 A session copied from another session up to one message, so the user can try a different path from there.
 _Avoid_: Fork

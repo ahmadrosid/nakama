@@ -391,11 +391,7 @@ describe("sub_agent child chats", () => {
 
     expect(result.status).toBe("fail");
     // The child turn ended, so the child chat takes a new message.
-    expect(await service.beginSessionTurn(result.sessionId ?? "", ORG_ID)).toBe(
-      true
-    );
-    // The registry is shared by every test file; leave no turn running.
-    sessionTurnRegistry.cancelTurn(result.sessionId ?? "");
+    expect(sessionTurnRegistry.isActive(result.sessionId ?? "")).toBe(false);
   });
 
   test("a child that runs past timeoutMs reports timeout", async () => {

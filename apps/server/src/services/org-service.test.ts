@@ -49,6 +49,7 @@ import { createMinimalHonoApp } from "../http/test-app-helpers";
 import { loginUserSession } from "../http/test-session-helpers";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
+import { startStoppedTurn } from "./agent-service-test-fixtures";
 import { AuthService } from "./auth-service";
 import { AutomationRunner } from "./automation-runner";
 import { AutomationService } from "./automation-service";
@@ -2521,7 +2522,7 @@ describe("OrgService shared agent selection", () => {
         "user_creator"
       );
       await expect(
-        agent.beginSessionTurn(id, "org_team_a")
+        startStoppedTurn(agent, id, "org_team_a")
       ).rejects.toMatchObject({ status: 404 });
       expect(
         (await agent.getSessionMessages(id, "org_team_a"))?.messages
@@ -3699,14 +3700,13 @@ if __name__ == "__main__":
           modelPublication.id,
           "user_creator"
         );
-        expect(await agent.beginSessionTurn(id, "org_team_a")).toBe(true);
-        sessionTurnRegistry.cancelTurn(id);
+        expect(await startStoppedTurn(agent, id, "org_team_a")).toBe("started");
         expect(await agent.sessions.get(id, "org_team_a")).toBe(first);
         Object.assign(agent, {
           userConfig: { ...config, providers: [config.providers[0]!] },
         });
         await expect(
-          agent.beginSessionTurn(id, "org_team_a")
+          startStoppedTurn(agent, id, "org_team_a")
         ).rejects.toMatchObject({ status: 400 });
         expect(sessionTurnRegistry.isActive(id)).toBe(false);
         expect(selections).toHaveLength(1);
@@ -3723,7 +3723,7 @@ if __name__ == "__main__":
           },
         });
         await expect(
-          agent.beginSessionTurn(id, "org_team_a")
+          startStoppedTurn(agent, id, "org_team_a")
         ).rejects.toMatchObject({ status: 400 });
         expect(selections).toHaveLength(1);
         Object.assign(agent, { userConfig: config });
@@ -3739,8 +3739,7 @@ if __name__ == "__main__":
 
         expect(changedCoding.env?.OPENAI_API_KEY).toBe("first-key");
         expect((await db.getProfile(profile.id))!.model).toBe(profile.model);
-        expect(await agent.beginSessionTurn(id, "org_team_a")).toBe(true);
-        sessionTurnRegistry.cancelTurn(id);
+        expect(await startStoppedTurn(agent, id, "org_team_a")).toBe("started");
         const second = (await agent.sessions.get(id, "org_team_a"))!;
         expect(second).not.toBe(first);
         expect(second.getHistory()).toEqual(history);
@@ -3758,7 +3757,7 @@ if __name__ == "__main__":
           userConfig: { ...config, providers: [config.providers[0]!] },
         });
         await expect(
-          agent.beginSessionTurn(id, "org_team_a")
+          startStoppedTurn(agent, id, "org_team_a")
         ).rejects.toMatchObject({ status: 400 });
         expect(sessionTurnRegistry.isActive(id)).toBe(false);
         expect(selections).toHaveLength(builds);
@@ -3766,8 +3765,7 @@ if __name__ == "__main__":
           (await agent.getSessionMessages(id, "org_team_a"))!.messages
         ).toEqual(history);
         Object.assign(agent, { userConfig: config });
-        expect(await agent.beginSessionTurn(id, "org_team_a")).toBe(true);
-        sessionTurnRegistry.cancelTurn(id);
+        expect(await startStoppedTurn(agent, id, "org_team_a")).toBe("started");
         expect(await agent.sessions.get(id, "org_team_a")).toBe(overridden);
         await orgService.unpublishSharedResource(
           "org_parent",
@@ -3891,7 +3889,8 @@ if __name__ == "__main__":
       }
 
       const history = [...first.getHistory()];
-      expect(await agent.beginSessionTurn(id, "org_team_a")).toBe(true);
+      // Holds the lock only, so the chat below is the one a running turn has.
+      expect(sessionTurnRegistry.beginTurn(id).started).toBe(true);
       const source = (await db.getProfile("profile_template"))!;
       await db.upsertProfile({
         ...source,
@@ -3903,14 +3902,14 @@ if __name__ == "__main__":
       expect(await agent.sessions.get(id, "org_team_a")).toBe(first);
       sessionTurnRegistry.cancelTurn(id);
       failBuild = true;
-      await expect(agent.beginSessionTurn(id, "org_team_a")).rejects.toThrow();
+      await expect(startStoppedTurn(agent, id, "org_team_a")).rejects.toThrow();
       expect(sessionTurnRegistry.isActive(id)).toBe(false);
       expect(first.getHistory()).toEqual(history);
       expect(
         (await agent.getSessionMessages(id, "org_team_a"))!.messages
       ).toEqual(history);
       failBuild = false;
-      expect(await agent.beginSessionTurn(id, "org_team_a")).toBe(true);
+      expect(await startStoppedTurn(agent, id, "org_team_a")).toBe("started");
       const second = (await agent.sessions.get(id, "org_team_a"))!;
       expect(second).not.toBe(first);
       expect(second.getHistory()).toEqual(history);
@@ -4091,19 +4090,18 @@ if __name__ == "__main__":
       const source = (await db.getProfile("profile_template"))!;
       await db.upsertProfile({ ...source, isSuper: true });
       await expect(
-        agent.beginSessionTurn(id, "org_team_a")
+        startStoppedTurn(agent, id, "org_team_a")
       ).rejects.toMatchObject({ status: 404 });
       expect(sessionTurnRegistry.isActive(id)).toBe(false);
       await db.upsertProfile(source);
-      expect(await agent.beginSessionTurn(id, "org_team_a")).toBe(true);
-      sessionTurnRegistry.cancelTurn(id);
+      expect(await startStoppedTurn(agent, id, "org_team_a")).toBe("started");
       await orgService.unpublishSharedResource(
         "org_parent",
         publication.id,
         "user_creator"
       );
       await expect(
-        agent.beginSessionTurn(id, "org_team_a")
+        startStoppedTurn(agent, id, "org_team_a")
       ).rejects.toMatchObject({ status: 404 });
       await expect(agent.sessions.get(id, "org_team_a")).rejects.toMatchObject({
         status: 404,

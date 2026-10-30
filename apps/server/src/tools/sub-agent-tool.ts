@@ -1,9 +1,7 @@
 import type { StreamEvent, ToolContext, ToolDefinition } from "@nakama/core";
 import { z } from "zod";
-import { streamMessage } from "../http/shared";
 import type { AgentService } from "../services/agent-service";
 import { sessionKind } from "../services/session-runtime";
-import { sessionTurnRegistry } from "../services/session-turn-registry";
 import { formatToolActivityLabel } from "./sub-agent-activity";
 import {
   buildSubAgentPrompt,
@@ -192,91 +190,59 @@ async function runInChildSession(
     );
   }
 
-  const started = await agentService.beginSessionTurn(sessionId, context.orgId);
+  // The turn publishes to the turn registry, which is what a browser tab
+  // opening the chat follows. Stop on the parent also stops a child it is
+  // waiting for; a background child outlives the parent turn on purpose.
+  const turn = await agentService.turns.start(
+    sessionId,
+    context.orgId,
+    { clientOrigin: context.clientOrigin, message: run.prompt },
+    run.background
+      ? { timeoutMs: run.timeoutMs }
+      : {
+          onEvent: activityLabels(context),
+          signal: context.signal,
+          timeoutMs: run.timeoutMs,
+        }
+  );
 
-  if (!started) {
+  if (turn.status !== "started") {
     return failSubAgentResult(
-      started === null
+      turn.status === "not_found"
         ? `Session ${sessionId} not found.`
         : `Session ${sessionId} is already answering.`
     );
   }
 
-  const session = await agentService.sessions.get(sessionId, context.orgId);
-
-  if (!session) {
-    sessionTurnRegistry.cancelTurn(sessionId);
-
-    return failSubAgentResult(`Session ${sessionId} not found.`);
-  }
-
-  const childId = sessionId;
-  const activity = run.background ? null : followActivity(childId, context);
-  const startedAt = Date.now();
-
-  const terminal = new Promise<StreamEvent>((resolve) => {
-    // Nothing reads this stream. The turn runs anyway and publishes to the
-    // turn registry, which is what a browser tab opening the chat follows.
-    void streamMessage(
-      childId,
-      session,
-      { clientOrigin: context.clientOrigin, message: run.prompt },
-      (event) => {
-        agentService.scheduleSessionTitleGeneration(childId);
-        resolve(event);
-      },
-      // Stop on the parent also stops a child it is waiting for. A background
-      // child outlives the parent turn on purpose.
-      run.background ? undefined : context.signal,
-      run.timeoutMs
-    )
-      .body?.pipeTo(new WritableStream())
-      .catch(() => {
-        // The turn already reported its end through onComplete.
-      });
-  });
-
   if (run.background) {
-    const output = `Started in a new chat (session ${childId}). The user can open it from Recents. Do not wait for it; read its reply later with read_profile_session.`;
+    const output = `Started in a new chat (session ${sessionId}). The user can open it from Recents. Do not wait for it; read its reply later with read_profile_session.`;
 
-    return { output, sessionId: childId, status: "success", summary: output };
+    return { output, sessionId, status: "success", summary: output };
   }
 
-  const event = await terminal.finally(() => activity?.unsubscribe());
+  context.emitSubAgentActivity?.("Starting…");
+  const end = await turn.done;
 
-  if (event.type === "done") {
-    return {
-      ...buildSubAgentResult("success", event.reply),
-      sessionId: childId,
-    };
+  if (end.kind === "done") {
+    return { ...buildSubAgentResult("success", end.reply), sessionId };
   }
 
-  // The turn's own deadline fires at timeoutMs, so an earlier error is a failure.
-  if (Date.now() - startedAt >= run.timeoutMs) {
+  if (end.reason === "timeout") {
     return {
       ...buildSubAgentResult("timeout", "", "Sub-agent timed out."),
-      sessionId: childId,
+      sessionId,
     };
   }
 
-  return {
-    ...buildSubAgentResult(
-      "fail",
-      "",
-      event.type === "error" ? event.error : "Sub-agent failed."
-    ),
-    sessionId: childId,
-  };
+  return { ...buildSubAgentResult("fail", "", end.message), sessionId };
 }
 
 /** Feeds the parent's sub-agent row the same live labels the in-memory run gave it. */
-function followActivity(sessionId: string, context: ToolContext) {
+function activityLabels(context: ToolContext) {
   let writing = false;
   let planning = false;
 
-  context.emitSubAgentActivity?.("Starting…");
-
-  return sessionTurnRegistry.subscribe(sessionId, (event) => {
+  return (event: StreamEvent) => {
     if (event.type === "tool_start") {
       context.emitSubAgentActivity?.(
         formatToolActivityLabel(event.tool, event.input)
@@ -288,7 +254,7 @@ function followActivity(sessionId: string, context: ToolContext) {
       writing = true;
       context.emitSubAgentActivity?.("Writing answer…");
     }
-  });
+  };
 }
 
 function readTimeoutMs(value: number | null): number {

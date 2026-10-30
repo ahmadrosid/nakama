@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { type AgentChatSession, createAgentChatSession } from "@nakama/agent";
 import {
   type ConfigureProviderRequest,
   type CreateProviderRequest,
@@ -6,11 +7,36 @@ import {
 } from "@nakama/core";
 import { asTestFetch } from "../../providers/test-helpers";
 import { buildProviderInstanceFromCreateRequest } from "../../services/provider-instance-helpers";
+import { TurnRunner } from "../../services/turn-runner";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import { setupFreshInstallSession } from "../test-session-helpers";
 
 setupTestConfigDir("nakama-unexpected-error-format-test-");
+
+/** A real turn runner whose session `session_1` exists and gets this chat. */
+function turnsWith(get: () => Promise<AgentChatSession>) {
+  return new TurnRunner({
+    loadRecord: async (id) => ({
+      agentQuestionnaire: null,
+      agentTodos: [],
+      channel: "web",
+      codingWorkspaceRoot: null,
+      createdAt: "2026-10-31T00:00:00.000Z",
+      id,
+      model: null,
+      parentSessionId: null,
+      profileId: "profile_default",
+      thinkingEffort: null,
+      title: null,
+      userId: null,
+    }),
+    prepare: async () => undefined,
+    scheduleSkillReview: () => undefined,
+    scheduleTitle: () => undefined,
+    sessions: { get },
+  });
+}
 
 describe("route error formatting", () => {
   const originalFetch = globalThis.fetch;
@@ -112,19 +138,25 @@ describe("route error formatting", () => {
   });
 
   test("send message does not leak an unexpected error's message", async () => {
+    const fail = async (): Promise<never> => {
+      throw new Error(
+        "ENOSPC: no space left on device, write /home/nakama/.config/nakama/nakama.db"
+      );
+    };
+
+    const chat = createAgentChatSession({
+      provider: {
+        generateChat: fail,
+        generateText: fail,
+        name: "openai",
+        streamChat: fail,
+      },
+    });
+
     const { app, databaseAdapter } = createMinimalHonoApp({
       agent: {
         assertSessionProfileAccess: async () => undefined,
-        beginSessionTurn: async () => true,
-        sessions: {
-          get: async () => ({
-            send: async () => {
-              throw new Error(
-                "ENOSPC: no space left on device, write /home/nakama/.config/nakama/nakama.db"
-              );
-            },
-          }),
-        },
+        turns: turnsWith(async () => chat),
       },
     });
 
@@ -157,12 +189,9 @@ describe("route error formatting", () => {
       const { app, databaseAdapter } = createMinimalHonoApp({
         agent: {
           assertSessionProfileAccess: async () => undefined,
-          beginSessionTurn: async () => true,
-          sessions: {
-            get: async () => {
-              throw error;
-            },
-          },
+          turns: turnsWith(async () => {
+            throw error;
+          }),
         },
       });
 
@@ -202,12 +231,9 @@ describe("route error formatting", () => {
     const { app, databaseAdapter } = createMinimalHonoApp({
       agent: {
         assertSessionProfileAccess: async () => undefined,
-        beginSessionTurn: async () => true,
-        sessions: {
-          get: async () => {
-            throw new Error("SQLITE_CORRUPT: database disk image is malformed");
-          },
-        },
+        turns: turnsWith(async () => {
+          throw new Error("SQLITE_CORRUPT: database disk image is malformed");
+        }),
       },
     });
 

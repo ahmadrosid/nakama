@@ -16,8 +16,8 @@ import {
   pluginPackage,
 } from "../testing/plugin-package-fixture";
 import { AgentService } from "./agent-service";
+import { startStoppedTurn } from "./agent-service-test-fixtures";
 import { PluginService } from "./plugin-service";
-import { sessionTurnRegistry } from "./session-turn-registry";
 import { SkillsService } from "./skills-service";
 import {
   pluginActorFromContext,
@@ -162,12 +162,9 @@ describe("AgentService plugin capabilities", () => {
 
     await plugins.disableOrgPlugin(ORG_ID, "notes", enabled.revision);
     expect(await readdir(copyRoot)).toEqual(["keep.txt"]);
-    const started = await agent.beginSessionTurn(sessionId, ORG_ID);
-    expect(started).toBe(true);
+    expect(await startStoppedTurn(agent, sessionId, ORG_ID)).toBe("started");
 
-    const next = await agent.sessions.get(sessionId, ORG_ID).finally(() => {
-      sessionTurnRegistry.cancelTurn(sessionId);
-    });
+    const next = await agent.sessions.get(sessionId, ORG_ID);
 
     expect(next).not.toBe(first);
 

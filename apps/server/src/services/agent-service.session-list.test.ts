@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
-import { createDefaultProfile } from "./agent-service-test-fixtures";
+import {
+  createDefaultProfile,
+  startStoppedTurn,
+} from "./agent-service-test-fixtures";
 import { sessionTurnRegistry } from "./session-turn-registry";
 
 const ORG_ID = "org_test";
@@ -80,8 +83,7 @@ describe("listSessions reports the live turn", () => {
     expect(await listed()).toEqual([]);
     expect(await listed("hello")).toEqual([sessionId]);
 
-    expect(await service.beginSessionTurn(sessionId, ORG_ID)).toBe(true);
-    sessionTurnRegistry.cancelTurn(sessionId);
+    expect(await startStoppedTurn(service, sessionId, ORG_ID)).toBe("started");
 
     expect(await listed()).toEqual([sessionId]);
   });
@@ -164,12 +166,13 @@ describe("listSessions reports the live turn", () => {
     const update = db.updateSessionClosedAt.bind(db);
     db.updateSessionClosedAt = () => Promise.reject(new Error("busy"));
 
-    await expect(service.beginSessionTurn(sessionId, ORG_ID)).rejects.toThrow();
+    await expect(
+      startStoppedTurn(service, sessionId, ORG_ID)
+    ).rejects.toThrow();
     expect(sessionTurnRegistry.isActive(sessionId)).toBe(false);
 
     db.updateSessionClosedAt = update;
-    expect(await service.beginSessionTurn(sessionId, ORG_ID)).toBe(true);
-    sessionTurnRegistry.cancelTurn(sessionId);
+    expect(await startStoppedTurn(service, sessionId, ORG_ID)).toBe("started");
   });
 
   test("closing a chat closes the chats sub_agent started from it, not its branches", async () => {

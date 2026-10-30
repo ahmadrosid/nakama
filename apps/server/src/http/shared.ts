@@ -1,23 +1,14 @@
-import type { AgentChatSession } from "@nakama/agent";
-import type { ImageAttachment, OrgRole } from "@nakama/core";
+import type { OrgRole } from "@nakama/core";
 import {
   AGENT_CHANNELS,
   type AgentChannel,
   type ApiErrorResponse,
-  type ChatTurnUsage,
-  type ChatUsage,
-  formatServerError,
   HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES,
   LOCAL_CLIENT_EMAIL,
   NakamaApiError,
   PLAIN_BROWSER_SESSION_COOKIE_NAMES,
-  reportError,
   browserSessionCookieNames as resolveBrowserSessionCookieNames,
-  resolveChatFirstTokenTimeoutMs,
-  resolveChatStreamTimeoutMs,
-  type SendMessageInput,
   type StreamEvent,
-  type ToolContext,
   verifyLocalAuthToken,
 } from "@nakama/core";
 import type {
@@ -27,7 +18,7 @@ import type {
 } from "@nakama/db";
 import { ensureLocalClientAccess } from "@nakama/db";
 import type { Context } from "hono";
-import { type ZodType, z } from "zod";
+import type { ZodType } from "zod";
 import type { AuthService } from "../services/auth-service";
 import { loadMfaPolicy } from "../services/mfa-config";
 import { sessionTurnRegistry } from "../services/session-turn-registry";
@@ -655,113 +646,6 @@ export function parseChannel(value: string | undefined): AgentChannel {
   throw new NakamaApiError(`Invalid channel. Expected ${CHANNEL_LIST}.`, 400);
 }
 
-const STREAM_TIMEOUT_MS = resolveChatStreamTimeoutMs();
-
-const FIRST_TOKEN_TIMEOUT_MS = resolveChatFirstTokenTimeoutMs();
-
-function createStreamSenders(
-  sessionId: string,
-  enqueue: (chunk: Uint8Array) => void
-) {
-  let terminal: StreamEvent | null = null;
-
-  const send = (event: StreamEvent) => {
-    sessionTurnRegistry.publish(sessionId, event);
-
-    if (event.type === "done" || event.type === "error") {
-      terminal = event;
-    }
-
-    try {
-      enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`));
-    } catch {
-      // Client disconnected — keep the server turn and registry subscribers alive.
-    }
-  };
-
-  return {
-    getTerminal: () => terminal,
-    send,
-  };
-}
-
-function buildAgentStreamHandlers(send: (event: StreamEvent) => void) {
-  return {
-    onChunk: (delta: string) => send({ delta, type: "chunk" }),
-    onSubAgentActivity: (event: { parentToolCallId: string; label: string }) =>
-      send({
-        label: event.label,
-        parentToolCallId: event.parentToolCallId,
-        type: "sub_agent_activity",
-      }),
-    onThinking: (delta: string) => send({ delta, type: "thinking" }),
-    onToolEnd: (event: {
-      toolGroupId?: string;
-      toolCallId: string;
-      tool: string;
-      result: unknown;
-      images?: ImageAttachment[];
-    }) => {
-      send({
-        images: event.images,
-        result: event.result,
-        tool: event.tool,
-        toolCallId: event.toolCallId,
-        toolGroupId: event.toolGroupId,
-        type: "tool_end",
-      });
-
-      if (event.tool === "todo_write") {
-        const parsed = agentTodoResultSchema.safeParse(event.result);
-
-        if (parsed.success) {
-          send({ todos: parsed.data.todos, type: "todos_updated" });
-        }
-      }
-
-      if (event.tool === "ask_user_question") {
-        const parsed = questionnaireResultSchema.safeParse(event.result);
-
-        if (parsed.success) {
-          send({
-            questionnaire: parsed.data.questionnaire,
-            type: "questionnaire_updated",
-          });
-        }
-      }
-    },
-    onToolInputDelta: (event: {
-      toolGroupId?: string;
-      toolCallId: string;
-      tool: string;
-      delta: string;
-      accumulatedArguments?: string;
-    }) =>
-      send({
-        accumulatedArguments: event.accumulatedArguments,
-        delta: event.delta,
-        tool: event.tool,
-        toolCallId: event.toolCallId,
-        toolGroupId: event.toolGroupId,
-        type: "tool_input_delta",
-      }),
-    onToolStart: (event: {
-      toolGroupId?: string;
-      toolCallId: string;
-      tool: string;
-      input: Extract<StreamEvent, { type: "tool_start" }>["input"];
-    }) =>
-      send({
-        input: event.input,
-        tool: event.tool,
-        toolCallId: event.toolCallId,
-        toolGroupId: event.toolGroupId,
-        type: "tool_start",
-      }),
-    onUsage: (usage: ChatUsage) => send({ type: "usage", usage }),
-  };
-}
-
 export function streamTurnSubscribe(sessionId: string): Response | null {
   if (!sessionTurnRegistry.isActive(sessionId)) {
     return null;
@@ -813,234 +697,56 @@ export function streamTurnSubscribe(sessionId: string): Response | null {
   });
 }
 
-export function streamMessage(
-  sessionId: string,
-  session: Pick<
-    AgentChatSession,
-    "getContextUsage" | "getTurnUsage" | "sendStream"
-  >,
-  input: SendMessageInput,
-  onComplete?: (terminal: StreamEvent) => void,
-  requestSignal?: AbortSignal,
-  // Only tests pass these. The resolved values clamp to 60s and 5s minimums,
-  // which are far too long to wait for in a suite.
-  timeoutMs: number = STREAM_TIMEOUT_MS,
-  firstTokenTimeoutMs: number = FIRST_TOKEN_TIMEOUT_MS,
-  whatsappMessage?: ToolContext["whatsappMessage"]
-): Response {
+/**
+ * SSE framing for a turn. Events written before `respond` wait in the stream,
+ * and cancelling the response aborts `signal`, which stops the turn.
+ */
+export function createTurnStream() {
   const encoder = new TextEncoder();
-  const keepaliveIntervalMs = 4000;
-  // The turn is cancelled either by the client going away (requestSignal, which is
-  // what Discord /stop and a closed browser tab both look like here) or by the
-  // response stream being cancelled. Both must reach the agent, otherwise the turn
-  // runs to completion and endTurn is late, which is what returned 409 to the next
-  // message in the session.
-  const turnAbort = new AbortController();
-  sessionTurnRegistry.attachAbort(sessionId, turnAbort);
-
-  const turnSignal = requestSignal
-    ? AbortSignal.any([turnAbort.signal, requestSignal])
-    : turnAbort.signal;
+  const cancel = new AbortController();
+  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
 
   const stream = new ReadableStream<Uint8Array>({
     cancel() {
-      turnAbort.abort();
+      cancel.abort();
     },
-    async start(controller) {
-      const { send: publish, getTerminal } = createStreamSenders(
-        sessionId,
-        (chunk) => {
-          controller.enqueue(chunk);
-        }
-      );
+    start(streamController) {
+      controller = streamController;
+    },
+  });
 
-      // Anything the provider produces clears the first-token deadline. The
-      // keepalive below deliberately does not go through here: it is the
-      // server's own ping and says nothing about whether the provider is alive.
-      let sawProviderOutput = false;
+  const enqueue = (text: string) => {
+    try {
+      controller?.enqueue(encoder.encode(text));
+    } catch {
+      // The client went away. The turn keeps running for registry subscribers.
+    }
+  };
 
-      const send = (event: StreamEvent) => {
-        sawProviderOutput = true;
-        publish(event);
-      };
+  return {
+    onEvent: (event: StreamEvent) =>
+      enqueue(`data: ${JSON.stringify(event)}\n\n`),
+    respond(done: Promise<unknown>): Response {
+      const keepalive = setInterval(() => enqueue(": ping\n\n"), 4000);
 
-      const keepalive = setInterval(() => {
-        try {
-          controller.enqueue(encoder.encode(": ping\n\n"));
-        } catch {
-          clearInterval(keepalive);
-        }
-      }, keepaliveIntervalMs);
-
-      const deadlines: ReturnType<typeof setTimeout>[] = [];
-      // A deadline aborts the turn, so turnSignal.aborted alone can no longer
-      // tell a cancel from a timeout. Without this the user sees "Turn
-      // cancelled." for a provider that simply went quiet.
-      let timedOut = false;
-
-      const failAfter = (ms: number, message: string, when?: () => boolean) =>
-        new Promise<never>((_, reject) => {
-          deadlines.push(
-            setTimeout(() => {
-              if (when && !when()) {
-                return;
-              }
-
-              timedOut = true;
-              reject(new NakamaApiError(message, 504));
-              // After rejecting, so the race reports the timeout and not the
-              // abort. The provider request is still open at this point and
-              // nothing else ever stops it.
-              turnAbort.abort();
-            }, ms)
-          );
-        });
-
-      try {
-        const raced: Promise<string>[] = [
-          session.sendStream(input, buildAgentStreamHandlers(send), {
-            signal: turnSignal,
-            whatsappMessage,
-          }),
-          failAfter(
-            timeoutMs,
-            `Chat timed out after ${Math.round(timeoutMs / 1000)}s waiting for the provider. Try another model or check provider settings.`
-          ),
-        ];
-
-        if (firstTokenTimeoutMs > 0) {
-          raced.push(
-            failAfter(
-              firstTokenTimeoutMs,
-              `The provider accepted the request but sent nothing for ${Math.round(firstTokenTimeoutMs / 1000)}s. Try another model or check provider settings.`,
-              () => !sawProviderOutput
-            )
-          );
-        }
-
-        const reply = await Promise.race(raced);
-
-        const contextUsage = session.getContextUsage() ?? undefined;
-        const usage = session.getTurnUsage() ?? undefined;
-
-        const doneEvent: Extract<StreamEvent, { type: "done" }> = {
-          reply,
-          type: "done",
-        };
-
-        if (contextUsage) {
-          doneEvent.contextUsage = contextUsage;
-        }
-
-        if (usage) {
-          doneEvent.usage = usage;
-        }
-
-        send(doneEvent);
-      } catch (error) {
-        const cancelled = turnSignal.aborted && !timedOut;
-
-        // The first-token timeout is a NakamaApiError 504, and it is exactly the
-        // failure an operator needs, so only a 4xx refusal is skipped.
-        if (
-          !(
-            cancelled ||
-            (error instanceof NakamaApiError && error.status < 500)
-          )
-        ) {
-          // The stream already told the user; without this the operator never hears.
-          void reportError(error, { kind: "turn", source: "server" });
-        }
-
-        // The provider charged for the calls that did land, so a failed turn
-        // still reports them rather than billing silently. Wrapped because a
-        // throw here would replace the real failure with a blank one.
-        let spent: ChatTurnUsage | undefined;
-
-        try {
-          spent = session.getTurnUsage() ?? undefined;
-        } catch {
-          spent = undefined;
-        }
-
-        const errorEvent: Extract<StreamEvent, { type: "error" }> = {
-          error: cancelled ? "Turn cancelled." : formatServerError(error),
-          type: "error",
-        };
-
-        if (spent) {
-          errorEvent.usage = spent;
-        }
-
-        send(errorEvent);
-      } finally {
-        // Every turn scheduled these. Left pending, a long-running server
-        // accumulates live timers per turn for the whole timeout window.
-        for (const handle of deadlines) {
-          clearTimeout(handle);
-        }
-
+      void done.finally(() => {
         clearInterval(keepalive);
 
-        const observedTerminal = getTerminal();
-
-        if (!observedTerminal) {
-          console.warn(
-            `Session ${sessionId}: Stream closed before the agent finished.`
-          );
-        }
-
-        const terminal =
-          observedTerminal ??
-          ({
-            error: "Stream closed before the agent finished.",
-            type: "error",
-          } satisfies StreamEvent);
-
-        sessionTurnRegistry.endTurn(sessionId, terminal);
-
         try {
-          controller.close();
+          controller?.close();
         } catch {
           // Already closed by the client cancelling the stream.
         }
+      });
 
-        onComplete?.(terminal);
-      }
+      return new Response(stream, {
+        headers: {
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          "Content-Type": "text/event-stream; charset=utf-8",
+        },
+      });
     },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-      "Content-Type": "text/event-stream; charset=utf-8",
-    },
-  });
+    signal: cancel.signal,
+  };
 }
-
-const agentTodoResultSchema = z.object({
-  todos: z.array(
-    z.object({
-      content: z.string(),
-      id: z.string(),
-      status: z.enum(["pending", "in_progress", "completed", "cancelled"]),
-    })
-  ),
-});
-
-const questionnaireResultSchema = z.object({
-  questionnaire: z.object({
-    id: z.string(),
-    questions: z.array(
-      z.object({
-        allowCustomAnswer: z.boolean(),
-        choices: z.array(z.object({ id: z.string(), label: z.string() })),
-        id: z.string(),
-        placeholder: z.string().optional(),
-        prompt: z.string(),
-      })
-    ),
-    title: z.string(),
-  }),
-});
