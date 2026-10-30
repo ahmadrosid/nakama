@@ -75,7 +75,10 @@ function setup() {
       );
     },
     isTurnActive: (id) => active.has(id),
-    loadRecord: async (id) => rows.get(id) ?? runtime.cognitoRecord(id) ?? null,
+    loadRecord: async (id, orgId) =>
+      orgId === ORG_ID
+        ? (rows.get(id) ?? runtime.cognitoRecord(id) ?? null)
+        : null,
     onCognitoEnd: async (entry) => {
       ended.push(entry.record.id);
     },
@@ -146,6 +149,49 @@ describe("SessionRuntime", () => {
       running
     );
     expect(builds).toHaveLength(2);
+  });
+
+  test("builds one chat when callers ask at the same time", async () => {
+    const { builds, rows, runtime } = setup();
+    rows.set("s1", record("s1"));
+
+    const [first, second] = await Promise.all([
+      runtime.get("s1", ORG_ID),
+      runtime.get("s1", ORG_ID),
+    ]);
+
+    expect(first).toBe(second);
+    expect(runtime.peek("s1")).toBe(first);
+    expect(builds).toHaveLength(1);
+  });
+
+  test("rebuilds a stale cognito chat once when callers ask at the same time", async () => {
+    const { builds, runtime, setRevision } = setup();
+    await runtime.openCognito(record("c1"), ORG_ID);
+    await runtime.peek("c1")?.send("hi");
+    setRevision("r2");
+
+    const [first, second] = await Promise.all([
+      runtime.get("c1", ORG_ID),
+      runtime.get("c1", ORG_ID),
+    ]);
+
+    expect(first).toBe(second);
+    expect(runtime.peek("c1")).toBe(first);
+    expect(builds).toHaveLength(2);
+  });
+
+  test("does not share a lookup with another org", async () => {
+    const { runtime } = setup();
+    await runtime.openCognito(record("c1"), ORG_ID);
+
+    const [mine, theirs] = await Promise.all([
+      runtime.get("c1", ORG_ID),
+      runtime.get("c1", "org_other"),
+    ]);
+
+    expect(mine).not.toBeNull();
+    expect(theirs).toBeNull();
   });
 
   test("holds at most 50 stored chats and never evicts one mid-turn", async () => {

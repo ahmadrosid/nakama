@@ -104,6 +104,11 @@ interface CachedChat {
 export class SessionRuntime {
   private readonly chats = new Map<string, CachedChat>();
   private readonly cognito: EphemeralSessionStore;
+  /** One build per session at a time, so concurrent callers get one chat. */
+  private readonly pending = new Map<
+    string,
+    { orgId: string; run: Promise<AgentChatSession | null> }
+  >();
   private readonly isTurnActive: (sessionId: string) => boolean;
 
   constructor(private readonly deps: SessionRuntimeDeps) {
@@ -119,7 +124,25 @@ export class SessionRuntime {
   async get(
     sessionId: string,
     orgId: string,
-    { forNewTurn = false }: { forNewTurn?: boolean } = {}
+    options: { forNewTurn?: boolean } = {}
+  ): Promise<AgentChatSession | null> {
+    const pending = this.pending.get(sessionId);
+
+    // Another org gets its own lookup, so its access check still runs. A new
+    // turn waits instead: a plain lookup mid-turn skips the revision check.
+    if (pending?.orgId === orgId && !options.forNewTurn) {
+      return pending.run;
+    }
+
+    return this.serialize(sessionId, orgId, () =>
+      this.resolve(sessionId, orgId, options)
+    );
+  }
+
+  private async resolve(
+    sessionId: string,
+    orgId: string,
+    { forNewTurn = false }: { forNewTurn?: boolean }
   ): Promise<AgentChatSession | null> {
     const record = await this.deps.loadRecord(sessionId, orgId);
 
@@ -210,12 +233,16 @@ export class SessionRuntime {
       return;
     }
 
-    await this.rebuildCognito(
-      entry,
-      orgId,
-      await this.deps.revisionFor(orgId, entry.record.profileId),
-      settings
-    );
+    await this.serialize(sessionId, orgId, async () => {
+      await this.rebuildCognito(
+        entry,
+        orgId,
+        await this.deps.revisionFor(orgId, entry.record.profileId),
+        settings
+      );
+
+      return entry.session;
+    });
   }
 
   /** Clears and drops the chat. A cognito chat also loses what it saved. */
@@ -270,6 +297,25 @@ export class SessionRuntime {
 
   trackAttachment(sessionId: string, attachmentId: string): void {
     this.cognito.trackAttachment(sessionId, attachmentId);
+  }
+
+  /** Runs after the session's current build, and makes later callers wait. */
+  private serialize(
+    sessionId: string,
+    orgId: string,
+    work: () => Promise<AgentChatSession | null>
+  ): Promise<AgentChatSession | null> {
+    const before = this.pending.get(sessionId)?.run.catch(() => null);
+
+    const run = (before ? before.then(work) : work()).finally(() => {
+      if (this.pending.get(sessionId)?.run === run) {
+        this.pending.delete(sessionId);
+      }
+    });
+
+    this.pending.set(sessionId, { orgId, run });
+
+    return run;
   }
 
   /** Access comes from the session's owner, so a rebuild matches the first build. */
