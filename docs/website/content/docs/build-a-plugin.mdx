@@ -256,6 +256,21 @@ Super Nakama, or any agent assigned the `create-plugin` skill, can also prepare 
 
 The **Official plugins → Reinstall** shortcut applies only to plugins bundled with Nakama, such as Workflows.
 
+## What a plugin can't do
+
+Know the limits before you ask for a plugin, so you ask for something that can ship.
+
+A plugin adds actions, a page, skills, workers, and its own data. It does not change how Nakama itself works:
+
+- **Two access levels only.** Each action is `member` or `admin`. A plugin cannot add new roles to Nakama, change org members, or change org settings.
+- **Roles inside a plugin stay inside the plugin.** You can build your own levels, such as Viewer, Editor, and Manager, in the plugin's database. Your actions check `context.actor.id` against that table before they run. These levels do not control who can open Nakama pages or settings.
+- **Limited host calls.** An action can list profiles, list and run a profile's assigned tools, and ask for a summary. It cannot call other plugin tools.
+- **No secret store.** To use an outside API key, add an admin-only action with `exposeAsTool: false` that saves the key under `context.dataDir`.
+- **No runtime dependencies.** Bundle every library into the built files.
+- **Up to eight workers.**
+
+When you ask Super Nakama for a plugin, it does not refuse a request because it is large. It asks up to five questions first, then builds the closest draft inside these limits. If a draft breaks a rule, the install check returns an error such as `invalid_manifest`. Super Nakama fixes the draft and submits it again. A request that needs a change to Nakama itself, such as a new org role, becomes a plugin-only version of that feature.
+
 ## Add persistent data
 
 When your feature needs a database, include SQL migrations in the package and declare them in the manifest:
