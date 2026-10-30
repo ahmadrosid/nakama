@@ -337,14 +337,13 @@ function ChatConversation({
   } = state;
 
   // Cognito chats are not kept, so neither is their open panel.
-  const rememberKey =
-    session && !cognito ? `nakama:chat-panel:${session.id}` : undefined;
+  const rememberId = session && !cognito ? session.id : undefined;
 
   return (
     <ChatAttachmentPanelProvider
       below={below}
       key={session?.id ?? "new"}
-      rememberKey={rememberKey}
+      rememberId={rememberId}
     >
       <ArtifactStreamingPanelBridge messages={messages} profileId={profileId} />
       <BrowserLiveViewPanelBridge messages={messages} sessionId={session?.id} />

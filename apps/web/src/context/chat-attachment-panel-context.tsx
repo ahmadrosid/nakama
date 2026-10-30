@@ -20,6 +20,24 @@ const DEFAULT_PANEL_WIDTH = 448;
 
 const PANEL_WIDTH_KEY = "nakama:attachment-panel-width";
 
+/** One entry per chat, newest last, so the list cannot grow without end. */
+const CHAT_PANELS_KEY = "nakama:chat-panels";
+
+const MAX_REMEMBERED_CHATS = 50;
+
+/** How long a saved panel waits for its card before it is dropped. */
+const RESTORE_WAIT_MS = 1500;
+
+/** The open panel of one chat: its card id, and the artifact it shows. */
+interface RememberedPanel {
+  id: string;
+  restoreKey: string;
+}
+
+interface RememberedChatPanel extends RememberedPanel {
+  chatId: string;
+}
+
 function readStored(key: string): string | null {
   try {
     return localStorage.getItem(key);
@@ -28,29 +46,59 @@ function readStored(key: string): string | null {
   }
 }
 
-function writeStored(key: string, value: string | null): void {
+function writeStored(key: string, value: string): void {
   try {
-    if (value === null) {
-      localStorage.removeItem(key);
-    } else {
-      localStorage.setItem(key, value);
-    }
+    localStorage.setItem(key, value);
   } catch {
     // Storage can be off or full; the panel still works for this visit.
   }
 }
 
-function readRememberedWidth(): number | null {
-  const width = Number(readStored(PANEL_WIDTH_KEY));
+/** Saved panels, oldest first. Entries with a missing field are dropped. */
+function readChatPanels(): RememberedChatPanel[] {
+  try {
+    // SAFETY: JSON.parse returns the values checked by the filter that follows.
+    const parsed = JSON.parse(
+      readStored(CHAT_PANELS_KEY) ?? "[]"
+    ) as Partial<RememberedChatPanel>[];
 
-  return Number.isFinite(width) && width > 0
-    ? clampAttachmentPanelWidth(width)
-    : null;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.flatMap(({ chatId, id, restoreKey }) =>
+      chatId && id && restoreKey ? [{ chatId, id, restoreKey }] : []
+    );
+  } catch {
+    return [];
+  }
 }
 
-// The width the user last gave the panel; once set, it wins over each file's
-// default width. Kept across reloads.
-let rememberedWidth: number | null = readRememberedWidth();
+function readChatPanel(chatId: string): RememberedPanel | null {
+  const entry = readChatPanels().find((panel) => panel.chatId === chatId);
+
+  return entry ? { id: entry.id, restoreKey: entry.restoreKey } : null;
+}
+
+function writeChatPanel(chatId: string, panel: RememberedPanel | null): void {
+  const rest = readChatPanels().filter((entry) => entry.chatId !== chatId);
+  const next = panel ? [...rest, { chatId, ...panel }] : rest;
+
+  writeStored(
+    CHAT_PANELS_KEY,
+    JSON.stringify(next.slice(-MAX_REMEMBERED_CHATS))
+  );
+}
+
+function readSavedWidth(): number | null {
+  const width = Number(readStored(PANEL_WIDTH_KEY));
+
+  return Number.isFinite(width) && width > 0 ? width : null;
+}
+
+// The width the user last dragged the panel to; once set, it wins over each
+// file's default width. Kept across reloads, and clamped to the screen on use.
+let rememberedWidth: number | null = readSavedWidth();
 
 const ENTER_SLIDE_MS = 200;
 
@@ -97,67 +145,135 @@ function ChatPanelColumn({
   );
 }
 
-/** Saves the open panel under `rememberKey` and offers it once after a reload. */
+/**
+ * Saves the open panel of a chat and opens it again after a reload. Kept out
+ * of the provider so the provider stays readable (react-doctor complexity).
+ */
 function useRememberedPanel(
-  rememberKey: string | undefined,
+  rememberId: string | undefined,
   config: ChatAttachmentPanelConfig | null
 ) {
-  // Read once on mount: the panel that was open when this chat was last left.
+  // The panel that was open when this chat was last left, read once.
   const pendingRestoreRef = useRef(
-    rememberKey ? readStored(rememberKey) : null
+    rememberId ? readChatPanel(rememberId) : null
   );
 
-  const claimRestore = useCallback((restoreKey: string) => {
-    if (pendingRestoreRef.current !== restoreKey) {
-      return false;
+  const restoreFallbackRef = useRef<(() => void) | null>(null);
+
+  // Cards mount with the list. The exact card that was open wins; another
+  // card for the same artifact (an earlier turn) opens only if it does not
+  // show up in the same pass.
+  const requestRestore = useCallback(
+    (restoreKey: string, id: string, open: () => void) => {
+      const pending = pendingRestoreRef.current;
+
+      if (pending?.restoreKey !== restoreKey) {
+        return () => undefined;
+      }
+
+      if (pending.id === id) {
+        pendingRestoreRef.current = null;
+        restoreFallbackRef.current = null;
+        open();
+
+        return () => undefined;
+      }
+
+      if (restoreFallbackRef.current) {
+        return () => undefined;
+      }
+
+      restoreFallbackRef.current = open;
+
+      const timeout = window.setTimeout(() => {
+        if (pendingRestoreRef.current && restoreFallbackRef.current === open) {
+          pendingRestoreRef.current = null;
+          restoreFallbackRef.current = null;
+          open();
+        }
+      }, 0);
+
+      return () => {
+        window.clearTimeout(timeout);
+
+        if (restoreFallbackRef.current === open) {
+          restoreFallbackRef.current = null;
+        }
+      };
+    },
+    []
+  );
+
+  // A card out of view (the list renders only what is on screen) or one that
+  // is gone does not open the panel later: the saved panel is dropped.
+  useEffect(() => {
+    if (!(rememberId && pendingRestoreRef.current)) {
+      return;
     }
 
-    pendingRestoreRef.current = null;
+    const timeout = window.setTimeout(() => {
+      if (pendingRestoreRef.current) {
+        pendingRestoreRef.current = null;
+        writeChatPanel(rememberId, null);
+      }
+    }, RESTORE_WAIT_MS);
 
-    return true;
-  }, []);
+    return () => window.clearTimeout(timeout);
+  }, [rememberId]);
 
-  const savedRestoreKey = config?.restoreKey ?? null;
-  const panelOpen = config !== null;
+  const openPanelId = config?.id ?? null;
+  const openRestoreKey = config?.restoreKey ?? null;
 
   useEffect(() => {
     // Wait while a saved panel has not opened yet, so the first render does
     // not wipe it.
-    if (!rememberKey || (!panelOpen && pendingRestoreRef.current)) {
+    if (!rememberId || (!openPanelId && pendingRestoreRef.current)) {
       return;
     }
 
-    writeStored(rememberKey, savedRestoreKey);
-  }, [rememberKey, panelOpen, savedRestoreKey]);
+    writeChatPanel(
+      rememberId,
+      openPanelId && openRestoreKey
+        ? { id: openPanelId, restoreKey: openRestoreKey }
+        : null
+    );
+  }, [rememberId, openPanelId, openRestoreKey]);
 
-  return { claimRestore, pendingRestoreRef };
+  return { pendingRestoreRef, requestRestore };
 }
 
 export function ChatAttachmentPanelProvider({
   below,
   children,
   presentation = "push",
-  rememberKey,
+  rememberId,
 }: {
   /** A second panel. It sits under the open panel, or alone on the right. */
   below?: ReactNode;
   children: ReactNode;
   /** `push` shares row space (chat). `overlay` slides over content from the right. */
   presentation?: "push" | "overlay";
-  /** Storage key: when set, the open panel opens again after a reload. */
-  rememberKey?: string;
+  /** Chat id: when set, the open panel opens again after a reload. */
+  rememberId?: string;
 }) {
   const [config, setConfig] = useState<ChatAttachmentPanelConfig | null>(null);
-  const [width, setWidth] = useState(rememberedWidth ?? DEFAULT_PANEL_WIDTH);
 
-  const resize = useCallback((next: number) => {
+  const [width, setWidth] = useState(() =>
+    rememberedWidth === null
+      ? DEFAULT_PANEL_WIDTH
+      : clampAttachmentPanelWidth(rememberedWidth)
+  );
+
+  // Only a drag the user finished is kept; fitting the panel to a smaller
+  // window changes the width for now and saves nothing.
+  const commitWidth = useCallback((next: number) => {
     rememberedWidth = next;
     setWidth(next);
     writeStored(PANEL_WIDTH_KEY, String(next));
   }, []);
 
-  const { claimRestore, pendingRestoreRef } = useRememberedPanel(
-    rememberKey,
+  const { pendingRestoreRef, requestRestore } = useRememberedPanel(
+    rememberId,
     config
   );
 
@@ -280,14 +396,14 @@ export function ChatAttachmentPanelProvider({
   const value = useMemo(
     () => ({
       activeId: config?.id ?? null,
-      claimRestore,
       hide,
       isFullscreen: config?.fullscreen ?? false,
       isOpen: config !== null,
+      requestRestore,
       show,
       update,
     }),
-    [config, show, update, hide, claimRestore]
+    [config, show, update, hide, requestRestore]
   );
 
   const overlay = presentation === "overlay";
@@ -316,7 +432,8 @@ export function ChatAttachmentPanelProvider({
         headerActions={config.headerActions}
         leading={config.leading}
         onClose={handlePanelClose}
-        onWidthChange={resize}
+        onResizeEnd={commitWidth}
+        onWidthChange={setWidth}
         resizable={config.resizable ?? !fullscreen}
         subtitle={config.subtitle}
         title={config.title}

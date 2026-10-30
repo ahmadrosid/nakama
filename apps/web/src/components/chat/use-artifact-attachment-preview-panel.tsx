@@ -184,7 +184,7 @@ export function useArtifactAttachmentPreviewPanel({
   id: string;
   artifact: ChatArtifactRef;
 }) {
-  const { show, update, activeId, claimRestore } = useChatAttachmentPanel();
+  const { show, update, activeId, requestRestore } = useChatAttachmentPanel();
   // The path, not the card id: a card id can change after a reload.
   const restoreKey = `${profileId}:${artifact.path}`;
 
@@ -596,12 +596,11 @@ export function useArtifactAttachmentPreviewPanel({
 
   // Opens again the artifact that was open when the chat was last left. The
   // card has just mounted, so its own state is already at the defaults.
-  useEffect(() => {
-    if (claimRestore(restoreKey)) {
-      showPanel();
-    }
+  useEffect(
+    () => requestRestore(restoreKey, id, showPanel),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [claimRestore, restoreKey]);
+    [requestRestore, restoreKey, id]
+  );
 
   return {
     imagePreviewUrl,

@@ -53,10 +53,10 @@ async function renderDraft(
 
   const panel: ChatAttachmentPanelContextValue = {
     activeId: null,
-    claimRestore: () => false,
     hide: () => {},
     isFullscreen: false,
     isOpen: false,
+    requestRestore: () => () => undefined,
     show: (config) => {
       shown.push(config);
     },

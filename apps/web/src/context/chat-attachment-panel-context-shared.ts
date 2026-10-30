@@ -58,11 +58,18 @@ export function beginAttachmentPanelClose(
 
 export interface ChatAttachmentPanelContextValue {
   activeId: string | null;
-  /** True once, for the panel that was open when the chat was last left. */
-  claimRestore: (restoreKey: string) => boolean;
   hide: (id?: string) => void;
   isFullscreen: boolean;
   isOpen: boolean;
+  /**
+   * Called by a card as it mounts. Runs `open` if this card shows the panel
+   * that was open when the chat was last left. Returns a cleanup for unmount.
+   */
+  requestRestore: (
+    restoreKey: string,
+    id: string,
+    open: () => void
+  ) => () => void;
   show: (config: ChatAttachmentPanelConfig) => void;
   update: (
     id: string,

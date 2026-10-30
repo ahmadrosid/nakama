@@ -19,6 +19,8 @@ interface AttachmentDetailPanelProps {
   headerClassName?: string;
   leading?: ReactNode;
   onClose: () => void;
+  /** Called once when a drag ends, with the width the user chose. */
+  onResizeEnd?: (width: number) => void;
   onWidthChange: (width: number) => void;
   resizable?: boolean;
   subtitle?: string | null;
@@ -40,6 +42,7 @@ export function AttachmentDetailPanel({
   fullscreen = false,
   width,
   onWidthChange,
+  onResizeEnd,
   onClose,
   className,
 }: AttachmentDetailPanelProps) {
@@ -103,6 +106,7 @@ export function AttachmentDetailPanel({
     }
 
     draggingRef.current = false;
+    onResizeEnd?.(clampWidth(window.innerWidth - event.clientX));
 
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);

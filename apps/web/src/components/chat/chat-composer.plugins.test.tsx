@@ -87,10 +87,10 @@ async function renderComposer(options: { withPlugin: boolean }) {
 
   const panel: ChatAttachmentPanelContextValue = {
     activeId: null,
-    claimRestore: () => false,
     hide: () => undefined,
     isFullscreen: false,
     isOpen: false,
+    requestRestore: () => () => undefined,
     show,
     update: () => undefined,
   };
