@@ -15,10 +15,7 @@ import {
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { resolveWebPublicUrl } from "@nakama/core/runtime";
 import { getTelegramConfigDir } from "@nakama/core/telegram-config";
-import {
-  createTelegramWorkerHeartbeat,
-  isHeartbeatAlive,
-} from "@nakama/core/telegram-worker";
+import { createTelegramWorkerHeartbeat } from "@nakama/core/telegram-worker";
 import { TelegramAuthStore } from "./auth-store";
 import { createBot } from "./bot";
 import { loadTelegramIdentities, type TelegramBridgeConfig } from "./config";
@@ -146,17 +143,18 @@ async function startIdentity(
     config.owner ?? config.orgId ?? null
   );
 
-  const existing = await heartbeat.read();
-
-  if (existing && existing.pid !== process.pid && isHeartbeatAlive(existing)) {
+  // Only the lock decides. After a restart the heartbeat pid can belong to
+  // another process.
+  try {
+    await heartbeat.acquire();
+  } catch {
     console.error(
-      `Another Nakama Telegram bridge already runs the ${label} bot (pid ${existing.pid}). Skipping it.`
+      `Another Nakama Telegram bridge already runs the ${label} bot. Skipping it.`
     );
 
     return null;
   }
 
-  await heartbeat.acquire();
   const configDir = getTelegramConfigDir(config.owner ?? config.orgId ?? null);
 
   const client = new NakamaClient({

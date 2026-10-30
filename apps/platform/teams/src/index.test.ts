@@ -45,8 +45,44 @@ test("a second worker that refuses to start leaves the running worker's port alo
   await withTempHome("nakama-teams-entry-", async () => {
     await saveWithTokenEndpointStubbed();
 
-    // The running worker: this test process holds a fresh heartbeat and the
-    // port it listens on.
+    // The running worker: this test process holds the lock, a fresh
+    // heartbeat, and the port it listens on.
+    const running = createTeamsWorkerHeartbeat(OWNER);
+    await running.acquire();
+    await saveTeamsInboundPort(LIVE_PORT, OWNER);
+    await running.write(true);
+
+    const child = Bun.spawn({
+      cmd: [
+        process.execPath,
+        "--no-install",
+        fileURLToPath(new URL("./index.ts", import.meta.url)),
+      ],
+      env: {
+        ...process.env,
+        NAKAMA_CHANNEL_ORG_ID: OWNER.orgId,
+        NAKAMA_CHANNEL_PROFILE_ID: OWNER.profileId,
+      },
+      stderr: "ignore",
+      stdout: "ignore",
+    });
+
+    // A worker that got past the lock would own the connection and clear the
+    // port on exit, so a kept port means the lock refused it.
+    expect(await child.exited).toBe(1);
+    expect((await loadTeamsConfigFile(OWNER))?.inboundPort).toBe(LIVE_PORT);
+    expect((await running.read())?.pid).toBe(process.pid);
+
+    await running.clear();
+  });
+});
+
+test("a fresh heartbeat whose pid now belongs to another process does not block a new worker", async () => {
+  await withTempHome("nakama-teams-entry-", async () => {
+    await saveWithTokenEndpointStubbed();
+
+    // After a restart the old heartbeat names a live pid (this test process)
+    // that holds no lock.
     await saveTeamsInboundPort(LIVE_PORT, OWNER);
     await createTeamsWorkerHeartbeat(OWNER).write(true);
 
@@ -61,19 +97,13 @@ test("a second worker that refuses to start leaves the running worker's port alo
         NAKAMA_CHANNEL_ORG_ID: OWNER.orgId,
         NAKAMA_CHANNEL_PROFILE_ID: OWNER.profileId,
       },
-      stderr: "pipe",
+      stderr: "ignore",
       stdout: "ignore",
     });
 
-    // The refusal names the running worker's pid, so the exit is the
-    // single-worker check and not a failure that happened before it.
-    expect(await child.exited).toBe(1);
-    expect(await new Response(child.stderr).text()).toContain(
-      `(pid ${process.pid})`
-    );
-    expect((await loadTeamsConfigFile(OWNER))?.inboundPort).toBe(LIVE_PORT);
-    expect((await createTeamsWorkerHeartbeat(OWNER).read())?.pid).toBe(
-      process.pid
-    );
+    // The test credentials fail later, but only a worker that took the
+    // connection clears its port on exit.
+    await child.exited;
+    expect((await loadTeamsConfigFile(OWNER))?.inboundPort).toBeNull();
   });
 });

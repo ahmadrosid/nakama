@@ -6,12 +6,7 @@ import {
   type TelegramConfigScope,
   type TelegramSettingsPublic,
 } from "./telegram-config";
-import {
-  createWorkerHeartbeatStore,
-  isHeartbeatAlive,
-} from "./worker-heartbeat";
-
-export { isHeartbeatAlive };
+import { createWorkerHeartbeatStore } from "./worker-heartbeat";
 
 /** One heartbeat per identity: the file lives beside the config it belongs to. */
 export function createTelegramWorkerHeartbeat(orgId: TelegramConfigScope) {

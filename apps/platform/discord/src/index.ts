@@ -10,10 +10,7 @@ import { channelOwnerFromEnv } from "@nakama/core/channel-config-shared";
 import { ChannelOrgStore } from "@nakama/core/channel-org";
 import { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import { getDiscordConfigDir } from "@nakama/core/discord-config";
-import {
-  createDiscordWorkerHeartbeat,
-  isHeartbeatAlive,
-} from "@nakama/core/discord-worker";
+import { createDiscordWorkerHeartbeat } from "@nakama/core/discord-worker";
 
 import {
   ensureServerRunning,
@@ -35,8 +32,6 @@ const owner = channelOwnerFromEnv();
 const heartbeat = createDiscordWorkerHeartbeat(owner);
 
 const clearDiscordWorkerHeartbeat = heartbeat.clear;
-
-const readDiscordWorkerHeartbeat = heartbeat.read;
 
 const writeDiscordWorkerHeartbeat = (
   pid: number,
@@ -69,20 +64,6 @@ registerCleanupHandlers(async () => {
 });
 
 try {
-  const existingHeartbeat = await readDiscordWorkerHeartbeat();
-
-  if (
-    existingHeartbeat &&
-    existingHeartbeat.pid !== process.pid &&
-    isHeartbeatAlive(existingHeartbeat)
-  ) {
-    console.error(
-      `Another Nakama Discord bridge is already running (pid ${existingHeartbeat.pid}). ` +
-        "Stop the existing bridge worker or disable it in the dashboard before starting a new one."
-    );
-    process.exit(1);
-  }
-
   const config = await loadConfig();
   await heartbeat.acquire();
 

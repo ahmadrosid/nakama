@@ -20,7 +20,6 @@ import {
   validateTeamsCredentials,
 } from "@nakama/core/teams-config";
 import { createTeamsWorkerHeartbeat } from "@nakama/core/teams-worker";
-import { isHeartbeatAlive } from "@nakama/core/worker-heartbeat";
 import { createTeamsChatHandler } from "./chat-handler";
 import { startTeamsApp, type TeamsAppHandle } from "./teams-app";
 
@@ -78,13 +77,7 @@ if (process.platform === "win32") {
 }
 
 try {
-  const existing = await heartbeat.read();
-
-  if (existing && existing.pid !== process.pid && isHeartbeatAlive(existing)) {
-    throw new Error(
-      `Another Nakama Teams bridge already runs this connection (pid ${existing.pid}).`
-    );
-  }
+  await heartbeat.acquire();
 
   ownsConnection = true;
 

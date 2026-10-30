@@ -21,10 +21,7 @@ import {
   loadSlackConfigFile,
   type SlackMember,
 } from "@nakama/core/slack-config";
-import {
-  createSlackWorkerHeartbeat,
-  isHeartbeatAlive,
-} from "@nakama/core/slack-worker";
+import { createSlackWorkerHeartbeat } from "@nakama/core/slack-worker";
 import {
   createChatHandler,
   createSlackEventHandler,
@@ -130,13 +127,7 @@ function createSlackApi(botToken: string): SlackApi {
 }
 
 try {
-  const existing = await heartbeat.read();
-
-  if (existing && existing.pid !== process.pid && isHeartbeatAlive(existing)) {
-    throw new Error(
-      `Another Nakama Slack bridge already runs this connection (pid ${existing.pid}).`
-    );
-  }
+  await heartbeat.acquire();
 
   const config = await loadSlackConfigFile(owner);
 

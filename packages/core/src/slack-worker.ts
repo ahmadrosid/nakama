@@ -15,8 +15,6 @@ interface SlackWorkerHeartbeat extends WorkerHeartbeatBase {
   connected?: boolean;
 }
 
-export { isHeartbeatAlive };
-
 /** One heartbeat per connection: the file lives beside the config it belongs to. */
 export function createSlackWorkerHeartbeat(owner: ChannelOwner) {
   const store = createWorkerHeartbeatStore<SlackWorkerHeartbeat>({
@@ -28,6 +26,7 @@ export function createSlackWorkerHeartbeat(owner: ChannelOwner) {
   });
 
   return {
+    acquire: store.acquire,
     clear: store.clear,
     read: store.read,
     write: (connected: boolean) =>

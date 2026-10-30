@@ -22,6 +22,7 @@ export function createTeamsWorkerHeartbeat(owner: ChannelOwner) {
   });
 
   return {
+    acquire: store.acquire,
     clear: store.clear,
     read: store.read,
     write: (connected: boolean) =>

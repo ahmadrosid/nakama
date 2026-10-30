@@ -15,8 +15,6 @@ export interface DiscordWorkerHeartbeat extends WorkerHeartbeatBase {
   connected?: boolean;
 }
 
-export { isHeartbeatAlive };
-
 export function createDiscordWorkerHeartbeat(scope: ChannelConfigScope = null) {
   return createWorkerHeartbeatStore<DiscordWorkerHeartbeat>({
     getDir: () => getDiscordConfigDir(scope),
