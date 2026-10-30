@@ -18,8 +18,39 @@ import {
 
 const DEFAULT_PANEL_WIDTH = 448;
 
-// The width the user last gave the panel; once set, it wins over each file's default width.
-let rememberedWidth: number | null = null;
+const PANEL_WIDTH_KEY = "nakama:attachment-panel-width";
+
+function readStored(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStored(key: string, value: string | null): void {
+  try {
+    if (value === null) {
+      localStorage.removeItem(key);
+    } else {
+      localStorage.setItem(key, value);
+    }
+  } catch {
+    // Storage can be off or full; the panel still works for this visit.
+  }
+}
+
+function readRememberedWidth(): number | null {
+  const width = Number(readStored(PANEL_WIDTH_KEY));
+
+  return Number.isFinite(width) && width > 0
+    ? clampAttachmentPanelWidth(width)
+    : null;
+}
+
+// The width the user last gave the panel; once set, it wins over each file's
+// default width. Kept across reloads.
+let rememberedWidth: number | null = readRememberedWidth();
 
 const ENTER_SLIDE_MS = 200;
 
@@ -66,16 +97,55 @@ function ChatPanelColumn({
   );
 }
 
+/** Saves the open panel under `rememberKey` and offers it once after a reload. */
+function useRememberedPanel(
+  rememberKey: string | undefined,
+  config: ChatAttachmentPanelConfig | null
+) {
+  // Read once on mount: the panel that was open when this chat was last left.
+  const pendingRestoreRef = useRef(
+    rememberKey ? readStored(rememberKey) : null
+  );
+
+  const claimRestore = useCallback((restoreKey: string) => {
+    if (pendingRestoreRef.current !== restoreKey) {
+      return false;
+    }
+
+    pendingRestoreRef.current = null;
+
+    return true;
+  }, []);
+
+  const savedRestoreKey = config?.restoreKey ?? null;
+  const panelOpen = config !== null;
+
+  useEffect(() => {
+    // Wait while a saved panel has not opened yet, so the first render does
+    // not wipe it.
+    if (!rememberKey || (!panelOpen && pendingRestoreRef.current)) {
+      return;
+    }
+
+    writeStored(rememberKey, savedRestoreKey);
+  }, [rememberKey, panelOpen, savedRestoreKey]);
+
+  return { claimRestore, pendingRestoreRef };
+}
+
 export function ChatAttachmentPanelProvider({
   below,
   children,
   presentation = "push",
+  rememberKey,
 }: {
   /** A second panel. It sits under the open panel, or alone on the right. */
   below?: ReactNode;
   children: ReactNode;
   /** `push` shares row space (chat). `overlay` slides over content from the right. */
   presentation?: "push" | "overlay";
+  /** Storage key: when set, the open panel opens again after a reload. */
+  rememberKey?: string;
 }) {
   const [config, setConfig] = useState<ChatAttachmentPanelConfig | null>(null);
   const [width, setWidth] = useState(rememberedWidth ?? DEFAULT_PANEL_WIDTH);
@@ -83,7 +153,13 @@ export function ChatAttachmentPanelProvider({
   const resize = useCallback((next: number) => {
     rememberedWidth = next;
     setWidth(next);
+    writeStored(PANEL_WIDTH_KEY, String(next));
   }, []);
+
+  const { claimRestore, pendingRestoreRef } = useRememberedPanel(
+    rememberKey,
+    config
+  );
 
   const [enterSlide, setEnterSlide] = useState(false);
   const configRef = useRef<ChatAttachmentPanelConfig | null>(config);
@@ -128,36 +204,41 @@ export function ChatAttachmentPanelProvider({
   const showGenerationRef = useRef(0);
   const closeInFlightRef = useRef<AttachmentPanelCloseInFlight>(null);
 
-  const show = useCallback((nextConfig: ChatAttachmentPanelConfig) => {
-    const generation = ++showGenerationRef.current;
+  const show = useCallback(
+    (nextConfig: ChatAttachmentPanelConfig) => {
+      const generation = ++showGenerationRef.current;
+      // The user picked a panel, so the saved one no longer applies.
+      pendingRestoreRef.current = null;
 
-    const apply = () => {
-      if (generation !== showGenerationRef.current) {
+      const apply = () => {
+        if (generation !== showGenerationRef.current) {
+          return;
+        }
+
+        setConfig(nextConfig);
+
+        if (nextConfig.defaultWidth != null && rememberedWidth === null) {
+          setWidth(clampAttachmentPanelWidth(nextConfig.defaultWidth));
+        }
+      };
+
+      const current = configRef.current;
+
+      const priorClose =
+        current && current.id !== nextConfig.id
+          ? beginAttachmentPanelClose(current, closeInFlightRef)
+          : null;
+
+      if (priorClose) {
+        void priorClose.finally(apply);
+
         return;
       }
 
-      setConfig(nextConfig);
-
-      if (nextConfig.defaultWidth != null && rememberedWidth === null) {
-        setWidth(clampAttachmentPanelWidth(nextConfig.defaultWidth));
-      }
-    };
-
-    const current = configRef.current;
-
-    const priorClose =
-      current && current.id !== nextConfig.id
-        ? beginAttachmentPanelClose(current, closeInFlightRef)
-        : null;
-
-    if (priorClose) {
-      void priorClose.finally(apply);
-
-      return;
-    }
-
-    apply();
-  }, []);
+      apply();
+    },
+    [pendingRestoreRef]
+  );
 
   const update = useCallback(
     (id: string, patch: Partial<Omit<ChatAttachmentPanelConfig, "id">>) => {
@@ -199,13 +280,14 @@ export function ChatAttachmentPanelProvider({
   const value = useMemo(
     () => ({
       activeId: config?.id ?? null,
+      claimRestore,
       hide,
       isFullscreen: config?.fullscreen ?? false,
       isOpen: config !== null,
       show,
       update,
     }),
-    [config, show, update, hide]
+    [config, show, update, hide, claimRestore]
   );
 
   const overlay = presentation === "overlay";

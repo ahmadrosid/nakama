@@ -320,6 +320,7 @@ function ChatConversation({
     agentQuestionnaire,
     branchingMessageId,
     busy,
+    cognito,
     currentModelSelection,
     handleBranchMessage,
     handleEditMessage,
@@ -335,8 +336,16 @@ function ChatConversation({
     turnStartedAt,
   } = state;
 
+  // Cognito chats are not kept, so neither is their open panel.
+  const rememberKey =
+    session && !cognito ? `nakama:chat-panel:${session.id}` : undefined;
+
   return (
-    <ChatAttachmentPanelProvider below={below} key={session?.id ?? "new"}>
+    <ChatAttachmentPanelProvider
+      below={below}
+      key={session?.id ?? "new"}
+      rememberKey={rememberKey}
+    >
       <ArtifactStreamingPanelBridge messages={messages} profileId={profileId} />
       <BrowserLiveViewPanelBridge messages={messages} sessionId={session?.id} />
       <ChatPageColumn cognito={cognitoSurface}>

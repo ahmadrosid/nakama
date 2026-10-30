@@ -10,6 +10,8 @@ export interface ChatAttachmentPanelConfig {
   leading?: ReactNode;
   onClose?: () => void | Promise<void>;
   resizable?: boolean;
+  /** Saved for the chat, so the same panel opens again after a reload. */
+  restoreKey?: string;
   subtitle?: string | null;
   title: string;
   typeLabel?: string | null;
@@ -56,6 +58,8 @@ export function beginAttachmentPanelClose(
 
 export interface ChatAttachmentPanelContextValue {
   activeId: string | null;
+  /** True once, for the panel that was open when the chat was last left. */
+  claimRestore: (restoreKey: string) => boolean;
   hide: (id?: string) => void;
   isFullscreen: boolean;
   isOpen: boolean;

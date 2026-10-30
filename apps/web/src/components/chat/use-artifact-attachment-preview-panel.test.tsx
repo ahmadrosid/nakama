@@ -42,6 +42,7 @@ test("opening an artifact preview does not update the panel on every render", as
       <ChatAttachmentPanelContext.Provider
         value={{
           activeId: config?.id ?? null,
+          claimRestore: () => false,
           hide: () => setConfig(null),
           isFullscreen: false,
           isOpen: config !== null,
