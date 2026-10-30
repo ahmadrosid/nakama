@@ -7,7 +7,6 @@ import type { TeamsWorkerStatus } from "./contract";
 import { getTeamsConfigDir, loadTeamsConfigFile } from "./teams-config";
 import {
   createWorkerHeartbeatStore,
-  isHeartbeatAlive,
   type WorkerHeartbeatBase,
 } from "./worker-heartbeat";
 
@@ -24,6 +23,7 @@ export function createTeamsWorkerHeartbeat(owner: ChannelOwner) {
   return {
     acquire: store.acquire,
     clear: store.clear,
+    isRunning: store.isRunning,
     read: store.read,
     write: (connected: boolean) =>
       store.write({
@@ -48,8 +48,9 @@ export async function getTeamsWorkerStatus(
   }
 
   const config = await loadTeamsConfigFile(scope);
-  const heartbeat = await createTeamsWorkerHeartbeat(scope).read();
-  const running = isHeartbeatAlive(heartbeat);
+  const store = createTeamsWorkerHeartbeat(scope);
+  const heartbeat = await store.read();
+  const running = await store.isRunning(heartbeat);
 
   return {
     configured: config !== null,

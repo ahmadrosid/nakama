@@ -16,11 +16,11 @@ import {
 
 setupTestConfigDir("nakama-teams-proxy-test-");
 
-const servers: { stop: () => void }[] = [];
+const servers: { stop: () => void | Promise<void> }[] = [];
 
-afterEach(() => {
+afterEach(async () => {
   for (const server of servers.splice(0)) {
-    server.stop();
+    await server.stop();
   }
 });
 
@@ -51,8 +51,12 @@ describe("teams webhook proxy", () => {
 
     const server = startFakeWorker(handler);
 
+    // A live worker holds the connection lock, not only a fresh heartbeat.
+    const heartbeat = createTeamsWorkerHeartbeat(owner);
+    await heartbeat.acquire();
+    servers.push({ stop: heartbeat.clear });
     await saveTeamsInboundPort(server.port, owner);
-    await createTeamsWorkerHeartbeat(owner).write(true);
+    await heartbeat.write(true);
 
     return server;
   }

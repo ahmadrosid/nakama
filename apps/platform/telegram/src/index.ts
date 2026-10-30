@@ -147,7 +147,11 @@ async function startIdentity(
   // another process.
   try {
     await heartbeat.acquire();
-  } catch {
+  } catch (error) {
+    if (!(await heartbeat.isLeaseHeld())) {
+      throw error;
+    }
+
     console.error(
       `Another Nakama Telegram bridge already runs the ${label} bot. Skipping it.`
     );

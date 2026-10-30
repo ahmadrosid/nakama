@@ -39,6 +39,10 @@ test("a Teams listener needs live heartbeat and recorded port to report readines
     );
     const heartbeat = createTeamsWorkerHeartbeat(owner);
     expect((await getTeamsWorkerStatus(owner)).running).toBe(false);
+    // A fresh heartbeat with a live pid but no lock: the pid was reused.
+    await heartbeat.write(true);
+    expect((await getTeamsWorkerStatus(owner)).running).toBe(false);
+    await heartbeat.acquire();
     await heartbeat.write(true);
     expect((await getTeamsWorkerStatus(owner)).connected).toBe(false);
     await saveTeamsInboundPort(43_120, owner);

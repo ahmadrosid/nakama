@@ -106,7 +106,7 @@ test("a killed worker releases its operating-system connection lock", async () =
     new URL("./worker-heartbeat.ts", import.meta.url)
   );
 
-  const script = `import {createWorkerHeartbeatStore} from ${JSON.stringify(modulePath)}; const store = createWorkerHeartbeatStore({getDir: () => process.argv[1]}); await store.acquire(); console.log("ready"); setInterval(() => {}, 1000);`;
+  const script = `import {createWorkerHeartbeatStore} from ${JSON.stringify(modulePath)}; const store = createWorkerHeartbeatStore({getDir: () => process.argv[1]}); await store.acquire(); console.log("ready"); setInterval(() => store.read(), 1000);`;
 
   const child = Bun.spawn([process.execPath, "-e", script, dir], {
     stderr: "pipe",

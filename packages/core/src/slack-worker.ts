@@ -7,7 +7,6 @@ import type { SlackWorkerStatus } from "./contract";
 import { getSlackConfigDir, loadSlackSettingsPublic } from "./slack-config";
 import {
   createWorkerHeartbeatStore,
-  isHeartbeatAlive,
   type WorkerHeartbeatBase,
 } from "./worker-heartbeat";
 
@@ -28,6 +27,7 @@ export function createSlackWorkerHeartbeat(owner: ChannelOwner) {
   return {
     acquire: store.acquire,
     clear: store.clear,
+    isRunning: store.isRunning,
     read: store.read,
     write: (connected: boolean) =>
       store.write({
@@ -52,8 +52,9 @@ export async function getSlackWorkerStatus(
   }
 
   const settings = await loadSlackSettingsPublic(scope);
-  const heartbeat = await createSlackWorkerHeartbeat(scope).read();
-  const running = isHeartbeatAlive(heartbeat);
+  const store = createSlackWorkerHeartbeat(scope);
+  const heartbeat = await store.read();
+  const running = await store.isRunning(heartbeat);
 
   return {
     configured: settings.configured,

@@ -41,6 +41,31 @@ async function saveWithTokenEndpointStubbed() {
   }
 }
 
+/**
+ * Runs the worker entry for OWNER. A dead proxy makes its Microsoft credential
+ * check fail at once, so the test never reaches the network.
+ */
+function spawnWorker() {
+  return Bun.spawn({
+    cmd: [
+      process.execPath,
+      "--no-install",
+      fileURLToPath(new URL("./index.ts", import.meta.url)),
+    ],
+    env: {
+      ...process.env,
+      HTTPS_PROXY: "http://127.0.0.1:9",
+      https_proxy: "http://127.0.0.1:9",
+      NAKAMA_CHANNEL_ORG_ID: OWNER.orgId,
+      NAKAMA_CHANNEL_PROFILE_ID: OWNER.profileId,
+      NO_PROXY: "",
+      no_proxy: "",
+    },
+    stderr: "ignore",
+    stdout: "ignore",
+  });
+}
+
 test("a second worker that refuses to start leaves the running worker's port alone", async () => {
   await withTempHome("nakama-teams-entry-", async () => {
     await saveWithTokenEndpointStubbed();
@@ -49,31 +74,19 @@ test("a second worker that refuses to start leaves the running worker's port alo
     // heartbeat, and the port it listens on.
     const running = createTeamsWorkerHeartbeat(OWNER);
     await running.acquire();
-    await saveTeamsInboundPort(LIVE_PORT, OWNER);
-    await running.write(true);
 
-    const child = Bun.spawn({
-      cmd: [
-        process.execPath,
-        "--no-install",
-        fileURLToPath(new URL("./index.ts", import.meta.url)),
-      ],
-      env: {
-        ...process.env,
-        NAKAMA_CHANNEL_ORG_ID: OWNER.orgId,
-        NAKAMA_CHANNEL_PROFILE_ID: OWNER.profileId,
-      },
-      stderr: "ignore",
-      stdout: "ignore",
-    });
+    try {
+      await saveTeamsInboundPort(LIVE_PORT, OWNER);
+      await running.write(true);
 
-    // A worker that got past the lock would own the connection and clear the
-    // port on exit, so a kept port means the lock refused it.
-    expect(await child.exited).toBe(1);
-    expect((await loadTeamsConfigFile(OWNER))?.inboundPort).toBe(LIVE_PORT);
-    expect((await running.read())?.pid).toBe(process.pid);
-
-    await running.clear();
+      // A worker that got past the lock would own the connection and clear
+      // the port on exit, so a kept port means the lock refused it.
+      expect(await spawnWorker().exited).toBe(1);
+      expect((await loadTeamsConfigFile(OWNER))?.inboundPort).toBe(LIVE_PORT);
+      expect((await running.read())?.pid).toBe(process.pid);
+    } finally {
+      await running.clear();
+    }
   });
 });
 
@@ -86,24 +99,9 @@ test("a fresh heartbeat whose pid now belongs to another process does not block 
     await saveTeamsInboundPort(LIVE_PORT, OWNER);
     await createTeamsWorkerHeartbeat(OWNER).write(true);
 
-    const child = Bun.spawn({
-      cmd: [
-        process.execPath,
-        "--no-install",
-        fileURLToPath(new URL("./index.ts", import.meta.url)),
-      ],
-      env: {
-        ...process.env,
-        NAKAMA_CHANNEL_ORG_ID: OWNER.orgId,
-        NAKAMA_CHANNEL_PROFILE_ID: OWNER.profileId,
-      },
-      stderr: "ignore",
-      stdout: "ignore",
-    });
-
-    // The test credentials fail later, but only a worker that took the
+    // The credential check fails later, but only a worker that took the
     // connection clears its port on exit.
-    await child.exited;
+    await spawnWorker().exited;
     expect((await loadTeamsConfigFile(OWNER))?.inboundPort).toBeNull();
   });
 });

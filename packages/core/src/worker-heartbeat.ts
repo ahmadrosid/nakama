@@ -96,6 +96,15 @@ export function createWorkerHeartbeatStore<
 
     try {
       await chmod(path, 0o600);
+      // A status check holds the lock for a moment. Wait that out instead of
+      // reading it as a running worker.
+      candidate.exec("PRAGMA busy_timeout = 1000");
+    } catch (error) {
+      candidate.close();
+      throw error;
+    }
+
+    try {
       candidate.exec("BEGIN EXCLUSIVE");
       lease = candidate;
     } catch {
@@ -200,9 +209,16 @@ export function createWorkerHeartbeatStore<
     }
   };
 
+  /**
+   * A fresh heartbeat from a worker that still holds the lock. The heartbeat
+   * pid alone can belong to another process after a restart.
+   */
   const isRunning = async (
+    heartbeat?: T | null,
     maxAgeMs = DEFAULT_WORKER_HEARTBEAT_MAX_AGE_MS
-  ): Promise<boolean> => isAlive(await read(), maxAgeMs);
+  ): Promise<boolean> =>
+    isAlive(heartbeat === undefined ? await read() : heartbeat, maxAgeMs) &&
+    (await isLeaseHeld());
 
   return {
     acquire,
