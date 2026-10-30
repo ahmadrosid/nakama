@@ -3,6 +3,7 @@ import {
   beforeEach,
   describe,
   expect,
+  jest,
   mock,
   spyOn,
   test,
@@ -62,18 +63,25 @@ const createSocket = mock((_config: baileys.UserFacingSocketConfig) => {
   return socket;
 });
 
+const fetchVersionOffline = async (): Promise<{
+  error?: unknown;
+  version: baileys.WAVersion;
+}> => {
+  throw new Error("GitHub version lookup is unavailable");
+};
+
+const fetchVersion = mock(fetchVersionOffline);
+
 mock.module("@whiskeysockets/baileys", () => ({
   ...baileys,
-  fetchLatestBaileysVersion: async () => {
-    throw new Error("GitHub version lookup is unavailable");
-  },
+  fetchLatestBaileysVersion: () => fetchVersion(),
   makeWASocket: createSocket,
 }));
 
 const {
   createWhatsAppQrQueue,
   createWhatsAppSocket,
-  lookupWhatsAppWebVersion,
+  resetWhatsAppWebVersionForTests,
   summarizeMissingTextPayload,
 } = await import("./socket");
 
@@ -204,14 +212,19 @@ describe("WhatsApp socket reconnect", () => {
   let tempConfigDir: string;
 
   beforeEach(async () => {
+    previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+    tempConfigDir = await mkdtemp(join(tmpdir(), "nakama-wa-socket-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+    // Load the version once on real timers, so its timeout is not a reconnect delay.
+    resetWhatsAppWebVersionForTests();
+    const warnOnce = spyOn(console, "warn").mockImplementation(() => {});
+    await (await createWhatsAppSocket({ onMessage: async () => {} })).start();
+    warnOnce.mockRestore();
     sockets.length = 0;
     delays.length = 0;
     endOrder.length = 0;
     endResolvers = [];
     createSocket.mockClear();
-    previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
-    tempConfigDir = await mkdtemp(join(tmpdir(), "nakama-wa-socket-"));
-    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
     logSpy = spyOn(console, "log").mockImplementation(() => {});
     warnSpy = spyOn(console, "warn").mockImplementation(() => {});
     timeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(
@@ -744,7 +757,7 @@ type TestConnectionUpdate = {
 function disconnectLines(warnSpy: ReturnType<typeof spyOn>): string[] {
   return warnSpy.mock.calls
     .map(([line]: unknown[]) => String(line))
-    .filter((line: string) => line.startsWith("WhatsApp disconnected"));
+    .filter((line: string) => line.includes('"reconnect":'));
 }
 
 function emit(index: number, update: TestConnectionUpdate) {
@@ -757,44 +770,97 @@ async function flush(): Promise<void> {
   await Promise.resolve();
 }
 
-describe("lookupWhatsAppWebVersion", () => {
+describe("WhatsApp Web version", () => {
   let warnSpy: ReturnType<typeof spyOn>;
+  let previousConfigDir: string | undefined;
+  let tempConfigDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    createSocket.mockClear();
+    fetchVersion.mockReset();
+    fetchVersion.mockImplementation(fetchVersionOffline);
+    resetWhatsAppWebVersionForTests();
+    previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+    tempConfigDir = await mkdtemp(join(tmpdir(), "nakama-wa-version-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
     warnSpy = spyOn(console, "warn").mockImplementation(() => {});
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     warnSpy.mockRestore();
+    fetchVersion.mockImplementation(fetchVersionOffline);
+    resetWhatsAppWebVersionForTests();
+
+    if (previousConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+    }
+
+    await rm(tempConfigDir, { force: true, recursive: true });
   });
 
-  test("returns the fetched version", async () => {
-    expect(
-      await lookupWhatsAppWebVersion(async () => ({ version: [2, 3000, 1] }))
-    ).toEqual([2, 3000, 1]);
-    expect(warnSpy).not.toHaveBeenCalled();
+  async function startedVersion(): Promise<baileys.WAVersion | undefined> {
+    const handle = await createWhatsAppSocket({ onMessage: async () => {} });
+    await handle.start();
+
+    return createSocket.mock.calls.at(-1)![0].version;
+  }
+
+  test("links with the fetched version and reuses it on the next start", async () => {
+    fetchVersion.mockImplementation(async () => ({ version: [2, 3000, 1] }));
+
+    expect(await startedVersion()).toEqual([2, 3000, 1]);
+    expect(await startedVersion()).toEqual([2, 3000, 1]);
+    expect(fetchVersion).toHaveBeenCalledTimes(1);
   });
 
-  test("falls back when the fetch fails", async () => {
-    expect(
-      await lookupWhatsAppWebVersion(async () => {
-        throw new Error("offline");
-      })
-    ).toBeUndefined();
-    expect(
-      await lookupWhatsAppWebVersion(async () => ({
-        error: new Error("Not Found"),
-        version: [2, 1, 1],
-      }))
-    ).toBeUndefined();
-    expect(warnSpy).toHaveBeenCalledTimes(2);
+  test("falls back to the Baileys default when the fetch reports an error", async () => {
+    fetchVersion.mockImplementation(async () => ({
+      error: new Error("Not Found"),
+      version: [2, 1, 1],
+    }));
+
+    expect(await startedVersion()).toEqual(
+      baileys.DEFAULT_CONNECTION_CONFIG.version
+    );
   });
 
-  test("falls back when the fetch times out", async () => {
-    expect(
-      await lookupWhatsAppWebVersion(() => new Promise(() => {}), 1)
-    ).toBeUndefined();
-    expect(warnSpy).toHaveBeenCalledTimes(1);
+  test("falls back to the Baileys default when the fetch times out", async () => {
+    fetchVersion.mockImplementation(() => new Promise(() => {}));
+    const handle = await createWhatsAppSocket({ onMessage: async () => {} });
+    jest.useFakeTimers();
+
+    try {
+      const started = handle.start();
+      jest.advanceTimersByTime(5000);
+      await started;
+    } finally {
+      jest.useRealTimers();
+    }
+
+    expect(createSocket.mock.calls.at(-1)![0].version).toEqual(
+      baileys.DEFAULT_CONNECTION_CONFIG.version
+    );
+  });
+
+  test("retries a failed lookup after the retry window, not on every start", async () => {
+    const now = Date.now();
+    const clock = spyOn(Date, "now").mockReturnValue(now);
+
+    try {
+      await startedVersion();
+      await startedVersion();
+      expect(fetchVersion).toHaveBeenCalledTimes(1);
+
+      fetchVersion.mockImplementation(async () => ({ version: [2, 3000, 2] }));
+      clock.mockReturnValue(now + 6 * 60 * 1000);
+
+      expect(await startedVersion()).toEqual([2, 3000, 2]);
+      expect(fetchVersion).toHaveBeenCalledTimes(2);
+    } finally {
+      clock.mockRestore();
+    }
   });
 });
 

@@ -62,6 +62,7 @@ async function startWhatsAppChannel(
   let bridgeConnected = false;
   let linkError: string | undefined;
   let linkOwner: ChannelOwner | undefined;
+  let ownsLease = false;
   const heartbeat = createWhatsAppWorkerHeartbeat(owner);
 
   const qrCodes = createWhatsAppQrQueue(
@@ -90,9 +91,12 @@ async function startWhatsAppChannel(
     try {
       await socketHandle?.stop();
     } finally {
-      // Await before exit — void + process.exit can leave a stale heartbeat/QR file.
-      await heartbeat.clear();
-      await qrCodes.clear();
+      // Another live bridge owns these files; leave its QR on screen.
+      if (ownsLease) {
+        // Await before exit — void + process.exit can leave a stale heartbeat/QR file.
+        await heartbeat.clear();
+        await qrCodes.clear();
+      }
     }
   };
 
@@ -100,11 +104,13 @@ async function startWhatsAppChannel(
     const config = await loadConfig(owner);
 
     // The OS lock dies with its process; a heartbeat pid can be reused.
-    if (await heartbeat.isLeaseHeld()) {
+    try {
+      await heartbeat.acquire();
+    } catch {
       throw new Error("A WhatsApp bridge is already running for this agent.");
     }
 
-    await heartbeat.acquire();
+    ownsLease = true;
     // Publish ownership before server startup can migrate legacy credentials.
     await heartbeat.write({
       connected: false,

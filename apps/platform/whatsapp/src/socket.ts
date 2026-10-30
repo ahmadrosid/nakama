@@ -68,28 +68,30 @@ type DisconnectDiagnosticValue = DisconnectDiagnostic | string;
 
 const VERSION_LOOKUP_TIMEOUT_MS = 5000;
 
-let cachedWebVersion: Promise<WAVersion | undefined> | undefined;
+// WhatsApp Web moves on while a host runs for weeks; a failed lookup retries sooner.
+const VERSION_CACHE_MS = 6 * 60 * 60 * 1000;
+
+const VERSION_RETRY_MS = 5 * 60 * 1000;
+
+let cachedWebVersion:
+  | { expiresAt: number; version: Promise<WAVersion | undefined> }
+  | undefined;
 
 /**
  * WhatsApp rejects links from a stale client version, and the version Baileys
  * ships with goes stale. Returns undefined to keep Baileys' default.
  */
-export async function lookupWhatsAppWebVersion(
-  lookup: () => Promise<{
-    error?: unknown;
-    version: WAVersion;
-  }> = fetchLatestBaileysVersion,
-  timeoutMs = VERSION_LOOKUP_TIMEOUT_MS
-): Promise<WAVersion | undefined> {
+async function lookupWhatsAppWebVersion(): Promise<WAVersion | undefined> {
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   try {
     const result = await Promise.race([
-      lookup(),
+      fetchLatestBaileysVersion(),
       new Promise<never>((_, reject) => {
         timer = setTimeout(
-          () => reject(new Error(`timed out after ${timeoutMs}ms`)),
-          timeoutMs
+          () =>
+            reject(new Error(`timed out after ${VERSION_LOOKUP_TIMEOUT_MS}ms`)),
+          VERSION_LOOKUP_TIMEOUT_MS
         );
       }),
     ]);
@@ -112,11 +114,28 @@ export async function lookupWhatsAppWebVersion(
   }
 }
 
-/** One lookup per process; reconnects reuse it. */
+/** Shared by every start and reconnect in this process until it expires. */
 function getWhatsAppWebVersion(): Promise<WAVersion | undefined> {
-  cachedWebVersion ??= lookupWhatsAppWebVersion();
+  if (cachedWebVersion && Date.now() < cachedWebVersion.expiresAt) {
+    return cachedWebVersion.version;
+  }
 
-  return cachedWebVersion;
+  const entry = {
+    expiresAt: Number.POSITIVE_INFINITY,
+    version: lookupWhatsAppWebVersion(),
+  };
+
+  cachedWebVersion = entry;
+  void entry.version.then((version) => {
+    entry.expiresAt =
+      Date.now() + (version ? VERSION_CACHE_MS : VERSION_RETRY_MS);
+  });
+
+  return entry.version;
+}
+
+export function resetWhatsAppWebVersionForTests(): void {
+  cachedWebVersion = undefined;
 }
 
 /**
