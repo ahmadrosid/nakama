@@ -1,8 +1,34 @@
 import type { ProfileSummary } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@nakama/ui/dropdown-menu";
 import { cn } from "@nakama/ui/utils";
-import { useEffect, useRef } from "react";
+import {
+  ArrowDown01Icon,
+  Delete02Icon,
+  PencilEdit02Icon,
+  PinIcon,
+  PinOffIcon,
+} from "hugeicons-react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { ChatProfileSwitcher } from "@/components/chat/chat-profile-switcher";
+import {
+  RecentChatsDialogs,
+  type SessionTarget,
+} from "@/components/sidebar-recents";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
+import {
+  useChatSessionSummary,
+  useDeleteSessionMutation,
+  useUpdateSessionMutation,
+} from "@/hooks/use-resource-mutations";
+import { navHrefForPage } from "@/lib/navigation";
 import { welcomeAnimationKey } from "@/pages/chat/chat-page.shared";
 
 /**
@@ -369,6 +395,128 @@ export function ChatWelcome({
           variant="prominent"
         />
       </div>
+    </div>
+  );
+}
+
+/**
+ * Top bar of an open chat: its title, with rename, pin and delete behind it.
+ * Desktop only, because on a phone the app header already shows the title.
+ * Its rule lines up with the attachment panel header's. The panel sits in a
+ * frame (`p-1.5` plus a 1px border), so the top padding adds those 7px. It is
+ * always there, so the transcript does not jump when the panel opens.
+ */
+export function ChatSessionBar({
+  actions,
+  cognito,
+  profileId,
+  sessionId,
+}: {
+  actions?: ReactNode;
+  cognito: boolean;
+  profileId: string;
+  sessionId: string;
+}) {
+  const navigate = useNavigate();
+  const summary = useChatSessionSummary(profileId, sessionId);
+  const updateSession = useUpdateSessionMutation();
+  const deleteSession = useDeleteSessionMutation();
+  const [renameTarget, setRenameTarget] = useState<SessionTarget | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SessionTarget | null>(null);
+  const title = summary?.title?.trim() || "New chat";
+  const pinned = Boolean(summary?.pinned);
+
+  return (
+    <div className="-mx-6 flex shrink-0 items-center gap-2 border-border border-b px-4 pt-[calc(1.125rem+1px)] pb-3 max-sm:hidden">
+      <div className="flex h-7 min-w-0 flex-1 items-center">
+        {cognito ? (
+          <h1 className="truncate px-2.5 font-medium text-sm">Cognito chat</h1>
+        ) : (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  className="min-w-0 max-w-full justify-start"
+                  size="sm"
+                  variant="ghost"
+                />
+              }
+            >
+              <h1 className="truncate font-medium text-sm">{title}</h1>
+              <ArrowDown01Icon
+                aria-hidden="true"
+                className="size-3.5 text-muted-foreground"
+              />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem
+                onClick={() => setRenameTarget({ id: sessionId, title })}
+              >
+                <PencilEdit02Icon aria-hidden="true" className="size-4" />
+                Rename
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  updateSession.mutate({
+                    input: { pinned: !pinned },
+                    profileId,
+                    sessionId,
+                  })
+                }
+              >
+                {pinned ? (
+                  <PinOffIcon aria-hidden="true" className="size-4" />
+                ) : (
+                  <PinIcon aria-hidden="true" className="size-4" />
+                )}
+                {pinned ? "Unpin" : "Pin"}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive"
+                onClick={() => setDeleteTarget({ id: sessionId, title })}
+              >
+                <Delete02Icon aria-hidden="true" className="size-4" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
+      {actions ? (
+        <div className="flex h-7 shrink-0 items-center gap-1">{actions}</div>
+      ) : null}
+      <RecentChatsDialogs
+        deleteTarget={deleteTarget}
+        onDelete={async () => {
+          await deleteSession.mutateAsync(sessionId);
+          setDeleteTarget(null);
+          navigate(navHrefForPage("chat", profileId), { replace: true });
+        }}
+        onRename={async (event) => {
+          event.preventDefault();
+          const next = renameTarget?.title.trim();
+
+          if (!next || updateSession.isPending) {
+            return;
+          }
+
+          await updateSession.mutateAsync({
+            input: { title: next },
+            profileId,
+            sessionId,
+          });
+          setRenameTarget(null);
+        }}
+        onRenameTitleChange={(next) =>
+          setRenameTarget((current) =>
+            current ? { ...current, title: next } : current
+          )
+        }
+        renameTarget={renameTarget}
+        setDeleteTarget={setDeleteTarget}
+        setRenameTarget={setRenameTarget}
+      />
     </div>
   );
 }

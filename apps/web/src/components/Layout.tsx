@@ -24,10 +24,7 @@ import { useBtwChatStore } from "@/context/btw-chat-store";
 import { useAppContext } from "@/context/use-app-context";
 import { useAgentGroupQuery } from "@/hooks/use-agent-groups";
 import { useOrgPlugins } from "@/hooks/use-plugins";
-import {
-  useHistorySessionsQuery,
-  useSessionSummaryQuery,
-} from "@/hooks/use-resource-mutations";
+import { useChatSessionSummary } from "@/hooks/use-resource-mutations";
 import {
   enabledPluginNavEntries,
   findNavItem,
@@ -150,18 +147,10 @@ function useAppShell() {
   const chatProfileId = chatRoute?.params.profileId ?? "";
   const chatSessionId = chatRoute?.params.sessionId ?? null;
 
-  const { data: sessions, hasNextPage } =
-    useHistorySessionsQuery(chatProfileId);
-
-  const listedChat = sessions.find((session) => session.id === chatSessionId);
-
-  // An old chat opened by URL can sit on a page the sidebar has not loaded.
-  const { data: unlistedChat } = useSessionSummaryQuery(
+  const chatTitle = useChatSessionSummary(
     chatProfileId,
-    listedChat || !hasNextPage ? null : chatSessionId
-  );
-
-  const chatTitle = (listedChat ?? unlistedChat)?.title?.trim();
+    chatSessionId
+  )?.title?.trim();
 
   // On a phone the header names the group.
   const groupRoute = groupRouteFromPath(location.pathname);

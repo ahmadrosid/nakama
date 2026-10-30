@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@nakama/ui/dialog";
 import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import { lazy, type ReactNode, Suspense, useMemo, useState } from "react";
 import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
 import { ArtifactStreamingPanelBridge } from "@/components/chat/artifact-streaming-panel-bridge";
@@ -30,7 +31,11 @@ import {
   ChatSetupPill,
 } from "@/pages/chat/chat-onboarding";
 import { shouldShowCognitoControl } from "@/pages/chat/chat-page.shared";
-import { ChatPageColumn, ChatWelcome } from "@/pages/chat/chat-page-layout";
+import {
+  ChatPageColumn,
+  ChatSessionBar,
+  ChatWelcome,
+} from "@/pages/chat/chat-page-layout";
 import {
   type Onboarding,
   useOnboarding,
@@ -107,16 +112,26 @@ export function ChatPageContent({
   // A locked cognito chat looks like a normal one: it has no other mode.
   const cognitoSurface = cognito && !cognitoLocked;
 
-  const cognitoControl =
+  const cognitoToggle =
     !cognitoLocked && shouldShowCognitoControl(cognito, isEmptyState) ? (
-      // Pinned to the column's top-right corner, which is the top right of the
-      // screen area. The backdrop keeps it readable over a scrolling transcript.
-      <div className="absolute top-2 right-3 z-20 rounded-full backdrop-blur sm:right-6">
-        <ChatCognitoControl
-          cognito={cognito}
-          disabled={busy || readOnlySession}
-          onCognitoChange={handleCognitoChange}
-        />
+      <ChatCognitoControl
+        cognito={cognito}
+        disabled={busy || readOnlySession}
+        onCognitoChange={handleCognitoChange}
+      />
+    ) : null;
+
+  // Pinned to the column's top-right corner, which is the top right of the
+  // screen area. The backdrop keeps it readable over a scrolling transcript.
+  const cognitoControl = (className?: string) =>
+    cognitoToggle ? (
+      <div
+        className={cn(
+          "absolute top-2 right-3 z-20 rounded-full backdrop-blur sm:right-6",
+          className
+        )}
+      >
+        {cognitoToggle}
       </div>
     ) : null;
 
@@ -191,7 +206,7 @@ export function ChatPageContent({
   const content = isEmptyState ? (
     <ChatAttachmentPanelProvider below={below} key={session?.id ?? "new"}>
       <ChatPageColumn centered cognito={cognitoSurface}>
-        {cognitoControl}
+        {cognitoControl()}
         <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col gap-1">
           <EmptyChatBody onboarding={onboarding}>
             <ChatWelcome
@@ -210,9 +225,11 @@ export function ChatPageContent({
   ) : (
     <ChatConversation
       below={below}
-      cognitoControl={cognitoControl}
+      cognitoControl={cognitoControl("sm:hidden")}
       cognitoSurface={cognitoSurface}
+      cognitoToggle={cognitoToggle}
       composer={composer}
+      showSessionBar={!cognitoLocked}
       showUsage={showUsage}
       state={state}
     />
@@ -305,14 +322,18 @@ function ChatConversation({
   below,
   cognitoControl,
   cognitoSurface,
+  cognitoToggle,
   composer,
+  showSessionBar,
   showUsage,
   state,
 }: {
   below?: ReactNode;
   cognitoControl: ReactNode;
   cognitoSurface: boolean;
+  cognitoToggle: ReactNode;
   composer: ReactNode;
+  showSessionBar: boolean;
   showUsage: boolean;
   state: ChatPageState;
 }) {
@@ -320,6 +341,7 @@ function ChatConversation({
     agentQuestionnaire,
     branchingMessageId,
     busy,
+    cognito,
     currentModelSelection,
     handleBranchMessage,
     handleEditMessage,
@@ -341,6 +363,14 @@ function ChatConversation({
       <BrowserLiveViewPanelBridge messages={messages} sessionId={session?.id} />
       <ChatPageColumn cognito={cognitoSurface}>
         {cognitoControl}
+        {session && showSessionBar ? (
+          <ChatSessionBar
+            actions={cognitoToggle}
+            cognito={cognito}
+            profileId={profileId}
+            sessionId={session.id}
+          />
+        ) : null}
         <div className="mx-auto flex min-h-0 w-full flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <ChatMessageList

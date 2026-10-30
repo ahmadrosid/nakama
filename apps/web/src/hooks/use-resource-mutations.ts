@@ -728,10 +728,7 @@ export function useHistorySessionsQuery(
 }
 
 /** One chat's summary, for a chat on a page the list has not loaded. */
-export function useSessionSummaryQuery(
-  profileId: string,
-  sessionId: string | null
-) {
+function useSessionSummaryQuery(profileId: string, sessionId: string | null) {
   return useQuery({
     enabled: Boolean(sessionId),
     queryFn: () => client.getSession(sessionId!),
@@ -1125,4 +1122,23 @@ export function useDeleteKnowledgeBaseDocumentMutation() {
         queryKeys.knowledgeBase.profile(variables.profileId)
       ),
   });
+}
+
+/**
+ * One chat's summary: from the Recents list, which polls for new titles, or
+ * fetched when the chat sits on a page the list has not loaded.
+ */
+export function useChatSessionSummary(
+  profileId: string,
+  sessionId: string | null
+) {
+  const { data: sessions, hasNextPage } = useHistorySessionsQuery(profileId);
+  const listed = sessions.find((session) => session.id === sessionId);
+
+  const { data: unlisted } = useSessionSummaryQuery(
+    profileId,
+    listed || !hasNextPage ? null : sessionId
+  );
+
+  return listed ?? unlisted;
 }
