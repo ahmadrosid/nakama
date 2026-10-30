@@ -151,8 +151,4 @@ Thanks to everyone who helps make Nakama better.
 
 ## Star History
 
-<p align="center">
-  <a href="https://star-history.dera.page/#ahmadrosid/nakama">
-    <img src="https://star-history.dera.page/svg?repos=ahmadrosid/nakama" alt="Star History Chart" width="800" />
-  </a>
-</p>
+[![Star History Chart](https://api.star-history.com/chart?repos=ahmadrosid/nakama&type=date&legend=top-left)](https://www.star-history.com/?repos=ahmadrosid%2Fnakama&type=date&legend=top-left)
