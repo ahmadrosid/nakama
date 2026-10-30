@@ -14,8 +14,8 @@ import {
   withTokenEndpointStubbed,
 } from "../test-teams-helpers";
 
-setupTestConfigDir("nakama-teams-proxy-test-");
-
+// Registered first so it runs first: Windows cannot delete the config dir
+// while a test worker still holds its lock file open.
 const servers: { stop: () => void | Promise<void> }[] = [];
 
 afterEach(async () => {
@@ -23,6 +23,8 @@ afterEach(async () => {
     await server.stop();
   }
 });
+
+setupTestConfigDir("nakama-teams-proxy-test-");
 
 /** A stand-in for the worker's SDK listener, bound to loopback like the real one. */
 function startFakeWorker(
