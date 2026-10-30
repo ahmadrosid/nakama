@@ -140,3 +140,38 @@ test("console output from a channel goes to that channel's log files", async () 
     await readFile(join(root, second.profileId, "stderr.log"), "utf8")
   ).toBe("later from agent_b\n");
 });
+
+test("console output after a channel's logs are closed does not throw", async () => {
+  const lines: string[] = [];
+
+  const write = (...args: unknown[]) => {
+    lines.push(args.join(" "));
+  };
+
+  const target = {
+    debug: write,
+    error: write,
+    info: write,
+    log: write,
+    warn: write,
+  };
+
+  installChannelLogRouting(target);
+
+  const sync = createWhatsAppHost({
+    getLogDir: (owner) => join(root, owner.profileId),
+    start: async (owner) => {
+      // A timer the channel leaves behind keeps its log context.
+      setTimeout(() => target.log(`late from ${owner.profileId}`), 20);
+
+      return { stop: async () => {} };
+    },
+  });
+
+  hosts.push(sync);
+  await sync([first]);
+  await sync([]);
+  await Bun.sleep(40);
+
+  expect(lines).toEqual(["late from agent_a"]);
+});

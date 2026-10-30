@@ -36,7 +36,16 @@ export function installChannelLogRouting(
       }
 
       const toStderr = method === "error" || method === "warn";
-      (toStderr ? logs.stderr : logs.stdout).write(`${format(...args)}\n`);
+      const stream = toStderr ? logs.stderr : logs.stdout;
+
+      // Async work can outlive its channel; a closed log must not throw.
+      if (stream.writableEnded || stream.destroyed) {
+        original(...args);
+
+        return;
+      }
+
+      stream.write(`${format(...args)}\n`);
     };
   }
 }
@@ -91,6 +100,15 @@ export function createWhatsAppHost(options: {
       stderr: createWriteStream(join(directory, "stderr.log"), { flags: "a" }),
       stdout: createWriteStream(join(directory, "stdout.log"), { flags: "a" }),
     };
+
+    // An unhandled stream error would crash every channel in this process.
+    for (const stream of [logs.stderr, logs.stdout]) {
+      stream.on("error", (error) => {
+        process.stderr.write(
+          `WhatsApp channel ${key} log write failed: ${error.message}\n`
+        );
+      });
+    }
 
     try {
       const handle = await channelLogs.run(logs, () => options.start(owner));

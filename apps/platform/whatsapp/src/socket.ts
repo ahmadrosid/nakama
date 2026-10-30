@@ -9,15 +9,21 @@ import {
   syncWhatsAppOwnerPairing,
 } from "@nakama/core/whatsapp-config";
 import {
+  clearWhatsAppQrCode,
+  writeWhatsAppQrCode,
+} from "@nakama/core/whatsapp-worker";
+import {
   DEFAULT_CONNECTION_CONFIG,
   DisconnectReason,
   extractMessageContent,
+  fetchLatestBaileysVersion,
   getContentType,
   jidDecode,
   jidEncode,
   makeWASocket,
   proto,
   type WASocket,
+  type WAVersion,
 } from "@whiskeysockets/baileys";
 import { usePrivateMultiFileAuthState } from "./auth-state";
 import { createBaileysLogger } from "./baileys-logger";
@@ -41,11 +47,13 @@ export interface WhatsAppSocketDeps {
   onDisconnected?: () => void;
   onLinkRejected?: (message: string, owner: ChannelOwner | null) => void;
   onMessage: (data: WhatsAppInboundChat) => Promise<void>;
-  onQr?: (qr: string) => void;
+  onQr?: (qr: string, generation: number) => void;
   orgId?: ChannelConfigScope;
 }
 
 export interface WhatsAppSocketHandle {
+  /** Changes when the current socket closes or a new one starts. */
+  readonly generation: number;
   socket: WASocket | null;
   start: () => Promise<void>;
   stop: () => Promise<void>;
@@ -57,6 +65,88 @@ interface DisconnectDiagnostic {
 }
 
 type DisconnectDiagnosticValue = DisconnectDiagnostic | string;
+
+const VERSION_LOOKUP_TIMEOUT_MS = 5000;
+
+let cachedWebVersion: Promise<WAVersion | undefined> | undefined;
+
+/**
+ * WhatsApp rejects links from a stale client version, and the version Baileys
+ * ships with goes stale. Returns undefined to keep Baileys' default.
+ */
+export async function lookupWhatsAppWebVersion(
+  lookup: () => Promise<{
+    error?: unknown;
+    version: WAVersion;
+  }> = fetchLatestBaileysVersion,
+  timeoutMs = VERSION_LOOKUP_TIMEOUT_MS
+): Promise<WAVersion | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    const result = await Promise.race([
+      lookup(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`timed out after ${timeoutMs}ms`)),
+          timeoutMs
+        );
+      }),
+    ]);
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    return result.version;
+  } catch (error) {
+    console.warn(
+      `WhatsApp Web version lookup failed; using the Baileys default: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** One lookup per process; reconnects reuse it. */
+function getWhatsAppWebVersion(): Promise<WAVersion | undefined> {
+  cachedWebVersion ??= lookupWhatsAppWebVersion();
+
+  return cachedWebVersion;
+}
+
+/**
+ * Writes and clears the QR file in call order, so a late write cannot land
+ * after a clear. A QR from a socket that is no longer current is dropped.
+ */
+export function createWhatsAppQrQueue(
+  owner: ChannelConfigScope,
+  getGeneration: () => number
+) {
+  let queue: Promise<void> = Promise.resolve();
+
+  const enqueue = (task: () => Promise<void>) => {
+    queue = queue.then(task).catch((error) => {
+      console.warn("WhatsApp QR code file update failed", error);
+    });
+
+    return queue;
+  };
+
+  return {
+    clear: () => enqueue(() => clearWhatsAppQrCode(owner)),
+    write: (qr: string, generation: number) =>
+      enqueue(async () => {
+        if (generation === getGeneration()) {
+          await writeWhatsAppQrCode(qr, owner);
+        }
+      }),
+  };
+}
 
 export async function createWhatsAppSocket(
   deps: WhatsAppSocketDeps
@@ -72,10 +162,19 @@ export async function createWhatsAppSocket(
   const baileysLogger = createBaileysLogger();
 
   const handle = {
+    get generation() {
+      return generation;
+    },
     get socket() {
       return socket;
     },
     async start() {
+      if (stopped) {
+        return;
+      }
+
+      const version = await getWhatsAppWebVersion();
+
       if (stopped) {
         return;
       }
@@ -163,6 +262,7 @@ export async function createWhatsAppSocket(
           syncType === proto.HistorySync.HistorySyncType.NON_BLOCKING_DATA ||
           syncType === proto.HistorySync.HistorySyncType.INITIAL_STATUS_V3,
         syncFullHistory: false,
+        version: version ?? DEFAULT_CONNECTION_CONFIG.version,
       });
 
       if (myGen !== generation || stopped) {
@@ -183,7 +283,7 @@ export async function createWhatsAppSocket(
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
-          deps.onQr?.(qr);
+          deps.onQr?.(qr, myGen);
         }
 
         if (connection === "open") {
@@ -238,7 +338,7 @@ export async function createWhatsAppSocket(
           const shouldReconnect =
             statusCode !== DisconnectReason.loggedOut && !stopped;
 
-          console.log(
+          console.warn(
             `WhatsApp disconnected ${JSON.stringify({
               cause: safeDisconnectReason(error?.cause ?? error?.data),
               code: statusCode ?? null,

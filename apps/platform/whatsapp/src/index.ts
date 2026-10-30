@@ -19,10 +19,8 @@ import {
   syncWhatsAppOwnerPairing,
 } from "@nakama/core/whatsapp-config";
 import {
-  clearWhatsAppQrCode,
   createWhatsAppWorkerHeartbeat,
   readWhatsAppHostChannels,
-  writeWhatsAppQrCode,
 } from "@nakama/core/whatsapp-worker";
 import { WhatsAppAuthStore } from "./auth-store";
 import { installBaileysConsoleRedaction } from "./baileys-logger";
@@ -35,7 +33,11 @@ import {
 } from "./host";
 import { startWhatsAppOutboundServer } from "./outbound-server";
 import { registerProcessLifecycleHandlers } from "./process-lifecycle";
-import { createWhatsAppSocket, type WhatsAppSocketHandle } from "./socket";
+import {
+  createWhatsAppQrQueue,
+  createWhatsAppSocket,
+  type WhatsAppSocketHandle,
+} from "./socket";
 
 /** The server runs every agent's WhatsApp number in one shared host process. */
 const hostMode = process.env.NAKAMA_WHATSAPP_HOST === "1";
@@ -62,6 +64,11 @@ async function startWhatsAppChannel(
   let linkOwner: ChannelOwner | undefined;
   const heartbeat = createWhatsAppWorkerHeartbeat(owner);
 
+  const qrCodes = createWhatsAppQrQueue(
+    owner,
+    () => socketHandle?.generation ?? -1
+  );
+
   const persistWorkerHeartbeat = () => {
     void heartbeat.write({
       connected: bridgeConnected,
@@ -85,19 +92,15 @@ async function startWhatsAppChannel(
     } finally {
       // Await before exit — void + process.exit can leave a stale heartbeat/QR file.
       await heartbeat.clear();
-      await clearWhatsAppQrCode(owner);
+      await qrCodes.clear();
     }
   };
 
   try {
     const config = await loadConfig(owner);
-    const existingHeartbeat = await heartbeat.read();
 
-    if (
-      existingHeartbeat &&
-      existingHeartbeat.pid !== process.pid &&
-      heartbeat.isAlive(existingHeartbeat)
-    ) {
+    // The OS lock dies with its process; a heartbeat pid can be reused.
+    if (await heartbeat.isLeaseHeld()) {
       throw new Error("A WhatsApp bridge is already running for this agent.");
     }
 
@@ -157,7 +160,7 @@ async function startWhatsAppChannel(
         linkOwner = undefined;
         persistWorkerHeartbeat();
         log("info", "worker.connected", { worker: "whatsapp" });
-        void clearWhatsAppQrCode(owner);
+        void qrCodes.clear();
         void syncWhatsAppOwnerPairing(
           {
             ownerJid: me.id,
@@ -170,17 +173,17 @@ async function startWhatsAppChannel(
         bridgeConnected = false;
         persistWorkerHeartbeat();
         // A closed socket's QR code can no longer be scanned.
-        void clearWhatsAppQrCode(owner);
+        void qrCodes.clear();
       },
       onLinkRejected: (message, rejectedOwner) => {
         linkError = message;
         linkOwner = rejectedOwner ?? undefined;
         persistWorkerHeartbeat();
-        void clearWhatsAppQrCode(owner);
+        void qrCodes.clear();
       },
       onMessage: handleMessage,
-      onQr: (qr) => {
-        void writeWhatsAppQrCode(qr, owner);
+      onQr: (qr, generation) => {
+        void qrCodes.write(qr, generation);
       },
       orgId: owner,
     });
