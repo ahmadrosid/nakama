@@ -310,6 +310,8 @@ type SubAgentToolStatus = "success" | "fail" | "timeout";
 export interface ParsedSubAgentResult {
   error?: string;
   output: string;
+  /** The child chat the run went to, so the parent can link to it. */
+  sessionId?: string;
   status: SubAgentToolStatus;
   summary: string;
 }
@@ -329,6 +331,7 @@ export function parseSubAgentResult(
     summary?: unknown;
     output?: unknown;
     error?: unknown;
+    sessionId?: unknown;
   };
 
   const status =
@@ -355,12 +358,20 @@ export function parseSubAgentResult(
       ? record.error.trim()
       : undefined;
 
+  const sessionId =
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
+    typeof record.sessionId === "string" && record.sessionId.trim()
+      ? record.sessionId.trim()
+      : undefined;
+
   return {
     output,
     status,
     summary,
     // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
     ...(error ? { error } : {}),
+    // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
+    ...(sessionId ? { sessionId } : {}),
   };
 }
 

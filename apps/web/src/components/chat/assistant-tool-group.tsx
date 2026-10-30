@@ -50,7 +50,11 @@ import { useTheme } from "@/context/use-theme";
 import { useOrgPlugins } from "@/hooks/use-plugins";
 import { useRafCoalescedValue } from "@/hooks/use-raf-coalesced-value";
 import { isArtifactMetaSidecarTool } from "@/lib/chat-artifacts";
-import { buildNewChatPath, type ChatListItem } from "@/lib/chat-history";
+import {
+  buildChatPath,
+  buildNewChatPath,
+  type ChatListItem,
+} from "@/lib/chat-history";
 import {
   formatSubAgentSubtitle,
   formatSubAgentTitle,
@@ -739,7 +743,13 @@ function DedicatedToolRow({
     return <ToolTimelineItem message={message} />;
   }
 
-  return <SubAgentToolRow message={message} modelLabel={modelLabel} />;
+  return (
+    <SubAgentToolRow
+      message={message}
+      modelLabel={modelLabel}
+      profileId={profileId}
+    />
+  );
 }
 
 export function ProfileCreatedCard({
@@ -927,12 +937,56 @@ function SubAgentOutputSection({
   return null;
 }
 
+/** The chat a sub_agent run went to, with its live state while a background run is still answering. */
+function SubAgentChatLink({
+  background,
+  profileId,
+  sessionId,
+}: {
+  background: boolean;
+  profileId: string;
+  sessionId: string;
+}) {
+  // A background child keeps answering after the tool returns, so poll until it ends.
+  const { data } = useQuery({
+    enabled: background,
+    queryFn: () => client.getSessionStatus(sessionId),
+    queryKey: ["session-status", sessionId],
+    refetchInterval: (query) =>
+      query.state.status === "error" || query.state.data?.active === false
+        ? false
+        : 3000,
+  });
+
+  return (
+    <div className="flex items-center gap-3 pl-6">
+      <Button
+        className="min-h-10 shrink-0 rounded-lg transition-transform active:scale-[0.96]"
+        render={<Link to={buildChatPath(profileId, sessionId)} />}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        Open chat
+        <ArrowRight01Icon aria-hidden className="size-4" />
+      </Button>
+      {data ? (
+        <span className="text-muted-foreground text-sm">
+          {data.active ? "Answering…" : "Finished"}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function SubAgentToolRow({
   message,
   modelLabel,
+  profileId,
 }: {
   message: ChatListItem;
   modelLabel?: string | null;
+  profileId?: string | null;
 }) {
   const isRunning = message.toolStatus === "running";
   const elapsedSeconds = useElapsedSeconds(isRunning, message.createdAt);
@@ -979,6 +1033,13 @@ function SubAgentToolRow({
           output={output}
         />
       )}
+      {parsed?.sessionId && profileId ? (
+        <SubAgentChatLink
+          background={message.toolInput?.background === true}
+          profileId={profileId}
+          sessionId={parsed.sessionId}
+        />
+      ) : null}
     </div>
   );
 }
