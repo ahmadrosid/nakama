@@ -47,14 +47,14 @@ const ENV_PROBE = [
   "ANTHROPIC_API_KEY",
 ];
 
-class FakeAgent implements acp.Agent {
+class FakeAgent {
   private mcpServerCount = 0;
   private sessionMeta = "";
   private mcpUrl = "";
   private configOptions = initialConfigOptions();
   private readonly sessionIds: string[] = [];
 
-  constructor(private readonly connection: acp.AgentSideConnection) {}
+  constructor(private readonly connection: acp.AgentContext) {}
 
   async initialize(): Promise<acp.InitializeResponse> {
     return {
@@ -78,10 +78,6 @@ class FakeAgent implements acp.Agent {
     this.sessionIds.push(sessionId);
 
     return { configOptions: this.configOptions, sessionId };
-  }
-
-  async authenticate(): Promise<acp.AuthenticateResponse> {
-    return {};
   }
 
   async setSessionConfigOption(
@@ -168,15 +164,14 @@ class FakeAgent implements acp.Agent {
     return { stopReason: "end_turn" };
   }
 
-  async cancel(): Promise<void> {
-    // Nothing to stop: the fake agent answers each prompt before returning.
-  }
-
   private async send(
     sessionId: string,
     update: acp.SessionUpdate
   ): Promise<void> {
-    await this.connection.sessionUpdate({ sessionId, update });
+    await this.connection.notify(acp.methods.client.session.update, {
+      sessionId,
+      update,
+    });
   }
 }
 
@@ -188,4 +183,18 @@ const stdin = Readable.toWeb(process.stdin) as ReturnType<
 
 const stream = acp.ndJsonStream(Writable.toWeb(process.stdout), stdin);
 
-new acp.AgentSideConnection((connection) => new FakeAgent(connection), stream);
+// Nothing handles session/cancel: the fake agent answers each prompt before returning.
+const app = acp
+  .agent()
+  .onRequest(acp.methods.agent.initialize, () => fake.initialize())
+  .onRequest(acp.methods.agent.session.new, ({ params }) =>
+    fake.newSession(params)
+  )
+  .onRequest(acp.methods.agent.session.setConfigOption, ({ params }) =>
+    fake.setSessionConfigOption(params)
+  )
+  .onRequest(acp.methods.agent.session.prompt, ({ params }) =>
+    fake.prompt(params)
+  );
+
+const fake = new FakeAgent(app.connect(stream).client);

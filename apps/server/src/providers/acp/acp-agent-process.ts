@@ -12,7 +12,7 @@ export interface AcpAgentLaunch {
 }
 
 export interface AcpAgentProcess {
-  connection: acp.ClientSideConnection;
+  connection: acp.ClientContext;
   /** Resolves when the agent process exits, for any reason. */
   exited: Promise<void>;
   kill(): void;
@@ -35,7 +35,7 @@ function agentEnv(): NodeJS.ProcessEnv {
  */
 export async function startAcpAgentProcess(
   launch: AcpAgentLaunch,
-  client: acp.Client
+  app: acp.ClientApp
 ): Promise<AcpAgentProcess> {
   const child: ChildProcessWithoutNullStreams = spawn(
     launch.command,
@@ -60,10 +60,10 @@ export async function startAcpAgentProcess(
 
   const stream = acp.ndJsonStream(Writable.toWeb(child.stdin), stdout);
 
-  const connection = new acp.ClientSideConnection(() => client, stream);
+  const connection = app.connect(stream).agent;
 
   try {
-    await connection.initialize({
+    await connection.request(acp.methods.agent.initialize, {
       clientCapabilities: {
         fs: { readTextFile: false, writeTextFile: false },
         terminal: false,

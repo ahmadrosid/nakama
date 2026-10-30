@@ -1,4 +1,4 @@
-import type * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk";
 import type {
   AcpAgentConfig,
   ChatCompletionResult,
@@ -78,13 +78,15 @@ export function createAcpProvider(options: AcpProviderOptions): ProviderClient {
     live.route.mapper = mapper;
 
     const onAbort = () => {
-      void live.process.connection.cancel({ sessionId });
+      void live.process.connection.notify(acp.methods.agent.session.cancel, {
+        sessionId,
+      });
     };
 
     input.signal?.addEventListener("abort", onAbort, { once: true });
 
     try {
-      await live.process.connection.prompt({
+      await live.process.connection.request(acp.methods.agent.session.prompt, {
         prompt: [{ text, type: "text" }],
         sessionId,
       });
@@ -141,11 +143,10 @@ export async function setAcpConfigOption(
   // SAFETY: ensureSession sets sessionId before it returns the live session.
   const sessionId = live.sessionId as string;
 
-  const response = await live.process.connection.setSessionConfigOption({
-    configId,
-    sessionId,
-    value,
-  });
+  const response = await live.process.connection.request(
+    acp.methods.agent.session.setConfigOption,
+    { configId, sessionId, value }
+  );
 
   live.configOptions = response.configOptions;
 
@@ -200,15 +201,18 @@ async function ensureSession(
 
   try {
     if (live.sessionId === null) {
-      const created = await live.process.connection.newSession({
-        // Claude's agent also loads every MCP server of the host's own Claude
-        // Code config (user settings, plugins, claude.ai connectors), so the
-        // profile could reach tools it never attached. Strict keeps it to the
-        // servers below. Other agents ignore this `_meta`.
-        _meta: { claudeCode: { options: { strictMcpConfig: true } } },
-        cwd: options.cwd,
-        mcpServers: options.mcpServers ?? [],
-      });
+      const created = await live.process.connection.request(
+        acp.methods.agent.session.new,
+        {
+          // Claude's agent also loads every MCP server of the host's own Claude
+          // Code config (user settings, plugins, claude.ai connectors), so the
+          // profile could reach tools it never attached. Strict keeps it to the
+          // servers below. Other agents ignore this `_meta`.
+          _meta: { claudeCode: { options: { strictMcpConfig: true } } },
+          cwd: options.cwd,
+          mcpServers: options.mcpServers ?? [],
+        }
+      );
 
       live.sessionId = created.sessionId;
       live.configOptions = created.configOptions ?? [];
@@ -241,12 +245,15 @@ async function applyInitialSettings(
       continue;
     }
 
-    const response = await live.process.connection.setSessionConfigOption({
-      configId,
-      // SAFETY: ensureSession sets sessionId before this runs.
-      sessionId: live.sessionId as string,
-      value,
-    });
+    const response = await live.process.connection.request(
+      acp.methods.agent.session.setConfigOption,
+      {
+        configId,
+        // SAFETY: ensureSession sets sessionId before this runs.
+        sessionId: live.sessionId as string,
+        value,
+      }
+    );
 
     live.configOptions = response.configOptions;
   }
@@ -284,8 +291,9 @@ async function getOrStartProcess(
       command: options.agent.command,
       cwd: options.cwd,
     },
-    {
-      requestPermission: async (params) => {
+    acp
+      .client()
+      .onRequest(acp.methods.client.session.requestPermission, ({ params }) => {
         // Approved: the chat's own Nakama tools, and edits to files inside the
         // profile folder. Commands and edits outside the folder are denied.
         const approve =
@@ -301,11 +309,10 @@ async function getOrStartProcess(
         return choice
           ? { outcome: { optionId: choice.optionId, outcome: "selected" } }
           : { outcome: { outcome: "cancelled" } };
-      },
-      sessionUpdate: async (notification) => {
-        route.mapper?.handle(notification);
-      },
-    }
+      })
+      .onNotification(acp.methods.client.session.update, ({ params }) => {
+        route.mapper?.handle(params);
+      })
   );
 
   const session: LiveSession = {
