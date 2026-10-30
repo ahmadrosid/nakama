@@ -3,7 +3,9 @@
   "ignore": [
     "tools/oxlint/anti-slop/**",
     // Bundled skill scripts run through the agent's bash tool, not imports.
-    "packages/core/src/skills/bundled/*/scripts/**"
+    "packages/core/src/skills/bundled/*/scripts/**",
+    // Repo agent skill scripts run from the shell, not imports.
+    ".agents/skills/*/scripts/**"
   ],
   // First-run baseline: teach the graph, then ignore leftovers instead of deleting unused code.
   "workspaces": {
