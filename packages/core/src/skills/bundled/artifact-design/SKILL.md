@@ -18,7 +18,7 @@ These instructions are loaded directly when this skill is active.
 1. Use the existing design system when the request provides one. Otherwise, base the design on the subject, audience, and content.
 2. Give editorial pages, landing pages, and games a bold treatment. Keep plans, memos, and other working documents polished and restrained.
 3. Write the design plan as CSS custom properties before building the page. Define colors, font families, type sizes, spacing, borders, and radii.
-4. Use those tokens throughout the page. Give every color token a light and dark value, including chart colors and interaction states.
+4. Use those tokens throughout the page, except in SVG attributes (see **Print and PDF**). Give every color token a light and dark value, including chart colors and interaction states.
 5. Support both themes through `prefers-color-scheme`. If an existing design system provides an explicit theme signal, respect it.
 6. Choose typefaces deliberately. Pair fonts only when the pairing improves hierarchy, and keep a consistent type scale with readable fallback fonts.
 7. Use only facts from the request or available sources. Do not add dates, durations, team sizes, customers, quotes, metrics, integrations, or feature details that were not supplied; omit them. Label supplied sample data; a "sample" label does not permit invented content.
@@ -113,6 +113,16 @@ Use this layout when the user asks for a dashboard, KPI page, or performance rep
 - Render all essential content on load. Do not hide it behind entrance animations or scroll effects. Respect reduced-motion preferences.
 - Keep the HTML at or below 16,000,000 UTF-8 bytes, including embedded assets. A tool or server may impose a lower limit; respect that limit.
 
+## Print and PDF
+
+PDF export renders the HTML without a browser, on A4 paper, in the light theme, and runs no scripts. Write every page so it prints correctly.
+
+1. In SVG attributes, write colors as hex values, such as `fill="#edf2df"`. Never write `fill="var(--surface)"` or `stroke="var(--line)"`: the PDF renderer cannot read `var()` there and draws the shape black. Use the light theme value. For dark mode, give the shape a class and set hex values in the dark media query, such as `.steam { stroke: #708772; }`.
+2. Add `@page { size: A4; margin: 0; }`. Slide decks keep their own `@page` rule.
+3. Make the layout work at 800px wide, the width of an A4 page. Keep nav labels and short buttons on one line with `white-space: nowrap`.
+4. In `@media print`, add `break-inside: avoid` to sections, panels, figures, and table rows, so a page break does not cut them.
+5. Give buttons an explicit `line-height`, such as `1.2`, so their text stays centered in the PDF.
+
 ## Resources and frame limits
 
 Treat these as authoring requirements. Do not claim that Nakama enforces them merely because the page follows these instructions.
@@ -130,5 +140,5 @@ Treat these as authoring requirements. Do not claim that Nakama enforces them me
 
 1. Choose the output format.
 2. For HTML, define the CSS tokens, then build the complete page. Keep the design plan in the CSS; do not create a separate planning artifact.
-3. Check the source against the requirements above. Remove placeholder content, unsupported actions, and unapproved resource URLs before saving.
+3. Check the source against the requirements above, including **Print and PDF**. Remove placeholder content, unsupported actions, and unapproved resource URLs before saving.
 4. If browser preview is explicitly requested and available, preview once. Check phone width, both themes, and the requested interactions; fix visible problems. Never claim visual verification from a source review alone.
