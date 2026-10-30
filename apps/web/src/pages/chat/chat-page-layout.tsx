@@ -402,9 +402,7 @@ export function ChatWelcome({
 /**
  * Top bar of an open chat: its title, with rename, pin and delete behind it.
  * Desktop only, because on a phone the app header already shows the title.
- * Its rule lines up with the attachment panel header's. The panel sits in a
- * frame (`p-1.5` plus a 1px border), so the top padding adds those 7px. It is
- * always there, so the transcript does not jump when the panel opens.
+ * Same height and rule as the attachment panel header, so the two line up.
  */
 export function ChatSessionBar({
   actions,
@@ -427,7 +425,7 @@ export function ChatSessionBar({
   const pinned = Boolean(summary?.pinned);
 
   return (
-    <div className="-mx-6 flex shrink-0 items-center gap-2 border-border border-b px-4 pt-[calc(1.125rem+1px)] pb-3 max-sm:hidden">
+    <div className="-mx-6 flex shrink-0 items-center gap-2 border-border border-b px-4 py-3 max-sm:hidden">
       <div className="flex h-7 min-w-0 flex-1 items-center">
         {cognito ? (
           <h1 className="truncate px-2.5 font-medium text-sm">Cognito chat</h1>

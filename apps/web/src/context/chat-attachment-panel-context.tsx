@@ -23,7 +23,10 @@ let rememberedWidth: number | null = null;
 
 const ENTER_SLIDE_MS = 200;
 
-/** The right side as cards: the open panel, with `below` under it. */
+/**
+ * The right side, flush with the chat: the open panel, with `below` under it.
+ * No frame, so the panel header sits on the same line as the chat title bar.
+ */
 function ChatPanelColumn({
   below,
   fullscreen,
@@ -52,8 +55,8 @@ function ChatPanelColumn({
   return (
     <div
       className={cn(
-        "flex min-h-0 shrink-0 flex-col gap-1.5 p-1.5 max-sm:w-full max-sm:flex-1",
-        "[&>aside]:min-h-0 [&>aside]:flex-1 [&>aside]:overflow-hidden [&>aside]:rounded-lg [&>aside]:border [&>aside]:shadow-xs",
+        "flex min-h-0 shrink-0 flex-col max-sm:w-full max-sm:flex-1",
+        "[&>aside+aside]:border-t [&>aside]:min-h-0 [&>aside]:flex-1 [&>aside]:overflow-hidden",
         sized &&
           "[&>aside+aside>[role=separator]]:hidden [&>aside+aside]:relative [&>aside]:w-full! [&>aside]:max-w-none",
         fullscreen && "flex-1"

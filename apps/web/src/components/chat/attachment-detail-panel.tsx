@@ -150,7 +150,7 @@ export function AttachmentDetailPanel({
         >
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <div className="min-w-0">
-              <h2 className="truncate font-semibold text-sm">{title}</h2>
+              <h2 className="truncate font-medium text-sm">{title}</h2>
               {leading ? null : subtitle ? (
                 <p className="mt-0.5 truncate text-muted-foreground text-xs">
                   {subtitle}
