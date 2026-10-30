@@ -140,8 +140,8 @@ describe("AgentService plugin capabilities", () => {
     await db.assignToolToProfile(profile.id, tool!.id);
 
     const sessionId = await agent.createSession(ORG_ID, "web", profile.id);
-    const first = await agent.resolveSession(sessionId, ORG_ID);
-    const again = await agent.resolveSession(sessionId, ORG_ID);
+    const first = await agent.sessions.get(sessionId, ORG_ID);
+    const again = await agent.sessions.get(sessionId, ORG_ID);
     expect(again).toBe(first);
 
     const before = await resolveProfileStoredTools(
@@ -165,7 +165,7 @@ describe("AgentService plugin capabilities", () => {
     const started = await agent.beginSessionTurn(sessionId, ORG_ID);
     expect(started).toBe(true);
 
-    const next = await agent.resolveSession(sessionId, ORG_ID).finally(() => {
+    const next = await agent.sessions.get(sessionId, ORG_ID).finally(() => {
       sessionTurnRegistry.cancelTurn(sessionId);
     });
 

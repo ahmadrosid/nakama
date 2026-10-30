@@ -136,7 +136,7 @@ describe("session persistence", () => {
       systemPrompt: "",
       updatedAt: "now",
     });
-    expect(await service.resolveSession("retired", "org_1")).not.toBeNull();
+    expect(await service.sessions.get("retired", "org_1")).not.toBeNull();
     const originalGet = db.getSession.bind(db);
 
     const read = spyOn(db, "getSession").mockImplementation((id) =>
@@ -144,7 +144,7 @@ describe("session persistence", () => {
     );
 
     try {
-      expect(await service.resolveSession("retired", "org_1")).toBeNull();
+      expect(await service.sessions.get("retired", "org_1")).toBeNull();
       await expect(tool.run({}, {})).rejects.toThrow();
       await expect(
         copySessionHistoryArchive(db, "org_1", "retired", "target")

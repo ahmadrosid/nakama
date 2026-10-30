@@ -9,21 +9,12 @@ import { createDefaultProfile } from "./agent-service-test-fixtures";
 
 const ORG_ID = "org_test";
 
-function privateServiceAccess<T>(service: AgentService): T {
-  // SAFETY: Tests use named interfaces for private service members.
-  return Object.create(service) as T;
-}
-
 describe("AgentService CLI coding workspace", () => {
   test("keeps the CLI coding workspace root when it rebuilds a session from the DB", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertProfile(createDefaultProfile());
     const service = new AgentService(null, null, db);
     const repo = mkdtempSync(path.join(tmpdir(), "nakama-cli-repo-"));
-
-    const { sessions } = privateServiceAccess<{
-      sessions: Map<string, unknown>;
-    }>(service);
 
     using buildContext = spyOn(core, "buildToolExecutionContext");
 
@@ -46,8 +37,9 @@ describe("AgentService CLI coding workspace", () => {
         },
       ]);
 
-      sessions.clear();
-      await service.resolveSession(sessionId, ORG_ID);
+      await service.sessions.get(sessionId, ORG_ID);
+      service.sessions.invalidateAll();
+      await service.sessions.get(sessionId, ORG_ID);
       const branch = await service.branchSession(sessionId, 0, ORG_ID);
 
       const childId = await service.createChildSession(
@@ -56,6 +48,9 @@ describe("AgentService CLI coding workspace", () => {
         "child",
         { isPlatformAdmin: true }
       );
+
+      await service.sessions.get(branch?.sessionId ?? "", ORG_ID);
+      await service.sessions.get(childId, ORG_ID);
 
       const roots = buildContext.mock.calls.map(
         ([input]) => input.codingWorkspaceRoot
@@ -78,10 +73,6 @@ describe("AgentService CLI coding workspace", () => {
     const service = new AgentService(null, null, db);
     const repo = mkdtempSync(path.join(tmpdir(), "nakama-cli-repo-"));
 
-    const { sessions } = privateServiceAccess<{
-      sessions: Map<string, unknown>;
-    }>(service);
-
     const sessionId = await service.createSession(
       ORG_ID,
       "cli",
@@ -90,11 +81,12 @@ describe("AgentService CLI coding workspace", () => {
       { codingWorkspaceRoot: repo }
     );
 
+    await service.sessions.get(sessionId, ORG_ID);
     rmSync(repo, { force: true, recursive: true });
-    sessions.clear();
+    service.sessions.invalidateAll();
 
     using buildContext = spyOn(core, "buildToolExecutionContext");
-    await service.resolveSession(sessionId, ORG_ID);
+    await service.sessions.get(sessionId, ORG_ID);
 
     expect(buildContext).toHaveBeenCalled();
     expect(

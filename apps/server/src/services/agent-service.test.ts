@@ -42,6 +42,19 @@ describe("AgentService MCP discovery", () => {
       const db = createInMemoryDatabaseAdapter();
       const profile = createDefaultProfile();
       await db.upsertProfile(profile);
+      await db.createUser({
+        createdAt: profile.createdAt,
+        email: "member@example.com",
+        id: "member",
+        passwordHash: "test",
+        updatedAt: profile.updatedAt,
+      });
+      await db.upsertOrgMember({
+        createdAt: profile.createdAt,
+        orgId: TEST_ORG_ID,
+        role: "member",
+        userId: "member",
+      });
 
       const server = {
         cachedTools: [{ description: "Read a file", name: "read_file" }],
@@ -158,11 +171,11 @@ describe("AgentService MCP discovery", () => {
         TEST_ORG_ID,
         "web",
         profile.id,
-        null,
+        "member",
         { orgRole: "member" }
       );
 
-      const session = (await agent.resolveSession(sessionId, TEST_ORG_ID))!;
+      const session = (await agent.sessions.get(sessionId, TEST_ORG_ID))!;
       await session.send("Read a file");
 
       expect(snapshots[0]).not.toContain("other__read_file");

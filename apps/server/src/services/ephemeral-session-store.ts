@@ -15,8 +15,9 @@ export interface EphemeralSession {
   lastActiveAt: number;
   /** Synthetic; shaped like a row so session paths can treat it as one. */
   record: StoredSessionRecord;
+  /** The capability revision the chat was built under. */
+  revision?: string;
   session: AgentChatSession;
-  sharedCapabilityRevision?: string;
 }
 
 /** A tab closed without toggling cognito off leaves an entry behind. */

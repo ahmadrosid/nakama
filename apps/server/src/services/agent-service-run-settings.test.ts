@@ -21,7 +21,6 @@ type CreateHarnessForProfile = (
 
 interface AgentServiceHarnessAccess {
   createHarnessForProfile: CreateHarnessForProfile;
-  sessions: Map<string, unknown>;
 }
 
 function privateServiceAccess<T>(service: AgentService): T {
@@ -77,6 +76,7 @@ describe("AgentService run settings", () => {
       model: string,
       effort: "low" | "medium" | "high"
     ) => {
+      await service.sessions.get(sessionId, ORG_ID);
       const record = await db.getSession(sessionId);
       expect(record?.model).toBe(model);
       expect(record?.thinkingEffort).toBe(effort);
@@ -115,17 +115,17 @@ describe("AgentService run settings", () => {
       })
     ).toBe(true);
 
-    access.sessions.clear();
-    await service.resolveSession(sessionId, ORG_ID);
+    service.sessions.invalidateAll();
+    await service.sessions.get(sessionId, ORG_ID);
     await expectSettings(sessionId, "provider-1::b", "high");
 
-    access.sessions.clear();
-    await service.resolveSession(branchId, ORG_ID);
+    service.sessions.invalidateAll();
+    await service.sessions.get(branchId, ORG_ID);
     await expectSettings(branchId, "provider-1::a", "low");
 
     // The model write lands, then the effort write fails: the cached chat
     // must not keep running on the old model.
-    await service.resolveSession(sessionId, ORG_ID);
+    await service.sessions.get(sessionId, ORG_ID);
     db.updateSessionThinkingEffort = () => Promise.reject(new Error("db down"));
 
     await expect(
@@ -136,7 +136,7 @@ describe("AgentService run settings", () => {
     ).rejects.toThrow();
 
     const buildsBefore = built.length;
-    await service.resolveSession(sessionId, ORG_ID);
+    await service.sessions.get(sessionId, ORG_ID);
     expect(built.length).toBe(buildsBefore + 1);
     await expectSettings(sessionId, "provider-1::a", "high");
   });

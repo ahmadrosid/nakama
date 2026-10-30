@@ -1087,7 +1087,7 @@ export function registerSessionRoutes(
     let body: SendMessageRequest;
 
     try {
-      const resolvedSession = await agent.resolveSession(sessionId, orgId);
+      const resolvedSession = await agent.sessions.get(sessionId, orgId);
 
       if (!resolvedSession) {
         sessionTurnRegistry.cancelTurn(sessionId);

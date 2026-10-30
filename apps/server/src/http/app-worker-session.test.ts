@@ -44,9 +44,11 @@ function createServerOptions() {
       }),
       listSkills: async () => ({ skills: [] }),
       providerConfigured: true,
-      resolveSession: async () => ({
-        send: async (input: { message: string }) => `reply:${input.message}`,
-      }),
+      sessions: {
+        get: async () => ({
+          send: async (input: { message: string }) => `reply:${input.message}`,
+        }),
+      },
     } as any,
     authService,
     automationService: {} as any,

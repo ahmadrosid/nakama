@@ -185,7 +185,7 @@ describe("session persistence", () => {
     ).toBe(source);
     await replaceSessionHistory(db, branch!.sessionId, history);
     service.setAutomationTools([]);
-    const detached = await service.resolveSession(branch!.sessionId, "org_1");
+    const detached = await service.sessions.get(branch!.sessionId, "org_1");
     service.setAutomationTools([]);
     expect(await service.clearSession(branch!.sessionId, "org_1")).toBe(true);
     await expect(detached!.compact({ force: true })).rejects.toThrow();
@@ -325,7 +325,7 @@ describe("session persistence", () => {
           "profile"
         );
 
-        const session = await service.resolveSession(sessionId, "org_1");
+        const session = await service.sessions.get(sessionId, "org_1");
         const paused = Promise.withResolvers<void>();
         const release = Promise.withResolvers<void>();
 
@@ -356,7 +356,7 @@ describe("session persistence", () => {
           expect(
             (await service.getSessionMessages(sessionId, "org_1"))?.messages
           ).toEqual([]);
-          const next = await service.resolveSession(sessionId, "org_1");
+          const next = await service.sessions.get(sessionId, "org_1");
           expect(next!.getHistory()).toEqual([]);
         }
       } finally {

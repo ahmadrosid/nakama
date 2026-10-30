@@ -232,11 +232,11 @@ export async function run(input, context) {
         { cognito, orgRole: "member" }
       );
 
-      const first = (await agent.resolveSession(id, "team_a"))!;
+      const first = (await agent.sessions.get(id, "team_a"))!;
       await first.send("First");
       expect(turns[0]!.tools ?? []).toEqual([]);
       await db.assignSkillToProfile("profile_parent", skill.id);
-      const second = (await agent.resolveSession(id, "team_a"))!;
+      const second = (await agent.sessions.get(id, "team_a"))!;
       expect(second).not.toBe(first);
       expect(second.getHistory()).toEqual(first.getHistory());
       await second.send("Second");
@@ -309,7 +309,7 @@ export async function run(input, context) {
           10_000
         )
       ).rejects.toMatchObject({ status: 404 });
-      const third = (await agent.resolveSession(id, "team_a"))!;
+      const third = (await agent.sessions.get(id, "team_a"))!;
       expect(third).not.toBe(second);
       expect(third.getHistory()).toEqual(second.getHistory());
       await third.send("Third");
@@ -335,14 +335,14 @@ export async function run(input, context) {
       expect(
         (await service.listSkillsForProfile(instance.id)).map((item) => item.id)
       ).toEqual(["global_skill"]);
-      const fourth = (await agent.resolveSession(id, "team_a"))!;
+      const fourth = (await agent.sessions.get(id, "team_a"))!;
       expect(fourth).not.toBe(third);
       expect(fourth.getHistory()).toEqual(third.getHistory());
       await fourth.send("Fourth");
       expect(turns[3]!.tools?.map((tool) => tool.name)).toContain("weather");
       await db.unassignSkillFromProfile("profile_parent", "global_skill");
       expect(await service.listSkillsForProfile(instance.id)).toEqual([]);
-      const fifth = (await agent.resolveSession(id, "team_a"))!;
+      const fifth = (await agent.sessions.get(id, "team_a"))!;
       expect(fifth).not.toBe(fourth);
       expect(fifth.getHistory()).toEqual(fourth.getHistory());
       await fifth.send("Fifth");
@@ -966,7 +966,7 @@ if __name__ == "__main__":
         { cognito, orgRole: "member" }
       );
 
-      const first = (await agent.resolveSession(id, "team_a"))!;
+      const first = (await agent.sessions.get(id, "team_a"))!;
       await first.send("First");
       expect(turns[0]!.tools?.map((tool) => tool.name) ?? []).not.toContain(
         "shared-notes"
@@ -992,7 +992,7 @@ if __name__ == "__main__":
 
       await db.assignSkillToProfile("profile_team_a", skill.id);
       failBuild = true;
-      await expect(agent.resolveSession(id, "team_a")).rejects.toThrow();
+      await expect(agent.sessions.get(id, "team_a")).rejects.toThrow();
       expect(
         first.getHistory().filter((message) => message.role === "user")
       ).toHaveLength(1);
@@ -1002,7 +1002,7 @@ if __name__ == "__main__":
       );
       failBuild = false;
       expect(await agent.beginSessionTurn(id, "team_a")).toBe(true);
-      const second = (await agent.resolveSession(id, "team_a"))!;
+      const second = (await agent.sessions.get(id, "team_a"))!;
       expect(second).not.toBe(first);
       expect(second.getHistory()).toEqual(first.getHistory());
       expect(await agent.getSessionQuestionnaire(id, "team_a")).toEqual(
@@ -1019,7 +1019,7 @@ if __name__ == "__main__":
         'export const name = "shared-notes"; export const parameters = {type: "object", properties: {current: {type: "number"}}}; export async function run() { return "done"; }'
       );
       await approve();
-      const updated = (await agent.resolveSession(id, "team_a"))!;
+      const updated = (await agent.sessions.get(id, "team_a"))!;
       expect(updated).not.toBe(second);
       await updated.send("Third");
       // A turn can also trigger follow-up provider calls; the newest one has
@@ -1029,7 +1029,7 @@ if __name__ == "__main__":
           ?.parameters
       ).toMatchObject({ properties: { current: { type: "number" } } });
       await db.deleteOrgSharedResource("parent", publication.id);
-      const revoked = (await agent.resolveSession(id, "team_a"))!;
+      const revoked = (await agent.sessions.get(id, "team_a"))!;
       expect(revoked).not.toBe(updated);
       await revoked.send("Fourth");
       expect(turns.at(-1)!.tools?.map((tool) => tool.name) ?? []).not.toContain(
@@ -1091,7 +1091,7 @@ if __name__ == "__main__":
         { cognito, orgRole: "member" }
       );
 
-      const session = await agent.resolveSession(id, "team_a");
+      const session = await agent.sessions.get(id, "team_a");
       expect(session).not.toBeNull();
       await session!.send("First question");
       expect(prompts[0]).toContain(
@@ -1115,7 +1115,7 @@ if __name__ == "__main__":
       expect(prompts[2]).toContain("Renamed parent");
       expect(prompts[2]).toContain("Current instructions");
       expect(prompts[2]).not.toContain("Published instructions");
-      expect(await agent.resolveSession(id, "team_a")).toBe(session);
+      expect(await agent.sessions.get(id, "team_a")).toBe(session);
       expect(
         session!.getHistory().filter((message) => message.role === "user")
       ).toHaveLength(3);

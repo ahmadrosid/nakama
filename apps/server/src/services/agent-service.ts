@@ -349,10 +349,7 @@ import {
   customToolTypesLabel,
   getCustomToolHandler,
 } from "./custom-tool-handlers";
-import {
-  type EphemeralSession,
-  EphemeralSessionStore,
-} from "./ephemeral-session-store";
+import type { EphemeralSession } from "./ephemeral-session-store";
 import {
   generateImageWithOpenAI,
   IMAGE_MODEL_REQUIRED_MESSAGE,
@@ -402,6 +399,12 @@ import {
   loadSessionHistory,
   wrapPersistedSession,
 } from "./session-persistence";
+import {
+  type ChatBuildContext,
+  inheritFrom,
+  SessionRuntime,
+  sessionKind,
+} from "./session-runtime";
 import { SessionTitleService } from "./session-title-service";
 import { sessionTurnRegistry } from "./session-turn-registry";
 import { SkillPostTurnReviewService } from "./skill-post-turn-review-service";
@@ -416,27 +419,7 @@ import {
 } from "./tool-resolver";
 import type { WorkerManagerService } from "./worker-manager-service";
 
-interface StoredSession {
-  channel: AgentChannel;
-  pluginRevision: string;
-  profileId: string;
-  session: AgentChatSession;
-  sharedCapabilityRevision?: string;
-}
-
-/**
- * Every opened session used to stay in memory with its history until a
- * restart, which is most of a long-lived instance's RAM growth. An evicted
- * session is rebuilt from SQLite on its next turn, as after a restart.
- */
-const MAX_CACHED_SESSIONS = 50;
-
 export type { SubAgentRunInput, SubAgentRunResult };
-
-interface CognitoSessionOptions {
-  /** Seeds a rebuild (model change) with the history held in memory. */
-  initialHistory?: ChatMessage[];
-}
 
 export interface CreateSessionOptions {
   codingWorkspaceRoot?: string;
@@ -451,15 +434,6 @@ export interface CreateSessionOptions {
 
 /** Per-session settings a chat is built with. Branches copy them. */
 type SessionRunSettings = Pick<StoredSessionRecord, "model" | "thinkingEffort">;
-
-/** What a chat is built with besides its stored session record. */
-interface ChatSessionBuildContext {
-  channel: AgentChannel;
-  cognito?: CognitoSessionOptions;
-  isPlatformAdmin?: boolean;
-  orgId: string;
-  orgRole?: OrgRole | null;
-}
 
 /** sub_agent chats one parent may start; the cap proposed on #2036. */
 const MAX_CHILD_SESSIONS = 5;
@@ -541,10 +515,18 @@ export class AgentService {
   private orgMemoryService: OrgMemoryService | null = null;
   private orgService: OrgService | null = null;
   private readonly memoryBackend: MemoryBackendService;
-  private readonly sessions = new Map<string, StoredSession>();
-  private readonly ephemeralSessions = new EphemeralSessionStore((entry) =>
-    this.purgeEphemeralAttachments(entry)
-  );
+  readonly sessions = new SessionRuntime({
+    accessFor: (orgId, userId) => this.resolveSessionAccess(orgId, userId),
+    build: (record, context) => this.buildChatSession(record, context),
+    loadRecord: (sessionId, orgId) =>
+      this.getSessionRecordForOrg(sessionId, orgId),
+    onCognitoEnd: (entry) => this.purgeEphemeralAttachments(entry),
+    revisionFor: async (orgId, profileId) =>
+      JSON.stringify([
+        await this.capabilityRevisionForProfile(orgId, profileId),
+        await this.pluginCapabilityRevision(orgId),
+      ]),
+  });
   private readonly sessionTitleService: SessionTitleService;
   private readonly orgUsageQuotaService: OrgUsageQuotaService;
   private skillPostTurnReviewService: SkillPostTurnReviewService;
@@ -688,7 +670,7 @@ export class AgentService {
 
   setAutomationTools(tools: ToolDefinition[]): void {
     this.automationTools = tools;
-    this.sessions.clear();
+    this.sessions.invalidateAll();
   }
 
   setServerTools(tools: ServerToolOverrides): void {
@@ -705,7 +687,7 @@ export class AgentService {
 
   setMcpClientManager(manager: McpClientManager): void {
     this.mcpClientManager = manager;
-    this.sessions.clear();
+    this.sessions.invalidateAll();
   }
 
   setMcpService(service: McpService): void {
@@ -718,12 +700,12 @@ export class AgentService {
 
   setPluginService(service: PluginService | null): void {
     this.pluginService = service;
-    this.sessions.clear();
+    this.sessions.invalidateAll();
   }
 
   setSkillsService(service: SkillsService): void {
     this.skillsService = service;
-    this.sessions.clear();
+    this.sessions.invalidateAll();
   }
 
   setOrgService(service: OrgService): void {
@@ -857,7 +839,7 @@ export class AgentService {
       };
     }
 
-    this.sessions.clear();
+    this.sessions.invalidateAll();
 
     return { thinking };
   }
@@ -912,7 +894,7 @@ export class AgentService {
       };
     }
 
-    this.sessions.clear();
+    this.sessions.invalidateAll();
 
     return { vision };
   }
@@ -1800,7 +1782,7 @@ export class AgentService {
 
     // Sessions cache their resolved tool list, so the swap between hosted and
     // custom search only takes effect once they are rebuilt.
-    this.sessions.clear();
+    this.sessions.invalidateAll();
 
     return this.getWebSearchSettings();
   }
@@ -1826,7 +1808,7 @@ export class AgentService {
     }
 
     await this.managedSecrets.save("global", `web-search:${provider}`, apiKey);
-    this.sessions.clear();
+    this.sessions.invalidateAll();
 
     return this.getWebSearchSettings();
   }
@@ -1874,7 +1856,7 @@ export class AgentService {
     }
 
     if (kind === "web-search") {
-      this.sessions.clear();
+      this.sessions.invalidateAll();
 
       return this.getWebSearchSettings();
     }
@@ -2611,11 +2593,6 @@ export class AgentService {
       user: userId ? { id: userId } : undefined,
     });
 
-    const sharedCapabilityRevision = await this.capabilityRevisionForProfile(
-      orgId,
-      resolvedProfileId
-    );
-
     const sessionId = nanoid();
     const modelOverride = this.normalizeSessionModelOverride(options?.model);
     const cognito = options?.cognito;
@@ -2650,33 +2627,10 @@ export class AgentService {
       );
     }
 
-    const session = await this.buildChatSession(record, {
-      channel,
-      cognito: cognito ? {} : undefined,
-      isPlatformAdmin: options?.isPlatformAdmin,
-      orgId,
-      orgRole: options?.orgRole,
-    });
-
+    // A stored chat is built on its first use, from this row.
     if (cognito) {
-      await this.ephemeralSessions.set({
-        attachmentIds: new Set(),
-        lastActiveAt: Date.now(),
-        record,
-        session,
-        sharedCapabilityRevision,
-      });
-
-      return sessionId;
+      await this.sessions.openCognito(record, orgId);
     }
-
-    this.cacheSession(sessionId, {
-      channel,
-      pluginRevision: await this.pluginCapabilityRevision(orgId),
-      profileId: resolvedProfileId,
-      session,
-      sharedCapabilityRevision,
-    });
 
     return sessionId;
   }
@@ -2691,7 +2645,7 @@ export class AgentService {
     title: string,
     access: Pick<CreateSessionOptions, "isPlatformAdmin" | "orgRole">
   ): Promise<string> {
-    if (this.ephemeralSessions.has(parentSessionId)) {
+    if (this.sessions.isCognito(parentSessionId)) {
       throw new NakamaApiError("A cognito chat cannot start other chats.", 400);
     }
 
@@ -2701,11 +2655,7 @@ export class AgentService {
       throw new NakamaApiError("Session not found.", 404);
     }
 
-    // A branch has a parent too, but it also has the message it branched at.
-    if (
-      parent.parentSessionId &&
-      (parent.branchMessageIndex ?? null) === null
-    ) {
+    if (sessionKind(parent) === "child") {
       throw new NakamaApiError(
         "A chat started from another chat cannot start more chats.",
         400
@@ -2726,15 +2676,19 @@ export class AgentService {
       );
     }
 
+    const inherited = inheritFrom(parent, "child");
+
     const childId = await this.createSession(
       orgId,
-      parseAgentChannel(parent.channel) ?? "web",
-      parent.profileId,
-      parent.userId,
+      parseAgentChannel(inherited.channel) ?? "web",
+      inherited.profileId,
+      inherited.userId,
       {
         ...access,
-        codingWorkspaceRoot: parent.codingWorkspaceRoot ?? undefined,
+        codingWorkspaceRoot: inherited.codingWorkspaceRoot ?? undefined,
+        model: inherited.model,
         parentSessionId,
+        thinkingEffort: inherited.thinkingEffort,
       }
     );
 
@@ -2791,7 +2745,7 @@ export class AgentService {
 
     const sessionRecord = record.sessionId
       ? await this.getSessionRecordForOrg(record.sessionId, orgId)
-      : this.ephemeralSessions.findByAttachmentId(attachmentId)?.record;
+      : this.sessions.cognitoByAttachment(attachmentId);
 
     if (!sessionRecord) {
       return null;
@@ -2855,50 +2809,6 @@ export class AgentService {
       );
       await this.db.deleteAttachment(attachment.id);
     }
-  }
-
-  /**
-   * A model change needs a new provider, which means a new session object. The
-   * conversation only exists in the old one, so it is carried across by hand.
-   */
-  private async rebuildEphemeralSession(
-    entry: EphemeralSession,
-    orgId: string,
-    settings: Partial<SessionRunSettings> = {}
-  ): Promise<boolean> {
-    const channel = parseAgentChannel(entry.record.channel);
-
-    if (!channel) {
-      return false;
-    }
-
-    const { isPlatformAdmin, orgRole } = await this.resolveSessionAccess(
-      orgId,
-      entry.record.userId
-    );
-
-    const sharedCapabilityRevision = await this.capabilityRevisionForProfile(
-      orgId,
-      entry.record.profileId
-    );
-
-    const session = await this.buildChatSession(
-      { ...entry.record, ...settings },
-      {
-        channel,
-        cognito: { initialHistory: [...entry.session.getHistory()] },
-        isPlatformAdmin,
-        orgId,
-        orgRole,
-      }
-    );
-
-    Object.assign(entry.record, settings);
-    entry.session = session;
-    entry.sharedCapabilityRevision = sharedCapabilityRevision;
-    await this.ephemeralSessions.set(entry);
-
-    return true;
   }
 
   /**
@@ -2974,12 +2884,12 @@ export class AgentService {
     // Live history is the only history a cognito session has, so it answers
     // here whether or not a turn is in flight.
     if (
-      this.ephemeralSessions.has(sessionId) ||
+      this.sessions.isCognito(sessionId) ||
       (!options?.persistedOnly && sessionTurnRegistry.isActive(sessionId))
     ) {
       const liveSession =
-        this.ephemeralSessions.get(sessionId)?.session ??
-        (await this.resolveSession(sessionId, orgId));
+        this.sessions.peek(sessionId) ??
+        (await this.sessions.get(sessionId, orgId));
 
       if (liveSession) {
         const history = liveSession.getHistory();
@@ -3005,13 +2915,13 @@ export class AgentService {
     }
 
     const storedMessages = await this.db.listMessagesForSession(sessionId);
-    const cached = this.sessions.get(sessionId)?.session;
+    const cached = this.sessions.peek(sessionId);
 
     const contextUsage = options?.persistedOnly
       ? null
       : cached
         ? cached.getContextUsage()
-        : ((await this.resolveSession(sessionId, orgId))?.getContextUsage() ??
+        : ((await this.sessions.get(sessionId, orgId))?.getContextUsage() ??
           null);
 
     return {
@@ -3062,19 +2972,14 @@ export class AgentService {
       : "Untitled (Branch)";
 
     const branchRecord: StoredSessionRecord = {
+      ...inheritFrom(record, "branch"),
       agentQuestionnaire: null,
       agentTodos: [],
       branchMessageIndex: messageIndex,
-      channel: record.channel,
-      codingWorkspaceRoot: record.codingWorkspaceRoot ?? null,
       createdAt: new Date().toISOString(),
       id: nextSessionId,
-      model: record.model,
       parentSessionId: sessionId,
-      profileId: record.profileId,
-      thinkingEffort: record.thinkingEffort ?? null,
       title: null,
-      userId: record.userId ?? null,
     };
 
     await this.db.upsertSession(branchRecord);
@@ -3090,33 +2995,6 @@ export class AgentService {
       }))
     );
     await this.db.updateSessionTitle(nextSessionId, branchTitle);
-
-    const channel = parseAgentChannel(record.channel);
-
-    if (!channel) {
-      throw new Error("Session channel is invalid.");
-    }
-
-    const { orgId: profileOrgId } = await this.requireProfileRecord(
-      record.profileId
-    );
-
-    const { isPlatformAdmin: branchIsPlatformAdmin, orgRole: branchOrgRole } =
-      await this.resolveSessionAccess(profileOrgId, record.userId);
-
-    const session = await this.buildChatSession(branchRecord, {
-      channel,
-      isPlatformAdmin: branchIsPlatformAdmin,
-      orgId: profileOrgId,
-      orgRole: branchOrgRole,
-    });
-
-    this.cacheSession(nextSessionId, {
-      channel,
-      pluginRevision: await this.pluginCapabilityRevision(profileOrgId),
-      profileId: record.profileId,
-      session,
-    });
 
     return { sessionId: nextSessionId };
   }
@@ -3188,14 +3066,10 @@ export class AgentService {
     return session ? toSessionSummary(session) : null;
   }
 
-  isCognitoSession(sessionId: string): boolean {
-    return this.ephemeralSessions.has(sessionId);
-  }
-
   scheduleSessionTitleGeneration(sessionId: string): void {
     // A cognito session has no row to title, and generating one would spend a
     // turn summarising a conversation that is meant to leave no trace.
-    if (this.ephemeralSessions.has(sessionId)) {
+    if (this.sessions.isCognito(sessionId)) {
       return;
     }
 
@@ -3212,7 +3086,7 @@ export class AgentService {
   schedulePostTurnSkillReview(sessionId: string): void {
     // The review writes skill suggestions, which is exactly the write-back a
     // cognito session promises not to do.
-    if (this.ephemeralSessions.has(sessionId)) {
+    if (this.sessions.isCognito(sessionId)) {
       return;
     }
 
@@ -3230,13 +3104,14 @@ export class AgentService {
       return false;
     }
 
-    if (await this.ephemeralSessions.delete(sessionId)) {
+    if (this.sessions.isCognito(sessionId)) {
+      await this.sessions.end(sessionId);
+
       return true;
     }
 
     discardInFlightSessionWrites(sessionId);
-    this.sessions.get(sessionId)?.session.clear();
-    this.sessions.delete(sessionId);
+    await this.sessions.end(sessionId);
     this.superNakamaSessionState.clearSession(sessionId);
     this.agentTodoState.clearSession(sessionId);
     this.agentQuestionnaireState.clearSession(sessionId);
@@ -3255,92 +3130,6 @@ export class AgentService {
     await this.db.deleteSession(sessionId);
 
     return true;
-  }
-
-  async resolveSession(
-    sessionId: string,
-    orgId: string,
-    forNewTurn = false
-  ): Promise<AgentChatSession | null> {
-    const record = await this.getSessionRecordForOrg(sessionId, orgId);
-
-    if (!record) {
-      return null;
-    }
-
-    if (forNewTurn && record.model) {
-      this.normalizeSessionModelOverride(record.model);
-    }
-
-    const ephemeral = this.ephemeralSessions.get(sessionId);
-    const stored = this.sessions.get(sessionId);
-
-    if (sessionTurnRegistry.isActive(sessionId) && !forNewTurn) {
-      const active = ephemeral?.session ?? stored?.session;
-
-      if (active) {
-        return active;
-      }
-    }
-
-    const sharedCapabilityRevision = await this.capabilityRevisionForProfile(
-      orgId,
-      record.profileId
-    );
-
-    if (ephemeral) {
-      if (
-        (ephemeral.sharedCapabilityRevision ?? "") !==
-          sharedCapabilityRevision &&
-        !(await this.rebuildEphemeralSession(ephemeral, orgId))
-      ) {
-        throw new NakamaApiError("Session refresh failed. Try again.", 503);
-      }
-
-      return ephemeral.session;
-    }
-
-    const pluginRevision = await this.pluginCapabilityRevision(orgId);
-
-    if (
-      stored &&
-      stored.pluginRevision === pluginRevision &&
-      (stored.sharedCapabilityRevision ?? "") === sharedCapabilityRevision
-    ) {
-      this.cacheSession(sessionId, stored);
-
-      return stored.session;
-    }
-
-    const channel = parseAgentChannel(record.channel);
-
-    if (!channel) {
-      return null;
-    }
-
-    const { orgId: profileOrgId } = await this.requireProfileRecord(
-      record.profileId
-    );
-
-    const { isPlatformAdmin: resumeIsPlatformAdmin, orgRole: resumeOrgRole } =
-      await this.resolveSessionAccess(profileOrgId, record.userId);
-
-    const session = await this.buildChatSession(record, {
-      channel,
-      isPlatformAdmin: resumeIsPlatformAdmin,
-      orgId: profileOrgId,
-      orgRole: resumeOrgRole,
-    });
-
-    this.cacheSession(sessionId, {
-      channel,
-      pluginRevision,
-      profileId: record.profileId,
-      session,
-      sharedCapabilityRevision,
-    });
-
-    return session;
   }
 
   /**
@@ -3389,10 +3178,10 @@ export class AgentService {
         return true;
       }
 
-      const ephemeral = this.ephemeralSessions.get(sessionId);
+      if (this.sessions.isCognito(sessionId)) {
+        await this.sessions.runSettingsChanged(sessionId, orgId, next);
 
-      if (ephemeral) {
-        return await this.rebuildEphemeralSession(ephemeral, orgId, next);
+        return true;
       }
 
       let updated = true;
@@ -3409,9 +3198,9 @@ export class AgentService {
           );
         }
       } finally {
-        // One write can land before the next fails. Drop the cached chat so
-        // the next turn is built from the stored row, not the old settings.
-        this.sessions.delete(sessionId);
+        // One write can land before the next fails. The chat is dropped either
+        // way, so the next turn is built from the stored row.
+        await this.sessions.runSettingsChanged(sessionId, orgId, next);
       }
 
       return updated;
@@ -3429,7 +3218,7 @@ export class AgentService {
     orgId: string,
     access: ChatProfileAccess
   ): Promise<boolean> {
-    if (this.ephemeralSessions.has(sessionId)) {
+    if (this.sessions.isCognito(sessionId)) {
       throw new NakamaApiError("An incognito chat cannot be closed.", 400);
     }
 
@@ -3474,7 +3263,7 @@ export class AgentService {
     for (const child of sessions) {
       if (
         child.parentSessionId === sessionId &&
-        (child.branchMessageIndex ?? null) === null &&
+        sessionKind(child) === "child" &&
         !child.closedAt &&
         (await this.db.updateSessionClosedAt(child.id, closedAt))
       ) {
@@ -3570,11 +3359,13 @@ export class AgentService {
 
       await this.resolveSharedAgentProfile(orgId, record.profileId);
 
-      if (
-        this.sessions.has(sessionId) ||
-        this.ephemeralSessions.has(sessionId)
-      ) {
-        await this.resolveSession(sessionId, orgId, true);
+      // A held chat may be out of date; one not held is built fresh anyway.
+      if (this.sessions.peek(sessionId)) {
+        if (record.model) {
+          this.normalizeSessionModelOverride(record.model);
+        }
+
+        await this.sessions.get(sessionId, orgId, { forNewTurn: true });
       }
 
       return true;
@@ -3593,7 +3384,8 @@ export class AgentService {
 
     // Clearing a cognito session is the same as ending it: there is no
     // durable copy to keep the id pointing at.
-    if (await this.ephemeralSessions.delete(sessionId)) {
+    if (this.sessions.isCognito(sessionId)) {
+      await this.sessions.end(sessionId);
       await this.agentQuestionnaireState.clear(sessionId);
 
       return true;
@@ -3604,8 +3396,7 @@ export class AgentService {
     // database instead of showing what the turn wrote after the clear. The
     // turn lock is left alone and is released when the turn ends.
     discardInFlightSessionWrites(sessionId);
-    this.sessions.get(sessionId)?.session.clear();
-    this.sessions.delete(sessionId);
+    await this.sessions.end(sessionId);
 
     await deleteSessionHistoryArchive(orgId, sessionId);
     await this.db.deleteMessagesForSession(sessionId);
@@ -3753,7 +3544,7 @@ export class AgentService {
     options: { force?: boolean } = {},
     orgId: string
   ): Promise<CompactionResponse | null> {
-    const session = await this.resolveSession(sessionId, orgId);
+    const session = await this.sessions.get(sessionId, orgId);
 
     if (!session) {
       return null;
@@ -4607,7 +4398,7 @@ export class AgentService {
     const provider = createProviderFromActiveConfig(this.userConfig);
     this._providerConfigured =
       isProviderConfigured(this.userConfig) && provider !== null;
-    this.sessions.clear();
+    this.sessions.invalidateAll();
   }
 
   private async refreshManagedProviderKeys(): Promise<void> {
@@ -4621,7 +4412,7 @@ export class AgentService {
       this.secretFingerprint !== null &&
       fingerprint !== this.secretFingerprint
     ) {
-      this.sessions.clear();
+      this.sessions.invalidateAll();
       this.composioService?.reloadConfiguration();
     }
 
@@ -4800,7 +4591,7 @@ export class AgentService {
     this.userConfig = await loadUserConfig();
     await this.refreshManagedProviderKeys();
     this.refreshProviderConfig();
-    this.ephemeralSessions.clear();
+    this.sessions.invalidateAll({ cognito: true });
     this.composioService?.reloadConfiguration();
     this.visionSettingsPromise = null;
     this.transcriptionSettingsPromise = null;
@@ -4893,11 +4684,7 @@ export class AgentService {
     );
 
     if (request.model !== undefined) {
-      for (const [sessionId, record] of this.sessions.entries()) {
-        if (record.profileId === profileId) {
-          this.sessions.delete(sessionId);
-        }
-      }
+      this.sessions.invalidateProfile(profileId);
     }
 
     return response;
@@ -4914,11 +4701,7 @@ export class AgentService {
       request
     );
 
-    for (const [sessionId, record] of this.sessions) {
-      if (record.profileId === profileId) {
-        this.sessions.delete(sessionId);
-      }
-    }
+    this.sessions.invalidateProfile(profileId);
 
     return result;
   }
@@ -4926,12 +4709,7 @@ export class AgentService {
   async deleteProfile(orgId: string, profileId: string): Promise<void> {
     await this.profileService.deleteProfile(orgId, profileId);
 
-    for (const [sessionId, record] of this.sessions) {
-      if (record.profileId === profileId) {
-        record.session.clear();
-        this.sessions.delete(sessionId);
-      }
-    }
+    this.sessions.invalidateProfile(profileId, { clear: true });
   }
 
   async listTools(orgId: string): Promise<ListToolsResponse> {
@@ -5831,11 +5609,12 @@ export class AgentService {
     sessionId: string,
     orgId: string
   ): Promise<StoredSessionRecord | null> {
-    // Cognito sessions have no row, so the map answers first. Everything that
-    // reaches a session funnels through here, which is why the rest of the
-    // file needs no branch of its own.
-    const ephemeral = this.ephemeralSessions.get(sessionId);
-    const record = ephemeral?.record ?? (await this.db.getSession(sessionId));
+    // Cognito sessions have no row, so the runtime answers first. Everything
+    // that reaches a session funnels through here, which is why the rest of
+    // the file needs no branch of its own.
+    const record =
+      this.sessions.cognitoRecord(sessionId) ??
+      (await this.db.getSession(sessionId));
 
     if (!record) {
       return null;
@@ -5965,18 +5744,6 @@ export class AgentService {
     }
 
     return profile;
-  }
-
-  private async requireProfileRecord(
-    profileId: string
-  ): Promise<StoredProfileRecord & { orgId: string }> {
-    const profile = await this.db.getProfile(profileId);
-
-    if (!profile?.orgId) {
-      throw new Error("Profile not found.");
-    }
-
-    return { ...profile, orgId: profile.orgId };
   }
 
   private async resolveSessionProfile(
@@ -6411,13 +6178,15 @@ export class AgentService {
     record: StoredSessionRecord,
     {
       channel,
-      cognito,
+      initialHistory: cognitoHistory,
       isPlatformAdmin,
+      kind,
       orgId,
       orgRole,
-    }: ChatSessionBuildContext
+    }: ChatBuildContext
   ): Promise<AgentChatSession> {
     const { id: sessionId, model: modelOverride, profileId, userId } = record;
+    const cognito = kind === "cognito";
     await this.refreshManagedProviderKeys();
     await this.ensureVisionSettingsLoaded();
     const profile = await this.requireExecutionProfile(orgId, profileId);
@@ -6436,13 +6205,8 @@ export class AgentService {
     const includeSkillManageTools = !cognito && SKILL_MANAGE_CHANNELS[channel];
 
     // A chat sub_agent started runs with nobody watching, so it gets the same
-    // limits as the in-memory sub-agent run. A branch has a parent too, but it
-    // also has the message it branched at.
-    const subAgentChat = Boolean(
-      !cognito &&
-        record.parentSessionId &&
-        (record.branchMessageIndex ?? null) === null
-    );
+    // limits as the in-memory sub-agent run.
+    const subAgentChat = kind === "child";
 
     const pluginOrgRole =
       channel === "telegram" ||
@@ -6511,7 +6275,7 @@ export class AgentService {
     // handed the live history instead, so the conversation survives the
     // rebuild that a new provider needs.
     const initialHistory = cognito
-      ? (cognito.initialHistory ?? [])
+      ? (cognitoHistory ?? [])
       : await loadSessionHistory(this.db, sessionId);
 
     const userTimezone = await this.getUserTimezone();
@@ -6559,7 +6323,7 @@ export class AgentService {
 
     const trackEphemeralAttachment = cognito
       ? (attachmentId: string) =>
-          this.ephemeralSessions.trackAttachment(sessionId, attachmentId)
+          this.sessions.trackAttachment(sessionId, attachmentId)
       : undefined;
 
     const saveAttachment: SaveInlineAttachment = trackEphemeralAttachment
@@ -6592,7 +6356,7 @@ export class AgentService {
       isPlatformAdmin: isPlatformAdmin || undefined,
       loadAttachment,
       onSkillCatalogChange: () => {
-        this.sessions.delete(sessionId);
+        this.sessions.invalidateSession(sessionId);
       },
       openTodosReminder: async () => {
         const plan = await this.agentTodoState.formatForPrompt(sessionId);
@@ -6617,7 +6381,7 @@ export class AgentService {
 
     const session = createAgentChatSession(harness, {
       archiveHistory: (history) => {
-        if (this.sessions.get(sessionId)?.session !== persistedSession) {
+        if (this.sessions.peek(sessionId) !== persistedSession) {
           throw new Error("Session changed during compaction. Try again.");
         }
 
@@ -7167,22 +6931,6 @@ export class AgentService {
     }
 
     throw new Error("No profile available for playground execution.");
-  }
-
-  /** Least recently used first out; a session mid-turn is never evicted. */
-  private cacheSession(sessionId: string, stored: StoredSession): void {
-    this.sessions.delete(sessionId);
-    this.sessions.set(sessionId, stored);
-
-    for (const id of this.sessions.keys()) {
-      if (this.sessions.size <= MAX_CACHED_SESSIONS) {
-        break;
-      }
-
-      if (!sessionTurnRegistry.isActive(id)) {
-        this.sessions.delete(id);
-      }
-    }
   }
 
   private resolveCompactionConfig(

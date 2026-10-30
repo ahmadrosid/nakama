@@ -625,7 +625,7 @@ describe("published parent knowledge reads", () => {
         { cognito, orgRole: "member" }
       );
 
-      const session = await agent.resolveSession(id, "org_team_a");
+      const session = await agent.sessions.get(id, "org_team_a");
       expect(session).not.toBeNull();
       await session!.send("First question");
       expect(prompts[0]).toContain('"id":"org_parent"');
@@ -634,7 +634,7 @@ describe("published parent knowledge reads", () => {
       await db.deleteOrgSharedResource("org_parent", publication.id);
       await session!.send("Second question");
       expect(prompts[1]).not.toContain('"id":"org_parent"');
-      expect(await agent.resolveSession(id, "org_team_a")).toBe(session);
+      expect(await agent.sessions.get(id, "org_team_a")).toBe(session);
       expect(
         session!.getHistory().filter((message) => message.role === "user")
       ).toHaveLength(2);

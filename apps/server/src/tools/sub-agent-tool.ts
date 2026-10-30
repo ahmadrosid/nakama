@@ -2,6 +2,7 @@ import type { StreamEvent, ToolContext, ToolDefinition } from "@nakama/core";
 import { z } from "zod";
 import { streamMessage } from "../http/shared";
 import type { AgentService } from "../services/agent-service";
+import { sessionKind } from "../services/session-runtime";
 import { sessionTurnRegistry } from "../services/session-turn-registry";
 import { formatToolActivityLabel } from "./sub-agent-activity";
 import {
@@ -105,7 +106,7 @@ export async function runSubAgentTool(
     // must leave no chats behind, so both keep the in-memory run.
     if (
       !context.sessionId ||
-      agentService.isCognitoSession(context.sessionId)
+      agentService.sessions.isCognito(context.sessionId)
     ) {
       if (input.background || input.sessionId) {
         return failSubAgentResult("Separate chats need a saved chat session.");
@@ -165,8 +166,7 @@ async function runInChildSession(
     context.orgId
   );
 
-  // A branch has a parent too, but it also has the message it branched at.
-  if (parent?.parentSessionId && parent.branchMessageIndex === null) {
+  if (parent && sessionKind(parent) === "child") {
     return failSubAgentResult("Nested sub-agent execution is not allowed.");
   }
 
@@ -202,7 +202,7 @@ async function runInChildSession(
     );
   }
 
-  const session = await agentService.resolveSession(sessionId, context.orgId);
+  const session = await agentService.sessions.get(sessionId, context.orgId);
 
   if (!session) {
     sessionTurnRegistry.cancelTurn(sessionId);

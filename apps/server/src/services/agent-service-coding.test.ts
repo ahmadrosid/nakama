@@ -250,7 +250,7 @@ describe("AgentService skill_manage injection", () => {
       { orgRole: "admin" }
     );
 
-    const session = await service.resolveSession(sessionId, ORG_ID);
+    const session = await service.sessions.get(sessionId, ORG_ID);
     expect(session).not.toBeNull();
 
     const typed = "/learn filing an expense: open portal, submit receipt";
@@ -290,7 +290,7 @@ describe("AgentService skill_manage injection", () => {
       { orgRole: "admin" }
     );
 
-    const session = await service.resolveSession(sessionId, ORG_ID);
+    const session = await service.sessions.get(sessionId, ORG_ID);
     expect(session).not.toBeNull();
 
     await session!.send({
@@ -331,7 +331,7 @@ describe("AgentService skill_manage injection", () => {
       { orgRole: "admin" }
     );
 
-    const session = await service.resolveSession(sessionId, ORG_ID);
+    const session = await service.sessions.get(sessionId, ORG_ID);
     expect(session).not.toBeNull();
 
     await session!.send({ message: "/learn" });

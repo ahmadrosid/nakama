@@ -319,7 +319,7 @@ describe("sub_agent child chats", () => {
     const { captured, service } = await createService(() => answer("Done"));
     const parentId = await service.createSession(ORG_ID, "web", PROFILE_ID);
 
-    const parent = await service.resolveSession(parentId, ORG_ID);
+    const parent = await service.sessions.get(parentId, ORG_ID);
     await parent?.send({ message: "hi" });
     expect(captured.names).toContain("ask_user_question");
     expect(captured.names).toContain("todo_write");

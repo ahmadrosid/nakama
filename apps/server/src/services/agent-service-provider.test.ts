@@ -226,7 +226,7 @@ describe("AgentService usage pricing context", () => {
     );
 
     const id = await service.createSession(ORG_ID, "web", profile.id);
-    const session = await service.resolveSession(id, ORG_ID);
+    const session = await service.sessions.get(id, ORG_ID);
     await session!.send({
       images: [{ data: "aGVsbG8=", mediaType: "image/png" }],
       message: "Describe the image",
@@ -302,7 +302,7 @@ describe("AgentService vision settings", () => {
         );
 
         const id = await service.createSession(ORG_ID, "web", profile.id);
-        const session = await service.resolveSession(id, ORG_ID);
+        const session = await service.sessions.get(id, ORG_ID);
         expect(session).not.toBeNull();
 
         if (missing === "primary") {

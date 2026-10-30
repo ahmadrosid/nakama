@@ -2018,7 +2018,7 @@ describe("OrgService shared agent selection", () => {
             );
 
       const session = sessionId
-        ? (await agent.resolveSession(sessionId, "org_team_a"))!
+        ? (await agent.sessions.get(sessionId, "org_team_a"))!
         : null;
 
       const run = () =>
@@ -2245,7 +2245,7 @@ describe("OrgService shared agent selection", () => {
       expect(create.status).toBe(201);
       const body: { sessionId: string } = await create.json();
       const id = body.sessionId;
-      const session = (await agent.resolveSession(id, "org_team_a"))!;
+      const session = (await agent.sessions.get(id, "org_team_a"))!;
       await session.send("Saved team turn");
       const history = [...session.getHistory()];
       expect(providerCalls).toBe(1);
@@ -2474,7 +2474,7 @@ describe("OrgService shared agent selection", () => {
         { orgRole: "member" }
       );
 
-      const first = (await agent.resolveSession(id, "org_team_a"))!;
+      const first = (await agent.sessions.get(id, "org_team_a"))!;
       await first.send("Saved turn");
       const savedHistory = [...first.getHistory()];
       const backup = await createNakamaDataExport({ databasePath, rootDir });
@@ -2486,7 +2486,7 @@ describe("OrgService shared agent selection", () => {
       });
       await writeFile(join(sourceDir, "STYLE.md"), "Later source style");
       await writeFile(join(teamDir, "MEMORY.md"), "Later team memory");
-      const later = (await agent.resolveSession(id, "org_team_a"))!;
+      const later = (await agent.sessions.get(id, "org_team_a"))!;
       await later.send("Later turn");
       expect(later.getHistory()).toHaveLength(savedHistory.length + 2);
       expect(builds.at(-1)?.name).toBe("Later source");
@@ -2498,7 +2498,7 @@ describe("OrgService shared agent selection", () => {
       });
       await database.reopen();
       await agent.reloadAfterDataRestore();
-      const restored = (await agent.resolveSession(id, "org_team_a"))!;
+      const restored = (await agent.sessions.get(id, "org_team_a"))!;
       expect(restored).not.toBe(later);
       expect(restored.getHistory()).toEqual(savedHistory);
       expect(builds.at(-1)).toMatchObject({
@@ -2908,7 +2908,7 @@ describe("OrgService shared agent selection", () => {
           { cognito, orgRole: "member" }
         );
 
-        const first = (await agent.resolveSession(id, "org_team_a"))!;
+        const first = (await agent.sessions.get(id, "org_team_a"))!;
         await first.send("First");
         await db.assignMcpServerToProfile("profile_template", server.id);
 
@@ -2918,7 +2918,7 @@ describe("OrgService shared agent selection", () => {
         expect(detail.mcpServers.map((item) => item.id)).toEqual([server.id]);
         expect(detail.mcpServerCount).toBe(1);
         expect(await db.listMcpServersForProfile(profile.id)).toEqual([]);
-        const second = (await agent.resolveSession(id, "org_team_a"))!;
+        const second = (await agent.sessions.get(id, "org_team_a"))!;
         expect(second).not.toBe(first);
         expect(second.getHistory()).toEqual(first.getHistory());
         await second.send("Second");
@@ -2965,7 +2965,7 @@ describe("OrgService shared agent selection", () => {
             },
           ],
         });
-        const third = (await agent.resolveSession(id, "org_team_a"))!;
+        const third = (await agent.sessions.get(id, "org_team_a"))!;
         expect(third).not.toBe(second);
         expect(third.getHistory()).toEqual(second.getHistory());
         expect(
@@ -3163,11 +3163,11 @@ if __name__ == "__main__":
         { cognito, orgRole: "member" }
       );
 
-      const first = (await agent.resolveSession(id, "org_team_a"))!;
+      const first = (await agent.sessions.get(id, "org_team_a"))!;
       await first.send("First");
       await db.assignToolToProfile(assignmentProfileId, record.id);
       await db.assignToolToProfile(assignmentProfileId, "global_read");
-      const second = (await agent.resolveSession(id, "org_team_a"))!;
+      const second = (await agent.sessions.get(id, "org_team_a"))!;
 
       if (!local) {
         const detail = (await agent.getProfile("org_team_a", profile.id))
@@ -3286,7 +3286,7 @@ if __name__ == "__main__":
           },
         },
       });
-      const third = (await agent.resolveSession(id, "org_team_a"))!;
+      const third = (await agent.sessions.get(id, "org_team_a"))!;
       expect(third).not.toBe(second);
       expect(third.getHistory()).toEqual(second.getHistory());
 
@@ -3338,7 +3338,7 @@ if __name__ == "__main__":
           status: 404,
         });
         await expect(
-          agent.resolveSession(id, "org_team_a")
+          agent.sessions.get(id, "org_team_a")
         ).rejects.toMatchObject({ status: 404 });
       } else {
         expect(
@@ -3690,7 +3690,7 @@ if __name__ == "__main__":
           { cognito, orgRole: "member" }
         );
 
-        const first = (await agent.resolveSession(id, "org_team_a"))!;
+        const first = (await agent.sessions.get(id, "org_team_a"))!;
         await first.send("Keep history");
         const history = [...first.getHistory()];
         expect(selections).toEqual(["second::same-model"]);
@@ -3701,7 +3701,7 @@ if __name__ == "__main__":
         );
         expect(await agent.beginSessionTurn(id, "org_team_a")).toBe(true);
         sessionTurnRegistry.cancelTurn(id);
-        expect(await agent.resolveSession(id, "org_team_a")).toBe(first);
+        expect(await agent.sessions.get(id, "org_team_a")).toBe(first);
         Object.assign(agent, {
           userConfig: { ...config, providers: [config.providers[0]!] },
         });
@@ -3741,7 +3741,7 @@ if __name__ == "__main__":
         expect((await db.getProfile(profile.id))!.model).toBe(profile.model);
         expect(await agent.beginSessionTurn(id, "org_team_a")).toBe(true);
         sessionTurnRegistry.cancelTurn(id);
-        const second = (await agent.resolveSession(id, "org_team_a"))!;
+        const second = (await agent.sessions.get(id, "org_team_a"))!;
         expect(second).not.toBe(first);
         expect(second.getHistory()).toEqual(history);
         expect(selections).toEqual(["second::same-model", "first::same-model"]);
@@ -3750,7 +3750,7 @@ if __name__ == "__main__":
             model: "second::same-model",
           })
         ).toBe(true);
-        const overridden = (await agent.resolveSession(id, "org_team_a"))!;
+        const overridden = (await agent.sessions.get(id, "org_team_a"))!;
         expect(overridden.getHistory()).toEqual(history);
         expect(selections.at(-1)).toBe("second::same-model");
         const builds = selections.length;
@@ -3768,7 +3768,7 @@ if __name__ == "__main__":
         Object.assign(agent, { userConfig: config });
         expect(await agent.beginSessionTurn(id, "org_team_a")).toBe(true);
         sessionTurnRegistry.cancelTurn(id);
-        expect(await agent.resolveSession(id, "org_team_a")).toBe(overridden);
+        expect(await agent.sessions.get(id, "org_team_a")).toBe(overridden);
         await orgService.unpublishSharedResource(
           "org_parent",
           publication.id,
@@ -3873,7 +3873,7 @@ if __name__ == "__main__":
         { cognito, orgRole: "member" }
       );
 
-      const first = (await agent.resolveSession(id, "org_team_a"))!;
+      const first = (await agent.sessions.get(id, "org_team_a"))!;
       await first.send("First");
       expect(turns[0]!.system).toContain("Published identity");
       expect(turns[0]!.system).toContain("Published style");
@@ -3900,7 +3900,7 @@ if __name__ == "__main__":
         thinkingEffort: "high",
         thinkingEnabled: true,
       });
-      expect(await agent.resolveSession(id, "org_team_a")).toBe(first);
+      expect(await agent.sessions.get(id, "org_team_a")).toBe(first);
       sessionTurnRegistry.cancelTurn(id);
       failBuild = true;
       await expect(agent.beginSessionTurn(id, "org_team_a")).rejects.toThrow();
@@ -3911,7 +3911,7 @@ if __name__ == "__main__":
       ).toEqual(history);
       failBuild = false;
       expect(await agent.beginSessionTurn(id, "org_team_a")).toBe(true);
-      const second = (await agent.resolveSession(id, "org_team_a"))!;
+      const second = (await agent.sessions.get(id, "org_team_a"))!;
       expect(second).not.toBe(first);
       expect(second.getHistory()).toEqual(history);
       expect(builds.at(-1)).toMatchObject({
@@ -3926,7 +3926,7 @@ if __name__ == "__main__":
       );
       sessionTurnRegistry.cancelTurn(id);
       await second.send("Second");
-      expect(await agent.resolveSession(id, "org_team_a")).toBe(second);
+      expect(await agent.sessions.get(id, "org_team_a")).toBe(second);
       expect(
         (await agent.getSessionMessages(id, "org_team_a"))!.messages.filter(
           (message) => message.role === "user"
@@ -3936,9 +3936,9 @@ if __name__ == "__main__":
         join(sourceDir, "USER.md"),
         "Changed private parent context"
       );
-      expect(await agent.resolveSession(id, "org_team_a")).toBe(second);
+      expect(await agent.sessions.get(id, "org_team_a")).toBe(second);
       await writeFile(join(sourceDir, "STYLE.md"), "Changed published style");
-      const third = (await agent.resolveSession(id, "org_team_a"))!;
+      const third = (await agent.sessions.get(id, "org_team_a"))!;
       expect(third).not.toBe(second);
       expect(third.getHistory()).toEqual(second.getHistory());
       await third.send("Third");
@@ -3948,7 +3948,7 @@ if __name__ == "__main__":
       await rm(join(sourceDir, "SOUL.md"));
       await rm(join(sourceDir, "STYLE.md"));
       await rm(join(sourceDir, "INSTRUCTIONS.md"));
-      const fourth = (await agent.resolveSession(id, "org_team_a"))!;
+      const fourth = (await agent.sessions.get(id, "org_team_a"))!;
       expect(fourth).not.toBe(third);
       expect(fourth.getHistory()).toEqual(third.getHistory());
       await fourth.send("Fourth");
@@ -4085,7 +4085,7 @@ if __name__ == "__main__":
         { cognito, orgRole: "member" }
       );
 
-      const session = (await agent.resolveSession(id, "org_team_a"))!;
+      const session = (await agent.sessions.get(id, "org_team_a"))!;
       await session.send("Keep this history");
       const history = [...session.getHistory()];
       const source = (await db.getProfile("profile_template"))!;
@@ -4105,9 +4105,9 @@ if __name__ == "__main__":
       await expect(
         agent.beginSessionTurn(id, "org_team_a")
       ).rejects.toMatchObject({ status: 404 });
-      await expect(
-        agent.resolveSession(id, "org_team_a")
-      ).rejects.toMatchObject({ status: 404 });
+      await expect(agent.sessions.get(id, "org_team_a")).rejects.toMatchObject({
+        status: 404,
+      });
       await expect(
         agent.createSession("org_team_a", "web", profile.id, "user_other")
       ).rejects.toMatchObject({ status: 404 });

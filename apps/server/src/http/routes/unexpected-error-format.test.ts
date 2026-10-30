@@ -116,13 +116,15 @@ describe("route error formatting", () => {
       agent: {
         assertSessionProfileAccess: async () => undefined,
         beginSessionTurn: async () => true,
-        resolveSession: async () => ({
-          send: async () => {
-            throw new Error(
-              "ENOSPC: no space left on device, write /home/nakama/.config/nakama/nakama.db"
-            );
-          },
-        }),
+        sessions: {
+          get: async () => ({
+            send: async () => {
+              throw new Error(
+                "ENOSPC: no space left on device, write /home/nakama/.config/nakama/nakama.db"
+              );
+            },
+          }),
+        },
       },
     });
 
@@ -156,8 +158,10 @@ describe("route error formatting", () => {
         agent: {
           assertSessionProfileAccess: async () => undefined,
           beginSessionTurn: async () => true,
-          resolveSession: async () => {
-            throw error;
+          sessions: {
+            get: async () => {
+              throw error;
+            },
           },
         },
       });
@@ -199,8 +203,10 @@ describe("route error formatting", () => {
       agent: {
         assertSessionProfileAccess: async () => undefined,
         beginSessionTurn: async () => true,
-        resolveSession: async () => {
-          throw new Error("SQLITE_CORRUPT: database disk image is malformed");
+        sessions: {
+          get: async () => {
+            throw new Error("SQLITE_CORRUPT: database disk image is malformed");
+          },
         },
       },
     });
