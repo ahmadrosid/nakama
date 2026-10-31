@@ -1,3 +1,4 @@
+import { dirname } from "node:path";
 import type { NakamaClient, RemoteChatSession } from "@nakama/client";
 import { formatClientError } from "@nakama/core/api-error";
 import {
@@ -9,6 +10,7 @@ import {
 import { createChatLock } from "@nakama/core/channel-chat-lock";
 import type { ChannelOwner } from "@nakama/core/channel-config-shared";
 import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
+import { readTextOrNull, writeTextFile } from "@nakama/core/fs";
 import {
   hasActiveHandshakeCode,
   isSlackUserAuthorized,
@@ -46,6 +48,17 @@ const WORKING_REACTION = "eyes";
 
 /** How long a users.info answer is trusted before a member is looked up again. */
 const MEMBER_CACHE_MS = 10 * 60 * 1000;
+
+// The server can finish a turn after the worker dies, so "send it again" alone
+// could run the work twice.
+const INTERRUPTED_REPLY =
+  "A restart cut off my reply to this. The work may still have finished, so check before sending it again.";
+
+const STALE_REPLY =
+  "I was offline when this arrived and did not act on it. Send it again if you still need it.";
+
+/** Older unstarted events are reported, not run: the moment may have passed. */
+const MAX_REPLAY_AGE_SECONDS = 60 * 60;
 
 const CHANNEL_MESSAGE_PREFIX =
   "[Slack channel thread. Your reply is visible to everyone in this channel.]\n";
@@ -96,20 +109,97 @@ export function replyToSlackEvent(
   return slack.postMessage(event.channel, message, threadTs);
 }
 
-/** Wraps event processing to log and send an error reply when handleEvent rejects. */
-export function createSlackEventHandler(deps: {
-  handleEvent: (event: SlackMessageEvent) => Promise<void>;
-  slack: Pick<SlackApi, "postMessage">;
-}): (event: SlackMessageEvent) => void {
-  return (event: SlackMessageEvent) => {
-    if (process.env.NAKAMA_CH_DEBUG === "1") {
-      console.log(
-        `[slack] ${event.type} channel_type=${event.channel_type} subtype=${event.subtype ?? "-"} user=${event.user ?? "-"} thread=${event.thread_ts ? "yes" : "no"}`
-      );
-    }
+interface InboxEntry {
+  event: SlackMessageEvent;
+  started: boolean;
+}
 
+/**
+ * Events acked to Slack whose turn has not ended, so a crash cannot lose one.
+ * `started` is what stops a turn that may have called tools from running twice.
+ */
+export class SlackEventInbox {
+  private entries: Record<string, InboxEntry> = {};
+  private saving: Promise<unknown> = Promise.resolve();
+
+  constructor(private readonly path: string) {}
+
+  async load(): Promise<void> {
+    const raw = await readTextOrNull(this.path);
+
+    try {
+      // SAFETY: Only this worker writes the file, always in this shape.
+      this.entries = JSON.parse(raw ?? "{}") as Record<string, InboxEntry>;
+    } catch (error) {
+      console.error("Slack event inbox is unreadable, starting empty:", error);
+      this.entries = {};
+    }
+  }
+
+  has(eventId: string): boolean {
+    return eventId in this.entries;
+  }
+
+  list() {
+    return Object.entries(this.entries);
+  }
+
+  async add(eventId: string, event: SlackMessageEvent): Promise<void> {
+    this.entries[eventId] = { event, started: false };
+
+    try {
+      await this.save();
+    } catch (error) {
+      delete this.entries[eventId];
+      throw error;
+    }
+  }
+
+  async markStarted(eventId: string): Promise<void> {
+    const entry = this.entries[eventId];
+
+    if (entry) {
+      entry.started = true;
+      await this.save();
+    }
+  }
+
+  async remove(eventId: string): Promise<void> {
+    delete this.entries[eventId];
+    await this.save();
+  }
+
+  // Each save rewrites the file, so one running late must not undo a newer one.
+  private save(): Promise<void> {
+    const write = () =>
+      writeTextFile(this.path, JSON.stringify(this.entries), {
+        ensureDir: dirname(this.path),
+      });
+
+    const saved = this.saving.then(write, write);
+
+    this.saving = saved;
+
+    return saved;
+  }
+}
+
+/** Runs events through the inbox: stored before the ack, removed when the turn ends. */
+export function createSlackEventHandler(deps: {
+  handleEvent: (
+    event: SlackMessageEvent,
+    onTurnStart: () => Promise<void>
+  ) => Promise<void>;
+  inbox: SlackEventInbox;
+  slack: Pick<SlackApi, "postMessage" | "removeReaction">;
+  /** Most channel traffic is not for the bot and never needs storing. */
+  wants: (event: SlackMessageEvent) => boolean;
+}) {
+  const { inbox } = deps;
+
+  function run(event: SlackMessageEvent, eventId: string): void {
     deps
-      .handleEvent(event)
+      .handleEvent(event, () => inbox.markStarted(eventId))
       .catch((error) => {
         console.error("Slack message handler error:", error);
 
@@ -117,8 +207,93 @@ export function createSlackEventHandler(deps: {
       })
       .catch((replyError) => {
         console.error("Failed to post Slack error reply:", replyError);
+      })
+      .then(() => inbox.remove(eventId))
+      .catch((error) => {
+        console.error("Failed to clear Slack event:", error);
       });
+  }
+
+  return {
+    /** The socket acks once this resolves. */
+    accept: async (event: SlackMessageEvent, eventId: string) => {
+      if (process.env.NAKAMA_CH_DEBUG === "1") {
+        console.log(
+          `[slack] ${event.type} channel_type=${event.channel_type} subtype=${event.subtype ?? "-"} user=${event.user ?? "-"} thread=${event.thread_ts ? "yes" : "no"}`
+        );
+      }
+
+      // Redelivered after a crash before the ack, and already being replayed.
+      if (inbox.has(eventId) || !deps.wants(event)) {
+        return;
+      }
+
+      await inbox.add(eventId, event);
+      run(event, eventId);
+    },
+
+    /** Await on worker start, before the socket opens, so replays go first. */
+    recover: async () => {
+      const replays: Array<() => void> = [];
+
+      for (const [eventId, { event, started }] of inbox.list()) {
+        const age = Date.now() / 1000 - Number(event.ts);
+
+        if (!(started || age > MAX_REPLAY_AGE_SECONDS)) {
+          replays.push(() => run(event, eventId));
+          continue;
+        }
+
+        try {
+          await replyToSlackEvent(
+            deps.slack,
+            event,
+            started ? INTERRUPTED_REPLY : STALE_REPLY
+          );
+          await deps.slack
+            .removeReaction(event.channel, event.ts, WORKING_REACTION)
+            .catch(() => {});
+          await inbox.remove(eventId);
+        } catch (error) {
+          // Kept, so the next start tells them instead.
+          console.error("Failed to post Slack recovery reply:", error);
+        }
+      }
+
+      for (const replay of replays) {
+        replay();
+      }
+    },
   };
+}
+
+/** Whether an event is one the bot acts on, not an edit, a bot post or chatter. */
+export function wantsSlackEvent(
+  event: SlackMessageEvent,
+  botUserId: string,
+  sessionStore: Pick<ChannelSessionStore, "get">
+): boolean {
+  // Edits, joins and bot posts arrive as subtypes; only people's messages
+  // start turns. A message with a file still counts, its text is used.
+  if (
+    event.type !== "message" ||
+    (event.subtype &&
+      event.subtype !== "thread_broadcast" &&
+      event.subtype !== "file_share") ||
+    event.bot_id ||
+    !event.user ||
+    event.user === botUserId
+  ) {
+    return false;
+  }
+
+  // In channels: an @mention opens a thread; after that the bot follows the thread.
+  return Boolean(
+    event.channel_type === "im" ||
+      (event.text ?? "").includes(`<@${botUserId}>`) ||
+      (event.thread_ts &&
+        sessionStore.get(`${event.channel}:${event.thread_ts}`))
+  );
 }
 
 export function createChatHandler(deps: ChatHandlerDeps) {
@@ -149,18 +324,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
   }
 
-  return async function handleEvent(event: SlackMessageEvent): Promise<void> {
-    // Edits, joins and bot posts arrive as subtypes; only people's messages
-    // start turns. A message with a file still counts, its text is used.
-    if (
-      event.type !== "message" ||
-      (event.subtype &&
-        event.subtype !== "thread_broadcast" &&
-        event.subtype !== "file_share") ||
-      event.bot_id ||
-      !event.user ||
-      event.user === botUserId
-    ) {
+  return async function handleEvent(
+    event: SlackMessageEvent,
+    onTurnStart?: () => Promise<void>
+  ): Promise<void> {
+    if (!wantsSlackEvent(event, botUserId, sessionStore)) {
       return;
     }
 
@@ -173,14 +341,8 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       ? event.channel
       : `${event.channel}:${threadTs}`;
 
-    // In channels: an @mention opens a thread; after that the bot follows the thread.
-    if (
-      !(
-        isDm ||
-        raw.includes(`<@${botUserId}>`) ||
-        (event.thread_ts && sessionStore.get(conversationKey))
-      )
-    ) {
+    // Checked by wantsSlackEvent; narrows the type for the rest of this turn.
+    if (!event.user) {
       return;
     }
 
@@ -216,6 +378,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         return;
       }
 
+      await onTurnStart?.();
       const result = await verifyAndPairSlackUser(owner, text, event.user);
       await reply(result.message);
 
@@ -265,6 +428,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         }
 
         case "new": {
+          await onTurnStart?.();
           await createAndBindSession(client, conversationKey);
           await reply("Started a new conversation.");
 
@@ -272,6 +436,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         }
 
         case "clear": {
+          await onTurnStart?.();
           await (await resolveSession(client, conversationKey)).clear();
           await reply("History cleared.");
 
@@ -328,6 +493,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       }
 
       const session = await resolveSession(client, sessionKey);
+      await onTurnStart?.();
       const signal = registerActiveStream(sessionKey);
       let pending = "";
       // Early posts run one after another so their messages stay in order.

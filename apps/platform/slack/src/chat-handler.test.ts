@@ -17,6 +17,7 @@ import {
   normalizeSlackText,
   replyToSlackEvent,
   type SlackApi,
+  wantsSlackEvent,
 } from "./chat-handler";
 import type { SlackMessageEvent } from "./socket";
 
@@ -428,6 +429,87 @@ test("text written before each tool call is posted in order", async () => {
       "done",
     ]);
   });
+});
+
+test("the turn is marked started before it reaches the agent", async () => {
+  await withTempHome("nakama-slack-start-", async (homeDir) => {
+    await saveTokens(OWNER);
+
+    const order: string[] = [];
+
+    const { handle } = createHarness(
+      homeDir,
+      undefined,
+      {},
+      {
+        stream: async () => {
+          order.push("turn");
+
+          return "done";
+        },
+      }
+    );
+
+    const inbound = message({ channel: "D1", channel_type: "im", text: "go" });
+
+    await handle(inbound, async () => {
+      order.push("started");
+    });
+    await handle({ ...inbound, text: "!help" }, async () => {
+      order.push("started for a command");
+    });
+
+    expect(order).toEqual(["started", "turn"]);
+
+    // A replay must not repeat these either.
+    for (const text of ["!new", "!clear"]) {
+      await handle({ ...inbound, text }, async () => {
+        order.push(text);
+      });
+    }
+
+    expect(order).toEqual(["started", "turn", "!new", "!clear"]);
+  });
+});
+
+test("using a pairing code counts as started", async () => {
+  await withTempHome("nakama-slack-pair-", async (homeDir) => {
+    await saveTokens();
+
+    const { handshakeCode } = await regenerateSlackHandshake(OWNER_AGENT);
+    const { handle } = createHarness(homeDir);
+    let started = 0;
+
+    await handle(
+      message({
+        channel: "D1",
+        channel_type: "im",
+        text: handshakeCode!.toLowerCase(),
+      }),
+      async () => {
+        started += 1;
+      }
+    );
+
+    expect(started).toBe(1);
+  });
+});
+
+test("only events for the bot are wanted", () => {
+  const record = { profileId: "default", sessionId: "s1", updatedAt: "" };
+  const store = { get: (key: string) => (key === "C1:9" ? record : undefined) };
+
+  const wants = (fields: Partial<SlackMessageEvent> & { text: string }) =>
+    wantsSlackEvent(message(fields), BOT, store);
+
+  expect(wants({ channel_type: "im", text: "hi" })).toBe(true);
+  expect(wants({ text: `<@${BOT}> hi` })).toBe(true);
+  expect(wants({ channel: "C1", text: "more", thread_ts: "9" })).toBe(true);
+  expect(wants({ text: "chatter" })).toBe(false);
+  expect(wants({ bot_id: "B1", channel_type: "im", text: "hi" })).toBe(false);
+  expect(
+    wants({ channel_type: "im", subtype: "message_changed", text: "hi" })
+  ).toBe(false);
 });
 
 describe("normalizeSlackText", () => {
