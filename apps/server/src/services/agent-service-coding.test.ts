@@ -97,6 +97,9 @@ describe("AgentService skill_manage injection", () => {
       expect(await hasSkillManage("chat", "telegram")).toBe(false);
       expect(await hasSkillManage("cognito", "web")).toBe(false);
       expect(await hasSkillManage("automation")).toBe(false);
+      expect(await hasSkillManage("plugin_workflow")).toBe(false);
+      // The ACP draft list is built before any channel exists.
+      expect(await hasSkillManage("acp_draft")).toBe(true);
     }
   );
 
@@ -155,6 +158,16 @@ describe("AgentService skill_manage injection", () => {
     expect(await names("automation")).not.toContain("create_automation");
 
     expect(await names("plugin_summarize")).toEqual([]);
+
+    expect(await names("branch")).toEqual(await names("chat"));
+
+    expect(await names("acp_draft")).toEqual(expect.arrayContaining(planning));
+    expect(await names("acp_draft")).toContain("propose_org_memory");
+
+    const workflow = await names("plugin_workflow");
+    expect(workflow).toContain("ask_user_question");
+    expect(workflow).not.toContain("todo_write");
+    expect(workflow).not.toContain("create_automation");
   });
 
   test("skips platform tool groups for a profile with no tools", async () => {

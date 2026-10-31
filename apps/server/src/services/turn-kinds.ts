@@ -35,7 +35,7 @@ interface TurnPolicy {
   channel?: Extract<AgentChannel, "automation" | "subagent">;
   /** Lines added after the profile's system prompt. */
   instructions: readonly string[];
-  /** Unattended turns act as a member, whoever set them up. */
+  /** Unattended one-shot turns act as a member, whoever set them up. */
   orgRole?: "member";
   /** Null for a turn that runs without tools. */
   tools:
@@ -67,7 +67,10 @@ const ALL_TOOLS = {
   todo: true,
 } as const;
 
-/** A turn nobody watches gets no planning, questions or nested agents. */
+/**
+ * A turn nobody watches gets no planning, questions or nested agents.
+ * Automations and plugin workflows still turn questions and sub_agent on.
+ */
 const DELEGATED_TOOLS = {
   automation: false,
   mcpDiscovery: false,
@@ -118,7 +121,6 @@ const TURN_POLICIES: Record<TurnKind, TurnPolicy> = {
   },
   plugin_workflow: {
     instructions: [],
-    orgRole: "member",
     tools: {
       ...DELEGATED_TOOLS,
       question: true,

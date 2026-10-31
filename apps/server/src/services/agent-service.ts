@@ -2148,6 +2148,9 @@ export class AgentService {
       userId: userId ?? undefined,
     });
 
+    // Before the harness: a replay that throws must not leave ACP tool access.
+    const initialHistory = await input.initialHistory?.(tools, toolContext);
+
     const acpKey = oneShotAcpKey(profile);
 
     const harness = this.createHarnessForProfile(
@@ -2162,7 +2165,7 @@ export class AgentService {
       channel: policy.channel,
       deliveryChannel: input.deliveryChannel,
       enableToolLoop: policy.tools !== null,
-      initialHistory: await input.initialHistory?.(tools, toolContext),
+      initialHistory,
       soul: soulActive,
       systemPrompt: withTurnInstructions(systemPrompt, policy.instructions),
       toolContext,
