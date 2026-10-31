@@ -188,7 +188,7 @@ function ChatExample() {
   return (
     <section
       aria-label="Example group"
-      className="flex @4xl:hidden w-full max-w-sm flex-col rounded-2xl border px-3 py-4"
+      className="flex @4xl:hidden w-full max-w-sm flex-col"
     >
       <div className="pb-3 text-center text-muted-foreground text-xs">
         Today 9:41 AM
