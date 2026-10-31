@@ -111,10 +111,23 @@ async function sendTurnEndedPush(
       ? terminal.reply
       : `The reply failed: ${terminal.error}`;
 
+  const title = summary.title
+    ? `${profile.name} · ${summary.title}`
+    : profile.name;
+
+  // The whole payload must fit one 4 KB push record, so every text is capped.
   await webPushService.notify(target.userId, {
-    body: text.replace(/\s+/g, " ").trim().slice(0, 180) || "Reply ready",
+    body: clip(text.replace(/\s+/g, " ").trim(), 180) || "Reply ready",
     tag: `session-${target.sessionId}`,
-    title: summary.title ? `${profile.name} · ${summary.title}` : profile.name,
-    url: `/chat/${encodeURIComponent(summary.profileId)}/${encodeURIComponent(target.sessionId)}`,
+    title: clip(title, 100),
+    // The org rides along: the device may have another org active by the tap.
+    url: `/chat/${encodeURIComponent(summary.profileId)}/${encodeURIComponent(target.sessionId)}?org=${encodeURIComponent(target.orgId)}`,
   });
+}
+
+/** Cuts on whole characters, so an emoji is never split in half. */
+function clip(value: string, max: number): string {
+  const chars = Array.from(value);
+
+  return chars.length > max ? `${chars.slice(0, max - 1).join("")}…` : value;
 }

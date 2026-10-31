@@ -84,6 +84,9 @@ describe("isPushServiceEndpoint", () => {
       isPushServiceEndpoint("https://evilpush.apple.com.example.org/")
     ).toBe(false);
     expect(isPushServiceEndpoint("https://notpush.apple.com/")).toBe(false);
+    expect(
+      isPushServiceEndpoint("https://script.google.com/macros/s/x/exec")
+    ).toBe(false);
     expect(isPushServiceEndpoint("not a url")).toBe(false);
   });
 });

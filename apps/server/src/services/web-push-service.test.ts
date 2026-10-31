@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebPushService } from "./web-push-service";
@@ -84,5 +92,32 @@ describe("WebPushService", () => {
     const first = await new WebPushService(path).publicKey();
 
     expect(await new WebPushService(path).publicKey()).toBe(first);
+  });
+
+  test("moves a broken state file aside and keeps working", async () => {
+    dir = await mkdtemp(join(tmpdir(), "web-push-"));
+    const path = join(dir, "web-push.json");
+    await writeFile(path, '{"subscriptions": {');
+    const warn = spyOn(console, "warn").mockImplementation(() => undefined);
+
+    try {
+      expect(await new WebPushService(path).publicKey()).toBeString();
+      expect(JSON.parse(await readFile(path, "utf8")).vapid).not.toBeNull();
+      expect(
+        (await readdir(dir)).some((name) => name.includes(".corrupt-"))
+      ).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test("does not replace the key pair when the file cannot be read", async () => {
+    dir = await mkdtemp(join(tmpdir(), "web-push-"));
+    // A directory where the file should be: reading it fails with EISDIR.
+    const path = join(dir, "web-push.json");
+    await mkdir(path);
+
+    await expect(new WebPushService(path).publicKey()).rejects.toThrow();
+    expect((await stat(path)).isDirectory()).toBe(true);
   });
 });

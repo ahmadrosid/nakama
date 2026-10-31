@@ -18,6 +18,7 @@ import {
   AuthContext,
   type AuthContextValue,
 } from "@/context/auth-context-shared";
+import { forgetThisDevicePush, webPushSupported } from "@/hooks/use-web-push";
 import { client } from "@/lib/client";
 import {
   canArchiveOrganization,
@@ -240,6 +241,15 @@ function useAuthSession() {
 
   const logout = useCallback(async () => {
     const revision = ++authRevision.current;
+
+    if (webPushSupported) {
+      // Before logout, while the server still knows who owns it: a signed-out
+      // device must stop showing this user's replies on its lock screen.
+      await navigator.serviceWorker
+        .getRegistration()
+        .then(forgetThisDevicePush)
+        .catch(() => undefined);
+    }
 
     try {
       await client.logout();

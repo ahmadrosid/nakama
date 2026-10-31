@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/use-auth";
 import { client, formatError } from "@/lib/client";
 
@@ -52,6 +53,69 @@ async function subscribeThisDevice(
     await subscription.unsubscribe();
     throw err;
   }
+}
+
+/** Drops this device's subscription on the server and in the browser. */
+export async function forgetThisDevicePush(
+  registration: ServiceWorkerRegistration | undefined
+): Promise<void> {
+  const existing = await registration?.pushManager.getSubscription();
+
+  if (!existing) {
+    return;
+  }
+
+  await client.deletePushSubscription(existing.endpoint).catch(() => {
+    // The server may already have dropped it; the browser side still goes.
+  });
+  await existing.unsubscribe();
+}
+
+/**
+ * A notification for a chat in another org carries `?org=`. The chat waits
+ * (true) until that org is active, or every lookup in it answers 404.
+ */
+export function useOrgFromNotification(): boolean {
+  const { activeOrg, orgs, switchOrg } = useAuth();
+  const [params, setParams] = useSearchParams();
+  const wanted = params.get("org");
+  const [failed, setFailed] = useState<string | null>(null);
+  const startedRef = useRef<string | null>(null);
+
+  const switching =
+    wanted !== null &&
+    wanted !== failed &&
+    wanted !== activeOrg?.id &&
+    orgs.some((org) => org.id === wanted);
+
+  useEffect(() => {
+    if (wanted === null) {
+      return;
+    }
+
+    if (!switching) {
+      setParams(
+        (current) => {
+          current.delete("org");
+
+          return current;
+        },
+        { replace: true }
+      );
+
+      return;
+    }
+
+    // Once per org: switchOrg changes identity while the switch settles.
+    if (startedRef.current === wanted) {
+      return;
+    }
+
+    startedRef.current = wanted;
+    switchOrg(wanted).catch(() => setFailed(wanted));
+  }, [setParams, switchOrg, switching, wanted]);
+
+  return switching;
 }
 
 /** This device's "notify me when a reply is ready" switch. */
@@ -121,14 +185,7 @@ export function useWebPush() {
       }
 
       const registration = await navigator.serviceWorker.ready;
-      const existing = await registration.pushManager.getSubscription();
-
-      if (existing) {
-        await client.deletePushSubscription(existing.endpoint).catch(() => {
-          // The server may already have dropped it; the browser side still goes.
-        });
-        await existing.unsubscribe();
-      }
+      await forgetThisDevicePush(registration);
 
       if (!next) {
         setEnabled(false);

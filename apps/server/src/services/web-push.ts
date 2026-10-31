@@ -45,13 +45,18 @@ export function isPushServiceEndpoint(endpoint: string): boolean {
     return false;
   }
 
-  return (
-    url.protocol === "https:" &&
-    PUSH_SERVICE_HOSTS.some(
-      (host) => url.hostname === host || url.hostname.endsWith(`.${host}`)
-    )
-  );
+  const onHost = (host: string) =>
+    url.hostname === host || url.hostname.endsWith(`.${host}`);
+
+  if (url.protocol !== "https:" || !PUSH_SERVICE_HOSTS.some(onHost)) {
+    return false;
+  }
+
+  // Any google.com site is far wider than FCM (Apps Script runs anyone's code).
+  return !onHost("google.com") || url.pathname.startsWith(GOOGLE_FCM_PATH);
 }
+
+const GOOGLE_FCM_PATH = "/fcm/send/";
 
 const toBase64Url = (bytes: Uint8Array): string =>
   Buffer.from(bytes).toString("base64url");

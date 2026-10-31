@@ -26,7 +26,7 @@ import { useAppContext } from "@/context/use-app-context";
 import { useAgentGroupQuery } from "@/hooks/use-agent-groups";
 import { useOrgPlugins } from "@/hooks/use-plugins";
 import { useChatSessionSummary } from "@/hooks/use-resource-mutations";
-import { usePushPresence } from "@/hooks/use-web-push";
+import { useOrgFromNotification, usePushPresence } from "@/hooks/use-web-push";
 import {
   enabledPluginNavEntries,
   findNavItem,
@@ -48,6 +48,7 @@ const BtwChatHost = lazy(() =>
 export function Layout() {
   const shell = useAppShell();
   usePushPresence();
+  const switchingOrg = useOrgFromNotification();
   const btwOpen = useBtwChatStore((store) => store.chat !== null);
 
   return (
@@ -78,7 +79,7 @@ export function Layout() {
             <AppShellError error={shell.error} />
             <main className={appShellMainClassName(shell.page, shell.pathname)}>
               <RouteBoundary resetKey={shell.pathname}>
-                <Outlet />
+                {switchingOrg ? null : <Outlet />}
               </RouteBoundary>
             </main>
           </div>

@@ -53,10 +53,6 @@ export function WebPushPrompt() {
           <p className="font-medium text-foreground text-sm">
             Get notified when a reply is ready?
           </p>
-          <p className="mt-0.5 text-muted-foreground text-xs leading-snug">
-            When an agent finishes answering while you are away, this device
-            shows a notification. You can change it later from the bell.
-          </p>
           {error ? (
             <p className="mt-1 text-destructive text-xs leading-snug">
               {error}

@@ -109,8 +109,28 @@ describe("pushTurnEnded", () => {
         body: "Here is the plan.",
         tag: "session-s1",
         title: "Writer · Launch plan",
-        url: "/chat/profile_push/s1",
+        url: "/chat/profile_push/s1?org=org_push",
       });
+    } finally {
+      notify.mockRestore();
+    }
+  });
+
+  test("keeps a long title inside the push size limit", async () => {
+    const notify = spyOn(webPushService, "notify").mockResolvedValue();
+
+    try {
+      await pushTurnEnded(
+        agentWith({ ...summary, title: "🚀".repeat(2000) }),
+        target,
+        { reply: "ok", type: "done" }
+      );
+
+      const message = notify.mock.calls[0]?.[1];
+      expect(Array.from(message?.title ?? "")).toHaveLength(100);
+      expect(
+        new TextEncoder().encode(JSON.stringify(message)).length
+      ).toBeLessThan(4000);
     } finally {
       notify.mockRestore();
     }

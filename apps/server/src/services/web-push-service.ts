@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { getUserConfigDir, resolveWebPublicUrl } from "@nakama/core";
 import {
@@ -10,6 +10,9 @@ import {
 
 /** A page that is on screen reports in at least this often. */
 const PRESENCE_TTL_MS = 75_000;
+
+/** Open Nakama pages one user can have; more only means fewer pushes held back. */
+const MAX_PRESENCE_CLIENTS = 32;
 
 export interface WebPushMessage {
   body: string;
@@ -42,13 +45,54 @@ export class WebPushService {
   }
 
   private load(): Promise<WebPushState> {
-    this.state ??= readFile(this.filePath(), "utf8").then(
-      // SAFETY: only this service writes the file, always from a WebPushState.
-      (raw) => JSON.parse(raw) as WebPushState,
-      () => ({ subscriptions: {}, vapid: null })
-    );
+    if (this.state) {
+      return this.state;
+    }
 
-    return this.state;
+    const pending = this.readState();
+    this.state = pending;
+
+    // Not cached: a read that failed for a passing reason is tried again.
+    pending.catch(() => {
+      if (this.state === pending) {
+        this.state = null;
+      }
+    });
+
+    return pending;
+  }
+
+  private async readState(): Promise<WebPushState> {
+    const path = this.filePath();
+    let raw: string;
+
+    try {
+      raw = await readFile(path, "utf8");
+    } catch (error) {
+      // Only a missing file means "nothing yet". Any other read error must not
+      // lead to fresh VAPID keys overwriting every saved subscription.
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "ENOENT"
+      ) {
+        return { subscriptions: {}, vapid: null };
+      }
+
+      throw error;
+    }
+
+    try {
+      // SAFETY: only this service writes the file, always from a WebPushState.
+      return JSON.parse(raw) as WebPushState;
+    } catch {
+      // Unreadable, so its key and subscriptions are lost anyway. Keep it for
+      // the operator and start again, instead of failing every push for good.
+      await rename(path, `${path}.corrupt-${Date.now()}`);
+      console.warn(`${path} was not valid JSON; moved it aside.`);
+
+      return { subscriptions: {}, vapid: null };
+    }
   }
 
   private async save(state: WebPushState): Promise<void> {
@@ -56,7 +100,10 @@ export class WebPushService {
 
     const write = this.saving.then(async () => {
       await mkdir(dirname(path), { recursive: true });
-      await writeFile(path, JSON.stringify(state, null, 2), { mode: 0o600 });
+      // Write then rename, so a crash mid-write cannot leave half a file.
+      const temp = `${path}.${process.pid}.tmp`;
+      await writeFile(temp, JSON.stringify(state, null, 2), { mode: 0o600 });
+      await rename(temp, path);
     });
 
     // One failed write must not fail every later one.
@@ -115,9 +162,20 @@ export class WebPushService {
 
   setPresence(userId: string, clientId: string, visible: boolean): void {
     const clients = this.presence.get(userId) ?? new Map<string, number>();
+    const now = Date.now();
 
-    if (visible) {
-      clients.set(clientId, Date.now() + PRESENCE_TTL_MS);
+    // Pages that closed without saying so would otherwise stay here for good.
+    for (const [id, expiresAt] of clients) {
+      if (expiresAt <= now) {
+        clients.delete(id);
+      }
+    }
+
+    if (
+      visible &&
+      (clients.has(clientId) || clients.size < MAX_PRESENCE_CLIENTS)
+    ) {
+      clients.set(clientId, now + PRESENCE_TTL_MS);
     } else {
       clients.delete(clientId);
     }

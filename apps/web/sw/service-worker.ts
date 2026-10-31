@@ -87,7 +87,21 @@ self.addEventListener("notificationclick", (event) => {
 });
 
 async function openFromNotification(url: string): Promise<void> {
-  const [open] = await self.clients.matchAll({ type: "window" });
+  const windows = await self.clients.matchAll({ type: "window" });
+  const { pathname } = new URL(url);
+
+  // Already on that chat: a reload would only throw away what is on screen.
+  const showing = windows.find(
+    (client) => new URL(client.url).pathname === pathname
+  );
+
+  if (showing) {
+    await showing.focus();
+
+    return;
+  }
+
+  const [open] = windows;
 
   if (open) {
     await open.focus();
