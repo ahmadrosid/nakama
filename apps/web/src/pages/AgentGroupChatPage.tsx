@@ -245,7 +245,7 @@ function GroupHeader({
         variant="ghost"
       >
         <MessageAdd01Icon aria-hidden />
-        <span className="max-sm:sr-only">New chat</span>
+        <span className="@max-md:sr-only max-sm:sr-only">New chat</span>
       </Button>
       <GroupActionsMenu onEdit={() => setEditing(true)} />
     </>
@@ -256,10 +256,10 @@ function GroupHeader({
 
   return (
     <>
-      <header className="-mx-6 flex shrink-0 items-center gap-2 border-border border-b px-4 py-3 max-sm:hidden">
+      <header className="@container -mx-6 flex shrink-0 items-center gap-2 border-border border-b px-4 py-3 max-sm:hidden">
         <div className="flex h-7 min-w-0 flex-1 items-center gap-2 px-2.5">
           <h1 className="truncate font-medium text-sm">{group.name}</h1>
-          <div className="flex shrink-0 -space-x-1.5">
+          <div className="flex @max-md:hidden shrink-0 -space-x-1.5">
             {members.slice(0, 4).map((member) => (
               <ProfileAvatar
                 className="outline-none"
@@ -269,7 +269,7 @@ function GroupHeader({
               />
             ))}
           </div>
-          <span className="shrink-0 text-muted-foreground text-xs">
+          <span className="@max-md:hidden shrink-0 text-muted-foreground text-xs">
             {group.memberIds.length} agents
           </span>
         </div>
