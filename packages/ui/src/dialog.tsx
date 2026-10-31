@@ -82,6 +82,43 @@ function DialogContent({
   );
 }
 
+// A full-height panel that slides in from the right edge.
+function DialogSheetContent({
+  className,
+  children,
+  closeLabel = "Close",
+  ...props
+}: DialogPrimitive.Popup.Props & { closeLabel?: string }) {
+  return (
+    <DialogPortal>
+      <DialogOverlay className="transition-opacity duration-200 ease-out data-closed:animate-none data-open:animate-none data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none" />
+      <DialogPrimitive.Popup
+        className={cn(
+          "fixed inset-y-0 right-0 z-50 flex w-full max-w-2xl flex-col border-border border-l bg-background text-foreground text-sm shadow-xl outline-none transition-transform duration-200 ease-out data-[ending-style]:translate-x-full data-[starting-style]:translate-x-full motion-reduce:transition-none",
+          className
+        )}
+        data-slot="dialog-sheet-content"
+        {...props}
+      >
+        {children}
+        <DialogPrimitive.Close
+          data-slot="dialog-close"
+          render={
+            <Button
+              aria-label={closeLabel}
+              className="absolute top-1 right-2 min-h-10 min-w-10"
+              size="icon"
+              variant="ghost"
+            />
+          }
+        >
+          <Cancel01Icon aria-hidden className="size-4" />
+        </DialogPrimitive.Close>
+      </DialogPrimitive.Popup>
+    </DialogPortal>
+  );
+}
+
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -236,6 +273,7 @@ export {
   DialogHeader,
   DialogOverlay,
   DialogPortal,
+  DialogSheetContent,
   DialogTitle,
   DialogTrigger,
 };

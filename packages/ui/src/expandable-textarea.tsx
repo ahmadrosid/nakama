@@ -4,14 +4,14 @@ import { useState } from "react";
 import { Button } from "./button";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogSheetContent,
   DialogTitle,
 } from "./dialog";
 import { Spinner } from "./spinner";
-import { Textarea } from "./textarea";
+import { EditorStatus, EditorTextarea } from "./textarea";
 import { cn } from "./utils";
 
 type ExpandableTextareaProps = {
@@ -23,6 +23,8 @@ type ExpandableTextareaProps = {
   disabled?: boolean;
   className?: string;
   containerClassName?: string;
+  labelClassName?: string;
+  editButtonClassName?: string;
   previewClassName?: string;
   dialogTitle?: string;
   dialogDescription?: string;
@@ -39,6 +41,8 @@ function ExpandableTextarea({
   disabled = false,
   className,
   containerClassName,
+  labelClassName,
+  editButtonClassName,
   previewClassName,
   dialogTitle,
   dialogDescription,
@@ -76,11 +80,16 @@ function ExpandableTextarea({
     <>
       <div className={cn("flex flex-col gap-1.5", containerClassName)}>
         <div className="flex items-center justify-between gap-2">
-          <span className="text-muted-foreground text-xs">{label}</span>
+          <span className={cn("text-muted-foreground text-xs", labelClassName)}>
+            {label}
+          </span>
           <Button
             aria-controls={htmlFor}
             aria-expanded={open}
-            className="relative h-7 gap-1.5 py-0 pr-2 pl-1.5 text-muted-foreground text-xs after:absolute after:-inset-x-2 after:-inset-y-1"
+            className={cn(
+              "relative h-7 gap-1.5 py-0 pr-2 pl-1.5 text-muted-foreground text-xs after:absolute after:-inset-x-2 after:-inset-y-1",
+              editButtonClassName
+            )}
             disabled={disabled}
             onClick={() => setOpen(true)}
             size="sm"
@@ -112,35 +121,40 @@ function ExpandableTextarea({
       </div>
 
       <Dialog onOpenChange={setOpen} open={open}>
-        <DialogContent className="flex max-h-[min(92dvh,40rem)] flex-col gap-4 p-6 sm:max-w-3xl">
-          <DialogHeader className="gap-2">
-            <DialogTitle>{dialogTitle ?? label}</DialogTitle>
+        <DialogSheetContent>
+          <DialogHeader className="h-12 shrink-0 flex-row items-center gap-2.5 border-border border-b pr-14 pl-5">
+            <DialogTitle className="shrink-0 text-sm">
+              {dialogTitle ?? label}
+            </DialogTitle>
             {dialogDescription ? (
-              <DialogDescription>{dialogDescription}</DialogDescription>
+              <DialogDescription className="min-w-0 truncate text-xs">
+                {dialogDescription}
+              </DialogDescription>
             ) : null}
           </DialogHeader>
-          <Textarea
+          <EditorTextarea
+            aria-label={label}
             autoFocus
-            className={cn(
-              "min-h-[min(60dvh,28rem)] flex-1 font-mono text-sm leading-relaxed",
-              className
-            )}
+            className={className}
             disabled={disabled}
             id={`${htmlFor}-editor`}
             onChange={onChange}
+            onSave={() => void handleSave()}
             placeholder={placeholder}
             value={value}
           />
-          <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 pt-2 pb-2 sm:justify-end">
+          <DialogFooter className="m-0 shrink-0 items-center gap-2 rounded-none border-border border-t bg-transparent px-5 py-2.5 sm:flex-row sm:justify-between">
+            <EditorStatus value={value} />
             <Button
               disabled={disabled || saving}
               onClick={() => void handleSave()}
+              title="Save (⌘S)"
               type="button"
             >
               {saving ? <Spinner className="size-4" /> : "Save"}
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </DialogSheetContent>
       </Dialog>
     </>
   );

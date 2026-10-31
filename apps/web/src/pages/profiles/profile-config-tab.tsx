@@ -18,7 +18,6 @@ import {
 import { toast } from "@nakama/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowDown01Icon,
   ArrowRight01Icon,
   Building06Icon,
   CloudDownloadIcon,
@@ -54,7 +53,7 @@ import {
   ProfileConfigIdentitySection,
   ProfileSystemPromptCard,
 } from "@/pages/profiles/profile-config-identity-section";
-import { ProfileHistoryTab } from "@/pages/profiles/profile-history-tab";
+import { ProfileHistorySheet } from "@/pages/profiles/profile-history-tab";
 import { ProfileMcpSection } from "@/pages/profiles/profile-mcp-section";
 import { ProfileSkillsSection } from "@/pages/profiles/profile-skills-section";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
@@ -75,27 +74,36 @@ function ProfilePromptPanel({
 }) {
   const { user } = useAuth();
   const isOwner = isProfileOwner(state.detail, user?.id);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const showFiles = canCreateProfile || isOwner;
 
   return (
     <>
       <ProfileSystemPromptCard state={state} />
       {canPack || isOwner ? (
-        <section className="space-y-4" id="profile-prompt">
-          {canCreateProfile || isOwner ? (
-            <SoulTab profileId={profileId} />
-          ) : null}
-          <details className="group/history">
-            <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 text-muted-foreground/55 text-sm hover:text-muted-foreground [&::-webkit-details-marker]:hidden">
-              <span>Change histories</span>
-              <ArrowDown01Icon
-                aria-hidden="true"
-                className="size-3.5 -rotate-90 transition-transform group-open/history:rotate-0"
-              />
-            </summary>
-            <div className="pt-3">
-              <ProfileHistoryTab profileId={profileId} />
-            </div>
-          </details>
+        <section className="space-y-3" id="profile-prompt">
+          <div className="flex items-center justify-between gap-3">
+            {showFiles ? (
+              <h2 className="font-medium text-foreground/80 text-sm">
+                Agent prompt
+              </h2>
+            ) : null}
+            <button
+              aria-haspopup="dialog"
+              className="ml-auto flex h-8 items-center gap-1 rounded-md font-medium text-muted-foreground text-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => setHistoryOpen(true)}
+              type="button"
+            >
+              Change history
+              <ArrowRight01Icon aria-hidden="true" className="size-3.5" />
+            </button>
+          </div>
+          {showFiles ? <SoulTab profileId={profileId} /> : null}
+          <ProfileHistorySheet
+            onOpenChange={setHistoryOpen}
+            open={historyOpen}
+            profileId={profileId}
+          />
         </section>
       ) : null}
     </>
@@ -543,7 +551,7 @@ function ProfileFooterActions({
 
         return (
           <button
-            className={`flex h-10 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-border px-3 text-sm outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 ${destructive || fullRow.has(action) ? "col-span-2" : ""} ${destructive ? "text-destructive" : "text-muted-foreground hover:text-foreground"}`}
+            className={`flex h-11 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 font-medium text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 ${destructive || fullRow.has(action) ? "col-span-2" : ""} ${destructive ? "bg-destructive/10 text-destructive hover:bg-destructive/15" : "bg-muted text-foreground/80 hover:bg-muted/70 hover:text-foreground"}`}
             disabled={disabled}
             key={label}
             onClick={onClick}

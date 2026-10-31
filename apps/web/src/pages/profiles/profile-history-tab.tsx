@@ -1,13 +1,8 @@
 import type { ProfileChangeEvent } from "@nakama/core";
 import { Button } from "@nakama/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@nakama/ui/dialog";
+import { Dialog, DialogSheetContent, DialogTitle } from "@nakama/ui/dialog";
 import { useQuery } from "@tanstack/react-query";
+import { ArrowLeft01Icon } from "hugeicons-react";
 import { useState } from "react";
 import { buildFileDiffRows, FileDiff } from "@/components/file-diff";
 import {
@@ -130,19 +125,13 @@ function AssignmentChangeSummary({ event }: { event: ProfileChangeEvent }) {
   );
 }
 
-function HistoryChangeDialog({
+function HistoryChangeDetail({
   event,
-  onOpenChange,
-  open,
+  onBack,
 }: {
-  event: ProfileChangeEvent | null;
-  onOpenChange: (open: boolean) => void;
-  open: boolean;
+  event: ProfileChangeEvent;
+  onBack: () => void;
 }) {
-  if (!event) {
-    return null;
-  }
-
   const file = formatFieldLabel(event.field);
   const actor = formatActorLabel(event);
   const rows = buildChangeRows(event);
@@ -150,15 +139,25 @@ function HistoryChangeDialog({
   const removed = rows.filter((row) => row.type === "del").length;
 
   return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="flex max-h-[min(90dvh,85vh)] w-[calc(100%-1.5rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
-        <DialogHeader className="shrink-0 gap-2 pt-4 pr-12 pb-2 pl-4 sm:pt-5 sm:pl-5">
+    <div className="flex min-h-full flex-col">
+      <div className="flex items-start gap-2 border-border border-b py-3 pr-6 pl-3">
+        <Button
+          aria-label="Back to change history"
+          className="min-h-10 min-w-10 shrink-0"
+          onClick={onBack}
+          size="icon"
+          type="button"
+          variant="ghost"
+        >
+          <ArrowLeft01Icon aria-hidden className="size-5" />
+        </Button>
+        <div className="min-w-0 flex-1 pt-1.5">
           <div className="flex items-baseline justify-between gap-3">
-            <DialogTitle className="text-balance">
+            <h3 className="truncate font-medium text-sm">
               {file}
               {event.assignmentChanges ? " updated" : ""}
-            </DialogTitle>
-            {!event.assignmentChanges && (
+            </h3>
+            {event.assignmentChanges ? null : (
               <p className="shrink-0 font-mono text-xs tabular-nums">
                 <span className="text-emerald-600 dark:text-emerald-400">
                   +{added}
@@ -169,7 +168,7 @@ function HistoryChangeDialog({
               </p>
             )}
           </div>
-          <DialogDescription className="text-pretty">
+          <p className="mt-0.5 text-pretty text-muted-foreground text-xs">
             <time
               dateTime={event.createdAt}
               title={formatSessionTimestamp(event.createdAt)}
@@ -179,26 +178,18 @@ function HistoryChangeDialog({
             {" · "}
             {formatSourceLabel(event.source)}
             {actor ? <> · {actor}</> : null}
-          </DialogDescription>
-        </DialogHeader>
-        {event.assignmentChanges ? (
-          <div className="min-h-0 overflow-y-auto border-border border-t">
-            <AssignmentChangeSummary event={event} />
-            <FileDiff className="border-border border-t" rows={rows} wrap />
-          </div>
-        ) : (
-          <FileDiff
-            className="min-h-0 flex-1 border-border border-t"
-            rows={rows}
-            wrap
-          />
-        )}
-      </DialogContent>
-    </Dialog>
+          </p>
+        </div>
+      </div>
+      {event.assignmentChanges ? (
+        <AssignmentChangeSummary event={event} />
+      ) : null}
+      <FileDiff rows={rows} wrap />
+    </div>
   );
 }
 
-export function ProfileHistoryTab({ profileId }: { profileId: string }) {
+function ProfileHistoryList({ profileId }: { profileId: string }) {
   const [openEventId, setOpenEventId] = useState<string | null>(null);
 
   const { data, error, isLoading, refetch } = useQuery({
@@ -208,7 +199,7 @@ export function ProfileHistoryTab({ profileId }: { profileId: string }) {
 
   if (isLoading) {
     return (
-      <p className="text-pretty text-muted-foreground text-sm">
+      <p className="text-pretty px-5 py-4 text-muted-foreground text-sm">
         Loading history…
       </p>
     );
@@ -216,7 +207,7 @@ export function ProfileHistoryTab({ profileId }: { profileId: string }) {
 
   if (error) {
     return (
-      <p className="text-pretty text-destructive text-sm">
+      <p className="text-pretty px-5 py-4 text-destructive text-sm">
         {formatError(error)}{" "}
         <Button
           className="relative h-auto p-0 after:absolute after:top-1/2 after:left-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2"
@@ -234,7 +225,7 @@ export function ProfileHistoryTab({ profileId }: { profileId: string }) {
 
   if (events.length === 0) {
     return (
-      <p className="text-pretty text-muted-foreground text-sm">
+      <p className="text-pretty px-5 py-4 text-muted-foreground text-sm">
         No profile changes yet.
       </p>
     );
@@ -242,74 +233,93 @@ export function ProfileHistoryTab({ profileId }: { profileId: string }) {
 
   const openEvent = events.find((event) => event.id === openEventId) ?? null;
 
-  return (
-    <div className="space-y-3">
-      <ul
-        aria-label="Profile change history"
-        className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card"
-      >
-        {events.map((event) => {
-          const actor = formatActorLabel(event);
-          const rows = event.assignmentChanges ? [] : buildChangeRows(event);
-
-          const added =
-            event.assignmentChanges?.added.length ??
-            rows.filter((row) => row.type === "add").length;
-
-          const removed =
-            event.assignmentChanges?.removed.length ??
-            rows.filter((row) => row.type === "del").length;
-
-          return (
-            <li key={event.id}>
-              <button
-                aria-haspopup="dialog"
-                className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-[background-color] duration-150 ease-out hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset"
-                onClick={() => setOpenEventId(event.id)}
-                type="button"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-sm">
-                    {formatFieldLabel(event.field)}
-                    {event.assignmentChanges ? " updated" : ""}
-                  </p>
-                  <p className="mt-0.5 text-pretty text-muted-foreground text-xs">
-                    {formatSourceLabel(event.source)}
-                    {" · "}
-                    <time
-                      className="tabular-nums"
-                      dateTime={event.createdAt}
-                      title={formatSessionTimestamp(event.createdAt)}
-                    >
-                      {formatSessionRelativeTime(event.createdAt)}
-                    </time>
-                    {actor ? <> · {actor}</> : null}
-                  </p>
-                </div>
-                <p className="shrink-0 font-mono text-xs tabular-nums">
-                  <span className="text-emerald-600 dark:text-emerald-400">
-                    {event.assignmentChanges ? `${added} added` : `+${added}`}
-                  </span>
-                  <span className="ml-1.5 text-red-600 dark:text-red-400">
-                    {event.assignmentChanges
-                      ? `${removed} removed`
-                      : `-${removed}`}
-                  </span>
-                </p>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-      <HistoryChangeDialog
+  if (openEvent) {
+    return (
+      <HistoryChangeDetail
         event={openEvent}
-        onOpenChange={(open) => {
-          if (!open) {
-            setOpenEventId(null);
-          }
-        }}
-        open={openEvent !== null}
+        onBack={() => setOpenEventId(null)}
       />
-    </div>
+    );
+  }
+
+  return (
+    <ul aria-label="Profile change history" className="divide-y divide-border">
+      {events.map((event) => {
+        const actor = formatActorLabel(event);
+        const rows = event.assignmentChanges ? [] : buildChangeRows(event);
+
+        const added =
+          event.assignmentChanges?.added.length ??
+          rows.filter((row) => row.type === "add").length;
+
+        const removed =
+          event.assignmentChanges?.removed.length ??
+          rows.filter((row) => row.type === "del").length;
+
+        return (
+          <li key={event.id}>
+            <button
+              className="flex w-full cursor-pointer items-center gap-3 px-6 py-3.5 text-left transition-[background-color] duration-150 ease-out hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset"
+              onClick={() => setOpenEventId(event.id)}
+              type="button"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium text-sm">
+                  {formatFieldLabel(event.field)}
+                  {event.assignmentChanges ? " updated" : ""}
+                </p>
+                <p className="mt-0.5 text-pretty text-muted-foreground text-xs">
+                  {formatSourceLabel(event.source)}
+                  {" · "}
+                  <time
+                    className="tabular-nums"
+                    dateTime={event.createdAt}
+                    title={formatSessionTimestamp(event.createdAt)}
+                  >
+                    {formatSessionRelativeTime(event.createdAt)}
+                  </time>
+                  {actor ? <> · {actor}</> : null}
+                </p>
+              </div>
+              <p className="shrink-0 font-mono text-xs tabular-nums">
+                <span className="text-emerald-600 dark:text-emerald-400">
+                  {event.assignmentChanges ? `${added} added` : `+${added}`}
+                </span>
+                <span className="ml-1.5 text-red-600 dark:text-red-400">
+                  {event.assignmentChanges
+                    ? `${removed} removed`
+                    : `-${removed}`}
+                </span>
+              </p>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+export function ProfileHistorySheet({
+  onOpenChange,
+  open,
+  profileId,
+}: {
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+  profileId: string;
+}) {
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogSheetContent closeLabel="Close change history">
+        <header className="flex h-12 shrink-0 items-center border-border border-b pr-14 pl-5">
+          <DialogTitle className="font-medium text-sm">
+            Change history
+          </DialogTitle>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          {open ? <ProfileHistoryList profileId={profileId} /> : null}
+        </div>
+      </DialogSheetContent>
+    </Dialog>
   );
 }

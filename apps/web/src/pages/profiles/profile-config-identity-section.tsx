@@ -1,5 +1,4 @@
 import type { AcpAgentPresetSummary } from "@nakama/core/contract";
-import { Card, CardContent } from "@nakama/ui/card";
 import {
   Command,
   CommandEmpty,
@@ -184,19 +183,21 @@ export function ProfileSystemPromptCard({ state }: { state: IdentityState }) {
   }
 
   return (
-    <Card className="w-full shadow-none">
-      <CardContent className="px-4 py-3">
-        <ExpandableTextarea
-          dialogDescription="Instructions sent to the model at the start of each chat."
-          disabled={busy || !canManageProfile}
-          htmlFor="profile-prompt"
-          label="System prompt"
-          onChange={(event) => handleEditPromptChange(event.target.value)}
-          onSave={flushSave}
-          value={editPrompt}
-        />
-      </CardContent>
-    </Card>
+    <div className="w-full rounded-2xl bg-muted/60 px-5 pt-4 pb-5">
+      <ExpandableTextarea
+        containerClassName="gap-3"
+        dialogDescription="Instructions sent to the model at the start of each chat."
+        disabled={busy || !canManageProfile}
+        editButtonClassName="h-8 rounded-full bg-background px-3 font-medium text-foreground/80 shadow-xs after:hidden hover:bg-background hover:text-foreground"
+        htmlFor="profile-prompt"
+        label="System prompt"
+        labelClassName="font-medium text-foreground/80 text-sm"
+        onChange={(event) => handleEditPromptChange(event.target.value)}
+        onSave={flushSave}
+        previewClassName="border-0 p-0 hover:bg-transparent dark:bg-transparent"
+        value={editPrompt}
+      />
+    </div>
   );
 }
 
@@ -266,7 +267,7 @@ function ProfileAgentPicker({
       };
 
   return (
-    <div className="flex min-w-0 max-w-full items-center text-muted-foreground text-sm">
+    <div className="flex min-w-0 max-w-full items-center gap-2 text-muted-foreground text-sm">
       <ProfileChatAgentField
         disabled={disabled}
         hasCustomAgent={hasAcpAgent && !acpAgentId}
@@ -274,8 +275,6 @@ function ProfileAgentPicker({
         presets={state.acpAgentPresets}
         selectedPresetId={acpAgentId}
       />
-
-      <span aria-hidden>·</span>
       <ProfileModelField disabled={disabled || acpIsSaving} {...model} />
       {hasAcpAgent && acpEffortOptions?.length ? (
         <Select
@@ -328,7 +327,7 @@ function ProfileModelField({
     <Popover onOpenChange={setModelPickerOpen} open={modelPickerOpen}>
       <PopoverTrigger
         aria-label="Select model"
-        className="flex h-8 min-w-0 cursor-pointer items-center gap-1 rounded-md bg-transparent px-2 text-sm outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex h-8 min-w-0 cursor-pointer items-center gap-1.5 rounded-full bg-muted px-3 font-medium text-foreground/80 text-xs outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
         disabled={disabled || providerModelGroups.length === 0}
         id="profile-model"
       >
@@ -423,7 +422,7 @@ function ProfileChatAgentField({
     >
       <SelectTrigger
         aria-label="Chat agent"
-        className="h-8 w-auto gap-1 rounded-md border-0 bg-transparent px-2 text-muted-foreground shadow-none hover:text-foreground dark:bg-transparent"
+        className="h-8 w-auto gap-1.5 rounded-full border-0 bg-muted px-3 font-medium text-foreground/80 text-xs shadow-none hover:text-foreground dark:bg-muted"
         id="profile-chat-agent"
       >
         <SelectValue placeholder="Nakama">

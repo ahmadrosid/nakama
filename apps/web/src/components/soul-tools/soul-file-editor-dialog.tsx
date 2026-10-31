@@ -2,14 +2,14 @@ import type { SoulFileStatus, SoulStackFiles } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogSheetContent,
   DialogTitle,
 } from "@nakama/ui/dialog";
 import { Spinner } from "@nakama/ui/spinner";
-import { Textarea } from "@nakama/ui/textarea";
+import { EditorStatus, EditorTextarea } from "@nakama/ui/textarea";
 import { File01Icon, Folder01Icon } from "hugeicons-react";
 
 function SoulFileEditorHeader({
@@ -27,8 +27,8 @@ function SoulFileEditorHeader({
   isWritable: boolean;
 }) {
   return (
-    <DialogHeader className="gap-2 pr-8 sm:gap-3">
-      <DialogTitle className="flex items-center gap-2 font-mono text-base">
+    <DialogHeader className="h-12 shrink-0 flex-row items-center gap-2.5 border-border border-b pr-14 pl-5">
+      <DialogTitle className="flex shrink-0 items-center gap-2 font-mono text-sm">
         {openFileMeta?.writable ? (
           <File01Icon
             aria-hidden
@@ -42,7 +42,7 @@ function SoulFileEditorHeader({
         )}
         {openFileMeta?.label}
       </DialogTitle>
-      <DialogDescription className="leading-relaxed">
+      <DialogDescription className="min-w-0 truncate text-xs">
         {openFileMeta?.description}
         {isWritable ? null : " Read-only in the UI."}
       </DialogDescription>
@@ -61,6 +61,7 @@ function SoulFileEditorBody({
   isDirty,
   openFileMeta,
   onEditContentChange,
+  onSave,
 }: {
   dialogError: string | null;
   dialogLoading: boolean;
@@ -77,16 +78,24 @@ function SoulFileEditorBody({
     | null
     | undefined;
   onEditContentChange: (value: string) => void;
+  onSave: () => void;
 }) {
   const showMissingHint = Boolean(
     isWritable && openFile && status && !status.files[openFile] && !editContent
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col">
       {dialogError ? (
-        <p className="shrink-0 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
+        <p className="shrink-0 border-destructive/30 border-b bg-destructive/10 px-6 py-3 text-destructive text-sm">
           {dialogError}
+        </p>
+      ) : null}
+
+      {showMissingHint && !dialogLoading ? (
+        <p className="shrink-0 border-border border-b bg-muted/40 px-6 py-3 text-muted-foreground text-sm">
+          This file is missing. Start writing — it will be created when you
+          save.
         </p>
       ) : null}
 
@@ -96,68 +105,60 @@ function SoulFileEditorBody({
           Loading file content…
         </div>
       ) : (
-        <>
-          {showMissingHint ? (
-            <p className="shrink-0 text-muted-foreground text-sm leading-relaxed">
-              This file is missing. Start writing — it will be created when you
-              save.
-            </p>
-          ) : null}
-
-          <Textarea
-            className="field-sizing-fixed min-h-[min(52dvh,22rem)] flex-1 resize-none overflow-y-auto font-mono text-xs leading-relaxed sm:min-h-[min(58dvh,26rem)]"
-            disabled={busy || dialogLoading}
-            onChange={(event) => onEditContentChange(event.target.value)}
-            placeholder={
-              isWritable
-                ? `Write ${openFileMeta?.label ?? "file"} content…`
-                : "File content is read-only."
+        <EditorTextarea
+          aria-label={openFileMeta?.label ?? "File content"}
+          autoFocus={isWritable}
+          disabled={busy}
+          onChange={(event) => onEditContentChange(event.target.value)}
+          onSave={() => {
+            if (isWritable && isDirty && !busy) {
+              onSave();
             }
-            readOnly={!isWritable || dialogLoading}
-            value={editContent}
-          />
-
-          {isWritable && isDirty ? (
-            <p className="shrink-0 font-medium text-amber-700 text-xs dark:text-amber-300">
-              Unsaved changes
-            </p>
-          ) : null}
-        </>
+          }}
+          placeholder={
+            isWritable
+              ? `Write ${openFileMeta?.label ?? "file"} content…`
+              : "File content is read-only."
+          }
+          readOnly={!isWritable}
+          value={editContent}
+        />
       )}
     </div>
   );
 }
 
 function SoulFileEditorFooter({
+  editContent,
   isWritable,
   busy,
   dialogLoading,
   isDirty,
-  onOpenChange,
   onSave,
 }: {
+  editContent: string;
   isWritable: boolean;
   busy: boolean;
   dialogLoading: boolean;
   isDirty: boolean;
-  onOpenChange: (open: boolean) => void;
   onSave: () => void;
 }) {
   return (
-    <DialogFooter className="mx-0 mb-0 shrink-0 flex-col-reverse gap-3 border-border border-t bg-transparent p-0 pt-4 sm:flex-row sm:justify-end sm:pt-5">
-      <Button
-        className="w-full sm:w-auto"
-        onClick={() => onOpenChange(false)}
-        type="button"
-        variant="outline"
-      >
-        Close
-      </Button>
+    <DialogFooter className="m-0 shrink-0 items-center gap-2 rounded-none border-border border-t bg-transparent px-5 py-2.5 sm:flex-row sm:justify-between">
+      <div className="flex items-center gap-3">
+        <EditorStatus value={editContent} />
+        {isWritable && isDirty ? (
+          <span className="flex items-center gap-1.5 font-medium text-amber-700 text-xs dark:text-amber-300">
+            <span aria-hidden className="size-1.5 rounded-full bg-current" />
+            Unsaved
+          </span>
+        ) : null}
+      </div>
       {isWritable ? (
         <Button
-          className="w-full sm:w-auto"
           disabled={busy || dialogLoading || !isDirty}
           onClick={onSave}
+          title="Save (⌘S)"
           type="button"
         >
           {busy ? <Spinner className="size-4" /> : "Save file"}
@@ -205,7 +206,7 @@ export function SoulFileEditorDialog({
 }) {
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="flex max-h-[min(90dvh,85vh)] min-h-[min(82dvh,38rem)] w-[calc(100%-1.5rem)] flex-col gap-4 p-4 sm:max-w-3xl sm:gap-6 sm:p-6">
+      <DialogSheetContent>
         <SoulFileEditorHeader
           isWritable={isWritable}
           openFileMeta={openFileMeta}
@@ -218,6 +219,7 @@ export function SoulFileEditorDialog({
           isDirty={isDirty}
           isWritable={isWritable}
           onEditContentChange={onEditContentChange}
+          onSave={onSave}
           openFile={openFile}
           openFileMeta={openFileMeta}
           status={status}
@@ -225,12 +227,12 @@ export function SoulFileEditorDialog({
         <SoulFileEditorFooter
           busy={busy}
           dialogLoading={dialogLoading}
+          editContent={editContent}
           isDirty={isDirty}
           isWritable={isWritable}
-          onOpenChange={onOpenChange}
           onSave={onSave}
         />
-      </DialogContent>
+      </DialogSheetContent>
     </Dialog>
   );
 }
