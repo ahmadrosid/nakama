@@ -49,8 +49,16 @@ const WORKING_REACTION = "eyes";
 /** How long a users.info answer is trusted before a member is looked up again. */
 const MEMBER_CACHE_MS = 10 * 60 * 1000;
 
+// The server can finish a turn after the worker dies, so "send it again" alone
+// could run the work twice.
 const INTERRUPTED_REPLY =
-  "That message was interrupted by a restart. Please send it again.";
+  "A restart cut off my reply to this. The work may still have finished, so check before sending it again.";
+
+const STALE_REPLY =
+  "I was offline when this arrived and did not act on it. Send it again if you still need it.";
+
+/** Older unstarted events are reported, not run: the moment may have passed. */
+const MAX_REPLAY_AGE_SECONDS = 60 * 60;
 
 const CHANNEL_MESSAGE_PREFIX =
   "[Slack channel thread. Your reply is visible to everyone in this channel.]\n";
@@ -183,7 +191,9 @@ export function createSlackEventHandler(deps: {
     onTurnStart: () => Promise<void>
   ) => Promise<void>;
   inbox: SlackEventInbox;
-  slack: Pick<SlackApi, "postMessage">;
+  slack: Pick<SlackApi, "postMessage" | "removeReaction">;
+  /** Most channel traffic is not for the bot and never needs storing. */
+  wants: (event: SlackMessageEvent) => boolean;
 }) {
   const { inbox } = deps;
 
@@ -214,7 +224,7 @@ export function createSlackEventHandler(deps: {
       }
 
       // Redelivered after a crash before the ack, and already being replayed.
-      if (inbox.has(eventId)) {
+      if (inbox.has(eventId) || !deps.wants(event)) {
         return;
       }
 
@@ -222,24 +232,68 @@ export function createSlackEventHandler(deps: {
       run(event, eventId);
     },
 
-    /** Call on worker start, before the socket opens. */
+    /** Await on worker start, before the socket opens, so replays go first. */
     recover: async () => {
+      const replays: Array<() => void> = [];
+
       for (const [eventId, { event, started }] of inbox.list()) {
-        if (!started) {
-          run(event, eventId);
+        const age = Date.now() / 1000 - Number(event.ts);
+
+        if (!(started || age > MAX_REPLAY_AGE_SECONDS)) {
+          replays.push(() => run(event, eventId));
           continue;
         }
 
         try {
-          await replyToSlackEvent(deps.slack, event, INTERRUPTED_REPLY);
+          await replyToSlackEvent(
+            deps.slack,
+            event,
+            started ? INTERRUPTED_REPLY : STALE_REPLY
+          );
+          await deps.slack
+            .removeReaction(event.channel, event.ts, WORKING_REACTION)
+            .catch(() => {});
           await inbox.remove(eventId);
         } catch (error) {
           // Kept, so the next start tells them instead.
-          console.error("Failed to post Slack interrupted reply:", error);
+          console.error("Failed to post Slack recovery reply:", error);
         }
+      }
+
+      for (const replay of replays) {
+        replay();
       }
     },
   };
+}
+
+/** Whether an event is one the bot acts on, not an edit, a bot post or chatter. */
+export function wantsSlackEvent(
+  event: SlackMessageEvent,
+  botUserId: string,
+  sessionStore: Pick<ChannelSessionStore, "get">
+): boolean {
+  // Edits, joins and bot posts arrive as subtypes; only people's messages
+  // start turns. A message with a file still counts, its text is used.
+  if (
+    event.type !== "message" ||
+    (event.subtype &&
+      event.subtype !== "thread_broadcast" &&
+      event.subtype !== "file_share") ||
+    event.bot_id ||
+    !event.user ||
+    event.user === botUserId
+  ) {
+    return false;
+  }
+
+  // In channels: an @mention opens a thread; after that the bot follows the thread.
+  return Boolean(
+    event.channel_type === "im" ||
+      (event.text ?? "").includes(`<@${botUserId}>`) ||
+      (event.thread_ts &&
+        sessionStore.get(`${event.channel}:${event.thread_ts}`))
+  );
 }
 
 export function createChatHandler(deps: ChatHandlerDeps) {
@@ -274,17 +328,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     event: SlackMessageEvent,
     onTurnStart?: () => Promise<void>
   ): Promise<void> {
-    // Edits, joins and bot posts arrive as subtypes; only people's messages
-    // start turns. A message with a file still counts, its text is used.
-    if (
-      event.type !== "message" ||
-      (event.subtype &&
-        event.subtype !== "thread_broadcast" &&
-        event.subtype !== "file_share") ||
-      event.bot_id ||
-      !event.user ||
-      event.user === botUserId
-    ) {
+    if (!wantsSlackEvent(event, botUserId, sessionStore)) {
       return;
     }
 
@@ -297,14 +341,8 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       ? event.channel
       : `${event.channel}:${threadTs}`;
 
-    // In channels: an @mention opens a thread; after that the bot follows the thread.
-    if (
-      !(
-        isDm ||
-        raw.includes(`<@${botUserId}>`) ||
-        (event.thread_ts && sessionStore.get(conversationKey))
-      )
-    ) {
+    // Checked by wantsSlackEvent; narrows the type for the rest of this turn.
+    if (!event.user) {
       return;
     }
 
@@ -340,6 +378,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         return;
       }
 
+      await onTurnStart?.();
       const result = await verifyAndPairSlackUser(owner, text, event.user);
       await reply(result.message);
 
@@ -389,6 +428,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         }
 
         case "new": {
+          await onTurnStart?.();
           await createAndBindSession(client, conversationKey);
           await reply("Started a new conversation.");
 
@@ -396,6 +436,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         }
 
         case "clear": {
+          await onTurnStart?.();
           await (await resolveSession(client, conversationKey)).clear();
           await reply("History cleared.");
 

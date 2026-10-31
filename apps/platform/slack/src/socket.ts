@@ -39,7 +39,8 @@ export function connectSlackSocket(options: {
   let socket: WebSocket | null = null;
   let closed = false;
   let backoffMs = 1000;
-  const seenEventIds = new Set<string>();
+  // Each event's accept, so a duplicate is acked only once the first is safe.
+  const seenEvents = new Map<string, Promise<void>>();
 
   function scheduleReconnect(): void {
     if (closed) {
@@ -84,30 +85,43 @@ export function connectSlackSocket(options: {
       envelope.payload?.event_id ?? `${event.channel}:${event.ts}`;
 
     // Slack redelivers when an ack is late; never run the same turn twice.
-    if (seenEventIds.has(eventId)) {
-      ack(envelope);
+    const from = socket;
+
+    const ackOnSameSocket = () => {
+      // The envelope belongs to this connection. Once it is gone, Slack
+      // redelivers on the next one and this map answers it.
+      if (from?.readyState === WebSocket.OPEN && envelope.envelope_id) {
+        from.send(JSON.stringify({ envelope_id: envelope.envelope_id }));
+      }
+    };
+
+    const seen = seenEvents.get(eventId);
+
+    if (seen) {
+      seen.then(ackOnSameSocket, () => {});
 
       return;
     }
 
-    seenEventIds.add(eventId);
+    const accepted = Promise.resolve().then(() =>
+      options.onEvent(event, eventId)
+    );
 
-    if (seenEventIds.size > SEEN_EVENT_LIMIT) {
-      const oldestEventId = seenEventIds.values().next().value;
+    seenEvents.set(eventId, accepted);
+
+    if (seenEvents.size > SEEN_EVENT_LIMIT) {
+      const oldestEventId = seenEvents.keys().next().value;
 
       if (oldestEventId) {
-        seenEventIds.delete(oldestEventId);
+        seenEvents.delete(oldestEventId);
       }
     }
 
     // No ack on a failure, so Slack delivers the event again.
-    Promise.resolve()
-      .then(() => options.onEvent(event, eventId))
-      .then(() => ack(envelope))
-      .catch((error) => {
-        seenEventIds.delete(eventId);
-        console.error("Slack event not accepted:", error);
-      });
+    accepted.then(ackOnSameSocket, (error) => {
+      seenEvents.delete(eventId);
+      console.error("Slack event not accepted:", error);
+    });
   }
 
   async function open(): Promise<void> {
