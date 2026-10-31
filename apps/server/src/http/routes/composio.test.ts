@@ -243,6 +243,89 @@ describe("composio routes", () => {
     expect(enableResponse.status).toBe(403);
   });
 
+  test("org member adds a toolkit only to an agent they created", async () => {
+    const { app, databaseAdapter } = await createApp();
+
+    const { email, password, orgId } = await seedOrgAdmin(databaseAdapter, {
+      profileId: "profile_admin",
+    });
+
+    const admin = await loginUserSession(app, email, password, orgId);
+
+    const enableResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/composio/toolkits/gmail/enable", {
+        body: JSON.stringify({ toolkitSlug: "gmail" }),
+        headers: admin.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": admin.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    // SAFETY: This test controls the fixture shape at this boundary.
+    const enabled = (await enableResponse.json()) as { id: string };
+
+    const now = new Date().toISOString();
+    const authService = new AuthService();
+
+    await databaseAdapter.createUser({
+      createdAt: now,
+      email: "member@example.com",
+      id: "user_member",
+      passwordHash: await authService.hashPassword("password123"),
+      updatedAt: now,
+    });
+    await databaseAdapter.upsertOrgMember({
+      createdAt: now,
+      orgId,
+      role: "member",
+      userId: "user_member",
+    });
+    await databaseAdapter.upsertProfile({
+      createdAt: now,
+      id: "profile_member",
+      isSuper: false,
+      model: "openrouter/auto",
+      name: "Mine",
+      orgId,
+      ownerUserId: "user_member",
+      systemPrompt: "You are helpful.",
+      updatedAt: now,
+    });
+
+    const member = await loginUserSession(
+      app,
+      "member@example.com",
+      "password123",
+      orgId
+    );
+
+    const assign = (profileId: string) =>
+      app.fetch(
+        new Request(
+          `http://localhost:4310/v1/profiles/${profileId}/composio-toolkits`,
+          {
+            body: JSON.stringify({ assignments: [{ toolkitId: enabled.id }] }),
+            headers: member.headers({
+              "Content-Type": "application/json",
+              "X-CSRF-Token": member.csrfToken,
+            }),
+            method: "PUT",
+          }
+        )
+      );
+
+    const own = await assign("profile_member");
+
+    expect(own.status).toBe(200);
+    await expect(own.json()).resolves.toMatchObject({
+      assignments: [expect.objectContaining({ toolkitId: enabled.id })],
+    });
+
+    expect((await assign("profile_admin")).status).toBe(403);
+  });
+
   test("oauth callback does not require a browser session", async () => {
     const { app } = await createApp();
 

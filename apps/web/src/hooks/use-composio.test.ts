@@ -153,12 +153,27 @@ describe("connectComposioApp", () => {
     expect(calls.returnTo).toEqual([]);
   });
 
-  test("a member only signs in", async () => {
+  test("a member adds an enabled toolkit to their agent and signs in", async () => {
     const calls = mockClient([]);
 
     await connectComposioApp({
       isOrgAdmin: false,
       profileId: "p1",
+      returnTo: "/chat",
+      toolkitSlug: "canva",
+      toolkits: { orgToolkits: [canva], userConnections: [] },
+    });
+
+    expect(calls.enabled).toEqual([]);
+    expect(calls.assigned).toEqual([["tk_canva"]]);
+    expect(calls.returnTo).toEqual(["/chat"]);
+  });
+
+  test("without an agent it only signs in", async () => {
+    const calls = mockClient([]);
+
+    await connectComposioApp({
+      isOrgAdmin: false,
       returnTo: "/chat",
       toolkitSlug: "canva",
       toolkits: { orgToolkits: [canva], userConnections: [] },

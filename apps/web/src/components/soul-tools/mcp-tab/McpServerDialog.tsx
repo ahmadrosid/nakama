@@ -28,9 +28,10 @@ import { McpServerDialogForm } from "@/components/soul-tools/mcp-tab/mcp-server-
 import { unregisteredPopularServers } from "@/components/soul-tools/mcp-tab/popular-mcp-servers";
 import { useMcpServerDialogState } from "@/components/soul-tools/mcp-tab/use-mcp-server-dialog-state";
 import { useAuth } from "@/context/use-auth";
-import { useMcpServersQuery } from "@/hooks/use-app-queries";
+import { useMcpServersQuery, useProfileQuery } from "@/hooks/use-app-queries";
 import { connectComposioApp, useComposioToolkits } from "@/hooks/use-composio";
 import { formatError } from "@/lib/client";
+import { isProfileOwner } from "@/lib/profiles";
 import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -171,7 +172,7 @@ function McpCreateBody({
   state: McpServerDialogState;
 }) {
   const queryClient = useQueryClient();
-  const { activeOrg } = useAuth();
+  const { activeOrg, user } = useAuth();
   const isOrgAdmin = activeOrg?.role === "admin";
   const [view, setView] = useState<CreateView>("apps");
   const [query, setQuery] = useState("");
@@ -180,6 +181,15 @@ function McpCreateBody({
   // Every server in the org, assigned or not, so a preset never duplicates one.
   const { data: orgServers } = useMcpServersQuery();
   const { data: composio } = useComposioToolkits();
+  const { data: profile } = useProfileQuery(profileId ?? null);
+
+  // A Composio app only works once it is on the agent, so offer it only to
+  // someone who can add it there.
+  const canManageAgent =
+    Boolean(profile && !profile.sharedAgent) &&
+    (isOrgAdmin ||
+      user?.isPlatformAdmin === true ||
+      isProfileOwner(profile, user?.id));
 
   // A member cannot turn a toolkit on, so they see only the ones an admin has.
   const enabledSlugs = new Set(
@@ -188,13 +198,26 @@ function McpCreateBody({
       .map((item) => item.toolkitSlug)
   );
 
-  const offered = composio?.configured
-    ? composio.catalog.filter(
-        (item) => isOrgAdmin || enabledSlugs.has(item.slug)
-      )
-    : [];
+  const offered =
+    composio?.configured && canManageAgent
+      ? composio.catalog.filter(
+          (item) => isOrgAdmin || enabledSlugs.has(item.slug)
+        )
+      : [];
 
   async function connectApp(item: PopularServer) {
+    if (!offered.some((toolkit) => toolkit.slug === item.toolkit)) {
+      // No Composio for this app here: sign in to its own MCP server.
+      if ("url" in item) {
+        state.selectKind("signin");
+        state.setName(item.name);
+        state.setUrl(item.url);
+        setView("custom");
+      }
+
+      return;
+    }
+
     if (!composio) {
       return;
     }
@@ -273,10 +296,11 @@ function McpCreateBody({
         setView("custom");
       }}
       onQueryChange={setQuery}
-      popular={unregisteredPopularServers(
-        orgServers ?? availableServers,
-        offered
-      )}
+      popular={
+        composio
+          ? unregisteredPopularServers(orgServers ?? availableServers, offered)
+          : []
+      }
       query={query}
       registered={onAssign ? (availableServers ?? []) : []}
     />

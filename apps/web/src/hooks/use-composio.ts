@@ -114,13 +114,15 @@ export function useConnectComposioToolkit() {
 }
 
 /**
- * One click from the Connect an app dialog. An admin turns the toolkit on and
- * adds it to the agent; then anyone who has no account linked yet signs in,
- * and Composio returns them to `returnTo`. Resolves to the sign-in URL, or
- * null when the account was already linked.
+ * One click from the Connect an app dialog. An admin turns the toolkit on; it
+ * is added to `profileId`, which the caller passes only when the user manages
+ * that agent; then anyone who has no account linked yet signs in, and
+ * Composio returns them to `returnTo`. Resolves to the sign-in URL, or null
+ * when the account was already linked.
  */
 export async function connectComposioApp(input: {
   isOrgAdmin: boolean;
+  /** The agent to add the toolkit to. Pass it only when the user manages it. */
   profileId?: string;
   returnTo: string;
   toolkits: Pick<
@@ -137,7 +139,7 @@ export async function connectComposioApp(input: {
     toolkit = await client.enableComposioToolkit(input.toolkitSlug);
   }
 
-  if (input.isOrgAdmin && input.profileId && toolkit) {
+  if (input.profileId && toolkit?.status === "enabled") {
     const { assignments } = await client.listProfileComposioToolkits(
       input.profileId
     );
