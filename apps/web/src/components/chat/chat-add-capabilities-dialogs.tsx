@@ -753,6 +753,7 @@ export function ChatAddCapabilitiesDialogs({
         }}
         onSubmit={handleCreateMcp}
         open={mcpOpen}
+        profileId={profileId}
       />
       <ChatSkillDialog
         onOpenChange={onSkillOpenChange}

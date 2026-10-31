@@ -3415,6 +3415,8 @@ export interface EnableComposioToolkitRequest {
 export interface ComposioConnectRequest {
   /** Browser origin for OAuth callback (e.g. http://localhost:3003). */
   callbackOrigin?: string;
+  /** Path on this site to land on after sign-in, e.g. `/profiles?profile=…`. */
+  returnTo?: string;
 }
 
 export interface ComposioConnectResponse {

@@ -15,7 +15,7 @@ import { Input } from "@nakama/ui/input";
 import { useQueries } from "@tanstack/react-query";
 import { Search01Icon } from "hugeicons-react";
 import { type ReactNode, useDeferredValue, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   type ComposioToolkitListProps,
   ComposioToolkitRowList,
@@ -63,8 +63,7 @@ function ComposioToolkitList({
   ...handlers
 }: ComposioToolkitListProps) {
   const { busy, isOrgAdmin, onEnable } = handlers;
-  const [searchParams] = useSearchParams();
-  const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
+  const [search, setSearch] = useState("");
   const [showAllApps, setShowAllApps] = useState(false);
   const deferredSearch = useDeferredValue(search);
 

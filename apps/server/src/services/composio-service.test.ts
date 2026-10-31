@@ -6,7 +6,7 @@ import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AuthService } from "./auth-service";
 import type { ComposioApiClient } from "./composio-api-client";
-import { ComposioService } from "./composio-service";
+import { ComposioService, isSameSiteReturnPath } from "./composio-service";
 
 const TEST_API_KEY = "ck_test";
 
@@ -1065,5 +1065,19 @@ describe("ComposioService", () => {
     } finally {
       restore();
     }
+  });
+});
+
+describe("isSameSiteReturnPath", () => {
+  test("allows a path on this site", () => {
+    expect(isSameSiteReturnPath("/profiles?profile=p1")).toBe(true);
+    expect(isSameSiteReturnPath("/chat/p1/s1")).toBe(true);
+  });
+
+  test("refuses another origin", () => {
+    expect(isSameSiteReturnPath("https://evil.example/")).toBe(false);
+    expect(isSameSiteReturnPath("//evil.example/")).toBe(false);
+    expect(isSameSiteReturnPath("/\\evil.example/")).toBe(false);
+    expect(isSameSiteReturnPath("profiles")).toBe(false);
   });
 });

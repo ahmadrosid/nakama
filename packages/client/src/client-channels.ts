@@ -334,9 +334,10 @@ export class ChannelsClient extends AutomationsClient {
   }
 
   async connectComposioToolkit(
-    toolkitSlug: string
+    toolkitSlug: string,
+    options: { returnTo?: string } = {}
   ): Promise<ComposioConnectResponse> {
-    const body: ComposioConnectRequest = {};
+    const body: ComposioConnectRequest = { returnTo: options.returnTo };
 
     const callbackOrigin = readBrowserOrigin();
 

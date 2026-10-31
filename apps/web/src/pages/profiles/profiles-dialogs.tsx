@@ -358,6 +358,7 @@ export function ProfilesDialogs(state: ProfilesPageState) {
         }}
         onSubmit={handleCreateMcpServer}
         open={mcpCreateOpen && canManageProfile}
+        profileId={state.selectedId ?? undefined}
       />
 
       <CloneProfileDialog

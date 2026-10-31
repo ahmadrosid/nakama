@@ -1,4 +1,5 @@
 import type {
+  ListComposioToolkitsResponse,
   UpdateComposioSettingsRequest,
   UpdateProfileComposioToolkitsRequest,
 } from "@nakama/core/contract";
@@ -110,6 +111,68 @@ export function useConnectComposioToolkit() {
       window.location.href = response.redirectUrl;
     },
   });
+}
+
+/**
+ * One click from the Connect an app dialog. An admin turns the toolkit on and
+ * adds it to the agent; then anyone who has no account linked yet signs in,
+ * and Composio returns them to `returnTo`. Resolves to the sign-in URL, or
+ * null when the account was already linked.
+ */
+export async function connectComposioApp(input: {
+  isOrgAdmin: boolean;
+  profileId?: string;
+  returnTo: string;
+  toolkits: Pick<
+    ListComposioToolkitsResponse,
+    "orgToolkits" | "userConnections"
+  >;
+  toolkitSlug: string;
+}): Promise<string | null> {
+  let toolkit = input.toolkits.orgToolkits.find(
+    (item) => item.toolkitSlug === input.toolkitSlug
+  );
+
+  if (input.isOrgAdmin && toolkit?.status !== "enabled") {
+    toolkit = await client.enableComposioToolkit(input.toolkitSlug);
+  }
+
+  if (input.isOrgAdmin && input.profileId && toolkit) {
+    const { assignments } = await client.listProfileComposioToolkits(
+      input.profileId
+    );
+
+    if (!assignments.some((item) => item.toolkitId === toolkit.id)) {
+      await client.updateProfileComposioToolkits(input.profileId, {
+        assignments: [
+          ...assignments.map(({ allowedActions, toolkitId }) => ({
+            allowedActions,
+            toolkitId,
+          })),
+          { toolkitId: toolkit.id },
+        ],
+      });
+    }
+  }
+
+  const linked = input.toolkits.userConnections.some(
+    (item) => item.toolkitId === toolkit?.id && item.status === "connected"
+  );
+
+  if (linked) {
+    return null;
+  }
+
+  const { redirectUrl } = await client.connectComposioToolkit(
+    input.toolkitSlug,
+    { returnTo: input.returnTo }
+  );
+
+  if (!isAllowedComposioRedirectUrl(redirectUrl)) {
+    throw new Error("Blocked an unexpected Composio redirect URL.");
+  }
+
+  return redirectUrl;
 }
 
 export function useDisconnectComposioToolkit() {

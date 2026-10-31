@@ -9,6 +9,7 @@ import type {
 } from "@nakama/core";
 import { NakamaApiError } from "@nakama/core";
 import { resolveComposioCallbackBaseUrl } from "../../services/composio-callback-url";
+import { isSameSiteReturnPath } from "../../services/composio-service";
 import type { ServerOptions } from "../context";
 import {
   requireOrgAdminFromContext,
@@ -191,7 +192,12 @@ export function registerComposioRoutes(
             clientOrigin: body.callbackOrigin,
             request: c.req.raw,
           }),
-          { returnTo: "/integrations?section=composio" }
+          {
+            returnTo:
+              body.returnTo && isSameSiteReturnPath(body.returnTo)
+                ? body.returnTo
+                : "/integrations?section=composio",
+          }
         )
       );
     } catch (error) {

@@ -67,6 +67,24 @@ const MEET_RECORDING_TOOLKITS = new Set(["gmail", "googledrive"]);
 
 const MEET_RETURN_PATH = "/google-meet?import=recording";
 
+/**
+ * A path on this site, never another origin: the OAuth callback redirects to
+ * it, so `//evil.example` or `/\\evil.example` would be an open redirect.
+ */
+export function isSameSiteReturnPath(path: string): boolean {
+  if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\")) {
+    return false;
+  }
+
+  try {
+    return (
+      new URL(path, "http://nakama.local").origin === "http://nakama.local"
+    );
+  } catch {
+    return false;
+  }
+}
+
 function toOrgToolkitSummary(
   record: StoredComposioToolkitRecord
 ): ComposioToolkitSummary {
@@ -839,9 +857,7 @@ export class ComposioService {
           connectionId: z.string(),
           nonce: z.string(),
           orgId: z.string(),
-          returnTo: z
-            .enum([MEET_RETURN_PATH, "/integrations?section=composio"])
-            .optional(),
+          returnTo: z.string().refine(isSameSiteReturnPath).optional(),
           toolkitId: z.string(),
           userId: z.string(),
         })
