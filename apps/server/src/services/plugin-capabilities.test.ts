@@ -225,7 +225,10 @@ describe("plugin capabilities", () => {
     expect(rest).toEqual([]);
     expect(copy).toMatch(/^notes\.notes\.[a-f0-9]{12}$/);
     const instructionPath = join(copyRoot, copy!, "SKILL.md");
-    expect(catalog).toContain(JSON.stringify(instructionPath));
+    expect(
+      (await skills.loadSkillForModel(ORG_ID, profile.id, "notes"))
+        ?.skillFilePath
+    ).toBe(instructionPath);
     const context = { orgId: ORG_ID, profileId: profile.id, workspaceRoot };
     expect(
       (await runReadFile({ path: instructionPath }, context)).content
@@ -256,13 +259,13 @@ describe("plugin capabilities", () => {
       skills.composeCatalogForProfile("other_org", profile.id)
     ).rejects.toMatchObject({ status: 404 });
 
-    const matched = await skills.formatMatchedSkillsForPrompt(
+    const matched = await skills.findExplicitSkillForMessage(
       ORG_ID,
       profile.id,
       "/skill notes"
     );
 
-    expect(matched).toContain("notes");
+    expect(matched?.name).toBe("notes");
 
     const resolved = await resolveProfileStoredTools(
       await db.listToolsForProfile(profile.id),
@@ -560,9 +563,10 @@ describe("plugin capabilities", () => {
     await db.assignSkillToProfile(profile.id, skill!.id);
     await db.assignToolToProfile(profile.id, tool!.id);
 
-    const oldCatalog = await skills.composeCatalogForProfile(
+    const oldSkill = await skills.loadSkillForModel(
       ORG_ID,
-      profile.id
+      profile.id,
+      "notes"
     );
 
     const copyRoot = join(
@@ -623,13 +627,14 @@ describe("plugin capabilities", () => {
     const afterUpdate = await db.getOrgPlugin(ORG_ID, "notes");
     await plugins.enableOrgPlugin(ORG_ID, "notes", afterUpdate!.revision);
 
-    const newCatalog = await skills.composeCatalogForProfile(
+    const newSkill = await skills.loadSkillForModel(
       ORG_ID,
-      profile.id
+      profile.id,
+      "notes"
     );
 
-    expect(newCatalog).not.toBe(oldCatalog);
-    expect(newCatalog).not.toContain(join(copyRoot, oldCopy!));
+    expect(newSkill?.skillFilePath).not.toBe(oldSkill?.skillFilePath);
+    expect(newSkill?.skillFilePath).not.toContain(join(copyRoot, oldCopy!));
 
     const newCopy = (await readdir(copyRoot)).find(
       (entry) => entry !== oldCopy
@@ -800,13 +805,13 @@ Standalone body.
     expect(catalog).toContain("**notes**");
     expect(catalog).toContain("Standalone notes shadow attempt");
 
-    const matched = await skills.formatMatchedSkillsForPrompt(
+    const matched = await skills.findExplicitSkillForMessage(
       ORG_ID,
       profile.id,
       "/skill notes"
     );
 
-    expect(matched).toContain("Store notes in the plugin database");
+    expect(matched?.body).toContain("Store notes in the plugin database");
 
     const pluginDir = await plugins.resolveEnabledSkillDirectory(
       ORG_ID,
@@ -822,7 +827,6 @@ Standalone body.
       directory: pluginDir!,
       disableModelInvocation: false,
       hasTool: true,
-      includeBodyOnMatch: false,
       name: "notes",
       scriptIssues: [],
       scriptTools: [],

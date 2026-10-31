@@ -26,8 +26,7 @@ const AUTHORING_STANDARDS = `Follow Nakama skill-authoring standards exactly:
 
 Frontmatter (existing parser only — do not invent Hermes-only fields like version, author, platforms, or metadata.hermes):
 - name: lowercase kebab-case
-- description: one trigger-rich sentence — what it does and when to use it (matching keys off description). No marketing words (powerful, comprehensive, seamless, advanced, robust). Do not starve the matcher of trigger terms.
-- include-body-on-match: true for procedure skills that should load in full when matched
+- description: one sentence — what it does and when to use it. The agent picks skills from this description, so name the tasks it covers. No marketing words (powerful, comprehensive, seamless, advanced, robust).
 
 Body section order (omit empty sections):
 1. "# Skill" title + 2–3 sentence intro (what it does / does not do)
@@ -43,7 +42,7 @@ Nakama-tool framing (name builtins / assigned tools in backticks; do not invent 
 - Prefer \`search_files\` / \`ripgrep\` over grep/rg
 - Prefer \`read_file\` over cat/head/tail
 - Prefer \`web_fetch\` over curl for page text
-- Prefer supporting files + match / \`read_file\` over invented skill_view
+- Prefer supporting files + \`load_skill\` / \`read_file\` over invented skill_view
 - Only mention tools assigned to this profile (\`bash\` only if assigned)
 
 Facts and preferences stay in MEMORY.md via update-profile-memory. /learn authors procedures, not user facts.
@@ -160,7 +159,7 @@ type ProviderChatMessage = {
 
 /**
  * Expand `/learn` on the last user message for the provider only.
- * History stays raw so skill matching, UI, and later turns keep the short command.
+ * History stays raw so `/skill` detection, UI, and later turns keep the short command.
  *
  * Bare `/learn` with prior turns uses the conversation-workflow default. Bare
  * `/learn` as the first message asks for a source instead — unless the same

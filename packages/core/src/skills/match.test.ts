@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { matchSkillsForMessage } from "./match";
+import { findExplicitSkill } from "./match";
 import type { DiscoveredSkill } from "./types";
 
 const weatherSkill: DiscoveredSkill = {
@@ -8,7 +8,6 @@ const weatherSkill: DiscoveredSkill = {
   directory: "/tmp/weather",
   disableModelInvocation: false,
   hasTool: true,
-  includeBodyOnMatch: false,
   name: "weather",
   scriptIssues: [],
   scriptTools: [],
@@ -23,46 +22,29 @@ const privateSkill: DiscoveredSkill = {
   name: "deploy",
 };
 
-describe("matchSkillsForMessage", () => {
-  test("matches by keyword in user message", () => {
-    const matched = matchSkillsForMessage(
-      [weatherSkill],
-      "What's the weather in Jakarta?"
-    );
-
-    expect(matched.map((skill) => skill.name)).toEqual(["weather"]);
-  });
-
-  test("matches explicit /skill invocation", () => {
-    const matched = matchSkillsForMessage(
-      [privateSkill],
-      "Please /skill deploy now"
-    );
-
-    expect(matched.map((skill) => skill.name)).toEqual(["deploy"]);
-  });
-
-  test("skips explicit-only skills without invocation", () => {
-    const matched = matchSkillsForMessage(
-      [privateSkill],
-      "deploy the app to production"
-    );
-
-    expect(matched).toEqual([]);
-  });
-
-  test("matches a singular word against a plural description keyword", () => {
-    const artifactSkill: DiscoveredSkill = {
-      ...weatherSkill,
-      description: "Create or save artifacts and dashboards.",
-      name: "artifact-design",
-    };
-
+describe("findExplicitSkill", () => {
+  test("finds the skill a /skill message names", () => {
     expect(
-      matchSkillsForMessage(
-        [artifactSkill],
-        "can you make me a dashboard artifact for Q3?"
-      ).map((skill) => skill.name)
-    ).toEqual(["artifact-design"]);
+      findExplicitSkill(
+        [weatherSkill, privateSkill],
+        "Please /skill deploy now"
+      )
+    ).toBe(privateSkill);
+    expect(
+      findExplicitSkill([weatherSkill], "use skill weather for Jakarta")
+    ).toBe(weatherSkill);
+  });
+
+  test("does not pick a skill from words in the message", () => {
+    expect(
+      findExplicitSkill([weatherSkill], "What's the weather in Jakarta?")
+    ).toBeNull();
+    expect(
+      findExplicitSkill([privateSkill], "deploy the app to production")
+    ).toBeNull();
+  });
+
+  test("returns null for a skill the profile does not have", () => {
+    expect(findExplicitSkill([weatherSkill], "/skill deploy")).toBeNull();
   });
 });

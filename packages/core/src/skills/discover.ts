@@ -121,7 +121,6 @@ export async function discoverSkillDirectory(
       disableModelInvocation:
         parsed.frontmatter.disableModelInvocation ?? false,
       hasTool: toolPath !== null || scripts.tools.length > 0,
-      includeBodyOnMatch: parsed.frontmatter.includeBodyOnMatch ?? false,
       name: parsed.frontmatter.name,
       scriptIssues: scripts.issues,
       scriptTools: scripts.tools,

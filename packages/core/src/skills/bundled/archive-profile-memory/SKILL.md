@@ -1,7 +1,6 @@
 ---
 name: archive-profile-memory
 description: Archive or clean up facts from active MEMORY.md into memory-archive/ without deleting them. Use when the user wants to forget, remove, tidy old memory, or free space for new memories.
-include-body-on-match: true
 ---
 
 Use this skill when the user wants to remove facts from active memory without deleting them permanently.

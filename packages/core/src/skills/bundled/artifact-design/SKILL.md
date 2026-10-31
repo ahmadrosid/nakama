@@ -1,7 +1,6 @@
 ---
 name: artifact-design
 description: Design artifacts, HTML pages, dashboards, charts, slides, a slide deck or decks, a presentation or presentations, reports, plans, memos, summaries, code snippets, and logs.
-include-body-on-match: true
 ---
 
 Design complete deliverables that the user can revisit in the profile **Artifacts** tab.

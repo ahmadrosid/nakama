@@ -1,7 +1,6 @@
 ---
 name: update-profile-memory
 description: Record facts, preferences, and personal context in active MEMORY.md for cross-session continuity. Use when the user shares something to remember, states a preference, or you learn durable context about them.
-include-body-on-match: true
 ---
 
 Use this skill to **add** facts to active `MEMORY.md`.

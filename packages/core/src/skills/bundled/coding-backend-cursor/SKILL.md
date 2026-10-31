@@ -2,7 +2,6 @@
 name: coding-backend-cursor
 description: Runtime prompt layer for Cursor Agent CLI coding agent runs.
 disable-model-invocation: true
-include-body-on-match: true
 ---
 
 You are preparing a coding agent run for Cursor Agent CLI (`agent`), orchestrated via the `bash` tool.

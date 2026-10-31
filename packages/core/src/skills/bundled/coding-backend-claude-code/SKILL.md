@@ -2,7 +2,6 @@
 name: coding-backend-claude-code
 description: Runtime prompt layer for Claude Code coding agent runs.
 disable-model-invocation: true
-include-body-on-match: true
 ---
 
 You are preparing a coding agent run for [Claude Code](https://code.claude.com/docs/en/cli-reference) (Anthropic's autonomous coding agent CLI), orchestrated via terminal/process tools. Claude Code v2.x can read files, write code, run shell commands, spawn subagents, and manage git workflows autonomously.
