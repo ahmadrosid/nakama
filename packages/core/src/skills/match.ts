@@ -3,6 +3,9 @@ import type { DiscoveredSkill, SkillMatchOptions } from "./types";
 const EXPLICIT_SKILL_PATTERN =
   /(?:^|\s)(?:\/skill|use skill|activate skill)\s+([a-z0-9-]+)\b/i;
 
+/** A pasted link says where, not what: "github.com/..." is not a GitHub skill request. */
+const URL_PATTERN = /\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.)\S+/gi;
+
 export function matchSkillsForMessage(
   skills: DiscoveredSkill[],
   userMessage: string,
@@ -45,7 +48,7 @@ export function extractExplicitSkillName(message: string): string | null {
 }
 
 function messageMatchesSkill(message: string, skill: DiscoveredSkill): boolean {
-  const normalized = message.toLowerCase();
+  const normalized = message.replace(URL_PATTERN, " ").toLowerCase();
 
   if (containsWord(normalized, skill.name)) {
     return true;
@@ -105,6 +108,11 @@ function extractKeywords(description: string): string[] {
     "helps",
     "using",
     "used",
+    "find",
+    "list",
+    "link",
+    "links",
+    "available",
   ]);
 
   return description

@@ -65,4 +65,41 @@ describe("matchSkillsForMessage", () => {
       ).map((skill) => skill.name)
     ).toEqual(["artifact-design"]);
   });
+
+  test("ignores words inside a pasted URL", () => {
+    const installerSkill: DiscoveredSkill = {
+      ...weatherSkill,
+      description:
+        "Find, list, and install reusable skills from GitHub or links.",
+      name: "skill-installer",
+    };
+
+    expect(
+      matchSkillsForMessage(
+        [installerSkill],
+        "hi can you clone this into your workspace https://github.com/LayerNorm/overlay-web"
+      )
+    ).toEqual([]);
+    expect(
+      matchSkillsForMessage(
+        [installerSkill],
+        "install the skill from GitHub https://github.com/o/r/tree/main/s"
+      ).map((skill) => skill.name)
+    ).toEqual(["skill-installer"]);
+  });
+
+  test("does not match on common words like find, list, or link", () => {
+    const installerSkill: DiscoveredSkill = {
+      ...weatherSkill,
+      description: "Find, list, and link available things.",
+      name: "skill-installer",
+    };
+
+    expect(
+      matchSkillsForMessage(
+        [installerSkill],
+        "find the bug and list the open PRs, here is the link"
+      )
+    ).toEqual([]);
+  });
 });
