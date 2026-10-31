@@ -44,7 +44,10 @@ describe("WebPushService", () => {
     const endpoint = "https://fcm.googleapis.com/fcm/send/abc";
     await service.subscribe("u1", { endpoint, keys: await browserKeys() });
 
-    expect((await stat(path)).mode.toString(8).slice(-3)).toBe("600");
+    // Windows does not expose POSIX owner/group permission bits.
+    if (process.platform !== "win32") {
+      expect((await stat(path)).mode % 512).toBe(0o600);
+    }
 
     const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(null, { status: 201 })
