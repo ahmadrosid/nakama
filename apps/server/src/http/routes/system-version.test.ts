@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getNakamaVersion } from "@nakama/core";
@@ -201,10 +201,20 @@ describe("GET /v1/system/version", () => {
         })
       );
 
+      const body = await state.json();
+
+      // Running from the click on, before the updater has taken the request.
+      expect(body.status).toMatchObject({
+        state: "running",
+        version: "999.0.0",
+      });
+      expect((await upgrade(admin, admin.orgId!, "999.0.0")).status).toBe(409);
+
       // Newest archive per version, and never the running one.
-      expect((await state.json()).rollbacks).toEqual([
+      expect(body.rollbacks).toEqual([
         { at: "2026-10-27T03:35:09Z", version: "0.4.59" },
       ]);
+      rmSync(join(dir, "request"));
       expect((await upgrade(admin, admin.orgId!, "0.4.58", true)).status).toBe(
         400
       );
@@ -215,6 +225,7 @@ describe("GET /v1/system/version", () => {
         "rollback 0.4.59\n"
       );
 
+      rmSync(join(dir, "request"));
       writeFileSync(
         join(dir, "status.json"),
         JSON.stringify({
