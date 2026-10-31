@@ -638,7 +638,7 @@
   }
 
   .app-shell-header {
-    @apply flex h-14 shrink-0 items-center border-b border-border/50;
+    @apply flex h-12 shrink-0 items-center border-b border-border/50;
   }
 
   .desktop-title-bar {
@@ -675,7 +675,7 @@
 
   .sidebar-shell:not([data-collapsed]) .app-shell-header,
   .sidebar-shell[data-collapsed] .app-shell-header {
-    @apply h-14 flex-row gap-2.5 px-3;
+    @apply h-12 flex-row gap-2.5 px-3;
   }
 
   .sidebar-shell[data-collapsed] .app-shell-header {

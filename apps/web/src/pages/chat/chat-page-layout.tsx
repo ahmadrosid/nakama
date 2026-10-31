@@ -425,7 +425,7 @@ export function ChatSessionBar({
   const pinned = Boolean(summary?.pinned);
 
   return (
-    <div className="-mx-6 flex h-14 shrink-0 items-center gap-2 border-border border-b px-4 max-sm:hidden">
+    <div className="-mx-6 flex h-12 shrink-0 items-center gap-2 border-border border-b px-4 max-sm:hidden">
       <div className="flex h-7 min-w-0 flex-1 items-center">
         {cognito ? (
           <h1 className="truncate px-2.5 font-medium text-sm">Cognito chat</h1>
