@@ -655,6 +655,9 @@ export function parseChannel(value: string | undefined): AgentChannel {
   throw new NakamaApiError(`Invalid channel. Expected ${CHANNEL_LIST}.`, 400);
 }
 
+/** What a turn ends with when it was stopped rather than failed. */
+export const TURN_CANCELLED_ERROR = "Turn cancelled.";
+
 const STREAM_TIMEOUT_MS = resolveChatStreamTimeoutMs();
 
 const FIRST_TOKEN_TIMEOUT_MS = resolveChatFirstTokenTimeoutMs();
@@ -970,7 +973,7 @@ export function streamMessage(
         }
 
         const errorEvent: Extract<StreamEvent, { type: "error" }> = {
-          error: cancelled ? "Turn cancelled." : formatServerError(error),
+          error: cancelled ? TURN_CANCELLED_ERROR : formatServerError(error),
           type: "error",
         };
 

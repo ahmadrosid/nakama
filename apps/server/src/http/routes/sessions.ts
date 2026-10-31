@@ -48,6 +48,7 @@ import {
   streamTurnSubscribe,
 } from "../shared";
 import type { HonoApp } from "../types";
+import { pushTurnEnded } from "./web-push";
 
 const MAX_SESSION_PAGE_SIZE = 100;
 
@@ -1152,7 +1153,7 @@ export function registerSessionRoutes(
       c.req.header("Accept")?.includes("text/event-stream");
 
     if (wantsStream) {
-      const { mode } = getRequestAuth(c);
+      const { mode, user } = getRequestAuth(c);
       // The web app stops a turn through /stop, so its connection dropping is
       // a phone locking or a tab closing and the turn runs on. Channel workers
       // still stop by hanging up.
@@ -1167,6 +1168,14 @@ export function registerSessionRoutes(
 
           if (terminal.type === "done") {
             agent.schedulePostTurnSkillReview(sessionId);
+          }
+
+          if (fromBrowser) {
+            void pushTurnEnded(
+              agent,
+              { orgId, sessionId, userId: user.id },
+              terminal
+            );
           }
         },
         c.req.raw.signal,

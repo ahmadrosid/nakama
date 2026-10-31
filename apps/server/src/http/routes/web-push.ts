@@ -1,8 +1,15 @@
 import { z } from "@hono/zod-openapi";
+import type { StreamEvent } from "@nakama/core";
 import { NakamaApiError } from "@nakama/core";
 import { isPushServiceEndpoint } from "../../services/web-push";
 import { webPushService } from "../../services/web-push-service";
-import { getRequestAuth, json, readJson } from "../shared";
+import type { ServerOptions } from "../context";
+import {
+  getRequestAuth,
+  json,
+  readJson,
+  TURN_CANCELLED_ERROR,
+} from "../shared";
 import type { HonoApp } from "../types";
 
 const subscriptionSchema = z.object({
@@ -55,5 +62,59 @@ export function registerWebPushRoutes(app: HonoApp): void {
     webPushService.setPresence(user.id, clientId, visible);
 
     return noContent();
+  });
+}
+
+type TurnPushAgent = Pick<
+  ServerOptions["agent"],
+  "getProfile" | "getSessionSummary"
+>;
+
+/** Pushes "the reply is ready" to whoever asked, if they have left the page. */
+export async function pushTurnEnded(
+  agent: TurnPushAgent,
+  target: { orgId: string; sessionId: string; userId: string },
+  terminal: StreamEvent
+): Promise<void> {
+  try {
+    await sendTurnEndedPush(agent, target, terminal);
+  } catch (error) {
+    console.warn(`Session ${target.sessionId}: web push failed:`, error);
+  }
+}
+
+async function sendTurnEndedPush(
+  agent: TurnPushAgent,
+  target: { orgId: string; sessionId: string; userId: string },
+  terminal: StreamEvent
+): Promise<void> {
+  if (
+    !(
+      terminal.type === "done" ||
+      (terminal.type === "error" && terminal.error !== TURN_CANCELLED_ERROR)
+    )
+  ) {
+    return;
+  }
+
+  const summary = await agent.getSessionSummary(target.sessionId, target.orgId);
+
+  // A cognito chat has no row, and promises no trace: no lock-screen preview.
+  if (!summary) {
+    return;
+  }
+
+  const { profile } = await agent.getProfile(target.orgId, summary.profileId);
+
+  const text =
+    terminal.type === "done"
+      ? terminal.reply
+      : `The reply failed: ${terminal.error}`;
+
+  await webPushService.notify(target.userId, {
+    body: text.replace(/\s+/g, " ").trim().slice(0, 180) || "Reply ready",
+    tag: `session-${target.sessionId}`,
+    title: summary.title ? `${profile.name} · ${summary.title}` : profile.name,
+    url: `/chat/${encodeURIComponent(summary.profileId)}/${encodeURIComponent(target.sessionId)}`,
   });
 }
