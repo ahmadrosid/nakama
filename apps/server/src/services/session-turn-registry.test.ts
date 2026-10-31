@@ -200,4 +200,22 @@ describe("SessionTurnRegistry", () => {
     expect(replay.length).toBeGreaterThan(0);
     expect(replay[replay.length - 1]).toContain("11999");
   });
+
+  test("drains the buffer by bytes when the event count stays under the cap", () => {
+    const registry = new SessionTurnRegistry();
+    registry.beginTurn("session_1");
+
+    for (let index = 0; index < 200; index += 1) {
+      registry.publish("session_1", {
+        delta: "x".repeat(30_000),
+        type: "chunk",
+      });
+    }
+
+    const replay: StreamEvent[] = [];
+    registry.subscribe("session_1", (event) => replay.push(event));
+
+    expect(replay.length).toBeGreaterThan(0);
+    expect(replay.length).toBeLessThan(200);
+  });
 });

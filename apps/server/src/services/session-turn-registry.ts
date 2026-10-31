@@ -163,6 +163,8 @@ function trimBuffer(turn: ActiveTurn): void {
       break;
     }
 
+    const before = turn.events.length;
+
     turn.events = compactBuffer(turn.events);
     rebuildSnapshotIndexes(turn);
     turn.bufferBytes = turn.events.reduce(
@@ -170,7 +172,11 @@ function trimBuffer(turn: ActiveTurn): void {
       0
     );
 
-    if (turn.events.length > MAX_BUFFER_EVENTS) {
+    // Compaction is a no-op when only the byte cap is exceeded, so shift anyway.
+    if (
+      turn.events.length > MAX_BUFFER_EVENTS ||
+      turn.events.length === before
+    ) {
       const removed = turn.events.shift();
 
       if (removed) {
