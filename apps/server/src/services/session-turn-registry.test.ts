@@ -205,9 +205,16 @@ describe("SessionTurnRegistry", () => {
     const registry = new SessionTurnRegistry();
     registry.beginTurn("session_1");
 
+    const questionnaire: StreamEvent = {
+      questionnaire: null,
+      type: "questionnaire_updated",
+    };
+
+    registry.publish("session_1", questionnaire);
+
     for (let index = 0; index < 200; index += 1) {
       registry.publish("session_1", {
-        delta: "x".repeat(30_000),
+        delta: `${index}:${"é".repeat(15_000)}`,
         type: "chunk",
       });
     }
@@ -215,7 +222,38 @@ describe("SessionTurnRegistry", () => {
     const replay: StreamEvent[] = [];
     registry.subscribe("session_1", (event) => replay.push(event));
 
-    expect(replay.length).toBeGreaterThan(0);
-    expect(replay.length).toBeLessThan(200);
+    const bytes = replay.reduce(
+      (total, event) =>
+        total + Buffer.byteLength(JSON.stringify(event), "utf8"),
+      0
+    );
+
+    expect(bytes).toBeLessThanOrEqual(4 * 1024 * 1024);
+    expect(replay.length).toBeLessThan(201);
+    expect(replay[0]).toEqual(questionnaire);
+    const last = replay.at(-1);
+    expect(last?.type === "chunk" && last.delta.startsWith("199:")).toBe(true);
+  });
+
+  test("keeps snapshots and the newest event when one event exceeds the byte cap", () => {
+    const registry = new SessionTurnRegistry();
+    registry.beginTurn("session_1");
+
+    const todos: StreamEvent = { todos: [], type: "todos_updated" };
+    registry.publish("session_1", todos);
+    registry.publish("session_1", { delta: "early", type: "chunk" });
+    registry.publish("session_1", {
+      delta: "x".repeat(5 * 1024 * 1024),
+      type: "chunk",
+    });
+
+    const replay: StreamEvent[] = [];
+    registry.subscribe("session_1", (event) => replay.push(event));
+
+    expect(replay.map((event) => event.type)).toEqual([
+      "todos_updated",
+      "chunk",
+    ]);
+    expect(replay[0]).toEqual(todos);
   });
 });
