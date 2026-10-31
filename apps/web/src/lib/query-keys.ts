@@ -68,6 +68,7 @@ export const queryKeys = {
   mcp: {
     all: ["mcp", "servers"] as const,
     detail: (serverId: string) => ["mcp", "servers", serverId] as const,
+    registry: (query: string) => ["mcp", "registry", query] as const,
   },
   models: ["models"] as const,
   modelsDev: ["modelsDev"] as const,

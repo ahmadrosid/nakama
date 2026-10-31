@@ -16,6 +16,7 @@ import type {
   ListSkillsResponse,
   ListSkillVersionsResponse,
   ListToolsResponse,
+  McpRegistrySearchResponse,
   McpServerResponse,
   MoveProfileRequest,
   PatchSkillRequest,
@@ -294,6 +295,12 @@ export class ProfilesClient extends SettingsClient {
 
   async listMcpServers(): Promise<ListMcpServersResponse> {
     return this.request<ListMcpServersResponse>("/v1/mcp/servers");
+  }
+
+  async searchMcpRegistry(query: string): Promise<McpRegistrySearchResponse> {
+    return this.request<McpRegistrySearchResponse>(
+      `/v1/mcp/registry?${new URLSearchParams({ search: query })}`
+    );
   }
 
   async getMcpServer(serverId: string): Promise<McpServerResponse> {

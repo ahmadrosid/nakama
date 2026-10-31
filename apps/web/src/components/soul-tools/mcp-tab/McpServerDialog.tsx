@@ -1,5 +1,6 @@
 import type {
   CreateMcpServerRequest,
+  McpRegistryServer,
   McpServerResponse,
   McpServerSummary,
 } from "@nakama/core/contract";
@@ -26,6 +27,7 @@ import {
 import { McpImportConfigDialog } from "@/components/soul-tools/mcp-tab/mcp-import-config-dialog";
 import { McpServerDialogForm } from "@/components/soul-tools/mcp-tab/mcp-server-dialog-form";
 import { unregisteredPopularServers } from "@/components/soul-tools/mcp-tab/popular-mcp-servers";
+import { emptyHeaderRow } from "@/components/soul-tools/mcp-tab/shared";
 import { useMcpServerDialogState } from "@/components/soul-tools/mcp-tab/use-mcp-server-dialog-state";
 import { useAuth } from "@/context/use-auth";
 import { useMcpServersQuery, useProfileQuery } from "@/hooks/use-app-queries";
@@ -156,6 +158,24 @@ function McpServerDialogCreateForm({
 
 type CreateView = "apps" | "custom";
 
+function initialRegistryHeaderValue(header: {
+  isSecret?: boolean;
+  value?: string;
+}): string {
+  if (!header.value) {
+    return "";
+  }
+
+  if (header.isSecret) {
+    const templateIdx = header.value.indexOf("{");
+
+    // If template like "Bearer {token}", prefill "Bearer " so the user pastes only their secret.
+    return templateIdx === -1 ? "" : header.value.slice(0, templateIdx);
+  }
+
+  return header.value;
+}
+
 function McpCreateBody({
   availableServers,
   busy,
@@ -253,6 +273,34 @@ function McpCreateBody({
     }
   }
 
+  function selectRegistryServer(server: McpRegistryServer) {
+    const remote =
+      server.remotes.find(
+        (r) => r.type === "streamable-http" || r.type === "http"
+      ) ?? server.remotes[0];
+
+    if (!remote) {
+      return;
+    }
+
+    state.setName(server.name);
+    state.setUrl(remote.url);
+    state.selectKind("http");
+
+    const headers = (remote.headers ?? [])
+      .filter(
+        (header) => header.isSecret === true || header.isRequired === true
+      )
+      .map((header) => ({
+        key: header.name,
+        value: initialRegistryHeaderValue(header),
+      }));
+
+    state.setHeaders(headers.length > 0 ? headers : [emptyHeaderRow()]);
+    state.clearTestResult();
+    setView("custom");
+  }
+
   if (state.pendingAuth) {
     return (
       <McpSignInPending
@@ -296,6 +344,7 @@ function McpCreateBody({
         setView("custom");
       }}
       onQueryChange={setQuery}
+      onSelectRegistry={selectRegistryServer}
       popular={
         composio
           ? unregisteredPopularServers(orgServers ?? availableServers, offered)
