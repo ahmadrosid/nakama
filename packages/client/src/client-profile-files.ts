@@ -213,7 +213,7 @@ export class ProfileFilesClient extends ProfilesClient {
     artifactPath: string,
     options: {
       inline?: boolean;
-      render?: "markdown" | "pdf";
+      render?: "markdown";
       signal?: AbortSignal;
       maxBytes?: number;
     } = {}

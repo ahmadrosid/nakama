@@ -75,7 +75,9 @@ export const ARTIFACT_FRAME_CSP = [
   "worker-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",
-  "sandbox allow-scripts",
+  // allow-modals lets the print frame open the print dialog; the preview
+  // iframe's own sandbox attribute still leaves it out.
+  "sandbox allow-scripts allow-modals",
   "frame-ancestors 'self'",
 ].join("; ");
 

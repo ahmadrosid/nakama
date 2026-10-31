@@ -144,7 +144,10 @@ describe("createHonoApp", () => {
       expect(directives.get(name)).toEqual(["'none'"]);
     }
 
-    expect(directives.get("sandbox")).toEqual(["allow-scripts"]);
+    expect(directives.get("sandbox")).toEqual([
+      "allow-scripts",
+      "allow-modals",
+    ]);
     expect(response.headers.get("Permissions-Policy")).toBe(
       "camera=(), microphone=()"
     );

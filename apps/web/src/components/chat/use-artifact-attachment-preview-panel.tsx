@@ -30,6 +30,10 @@ import { useAuth } from "@/context/use-auth";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import { useWriteArtifactMutation } from "@/hooks/use-resource-mutations";
 import {
+  printArtifactHtml,
+  resolveArtifactHtmlAssets,
+} from "@/lib/artifact-html-preview";
+import {
   artifactCodeLanguage,
   buildArtifactContentUrl,
   type ChatArtifactRef,
@@ -304,25 +308,26 @@ export function useArtifactAttachmentPreviewPanel({
   }
 
   async function downloadPdf() {
-    try {
-      const pdf = await client
-        .forOrg(activeOrg?.id ?? null)
-        .readProfileArtifactContent(profileId, artifact.path, {
-          render: "pdf",
-        });
+    if (content === null) {
+      return;
+    }
 
-      const url = URL.createObjectURL(
-        new Blob([pdf.data], { type: "application/pdf" })
+    try {
+      const scopedClient = client.forOrg(activeOrg?.id ?? null);
+
+      const html = await resolveArtifactHtmlAssets(
+        content,
+        artifact.path,
+        (path) =>
+          scopedClient.readProfileArtifactContent(profileId, path, {
+            inline: true,
+          }),
+        new AbortController().signal
       );
 
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `${header.title}.pdf`;
-      link.click();
-      // Revoking in the same tick can cancel the download in some browsers.
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (downloadError) {
-      toast(formatError(downloadError));
+      printArtifactHtml(html);
+    } catch (printError) {
+      toast(formatError(printError));
     }
   }
 

@@ -14,6 +14,57 @@ export const ARTIFACT_FRAME_URL = "/artifact-frame";
 
 export const ARTIFACT_FRAME_READY = "nakama-artifact-frame-ready";
 
+const ARTIFACT_PRINT_DONE = "nakama-artifact-print-done";
+
+/** Runs inside the frame: wait for fonts, open the print dialog, then report back. */
+const PRINT_SCRIPT = `<script>(() => {
+  const go = () => document.fonts.ready.then(() => setTimeout(() => {
+    addEventListener("afterprint", () => parent.postMessage("${ARTIFACT_PRINT_DONE}", "*"));
+    print();
+  }, 100));
+  document.readyState === "complete" ? go() : addEventListener("load", go);
+})();</script>`;
+
+/**
+ * Prints an HTML artifact with the browser's own print dialog, where the user
+ * picks "Save as PDF". The browser renders it the same way as the preview.
+ */
+export function printArtifactHtml(html: string): void {
+  const frame = document.createElement("iframe");
+  frame.setAttribute("aria-hidden", "true");
+  frame.setAttribute("sandbox", `${ARTIFACT_HTML_IFRAME_SANDBOX} allow-modals`);
+  frame.src = ARTIFACT_FRAME_URL;
+  frame.style.cssText =
+    "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
+
+  const cleanup = () => {
+    window.removeEventListener("message", onMessage);
+    frame.remove();
+  };
+
+  function onMessage(event: MessageEvent) {
+    if (event.source !== frame.contentWindow) {
+      return;
+    }
+
+    if (event.data === ARTIFACT_FRAME_READY) {
+      frame.contentWindow?.postMessage(
+        {
+          nakamaArtifactHtml: `${htmlForArtifactPreview(html)}${PRINT_SCRIPT}`,
+        },
+        "*"
+      );
+    } else if (event.data === ARTIFACT_PRINT_DONE) {
+      cleanup();
+    }
+  }
+
+  window.addEventListener("message", onMessage);
+  document.body.append(frame);
+  // Some browsers never send afterprint; do not keep the frame forever.
+  window.setTimeout(cleanup, 10 * 60_000);
+}
+
 export function htmlForArtifactPreview(html: string): string {
   if (new TextEncoder().encode(html).byteLength > MAX_HTML_ARTIFACT_BYTES) {
     return `<p role="alert">HTML artifacts cannot exceed ${MAX_HTML_ARTIFACT_BYTES} bytes.</p>`;

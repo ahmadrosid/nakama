@@ -74,12 +74,9 @@ RUN set -eu; \
 FROM oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 AS runtime
 WORKDIR /app
 
-# HTML artifact → PDF export (services/html-pdf.ts). WeasyPrint comes from pip:
-# Debian's 62.x drops clamp()/vw sizes, so decks print with default text.
+# Chrome is not installed by default. Agent PDF export (services/html-pdf.ts)
+# needs it; the INSTALL_MEET_DEPS build below adds Chromium.
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl sudo python3 python3-venv \
-    python3-pip libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core \
-  && PIP_NO_COMPILE=1 pip3 install --no-cache-dir --break-system-packages weasyprint==70.0 \
-  && apt-get purge -y python3-pip && apt-get autoremove -y \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=ffmpeg-binaries /ffmpeg /ffprobe /usr/local/bin/
 

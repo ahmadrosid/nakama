@@ -74,6 +74,19 @@ The **Files** management page and its listing, rename, delete, and knowledge con
 
 Authorized active-organization members can still read artifact content through chat attachments and the content API even though they can't open the **Files** management page.
 
+## Save an HTML artifact as PDF
+
+A PDF is easier to send, print, or attach than an HTML page.
+
+In web chat, open an HTML artifact and select **Download as PDF** in its actions menu. Your browser opens its print dialog; select **Save as PDF**. The browser draws the page, so the PDF looks the same as the preview. Decks that set a print page size print one slide per page.
+
+In Telegram, Discord, WhatsApp, Slack, and Teams, ask the agent for a PDF. The agent prints the HTML on the server with headless Chrome and saves the PDF as a new artifact. The server must have Chrome or Chromium:
+
+- Install Chrome or Chromium on the server, or set `NAKAMA_CHROME_PATH` to the Chrome binary.
+- The default Docker image does not include Chrome. An image built with `INSTALL_MEET_DEPS=true` includes Chromium.
+
+Without Chrome, the agent tells the user that the server admin must set up headless Chrome. Slack and Teams do not send files yet, so there the PDF stays in the artifacts folder.
+
 ## Publish a public share
 
 **Share artifact** publishes the file at a tokenized URL that needs no login, and gives you a link to copy.

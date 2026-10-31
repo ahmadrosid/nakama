@@ -1,4 +1,4 @@
-import { realpath } from "node:fs/promises";
+import { mkdir, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   getProfileSoulDir,
@@ -9,6 +9,7 @@ import {
 } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 import { z } from "zod";
+import { convertHtmlToPdf } from "../services/html-pdf";
 
 const SaveArtifactInputSchema = z.object({
   content: z.string(),
@@ -26,7 +27,7 @@ export function createSaveArtifactTool(
 ): ToolDefinition {
   return {
     description:
-      "Save a text deliverable (HTML page, report, deck, Markdown, code, log, data) under artifacts/ in the profile workspace and record who made it. An existing name gets a date suffix; use the returned path. Use edit_file to change an existing artifact.",
+      "Save a text deliverable (HTML page, report, deck, Markdown, code, log, data) under artifacts/ in the profile workspace and record who made it. For a PDF, use a .pdf path with full HTML as content; the server prints it with headless Chrome. An existing name gets a date suffix; use the returned path. Use edit_file to change an existing artifact.",
     name: SAVE_ARTIFACT_TOOL_NAME,
     parallelSafe: false,
     parameters: {
@@ -77,11 +78,38 @@ export async function runSaveArtifactTool(
     throw new Error("save_artifact only saves under artifacts/.");
   }
 
+  const isPdf = input.path.toLowerCase().endsWith(".pdf");
+
+  // A .pdf path takes HTML and prints it in headless Chrome first, so a missing
+  // Chrome fails before anything is written.
+  if (isPdf) {
+    await mkdir(artifactsDir, { recursive: true });
+  }
+
+  const pdf = isPdf
+    ? await convertHtmlToPdf(
+        input.content,
+        path
+          .relative(artifactsDir, path.resolve(workspaceRoot, input.path))
+          .split(path.sep)
+          .join("/")
+          .replace(/\.pdf$/i, ".html"),
+        artifactsDir
+      )
+    : null;
+
   // The guard that sends write_file here must not block this tool's own write.
+  // For a PDF it reserves the guarded, unique path; the PDF bytes replace the
+  // HTML right after.
   const written = await runWriteFile(input, {
     ...context,
     forbidArtifactFileWrites: false,
   });
+
+  if (pdf) {
+    await writeFile(written.path, pdf);
+    written.bytesWritten = pdf.length;
+  }
 
   // The owner comes from the server-side context, never from the tool input.
   await deps.db.upsertArtifactRecord({

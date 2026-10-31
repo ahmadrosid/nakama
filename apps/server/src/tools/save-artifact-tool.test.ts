@@ -17,6 +17,7 @@ import {
   ensureSaveArtifactToolDefinition,
 } from "@nakama/db";
 import { AgentService } from "../services/agent-service";
+import { resolveChromeBin } from "../services/html-pdf";
 import {
   createSaveArtifactTool,
   runSaveArtifactTool,
@@ -129,6 +130,50 @@ describe("save_artifact", () => {
       userName: "Ana",
     });
   });
+
+  test("a .pdf path fails with 501 and writes nothing when Chrome is missing", async () => {
+    const original = process.env.NAKAMA_CHROME_PATH;
+    process.env.NAKAMA_CHROME_PATH = path.join(configDir, "no-chrome");
+
+    try {
+      await expect(
+        runSaveArtifactTool(
+          { content: "<h1>Deck</h1>", path: "artifacts/deck.pdf" },
+          context,
+          { db }
+        )
+      ).rejects.toMatchObject({ status: 501 });
+    } finally {
+      if (original === undefined) {
+        delete process.env.NAKAMA_CHROME_PATH;
+      } else {
+        process.env.NAKAMA_CHROME_PATH = original;
+      }
+    }
+
+    expect(await db.listArtifactRecords("org_a", "profile_a")).toHaveLength(0);
+  });
+
+  test.skipIf(resolveChromeBin() === null)(
+    "a .pdf path prints the HTML to a PDF file",
+    async () => {
+      const result = await runSaveArtifactTool(
+        { content: "<h1>Deck</h1>", path: "artifacts/deck.pdf" },
+        context,
+        { db }
+      );
+
+      const bytes = await readFile(result.path);
+
+      expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
+      expect(result.bytesWritten).toBe(bytes.length);
+
+      const [record] = await db.listArtifactRecords("org_a", "profile_a");
+
+      expect(record?.filename).toBe("deck.pdf");
+    },
+    60_000
+  );
 
   test("ignores an owner passed in the tool input", async () => {
     await createSaveArtifactTool({ db }).run(
