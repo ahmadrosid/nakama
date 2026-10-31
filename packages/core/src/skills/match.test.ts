@@ -120,6 +120,21 @@ describe("matchSkillsForMessage", () => {
     }
   });
 
+  test("matches on words in a link path", () => {
+    const sheetSkill: DiscoveredSkill = {
+      ...weatherSkill,
+      description: "Read Google spreadsheets.",
+      name: "sheets",
+    };
+
+    expect(
+      matchSkillsForMessage(
+        [sheetSkill],
+        "check this https://docs.google.com/spreadsheets/d/abc/edit"
+      ).map((skill) => skill.name)
+    ).toEqual(["sheets"]);
+  });
+
   test("keeps words glued to the end of a link", () => {
     const installerSkill: DiscoveredSkill = {
       ...weatherSkill,

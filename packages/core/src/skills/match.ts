@@ -4,12 +4,13 @@ const EXPLICIT_SKILL_PATTERN =
   /(?:^|\s)(?:\/skill|use skill|activate skill)\s+([a-z0-9-]+)\b/i;
 
 /**
- * A pasted link says where, not what: "github.com/..." is not a GitHub skill request.
- * Matches scheme links, www. links, and bare host/path links. Stops before
- * closing brackets, quotes, and commas so glued words survive.
+ * A pasted link's host says where, not what: "github.com/..." is not a GitHub
+ * skill request. The path can say what ("docs.google.com/spreadsheets/..."),
+ * so only the host is removed. Matches scheme, www. and bare host/path links,
+ * and stops before closing brackets, quotes, and commas so glued words survive.
  */
 const URL_PATTERN =
-  /\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.|[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\/)[^\s)\]>"',]*/gi;
+  /\b(?:[a-z][a-z0-9+.-]*:\/\/[^\s/)\]>"',]*|www\.[^\s/)\]>"',]*|[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?=\/))([^\s)\]>"',]*)/gi;
 
 const STOP_WORDS = new Set([
   "a",
@@ -66,7 +67,11 @@ export function matchSkillsForMessage(
   }
 
   const explicitName = extractExplicitSkillName(message);
-  const normalized = message.replace(URL_PATTERN, " ").toLowerCase();
+
+  const normalized = message
+    .replace(URL_PATTERN, (_url, linkPath: string) => ` ${linkPath} `)
+    .toLowerCase();
+
   const matched: DiscoveredSkill[] = [];
 
   for (const skill of skills) {
