@@ -37,6 +37,11 @@ describe("MCP official registry search", () => {
         return Response.json({
           servers: [
             {
+              _meta: {
+                "io.modelcontextprotocol.registry/official": {
+                  isLatest: true,
+                },
+              },
               server: {
                 description: "GitHub MCP Server",
                 name: "github-mcp",
@@ -62,6 +67,43 @@ describe("MCP official registry search", () => {
               },
             },
             {
+              // Duplicate name / older version -> should be skipped
+              _meta: {
+                "io.modelcontextprotocol.registry/official": {
+                  isLatest: false,
+                },
+              },
+              server: {
+                description: "Older GitHub MCP Server",
+                name: "github-mcp",
+                remotes: [
+                  {
+                    type: "streamable-http",
+                    url: "https://example.com/old",
+                  },
+                ],
+              },
+            },
+            {
+              // SSE remote type -> should be filtered out
+              _meta: {
+                "io.modelcontextprotocol.registry/official": {
+                  isLatest: true,
+                },
+              },
+              server: {
+                description: "SSE only MCP",
+                name: "sse-mcp",
+                remotes: [
+                  {
+                    type: "sse",
+                    url: "https://example.com/sse",
+                  },
+                ],
+              },
+            },
+            {
+              // Local package only -> should be skipped
               server: {
                 description: "Local package only",
                 name: "local-only",
@@ -119,7 +161,11 @@ describe("MCP official registry search", () => {
         },
       ],
     });
-    expect(new URL(requestedUrl).searchParams.get("search")).toBe("github");
+
+    const parsedUrl = new URL(requestedUrl);
+
+    expect(parsedUrl.searchParams.get("search")).toBe("github");
+    expect(parsedUrl.searchParams.get("version")).toBe("latest");
 
     const tenantAdmin = await seedOrgAdmin(databaseAdapter, {
       authService,

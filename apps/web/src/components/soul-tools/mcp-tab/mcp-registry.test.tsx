@@ -32,8 +32,15 @@ const sampleServer: McpRegistryServer = {
           value: "Bearer {token}",
         },
         {
-          name: "X-Non-Secret",
-          value: "constant",
+          isRequired: true,
+          name: "X-Required-Header",
+          value: "fixed-value",
+        },
+        {
+          isRequired: false,
+          isSecret: false,
+          name: "X-Optional-Header",
+          value: "optional-value",
         },
       ],
       type: "streamable-http",
@@ -136,7 +143,7 @@ test("searches official registry and displays results with name, description, an
     "https://server.smithery.ai/@example/github/mcp"
   );
 
-  // Secret header "Authorization" should be present with empty value
+  // Headers: Authorization (secret with Bearer template prefix), X-Required-Header (fixed value), no optional
   const headerKeyInputs = Array.from(
     document.querySelectorAll<HTMLInputElement>(
       'input[placeholder="Authorization"], input[aria-label^="Header name"]'
@@ -146,7 +153,85 @@ test("searches official registry and displays results with name, description, an
   const headerKeys = headerKeyInputs.map((i) => i.value);
 
   expect(headerKeys).toContain("Authorization");
-  expect(headerKeys).not.toContain("X-Non-Secret");
+  expect(headerKeys).toContain("X-Required-Header");
+  expect(headerKeys).not.toContain("X-Optional-Header");
+
+  const headerValueInputs = Array.from(
+    document.querySelectorAll<HTMLInputElement>(
+      'input[placeholder="Bearer token"], input[placeholder="Header value"], input[aria-label^="Header value"]'
+    )
+  );
+
+  const headerValues = headerValueInputs.map((i) => i.value);
+
+  expect(headerValues).toContain("Bearer ");
+  expect(headerValues).toContain("fixed-value");
+});
+
+test("when user is not a platform admin, registry search is not executed and alert is hidden", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  const searchSpy = spyOn(client, "searchMcpRegistry").mockResolvedValue({
+    servers: [sampleServer],
+  });
+
+  cleanups.push(() => {
+    act(() => root.unmount());
+    container.remove();
+    searchSpy.mockRestore();
+  });
+
+  // Org admin without platform admin privileges
+  // SAFETY: McpServerDialog reads only activeOrg and user from this fixture.
+  const auth = {
+    activeOrg: { id: "org-test", role: "admin" },
+    user: { id: "user-test", isPlatformAdmin: false },
+  } as AuthContextValue;
+
+  await act(async () => {
+    root.render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <AuthContext.Provider value={auth}>
+          <McpServerDialog
+            availableServers={[]}
+            busy={false}
+            onOpenChange={() => {}}
+            onSubmit={async () => {}}
+            open
+          />
+        </AuthContext.Provider>
+      </QueryClientProvider>
+    );
+  });
+
+  const searchInput = document.querySelector<HTMLInputElement>(
+    'input[aria-label="Search apps"]'
+  )!;
+
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value"
+    )!.set!.call(searchInput, "github");
+    searchInput.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  });
+
+  const settle = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+  await settle();
+
+  expect(searchSpy).not.toHaveBeenCalled();
+  expect(document.querySelectorAll('[role="alert"]')).toHaveLength(0);
 });
 
 test("when registry is down, error is displayed and manual form still works", async () => {

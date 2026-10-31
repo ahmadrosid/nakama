@@ -20,6 +20,7 @@ import {
 import { type ReactNode, useEffect, useState } from "react";
 import { POPULAR_SERVERS } from "@/components/soul-tools/mcp-tab/popular-mcp-servers";
 import type { McpServerKind } from "@/components/soul-tools/mcp-tab/use-mcp-server-dialog-state";
+import { useAuth } from "@/context/use-auth";
 import { useMcpServerDetailQuery } from "@/hooks/use-app-queries";
 import { client, formatError } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
@@ -280,6 +281,9 @@ export function McpAppPicker({
 }) {
   const [filter, setFilter] = useState<AppFilter>("all");
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  const { user } = useAuth();
+  const isPlatformAdmin = user?.isPlatformAdmin === true;
+  const isSearchingRegistry = isPlatformAdmin && debouncedQuery.length >= 2;
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query.trim()), 300);
@@ -288,7 +292,7 @@ export function McpAppPicker({
   }, [query]);
 
   const registryResults = useQuery({
-    enabled: debouncedQuery.length >= 2,
+    enabled: isSearchingRegistry,
     queryFn: () => client.searchMcpRegistry(debouncedQuery),
     queryKey: queryKeys.mcp.registry(debouncedQuery),
     staleTime: 60_000,
@@ -315,10 +319,9 @@ export function McpAppPicker({
     (card) => !showChips || matchesFilter(card, filter)
   );
 
-  const registryServers = registryResults.data?.servers ?? [];
-
-  const hasRegistryServers =
-    debouncedQuery.length >= 2 && registryServers.length > 0;
+  const registryServers = isSearchingRegistry
+    ? (registryResults.data?.servers ?? [])
+    : [];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -338,7 +341,7 @@ export function McpAppPicker({
               type="search"
               value={query}
             />
-            {registryResults.isFetching ? (
+            {isSearchingRegistry && registryResults.isFetching ? (
               <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground">
                 <Spinner className="size-4" />
               </span>
@@ -354,7 +357,7 @@ export function McpAppPicker({
         </div>
       </div>
 
-      {registryResults.error ? (
+      {isSearchingRegistry && registryResults.error ? (
         <div
           className="mx-6 mt-3 rounded-md bg-destructive/10 px-3 py-2 text-destructive text-sm"
           role="alert"
@@ -369,17 +372,15 @@ export function McpAppPicker({
             <AppCardButton busy={busy} card={card} />
           </li>
         ))}
-        {hasRegistryServers
-          ? registryServers.map((server) => (
-              <li key={server.name}>
-                <RegistryServerCardButton
-                  busy={busy}
-                  onSelect={(item) => onSelectRegistry?.(item)}
-                  server={server}
-                />
-              </li>
-            ))
-          : null}
+        {registryServers.map((server) => (
+          <li key={`${server.name}-${server.remotes[0]?.url}`}>
+            <RegistryServerCardButton
+              busy={busy}
+              onSelect={(item) => onSelectRegistry?.(item)}
+              server={server}
+            />
+          </li>
+        ))}
         <li>
           <button
             className="flex h-full w-full items-center gap-3 rounded-lg border border-border border-dashed px-3 py-2.5 text-left text-muted-foreground text-sm transition-colors hover:bg-muted/50 hover:text-foreground"

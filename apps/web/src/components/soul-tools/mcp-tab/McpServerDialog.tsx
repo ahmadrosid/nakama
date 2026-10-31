@@ -158,6 +158,24 @@ function McpServerDialogCreateForm({
 
 type CreateView = "apps" | "custom";
 
+function initialRegistryHeaderValue(header: {
+  isSecret?: boolean;
+  value?: string;
+}): string {
+  if (!header.value) {
+    return "";
+  }
+
+  if (header.isSecret) {
+    const templateIdx = header.value.indexOf("{");
+
+    // If template like "Bearer {token}", prefill "Bearer " so the user pastes only their secret.
+    return templateIdx === -1 ? "" : header.value.slice(0, templateIdx);
+  }
+
+  return header.value;
+}
+
 function McpCreateBody({
   availableServers,
   busy,
@@ -256,7 +274,10 @@ function McpCreateBody({
   }
 
   function selectRegistryServer(server: McpRegistryServer) {
-    const remote = server.remotes[0];
+    const remote =
+      server.remotes.find(
+        (r) => r.type === "streamable-http" || r.type === "http"
+      ) ?? server.remotes[0];
 
     if (!remote) {
       return;
@@ -266,16 +287,16 @@ function McpCreateBody({
     state.setUrl(remote.url);
     state.selectKind("http");
 
-    const secretHeaders = (remote.headers ?? [])
-      .filter((header) => header.isSecret === true)
+    const headers = (remote.headers ?? [])
+      .filter(
+        (header) => header.isSecret === true || header.isRequired === true
+      )
       .map((header) => ({
         key: header.name,
-        value: "",
+        value: initialRegistryHeaderValue(header),
       }));
 
-    state.setHeaders(
-      secretHeaders.length > 0 ? secretHeaders : [emptyHeaderRow()]
-    );
+    state.setHeaders(headers.length > 0 ? headers : [emptyHeaderRow()]);
     state.clearTestResult();
     setView("custom");
   }

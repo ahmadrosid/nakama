@@ -6,10 +6,12 @@ import type {
   TestMcpServerResponse,
 } from "@nakama/core";
 import { NakamaApiError } from "@nakama/core";
+import type { McpRegistrySearchResponse } from "@nakama/core/contract";
 import {
   resolveCallbackBaseUrlFromRedirect,
   resolveComposioCallbackBaseUrl,
 } from "../../services/composio-callback-url";
+import { searchMcpRegistry } from "../../services/mcp-registry";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
@@ -394,6 +396,53 @@ export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
       tags: ["Profiles", "MCP"],
     })
   );
+
+  const registrySearchSchema = z
+    .object({})
+    .passthrough()
+    .openapi("McpRegistrySearchResponse");
+
+  const registrySearchQuery = z.object({
+    search: z
+      .string()
+      .optional()
+      .openapi({
+        description: "Search query for MCP servers",
+        example: "github",
+        param: { in: "query", name: "search" },
+      }),
+  });
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "searchMcpRegistry",
+      path: "/v1/mcp/registry",
+      request: {
+        query: registrySearchQuery,
+      },
+      responses: {
+        200: {
+          content: { "application/json": { schema: registrySearchSchema } },
+          description: "Matching MCP servers from official registry",
+        },
+        502: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Registry unavailable",
+        },
+      },
+      summary: "Search official MCP registry",
+      tags: ["MCP"],
+    })
+  );
+
+  app.get("/v1/mcp/registry", async (c) => {
+    requirePlatformAdminFromContext(c);
+
+    return json<McpRegistrySearchResponse>(
+      await searchMcpRegistry(c.req.query("search") ?? "")
+    );
+  });
 
   app.get("/v1/mcp/servers", async (c) => {
     requirePlatformAdminFromContext(c);

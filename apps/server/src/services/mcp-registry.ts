@@ -1,5 +1,8 @@
 import { NakamaApiError } from "@nakama/core";
-import type { McpRegistrySearchResponse } from "@nakama/core/contract";
+import type {
+  McpRegistrySearchResponse,
+  McpRegistryServer,
+} from "@nakama/core/contract";
 import { z } from "zod";
 
 const MCP_REGISTRY_SEARCH_URL =
@@ -25,6 +28,19 @@ const registryServerSchema = z.object({
   remotes: z.array(remoteSchema).optional(),
 });
 
+const registryItemSchema = z.object({
+  _meta: z
+    .object({
+      "io.modelcontextprotocol.registry/official": z
+        .object({
+          isLatest: z.boolean().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+  server: registryServerSchema,
+});
+
 export async function searchMcpRegistry(
   query: string
 ): Promise<McpRegistrySearchResponse> {
@@ -38,7 +54,11 @@ export async function searchMcpRegistry(
 
   try {
     const response = await fetch(
-      `${MCP_REGISTRY_SEARCH_URL}?${new URLSearchParams({ limit: "20", search: q })}`,
+      `${MCP_REGISTRY_SEARCH_URL}?${new URLSearchParams({
+        limit: "20",
+        search: q,
+        version: "latest",
+      })}`,
       { signal: AbortSignal.timeout(10_000) }
     );
 
@@ -58,11 +78,7 @@ export async function searchMcpRegistry(
 
   const items = z
     .object({
-      servers: z.array(
-        z.object({
-          server: z.unknown(),
-        })
-      ),
+      servers: z.array(registryItemSchema),
     })
     .safeParse(body);
 
@@ -70,29 +86,38 @@ export async function searchMcpRegistry(
     return { servers: [] };
   }
 
+  const serversByName = new Map<string, McpRegistryServer>();
+
+  for (const item of items.data.servers) {
+    const isLatest =
+      item._meta?.["io.modelcontextprotocol.registry/official"]?.isLatest;
+
+    if (isLatest === false) {
+      continue;
+    }
+
+    const { description, name, remotes } = item.server;
+
+    // Remote servers only: filter for HTTP transports (streamable-http), excluding SSE or package/stdio.
+    const validRemotes = (remotes ?? []).filter(
+      (remote) => remote.type === "streamable-http" || remote.type === "http"
+    );
+
+    if (validRemotes.length === 0) {
+      continue;
+    }
+
+    if (!serversByName.has(name)) {
+      serversByName.set(name, {
+        description,
+        name,
+        remotes: validRemotes,
+        transport: validRemotes[0].type,
+      });
+    }
+  }
+
   return {
-    servers: items.data.servers.flatMap((item) => {
-      const parsed = registryServerSchema.safeParse(item.server);
-
-      if (!parsed.success) {
-        return [];
-      }
-
-      const { description, name, remotes } = parsed.data;
-
-      // First-cut: remote servers only; package-only entries (local stdio installs) left out.
-      if (!remotes || remotes.length === 0) {
-        return [];
-      }
-
-      return [
-        {
-          description,
-          name,
-          remotes,
-          transport: remotes[0].type,
-        },
-      ];
-    }),
+    servers: Array.from(serversByName.values()),
   };
 }
