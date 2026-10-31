@@ -14,7 +14,7 @@ import {
   Search01Icon,
   Tick02Icon,
 } from "hugeicons-react";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { POPULAR_SERVERS } from "@/components/soul-tools/mcp-tab/popular-mcp-servers";
 import type { McpServerKind } from "@/components/soul-tools/mcp-tab/use-mcp-server-dialog-state";
 import { useMcpServerDetailQuery } from "@/hooks/use-app-queries";
@@ -116,7 +116,7 @@ function appCards({
 
   const connect = popular.map((preset) => ({
     description: preset.description,
-    key: preset.url,
+    key: preset.toolkit,
     name: preset.name,
     onPick: () => onConnect(preset),
     preset,
@@ -389,83 +389,16 @@ export function McpCustomConnection({
   );
 }
 
-export function McpConnectApp({
-  busy,
-  canSubmit,
-  onBack,
-  onSubmit,
-  preset,
-  submitError,
-}: {
-  busy: boolean;
-  canSubmit: boolean;
-  onBack: () => void;
-  onSubmit: (event: FormEvent) => void;
-  preset: PopularServer;
-  submitError: string | null;
-}) {
-  return (
-    <form
-      className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-6"
-      onSubmit={onSubmit}
-    >
-      <BackButton onClick={onBack} />
-      <div className="mx-auto flex w-full max-w-md flex-col gap-6">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <AppLogo name={preset.name} preset={preset} size="lg" />
-          <DialogTitle className="text-xl">Connect {preset.name}</DialogTitle>
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <h3 className="font-medium text-muted-foreground text-xs">
-            Your agent will be able to
-          </h3>
-          <ul className="flex flex-col gap-2">
-            {preset.abilities.map((ability) => (
-              <li className="flex items-center gap-2 text-sm" key={ability}>
-                <Tick02Icon
-                  aria-hidden
-                  className="size-4 text-emerald-600 dark:text-emerald-400"
-                />
-                {ability}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <p className="rounded-lg bg-muted/60 px-4 py-3 text-muted-foreground text-sm">
-          {preset.name} opens in a new tab. Sign in there to approve access.
-        </p>
-
-        {submitError ? (
-          <p
-            className="rounded-md bg-destructive/10 px-3 py-2.5 text-destructive text-sm"
-            role="alert"
-          >
-            {submitError}
-          </p>
-        ) : null}
-
-        <Button disabled={busy || !canSubmit} size="lg" type="submit">
-          {busy ? <Spinner className="size-4" /> : `Continue to ${preset.name}`}
-        </Button>
-      </div>
-    </form>
-  );
-}
-
 export function McpSignInPending({
   name,
   onDone,
   opened,
-  preset,
   serverId,
   url,
 }: {
   name: string;
   onDone: () => void;
   opened: boolean;
-  preset?: PopularServer;
   serverId: string;
   url: string;
 }) {
@@ -500,7 +433,7 @@ export function McpSignInPending({
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
-      <AppLogo name={name} preset={preset} size="lg" />
+      <AppLogo name={name} size="lg" />
       <DialogTitle className="text-xl">Finish signing in to {name}</DialogTitle>
       <p className="max-w-sm text-muted-foreground text-sm">
         Approve access in the {name} tab. This window updates by itself.

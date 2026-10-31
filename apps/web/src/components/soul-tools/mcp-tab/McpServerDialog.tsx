@@ -15,18 +15,21 @@ import {
 import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
 import { type ComponentProps, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   McpAppPicker,
-  McpConnectApp,
   McpCustomConnection,
   McpSignInPending,
-  type PopularServer,
 } from "@/components/soul-tools/mcp-tab/mcp-connect-app-views";
 import { McpImportConfigDialog } from "@/components/soul-tools/mcp-tab/mcp-import-config-dialog";
 import { McpServerDialogForm } from "@/components/soul-tools/mcp-tab/mcp-server-dialog-form";
-import { unregisteredPopularServers } from "@/components/soul-tools/mcp-tab/popular-mcp-servers";
+import {
+  composioToolkitPath,
+  unregisteredPopularServers,
+} from "@/components/soul-tools/mcp-tab/popular-mcp-servers";
 import { useMcpServerDialogState } from "@/components/soul-tools/mcp-tab/use-mcp-server-dialog-state";
 import { useMcpServersQuery } from "@/hooks/use-app-queries";
+import { useComposioToolkits } from "@/hooks/use-composio";
 
 type McpServerDialogState = ReturnType<typeof useMcpServerDialogState>;
 
@@ -147,7 +150,7 @@ function McpServerDialogCreateForm({
   );
 }
 
-type CreateView = "apps" | "connect" | "custom";
+type CreateView = "apps" | "custom";
 
 function McpCreateBody({
   availableServers,
@@ -162,18 +165,13 @@ function McpCreateBody({
   onOpenChange: (open: boolean) => void;
   state: McpServerDialogState;
 }) {
+  const navigate = useNavigate();
   const [view, setView] = useState<CreateView>("apps");
-  const [preset, setPreset] = useState<PopularServer | null>(null);
   const [query, setQuery] = useState("");
 
   // Every server in the org, assigned or not, so a preset never duplicates one.
   const { data: orgServers } = useMcpServersQuery();
-
-  function startForm(name: string, url: string) {
-    state.selectKind("signin");
-    state.setName(name);
-    state.setUrl(url);
-  }
+  const { data: composio } = useComposioToolkits();
 
   if (state.pendingAuth) {
     return (
@@ -181,22 +179,8 @@ function McpCreateBody({
         name={state.pendingAuth.name}
         onDone={() => onOpenChange(false)}
         opened={state.pendingAuth.opened}
-        preset={preset ?? undefined}
         serverId={state.pendingAuth.serverId}
         url={state.pendingAuth.url}
-      />
-    );
-  }
-
-  if (view === "connect" && preset) {
-    return (
-      <McpConnectApp
-        busy={busy}
-        canSubmit={state.canSubmit}
-        onBack={() => setView("apps")}
-        onSubmit={state.handleSubmit}
-        preset={preset}
-        submitError={state.submitError}
       />
     );
   }
@@ -225,17 +209,24 @@ function McpCreateBody({
       busy={busy}
       onAssign={onAssign}
       onConnect={(item) => {
-        setPreset(item);
-        startForm(item.name, item.url);
-        setView("connect");
+        onOpenChange(false);
+        navigate(composioToolkitPath(item.toolkit));
       }}
       onCustom={() => {
-        setPreset(null);
-        startForm("", "");
+        state.selectKind("signin");
+        state.setName("");
+        state.setUrl("");
         setView("custom");
       }}
       onQueryChange={setQuery}
-      popular={unregisteredPopularServers(orgServers ?? availableServers)}
+      popular={
+        composio?.configured
+          ? unregisteredPopularServers(
+              orgServers ?? availableServers,
+              composio.catalog
+            )
+          : []
+      }
       query={query}
       registered={onAssign ? (availableServers ?? []) : []}
     />
