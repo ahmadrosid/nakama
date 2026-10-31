@@ -1024,6 +1024,24 @@ export function registerSessionRoutes(
     });
   });
 
+  app.post("/v1/sessions/:sessionId/stop", async (c) => {
+    requireOrgMemberFromContext(c);
+
+    const { orgId, sessionId } = await requireSessionAccess(c, {
+      runsTools: true,
+    });
+
+    // The org check lives in the lookup, as on /status; cognito chats too.
+    if (!(await agent.getSessionMessages(sessionId, orgId))) {
+      return errorResponse("Session not found", 404);
+    }
+
+    // The turn still ends through its own stream, which reports the cancel.
+    sessionTurnRegistry.stopTurn(sessionId);
+
+    return new Response(null, { status: 204 });
+  });
+
   app.get("/v1/sessions/:sessionId/stream", async (c) => {
     const { orgId, sessionId } = await requireSessionAccess(c);
     const result = await agent.getSessionMessages(sessionId, orgId);
