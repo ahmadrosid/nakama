@@ -55,6 +55,44 @@ test("each queued message removes and sends by its id", () => {
   expect(sent).toEqual(["a"]);
 });
 
+test("editing a queued message saves the new text on Enter", () => {
+  const edits: Array<[string, string]> = [];
+  const container = render(
+    <ChatMessageQueuePanel
+      messages={messages}
+      onEdit={(id, text) => edits.push([id, text])}
+    />
+  );
+
+  act(() =>
+    container
+      .querySelector<HTMLButtonElement>(
+        'button[aria-label="Edit queued message"]'
+      )
+      ?.click()
+  );
+
+  const textarea = container.querySelector("textarea");
+  expect(textarea?.value).toBe("use canva");
+
+  act(() => {
+    const setter = Object.getOwnPropertyDescriptor(
+      Object.getPrototypeOf(textarea),
+      "value"
+    )?.set;
+    setter?.call(textarea, "use figma");
+    textarea?.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+  act(() => {
+    textarea?.dispatchEvent(
+      new window.KeyboardEvent("keydown", { bubbles: true, key: "Enter" })
+    );
+  });
+
+  expect(edits).toEqual([["a", "use figma"]]);
+  expect(container.querySelector("textarea")).toBeNull();
+});
+
 test("an empty queue renders nothing", () => {
   const container = render(<ChatMessageQueuePanel messages={[]} />);
 

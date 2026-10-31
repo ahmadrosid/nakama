@@ -150,6 +150,7 @@ interface ChatComposerBaseProps {
   draftStorageKey?: string | null;
   error: string | null;
   footerClassName?: string;
+  onEditQueuedMessage?: (id: string, text: string) => void;
   onRemoveQueuedMessage?: (id: string) => void;
   onSendQueuedMessageNow?: (id: string) => void;
   onStop?: () => void;
@@ -579,6 +580,7 @@ function ChatComposerMain({
   const queue = layout.isMinimal ? null : (
     <ChatMessageQueuePanel
       messages={layout.queuedMessages}
+      onEdit={props.onEditQueuedMessage}
       onRemove={props.onRemoveQueuedMessage}
       onSendNow={props.onSendQueuedMessageNow}
     />
