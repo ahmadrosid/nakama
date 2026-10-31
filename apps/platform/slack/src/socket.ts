@@ -25,14 +25,15 @@ const MAX_BACKOFF_MS = 30_000;
 const SEEN_EVENT_LIMIT = 500;
 
 /**
- * Socket Mode without the SDK: open a ticket URL, ack every envelope, and
+ * Socket Mode without the SDK: open a ticket URL, ack each envelope, and
  * reconnect on `disconnect` or close. No public URL is needed.
  * ponytail: no client-side ping watchdog; a half-open socket waits for Slack's
  * next refresh. Add one if the bridge goes silent without a close event.
  */
 export function connectSlackSocket(options: {
   appToken: string;
-  onEvent: (event: SlackMessageEvent) => void;
+  /** Resolves once the event is safe to ack; the turn itself runs on after. */
+  onEvent: (event: SlackMessageEvent, eventId: string) => Promise<void> | void;
   onStatus: (connected: boolean) => void;
 }) {
   let socket: WebSocket | null = null;
@@ -49,9 +50,17 @@ export function connectSlackSocket(options: {
     backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
   }
 
-  function handleEnvelope(envelope: SocketEnvelope): void {
+  function ack(envelope: SocketEnvelope): void {
     if (envelope.envelope_id) {
       socket?.send(JSON.stringify({ envelope_id: envelope.envelope_id }));
+    }
+  }
+
+  function handleEnvelope(envelope: SocketEnvelope): void {
+    const event = envelope.payload?.event;
+
+    if (envelope.type !== "events_api" || !event) {
+      ack(envelope);
     }
 
     if (envelope.type === "hello") {
@@ -67,31 +76,38 @@ export function connectSlackSocket(options: {
       return;
     }
 
-    const event = envelope.payload?.event;
-    const eventId = envelope.payload?.event_id;
-
     if (envelope.type !== "events_api" || !event) {
       return;
     }
 
+    const eventId =
+      envelope.payload?.event_id ?? `${event.channel}:${event.ts}`;
+
     // Slack redelivers when an ack is late; never run the same turn twice.
-    if (eventId) {
-      if (seenEventIds.has(eventId)) {
-        return;
-      }
+    if (seenEventIds.has(eventId)) {
+      ack(envelope);
 
-      seenEventIds.add(eventId);
+      return;
+    }
 
-      if (seenEventIds.size > SEEN_EVENT_LIMIT) {
-        const oldestEventId = seenEventIds.values().next().value;
+    seenEventIds.add(eventId);
 
-        if (oldestEventId) {
-          seenEventIds.delete(oldestEventId);
-        }
+    if (seenEventIds.size > SEEN_EVENT_LIMIT) {
+      const oldestEventId = seenEventIds.values().next().value;
+
+      if (oldestEventId) {
+        seenEventIds.delete(oldestEventId);
       }
     }
 
-    options.onEvent(event);
+    // No ack on a failure, so Slack delivers the event again.
+    Promise.resolve()
+      .then(() => options.onEvent(event, eventId))
+      .then(() => ack(envelope))
+      .catch((error) => {
+        seenEventIds.delete(eventId);
+        console.error("Slack event not accepted:", error);
+      });
   }
 
   async function open(): Promise<void> {

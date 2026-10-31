@@ -26,6 +26,7 @@ import {
   createChatHandler,
   createSlackEventHandler,
   type SlackApi,
+  SlackEventInbox,
 } from "./chat-handler";
 import { connectSlackSocket } from "./socket";
 
@@ -170,9 +171,19 @@ try {
     slack,
   });
 
+  const inbox = new SlackEventInbox(
+    join(getSlackConfigDir(owner), "event-inbox.json")
+  );
+
+  await inbox.load();
+
+  const events = createSlackEventHandler({ handleEvent, inbox, slack });
+
+  void events.recover();
+
   closeSocket = connectSlackSocket({
     appToken: config.appToken,
-    onEvent: createSlackEventHandler({ handleEvent, slack }),
+    onEvent: events.accept,
     onStatus: (next) => {
       connected = next;
       void heartbeat.write(connected);

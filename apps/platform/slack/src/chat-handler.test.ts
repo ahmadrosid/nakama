@@ -430,6 +430,38 @@ test("text written before each tool call is posted in order", async () => {
   });
 });
 
+test("the turn is marked started before it reaches the agent", async () => {
+  await withTempHome("nakama-slack-start-", async (homeDir) => {
+    await saveTokens(OWNER);
+
+    const order: string[] = [];
+
+    const { handle } = createHarness(
+      homeDir,
+      undefined,
+      {},
+      {
+        stream: async () => {
+          order.push("turn");
+
+          return "done";
+        },
+      }
+    );
+
+    const inbound = message({ channel: "D1", channel_type: "im", text: "go" });
+
+    await handle(inbound, async () => {
+      order.push("started");
+    });
+    await handle({ ...inbound, text: "!help" }, async () => {
+      order.push("started for a command");
+    });
+
+    expect(order).toEqual(["started", "turn"]);
+  });
+});
+
 describe("normalizeSlackText", () => {
   test("drops the bot mention and unescapes links and entities", () => {
     expect(
