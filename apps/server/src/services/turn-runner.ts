@@ -32,7 +32,8 @@ export type TurnEnd =
   | {
       kind: "error";
       message: string;
-      reason: "cancelled" | "failed" | "timeout";
+      /** `stalled`: the provider sent nothing before the first-token deadline. */
+      reason: "cancelled" | "failed" | "stalled" | "timeout";
       status: number;
       usage?: ChatTurnUsage;
     };
@@ -247,6 +248,11 @@ export class TurnRunner {
       return { status: "busy" };
     }
 
+    // Attached before prepare, so a stop or close_session sent while the chat
+    // is prepared still reaches the turn.
+    const abort = new AbortController();
+    this.registry.attachAbort(sessionId, abort);
+
     let chat: TurnChat | null;
 
     try {
@@ -264,7 +270,7 @@ export class TurnRunner {
     }
 
     return {
-      done: this.run(record, chat, input, options),
+      done: this.run(record, chat, input, options, abort),
       status: "started",
     };
   }
@@ -273,12 +279,10 @@ export class TurnRunner {
     record: StoredSessionRecord,
     chat: TurnChat,
     input: SendMessageInput,
-    options: TurnOptions
+    options: TurnOptions,
+    abort: AbortController
   ): Promise<TurnEnd> {
     const sessionId = record.id;
-    // close_session reaches the turn through this controller.
-    const abort = new AbortController();
-    this.registry.attachAbort(sessionId, abort);
 
     const signal = options.signal
       ? AbortSignal.any([abort.signal, options.signal])
@@ -313,10 +317,15 @@ export class TurnRunner {
     let sawOutput = false;
     // A deadline aborts the turn too, so the signal alone cannot tell a
     // cancel from a timeout.
-    let timedOut = false;
+    let timedOut: "stalled" | "timeout" | null = null;
     const deadlines: ReturnType<typeof setTimeout>[] = [];
 
-    const failAfter = (ms: number, message: string, when?: () => boolean) =>
+    const failAfter = (
+      ms: number,
+      message: string,
+      reason: "stalled" | "timeout",
+      when?: () => boolean
+    ) =>
       new Promise<never>((_, reject) => {
         deadlines.push(
           setTimeout(() => {
@@ -324,7 +333,7 @@ export class TurnRunner {
               return;
             }
 
-            timedOut = true;
+            timedOut = reason;
             reject(new NakamaApiError(message, 504));
             // After rejecting, so the race reports the timeout and not the
             // abort. Nothing else stops the open provider request.
@@ -349,7 +358,8 @@ export class TurnRunner {
         ),
         failAfter(
           timeoutMs,
-          `Chat timed out after ${Math.round(timeoutMs / 1000)}s waiting for the provider. Try another model or check provider settings.`
+          `Chat timed out after ${Math.round(timeoutMs / 1000)}s waiting for the provider. Try another model or check provider settings.`,
+          "timeout"
         ),
       ];
 
@@ -358,6 +368,7 @@ export class TurnRunner {
           failAfter(
             this.firstTokenTimeoutMs,
             `The provider accepted the request but sent nothing for ${Math.round(this.firstTokenTimeoutMs / 1000)}s. Try another model or check provider settings.`,
+            "stalled",
             () => !sawOutput
           )
         );
@@ -372,7 +383,7 @@ export class TurnRunner {
         usage: chat.getTurnUsage() ?? undefined,
       };
     } catch (error) {
-      const cancelled = signal.aborted && !timedOut;
+      const cancelled = signal.aborted && timedOut === null;
 
       // A 504 timeout is exactly what an operator needs, so only a 4xx
       // refusal and a cancel go unreported.
@@ -403,7 +414,7 @@ export class TurnRunner {
         : {
             kind: "error",
             message: formatServerError(error),
-            reason: timedOut ? "timeout" : "failed",
+            reason: timedOut ?? "failed",
             status: error instanceof NakamaApiError ? error.status : 500,
             usage,
           };
@@ -414,10 +425,17 @@ export class TurnRunner {
     }
 
     this.finish(sessionId, end, send);
-    this.deps.scheduleTitle(sessionId);
 
-    if (end.kind === "done" && sessionKind(record) !== "child") {
-      this.deps.scheduleSkillReview(sessionId);
+    // The turn is over and its lock is free; a failing hook must not turn a
+    // finished reply into an error or an unhandled rejection.
+    try {
+      this.deps.scheduleTitle(sessionId);
+
+      if (end.kind === "done" && sessionKind(record) !== "child") {
+        this.deps.scheduleSkillReview(sessionId);
+      }
+    } catch (error) {
+      void this.report(error, { kind: "turn", source: "server" });
     }
 
     return end;

@@ -233,6 +233,37 @@ describe("TurnRunner", () => {
     expect(registry.isActive(SESSION_ID)).toBe(false);
   });
 
+  test("a stop sent while the chat is prepared cancels the turn", async () => {
+    const { fake, seen } = chat(async () => "never");
+    let registry: SessionTurnRegistry | undefined;
+
+    const setupResult = setup(fake, {
+      prepare: async () => {
+        registry?.stopTurn(SESSION_ID);
+      },
+    });
+
+    registry = setupResult.registry;
+
+    expect(await setupResult.run()).toMatchObject({ reason: "cancelled" });
+    expect(seen.sent).toBe(0);
+    expect(registry.isActive(SESSION_ID)).toBe(false);
+  });
+
+  test("a throwing hook keeps the finished reply", async () => {
+    const { fake } = chat(async () => "hello");
+
+    const { registry, reported, run } = setup(fake, {
+      scheduleTitle: () => {
+        throw new Error("title service down");
+      },
+    });
+
+    expect(await run()).toMatchObject({ kind: "done", reply: "hello" });
+    expect(reported).toHaveLength(1);
+    expect(registry.isActive(SESSION_ID)).toBe(false);
+  });
+
   test("a caller that left before the turn began sends nothing and runs no hooks", async () => {
     const { fake, seen } = chat(async () => "never");
     const { hooks, registry, run } = setup(fake);
@@ -263,7 +294,7 @@ describe("TurnRunner", () => {
     const { run } = setup(fake, { firstTokenTimeoutMs: 20 });
     const startedAt = performance.now();
 
-    expect(await run()).toMatchObject({ reason: "timeout" });
+    expect(await run()).toMatchObject({ reason: "stalled" });
     // The overall deadline is 5s, so this ended on the first-token one.
     expect(performance.now() - startedAt).toBeLessThan(2000);
   });

@@ -1098,12 +1098,13 @@ export function registerSessionRoutes(
 
     const turnStream = wantsStream ? createTurnStream() : null;
 
-    // A closed request stops the turn on both paths, as a cancelled stream does.
+    // A closed stream stops the turn. A JSON turn runs to the end, so a client
+    // or proxy timeout does not lose a reply that is still saved to history.
     const turn = await agent.turns.start(sessionId, orgId, input, {
       onEvent: turnStream?.onEvent,
       signal: turnStream
         ? AbortSignal.any([turnStream.signal, c.req.raw.signal])
-        : c.req.raw.signal,
+        : undefined,
       whatsappMessage: body.whatsappMessage,
     });
 

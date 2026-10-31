@@ -190,6 +190,11 @@ async function runInChildSession(
     );
   }
 
+  // Before the turn starts, so it never replaces a label the turn sends.
+  if (!run.background) {
+    context.emitSubAgentActivity?.("Starting…");
+  }
+
   // The turn publishes to the turn registry, which is what a browser tab
   // opening the chat follows. Stop on the parent also stops a child it is
   // waiting for; a background child outlives the parent turn on purpose.
@@ -220,7 +225,6 @@ async function runInChildSession(
     return { output, sessionId, status: "success", summary: output };
   }
 
-  context.emitSubAgentActivity?.("Starting…");
   const end = await turn.done;
 
   if (end.kind === "done") {
