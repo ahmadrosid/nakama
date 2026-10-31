@@ -36,6 +36,74 @@ self.addEventListener("message", (event) => {
   }
 });
 
+/** Sent by the server when a chat reply is ready (`web-push-service.ts`). */
+interface ReplyPush {
+  body: string;
+  tag: string;
+  title: string;
+  url: string;
+}
+
+const FALLBACK_PUSH: ReplyPush = {
+  body: "",
+  tag: "nakama",
+  title: "Nakama",
+  url: "/",
+};
+
+function readPush(data: PushMessageData | null): ReplyPush {
+  try {
+    // SAFETY: only Nakama's server holds the VAPID key this subscription was
+    // made with, and it always sends a ReplyPush.
+    return (data?.json() as ReplyPush | undefined) ?? FALLBACK_PUSH;
+  } catch {
+    return FALLBACK_PUSH;
+  }
+}
+
+self.addEventListener("push", (event) => {
+  const message = readPush(event.data);
+
+  // Always show something: Safari drops a subscription whose pushes stay silent.
+  event.waitUntil(
+    self.registration.showNotification(message.title || "Nakama", {
+      // Android draws the badge from its alpha only: an opaque icon is a white square.
+      badge: "/icons/notification-badge-v1.png",
+      body: message.body,
+      data: { url: message.url },
+      icon: "/icons/icon-192-v2.png",
+      tag: message.tag,
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+
+  const url = new URL(event.notification.data?.url ?? "/", self.location.origin)
+    .href;
+
+  event.waitUntil(openFromNotification(url));
+});
+
+async function openFromNotification(url: string): Promise<void> {
+  const [open] = await self.clients.matchAll({ type: "window" });
+
+  if (open) {
+    await open.focus();
+
+    try {
+      await open.navigate(url);
+
+      return;
+    } catch {
+      // Not controlled by this worker yet: fall through to a new window.
+    }
+  }
+
+  await self.clients.openWindow(url);
+}
+
 self.addEventListener("fetch", (event) => {
   const strategy = classifyRequest(
     {
