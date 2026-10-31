@@ -1207,8 +1207,17 @@ export function useChatPage() {
   ]);
 
   const stopStreaming = useCallback(() => {
-    // Stop means stop: aborting closes the request, which is how the server
-    // learns to end the turn. Detaching is only for switching chats.
+    // Stop means stop. Closing the request no longer ends a browser's turn
+    // (a phone locking must not), so the server is told outright. Detaching
+    // is only for switching chats.
+    const sessionId = activeSessionIdRef.current;
+
+    if (sessionId) {
+      client.stopSessionTurn(sessionId).catch(() => {
+        // No turn left to stop, or the session went away.
+      });
+    }
+
     detachStreamRef.current = null;
     streamAbortRef.current?.abort();
   }, []);
