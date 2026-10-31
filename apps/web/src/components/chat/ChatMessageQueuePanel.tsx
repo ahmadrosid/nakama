@@ -64,11 +64,14 @@ function QueuedBubble({
     if (!copied) {
       return;
     }
+
     const timer = setTimeout(() => setCopied(false), 1500);
+
     return () => clearTimeout(timer);
   }, [copied]);
 
   const attachmentLabel = attachmentText(message.attachmentCount);
+
   const label = message.text
     ? [message.text, attachmentLabel].filter(Boolean).join(" · ")
     : attachmentLabel;
@@ -81,6 +84,7 @@ function QueuedBubble({
     if (draft !== null && onEdit && (draft.trim() || attachmentLabel)) {
       onEdit(message.id, draft);
     }
+
     setDraft(null);
   };
 

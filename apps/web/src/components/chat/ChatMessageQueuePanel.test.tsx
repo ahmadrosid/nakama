@@ -20,6 +20,7 @@ function render(element: React.ReactElement) {
     act(() => root.unmount());
     container.remove();
   });
+
   return container;
 }
 
@@ -31,6 +32,7 @@ const messages = [
 test("each queued message removes and sends by its id", () => {
   const removed: string[] = [];
   const sent: string[] = [];
+
   const container = render(
     <ChatMessageQueuePanel
       messages={messages}
@@ -44,6 +46,7 @@ test("each queued message removes and sends by its id", () => {
   const removeButtons = container.querySelectorAll<HTMLButtonElement>(
     'button[aria-label="Remove queued message"]'
   );
+
   const sendButtons = [
     ...container.querySelectorAll<HTMLButtonElement>("button"),
   ].filter((button) => !button.hasAttribute("aria-label"));
@@ -57,6 +60,7 @@ test("each queued message removes and sends by its id", () => {
 
 test("editing a queued message saves the new text on Enter", () => {
   const edits: Array<[string, string]> = [];
+
   const container = render(
     <ChatMessageQueuePanel
       messages={messages}
@@ -80,6 +84,7 @@ test("editing a queued message saves the new text on Enter", () => {
       Object.getPrototypeOf(textarea),
       "value"
     )?.set;
+
     setter?.call(textarea, "use figma");
     textarea?.dispatchEvent(new window.Event("input", { bubbles: true }));
   });

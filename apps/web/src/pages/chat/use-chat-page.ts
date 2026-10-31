@@ -1244,6 +1244,7 @@ export function useChatPage() {
       ];
       setQueuedMessages((current) => {
         const hit = current.find((entry) => entry.id === id);
+
         return hit
           ? [hit, ...current.filter((entry) => entry.id !== id)]
           : current;
