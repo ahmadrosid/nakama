@@ -45,6 +45,18 @@ export interface AutomationDelivery {
   to?: string;
 }
 
+/**
+ * What an automation run may use from its agent. Each list holds ids from the
+ * agent's own set; anything not listed, including what the agent gets later,
+ * is left out.
+ */
+export interface AutomationToolLimit {
+  /** Composio toolkit slugs, for example `gmail`. */
+  composioToolkits: string[];
+  mcpServerIds: string[];
+  toolIds: string[];
+}
+
 export interface AutomationDefinition {
   delivery?: AutomationDelivery;
   description: string;
@@ -52,6 +64,8 @@ export interface AutomationDefinition {
   name: string;
   prompt: string;
   steps: AutomationStep[];
+  /** No limit: the run gets every tool its agent has. */
+  toolLimit?: AutomationToolLimit;
   trigger: AutomationTrigger;
   version: number;
 }
@@ -64,6 +78,8 @@ export interface StoredAutomation extends AutomationDefinition {
   nextRunAt?: string | null;
   orgId?: string | null;
   profileId: string;
+  /** The last person who saved it; runs use their Composio sign-ins. */
+  runAsUserId?: string | null;
   updatedAt: string;
 }
 
@@ -1369,6 +1385,7 @@ export interface CreateAutomationRequest {
   name: string;
   profileId?: string;
   prompt: string;
+  toolLimit?: AutomationToolLimit;
   trigger: AutomationTrigger;
 }
 
@@ -1379,6 +1396,8 @@ export interface UpdateAutomationRequest {
   name?: string;
   profileId?: string;
   prompt?: string;
+  /** null removes the limit. */
+  toolLimit?: AutomationToolLimit | null;
   trigger?: AutomationTrigger;
 }
 

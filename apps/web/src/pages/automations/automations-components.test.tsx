@@ -664,3 +664,93 @@ test("editor retains custom and one-time triggers until a preset is selected", a
     queryClient.clear();
   }
 });
+
+test("editor limits tools to what the user leaves ticked", async () => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { enabled: false } },
+  });
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  let draft: StoredAutomation = {
+    createdAt: "2026-10-01T00:00:00Z",
+    description: "",
+    enabled: true,
+    id: "automation",
+    name: "Briefing",
+    profileId: "agent",
+    prompt: "Brief me",
+    steps: [],
+    trigger: { type: "manual" },
+    updatedAt: "2026-10-01T00:00:00Z",
+    version: 1,
+  };
+
+  function Editor() {
+    const [value, setValue] = useState(draft);
+    draft = value;
+
+    return (
+      <AutomationEditorForm
+        automation={value}
+        busy={false}
+        onChange={(patch) => setValue((current) => ({ ...current, ...patch }))}
+        profiles={[]}
+        toolOptions={{
+          composioToolkits: [{ id: "gmail", label: "gmail" }],
+          mcpServerIds: [{ id: "mcp_calendar", label: "calendar" }],
+          toolIds: [
+            { id: "tool_bash", label: "bash" },
+            { id: "tool_read", label: "read_file" },
+          ],
+        }}
+      />
+    );
+  }
+
+  try {
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Editor />
+        </QueryClientProvider>
+      )
+    );
+    expect(draft.toolLimit).toBeUndefined();
+
+    await act(async () =>
+      container
+        .querySelector<HTMLElement>(
+          `[aria-label="Use all of the agent's tools"]`
+        )!
+        .click()
+    );
+    expect(draft.toolLimit).toEqual({
+      composioToolkits: ["gmail"],
+      mcpServerIds: ["mcp_calendar"],
+      toolIds: ["tool_bash", "tool_read"],
+    });
+
+    const bash = Array.from(container.querySelectorAll("label")).find(
+      (label) => label.textContent === "bash"
+    )!;
+
+    await act(async () => bash.click());
+    expect(draft.toolLimit?.toolIds).toEqual(["tool_read"]);
+
+    await act(async () =>
+      container
+        .querySelector<HTMLElement>(
+          `[aria-label="Use all of the agent's tools"]`
+        )!
+        .click()
+    );
+    expect(draft.toolLimit).toBeUndefined();
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    queryClient.clear();
+  }
+});

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
-import { useProfilesQuery } from "@/hooks/use-app-queries";
+import { useProfileQuery, useProfilesQuery } from "@/hooks/use-app-queries";
 import {
   useAutomationRunsQuery,
   useAutomationsQuery,
@@ -13,8 +13,10 @@ import {
   useRunAutomationMutation,
   useUpdateAutomationMutation,
 } from "@/hooks/use-automations";
+import { useProfileComposioToolkits } from "@/hooks/use-composio";
 import { formatError } from "@/lib/client";
 import { findSuperNakamaProfile } from "@/lib/profiles";
+import type { AutomationToolOptions } from "@/pages/automations/automations-components";
 
 const EMPTY_AUTOMATIONS: StoredAutomation[] = [];
 
@@ -79,6 +81,24 @@ export function useAutomationsPage() {
   );
 
   const [editDraft, setEditDraft] = useState<StoredAutomation | null>(null);
+  const editProfileId = editDraft?.profileId ?? null;
+  const { data: editProfile } = useProfileQuery(editProfileId);
+  const { data: editComposio } = useProfileComposioToolkits(editProfileId);
+
+  const toolOptions = useMemo<AutomationToolOptions | undefined>(
+    () =>
+      editProfile && {
+        composioToolkits: (editComposio?.assignments ?? []).map(
+          ({ toolkitSlug }) => ({ id: toolkitSlug, label: toolkitSlug })
+        ),
+        mcpServerIds: editProfile.mcpServers.map(({ id, name }) => ({
+          id,
+          label: name,
+        })),
+        toolIds: editProfile.tools.map(({ id, name }) => ({ id, label: name })),
+      },
+    [editProfile, editComposio]
+  );
 
   const busy = updateMutation.isPending || deleteMutation.isPending;
 
@@ -193,6 +213,7 @@ export function useAutomationsPage() {
           name: editDraft.name,
           profileId: editDraft.profileId,
           prompt: editDraft.prompt,
+          toolLimit: editDraft.toolLimit ?? null,
           trigger: editDraft.trigger,
         },
       });
@@ -348,6 +369,7 @@ export function useAutomationsPage() {
     setEditDraft,
     setSearchQuery,
     setSelectedId,
+    toolOptions,
     trimmedSearch,
     unreadByAutomationId,
     updateEditDraft,

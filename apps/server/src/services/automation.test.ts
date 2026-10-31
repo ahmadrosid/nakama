@@ -66,6 +66,56 @@ async function assignComposeioGmailSender(
 }
 
 describe("AutomationService", () => {
+  test("stores a tool limit and who saved it", async () => {
+    const db = await createTestDb();
+
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+
+    const created = await service.create(
+      ORG_ID,
+      {
+        description: "",
+        name: "Briefing",
+        prompt: "Brief me",
+        toolLimit: {
+          composioToolkits: ["Gmail", "gmail"],
+          mcpServerIds: [],
+          toolIds: [" tool_a ", ""],
+        },
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID,
+      { orgRole: "member", userId: "user_a" }
+    );
+
+    const stored = await service.get(created.id, ORG_ID);
+    expect(stored?.toolLimit).toEqual({
+      composioToolkits: ["gmail"],
+      mcpServerIds: [],
+      toolIds: ["tool_a"],
+    });
+    expect(stored?.runAsUserId).toBe("user_a");
+
+    // The runner saves without access and changes neither field.
+    await service.update(created.id, ORG_ID, { enabled: false });
+    const afterRunner = await service.get(created.id, ORG_ID);
+    expect(afterRunner?.runAsUserId).toBe("user_a");
+    expect(afterRunner?.toolLimit?.toolIds).toEqual(["tool_a"]);
+
+    // A person who saves it lends their sign-ins; null removes the limit.
+    await service.update(
+      created.id,
+      ORG_ID,
+      { toolLimit: null },
+      { orgRole: "member", userId: "user_b" }
+    );
+    const cleared = await service.get(created.id, ORG_ID);
+    expect(cleared?.toolLimit).toBeUndefined();
+    expect(cleared?.runAsUserId).toBe("user_b");
+  });
+
   test("only an org admin can automate an agent that has the email tool", async () => {
     const db = await createTestDb();
     const now = new Date().toISOString();

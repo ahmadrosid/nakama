@@ -3,11 +3,13 @@ import type {
   AutomationDelivery,
   AutomationRunRecord,
   AutomationRunStatus,
+  AutomationToolLimit,
   ProfileSummary,
   StoredAutomation,
 } from "@nakama/core/contract";
 import { MAX_SESSION_SEARCH_LENGTH } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
+import { Checkbox } from "@nakama/ui/checkbox";
 import { Command, CommandItem, CommandList } from "@nakama/ui/command";
 import { DialogOverlay, DialogTitle } from "@nakama/ui/dialog";
 import { Input } from "@nakama/ui/input";
@@ -25,6 +27,7 @@ import {
   SelectValue,
 } from "@nakama/ui/select";
 import { Spinner } from "@nakama/ui/spinner";
+import { Switch } from "@nakama/ui/switch";
 import { Textarea } from "@nakama/ui/textarea";
 import { cn } from "@nakama/ui/utils";
 import {
@@ -235,16 +238,23 @@ const WEEKDAYS = [
   "Saturday",
 ];
 
+/** What the chosen agent has, by the ids a tool limit stores. */
+export type AutomationToolOptions = {
+  [Key in keyof AutomationToolLimit]: Array<{ id: string; label: string }>;
+};
+
 export function AutomationEditorForm({
   automation,
   busy,
   onChange,
   profiles,
+  toolOptions,
 }: {
   automation: StoredAutomation;
   busy: boolean;
   onChange: (patch: Partial<StoredAutomation>) => void;
   profiles: ProfileSummary[];
+  toolOptions?: AutomationToolOptions;
 }) {
   const scheduleTrigger =
     automation.trigger.type === "schedule" ? automation.trigger : null;
@@ -311,6 +321,14 @@ export function AutomationEditorForm({
         delivery={automation.delivery}
         onChange={(delivery) => onChange({ delivery })}
       />
+      {toolOptions ? (
+        <ToolLimitFields
+          busy={busy}
+          limit={automation.toolLimit}
+          onChange={(toolLimit) => onChange({ toolLimit })}
+          options={toolOptions}
+        />
+      ) : null}
       <details className="group border-border border-t pt-3">
         <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 font-semibold sm:min-h-10 [&::-webkit-details-marker]:hidden">
           More options
@@ -1236,6 +1254,88 @@ function RunStatusIcon({ status }: { status: AutomationRunStatus }) {
       aria-hidden
       className={cn(className, "animate-spin text-muted-foreground")}
     />
+  );
+}
+
+const TOOL_LIMIT_GROUPS: Array<{
+  key: keyof AutomationToolLimit;
+  label: string;
+}> = [
+  { key: "toolIds", label: "Tools" },
+  { key: "mcpServerIds", label: "MCP servers" },
+  { key: "composioToolkits", label: "Connectors" },
+];
+
+function ToolLimitFields({
+  busy,
+  limit,
+  onChange,
+  options,
+}: {
+  busy: boolean;
+  limit?: AutomationToolLimit;
+  onChange: (limit: AutomationToolLimit | undefined) => void;
+  options: AutomationToolOptions;
+}) {
+  return (
+    <fieldset className="grid min-w-0 gap-3">
+      <legend className="mb-2 font-semibold text-sm">Tools it may use</legend>
+      <label className="flex min-h-10 items-center gap-2 text-sm">
+        <Switch
+          aria-label="Use all of the agent's tools"
+          checked={!limit}
+          disabled={busy}
+          onCheckedChange={(all) =>
+            // Start a new limit with everything picked, so the user unticks.
+            onChange(
+              all
+                ? undefined
+                : {
+                    composioToolkits: options.composioToolkits.map(
+                      (item) => item.id
+                    ),
+                    mcpServerIds: options.mcpServerIds.map((item) => item.id),
+                    toolIds: options.toolIds.map((item) => item.id),
+                  }
+            )
+          }
+        />
+        All of the agent's tools
+      </label>
+      {limit
+        ? TOOL_LIMIT_GROUPS.map(({ key, label }) =>
+            options[key].length > 0 ? (
+              <div className="grid gap-1.5" key={key}>
+                <span className="font-medium text-muted-foreground text-xs">
+                  {label}
+                </span>
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  {options[key].map((item) => (
+                    <label
+                      className="flex min-h-9 items-center gap-2 text-sm"
+                      key={item.id}
+                    >
+                      <Checkbox
+                        checked={limit[key].includes(item.id)}
+                        disabled={busy}
+                        onCheckedChange={(checked) =>
+                          onChange({
+                            ...limit,
+                            [key]: checked
+                              ? [...limit[key], item.id]
+                              : limit[key].filter((id) => id !== item.id),
+                          })
+                        }
+                      />
+                      {item.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : null
+          )
+        : null}
+    </fieldset>
   );
 }
 
