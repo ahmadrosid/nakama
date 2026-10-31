@@ -1,7 +1,6 @@
 import type { StreamEvent, ToolContext, ToolDefinition } from "@nakama/core";
 import { z } from "zod";
 import type { AgentService } from "../services/agent-service";
-import { sessionKind } from "../services/session-runtime";
 import { formatToolActivityLabel } from "./sub-agent-activity";
 import {
   buildSubAgentPrompt,
@@ -35,7 +34,7 @@ export function createSubAgentTool(agentService: AgentService): ToolDefinition {
       properties: {
         background: {
           description:
-            "Return at once instead of waiting for the answer. Up to 5 sub-agent chats per chat. Read the reply later with read_profile_session.",
+            "Return at once instead of waiting for the answer. Up to 5 sub-agent chats per chat.",
           type: "boolean",
         },
         context: {
@@ -159,15 +158,8 @@ async function runInChildSession(
   context: ToolContext & { orgId: string },
   agentService: AgentService
 ): Promise<SubAgentToolOutput> {
-  const parent = await agentService.getSessionSummary(
-    run.parentSessionId,
-    context.orgId
-  );
-
-  if (parent && sessionKind(parent) === "child") {
-    return failSubAgentResult("Nested sub-agent execution is not allowed.");
-  }
-
+  // createChildSession refuses a parent that is itself a child chat, and such
+  // a parent has no children to send to.
   let sessionId = run.childSessionId;
 
   if (sessionId) {
@@ -220,7 +212,7 @@ async function runInChildSession(
   }
 
   if (run.background) {
-    const output = `Started in a new chat (session ${sessionId}). The user can open it from Recents. Do not wait for it; read its reply later with read_profile_session.`;
+    const output = `Started in a new chat (session ${sessionId}). The user can open it from Recents. Do not wait for it.`;
 
     return { output, sessionId, status: "success", summary: output };
   }

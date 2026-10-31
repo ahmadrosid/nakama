@@ -258,6 +258,21 @@ describe("sub_agent background", () => {
       parentId
     );
   });
+
+  test("a child of a Telegram chat is a web chat", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    const agent = new AgentService(null, null, db);
+    const parentId = await agent.createSession(ORG_ID, "telegram", PROFILE_ID);
+
+    const started = await runSubAgentTool(
+      { background: true, task: "Draft the marketing plan" },
+      { ...TOOL_CONTEXT, sessionId: parentId },
+      agent
+    );
+
+    expect((await db.getSession(started.sessionId ?? ""))?.channel).toBe("web");
+  });
 });
 
 describe("sub_agent child chats", () => {

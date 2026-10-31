@@ -1282,6 +1282,9 @@ export interface DatabaseAdapter {
     now: string
   ): Promise<StoredBrowserSessionRecord[]>;
 
+  /** Sessions whose parent is this one: sub_agent chats and branches. */
+  listChildSessions(parentSessionId: string): Promise<StoredSessionRecord[]>;
+
   listComposioToolkitsForOrg(
     orgId: string
   ): Promise<StoredComposioToolkitRecord[]>;

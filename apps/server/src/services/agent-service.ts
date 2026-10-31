@@ -437,6 +437,7 @@ export interface CreateSessionOptions {
   orgRole?: OrgRole | null;
   parentSessionId?: string;
   thinkingEffort?: ThinkingEffort | null;
+  title?: string;
 }
 
 /** Per-session settings a chat is built with. Branches copy them. */
@@ -2575,7 +2576,7 @@ export class AgentService {
       parentSessionId: options?.parentSessionId ?? null,
       profileId: resolvedProfileId,
       thinkingEffort: options?.thinkingEffort ?? null,
-      title: null,
+      title: options?.title ?? null,
       userId: userId ?? null,
     };
 
@@ -2629,13 +2630,9 @@ export class AgentService {
       );
     }
 
-    const siblings = parent.userId
-      ? await this.db.listSessionsForUser(parent.userId)
-      : await this.db.listSessions();
-
     if (
-      siblings.filter((session) => session.parentSessionId === parentSessionId)
-        .length >= MAX_CHILD_SESSIONS
+      (await this.db.listChildSessions(parentSessionId)).length >=
+      MAX_CHILD_SESSIONS
     ) {
       throw new NakamaApiError(
         `This chat already started ${MAX_CHILD_SESSIONS} chats.`,
@@ -2645,9 +2642,11 @@ export class AgentService {
 
     const inherited = inheritFrom(parent, "child");
 
-    const childId = await this.createSession(
+    // Web even under a Telegram or Discord chat: no bot chat is bound to the
+    // child, so the user opens it from Recents.
+    return await this.createSession(
       orgId,
-      parseAgentChannel(inherited.channel) ?? "web",
+      "web",
       inherited.profileId,
       inherited.userId,
       {
@@ -2656,12 +2655,9 @@ export class AgentService {
         model: inherited.model,
         parentSessionId,
         thinkingEffort: inherited.thinkingEffort,
+        title,
       }
     );
-
-    await this.db.renameSessionTitle(childId, title);
-
-    return childId;
   }
 
   async assertSessionProfileAccess(
@@ -3223,13 +3219,8 @@ export class AgentService {
 
     // Chats sub_agent started here go with it, or Recents keeps them without
     // their parent. A branch has a parent too but stays: it is its own chat.
-    const sessions = record.userId
-      ? await this.db.listSessionsForUser(record.userId)
-      : await this.db.listSessions();
-
-    for (const child of sessions) {
+    for (const child of await this.db.listChildSessions(sessionId)) {
       if (
-        child.parentSessionId === sessionId &&
         sessionKind(child) === "child" &&
         !child.closedAt &&
         (await this.db.updateSessionClosedAt(child.id, closedAt))
