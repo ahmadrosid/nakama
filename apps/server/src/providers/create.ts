@@ -241,6 +241,7 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
     case "zhipu_cn":
     case "groq":
     case "cheaper_inference":
+    case "atmorouter":
       return createOpenAIProvider({
         apiKey: options.apiKey,
         baseUrl: baseUrlOverride ?? discoveryBaseUrl,

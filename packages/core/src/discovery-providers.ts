@@ -38,6 +38,7 @@ export const DISCOVERY_MODEL_PROVIDERS: ReadonlySet<ProviderName> =
     "xai",
     "groq",
     "cheaper_inference",
+    "atmorouter",
     "zhipu",
     "zhipu_cn",
   ]);
@@ -48,6 +49,7 @@ export const DISCOVERY_MODEL_PROVIDERS: ReadonlySet<ProviderName> =
 export const DISCOVERY_PROVIDER_BASE_URLS: Readonly<
   Partial<Record<ProviderName, string>>
 > = {
+  atmorouter: "https://atmorouter.dev/v1",
   cheaper_inference: "https://api.cheaperinference.com/v1",
   groq: "https://api.groq.com/openai/v1",
   minimax: "https://api.minimax.io/v1",
