@@ -2536,7 +2536,8 @@ describe("OrgService shared agent selection", () => {
     } finally {
       database.release();
     }
-  });
+    // A full export and restore on a busy CI runner can pass 5 seconds.
+  }, 15_000);
   test("published tool details and local assignments keep parent sources private", async () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     const agentPublication = await seedSharedAgentSelection(db, orgService);
