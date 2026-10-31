@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   extractComposioListItems,
+  listAllCatalogToolkits,
   parseCatalogToolkitItem,
   parseLinkRedirectUrl,
   parseSessionToolItems,
@@ -105,6 +106,52 @@ describe("parseLinkRedirectUrl", () => {
         connectionRequest: { redirectUrl: "https://oauth.example/nested" },
       })
     ).toBe("https://oauth.example/nested");
+  });
+});
+
+describe("listAllCatalogToolkits", () => {
+  test("follows the cursor to the last page", async () => {
+    const cursors: (string | undefined)[] = [];
+
+    const client = {
+      toolkits: {
+        async list(query: { cursor?: string; limit: number }) {
+          cursors.push(query.cursor);
+
+          return query.cursor
+            ? { items: [{ name: "Higgsfield", slug: "higgsfield" }] }
+            : {
+                items: [{ name: "Notion", slug: "notion" }],
+                next_cursor: "page-2",
+              };
+        },
+      },
+    };
+
+    const catalog = await listAllCatalogToolkits(client);
+
+    expect(catalog.map((toolkit) => toolkit.slug)).toEqual([
+      "notion",
+      "higgsfield",
+    ]);
+    expect(cursors).toEqual([undefined, "page-2"]);
+  });
+
+  test("stops when the cursor never ends", async () => {
+    let calls = 0;
+
+    const client = {
+      toolkits: {
+        async list() {
+          calls++;
+
+          return { items: [], next_cursor: "again" };
+        },
+      },
+    };
+
+    await expect(listAllCatalogToolkits(client)).resolves.toEqual([]);
+    expect(calls).toBe(20);
   });
 });
 

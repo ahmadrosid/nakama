@@ -177,6 +177,47 @@ type ComposioAuthConfigClient = {
   };
 };
 
+type ComposioToolkitPageClient = {
+  toolkits: {
+    list(query: { cursor?: string; limit: number }): Promise<{
+      items: unknown[];
+      next_cursor?: string | null;
+    }>;
+  };
+};
+
+const CATALOG_PAGE_SIZE = 1000;
+
+/** A guard against a cursor that never ends, far above today's catalog. */
+const MAX_CATALOG_PAGES = 20;
+
+/**
+ * Every page of the catalog. The SDK's `toolkits.get` returns one page and
+ * drops the cursor, which hid apps such as Higgsfield past the first 200.
+ */
+export async function listAllCatalogToolkits(
+  client: ComposioToolkitPageClient
+): Promise<ComposioCatalogToolkit[]> {
+  const items: unknown[] = [];
+  let cursor: string | undefined;
+
+  for (let page = 0; page < MAX_CATALOG_PAGES; page++) {
+    const response = await client.toolkits.list({
+      cursor,
+      limit: CATALOG_PAGE_SIZE,
+    });
+
+    items.push(...response.items);
+    cursor = response.next_cursor ?? undefined;
+
+    if (!cursor) {
+      break;
+    }
+  }
+
+  return items.flatMap((item) => parseCatalogToolkitItem(item) ?? []);
+}
+
 export async function resolveAuthConfigId(
   composio: ComposioAuthConfigClient,
   toolkitSlug: string
@@ -257,11 +298,15 @@ export class ComposioApiClient {
   async listCatalogToolkits(options?: {
     limit?: number;
   }): Promise<ComposioCatalogToolkit[]> {
-    const limit = options?.limit ?? 200;
-    const response = await this.composio.toolkits.get({ limit });
-    const items = extractComposioListItems(response);
+    if (!options?.limit) {
+      return listAllCatalogToolkits(this.composio.getClient());
+    }
 
-    return items
+    const response = await this.composio.toolkits.get({
+      limit: options.limit,
+    });
+
+    return extractComposioListItems(response)
       .map((item) => parseCatalogToolkitItem(item))
       .filter((item): item is ComposioCatalogToolkit => item !== null);
   }
