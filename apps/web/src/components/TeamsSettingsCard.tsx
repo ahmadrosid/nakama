@@ -267,7 +267,7 @@ export function TeamsSettingsCard() {
       ) : null}
 
       <SettingsRow
-        description="Register this as the bot's messaging endpoint in Azure."
+        description="Paste this as the bot's messaging endpoint in the Teams Developer Portal or your Azure Bot."
         label="Messaging endpoint"
         layout="stacked"
       >
