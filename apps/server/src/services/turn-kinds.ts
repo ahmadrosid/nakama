@@ -67,7 +67,7 @@ const ALL_TOOLS = {
 
 /**
  * A turn nobody watches gets no planning, questions or nested agents.
- * Automations and plugin workflows still turn questions and sub_agent on.
+ * Automations and plugin workflows still turn sub_agent on.
  */
 const DELEGATED_TOOLS = {
   automation: false,
@@ -89,11 +89,7 @@ const TURN_POLICIES: Record<TurnKind, TurnPolicy> = {
     channel: "automation",
     instructions: [],
     orgRole: "member",
-    tools: {
-      ...DELEGATED_TOOLS,
-      question: true,
-      subAgent: true,
-    },
+    tools: { ...DELEGATED_TOOLS, subAgent: true },
   },
   branch: { instructions: [], tools: ALL_TOOLS },
   chat: { instructions: [], tools: ALL_TOOLS },
@@ -120,11 +116,7 @@ const TURN_POLICIES: Record<TurnKind, TurnPolicy> = {
   },
   plugin_workflow: {
     instructions: [],
-    tools: {
-      ...DELEGATED_TOOLS,
-      question: true,
-      subAgent: true,
-    },
+    tools: { ...DELEGATED_TOOLS, subAgent: true },
   },
   sub_agent: {
     channel: "subagent",

@@ -152,8 +152,8 @@ describe("AgentService skill_manage injection", () => {
     expect(await names("cognito")).not.toContain("propose_org_memory");
     expect(await names("cognito")).toContain("todo_write");
 
-    // Today an automation keeps ask_user_question; #2196 removes it.
-    expect(await names("automation")).toContain("ask_user_question");
+    // Nobody is there to answer, and the question would end the run.
+    expect(await names("automation")).not.toContain("ask_user_question");
     expect(await names("automation")).not.toContain("todo_write");
     expect(await names("automation")).not.toContain("create_automation");
 
@@ -165,7 +165,7 @@ describe("AgentService skill_manage injection", () => {
     expect(await names("acp_draft")).toContain("propose_org_memory");
 
     const workflow = await names("plugin_workflow");
-    expect(workflow).toContain("ask_user_question");
+    expect(workflow).not.toContain("ask_user_question");
     expect(workflow).not.toContain("todo_write");
     expect(workflow).not.toContain("create_automation");
   });

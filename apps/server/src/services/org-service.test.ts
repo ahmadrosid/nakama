@@ -3273,7 +3273,7 @@ if __name__ == "__main__":
       }
 
       await writeFile(modulePath, source.replace('"first"', '"updated"'));
-      await db.upsertTool({ ...record, name: "ask_user_question" });
+      await db.upsertTool({ ...record, name: "org_memory_search" });
       await expect(
         agent.resolvePluginExecutionTools("org_team_a", profile.id)
       ).rejects.toMatchObject({ status: 409 });
