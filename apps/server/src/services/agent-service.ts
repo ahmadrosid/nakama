@@ -2158,28 +2158,35 @@ export class AgentService {
 
     const acpKey = oneShotAcpKey(profile);
 
-    const harness = this.createHarnessForProfile(
-      profile,
-      profile.model,
-      userId ?? undefined,
-      acpKey,
-      { context: toolContext, tools }
-    );
+    // The harness registers ACP tool access, and the caller gets `close` only
+    // on return, so a throw from here on must end the run itself.
+    try {
+      const harness = this.createHarnessForProfile(
+        profile,
+        profile.model,
+        userId ?? undefined,
+        acpKey,
+        { context: toolContext, tools }
+      );
 
-    const chat = createAgentChatSession(harness, {
-      channel: policy.channel,
-      deliveryChannel: input.deliveryChannel,
-      enableToolLoop: policy.tools !== null,
-      initialHistory,
-      soul: soulActive,
-      systemPrompt: withTurnInstructions(systemPrompt, policy.instructions),
-      toolContext,
-      tools,
-      userContext,
-      userTimezone,
-    });
+      const chat = createAgentChatSession(harness, {
+        channel: policy.channel,
+        deliveryChannel: input.deliveryChannel,
+        enableToolLoop: policy.tools !== null,
+        initialHistory,
+        soul: soulActive,
+        systemPrompt: withTurnInstructions(systemPrompt, policy.instructions),
+        toolContext,
+        tools,
+        userContext,
+        userTimezone,
+      });
 
-    return { chat, close: () => endOneShotAcp(acpKey), initialHistory };
+      return { chat, close: () => endOneShotAcp(acpKey), initialHistory };
+    } catch (error) {
+      endOneShotAcp(acpKey);
+      throw error;
+    }
   }
 
   /**
