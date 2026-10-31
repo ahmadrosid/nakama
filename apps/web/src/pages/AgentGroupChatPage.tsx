@@ -48,7 +48,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { ChatPageColumn } from "@/pages/chat/chat-page-layout";
 
 const COMPOSER_DOCK =
-  "sticky bottom-0 z-10 mt-auto w-full shrink-0 bg-background/95 pt-3 max-sm:px-0 sm:px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:pt-4 sm:pb-4";
+  "sticky bottom-0 z-10 mt-auto w-full shrink-0 bg-background/95 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:pt-4 sm:pb-4";
 
 const NO_THREAD_RUNS: number[] = [];
 
@@ -115,6 +115,7 @@ export function AgentGroupChatPage() {
         ) : null
       }
       key={`${groupId}:${sessionId ?? "new"}`}
+      rememberId={sessionId}
     >
       {sessionId ? (
         <GroupSession
@@ -220,7 +221,11 @@ function GroupMissing({ message }: { message?: string }) {
   );
 }
 
-/** The group's name, its agents' avatars and count, and the edit group and new chat buttons. */
+/**
+ * Top bar of an open group chat: the group's name, its agents, and the new
+ * chat and group actions. Same height and rule as the side panel header, so
+ * the two line up, as on the agent chat page.
+ */
 function GroupHeader({
   group,
   members,
@@ -237,6 +242,7 @@ function GroupHeader({
         onClick={() => navigate(groupPath(group.id))}
         size="sm"
         type="button"
+        variant="ghost"
       >
         <MessageAdd01Icon aria-hidden />
         <span className="max-sm:sr-only">New chat</span>
@@ -250,26 +256,24 @@ function GroupHeader({
 
   return (
     <>
-      <header className="flex h-14 shrink-0 items-center gap-3 px-4 max-sm:hidden sm:px-6">
-        <h1 className="min-w-0 truncate font-semibold text-lg tracking-tight">
-          {group.name}
-        </h1>
-        <div className="flex shrink-0 -space-x-2">
-          {members.slice(0, 4).map((member) => (
-            <ProfileAvatar
-              className="outline-none"
-              key={member.id}
-              profile={member}
-              size="sm"
-            />
-          ))}
+      <header className="-mx-6 flex shrink-0 items-center gap-2 border-border border-b px-4 py-3 max-sm:hidden">
+        <div className="flex h-7 min-w-0 flex-1 items-center gap-2 px-2.5">
+          <h1 className="truncate font-medium text-sm">{group.name}</h1>
+          <div className="flex shrink-0 -space-x-1.5">
+            {members.slice(0, 4).map((member) => (
+              <ProfileAvatar
+                className="outline-none"
+                key={member.id}
+                profile={member}
+                size="xs"
+              />
+            ))}
+          </div>
+          <span className="shrink-0 text-muted-foreground text-xs">
+            {group.memberIds.length} agents
+          </span>
         </div>
-        <span className="shrink-0 text-muted-foreground text-sm">
-          {group.memberIds.length} agents
-        </span>
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          {actions}
-        </div>
+        <div className="flex h-7 shrink-0 items-center gap-1">{actions}</div>
       </header>
       {navbarActions
         ? createPortal(
@@ -311,25 +315,25 @@ function GroupConversation({
   const { members } = roster;
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <ChatPageColumn>
       <GroupHeader group={group} members={members} />
-      <ChatPageColumn>
-        <div
-          className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col"
-          id="agent-group-chat"
-        >
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <GroupMessageList
-              messages={messages}
-              onOpenLive={() => onOpenLive?.()}
-              onOpenThread={(messageId) => onOpenThread?.(messageId)}
-              profiles={profiles}
-              roster={roster}
-              run={run}
-              threadRunIds={threadRunIds}
-            />
-          </div>
-          <div className={COMPOSER_DOCK}>
+      <div
+        className="mx-auto flex min-h-0 w-full flex-1 flex-col"
+        id="agent-group-chat"
+      >
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <GroupMessageList
+            messages={messages}
+            onOpenLive={() => onOpenLive?.()}
+            onOpenThread={(messageId) => onOpenThread?.(messageId)}
+            profiles={profiles}
+            roster={roster}
+            run={run}
+            threadRunIds={threadRunIds}
+          />
+        </div>
+        <div className={COMPOSER_DOCK}>
+          <div className="mx-auto w-full max-w-3xl sm:px-4">
             <GroupComposer
               allowDocuments
               busy={run !== null}
@@ -340,8 +344,8 @@ function GroupConversation({
             />
           </div>
         </div>
-      </ChatPageColumn>
-    </div>
+      </div>
+    </ChatPageColumn>
   );
 }
 
@@ -433,15 +437,16 @@ function GroupDraft({
   }
 
   return (
-    <ChatPageColumn>
+    <ChatPageColumn centered>
+      {/* Pinned to the column's top-right corner, like the cognito toggle in agent chat. */}
+      <div className="absolute top-2 right-3 z-20 sm:right-6">
+        <GroupActionsMenu onEdit={() => setEditing(true)} />
+      </div>
       <div
-        className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col"
+        className="mx-auto mb-12 flex w-full max-w-3xl flex-col"
         id="group-new-chat"
       >
-        <div className="@container flex shrink-0 justify-end gap-2 px-4 pt-4">
-          <GroupActionsMenu onEdit={() => setEditing(true)} />
-        </div>
-        <div className="flex flex-1 flex-col justify-center gap-6 pb-12">
+        <div className="flex flex-col gap-6">
           <div className="flex flex-col items-center gap-3 px-4 text-center">
             {group.avatarVersion ? (
               <GroupAvatar

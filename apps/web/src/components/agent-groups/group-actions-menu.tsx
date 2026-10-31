@@ -31,7 +31,7 @@ export function GroupActionsMenu({ onEdit }: { onEdit: () => void }) {
             aria-label="Group actions"
             size="icon-sm"
             type="button"
-            variant="outline"
+            variant="ghost"
           />
         }
       >

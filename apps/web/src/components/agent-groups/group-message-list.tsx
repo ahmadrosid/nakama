@@ -368,7 +368,7 @@ export function GroupMessageList({
           ref={scrollRef}
         >
           <div
-            className="flex flex-col py-4 max-sm:px-0 sm:px-4"
+            className="mx-auto flex w-full max-w-3xl flex-col py-4 max-sm:px-0 sm:px-4"
             ref={contentRef}
           >
             {rows.map(
