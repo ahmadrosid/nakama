@@ -256,7 +256,7 @@ function GroupHeader({
 
   return (
     <>
-      <header className="@container -mx-6 flex shrink-0 items-center gap-2 border-border border-b px-4 py-3 max-sm:hidden">
+      <header className="@container -mx-6 flex h-14 shrink-0 items-center gap-2 border-border border-b px-4 max-sm:hidden">
         <div className="flex h-7 min-w-0 flex-1 items-center gap-2 px-2.5">
           <h1 className="truncate font-medium text-sm">{group.name}</h1>
           <div className="flex @max-md:hidden shrink-0 -space-x-1.5">

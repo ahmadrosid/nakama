@@ -166,7 +166,7 @@ export function BtwChatPanel() {
     <AttachmentDetailPanel
       bodyClassName="flex flex-col overflow-hidden p-0"
       className="max-sm:absolute max-sm:inset-0 max-sm:z-30"
-      headerClassName="px-3 py-1.5"
+      headerClassName="px-3"
       onClose={close}
       onWidthChange={setWidth}
       title="Side chat"

@@ -102,7 +102,7 @@ export function GroupThreadPanel({
     <AttachmentDetailPanel
       bodyClassName="flex flex-col overflow-hidden p-0"
       className="max-sm:absolute max-sm:inset-0 max-sm:z-30"
-      headerClassName="px-3 py-1.5"
+      headerClassName="px-3"
       onClose={onClose}
       onWidthChange={setWidth}
       title={`Thread with ${agent?.name ?? "agent"}`}
@@ -219,7 +219,7 @@ export function GroupLivePanel({
     <AttachmentDetailPanel
       bodyClassName="flex flex-col overflow-hidden p-0"
       className="max-sm:absolute max-sm:inset-0 max-sm:z-30"
-      headerClassName="px-3 py-1.5"
+      headerClassName="px-3"
       onClose={onClose}
       onWidthChange={setWidth}
       title={agent ? `${agent.name} live` : "Live"}
@@ -305,7 +305,7 @@ export function GroupFilesPanel({
     <AttachmentDetailPanel
       bodyClassName="flex flex-col overflow-hidden p-0"
       className="max-sm:absolute max-sm:inset-0 max-sm:z-30"
-      headerClassName="px-3 py-1.5"
+      headerClassName="px-3"
       onClose={onClose}
       onWidthChange={setWidth}
       title="Files"
