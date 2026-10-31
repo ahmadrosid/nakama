@@ -56,7 +56,7 @@ function authContextForTest(): AuthContextValue {
     setup: async () => undefined,
     switchOrg: async () => undefined,
     updateOrg: async () => undefined,
-    user: null,
+    user: { email: "admin@example.com", id: "admin", isPlatformAdmin: true },
   };
 }
 
@@ -81,17 +81,25 @@ function stubApi(loaded: TeamsSettingsResponse) {
     new Error("not needed")
   );
 
+  const generate = spyOn(api, "regenerateTeamsHandshake").mockResolvedValue({
+    ...loaded,
+    configured: true,
+    handshakeCode: "A".repeat(32),
+    handshakeExpiresAt: new Date(Date.now() + 600_000).toISOString(),
+  });
+
   cleanups.push(() => {
     scope.mockRestore();
     get.mockRestore();
     save.mockRestore();
     status.mockRestore();
+    generate.mockRestore();
   });
 
-  return { api, save };
+  return { api, generate, save };
 }
 
-async function renderCard() {
+async function renderCard(auth = authContextForTest()) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -103,7 +111,7 @@ async function renderCard() {
   await act(async () => {
     root.render(
       <QueryClientProvider client={queryClient}>
-        <AuthContext.Provider value={authContextForTest()}>
+        <AuthContext.Provider value={auth}>
           <ChannelProfileContext.Provider value="profile-a">
             <TeamsSettingsCard />
           </ChannelProfileContext.Provider>
@@ -178,6 +186,95 @@ test("saves the entered credentials to the selected agent", async () => {
     },
     "profile-a"
   );
+});
+
+test("generates a code for the selected agent and copies the returned code", async () => {
+  const { generate } = stubApi(settings({ configured: true }));
+  const copy = spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+  cleanups.push(() => copy.mockRestore());
+  const container = await renderCard();
+  await clickButton(container, "Generate code");
+  expect(generate).toHaveBeenCalledWith("profile-a");
+  expect(
+    container.querySelector("code[aria-label='Pairing code']")?.textContent
+  ).toBe("A".repeat(32));
+  await clickButton(container, "Copy");
+  expect(copy).toHaveBeenCalledWith("A".repeat(32));
+});
+
+test("generating a code preserves unsaved credential edits", async () => {
+  stubApi(
+    settings({ clientId: CLIENT_ID, configured: true, tenantId: TENANT })
+  );
+  const container = await renderCard();
+  await typeInto(container, "Client secret", "unsaved-secret");
+  await typeInto(container, "Allowed users", USER);
+  await clickButton(container, "Generate code");
+  expect(
+    container.querySelector<HTMLInputElement>(
+      "input[aria-label='Client secret']"
+    )?.value
+  ).toBe("unsaved-secret");
+  expect(
+    container.querySelector<HTMLInputElement>(
+      "input[aria-label='Allowed users']"
+    )?.value
+  ).toBe(USER);
+});
+
+test("a failed code request leaves the form available and displays an error", async () => {
+  const { generate } = stubApi(settings({ configured: true }));
+  generate.mockRejectedValue(new Error("unavailable"));
+  const container = await renderCard();
+  await clickButton(container, "Generate code");
+  expect(container.querySelector("[role='alert']")).not.toBeNull();
+  expect(container.querySelector("code[aria-label='Pairing code']")).toBeNull();
+});
+
+test("code generation stays disabled until credentials are saved", async () => {
+  const { generate } = stubApi(settings());
+  const container = await renderCard();
+
+  const button = Array.from(container.querySelectorAll("button")).find(
+    (item) => item.textContent?.trim() === "Generate code"
+  );
+
+  expect(button?.disabled).toBe(true);
+  button?.click();
+  expect(generate).not.toHaveBeenCalled();
+});
+
+test("members have no pairing code controls", async () => {
+  stubApi(settings({ configured: true }));
+  const auth = authContextForTest();
+  auth.user = {
+    email: "member@example.com",
+    id: "member",
+    isPlatformAdmin: false,
+  };
+  const container = await renderCard(auth);
+  expect(
+    Array.from(container.querySelectorAll("button")).some((button) =>
+      button.textContent?.includes("code")
+    )
+  ).toBe(false);
+});
+
+test("an expired code is not available to copy", async () => {
+  stubApi(
+    settings({
+      configured: true,
+      handshakeCode: "A".repeat(32),
+      handshakeExpiresAt: "2000-01-01T00:00:00.000Z",
+    })
+  );
+  const container = await renderCard();
+  expect(container.querySelector("code[aria-label='Pairing code']")).toBeNull();
+  expect(
+    Array.from(container.querySelectorAll("button")).some(
+      (button) => button.textContent?.trim() === "Copy"
+    )
+  ).toBe(false);
 });
 
 test("never fills the saved secret back in, and keeps it when left blank", async () => {
