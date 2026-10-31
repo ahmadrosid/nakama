@@ -18,31 +18,29 @@ export type OneShotKind = Extract<
   "automation" | "group_member" | "plugin_summarize" | "sub_agent"
 >;
 
-/** Which platform tool groups a turn gets on top of the profile's own. */
-interface TurnTools {
-  automation: boolean;
-  /** Search-only MCP listing, when the instance turns discovery on. */
-  mcpDiscovery: boolean;
-  memoryWrite: boolean;
-  question: boolean;
-  skillManage: boolean;
-  subAgent: boolean;
-  todo: boolean;
-}
-
 interface TurnPolicy {
+  /** Depth a session turn's tools see; a one-shot turn takes its caller's. */
+  agentDepth?: number;
   /** One-shot turns set it; a session uses its own channel. */
   channel?: Extract<AgentChannel, "automation" | "subagent">;
   /** Lines added after the profile's system prompt. */
   instructions: readonly string[];
   /** Unattended one-shot turns act as a member, whoever set them up. */
   orgRole?: "member";
-  /** Null for a turn that runs without tools. */
-  tools:
-    | (Omit<TurnTools, "skillManage"> & {
-        skillManage: boolean | "by_channel";
-      })
-    | null;
+  /**
+   * Platform tool groups on top of the profile's own; null for a turn that
+   * runs without tools.
+   */
+  tools: {
+    automation: boolean;
+    /** Search-only MCP listing, when the instance turns discovery on. */
+    mcpDiscovery: boolean;
+    memoryWrite: boolean;
+    question: boolean;
+    skillManage: boolean | "by_channel";
+    subAgent: boolean;
+    todo: boolean;
+  } | null;
 }
 
 const SUB_AGENT_INSTRUCTIONS = [
@@ -100,6 +98,7 @@ const TURN_POLICIES: Record<TurnKind, TurnPolicy> = {
   branch: { instructions: [], tools: ALL_TOOLS },
   chat: { instructions: [], tools: ALL_TOOLS },
   child: {
+    agentDepth: 1,
     instructions: SUB_AGENT_INSTRUCTIONS,
     tools: { ...DELEGATED_TOOLS, mcpDiscovery: true },
   },

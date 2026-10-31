@@ -2006,30 +2006,31 @@ export class AgentService {
       ? await this.db.listAutomationRunSteps(automationRunId)
       : [];
 
-    let replay: ChatMessage[] = [];
+    const { chat, close, initialHistory } = await this.openOneShotChat(
+      "automation",
+      {
+        context: { automationId, automationRunId },
+        deliveryChannel,
+        extraTools: this.automationRunHistoryTools,
+        initialHistory: async (tools, toolContext) => {
+          if (!resume || savedSteps.length === 0) {
+            return;
+          }
 
-    const { chat, close } = await this.openOneShotChat("automation", {
-      context: { automationId, automationRunId },
-      deliveryChannel,
-      extraTools: this.automationRunHistoryTools,
-      initialHistory: async (tools, toolContext) => {
-        if (!resume || savedSteps.length === 0) {
-          return;
-        }
+          const replay = await this.replayAutomationSteps(
+            savedSteps,
+            tools,
+            toolContext
+          );
 
-        replay = await this.replayAutomationSteps(
-          savedSteps,
-          tools,
-          toolContext
-        );
-
-        return replay.length
-          ? [{ content: prompt, role: "user" }, ...replay]
-          : undefined;
-      },
-      orgId,
-      profileId,
-    });
+          return replay.length
+            ? [{ content: prompt, role: "user" }, ...replay]
+            : undefined;
+        },
+        orgId,
+        profileId,
+      }
+    );
 
     let stepPosition = savedSteps.length;
 
@@ -2077,7 +2078,7 @@ export class AgentService {
 
     try {
       return await chat.sendStream(
-        replay.length ? RESUME_AUTOMATION_PROMPT : prompt,
+        initialHistory ? RESUME_AUTOMATION_PROMPT : prompt,
         stepHandlers ?? { onChunk() {} }
       );
     } finally {
@@ -2089,7 +2090,7 @@ export class AgentService {
    * Builds a chat for a turn outside any session: the profile's prompt and
    * tools as the kind allows, and a fresh ACP process that `close` ends.
    * `initialHistory` gets the tools and context, as a resumed run replays
-   * its saved tool calls with them.
+   * its saved tool calls with them; the history it built comes back too.
    */
   private async openOneShotChat(
     kind: OneShotKind,
@@ -2114,7 +2115,11 @@ export class AgentService {
       profileId: string;
       userId?: string | null;
     }
-  ): Promise<{ chat: AgentChatSession; close: () => void }> {
+  ): Promise<{
+    chat: AgentChatSession;
+    close: () => void;
+    initialHistory: ChatMessage[] | undefined;
+  }> {
     const { orgId, profileId, userId } = input;
     const policy = turnPolicy(kind);
     const orgRole = policy.orgRole ?? input.orgRole;
@@ -2174,7 +2179,7 @@ export class AgentService {
       userTimezone,
     });
 
-    return { chat, close: () => endOneShotAcp(acpKey) };
+    return { chat, close: () => endOneShotAcp(acpKey), initialHistory };
   }
 
   /**
@@ -2382,7 +2387,6 @@ export class AgentService {
     extraTools: (turnActive: () => boolean) => ToolDefinition[]
   ): Promise<SubAgentRunResult> {
     const startedAt = Date.now();
-    const log = kind === "group_member" ? "group_turn" : "sub_agent";
 
     if (!this._providerConfigured) {
       return failSubAgentResult("Provider is not configured.");
@@ -2484,7 +2488,7 @@ export class AgentService {
       }
 
       console.info(
-        `[${log}] timeout org=${input.orgId} profile=${input.profileId} durationMs=${Date.now() - startedAt}`
+        `[${kind}] timeout org=${input.orgId} profile=${input.profileId} durationMs=${Date.now() - startedAt}`
       );
 
       return buildSubAgentResult("timeout", "", "Sub-agent timed out.");
@@ -2497,7 +2501,7 @@ export class AgentService {
 
     if (!reply) {
       console.info(
-        `[${log}] fail org=${input.orgId} profile=${input.profileId} durationMs=${durationMs} reason=empty_reply`
+        `[${kind}] fail org=${input.orgId} profile=${input.profileId} durationMs=${durationMs} reason=empty_reply`
       );
 
       return buildSubAgentResult(
@@ -2508,7 +2512,7 @@ export class AgentService {
     }
 
     console.info(
-      `[${log}] success org=${input.orgId} profile=${input.profileId} durationMs=${durationMs}`
+      `[${kind}] success org=${input.orgId} profile=${input.profileId} durationMs=${durationMs}`
     );
 
     return buildSubAgentResult("success", reply);
@@ -6260,7 +6264,7 @@ export class AgentService {
     const hasSkillManage = tools.some((tool) => tool.name === "skill_manage");
 
     const toolContext = buildToolExecutionContext({
-      agentDepth: kind === "child" ? 1 : undefined,
+      agentDepth: policy.agentDepth,
       assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
       channel,
       ...this.knowledgeToolContext(orgId, profileId),
