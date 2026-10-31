@@ -76,17 +76,20 @@ export async function forgetThisDevicePush(
  * (true) until that org is active, or every lookup in it answers 404.
  */
 export function useOrgFromNotification(): boolean {
-  const { activeOrg, orgs, switchOrg } = useAuth();
+  const { activeOrg, orgs, platformOrgs, switchOrg } = useAuth();
   const [params, setParams] = useSearchParams();
   const wanted = params.get("org");
-  const [failed, setFailed] = useState<string | null>(null);
+  // Set once switchOrg ends either way: it can resolve without a switch when a
+  // newer auth change wins, and the chat must not wait for good.
+  const [settled, setSettled] = useState<string | null>(null);
   const startedRef = useRef<string | null>(null);
 
   const switching =
     wanted !== null &&
-    wanted !== failed &&
+    wanted !== settled &&
     wanted !== activeOrg?.id &&
-    orgs.some((org) => org.id === wanted);
+    (orgs.some((org) => org.id === wanted) ||
+      platformOrgs.some((org) => org.id === wanted && !org.archivedAt));
 
   useEffect(() => {
     if (wanted === null) {
@@ -112,7 +115,9 @@ export function useOrgFromNotification(): boolean {
     }
 
     startedRef.current = wanted;
-    switchOrg(wanted).catch(() => setFailed(wanted));
+    switchOrg(wanted)
+      .catch(() => undefined)
+      .finally(() => setSettled(wanted));
   }, [setParams, switchOrg, switching, wanted]);
 
   return switching;

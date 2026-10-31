@@ -1211,18 +1211,28 @@ export function useChatPage() {
 
     if (sessionId) {
       // The abort below no longer stops the server, so a lost /stop would
-      // leave the turn running out of sight: try twice, then say so.
+      // leave the turn running out of sight: try twice, then say so. A 4xx
+      // answer will not change, so only a network or server error retries.
       const stop = () => client.stopSessionTurn(sessionId);
 
       stop()
-        .catch(stop)
+        .catch((err) => {
+          if (err instanceof NakamaApiError && err.status < 500) {
+            throw err;
+          }
+
+          return stop();
+        })
         .catch((err) => {
           // The session went away, and its turn with it.
           if (err instanceof NakamaApiError && err.status === 404) {
             return;
           }
 
-          setError(`The reply could not be stopped: ${formatError(err)}`);
+          // Only on the chat that was stopped, not one opened since.
+          if (activeSessionIdRef.current === sessionId) {
+            setError(`The reply could not be stopped: ${formatError(err)}`);
+          }
         });
     }
 

@@ -240,8 +240,6 @@ function useAuthSession() {
   );
 
   const logout = useCallback(async () => {
-    const revision = ++authRevision.current;
-
     if (webPushSupported) {
       // Before logout, while the server still knows who owns it: a signed-out
       // device must stop showing this user's replies on its lock screen.
@@ -250,6 +248,10 @@ function useAuthSession() {
         .then(forgetThisDevicePush)
         .catch(() => undefined);
     }
+
+    // Taken after the push cleanup, so an auth change during it cannot make
+    // this logout end the server session but keep the user on screen.
+    const revision = ++authRevision.current;
 
     try {
       await client.logout();
