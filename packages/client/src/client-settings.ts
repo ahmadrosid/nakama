@@ -314,4 +314,41 @@ export class SettingsClient extends SystemClient {
   async listTimezones(): Promise<ListTimezonesResponse> {
     return this.request<ListTimezonesResponse>("/v1/timezones");
   }
+
+  async getPushPublicKey(): Promise<string> {
+    const response = await this.request<{ publicKey: string }>(
+      "/v1/push/public-key"
+    );
+
+    return response.publicKey;
+  }
+
+  async savePushSubscription(subscription: WebPushSubscription): Promise<void> {
+    await this.request<void>("/v1/push/subscription", {
+      body: JSON.stringify(subscription),
+      method: "PUT",
+    });
+  }
+
+  async deletePushSubscription(endpoint: string): Promise<void> {
+    await this.request<void>("/v1/push/subscription", {
+      body: JSON.stringify({ endpoint }),
+      method: "DELETE",
+    });
+  }
+
+  /** `keepalive` so the "gone" report still lands while the page is hiding. */
+  async setPushPresence(clientId: string, visible: boolean): Promise<void> {
+    await this.request<void>("/v1/push/presence", {
+      body: JSON.stringify({ clientId, visible }),
+      keepalive: true,
+      method: "PUT",
+    });
+  }
+}
+
+/** A browser `PushSubscription.toJSON()`, as the server stores it. */
+interface WebPushSubscription {
+  endpoint: string;
+  keys: { auth: string; p256dh: string };
 }
