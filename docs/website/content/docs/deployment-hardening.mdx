@@ -121,6 +121,10 @@ origin are refused with `400`. Either set the flag on a trusted proxy or set
 the public URL below; a proxied install that does neither fails OAuth connects
 and passkey sign-in by design.
 
+A direct install with no proxy follows the same rule. If users open it on any
+address other than `localhost`, set the public URL to that address. Otherwise
+OAuth connects, share links, and passkey sign-in fail with `400`.
+
 After the proxy is live, set the exact external origin:
 
 ```bash
