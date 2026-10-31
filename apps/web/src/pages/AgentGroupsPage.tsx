@@ -11,13 +11,12 @@ import {
 import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
 import {
-  ArrowUp02Icon,
   Delete02Icon,
   MoreHorizontalIcon,
   PencilEdit02Icon,
   PlusSignIcon,
   Search01Icon,
-  Tick02Icon,
+  StopIcon,
 } from "hugeicons-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
@@ -88,13 +87,6 @@ function Mention({ children }: { children: ReactNode }) {
   return <span className="font-medium text-primary">{children}</span>;
 }
 
-const GROUP_FEATURES = [
-  "Add any agents and give them one brief",
-  "Ask one with @name, or everyone with @all",
-  "Agents pass work to each other; you can stop them",
-  "Keep side topics in threads",
-];
-
 function ExampleAvatar({
   className,
   letter,
@@ -111,115 +103,151 @@ function ExampleAvatar({
   );
 }
 
-/** An agent message laid out like `GroupMessageList`. */
-function ExampleReply({
-  author,
+/** Wide screens: example messages float as cards around the heading. */
+const FLOATING_CARD =
+  "absolute w-64 rounded-2xl border bg-background px-4 py-3.5 text-sm shadow-md";
+
+function FloatingExample() {
+  return (
+    <section aria-label="Example group" className="@4xl:contents hidden">
+      <p className={`${FLOATING_CARD} top-12 left-8 -rotate-3`}>
+        <span className="mb-1 block text-muted-foreground text-xs">You</span>
+        <Mention>@all</Mention> write a short post about our new pricing
+      </p>
+      <div
+        className={`${FLOATING_CARD} top-14 right-8 flex rotate-[2.5deg] gap-2.5`}
+      >
+        <ExampleAvatar
+          className="size-7 bg-primary/15 text-primary text-xs"
+          letter="R"
+        />
+        <p>
+          <span className="block font-semibold">Researcher</span>I found 3 key
+          facts. <Mention>@Writer</Mention>, they are yours.
+        </p>
+      </div>
+      <div
+        className={`${FLOATING_CARD} bottom-10 left-12 flex rotate-2 gap-2.5`}
+      >
+        <ExampleAvatar
+          className="size-7 bg-primary text-primary-foreground text-xs"
+          letter="W"
+        />
+        <p>
+          <span className="block font-semibold">Writer</span>Draft done. 140
+          words, ready for review.
+          <span className="mt-1 block font-medium text-primary text-xs">
+            2 replies in thread
+          </span>
+        </p>
+      </div>
+      <p className="absolute right-14 bottom-20 flex -rotate-2 items-center gap-2.5 rounded-xl bg-foreground px-3.5 py-2.5 text-background text-sm shadow-md">
+        <span className="size-2 rounded-full bg-primary" />
+        Writer is working
+        <span className="ml-1 flex items-center gap-1.5 rounded-lg bg-background/15 px-2.5 py-1 text-xs">
+          <StopIcon className="size-3" />
+          Stop
+        </span>
+      </p>
+    </section>
+  );
+}
+
+/** An agent message styled like a `GroupMessageList` row. */
+function ExampleAgentMessage({
   avatar,
   children,
+  name,
+  thread,
 }: {
-  author: string;
   avatar: ReactNode;
   children: ReactNode;
+  name: string;
+  thread?: string;
 }) {
   return (
-    <div className="mt-4 flex gap-2.5">
+    <div className="mt-3 flex items-end gap-2">
       {avatar}
-      <div className="flex min-w-0 max-w-[85%] flex-col items-start gap-1">
-        <div className="px-1 font-medium text-13 text-foreground">{author}</div>
-        <p className="rounded-2xl bg-muted px-4 py-2.5 text-sm">{children}</p>
+      <div className="flex min-w-0 max-w-[75%] flex-col items-start gap-1">
+        <div className="px-3.5 text-muted-foreground text-xs">{name}</div>
+        <p className="rounded-[1.25rem] rounded-bl-md bg-muted px-3.5 py-2 text-sm">
+          {children}
+        </p>
+        {thread ? (
+          <span className="ml-1 font-medium text-primary text-xs">
+            {thread}
+          </span>
+        ) : null}
       </div>
     </div>
   );
 }
 
+/** Narrow screens: the same example laid out like the group message list. */
+function ChatExample() {
+  return (
+    <section
+      aria-label="Example group"
+      className="flex @4xl:hidden w-full max-w-sm flex-col rounded-2xl border px-3 py-4"
+    >
+      <div className="pb-3 text-center text-muted-foreground text-xs">
+        Today 9:41 AM
+      </div>
+      <p className="w-fit max-w-[75%] self-end rounded-[1.25rem] rounded-br-md bg-[#0b84fe] px-3.5 py-2 text-sm text-white">
+        <span className="font-medium">@all</span> write a short post about our
+        new pricing
+      </p>
+      <ExampleAgentMessage
+        avatar={
+          <ExampleAvatar
+            className="size-7 bg-primary/15 text-primary text-xs"
+            letter="R"
+          />
+        }
+        name="Researcher"
+      >
+        I found 3 key facts. <Mention>@Writer</Mention>, they are yours.
+      </ExampleAgentMessage>
+      <ExampleAgentMessage
+        avatar={
+          <ExampleAvatar
+            className="size-7 bg-primary text-primary-foreground text-xs"
+            letter="W"
+          />
+        }
+        name="Writer"
+        thread="2 replies in thread"
+      >
+        Draft done. 140 words, ready for review.
+      </ExampleAgentMessage>
+    </section>
+  );
+}
+
 function GroupsEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div
-      className="flex flex-wrap items-center gap-12 py-10 sm:py-16"
-      id="agent-groups-empty"
-    >
-      <section className="flex flex-[1_1_20rem] flex-col gap-5">
-        <h2 className="text-balance font-bold text-3xl tracking-tight sm:text-4xl">
-          Your agents, working as a team
-        </h2>
-        <ul className="flex flex-col gap-3.5 text-foreground/80">
-          {GROUP_FEATURES.map((feature) => (
-            <li className="flex gap-3" key={feature}>
-              <Tick02Icon className="mt-0.5 size-5 shrink-0 text-primary" />
-              {feature}
-            </li>
-          ))}
-        </ul>
-        <div>
-          <Button id="btn-new-group" onClick={onCreate} size="lg">
+    <div className="@container my-6" id="agent-groups-empty">
+      <div className="relative flex @4xl:min-h-[40rem] flex-col items-center @4xl:justify-center gap-8 overflow-hidden px-4 @4xl:py-0 py-10">
+        <section className="relative z-10 flex max-w-lg flex-col items-center gap-5 text-center">
+          <h2 className="text-balance font-bold text-4xl tracking-tight sm:text-5xl">
+            Your agents, working as a team
+          </h2>
+          <p className="text-balance text-lg text-muted-foreground">
+            Give a group one brief. Ask one with @name, or everyone with @all.
+          </p>
+          <Button
+            className="rounded-full"
+            id="btn-new-group"
+            onClick={onCreate}
+            size="lg"
+          >
             <PlusSignIcon className="size-4" />
             New group
           </Button>
-        </div>
-      </section>
-      <section
-        aria-label="Example group"
-        className="flex min-w-0 flex-[1_1_26rem] flex-col overflow-hidden rounded-2xl border bg-background shadow-xs"
-      >
-        <div className="flex h-14 items-center gap-3 border-b px-4">
-          <span className="truncate font-semibold text-lg tracking-tight">
-            Content team
-          </span>
-          <span className="flex shrink-0 -space-x-2">
-            <ExampleAvatar
-              className="size-7 bg-primary/15 text-primary text-xs"
-              letter="R"
-            />
-            <ExampleAvatar
-              className="size-7 bg-primary text-primary-foreground text-xs"
-              letter="W"
-            />
-          </span>
-          <span className="shrink-0 text-muted-foreground text-sm">
-            2 agents
-          </span>
-        </div>
-        <div className="flex flex-col p-4">
-          <p className="ml-auto w-fit max-w-[85%] rounded-2xl bg-muted px-4 py-2.5 text-sm">
-            <Mention>@all</Mention> write a short post about our new pricing
-          </p>
-          <ExampleReply
-            author="Researcher"
-            avatar={
-              <ExampleAvatar
-                className="mt-0.5 size-7 bg-primary/15 text-primary text-xs"
-                letter="R"
-              />
-            }
-          >
-            I found 3 key facts. <Mention>@Writer</Mention>, they are yours.
-          </ExampleReply>
-          <ExampleReply
-            author="Writer"
-            avatar={
-              <ExampleAvatar
-                className="mt-0.5 size-7 bg-primary text-primary-foreground text-xs"
-                letter="W"
-              />
-            }
-          >
-            Draft done. 140 words, ready for review.
-          </ExampleReply>
-          <span className="mt-1 ml-10.5 font-medium text-primary text-xs">
-            2 replies in thread
-          </span>
-        </div>
-        <div className="px-4 pb-4">
-          <div className="flex items-center gap-2 rounded-xl border py-2 pr-2 pl-4 shadow-xs">
-            <span className="flex-1 truncate text-muted-foreground text-sm">
-              Message the group, @mention an agent or @all
-            </span>
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-              <ArrowUp02Icon className="size-4" />
-            </span>
-          </div>
-        </div>
-      </section>
+        </section>
+        <ChatExample />
+        <FloatingExample />
+      </div>
     </div>
   );
 }
