@@ -86,6 +86,45 @@ describe("WebPushService", () => {
     }
   });
 
+  test("names a non-localhost contact when the instance has no https URL", async () => {
+    dir = await mkdtemp(join(tmpdir(), "web-push-"));
+    const service = new WebPushService(join(dir, "web-push.json"));
+    const endpoint = "https://web.push.apple.com/QG9";
+    await service.subscribe("u1", { endpoint, keys: await browserKeys() });
+
+    const previous = process.env.NAKAMA_WEB_PUBLIC_URL;
+    process.env.NAKAMA_WEB_PUBLIC_URL = "http://192.168.1.20:4310";
+
+    const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, { status: 201 })
+    );
+
+    try {
+      await service.notify("u1", message);
+
+      const [, init] = fetchSpy.mock.calls[0] ?? [];
+
+      const token = new Headers(init?.headers)
+        .get("Authorization")
+        ?.match(/t=([^,]+)/)?.[1];
+
+      const claims = JSON.parse(
+        Buffer.from(token?.split(".")[1] ?? "", "base64url").toString()
+      );
+
+      expect(claims.sub).toStartWith("https:");
+      expect(claims.sub).not.toContain("localhost");
+    } finally {
+      fetchSpy.mockRestore();
+
+      if (previous === undefined) {
+        delete process.env.NAKAMA_WEB_PUBLIC_URL;
+      } else {
+        process.env.NAKAMA_WEB_PUBLIC_URL = previous;
+      }
+    }
+  });
+
   test("keeps the key pair a browser subscribed with across restarts", async () => {
     dir = await mkdtemp(join(tmpdir(), "web-push-"));
     const path = join(dir, "web-push.json");

@@ -14,6 +14,8 @@ const PRESENCE_TTL_MS = 75_000;
 /** Open Nakama pages one user can have; more only means fewer pushes held back. */
 const MAX_PRESENCE_CLIENTS = 32;
 
+const FALLBACK_VAPID_SUBJECT = "https://github.com/ahmadrosid/nakama";
+
 export interface WebPushMessage {
   body: string;
   /** Same tag replaces the earlier notification for that chat. */
@@ -221,9 +223,11 @@ export class WebPushService {
     const publicUrl = resolveWebPublicUrl();
 
     // VAPID wants an https: or mailto: contact for the push service operator.
+    // Apple refuses a localhost one, so an instance without https names the
+    // project instead.
     const subject = publicUrl?.startsWith("https:")
       ? publicUrl
-      : "mailto:nakama@localhost";
+      : FALLBACK_VAPID_SUBJECT;
 
     const payload = JSON.stringify(message);
     const vapid = state.vapid;
