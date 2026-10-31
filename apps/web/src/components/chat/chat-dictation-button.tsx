@@ -3,14 +3,17 @@ import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUp02Icon, Delete02Icon, Mic01Icon } from "hugeicons-react";
+import type { RefObject } from "react";
 import {
   composerHitTargetClass,
   composerIconButtonClass,
 } from "@/lib/chat-stream";
-import { formatElapsedSeconds } from "@/lib/elapsed-time";
 import { client } from "@/lib/client";
-import type { RefObject } from "react";
-import { useDictationRecorder, useDictationWaveform } from "./use-dictation-recorder";
+import { formatElapsedSeconds } from "@/lib/elapsed-time";
+import {
+  useDictationRecorder,
+  useDictationWaveform,
+} from "./use-dictation-recorder";
 
 /**
  * Microphone dictation for the chat composer, mirroring the Ragbot voice
