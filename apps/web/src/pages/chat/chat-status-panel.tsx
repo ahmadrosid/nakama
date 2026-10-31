@@ -1,4 +1,8 @@
-import type { AgentChannel, ProfileSummary } from "@nakama/core/contract";
+import type {
+  AgentChannel,
+  McpServerSummary,
+  ProfileSummary,
+} from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { cn } from "@nakama/ui/utils";
 import {
@@ -88,10 +92,19 @@ function ChatStatusRow({
   );
 }
 
-const MCP_STATUS_DOT: Record<string, string> = {
-  connected: "bg-emerald-500",
-  error: "bg-destructive",
-};
+function mcpStatusDotClass(server: McpServerSummary) {
+  if (!server.enabled) {
+    return "bg-muted-foreground/40";
+  }
+
+  if (server.status === "connected") {
+    return "bg-emerald-500";
+  }
+
+  return server.status === "error"
+    ? "bg-destructive"
+    : "bg-muted-foreground/40";
+}
 
 function ChatStatusArtifactRow({
   artifact,
@@ -307,10 +320,7 @@ function ChatStatusBody({
                 <span
                   className={cn(
                     "size-2 shrink-0 rounded-full",
-                    server.enabled
-                      ? (MCP_STATUS_DOT[server.status] ??
-                          "bg-muted-foreground/40")
-                      : "bg-muted-foreground/40"
+                    mcpStatusDotClass(server)
                   )}
                   title={server.enabled ? server.status : "disabled"}
                 />

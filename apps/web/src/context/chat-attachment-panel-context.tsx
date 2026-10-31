@@ -152,7 +152,7 @@ function ChatPanelColumn({
 function panelSizing(
   config: ChatAttachmentPanelConfig | null,
   savedWidth: number
-): { resizable: boolean; width: number } {
+) {
   if (config?.fixedWidth) {
     return { resizable: false, width: config.fixedWidth };
   }
