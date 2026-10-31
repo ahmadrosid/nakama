@@ -151,7 +151,7 @@ export async function readStreamEvents(
 
       if (payload.type === "done") {
         sawDoneEvent = true;
-        handlers.onDone?.();
+        handlers.onDone?.(payload.reply);
         throwIfAborted(signal);
 
         if (payload.contextUsage) {

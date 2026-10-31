@@ -11,7 +11,8 @@ let resyncedThisPage = false;
 /** How often an on-screen page tells the server; the server forgets after 75s. */
 const PRESENCE_INTERVAL_MS = 30_000;
 
-export const webPushSupported =
+/** This browser can hold a Web Push subscription. */
+export const browserPushSupported =
   typeof window !== "undefined" &&
   "serviceWorker" in navigator &&
   "PushManager" in window &&
@@ -24,6 +25,14 @@ export const webPushSupported =
  */
 const isDesktopApp =
   typeof navigator !== "undefined" && navigator.userAgent.includes("Electron/");
+
+/**
+ * The reply switch can work here. The desktop app needs only `Notification`:
+ * a plain-http server gives it no service worker.
+ */
+export const webPushSupported = isDesktopApp
+  ? typeof window !== "undefined" && "Notification" in window
+  : browserPushSupported;
 
 const DESKTOP_NOTIFY_KEY = "nakama.desktopNotify";
 

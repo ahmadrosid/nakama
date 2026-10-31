@@ -35,7 +35,7 @@ export interface StreamHandlers {
   onChunk: StreamHandler;
   onContextUsage?: (usage: ChatContextUsage) => void;
   /** Only called when the server sends its terminal done event. */
-  onDone?: () => void;
+  onDone?: (reply: string) => void;
   onQuestionnaireUpdated?: (questionnaire: AgentQuestionnaire | null) => void;
   onSubAgentActivity?: (event: {
     parentToolCallId: string;

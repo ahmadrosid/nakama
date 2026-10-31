@@ -772,11 +772,11 @@ export function buildStreamHandlers(
     onTodosUpdated?: (todos: AgentTodo[]) => void;
     onQuestionnaireUpdated?: (questionnaire: AgentQuestionnaire | null) => void;
     onContextUsage?: (usage: ChatContextUsage) => void;
-    /** Gets the text written after the turn's last tool call. */
+    /** Gets the reply the server sends with its done event. */
     onDone?: (reply: string) => void;
   } = {}
 ): StreamHandlers {
-  const handlers: StreamHandlers = {
+  return {
     onChunk: (delta) => {
       setMessages((current) => {
         const next = [...current];
@@ -805,6 +805,7 @@ export function buildStreamHandlers(
       });
     },
     onContextUsage: options.onContextUsage,
+    onDone: options.onDone,
     onQuestionnaireUpdated: options.onQuestionnaireUpdated,
     onSubAgentActivity: (event) => {
       setMessages((current) =>
@@ -947,27 +948,6 @@ export function buildStreamHandlers(
 
         return current;
       });
-    },
-  };
-
-  const { onDone } = options;
-
-  if (!onDone) {
-    return handlers;
-  }
-
-  let reply = "";
-
-  return {
-    ...handlers,
-    onChunk: (delta) => {
-      reply += delta;
-      handlers.onChunk(delta);
-    },
-    onDone: () => onDone(reply),
-    onToolStart: (event) => {
-      reply = "";
-      handlers.onToolStart?.(event);
     },
   };
 }

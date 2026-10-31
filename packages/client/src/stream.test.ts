@@ -29,6 +29,20 @@ describe("readStreamEvents", () => {
     ).resolves.toBe("ok");
   });
 
+  test("passes the done event's reply to onDone", async () => {
+    const replies: string[] = [];
+
+    await readStreamEvents(
+      streamFromChunks([
+        'data: {"type":"chunk","delta":"Let me check."}\n\n',
+        'data: {"type":"done","reply":"It is sunny."}\n\n',
+      ]),
+      { onChunk: () => {}, onDone: (reply) => replies.push(reply) }
+    );
+
+    expect(replies).toEqual(["It is sunny."]);
+  });
+
   test("accepts an empty terminal done reply", async () => {
     await expect(
       readStreamEvents(

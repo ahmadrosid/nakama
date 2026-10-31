@@ -864,14 +864,28 @@ export function useChatPage() {
 
             const abortController = new AbortController();
             streamAbortRef.current = abortController;
+            // Opening another chat detaches this stream instead of aborting
+            // it, so the turn can still announce its reply when it ends.
+            let detached = false;
+            detachStreamRef.current = () => {
+              detached = true;
+            };
+
+            const whileAttached =
+              <TValue>(write: (value: TValue) => void) =>
+              (value: TValue) => {
+                if (!detached) {
+                  write(value);
+                }
+              };
 
             const { reconnected } = await reconnectActiveSessionStream({
-              handlers: buildStreamHandlers(setMessages, {
-                onContextUsage: setContextUsage,
+              handlers: buildStreamHandlers(whileAttached(setMessages), {
+                onContextUsage: whileAttached(setContextUsage),
                 onDone: (reply) =>
                   notifyTurnDone(nextProfileId, sessionId, reply),
-                onQuestionnaireUpdated: setAgentQuestionnaire,
-                onTodosUpdated: setAgentTodos,
+                onQuestionnaireUpdated: whileAttached(setAgentQuestionnaire),
+                onTodosUpdated: whileAttached(setAgentTodos),
               }),
               messages: listItems,
               sessionId,
@@ -943,6 +957,7 @@ export function useChatPage() {
 
         if (isCurrentLoad()) {
           streamAbortRef.current = null;
+          detachStreamRef.current = null;
           setTurnStartedAt(null);
         }
       }

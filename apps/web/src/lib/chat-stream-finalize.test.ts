@@ -106,31 +106,3 @@ describe("finalizeStreamingMessages", () => {
     });
   });
 });
-
-describe("buildStreamHandlers onDone", () => {
-  test("passes the text written after the last tool call", () => {
-    let messages: ChatListItem[] = [];
-    const replies: string[] = [];
-
-    const handlers = buildStreamHandlers(
-      (update) => {
-        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This test updater supports both direct values and React state updater functions.
-        messages = typeof update === "function" ? update(messages) : update;
-      },
-      { onDone: (reply) => replies.push(reply) }
-    );
-
-    handlers.onChunk("Let me check.");
-    handlers.onToolStart?.({ input: {}, tool: "sample", toolCallId: "t1" });
-    handlers.onToolEnd?.({ result: {}, tool: "sample", toolCallId: "t1" });
-    handlers.onChunk("It is ");
-    handlers.onChunk("sunny.");
-    handlers.onDone?.();
-
-    expect(replies).toEqual(["It is sunny."]);
-    expect(messages.at(-1)).toMatchObject({
-      content: "It is sunny.",
-      role: "assistant",
-    });
-  });
-});
