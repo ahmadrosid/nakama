@@ -134,6 +134,10 @@ function ProviderInstanceTableRow({
         <p className="truncate font-medium text-foreground text-sm">
           {instance.label}
         </p>
+        {instance.hasApiKey ||
+        instance.secretSource === "environment" ? null : (
+          <p className="text-destructive text-xs">Not connected</p>
+        )}
       </td>
       <td className="px-3 py-2.5 align-middle">
         {endpoint ? (

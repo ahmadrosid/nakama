@@ -810,12 +810,19 @@ export function useCreateProviderMutation() {
         return created;
       }
 
-      const updated = await client.setProviderSecret(
-        created.provider.id,
-        apiKey
-      );
+      try {
+        const updated = await client.setProviderSecret(
+          created.provider.id,
+          apiKey
+        );
 
-      return { ...created, provider: updated.provider };
+        return { ...created, provider: updated.provider };
+      } catch (error) {
+        // A keyless row can stay the default and keep chat offline, even after
+        // the retry adds a working provider.
+        await client.deleteProvider(created.provider.id).catch(() => undefined);
+        throw error;
+      }
     },
     onSuccess: async () => {
       await invalidateProviderQueries(queryClient);

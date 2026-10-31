@@ -1767,3 +1767,58 @@ test("create group with invalid group photo", async () => {
     upload.mockRestore();
   }
 });
+
+test("create provider removes the new row when its API key is rejected", async () => {
+  const provider = {
+    createdAt: "2026-10-12T00:00:00Z",
+    hasApiKey: false,
+    id: "new-provider",
+    label: "OpenAI",
+    modelCount: 1,
+    type: "openai" as const,
+  };
+
+  const rejected = new Error("Invalid API key");
+
+  const create = spyOn(client, "createProvider").mockResolvedValue({
+    defaultProviderId: provider.id,
+    initialModel: "new-provider::model",
+    provider,
+  });
+
+  const saveSecret = spyOn(client, "setProviderSecret").mockRejectedValue(
+    rejected
+  );
+
+  const remove = spyOn(client, "deleteProvider").mockResolvedValue({
+    defaultProviderId: null,
+  });
+
+  let mutation!: ReturnType<typeof useCreateProviderMutation>;
+
+  function Probe() {
+    mutation = useCreateProviderMutation();
+
+    return null;
+  }
+
+  renderToString(
+    createElement(
+      QueryClientProvider,
+      { client: new QueryClient() },
+      createElement(Probe)
+    )
+  );
+
+  await expect(
+    mutation.mutateAsync({ apiKey: "bad", label: "OpenAI", type: "openai" })
+  ).rejects.toBe(rejected);
+
+  expect(remove).toHaveBeenCalledWith(provider.id);
+
+  create.mockRestore();
+
+  saveSecret.mockRestore();
+
+  remove.mockRestore();
+});
