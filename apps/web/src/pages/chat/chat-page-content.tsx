@@ -36,6 +36,7 @@ import {
   ChatSessionBar,
   ChatWelcome,
 } from "@/pages/chat/chat-page-layout";
+import { ChatStatusButton } from "@/pages/chat/chat-status-panel";
 import {
   type Onboarding,
   useOnboarding,
@@ -344,10 +345,12 @@ function ChatConversation({
   state: ChatPageState;
 }) {
   const {
+    activeProfile,
     agentQuestionnaire,
     branchingMessageId,
     busy,
     cognito,
+    contextUsage,
     currentModelSelection,
     handleBranchMessage,
     handleEditMessage,
@@ -359,6 +362,7 @@ function ChatConversation({
     renderModelLabel,
     sendMessage,
     session,
+    sessionChannel,
     showThinking,
     turnStartedAt,
   } = state;
@@ -378,7 +382,19 @@ function ChatConversation({
         {cognitoControl}
         {session && showSessionBar ? (
           <ChatSessionBar
-            actions={cognitoToggle}
+            actions={
+              <>
+                {cognitoToggle}
+                <ChatStatusButton
+                  channel={sessionChannel}
+                  contextUsage={contextUsage}
+                  messages={messages}
+                  modelLabel={renderModelLabel(currentModelSelection)}
+                  profile={activeProfile}
+                  profileId={profileId}
+                />
+              </>
+            }
             cognito={cognito}
             profileId={profileId}
             sessionId={session.id}

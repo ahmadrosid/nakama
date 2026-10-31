@@ -4,6 +4,8 @@ export interface ChatAttachmentPanelConfig {
   bodyClassName?: string;
   content: ReactNode;
   defaultWidth?: number;
+  /** Width that ignores the saved panel width. The panel is not resizable. */
+  fixedWidth?: number;
   fullscreen?: boolean;
   headerActions?: ReactNode;
   id: string;

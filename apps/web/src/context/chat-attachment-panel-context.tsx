@@ -148,6 +148,21 @@ function ChatPanelColumn({
   );
 }
 
+/** A fixed width wins over the saved one and turns off resizing. */
+function panelSizing(
+  config: ChatAttachmentPanelConfig | null,
+  savedWidth: number
+): { resizable: boolean; width: number } {
+  if (config?.fixedWidth) {
+    return { resizable: false, width: config.fixedWidth };
+  }
+
+  return {
+    resizable: config?.resizable ?? !config?.fullscreen,
+    width: savedWidth,
+  };
+}
+
 /**
  * Saves the open panel of a chat and opens it again after a reload. Kept out
  * of the provider so the provider stays readable (react-doctor complexity).
@@ -411,6 +426,7 @@ export function ChatAttachmentPanelProvider({
 
   const overlay = presentation === "overlay";
   const fullscreen = config?.fullscreen ?? false;
+  const sizing = panelSizing(config, width);
 
   const panel = config ? (
     <>
@@ -437,11 +453,11 @@ export function ChatAttachmentPanelProvider({
         onClose={handlePanelClose}
         onResizeEnd={commitWidth}
         onWidthChange={setWidth}
-        resizable={config.resizable ?? !fullscreen}
+        resizable={sizing.resizable}
         subtitle={config.subtitle}
         title={config.title}
         typeLabel={config.typeLabel}
-        width={width}
+        width={sizing.width}
       >
         {config.content}
       </AttachmentDetailPanel>
@@ -468,7 +484,7 @@ export function ChatAttachmentPanelProvider({
           framed={Boolean((config || below) && !overlay)}
           fullscreen={fullscreen}
           panel={panel}
-          width={width}
+          width={sizing.width}
         />
       </div>
     </ChatAttachmentPanelContext.Provider>
