@@ -20,7 +20,6 @@ import { GroupDialog } from "@/components/agent-groups/group-dialog";
 import { ProfileAdminPlusButton } from "@/components/ProfileAdminPlusButton";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { ProfileCreateDialog } from "@/components/ProfileCreateDialog";
-import { SidebarNotifications } from "@/components/SidebarNotifications";
 import { SidebarUserMenu } from "@/components/SidebarUserMenu";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAuth } from "@/context/use-auth";
@@ -323,7 +322,6 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
       )}
 
       <div className="flex shrink-0 flex-col items-center gap-1">
-        <SidebarNotifications />
         <SidebarUserMenu />
       </div>
 
