@@ -18,6 +18,7 @@ import {
 import { AppSidebar } from "@/components/AppSidebar";
 import { CommandPalette } from "@/components/CommandPalette";
 import { MobileNavDrawer } from "@/components/MobileNavDrawer";
+import { WebPushPrompt } from "@/components/notifications/web-push-prompt";
 import { ProfileRail } from "@/components/ProfileRail";
 import { RouteBoundary } from "@/components/RouteBoundary";
 import { useBtwChatStore } from "@/context/btw-chat-store";
@@ -25,6 +26,7 @@ import { useAppContext } from "@/context/use-app-context";
 import { useAgentGroupQuery } from "@/hooks/use-agent-groups";
 import { useOrgPlugins } from "@/hooks/use-plugins";
 import { useChatSessionSummary } from "@/hooks/use-resource-mutations";
+import { usePushPresence } from "@/hooks/use-web-push";
 import {
   enabledPluginNavEntries,
   findNavItem,
@@ -45,6 +47,7 @@ const BtwChatHost = lazy(() =>
 
 export function Layout() {
   const shell = useAppShell();
+  usePushPresence();
   const btwOpen = useBtwChatStore((store) => store.chat !== null);
 
   return (
@@ -82,6 +85,7 @@ export function Layout() {
         </div>
       </div>
       <CommandPalette />
+      <WebPushPrompt />
       {btwOpen ? (
         <Suspense fallback={null}>
           <BtwChatHost />
