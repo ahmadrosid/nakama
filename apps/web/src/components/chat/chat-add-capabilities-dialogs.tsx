@@ -7,14 +7,27 @@ import { BASH_TOOL_ID } from "@nakama/core/tools/protected";
 import { Button } from "@nakama/ui/button";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@nakama/ui/dialog";
 import { Input } from "@nakama/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@nakama/ui/input-group";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Add01Icon, Search01Icon, Tick02Icon } from "hugeicons-react";
+import {
+  Add01Icon,
+  Search01Icon,
+  Tick02Icon,
+  ViewIcon,
+  ViewOffIcon,
+} from "hugeicons-react";
 import { type FormEvent, useId, useState } from "react";
 import { Link } from "react-router-dom";
 import { readRecord, readString } from "@/components/chat/web-search.shared";
@@ -556,42 +569,75 @@ function ToolCredentialDialogContent({
     | undefined;
   toolName: string;
 }) {
+  const [showKey, setShowKey] = useState(false);
+  const locked = saving || status?.source === "environment";
+
+  const displayName = toolName
+    .replaceAll(/[_-]+/g, " ")
+    .replaceAll(/\b\w/g, (letter) => letter.toUpperCase());
+
   return (
-    <DialogContent aria-describedby={undefined} className="sm:max-w-sm">
+    <DialogContent
+      aria-describedby={undefined}
+      className="gap-5 p-6 sm:max-w-sm [&>[data-slot=dialog-close]]:top-4 [&>[data-slot=dialog-close]]:right-4"
+    >
       <DialogHeader>
-        <DialogTitle>Connect {toolName}</DialogTitle>
+        <DialogTitle>Connect {displayName}</DialogTitle>
       </DialogHeader>
       {status?.source === "environment" ? (
         <p className="text-sm">
           Managed by {status.envName}. Restart Nakama after you change it.
         </p>
       ) : null}
-      <form className="space-y-4" onSubmit={onSave}>
+      <form className="space-y-5" onSubmit={onSave}>
         <div className="space-y-2">
           <label className="font-medium text-sm" htmlFor={inputId}>
             API key
           </label>
-          <Input
-            autoComplete="off"
-            disabled={saving || status?.source === "environment"}
-            id={inputId}
-            maxLength={8192}
-            name="apiKey"
-            required
-            type="password"
-          />
+          <InputGroup className="h-10">
+            <InputGroupInput
+              autoComplete="off"
+              className="font-mono"
+              disabled={locked}
+              id={inputId}
+              maxLength={8192}
+              name="apiKey"
+              required
+              type={showKey ? "text" : "password"}
+            />
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton
+                aria-label={showKey ? "Hide key" : "Show key"}
+                disabled={locked}
+                onClick={() => setShowKey((value) => !value)}
+                size="icon-sm"
+                type="button"
+              >
+                {showKey ? (
+                  <ViewOffIcon className="size-4" />
+                ) : (
+                  <ViewIcon className="size-4" />
+                )}
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
         </div>
         {error ? (
           <p className="text-destructive text-sm" role="alert">
             {error}
           </p>
         ) : null}
-        <Button
-          disabled={saving || status?.source === "environment"}
-          type="submit"
-        >
-          {saving ? "Saving…" : "Save"}
-        </Button>
+        <div className="flex justify-end gap-2">
+          <DialogClose
+            disabled={saving}
+            render={<Button type="button" variant="outline" />}
+          >
+            Cancel
+          </DialogClose>
+          <Button disabled={locked} type="submit">
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </div>
       </form>
       {status?.savedAvailable && status.source === "missing" ? (
         <Button
