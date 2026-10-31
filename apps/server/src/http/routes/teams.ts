@@ -4,14 +4,16 @@ import {
   loadTeamsConfigFile,
   loadTeamsSettingsPublic,
   NakamaApiError,
+  regenerateTeamsHandshake,
   saveTeamsConfig,
   type TeamsSettingsResponse,
   type UpdateTeamsSettingsRequest,
 } from "@nakama/core";
+import { ChannelConfigBusyError } from "@nakama/core/channel-config-shared";
 import { resolveChannelOwner } from "../channel-owner";
 import type { ServerOptions } from "../context";
 import { requireOrgAdminOrPlatformAdminFromContext } from "../org-guards";
-import { errorResponse, json, readJson } from "../shared";
+import { errorResponse, getRequestAuth, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
 /**
@@ -36,11 +38,38 @@ const updateTeamsSettingsSchema = z.object({
 export function registerTeamsRoutes(app: HonoApp, options: ServerOptions) {
   const { agent, databaseAdapter, workerManager } = options;
 
-  app.get("/v1/settings/teams", async (c) =>
-    json<TeamsSettingsResponse>(
-      await loadTeamsSettingsPublic(await resolveChannelOwner(c, agent))
-    )
-  );
+  app.get("/v1/settings/teams", async (c) => {
+    const settings = await loadTeamsSettingsPublic(
+      await resolveChannelOwner(c, agent)
+    );
+
+    const auth = getRequestAuth(c);
+
+    if (auth.orgRole !== "admin" && !auth.isPlatformAdmin) {
+      settings.handshakeCode = null;
+      settings.handshakeExpiresAt = null;
+    }
+
+    return json<TeamsSettingsResponse>(settings);
+  });
+
+  app.post("/v1/settings/teams/handshake", async (c) => {
+    const owner = await resolveChannelOwner(c, agent);
+    requireOrgAdminOrPlatformAdminFromContext(c);
+
+    try {
+      return json<TeamsSettingsResponse>(await regenerateTeamsHandshake(owner));
+    } catch (error) {
+      if (error instanceof ChannelConfigBusyError) {
+        return errorResponse("Teams settings are busy. Try again.", 503);
+      }
+
+      return errorResponse(
+        "Could not generate a code. Save the Teams connection and try again.",
+        400
+      );
+    }
+  });
 
   app.put("/v1/settings/teams", async (c) => {
     const owner = await resolveChannelOwner(c, agent);

@@ -10,7 +10,9 @@ import {
   SettingsRow,
 } from "@/components/integration-settings.shared";
 import { WorkerActionBar } from "@/components/WorkerActionBar";
+import { useAuth } from "@/context/use-auth";
 import {
+  useRegenerateTeamsHandshake,
   useSaveTeamsSettings,
   useTeamsSettings,
 } from "@/hooks/use-app-queries";
@@ -68,15 +70,133 @@ function MessagingEndpoint({ endpoint }: { endpoint: string | null }) {
   );
 }
 
-export function TeamsSettingsCard() {
-  const { data: settings, error: loadError, isPending } = useTeamsSettings();
-  const save = useSaveTeamsSettings();
-  const { data: status } = useSystemStatusQuery();
-  const [form, setForm] = useState<TeamsForm>(() => formFrom(undefined));
+function TeamsPairingRow({
+  settings,
+  savePending,
+}: {
+  settings: TeamsSettingsResponse | undefined;
+  savePending: boolean;
+}) {
+  const generate = useRegenerateTeamsHandshake();
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [expiredCode, setExpiredCode] = useState<string | null>(null);
+  const [copyError, setCopyError] = useState(false);
+  const code = settings?.handshakeCode ?? null;
+  const expiresAt = settings?.handshakeExpiresAt ?? null;
+
+  const activeCode =
+    code !== expiredCode && Date.parse(expiresAt ?? "") > Date.now()
+      ? code
+      : null;
 
   useEffect(() => {
-    setForm(formFrom(settings));
-  }, [settings]);
+    if (!(code && expiresAt)) {
+      return;
+    }
+
+    const timer = setTimeout(
+      () => setExpiredCode(code),
+      Math.max(0, Date.parse(expiresAt) - Date.now())
+    );
+
+    return () => clearTimeout(timer);
+  }, [code, expiresAt]);
+
+  async function copyCode() {
+    if (!activeCode) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(activeCode);
+      setCopiedCode(activeCode);
+      setCopyError(false);
+    } catch {
+      setCopyError(true);
+    }
+  }
+
+  return (
+    <SettingsRow
+      description="Send the code to the bot in a direct message. It expires in 10 minutes."
+      label="Pairing"
+      layout="stacked"
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        {activeCode ? (
+          <>
+            <code
+              aria-label="Pairing code"
+              className="break-all rounded-md bg-muted px-2 py-1.5 text-xs"
+            >
+              {activeCode}
+            </code>
+            <Button
+              onClick={copyCode}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {copiedCode === activeCode ? "Copied" : "Copy"}
+            </Button>
+          </>
+        ) : null}
+        <Button
+          disabled={!settings?.configured || generate.isPending || savePending}
+          onClick={() => {
+            setCopyError(false);
+            generate.mutate();
+          }}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          {generate.isPending
+            ? "Generating…"
+            : activeCode
+              ? "New code"
+              : "Generate code"}
+        </Button>
+        <span className="text-muted-foreground text-xs" role="status">
+          {settings?.pairedUserIds.length ?? 0} linked
+        </span>
+      </div>
+      {generate.error ? (
+        <p className="text-destructive text-sm" role="alert">
+          {formatError(generate.error)}
+        </p>
+      ) : null}
+      {copyError ? (
+        <p className="text-destructive text-sm" role="alert">
+          Could not copy the code. Select it and copy it manually.
+        </p>
+      ) : null}
+    </SettingsRow>
+  );
+}
+
+export function TeamsSettingsCard() {
+  const { data: settings, error: loadError, isPending } = useTeamsSettings();
+  const { activeOrg, user } = useAuth();
+  const save = useSaveTeamsSettings();
+  const { data: status } = useSystemStatusQuery();
+
+  const [form, setForm] = useState<TeamsForm>(() => formFrom(undefined));
+
+  const {
+    allowedUserIds: savedAllowedUserIds,
+    clientId: savedClientId,
+    tenantId: savedTenantId,
+  } = formFrom(settings);
+
+  useEffect(() => {
+    setForm({
+      allowedUserIds: savedAllowedUserIds,
+      clientId: savedClientId,
+      clientSecret: "",
+      tenantId: savedTenantId,
+    });
+  }, [savedAllowedUserIds, savedClientId, savedTenantId]);
 
   if (isPending) {
     return SETTINGS_CARD_LOADING_SKELETON;
@@ -135,15 +255,19 @@ export function TeamsSettingsCard() {
       </SettingsRow>
 
       <SettingsRow
-        description="Entra object IDs of the people who may chat with this agent, separated by commas. Nobody can until one is listed."
+        description="Entra object IDs, separated by commas. Users can chat when listed here or linked with a pairing code."
         label="Allowed users"
         layout="stacked"
       >
         <Input aria-label="Allowed users" {...field("allowedUserIds")} />
       </SettingsRow>
 
+      {user?.isPlatformAdmin || activeOrg?.role === "admin" ? (
+        <TeamsPairingRow savePending={save.isPending} settings={settings} />
+      ) : null}
+
       <SettingsRow
-        description="Register this as the bot's messaging endpoint in Azure."
+        description="Paste this as the bot's messaging endpoint in the Teams Developer Portal or your Azure Bot."
         label="Messaging endpoint"
         layout="stacked"
       >

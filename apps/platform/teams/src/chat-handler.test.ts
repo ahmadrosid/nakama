@@ -3,10 +3,16 @@ import { join } from "node:path";
 import type { NakamaClient } from "@nakama/client";
 import { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import {
+  asTestFetch,
   createDefaultTestOrgs,
   withTempHome,
 } from "@nakama/core/channel-test-helpers";
-import type { TeamsConfigFile } from "@nakama/core/teams-config";
+import {
+  loadTeamsConfigFile,
+  regenerateTeamsHandshake,
+  saveTeamsConfig,
+  type TeamsConfigFile,
+} from "@nakama/core/teams-config";
 import { createTeamsChatHandler, type TeamsActivity } from "./chat-handler";
 
 const ORG = "org_test";
@@ -21,7 +27,10 @@ const CONFIG: TeamsConfigFile = {
   allowedUserIds: [ALLOWED],
   clientId: "22222222-2222-4222-8222-222222222222",
   clientSecret: "secret",
+  handshakeCode: null,
+  handshakeExpiresAt: null,
   inboundPort: 4321,
+  pairedUserIds: [],
   profileId: "default",
   tenantId: TENANT,
 };
@@ -114,6 +123,123 @@ function createHarness(
 }
 
 describe("teams chat handler", () => {
+  async function pairingHarness(homeDir: string) {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = asTestFetch(async () =>
+      Response.json({ access_token: "fixture", token_type: "Bearer" })
+    );
+
+    try {
+      await saveTeamsConfig(
+        {
+          clientId: CONFIG.clientId,
+          clientSecret: CONFIG.clientSecret,
+          tenantId: TENANT,
+        },
+        OWNER
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const generated = await regenerateTeamsHandshake(OWNER);
+
+    const harness = createHarness(homeDir, {
+      loadConfig: () => loadTeamsConfigFile(OWNER),
+    });
+
+    return { ...harness, code: generated.handshakeCode! };
+  }
+
+  test("a code in a personal chat links the sender and only the later message starts a turn", async () => {
+    await withTempHome("nakama-teams-handler-", async (homeDir) => {
+      const { handle, code, replies, turns, createdSessions } =
+        await pairingHarness(homeDir);
+
+      await handle(activity({ text: "before pairing" }));
+      expect(turns).toEqual([]);
+      await handle(activity({ text: code }));
+      expect(turns).toEqual([]);
+      expect(createdSessions).toEqual([]);
+      expect(replies).toHaveLength(1);
+      expect((await loadTeamsConfigFile(OWNER))?.pairedUserIds).toEqual([
+        ALLOWED,
+      ]);
+      await handle(activity({ text: "after pairing" }));
+      expect(turns.map((turn) => turn.message)).toEqual(["after pairing"]);
+
+      const restarted = createHarness(homeDir, {
+        loadConfig: () => loadTeamsConfigFile(OWNER),
+      });
+
+      await restarted.handle(activity({ text: "after restart" }));
+      expect(restarted.turns).toHaveLength(1);
+    });
+  });
+
+  for (const patch of [
+    { conversationType: "groupChat" },
+    { conversationType: "channel" },
+    { tenantId: CONFIG.clientId },
+    { senderId: "not-a-guid" },
+    { senderId: "" },
+    { isBot: true },
+    { channelId: "webchat" },
+  ]) {
+    test(`a code cannot pair an activity with ${JSON.stringify(patch)}`, async () => {
+      await withTempHome("nakama-teams-handler-", async (homeDir) => {
+        const { handle, code, turns, createdSessions } =
+          await pairingHarness(homeDir);
+
+        await handle(activity({ text: code, ...patch }));
+        expect(turns).toEqual([]);
+        expect(createdSessions).toEqual([]);
+        expect((await loadTeamsConfigFile(OWNER))?.pairedUserIds).toEqual([]);
+        expect((await loadTeamsConfigFile(OWNER))?.handshakeCode).toBe(code);
+      });
+    });
+  }
+
+  test("a code is never sent to the agent even for an authorized sender", async () => {
+    await withTempHome("nakama-teams-handler-", async (homeDir) => {
+      const { handle, turns, createdSessions } = createHarness(homeDir);
+      await handle(activity({ text: "A".repeat(32) }));
+      expect(turns).toEqual([]);
+      expect(createdSessions).toEqual([]);
+    });
+  });
+
+  test("wrong and consumed codes never start a turn or link a second sender", async () => {
+    await withTempHome("nakama-teams-handler-", async (homeDir) => {
+      const { handle, code, turns } = await pairingHarness(homeDir);
+      await handle(
+        activity({
+          text: code === "0".repeat(32) ? "1".repeat(32) : "0".repeat(32),
+        })
+      );
+      expect((await loadTeamsConfigFile(OWNER))?.pairedUserIds).toEqual([]);
+      await handle(activity({ text: code }));
+      await handle(activity({ senderId: CONFIG.clientId, text: code }));
+      expect((await loadTeamsConfigFile(OWNER))?.pairedUserIds).toEqual([
+        ALLOWED,
+      ]);
+      expect(turns).toEqual([]);
+    });
+  });
+
+  test("duplicate delivery consumes a code and replies once", async () => {
+    await withTempHome("nakama-teams-handler-", async (homeDir) => {
+      const { handle, code, replies, turns } = await pairingHarness(homeDir);
+      const message = activity({ text: code });
+      await Promise.all([handle(message), handle(message)]);
+      expect(replies).toHaveLength(1);
+      expect((await loadTeamsConfigFile(OWNER))?.pairedUserIds).toEqual([
+        ALLOWED,
+      ]);
+      expect(turns).toEqual([]);
+    });
+  });
+
   test("an allowed user in a personal chat gets the agent's reply", async () => {
     await withTempHome("nakama-teams-handler-", async (homeDir) => {
       const { handle, replies, turns } = createHarness(homeDir);
