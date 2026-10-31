@@ -1152,6 +1152,12 @@ export function registerSessionRoutes(
       c.req.header("Accept")?.includes("text/event-stream");
 
     if (wantsStream) {
+      const { mode } = getRequestAuth(c);
+      // The web app stops a turn through /stop, so its connection dropping is
+      // a phone locking or a tab closing and the turn runs on. Channel workers
+      // still stop by hanging up.
+      const fromBrowser = mode === "browser-session";
+
       return streamMessage(
         sessionId,
         session,
@@ -1166,7 +1172,8 @@ export function registerSessionRoutes(
         c.req.raw.signal,
         undefined,
         undefined,
-        body.whatsappMessage
+        body.whatsappMessage,
+        !fromBrowser
       );
     }
 
