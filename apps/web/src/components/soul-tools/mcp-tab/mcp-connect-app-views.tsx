@@ -1,11 +1,14 @@
-import type { McpServerSummary } from "@nakama/core/contract";
+import type {
+  McpRegistryServer,
+  McpServerSummary,
+} from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { buttonVariants } from "@nakama/ui/button-variants";
 import { DialogTitle } from "@nakama/ui/dialog";
 import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Add01Icon,
   ArrowLeft01Icon,
@@ -14,10 +17,11 @@ import {
   Search01Icon,
   Tick02Icon,
 } from "hugeicons-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { POPULAR_SERVERS } from "@/components/soul-tools/mcp-tab/popular-mcp-servers";
 import type { McpServerKind } from "@/components/soul-tools/mcp-tab/use-mcp-server-dialog-state";
 import { useMcpServerDetailQuery } from "@/hooks/use-app-queries";
+import { client, formatError } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
 export type PopularServer = (typeof POPULAR_SERVERS)[number];
@@ -166,6 +170,44 @@ function AppCardButton({ busy, card }: { busy: boolean; card: AppCard }) {
   );
 }
 
+function RegistryServerCardButton({
+  busy,
+  onSelect,
+  server,
+}: {
+  busy: boolean;
+  onSelect: (server: McpRegistryServer) => void;
+  server: McpRegistryServer;
+}) {
+  return (
+    <button
+      aria-label={`Add ${server.name} from registry`}
+      className="flex h-full w-full items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted/50 disabled:opacity-50"
+      disabled={busy}
+      onClick={() => onSelect(server)}
+      type="button"
+    >
+      <div
+        aria-hidden
+        className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted font-semibold text-foreground/80 text-sm"
+      >
+        {server.name.charAt(0).toUpperCase()}
+      </div>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate font-medium text-foreground text-sm">
+          {server.name}
+        </span>
+        <span className="truncate text-muted-foreground text-xs">
+          {server.description || server.remotes[0]?.url || "Remote MCP server"}
+        </span>
+      </span>
+      <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[0.6875rem] text-muted-foreground uppercase">
+        {server.transport}
+      </span>
+    </button>
+  );
+}
+
 type AppFilter = "all" | "ready" | "new";
 
 function matchesFilter(card: AppCard, filter: AppFilter): boolean {
@@ -221,6 +263,7 @@ export function McpAppPicker({
   onConnect,
   onCustom,
   onQueryChange,
+  onSelectRegistry,
   popular,
   query,
   registered,
@@ -230,11 +273,27 @@ export function McpAppPicker({
   onConnect: (preset: PopularServer) => void;
   onCustom: () => void;
   onQueryChange: (value: string) => void;
+  onSelectRegistry?: (server: McpRegistryServer) => void;
   popular: readonly PopularServer[];
   query: string;
   registered: McpServerSummary[];
 }) {
   const [filter, setFilter] = useState<AppFilter>("all");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query.trim()), 300);
+
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const registryResults = useQuery({
+    enabled: debouncedQuery.length >= 2,
+    queryFn: () => client.searchMcpRegistry(debouncedQuery),
+    queryKey: queryKeys.mcp.registry(debouncedQuery),
+    staleTime: 60_000,
+  });
+
   const needle = query.trim().toLowerCase();
 
   const searched = appCards({
@@ -256,6 +315,11 @@ export function McpAppPicker({
     (card) => !showChips || matchesFilter(card, filter)
   );
 
+  const registryServers = registryResults.data?.servers ?? [];
+
+  const hasRegistryServers =
+    debouncedQuery.length >= 2 && registryServers.length > 0;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-col gap-4 px-6 pt-6">
@@ -268,12 +332,17 @@ export function McpAppPicker({
             />
             <Input
               aria-label="Search apps"
-              className="pl-9"
+              className="pr-9 pl-9"
               onChange={(event) => onQueryChange(event.target.value)}
-              placeholder="Search apps"
+              placeholder="Search apps or registry"
               type="search"
               value={query}
             />
+            {registryResults.isFetching ? (
+              <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground">
+                <Spinner className="size-4" />
+              </span>
+            ) : null}
           </div>
           {showChips ? (
             <AppFilterChips
@@ -285,12 +354,32 @@ export function McpAppPicker({
         </div>
       </div>
 
+      {registryResults.error ? (
+        <div
+          className="mx-6 mt-3 rounded-md bg-destructive/10 px-3 py-2 text-destructive text-sm"
+          role="alert"
+        >
+          {formatError(registryResults.error)}
+        </div>
+      ) : null}
+
       <ul className="grid min-h-0 flex-1 auto-rows-min gap-2 overflow-y-auto px-6 py-5 sm:grid-cols-2">
         {cards.map((card) => (
           <li key={card.key}>
             <AppCardButton busy={busy} card={card} />
           </li>
         ))}
+        {hasRegistryServers
+          ? registryServers.map((server) => (
+              <li key={server.name}>
+                <RegistryServerCardButton
+                  busy={busy}
+                  onSelect={(item) => onSelectRegistry?.(item)}
+                  server={server}
+                />
+              </li>
+            ))
+          : null}
         <li>
           <button
             className="flex h-full w-full items-center gap-3 rounded-lg border border-border border-dashed px-3 py-2.5 text-left text-muted-foreground text-sm transition-colors hover:bg-muted/50 hover:text-foreground"

@@ -1,5 +1,6 @@
 import type {
   CreateMcpServerRequest,
+  McpRegistryServer,
   McpServerResponse,
   McpServerSummary,
 } from "@nakama/core/contract";
@@ -26,6 +27,7 @@ import {
 import { McpImportConfigDialog } from "@/components/soul-tools/mcp-tab/mcp-import-config-dialog";
 import { McpServerDialogForm } from "@/components/soul-tools/mcp-tab/mcp-server-dialog-form";
 import { unregisteredPopularServers } from "@/components/soul-tools/mcp-tab/popular-mcp-servers";
+import { emptyHeaderRow } from "@/components/soul-tools/mcp-tab/shared";
 import { useMcpServerDialogState } from "@/components/soul-tools/mcp-tab/use-mcp-server-dialog-state";
 import { useAuth } from "@/context/use-auth";
 import { useMcpServersQuery, useProfileQuery } from "@/hooks/use-app-queries";
@@ -253,6 +255,31 @@ function McpCreateBody({
     }
   }
 
+  function selectRegistryServer(server: McpRegistryServer) {
+    const remote = server.remotes[0];
+
+    if (!remote) {
+      return;
+    }
+
+    state.setName(server.name);
+    state.setUrl(remote.url);
+    state.selectKind("http");
+
+    const secretHeaders = (remote.headers ?? [])
+      .filter((header) => header.isSecret === true)
+      .map((header) => ({
+        key: header.name,
+        value: "",
+      }));
+
+    state.setHeaders(
+      secretHeaders.length > 0 ? secretHeaders : [emptyHeaderRow()]
+    );
+    state.clearTestResult();
+    setView("custom");
+  }
+
   if (state.pendingAuth) {
     return (
       <McpSignInPending
@@ -296,6 +323,7 @@ function McpCreateBody({
         setView("custom");
       }}
       onQueryChange={setQuery}
+      onSelectRegistry={selectRegistryServer}
       popular={
         composio
           ? unregisteredPopularServers(orgServers ?? availableServers, offered)
