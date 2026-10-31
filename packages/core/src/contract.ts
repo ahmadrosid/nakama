@@ -470,6 +470,8 @@ export interface NakamaUpgradeResponse {
   status: {
     at: string;
     message: string;
+    /** Image layers, while the new version downloads. */
+    progress?: { done: number; total: number };
     state: "running" | "done" | "failed" | "rolled_back";
     version: string;
   } | null;

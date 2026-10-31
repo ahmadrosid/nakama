@@ -144,12 +144,22 @@ function UpgradeMessage({ status }: { status: UpgradeStatus }) {
   const failed = status.state === "failed" || status.state === "rolled_back";
 
   return (
-    <p
-      className={failed ? "text-destructive text-xs" : "text-xs"}
-      role="status"
-    >
-      {status.message}
-    </p>
+    <div className="space-y-1">
+      <p
+        className={failed ? "text-destructive text-xs" : "text-xs"}
+        role="status"
+      >
+        {status.message}
+      </p>
+      {status.state === "running" && status.progress ? (
+        <progress
+          aria-label="Download"
+          className="h-1 w-40 appearance-none overflow-hidden rounded-full [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-primary"
+          max={status.progress.total}
+          value={status.progress.done}
+        />
+      ) : null}
+    </div>
   );
 }
 

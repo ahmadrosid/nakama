@@ -403,6 +403,7 @@ const UPDATER_STALE_MS = 30_000;
 const upgradeStatusSchema = z.object({
   at: z.string(),
   message: z.string(),
+  progress: z.object({ done: z.number(), total: z.number() }).optional(),
   state: z.enum(["running", "done", "failed", "rolled_back"]),
   version: z.string(),
 });
@@ -457,8 +458,29 @@ export async function readUpgradeState(
       .catch(() => null)
   );
 
+  const available = beat !== null && now - beat.mtimeMs < UPDATER_STALE_MS;
+
+  // The updater takes a request within two seconds. Until then the last run's
+  // status is all there is, and the button would look like the click did nothing.
+  const waiting = available
+    ? await readFile(join(dir, "request"), "utf8").catch(() => null)
+    : null;
+
+  if (waiting) {
+    return {
+      available,
+      rollbacks: await listRollbacks(current),
+      status: {
+        at: new Date(now).toISOString(),
+        message: "Starting.",
+        state: "running",
+        version: waiting.trim().split(" ").at(-1) ?? "",
+      },
+    };
+  }
+
   return {
-    available: beat !== null && now - beat.mtimeMs < UPDATER_STALE_MS,
+    available,
     rollbacks: await listRollbacks(current),
     status: status.success ? status.data : null,
   };
