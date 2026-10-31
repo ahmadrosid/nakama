@@ -26,8 +26,11 @@ function settings(
     clientId: null,
     clientSecretConfigured: false,
     configured: false,
+    handshakeCode: null,
+    handshakeExpiresAt: null,
     messagingEndpoint:
       "https://nakama.example.com/v1/channels/teams/profile-a/messages",
+    pairedUserIds: [],
     profileId: "profile-a",
     tenantId: null,
     ...patch,

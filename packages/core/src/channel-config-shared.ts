@@ -498,7 +498,10 @@ export async function writeBotChannelIniConfig<
  */
 export async function verifyAndPairBotChannelUser<
   TId extends string | number,
-  TConfig extends BotChannelConfigFile<TId> = BotChannelConfigFile<TId>,
+  TConfig extends Pick<
+    BotChannelConfigFile<TId>,
+    "allowedUserIds" | "pairedUserIds" | "handshakeCode" | "handshakeExpiresAt"
+  > = BotChannelConfigFile<TId>,
 >(options: {
   /** Channel config directory: the pairing lock and attempt budget both key off it. */
   configDir: string;

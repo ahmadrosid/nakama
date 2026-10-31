@@ -1,6 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
 import { asTestFetch, withTempHome } from "./channel-test-helpers";
-import { saveTeamsConfig, saveTeamsInboundPort } from "./teams-config";
+import {
+  regenerateTeamsHandshake,
+  saveTeamsConfig,
+  saveTeamsInboundPort,
+  verifyAndPairTeamsUser,
+} from "./teams-config";
 import {
   createTeamsWorkerHeartbeat,
   getTeamsWorkerStatus,
@@ -71,5 +76,31 @@ test("Teams start intent belongs to its organization and agent", async () => {
     ).toBe(false);
     await setWorkerDesiredRunning("teams", false, owner);
     expect((await readWorkerDesiredState(owner)).teams).toBe(false);
+  });
+});
+
+test("paired users report linked status without an allowed-user list", async () => {
+  await withTempHome("teams-worker-", async () => {
+    globalThis.fetch = asTestFetch(async () =>
+      Response.json({ access_token: "fixture", token_type: "Bearer" })
+    );
+    const tenantId = "11111111-1111-4111-8111-111111111111";
+    await saveTeamsConfig(
+      {
+        clientId: "22222222-2222-4222-8222-222222222222",
+        clientSecret: "fixture",
+        tenantId,
+      },
+      owner
+    );
+    expect((await getTeamsWorkerStatus(owner)).paired).toBe(false);
+    const { handshakeCode } = await regenerateTeamsHandshake(owner);
+    await verifyAndPairTeamsUser(
+      handshakeCode!,
+      "33333333-3333-4333-8333-333333333333",
+      tenantId,
+      owner
+    );
+    expect((await getTeamsWorkerStatus(owner)).paired).toBe(true);
   });
 });
