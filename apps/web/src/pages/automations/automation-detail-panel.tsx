@@ -158,6 +158,7 @@ function AutomationSummaryCard({
               <span className="font-medium text-foreground">
                 {selectedProfileName}
               </span>
+              {selected.toolLimit ? " · Limited tools" : null}
             </p>
             <Button
               className="px-3.5 text-destructive hover:text-destructive"

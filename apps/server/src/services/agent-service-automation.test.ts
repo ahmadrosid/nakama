@@ -233,3 +233,177 @@ describe("AgentService automation resume", () => {
     expect(steps[0]?.args).toBe('{"q":1}');
   });
 });
+
+describe("AgentService automation tool limit", () => {
+  setupTestConfigDir("nakama-automation-tool-limit-");
+
+  async function setup() {
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+    await db.upsertProfile(createDefaultProfile());
+    await db.upsertOrgMember({
+      createdAt: now,
+      orgId: ORG_ID,
+      role: "member",
+      userId: "user_saver",
+    });
+
+    for (const name of ["read_file", "search_files"]) {
+      await db.upsertTool({
+        createdAt: now,
+        description: name,
+        handlerConfig: {},
+        handlerType: "builtin",
+        id: `tool_${name}`,
+        name,
+        updatedAt: now,
+      });
+      await db.assignToolToProfile("profile_default", `tool_${name}`);
+    }
+
+    for (const name of ["calendar", "drive"]) {
+      await db.upsertMcpServer({
+        cachedTools: [{ description: name, inputSchema: {}, name: "list" }],
+        config: { url: "https://example.com/mcp" },
+        createdAt: now,
+        enabled: true,
+        id: `mcp_${name}`,
+        lastError: null,
+        name,
+        orgId: ORG_ID,
+        status: "connected",
+        transport: "http",
+        updatedAt: now,
+      });
+      await db.assignMcpServerToProfile("profile_default", `mcp_${name}`);
+    }
+
+    const composioUsers: string[] = [];
+
+    const toolkit = (slug: string) => ({
+      allowedActions: null,
+      orgToolkit: {
+        cachedTools: [
+          { description: slug, name: slug, slug: `${slug.toUpperCase()}_GO` },
+        ],
+        status: "enabled",
+        toolkitSlug: slug,
+      },
+      userConnection: { status: "connected" },
+    });
+
+    const offered: string[][] = [];
+    const service = new AgentService(null, null, db);
+    // SAFETY: MCP tool definitions only touch the service when they run.
+    service.setMcpService({} as never);
+    // SAFETY: Composio tools call only these three connection methods.
+    service.setMcpClientManager({
+      connectHttpEndpoint: async () => undefined,
+      disconnectHttpEndpoint: async () => undefined,
+      isHttpEndpointConnected: () => true,
+    } as never);
+    // SAFETY: the Composio builders call only these four methods.
+    service.setComposioService({
+      connectToolkit: async () => undefined,
+      getAssignedToolkitRecords: (_orgId: string, userId: string) => {
+        composioUsers.push(userId);
+
+        return Promise.resolve([toolkit("gmail"), toolkit("slack")]);
+      },
+      getProfileSessionEndpoint: async () => ({ url: "https://c.test/mcp" }),
+      isAvailable: async () => true,
+    } as never);
+    Object.assign(service, {
+      _providerConfigured: true,
+      createHarnessForProfile: () => ({
+        provider: {
+          name: "openai",
+          streamChat(input: GenerateChatInput) {
+            offered.push(
+              (input.tools ?? []).map(
+                (tool) => `${tool.name} ${tool.description}`
+              )
+            );
+
+            return Promise.resolve({
+              assistantMessage: { content: "Done", role: "assistant" },
+              content: "Done",
+              toolCalls: [],
+            });
+          },
+        },
+      }),
+      resolveProfileSystemPrompt: () =>
+        Promise.resolve({ soulActive: false, systemPrompt: "Test" }),
+    });
+
+    const run = async (
+      options: Parameters<AgentService["runAutomationPrompt"]>[8]
+    ) => {
+      await service.runAutomationPrompt(
+        ORG_ID,
+        "profile_default",
+        "Brief me",
+        undefined,
+        undefined,
+        undefined,
+        false,
+        undefined,
+        options
+      );
+
+      return offered.at(-1) ?? [];
+    };
+
+    return { composioUsers, run };
+  }
+
+  const names = (tools: string[]) => tools.map((tool) => tool.split(" ")[0]);
+
+  test("offers only the listed tools, MCP servers, and connectors", async () => {
+    const { composioUsers, run } = await setup();
+
+    const tools = await run({
+      runAsUserId: "user_saver",
+      toolLimit: {
+        composioToolkits: ["gmail"],
+        mcpServerIds: ["mcp_calendar"],
+        toolIds: ["tool_read_file"],
+      },
+    });
+
+    expect(names(tools)).toContain("read_file");
+    expect(names(tools)).not.toContain("search_files");
+    expect(tools.some((tool) => tool.startsWith("calendar"))).toBe(true);
+    expect(tools.some((tool) => tool.startsWith("drive"))).toBe(false);
+
+    const search = tools.find((tool) =>
+      tool.startsWith("composio__search_actions")
+    );
+
+    expect(search).toContain("gmail");
+    expect(search).not.toContain("slack");
+    expect(composioUsers).toContain("user_saver");
+  });
+
+  test("keeps the full set without a limit", async () => {
+    const { run } = await setup();
+
+    const tools = await run({ runAsUserId: "user_saver" });
+
+    expect(names(tools)).toContain("search_files");
+    expect(tools.some((tool) => tool.startsWith("drive"))).toBe(true);
+    expect(
+      tools.find((tool) => tool.startsWith("composio__search_actions"))
+    ).toContain("slack");
+  });
+
+  test("uses no connectors when the saver left the org", async () => {
+    const { composioUsers, run } = await setup();
+
+    const tools = await run({ runAsUserId: "user_gone" });
+
+    expect(names(tools)).not.toContain("composio__search_actions");
+    expect(composioUsers).toEqual([]);
+  });
+});

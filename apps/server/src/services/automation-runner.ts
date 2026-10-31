@@ -191,7 +191,8 @@ export class AutomationRunner {
           },
         },
         resume,
-        automation.delivery?.channel
+        automation.delivery?.channel,
+        automation
       );
 
       const completedRun = await this.automationService.completeRun(

@@ -27,6 +27,7 @@ type AutomationsDialogsProps = Pick<
   | "updateEditDraft"
   | "profiles"
   | "profilesLoading"
+  | "toolOptions"
 >;
 
 export function AutomationsDialogs({
@@ -40,6 +41,7 @@ export function AutomationsDialogs({
   updateEditDraft,
   profiles,
   profilesLoading,
+  toolOptions,
 }: AutomationsDialogsProps) {
   return (
     <>
@@ -76,6 +78,7 @@ export function AutomationsDialogs({
                     busy={busy}
                     onChange={updateEditDraft}
                     profiles={profiles}
+                    toolOptions={toolOptions}
                   />
                 </div>
 

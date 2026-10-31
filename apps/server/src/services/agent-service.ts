@@ -23,6 +23,7 @@ import type {
   AssignSkillRequest,
   AssignToolRequest,
   AutomationDeliveryChannel,
+  AutomationToolLimit,
   BranchSessionResponse,
   ChatContextUsage,
   ChatgptOAuthCredentials,
@@ -85,6 +86,7 @@ import type {
   SoulStackResponse,
   SoulStatusResponse,
   StartTelegramPairingRequest,
+  StoredAutomation,
   SuggestToolParamsResponse,
   SyncSkillsResponse,
   TelegramAccessRequestsResponse,
@@ -1996,11 +1998,18 @@ export class AgentService {
     automationRunId?: string,
     handlers?: Parameters<AgentChatSession["sendStream"]>[1],
     resume = false,
-    deliveryChannel?: AutomationDeliveryChannel
+    deliveryChannel?: AutomationDeliveryChannel,
+    run: Pick<StoredAutomation, "runAsUserId" | "toolLimit"> = {}
   ): Promise<string> {
     if (!this._providerConfigured) {
       throw new Error("Provider is not configured.");
     }
+
+    // A person who left the org no longer lends their Composio sign-ins.
+    const userId =
+      run.runAsUserId && (await this.db.getOrgMember(orgId, run.runAsUserId))
+        ? run.runAsUserId
+        : undefined;
 
     const savedSteps = automationRunId
       ? await this.db.listAutomationRunSteps(automationRunId)
@@ -2029,6 +2038,8 @@ export class AgentService {
         },
         orgId,
         profileId,
+        toolLimit: run.toolLimit,
+        userId,
       }
     );
 
@@ -2113,6 +2124,7 @@ export class AgentService {
       orgId: string;
       orgRole?: OrgRole | null;
       profileId: string;
+      toolLimit?: AutomationToolLimit;
       userId?: string | null;
     }
   ): Promise<{
@@ -2127,7 +2139,10 @@ export class AgentService {
 
     const tools = policy.tools
       ? [
-          ...(await this.resolveProfileTools(profile, kind, { userId })),
+          ...(await this.resolveProfileTools(profile, kind, {
+            toolLimit: input.toolLimit,
+            userId,
+          })),
           ...(input.extraTools ?? []),
         ]
       : [];
@@ -5713,6 +5728,8 @@ export class AgentService {
       actorRole?: "admin" | "member" | null;
       /** A session's channel; it decides skill_manage for chats. */
       channel?: AgentChannel;
+      /** An automation's limit; only the listed items stay. */
+      toolLimit?: AutomationToolLimit;
       userId?: string | null;
     } = {}
   ): Promise<ToolDefinition[]> {
@@ -5722,12 +5739,15 @@ export class AgentService {
       return [];
     }
 
+    const limit = options.toolLimit;
+
     const shared = profile.orgId
       ? await this.resolveSharedAgentProfile(profile.orgId, profile.id)
       : null;
 
-    const storedTools =
-      shared?.assignedTools ?? (await this.db.listToolsForProfile(profile.id));
+    const storedTools = (
+      shared?.assignedTools ?? (await this.db.listToolsForProfile(profile.id))
+    ).filter((record) => !limit || limit.toolIds.includes(record.id));
 
     const publishedTools = profile.orgId
       ? await this.publishedToolRevisionForRecords(profile.orgId, storedTools)
@@ -5871,9 +5891,10 @@ export class AgentService {
     let resolved = [...tools];
 
     if (this.mcpService) {
-      const mcpServers =
+      const mcpServers = (
         shared?.assignedMcpServers ??
-        (await this.db.listMcpServersForProfile(profile.id));
+        (await this.db.listMcpServersForProfile(profile.id))
+      ).filter((server) => !limit || limit.mcpServerIds.includes(server.id));
 
       const orgId = profile.orgId;
 
@@ -5989,19 +6010,38 @@ export class AgentService {
         throw new Error("Profile organization is missing.");
       }
 
+      const composio = this.composioService;
+
+      const composioService = {
+        connectToolkit: composio.connectToolkit.bind(composio),
+        getAssignedToolkitRecords: async (
+          ...args: Parameters<typeof composio.getAssignedToolkitRecords>
+        ) =>
+          (await composio.getAssignedToolkitRecords(...args)).filter(
+            ({ orgToolkit }) =>
+              !limit ||
+              limit.composioToolkits.includes(
+                orgToolkit.toolkitSlug.toLowerCase()
+              )
+          ),
+        getProfileSessionEndpoint:
+          composio.getProfileSessionEndpoint.bind(composio),
+        isAvailable: composio.isAvailable.bind(composio),
+      };
+
       resolved = [
         ...resolved,
         ...(await buildComposioConnectTools(
           orgId,
           options.userId,
           profile.id,
-          this.composioService
+          composioService
         )),
         ...(await buildComposioToolDefinitions(
           orgId,
           options.userId,
           profile.id,
-          this.composioService,
+          composioService,
           this.mcpClientManager
         )),
       ];
@@ -6096,7 +6136,8 @@ export class AgentService {
       );
     }
 
-    if (!policy.subAgent) {
+    // A sub-agent resolves the agent's full set, so a limit turns it off.
+    if (!policy.subAgent || limit) {
       resolved = resolved.filter((tool) => tool.name !== SUB_AGENT_TOOL_NAME);
     }
 

@@ -1,6 +1,9 @@
 import type { AutomationDefinition, StoredAutomation } from "@nakama/core";
 import type { DatabaseAdapter, StoredAutomationRecord } from "./types";
 
+type StoredDefinition = Omit<AutomationDefinition, "id" | "name"> &
+  Pick<StoredAutomation, "runAsUserId">;
+
 export class DatabaseAutomationStore {
   constructor(private readonly db: DatabaseAdapter) {}
 
@@ -33,9 +36,7 @@ export class DatabaseAutomationStore {
 
 function fromRecord(record: StoredAutomationRecord): StoredAutomation {
   // SAFETY: DatabaseAdapter stores this definition from a typed automation input.
-  const definition = record.definition as
-    | Partial<AutomationDefinition>
-    | undefined;
+  const definition = record.definition as Partial<StoredDefinition> | undefined;
 
   return {
     createdAt: record.createdAt,
@@ -47,7 +48,9 @@ function fromRecord(record: StoredAutomationRecord): StoredAutomation {
     orgId: record.orgId ?? null,
     profileId: record.profileId,
     prompt: definition?.prompt ?? "",
+    runAsUserId: definition?.runAsUserId ?? null,
     steps: definition?.steps ?? [],
+    toolLimit: definition?.toolLimit,
     trigger: definition?.trigger ?? { type: "manual" },
     updatedAt: record.updatedAt,
     version: definition?.version ?? record.version,
@@ -57,7 +60,7 @@ function fromRecord(record: StoredAutomationRecord): StoredAutomation {
 function toRecord(definition: StoredAutomation): StoredAutomationRecord {
   const now = new Date().toISOString();
 
-  const storedDefinition: Omit<AutomationDefinition, "id" | "name"> = {
+  const storedDefinition: StoredDefinition = {
     description: definition.description,
     prompt: definition.prompt,
     steps: definition.steps,
@@ -67,6 +70,14 @@ function toRecord(definition: StoredAutomation): StoredAutomationRecord {
 
   if (definition.delivery) {
     storedDefinition.delivery = definition.delivery;
+  }
+
+  if (definition.toolLimit) {
+    storedDefinition.toolLimit = definition.toolLimit;
+  }
+
+  if (definition.runAsUserId) {
+    storedDefinition.runAsUserId = definition.runAsUserId;
   }
 
   return {

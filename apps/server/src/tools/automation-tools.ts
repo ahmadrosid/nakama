@@ -130,6 +130,7 @@ export function createAutomationTools(
           {
             isPlatformAdmin: context.isPlatformAdmin,
             orgRole: context.orgRole,
+            userId: context.userId,
           }
         );
 

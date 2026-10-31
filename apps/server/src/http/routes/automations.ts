@@ -53,6 +53,12 @@ export function registerAutomationRoutes(
     .passthrough()
     .openapi("ListAutomationsResponse");
 
+  const toolLimitSchema = z.object({
+    composioToolkits: z.array(z.string()),
+    mcpServerIds: z.array(z.string()),
+    toolIds: z.array(z.string()),
+  });
+
   const createAutomationSchema = z
     .object({
       delivery: z
@@ -69,6 +75,7 @@ export function registerAutomationRoutes(
       name: z.string(),
       profileId: z.string().optional(),
       prompt: z.string(),
+      toolLimit: toolLimitSchema.optional(),
       trigger: z.discriminatedUnion("type", [
         z.object({ type: z.literal("manual") }),
         z.object({
@@ -108,6 +115,7 @@ export function registerAutomationRoutes(
       name: z.string().optional(),
       profileId: z.string().optional(),
       prompt: z.string().optional(),
+      toolLimit: toolLimitSchema.nullable().optional(),
       trigger: z
         .discriminatedUnion("type", [
           z.object({ type: z.literal("manual") }),
@@ -400,6 +408,7 @@ export function registerAutomationRoutes(
       {
         isPlatformAdmin: auth.isPlatformAdmin,
         orgRole: auth.orgRole,
+        userId: auth.user.id,
       }
     );
 
@@ -435,6 +444,7 @@ export function registerAutomationRoutes(
         {
           isPlatformAdmin: auth.isPlatformAdmin,
           orgRole: auth.orgRole,
+          userId: auth.user.id,
         }
       );
 
