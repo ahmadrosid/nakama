@@ -1405,14 +1405,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     "SELECT * FROM sessions WHERE user_id = ? AND app_user_id IS NULL ORDER BY created_at ASC"
   );
 
+  const listChildSessionsStmt = db.prepare<SessionRow, SQLQueryBindings[]>(
+    "SELECT * FROM sessions WHERE parent_session_id = ? AND app_user_id IS NULL"
+  );
+
   const getSessionStmt = db.prepare<SessionRow, SQLQueryBindings[]>(
     "SELECT * FROM sessions WHERE id = ? AND app_user_id IS NULL"
   );
 
   // org_id follows the profile's org. The profile move path keeps it in sync.
   const upsertSessionStmt = db.prepare(`
-    INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, app_user_id, user_id, model, org_id, pinned, parent_session_id, branch_message_index, thinking_effort, coding_workspace_root)
-    VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, app_user_id, user_id, model, org_id, pinned, parent_session_id, branch_message_index, thinking_effort, coding_workspace_root, title)
+    VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       profile_id = excluded.profile_id,
       channel = excluded.channel,
@@ -5629,6 +5633,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return rows.map(toBrowserSessionRecord);
     },
 
+    async listChildSessions(parentSessionId) {
+      return listChildSessionsStmt
+        .all(parentSessionId)
+        .map((row) => toSessionRecord(row));
+    },
+
     async listComposioToolkitsForOrg(orgId) {
       return listComposioToolkitsForOrgStmt
         .all(orgId)
@@ -6492,7 +6502,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.parentSessionId ?? null,
         record.branchMessageIndex ?? null,
         record.thinkingEffort ?? null,
-        record.codingWorkspaceRoot ?? null
+        record.codingWorkspaceRoot ?? null,
+        record.title ?? null
       );
     },
     async upsertSkill(record) {
