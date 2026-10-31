@@ -5,6 +5,7 @@ import { Notification01Icon } from "hugeicons-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { NotificationList } from "@/components/notifications/notification-list";
+import { WebPushToggle } from "@/components/notifications/web-push-toggle";
 import { useNotifications } from "@/hooks/use-notifications";
 import { PAGE_PATHS } from "@/lib/navigation";
 
@@ -105,6 +106,9 @@ export function SidebarNotifications() {
             </div>
           </>
         )}
+        <div className="mt-1 border-border border-t pt-1">
+          <WebPushToggle />
+        </div>
       </PopoverContent>
     </Popover>
   );
