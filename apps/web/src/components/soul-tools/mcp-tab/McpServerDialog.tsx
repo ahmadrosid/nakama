@@ -210,7 +210,7 @@ function McpCreateBody({
       onAssign={onAssign}
       onConnect={(item) => {
         onOpenChange(false);
-        navigate(composioToolkitPath(item.toolkit));
+        navigate(composioToolkitPath(item.name));
       }}
       onCustom={() => {
         state.selectKind("signin");
