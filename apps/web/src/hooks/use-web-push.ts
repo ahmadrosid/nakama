@@ -17,6 +17,74 @@ export const webPushSupported =
   "PushManager" in window &&
   "Notification" in window;
 
+/**
+ * Electron has no push service, so the desktop app shows a local notification
+ * from the open page instead. Read from the user agent: the preload's
+ * `data-desktop` lands only after the first render.
+ */
+const isDesktopApp =
+  typeof navigator !== "undefined" && navigator.userAgent.includes("Electron/");
+
+const DESKTOP_NOTIFY_KEY = "nakama.desktopNotify";
+
+function readDesktopNotify(): boolean {
+  try {
+    return (
+      localStorage.getItem(DESKTOP_NOTIFY_KEY) === "1" &&
+      Notification.permission === "granted"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function writeDesktopNotify(on: boolean): void {
+  try {
+    if (on) {
+      localStorage.setItem(DESKTOP_NOTIFY_KEY, "1");
+    } else {
+      localStorage.removeItem(DESKTOP_NOTIFY_KEY);
+    }
+  } catch {
+    // Without storage the switch cannot stay on; it reads off next load.
+  }
+}
+
+/**
+ * Desktop only: tells the user a reply is ready while Nakama is not in front.
+ * The browser gets the same message by Web Push from the server.
+ */
+export function notifyReplyReady(message: {
+  body: string;
+  onOpen: () => void;
+  tag: string;
+  title: string;
+}): void {
+  if (!(isDesktopApp && webPushSupported && readDesktopNotify())) {
+    return;
+  }
+
+  if (document.visibilityState === "visible" && document.hasFocus()) {
+    return;
+  }
+
+  const body = Array.from(message.body.replace(/\s+/g, " ").trim());
+
+  const notification = new Notification(message.title, {
+    body:
+      body.length > 180
+        ? `${body.slice(0, 179).join("")}…`
+        : body.join("") || "Reply ready",
+    tag: message.tag,
+  });
+
+  notification.onclick = () => {
+    window.focus();
+    message.onOpen();
+    notification.close();
+  };
+}
+
 function urlBase64ToBytes(value: string): Uint8Array<ArrayBuffer> {
   const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
   const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
@@ -139,6 +207,12 @@ export function useWebPush() {
     let cancelled = false;
 
     const read = () => {
+      if (isDesktopApp) {
+        setEnabled(readDesktopNotify());
+
+        return;
+      }
+
       navigator.serviceWorker.ready
         .then((registration) => registration.pushManager.getSubscription())
         .then(async (subscription) => {
@@ -185,6 +259,13 @@ export function useWebPush() {
           "Notifications are blocked for this site. Allow them in the browser settings."
         );
         setEnabled(false);
+
+        return;
+      }
+
+      if (isDesktopApp) {
+        writeDesktopNotify(next);
+        setEnabled(next);
 
         return;
       }

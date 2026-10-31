@@ -772,9 +772,11 @@ export function buildStreamHandlers(
     onTodosUpdated?: (todos: AgentTodo[]) => void;
     onQuestionnaireUpdated?: (questionnaire: AgentQuestionnaire | null) => void;
     onContextUsage?: (usage: ChatContextUsage) => void;
+    /** Gets the text written after the turn's last tool call. */
+    onDone?: (reply: string) => void;
   } = {}
 ): StreamHandlers {
-  return {
+  const handlers: StreamHandlers = {
     onChunk: (delta) => {
       setMessages((current) => {
         const next = [...current];
@@ -945,6 +947,27 @@ export function buildStreamHandlers(
 
         return current;
       });
+    },
+  };
+
+  const { onDone } = options;
+
+  if (!onDone) {
+    return handlers;
+  }
+
+  let reply = "";
+
+  return {
+    ...handlers,
+    onChunk: (delta) => {
+      reply += delta;
+      handlers.onChunk(delta);
+    },
+    onDone: () => onDone(reply),
+    onToolStart: (event) => {
+      reply = "";
+      handlers.onToolStart?.(event);
     },
   };
 }
