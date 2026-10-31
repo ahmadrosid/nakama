@@ -71,6 +71,12 @@ test("shows the newer release with its upgrade command and checks again on click
     "https://github.com/ahmadrosid/nakama/releases/tag/v0.4.60"
   );
 
+  expect(
+    [...container.querySelectorAll("a")].some((link) =>
+      link.href.endsWith("/docker#upgrade-a-docker-run-install")
+    )
+  ).toBe(true);
+
   latest = "0.4.59";
 
   const button = [...container.querySelectorAll("button")].find(

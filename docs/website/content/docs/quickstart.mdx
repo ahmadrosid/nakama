@@ -28,7 +28,7 @@ Complete the setup wizard in the browser and you are live. Skip to [First-time s
 
 ### Option 3: Docker
 
-For a single-container deployment:
+To try it on your own machine:
 
 ```bash
 docker pull ghcr.io/ahmadrosid/nakama:latest
@@ -37,7 +37,7 @@ printf 'NAKAMA_SECRETS_KEY=%s\n' "$(openssl rand -base64 32)" > nakama-secrets.e
 docker run -d -p 4310:4310 -v nakama-data:/nakama/data --env-file nakama-secrets.env --name nakama ghcr.io/ahmadrosid/nakama:latest
 ```
 
-Open `http://localhost:4310`. See [Docker](/docker) for build-from-source, volumes, and production notes.
+Open `http://localhost:4310`. On a server, use Compose instead: it pins the version, keeps a daily backup, and can upgrade from Settings. See [Docker](/docker#on-a-server).
 
 ### Option 4: Local development
 

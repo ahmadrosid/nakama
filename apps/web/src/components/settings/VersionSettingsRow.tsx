@@ -15,6 +15,9 @@ import { queryKeys } from "@/lib/query-keys";
 
 type UpgradeStatus = NakamaUpgradeResponse["status"];
 
+const UPGRADE_DOCS_URL =
+  "https://ahmadrosid.github.io/nakama/docker#upgrade-a-docker-run-install";
+
 function VersionStatus({
   query,
 }: {
@@ -64,9 +67,19 @@ function UpgradeAction({
 
   if (!available) {
     return (
-      <pre className="overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-xs">
-        {`sed -i 's/^NAKAMA_VERSION=.*/NAKAMA_VERSION=${latest}/' .env\ndocker compose pull && docker compose up -d`}
-      </pre>
+      <div className="space-y-1">
+        <pre className="overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-xs">
+          {`sed -i 's/^NAKAMA_VERSION=.*/NAKAMA_VERSION=${latest}/' .env\ndocker compose pull && docker compose up -d`}
+        </pre>
+        <a
+          className="text-xs underline underline-offset-2"
+          href={UPGRADE_DOCS_URL}
+          rel="noreferrer"
+          target="_blank"
+        >
+          Not on Compose?
+        </a>
+      </div>
     );
   }
 

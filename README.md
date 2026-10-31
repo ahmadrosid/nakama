@@ -81,7 +81,19 @@ You can also run Nakama with Docker. It runs as one container and needs about
 [Requirements](https://ahmadrosid.github.io/nakama/docker#requirements) before
 enabling channel workers.
 
-**Prebuilt image (fastest):**
+**On a server, use Compose.** It pins the version, keeps a daily encrypted backup, and can turn on the Update button in Settings. Set `NAKAMA_VERSION` to the [latest release](https://github.com/ahmadrosid/nakama/releases/latest) and put an HTTPS proxy in front ([Deployment hardening](https://ahmadrosid.github.io/nakama/deployment-hardening)).
+
+```bash
+curl -O https://raw.githubusercontent.com/ahmadrosid/nakama/main/docker-compose.yaml
+umask 077
+printf 'NAKAMA_SECRETS_KEY=%s\n' "$(openssl rand -base64 32)" > nakama-secrets.env
+echo NAKAMA_VERSION=0.4.65 > .env
+docker compose up -d
+```
+
+See [Upgrade](https://ahmadrosid.github.io/nakama/docker#upgrade).
+
+**To try it on your own machine:**
 
 ```bash
 # Pull and run the latest image
