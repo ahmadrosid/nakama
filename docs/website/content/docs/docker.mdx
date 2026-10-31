@@ -28,9 +28,23 @@ Two things raise the figure and are not in the table:
 - **A configured provider.** The numbers above come from offline mode, so no
   model traffic passed through the container.
 
+## On a server
+
+Use Compose. It pins the version, keeps a daily encrypted backup, and can turn on the [Update button](#upgrade-from-settings). Set `NAKAMA_VERSION` to the [latest release](https://github.com/ahmadrosid/nakama/releases/latest).
+
+```bash
+curl -O https://raw.githubusercontent.com/ahmadrosid/nakama/main/docker-compose.yaml
+umask 077
+printf 'NAKAMA_SECRETS_KEY=%s\n' "$(openssl rand -base64 32)" > nakama-secrets.env
+echo NAKAMA_VERSION=0.4.65 > .env
+docker compose up -d
+```
+
+Put an HTTPS proxy in front before anyone else reaches it ([Deployment hardening](/deployment-hardening)).
+
 ## Quick run
 
-Pull the prebuilt image and start Nakama:
+To try Nakama on your own machine, pull the prebuilt image and start it:
 
 ```bash
 docker pull ghcr.io/ahmadrosid/nakama:latest
@@ -42,7 +56,6 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data \
 
 Keep `nakama-secrets.env` outside the data volume and back it up separately.
 Use the same file when you restart or upgrade this install.
-For Docker Compose, create this file beside `docker-compose.yaml` before starting it.
 
 Open `http://localhost:4310`. The container serves the API, web dashboard, and platform workers together.
 
@@ -70,6 +83,17 @@ docker compose pull && docker compose up -d
 The newest backup can be up to a day old. For a fresh one, use **Export ZIP** in the dashboard first ([Backup and restore](/backup-restore)).
 
 To roll back, set the previous version and run `docker compose up -d` again. Database migrations only move forward, so if the newer version already started, restore the backup taken before the upgrade as well.
+
+### Upgrade a `docker run` install
+
+Check that you have a backup (**Export ZIP** in the dashboard), then replace the container. The data stays in the volume:
+
+```bash
+docker pull ghcr.io/ahmadrosid/nakama:latest
+docker rm -f nakama
+docker run -d -p 4310:4310 -v nakama-data:/nakama/data \
+  --env-file nakama-secrets.env --name nakama ghcr.io/ahmadrosid/nakama:latest
+```
 
 ### Upgrade from Settings
 
