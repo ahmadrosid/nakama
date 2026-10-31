@@ -16,7 +16,11 @@ import type {
   ToolContext,
   ToolDefinition,
 } from "@nakama/core";
-import { createId, ProviderStreamInterruptedError } from "@nakama/core";
+import {
+  createId,
+  NakamaApiError,
+  ProviderStreamInterruptedError,
+} from "@nakama/core";
 import { z } from "zod";
 
 export interface AgentRequest {
@@ -78,6 +82,13 @@ const QuestionnaireToolResultSchema = z.object({ questionnaire: z.json() });
 const MAX_TOOL_ITERATIONS = 100;
 
 const MAX_TURN_OUTPUT_TOKENS = 200_000;
+
+/**
+ * Wait before the one retry a turn spends on a provider HTTP failure.
+ * Providers surface rate limits, gateways, and timeouts as one 502, so this
+ * rides out the transient ones without hiding permanent failures.
+ */
+const PROVIDER_RETRY_DELAY_MS = 500;
 
 const MAX_OPEN_TODO_NUDGES = 2;
 
@@ -750,6 +761,7 @@ async function runConversation(
   let finalReplyOnly = false;
   let thinkingOff = false;
   let streamRetried = false;
+  let transientRetried = false;
   let streamInterrupted = false;
   let openTodoNudges = 0;
   let openTodosReminder: string | null = null;
@@ -848,6 +860,24 @@ async function runConversation(
       ) {
         streamRetried = true;
         streamInterrupted = true;
+        continue;
+      }
+
+      // Providers surface rate limits, gateways, and timeouts as one 502
+      // (buildProviderHttpError maps every non-auth HTTP status there), so
+      // this rides out the transient ones. One bounded try per turn, nothing
+      // was streamed yet, and permanent failures still fail the turn.
+      if (
+        error instanceof NakamaApiError &&
+        error.status >= 500 &&
+        !(error instanceof ProviderStreamInterruptedError) &&
+        !transientRetried &&
+        !signal?.aborted
+      ) {
+        transientRetried = true;
+        await new Promise((resolve) =>
+          setTimeout(resolve, PROVIDER_RETRY_DELAY_MS)
+        );
         continue;
       }
 
