@@ -7,6 +7,8 @@ The org is the isolation boundary. Profiles, sessions, tools, MCP, skills, autom
 Security trust boundaries, STRIDE analysis, and residual risks are maintained in
 [`THREAT_MODEL.md`](./THREAT_MODEL.md).
 
+The words session, chat, turn, branch, child chat, and cognito chat have one meaning each. [`GLOSSARY.md`](./GLOSSARY.md) defines them.
+
 ## System overview
 
 ```mermaid
@@ -117,6 +119,9 @@ nakama/
 |---|---|
 | Clients (`web`, `cli`, channels) | Thin HTTP and SSE client. This layer has no agent loop. |
 | `apps/server` `AgentService` | Assembles the profile, provider, tools, MCP, soul, Composio, org-memory, attachments, and persistence. |
+| `SessionRuntime` (`session-runtime.ts`) | Turns a session id into a chat. It holds the chat caches and builds a chat again when it is out of date. |
+| `TurnRunner` (`turn-runner.ts`) | Runs one turn of a session, from the lock to the post-turn hooks. |
+| Turn kinds (`turn-kinds.ts`) | One table that gives each kind of turn its platform tools and prompt lines. |
 | `packages/agent` | This package owns prompts, the tool loop, compaction, and `AgentChatSession`. |
 | `packages/core` | This package owns contracts, soul compose, builtins, channel helpers, and config. |
 | `packages/db` | This package owns the schema and adapters for persisted entities. |
@@ -153,7 +158,9 @@ Org roles are `admin` and `member`. A platform admin uses `/v1/platform/*`.
 
 `AgentService` in [`agent-service.ts`](./apps/server/src/services/agent-service.ts) assembles the agent runtime.
 
-The service loads the profile, the soul, the provider, and the model. The service attaches builtin tools, custom JS tools, custom Python tools, MCP tools, and enabled plugin tools. The service attaches Composio tools and org-memory tools when they apply. Super Nakama gets extra tools when the profile permits them. The service also attaches questionnaire, todo, and attachments. Discord sessions get Discord artifact tools.
+The service loads the profile, the soul, the provider, and the model. The service attaches builtin tools, custom JS tools, custom Python tools, MCP tools, and enabled plugin tools. The service attaches Composio tools and org-memory tools when they apply. Super Nakama gets extra tools when the profile permits them. Discord sessions get Discord artifact tools.
+
+The kind of turn decides the platform tools on top of the profile's own: automation, todo, questionnaire, `sub_agent`, `skill_manage`, and org-memory proposals. It also decides the prompt lines added after the profile's prompt. The kinds are `chat`, `branch`, `cognito`, `child`, `sub_agent`, `group_member`, `automation`, `plugin_workflow`, `plugin_summarize`, and `acp_draft`. For example, a child chat, a sub-agent run, and a group member turn get no todo, questionnaire, automation, or `sub_agent` tools. A cognito chat gets no org-memory proposals and no `skill_manage`. The table is [`turn-kinds.ts`](./apps/server/src/services/turn-kinds.ts).
 
 Prompt layers:
 
@@ -167,11 +174,26 @@ Per-turn context can include todos, matched skills, and Composio connections. A 
 
 ## Sessions
 
-- Live state is the in-memory `AgentChatSession`.
+- Live state is the in-memory `AgentChatSession`, which [`session-runtime.ts`](./apps/server/src/services/session-runtime.ts) holds.
+- The runtime builds a stored chat from its session record on first use. It holds at most 50 stored chats and evicts the least recently used one that has no turn running.
+- The runtime builds a chat again when what the profile may use (tools, skills, plugins) changes. A rebuilt chat gets the same record and the owner's access, so it equals the first one.
 - Durable history is SQLite `session_messages` through [`session-persistence.ts`](./apps/server/src/services/session-persistence.ts).
-- Cognito sessions are intentionally ephemeral: their history stays in memory and has no `sessions` or `session_messages` row.
+- Cognito sessions are intentionally ephemeral: their history stays in memory and has no `sessions` or `session_messages` row. The runtime keeps them in a separate store.
 - Questionnaire and todo are on `sessions` metadata.
 - The tables are `sessions`, `session_messages`, and `attachments`.
+
+## Turns
+
+[`turn-runner.ts`](./apps/server/src/services/turn-runner.ts) runs every message turn of a session. The SSE route, the JSON route, and the `sub_agent` tool call it, and each one only chooses how to show the turn.
+
+1. The runner finds the session record, then takes the session's turn lock. A session that another turn holds answers busy.
+2. It reopens a closed chat, checks the shared agent and the model, and gets the chat from the session runtime.
+3. It sends the message with one abort signal. A closed request, a stopped parent, or `close_session` aborts it.
+4. It ends the turn on the overall deadline, or on the first-token deadline if the provider sends nothing.
+5. It publishes every event to [`session-turn-registry.ts`](./apps/server/src/services/session-turn-registry.ts), so another tab can follow the turn.
+6. It frees the lock, then schedules the title. After a successful turn that is not in a child chat, it also schedules the skill review.
+
+Turns outside a session (automations, plugin summaries, in-memory sub-agents, group member turns) use `AgentService.openOneShotChat` with their turn kind.
 
 ## Tools and MCP
 
@@ -242,7 +264,8 @@ Org memory is also on disk at `~/.nakama/orgs/{orgId}/MEMORY.md`.
 
 - Packages must not import from `apps/*`.
 - The server examines org membership before org-scoped routes.
-- Profiles control behavior and tool availability.
+- Profiles control behavior. The profile and the kind of turn together control tool availability.
+- A session runs one turn at a time.
 - Message history is durable except for intentionally ephemeral Cognito sessions.
 - The same Hono app produces OpenAPI and serves runtime requests.
 - Channel apps are transport bridges. They are not separate agent runtimes.

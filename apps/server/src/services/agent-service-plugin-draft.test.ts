@@ -12,7 +12,9 @@ import { SkillsService } from "./skills-service";
 /** The private resolver that decides which tools a chat turn gets. */
 interface ProfileToolResolver {
   resolveProfileTools(
-    profile: StoredProfileRecord
+    profile: StoredProfileRecord,
+    kind: "chat",
+    options: { channel: "web" }
   ): Promise<Array<{ name: string }>>;
 }
 
@@ -35,7 +37,9 @@ describe("submit_plugin_draft on an ordinary agent", () => {
     const resolver = Object.create(service) as ProfileToolResolver;
 
     const names = async () =>
-      (await resolver.resolveProfileTools(profile)).map((tool) => tool.name);
+      (
+        await resolver.resolveProfileTools(profile, "chat", { channel: "web" })
+      ).map((tool) => tool.name);
 
     expect(await names()).not.toContain("submit_plugin_draft");
 

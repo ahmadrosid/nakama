@@ -2,25 +2,26 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { ensureBundledSkillFiles, type ToolDefinition } from "@nakama/core";
+import {
+  type AgentChannel,
+  ensureBundledSkillFiles,
+  type ToolDefinition,
+} from "@nakama/core";
 import type { StoredProfileRecord } from "@nakama/db";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AgentService } from "./agent-service";
 import { createDefaultProfile } from "./agent-service-test-fixtures";
 
 import { SkillsService } from "./skills-service";
+import type { TurnKind } from "./turn-kinds";
 
 const ORG_ID = "org_test";
 
 interface AgentServiceProfileToolsAccess {
   resolveProfileTools(
     profile: StoredProfileRecord,
-    options?: {
-      includeAutomationTools?: boolean;
-      includeQuestionTools?: boolean;
-      includeSkillManageTools?: boolean;
-      includeTodoTools?: boolean;
-    }
+    kind: TurnKind,
+    options?: { channel?: AgentChannel }
   ): Promise<Array<{ name: string }>>;
 }
 
@@ -79,16 +80,6 @@ describe("AgentService skill_manage injection", () => {
       const service = new AgentService(null, null, db);
       service.setSkillsService(skills);
 
-      type ResolveTools = {
-        resolveProfileTools(
-          profile: StoredProfileRecord,
-          options?: {
-            includeAutomationTools?: boolean;
-            includeSkillManageTools?: boolean;
-          }
-        ): Promise<Array<{ name: string }>>;
-      };
-
       // SAFETY: This test checks the profile tool resolver for its fixture.
       const resolve =
         privateServiceAccess<AgentServiceProfileToolsAccess>(
@@ -97,46 +88,79 @@ describe("AgentService skill_manage injection", () => {
 
       const profile = createDefaultProfile();
 
-      const webTools = await resolve(profile, {
-        includeSkillManageTools: true,
-      });
+      const hasSkillManage = async (kind: TurnKind, channel?: AgentChannel) =>
+        (await resolve(profile, kind, { channel })).some(
+          (tool) => tool.name === "skill_manage"
+        );
 
-      expect(webTools.some((tool) => tool.name === "skill_manage")).toBe(true);
-
-      const telegramTools = await resolve(profile, {
-        includeSkillManageTools: false,
-      });
-
-      expect(telegramTools.some((tool) => tool.name === "skill_manage")).toBe(
-        false
-      );
-
-      const automationTools = await resolve(profile, {
-        includeAutomationTools: false,
-      });
-
-      expect(automationTools.some((tool) => tool.name === "skill_manage")).toBe(
-        false
-      );
+      expect(await hasSkillManage("chat", "web")).toBe(true);
+      expect(await hasSkillManage("chat", "telegram")).toBe(false);
+      expect(await hasSkillManage("cognito", "web")).toBe(false);
+      expect(await hasSkillManage("automation")).toBe(false);
     }
   );
+
+  test("each turn kind gets its own platform tools", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    await db.upsertTool({
+      createdAt: new Date().toISOString(),
+      description: "Test tool",
+      handlerConfig: { modulePath: "test.js" },
+      handlerType: "javascript",
+      id: "tool_for_turn_kinds",
+      name: "test_tool",
+      updatedAt: new Date().toISOString(),
+    });
+    await db.assignToolToProfile("profile_default", "tool_for_turn_kinds");
+
+    const service = new AgentService(null, null, db);
+    service.setAutomationTools([
+      // SAFETY: This test controls the fixture shape at this boundary.
+      { name: "create_automation" } as ToolDefinition,
+    ]);
+
+    // SAFETY: This test checks the profile tool resolver for its fixture.
+    const resolve =
+      privateServiceAccess<AgentServiceProfileToolsAccess>(
+        service
+      ).resolveProfileTools.bind(service);
+
+    const names = async (kind: TurnKind) =>
+      (await resolve(createDefaultProfile(), kind, { channel: "web" })).map(
+        (tool) => tool.name
+      );
+
+    const planning = ["create_automation", "todo_write", "ask_user_question"];
+
+    expect(await names("chat")).toEqual(expect.arrayContaining(planning));
+    expect(await names("chat")).toContain("propose_org_memory");
+
+    // A child chat runs unwatched, like the in-memory sub-agent.
+    for (const kind of ["child", "sub_agent", "group_member"] as const) {
+      const tools = await names(kind);
+
+      for (const name of planning) {
+        expect(tools).not.toContain(name);
+      }
+    }
+
+    // Nothing leaves a cognito chat.
+    expect(await names("cognito")).not.toContain("propose_org_memory");
+    expect(await names("cognito")).toContain("todo_write");
+
+    // Today an automation keeps ask_user_question; #2196 removes it.
+    expect(await names("automation")).toContain("ask_user_question");
+    expect(await names("automation")).not.toContain("todo_write");
+    expect(await names("automation")).not.toContain("create_automation");
+
+    expect(await names("plugin_summarize")).toEqual([]);
+  });
 
   test("skips platform tool groups for a profile with no tools", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertProfile(createDefaultProfile());
     const service = new AgentService(null, null, db);
-
-    type ResolveTools = {
-      resolveProfileTools(
-        profile: StoredProfileRecord,
-        options?: {
-          includeAutomationTools?: boolean;
-          includeSkillManageTools?: boolean;
-          includeTodoTools?: boolean;
-          includeQuestionTools?: boolean;
-        }
-      ): Promise<Array<{ name: string }>>;
-    };
 
     // SAFETY: This test checks the profile tool resolver for its fixture.
     const resolve =
@@ -147,12 +171,7 @@ describe("AgentService skill_manage injection", () => {
     const profile = createDefaultProfile();
 
     // Profile with zero own tools: no platform groups, no session helpers.
-    const tools = await resolve(profile, {
-      includeAutomationTools: true,
-      includeQuestionTools: true,
-      includeSkillManageTools: true,
-      includeTodoTools: true,
-    });
+    const tools = await resolve(profile, "chat", { channel: "web" });
 
     expect(tools).toHaveLength(0);
 
@@ -168,12 +187,7 @@ describe("AgentService skill_manage injection", () => {
     });
     await db.assignToolToProfile("profile_default", "tool_for_platform_groups");
 
-    const withTools = await resolve(profile, {
-      includeAutomationTools: true,
-      includeQuestionTools: true,
-      includeSkillManageTools: true,
-      includeTodoTools: true,
-    });
+    const withTools = await resolve(profile, "chat", { channel: "web" });
 
     expect(withTools.some((tool) => tool.name === "test_tool")).toBe(true);
     expect(withTools.some((tool) => tool.name === "ask_user_question")).toBe(
@@ -208,20 +222,13 @@ describe("AgentService skill_manage injection", () => {
       { name: "create_automation" } as ToolDefinition,
     ]);
 
-    type ResolveTools = {
-      resolveProfileTools(
-        profile: StoredProfileRecord,
-        options?: { includeAutomationTools?: boolean }
-      ): Promise<Array<{ name: string }>>;
-    };
-
     // SAFETY: This test checks the profile tool resolver for its fixture.
     const resolve =
       privateServiceAccess<AgentServiceProfileToolsAccess>(
         service
       ).resolveProfileTools.bind(service);
 
-    const tools = await resolve(profile, { includeAutomationTools: true });
+    const tools = await resolve(profile, "chat", { channel: "web" });
     expect(tools.some((tool) => tool.name === "create_automation")).toBe(true);
   });
 
