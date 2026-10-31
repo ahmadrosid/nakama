@@ -60,6 +60,7 @@ import {
 import { registerTeamsRoutes } from "./routes/teams";
 import { registerToolRoutes } from "./routes/tools";
 import { registerUserContextRoutes } from "./routes/user-context";
+import { registerWebPushRoutes } from "./routes/web-push";
 import { registerWorkerRoutes } from "./routes/workers";
 import { errorResponse, isSecureRequest } from "./shared";
 import type { HonoApp } from "./types";
@@ -415,6 +416,7 @@ export function createHonoApp(options: ServerOptions) {
   registerAgentGroupRoutes(app, options);
   registerAutomationRoutes(app, options);
   registerNotificationDestinationRoutes(app, options);
+  registerWebPushRoutes(app);
   registerAutomationWorkerSettingsRoutes(app, options);
   registerCodingHarnessSettingsRoutes(app, options);
   registerComposioRoutes(app, options);
