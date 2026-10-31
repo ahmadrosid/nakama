@@ -13,7 +13,16 @@ import {
   Plug01Icon,
   TaskDaily01Icon,
 } from "hugeicons-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useArtifactAttachmentPreviewPanel } from "@/components/chat/use-artifact-attachment-preview-panel";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
@@ -32,6 +41,7 @@ import {
   type ChatListItem,
   formatSessionChannelLabel,
 } from "@/lib/chat-history";
+import { groupMessagesIntoTurns } from "@/lib/chat-message-turns";
 
 /** One card of the status panel. The title toggles the body. */
 function ChatStatusSection({
@@ -106,26 +116,176 @@ function mcpStatusDotClass(server: McpServerSummary) {
     : "bg-muted-foreground/40";
 }
 
-function ChatStatusArtifactRow({
+/** Chat state the status panel shows. */
+export interface ChatStatusData {
+  busy: boolean;
+  channel: AgentChannel;
+  contextUsage: ChatContextUsage | null;
+  messages: ChatListItem[];
+  modelLabel: ReactNode;
+  profile: ProfileSummary | undefined;
+  profileId: string;
+}
+
+interface ChatStatusSelection {
+  artifact: ChatArtifactRef;
+  /** Bumped on every click, so a second click on the same file opens it again. */
+  nonce: number;
+}
+
+interface ChatStatusContextValue {
+  clear: () => void;
+  data: ChatStatusData;
+  select: (artifact: ChatArtifactRef) => void;
+  selection: ChatStatusSelection | null;
+}
+
+const ChatStatusContext = createContext<ChatStatusContextValue | null>(null);
+
+function useChatStatus(): ChatStatusContextValue {
+  const context = useContext(ChatStatusContext);
+
+  if (!context) {
+    throw new Error("useChatStatus must be used within ChatStatusProvider");
+  }
+
+  return context;
+}
+
+/**
+ * Gives the status panel live chat state. It wraps the attachment panel
+ * provider, so the panel body reads it directly instead of being re-sent.
+ */
+export function ChatStatusProvider({
+  children,
+  data,
+}: {
+  children: ReactNode;
+  data: ChatStatusData;
+}) {
+  const [selection, setSelection] = useState<ChatStatusSelection | null>(null);
+  const clear = useCallback(() => setSelection(null), []);
+
+  const select = useCallback(
+    (artifact: ChatArtifactRef) =>
+      setSelection((current) => ({
+        artifact,
+        nonce: (current?.nonce ?? 0) + 1,
+      })),
+    []
+  );
+
+  const value = useMemo(
+    () => ({ clear, data, select, selection }),
+    [clear, data, select, selection]
+  );
+
+  return (
+    <ChatStatusContext.Provider value={value}>
+      {children}
+    </ChatStatusContext.Provider>
+  );
+}
+
+function artifactKey(artifact: ChatArtifactRef) {
+  return `${artifact.ownerProfileId ?? ""}:${artifact.path}`;
+}
+
+/** Newest first, one entry per file, read turn by turn like the transcript. */
+function collectArtifacts(messages: ChatListItem[]) {
+  const byKey = new Map<string, ChatArtifactRef>();
+
+  for (const turn of groupMessagesIntoTurns(messages).reverse()) {
+    if (turn.kind === "user") {
+      continue;
+    }
+
+    const turnArtifacts = extractTurnArtifacts(
+      turn.messages.map(({ message }) => message)
+    );
+
+    for (const artifact of turnArtifacts.reverse()) {
+      const key = artifactKey(artifact);
+
+      if (!byKey.has(key)) {
+        byKey.set(key, artifact);
+      }
+    }
+  }
+
+  return [...byKey.values()];
+}
+
+/**
+ * Owns the preview of a file picked in Outputs. It lives beside the chat, not
+ * in the status panel, so it stays mounted (and keeps loading the file) after
+ * the preview replaces the status panel.
+ */
+export function ChatStatusArtifactOpener() {
+  const { clear, data, selection } = useChatStatus();
+
+  if (!selection) {
+    return null;
+  }
+
+  return (
+    <ChatStatusArtifactPreview
+      artifact={selection.artifact}
+      key={`${artifactKey(selection.artifact)}:${selection.nonce}`}
+      onClosed={clear}
+      profileId={data.profileId}
+    />
+  );
+}
+
+function ChatStatusArtifactPreview({
   artifact,
+  onClosed,
   profileId,
 }: {
   artifact: ChatArtifactRef;
+  onClosed: () => void;
   profileId: string;
 }) {
+  const { activeId } = useChatAttachmentPanel();
+  const id = `chat-status:${artifactKey(artifact)}`;
+  const requestedRef = useRef(false);
+  const shownRef = useRef(false);
+
   const { openPanel } = useArtifactAttachmentPreviewPanel({
     artifact,
-    id: `chat-status:${artifact.path}`,
+    id,
     profileId: artifact.ownerProfileId ?? profileId,
   });
 
+  useEffect(() => {
+    if (!requestedRef.current) {
+      requestedRef.current = true;
+      openPanel();
+    }
+  });
+
+  // Unmount once the preview is closed or replaced.
+  useEffect(() => {
+    if (activeId === id) {
+      shownRef.current = true;
+    } else if (shownRef.current) {
+      onClosed();
+    }
+  }, [activeId, id, onClosed]);
+
+  return null;
+}
+
+function ChatStatusArtifactRow({ artifact }: { artifact: ChatArtifactRef }) {
+  const { select } = useChatStatus();
   const type = artifact.filename.split(".").pop()?.toUpperCase();
 
   return (
     <li>
       <button
         className="-mx-1.5 flex min-h-7 w-[calc(100%+0.75rem)] items-center gap-2.5 rounded-md px-1.5 text-left text-sm hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        onClick={openPanel}
+        onClick={() => select(artifact)}
         type="button"
       >
         <File01Icon
@@ -141,52 +301,15 @@ function ChatStatusArtifactRow({
   );
 }
 
-interface ChatStatusProps {
-  channel: AgentChannel;
-  contextUsage: ChatContextUsage | null;
-  messages: ChatListItem[];
-  modelLabel: ReactNode;
-  profile: ProfileSummary | undefined;
-  profileId: string;
-}
-
 const CHAT_STATUS_PANEL_ID = "chat-status";
 
 /**
- * Session bar button that opens the chat status in the right side panel:
- * agent, model and channel, context use, MCP servers and files the agent made.
+ * Opens the chat status in the right side panel: agent, model and channel,
+ * context use, MCP servers and files the agent made.
  */
-export function ChatStatusButton({
-  channel,
-  contextUsage,
-  messages,
-  modelLabel,
-  profile,
-  profileId,
-}: ChatStatusProps) {
-  const { activeId, hide, show, update } = useChatAttachmentPanel();
+export function ChatStatusButton() {
+  const { activeId, hide, show } = useChatAttachmentPanel();
   const open = activeId === CHAT_STATUS_PANEL_ID;
-
-  const content = useMemo(
-    () => (
-      <ChatStatusBody
-        channel={channel}
-        contextUsage={contextUsage}
-        messages={messages}
-        modelLabel={modelLabel}
-        profile={profile}
-        profileId={profileId}
-      />
-    ),
-    [channel, contextUsage, messages, modelLabel, profile, profileId]
-  );
-
-  // The panel keeps the content it was opened with, so push new chat state in.
-  useEffect(() => {
-    if (open) {
-      update(CHAT_STATUS_PANEL_ID, { content });
-    }
-  }, [content, open, update]);
 
   return (
     <Button
@@ -201,7 +324,7 @@ export function ChatStatusButton({
           ? hide(CHAT_STATUS_PANEL_ID)
           : show({
               bodyClassName: "flex flex-col gap-2 p-3",
-              content,
+              content: <ChatStatusBody />,
               fixedWidth: 340,
               id: CHAT_STATUS_PANEL_ID,
               title: "Status",
@@ -215,31 +338,35 @@ export function ChatStatusButton({
   );
 }
 
-function ChatStatusBody({
-  channel,
-  contextUsage,
-  messages,
-  modelLabel,
-  profile,
-  profileId,
-}: ChatStatusProps) {
+function ChatStatusBody() {
+  const {
+    data: {
+      busy,
+      channel,
+      contextUsage,
+      messages,
+      modelLabel,
+      profile,
+      profileId,
+    },
+  } = useChatStatus();
+
   const detail = useProfileQuery(profileId);
   const servers = detail.data?.mcpServers ?? [];
+  // Files are listed from finished turns only, so a streaming reply does not
+  // re-scan the whole chat on every token.
+  const [settledMessages, setSettledMessages] = useState(messages);
 
-  const artifacts = useMemo(() => {
-    // Newest first, one row per file.
-    const byPath = new Map<string, ChatArtifactRef>();
-
-    for (const artifact of extractTurnArtifacts(messages).reverse()) {
-      const key = `${artifact.ownerProfileId ?? ""}:${artifact.path}`;
-
-      if (!byPath.has(key)) {
-        byPath.set(key, artifact);
-      }
+  useEffect(() => {
+    if (!busy) {
+      setSettledMessages(messages);
     }
+  }, [busy, messages]);
 
-    return [...byPath.values()];
-  }, [messages]);
+  const artifacts = useMemo(
+    () => collectArtifacts(settledMessages),
+    [settledMessages]
+  );
 
   const ratio = contextUsage ? contextUsageRatio(contextUsage) : 0;
 
@@ -339,8 +466,7 @@ function ChatStatusBody({
           artifacts.map((artifact) => (
             <ChatStatusArtifactRow
               artifact={artifact}
-              key={`${artifact.ownerProfileId ?? ""}:${artifact.path}`}
-              profileId={profileId}
+              key={artifactKey(artifact)}
             />
           ))
         )}
