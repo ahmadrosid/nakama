@@ -111,6 +111,20 @@ proxy replaces untrusted `X-Forwarded-For` values. A client that can reach the
 backend or supply the first forwarded address can otherwise choose its own
 rate-limit identity.
 
+The same flag governs the origin Nakama builds for OAuth callbacks, artifact
+share links, passkey sign-in, and first-run setup. With `NAKAMA_TRUST_PROXY=true`,
+forwarded `X-Forwarded-Host` and `X-Forwarded-Proto` name this deployment when
+no public URL is configured. Without the flag, those headers belong to the
+caller: only a configured `NAKAMA_WEB_PUBLIC_URL` (or a loopback origin, for
+local development) may name a remote origin, and requests that name any other
+origin are refused with `400`. Either set the flag on a trusted proxy or set
+the public URL below; a proxied install that does neither fails OAuth connects
+and passkey sign-in by design.
+
+A direct install with no proxy follows the same rule. If users open it on any
+address other than `localhost`, set the public URL to that address. Otherwise
+OAuth connects, share links, and passkey sign-in fail with `400`.
+
 After the proxy is live, set the exact external origin:
 
 ```bash

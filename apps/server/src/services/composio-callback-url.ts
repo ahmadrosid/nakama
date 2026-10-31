@@ -91,8 +91,16 @@ function isAllowedClientOrigin(candidate: string, request?: Request): boolean {
     return true;
   }
 
+  if (isLoopbackComposioCallbackBaseUrl(candidate)) {
+    return true;
+  }
+
+  // A remote claim needs an origin the caller does not also control. Behind a
+  // trusted proxy the forwarded headers name the deployment; without one, no
+  // request signal vouches for a remote origin, because the caller controls
+  // `Host` (and therefore `request.url`) just as much as `X-Forwarded-Host`.
   return (
-    isLoopbackComposioCallbackBaseUrl(candidate) ||
+    trustForwardedHeaders() &&
     sameHost(candidate, resolveRequestSelfOrigin(request))
   );
 }
@@ -114,21 +122,28 @@ function sameHost(a: string, b?: string): boolean {
   }
 }
 
-/** Where the request actually landed: the proxy's host if there is one. */
-function resolveRequestSelfOrigin(request?: Request): string | undefined {
+/**
+ * Whether a trusted proxy owns the request's forwarding headers. Same contract
+ * as the rate limiter (`http/app.ts`) and the deployment hardening docs: the
+ * operator sets this only when the backend port is private and the proxy
+ * replaces untrusted forwarded values. It gates every forwarded header this
+ * file reads, `X-Forwarded-Host` and `X-Forwarded-Proto` alike. Without it a
+ * caller names no remote origin here, because it controls `Host` (and so
+ * `request.url`) just as much as the forwarded headers (issue #477).
+ */
+function trustForwardedHeaders(): boolean {
+  return process.env.NAKAMA_TRUST_PROXY === "true";
+}
+
+/**
+ * The origin the request actually landed on the listener, with no proxy header
+ * involved. On a direct install this reflects the `Host` the caller sent, so
+ * it anchors a real browser's own origin but must never vouch for a
+ * caller-named remote origin on its own.
+ */
+function resolveRequestListenerOrigin(request?: Request): string | undefined {
   if (!request) {
     return;
-  }
-
-  const forwardedHost = request.headers.get("x-forwarded-host")?.trim();
-
-  if (forwardedHost) {
-    const proto = request.headers.get("x-forwarded-proto")?.trim() || "http";
-    const forwarded = `${proto}://${forwardedHost}`;
-
-    if (isValidBaseUrl(forwarded)) {
-      return forwarded;
-    }
   }
 
   try {
@@ -136,6 +151,28 @@ function resolveRequestSelfOrigin(request?: Request): string | undefined {
 
     return `${url.protocol}//${url.host}`;
   } catch {}
+}
+
+/** Where the request landed: the proxy-named origin behind a trusted proxy, the listener otherwise. */
+function resolveRequestSelfOrigin(request?: Request): string | undefined {
+  if (!request) {
+    return;
+  }
+
+  if (trustForwardedHeaders()) {
+    const forwardedHost = request.headers.get("x-forwarded-host")?.trim();
+
+    if (forwardedHost) {
+      const proto = request.headers.get("x-forwarded-proto")?.trim() || "http";
+      const forwarded = `${proto}://${forwardedHost}`;
+
+      if (isValidBaseUrl(forwarded)) {
+        return forwarded;
+      }
+    }
+  }
+
+  return resolveRequestListenerOrigin(request);
 }
 
 /**
@@ -158,8 +195,23 @@ function isDeploymentOrigin(candidate: string, request?: Request): boolean {
     return true;
   }
 
+  if (!request) {
+    return false;
+  }
+
+  // The listener host anchors a direct install's own origin: the browser on
+  // the page cannot lie about the `Host` it is talking to, and first-run setup
+  // has nothing configured yet to check against. Forwarded headers only count
+  // when the operator declared a trusted proxy; otherwise a caller could
+  // persist an origin it controls and every later redirect_uri and share link
+  // would use it (#477).
+  if (sameHost(candidate, resolveRequestListenerOrigin(request))) {
+    return true;
+  }
+
   return (
-    Boolean(request) && sameHost(candidate, resolveRequestSelfOrigin(request))
+    trustForwardedHeaders() &&
+    sameHost(candidate, resolveRequestSelfOrigin(request))
   );
 }
 
@@ -204,10 +256,11 @@ export async function getWebPublicUrlSettings(): Promise<WebPublicUrlSettingsRes
 
 /**
  * OAuth callback base URL. A configured public URL is the operator's answer and
- * wins: clientOrigin, Origin, Referer and X-Forwarded-Host all come from the
- * caller, and this base ends up in the redirect_uri an OAuth code is delivered
- * to. They still decide when nothing is configured, which is how a dev install
- * on localhost works.
+ * wins: clientOrigin, Origin and Referer all come from the caller, and this
+ * base ends up in the redirect_uri an OAuth code is delivered to. They still
+ * decide when nothing is configured, which is how a dev install on localhost
+ * works — vouched for by loopback, or by the proxy-named origin when the
+ * operator declared a trusted proxy (`NAKAMA_TRUST_PROXY`, issue #477).
  */
 export function resolveComposioCallbackBaseUrl(
   options: { clientOrigin?: string; request?: Request } = {}
@@ -245,9 +298,18 @@ export function resolveCallbackBaseUrlFromRedirect(request: Request): string {
 }
 
 function fallbackCallbackBaseUrl(request?: Request): string {
+  // Behind a trusted proxy the forwarded headers name the deployment, scheme
+  // included, so CLI and API requests without an `Origin` still build an
+  // https callback. On a direct install the caller controls `Host`, so
+  // `request.url` names whatever the caller sent; deriving a remote base from
+  // it would let the caller pin where an OAuth code is delivered (#477). Fail
+  // closed to loopback and let the operator name the origin instead.
   const self = resolveRequestSelfOrigin(request);
 
-  if (self) {
+  if (
+    self &&
+    (trustForwardedHeaders() || isLoopbackComposioCallbackBaseUrl(self))
+  ) {
     return self;
   }
 

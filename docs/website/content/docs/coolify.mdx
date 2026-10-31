@@ -56,6 +56,8 @@ Generate `NAKAMA_SECRETS_KEY` with `openssl rand -base64 32` and back it up outs
 
 Nakama uses Server-Sent Events for streaming responses. Coolify's default Traefik proxy handles SSE correctly with no extra config.
 
+Traefik also sends `X-Forwarded-Host` and `X-Forwarded-Proto` on every request. Set `NAKAMA_TRUST_PROXY=true` in the service environment so Nakama uses them for OAuth callbacks, passkey sign-in, and first-run setup when `NAKAMA_WEB_PUBLIC_URL` is not set. Without the flag or the public URL, a caller-named remote origin is refused and connect flows fail closed.
+
 If you use a custom Nginx proxy in front of Coolify, disable buffering for the Nakama location:
 
 ```nginx

@@ -164,7 +164,11 @@ function agentHandlers(
   };
 }
 
-function terminalEvent(end: TurnEnd): StreamEvent {
+/** What a turn ends with when it was stopped rather than failed. */
+export const TURN_CANCELLED_ERROR = "Turn cancelled.";
+
+/** The `done` or `error` event a turn end is shown as. */
+export function terminalEvent(end: TurnEnd): StreamEvent {
   if (end.kind === "done") {
     const event: Extract<StreamEvent, { type: "done" }> = {
       reply: end.reply,
@@ -197,7 +201,7 @@ function terminalEvent(end: TurnEnd): StreamEvent {
 function cancelledEnd(usage?: ChatTurnUsage): TurnEnd {
   return {
     kind: "error",
-    message: "Turn cancelled.",
+    message: TURN_CANCELLED_ERROR,
     reason: "cancelled",
     status: 499,
     usage,

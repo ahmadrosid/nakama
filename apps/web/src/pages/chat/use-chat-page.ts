@@ -326,15 +326,12 @@ export function useChatPage() {
   /**
    * Hand the current stream back before the page moves to another chat.
    *
-   * The server ends a turn as soon as the request streaming it goes away, so a
-   * send stream is detached rather than aborted: the chat keeps running in the
-   * background and is picked up again by the reconnect in `resumeSession`.
+   * A send stream is detached rather than aborted: the chat keeps running in
+   * the background and is picked up again by the reconnect in `resumeSession`.
    * Everything the turn owned on the page (busy flags, the queue) is released
-   * here, because the next chat needs a clean composer.
-   *
-   * ponytail: a detached turn still dies with the page (reload, closed tab).
-   * Give the server an explicit stop endpoint and stop cancelling on
-   * disconnect if turns need to outlive the tab.
+   * here, because the next chat needs a clean composer. The server keeps a
+   * browser's turn running even when the page goes away; only Stop
+   * (`stopSessionTurn`) ends it.
    */
   const releaseActiveStream = useCallback(() => {
     const released = releaseChatStream({
@@ -1207,8 +1204,17 @@ export function useChatPage() {
   ]);
 
   const stopStreaming = useCallback(() => {
-    // Stop means stop: aborting closes the request, which is how the server
-    // learns to end the turn. Detaching is only for switching chats.
+    // Stop means stop. Closing the request no longer ends a browser's turn
+    // (a phone locking must not), so the server is told outright. Detaching
+    // is only for switching chats.
+    const sessionId = activeSessionIdRef.current;
+
+    if (sessionId) {
+      client.stopSessionTurn(sessionId).catch(() => {
+        // No turn left to stop, or the session went away.
+      });
+    }
+
     detachStreamRef.current = null;
     streamAbortRef.current?.abort();
   }, []);

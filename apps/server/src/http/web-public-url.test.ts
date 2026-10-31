@@ -97,22 +97,70 @@ describe("web public url settings", () => {
     expect(foreign.status).toBe(400);
     expect(await readSavedBaseUrl(app, session)).toBeNull();
 
-    // The origin the request was forwarded to is the deployment's own.
-    const forwarded = await app.fetch(
+    // A forwarded header is caller-controlled: without NAKAMA_TRUST_PROXY it
+    // cannot pin the base an OAuth code is delivered to.
+    const forgedForward = await app.fetch(
       putRequest(
         session,
-        { webPublicUrl: "https://nakama.example.com" },
+        { webPublicUrl: "https://attacker.example" },
         session.orgId,
-        // No X-Forwarded-Proto: the check compares hosts, and the header would
-        // make the server look for the `__Host-` cookie this http session
-        // does not hold.
-        { "X-Forwarded-Host": "nakama.example.com" }
+        { "X-Forwarded-Host": "attacker.example" }
       )
     );
 
-    expect(forwarded.status).toBe(200);
+    expect(forgedForward.status).toBe(400);
+    expect(await readSavedBaseUrl(app, session)).toBeNull();
+
+    // The origin a trusted proxy forwards is the deployment's own.
+    await withTestEnv({ NAKAMA_TRUST_PROXY: "true" }, async () => {
+      const forwarded = await app.fetch(
+        putRequest(
+          session,
+          { webPublicUrl: "https://nakama.example.com" },
+          session.orgId,
+          // No X-Forwarded-Proto: the check compares hosts, and the header would
+          // make the server look for the `__Host-` cookie this http session
+          // does not hold.
+          { "X-Forwarded-Host": "nakama.example.com" }
+        )
+      );
+
+      expect(forwarded.status).toBe(200);
+    });
+
     expect(await readSavedBaseUrl(app, session)).toBe(
       "https://nakama.example.com"
+    );
+  });
+
+  test("first-run setup accepts the origin a trusted proxy forwards", async () => {
+    await withTestEnv(
+      {
+        NAKAMA_PUBLIC_URL: undefined,
+        NAKAMA_TRUST_PROXY: "true",
+        NAKAMA_WEB_PUBLIC_URL: undefined,
+      },
+      async () => {
+        const { app } = createMinimalHonoApp();
+
+        const response = await app.fetch(
+          new Request("http://nakama-internal:4310/v1/auth/setup", {
+            body: JSON.stringify({
+              ...buildSetupAuthBody(),
+              webPublicUrl: "https://nakama.example.com",
+            }),
+            headers: {
+              "Content-Type": "application/json",
+              "X-Forwarded-Host": "nakama.example.com",
+              "X-Forwarded-Proto": "https",
+            },
+            method: "POST",
+          })
+        );
+
+        expect(response.status).toBe(201);
+        expect(await loadUserWebPublicUrl()).toBe("https://nakama.example.com");
+      }
     );
   });
 

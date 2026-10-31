@@ -46,6 +46,8 @@ For Docker Compose, create this file beside `docker-compose.yaml` before startin
 
 Open `http://localhost:4310`. The container serves the API, web dashboard, and platform workers together.
 
+If you open Nakama from another machine, for example `http://203.0.113.10:4310` on a VPS, save that address as the public URL. Without it, Nakama refuses to build OAuth callbacks, share links, and passkey sign-in for an origin it cannot verify, and those requests fail with `400`. A platform admin sets it in **System → Preferences → Public web URL**, or you pass `-e NAKAMA_WEB_PUBLIC_URL=http://203.0.113.10:4310` to `docker run`.
+
 Data is stored at `/nakama/data` inside the container. The `-v nakama-data:/nakama/data` volume persists orgs, profiles, sessions, provider settings, and the local SQLite database across restarts.
 
 ## Upgrade
@@ -163,6 +165,7 @@ Use readiness checks to keep traffic away from an unavailable database, and requ
 On HTTPS, the session and CSRF cookies are issued as `__Host-nakama_session` and `__Host-nakama_csrf`. Browsers bind those to the exact host, so a sibling host under the same parent domain cannot plant or overwrite a session.
 
 - A proxy that terminates TLS must send `X-Forwarded-Proto: https`, otherwise Nakama treats the request as plain HTTP, issues the unprefixed `nakama_session` and `nakama_csrf` cookies, and loses the host binding.
+- OAuth callbacks, public share links, and passkey sign-in build on the request origin too. Behind a proxy, set `NAKAMA_TRUST_PROXY=true` so forwarded `X-Forwarded-Host` and `X-Forwarded-Proto` name this deployment, or set `NAKAMA_WEB_PUBLIC_URL` to the exact external origin. Without one of the two, a caller-named remote origin is refused and connect flows fail closed.
 - Unprefixed cookies are ignored on HTTPS, so the first sign-in after upgrading happens once more. Signing in again reissues the host-bound pair and clears the old cookies.
 - Plain HTTP deployments keep the unprefixed cookies, because browsers discard `Secure` cookies on `http://` origins.
 

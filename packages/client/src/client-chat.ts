@@ -90,6 +90,14 @@ export class ChatClient extends ProfileFilesClient {
     );
   }
 
+  /** Ends the running turn. The web app's connection dropping no longer does. */
+  async stopSessionTurn(sessionId: string): Promise<void> {
+    await this.request<void>(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/stop`,
+      { method: "POST" }
+    );
+  }
+
   async getSessionBrowser(sessionId: string): Promise<SessionBrowserResponse> {
     return this.request<SessionBrowserResponse>(
       `/v1/sessions/${encodeURIComponent(sessionId)}/browser`

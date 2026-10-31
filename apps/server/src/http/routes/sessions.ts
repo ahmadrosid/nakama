@@ -27,6 +27,7 @@ import {
 } from "../../services/agent-browser-service";
 import { resolveRequestClientOrigin } from "../../services/composio-callback-url";
 import { sessionTurnRegistry } from "../../services/session-turn-registry";
+import { terminalEvent } from "../../services/turn-runner";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
@@ -43,6 +44,7 @@ import {
   streamTurnSubscribe,
 } from "../shared";
 import type { HonoApp } from "../types";
+import { pushTurnEnded } from "./web-push";
 
 const MAX_SESSION_PAGE_SIZE = 100;
 
@@ -1019,6 +1021,24 @@ export function registerSessionRoutes(
     });
   });
 
+  app.post("/v1/sessions/:sessionId/stop", async (c) => {
+    requireOrgMemberFromContext(c);
+
+    const { orgId, sessionId } = await requireSessionAccess(c, {
+      runsTools: true,
+    });
+
+    // The org check lives in the lookup, as on /status; cognito chats too.
+    if (!(await agent.getSessionMessages(sessionId, orgId))) {
+      return errorResponse("Session not found", 404);
+    }
+
+    // The turn still ends through its own stream, which reports the cancel.
+    sessionTurnRegistry.stopTurn(sessionId);
+
+    return new Response(null, { status: 204 });
+  });
+
   app.get("/v1/sessions/:sessionId/stream", async (c) => {
     const { orgId, sessionId } = await requireSessionAccess(c);
     const result = await agent.getSessionMessages(sessionId, orgId);
@@ -1097,14 +1117,19 @@ export function registerSessionRoutes(
       c.req.header("Accept")?.includes("text/event-stream");
 
     const turnStream = wantsStream ? createTurnStream() : null;
+    const { mode, user } = getRequestAuth(c);
+    // The web app stops a turn through /stop, so its stream dropping is a
+    // phone locking or a tab closing and the turn runs on. Channel workers
+    // still stop by hanging up. A JSON turn always runs to the end, so a
+    // client or proxy timeout does not lose a reply saved to history.
+    const fromBrowser = turnStream !== null && mode === "browser-session";
 
-    // A closed stream stops the turn. A JSON turn runs to the end, so a client
-    // or proxy timeout does not lose a reply that is still saved to history.
     const turn = await agent.turns.start(sessionId, orgId, input, {
       onEvent: turnStream?.onEvent,
-      signal: turnStream
-        ? AbortSignal.any([turnStream.signal, c.req.raw.signal])
-        : undefined,
+      signal:
+        turnStream && !fromBrowser
+          ? AbortSignal.any([turnStream.signal, c.req.raw.signal])
+          : undefined,
       whatsappMessage: body.whatsappMessage,
     });
 
@@ -1116,6 +1141,16 @@ export function registerSessionRoutes(
       return errorResponse(
         "A response is already in progress for this session.",
         409
+      );
+    }
+
+    if (fromBrowser) {
+      void turn.done.then((end) =>
+        pushTurnEnded(
+          agent,
+          { orgId, sessionId, userId: user.id },
+          terminalEvent(end)
+        )
       );
     }
 
