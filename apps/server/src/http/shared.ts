@@ -826,7 +826,10 @@ export function streamMessage(
   // which are far too long to wait for in a suite.
   timeoutMs: number = STREAM_TIMEOUT_MS,
   firstTokenTimeoutMs: number = FIRST_TOKEN_TIMEOUT_MS,
-  whatsappMessage?: ToolContext["whatsappMessage"]
+  whatsappMessage?: ToolContext["whatsappMessage"],
+  // False when the client stops turns explicitly (the web app's /stop), so a
+  // dropped connection leaves the turn running.
+  stopOnDisconnect = true
 ): Response {
   const encoder = new TextEncoder();
   const keepaliveIntervalMs = 4000;
@@ -838,13 +841,16 @@ export function streamMessage(
   const turnAbort = new AbortController();
   sessionTurnRegistry.attachAbort(sessionId, turnAbort);
 
-  const turnSignal = requestSignal
-    ? AbortSignal.any([turnAbort.signal, requestSignal])
-    : turnAbort.signal;
+  const turnSignal =
+    requestSignal && stopOnDisconnect
+      ? AbortSignal.any([turnAbort.signal, requestSignal])
+      : turnAbort.signal;
 
   const stream = new ReadableStream<Uint8Array>({
     cancel() {
-      turnAbort.abort();
+      if (stopOnDisconnect) {
+        turnAbort.abort();
+      }
     },
     async start(controller) {
       const { send: publish, getTerminal } = createStreamSenders(

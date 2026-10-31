@@ -146,6 +146,41 @@ describe("streamMessage cancellation", () => {
     expect(sessionTurnRegistry.isActive(sessionId)).toBe(false);
   });
 
+  test("a browser hanging up leaves the turn running until it is stopped", async () => {
+    const sessionId = `session_detached_test_${Date.now()}`;
+    const { session, sawSignal } = createCancellableSession();
+    const request = new AbortController();
+
+    expect(sessionTurnRegistry.beginTurn(sessionId).started).toBe(true);
+
+    const response = streamMessage(
+      sessionId,
+      session,
+      { message: "run something long" },
+      undefined,
+      request.signal,
+      undefined,
+      undefined,
+      undefined,
+      false
+    );
+
+    await Bun.sleep(10);
+    // A phone locking: the request aborts and the response body is cancelled.
+    request.abort();
+    await response.body?.cancel();
+    await Bun.sleep(30);
+
+    expect(sawSignal()?.aborted).toBe(false);
+    expect(sessionTurnRegistry.isActive(sessionId)).toBe(true);
+
+    // What POST /v1/sessions/:id/stop does.
+    sessionTurnRegistry.stopTurn(sessionId);
+    await waitForTurnToEnd(sessionId);
+
+    expect(sessionTurnRegistry.isActive(sessionId)).toBe(false);
+  });
+
   test("a mid-flight drop without a terminal event records the fallback and warns", async () => {
     const sessionId = `session_drop_test_${Date.now()}`;
     const { session } = createCancellableSession();
