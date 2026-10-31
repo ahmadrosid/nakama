@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import path from "node:path";
+import { discoverSkillDirectory } from "./discover";
 import { matchSkillsForMessage } from "./match";
 import type { DiscoveredSkill } from "./types";
 
@@ -101,5 +103,72 @@ describe("matchSkillsForMessage", () => {
         "find the bug and list the open PRs, here is the link"
       )
     ).toEqual([]);
+  });
+
+  test("ignores bare-domain and www links", () => {
+    const githubSkill: DiscoveredSkill = {
+      ...weatherSkill,
+      description: "Work with GitHub repositories.",
+      name: "gh-helper",
+    };
+
+    for (const message of [
+      "clone github.com/LayerNorm/overlay-web please",
+      "clone www.github.com/LayerNorm/overlay-web please",
+    ]) {
+      expect(matchSkillsForMessage([githubSkill], message)).toEqual([]);
+    }
+  });
+
+  test("keeps words glued to the end of a link", () => {
+    const installerSkill: DiscoveredSkill = {
+      ...weatherSkill,
+      description: "Install reusable skills.",
+      name: "skill-installer",
+    };
+
+    expect(
+      matchSkillsForMessage(
+        [installerSkill],
+        "see [repo](https://example.com/o/r),install"
+      ).map((skill) => skill.name)
+    ).toEqual(["skill-installer"]);
+  });
+
+  test("does not match plural forms of stop words", () => {
+    const ticketSkill: DiscoveredSkill = {
+      ...weatherSkill,
+      description: "Finds and lists things.",
+      name: "ticket-helper",
+    };
+
+    expect(
+      matchSkillsForMessage([ticketSkill], "find the bug and list the PRs")
+    ).toEqual([]);
+  });
+
+  test("bundled skill-installer ignores everyday link messages", async () => {
+    const installer = await discoverSkillDirectory(
+      path.join(import.meta.dir, "bundled", "skill-installer")
+    );
+
+    if (!installer) {
+      throw new Error("bundled skill-installer not found");
+    }
+
+    for (const message of [
+      "summarize this article https://example.com/post",
+      "check this website for me",
+      "clone github.com/LayerNorm/overlay-web",
+    ]) {
+      expect(matchSkillsForMessage([installer], message)).toEqual([]);
+    }
+
+    expect(
+      matchSkillsForMessage(
+        [installer],
+        "install the skill from https://github.com/o/r"
+      )
+    ).toHaveLength(1);
   });
 });

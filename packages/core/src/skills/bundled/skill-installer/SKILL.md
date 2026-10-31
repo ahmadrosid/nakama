@@ -1,6 +1,6 @@
 ---
 name: skill-installer
-description: Find, list, and install reusable skills from GitHub or skills linked from articles and websites. Use when the user asks to install a skill from a link, add a skill from GitHub, browse available skills, or install a named curated skill.
+description: Find, list, and install reusable skills from GitHub or a link. Use when the user asks to install a skill from a link, add a skill from GitHub, browse available skills, or install a curated skill.
 include-body-on-match: true
 ---
 

@@ -3,8 +3,56 @@ import type { DiscoveredSkill, SkillMatchOptions } from "./types";
 const EXPLICIT_SKILL_PATTERN =
   /(?:^|\s)(?:\/skill|use skill|activate skill)\s+([a-z0-9-]+)\b/i;
 
-/** A pasted link says where, not what: "github.com/..." is not a GitHub skill request. */
-const URL_PATTERN = /\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.)\S+/gi;
+/**
+ * A pasted link says where, not what: "github.com/..." is not a GitHub skill request.
+ * Matches scheme links, www. links, and bare host/path links. Stops before
+ * closing brackets, quotes, and commas so glued words survive.
+ */
+const URL_PATTERN =
+  /\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.|[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\/)[^\s)\]>"',]*/gi;
+
+const STOP_WORDS = new Set([
+  "a",
+  "an",
+  "the",
+  "and",
+  "or",
+  "for",
+  "to",
+  "when",
+  "use",
+  "with",
+  "user",
+  "asks",
+  "about",
+  "working",
+  "files",
+  "file",
+  "this",
+  "that",
+  "from",
+  "into",
+  "are",
+  "is",
+  "in",
+  "on",
+  "of",
+  "by",
+  "as",
+  "at",
+  "it",
+  "be",
+  "do",
+  "does",
+  "help",
+  "helps",
+  "using",
+  "used",
+  "find",
+  "list",
+  "link",
+  "available",
+]);
 
 export function matchSkillsForMessage(
   skills: DiscoveredSkill[],
@@ -18,6 +66,7 @@ export function matchSkillsForMessage(
   }
 
   const explicitName = extractExplicitSkillName(message);
+  const normalized = message.replace(URL_PATTERN, " ").toLowerCase();
   const matched: DiscoveredSkill[] = [];
 
   for (const skill of skills) {
@@ -33,7 +82,7 @@ export function matchSkillsForMessage(
       continue;
     }
 
-    if (messageMatchesSkill(message, skill)) {
+    if (messageMatchesSkill(normalized, skill)) {
       matched.push(skill);
     }
   }
@@ -47,9 +96,11 @@ export function extractExplicitSkillName(message: string): string | null {
   return match?.[1]?.toLowerCase() ?? null;
 }
 
-function messageMatchesSkill(message: string, skill: DiscoveredSkill): boolean {
-  const normalized = message.replace(URL_PATTERN, " ").toLowerCase();
-
+/** `normalized` is the lowercased message with URLs removed. */
+function messageMatchesSkill(
+  normalized: string,
+  skill: DiscoveredSkill
+): boolean {
   if (containsWord(normalized, skill.name)) {
     return true;
   }
@@ -71,55 +122,16 @@ function singularize(word: string): string {
 }
 
 function extractKeywords(description: string): string[] {
-  const stopWords = new Set([
-    "a",
-    "an",
-    "the",
-    "and",
-    "or",
-    "for",
-    "to",
-    "when",
-    "use",
-    "with",
-    "user",
-    "asks",
-    "about",
-    "working",
-    "files",
-    "file",
-    "this",
-    "that",
-    "from",
-    "into",
-    "are",
-    "is",
-    "in",
-    "on",
-    "of",
-    "by",
-    "as",
-    "at",
-    "it",
-    "be",
-    "do",
-    "does",
-    "help",
-    "helps",
-    "using",
-    "used",
-    "find",
-    "list",
-    "link",
-    "links",
-    "available",
-  ]);
-
   return description
     .toLowerCase()
     .split(/[^a-z0-9-]+/)
     .map((word) => word.trim())
-    .filter((word) => word.length >= 4 && !stopWords.has(word));
+    .filter(
+      (word) =>
+        word.length >= 4 &&
+        !STOP_WORDS.has(word) &&
+        !STOP_WORDS.has(singularize(word))
+    );
 }
 
 function containsWord(haystack: string, word: string): boolean {
