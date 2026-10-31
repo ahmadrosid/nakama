@@ -219,8 +219,9 @@ export function buildChatSystemPrompt(
 
     if (tools.some((tool) => tool.name === "ask_user_question")) {
       sections.push(
-        "Use ask_user_question when you need missing information before you can continue.",
-        "Ask one concise batch at a time, prefer predefined choices when possible, and wait for the user's answers before proceeding."
+        "Whenever you ask the user a question or need a detail from them, call ask_user_question. Do not ask questions in plain reply text, even when you could continue with placeholders.",
+        "For open details such as a date, link, or name, offer likely answers as choices and set allowCustomAnswer to true.",
+        "Ask one concise batch at a time and wait for the user's answers before proceeding."
       );
     }
 
