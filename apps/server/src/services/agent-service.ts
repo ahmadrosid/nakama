@@ -143,6 +143,7 @@ import {
   chatgptOAuthNeedsRefresh,
   cloudflareBaseUrlFromAccountId,
   composeKnowledgeBaseCatalog,
+  composeLoadedSkillPrompt,
   composeSoulSystemPrompt,
   createErrorTrackingSink,
   createId,
@@ -297,6 +298,7 @@ import {
   sendWhatsAppArtifactTool,
 } from "../tools/send-discord-artifact-tool";
 import {
+  createLoadSkillTool,
   createSkillManageTools,
   SKILL_MANAGE_CHANNELS,
 } from "../tools/skill-manage-tool";
@@ -6040,6 +6042,22 @@ export class AgentService {
 
       resolved = [...resolved, ...skillTools];
 
+      if (await this.skillsService.hasModelLoadableSkills(orgId, profile.id)) {
+        resolved = [
+          ...resolved,
+          createLoadSkillTool({
+            extraContext: (skill, context) =>
+              this.formatSkillHostContext(
+                profile,
+                skill.name,
+                context.codingWorkspaceRoot
+              ),
+            recordUsage: kind !== "cognito",
+            skillsService: this.skillsService,
+          }),
+        ];
+      }
+
       // Interactive web/cli only: messaging, automation, task, and subagent omit this.
       if (hasOwnTools && policy.skillManage) {
         const assignedSkills = await this.skillsService.listSkillsForProfile(
@@ -6445,44 +6463,27 @@ export class AgentService {
           parts.push(imageMentionContext);
         }
 
-        if (this.skillsService && context?.userMessage?.trim()) {
-          const skillContext =
-            await this.skillsService.formatMatchedSkillsForPrompt(
-              orgId,
-              profileId,
-              context.userMessage,
-              {
-                appendContext: async (matched) => {
-                  const parts: string[] = [];
+        const explicitSkill =
+          this.skillsService && context?.userMessage?.trim()
+            ? await this.skillsService.findExplicitSkillForMessage(
+                orgId,
+                profileId,
+                context.userMessage,
+                !cognito
+              )
+            : null;
 
-                  if (
-                    profile.isSuper &&
-                    matched.some((skill) => skill.name === "create-profile")
-                  ) {
-                    parts.push(
-                      await this.formatProfileAuthoringToolContext(orgId)
-                    );
-                  }
+        if (explicitSkill) {
+          parts.push(composeLoadedSkillPrompt(explicitSkill));
 
-                  if (matched.some((skill) => skill.name === "coding-agent")) {
-                    parts.push(
-                      await this.formatCodingDelegationContext(
-                        orgId,
-                        profileId,
-                        codingRoot
-                      )
-                    );
-                  }
+          const hostContext = await this.formatSkillHostContext(
+            profile,
+            explicitSkill.name,
+            codingRoot
+          );
 
-                  return parts.filter(Boolean).join("\n\n");
-                },
-                recordUsage: !cognito,
-                usageContext: skillUsageContext,
-              }
-            );
-
-          if (skillContext.trim()) {
-            parts.push(skillContext.trim());
+          if (hostContext) {
+            parts.push(hostContext);
           }
         }
 
@@ -6510,6 +6511,33 @@ export class AgentService {
     });
 
     return persistedSession;
+  }
+
+  /** Live host facts that the create-profile and coding-agent skills need. */
+  private async formatSkillHostContext(
+    profile: StoredProfileRecord,
+    skillName: string,
+    codingWorkspaceRoot: string | undefined
+  ): Promise<string> {
+    const orgId = profile.orgId;
+
+    if (!orgId) {
+      return "";
+    }
+
+    if (profile.isSuper && skillName === "create-profile") {
+      return await this.formatProfileAuthoringToolContext(orgId);
+    }
+
+    if (skillName === "coding-agent") {
+      return await this.formatCodingDelegationContext(
+        orgId,
+        profile.id,
+        codingWorkspaceRoot
+      );
+    }
+
+    return "";
   }
 
   private async formatProfileAuthoringToolContext(

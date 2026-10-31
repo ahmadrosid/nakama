@@ -1,7 +1,6 @@
 ---
 name: create-automation
 description: Create, schedule, and manage automations. Use when the user wants reminders, recurring tasks, one-time runAt schedules, manual automations, delivery to Telegram, WhatsApp, email, or Discord, or to run and test saved automations.
-include-body-on-match: true
 ---
 
 When the user wants something scheduled or automated, explain your plan clearly in their timezone.

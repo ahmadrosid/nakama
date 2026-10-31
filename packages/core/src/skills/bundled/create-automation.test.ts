@@ -4,7 +4,6 @@ import { mkdir, mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { discoverSkillDirectory } from "../discover";
-import { matchSkillsForMessage } from "../match";
 import { readBundledSkillMarkdown } from "./index";
 import { ensureBundledSkillFiles } from "./install";
 
@@ -223,23 +222,6 @@ describe("ensureBundledSkillFiles", () => {
     expect(
       await readFile(join(skillsDir, "artifact-design", "SKILL.md"), "utf8")
     ).toBe(await readBundledSkillMarkdown("artifact-design"));
-  });
-
-  test("matches artifact-design for a casual slide deck request", async () => {
-    await ensureBundledSkillFiles();
-
-    const skill = await discoverSkillDirectory(
-      join(configDir, "agent", "skills", "artifact-design")
-    );
-
-    expect(skill).not.toBeNull();
-
-    const matched = matchSkillsForMessage(
-      skill ? [skill] : [],
-      "hey can you make me a slide deck for our team sync on friday? it's about Q3 results. keep it like 6-7 slides"
-    );
-
-    expect(matched.map((entry) => entry.name)).toEqual(["artifact-design"]);
   });
 
   test("refreshes an installed memory archive skill on startup", async () => {

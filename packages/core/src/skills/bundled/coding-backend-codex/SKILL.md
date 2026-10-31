@@ -2,7 +2,6 @@
 name: coding-backend-codex
 description: Runtime prompt layer for Codex coding agent runs.
 disable-model-invocation: true
-include-body-on-match: true
 ---
 
 Use Codex for coding tasks when the Coding Agent Harness context selects it. Follow that context's command template and run it through Nakama's `bash` tool with `codingAgent: true`, `cwd` set to the target project, and a task-appropriate `timeoutMs`.

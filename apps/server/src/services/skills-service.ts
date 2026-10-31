@@ -37,7 +37,6 @@ import {
   BUNDLED_SKILL_NAMES,
   buildToolExecutionContext,
   composeAgentBrowserCapabilityPrompt,
-  composeMatchedSkillsPrompt,
   composeSkillMarkdown,
   composeSkillsCatalog,
   createBlockedSkillCodeTool,
@@ -48,8 +47,8 @@ import {
   deleteSkillDirectory,
   discoverSkillDirectory,
   discoverSkills,
-  extractExplicitSkillName,
   fetchGitHubSkillBundle,
+  findExplicitSkill,
   type GitHubSkillBundle,
   getOrgConfigDir,
   getProfileSoulDir,
@@ -58,7 +57,6 @@ import {
   isMemberAuthoredSkillDirectory,
   isPathWithinProfileSkillsDir,
   loadSkillTools,
-  matchSkillsForMessage,
   NakamaApiError,
   orgIdFromSkillSourcePath,
   parseRawProfileSkillContent,
@@ -368,7 +366,6 @@ export class SkillsService {
     summary: PublishedSkillSummary;
     body: string;
     directory: string;
-    includeBodyOnMatch: boolean;
     sourceProfileId: string;
   }> {
     const team = await this.db.getOrganizationById(orgId);
@@ -447,7 +444,6 @@ export class SkillsService {
       return {
         body: parsed.body,
         directory: sourcePath,
-        includeBodyOnMatch: parsed.frontmatter.includeBodyOnMatch ?? false,
         sourceProfileId: owner.id,
         summary: {
           createdAt: record.createdAt,
@@ -1647,45 +1643,64 @@ export class SkillsService {
     );
   }
 
-  async formatMatchedSkillsForPrompt(
+  /** True when the catalog lists a skill, so the profile needs `load_skill`. */
+  async hasModelLoadableSkills(
+    orgId: string,
+    profileId: string
+  ): Promise<boolean> {
+    return (await this.getPromptSkills(orgId, profileId)).some(
+      (item) => !item.discovered.disableModelInvocation
+    );
+  }
+
+  /**
+   * One assigned skill the model asked for with `load_skill`. Null when the
+   * profile has no such skill, or the skill only runs on `/skill <name>`.
+   */
+  async loadSkillForModel(
+    orgId: string,
+    profileId: string,
+    name: string,
+    /** False in a cognito session, for the same reason as the catalog. */
+    recordUsage = true
+  ): Promise<DiscoveredSkill | null> {
+    const entry = (await this.getPromptSkills(orgId, profileId)).find(
+      (item) => item.discovered.name === name
+    );
+
+    if (!entry || entry.discovered.disableModelInvocation) {
+      return null;
+    }
+
+    if (recordUsage) {
+      void this.recordMatches(orgId, profileId, [entry.record.id]);
+    }
+
+    return entry.discovered;
+  }
+
+  /** The assigned skill a `/skill <name>` message names. */
+  async findExplicitSkillForMessage(
     orgId: string,
     profileId: string,
     userMessage: string,
-    options: {
-      appendContext?: (matched: DiscoveredSkill[]) => string | Promise<string>;
-      /** False in a cognito session, for the same reason as the catalog. */
-      recordUsage?: boolean;
-      usageContext?: SkillUsageRecordingContext;
-    } = {}
-  ): Promise<string> {
+    recordUsage = true
+  ): Promise<DiscoveredSkill | null> {
     const assigned = await this.getPromptSkills(orgId, profileId);
-    const discovered = assigned.map((item) => item.discovered);
-    const matched = matchSkillsForMessage(discovered, userMessage);
-    const explicitSkillName = extractExplicitSkillName(userMessage);
 
-    if (matched.length > 0) {
-      const matchedSkillIds = matched
-        .map(
-          (skill) =>
-            assigned.find(
-              (entry) => entry.discovered.directory === skill.directory
-            )?.record.id
-        )
-        .filter((skillId): skillId is string => Boolean(skillId));
+    const skill = findExplicitSkill(
+      assigned.map((item) => item.discovered),
+      userMessage
+    );
 
-      if (options.recordUsage !== false) {
-        void this.recordMatches(orgId, profileId, matchedSkillIds);
-      }
+    const skillId = assigned.find((item) => item.discovered === skill)?.record
+      .id;
+
+    if (skillId && recordUsage) {
+      void this.recordMatches(orgId, profileId, [skillId]);
     }
 
-    const prompt = composeMatchedSkillsPrompt(matched, {
-      explicitInvocation: explicitSkillName !== null,
-    });
-
-    const extraContext =
-      matched.length > 0 ? await options.appendContext?.(matched) : "";
-
-    return [prompt, extraContext?.trim()].filter(Boolean).join("\n\n");
+    return skill;
   }
 
   async listSkillSummariesForProfile(
@@ -2469,7 +2484,6 @@ export class SkillsService {
             directory,
             disableModelInvocation: source.summary.disableModelInvocation,
             hasTool: code?.hasTool ?? false,
-            includeBodyOnMatch: source.includeBodyOnMatch,
             name: source.summary.name,
             scriptIssues: code?.scriptIssues ?? [],
             scriptTools: (code?.scriptTools ?? []).map((script) => ({

@@ -4,8 +4,6 @@ export interface SkillFrontmatter {
   description: string;
   /** When true, the skill only activates on explicit invocation (e.g. /skill name). */
   disableModelInvocation?: boolean;
-  /** When true, auto-matched skills include full body text in the prompt. */
-  includeBodyOnMatch?: boolean;
   name: string;
   /** Paths, relative to the skill directory, that become callable tools. */
   scripts?: string[];
@@ -23,7 +21,6 @@ export interface DiscoveredSkill {
   directory: string;
   disableModelInvocation: boolean;
   hasTool: boolean;
-  includeBodyOnMatch: boolean;
   name: string;
   /** Shipped scripts nothing will run, with the reason. Empty when all is well. */
   scriptIssues: SkillScriptIssue[];
@@ -32,8 +29,4 @@ export interface DiscoveredSkill {
   skillFilePath: string;
   sourceOrganization?: { id: string; name: string };
   toolPath: string | null;
-}
-
-export interface SkillMatchOptions {
-  explicitOnly?: boolean;
 }

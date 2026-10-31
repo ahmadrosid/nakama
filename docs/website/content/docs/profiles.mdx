@@ -189,7 +189,7 @@ Memory writes and archives use bundled skills (`update-profile-memory`, `archive
 | `memory-archive/` | No | `archive-profile-memory` skill + file tools |
 | `artifacts/` | No (**Browse Files → Artifacts**, download API, web chat preview) | `save_artifact` or `write_docx` (`artifact-design` skill for layout) |
 | Knowledge base | Via `knowledge_base_search` when assigned | Upload from **Browse Files → Knowledge**; search at runtime |
-| Profile skills | Via skill matcher when relevant | `manage-skills` skill or dashboard |
+| Profile skills | Agent loads with `load_skill` when relevant | `manage-skills` skill or dashboard |
 
 Platform administrators can open **Browse Files → Knowledge** and add a ZIP file to a profile. Nakama imports `.txt`, `.md`, `.csv`, `.pdf`, and `.docx` files as separate documents. The ZIP can be at most 20 MB. Each document can be at most 20 MB.
 

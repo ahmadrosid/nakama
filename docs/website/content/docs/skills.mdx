@@ -9,7 +9,7 @@ Think of it as a saved workflow:
 
 - The profile keeps its main identity in soul files or `systemPrompt`
 - A skill adds a focused procedure for a specific kind of task
-- The agent can match and use that procedure when it is relevant
+- The agent loads and uses that procedure when it is relevant
 
 Use skills when you want the bot to follow the same steps repeatedly without cramming everything into the main prompt.
 
@@ -91,7 +91,6 @@ Optional frontmatter:
 | Field | Meaning |
 |------|---------|
 | `disable-model-invocation` | Only run on explicit invocation |
-| `include-body-on-match` | Include the full body when the skill auto-matches |
 
 ## Skills with tools
 
@@ -229,7 +228,7 @@ export NAKAMA_PYTHON_BIN=/opt/nakama-python/bin/python3
 
 When a profile starts a chat, Nakama appends the assigned skills catalog to the agent prompt.
 
-On each user turn, Nakama can also attach matched skill context for the current message.
+The catalog lists each skill name and description. When a request matches a description, the agent calls `load_skill` to read the full instructions. A skill with `disable-model-invocation` stays out of the catalog and runs only on `/skill <name>`.
 
 That means skills are not a separate bot. They are extra behavior layers attached to a profile.
 
@@ -250,7 +249,7 @@ Selecting a skill inserts an explicit invocation like:
 /skill weather
 ```
 
-The composer highlights the selected skill, but the message still sends as plain text so it works with the normal skill matcher.
+The composer highlights the selected skill, but the message still sends as plain text. Nakama reads `/skill <name>` and attaches that skill for the turn.
 
 The slash picker also reserves **`/learn`** — use it to turn notes, a URL, a local folder, or the workflow you just finished into a reusable skill. See [Self-improving skills](/self-improving-skills#learn-from-sources).
 
@@ -308,7 +307,7 @@ Org admins can enable **Ask me before a bot saves a skill** under **Settings →
 - **Archive path:** copy exact bullets to `memory-archive/YYYY-MM.md`, then remove them from `MEMORY.md`
 - **Artifact path** (chat prompt rules): save the file the agent produced with `save_artifact` or `write_docx` under `artifacts/{filename}` with the correct file extension. Nakama derives the file type, size, and timestamp automatically. Use `save_artifact` for text, Markdown, HTML, JSON, and code; use `write_docx` when the user wants a real Word document.
 
-These skills use `include-body-on-match: true`, so the full procedure loads when the user's message matches the skill description. The chat wrapper also mentions memory skills when `read_file` and `edit_file` are available, and the artifact save rules when `save_artifact` or `write_file` is available.
+The agent loads these skills with `load_skill` when the request matches the skill description. The chat wrapper also mentions memory skills when `read_file` and `edit_file` are available, and the artifact save rules when `save_artifact` or `write_file` is available.
 
 They are hidden from the `/skill` slash picker (like `create-automation` and `manage-skills`) because they are system workflows, not user-authored skills. Agents can still invoke them explicitly with `/skill update-profile-memory`, `/skill archive-profile-memory`, or `/skill artifact-design`.
 

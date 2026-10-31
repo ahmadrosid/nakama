@@ -1,7 +1,6 @@
 ---
 name: create-workflow
 description: Create and run user-triggered workflows with declared steps. Use when the user asks about a workflow or wants a verifiable recipe (fetch, compare, summarize) they can run on demand from chat or the dashboard.
-include-body-on-match: true
 ---
 
 When the user wants a workflow they can run on demand (for example "morning brief"), explain the step recipe clearly before saving.

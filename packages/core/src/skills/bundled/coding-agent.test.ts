@@ -2,45 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { matchSkillsForMessage } from "../match";
-import { parseSkillMarkdown } from "../parse";
-import { readBundledSkillMarkdown } from "./index";
 import { ensureBundledSkillFiles } from "./install";
-
-describe("bundled coding-agent skill", () => {
-  test("description matches code-change requests but not plain explainers", async () => {
-    const content = await readBundledSkillMarkdown("coding-agent");
-    const parsed = parseSkillMarkdown(content, "coding-agent/SKILL.md");
-
-    const discovered = {
-      body: parsed.body,
-      description: parsed.frontmatter.description,
-      directory: "/tmp/coding-agent",
-      disableModelInvocation: false,
-      hasTool: false,
-      includeBodyOnMatch: true,
-      name: parsed.frontmatter.name,
-      scriptIssues: [],
-      scriptTools: [],
-      skillFilePath: "/tmp/coding-agent/SKILL.md",
-      toolPath: null,
-    };
-
-    expect(
-      matchSkillsForMessage(
-        [discovered],
-        "Fix the failing auth tests in this repository"
-      ).map((skill) => skill.name)
-    ).toEqual(["coding-agent"]);
-
-    expect(
-      matchSkillsForMessage(
-        [discovered],
-        "Explain how TLS session resumption works"
-      ).map((skill) => skill.name)
-    ).toEqual([]);
-  });
-});
 
 describe("ensureBundledSkillFiles for coding agent", () => {
   let configDir: string;

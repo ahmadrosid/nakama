@@ -114,7 +114,7 @@ Merged in `agent-service` `resolveProfileSystemPrompt` → `generateReply` (`pro
 |---|---|---|
 | Chat structure (USER.md, tools, timezone, channels) | `packages/agent/src/chat-prompt.ts` | `buildChatSystemPrompt` |
 | Soul content | `packages/core/src/soul/compose.ts` | `composeSoulSystemPrompt` |
-| Skills catalog / matched / agent-browser | `packages/core/src/skills/compose.ts` | `composeSkillsCatalog`, `composeMatchedSkillsPrompt`, `composeAgentBrowserCapabilityPrompt` |
+| Skills catalog / loaded skill / agent-browser | `packages/core/src/skills/compose.ts` (`load_skill` tool: `apps/server/src/tools/skill-manage-tool.ts`) | `composeSkillsCatalog`, `composeLoadedSkillPrompt`, `composeAgentBrowserCapabilityPrompt` |
 | Per-turn context (date, etc.) | `packages/agent/src/chat.ts` | `generateReply` |
 
 ## Soul (`packages/core/src/soul/`)
