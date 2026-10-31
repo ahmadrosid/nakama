@@ -120,7 +120,6 @@ import {
   selectFolderFiles,
 } from "@/lib/chat-images";
 import {
-  type ComposerStackEdge,
   composerHitTargetClass,
   composerIconButtonClass,
   composerInputGroupClass,
@@ -151,6 +150,8 @@ interface ChatComposerBaseProps {
   draftStorageKey?: string | null;
   error: string | null;
   footerClassName?: string;
+  onRemoveQueuedMessage?: (id: string) => void;
+  onSendQueuedMessageNow?: (id: string) => void;
   onStop?: () => void;
   onSubmit: (text: string, files: FileUIPart[]) => void;
   placeholder?: string;
@@ -265,33 +266,6 @@ function ChatComposerOfflineHint({
         Set up AI
       </Button>
     </div>
-  );
-}
-
-function ChatComposerWorkStack({
-  hasQueuedMessages,
-  queueStackEdge,
-  queuedMessages,
-  showTodos,
-  todos,
-}: {
-  hasQueuedMessages: boolean;
-  queueStackEdge: ComposerStackEdge;
-  queuedMessages: QueuedComposerMessage[];
-  showTodos: boolean;
-  todos: AgentTodo[];
-}) {
-  return (
-    <>
-      {showTodos ? <AgentTodoPanel stack todos={todos} /> : null}
-      {hasQueuedMessages ? (
-        <ChatMessageQueuePanel
-          messages={queuedMessages}
-          stack
-          stackEdge={queueStackEdge}
-        />
-      ) : null}
-    </>
   );
 }
 
@@ -548,11 +522,8 @@ function resolveChatComposerLayout(
   const isMinimal = props.variant === "minimal";
   const todos = props.todos ?? EMPTY_TODOS;
   const queuedMessages = props.queuedMessages ?? EMPTY_QUEUED_MESSAGES;
-  const hasQueuedMessages = queuedMessages.length > 0;
 
   const showTodos = hasActiveAgentTodos(todos) && !displayError;
-
-  const queueStackEdge: ComposerStackEdge = showTodos ? "continue" : "start";
 
   const availableSkills = isMinimal
     ? EMPTY_SKILLS
@@ -562,13 +533,11 @@ function resolveChatComposerLayout(
     availableSkills,
     disabled: props.disabled ?? false,
     enableAddCommands: !isMinimal && enableAddCommands,
-    hasQueuedMessages,
     isMinimal,
     placeholder: props.placeholder ?? "Do anything...",
     queuedMessages,
-    queueStackEdge,
     showOfflineHint: !isMinimal && props.showOfflineHint === true,
-    showStacked: (showTodos || hasQueuedMessages) && !isMinimal,
+    showStacked: showTodos && !isMinimal,
     showTips: !isMinimal && props.showTips === true,
     showTodos,
     skillPickerKey: availableSkills.map((skill) => skill.id).join("\0"),
@@ -607,16 +576,19 @@ function ChatComposerMain({
     skillPickerKey: layout.skillPickerKey,
   };
 
+  const queue = layout.isMinimal ? null : (
+    <ChatMessageQueuePanel
+      messages={layout.queuedMessages}
+      onRemove={props.onRemoveQueuedMessage}
+      onSendNow={props.onSendQueuedMessageNow}
+    />
+  );
+
   if (layout.showStacked && isFullComposer(props)) {
     return (
       <div className="relative flex w-full flex-col">
-        <ChatComposerWorkStack
-          hasQueuedMessages={layout.hasQueuedMessages}
-          queuedMessages={layout.queuedMessages}
-          queueStackEdge={layout.queueStackEdge}
-          showTodos={layout.showTodos}
-          todos={layout.todos}
-        />
+        {queue}
+        <AgentTodoPanel stack todos={layout.todos} />
         <div className="relative z-10 -mt-2 w-full">
           <ChatComposerStackedPrompt
             {...promptProps}
@@ -629,14 +601,17 @@ function ChatComposerMain({
   }
 
   return (
-    <ChatComposerBarePrompt
-      {...promptProps}
-      fullProps={isFullComposer(props) ? props : undefined}
-      isMinimal={layout.isMinimal}
-      primarySupportsVision={
-        isFullComposer(props) ? props.primarySupportsVision : undefined
-      }
-    />
+    <>
+      {queue}
+      <ChatComposerBarePrompt
+        {...promptProps}
+        fullProps={isFullComposer(props) ? props : undefined}
+        isMinimal={layout.isMinimal}
+        primarySupportsVision={
+          isFullComposer(props) ? props.primarySupportsVision : undefined
+        }
+      />
+    </>
   );
 }
 

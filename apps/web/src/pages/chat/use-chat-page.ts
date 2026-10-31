@@ -1213,6 +1213,37 @@ export function useChatPage() {
     streamAbortRef.current?.abort();
   }, []);
 
+  const removeQueuedMessage = useCallback((id: string) => {
+    messageQueueRef.current = messageQueueRef.current.filter(
+      (item) => item.id !== id
+    );
+    setQueuedMessages((current) => current.filter((item) => item.id !== id));
+  }, []);
+
+  // Moves the message to the front, then stops the reply so it sends next.
+  const sendQueuedMessageNow = useCallback(
+    (id: string) => {
+      const item = messageQueueRef.current.find((entry) => entry.id === id);
+
+      if (!item) {
+        return;
+      }
+
+      messageQueueRef.current = [
+        item,
+        ...messageQueueRef.current.filter((entry) => entry.id !== id),
+      ];
+      setQueuedMessages((current) => {
+        const hit = current.find((entry) => entry.id === id);
+        return hit
+          ? [hit, ...current.filter((entry) => entry.id !== id)]
+          : current;
+      });
+      stopStreaming();
+    },
+    [stopStreaming]
+  );
+
   const executeSend = useCallback(
     async (
       text: string,
@@ -1776,8 +1807,10 @@ export function useChatPage() {
     providerModelGroups,
     queuedMessages,
     readOnlySession,
+    removeQueuedMessage,
     renderModelLabel,
     sendMessage,
+    sendQueuedMessageNow,
     session,
     sessionChannel,
     showOfflineHint,

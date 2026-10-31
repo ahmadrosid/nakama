@@ -72,6 +72,8 @@ export function ChatPageContent({
     composerDraftKey,
     composerEntry,
     queuedMessages,
+    removeQueuedMessage,
+    sendQueuedMessageNow,
     showOfflineHint,
     health,
     providerModelGroups,
@@ -175,6 +177,8 @@ export function ChatPageContent({
         onBtw={onBtw}
         onConnectProvider={() => setProviderDialogOpen(true)}
         onModelChange={handleModelChange}
+        onRemoveQueuedMessage={removeQueuedMessage}
+        onSendQueuedMessageNow={sendQueuedMessageNow}
         onStop={stopStreaming}
         onSubmit={(text, files) => {
           void sendMessage(text, files);
