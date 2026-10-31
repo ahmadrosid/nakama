@@ -2,9 +2,7 @@ import type { AgentChatSession } from "@nakama/agent";
 import {
   type ChatContextUsage,
   type ChatTurnUsage,
-  type ChatUsage,
   formatServerError,
-  type ImageAttachment,
   NakamaApiError,
   reportError,
   resolveChatFirstTokenTimeoutMs,
@@ -103,23 +101,20 @@ const questionnaireResultSchema = z.object({
   }),
 });
 
-function agentHandlers(send: (event: StreamEvent) => void) {
+/** Maps chat callbacks to stream events. */
+function agentHandlers(
+  send: (event: StreamEvent) => void
+): Parameters<TurnChat["sendStream"]>[1] {
   return {
-    onChunk: (delta: string) => send({ delta, type: "chunk" }),
-    onSubAgentActivity: (event: { parentToolCallId: string; label: string }) =>
+    onChunk: (delta) => send({ delta, type: "chunk" }),
+    onSubAgentActivity: (event) =>
       send({
         label: event.label,
         parentToolCallId: event.parentToolCallId,
         type: "sub_agent_activity",
       }),
-    onThinking: (delta: string) => send({ delta, type: "thinking" }),
-    onToolEnd: (event: {
-      toolGroupId?: string;
-      toolCallId: string;
-      tool: string;
-      result: unknown;
-      images?: ImageAttachment[];
-    }) => {
+    onThinking: (delta) => send({ delta, type: "thinking" }),
+    onToolEnd: (event) => {
       send({
         images: event.images,
         result: event.result,
@@ -148,13 +143,7 @@ function agentHandlers(send: (event: StreamEvent) => void) {
         }
       }
     },
-    onToolInputDelta: (event: {
-      toolGroupId?: string;
-      toolCallId: string;
-      tool: string;
-      delta: string;
-      accumulatedArguments?: string;
-    }) =>
+    onToolInputDelta: (event) =>
       send({
         accumulatedArguments: event.accumulatedArguments,
         delta: event.delta,
@@ -163,12 +152,7 @@ function agentHandlers(send: (event: StreamEvent) => void) {
         toolGroupId: event.toolGroupId,
         type: "tool_input_delta",
       }),
-    onToolStart: (event: {
-      toolGroupId?: string;
-      toolCallId: string;
-      tool: string;
-      input: Extract<StreamEvent, { type: "tool_start" }>["input"];
-    }) =>
+    onToolStart: (event) =>
       send({
         input: event.input,
         tool: event.tool,
@@ -176,7 +160,7 @@ function agentHandlers(send: (event: StreamEvent) => void) {
         toolGroupId: event.toolGroupId,
         type: "tool_start",
       }),
-    onUsage: (usage: ChatUsage) => send({ type: "usage", usage }),
+    onUsage: (usage) => send({ type: "usage", usage }),
   };
 }
 
@@ -208,6 +192,16 @@ function terminalEvent(end: TurnEnd): StreamEvent {
   }
 
   return event;
+}
+
+function cancelledEnd(usage?: ChatTurnUsage): TurnEnd {
+  return {
+    kind: "error",
+    message: "Turn cancelled.",
+    reason: "cancelled",
+    status: 499,
+    usage,
+  };
 }
 
 /**
@@ -301,12 +295,7 @@ export class TurnRunner {
     // The caller left while the chat was being prepared. Sending now would
     // still write the message into history, so the turn ends untouched.
     if (signal.aborted) {
-      const cancelled: TurnEnd = {
-        kind: "error",
-        message: "Turn cancelled.",
-        reason: "cancelled",
-        status: 499,
-      };
+      const cancelled = cancelledEnd();
 
       this.finish(sessionId, cancelled, send);
 
@@ -404,13 +393,7 @@ export class TurnRunner {
       }
 
       end = cancelled
-        ? {
-            kind: "error",
-            message: "Turn cancelled.",
-            reason: "cancelled",
-            status: 499,
-            usage,
-          }
+        ? cancelledEnd(usage)
         : {
             kind: "error",
             message: formatServerError(error),

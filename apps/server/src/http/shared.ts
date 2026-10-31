@@ -646,6 +646,12 @@ export function parseChannel(value: string | undefined): AgentChannel {
   throw new NakamaApiError(`Invalid channel. Expected ${CHANNEL_LIST}.`, 400);
 }
 
+const SSE_HEADERS = {
+  "Cache-Control": "no-cache, no-transform",
+  Connection: "keep-alive",
+  "Content-Type": "text/event-stream; charset=utf-8",
+};
+
 export function streamTurnSubscribe(sessionId: string): Response | null {
   if (!sessionTurnRegistry.isActive(sessionId)) {
     return null;
@@ -688,13 +694,7 @@ export function streamTurnSubscribe(sessionId: string): Response | null {
     },
   });
 
-  return new Response(stream, {
-    headers: {
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-      "Content-Type": "text/event-stream; charset=utf-8",
-    },
-  });
+  return new Response(stream, { headers: SSE_HEADERS });
 }
 
 /**
@@ -704,7 +704,8 @@ export function streamTurnSubscribe(sessionId: string): Response | null {
 export function createTurnStream() {
   const encoder = new TextEncoder();
   const cancel = new AbortController();
-  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+  // start() runs inside the constructor, so this is set before first use.
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
 
   const stream = new ReadableStream<Uint8Array>({
     cancel() {
@@ -717,7 +718,7 @@ export function createTurnStream() {
 
   const enqueue = (text: string) => {
     try {
-      controller?.enqueue(encoder.encode(text));
+      controller.enqueue(encoder.encode(text));
     } catch {
       // The client went away. The turn keeps running for registry subscribers.
     }
@@ -733,19 +734,13 @@ export function createTurnStream() {
         clearInterval(keepalive);
 
         try {
-          controller?.close();
+          controller.close();
         } catch {
           // Already closed by the client cancelling the stream.
         }
       });
 
-      return new Response(stream, {
-        headers: {
-          "Cache-Control": "no-cache, no-transform",
-          Connection: "keep-alive",
-          "Content-Type": "text/event-stream; charset=utf-8",
-        },
-      });
+      return new Response(stream, { headers: SSE_HEADERS });
     },
     signal: cancel.signal,
   };
