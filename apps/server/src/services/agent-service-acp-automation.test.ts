@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import {
@@ -7,6 +7,7 @@ import {
   writeRuntimeServerUrl,
 } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import * as acpMcpTools from "../providers/acp/acp-mcp-tools";
 import {
   acpMcpRequestSchema,
   handleAcpMcpRequest,
@@ -111,5 +112,57 @@ describe("ACP profile in an automation run", () => {
     });
 
     expect(afterRun).toEqual({ kind: "unknown" });
+  });
+
+  test("a sub-agent run that fails before it sends leaves no tool access", async () => {
+    await mkdir(getProfileSoulDir("org_test", "profile_default"), {
+      recursive: true,
+    });
+
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile({
+      ...createDefaultProfile(),
+      acpAgent: { args: [FAKE_AGENT], command: "bun" },
+    });
+
+    const service = new AgentService(null, null, db);
+    Object.assign(service, {
+      _providerConfigured: true,
+      resolveProfileSystemPrompt: () =>
+        Promise.resolve({ soulActive: false, systemPrompt: "Test" }),
+      resolveProfileTools: () => Promise.resolve([tool("plugin_x__status")]),
+    });
+
+    using registered = spyOn(acpMcpTools, "setAcpToolAccess");
+    const failure = new Error("activity listener failed");
+
+    await expect(
+      service.runSubAgentPrompt({
+        onActivity: () => {
+          throw failure;
+        },
+        orgId: "org_test",
+        profileId: "profile_default",
+        task: "Do it",
+      })
+    ).rejects.toBe(failure);
+
+    const sessionKey = registered.mock.calls[0]?.[0] ?? "";
+    expect(sessionKey).not.toBe("");
+
+    // A key still registered keeps its token; a cleared one gets a new token
+    // that nothing answers for.
+    const url = acpMcpTools.acpMcpServerFor(sessionKey).env?.[0]?.value ?? "";
+    const token = url.split("/").pop() ?? "";
+
+    expect(
+      await acpMcpTools.handleAcpMcpRequest(token, {
+        id: 1,
+        jsonrpc: "2.0",
+        method: "tools/list",
+      })
+    ).toEqual({ kind: "unknown" });
+
+    acpMcpTools.clearAcpToolAccess(sessionKey);
   });
 });

@@ -2328,16 +2328,16 @@ export class AgentService {
       profileId,
     });
 
-    const userMessage = [
-      "Workflow receipts (only source of truth — do not invent values):",
-      "```json",
-      JSON.stringify(receiptBag, null, 2),
-      "```",
-      "",
-      prompt.trim(),
-    ].join("\n");
-
     try {
+      const userMessage = [
+        "Workflow receipts (only source of truth — do not invent values):",
+        "```json",
+        JSON.stringify(receiptBag, null, 2),
+        "```",
+        "",
+        prompt.trim(),
+      ].join("\n");
+
       return await chat.sendStream(userMessage, { onChunk() {} }, { signal });
     } finally {
       close();
@@ -2418,68 +2418,69 @@ export class AgentService {
       userId: input.userId,
     });
 
-    const prompt = buildSubAgentPrompt(task, input.context);
-    let sawPlanning = false;
-    let sawWriting = false;
-
-    const emitActivity = (label: string) => {
-      input.onActivity?.(label);
-    };
-
-    emitActivity("Starting…");
-
     const timeout = AbortSignal.timeout(timeoutMs);
-
-    const signal = input.signal
-      ? AbortSignal.any([input.signal, timeout])
-      : timeout;
-
-    const sent = chat.sendStream(
-      prompt,
-      {
-        onChunk: (chunk) => {
-          input.onText?.(chunk);
-
-          if (sawWriting) {
-            return;
-          }
-
-          sawWriting = true;
-          emitActivity("Writing answer…");
-        },
-        onThinking: () => {
-          if (sawPlanning) {
-            return;
-          }
-
-          sawPlanning = true;
-          emitActivity("Planning…");
-        },
-        onToolStart: (event) => {
-          emitActivity(formatToolActivityLabel(event.tool, event.input));
-        },
-      },
-      { signal }
-    );
-
-    // A harness that ignores the signal is not waited for.
-    const aborted = new Promise<never>((_, reject) => {
-      if (signal.aborted) {
-        reject(signal.reason);
-      }
-
-      signal.addEventListener("abort", () => reject(signal.reason), {
-        once: true,
-      });
-    });
-
-    // The loser of the race below settles later with no one listening.
-    sent.catch(() => undefined);
-    aborted.catch(() => undefined);
-
     let reply: string;
 
+    // Everything after the chat exists sits in this try, so a throwing
+    // activity callback still ends the ACP run and clears its tool access.
     try {
+      const prompt = buildSubAgentPrompt(task, input.context);
+      let sawPlanning = false;
+      let sawWriting = false;
+
+      const emitActivity = (label: string) => {
+        input.onActivity?.(label);
+      };
+
+      emitActivity("Starting…");
+
+      const signal = input.signal
+        ? AbortSignal.any([input.signal, timeout])
+        : timeout;
+
+      const sent = chat.sendStream(
+        prompt,
+        {
+          onChunk: (chunk) => {
+            input.onText?.(chunk);
+
+            if (sawWriting) {
+              return;
+            }
+
+            sawWriting = true;
+            emitActivity("Writing answer…");
+          },
+          onThinking: () => {
+            if (sawPlanning) {
+              return;
+            }
+
+            sawPlanning = true;
+            emitActivity("Planning…");
+          },
+          onToolStart: (event) => {
+            emitActivity(formatToolActivityLabel(event.tool, event.input));
+          },
+        },
+        { signal }
+      );
+
+      // A harness that ignores the signal is not waited for.
+      const aborted = new Promise<never>((_, reject) => {
+        if (signal.aborted) {
+          reject(signal.reason);
+        }
+
+        signal.addEventListener("abort", () => reject(signal.reason), {
+          once: true,
+        });
+      });
+
+      // The loser of the race below settles later with no one listening.
+      sent.catch(() => undefined);
+      aborted.catch(() => undefined);
+
       // A stopped or timed-out turn's ACP process is stopped here too, not left running.
       reply = (await Promise.race([sent, aborted])).trim();
     } catch (error) {
