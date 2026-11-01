@@ -433,6 +433,10 @@ export async function createNakamaDataExport(
             try {
               data = await readFile(file.absolutePath);
             } catch (error) {
+              if (isPermissionError(error)) {
+                throw unreadablePathError(file.relativePath);
+              }
+
               // Config files are required for a restore, so their loss fails the export.
               if (isConfigFile || !isMissingPathError(error)) {
                 throw error;
@@ -1378,6 +1382,10 @@ async function inventoryConfigRoot(
     try {
       entries = await readdir(currentDir, { withFileTypes: true });
     } catch (error) {
+      if (isPermissionError(error) && currentDir !== rootDir) {
+        throw unreadablePathError(toZipPath(relative(rootDir, currentDir)));
+      }
+
       if (!isMissingPathError(error) || currentDir === rootDir) {
         throw error;
       }
@@ -1850,6 +1858,20 @@ function isMissingPathError<T>(error: T): boolean {
   const code = getNodeErrorCode(error);
 
   return code === "ENOENT" || code === "ENOTDIR";
+}
+
+function isPermissionError<T>(error: T): boolean {
+  const code = getNodeErrorCode(error);
+
+  return code === "EACCES" || code === "EPERM";
+}
+
+/** Keeps failing: a backup that skips what it cannot read looks complete but is not. */
+function unreadablePathError(path: string): NakamaApiError {
+  return new NakamaApiError(
+    `Cannot export a backup: the server cannot read ${path}. Fix its owner or permissions, or remove it, then try again.`,
+    409
+  );
 }
 
 async function readDirentsIfPresent(dir: string): Promise<Dirent[]> {

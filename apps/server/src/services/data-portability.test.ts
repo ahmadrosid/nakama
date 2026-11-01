@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import * as fsPromises from "node:fs/promises";
 import {
+  chmod,
   link,
   lstat,
   mkdir,
@@ -33,6 +34,7 @@ import {
 } from "./data-portability";
 import { MeetingStore } from "./google-meet/store";
 import { ManagedSecrets } from "./managed-secrets";
+import { writeBackup } from "./scheduled-backup";
 
 let rootDir = "";
 
@@ -1017,15 +1019,18 @@ describe("Nakama data portability", () => {
     }
   });
 
-  test("fails the export on read errors other than a deleted path", async () => {
-    await writeFile(join(rootDir, "notes.txt"), "ok");
+  test.each([
+    "notes.txt",
+    "config.ini",
+  ])("names %s when the server cannot read it", async (name) => {
+    await writeFile(join(rootDir, name), "ok");
     const realReadFile = fsPromises.readFile;
 
     const readMock = spyOn(fsPromises, "readFile").mockImplementation(
       // SAFETY: the wrapper forwards its arguments to the real readFile unchanged.
       (async (...args: Parameters<typeof realReadFile>) => {
-        if (args[0] === join(rootDir, "notes.txt")) {
-          throw Object.assign(new Error("denied"), { code: "EACCES" });
+        if (args[0] === join(rootDir, name)) {
+          throw Object.assign(new Error("denied"), { code: "EPERM" });
         }
 
         return await realReadFile(...args);
@@ -1035,7 +1040,91 @@ describe("Nakama data portability", () => {
     try {
       await expect(
         createNakamaDataExport({ databasePath: null, rootDir })
-      ).rejects.toMatchObject({ code: "EACCES" });
+      ).rejects.toMatchObject({
+        message: expect.stringContaining(name),
+        status: 409,
+      });
+    } finally {
+      readMock.mockRestore();
+    }
+  });
+
+  test("names a folder the server cannot list", async () => {
+    const locked = join(rootDir, "orgs/o1");
+    await mkdir(locked, { recursive: true });
+    const realReaddir = fsPromises.readdir;
+
+    const readdirMock = spyOn(fsPromises, "readdir").mockImplementation(
+      // SAFETY: the wrapper forwards its arguments to the real readdir unchanged.
+      (async (...args: Parameters<typeof realReaddir>) => {
+        if (args[0] === locked) {
+          throw Object.assign(new Error("denied"), { code: "EACCES" });
+        }
+
+        return await realReaddir(...args);
+      }) as typeof realReaddir
+    );
+
+    try {
+      await expect(
+        createNakamaDataExport({ databasePath: null, rootDir })
+      ).rejects.toMatchObject({
+        message: expect.stringContaining("orgs/o1"),
+        status: 409,
+      });
+    } finally {
+      readdirMock.mockRestore();
+    }
+  });
+
+  // chmod does nothing on Windows, and root reads a mode 000 file anyway.
+  test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "a real unreadable file fails manual and scheduled backups by name",
+    async () => {
+      const relativePath = "orgs/o1/profiles/p1/SOUL.md.bak-0101";
+      await mkdir(join(rootDir, "orgs/o1/profiles/p1"), { recursive: true });
+      await writeFile(join(rootDir, relativePath), "soul");
+      await chmod(join(rootDir, relativePath), 0o000);
+
+      const refusal = {
+        message: expect.stringContaining(relativePath),
+        status: 409,
+      };
+
+      const exportZip = async () =>
+        (await createNakamaDataExport({ databasePath: null, rootDir })).data;
+
+      await expect(exportZip()).rejects.toMatchObject(refusal);
+      await expect(
+        writeBackup({
+          dir: join(rootDir, "backups"),
+          exportZip,
+          key: Buffer.alloc(32),
+        })
+      ).rejects.toMatchObject(refusal);
+      expect(await readdir(rootDir)).toEqual(["orgs"]);
+    }
+  );
+
+  test("fails the export on read errors other than a deleted path", async () => {
+    await writeFile(join(rootDir, "notes.txt"), "ok");
+    const realReadFile = fsPromises.readFile;
+
+    const readMock = spyOn(fsPromises, "readFile").mockImplementation(
+      // SAFETY: the wrapper forwards its arguments to the real readFile unchanged.
+      (async (...args: Parameters<typeof realReadFile>) => {
+        if (args[0] === join(rootDir, "notes.txt")) {
+          throw Object.assign(new Error("failed"), { code: "EIO" });
+        }
+
+        return await realReadFile(...args);
+      }) as typeof realReadFile
+    );
+
+    try {
+      await expect(
+        createNakamaDataExport({ databasePath: null, rootDir })
+      ).rejects.toMatchObject({ code: "EIO" });
     } finally {
       readMock.mockRestore();
     }
