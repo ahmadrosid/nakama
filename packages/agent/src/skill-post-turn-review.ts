@@ -105,15 +105,28 @@ export function buildSkillPostTurnReviewPrompt(input: {
     }
   }
 
-  const loadedLines = input.catalog
-    .filter((skill) => skill.skillMarkdown)
-    .flatMap((skill) => [
+  const loadedLines = input.catalog.flatMap(({ name, skillMarkdown }) => {
+    if (!skillMarkdown) {
+      return [];
+    }
+
+    const lines = [
       "",
-      `### ${skill.name}`,
+      `### ${name}`,
       "",
       // Cut without an ellipsis so the model cannot copy a marker into oldString.
-      skill.skillMarkdown?.slice(0, SKILL_MARKDOWN_MAX) ?? "",
-    ]);
+      skillMarkdown.slice(0, SKILL_MARKDOWN_MAX),
+    ];
+
+    if (skillMarkdown.length > SKILL_MARKDOWN_MAX) {
+      lines.push(
+        "",
+        `(SKILL.md cut at ${SKILL_MARKDOWN_MAX} of ${skillMarkdown.length} characters. Do not patch past the cut. The hidden part can repeat text, so pick a long oldString.)`
+      );
+    }
+
+    return lines;
+  });
 
   return [
     truncate(lines.join("\n"), TURN_SNIPPET_MAX),

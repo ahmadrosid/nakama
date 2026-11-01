@@ -7,15 +7,21 @@ import {
 import {
   type AgentChannel,
   type ChatMessage,
+  extractExplicitSkillName,
   extractLatestTurnMessages,
+  getUserMessageText,
   LOAD_SKILL_TOOL_NAME,
   parseAgentChannel,
   resolveProfileOrgBooleanOverride,
   SKILL_FILE_NAME,
   type UserConfig,
 } from "@nakama/core";
-import { isPathWithinProfileSkillsDir } from "@nakama/core/skills/write";
+import {
+  isPathWithinProfileSkillsDir,
+  resolveProfileSkillDirectory,
+} from "@nakama/core/skills/write";
 import type { DatabaseAdapter } from "@nakama/db";
+import { z } from "zod";
 import { createProviderForProfile } from "./provider-instance-helpers";
 
 /**
@@ -63,6 +69,11 @@ export interface PostTurnReviewEligibility {
   toolCallCount: number;
   usedSkillManage: boolean;
 }
+
+const LoadSkillResultSchema = z.object({
+  error: z.never().optional(),
+  name: z.string(),
+});
 
 export interface PostTurnReviewRunnerContext {
   messages: ChatMessage[];
@@ -207,21 +218,44 @@ export class SkillPostTurnReviewService {
 
     const assigned = await this.db.listSkillsForProfile(context.profileId);
 
-    const loadedNames = new Set(
-      context.turnMessages.flatMap((message) =>
-        message.role === "assistant"
-          ? (message.toolCalls ?? [])
-              .filter((call) => call.name === LOAD_SKILL_TOOL_NAME)
-              .map((call) => call.arguments.name)
-          : []
-      )
-    );
+    // A skill counts as loaded when a load_skill call succeeded or the user
+    // named it with `/skill <name>`, in this turn or an earlier one.
+    const loadedNames = new Set<string>();
+
+    for (const message of context.messages) {
+      if (message.role === "user") {
+        const name = extractExplicitSkillName(
+          getUserMessageText(message.content)
+        );
+
+        if (name) {
+          loadedNames.add(name);
+        }
+      } else if (
+        message.role === "tool" &&
+        message.name === LOAD_SKILL_TOOL_NAME
+      ) {
+        // A success carries the skill's own name; a failure carries only `error`.
+        try {
+          const result = LoadSkillResultSchema.safeParse(
+            JSON.parse(message.content)
+          );
+
+          if (result.success) {
+            loadedNames.add(result.data.name);
+          }
+        } catch {
+          // Not JSON, so the call returned no skill.
+        }
+      }
+    }
 
     const catalog = await Promise.all(
       assigned.map(async (skill) => ({
         description: skill.description,
         name: skill.name,
         // Only the profile's own skills can be patched, so only they need the body.
+        // Read the same file staging matches oldString against.
         skillMarkdown:
           loadedNames.has(skill.name) &&
           isPathWithinProfileSkillsDir(
@@ -229,10 +263,21 @@ export class SkillPostTurnReviewService {
             context.profileId,
             skill.sourcePath
           )
-            ? await readFile(
-                path.join(skill.sourcePath, SKILL_FILE_NAME),
-                "utf8"
-              ).catch(() => undefined)
+            ? await Promise.resolve()
+                .then(() =>
+                  readFile(
+                    path.join(
+                      resolveProfileSkillDirectory(
+                        context.orgId,
+                        context.profileId,
+                        skill.name
+                      ),
+                      SKILL_FILE_NAME
+                    ),
+                    "utf8"
+                  )
+                )
+                .catch(() => undefined)
             : undefined,
       }))
     );

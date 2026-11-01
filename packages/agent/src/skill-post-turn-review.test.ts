@@ -179,4 +179,20 @@ describe("buildSkillPostTurnReviewPrompt", () => {
 
     expect(prompt).toContain(tail);
   });
+
+  test("marks a SKILL.md cut at the limit", () => {
+    const prompt = buildSkillPostTurnReviewPrompt({
+      catalog: [
+        {
+          description: "Deploy steps",
+          name: "deploy-checklist",
+          skillMarkdown: `${"x".repeat(6000)}hidden-tail-marker`,
+        },
+      ],
+      turnMessages: [{ content: "deploy staging", role: "user" }],
+    });
+
+    expect(prompt).not.toContain("hidden-tail-marker");
+    expect(prompt).toContain("6018");
+  });
 });

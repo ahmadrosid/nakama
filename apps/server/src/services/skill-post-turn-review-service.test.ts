@@ -323,7 +323,8 @@ describe("SkillPostTurnReviewService", () => {
     expect(ran).toBe(1);
   });
 
-  test("review prompt carries the SKILL.md of skills the turn loaded", async () => {
+  test("review prompt carries the SKILL.md of skills the session loaded", async () => {
+    const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
     const configDir = await mkdtemp(join(tmpdir(), "nakama-post-turn-review-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
 
@@ -332,7 +333,12 @@ describe("SkillPostTurnReviewService", () => {
       const profile = await seedSkillOrg(db);
       const skills = new SkillsService(db);
 
-      for (const name of ["deploy-notes", "release-notes"]) {
+      for (const name of [
+        "deploy-notes",
+        "explicit-notes",
+        "failed-notes",
+        "release-notes",
+      ]) {
         const created = await skills.createSkill(ORG_ID, {
           body: `${name}-body-marker`,
           description: `About ${name}.`,
@@ -359,32 +365,71 @@ describe("SkillPostTurnReviewService", () => {
       const service = new SkillPostTurnReviewService(db, () => null);
       service.resolveProviderForProfile = () => Promise.resolve(provider);
 
+      const turnMessages: ChatMessage[] = [
+        { content: "now release", role: "user" },
+        {
+          content: "",
+          role: "assistant",
+          toolCalls: [
+            {
+              arguments: { name: "failed-notes" },
+              id: "2",
+              name: "load_skill",
+            },
+          ],
+        },
+        {
+          content: JSON.stringify({ error: "No skill named failed-notes" }),
+          name: "load_skill",
+          role: "tool",
+          toolCallId: "2",
+        },
+      ];
+
       await service.reviewTurnWithLlm({
-        messages: [],
-        orgId: ORG_ID,
-        profileId: profile.id,
-        sessionId: "session_1",
-        turnMessages: [
-          { content: "deploy", role: "user" },
+        messages: [
+          { content: "/skill explicit-notes deploy", role: "user" },
           {
             content: "",
             role: "assistant",
             toolCalls: [
               {
-                arguments: { name: "deploy-notes" },
+                arguments: { name: " deploy-notes " },
                 id: "1",
                 name: "load_skill",
               },
             ],
           },
+          {
+            content: JSON.stringify({
+              instructions: "x",
+              name: "deploy-notes",
+            }),
+            name: "load_skill",
+            role: "tool",
+            toolCallId: "1",
+          },
+          { content: "done", role: "assistant" },
+          ...turnMessages,
         ],
+        orgId: ORG_ID,
+        profileId: profile.id,
+        sessionId: "session_1",
+        turnMessages,
         userId: null,
       });
 
       expect(prompt).toContain("deploy-notes-body-marker");
+      expect(prompt).toContain("explicit-notes-body-marker");
+      expect(prompt).not.toContain("failed-notes-body-marker");
       expect(prompt).not.toContain("release-notes-body-marker");
     } finally {
-      delete process.env.NAKAMA_CONFIG_DIR;
+      if (originalConfigDir === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+      }
+
       await rm(configDir, { force: true, recursive: true });
     }
   });
