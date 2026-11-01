@@ -5,6 +5,7 @@ description: Use for slide decks, presentations, and pitch decks. Builds one HTM
 
 Build slide decks as one HTML artifact from the tested template in this skill.
 These instructions are loaded directly when this skill is active.
+For decks, these rules replace the artifact-design rules: use the light theme only, with no dark-mode block, and do not link Google Fonts.
 
 ## Start from the template
 
