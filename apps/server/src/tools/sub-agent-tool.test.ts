@@ -317,6 +317,42 @@ describe("sub_agent background", () => {
     );
 
     expect(sessions.map((session) => session.id)).toEqual([childId]);
+
+    await expect(agent.detachSession(childId, ORG_ID)).rejects.toMatchObject({
+      status: 400,
+    });
+
+    const branch = await agent.branchSession(
+      childId,
+      0,
+      ORG_ID,
+      member.user.id
+    );
+
+    const branchId = branch?.sessionId ?? "";
+
+    await expect(
+      agent.assertSessionProfileAccess(branchId, ORG_ID, member)
+    ).resolves.toBeUndefined();
+    expect(
+      (
+        await agent.listSessions(ORG_ID, PROFILE_ID, "web", member)
+      ).sessions.map((session) => session.id)
+    ).toContain(branchId);
+
+    await expect(
+      agent.assertSessionProfileAccess(branchId, ORG_ID, {
+        user: { id: "user_other" },
+      })
+    ).rejects.toMatchObject({ status: 404 });
+
+    await expect(
+      agent.closeSession(privateId, ORG_ID, member)
+    ).rejects.toMatchObject({ status: 404 });
+    expect(await agent.closeSession(childId, ORG_ID, member)).toBe(true);
+
+    expect(await agent.purgeSession(parentId, ORG_ID)).toBe(true);
+    expect(await db.getSession(childId)).toBeNull();
   });
 
   test("the cap counts only open sub_agent chats", async () => {

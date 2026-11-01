@@ -1057,7 +1057,7 @@ export function registerSessionRoutes(
   });
 
   app.post("/v1/sessions/:sessionId/branch", async (c) => {
-    requireOrgMemberFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
 
     const { orgId, sessionId } = await requireSessionAccess(c, {
       runsTools: true,
@@ -1068,7 +1068,8 @@ export function registerSessionRoutes(
     const result = await agent.branchSession(
       sessionId,
       body.messageIndex,
-      orgId
+      orgId,
+      auth.user?.id
     );
 
     if (!result) {

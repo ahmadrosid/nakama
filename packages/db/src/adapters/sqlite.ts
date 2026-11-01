@@ -1650,6 +1650,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
             SELECT 1
             FROM sessions parent
             WHERE parent.id = s.parent_session_id
+              AND s.branch_message_index IS NULL
               AND parent.channel IN (SELECT value FROM json_each(?11))
           )
         )

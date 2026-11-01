@@ -175,6 +175,44 @@ describe("listSessions reports the live turn", () => {
     expect(await startStoppedTurn(service, sessionId, ORG_ID)).toBe("started");
   });
 
+  test("a closed sub_agent chat does not reopen past the open-chat cap", async () => {
+    const { db, service } = await createService();
+    const access = { isPlatformAdmin: false, orgRole: null };
+
+    const parentId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      USER.id
+    );
+
+    const children: string[] = [];
+
+    for (let index = 0; index < 5; index += 1) {
+      children.push(
+        await service.createChildSession(
+          parentId,
+          ORG_ID,
+          `Topic ${index}`,
+          access
+        )
+      );
+    }
+
+    const closedId = children[0] ?? "";
+
+    expect(await service.closeSession(closedId, ORG_ID, { user: USER })).toBe(
+      true
+    );
+    await service.createChildSession(parentId, ORG_ID, "Topic 5", access);
+
+    await expect(
+      startStoppedTurn(service, closedId, ORG_ID)
+    ).rejects.toMatchObject({ status: 400 });
+    expect((await db.getSession(closedId))?.closedAt).toBeString();
+    expect(sessionTurnRegistry.isActive(closedId)).toBe(false);
+  });
+
   test("closing a chat closes the chats sub_agent started from it, not its branches", async () => {
     const { db, service } = await createService();
 
