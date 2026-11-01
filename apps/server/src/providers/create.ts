@@ -27,7 +27,7 @@ import { createChatgptProvider } from "./chatgpt";
 import { createCloudflareProvider } from "./cloudflare";
 import {
   compatibleModelSupportsThinking,
-  fetchNetraMaxOutputTokens,
+  fetchNetraModelLimits,
 } from "./compatible-models";
 import { FIREWORKS_INFERENCE_BASE_URL } from "./fireworks";
 import { createGeminiProvider } from "./gemini";
@@ -43,8 +43,8 @@ import { createXaiProvider } from "./xai-oauth";
 const NETRA_V41_TOOL_TURN_VERIFIED = true;
 
 // Used when Netra's /v1/models cannot be read or reports no output limit, as
-// opencode does for models without a known limit. The context window is 1M.
-const NETRA_MAX_OUTPUT_TOKENS = 32_000;
+// opencode does for models without a known limit.
+export const NETRA_MAX_OUTPUT_TOKENS = 32_000;
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 
@@ -153,7 +153,7 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
       if (
         !findCustomModel(options.instance?.customModels, model)?.maxOutputTokens
       ) {
-        fetchNetraMaxOutputTokens(options.apiKey, model);
+        fetchNetraModelLimits(options.apiKey, model);
       }
 
       return createOpenAICompatibleProvider({
@@ -166,7 +166,8 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         resolveMaxOutputTokens: async () =>
           findCustomModel(options.instance?.customModels, model)
             ?.maxOutputTokens ??
-          (await fetchNetraMaxOutputTokens(options.apiKey, model)) ??
+          (await fetchNetraModelLimits(options.apiKey, model))
+            .maxOutputTokens ??
           NETRA_MAX_OUTPUT_TOKENS,
         supportsThinking: true,
       });

@@ -5,7 +5,7 @@ import { serve } from "bun";
 import {
   compatibleModelSupportsThinking,
   customModelEntryFromRemoteRecord,
-  fetchNetraMaxOutputTokens,
+  fetchNetraModelLimits,
   fetchNetraModels,
   fetchRemoteOpenAIModels,
   getModelsForProviderInstance,
@@ -90,7 +90,7 @@ test("instances without a shortlist expose their provider catalog", () => {
   }
 });
 
-test("Netra output limit is read once and a failed read waits before a retry", async () => {
+test("Netra model limits are read once and a failed read waits before a retry", async () => {
   let calls = 0;
   globalThis.fetch = asTestFetch(async () => {
     calls += 1;
@@ -102,29 +102,34 @@ test("Netra output limit is read once and a failed read waits before a retry", a
     return Response.json({
       data: [
         {
+          context_length: 1_048_576,
           id: "deepseek/deepseek-v4.1-flash",
-          top_provider: { max_completion_tokens: 131_072 },
+          top_provider: {
+            context_length: 1_048_576,
+            max_completion_tokens: 131_072,
+          },
         },
       ],
     });
   });
 
   const read = (now?: number) =>
-    fetchNetraMaxOutputTokens("cache-key", "deepseek/deepseek-v4.1-flash", now);
+    fetchNetraModelLimits("cache-key", "deepseek/deepseek-v4.1-flash", now);
 
   const later = Date.now() + 11 * 60_000;
+  const limits = { contextWindow: 1_048_576, maxOutputTokens: 131_072 };
 
-  expect(await read()).toBeUndefined();
+  expect(await read()).toEqual({});
   // Within 10 minutes of the failure: no new request, fallback right away.
-  expect(await read()).toBeUndefined();
+  expect(await read()).toEqual({});
   expect(calls).toBe(1);
-  expect(await read(later)).toBe(131_072);
-  expect(await read(later)).toBe(131_072);
-  expect(await read()).toBe(131_072);
+  expect(await read(later)).toEqual(limits);
+  expect(await read(later)).toEqual(limits);
+  expect(await read()).toEqual(limits);
   expect(calls).toBe(2);
 });
 
-test("concurrent Netra output limit reads share one request", async () => {
+test("concurrent Netra model limit reads share one request", async () => {
   let calls = 0;
   globalThis.fetch = asTestFetch(async () => {
     calls += 1;
@@ -141,15 +146,15 @@ test("concurrent Netra output limit reads share one request", async () => {
 
   const reads = await Promise.all(
     Array.from({ length: 5 }, () =>
-      fetchNetraMaxOutputTokens("shared-key", "deepseek/deepseek-v4.1-flash")
+      fetchNetraModelLimits("shared-key", "deepseek/deepseek-v4.1-flash")
     )
   );
 
-  expect(reads).toEqual(Array(5).fill(131_072));
+  expect(reads).toEqual(Array(5).fill({ maxOutputTokens: 131_072 }));
   expect(calls).toBe(1);
 });
 
-test("a Netra output limit lookup that times out falls back and is retried later", async () => {
+test("a Netra model limit lookup that times out falls back and is retried later", async () => {
   let calls = 0;
   globalThis.fetch = asTestFetch(
     async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -172,14 +177,12 @@ test("a Netra output limit lookup that times out falls back and is retried later
   );
 
   const read = (now?: number) =>
-    fetchNetraMaxOutputTokens(
-      "timeout-key",
-      "deepseek/deepseek-v4.1-flash",
-      now
-    );
+    fetchNetraModelLimits("timeout-key", "deepseek/deepseek-v4.1-flash", now);
 
-  expect(await read()).toBeUndefined();
-  expect(await read(Date.now() + 11 * 60_000)).toBe(131_072);
+  expect(await read()).toEqual({});
+  expect(await read(Date.now() + 11 * 60_000)).toEqual({
+    maxOutputTokens: 131_072,
+  });
   expect(calls).toBe(2);
 });
 
