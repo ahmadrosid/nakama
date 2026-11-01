@@ -30,10 +30,10 @@ These instructions are loaded directly when this skill is active.
 ## Use only supplied content
 
 1. Use a title slide. Do not add an agenda, summary, closing, or thank-you slide unless the user asks for one.
-2. Give each supplied fact or topic its own slide, and show each fact on one slide only. When the facts fill fewer slides than the user asked for, make fewer slides and say so in your reply.
-3. Use only the words and facts the user supplied. When an item has no detail, give it only that sentence, set with `.big`. Do not add steps, features, dates, timelines, causes, metrics, or results.
+2. Give each supplied fact or topic its own slide, and show each fact on one slide only. When the facts fill fewer slides than the user asked for, make fewer slides and say so in your reply. Do not split or repeat a fact to reach the count.
+3. Use only the words and facts the user supplied. Replace or remove all template sample text and numbers, such as "First point", "1.5M", and "+25%"; none may stay in the saved deck. When an item has no detail, give it only that sentence, set with `.big`. Do not add steps, features, dates, timelines, causes, metrics, or results.
 4. Write relative dates as the user wrote them, such as "Friday".
-5. When the user requests a slide but supplies no content for it, show its title, any supplied facts, and one `To add:` line that names what is missing. Name these gaps in your reply.
+5. When the user requests a slide but supplies no content for it, show its title, any supplied facts, and one `To add:` line that names what is missing. This is the only placeholder allowed. Name these gaps in your reply.
 6. Calculate changes and ratios with a tool that runs code, such as `bash`, when one is available. Otherwise, show the source values and label the change as not verified.
 
 ## Resources
