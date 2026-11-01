@@ -930,35 +930,24 @@ describe("Nakama data portability", () => {
   });
 
   test("skips files and folders deleted while the export runs", async () => {
-    const ltx = join(rootDir, "sqlite/.nakama.sqlite-litestream/ltx");
-    await mkdir(join(ltx, "0"), { recursive: true });
-    await mkdir(join(ltx, "1"), { recursive: true });
+    const files = join(rootDir, "orgs/acme/files");
+    await mkdir(join(files, "0"), { recursive: true });
+    await mkdir(join(files, "1"), { recursive: true });
+    await mkdir(join(files, "2"), { recursive: true });
     await writeFile(join(rootDir, "config.ini"), "ok");
-    await writeFile(join(ltx, "0/before-stat.ltx"), "a");
-    await writeFile(join(ltx, "0/before-read.ltx"), "b");
-    await writeFile(join(ltx, "0/kept.ltx"), "c");
-    await writeFile(join(ltx, "1/gone.ltx"), "d");
+    await writeFile(join(files, "0/before-read.txt"), "b");
+    await writeFile(join(files, "0/kept.txt"), "c");
+    await writeFile(join(files, "1/gone.txt"), "d");
+    await writeFile(join(files, "2/replaced.txt"), "e");
 
-    const realLstat = fsPromises.lstat;
     const realReadFile = fsPromises.readFile;
     const realReaddir = fsPromises.readdir;
 
-    // Each spy deletes its target, then forwards the same arguments to the real call.
-    const lstatMock = spyOn(fsPromises, "lstat").mockImplementation(
-      // SAFETY: the wrapper forwards its arguments to the real lstat unchanged.
-      (async (...args: Parameters<typeof realLstat>) => {
-        if (String(args[0]).endsWith("before-stat.ltx")) {
-          await rm(args[0], { force: true });
-        }
-
-        return await realLstat(...args);
-      }) as typeof realLstat
-    );
-
+    // Each spy changes its target, then forwards the same arguments to the real call.
     const readMock = spyOn(fsPromises, "readFile").mockImplementation(
       // SAFETY: the wrapper forwards its arguments to the real readFile unchanged.
       (async (...args: Parameters<typeof realReadFile>) => {
-        if (String(args[0]).endsWith("before-read.ltx")) {
+        if (String(args[0]).endsWith("before-read.txt")) {
           await rm(String(args[0]), { force: true });
         }
 
@@ -969,8 +958,13 @@ describe("Nakama data portability", () => {
     const readdirMock = spyOn(fsPromises, "readdir").mockImplementation(
       // SAFETY: the wrapper forwards its arguments to the real readdir unchanged.
       (async (...args: Parameters<typeof realReaddir>) => {
-        if (args[0] === join(ltx, "1")) {
+        if (args[0] === join(files, "1")) {
           await rm(args[0], { force: true, recursive: true });
+        }
+
+        if (args[0] === join(files, "2")) {
+          await rm(args[0], { force: true, recursive: true });
+          await writeFile(args[0], "now a file");
         }
 
         return await realReaddir(...args);
@@ -982,22 +976,90 @@ describe("Nakama data portability", () => {
     try {
       result = await createNakamaDataExport({ databasePath: null, rootDir });
     } finally {
-      lstatMock.mockRestore();
       readMock.mockRestore();
       readdirMock.mockRestore();
     }
 
-    const prefix = "sqlite/.nakama.sqlite-litestream/ltx";
+    const prefix = "orgs/acme/files";
     const entries = fflate.unzipSync(result.data);
     expect(Object.keys(entries)).toContain("config.ini");
-    expect(Object.keys(entries)).toContain(`${prefix}/0/kept.ltx`);
-    expect(Object.keys(entries)).not.toContain(`${prefix}/0/before-read.ltx`);
+    expect(Object.keys(entries)).toContain(`${prefix}/0/kept.txt`);
+    expect(Object.keys(entries)).not.toContain(`${prefix}/0/before-read.txt`);
     expect(result.manifest.fileCount).toBe(2);
     expect(result.manifest.skipped.map((item) => item.path).sort()).toEqual([
-      `${prefix}/0/before-read.ltx`,
-      `${prefix}/0/before-stat.ltx`,
+      `${prefix}/0/before-read.txt`,
       `${prefix}/1`,
+      `${prefix}/2`,
     ]);
+  });
+
+  test("fails the export when a config file is deleted while it runs", async () => {
+    await writeFile(join(rootDir, "config.ini"), "ok");
+    const realReadFile = fsPromises.readFile;
+
+    const readMock = spyOn(fsPromises, "readFile").mockImplementation(
+      // SAFETY: the wrapper forwards its arguments to the real readFile unchanged.
+      (async (...args: Parameters<typeof realReadFile>) => {
+        if (args[0] === join(rootDir, "config.ini")) {
+          await rm(args[0], { force: true });
+        }
+
+        return await realReadFile(...args);
+      }) as typeof realReadFile
+    );
+
+    try {
+      await expect(
+        createNakamaDataExport({ databasePath: null, rootDir })
+      ).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      readMock.mockRestore();
+    }
+  });
+
+  test("fails the export on read errors other than a deleted path", async () => {
+    await writeFile(join(rootDir, "notes.txt"), "ok");
+    const realReadFile = fsPromises.readFile;
+
+    const readMock = spyOn(fsPromises, "readFile").mockImplementation(
+      // SAFETY: the wrapper forwards its arguments to the real readFile unchanged.
+      (async (...args: Parameters<typeof realReadFile>) => {
+        if (args[0] === join(rootDir, "notes.txt")) {
+          throw Object.assign(new Error("denied"), { code: "EACCES" });
+        }
+
+        return await realReadFile(...args);
+      }) as typeof realReadFile
+    );
+
+    try {
+      await expect(
+        createNakamaDataExport({ databasePath: null, rootDir })
+      ).rejects.toMatchObject({ code: "EACCES" });
+    } finally {
+      readMock.mockRestore();
+    }
+  });
+
+  test("leaves out Litestream state next to the snapshotted database", async () => {
+    const databasePath = join(rootDir, "sqlite/nakama.sqlite");
+    await mkdir(join(rootDir, "sqlite/.nakama.sqlite-litestream/ltx/0"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(rootDir, "sqlite/.nakama.sqlite-litestream/ltx/0/a.ltx"),
+      "a"
+    );
+    new Database(databasePath).close();
+
+    const result = await createNakamaDataExport({ databasePath, rootDir });
+    const entries = Object.keys(fflate.unzipSync(result.data));
+
+    expect(entries).toContain("sqlite/nakama.sqlite");
+    expect(entries.some((name) => name.includes("-litestream"))).toBe(false);
+    expect(result.manifest.skipped.map((item) => item.path)).toContain(
+      "sqlite/.nakama.sqlite-litestream"
+    );
   });
 
   test("rejects a ZIP result above the compressed restore budget", async () => {

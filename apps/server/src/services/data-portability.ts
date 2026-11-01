@@ -133,7 +133,6 @@ interface ZipEntry {
 interface InventoryItem {
   absolutePath: string;
   relativePath: string;
-  size: number;
 }
 
 const RESTORE_PREFIX = ".nakama-restore-";
@@ -143,6 +142,10 @@ const BACKUP_PREFIX = ".nakama-backup-";
 const PLUGIN_SNAPSHOT_PREFIX = ".nakama-plugin-snapshot-";
 
 const DELETED_DURING_EXPORT = "Deleted while the export ran.";
+
+const CONFIG_FILES = new Set(["config.ini", "composio/config.ini"]);
+
+const LITESTREAM_SUFFIX = "-litestream";
 
 const ORG_PLUGIN_SQLITE = /^orgs\/[^/]+\/plugins\/[^/]+\/db\/[^/]+\.sqlite$/;
 
@@ -413,7 +416,7 @@ export async function createNakamaDataExport(
             }
           }
 
-          const { files: inventory, skipped } = await inventoryConfigRoot(
+          const { files, skipped } = await inventoryConfigRoot(
             rootDir,
             snapshots
           );
@@ -421,16 +424,17 @@ export async function createNakamaDataExport(
           skipped.push(...outsideDatabases);
 
           const entries: Record<string, Uint8Array> = {};
-          const files: InventoryItem[] = [];
 
-          for (const file of inventory) {
+          for (const file of files) {
             validateArchivePath(file.relativePath);
+            const isConfigFile = CONFIG_FILES.has(file.relativePath);
             let data: Buffer;
 
             try {
               data = await readFile(file.absolutePath);
             } catch (error) {
-              if (getNodeErrorCode(error) !== "ENOENT") {
+              // Config files are required for a restore, so their loss fails the export.
+              if (isConfigFile || !isMissingPathError(error)) {
                 throw error;
               }
 
@@ -442,8 +446,7 @@ export async function createNakamaDataExport(
             }
 
             if (
-              (file.relativePath === "config.ini" ||
-                file.relativePath === "composio/config.ini") &&
+              isConfigFile &&
               /(?:^|\n)\s*(?:api_key|password)\s*=/m.test(data.toString("utf8"))
             ) {
               throw new NakamaApiError(
@@ -453,22 +456,18 @@ export async function createNakamaDataExport(
             }
 
             entries[file.relativePath] = data;
-            files.push(file);
           }
 
           for (const [relativePath, absolutePath] of snapshots) {
             validateArchivePath(relativePath);
             entries[relativePath] = await readFile(absolutePath);
-            files.push({
-              absolutePath,
-              relativePath,
-              size: entries[relativePath].byteLength,
-            });
           }
+
+          const exportedPaths = Object.keys(entries);
 
           const topLevelPaths = Array.from(
             new Set(
-              files.flatMap((file) => file.relativePath.split("/")[0] || [])
+              exportedPaths.map((path) => path.split("/")[0]).filter(Boolean)
             )
           ).sort();
 
@@ -480,7 +479,7 @@ export async function createNakamaDataExport(
           const manifest: DataExportManifest = {
             apiVersion: NAKAMA_API_VERSION,
             createdAt,
-            fileCount: files.length,
+            fileCount: exportedPaths.length,
             kind: "nakama-export",
             skipped,
             sourceRootName: basename(rootDir) || ".nakama",
@@ -1379,7 +1378,7 @@ async function inventoryConfigRoot(
     try {
       entries = await readdir(currentDir, { withFileTypes: true });
     } catch (error) {
-      if (getNodeErrorCode(error) !== "ENOENT" || currentDir === rootDir) {
+      if (!isMissingPathError(error) || currentDir === rootDir) {
         throw error;
       }
 
@@ -1421,16 +1420,7 @@ async function inventoryConfigRoot(
         continue;
       }
 
-      try {
-        const stat = await lstat(absolutePath);
-        files.push({ absolutePath, relativePath, size: stat.size });
-      } catch (error) {
-        if (getNodeErrorCode(error) !== "ENOENT") {
-          throw error;
-        }
-
-        skipped.push({ path: relativePath, reason: DELETED_DURING_EXPORT });
-      }
+      files.push({ absolutePath, relativePath });
     }
   }
 }
@@ -1645,6 +1635,21 @@ function skipRelativePathReason(
     return "Database sidecars are represented by completed snapshots.";
   }
 
+  // Litestream keeps `.<db>-litestream/` next to `<db>`.
+  const last = parts.at(-1) ?? "";
+
+  if (
+    last.startsWith(".") &&
+    last.endsWith(LITESTREAM_SUFFIX) &&
+    snapshots.has(
+      [...parts.slice(0, -1), last.slice(1, -LITESTREAM_SUFFIX.length)].join(
+        "/"
+      )
+    )
+  ) {
+    return "Litestream replica state is excluded; the database is a completed snapshot.";
+  }
+
   if (snapshots.has(path)) {
     return "Live databases are replaced by completed snapshots.";
   }
@@ -1659,11 +1664,7 @@ async function snapshotOrgPluginDatabases(
   const snapshots = new Map<string, string>();
   const orgsDir = join(rootDir, "orgs");
 
-  if (!(await pathExists(orgsDir))) {
-    return snapshots;
-  }
-
-  for (const org of await readdir(orgsDir, { withFileTypes: true })) {
+  for (const org of await readDirentsIfPresent(orgsDir)) {
     if (!org.isDirectory()) {
       continue;
     }
@@ -1680,22 +1681,14 @@ async function snapshotOrgPluginDatabases(
 
     const pluginsDir = join(orgsDir, org.name, "plugins");
 
-    if (!(await pathExists(pluginsDir))) {
-      continue;
-    }
-
-    for (const plugin of await readdir(pluginsDir, { withFileTypes: true })) {
+    for (const plugin of await readDirentsIfPresent(pluginsDir)) {
       if (!plugin.isDirectory()) {
         continue;
       }
 
       const dbDir = join(pluginsDir, plugin.name, "db");
 
-      if (!(await pathExists(dbDir))) {
-        continue;
-      }
-
-      for (const entry of await readdir(dbDir, { withFileTypes: true })) {
+      for (const entry of await readDirentsIfPresent(dbDir)) {
         if (!(entry.isFile() && entry.name.endsWith(".sqlite"))) {
           continue;
         }
@@ -1850,6 +1843,25 @@ function isNumber<T>(input: T): input is T & number {
     Object.prototype.toString.call(input) === "[object Number]" &&
     Number.isFinite(input)
   );
+}
+
+/** ENOTDIR: a file took the place of a directory segment. Both mean "gone". */
+function isMissingPathError<T>(error: T): boolean {
+  const code = getNodeErrorCode(error);
+
+  return code === "ENOENT" || code === "ENOTDIR";
+}
+
+async function readDirentsIfPresent(dir: string): Promise<Dirent[]> {
+  try {
+    return await readdir(dir, { withFileTypes: true });
+  } catch (error) {
+    if (isMissingPathError(error)) {
+      return [];
+    }
+
+    throw error;
+  }
 }
 
 function getNodeErrorCode<T>(error: T): string | undefined {
