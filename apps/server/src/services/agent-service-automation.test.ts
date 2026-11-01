@@ -374,6 +374,7 @@ describe("AgentService automation tool limit", () => {
 
     expect(names(tools)).toContain("read_file");
     expect(names(tools)).not.toContain("search_files");
+    expect(names(tools)).not.toContain("org_memory_search");
     expect(tools.some((tool) => tool.startsWith("calendar"))).toBe(true);
     expect(tools.some((tool) => tool.startsWith("drive"))).toBe(false);
 
@@ -392,6 +393,7 @@ describe("AgentService automation tool limit", () => {
     const tools = await run({ runAsUserId: "user_saver" });
 
     expect(names(tools)).toContain("search_files");
+    expect(names(tools)).toContain("org_memory_search");
     expect(tools.some((tool) => tool.startsWith("drive"))).toBe(true);
     expect(
       tools.find((tool) => tool.startsWith("composio__search_actions"))

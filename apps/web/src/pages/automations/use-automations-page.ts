@@ -82,22 +82,31 @@ export function useAutomationsPage() {
 
   const [editDraft, setEditDraft] = useState<StoredAutomation | null>(null);
   const editProfileId = editDraft?.profileId ?? null;
-  const { data: editProfile } = useProfileQuery(editProfileId);
-  const { data: editComposio } = useProfileComposioToolkits(editProfileId);
 
+  const { data: editProfile } = useProfileQuery(editProfileId);
+
+  const { data: editComposio, isPending: editComposioPending } =
+    useProfileComposioToolkits(editProfileId);
+
+  // Wait for connectors too, or a new limit starts without them.
   const toolOptions = useMemo<AutomationToolOptions | undefined>(
     () =>
-      editProfile && {
-        composioToolkits: (editComposio?.assignments ?? []).map(
-          ({ toolkitSlug }) => ({ id: toolkitSlug, label: toolkitSlug })
-        ),
-        mcpServerIds: editProfile.mcpServers.map(({ id, name }) => ({
-          id,
-          label: name,
-        })),
-        toolIds: editProfile.tools.map(({ id, name }) => ({ id, label: name })),
-      },
-    [editProfile, editComposio]
+      editProfile && !editComposioPending
+        ? {
+            composioToolkits: (editComposio?.assignments ?? []).map(
+              ({ toolkitSlug }) => ({ id: toolkitSlug, label: toolkitSlug })
+            ),
+            mcpServerIds: editProfile.mcpServers.map(({ id, name }) => ({
+              id,
+              label: name,
+            })),
+            toolIds: editProfile.tools.map(({ id, name }) => ({
+              id,
+              label: name,
+            })),
+          }
+        : undefined,
+    [editProfile, editComposio, editComposioPending]
   );
 
   const busy = updateMutation.isPending || deleteMutation.isPending;
@@ -296,7 +305,14 @@ export function useAutomationsPage() {
       return;
     }
 
-    setEditDraft({ ...editDraft, ...patch });
+    const next = { ...editDraft, ...patch };
+
+    // A limit holds the old agent's ids, so a new agent starts with all tools.
+    if (next.profileId !== editDraft.profileId) {
+      delete next.toolLimit;
+    }
+
+    setEditDraft(next);
   }
 
   async function refresh() {

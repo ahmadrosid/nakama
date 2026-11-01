@@ -272,6 +272,17 @@ export class AutomationService {
       toolLimit = normalizeToolLimit(input.toolLimit);
     }
 
+    const prompt = input.prompt?.trim() || existing.prompt;
+
+    // Whoever changes what a run does lends their Composio sign-ins, so
+    // nobody can steer another person's accounts. A pause, rename, or new
+    // schedule keeps the current person. The runner saves with no access.
+    const steers =
+      prompt !== existing.prompt ||
+      profileId !== existing.profileId ||
+      JSON.stringify(delivery) !== JSON.stringify(existing.delivery) ||
+      JSON.stringify(toolLimit) !== JSON.stringify(existing.toolLimit);
+
     const updated: StoredAutomation = {
       ...existing,
       delivery,
@@ -279,10 +290,9 @@ export class AutomationService {
       enabled: input.enabled ?? existing.enabled,
       name: input.name?.trim() || existing.name,
       profileId,
-      prompt: input.prompt?.trim() || existing.prompt,
-      // Whoever saves it lends their Composio sign-ins, so nobody can steer
-      // another person's accounts. The runner saves with no access.
-      runAsUserId: access ? (access.userId ?? null) : existing.runAsUserId,
+      prompt,
+      runAsUserId:
+        access && steers ? (access.userId ?? null) : existing.runAsUserId,
       toolLimit,
       trigger,
       updatedAt: new Date().toISOString(),

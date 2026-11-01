@@ -104,6 +104,15 @@ describe("AutomationService", () => {
     expect(afterRunner?.runAsUserId).toBe("user_a");
     expect(afterRunner?.toolLimit?.toolIds).toEqual(["tool_a"]);
 
+    // A pause or rename by someone else keeps the saver's sign-ins.
+    await service.update(
+      created.id,
+      ORG_ID,
+      { enabled: true, name: "Morning briefing", prompt: "Brief me" },
+      { orgRole: "admin", userId: "user_b" }
+    );
+    expect((await service.get(created.id, ORG_ID))?.runAsUserId).toBe("user_a");
+
     // A person who saves it lends their sign-ins; null removes the limit.
     await service.update(
       created.id,

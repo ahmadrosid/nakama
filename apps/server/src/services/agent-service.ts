@@ -6073,10 +6073,11 @@ export class AgentService {
         throw new Error("Profile organization is missing.");
       }
 
-      const skillTools = await this.skillsService.loadToolsForProfile(
-        orgId,
-        profile.id
-      );
+      // A limit lists only tools, MCP servers, and connectors, so it leaves
+      // out skill tools.
+      const skillTools = limit
+        ? []
+        : await this.skillsService.loadToolsForProfile(orgId, profile.id);
 
       resolved = [...resolved, ...skillTools];
 
@@ -6103,7 +6104,9 @@ export class AgentService {
       }
     }
 
-    if (profile.isSuper) {
+    // Super Nakama and org memory tools are not in the picker, so a limit
+    // leaves them out too.
+    if (!limit && profile.isSuper) {
       resolved = [
         ...resolved,
         ...this.superNakamaTools.filter(
@@ -6112,6 +6115,7 @@ export class AgentService {
         ),
       ];
     } else if (
+      !limit &&
       this.skillsService &&
       (await this.skillsService.listSkillsForProfile(profile.id)).some(
         (skill) => skill.name === "create-plugin"
@@ -6126,7 +6130,7 @@ export class AgentService {
       ];
     }
 
-    if (hasOwnTools) {
+    if (hasOwnTools && !limit) {
       resolved = [...resolved, ...this.orgMemoryTools];
     }
 
