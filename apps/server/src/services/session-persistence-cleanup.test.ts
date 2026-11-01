@@ -148,7 +148,7 @@ describe("session persistence", () => {
     service = new AgentService(null, null, db);
     Object.assign(service, {
       createHarnessForProfile: () => ({ provider: summaryProvider }),
-      resolveCompactionConfig: () => ({
+      resolveCompactionConfig: async () => ({
         contextWindow: 100_000,
         maxOutputTokens: 8192,
       }),

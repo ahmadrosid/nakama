@@ -154,6 +154,38 @@ test("concurrent Netra model limit reads share one request", async () => {
   expect(calls).toBe(1);
 });
 
+test("a Netra model list without the model is read again after the retry wait", async () => {
+  let calls = 0;
+  globalThis.fetch = asTestFetch(async () => {
+    calls += 1;
+
+    return Response.json({
+      data:
+        calls === 1
+          ? []
+          : [
+              {
+                context_length: 1_048_576,
+                id: "deepseek/deepseek-v4.1-flash",
+                top_provider: { max_completion_tokens: 131_072 },
+              },
+            ],
+    });
+  });
+
+  const read = (now?: number) =>
+    fetchNetraModelLimits("missing-key", "deepseek/deepseek-v4.1-flash", now);
+
+  expect(await read()).toEqual({});
+  expect(await read()).toEqual({});
+  expect(calls).toBe(1);
+  expect(await read(Date.now() + 11 * 60_000)).toEqual({
+    contextWindow: 1_048_576,
+    maxOutputTokens: 131_072,
+  });
+  expect(calls).toBe(2);
+});
+
 test("a Netra model limit lookup that times out falls back and is retried later", async () => {
   let calls = 0;
   globalThis.fetch = asTestFetch(

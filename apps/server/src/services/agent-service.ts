@@ -6148,6 +6148,20 @@ export class AgentService {
     await this.ensureVisionSettingsLoaded();
     const profile = await this.requireExecutionProfile(orgId, profileId);
 
+    const selectedModel = modelOverride
+      ? this.normalizeSessionModelOverride(modelOverride)
+      : profile.model;
+
+    // Netra limits come from a network lookup, so start it now and let it
+    // run while the tools, prompt, and history load.
+    const compactionLookup = this.resolveCompactionConfig(
+      profile,
+      selectedModel
+    );
+
+    // Keep a failure for the await below, not as an unhandled rejection.
+    compactionLookup.catch(() => undefined);
+
     // A stored CLI folder can be moved or deleted after the chat started.
     // Then the chat goes back to the profile workspace.
     const { codingWorkspaceRoot } = record;
@@ -6223,14 +6237,7 @@ export class AgentService {
     const userTimezone = await this.getUserTimezone();
     const userContext = await this.loadUserContextForUser(orgId, userId);
 
-    const selectedModel = modelOverride
-      ? this.normalizeSessionModelOverride(modelOverride)
-      : profile.model;
-
-    const compaction = await this.resolveCompactionConfig(
-      profile,
-      selectedModel
-    );
+    const compaction = await compactionLookup;
 
     const workspaceThinking = this.resolveWorkspaceThinkingDefaults();
 

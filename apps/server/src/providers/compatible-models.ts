@@ -725,6 +725,12 @@ export function fetchNetraModelLimits(
       limits.maxOutputTokens = maxOutputTokens;
     }
 
+    // A list without this model or its limits may be a partial rollout:
+    // use the fallbacks now and ask again after the retry wait.
+    if (!(contextWindow && maxOutputTokens)) {
+      entry.failedAt = Date.now();
+    }
+
     return limits;
   })().catch((): NetraModelLimits => {
     entry.failedAt = Date.now();
