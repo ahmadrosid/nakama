@@ -10,6 +10,8 @@ const TURN_SNIPPET_MAX = 4000;
 
 const TOOL_RESULT_MAX = 400;
 
+const SKILL_MARKDOWN_MAX = 6000;
+
 const bundledNames = new Set<string>(BUNDLED_SKILL_NAMES);
 
 const SkillPostTurnReviewResponseSchema = z.object({
@@ -33,6 +35,8 @@ export type SkillPostTurnReviewOutcome =
 export interface SkillCatalogEntry {
   description: string;
   name: string;
+  /** Full SKILL.md; set only for a skill the turn loaded and the profile may patch. */
+  skillMarkdown?: string;
 }
 
 const REVIEW_SYSTEM = [
@@ -48,7 +52,7 @@ const REVIEW_SYSTEM = [
   "- Never delete skills; never target bundled/global system skills",
   "- create name must match ^[a-z0-9-]{1,64}$",
   "- create content must include frontmatter with name and description",
-  "- patch oldString must be unique in the current skill body you would expect",
+  "- patch only a skill listed under Loaded skills; copy oldString exactly from its SKILL.md and make it unique there",
   "- Do not wrap JSON in markdown fences",
 ].join("\n");
 
@@ -101,7 +105,22 @@ export function buildSkillPostTurnReviewPrompt(input: {
     }
   }
 
-  return truncate(lines.join("\n"), TURN_SNIPPET_MAX);
+  const loadedLines = input.catalog
+    .filter((skill) => skill.skillMarkdown)
+    .flatMap((skill) => [
+      "",
+      `### ${skill.name}`,
+      "",
+      // Cut without an ellipsis so the model cannot copy a marker into oldString.
+      skill.skillMarkdown?.slice(0, SKILL_MARKDOWN_MAX) ?? "",
+    ]);
+
+  return [
+    truncate(lines.join("\n"), TURN_SNIPPET_MAX),
+    "",
+    "## Loaded skills",
+    ...(loadedLines.length > 0 ? loadedLines : ["", "(none)"]),
+  ].join("\n");
 }
 
 function extractJsonObject(raw: string): SkillPostTurnReviewResponse | null {
@@ -143,8 +162,9 @@ function isValidSkillName(name: string): boolean {
 
 export function parseSkillPostTurnReviewResponse(
   raw: string,
-  options: { catalogNames: Set<string> }
+  options: { catalog: SkillCatalogEntry[] }
 ): SkillPostTurnReviewOutcome {
+  const catalogNames = new Set(options.catalog.map((skill) => skill.name));
   const parsed = extractJsonObject(raw);
 
   if (!parsed) {
@@ -176,7 +196,7 @@ export function parseSkillPostTurnReviewResponse(
       return { action: "noop", reason: "bundled_forbidden" };
     }
 
-    if (options.catalogNames.has(name)) {
+    if (catalogNames.has(name)) {
       return { action: "noop", reason: "create_collides_with_existing" };
     }
 
@@ -201,8 +221,15 @@ export function parseSkillPostTurnReviewResponse(
       return { action: "noop", reason: "bundled_forbidden" };
     }
 
-    if (!options.catalogNames.has(name)) {
+    const target = options.catalog.find((skill) => skill.name === name);
+
+    if (!target) {
       return { action: "noop", reason: "patch_unknown_skill" };
+    }
+
+    // Without the SKILL.md in the prompt, oldString is a guess and fails on apply.
+    if (!target.skillMarkdown) {
+      return { action: "noop", reason: "patch_skill_not_loaded" };
     }
 
     return { action: "patch", name, newString, oldString };
@@ -221,8 +248,6 @@ export async function generateSkillPostTurnReview(input: {
     turnMessages: input.turnMessages,
   });
 
-  const catalogNames = new Set(input.catalog.map((skill) => skill.name));
-
   try {
     const result = await input.provider.generateText({
       format: "text",
@@ -230,7 +255,9 @@ export async function generateSkillPostTurnReview(input: {
       system: REVIEW_SYSTEM,
     });
 
-    return parseSkillPostTurnReviewResponse(result.content, { catalogNames });
+    return parseSkillPostTurnReviewResponse(result.content, {
+      catalog: input.catalog,
+    });
   } catch (error) {
     console.error("Failed post-turn skill review LLM call:", error);
 
