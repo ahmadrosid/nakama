@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { ChatMessage, UserConfig } from "@nakama/core";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { ChatMessage, ProviderClient, UserConfig } from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
   type DatabaseAdapter,
@@ -8,6 +11,8 @@ import {
   evaluatePostTurnReviewTurnEligibility,
   SkillPostTurnReviewService,
 } from "./skill-post-turn-review-service";
+import { SkillsService } from "./skills-service";
+import { ORG_ID, seedSkillOrg } from "./skills-service-test-fixtures";
 
 function toolCall(id: string, name = "read_file") {
   return { arguments: {}, id, name };
@@ -316,6 +321,72 @@ describe("SkillPostTurnReviewService", () => {
     release();
     expect(await first).toBe("ran");
     expect(ran).toBe(1);
+  });
+
+  test("review prompt carries the SKILL.md of skills the turn loaded", async () => {
+    const configDir = await mkdtemp(join(tmpdir(), "nakama-post-turn-review-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    try {
+      const db = createInMemoryDatabaseAdapter();
+      const profile = await seedSkillOrg(db);
+      const skills = new SkillsService(db);
+
+      for (const name of ["deploy-notes", "release-notes"]) {
+        const created = await skills.createSkill(ORG_ID, {
+          body: `${name}-body-marker`,
+          description: `About ${name}.`,
+          name,
+          profileId: profile.id,
+        });
+
+        await db.assignSkillToProfile(profile.id, created.skill.id);
+      }
+
+      let prompt = "";
+
+      const provider: ProviderClient = {
+        generateChat: () => Promise.reject(new Error("unused")),
+        generateText: (request) => {
+          prompt = request.prompt;
+
+          return Promise.resolve({ content: '{"action":"noop"}' });
+        },
+        name: "openai",
+        streamChat: () => Promise.reject(new Error("unused")),
+      };
+
+      const service = new SkillPostTurnReviewService(db, () => null);
+      service.resolveProviderForProfile = () => Promise.resolve(provider);
+
+      await service.reviewTurnWithLlm({
+        messages: [],
+        orgId: ORG_ID,
+        profileId: profile.id,
+        sessionId: "session_1",
+        turnMessages: [
+          { content: "deploy", role: "user" },
+          {
+            content: "",
+            role: "assistant",
+            toolCalls: [
+              {
+                arguments: { name: "deploy-notes" },
+                id: "1",
+                name: "load_skill",
+              },
+            ],
+          },
+        ],
+        userId: null,
+      });
+
+      expect(prompt).toContain("deploy-notes-body-marker");
+      expect(prompt).not.toContain("release-notes-body-marker");
+    } finally {
+      delete process.env.NAKAMA_CONFIG_DIR;
+      await rm(configDir, { force: true, recursive: true });
+    }
   });
 
   test("resolveProviderForProfile passes the model string to createProvider", async () => {

@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import {
   generateSkillPostTurnReview,
   type SkillPostTurnReviewOutcome,
@@ -6,10 +8,13 @@ import {
   type AgentChannel,
   type ChatMessage,
   extractLatestTurnMessages,
+  LOAD_SKILL_TOOL_NAME,
   parseAgentChannel,
   resolveProfileOrgBooleanOverride,
+  SKILL_FILE_NAME,
   type UserConfig,
 } from "@nakama/core";
+import { isPathWithinProfileSkillsDir } from "@nakama/core/skills/write";
 import type { DatabaseAdapter } from "@nakama/db";
 import { createProviderForProfile } from "./provider-instance-helpers";
 
@@ -202,10 +207,35 @@ export class SkillPostTurnReviewService {
 
     const assigned = await this.db.listSkillsForProfile(context.profileId);
 
-    const catalog = assigned.map((skill) => ({
-      description: skill.description,
-      name: skill.name,
-    }));
+    const loadedNames = new Set(
+      context.turnMessages.flatMap((message) =>
+        message.role === "assistant"
+          ? (message.toolCalls ?? [])
+              .filter((call) => call.name === LOAD_SKILL_TOOL_NAME)
+              .map((call) => call.arguments.name)
+          : []
+      )
+    );
+
+    const catalog = await Promise.all(
+      assigned.map(async (skill) => ({
+        description: skill.description,
+        name: skill.name,
+        // Only the profile's own skills can be patched, so only they need the body.
+        skillMarkdown:
+          loadedNames.has(skill.name) &&
+          isPathWithinProfileSkillsDir(
+            context.orgId,
+            context.profileId,
+            skill.sourcePath
+          )
+            ? await readFile(
+                path.join(skill.sourcePath, SKILL_FILE_NAME),
+                "utf8"
+              ).catch(() => undefined)
+            : undefined,
+      }))
+    );
 
     return generateSkillPostTurnReview({
       catalog,
