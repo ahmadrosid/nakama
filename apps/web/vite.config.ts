@@ -1,10 +1,19 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { z } from "zod";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
+
+/** The server reports the same root `package.json` version in `/health`. */
+const buildVersion = z
+  .object({ version: z.string() })
+  .parse(
+    JSON.parse(readFileSync(path.resolve(root, "../../package.json"), "utf8"))
+  ).version;
 
 const serverUrl = process.env.NAKAMA_SERVER_URL ?? "http://127.0.0.1:4310";
 
@@ -13,6 +22,9 @@ export default defineConfig({
   // precache list, then deletes it from `dist`.
   build: {
     manifest: true,
+  },
+  define: {
+    "import.meta.env.VITE_NAKAMA_VERSION": JSON.stringify(buildVersion),
   },
   optimizeDeps: {
     // Workspace exports can change without a lockfile change. Refresh the

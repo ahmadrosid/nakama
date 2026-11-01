@@ -1,8 +1,8 @@
 import { Button } from "@nakama/ui/button";
 import { RefreshIcon } from "hugeicons-react";
 import { useState } from "react";
-import { ReleaseChangeList } from "@/components/WhatsNew";
 import { useServiceWorkerUpdate } from "@/hooks/use-service-worker-update";
+import { RELEASE_CHANGE_LABELS, type ReleaseNote } from "@/lib/release-notes";
 
 /** Set for the rest of the browser session after the user picks Later. */
 const UPDATE_LATER_KEY = "nakama-update-later";
@@ -16,6 +16,25 @@ function readLater(): boolean {
   } catch {
     return false;
   }
+}
+
+export function ReleaseChangeList({
+  changes,
+}: {
+  changes: ReleaseNote["changes"];
+}) {
+  return (
+    <ul className="space-y-1 text-sm">
+      {changes.map((change) => (
+        <li className="text-foreground" key={`${change.kind}:${change.text}`}>
+          <span className="text-muted-foreground">
+            {RELEASE_CHANGE_LABELS[change.kind]}:
+          </span>{" "}
+          {change.text}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export function ServiceWorkerUpdatePrompt() {

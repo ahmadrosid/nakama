@@ -87,8 +87,9 @@ export function Layout() {
         </div>
       </div>
       <CommandPalette />
-      <WebPushPrompt />
-      <WhatsNewCard />
+      <WhatsNewCard>
+        <WebPushPrompt />
+      </WhatsNewCard>
       {btwOpen ? (
         <Suspense fallback={null}>
           <BtwChatHost />

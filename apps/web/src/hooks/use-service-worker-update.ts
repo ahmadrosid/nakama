@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { client } from "@/lib/client";
+import { queryClient } from "@/lib/query-client";
+import { queryKeys } from "@/lib/query-keys";
 import {
   fetchReleaseNotes,
   findReleaseNote,
@@ -135,7 +137,16 @@ export function useServiceWorkerUpdate(): ServiceWorkerUpdate {
     let disposed = false;
 
     // The server already runs the new build, so its health and notes are new.
-    Promise.all([client.health(), fetchReleaseNotes().catch(() => [])])
+    // Fresh fetch into the shared cache, so What's new also gets the new notes.
+    const notes = queryClient
+      .fetchQuery({
+        queryFn: fetchReleaseNotes,
+        queryKey: queryKeys.releaseNotes,
+        staleTime: 0,
+      })
+      .catch(() => []);
+
+    Promise.all([client.health(), notes])
       .then(([health, notes]) => {
         if (disposed) {
           return;

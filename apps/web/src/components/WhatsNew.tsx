@@ -6,15 +6,10 @@ import {
   DialogTitle,
 } from "@nakama/ui/dialog";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
-import { useAppContext } from "@/context/use-app-context";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { ReleaseChangeList } from "@/components/ServiceWorkerUpdatePrompt";
 import { queryKeys } from "@/lib/query-keys";
-import {
-  fetchReleaseNotes,
-  findReleaseNote,
-  RELEASE_CHANGE_LABELS,
-  type ReleaseNote,
-} from "@/lib/release-notes";
+import { fetchReleaseNotes, findReleaseNote } from "@/lib/release-notes";
 
 /** The last version whose notes this browser has shown. */
 const SEEN_KEY = "nakama-whats-new-seen";
@@ -36,29 +31,14 @@ function useReleaseNotesQuery(enabled: boolean) {
   });
 }
 
-export function ReleaseChangeList({
-  changes,
-}: {
-  changes: ReleaseNote["changes"];
-}) {
-  return (
-    <ul className="space-y-1 text-sm">
-      {changes.map((change) => (
-        <li className="text-foreground" key={change.text}>
-          <span className="text-muted-foreground">
-            {RELEASE_CHANGE_LABELS[change.kind]}:
-          </span>{" "}
-          {change.text}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/** Shows the notes for the running version one time after it changes. */
-export function WhatsNewCard() {
-  const { health } = useAppContext();
-  const version = health?.version?.trim() || null;
+/**
+ * Shows the notes for this page's build one time after it changes. While it
+ * has nothing to show it renders `children`, so two bottom cards never stack.
+ */
+export function WhatsNewCard({ children }: { children?: ReactNode }) {
+  // The build version, not /health: the server can run a newer build than
+  // the page until the service worker update is applied.
+  const version = import.meta.env.VITE_NAKAMA_VERSION?.trim() || null;
   const [seen, setSeen] = useState(readSeen);
   const changed = version !== null && seen !== null && seen !== version;
   const notesQuery = useReleaseNotesQuery(changed);
@@ -82,15 +62,20 @@ export function WhatsNewCard() {
   useEffect(() => {
     // A first visit has no earlier version to compare with, so it shows nothing.
     const firstVisit = version !== null && seen === null;
-    const nothingToShow = changed && !notesQuery.isPending && !hasChanges;
+    // A failed fetch keeps the old version, so the notes show on a later visit.
+    const nothingToShow = changed && notesQuery.isSuccess && !hasChanges;
 
     if (firstVisit || nothingToShow) {
       markSeen();
     }
-  }, [changed, hasChanges, markSeen, notesQuery.isPending, seen, version]);
+  }, [changed, hasChanges, markSeen, notesQuery.isSuccess, seen, version]);
+
+  if (changed && notesQuery.isPending) {
+    return null;
+  }
 
   if (!(changed && note && hasChanges)) {
-    return null;
+    return children;
   }
 
   return (
