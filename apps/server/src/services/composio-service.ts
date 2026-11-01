@@ -135,6 +135,12 @@ export class ComposioService {
     { fingerprint: string; endpoint: ComposioSessionMcpEndpoint }
   >();
 
+  /**
+   * Goes up on every toolkit, connection, or assignment change. Chats hold
+   * their Composio tools, so the agent rebuilds a chat when this changes.
+   */
+  revision = 0;
+
   constructor(
     private readonly databaseAdapter: DatabaseAdapter,
     private readonly authService: AuthService
@@ -380,6 +386,7 @@ export class ComposioService {
     this.reachabilityCache = null;
     this.reachabilityInflight = null;
     this.profileSessionCache.clear();
+    this.revision += 1;
   }
 
   /**
@@ -636,6 +643,7 @@ export class ComposioService {
 
       await this.databaseAdapter.upsertComposioToolkit(updated);
       await this.assignToDefaultProfile(orgId, updated.id);
+      this.revision += 1;
 
       return toOrgToolkitSummary(updated);
     }
@@ -654,6 +662,7 @@ export class ComposioService {
 
     await this.databaseAdapter.upsertComposioToolkit(record);
     await this.assignToDefaultProfile(orgId, record.id);
+    this.revision += 1;
 
     return toOrgToolkitSummary(record);
   }
@@ -672,6 +681,7 @@ export class ComposioService {
 
     await this.databaseAdapter.upsertComposioToolkit(updated);
     await this.unassignFromAllProfiles(orgId, updated.id);
+    this.revision += 1;
 
     return toOrgToolkitSummary(updated);
   }
@@ -1108,6 +1118,7 @@ export class ComposioService {
       profile.id,
       assignments
     );
+    this.revision += 1;
 
     return this.listProfileAssignments(orgId, profile);
   }
@@ -1359,6 +1370,7 @@ export class ComposioService {
   }
 
   private invalidateProfileSessionCachesForUser(userId: string): void {
+    this.revision += 1;
     const suffix = `:${userId}:`;
 
     for (const key of this.profileSessionCache.keys()) {

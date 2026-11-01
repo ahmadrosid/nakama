@@ -520,6 +520,7 @@ export class AgentService {
       JSON.stringify([
         await this.capabilityRevisionForProfile(orgId, profileId),
         await this.pluginCapabilityRevision(orgId),
+        this.composioService?.revision ?? 0,
       ]),
   });
   readonly turns = new TurnRunner({

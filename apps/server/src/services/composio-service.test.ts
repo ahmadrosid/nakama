@@ -636,6 +636,45 @@ describe("ComposioService", () => {
     }
   });
 
+  test("revision changes when toolkits or agent assignments change", async () => {
+    const { db, service, restore } = await createConfiguredService();
+
+    try {
+      await db.upsertProfile({
+        createdAt: new Date().toISOString(),
+        id: "profile_default",
+        isDefault: true,
+        isSuper: false,
+        model: null,
+        name: "Default",
+        orgId: ORG_ID,
+        systemPrompt: "",
+        updatedAt: new Date().toISOString(),
+      });
+
+      const seen = [service.revision];
+
+      const toolkit = await service.enableToolkit(ORG_ID, {
+        toolkitSlug: "gmail",
+      });
+
+      seen.push(service.revision);
+
+      const profile = await db.getProfile("profile_default");
+      await service.updateProfileAssignments(ORG_ID, profile!, {
+        assignments: [{ toolkitId: toolkit.id }],
+      });
+      seen.push(service.revision);
+
+      await service.disableToolkit(ORG_ID, "gmail");
+      seen.push(service.revision);
+
+      expect(new Set(seen).size).toBe(seen.length);
+    } finally {
+      restore();
+    }
+  });
+
   test("connectToolkit stores oauth state on user connection and returns redirect URL", async () => {
     const { service, restore } = await createConfiguredService();
 
