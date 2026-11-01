@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
     paths: ['docs/website/**', '.github/workflows/docs.yml']
+  # A tagged image is published: republish version.txt for the update check.
+  workflow_run:
+    workflows: [Docker Publish]
+    types: [completed]
   # Build only. A broken page should fail here, not after the merge.
   pull_request:
     paths: ['docs/website/**', '.github/workflows/docs.yml']
@@ -21,12 +25,43 @@ concurrency:
 
 jobs:
   build:
+    # Docker Publish also runs on main. Only a successful v* tag run counts.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      startsWith(github.event.workflow_run.head_branch, 'v'))
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      # Running servers offer an update to this version, so it must be a tag
+      # whose Docker images are already published.
+      - name: Find the newest published release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUIRED: ${{ github.event_name != 'pull_request' }}
+        run: |
+          version=""
+          for tag in $(git ls-remote --tags --refs origin 'v*' \
+            | sed 's#.*refs/tags/##' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -Vr | head -n 5); do
+            published="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/docker-publish.yml/runs?branch=$tag&status=success&per_page=1" --jq .total_count)"
+            if [ "$published" -gt 0 ]; then
+              version="${tag#v}"
+              break
+            fi
+          done
+          if [ -z "$version" ] && [ "$REQUIRED" = "true" ]; then
+            echo "No v* tag with a successful Docker Publish run." >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -45,6 +80,7 @@ jobs:
         env:
           NODE_ENV: production
           NAKAMA_DOCS_GITHUB_PAGES: 'true'
+          NAKAMA_LATEST_VERSION: ${{ steps.release.outputs.version }}
 
       - name: Setup Pages
         if: github.event_name != 'pull_request'

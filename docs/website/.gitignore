@@ -7,3 +7,4 @@ out
 generated/
 app/(mirrors)/
 public/sitemap.xml
+public/version.txt

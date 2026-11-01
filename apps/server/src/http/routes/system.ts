@@ -247,7 +247,7 @@ export function registerSystemRoutes(
       },
       502: {
         content: { "application/json": { schema: errorSchema } },
-        description: "GitHub releases unreachable",
+        description: "Latest version unreachable",
       },
     },
     summary: "Check for a newer Nakama release",

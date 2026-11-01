@@ -43,21 +43,7 @@ describe("GET /v1/system/version", () => {
         })
       );
 
-    globalThis.fetch = asTestFetch(
-      mock(async () => new Response("down", { status: 503 }))
-    );
-
-    expect((await check(admin, admin.orgId!)).status).toBe(502);
-
-    globalThis.fetch = asTestFetch(
-      mock(async () =>
-        Response.json({
-          html_url:
-            "https://github.com/ahmadrosid/nakama/releases/tag/v999.0.0",
-          tag_name: "v999.0.0",
-        })
-      )
-    );
+    globalThis.fetch = asTestFetch(mock(async () => new Response("999.0.0\n")));
 
     const response = await check(admin, admin.orgId!);
 
@@ -86,7 +72,7 @@ describe("GET /v1/system/version", () => {
     expect((await check(tenantSession, tenantAdmin.orgId)).status).toBe(403);
   });
 
-  test("NAKAMA_DISABLE_UPDATE_CHECK answers 404 without calling GitHub", async () => {
+  test("NAKAMA_DISABLE_UPDATE_CHECK answers 404 without fetching the latest version", async () => {
     process.env.NAKAMA_DISABLE_UPDATE_CHECK = "true";
 
     const { app, databaseAdapter } = createMinimalHonoApp({
@@ -100,8 +86,8 @@ describe("GET /v1/system/version", () => {
       "admin-version-off@org.com"
     );
 
-    const github = mock(async () => Response.json({}));
-    globalThis.fetch = asTestFetch(github);
+    const latest = mock(async () => new Response("999.0.0"));
+    globalThis.fetch = asTestFetch(latest);
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/system/version", {
@@ -110,18 +96,14 @@ describe("GET /v1/system/version", () => {
     );
 
     expect(response.status).toBe(404);
-    expect(github).not.toHaveBeenCalled();
+    expect(latest).not.toHaveBeenCalled();
 
     const health = await app.fetch(new Request("http://localhost:4310/health"));
     expect((await health.json()).updateCheckEnabled).toBe(false);
   });
 
   test("only a higher X.Y.Z release counts as an update", async () => {
-    globalThis.fetch = asTestFetch(
-      mock(async () =>
-        Response.json({ html_url: "https://example.com", tag_name: "v0.4.60" })
-      )
-    );
+    globalThis.fetch = asTestFetch(mock(async () => new Response("0.4.60")));
 
     // A later clock skips the cached release left by the test above.
     const later = Date.now() + 2 * 60 * 60 * 1000;
@@ -134,6 +116,44 @@ describe("GET /v1/system/version", () => {
     );
 
     expect(updates).toEqual([false, true, true, false, false]);
+  });
+
+  test("a failed lookup answers 502 and is retried after one minute", async () => {
+    // Later than every clock above, so no cached release is used.
+    const start = Date.now() + 6 * 60 * 60 * 1000;
+
+    const down = mock(async () => new Response("down", { status: 503 }));
+    globalThis.fetch = asTestFetch(down);
+
+    await expect(checkNakamaVersion("0.4.59", start)).rejects.toMatchObject({
+      status: 502,
+    });
+    await expect(
+      checkNakamaVersion("0.4.59", start + 30_000)
+    ).rejects.toMatchObject({ status: 502 });
+
+    expect(down).toHaveBeenCalledTimes(1);
+
+    const broken = new ReadableStream({
+      start(controller) {
+        controller.error(new Error("connection reset"));
+      },
+    });
+
+    globalThis.fetch = asTestFetch(mock(async () => new Response(broken)));
+
+    await expect(
+      checkNakamaVersion("0.4.59", start + 2 * 60_000)
+    ).rejects.toMatchObject({ status: 502 });
+
+    globalThis.fetch = asTestFetch(mock(async () => new Response("v0.4.60\n")));
+
+    expect(await checkNakamaVersion("0.4.59", start + 4 * 60_000)).toEqual({
+      current: "0.4.59",
+      latest: "0.4.60",
+      releaseUrl: "https://github.com/ahmadrosid/nakama/releases/tag/v0.4.60",
+      updateAvailable: true,
+    });
   });
 
   test("the Update button hands a newer version to a running updater, platform admins only, not org admins or members", async () => {

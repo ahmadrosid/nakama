@@ -193,10 +193,22 @@ ${sitemapUrls
 
   await writeFile(path.join(PUBLIC_DIR, "sitemap.xml"), sitemap);
 
+  // Running servers read this to offer the Update button. The docs workflow
+  // sets it to the newest tag whose Docker images are published.
+  const version = process.env.NAKAMA_LATEST_VERSION?.trim();
+
+  if (version) {
+    if (!/^\d+\.\d+\.\d+$/.test(version)) {
+      throw new Error(`NAKAMA_LATEST_VERSION is not X.Y.Z: ${version}`);
+    }
+
+    await writeFile(path.join(PUBLIC_DIR, "version.txt"), `${version}\n`);
+  }
+
   await writeMirrorRoutes([...pagePaths, "llms.txt"]);
 
   console.log(
-    `Generated ${pages.length} markdown mirrors, llms.txt, sitemap.xml, and mirror routes`
+    `Generated ${pages.length} markdown mirrors, llms.txt, sitemap.xml, version.txt, and mirror routes`
   );
 }
 
