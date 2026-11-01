@@ -716,6 +716,99 @@ describe("composio-tool-bridge", () => {
     });
   });
 
+  test("web chat offers a connect button for any app without starting OAuth", async () => {
+    const composioService: Parameters<typeof buildComposioConnectTools>[3] = {
+      async connectToolkit() {
+        throw new Error("Web chat must not start OAuth on the server");
+      },
+      async getAssignedToolkitRecords() {
+        return [];
+      },
+      isAvailable: async () => true,
+    };
+
+    const tools = await buildComposioConnectTools(
+      "org_1",
+      "usr_1",
+      "profile_1",
+      composioService,
+      { channel: "web" }
+    );
+
+    expect(tools.map((tool) => tool.name)).toEqual([
+      "composio__connect_account",
+    ]);
+
+    await expect(
+      tools[0]?.run(
+        { toolkit_slug: "GoogleCalendar" },
+        { clientOrigin: "http://localhost:3003" }
+      )
+    ).resolves.toEqual(
+      expect.objectContaining({
+        toolkitSlug: "googlecalendar",
+        type: "composio_connect",
+      })
+    );
+
+    await expect(
+      tools[0]?.run({ toolkit_slug: "google calendar" }, {})
+    ).resolves.toMatchObject({ code: "COMPOSIO_POLICY" });
+  });
+
+  test("web chat reports an app that is already connected", async () => {
+    const composioService: Parameters<typeof buildComposioConnectTools>[3] = {
+      async connectToolkit() {
+        throw new Error("should not be called");
+      },
+      async getAssignedToolkitRecords() {
+        return [
+          {
+            allowedActions: null,
+            orgToolkit: {
+              cachedTools: [],
+              createdAt: "2026-01-01T00:00:00.000Z",
+              displayName: "Gmail",
+              id: "ctk_1",
+              lastError: null,
+              orgId: "org_1",
+              status: "enabled",
+              toolkitSlug: "gmail",
+              updatedAt: "2026-01-01T00:00:00.000Z",
+            },
+            userConnection: {
+              connectedAccountId: "ca_1",
+              createdAt: "2026-01-01T00:00:00.000Z",
+              id: "cuc_1",
+              lastError: null,
+              oauthStateHash: null,
+              orgId: "org_1",
+              sessionIdEnc: null,
+              status: "connected",
+              toolkitId: "ctk_1",
+              updatedAt: "2026-01-01T00:00:00.000Z",
+              userId: "usr_1",
+            },
+          },
+        ];
+      },
+      isAvailable: async () => true,
+    };
+
+    const tools = await buildComposioConnectTools(
+      "org_1",
+      "usr_1",
+      "profile_1",
+      composioService,
+      { channel: "web" }
+    );
+
+    const result = await tools[0]?.run({ toolkit_slug: "gmail" }, {});
+
+    expect(result).toMatchObject({ connected: true, toolkitSlug: "gmail" });
+    expect(result).not.toHaveProperty("type");
+  });
+
   test("connect tool rejects loopback callback URLs", async () => {
     const composioService: Parameters<typeof buildComposioConnectTools>[3] = {
       async connectToolkit() {

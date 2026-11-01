@@ -6105,7 +6105,8 @@ export class AgentService {
           orgId,
           options.userId,
           profile.id,
-          composioService
+          composioService,
+          { channel: limit ? undefined : options.channel }
         )),
         ...(await buildComposioToolDefinitions(
           orgId,

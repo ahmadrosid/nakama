@@ -1265,7 +1265,8 @@ export class ComposioService {
       ...lines,
       "",
       ...workflowGuidance,
-      "Only connected toolkits can be invoked. If a connection is missing, call `composio__connect_account` with the toolkit slug and send the user the OAuth link from the tool result.",
+      "Only connected toolkits can be invoked. If a connection is missing, call `composio__connect_account` with the toolkit slug. If the result has an OAuth link, send it to the user.",
+      "In web chat, an app that is not in this list can still be connected: call `composio__connect_account` with its slug instead of saying it is not enabled.",
     ].join("\n");
   }
 

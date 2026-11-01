@@ -3,6 +3,7 @@ import type {
   AgentQuestionAnswer,
   AgentQuestionnaire,
   ChatUsage,
+  ListComposioToolkitsResponse,
 } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import {
@@ -13,6 +14,7 @@ import {
 } from "@nakama/ui/dropdown-menu";
 import { Textarea } from "@nakama/ui/textarea";
 import { cn } from "@nakama/ui/utils";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   CheckmarkCircle01Icon,
   Copy01Icon,
@@ -38,6 +40,7 @@ import {
   ConversationStickinessProvider,
 } from "@/components/ai-elements/conversation";
 import { Message, MessageContent } from "@/components/ai-elements/message";
+import { ComposioToolkitLogo } from "@/components/ComposioToolkitLogo";
 import {
   AgentQuestionnaireAnswers,
   AgentQuestionnairePanel,
@@ -56,7 +59,11 @@ import { DocumentAttachmentPreview } from "@/components/chat/document-attachment
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { PluginDrafts } from "@/components/chat/PluginDraftCard";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
+import { readRecord, readString } from "@/components/chat/web-search.shared";
+import { useAuth } from "@/context/use-auth";
 import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
+import { useProfileQuery } from "@/hooks/use-app-queries";
+import { connectComposioApp, useComposioToolkits } from "@/hooks/use-composio";
 import { useArtifactsExist } from "@/hooks/use-resource-mutations";
 import { extractTurnArtifacts } from "@/lib/chat-artifacts";
 import {
@@ -77,8 +84,12 @@ import {
   parseProfileCreatedResult,
 } from "@/lib/chat-stream";
 import { sumChatUsage } from "@/lib/chat-usage";
+import { formatError } from "@/lib/client";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
 import { isPastedTextDocument } from "@/lib/pasted-text";
+import { isProfileOwner } from "@/lib/profiles";
+import { invalidateQueries } from "@/lib/query-client";
+import { queryKeys } from "@/lib/query-keys";
 import { listOverflowsViewport } from "./chat-message-list.shared";
 
 function followOutputBehavior(atBottom: boolean): false | "auto" {
@@ -627,6 +638,11 @@ function AssistantTurn({
         complete={interactiveTurnComplete}
         messages={turnMessages}
       />
+      <ComposioConnectCards
+        complete={interactiveTurnComplete}
+        messages={turnMessages}
+        profileId={profileId}
+      />
       <PluginDrafts
         complete={interactiveTurnComplete}
         messages={turnMessages}
@@ -775,6 +791,239 @@ function CreatedProfiles({
       {groups.map((group) => (
         <GroupCreatedCard group={group} key={group.id} />
       ))}
+    </div>
+  );
+}
+
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Tool results are untrusted JSON decoded at this boundary.
+function parseComposioConnectRequest(value: unknown) {
+  const record = readRecord(value);
+  const toolkitSlug = readString(record?.toolkitSlug);
+
+  if (record?.type !== "composio_connect" || !toolkitSlug) {
+    return null;
+  }
+
+  return {
+    displayName: readString(record.displayName) ?? toolkitSlug,
+    toolkitSlug,
+  };
+}
+
+function ComposioConnectCards({
+  complete,
+  messages,
+  profileId,
+}: {
+  complete: boolean;
+  messages: ChatListItem[];
+  profileId?: string | null;
+}) {
+  if (!complete) {
+    return null;
+  }
+
+  const requests = new Map(
+    messages.flatMap((message) => {
+      const request =
+        message.tool === "composio__connect_account"
+          ? parseComposioConnectRequest(message.toolResult)
+          : null;
+
+      return request ? [[request.toolkitSlug, request] as const] : [];
+    })
+  );
+
+  return [...requests.values()].map((request) => (
+    <ComposioConnectCard
+      displayName={request.displayName}
+      key={request.toolkitSlug}
+      profileId={profileId ?? null}
+      toolkitSlug={request.toolkitSlug}
+    />
+  ));
+}
+
+const COMPOSIO_CONNECT_POLL_MS = 3000;
+
+const COMPOSIO_CONNECT_POLL_LIMIT_MS = 5 * 60_000;
+
+function isComposioToolkitConnected(
+  toolkits: ListComposioToolkitsResponse | undefined,
+  toolkitSlug: string
+): boolean {
+  const orgToolkit = toolkits?.orgToolkits.find(
+    (item) => item.toolkitSlug === toolkitSlug
+  );
+
+  return (
+    orgToolkit?.status === "enabled" &&
+    (toolkits?.userConnections.some(
+      (item) => item.toolkitId === orgToolkit.id && item.status === "connected"
+    ) ??
+      false)
+  );
+}
+
+/** What the connect card shows for one app, from the org's Composio list. */
+function describeComposioApp(
+  toolkits: ListComposioToolkitsResponse | undefined,
+  toolkitSlug: string,
+  displayName: string,
+  isOrgAdmin: boolean
+) {
+  const catalogItem = toolkits?.catalog.find(
+    (item) => item.slug === toolkitSlug
+  );
+
+  const orgToolkit = toolkits?.orgToolkits.find(
+    (item) => item.toolkitSlug === toolkitSlug
+  );
+
+  const name = catalogItem?.name ?? orgToolkit?.displayName ?? displayName;
+
+  const unknownApp =
+    Boolean(toolkits?.catalog.length) && !catalogItem && !orgToolkit;
+
+  let blockedReason: string | null = null;
+
+  if (unknownApp) {
+    blockedReason = `${name} is not in Composio.`;
+  } else if (!(isOrgAdmin || orgToolkit?.status === "enabled")) {
+    blockedReason = `Ask an org admin to turn on ${name}.`;
+  }
+
+  return {
+    blockedReason,
+    connected: isComposioToolkitConnected(toolkits, toolkitSlug),
+    logoUrl: catalogItem?.logoUrl,
+    name,
+  };
+}
+
+/**
+ * One click opens Composio sign-in in a new tab. An admin also turns the app
+ * on and adds it to this agent. After the click the card checks every few
+ * seconds, so it reads Connected without a tab switch.
+ */
+function ComposioConnectCard({
+  displayName,
+  profileId,
+  toolkitSlug,
+}: {
+  displayName: string;
+  profileId: string | null;
+  toolkitSlug: string;
+}) {
+  const { activeOrg, user } = useAuth();
+  const queryClient = useQueryClient();
+  const isOrgAdmin = activeOrg?.role === "admin";
+
+  const [pollUntil, setPollUntil] = useState(0);
+
+  const { data: toolkits } = useComposioToolkits({
+    refetchInterval: (data) =>
+      Date.now() < pollUntil && !isComposioToolkitConnected(data, toolkitSlug)
+        ? COMPOSIO_CONNECT_POLL_MS
+        : false,
+    refetchOnWindowFocus: true,
+  });
+
+  const { data: profile } = useProfileQuery(profileId);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const canManageAgent =
+    Boolean(profile && !profile.sharedAgent) &&
+    (isOrgAdmin ||
+      user?.isPlatformAdmin === true ||
+      isProfileOwner(profile, user?.id));
+
+  const { blockedReason, connected, logoUrl, name } = describeComposioApp(
+    toolkits,
+    toolkitSlug,
+    displayName,
+    isOrgAdmin
+  );
+
+  async function connect() {
+    if (!toolkits) {
+      return;
+    }
+
+    // Open the tab inside the click so the browser does not block it.
+    const tab = window.open("", "_blank");
+
+    if (tab) {
+      tab.opener = null;
+    }
+
+    setPending(true);
+    setError(null);
+
+    try {
+      const signInUrl = await connectComposioApp({
+        isOrgAdmin,
+        profileId: canManageAgent && profileId ? profileId : undefined,
+        returnTo: `/integrations?section=composio&connected=${encodeURIComponent(toolkitSlug)}`,
+        toolkitSlug,
+        toolkits,
+      });
+
+      if (signInUrl && tab) {
+        tab.location.href = signInUrl;
+        setPollUntil(Date.now() + COMPOSIO_CONNECT_POLL_LIMIT_MS);
+      } else if (signInUrl) {
+        window.location.href = signInUrl;
+      } else {
+        tab?.close();
+      }
+
+      await invalidateQueries(
+        queryClient,
+        queryKeys.composio.toolkits,
+        queryKeys.composio.profileToolkits(profileId ?? "none")
+      );
+    } catch (connectError) {
+      tab?.close();
+      setError(formatError(connectError));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="flex w-fit max-w-full flex-col gap-2 rounded-xl bg-muted/40 p-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <ComposioToolkitLogo logoUrl={logoUrl} name={name} />
+        <p className="min-w-0 truncate font-medium text-foreground text-sm">
+          {name}
+        </p>
+        {connected ? (
+          <span className="flex shrink-0 items-center gap-1 text-muted-foreground text-sm">
+            <CheckmarkCircle01Icon aria-hidden className="size-4" />
+            Connected
+          </span>
+        ) : (
+          <Button
+            className="min-h-10 shrink-0 rounded-lg transition-transform active:scale-[0.96]"
+            disabled={!toolkits || pending || blockedReason !== null}
+            onClick={() => {
+              connect().catch(() => undefined);
+            }}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {pending ? "Connecting…" : "Connect"}
+          </Button>
+        )}
+      </div>
+      {connected || !(blockedReason || error) ? null : (
+        <p className="text-muted-foreground text-xs" role="status">
+          {error ?? blockedReason}
+        </p>
+      )}
     </div>
   );
 }

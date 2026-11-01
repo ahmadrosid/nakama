@@ -67,8 +67,24 @@ const composioToolkitsQueryOptions = queryOptions({
   queryKey: queryKeys.composio.toolkits,
 });
 
-export function useComposioToolkits(options: { enabled?: boolean } = {}) {
-  return useQuery({ ...composioToolkitsQueryOptions, ...options });
+export function useComposioToolkits(
+  options: {
+    enabled?: boolean;
+    refetchInterval?: (
+      data: ListComposioToolkitsResponse | undefined
+    ) => number | false;
+    refetchOnWindowFocus?: boolean;
+  } = {}
+) {
+  const { refetchInterval, ...rest } = options;
+
+  return useQuery({
+    ...composioToolkitsQueryOptions,
+    ...rest,
+    refetchInterval: refetchInterval
+      ? (query) => refetchInterval(query.state.data)
+      : undefined,
+  });
 }
 
 export function useEnableComposioToolkit() {

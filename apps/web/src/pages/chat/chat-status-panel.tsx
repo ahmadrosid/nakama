@@ -28,6 +28,10 @@ import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import { useProfileQuery } from "@/hooks/use-app-queries";
 import {
+  useComposioToolkits,
+  useProfileComposioToolkits,
+} from "@/hooks/use-composio";
+import {
   type ChatArtifactRef,
   extractTurnArtifacts,
 } from "@/lib/chat-artifacts";
@@ -338,6 +342,106 @@ export function ChatStatusButton() {
   );
 }
 
+/**
+ * The agent's Composio apps and whether this user has signed in to each.
+ * Members who cannot manage the agent get no list, so they see only MCP.
+ */
+function useAgentComposioApps(profileId: string) {
+  const assignments =
+    useProfileComposioToolkits(profileId).data?.assignments ?? [];
+
+  const composio = useComposioToolkits({
+    enabled: assignments.length > 0,
+  }).data;
+
+  return assignments.map((assignment) => {
+    const orgToolkit = composio?.orgToolkits.find(
+      (item) => item.id === assignment.toolkitId
+    );
+
+    const catalogItem = composio?.catalog.find(
+      (item) => item.slug === assignment.toolkitSlug
+    );
+
+    return {
+      connected:
+        composio?.userConnections.some(
+          (item) =>
+            item.toolkitId === assignment.toolkitId &&
+            item.status === "connected"
+        ) ?? false,
+      id: assignment.toolkitId,
+      logoUrl: catalogItem?.logoUrl,
+      name:
+        catalogItem?.name ?? orgToolkit?.displayName ?? assignment.toolkitSlug,
+    };
+  });
+}
+
+/** The agent's MCP servers and Composio apps. */
+function ChatStatusConnectors({ profileId }: { profileId: string }) {
+  const detail = useProfileQuery(profileId);
+  const servers = detail.data?.mcpServers ?? [];
+  const apps = useAgentComposioApps(profileId);
+
+  return (
+    <ChatStatusSection title="Connectors">
+      {servers.length === 0 && apps.length === 0 ? (
+        <li className="text-muted-foreground text-sm">
+          {detail.isPending ? "Loading…" : "No connectors"}
+        </li>
+      ) : null}
+      {apps.map((app) => (
+        <ChatStatusRow
+          icon={
+            app.logoUrl ? (
+              <img
+                alt=""
+                className="size-4 object-contain"
+                decoding="async"
+                src={app.logoUrl}
+              />
+            ) : (
+              <Plug01Icon aria-hidden className="size-4" />
+            )
+          }
+          key={app.id}
+          trailing={
+            <span
+              className={cn(
+                "size-2 shrink-0 rounded-full",
+                app.connected ? "bg-emerald-500" : "bg-muted-foreground/40"
+              )}
+              title={app.connected ? "connected" : "not connected"}
+            />
+          }
+        >
+          {app.name}
+        </ChatStatusRow>
+      ))}
+      {servers.length === 0
+        ? null
+        : servers.map((server) => (
+            <ChatStatusRow
+              icon={<Plug01Icon aria-hidden className="size-4" />}
+              key={server.id}
+              trailing={
+                <span
+                  className={cn(
+                    "size-2 shrink-0 rounded-full",
+                    mcpStatusDotClass(server)
+                  )}
+                  title={server.enabled ? server.status : "disabled"}
+                />
+              }
+            >
+              {server.name}
+            </ChatStatusRow>
+          ))}
+    </ChatStatusSection>
+  );
+}
+
 function ChatStatusBody() {
   const {
     data: {
@@ -351,8 +455,6 @@ function ChatStatusBody() {
     },
   } = useChatStatus();
 
-  const detail = useProfileQuery(profileId);
-  const servers = detail.data?.mcpServers ?? [];
   // Files are listed from finished turns only, so a streaming reply does not
   // re-scan the whole chat on every token.
   const [settledMessages, setSettledMessages] = useState(messages);
@@ -433,31 +535,7 @@ function ChatStatusBody() {
         </ChatStatusSection>
       ) : null}
 
-      <ChatStatusSection title="Connectors">
-        {servers.length === 0 ? (
-          <li className="text-muted-foreground text-sm">
-            {detail.isPending ? "Loading…" : "No MCP servers"}
-          </li>
-        ) : (
-          servers.map((server) => (
-            <ChatStatusRow
-              icon={<Plug01Icon aria-hidden className="size-4" />}
-              key={server.id}
-              trailing={
-                <span
-                  className={cn(
-                    "size-2 shrink-0 rounded-full",
-                    mcpStatusDotClass(server)
-                  )}
-                  title={server.enabled ? server.status : "disabled"}
-                />
-              }
-            >
-              {server.name}
-            </ChatStatusRow>
-          ))
-        )}
-      </ChatStatusSection>
+      <ChatStatusConnectors profileId={profileId} />
 
       <ChatStatusSection title="Outputs">
         {artifacts.length === 0 ? (
