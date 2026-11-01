@@ -6,6 +6,8 @@ Report it privately through GitHub: open the
 [Security tab](https://github.com/ahmadrosid/nakama/security) and click
 **Report a vulnerability**. Only the maintainers see the report.
 
+You can also email [security@withnakama.com](mailto:security@withnakama.com).
+
 Please do not open a public issue, pull request or discussion for a
 vulnerability before it is fixed. Everything posted in this repository is
 public and stays in its edit history.
