@@ -4,6 +4,7 @@ import { Card, CardContent } from "@nakama/ui/card";
 import { Spinner } from "@nakama/ui/spinner";
 import { Switch } from "@nakama/ui/switch";
 import { cn } from "@nakama/ui/utils";
+import { PencilEdit02Icon, PlayIcon } from "hugeicons-react";
 import { formatFutureRelativeTime } from "@/lib/chat-history";
 import {
   ListSkeleton,
@@ -138,6 +139,7 @@ function AutomationSummaryCard({
             type="button"
             variant="outline"
           >
+            <PencilEdit02Icon aria-hidden className="size-4" />
             Edit
           </Button>
           <Button
@@ -149,7 +151,9 @@ function AutomationSummaryCard({
           >
             {runningId === selected.id ? (
               <Spinner className="size-3.5" />
-            ) : null}
+            ) : (
+              <PlayIcon aria-hidden className="size-4" />
+            )}
             Run now
           </Button>
           <div className="ml-auto flex items-center gap-2">
