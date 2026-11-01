@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { client } from "@/lib/client";
+import { queryClient } from "@/lib/query-client";
+import { queryKeys } from "@/lib/query-keys";
 import {
   fetchReleaseNotes,
   findReleaseNote,
@@ -168,16 +170,23 @@ export function useServiceWorkerUpdate(): ServiceWorkerUpdate {
     let disposed = false;
 
     // The server already runs the new build, so its health and notes are new.
+    // The fetch fills the shared cache, so What's new gets the new notes too.
+    const notes = queryClient.fetchQuery({
+      queryFn: () => loadReleaseNotes(() => disposed),
+      queryKey: queryKeys.releaseNotes,
+      staleTime: 0,
+    });
+
     Promise.all([
       readServerVersion(),
-      loadReleaseNotes(() => disposed),
+      notes.catch(() => []),
       loadedVersionRef.current ?? Promise.resolve(null),
-    ]).then(([next, notes, loaded]) => {
+    ]).then(([next, releaseNotes, loaded]) => {
       if (disposed) {
         return;
       }
 
-      const found = findReleaseNote(notes, next, loaded);
+      const found = findReleaseNote(releaseNotes, next, loaded);
       setVersion(next ?? found?.version ?? null);
       setNote(found);
     });

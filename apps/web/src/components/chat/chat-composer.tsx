@@ -85,6 +85,7 @@ import {
   ServiceWorkerUpdateNotice,
   useUpdateReady,
 } from "@/components/ServiceWorkerUpdatePrompt";
+import { WhatsNewNotice } from "@/components/WhatsNew";
 import { useAuth } from "@/context/use-auth";
 import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import {
@@ -238,7 +239,11 @@ function ChatComposerNotice({
   }
 
   if (showTips) {
-    return <ChatTips />;
+    return (
+      <WhatsNewNotice>
+        <ChatTips />
+      </WhatsNewNotice>
+    );
   }
 
   return null;
