@@ -61,6 +61,11 @@ Screenshots: `gh pr edit <number> --attach <image-path>` uploads and embeds it i
 
 **Releases:** Bump root `package.json` to the next patch after the latest GitHub release, check, commit, push, tag `vX.Y.Z`, and publish with generated notes.
 
+Before the bump commit, add the version to the top of `apps/web/public/release-notes.json`. The update prompt and **What's new** show it to every user. Rules:
+- 1–3 `changes`, each `new`, `changed`, or `fixed`, in user words: no PR prefixes, issue numbers, file names, or internal terms
+- A change to how an existing flow works is `changed`, and says what moved
+- `critical` (one sentence) only for a security fix or a build that the old page cannot work with. It removes **Later** from the prompt
+
 ## Browser automation
 
 Prefer role and text locators. Add `data-testid` only when labels collide.

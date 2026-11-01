@@ -1,0 +1,19 @@
+[
+  {
+    "version": "0.4.68",
+    "changes": [
+      {
+        "kind": "new",
+        "text": "The update message shows the new version and what changed. Choose Later to update when you are ready."
+      },
+      {
+        "kind": "new",
+        "text": "Slide decks can use the meetup style, and the agent picks a cover layout that fits."
+      },
+      {
+        "kind": "fixed",
+        "text": "A skill change that the agent suggests after a chat is checked before you approve it, so it cannot break the skill."
+      }
+    ]
+  }
+]
