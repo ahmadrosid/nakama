@@ -234,6 +234,7 @@ describe("ensureBundledSkillFiles", () => {
       "slide-deck-design",
       "assets"
     );
+
     const template = await readFile(join(assets, "deck.html"), "utf8");
     const patterns = await readFile(join(assets, "patterns.html"), "utf8");
 
