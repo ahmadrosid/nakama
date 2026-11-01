@@ -9,11 +9,11 @@ For decks, these rules replace the artifact-design rules: use the light theme on
 
 ## Start from the template
 
-1. Read `assets/deck.html` in this skill's directory with read_file. Build the full path from the skill directory. It holds the frame, the cover, the numbered list, and the statement slide.
+1. Read `assets/deck.html` in this skill's directory with read_file. Build the full path from the skill directory. It holds the frame, two cover layouts, the numbered list, and the statement slide.
 2. When a slide needs stats with a chart, people, a leaderboard, or screenshots, also read `assets/patterns.html`. For each pattern you use, copy its CSS to the end of the deck's `<style>` and its slide into `<main>`.
 3. Keep the frame CSS, the print CSS, the phone CSS, the nav, the notes panel, and the script exactly as they are. They show one 16:9 slide at a time, move with the arrow keys, Space, Page Up/Down, Home, and End, open a slide from a `#n` hash, toggle speaker notes with **N**, and print one slide per page.
 4. Change only the tokens in `:root`, the `<title>`, the `aria-label` on `<main>`, and the slides.
-5. Put each slide in `<section class="slide" aria-label="Slide n: Name">`. The cover also has the `cover` class.
+5. Put each slide in `<section class="slide" aria-label="Slide n: Name">`.
 6. Size slide text and spacing in `cqw` only. Do not use `px`, `rem`, or `vw` inside a slide, except in the phone media query.
 7. Save the deck with save_artifact as one `.html` file, for example `artifacts/q3-results-deck.html`.
 
@@ -36,7 +36,8 @@ Use these patterns. Remove the ones you do not use, and do not invent new layout
 
 | Pattern | File | Classes | Use for |
 |---|---|---|---|
-| Cover | `deck.html` | `.cover`, `.cover-grid`, `.visual.hero` | Title, date, and one key figure on the gradient panel |
+| Title cover | `deck.html` | `.cover-title` | A large title on the full slide. Add `visual` for a gradient background |
+| Split cover | `deck.html` | `.cover`, `.cover-grid`, `.visual.hero` | Title beside a panel that shows one supplied figure or image |
 | Numbered list | `deck.html` | `.row`, `.n` | Steps, a plan, or a roadmap, up to 4 rows |
 | Statement | `deck.html` | `.say` | One sentence, set large |
 | Stats + chart | `patterns.html` | `.split`, `.stat`, `.chart`, `.bar` | Up to 3 stats beside a bar chart of one series |
@@ -48,7 +49,7 @@ Use these patterns. Remove the ones you do not use, and do not invent new layout
 2. Leaderboard: set each bar's `<i>` width inline as value / max × 100%. Add `on` to the top 3 rows. Rank numbers have two digits (`01`).
 3. Avatars: use `<img class="av" src="data:..." alt="">` when the user supplies a photo. Otherwise use `<span class="av">` with initials.
 4. Gallery: replace each sample SVG with the user's screenshot as `<img src="data:..." alt="What it shows">`. When there are no screenshots, do not use the gallery.
-5. Cover panel: show one supplied figure, such as a before and after value. When there is none, remove the panel's content and keep the empty gradient.
+5. Cover: choose the layout that fits the deck. The split cover is not the default. Use it only when the panel shows something the user supplied, such as a before and after value or a product image. Otherwise use the title cover, plain or with `visual`. Do not invent a diagram or figure to fill the panel. Keep the cover `h1` to 3 short lines or fewer.
 
 ## Content rules
 

@@ -262,6 +262,13 @@
       font-size: 1.3cqw;
       color: var(--subtle);
     }
+    /* Title cover: no panel. Add the visual class for a gradient background. */
+    .cover-title h1 {
+      max-width: 72cqw;
+      margin-top: auto;
+      font-size: 6.4cqw;
+      line-height: 1.05;
+    }
     .hero {
       display: flex;
       flex-direction: column;
@@ -360,6 +367,9 @@
         margin: 10px 0 28px;
         font-size: 28px;
       }
+      .cover-title h1 {
+        font-size: 34px;
+      }
       .body {
         font-size: 14px;
       }
@@ -445,6 +455,15 @@
   </head>
   <body>
     <main aria-label="Deck Title" class="deck">
+      <!-- Cover: keep one of the two below. Title cover: the full slide for the title. -->
+      <section aria-label="Slide 1: Title" class="slide cover-title">
+        <div class="brand"><i></i>Brand</div>
+        <h1>Deck title on one line<br><span>Subtitle or date</span></h1>
+        <p class="meta">Event name · Date · Time</p>
+        <aside class="notes"><p>What you say while this slide shows.</p></aside>
+      </section>
+
+      <!-- Split cover: only when the panel shows a supplied figure or image. -->
       <section aria-label="Slide 1: Title" class="slide cover">
         <div class="cover-grid">
           <div class="cover-text">
