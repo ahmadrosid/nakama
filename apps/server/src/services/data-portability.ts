@@ -433,16 +433,28 @@ export async function createNakamaDataExport(
             try {
               data = await readFile(file.absolutePath);
             } catch (error) {
-              // Config files are required for a restore, so their loss fails the export.
-              if (isConfigFile || !isMissingPathError(error)) {
-                throw error;
+              if (isMissingPathError(error)) {
+                // Config files are required for a restore, so their loss fails the export.
+                if (isConfigFile) {
+                  throw error;
+                }
+
+                skipped.push({
+                  path: file.relativePath,
+                  reason: DELETED_DURING_EXPORT,
+                });
+                continue;
               }
 
-              skipped.push({
-                path: file.relativePath,
-                reason: DELETED_DURING_EXPORT,
-              });
-              continue;
+              // The export stays incomplete without this file, so fail with
+              // the path instead of a raw errno that names nothing actionable.
+              const detail =
+                error instanceof Error ? error.message : String(error);
+
+              throw new NakamaApiError(
+                `Cannot read "${file.relativePath}" (${detail}). Fix the file's owner or permissions, or remove it, then retry the export.`,
+                409
+              );
             }
 
             if (

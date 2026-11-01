@@ -1035,7 +1035,39 @@ describe("Nakama data portability", () => {
     try {
       await expect(
         createNakamaDataExport({ databasePath: null, rootDir })
-      ).rejects.toMatchObject({ code: "EACCES" });
+      ).rejects.toMatchObject({
+        message: expect.stringContaining('"notes.txt"'),
+        name: "NakamaApiError",
+        status: 409,
+      });
+    } finally {
+      readMock.mockRestore();
+    }
+  });
+
+  test("fails the export with a 409 when an unreadable config file blocks it", async () => {
+    await writeFile(join(rootDir, "config.ini"), "ok");
+    const realReadFile = fsPromises.readFile;
+
+    const readMock = spyOn(fsPromises, "readFile").mockImplementation(
+      // SAFETY: the wrapper forwards its arguments to the real readFile unchanged.
+      (async (...args: Parameters<typeof realReadFile>) => {
+        if (args[0] === join(rootDir, "config.ini")) {
+          throw Object.assign(new Error("denied"), { code: "EACCES" });
+        }
+
+        return await realReadFile(...args);
+      }) as typeof realReadFile
+    );
+
+    try {
+      await expect(
+        createNakamaDataExport({ databasePath: null, rootDir })
+      ).rejects.toMatchObject({
+        message: expect.stringContaining('"config.ini"'),
+        name: "NakamaApiError",
+        status: 409,
+      });
     } finally {
       readMock.mockRestore();
     }
