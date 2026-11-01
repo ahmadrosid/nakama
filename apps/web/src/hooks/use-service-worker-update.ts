@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { client } from "@/lib/client";
 
 const SERVICE_WORKER_URL = "/sw.js";
 
@@ -8,6 +9,8 @@ const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 interface ServiceWorkerUpdate {
   applyUpdate: () => void;
   updateReady: boolean;
+  /** Version the server now runs, read once a newer build is waiting. */
+  version: string | null;
 }
 
 /**
@@ -23,6 +26,8 @@ export function useServiceWorkerUpdate(): ServiceWorkerUpdate {
     useState<ServiceWorkerRegistration | null>(null);
 
   const [installing, setInstalling] = useState<ServiceWorker | null>(null);
+
+  const [version, setVersion] = useState<string | null>(null);
 
   useEffect(() => {
     if (!(import.meta.env.PROD && "serviceWorker" in navigator)) {
@@ -114,6 +119,28 @@ export function useServiceWorkerUpdate(): ServiceWorkerUpdate {
       installing.removeEventListener("statechange", handleStateChange);
   }, [installing]);
 
+  useEffect(() => {
+    if (!waiting) {
+      return;
+    }
+
+    let disposed = false;
+
+    // The server already runs the new build, so its health reports the version.
+    client
+      .health()
+      .then((health) => {
+        if (!disposed) {
+          setVersion(health.version.trim() || null);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      disposed = true;
+    };
+  }, [waiting]);
+
   const applyUpdate = useCallback(() => {
     if (!waiting) {
       return;
@@ -123,5 +150,5 @@ export function useServiceWorkerUpdate(): ServiceWorkerUpdate {
     waiting.postMessage({ type: "SKIP_WAITING" });
   }, [waiting]);
 
-  return { applyUpdate, updateReady: waiting !== null };
+  return { applyUpdate, updateReady: waiting !== null, version };
 }
