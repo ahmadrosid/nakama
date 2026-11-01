@@ -929,6 +929,77 @@ describe("Nakama data portability", () => {
     expect((await readdir(rootDir)).length).toBe(5);
   });
 
+  test("skips files and folders deleted while the export runs", async () => {
+    const ltx = join(rootDir, "sqlite/.nakama.sqlite-litestream/ltx");
+    await mkdir(join(ltx, "0"), { recursive: true });
+    await mkdir(join(ltx, "1"), { recursive: true });
+    await writeFile(join(rootDir, "config.ini"), "ok");
+    await writeFile(join(ltx, "0/before-stat.ltx"), "a");
+    await writeFile(join(ltx, "0/before-read.ltx"), "b");
+    await writeFile(join(ltx, "0/kept.ltx"), "c");
+    await writeFile(join(ltx, "1/gone.ltx"), "d");
+
+    const realLstat = fsPromises.lstat;
+    const realReadFile = fsPromises.readFile;
+    const realReaddir = fsPromises.readdir;
+
+    // Each spy deletes its target, then forwards the same arguments to the real call.
+    const lstatMock = spyOn(fsPromises, "lstat").mockImplementation(
+      // SAFETY: the wrapper forwards its arguments to the real lstat unchanged.
+      (async (...args: Parameters<typeof realLstat>) => {
+        if (String(args[0]).endsWith("before-stat.ltx")) {
+          await rm(args[0], { force: true });
+        }
+
+        return await realLstat(...args);
+      }) as typeof realLstat
+    );
+
+    const readMock = spyOn(fsPromises, "readFile").mockImplementation(
+      // SAFETY: the wrapper forwards its arguments to the real readFile unchanged.
+      (async (...args: Parameters<typeof realReadFile>) => {
+        if (String(args[0]).endsWith("before-read.ltx")) {
+          await rm(String(args[0]), { force: true });
+        }
+
+        return await realReadFile(...args);
+      }) as typeof realReadFile
+    );
+
+    const readdirMock = spyOn(fsPromises, "readdir").mockImplementation(
+      // SAFETY: the wrapper forwards its arguments to the real readdir unchanged.
+      (async (...args: Parameters<typeof realReaddir>) => {
+        if (args[0] === join(ltx, "1")) {
+          await rm(args[0], { force: true, recursive: true });
+        }
+
+        return await realReaddir(...args);
+      }) as typeof realReaddir
+    );
+
+    let result: Awaited<ReturnType<typeof createNakamaDataExport>>;
+
+    try {
+      result = await createNakamaDataExport({ databasePath: null, rootDir });
+    } finally {
+      lstatMock.mockRestore();
+      readMock.mockRestore();
+      readdirMock.mockRestore();
+    }
+
+    const prefix = "sqlite/.nakama.sqlite-litestream/ltx";
+    const entries = fflate.unzipSync(result.data);
+    expect(Object.keys(entries)).toContain("config.ini");
+    expect(Object.keys(entries)).toContain(`${prefix}/0/kept.ltx`);
+    expect(Object.keys(entries)).not.toContain(`${prefix}/0/before-read.ltx`);
+    expect(result.manifest.fileCount).toBe(2);
+    expect(result.manifest.skipped.map((item) => item.path).sort()).toEqual([
+      `${prefix}/0/before-read.ltx`,
+      `${prefix}/0/before-stat.ltx`,
+      `${prefix}/1`,
+    ]);
+  });
+
   test("rejects a ZIP result above the compressed restore budget", async () => {
     await writeFile(join(rootDir, "config.ini"), "original");
 

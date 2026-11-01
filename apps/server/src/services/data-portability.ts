@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import type { Dirent } from "node:fs";
 import {
   chmod,
   cp,
@@ -140,6 +141,8 @@ const RESTORE_PREFIX = ".nakama-restore-";
 const BACKUP_PREFIX = ".nakama-backup-";
 
 const PLUGIN_SNAPSHOT_PREFIX = ".nakama-plugin-snapshot-";
+
+const DELETED_DURING_EXPORT = "Deleted while the export ran.";
 
 const ORG_PLUGIN_SQLITE = /^orgs\/[^/]+\/plugins\/[^/]+\/db\/[^/]+\.sqlite$/;
 
@@ -410,7 +413,7 @@ export async function createNakamaDataExport(
             }
           }
 
-          const { files, skipped } = await inventoryConfigRoot(
+          const { files: inventory, skipped } = await inventoryConfigRoot(
             rootDir,
             snapshots
           );
@@ -418,10 +421,25 @@ export async function createNakamaDataExport(
           skipped.push(...outsideDatabases);
 
           const entries: Record<string, Uint8Array> = {};
+          const files: InventoryItem[] = [];
 
-          for (const file of files) {
+          for (const file of inventory) {
             validateArchivePath(file.relativePath);
-            const data = await readFile(file.absolutePath);
+            let data: Buffer;
+
+            try {
+              data = await readFile(file.absolutePath);
+            } catch (error) {
+              if (getNodeErrorCode(error) !== "ENOENT") {
+                throw error;
+              }
+
+              skipped.push({
+                path: file.relativePath,
+                reason: DELETED_DURING_EXPORT,
+              });
+              continue;
+            }
 
             if (
               (file.relativePath === "config.ini" ||
@@ -435,6 +453,7 @@ export async function createNakamaDataExport(
             }
 
             entries[file.relativePath] = data;
+            files.push(file);
           }
 
           for (const [relativePath, absolutePath] of snapshots) {
@@ -449,9 +468,7 @@ export async function createNakamaDataExport(
 
           const topLevelPaths = Array.from(
             new Set(
-              files
-                .map((file) => file.relativePath.split("/")[0])
-                .filter(Boolean)
+              files.flatMap((file) => file.relativePath.split("/")[0] || [])
             )
           ).sort();
 
@@ -1357,7 +1374,22 @@ async function inventoryConfigRoot(
   return { files, skipped };
 
   async function walk(currentDir: string): Promise<void> {
-    const entries = await readdir(currentDir, { withFileTypes: true });
+    let entries: Dirent[];
+
+    try {
+      entries = await readdir(currentDir, { withFileTypes: true });
+    } catch (error) {
+      if (getNodeErrorCode(error) !== "ENOENT" || currentDir === rootDir) {
+        throw error;
+      }
+
+      skipped.push({
+        path: toZipPath(relative(rootDir, currentDir)),
+        reason: DELETED_DURING_EXPORT,
+      });
+
+      return;
+    }
 
     for (const entry of entries) {
       const absolutePath = join(currentDir, entry.name);
@@ -1389,8 +1421,16 @@ async function inventoryConfigRoot(
         continue;
       }
 
-      const stat = await lstat(absolutePath);
-      files.push({ absolutePath, relativePath, size: stat.size });
+      try {
+        const stat = await lstat(absolutePath);
+        files.push({ absolutePath, relativePath, size: stat.size });
+      } catch (error) {
+        if (getNodeErrorCode(error) !== "ENOENT") {
+          throw error;
+        }
+
+        skipped.push({ path: relativePath, reason: DELETED_DURING_EXPORT });
+      }
     }
   }
 }
