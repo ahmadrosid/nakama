@@ -3,7 +3,8 @@ name: Docs
 on:
   push:
     branches: [main]
-    paths: ['docs/website/**', '.github/workflows/docs.yml']
+    # package.json: a version bump republishes version.txt for the update check.
+    paths: ['docs/website/**', '.github/workflows/docs.yml', 'package.json']
   # Build only. A broken page should fail here, not after the merge.
   pull_request:
     paths: ['docs/website/**', '.github/workflows/docs.yml']

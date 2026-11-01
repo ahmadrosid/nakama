@@ -49,15 +49,7 @@ describe("GET /v1/system/version", () => {
 
     expect((await check(admin, admin.orgId!)).status).toBe(502);
 
-    globalThis.fetch = asTestFetch(
-      mock(async () =>
-        Response.json({
-          html_url:
-            "https://github.com/ahmadrosid/nakama/releases/tag/v999.0.0",
-          tag_name: "v999.0.0",
-        })
-      )
-    );
+    globalThis.fetch = asTestFetch(mock(async () => new Response("999.0.0\n")));
 
     const response = await check(admin, admin.orgId!);
 
@@ -86,7 +78,7 @@ describe("GET /v1/system/version", () => {
     expect((await check(tenantSession, tenantAdmin.orgId)).status).toBe(403);
   });
 
-  test("NAKAMA_DISABLE_UPDATE_CHECK answers 404 without calling GitHub", async () => {
+  test("NAKAMA_DISABLE_UPDATE_CHECK answers 404 without fetching the latest version", async () => {
     process.env.NAKAMA_DISABLE_UPDATE_CHECK = "true";
 
     const { app, databaseAdapter } = createMinimalHonoApp({
@@ -100,8 +92,8 @@ describe("GET /v1/system/version", () => {
       "admin-version-off@org.com"
     );
 
-    const github = mock(async () => Response.json({}));
-    globalThis.fetch = asTestFetch(github);
+    const latest = mock(async () => new Response("999.0.0"));
+    globalThis.fetch = asTestFetch(latest);
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/system/version", {
@@ -110,18 +102,14 @@ describe("GET /v1/system/version", () => {
     );
 
     expect(response.status).toBe(404);
-    expect(github).not.toHaveBeenCalled();
+    expect(latest).not.toHaveBeenCalled();
 
     const health = await app.fetch(new Request("http://localhost:4310/health"));
     expect((await health.json()).updateCheckEnabled).toBe(false);
   });
 
   test("only a higher X.Y.Z release counts as an update", async () => {
-    globalThis.fetch = asTestFetch(
-      mock(async () =>
-        Response.json({ html_url: "https://example.com", tag_name: "v0.4.60" })
-      )
-    );
+    globalThis.fetch = asTestFetch(mock(async () => new Response("0.4.60")));
 
     // A later clock skips the cached release left by the test above.
     const later = Date.now() + 2 * 60 * 60 * 1000;

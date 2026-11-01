@@ -332,15 +332,11 @@ function isString<T>(value: T): value is T & string {
   return Object.prototype.toString.call(value) === "[object String]";
 }
 
-const LATEST_RELEASE_URL =
-  "https://api.github.com/repos/ahmadrosid/nakama/releases/latest";
+// Written by the docs build from the root package.json. GitHub Pages has no
+// API rate limit, unlike api.github.com (60 calls per hour per IP).
+const LATEST_VERSION_URL = "https://ahmadrosid.github.io/nakama/version.txt";
 
 const RELEASE_CACHE_MS = 10 * 60 * 1000;
-
-const releaseSchema = z.object({
-  html_url: z.string(),
-  tag_name: z.string(),
-});
 
 let cachedRelease: { at: number; latest: string; releaseUrl: string } | null =
   null;
@@ -364,29 +360,29 @@ function isNewer(latest: string, current: string): boolean {
   return (diff ?? 0) > 0;
 }
 
-/** Cached for 10 minutes: anonymous GitHub API calls are limited to 60 per hour per IP. */
+/** Cached for 10 minutes. */
 export async function checkNakamaVersion(
   current: string,
   now = Date.now()
 ): Promise<NakamaVersionResponse> {
   if (!cachedRelease || now - cachedRelease.at > RELEASE_CACHE_MS) {
-    const response = await fetch(LATEST_RELEASE_URL, {
-      headers: { Accept: "application/vnd.github+json" },
+    const response = await fetch(LATEST_VERSION_URL, {
       signal: AbortSignal.timeout(10_000),
     }).catch(() => null);
 
-    const parsed = releaseSchema.safeParse(
-      response?.ok ? await response.json() : null
-    );
+    const latest = response?.ok ? (await response.text()).trim() : "";
 
-    if (!parsed.success) {
-      throw new NakamaApiError("Could not reach GitHub releases.", 502);
+    if (!versionParts(latest)) {
+      throw new NakamaApiError(
+        "Could not read the latest Nakama version.",
+        502
+      );
     }
 
     cachedRelease = {
       at: now,
-      latest: parsed.data.tag_name.replace(/^v/i, ""),
-      releaseUrl: parsed.data.html_url,
+      latest,
+      releaseUrl: `https://github.com/ahmadrosid/nakama/releases/tag/v${latest}`,
     };
   }
 

@@ -193,10 +193,17 @@ ${sitemapUrls
 
   await writeFile(path.join(PUBLIC_DIR, "sitemap.xml"), sitemap);
 
+  // Running servers read this to offer the Update button.
+  const { version } = JSON.parse(
+    await readFile(path.join(WEBSITE_DIR, "..", "..", "package.json"), "utf8")
+  );
+
+  await writeFile(path.join(PUBLIC_DIR, "version.txt"), `${version}\n`);
+
   await writeMirrorRoutes([...pagePaths, "llms.txt"]);
 
   console.log(
-    `Generated ${pages.length} markdown mirrors, llms.txt, sitemap.xml, and mirror routes`
+    `Generated ${pages.length} markdown mirrors, llms.txt, sitemap.xml, version.txt, and mirror routes`
   );
 }
 
