@@ -18,7 +18,7 @@ These instructions are loaded directly when this skill is active.
 1. Use the existing design system when the request provides one. Otherwise, base the design on the subject, audience, and content.
 2. Give editorial pages, landing pages, and games a bold treatment. Keep plans, memos, and other working documents polished and restrained.
 3. Write the design plan as CSS custom properties before building the page. Define colors, font families, type sizes, spacing, borders, and radii.
-4. Use those tokens throughout the page, except in SVG attributes (see **Print and PDF**). Give every color token a light and dark value, including chart colors and interaction states.
+4. Use those tokens throughout the page. Give every color token a light and dark value, including chart colors and interaction states.
 5. Support both themes through `prefers-color-scheme`. If an existing design system provides an explicit theme signal, respect it.
 6. Choose typefaces deliberately. Pair fonts only when the pairing improves hierarchy, and keep a consistent type scale with readable fallback fonts.
 7. Use only facts from the request or available sources. Do not add dates, durations, team sizes, customers, quotes, metrics, integrations, or feature details that were not supplied; omit them. Label supplied sample data; a "sample" label does not permit invented content.
@@ -115,9 +115,9 @@ Use this layout when the user asks for a dashboard, KPI page, or performance rep
 
 ## Print and PDF
 
-PDF export renders the HTML without a browser, on A4 paper, in the light theme, and runs no scripts. Write every page so it prints correctly.
+PDF export prints the page in a browser with its `@media print` styles: the user's browser in web chat, or headless Chrome on the server. Scripts run, but print only what is on the page when it loads. Write every page so it prints correctly.
 
-1. In SVG attributes, write colors as hex values, such as `fill="#edf2df"`. Never write `fill="var(--surface)"` or `stroke="var(--line)"`: the PDF renderer cannot read `var()` there and draws the shape black. Use the light theme value. For dark mode, give the shape a class and set hex values in the dark media query, such as `.steam { stroke: #708772; }`.
+1. Show all essential content in `@media print`, including content that page code hides or reveals on screen, such as tabs and slides.
 2. Add `@page { size: A4; margin: 0; }`. Slide decks keep their own `@page` rule.
 3. Make the layout work at 800px wide, the width of an A4 page. Keep nav labels and short buttons on one line with `white-space: nowrap`.
 4. In `@media print`, add `break-inside: avoid` to sections, panels, figures, and table rows, so a page break does not cut them.
