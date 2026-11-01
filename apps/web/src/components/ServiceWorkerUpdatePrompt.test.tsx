@@ -117,10 +117,19 @@ test("shows at most three change lines", () => {
   expect(items.join(" ")).not.toContain("four");
 });
 
-test("a critical build shows its reason and offers no Later", () => {
+test("a repeated line shows once", () => {
+  note = {
+    changes: ["same", "same", "other"].map((text) => ({ kind: "new", text })),
+    version: "0.4.68",
+  };
+
+  expect(render().querySelectorAll("li")).toHaveLength(2);
+});
+
+test("a critical build shows its reason and changes, and offers no Later", () => {
   sessionStorage.setItem("nakama-update-later", "1");
   note = {
-    changes: [{ kind: "fixed", text: "hidden" }],
+    changes: [{ kind: "fixed", text: "listed" }],
     critical: "reason",
     version: "0.4.68",
   };
@@ -128,7 +137,7 @@ test("a critical build shows its reason and offers no Later", () => {
   const container = render();
 
   expect(container.textContent).toContain("reason");
-  expect(container.textContent).not.toContain("hidden");
+  expect(container.textContent).toContain("listed");
   expect(() => button(container, "Later")).toThrow();
   expect(button(container, "Reload")).toBeTruthy();
 });

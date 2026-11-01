@@ -7,7 +7,7 @@ import { RELEASE_CHANGE_LABELS } from "@/lib/release-notes";
 /** Set for the rest of the browser session after the user picks Later. */
 const UPDATE_LATER_KEY = "nakama-update-later";
 
-/** The prompt stays small; the full list lives in What's new. */
+/** The prompt stays small: only the first lines of the release show. */
 const MAX_CHANGES = 3;
 
 function readLater(): boolean {
@@ -37,7 +37,10 @@ export function ServiceWorkerUpdatePrompt() {
     setLater(true);
   };
 
-  const changes = note?.changes.slice(0, MAX_CHANGES) ?? [];
+  // A repeated line adds nothing, and the text is the list key.
+  const changes = [
+    ...new Map(note?.changes.map((change) => [change.text, change])).values(),
+  ].slice(0, MAX_CHANGES);
 
   return (
     <div
@@ -50,7 +53,7 @@ export function ServiceWorkerUpdatePrompt() {
       {critical ? (
         <p className="mt-1 text-muted-foreground text-sm">{critical}</p>
       ) : null}
-      {!critical && changes.length > 0 ? (
+      {changes.length > 0 ? (
         <ul className="mt-2 space-y-1 text-sm">
           {changes.map((change) => (
             <li className="text-foreground" key={change.text}>
