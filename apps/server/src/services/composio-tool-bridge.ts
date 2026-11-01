@@ -267,6 +267,8 @@ function buildWebConnectTool(
         displayName,
         instructions:
           "The chat shows the user a Connect button for this app. Tell them in one short line to click it, then send a message when done. Do not write a link.",
+        // The browser adds the app to the agent only for someone who manages it.
+        onAgent: Boolean(record),
         toolkitSlug,
         type: "composio_connect",
       });

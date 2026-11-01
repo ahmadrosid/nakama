@@ -33,7 +33,7 @@ import { useAuth } from "@/context/use-auth";
 import { useMcpServersQuery, useProfileQuery } from "@/hooks/use-app-queries";
 import { connectComposioApp, useComposioToolkits } from "@/hooks/use-composio";
 import { formatError } from "@/lib/client";
-import { isProfileOwner } from "@/lib/profiles";
+import { canManageAgent } from "@/lib/profiles";
 import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -206,11 +206,7 @@ function McpCreateBody({
 
   // A Composio app only works once it is on the agent, so offer it only to
   // someone who can add it there.
-  const canManageAgent =
-    Boolean(profile && !profile.sharedAgent) &&
-    (isOrgAdmin ||
-      user?.isPlatformAdmin === true ||
-      isProfileOwner(profile, user?.id));
+  const canManage = canManageAgent(profile, user, isOrgAdmin);
 
   // A member cannot turn a toolkit on, so they see only the ones an admin has.
   const enabledSlugs = new Set(
@@ -220,7 +216,7 @@ function McpCreateBody({
   );
 
   const offered =
-    composio?.configured && canManageAgent
+    composio?.configured && canManage
       ? composio.catalog.filter(
           (item) => isOrgAdmin || enabledSlugs.has(item.slug)
         )

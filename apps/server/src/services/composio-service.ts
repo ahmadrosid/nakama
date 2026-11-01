@@ -1,5 +1,6 @@
 import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import {
+  type AgentChannel,
   type ComposioCatalogToolkitSummary,
   type ComposioConnectResponse,
   type ComposioToolkitSummary,
@@ -1211,7 +1212,8 @@ export class ComposioService {
   async formatProfileConnectionsContext(
     orgId: string,
     userId: string,
-    profileId: string
+    profileId: string,
+    options: { channel?: AgentChannel } = {}
   ): Promise<string> {
     if (!(await this.isAvailable())) {
       return "";
@@ -1266,7 +1268,11 @@ export class ComposioService {
       "",
       ...workflowGuidance,
       "Only connected toolkits can be invoked. If a connection is missing, call `composio__connect_account` with the toolkit slug. If the result has an OAuth link, send it to the user.",
-      "In web chat, an app that is not in this list can still be connected: call `composio__connect_account` with its slug instead of saying it is not enabled.",
+      ...(options.channel === "web"
+        ? [
+            "An app that is not in this list can still be connected: call `composio__connect_account` with its slug instead of saying it is not enabled.",
+          ]
+        : []),
     ].join("\n");
   }
 

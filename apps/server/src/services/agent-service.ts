@@ -6106,7 +6106,12 @@ export class AgentService {
           options.userId,
           profile.id,
           composioService,
-          { channel: limit ? undefined : options.channel }
+          {
+            // The web tool is always offered, so a profile with no tools of
+            // its own keeps the assigned-only tool and stays tool-free.
+            channel:
+              limit || resolved.length === 0 ? undefined : options.channel,
+          }
         )),
         ...(await buildComposioToolDefinitions(
           orgId,
@@ -6570,7 +6575,8 @@ export class AgentService {
             await this.composioService.formatProfileConnectionsContext(
               orgId,
               userId,
-              profileId
+              profileId,
+              { channel }
             );
 
           if (composioContext.trim()) {

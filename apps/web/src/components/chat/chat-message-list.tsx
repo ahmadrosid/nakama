@@ -14,7 +14,7 @@ import {
 } from "@nakama/ui/dropdown-menu";
 import { Textarea } from "@nakama/ui/textarea";
 import { cn } from "@nakama/ui/utils";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckmarkCircle01Icon,
   Copy01Icon,
@@ -63,7 +63,11 @@ import { readRecord, readString } from "@/components/chat/web-search.shared";
 import { useAuth } from "@/context/use-auth";
 import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import { useProfileQuery } from "@/hooks/use-app-queries";
-import { connectComposioApp, useComposioToolkits } from "@/hooks/use-composio";
+import {
+  connectComposioApp,
+  profileComposioToolkitsQueryOptions,
+  useComposioToolkits,
+} from "@/hooks/use-composio";
 import { useArtifactsExist } from "@/hooks/use-resource-mutations";
 import { extractTurnArtifacts } from "@/lib/chat-artifacts";
 import {
@@ -87,7 +91,7 @@ import { sumChatUsage } from "@/lib/chat-usage";
 import { formatError } from "@/lib/client";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
 import { isPastedTextDocument } from "@/lib/pasted-text";
-import { isProfileOwner } from "@/lib/profiles";
+import { canManageAgent } from "@/lib/profiles";
 import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 import { listOverflowsViewport } from "./chat-message-list.shared";
@@ -806,6 +810,7 @@ function parseComposioConnectRequest(value: unknown) {
 
   return {
     displayName: readString(record.displayName) ?? toolkitSlug,
+    onAgent: record.onAgent === true,
     toolkitSlug,
   };
 }
@@ -838,6 +843,7 @@ function ComposioConnectCards({
     <ComposioConnectCard
       displayName={request.displayName}
       key={request.toolkitSlug}
+      onAgent={request.onAgent}
       profileId={profileId ?? null}
       toolkitSlug={request.toolkitSlug}
     />
@@ -870,7 +876,7 @@ function describeComposioApp(
   toolkits: ListComposioToolkitsResponse | undefined,
   toolkitSlug: string,
   displayName: string,
-  isOrgAdmin: boolean
+  access: { canManage: boolean; isOrgAdmin: boolean; onAgent: boolean }
 ) {
   const catalogItem = toolkits?.catalog.find(
     (item) => item.slug === toolkitSlug
@@ -889,13 +895,18 @@ function describeComposioApp(
 
   if (unknownApp) {
     blockedReason = `${name} is not in Composio.`;
-  } else if (!(isOrgAdmin || orgToolkit?.status === "enabled")) {
+  } else if (!(access.isOrgAdmin || orgToolkit?.status === "enabled")) {
     blockedReason = `Ask an org admin to turn on ${name}.`;
+  } else if (!(access.canManage || access.onAgent)) {
+    // Only someone who manages the agent can add the app to it.
+    blockedReason = `Ask the agent owner to add ${name}.`;
   }
 
   return {
     blockedReason,
-    connected: isComposioToolkitConnected(toolkits, toolkitSlug),
+    // The agent can use the app only when it is on the agent too.
+    connected:
+      access.onAgent && isComposioToolkitConnected(toolkits, toolkitSlug),
     logoUrl: catalogItem?.logoUrl,
     name,
   };
@@ -908,10 +919,13 @@ function describeComposioApp(
  */
 function ComposioConnectCard({
   displayName,
+  onAgent: onAgentAtCall,
   profileId,
   toolkitSlug,
 }: {
   displayName: string;
+  /** From the tool result: the app was on the agent when the model asked. */
+  onAgent: boolean;
   profileId: string | null;
   toolkitSlug: string;
 }) {
@@ -933,21 +947,29 @@ function ComposioConnectCard({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canManageAgent =
-    Boolean(profile && !profile.sharedAgent) &&
-    (isOrgAdmin ||
-      user?.isPlatformAdmin === true ||
-      isProfileOwner(profile, user?.id));
+  const canManage = canManageAgent(profile, user, isOrgAdmin);
+
+  // Only managers can read the agent's apps; a click can add one, so read live.
+  const { data: agentApps } = useQuery({
+    ...profileComposioToolkitsQueryOptions(profileId),
+    enabled: canManage && Boolean(profileId),
+  });
+
+  const onAgent =
+    agentApps?.assignments.some((item) => item.toolkitSlug === toolkitSlug) ??
+    onAgentAtCall;
+
+  const ready = Boolean(toolkits && (!profileId || profile));
 
   const { blockedReason, connected, logoUrl, name } = describeComposioApp(
     toolkits,
     toolkitSlug,
     displayName,
-    isOrgAdmin
+    { canManage, isOrgAdmin, onAgent }
   );
 
   async function connect() {
-    if (!toolkits) {
+    if (!(toolkits && ready)) {
       return;
     }
 
@@ -964,7 +986,7 @@ function ComposioConnectCard({
     try {
       const signInUrl = await connectComposioApp({
         isOrgAdmin,
-        profileId: canManageAgent && profileId ? profileId : undefined,
+        profileId: canManage && profileId ? profileId : undefined,
         returnTo: `/integrations?section=composio&connected=${encodeURIComponent(toolkitSlug)}`,
         toolkitSlug,
         toolkits,
@@ -1007,7 +1029,7 @@ function ComposioConnectCard({
         ) : (
           <Button
             className="min-h-10 shrink-0 rounded-lg transition-transform active:scale-[0.96]"
-            disabled={!toolkits || pending || blockedReason !== null}
+            disabled={!ready || pending || blockedReason !== null}
             onClick={() => {
               connect().catch(() => undefined);
             }}
@@ -1019,7 +1041,7 @@ function ComposioConnectCard({
           </Button>
         )}
       </div>
-      {connected || !(blockedReason || error) ? null : (
+      {connected || !ready || !(blockedReason || error) ? null : (
         <p className="text-muted-foreground text-xs" role="status">
           {error ?? blockedReason}
         </p>

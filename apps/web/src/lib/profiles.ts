@@ -21,6 +21,20 @@ export function isProfileOwner(
   return Boolean(userId) && profile?.ownerUserId === userId;
 }
 
+/** True when the user can change the agent's tools. Shared agents are read-only. */
+export function canManageAgent(
+  profile: { ownerUserId?: string | null; sharedAgent?: unknown } | undefined,
+  user: { id?: string; isPlatformAdmin?: boolean } | null | undefined,
+  isOrgAdmin: boolean
+): boolean {
+  return (
+    Boolean(profile && !profile.sharedAgent) &&
+    (isOrgAdmin ||
+      user?.isPlatformAdmin === true ||
+      isProfileOwner(profile, user?.id))
+  );
+}
+
 export function findDefaultProfile(
   profiles: ProfileSummary[]
 ): ProfileSummary | undefined {

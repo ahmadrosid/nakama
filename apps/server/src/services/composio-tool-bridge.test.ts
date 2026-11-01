@@ -746,6 +746,7 @@ describe("composio-tool-bridge", () => {
       )
     ).resolves.toEqual(
       expect.objectContaining({
+        onAgent: false,
         toolkitSlug: "googlecalendar",
         type: "composio_connect",
       })

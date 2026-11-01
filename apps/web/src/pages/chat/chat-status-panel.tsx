@@ -5,6 +5,7 @@ import type {
 } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { cn } from "@nakama/ui/utils";
+import { useQuery } from "@tanstack/react-query";
 import {
   AiBrain01Icon,
   ArrowDown01Icon,
@@ -25,11 +26,12 @@ import {
 } from "react";
 import { useArtifactAttachmentPreviewPanel } from "@/components/chat/use-artifact-attachment-preview-panel";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
+import { useAuth } from "@/context/use-auth";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import { useProfileQuery } from "@/hooks/use-app-queries";
 import {
+  profileComposioToolkitsQueryOptions,
   useComposioToolkits,
-  useProfileComposioToolkits,
 } from "@/hooks/use-composio";
 import {
   type ChatArtifactRef,
@@ -46,6 +48,7 @@ import {
   formatSessionChannelLabel,
 } from "@/lib/chat-history";
 import { groupMessagesIntoTurns } from "@/lib/chat-message-turns";
+import { canManageAgent } from "@/lib/profiles";
 
 /** One card of the status panel. The title toggles the body. */
 function ChatStatusSection({
@@ -346,9 +349,13 @@ export function ChatStatusButton() {
  * The agent's Composio apps and whether this user has signed in to each.
  * Members who cannot manage the agent get no list, so they see only MCP.
  */
-function useAgentComposioApps(profileId: string) {
+function useAgentComposioApps(profileId: string, canManage: boolean) {
+  // The agent's app list is manager-only; members would get a 403.
   const assignments =
-    useProfileComposioToolkits(profileId).data?.assignments ?? [];
+    useQuery({
+      ...profileComposioToolkitsQueryOptions(profileId),
+      enabled: canManage,
+    }).data?.assignments ?? [];
 
   const composio = useComposioToolkits({
     enabled: assignments.length > 0,
@@ -380,9 +387,14 @@ function useAgentComposioApps(profileId: string) {
 
 /** The agent's MCP servers and Composio apps. */
 function ChatStatusConnectors({ profileId }: { profileId: string }) {
+  const { activeOrg, user } = useAuth();
   const detail = useProfileQuery(profileId);
   const servers = detail.data?.mcpServers ?? [];
-  const apps = useAgentComposioApps(profileId);
+
+  const apps = useAgentComposioApps(
+    profileId,
+    canManageAgent(detail.data, user, activeOrg?.role === "admin")
+  );
 
   return (
     <ChatStatusSection title="Connectors">
