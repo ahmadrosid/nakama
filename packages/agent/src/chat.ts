@@ -16,7 +16,11 @@ import type {
   ToolContext,
   ToolDefinition,
 } from "@nakama/core";
-import { createId, ProviderStreamInterruptedError } from "@nakama/core";
+import {
+  createId,
+  NakamaApiError,
+  ProviderStreamInterruptedError,
+} from "@nakama/core";
 import { z } from "zod";
 
 export interface AgentRequest {
@@ -78,6 +82,49 @@ const QuestionnaireToolResultSchema = z.object({ questionnaire: z.json() });
 const MAX_TOOL_ITERATIONS = 100;
 
 const MAX_TURN_OUTPUT_TOKENS = 200_000;
+
+/** Wait before the one retry a turn spends on a transient provider failure. */
+const PROVIDER_RETRY_DELAY_MS = 500;
+
+/**
+ * Connection failures that carry no HTTP status. Bun names them in `.code`
+ * ("ConnectionRefused", "ENOTFOUND", ...), older stacks use the Node
+ * spellings ("ECONNRESET", ...), and Bun's refused-host TypeError is only
+ * recognized by its fixed message. The OpenAI-shaped adapters pass all of
+ * these through as-is, so the retry gate has to recognize them itself.
+ */
+const CONNECTION_ERROR_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "EAI_AGAIN",
+  "ENOTFOUND",
+  "ConnectionRefused",
+  "ConnectionReset",
+  "ConnectionClosed",
+]);
+
+function isTransientConnectionError<ErrorValue>(error: ErrorValue): boolean {
+  if (!(error instanceof TypeError)) {
+    return false;
+  }
+
+  // SAFETY: TypeError is the only shape this helper handles, and Bun's
+  // fetch connection failures carry the socket code on it when the runtime
+  // names one. The fallback covers the case where no code was attached.
+  const code = (error as { code?: string }).code;
+
+  if (code) {
+    return CONNECTION_ERROR_CODES.has(code);
+  }
+
+  return (
+    error.message.startsWith("Unable to connect") ||
+    error.message.includes("getaddrinfo")
+  );
+}
 
 const MAX_OPEN_TODO_NUDGES = 2;
 
@@ -750,6 +797,7 @@ async function runConversation(
   let finalReplyOnly = false;
   let thinkingOff = false;
   let streamRetried = false;
+  let transientRetried = false;
   let streamInterrupted = false;
   let openTodoNudges = 0;
   let openTodosReminder: string | null = null;
@@ -848,6 +896,28 @@ async function runConversation(
       ) {
         streamRetried = true;
         streamInterrupted = true;
+        continue;
+      }
+
+      // Providers surface rate limits, gateways, and timeouts as one 502
+      // (buildProviderHttpError maps every non-auth HTTP status there, for
+      // the OpenAI-shaped adapters and now Gemini too), and a refused
+      // connection or failed DNS lookup arrives as Bun's TypeError before any
+      // HTTP happens. One bounded try per turn covers both; drops that land
+      // after a chunk or a tool call go through the interrupted path instead,
+      // and permanent failures still fail the turn.
+      if (
+        ((error instanceof NakamaApiError &&
+          error.status >= 500 &&
+          !(error instanceof ProviderStreamInterruptedError)) ||
+          isTransientConnectionError(error)) &&
+        !transientRetried &&
+        !signal?.aborted
+      ) {
+        transientRetried = true;
+        await new Promise((resolve) =>
+          setTimeout(resolve, PROVIDER_RETRY_DELAY_MS)
+        );
         continue;
       }
 
@@ -1370,13 +1440,27 @@ async function generateReply(
             },
           };
     } catch (error) {
-      const interrupted = error instanceof ProviderStreamInterruptedError;
+      // A connection that lands after a chunk or a tool call has gone out is
+      // the same shape as a broken stream: keep the partial reply in history,
+      // close the steps that never got their tool end, and let the interrupted
+      // path retry it once with its note, instead of the turn gate replaying
+      // the call from scratch and leaving those steps open.
+      const streamError =
+        (content || thinking || pendingToolInputs.size > 0) &&
+        isTransientConnectionError(error) &&
+        !(error instanceof ProviderStreamInterruptedError)
+          ? new ProviderStreamInterruptedError(
+              error instanceof Error ? error.message : String(error)
+            )
+          : error;
+
+      const interrupted = streamError instanceof ProviderStreamInterruptedError;
 
       // Tool calls cut off by the broken stream never run; close their steps.
       if (interrupted) {
         for (const [toolCallId, tool] of pendingToolInputs) {
           handlers.onToolEnd?.({
-            result: { error: error.message },
+            result: { error: streamError.message },
             tool,
             toolCallId,
             toolGroupId,
@@ -1403,7 +1487,7 @@ async function generateReply(
         history.push(message);
       }
 
-      throw error;
+      throw streamError;
     }
   }
 
