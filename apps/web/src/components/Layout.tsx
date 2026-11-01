@@ -21,6 +21,7 @@ import { MobileNavDrawer } from "@/components/MobileNavDrawer";
 import { WebPushPrompt } from "@/components/notifications/web-push-prompt";
 import { ProfileRail } from "@/components/ProfileRail";
 import { RouteBoundary } from "@/components/RouteBoundary";
+import { WhatsNewCard } from "@/components/WhatsNew";
 import { useBtwChatStore } from "@/context/btw-chat-store";
 import { useAppContext } from "@/context/use-app-context";
 import { useAgentGroupQuery } from "@/hooks/use-agent-groups";
@@ -87,6 +88,7 @@ export function Layout() {
       </div>
       <CommandPalette />
       <WebPushPrompt />
+      <WhatsNewCard />
       {btwOpen ? (
         <Suspense fallback={null}>
           <BtwChatHost />

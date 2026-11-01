@@ -1,8 +1,8 @@
 import { Button } from "@nakama/ui/button";
 import { RefreshIcon } from "hugeicons-react";
 import { useState } from "react";
+import { ReleaseChangeList } from "@/components/WhatsNew";
 import { useServiceWorkerUpdate } from "@/hooks/use-service-worker-update";
-import { RELEASE_CHANGE_LABELS } from "@/lib/release-notes";
 
 /** Set for the rest of the browser session after the user picks Later. */
 const UPDATE_LATER_KEY = "nakama-update-later";
@@ -51,16 +51,9 @@ export function ServiceWorkerUpdatePrompt() {
         <p className="mt-1 text-muted-foreground text-sm">{critical}</p>
       ) : null}
       {!critical && changes.length > 0 ? (
-        <ul className="mt-2 space-y-1 text-sm">
-          {changes.map((change) => (
-            <li className="text-foreground" key={change.text}>
-              <span className="text-muted-foreground">
-                {RELEASE_CHANGE_LABELS[change.kind]}:
-              </span>{" "}
-              {change.text}
-            </li>
-          ))}
-        </ul>
+        <div className="mt-2">
+          <ReleaseChangeList changes={changes} />
+        </div>
       ) : null}
       <div className="mt-3 flex justify-end gap-2">
         {critical ? null : (

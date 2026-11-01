@@ -21,6 +21,7 @@ import {
   ComputerIcon,
   Logout03Icon,
   MoonIcon,
+  NewReleasesIcon,
   SparklesIcon,
   Sun01Icon,
   UserIcon,
@@ -28,6 +29,7 @@ import {
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { UserContextEditorDialog } from "@/components/UserContextCard";
+import { WhatsNewDialog } from "@/components/WhatsNew";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
@@ -63,6 +65,7 @@ export function SidebarUserMenu() {
   const { theme, setTheme } = useTheme();
   const [profileOpen, setProfileOpen] = useState(false);
   const [personalisationOpen, setPersonalisationOpen] = useState(false);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   const version = health?.version?.trim();
 
   const canCheckUpdates =
@@ -148,6 +151,15 @@ export function SidebarUserMenu() {
                     >
                       <SparklesIcon className="size-4 text-muted-foreground" />
                       Personalisation
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="px-2.5 py-1.5"
+                      onClick={() => {
+                        setWhatsNewOpen(true);
+                      }}
+                    >
+                      <NewReleasesIcon className="size-4 text-muted-foreground" />
+                      What's new
                     </DropdownMenuItem>
                     {canAccessOrganizationPage(
                       user.isPlatformAdmin === true,
@@ -276,6 +288,8 @@ export function SidebarUserMenu() {
         onOpenChange={setPersonalisationOpen}
         open={personalisationOpen}
       />
+
+      <WhatsNewDialog onOpenChange={setWhatsNewOpen} open={whatsNewOpen} />
     </>
   );
 }
