@@ -9,7 +9,7 @@ These instructions are loaded directly when this skill is active.
 ## Choose the output
 
 - Use HTML for visual reports, plans, memos, landing pages, and browser games.
-- For slide decks and presentations, follow the slide-deck-design skill. It holds the deck template; load it with load_skill.
+- For slide decks and presentations, follow the slide-deck-design skill. It holds the deck template; load it with load_skill. Its theme, font, and resource rules replace the ones in this skill.
 - Keep the format the user requests. Use Markdown for pages only when the user or another active skill requires it.
 - Keep code, logs, and structured data in their appropriate formats. Preserve existing formats when moving files or editing artifacts.
 

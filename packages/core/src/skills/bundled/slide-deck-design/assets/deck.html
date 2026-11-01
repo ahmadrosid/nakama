@@ -4,401 +4,590 @@
     <meta charset="utf-8">
     <meta content="width=device-width, initial-scale=1" name="viewport">
     <title>Deck Title</title>
-    <link href="https://fonts.googleapis.com" rel="preconnect">
-    <link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
-    >
     <style>
-    /* ---- Design tokens: change these for each deck ---- */
+    /* Fonts: system stacks, so the deck works offline. To use a brand font, add an
+       @font-face rule with src: url(data:font/woff2;base64,...) and put its family
+       first in --sans or --mono. Do not link a font file. */
     :root {
-      --bg: #f5f5f5;
-      --slide: #ffffff;
-      --text: #171717;
-      --muted: #52525b;
-      --line: #e5e5e5;
-      --primary: #b45309;
-      --on-primary: #ffffff;
-      --sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-      --mono: "JetBrains Mono", ui-monospace, monospace;
+      --page: #eceff4;
+      --bg: #ffffff;
+      --ink: #101214;
+      --muted: #586270;
+      --subtle: #8a94a3;
+      --line: #e2e8f0;
+      --wash: #f8fafc;
+      /* One accent. Change all four together. */
+      --accent: #b45309;
+      --accent-ink: #92400e;
+      --accent-soft: #fffbeb;
+      --accent-line: #fcd34d;
+      --sans:
+        "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        Roboto, Arial, sans-serif;
+      --mono:
+        "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+        monospace;
+      /* Slide width: the largest 16:9 box that fits the window. */
+      --w: min(100vw, 177.778dvh);
       color-scheme: light;
     }
-    /* Screen only, so print and PDF always use the light tokens above. */
-    @media screen and (prefers-color-scheme: dark) {
-      :root {
-        --bg: #0a0a0b;
-        --slide: #161618;
-        --text: #fafafa;
-        --muted: #a1a1aa;
-        --line: #2a2a2e;
-        --primary: #f59e0b;
-        --on-primary: #0a0a0b;
-        color-scheme: dark;
-      }
-    }
 
-    /* ---- Frame: keep as is ---- */
+    /* ---- Frame, nav, and notes: keep as is ---- */
     * {
       box-sizing: border-box;
     }
     html,
     body {
-      height: 100%;
+      height: 100dvh;
+      margin: 0;
+      overflow: hidden;
+      font-family: var(--sans);
+      color: var(--ink);
+      background: var(--page);
+    }
+    p {
       margin: 0;
     }
-    body {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      align-items: center;
-      justify-content: center;
-      padding: 16px;
-      font-family: var(--sans);
-      color: var(--text);
-      background: var(--bg);
-    }
-    /* The deck is as wide as the viewport allows while one slide and the controls still fit. */
     .deck {
-      width: min(100%, calc((100vh - 88px) * 16 / 9));
+      display: grid;
+      place-items: center;
+      height: 100%;
     }
+    /* Children size in cqw, so text scales with the slide. 1cqw is 1% of the
+       slide's content box (inside the padding), so place absolute items with
+       var(--w), not cqw. */
     .slide {
       position: relative;
-      width: 100%;
-      aspect-ratio: 16 / 9;
-      container-type: size;
-      overflow: hidden;
-      background: var(--slide);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-    }
-    /* Padding lives on .frame, so cqw is measured against the slide, not the viewport. */
-    .frame {
-      position: absolute;
-      inset: 0;
       display: flex;
       flex-direction: column;
-      padding: 6cqw 6.5cqw;
+      width: var(--w);
+      height: calc(var(--w) * 9 / 16);
+      padding: calc(var(--w) * 0.052) calc(var(--w) * 0.064)
+        calc(var(--w) * 0.06);
+      container-type: inline-size;
+      overflow: hidden;
+      background: var(--bg);
     }
-    .js .slide:not(.is-active) {
+    /* Without script, every slide shows. */
+    .js .slide:not(.active),
+    .notes,
+    .notes-panel {
       display: none;
     }
-    .controls {
+    .nav {
+      position: fixed;
+      top: 10px;
+      right: 12px;
+      z-index: 5;
       display: flex;
-      gap: 12px;
       align-items: center;
-      font: 500 14px / 1.2 var(--sans);
-    }
-    .controls button {
-      padding: 8px 16px;
-      font: inherit;
-      color: var(--text);
-      white-space: nowrap;
-      appearance: none;
-      cursor: pointer;
-      background: var(--slide);
-      border: 1px solid var(--line);
-      border-radius: 999px;
-    }
-    .controls button:disabled {
-      cursor: default;
-      opacity: 0.4;
-    }
-    .controls button:focus-visible {
-      outline: 2px solid var(--primary);
-      outline-offset: 2px;
-    }
-    .counter {
-      min-width: 4.5em;
-      font-family: var(--mono);
-      font-variant-numeric: tabular-nums;
+      font: 12px var(--mono);
       color: var(--muted);
-      text-align: center;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      opacity: 0.35;
+    }
+    .nav:hover,
+    .nav:focus-within {
+      opacity: 1;
+    }
+    .nav button {
+      padding: 6px 9px;
+      font: inherit;
+      color: var(--ink);
+      cursor: pointer;
+      background: none;
+      border: 0;
+    }
+    .nav button:disabled {
+      opacity: 0.3;
+    }
+    .show-notes .notes-panel {
+      position: fixed;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 6;
+      display: block;
+      max-height: 38vh;
+      padding: 16px 24px;
+      overflow: auto;
+      font-size: 15px;
+      line-height: 1.55;
+      color: #e6e9ee;
+      background: #101214;
+    }
+    .notes-panel p {
+      max-width: 960px;
+      margin-bottom: 8px;
+    }
+    .notes-panel .q {
+      color: var(--accent-line);
+    }
+    .notes-panel .hint {
+      font: 11px var(--mono);
+      color: var(--subtle);
     }
 
-    /* ---- Slide type: sizes in cqw so text scales with the slide ---- */
-    .eyebrow {
-      margin: 0 0 2cqw;
-      font: 500 1.5cqw / 1.2 var(--mono);
-      color: var(--primary);
+    /* ---- Type and slide frame ---- */
+    .kicker,
+    .label {
+      font: 500 1.1cqw / 1.3 var(--mono);
+      color: var(--accent-ink);
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.14em;
     }
-    h1,
-    h2 {
-      margin: 0;
-      font-weight: 700;
-      letter-spacing: -0.03em;
+    .label {
+      display: block;
+      margin-bottom: 1.2cqw;
+      font-size: 1cqw;
+      color: var(--subtle);
     }
     h1 {
-      font-size: 6.5cqw;
-      line-height: 1.02;
-    }
-    h2 {
-      font-size: 4.6cqw;
-      line-height: 1.08;
-    }
-    p,
-    li {
-      font-size: 2.4cqw;
-      line-height: 1.4;
-    }
-    .lede {
-      max-width: 70%;
-      margin: 2.5cqw 0 0;
-      color: var(--muted);
-    }
-    .points {
-      padding: 0;
-      margin: 3cqw 0 0;
-      list-style: none;
-    }
-    .points li {
-      padding: 1.4cqw 0;
-      border-top: 1px solid var(--line);
-    }
-    .big {
-      margin: auto 0;
-      font-size: 6cqw;
-      font-weight: 600;
+      margin: 1.3cqw 0 0;
+      font-size: 4.2cqw;
+      font-weight: 550;
       line-height: 1.12;
-      letter-spacing: -0.02em;
+      letter-spacing: -0.035em;
     }
-    .page-number {
+    h1 span {
+      color: var(--subtle);
+    }
+    .body {
+      font-size: 1.45cqw;
+      line-height: 1.5;
+      color: var(--muted);
+    }
+    /* Main content sits at the bottom of the slide. */
+    .fill {
+      margin-top: auto;
+    }
+    .source {
+      padding-top: 1.6cqw;
+      font-size: 1.15cqw;
+      color: var(--subtle);
+    }
+    .foot {
       position: absolute;
-      right: 6.5cqw;
-      bottom: 4.5cqw;
-      font: 1.4cqw var(--mono);
-      color: var(--muted);
-    }
-
-    /* Two columns: text beside a visual or a metric. */
-    .split {
-      display: grid;
-      flex: 1;
-      grid-template-columns: 1fr 1fr;
-      gap: 5cqw;
-      align-items: center;
-      min-height: 0;
-      margin-top: 3cqw;
-    }
-    .metric strong {
-      display: block;
-      font-size: 9cqw;
-      font-variant-numeric: tabular-nums;
-      line-height: 1;
-      letter-spacing: -0.04em;
-    }
-    .metric > span {
-      display: block;
-      margin-top: 1.2cqw;
-      font-size: 2.2cqw;
-      color: var(--muted);
-    }
-    .metric .change {
-      font-weight: 600;
-      color: var(--primary);
-    }
-
-    /* Bar chart: one bar per track; set each bar's height inline as value / max × 100%. */
-    .bars {
+      right: calc(var(--w) * 0.064);
+      bottom: 2.4cqw;
+      left: calc(var(--w) * 0.064);
       display: flex;
-      gap: 4cqw;
-      align-items: flex-end;
+      justify-content: space-between;
+      font-size: 0.95cqw;
+      color: var(--subtle);
     }
-    .bar {
+    /* Brand mark: replace <i> with the user's logo as <svg> or <img>. */
+    .mark,
+    .brand {
+      display: flex;
+      gap: 0.7cqw;
+      align-items: center;
+    }
+    .mark > *,
+    .brand > * {
+      width: 1.4cqw;
+      height: 1.4cqw;
+      background: currentColor;
+      border-radius: 50%;
+    }
+    .mark > svg,
+    .mark > img,
+    .brand > svg,
+    .brand > img {
+      width: auto;
+      background: none;
+      border-radius: 0;
+    }
+    .brand {
+      font-size: 1.7cqw;
+      font-weight: 600;
+    }
+    .brand > * {
+      width: 2.4cqw;
+      height: 2.4cqw;
+    }
+    /* Round avatar: an <img> or a <span> with initials. */
+    .av {
+      display: grid;
+      flex: none;
+      place-items: center;
+      width: 3.2cqw;
+      height: 3.2cqw;
+      font: 500 1.1cqw var(--mono);
+      color: var(--accent-ink);
+      object-fit: cover;
+      background: var(--accent-soft);
+      border-radius: 50%;
+    }
+    /* Soft gradient panel built from the accent. */
+    .visual {
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(
+          70% 90% at 12% 8%,
+          color-mix(in srgb, var(--accent) 30%, transparent),
+          transparent 60%
+        ),
+        radial-gradient(60% 80% at 88% 18%, #c7d3e6, transparent 65%),
+        radial-gradient(
+          70% 70% at 70% 100%,
+          color-mix(in srgb, var(--accent) 38%, transparent),
+          transparent 60%
+        ),
+        linear-gradient(135deg, var(--accent-soft), #e6e9f0 55%, #dfe5ee);
+    }
+
+    /* ---- Cover ---- */
+    .cover {
+      padding: 0;
+    }
+    .cover-grid {
+      display: grid;
+      grid-template-columns: 0.92fr 1.08fr;
+      height: 100%;
+    }
+    .cover-text {
+      display: flex;
+      flex-direction: column;
+      padding: 5.2cqw 4cqw 4.6cqw 6.4cqw;
+    }
+    .cover h1 {
+      margin-top: auto;
+      font-size: 4.8cqw;
+    }
+    .meta {
+      margin-top: auto;
+      font-size: 1.3cqw;
+      color: var(--subtle);
+    }
+    .hero {
       display: flex;
       flex-direction: column;
       gap: 1cqw;
       align-items: center;
-      font-size: 1.8cqw;
-      color: var(--muted);
+      justify-content: center;
+      font-family: var(--mono);
     }
-    .track {
-      display: flex;
-      align-items: flex-end;
-      width: 9cqw;
-      height: 18cqw;
+    .hero b {
+      font-size: 5.2cqw;
+      font-weight: 500;
     }
-    .fill {
-      width: 100%;
-      background: var(--muted);
-      border-radius: 4px 4px 0 0;
+    .hero .on {
+      color: var(--accent-ink);
     }
-    .fill.focus {
-      background: var(--primary);
+    .hero i {
+      font-size: 2.4cqw;
+      font-style: normal;
+      color: var(--subtle);
     }
 
-    /* ---- Print: one slide per 16:9 page, light colors, no controls ---- */
+    /* ---- Numbered list ---- */
+    .row {
+      display: grid;
+      grid-template-columns: 6cqw 1fr;
+      gap: 2cqw;
+      padding: 1.35cqw 0;
+      border-top: 1px solid var(--line);
+    }
+    .row:last-child {
+      border-bottom: 1px solid var(--line);
+    }
+    .row .n {
+      padding-top: 0.4cqw;
+      font: 1.2cqw var(--mono);
+      color: var(--accent-ink);
+    }
+    .row p {
+      font-size: 1.9cqw;
+      line-height: 1.4;
+      color: var(--muted);
+    }
+    .row b {
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    /* ---- Statement: one sentence, set large ---- */
+    .say {
+      max-width: 80cqw;
+      font-size: 4.2cqw;
+      font-weight: 500;
+      line-height: 1.2;
+      letter-spacing: -0.03em;
+    }
+
+    /* ---- Phone portrait: layouts stack, text in px ---- */
+    @media screen and (max-width: 760px) and (orientation: portrait) {
+      html,
+      body {
+        height: auto;
+        overflow: auto;
+      }
+      .deck {
+        display: block;
+      }
+      .slide {
+        width: 100%;
+        height: auto;
+        min-height: 100dvh;
+        padding: 48px 22px 72px;
+      }
+      .cover {
+        padding: 0;
+      }
+      .cover-grid {
+        grid-template-columns: 1fr;
+        min-height: 100dvh;
+      }
+      .cover-text {
+        min-height: 60dvh;
+        padding: 48px 22px 28px;
+      }
+      .kicker,
+      .source,
+      .foot,
+      .meta {
+        font-size: 11px;
+      }
+      .label,
+      .row .n {
+        font-size: 10px;
+      }
+      h1,
+      .cover h1 {
+        margin: 10px 0 28px;
+        font-size: 28px;
+      }
+      .body {
+        font-size: 14px;
+      }
+      .row {
+        grid-template-columns: 36px 1fr;
+        padding: 12px 0;
+      }
+      .row p {
+        font-size: 16px;
+      }
+      .say {
+        font-size: 26px;
+      }
+      .brand {
+        font-size: 18px;
+      }
+      .mark > * {
+        width: 12px;
+        height: 12px;
+      }
+      .brand > * {
+        width: 22px;
+        height: 22px;
+      }
+      .hero {
+        min-height: 40dvh;
+      }
+      .hero b {
+        font-size: 36px;
+      }
+      .hero i {
+        font-size: 18px;
+      }
+      .av {
+        width: 28px;
+        height: 28px;
+        font-size: 10px;
+      }
+      .foot {
+        right: 22px;
+        bottom: 22px;
+        left: 22px;
+      }
+    }
+
+    /* ---- Print: one slide per 16:9 page, light tokens, no controls ---- */
     @page {
       size: 16in 9in;
       margin: 0;
     }
     @media print {
+      :root {
+        --w: 16in;
+      }
       html,
       body {
         height: auto;
-      }
-      body {
-        display: block;
-        padding: 0;
+        overflow: visible;
         background: #ffffff;
       }
       .deck {
-        width: 16in;
-      }
-      .js .slide:not(.is-active),
-      .slide {
         display: block;
       }
+      .js .slide:not(.active),
       .slide {
-        width: 16in;
-        height: 9in;
-        aspect-ratio: auto;
-        border: 0;
-        border-radius: 0;
+        display: flex;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
         break-after: page;
+        break-inside: avoid;
       }
       .slide:last-child {
         break-after: auto;
       }
-      .controls {
+      .nav,
+      .show-notes .notes-panel {
         display: none;
       }
     }
-    @media (prefers-reduced-motion: no-preference) {
-      .controls button {
-        transition: border-color 0.15s;
-      }
-    }
+
+    /* ---- Pattern CSS from patterns.html goes below ---- */
     </style>
   </head>
   <body>
-    <main aria-label="Slide deck" class="deck">
-      <!-- Title slide -->
-      <section aria-label="Slide 1" class="slide">
-        <div class="frame">
-          <p class="eyebrow">Eyebrow label</p>
-          <h1>Deck title on<br>one or two lines</h1>
-          <p class="lede">One sentence that says what the deck is about.</p>
-        </div>
-      </section>
-
-      <!-- Points slide: at most four one-line points -->
-      <section aria-label="Slide 2" class="slide">
-        <div class="frame">
-          <p class="eyebrow">Section</p>
-          <h2>One idea per slide</h2>
-          <ul class="points">
-            <li>First point</li>
-            <li>Second point</li>
-            <li>Third point</li>
-          </ul>
-          <span class="page-number">02</span>
-        </div>
-      </section>
-
-      <!-- Metric slide: number, change, and bars of the supplied values -->
-      <section aria-label="Slide 3" class="slide">
-        <div class="frame">
-          <p class="eyebrow">Metric</p>
-          <h2>Metric name</h2>
-          <div class="split">
-            <div class="metric">
-              <strong>1.5M</strong>
-              <span><span class="change">+25%</span> from 1.2M</span>
-            </div>
-            <div aria-label="1.2M before, 1.5M after" class="bars">
-              <div class="bar">
-                <div class="track">
-                  <div class="fill" style="height: 80%"></div>
-                </div>
-                Before
-              </div>
-              <div class="bar">
-                <div class="track">
-                  <div class="fill focus" style="height: 100%"></div>
-                </div>
-                After
-              </div>
-            </div>
+    <main aria-label="Deck Title" class="deck">
+      <section aria-label="Slide 1: Title" class="slide cover">
+        <div class="cover-grid">
+          <div class="cover-text">
+            <div class="brand"><i></i>Brand</div>
+            <h1>Deck title<br>on two lines<br><span>Date or subtitle</span></h1>
+            <p class="meta">Event name · Date · Time</p>
           </div>
-          <span class="page-number">03</span>
+          <div class="visual hero">
+            <span class="label">Key figure</span>
+            <b>1.2M</b>
+            <i>↓</i>
+            <b class="on">1.5M</b>
+          </div>
         </div>
+        <aside class="notes">
+          <p>What you say while this slide shows.</p>
+          <p class="q">
+            <b>Q:</b>
+            A question the audience may ask — and the answer.
+          </p>
+        </aside>
       </section>
 
-      <!-- Statement slide: one sentence, set large -->
-      <section aria-label="Slide 4" class="slide">
-        <div class="frame">
-          <p class="eyebrow">Update</p>
-          <p class="big">
-            One supplied sentence, set large as the slide's main text.
-          </p>
-          <span class="page-number">04</span>
+      <section aria-label="Slide 2: Plan" class="slide">
+        <p class="kicker">Section · Plan</p>
+        <h1>Next steps.<br><span>Four items.</span></h1>
+        <div class="fill">
+          <div class="row">
+            <span class="n">01</span>
+            <p><b>First item</b> and a few words of detail</p>
+          </div>
+          <div class="row">
+            <span class="n">02</span>
+            <p><b>Second item</b> and a few words of detail</p>
+          </div>
+          <div class="row">
+            <span class="n">03</span>
+            <p><b>Third item</b> and a few words of detail</p>
+          </div>
+          <div class="row">
+            <span class="n">04</span>
+            <p><b>Fourth item</b> and a few words of detail</p>
+          </div>
         </div>
+        <p class="source">Source: where the facts come from, and the date.</p>
+        <div class="foot">
+          <span class="mark"><i></i>Deck Title</span><span>02</span>
+        </div>
+        <aside class="notes">
+          <p>Why each item matters, and who owns it.</p>
+        </aside>
+      </section>
+
+      <section aria-label="Slide 3: Statement" class="slide">
+        <p class="kicker">Section · Update</p>
+        <p class="say fill">
+          One supplied sentence, set large as the slide's main text.
+        </p>
+        <div class="foot">
+          <span class="mark"><i></i>Deck Title</span><span>03</span>
+        </div>
+        <aside class="notes"><p>The context behind the sentence.</p></aside>
       </section>
     </main>
-    <nav aria-label="Slide navigation" class="controls">
-      <button aria-label="Previous slide" data-step="-1" type="button">
-        ← Prev
-      </button>
-      <span aria-live="polite" class="counter"></span>
-      <button aria-label="Next slide" data-step="1" type="button">
-        Next →
-      </button>
+    <nav aria-label="Slide navigation" class="nav">
+      <button aria-label="Previous slide" type="button">←</button>
+      <span aria-live="polite" class="count"></span>
+      <button aria-label="Next slide" type="button">→</button>
+      <button aria-label="Speaker notes" type="button">N</button>
     </nav>
+    <div aria-live="polite" class="notes-panel"></div>
     <script>
     "use strict";
     (() => {
-      // Navigation: keep as is. Without script, every slide shows.
+      // Navigation and notes: keep as is.
       document.documentElement.classList.add("js");
       const slides = [...document.querySelectorAll(".slide")];
-      const counter = document.querySelector(".counter");
-      const [prev, next] = document.querySelectorAll(".controls button");
+      const count = document.querySelector(".count");
+      const panel = document.querySelector(".notes-panel");
+      const [prev, next, notes] = document.querySelectorAll(".nav button");
       let index = 0;
 
       function show(n) {
-        index = Math.max(0, Math.min(slides.length - 1, n));
+        index = Math.max(0, Math.min(slides.length - 1, n || 0));
         for (const [i, slide] of slides.entries()) {
-          slide.classList.toggle("is-active", i === index);
+          slide.classList.toggle("active", i === index);
         }
-        counter.textContent = `${index + 1} / ${slides.length}`;
+        count.textContent = `${index + 1} / ${slides.length}`;
         prev.disabled = index === 0;
         next.disabled = index === slides.length - 1;
+        const hint = document.createElement("p");
+        hint.className = "hint";
+        hint.textContent = `SPEAKER NOTES · ${index + 1} · press N to close`;
+        const aside = slides[index].querySelector(".notes");
+        panel.replaceChildren(
+          hint,
+          ...(aside?.cloneNode(true).childNodes ?? [])
+        );
+        try {
+          history.replaceState(null, "", `#${index + 1}`);
+        } catch {
+          // Some previews block URL changes; the deck still works.
+        }
       }
 
+      const toggleNotes = () => document.body.classList.toggle("show-notes");
       prev.addEventListener("click", () => show(index - 1));
       next.addEventListener("click", () => show(index + 1));
+      notes.addEventListener("click", toggleNotes);
       addEventListener("keydown", (event) => {
-        // Leave browser shortcuts alone, and let Space press a focused control.
-        if (event.altKey || event.ctrlKey || event.metaKey) {
-          return;
-        }
+        // Leave browser shortcuts, form fields, and Space on a control alone.
+        const target = event.target.closest?.bind(event.target);
         if (
-          event.key === " " &&
-          event.target.closest?.("button, a, input, select, textarea")
+          event.altKey ||
+          event.ctrlKey ||
+          event.metaKey ||
+          target?.("input, select, textarea") ||
+          (event.key === " " && target?.("button, a"))
         ) {
           return;
         }
-        const step = {
+        const steps = {
           " ": 1,
+          ArrowDown: 1,
           ArrowLeft: -1,
           ArrowRight: 1,
+          ArrowUp: -1,
+          End: slides.length,
+          Home: -slides.length,
           PageDown: 1,
           PageUp: -1,
-        }[event.key];
-        if (step) {
+        };
+        if (event.key in steps) {
           event.preventDefault();
-          show(index + step);
-        }
-        if (event.key === "Home") {
-          show(0);
-        }
-        if (event.key === "End") {
-          show(slides.length - 1);
+          show(index + steps[event.key]);
+        } else if (event.key.toLowerCase() === "n") {
+          event.preventDefault();
+          toggleNotes();
         }
       });
-      show(0);
+      const fromHash = () => Number(location.hash.slice(1)) - 1;
+      addEventListener("hashchange", () => show(fromHash()));
+      show(fromHash());
     })();
     </script>
   </body>
