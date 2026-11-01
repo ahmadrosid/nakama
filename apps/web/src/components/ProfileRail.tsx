@@ -276,18 +276,13 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
       aria-label="Profiles"
       className="flex h-full w-14 shrink-0 flex-col items-center gap-2 border-border/50 border-r bg-sidebar/60 py-3"
     >
-      <a
-        aria-label="Nakama"
-        className="flex size-7 shrink-0 items-center justify-center rounded-md transition-opacity hover:opacity-80"
-        href="/chat"
-        title="Nakama"
-      >
+      <div className="flex size-7 shrink-0 items-center justify-center">
         <img
-          alt=""
+          alt="Nakama"
           className="size-5.5 -translate-y-px object-contain"
           src={logoSrc}
         />
-      </a>
+      </div>
 
       <div className="no-scrollbar flex min-h-0 flex-1 flex-col items-center gap-1.5 overflow-y-auto px-2 py-1">
         {pinnedItems.map(renderItem)}

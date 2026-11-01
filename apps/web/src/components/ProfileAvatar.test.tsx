@@ -281,6 +281,12 @@ test.each([
     expect(
       [...bars].map((bar) => bar.parentElement?.getAttribute("aria-label"))
     ).toEqual(["Agent A"]);
+
+    // A plain link would reload the whole app; the logo is not a control.
+    const logo = container.querySelector('img[alt="Nakama"]');
+
+    expect(logo).not.toBeNull();
+    expect(logo?.closest("a")).toBeNull();
   } finally {
     await act(async () => root.unmount());
     useActiveChatProfileStore.setState(previousState);
