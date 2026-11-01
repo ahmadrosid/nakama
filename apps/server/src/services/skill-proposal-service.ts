@@ -12,7 +12,7 @@ import type { SkillProposal } from "@nakama/core/contract";
 import {
   assertNotBundledSkillName,
   assertValidSkillName,
-  readSkillForPatch,
+  prepareSkillPatch,
 } from "@nakama/core/skills/write";
 import type {
   DatabaseAdapter,
@@ -433,6 +433,14 @@ export class SkillProposalService {
     this.assertPatchFieldSize(oldString);
     this.assertPatchFieldSize(newString);
 
+    await prepareSkillPatch({
+      name,
+      newString,
+      oldString,
+      orgId: input.orgId,
+      profileId: input.profileId,
+    });
+
     const db = this.requireDatabase();
 
     const pending = await db.getPendingSkillProposalForPatch(
@@ -464,13 +472,6 @@ export class SkillProposalService {
         proposalId: conflicting.id,
       };
     }
-
-    await readSkillForPatch({
-      name,
-      oldString,
-      orgId: input.orgId,
-      profileId: input.profileId,
-    });
 
     const proposal = await this.insertProposal({
       ...input,

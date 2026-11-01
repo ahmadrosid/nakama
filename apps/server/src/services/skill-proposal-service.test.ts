@@ -358,6 +358,55 @@ describe("SkillProposalService", () => {
     );
   });
 
+  test("stage patch refuses a rename, even when another proposal is pending", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const profile = await seedOrg(db);
+    const skills = new SkillsService(db);
+    const service = new SkillProposalService(db, skills);
+
+    await skills.createSkill(ORG_ID, {
+      body: "Run the deploy checklist before shipping.",
+      description: "Notes about deploy process.",
+      name: "deploy-notes",
+      profileId: profile.id,
+    });
+
+    const staged = await service.stageProposal({
+      action: "patch",
+      newString: "release checklist",
+      oldString: "deploy checklist",
+      orgId: ORG_ID,
+      profileId: profile.id,
+      skillName: "deploy-notes",
+    });
+
+    await expect(
+      service.stageProposal({
+        action: "patch",
+        newString: "name: other-notes",
+        oldString: "name: deploy-notes",
+        orgId: ORG_ID,
+        profileId: profile.id,
+        skillName: "deploy-notes",
+      })
+    ).rejects.toMatchObject({ name: "NakamaApiError", status: 400 });
+    await expect(
+      service.stageProposal({
+        action: "patch",
+        newString: "x",
+        oldString: "not in the file",
+        orgId: ORG_ID,
+        profileId: profile.id,
+        skillName: "deploy-notes",
+      })
+    ).rejects.toMatchObject({ name: "NakamaApiError", status: 409 });
+    expect(
+      (await db.listSkillProposals(ORG_ID, { status: "pending" })).map(
+        (proposal) => proposal.id
+      )
+    ).toEqual([staged.proposalId!]);
+  });
+
   test("approve patch applies old_string/new_string", async () => {
     const db = createInMemoryDatabaseAdapter();
     const profile = await seedOrg(db);
