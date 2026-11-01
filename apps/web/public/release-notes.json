@@ -1,0 +1,19 @@
+[
+  {
+    "version": "0.4.68",
+    "changes": [
+      {
+        "kind": "new",
+        "text": "The update line shows what changed"
+      },
+      {
+        "kind": "new",
+        "text": "Meetup style for slide decks"
+      },
+      {
+        "kind": "fixed",
+        "text": "Skill suggestions cannot break a skill"
+      }
+    ]
+  }
+]

@@ -81,6 +81,10 @@ import { ChatSkillPicker } from "@/components/chat/chat-skill-picker";
 import { ChatSkillTokenOverlay } from "@/components/chat/chat-skill-token-overlay";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
+import {
+  ServiceWorkerUpdateNotice,
+  useUpdateReady,
+} from "@/components/ServiceWorkerUpdatePrompt";
 import { useAuth } from "@/context/use-auth";
 import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import {
@@ -219,12 +223,18 @@ function ChatComposerNotice({
   headerNotice?: ReactNode;
   showTips: boolean;
 }) {
+  const updateReady = useUpdateReady();
+
   if (error) {
     return <ChatComposerError message={error} />;
   }
 
   if (headerNotice) {
     return headerNotice;
+  }
+
+  if (updateReady) {
+    return <ServiceWorkerUpdateNotice />;
   }
 
   if (showTips) {
