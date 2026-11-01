@@ -70,7 +70,7 @@ Hit a bug that has no issue? Open one with the [issue templates](https://github.
 
 ### Before you start building
 
-Four questions. Any answer of no is worth raising in the issue first, where it
+Five questions. Any answer of no is worth raising in the issue first, where it
 costs nothing.
 
 1. Is the issue's `stage:` label `now`? The table above says what the other two
@@ -82,6 +82,10 @@ costs nothing.
    not see the same filesystem.
 4. Does the new abstraction have more than one caller today? A cache, a dedupe, a
    guard or a factory with a single call site gets deleted in review.
+5. Does it keep Nakama lean? The ceiling is 512 MB of RAM. If every install pays for
+   the change even when nobody uses it (a new process, worker, poller, browser or
+   heavy dependency), put a before and after RSS in the PR, or make it a plugin, a
+   skill or an MCP server. Bug and security fixes are not blocked by this.
 
 ## Workflow
 

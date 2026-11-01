@@ -2,10 +2,20 @@
 
 Agent platform built to work with your team — not replace them. Multi-tenant monorepo; orgs are flat tenants, each profile has a **soul** (identity, style, instructions, memory).
 
+## Strategy
+
+Lean is the line core keeps. Judge every design, review and issue breakdown against it.
+
+- 512 MB of RAM is the ceiling for an install. A feature that goes over it does not go in core
+- Before adding to core, ask if a plugin, a skill or an MCP server can do it. If yes, build it there
+- A cost every install pays (a new process, worker, poller, browser or heavy dependency) needs a measured RSS before and after in the PR
+- Work that loads a whole file or archive in memory grows with the data, so state its peak
+- Bug and security fixes are not blocked by this
+
 ## Rules
 
 **Before code**
-- Read [CONTRIBUTING.md, "Before you start building"](./CONTRIBUTING.md#before-you-start-building) first. Four questions, and a closed PR here usually failed one of them. You can produce a working change faster than anyone can decide it was the right one, so check the shape before the diff
+- Read [CONTRIBUTING.md, "Before you start building"](./CONTRIBUTING.md#before-you-start-building) first. Five questions, and a closed PR here usually failed one of them. You can produce a working change faster than anyone can decide it was the right one, so check the shape before the diff
 - Read the rest of [CONTRIBUTING.md](./CONTRIBUTING.md) before you pick work or open a PR: how to claim an issue, the checks to run, the PR body format, and [what happens to work that goes quiet](./CONTRIBUTING.md#when-work-goes-quiet). An issue assigned to someone else is not yours to build. A PR labelled `stale` is, with `Co-authored-by` for its author
 
 **Code**
