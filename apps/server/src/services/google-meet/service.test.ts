@@ -302,12 +302,10 @@ test("shared capture listener consumes tokens once and preserves protocol 2 fina
     );
     const ws = new WebSocket(first.capture.url);
 
+    // No wall-clock deadline: on Windows CI each step writes SQLite with
+    // synchronous=EXTRA, so finalization can take seconds. The test timeout
+    // still catches a hang; a close before finalization fails at once.
     const finalized = new Promise<void>((resolve, reject) => {
-      const deadline = setTimeout(
-        () => reject(new Error("Capture timed out")),
-        2000
-      );
-
       ws.addEventListener("message", (event) => {
         const message = JSON.parse(String(event.data));
 
@@ -317,14 +315,13 @@ test("shared capture listener consumes tokens once and preserves protocol 2 fina
         }
 
         if (message.type === "capture-finalized") {
-          clearTimeout(deadline);
           resolve();
         }
       });
-      ws.addEventListener("error", () => {
-        clearTimeout(deadline);
-        reject(new Error("Socket failed"));
-      });
+      ws.addEventListener("close", () =>
+        reject(new Error("Socket closed before finalization"))
+      );
+      ws.addEventListener("error", () => reject(new Error("Socket failed")));
     });
 
     await finalized;
