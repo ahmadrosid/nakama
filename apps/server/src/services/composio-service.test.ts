@@ -587,6 +587,119 @@ describe("ComposioService", () => {
     }
   });
 
+  test("an account connected again while Composio answers is kept, and the failure reaches the prompt", async () => {
+    const { db, service, restore } = await createConfiguredService();
+
+    try {
+      const now = "2026-01-01T00:00:00.000Z";
+      await seedOrgWithAdmin(db);
+
+      const profileId = "profile_race";
+      await db.upsertProfile({
+        createdAt: now,
+        id: profileId,
+        isDefault: false,
+        isSuper: false,
+        model: null,
+        name: "Agent",
+        orgId: ORG_ID,
+        systemPrompt: "",
+        updatedAt: now,
+      });
+
+      const connection = {
+        connectedAccountId: "ca_old_gmail",
+        createdAt: now,
+        id: "connection_gmail",
+        lastError: null,
+        oauthStateHash: null,
+        orgId: ORG_ID,
+        sessionIdEnc: null,
+        status: "connected" as const,
+        toolkitId: "",
+        updatedAt: now,
+        userId: USER_ID,
+      };
+
+      injectMockComposioClient(service, {
+        async createProfileSession(_userId, _slugs, _actions, accounts = {}) {
+          if (accounts.gmail !== "ca_old_gmail") {
+            return { sessionId: "sess_ok", url: "https://mcp.example.com/ok" };
+          }
+
+          // The user finishes OAuth again before Composio answers.
+          await db.upsertComposioUserConnection({
+            ...connection,
+            connectedAccountId: "ca_new_gmail",
+          });
+
+          const details = {
+            code: 4306,
+            message: "Could not find connected account(s) ca_old_gmail.",
+            slug: "ToolRouterV2_InvalidConnectedAccountIds",
+          };
+
+          throw Object.assign(
+            new Error(`400 ${JSON.stringify({ error: details })}`),
+            { details, status: 400 }
+          );
+        },
+        async listCatalogToolkits() {
+          return [
+            {
+              description: "gmail",
+              logoUrl: null,
+              name: "gmail",
+              slug: "gmail",
+            },
+          ];
+        },
+      });
+
+      const toolkit = await service.enableToolkit(ORG_ID, {
+        toolkitSlug: "gmail",
+      });
+
+      connection.toolkitId = toolkit.id;
+      await db.upsertComposioUserConnection(connection);
+      await db.replaceProfileComposioToolkits(profileId, [
+        { allowedActions: null, profileId, toolkitId: toolkit.id },
+      ]);
+
+      await expect(
+        service.getProfileSessionEndpoint(ORG_ID, USER_ID, profileId)
+      ).rejects.toThrow();
+
+      expect(
+        await db.getComposioUserConnection(USER_ID, toolkit.id)
+      ).toMatchObject({
+        connectedAccountId: "ca_new_gmail",
+        status: "connected",
+      });
+      expect(
+        await service.formatProfileConnectionsContext(
+          ORG_ID,
+          USER_ID,
+          profileId
+        )
+      ).toContain("ToolRouterV2_InvalidConnectedAccountIds");
+
+      expect(
+        (await service.getProfileSessionEndpoint(ORG_ID, USER_ID, profileId))
+          ?.sessionId
+      ).toBe("sess_ok");
+      expect(
+        await service.formatProfileConnectionsContext(
+          ORG_ID,
+          USER_ID,
+          profileId
+        )
+      ).not.toContain("ToolRouterV2_InvalidConnectedAccountIds");
+    } finally {
+      restore();
+    }
+  });
+
   test("shared profiles reject integration assignments and default auto-assignment after revocation", async () => {
     const { db, service, restore } = await createConfiguredService();
 

@@ -288,15 +288,30 @@ describe("findRejectedConnectedAccountIds", () => {
     ]);
   });
 
-  test("returns every requested id when the refusal names none of them", () => {
+  test("returns the only requested id when the refusal names none", () => {
     const error = Object.assign(new Error("400"), {
       details: { code: 4306, message: "Invalid connected accounts" },
     });
 
-    expect(findRejectedConnectedAccountIds(error, ["ca_a", "ca_b"])).toEqual([
-      "ca_a",
-      "ca_b",
-    ]);
+    expect(findRejectedConnectedAccountIds(error, ["ca_a"])).toEqual(["ca_a"]);
+    expect(findRejectedConnectedAccountIds(error, ["ca_a", "ca_b"])).toEqual(
+      []
+    );
+  });
+
+  test("matches whole ids, in any id format", () => {
+    const uuid = "0b6f1c7e-3c1f-4f6e-9a8e-2d1b7c9f4a10";
+
+    const error = Object.assign(new Error("400"), {
+      details: {
+        code: 4306,
+        message: `Could not find connected account(s) ca_old_gmail, ${uuid}.`,
+      },
+    });
+
+    expect(
+      findRejectedConnectedAccountIds(error, ["ca_old", "ca_old_gmail", uuid])
+    ).toEqual(["ca_old_gmail", uuid]);
   });
 
   test("ignores other errors", () => {

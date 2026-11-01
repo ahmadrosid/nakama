@@ -185,7 +185,8 @@ const ComposioApiErrorSchema = z.object({
  * The connected account ids Composio refused when opening a session, or null
  * when the error is something else. Composio refuses ids it does not hold for
  * this user, for example after the instance moved to a new Composio project.
- * When the error names no requested id, every requested id is returned.
+ * When the error names no requested id, only a single requested id is
+ * returned; with several, the result is empty.
  */
 export function findRejectedConnectedAccountIds(
   error: Error,
@@ -229,10 +230,16 @@ export function findRejectedConnectedAccountIds(
     return null;
   }
 
-  const named = new Set(text.match(/\bca_[A-Za-z0-9_-]+/g) ?? []);
-  const mentioned = requestedIds.filter((id) => named.has(id));
+  const tokens = new Set(text.split(/[^A-Za-z0-9_-]+/));
+  const mentioned = requestedIds.filter((id) => tokens.has(id));
 
-  return mentioned.length > 0 ? mentioned : requestedIds;
+  if (mentioned.length > 0) {
+    return mentioned;
+  }
+
+  // With one id the refused account is clear. With more, marking all of them
+  // would break the apps that still work, so mark none.
+  return requestedIds.length === 1 ? requestedIds : [];
 }
 
 type ComposioAuthConfigClient = {

@@ -448,33 +448,30 @@ export async function buildComposioToolDefinitions(
 
   const connectionKey = composioConnectionKey(orgId, userId, profileId);
 
-  let session: NonNullable<
-    Awaited<ReturnType<ComposioService["getProfileSessionEndpoint"]>>
+  let session: Awaited<
+    ReturnType<ComposioService["getProfileSessionEndpoint"]>
   >;
 
   // Composio is an add-on: when it cannot open a session, the turn runs
-  // without its tools instead of failing.
+  // without its tools instead of failing. The service keeps the reason, and
+  // the system prompt tells the agent.
   try {
-    const opened = await composioService.getProfileSessionEndpoint(
+    session = await composioService.getProfileSessionEndpoint(
       orgId,
       userId,
       profileId
     );
-
-    if (!opened) {
-      return [];
-    }
-
-    session = opened;
-
-    await ensureComposioMcpConnection(mcpClientManager, connectionKey, session);
   } catch (error) {
-    console.warn(
-      `Composio tools are unavailable for this turn: ${error instanceof Error ? error.message : String(error)}`
-    );
+    console.error("Composio tools are unavailable for this turn:", error);
 
     return [];
   }
+
+  if (!session) {
+    return [];
+  }
+
+  await ensureComposioMcpConnection(mcpClientManager, connectionKey, session);
 
   // Opening the session can mark refused accounts as needing reconnection,
   // so read the assignments again before offering their actions.
