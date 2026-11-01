@@ -128,7 +128,10 @@ describe("createHonoApp", () => {
       "data:",
       "https://fonts.googleapis.com",
     ]);
-    expect(directives.get("font-src")).toEqual(["https://fonts.gstatic.com"]);
+    expect(directives.get("font-src")).toEqual([
+      "data:",
+      "https://fonts.gstatic.com",
+    ]);
     expect(directives.get("img-src")).toEqual(["data:"]);
     expect(directives.get("media-src")).toEqual(["data:"]);
 
