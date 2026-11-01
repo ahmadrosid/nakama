@@ -71,7 +71,7 @@ Use these patterns. Remove the ones you do not use, and do not invent new layout
 
 - The deck must work offline. Keep styles, scripts, fonts, and images inside the HTML. Do not link a CDN, Google Fonts, or any other URL.
 - Use inline SVG or data URLs for images and logos.
-- Fonts: keep the template's system font stacks in `--sans` and `--mono`. Do not link or embed fonts; Nakama's preview blocks data-URL fonts.
+- Fonts: keep the template's system font stacks in `--sans` and `--mono`. To use a brand font, embed it: add an `@font-face` rule with `src: url(data:font/woff2;base64,...) format("woff2")` and put its family name first in `--sans` or `--mono`. Embed only the weights the deck uses. Do not link a font file.
 - Do not use `window.print()`, `alert()`, popups, network requests, or browser storage. Users download the PDF with Nakama's artifact controls.
 
 ## Workflow
