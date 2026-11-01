@@ -12,6 +12,7 @@ import type {
 import {
   assertNotBundledSkillName,
   assertValidSkillName,
+  prepareSkillPatch,
 } from "@nakama/core/skills/write";
 import type { DatabaseAdapter, StoredSkillSuggestion } from "@nakama/db";
 import type { SkillProposalService } from "./skill-proposal-service";
@@ -69,6 +70,16 @@ export class SkillSuggestionService {
     const { outcome } = input;
     const name = assertValidSkillName(outcome.name);
     assertNotBundledSkillName(name);
+
+    if (outcome.action === "patch") {
+      await prepareSkillPatch({
+        name,
+        newString: outcome.newString,
+        oldString: outcome.oldString,
+        orgId: input.orgId,
+        profileId: input.profileId,
+      });
+    }
 
     const now = new Date().toISOString();
 

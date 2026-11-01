@@ -964,14 +964,6 @@ export class SkillsService {
       );
     }
 
-    const beforeContent = await readFile(
-      path.join(
-        resolveProfileSkillDirectory(orgId, profileId, name),
-        SKILL_FILE_NAME
-      ),
-      "utf8"
-    ).catch(() => null);
-
     const patched = await patchSkillFile({
       name,
       newString,
@@ -993,13 +985,18 @@ export class SkillsService {
       "utf8"
     );
 
-    await this.recordSkillVersion(record, beforeContent, afterContent, meta);
+    await this.recordSkillVersion(
+      record,
+      patched.previousContent,
+      afterContent,
+      meta
+    );
 
     if (meta) {
       await recordProfileChangeEvent(this.db, {
         actorUserId: meta.actorUserId,
         afterValue: afterContent,
-        beforeValue: beforeContent,
+        beforeValue: patched.previousContent,
         field: "skills",
         orgId,
         profileId,

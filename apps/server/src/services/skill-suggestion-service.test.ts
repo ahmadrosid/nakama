@@ -230,6 +230,33 @@ describe("SkillSuggestionService", () => {
     ).rejects.toThrow(/bundled/i);
   });
 
+  test("createSuggestion refuses a patch whose old_string cannot apply", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const profile = await seedOrg(db, { orgSkillsWriteApproval: false });
+    const { skills, suggestions } = buildServices(db);
+
+    await skills.createSkill(ORG_ID, {
+      body: "Run the deploy checklist before shipping.",
+      description: "Notes about deploy process.",
+      name: "deploy-notes",
+      profileId: profile.id,
+    });
+
+    await expect(
+      suggestions.createSuggestion({
+        orgId: ORG_ID,
+        outcome: {
+          action: "patch",
+          name: "deploy-notes",
+          newString: "replacement",
+          oldString: "Notes about depl\u2026",
+        },
+        profileId: profile.id,
+      })
+    ).rejects.toMatchObject({ name: "NakamaApiError", status: 409 });
+    expect(await suggestions.listSuggestions(ORG_ID)).toEqual([]);
+  });
+
   test("cross-org suggestion id returns 404 on apply", async () => {
     const db = createInMemoryDatabaseAdapter();
     const profile = await seedOrg(db);

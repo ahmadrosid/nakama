@@ -780,10 +780,13 @@ export class AgentService {
           });
         }
       } catch (error) {
-        console.error(
-          "Failed to record post-turn skill review outcome:",
-          error
-        );
+        // A 4xx means the outcome was refused (e.g. old_string no longer matches), not a failure.
+        if (!(error instanceof NakamaApiError && error.status < 500)) {
+          console.error(
+            "Failed to record post-turn skill review outcome:",
+            error
+          );
+        }
       }
 
       return outcome;
