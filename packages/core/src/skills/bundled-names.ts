@@ -5,6 +5,7 @@ export const DEFAULT_BUNDLED_SKILL_NAMES = [
   "update-profile-memory",
   "archive-profile-memory",
   "artifact-design",
+  "slide-deck-design",
   "composio-integrations",
   "nakama-guide",
 ] as const;

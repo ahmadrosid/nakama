@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1" name="viewport">
+    <title>Deck Title</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect">
+    <link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    >
+    <style>
+    /* ---- Design tokens: change these for each deck ---- */
+    :root {
+      --bg: #f5f5f5;
+      --slide: #ffffff;
+      --text: #171717;
+      --muted: #52525b;
+      --line: #e5e5e5;
+      --primary: #b45309;
+      --on-primary: #ffffff;
+      --sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+      --mono: "JetBrains Mono", ui-monospace, monospace;
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0a0a0b;
+        --slide: #161618;
+        --text: #fafafa;
+        --muted: #a1a1aa;
+        --line: #2a2a2e;
+        --primary: #f59e0b;
+        --on-primary: #0a0a0b;
+        color-scheme: dark;
+      }
+    }
+
+    /* ---- Frame: keep as is ---- */
+    * {
+      box-sizing: border-box;
+    }
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      font-family: var(--sans);
+      color: var(--text);
+      background: var(--bg);
+    }
+    /* The deck is as wide as the viewport allows while one slide and the controls still fit. */
+    .deck {
+      width: min(100%, calc((100vh - 88px) * 16 / 9));
+    }
+    .slide {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      container-type: size;
+      overflow: hidden;
+      background: var(--slide);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    /* Padding lives on .frame, so cqw is measured against the slide, not the viewport. */
+    .frame {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 6cqw 6.5cqw;
+    }
+    .js .slide:not(.is-active) {
+      display: none;
+    }
+    .controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      font: 500 14px / 1.2 var(--sans);
+    }
+    .controls button {
+      padding: 8px 16px;
+      font: inherit;
+      color: var(--text);
+      white-space: nowrap;
+      appearance: none;
+      cursor: pointer;
+      background: var(--slide);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+    }
+    .controls button:disabled {
+      cursor: default;
+      opacity: 0.4;
+    }
+    .controls button:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+    .counter {
+      min-width: 4.5em;
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    /* ---- Slide type: sizes in cqw so text scales with the slide ---- */
+    .eyebrow {
+      margin: 0 0 2cqw;
+      font: 500 1.5cqw / 1.2 var(--mono);
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    h1,
+    h2 {
+      margin: 0;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+    h1 {
+      font-size: 6.5cqw;
+      line-height: 1.02;
+    }
+    h2 {
+      font-size: 4.6cqw;
+      line-height: 1.08;
+    }
+    p,
+    li {
+      font-size: 2.4cqw;
+      line-height: 1.4;
+    }
+    .lede {
+      max-width: 70%;
+      margin: 2.5cqw 0 0;
+      color: var(--muted);
+    }
+    .points {
+      padding: 0;
+      margin: 3cqw 0 0;
+      list-style: none;
+    }
+    .points li {
+      padding: 1.4cqw 0;
+      border-top: 1px solid var(--line);
+    }
+    .big {
+      margin: auto 0;
+      font-size: 6cqw;
+      font-weight: 600;
+      line-height: 1.12;
+      letter-spacing: -0.02em;
+    }
+    .page-number {
+      position: absolute;
+      right: 6.5cqw;
+      bottom: 4.5cqw;
+      font: 1.4cqw var(--mono);
+      color: var(--muted);
+    }
+
+    /* Two columns: text beside a visual or a metric. */
+    .split {
+      display: grid;
+      flex: 1;
+      grid-template-columns: 1fr 1fr;
+      gap: 5cqw;
+      align-items: center;
+      min-height: 0;
+      margin-top: 3cqw;
+    }
+    .metric strong {
+      display: block;
+      font-size: 9cqw;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+      letter-spacing: -0.04em;
+    }
+    .metric > span {
+      display: block;
+      margin-top: 1.2cqw;
+      font-size: 2.2cqw;
+      color: var(--muted);
+    }
+    .metric .change {
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    /* Bar chart: one bar per track; set each bar's height inline as value / max × 100%. */
+    .bars {
+      display: flex;
+      gap: 4cqw;
+      align-items: flex-end;
+    }
+    .bar {
+      display: flex;
+      flex-direction: column;
+      gap: 1cqw;
+      align-items: center;
+      font-size: 1.8cqw;
+      color: var(--muted);
+    }
+    .track {
+      display: flex;
+      align-items: flex-end;
+      width: 9cqw;
+      height: 18cqw;
+    }
+    .fill {
+      width: 100%;
+      background: var(--muted);
+      border-radius: 4px 4px 0 0;
+    }
+    .fill.focus {
+      background: var(--primary);
+    }
+
+    /* ---- Print: one slide per 16:9 page, light colors, no controls ---- */
+    @page {
+      size: 16in 9in;
+      margin: 0;
+    }
+    @media print {
+      :root {
+        --slide: #ffffff;
+        --text: #171717;
+        --muted: #52525b;
+        --line: #e5e5e5;
+        --primary: #b45309;
+        color-scheme: light;
+      }
+      html,
+      body {
+        height: auto;
+      }
+      body {
+        display: block;
+        padding: 0;
+        background: #ffffff;
+      }
+      .deck {
+        width: 16in;
+      }
+      .js .slide:not(.is-active),
+      .slide {
+        display: block;
+      }
+      .slide {
+        width: 16in;
+        height: 9in;
+        aspect-ratio: auto;
+        border: 0;
+        border-radius: 0;
+        break-after: page;
+      }
+      .slide:last-child {
+        break-after: auto;
+      }
+      .controls {
+        display: none;
+      }
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .controls button {
+        transition: border-color 0.15s;
+      }
+    }
+    </style>
+  </head>
+  <body>
+    <main aria-label="Slide deck" class="deck">
+      <!-- Title slide -->
+      <section aria-label="Slide 1" class="slide">
+        <div class="frame">
+          <p class="eyebrow">Eyebrow label</p>
+          <h1>Deck title on<br>one or two lines</h1>
+          <p class="lede">One sentence that says what the deck is about.</p>
+        </div>
+      </section>
+
+      <!-- Points slide: at most four one-line points -->
+      <section aria-label="Slide 2" class="slide">
+        <div class="frame">
+          <p class="eyebrow">Section</p>
+          <h2>One idea per slide</h2>
+          <ul class="points">
+            <li>First point</li>
+            <li>Second point</li>
+            <li>Third point</li>
+          </ul>
+          <span class="page-number">02</span>
+        </div>
+      </section>
+
+      <!-- Metric slide: number, change, and bars of the supplied values -->
+      <section aria-label="Slide 3" class="slide">
+        <div class="frame">
+          <p class="eyebrow">Metric</p>
+          <h2>Metric name</h2>
+          <div class="split">
+            <div class="metric">
+              <strong>1.5M</strong>
+              <span><span class="change">+25%</span> from 1.2M</span>
+            </div>
+            <div aria-label="1.2M before, 1.5M after" class="bars">
+              <div class="bar">
+                <div class="track">
+                  <div class="fill" style="height: 80%"></div>
+                </div>
+                Before
+              </div>
+              <div class="bar">
+                <div class="track">
+                  <div class="fill focus" style="height: 100%"></div>
+                </div>
+                After
+              </div>
+            </div>
+          </div>
+          <span class="page-number">03</span>
+        </div>
+      </section>
+
+      <!-- Statement slide: one sentence, set large -->
+      <section aria-label="Slide 4" class="slide">
+        <div class="frame">
+          <p class="eyebrow">Update</p>
+          <p class="big">
+            One supplied sentence, set large as the slide's main text.
+          </p>
+          <span class="page-number">04</span>
+        </div>
+      </section>
+    </main>
+    <nav aria-label="Slide navigation" class="controls">
+      <button aria-label="Previous slide" data-step="-1" type="button">
+        ← Prev
+      </button>
+      <span aria-live="polite" class="counter"></span>
+      <button aria-label="Next slide" data-step="1" type="button">
+        Next →
+      </button>
+    </nav>
+    <script>
+    "use strict";
+    (() => {
+      // Navigation: keep as is. Without script, every slide shows.
+      document.documentElement.classList.add("js");
+      const slides = [...document.querySelectorAll(".slide")];
+      const counter = document.querySelector(".counter");
+      const [prev, next] = document.querySelectorAll(".controls button");
+      let index = 0;
+
+      function show(n) {
+        index = Math.max(0, Math.min(slides.length - 1, n));
+        for (const [i, slide] of slides.entries()) {
+          slide.classList.toggle("is-active", i === index);
+        }
+        counter.textContent = `${index + 1} / ${slides.length}`;
+        prev.disabled = index === 0;
+        next.disabled = index === slides.length - 1;
+      }
+
+      prev.addEventListener("click", () => show(index - 1));
+      next.addEventListener("click", () => show(index + 1));
+      addEventListener("keydown", (event) => {
+        const step = {
+          " ": 1,
+          ArrowLeft: -1,
+          ArrowRight: 1,
+          PageDown: 1,
+          PageUp: -1,
+        }[event.key];
+        if (step) {
+          event.preventDefault();
+          show(index + step);
+        }
+        if (event.key === "Home") {
+          show(0);
+        }
+        if (event.key === "End") {
+          show(slides.length - 1);
+        }
+      });
+      show(0);
+    })();
+    </script>
+  </body>
+</html>

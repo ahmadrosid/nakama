@@ -225,21 +225,52 @@ describe("ensureBundledSkillFiles", () => {
     ).toBe(await readBundledSkillMarkdown("artifact-design"));
   });
 
-  test("matches artifact-design for a casual slide deck request", async () => {
+  async function discoverArtifactSkills() {
     await ensureBundledSkillFiles();
 
-    const skill = await discoverSkillDirectory(
-      join(configDir, "agent", "skills", "artifact-design")
+    const skills = await Promise.all(
+      ["artifact-design", "slide-deck-design"].map((name) =>
+        discoverSkillDirectory(join(configDir, "agent", "skills", name))
+      )
     );
 
-    expect(skill).not.toBeNull();
+    return skills.filter((skill) => skill !== null);
+  }
 
+  test("matches slide-deck-design, not artifact-design, for a casual slide deck request", async () => {
     const matched = matchSkillsForMessage(
-      skill ? [skill] : [],
+      await discoverArtifactSkills(),
       "hey can you make me a slide deck for our team sync on friday? it's about Q3 results. keep it like 6-7 slides"
     );
 
+    expect(matched.map((entry) => entry.name)).toEqual(["slide-deck-design"]);
+  });
+
+  test("matches artifact-design, not slide-deck-design, for a dashboard request", async () => {
+    const matched = matchSkillsForMessage(
+      await discoverArtifactSkills(),
+      "build me a dashboard of weekly signups with a chart"
+    );
+
     expect(matched.map((entry) => entry.name)).toEqual(["artifact-design"]);
+  });
+
+  test("installs the slide deck template beside the skill", async () => {
+    await ensureBundledSkillFiles();
+
+    const template = await readFile(
+      join(
+        configDir,
+        "agent",
+        "skills",
+        "slide-deck-design",
+        "assets",
+        "deck.html"
+      ),
+      "utf8"
+    );
+
+    expect(template).toContain('class="slide"');
   });
 
   test("refreshes an installed memory archive skill on startup", async () => {

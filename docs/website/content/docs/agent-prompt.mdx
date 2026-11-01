@@ -93,7 +93,8 @@ Profiles do not use dedicated memory or artifact builtins. The chat wrapper nudg
 |-------|-------------|---------|
 | `update-profile-memory` | `read_file` + `edit_file` | Append facts and preferences to active `MEMORY.md` |
 | `archive-profile-memory` | `read_file` + `edit_file` | Move bullets from `MEMORY.md` into `memory-archive/` without deleting them |
-| `artifact-design` | `save_artifact` or `write_file` | Design rules for HTML pages, dashboards, and slide decks the agent saves under `artifacts/`; on web chat, saved files show as message attachment chips with in-chat preview |
+| `artifact-design` | `save_artifact` or `write_file` | Design rules for HTML pages, reports, and dashboards the agent saves under `artifacts/`; on web chat, saved files show as message attachment chips with in-chat preview |
+| `slide-deck-design` | `save_artifact` or `write_file` | A tested deck template: one 16:9 slide at a time on screen, Prev/Next controls, and one slide per page in PDF |
 
 The skills catalog is always visible. When a user message matches a skill description, Nakama can attach the full skill body for that turn (`include-body-on-match: true`).
 

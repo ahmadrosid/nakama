@@ -17,6 +17,7 @@ const FORCE_REFRESH_BUNDLED_SKILL_NAMES = new Set<string>([
   "coding-backend-cursor",
   "agent-browser",
   "artifact-design",
+  "slide-deck-design",
   "archive-profile-memory",
   "nakama-guide",
 ]);
