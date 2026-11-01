@@ -1955,6 +1955,10 @@ function migrateSessionsTable(db: Database): void {
 
 function migrateSessionTree(db: Database): void {
   addNullableTextColumnIfMissing(db, "sessions", "parent_session_id");
+  // listChildSessions runs on every close and every new sub_agent chat.
+  db.exec(
+    "CREATE INDEX IF NOT EXISTS sessions_parent_session_id ON sessions (parent_session_id)"
+  );
 
   if (
     !db

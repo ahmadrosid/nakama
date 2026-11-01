@@ -259,11 +259,24 @@ describe("sub_agent background", () => {
     );
   });
 
-  test("a child of a Telegram chat is a web chat", async () => {
+  test("a child of a Telegram chat is a web chat that the org shares", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertProfile(createDefaultProfile());
     const agent = new AgentService(null, null, db);
-    const parentId = await agent.createSession(ORG_ID, "telegram", PROFILE_ID);
+
+    const parentId = await agent.createSession(
+      ORG_ID,
+      "telegram",
+      PROFILE_ID,
+      "user_bot"
+    );
+
+    const privateId = await agent.createSession(
+      ORG_ID,
+      "web",
+      PROFILE_ID,
+      "user_bot"
+    );
 
     const started = await runSubAgentTool(
       { background: true, task: "Draft the marketing plan" },
@@ -271,7 +284,86 @@ describe("sub_agent background", () => {
       agent
     );
 
-    expect((await db.getSession(started.sessionId ?? ""))?.channel).toBe("web");
+    const childId = started.sessionId ?? "";
+
+    expect((await db.getSession(childId))?.channel).toBe("web");
+
+    for (const id of [childId, privateId]) {
+      await db.appendMessagesForSession(id, [
+        {
+          createdAt: new Date().toISOString(),
+          id: `msg_${id}`,
+          payload: { content: "hello", role: "user" },
+          seq: 0,
+          sessionId: id,
+        },
+      ]);
+    }
+
+    const member = { user: { id: "user_member" } };
+
+    await expect(
+      agent.assertSessionProfileAccess(childId, ORG_ID, member)
+    ).resolves.toBeUndefined();
+    await expect(
+      agent.assertSessionProfileAccess(privateId, ORG_ID, member)
+    ).rejects.toMatchObject({ status: 404 });
+
+    const { sessions } = await agent.listSessions(
+      ORG_ID,
+      PROFILE_ID,
+      "web",
+      member
+    );
+
+    expect(sessions.map((session) => session.id)).toEqual([childId]);
+  });
+
+  test("the cap counts only open sub_agent chats", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    const agent = new AgentService(null, null, db);
+    const parentId = await agent.createSession(ORG_ID, "web", PROFILE_ID);
+    const parentContext = { ...TOOL_CONTEXT, sessionId: parentId };
+
+    for (let index = 0; index < 5; index += 1) {
+      const branchId = await agent.createSession(ORG_ID, "web", PROFILE_ID);
+      const branch = await db.getSession(branchId);
+
+      if (branch) {
+        await db.upsertSession({
+          ...branch,
+          branchMessageIndex: 0,
+          parentSessionId: parentId,
+        });
+      }
+    }
+
+    const children: string[] = [];
+
+    for (let index = 0; index < 5; index += 1) {
+      const started = await runSubAgentTool(
+        { background: true, task: `Topic ${index}` },
+        parentContext,
+        agent
+      );
+
+      expect(started.status).toBe("success");
+      children.push(started.sessionId ?? "");
+    }
+
+    const oneTooMany = () =>
+      runSubAgentTool(
+        { background: true, task: "One more" },
+        parentContext,
+        agent
+      );
+
+    expect((await oneTooMany()).status).toBe("fail");
+
+    await db.updateSessionClosedAt(children[0] ?? "", new Date().toISOString());
+
+    expect((await oneTooMany()).status).toBe("success");
   });
 });
 

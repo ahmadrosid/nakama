@@ -463,24 +463,8 @@ const SHARED_HISTORY_CHANNELS: readonly AgentChannel[] = [
   "whatsapp",
 ];
 
-/**
- * Any other chat belongs to the user who started it. Platform admins may open
- * any chat for support; everyone else gets the same 404 as a missing session,
- * so holding another user's session id reveals nothing.
- */
-function assertSessionOwner(
-  record: StoredSessionRecord,
-  access: ChatProfileAccess
-): void {
-  if (
-    access.isPlatformAdmin ||
-    SHARED_HISTORY_CHANNELS.some((channel) => channel === record.channel) ||
-    (access.user && record.userId === access.user.id)
-  ) {
-    return;
-  }
-
-  throw new NakamaApiError("Session not found", 404);
+function isSharedHistory(record: StoredSessionRecord): boolean {
+  return SHARED_HISTORY_CHANNELS.some((channel) => channel === record.channel);
 }
 
 export class AgentService {
@@ -2630,10 +2614,12 @@ export class AgentService {
       );
     }
 
-    if (
-      (await this.db.listChildSessions(parentSessionId)).length >=
-      MAX_CHILD_SESSIONS
-    ) {
+    // Branches and closed chats do not count: the cap is on open sub_agent chats.
+    const openChildren = (
+      await this.db.listChildSessions(parentSessionId)
+    ).filter((child) => sessionKind(child) === "child" && !child.closedAt);
+
+    if (openChildren.length >= MAX_CHILD_SESSIONS) {
       throw new NakamaApiError(
         `This chat already started ${MAX_CHILD_SESSIONS} chats.`,
         400
@@ -2660,6 +2646,37 @@ export class AgentService {
     );
   }
 
+  /**
+   * Any other chat belongs to the user who started it. A chat that sub_agent
+   * started under a shared chat is shared too, though it is a web chat.
+   * Platform admins may open any chat for support; everyone else gets the
+   * same 404 as a missing session, so holding another user's session id
+   * reveals nothing.
+   */
+  private async assertSessionOwner(
+    record: StoredSessionRecord,
+    orgId: string,
+    access: ChatProfileAccess
+  ): Promise<void> {
+    if (
+      access.isPlatformAdmin ||
+      isSharedHistory(record) ||
+      (access.user && record.userId === access.user.id)
+    ) {
+      return;
+    }
+
+    const parent = record.parentSessionId
+      ? await this.getSessionRecordForOrg(record.parentSessionId, orgId)
+      : null;
+
+    if (parent && isSharedHistory(parent)) {
+      return;
+    }
+
+    throw new NakamaApiError("Session not found", 404);
+  }
+
   async assertSessionProfileAccess(
     sessionId: string,
     orgId: string,
@@ -2674,7 +2691,7 @@ export class AgentService {
         await this.requireProfile(orgId, record.profileId),
         access
       );
-      assertSessionOwner(record, access);
+      await this.assertSessionOwner(record, orgId, access);
 
       // Only the local CLI can set this folder, so only it can run tools there.
       if (options.localClient === false && record.codingWorkspaceRoot) {
@@ -2714,7 +2731,7 @@ export class AgentService {
       return null;
     }
 
-    assertSessionOwner(sessionRecord, access);
+    await this.assertSessionOwner(sessionRecord, orgId, access);
 
     return createAttachmentLoader(this.db, {
       orgId,

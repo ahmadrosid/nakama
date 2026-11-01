@@ -1645,6 +1645,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           ?10 IS NULL
           OR s.user_id = ?10
           OR s.channel IN (SELECT value FROM json_each(?11))
+          -- A sub_agent chat under a shared chat is a web chat, shared too.
+          OR EXISTS (
+            SELECT 1
+            FROM sessions parent
+            WHERE parent.id = s.parent_session_id
+              AND parent.channel IN (SELECT value FROM json_each(?11))
+          )
         )
         AND s.app_user_id IS NULL
         -- A closed chat leaves Recents but a search or a lookup by id still finds it.
