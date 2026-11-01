@@ -94,7 +94,7 @@ function newestVersion(notes: ReleaseNote[]): string | null {
 
 /**
  * The note for `to`, marked critical when any release after `from` up to `to`
- * is critical, so a skipped security fix still removes Later. Without `to`,
+ * is critical, so a skipped security fix still shows its reason. Without `to`,
  * the newest note in the file is the target.
  */
 export function findReleaseNote(
