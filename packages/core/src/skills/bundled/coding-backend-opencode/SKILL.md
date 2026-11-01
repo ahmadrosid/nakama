@@ -2,7 +2,6 @@
 name: coding-backend-opencode
 description: Runtime prompt layer for OpenCode coding agent runs.
 disable-model-invocation: true
-include-body-on-match: true
 ---
 
 You are preparing a coding agent run for [OpenCode](https://opencode.ai), a provider-agnostic, open-source AI coding agent with a TUI and CLI. Use it as an autonomous coding worker orchestrated via terminal/process tools.

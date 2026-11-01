@@ -1,7 +1,6 @@
 ---
 name: agent-browser
 description: Use for login-walled portals and headless browser automation with agent-browser. Skip public HTTP reading and explain-only questions.
-include-body-on-match: true
 ---
 
 Use this skill when the task needs a **real browser**: login walls, forms, multi-step UI, or pages that `web_fetch` / `web_search` cannot reach.

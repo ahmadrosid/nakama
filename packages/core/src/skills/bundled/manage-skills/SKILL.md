@@ -1,7 +1,6 @@
 ---
 name: manage-skills
 description: Create, update, inspect, or manage reusable profile skills with skill_manage. Use when the user wants the agent to remember a repeatable workflow, change a skill, or maintain skill instructions.
-include-body-on-match: true
 ---
 
 Use skills for repeatable procedures and workflows the agent should execute later. Do not use skills for user facts, preferences, or observations; use the `update-profile-memory` skill for those.
@@ -30,7 +29,6 @@ Example create content:
 ---
 name: skill-name
 description: Short trigger description explaining when to use this skill.
-include-body-on-match: true
 ---
 
 Step-by-step instructions for the repeatable workflow.

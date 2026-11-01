@@ -1,7 +1,10 @@
 import {
   type AgentChannel,
+  composeLoadedSkillPrompt,
+  type DiscoveredSkill,
   fetchGitHubSkillBundle,
   type GitHubSkillBundle,
+  LOAD_SKILL_TOOL_NAME,
   parseRawProfileSkillContent,
   type ToolContext,
   type ToolDefinition,
@@ -176,10 +179,10 @@ function skillManageResult(options: {
 
   const matchHint =
     options.action === "delete"
-      ? "The skill was removed from this profile (disk, assignment, and DB row). Keyword match and /skill will no longer find it."
+      ? "The skill was removed from this profile (disk, assignment, and DB row). load_skill and /skill will no longer find it."
       : options.action === "write_file" || options.action === "remove_file"
         ? "Supporting file change applied under the profile skill directory."
-        : "The skill is assigned for this profile. Keyword match and /skill work on later turns; the session skills catalog refreshes before the next turn.";
+        : "The skill is assigned for this profile. load_skill and /skill work on later turns; the session skills catalog refreshes before the next turn.";
 
   const result: SkillManageResult = {
     action: options.action,
@@ -214,7 +217,7 @@ function stagedSkillManageResult(options: {
   const result: StagedSkillManageResult = {
     action: options.action,
     matchHint:
-      "The skill change is pending admin approval and is not live yet. It will not match until an org admin approves the proposal.",
+      "The skill change is pending admin approval and is not live yet. It cannot be loaded until an org admin approves the proposal.",
     message: options.message,
     name: options.name,
     outcome: options.outcome,
@@ -227,6 +230,69 @@ function stagedSkillManageResult(options: {
   }
 
   return result;
+}
+
+export interface LoadSkillToolDeps {
+  /** Live host context a skill needs next to its instructions, or "". */
+  extraContext: (
+    skill: DiscoveredSkill,
+    context: ToolContext
+  ) => Promise<string>;
+  /** False in a cognito session, for the same reason as the catalog. */
+  recordUsage: boolean;
+  skillsService: SkillsService;
+}
+
+const LoadSkillInputSchema = z.object({ name: z.string().trim().min(1) });
+
+/** The model's way to load a skill it picked from the catalog. */
+export function createLoadSkillTool(deps: LoadSkillToolDeps): ToolDefinition {
+  return {
+    description:
+      "Load an assigned skill's full instructions when the user's request matches its description in Available Agent Skills. Call it before you start the task.",
+    name: LOAD_SKILL_TOOL_NAME,
+    parallelSafe: true,
+    parameters: {
+      additionalProperties: false,
+      properties: {
+        name: {
+          description: "Skill name from Available Agent Skills.",
+          type: "string",
+        },
+      },
+      required: ["name"],
+      type: "object",
+    },
+    async run(rawInput, context: ToolContext) {
+      const input = LoadSkillInputSchema.safeParse(rawInput);
+
+      if (!input.success) {
+        throw new Error("name is required.");
+      }
+
+      const skill = await deps.skillsService.loadSkillForModel(
+        requireOrgId(context),
+        requireProfileId(context),
+        input.data.name,
+        deps.recordUsage
+      );
+
+      if (!skill) {
+        throw new Error(
+          `No skill named ${JSON.stringify(input.data.name)} can be loaded. Use a name from Available Agent Skills.`
+        );
+      }
+
+      const extra = await deps.extraContext(skill, context);
+
+      return {
+        instructions: [composeLoadedSkillPrompt(skill), extra.trim()]
+          .filter(Boolean)
+          .join("\n\n"),
+        name: skill.name,
+      };
+    },
+  };
 }
 
 export function createSkillManageTools(

@@ -1,7 +1,6 @@
 ---
 name: create-plugin
 description: Draft or build a custom Nakama plugin with actions, a dashboard page, skills, workers, and migrations. Use when the user asks to create or change a plugin.
-include-body-on-match: true
 ---
 
 Create a local draft for human review. Never install or enable the plugin yourself.

@@ -1,7 +1,6 @@
 ---
 name: artifact-design
-description: Design artifacts, HTML pages, dashboards, charts, reports, plans, memos, summaries, code snippets, and logs.
-include-body-on-match: true
+description: Design artifacts such as HTML pages, dashboards, charts, reports, plans, memos, summaries, code snippets, and logs. For slide decks and presentations, use slide-deck-design.
 ---
 
 Design complete deliverables that the user can revisit in the profile **Artifacts** tab.
@@ -10,7 +9,7 @@ These instructions are loaded directly when this skill is active.
 ## Choose the output
 
 - Use HTML for visual reports, plans, memos, landing pages, and browser games.
-- For slide decks and presentations, follow the slide-deck-design skill. It holds the deck template; read it with read_file when it is not active.
+- For slide decks and presentations, follow the slide-deck-design skill. It holds the deck template; load it with load_skill.
 - Keep the format the user requests. Use Markdown for pages only when the user or another active skill requires it.
 - Keep code, logs, and structured data in their appropriate formats. Preserve existing formats when moving files or editing artifacts.
 

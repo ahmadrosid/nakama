@@ -1,7 +1,6 @@
 ---
 name: create-profile
 description: Create, design, or set up a new bot profile with soul files and appropriate tool assignments. Use when the user asks for a new profile, support bot, assistant, persona, or specialized bot.
-include-body-on-match: true
 ---
 
 When the user asks to create a profile, run a confirm-first factory — never call `create_profile` until they explicitly confirm the draft.

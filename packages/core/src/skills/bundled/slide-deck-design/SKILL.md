@@ -1,7 +1,6 @@
 ---
 name: slide-deck-design
-description: Slide decks, slides, decks, presentations, pitch decks, and keynotes.
-include-body-on-match: true
+description: Use for slide decks, presentations, and pitch decks. Builds one HTML deck from a tested template with one 16:9 slide at a time on screen and one slide per page in PDF.
 ---
 
 Build slide decks as one HTML artifact from the tested template in this skill.

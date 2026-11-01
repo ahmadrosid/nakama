@@ -1,7 +1,6 @@
 ---
 name: coding-agent
 description: Invoke a dedicated coding agent (Codex, Claude Code, OpenCode, pi, or Cursor Agent) for bug fixes, feature implementation, file edits, repository changes, or targeted validation when the user wants changes made in the current project. Nakama handles ordinary explanation, brainstorming, and non-editing chat; use this skill when repo work is better done by a coding agent.
-include-body-on-match: true
 ---
 
 Use this skill when the user wants real code work done in the current project: implementing features, fixing bugs, editing files, running targeted validation, or inspecting the repo to make a concrete change.

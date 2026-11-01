@@ -1,7 +1,6 @@
 ---
 name: data-view
 description: Read and edit spreadsheets saved in Data View, from Google Sheets or xlsx and csv tables. Use when the user mentions a spreadsheet, sheet or xlsx file, or shares a Google Sheets link.
-include-body-on-match: true
 ---
 
 Data View keeps a saved copy of each Google Sheet. Reading the copy is free; only adding, refreshing, and syncing touch Google.

@@ -12,14 +12,16 @@ import {
   ORG_ID,
   seedSkillOrg as seedOrgProfile,
 } from "../services/skills-service-test-fixtures";
-import { createSkillManageTools } from "./skill-manage-tool";
+import {
+  createLoadSkillTool,
+  createSkillManageTools,
+} from "./skill-manage-tool";
 
 const PROFILE_ID = "profile_default";
 
 const researchSkillMarkdown = `---
 name: research-paper
 description: Research a paper. Use when the user asks to dig into a research paper.
-include-body-on-match: true
 ---
 
 1. Search for the paper title.
@@ -272,7 +274,7 @@ describe("skill_manage tool", () => {
     expect(await db.listSkillsForProfile(profile.id)).toHaveLength(0);
   });
 
-  test("create assigns skill and makes it matchable", async () => {
+  test("create assigns skill and makes it loadable", async () => {
     const { db, service, tool } = await setup();
     const profile = await seedOrgProfile(db);
 
@@ -295,13 +297,51 @@ describe("skill_manage tool", () => {
     const assigned = await db.listSkillsForProfile(profile.id);
     expect(assigned.map((skill) => skill.name)).toContain("research-paper");
 
-    const matched = await service.formatMatchedSkillsForPrompt(
+    const loaded = await service.loadSkillForModel(
       ORG_ID,
       profile.id,
-      "Please research a paper on transformers"
+      "research-paper"
     );
 
-    expect(matched).toContain("Active Skill: research-paper");
+    expect(loaded?.name).toBe("research-paper");
+  });
+
+  test("load_skill returns instructions with host context and counts the use", async () => {
+    const { db, service, tool } = await setup();
+    const profile = await seedOrgProfile(db);
+    const context = memberContext({ profileId: profile.id });
+
+    await tool.run(
+      { action: "create", content: researchSkillMarkdown },
+      context
+    );
+
+    const loadSkill = createLoadSkillTool({
+      extraContext: async (skill) =>
+        skill.name === "research-paper" ? "# Host facts" : "",
+      recordUsage: true,
+      skillsService: service,
+    });
+
+    const result = await loadSkill.run({ name: "research-paper" }, context);
+
+    expect(result).toMatchObject({ name: "research-paper" });
+
+    // SAFETY: createLoadSkillTool returns { instructions, name } on success, checked above.
+    const { instructions } = result as { instructions: string };
+    expect(instructions).toContain("Summarize contributions and limitations.");
+    expect(instructions).toContain("# Host facts");
+
+    const [skill] = await db.listSkillsForProfile(profile.id);
+    let useCount = 0;
+
+    for (let attempt = 0; attempt < 50 && useCount === 0; attempt += 1) {
+      await Bun.sleep(5);
+      useCount = (await db.getSkillUsage(profile.id, skill!.id))?.useCount ?? 0;
+    }
+
+    expect(useCount).toBe(1);
+    await expect(loadSkill.run({ name: "missing" }, context)).rejects.toThrow();
   });
 
   test("invalidates the current session catalog after live create and delete", async () => {
@@ -479,7 +519,6 @@ describe("skill_manage tool", () => {
           content: `---
 name: research-paper
 description: Research a paper and summarize it.
-include-body-on-match: true
 ---
 
 Completely different body.

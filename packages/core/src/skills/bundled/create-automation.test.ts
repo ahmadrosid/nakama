@@ -4,7 +4,6 @@ import { mkdir, mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { discoverSkillDirectory } from "../discover";
-import { matchSkillsForMessage } from "../match";
 import { readBundledSkillMarkdown } from "./index";
 import { ensureBundledSkillFiles } from "./install";
 
@@ -223,36 +222,6 @@ describe("ensureBundledSkillFiles", () => {
     expect(
       await readFile(join(skillsDir, "artifact-design", "SKILL.md"), "utf8")
     ).toBe(await readBundledSkillMarkdown("artifact-design"));
-  });
-
-  async function discoverArtifactSkills() {
-    await ensureBundledSkillFiles();
-
-    const skills = await Promise.all(
-      ["artifact-design", "slide-deck-design"].map((name) =>
-        discoverSkillDirectory(join(configDir, "agent", "skills", name))
-      )
-    );
-
-    return skills.filter((skill) => skill !== null);
-  }
-
-  test("matches slide-deck-design, not artifact-design, for a casual slide deck request", async () => {
-    const matched = matchSkillsForMessage(
-      await discoverArtifactSkills(),
-      "hey can you make me a slide deck for our team sync on friday? it's about Q3 results. keep it like 6-7 slides"
-    );
-
-    expect(matched.map((entry) => entry.name)).toEqual(["slide-deck-design"]);
-  });
-
-  test("matches artifact-design, not slide-deck-design, for a dashboard request", async () => {
-    const matched = matchSkillsForMessage(
-      await discoverArtifactSkills(),
-      "build me a dashboard of weekly signups with a chart"
-    );
-
-    expect(matched.map((entry) => entry.name)).toEqual(["artifact-design"]);
   });
 
   test("installs the slide deck template beside the skill", async () => {

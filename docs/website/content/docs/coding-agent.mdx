@@ -35,12 +35,12 @@ Dedicated coding agents are built for that job. Nakama adds this feature so you 
 | **`coding-agent` skill** | Teaches when to invoke a coding agent, how to install CLIs, when to ask which backend, and how to summarize results |
 | **`bash` tool** | Runs the coding-agent CLI in the profile workspace |
 | **Runtime discovery** | Nakama detects which CLIs are on the server `PATH` and injects harness context for the turn |
-| **Backend guidance** | Runtime-only bundled skills (`coding-backend-codex`, `coding-backend-claude-code`, `coding-backend-opencode`, `coding-backend-pi`, `coding-backend-cursor`) injected on matched turns |
+| **Backend guidance** | Runtime-only bundled skills (`coding-backend-codex`, `coding-backend-claude-code`, `coding-backend-opencode`, `coding-backend-pi`, `coding-backend-cursor`) injected when the agent loads `coding-agent` |
 
 ```text
 User message (coding task)
-  → skill matcher activates coding-agent
-  → Nakama injects discovery context (install / one backend / ask when multiple)
+  → Nakama agent loads coding-agent with load_skill
+  → Nakama returns discovery context (install / one backend / ask when multiple)
   → Nakama agent calls bash with the coding-agent command
   → Nakama agent summarizes the result for the user
 ```
@@ -75,7 +75,7 @@ Assigning **`bash` + `coding-agent`** means the agent can run global package ins
 
 ### 2. Chat from a profile with coding-agent access
 
-When the user's message looks like a code-change request, the skill matcher attaches the full `coding-agent` body plus harness context for that turn:
+When the user's message is a code-change request, the agent loads `coding-agent` with `load_skill`. Nakama returns the full skill body plus harness context:
 
 - **No CLI installed** — context lists install commands for npm-based CLIs; Cursor Agent must be installed by the operator
 - **One CLI installed** — context includes that backend's command template
@@ -136,7 +136,7 @@ Keep work **on the Nakama agent** (file tools only, no coding CLI) when the user
 - Small, single-file edits that fit a simple tool loop
 - Advice without repo changes
 
-The `coding-agent` skill description is tuned so explain-only messages do not auto-match.
+The `coding-agent` skill description tells the agent not to load it for explain-only messages.
 
 ## Runtime behavior
 
@@ -191,4 +191,4 @@ Tool and skill assignment remain per profile.
 - [Builtin tools](/builtin-tools) — `bash` parameters and scope
 - [Skills](/skills) — bundled skills catalog, including `coding-agent`
 - [Profiles](/profiles) — Super Nakama and per-profile tool access
-- [Agent prompts](/agent-prompt) — how matched skills and harness context join the system prompt
+- [Agent prompts](/agent-prompt) — how loaded skills and harness context join the system prompt
