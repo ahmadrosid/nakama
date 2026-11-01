@@ -338,7 +338,8 @@ export function registerSessionRoutes(
   const sessionListQuerySchema = z
     .object({
       channel: agentChannelSchema.optional().openapi({
-        description: "Single-channel filter. One of the two filters is required.",
+        description:
+          "Single-channel filter. One of the two filters is required.",
         param: { required: true },
       }),
       channels: z
