@@ -579,11 +579,18 @@ export function useChatPage() {
 
   const enterDraftChat = useCallback(
     (nextProfileId: string) => {
+      // oxlint-disable react-doctor/no-adjust-state-on-prop-change -- The ?new=1 layout effect calls this for a one-shot "New chat" link, then clears the URL; it is an event, not a prop change.
       sessionLoadRef.current += 1;
       releaseActiveStream();
       setBusy(false);
       setTurnStartedAt(null);
-      localStorage.removeItem(sessionStorageKey(nextProfileId));
+
+      try {
+        localStorage.removeItem(sessionStorageKey(nextProfileId));
+      } catch {
+        // Starting a new chat must still work when browser storage is disabled.
+      }
+
       skipNextProfileSessionRef.current = true;
       loadedRouteRef.current = null;
       messageQueueRef.current = [];
@@ -599,6 +606,7 @@ export function useChatPage() {
       setAgentTodos([]);
       setAgentQuestionnaire(null);
       setContextUsage(null);
+      // oxlint-enable react-doctor/no-adjust-state-on-prop-change
 
       // Session routes remount ChatPage on /chat — pass profile in the query so it survives.
       // The ?new=1 handler then replaces the URL with bare /chat.
@@ -1079,33 +1087,8 @@ export function useChatPage() {
     const storedDraft = draftKey ? consumeStoredChatDraft(draftKey) : null;
     const requestedDraft = inlineDraft ?? storedDraft;
 
-    try {
-      localStorage.removeItem(sessionStorageKey(targetProfileId));
-    } catch {
-      // Starting a new chat must still work when browser storage is disabled.
-    }
-
-    skipNextProfileSessionRef.current = true;
-    loadedRouteRef.current = null;
-    sessionLoadRef.current += 1;
-    releaseActiveStream();
-    setBusy(false);
-    setTurnStartedAt(null);
-    messageQueueRef.current = [];
-    isSendingRef.current = false;
-    activeSessionIdRef.current = null;
-    setQueuedMessages([]);
-    setSession(null);
-    setSessionModel(
-      targetProfileId ? restoreLastChatModel(targetProfileId) : null
-    );
-    setSessionThinkingEffort(null);
-    setSessionChannel("web");
-    setMessages([]);
-    setError(null);
-    setAgentTodos([]);
-    setAgentQuestionnaire(null);
-    setContextUsage(null);
+    // ?new=1 is always on /chat, so enterDraftChat does not navigate here.
+    enterDraftChat(targetProfileId);
 
     if (requestedProfile && requestedProfile !== profileIdRef.current) {
       setProfileId(requestedProfile);
@@ -1145,8 +1128,7 @@ export function useChatPage() {
     setProfileId,
     navigate,
     location.search,
-    releaseActiveStream,
-    restoreLastChatModel,
+    enterDraftChat,
     profileId,
     user?.id,
     activeOrg?.id,
