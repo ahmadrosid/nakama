@@ -338,8 +338,12 @@ const LATEST_VERSION_URL = "https://ahmadrosid.github.io/nakama/version.txt";
 
 const RELEASE_CACHE_MS = 10 * 60 * 1000;
 
+const RELEASE_FAILURE_CACHE_MS = 60 * 1000;
+
 let cachedRelease: { at: number; latest: string; releaseUrl: string } | null =
   null;
+
+let releaseFailedAt: number | null = null;
 
 function versionParts(version: string): number[] | null {
   const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
@@ -360,24 +364,40 @@ function isNewer(latest: string, current: string): boolean {
   return (diff ?? 0) > 0;
 }
 
-/** Cached for 10 minutes. */
+/** Cached for 10 minutes; a failure is cached for 1 minute. */
 export async function checkNakamaVersion(
   current: string,
   now = Date.now()
 ): Promise<NakamaVersionResponse> {
   if (!cachedRelease || now - cachedRelease.at > RELEASE_CACHE_MS) {
-    const response = await fetch(LATEST_VERSION_URL, {
-      signal: AbortSignal.timeout(10_000),
-    }).catch(() => null);
+    let parts: number[] | null = null;
 
-    const latest = response?.ok ? (await response.text()).trim() : "";
+    if (
+      releaseFailedAt === null ||
+      now - releaseFailedAt > RELEASE_FAILURE_CACHE_MS
+    ) {
+      // The timeout also covers the body read, so text() can reject too.
+      try {
+        const response = await fetch(LATEST_VERSION_URL, {
+          signal: AbortSignal.timeout(10_000),
+        });
 
-    if (!versionParts(latest)) {
+        parts = response.ok ? versionParts(await response.text()) : null;
+      } catch {
+        parts = null;
+      }
+
+      releaseFailedAt = parts ? null : now;
+    }
+
+    if (!parts) {
       throw new NakamaApiError(
         "Could not read the latest Nakama version.",
         502
       );
     }
+
+    const latest = parts.join(".");
 
     cachedRelease = {
       at: now,

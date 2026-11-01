@@ -43,12 +43,6 @@ describe("GET /v1/system/version", () => {
         })
       );
 
-    globalThis.fetch = asTestFetch(
-      mock(async () => new Response("down", { status: 503 }))
-    );
-
-    expect((await check(admin, admin.orgId!)).status).toBe(502);
-
     globalThis.fetch = asTestFetch(mock(async () => new Response("999.0.0\n")));
 
     const response = await check(admin, admin.orgId!);
@@ -122,6 +116,44 @@ describe("GET /v1/system/version", () => {
     );
 
     expect(updates).toEqual([false, true, true, false, false]);
+  });
+
+  test("a failed lookup answers 502 and is retried after one minute", async () => {
+    // Later than every clock above, so no cached release is used.
+    const start = Date.now() + 6 * 60 * 60 * 1000;
+
+    const down = mock(async () => new Response("down", { status: 503 }));
+    globalThis.fetch = asTestFetch(down);
+
+    await expect(checkNakamaVersion("0.4.59", start)).rejects.toMatchObject({
+      status: 502,
+    });
+    await expect(
+      checkNakamaVersion("0.4.59", start + 30_000)
+    ).rejects.toMatchObject({ status: 502 });
+
+    expect(down).toHaveBeenCalledTimes(1);
+
+    const broken = new ReadableStream({
+      start(controller) {
+        controller.error(new Error("connection reset"));
+      },
+    });
+
+    globalThis.fetch = asTestFetch(mock(async () => new Response(broken)));
+
+    await expect(
+      checkNakamaVersion("0.4.59", start + 2 * 60_000)
+    ).rejects.toMatchObject({ status: 502 });
+
+    globalThis.fetch = asTestFetch(mock(async () => new Response("v0.4.60\n")));
+
+    expect(await checkNakamaVersion("0.4.59", start + 4 * 60_000)).toEqual({
+      current: "0.4.59",
+      latest: "0.4.60",
+      releaseUrl: "https://github.com/ahmadrosid/nakama/releases/tag/v0.4.60",
+      updateAvailable: true,
+    });
   });
 
   test("the Update button hands a newer version to a running updater, platform admins only, not org admins or members", async () => {
