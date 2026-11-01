@@ -245,6 +245,13 @@ export function parseSkillPostTurnReviewResponse(
       return { action: "noop", reason: "patch_skill_not_loaded" };
     }
 
+    // The model saw only the part before the cut, so oldString must be there.
+    if (
+      !target.skillMarkdown.slice(0, SKILL_MARKDOWN_MAX).includes(oldString)
+    ) {
+      return { action: "noop", reason: "patch_old_string_not_shown" };
+    }
+
     return { action: "patch", name, newString, oldString };
   }
 

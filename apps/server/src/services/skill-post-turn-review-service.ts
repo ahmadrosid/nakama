@@ -16,10 +16,8 @@ import {
   SKILL_FILE_NAME,
   type UserConfig,
 } from "@nakama/core";
-import {
-  isPathWithinProfileSkillsDir,
-  resolveProfileSkillDirectory,
-} from "@nakama/core/skills/write";
+import { resolveProfileSkillDirectory } from "@nakama/core/skills/write";
+import { comparablePath, resolveWithRealpath } from "@nakama/core/tools/paths";
 import type { DatabaseAdapter } from "@nakama/db";
 import { z } from "zod";
 import { createProviderForProfile } from "./provider-instance-helpers";
@@ -70,10 +68,38 @@ export interface PostTurnReviewEligibility {
   usedSkillManage: boolean;
 }
 
-const LoadSkillResultSchema = z.object({
-  error: z.never().optional(),
-  name: z.string(),
-});
+// Only a successful load_skill result carries `name`.
+const LoadSkillResultSchema = z.object({ name: z.string() });
+
+/** Most SKILL.md bodies one review prompt carries. */
+const MAX_LOADED_SKILL_BODIES = 3;
+
+/**
+ * SKILL.md of a profile-owned skill, read from the same file staging matches
+ * oldString against. Undefined for a skill whose source is another directory
+ * (global, bundled, or a folder name that differs from the skill name).
+ */
+async function readProfileSkillMarkdown(
+  context: { orgId: string; profileId: string },
+  skill: { name: string; sourcePath: string }
+): Promise<string | undefined> {
+  try {
+    const directory = resolveProfileSkillDirectory(
+      context.orgId,
+      context.profileId,
+      skill.name
+    );
+
+    if (
+      comparablePath(directory) !==
+      comparablePath(resolveWithRealpath(skill.sourcePath))
+    ) {
+      return;
+    }
+
+    return await readFile(path.join(directory, SKILL_FILE_NAME), "utf8");
+  } catch {}
+}
 
 export interface PostTurnReviewRunnerContext {
   messages: ChatMessage[];
@@ -219,8 +245,14 @@ export class SkillPostTurnReviewService {
     const assigned = await this.db.listSkillsForProfile(context.profileId);
 
     // A skill counts as loaded when a load_skill call succeeded or the user
-    // named it with `/skill <name>`, in this turn or an earlier one.
+    // named it with `/skill <name>`, in this turn or an earlier one. The Set
+    // keeps the latest load last, so the cap below keeps the most recent ones.
     const loadedNames = new Set<string>();
+
+    const markLoaded = (name: string) => {
+      loadedNames.delete(name);
+      loadedNames.add(name);
+    };
 
     for (const message of context.messages) {
       if (message.role === "user") {
@@ -229,7 +261,7 @@ export class SkillPostTurnReviewService {
         );
 
         if (name) {
-          loadedNames.add(name);
+          markLoaded(name);
         }
       } else if (
         message.role === "tool" &&
@@ -242,7 +274,7 @@ export class SkillPostTurnReviewService {
           );
 
           if (result.success) {
-            loadedNames.add(result.data.name);
+            markLoaded(result.data.name);
           }
         } catch {
           // Not JSON, so the call returned no skill.
@@ -250,35 +282,17 @@ export class SkillPostTurnReviewService {
       }
     }
 
+    const recentNames = new Set(
+      [...loadedNames].slice(-MAX_LOADED_SKILL_BODIES)
+    );
+
     const catalog = await Promise.all(
       assigned.map(async (skill) => ({
         description: skill.description,
         name: skill.name,
-        // Only the profile's own skills can be patched, so only they need the body.
-        // Read the same file staging matches oldString against.
-        skillMarkdown:
-          loadedNames.has(skill.name) &&
-          isPathWithinProfileSkillsDir(
-            context.orgId,
-            context.profileId,
-            skill.sourcePath
-          )
-            ? await Promise.resolve()
-                .then(() =>
-                  readFile(
-                    path.join(
-                      resolveProfileSkillDirectory(
-                        context.orgId,
-                        context.profileId,
-                        skill.name
-                      ),
-                      SKILL_FILE_NAME
-                    ),
-                    "utf8"
-                  )
-                )
-                .catch(() => undefined)
-            : undefined,
+        skillMarkdown: recentNames.has(skill.name)
+          ? await readProfileSkillMarkdown(context, skill)
+          : undefined,
       }))
     );
 

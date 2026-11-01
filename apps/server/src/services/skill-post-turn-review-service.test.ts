@@ -337,6 +337,8 @@ describe("SkillPostTurnReviewService", () => {
         "deploy-notes",
         "explicit-notes",
         "failed-notes",
+        "late-notes",
+        "old-notes",
         "release-notes",
       ]) {
         const created = await skills.createSkill(ORG_ID, {
@@ -366,7 +368,7 @@ describe("SkillPostTurnReviewService", () => {
       service.resolveProviderForProfile = () => Promise.resolve(provider);
 
       const turnMessages: ChatMessage[] = [
-        { content: "now release", role: "user" },
+        { content: "/skill late-notes now release", role: "user" },
         {
           content: "",
           role: "assistant",
@@ -388,6 +390,8 @@ describe("SkillPostTurnReviewService", () => {
 
       await service.reviewTurnWithLlm({
         messages: [
+          { content: "/skill old-notes", role: "user" },
+          { content: "ok", role: "assistant" },
           { content: "/skill explicit-notes deploy", role: "user" },
           {
             content: "",
@@ -421,6 +425,9 @@ describe("SkillPostTurnReviewService", () => {
 
       expect(prompt).toContain("deploy-notes-body-marker");
       expect(prompt).toContain("explicit-notes-body-marker");
+      expect(prompt).toContain("late-notes-body-marker");
+      // Only the three most recent loads keep a body.
+      expect(prompt).not.toContain("old-notes-body-marker");
       expect(prompt).not.toContain("failed-notes-body-marker");
       expect(prompt).not.toContain("release-notes-body-marker");
     } finally {

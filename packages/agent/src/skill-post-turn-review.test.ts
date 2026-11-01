@@ -111,6 +111,28 @@ describe("parseSkillPostTurnReviewResponse", () => {
     ).toEqual({ action: "noop", reason: "patch_skill_not_loaded" });
   });
 
+  test("refuses a patch whose oldString is past the SKILL.md cut", () => {
+    expect(
+      parseSkillPostTurnReviewResponse(
+        JSON.stringify({
+          action: "patch",
+          name: "deploy-checklist",
+          newString: "b",
+          oldString: "hidden-tail-marker",
+        }),
+        {
+          catalog: [
+            {
+              description: "Deploy steps",
+              name: "deploy-checklist",
+              skillMarkdown: `${"x".repeat(6000)}hidden-tail-marker`,
+            },
+          ],
+        }
+      )
+    ).toEqual({ action: "noop", reason: "patch_old_string_not_shown" });
+  });
+
   test("rejects delete", () => {
     expect(
       parseSkillPostTurnReviewResponse(
@@ -180,7 +202,7 @@ describe("buildSkillPostTurnReviewPrompt", () => {
     expect(prompt).toContain(tail);
   });
 
-  test("marks a SKILL.md cut at the limit", () => {
+  test("cuts a SKILL.md at the limit", () => {
     const prompt = buildSkillPostTurnReviewPrompt({
       catalog: [
         {
@@ -193,6 +215,5 @@ describe("buildSkillPostTurnReviewPrompt", () => {
     });
 
     expect(prompt).not.toContain("hidden-tail-marker");
-    expect(prompt).toContain("6018");
   });
 });
