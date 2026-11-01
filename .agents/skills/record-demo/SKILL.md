@@ -74,12 +74,13 @@ A `run` call stops at 30 s. Record each part in its own `run`, with at most
 const RELAY = browser.page(RELAY_ID);
 const REC = { target: TARGET_ID, on: true, buf: [], n: 0 };
 // On a failed POST the frames go back in the buffer for the next flush. It never throws.
+// page.evaluate gives { value, changed, page, settled }. The HTTP status is in res.value.
 async function flush() {
   if (!REC.buf.length) return;
   const items = REC.buf.splice(0);
   try {
-    const status = await RELAY.evaluate((it) => fetch("/frames", { method: "POST", headers: { "x-frame-relay": "1" }, body: JSON.stringify(it) }).then((r) => r.status), items);
-    if (status !== 200) throw new Error("frame server status " + status);
+    const res = await RELAY.evaluate((it) => fetch("/frames", { method: "POST", headers: { "x-frame-relay": "1" }, body: JSON.stringify(it) }).then((r) => r.status), items);
+    if (res.value !== 200) throw new Error("frame server status " + JSON.stringify(res));
   } catch (e) {
     REC.buf.unshift(...items);
     REC.err = String(e);
