@@ -18,7 +18,7 @@ function readLater(): boolean {
   }
 }
 
-export function ReleaseChangeList({
+function ReleaseChangeList({
   changes,
   max,
 }: {

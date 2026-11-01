@@ -4,7 +4,7 @@ import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { queryKeys } from "@/lib/query-keys";
 import type { ReleaseNote } from "@/lib/release-notes";
-import { WhatsNewCard, WhatsNewDialog } from "./WhatsNew";
+import { WhatsNewDialog, WhatsNewNotice } from "./WhatsNew";
 
 const SEEN_KEY = "nakama-whats-new-seen";
 
@@ -76,8 +76,20 @@ function render(
   return container;
 }
 
+function closeButton(container: HTMLElement) {
+  const match = container.querySelector<HTMLButtonElement>(
+    'button[aria-label="Close"]'
+  );
+
+  if (!match) {
+    throw new Error("No Close button");
+  }
+
+  return match;
+}
+
 test("a first visit shows nothing and remembers the version", () => {
-  const container = render(<WhatsNewCard />);
+  const container = render(<WhatsNewNotice />);
 
   expect(container.textContent).toBe("");
   expect(localStorage.getItem(SEEN_KEY)).toBe("0.4.68");
@@ -86,15 +98,11 @@ test("a first visit shows nothing and remembers the version", () => {
 test("after an update it shows the notes one time", () => {
   localStorage.setItem(SEEN_KEY, "0.4.67");
 
-  const container = render(<WhatsNewCard />);
+  const container = render(<WhatsNewNotice />);
 
   expect(container.textContent).toContain("Later button");
 
-  const gotIt = [...container.querySelectorAll("button")].find(
-    (element) => element.textContent === "Got it"
-  );
-
-  act(() => gotIt?.click());
+  act(() => closeButton(container).click());
 
   expect(container.textContent).toBe("");
   expect(localStorage.getItem(SEEN_KEY)).toBe("0.4.68");
@@ -103,7 +111,7 @@ test("after an update it shows the notes one time", () => {
 test("a version without notes shows nothing and is marked seen", () => {
   localStorage.setItem(SEEN_KEY, "0.4.68");
 
-  const container = render(<WhatsNewCard />, { version: "0.4.69" });
+  const container = render(<WhatsNewNotice />, { version: "0.4.69" });
 
   expect(container.textContent).toBe("");
   expect(localStorage.getItem(SEEN_KEY)).toBe("0.4.69");
@@ -113,18 +121,14 @@ test("the other prompt shows only when there are no notes to show", () => {
   localStorage.setItem(SEEN_KEY, "0.4.67");
 
   const container = render(
-    <WhatsNewCard>
+    <WhatsNewNotice>
       <p>Other prompt</p>
-    </WhatsNewCard>
+    </WhatsNewNotice>
   );
 
   expect(container.textContent).not.toContain("Other prompt");
 
-  const gotIt = [...container.querySelectorAll("button")].find(
-    (element) => element.textContent === "Got it"
-  );
-
-  act(() => gotIt?.click());
+  act(() => closeButton(container).click());
 
   expect(container.textContent).toBe("Other prompt");
 });
@@ -136,7 +140,7 @@ test("a failed notes fetch keeps the old version", async () => {
     new Error("offline")
   );
 
-  const container = render(<WhatsNewCard />, { seed: false });
+  const container = render(<WhatsNewNotice />, { seed: false });
 
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -145,6 +149,35 @@ test("a failed notes fetch keeps the old version", async () => {
   expect(container.textContent).toBe("");
   expect(localStorage.getItem(SEEN_KEY)).toBe("0.4.67");
   fetchSpy.mockRestore();
+});
+
+test("See what's new opens the notes and closing them marks them seen", async () => {
+  localStorage.setItem(SEEN_KEY, "0.4.67");
+
+  const container = render(<WhatsNewNotice />);
+
+  const open = [...container.querySelectorAll("button")].find(
+    (element) => element.textContent === "See what's new"
+  );
+
+  act(() => open?.click());
+
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  expect(localStorage.getItem(SEEN_KEY)).toBe("0.4.67");
+
+  act(() => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  });
+
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  expect(localStorage.getItem(SEEN_KEY)).toBe("0.4.68");
 });
 
 test("the dialog lists every release", async () => {

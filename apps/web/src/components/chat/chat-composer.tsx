@@ -81,6 +81,7 @@ import { ChatSkillPicker } from "@/components/chat/chat-skill-picker";
 import { ChatSkillTokenOverlay } from "@/components/chat/chat-skill-token-overlay";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
+import { WhatsNewNotice } from "@/components/WhatsNew";
 import { useAuth } from "@/context/use-auth";
 import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import {
@@ -228,7 +229,11 @@ function ChatComposerNotice({
   }
 
   if (showTips) {
-    return <ChatTips />;
+    return (
+      <WhatsNewNotice>
+        <ChatTips />
+      </WhatsNewNotice>
+    );
   }
 
   return null;

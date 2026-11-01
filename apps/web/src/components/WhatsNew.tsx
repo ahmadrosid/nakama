@@ -6,13 +6,25 @@ import {
   DialogTitle,
 } from "@nakama/ui/dialog";
 import { useQuery } from "@tanstack/react-query";
+import {
+  ArrowDown01Icon,
+  Cancel01Icon,
+  NewReleasesIcon,
+} from "hugeicons-react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
-import { ReleaseChangeList } from "@/components/ServiceWorkerUpdatePrompt";
+import { ChatComposerNotice } from "@/components/chat/chat-tips";
 import { queryKeys } from "@/lib/query-keys";
-import { fetchReleaseNotes, findReleaseNote } from "@/lib/release-notes";
+import {
+  fetchReleaseNotes,
+  findReleaseNote,
+  RELEASE_CHANGE_LABELS,
+  type ReleaseNote,
+} from "@/lib/release-notes";
 
 /** The last version whose notes this browser has shown. */
 const SEEN_KEY = "nakama-whats-new-seen";
+
+const KIND_ORDER = ["new", "changed", "fixed"] as const;
 
 function readSeen(): string | null {
   try {
@@ -32,18 +44,19 @@ function useReleaseNotesQuery(enabled: boolean) {
 }
 
 /**
- * Shows the notes for this page's build one time after it changes. While it
- * has nothing to show it renders `children`, so two bottom cards never stack.
+ * Shows the notes for this page's build one time after it changes, in the
+ * composer's notice line. Until then, and after, it renders `children`.
  */
-export function WhatsNewCard({ children }: { children?: ReactNode }) {
+export function WhatsNewNotice({ children }: { children?: ReactNode }) {
   // The build version, not /health: the server can run a newer build than
   // the page until the service worker update is applied.
   const version = import.meta.env.VITE_NAKAMA_VERSION?.trim() || null;
   const [seen, setSeen] = useState(readSeen);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const changed = version !== null && seen !== null && seen !== version;
   const notesQuery = useReleaseNotesQuery(changed);
   const note = findReleaseNote(notesQuery.data ?? [], version);
-  const hasChanges = (note?.changes.length ?? 0) > 0;
+  const first = note?.changes[0];
 
   const markSeen = useCallback(() => {
     if (!version) {
@@ -53,7 +66,7 @@ export function WhatsNewCard({ children }: { children?: ReactNode }) {
     try {
       localStorage.setItem(SEEN_KEY, version);
     } catch {
-      // Storage can be blocked; the card then hides for this page only.
+      // Storage can be blocked; the notice then hides for this page only.
     }
 
     setSeen(version);
@@ -63,36 +76,96 @@ export function WhatsNewCard({ children }: { children?: ReactNode }) {
     // A first visit has no earlier version to compare with, so it shows nothing.
     const firstVisit = version !== null && seen === null;
     // A failed fetch keeps the old version, so the notes show on a later visit.
-    const nothingToShow = changed && notesQuery.isSuccess && !hasChanges;
+    const nothingToShow = changed && notesQuery.isSuccess && !first;
 
     if (firstVisit || nothingToShow) {
       markSeen();
     }
-  }, [changed, hasChanges, markSeen, notesQuery.isSuccess, seen, version]);
+  }, [changed, first, markSeen, notesQuery.isSuccess, seen, version]);
 
-  if (changed && notesQuery.isPending) {
-    return null;
-  }
-
-  if (!(changed && note && hasChanges)) {
+  if (!(changed && note && first)) {
     return children;
   }
 
   return (
-    <section
-      aria-label="What's new"
-      className="pointer-events-auto fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-50 mx-auto w-[min(24rem,calc(100%-2rem))] rounded-xl border border-border bg-card p-4 shadow-lg"
-    >
-      <p className="mb-2 font-medium text-foreground text-sm">
-        What's new in Nakama {note.version}
-      </p>
-      <ReleaseChangeList changes={note.changes} />
-      <div className="mt-3 flex justify-end">
-        <Button onClick={markSeen} size="sm" type="button">
-          Got it
-        </Button>
-      </div>
-    </section>
+    <>
+      <ChatComposerNotice>
+        <section
+          aria-label="What's new"
+          className="flex items-center gap-2 text-muted-foreground text-xs"
+        >
+          <NewReleasesIcon
+            aria-hidden
+            className="size-3 shrink-0 text-primary/80"
+          />
+          <p className="min-w-0 flex-1 truncate">
+            <span className="font-medium text-foreground">
+              Updated to {note.version}
+            </span>{" "}
+            {first.text}
+          </p>
+          <Button
+            className="h-6 px-2 text-xs"
+            onClick={() => setDialogOpen(true)}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            See what's new
+          </Button>
+          <Button
+            aria-label="Close"
+            className="size-6"
+            onClick={markSeen}
+            size="icon"
+            type="button"
+            variant="ghost"
+          >
+            <Cancel01Icon aria-hidden className="size-3" />
+          </Button>
+        </section>
+      </ChatComposerNotice>
+      <WhatsNewDialog
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+
+          if (!open) {
+            markSeen();
+          }
+        }}
+        open={dialogOpen}
+      />
+    </>
+  );
+}
+
+function ReleaseChangeGroups({ changes }: { changes: ReleaseNote["changes"] }) {
+  return (
+    <div className="space-y-3">
+      {KIND_ORDER.map((kind) => {
+        // A repeated line adds nothing, and the text is the list key.
+        const texts = [
+          ...new Set(
+            changes
+              .filter((change) => change.kind === kind)
+              .map((change) => change.text)
+          ),
+        ];
+
+        return texts.length === 0 ? null : (
+          <div key={kind}>
+            <h4 className="mb-1 font-semibold text-muted-foreground text-xs uppercase tracking-wide">
+              {RELEASE_CHANGE_LABELS[kind]}
+            </h4>
+            <ul className="list-disc space-y-1 pl-4 text-foreground text-sm">
+              {texts.map((text) => (
+                <li key={text}>{text}</li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -104,7 +177,7 @@ export function WhatsNewDialog({
   open: boolean;
 }) {
   const notesQuery = useReleaseNotesQuery(open);
-  const notes = notesQuery.data ?? [];
+  const [latest, ...older] = notesQuery.data ?? [];
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
@@ -114,18 +187,34 @@ export function WhatsNewDialog({
         </DialogHeader>
         {notesQuery.isPending ? null : (
           <div className="space-y-4">
-            {notes.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No notes yet.</p>
+            {latest ? (
+              <section>
+                <h3 className="mb-2 font-medium font-mono text-sm tabular-nums">
+                  {latest.version}
+                </h3>
+                <ReleaseChangeGroups changes={latest.changes} />
+              </section>
             ) : (
-              notes.map((note) => (
-                <section key={note.version}>
-                  <h3 className="mb-1 font-medium font-mono text-muted-foreground text-xs tabular-nums">
-                    {note.version}
-                  </h3>
-                  <ReleaseChangeList changes={note.changes} />
-                </section>
-              ))
+              <p className="text-muted-foreground text-sm">No notes yet.</p>
             )}
+            {older.length > 0 ? (
+              <div className="divide-y divide-border border-border border-t">
+                {older.map((note) => (
+                  <details className="group py-1" key={note.version}>
+                    <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between font-medium font-mono text-sm tabular-nums">
+                      {note.version}
+                      <ArrowDown01Icon
+                        aria-hidden
+                        className="size-4 text-muted-foreground transition-transform group-open:rotate-180"
+                      />
+                    </summary>
+                    <div className="pb-2">
+                      <ReleaseChangeGroups changes={note.changes} />
+                    </div>
+                  </details>
+                ))}
+              </div>
+            ) : null}
           </div>
         )}
       </DialogContent>
