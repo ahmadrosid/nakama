@@ -1,55 +1,67 @@
-import { expect, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
 import committed from "../../public/release-notes.json";
-import { findReleaseNote, parseReleaseNotes } from "./release-notes";
+import {
+  fetchReleaseNotes,
+  findReleaseNote,
+  releaseNotesSchema,
+} from "./release-notes";
 
-test("drops entries and changes with the wrong shape", () => {
-  const notes = parseReleaseNotes([
-    {
-      changes: [
-        { kind: "new", text: " A " },
-        { kind: "oops", text: "B" },
-      ],
-      version: "1.0.1",
-    },
-    { version: 2 },
-    "junk",
-  ]);
+const originalFetch = globalThis.fetch;
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
+
+function serve(body: string, status = 200) {
+  globalThis.fetch = Object.assign(async () => new Response(body, { status }), {
+    preconnect: originalFetch.preconnect,
+  });
+}
+
+test("reads notes and keeps the critical reason", async () => {
+  serve(
+    JSON.stringify([
+      {
+        changes: [{ kind: "fixed", text: " A " }],
+        critical: "reason",
+        version: "1.0.2",
+      },
+    ])
+  );
+
+  const notes = await fetchReleaseNotes();
 
   expect(notes).toEqual([
     {
-      changes: [{ kind: "new", text: "A" }],
-      critical: undefined,
-      version: "1.0.1",
+      changes: [{ kind: "fixed", text: "A" }],
+      critical: "reason",
+      version: "1.0.2",
     },
   ]);
 });
 
-test("keeps the critical reason", () => {
-  const [note] = parseReleaseNotes([
-    { changes: [], critical: "Fixes a sign-in leak.", version: "1.0.2" },
-  ]);
+test("a malformed or missing file gives no notes", async () => {
+  serve(
+    JSON.stringify([{ changes: [{ kind: "oops", text: "B" }], version: "1" }])
+  );
+  expect(await fetchReleaseNotes()).toEqual([]);
 
-  expect(note?.critical).toBe("Fixes a sign-in leak.");
+  serve("", 404);
+  expect(await fetchReleaseNotes()).toEqual([]);
 });
 
 test("finds the note for a version", () => {
-  const notes = parseReleaseNotes([{ changes: [], version: "1.0.3" }]);
+  const notes = [{ changes: [], version: "1.0.3" }];
 
   expect(findReleaseNote(notes, "1.0.3")?.version).toBe("1.0.3");
   expect(findReleaseNote(notes, "9.9.9")).toBeNull();
 });
 
-test("committed notes parse in full and stay in user language", () => {
-  const notes = parseReleaseNotes(committed);
+test("committed notes parse and stay in user language", () => {
+  const notes = releaseNotesSchema.parse(committed);
 
-  expect(notes).toHaveLength(committed.length);
-
-  for (const [index, note] of notes.entries()) {
-    expect(note.changes).toHaveLength(committed[index]?.changes.length ?? -1);
-
-    for (const { text } of note.changes) {
-      // No PR prefixes, issue numbers, or file names.
-      expect(text).not.toMatch(/^\w+(\([\w-]+\))?!?:|#\d+|\.(tsx?|md|json)\b/);
-    }
+  for (const { text } of notes.flatMap((note) => note.changes)) {
+    // No PR prefixes, issue numbers, or file names.
+    expect(text).not.toMatch(/^\w+(\([\w-]+\))?!?:|#\d+|\.(tsx?|md|json)\b/);
   }
 });

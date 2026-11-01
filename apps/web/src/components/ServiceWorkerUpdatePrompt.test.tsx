@@ -6,12 +6,12 @@ import type { ReleaseNote } from "@/lib/release-notes";
 
 const applyUpdate = mock(() => undefined);
 
-const update: { note: ReleaseNote | null } = { note: null };
+let note: ReleaseNote | null = null;
 
 mock.module("@/hooks/use-service-worker-update", () => ({
   useServiceWorkerUpdate: () => ({
     applyUpdate,
-    note: update.note,
+    note,
     updateReady: true,
     version: "0.4.68",
   }),
@@ -36,7 +36,7 @@ beforeEach(() => {
   });
   sessionStorage.clear();
   applyUpdate.mockClear();
-  update.note = null;
+  note = null;
 });
 
 afterEach(() => {
@@ -101,7 +101,7 @@ test("Reload applies the update", () => {
 });
 
 test("shows at most three change lines", () => {
-  update.note = {
+  note = {
     changes: ["one", "two", "three", "four"].map((text) => ({
       kind: "new",
       text,
@@ -119,15 +119,15 @@ test("shows at most three change lines", () => {
 
 test("a critical build shows its reason and offers no Later", () => {
   sessionStorage.setItem("nakama-update-later", "1");
-  update.note = {
+  note = {
     changes: [{ kind: "fixed", text: "hidden" }],
-    critical: "Closes a sign-in hole.",
+    critical: "reason",
     version: "0.4.68",
   };
 
   const container = render();
 
-  expect(container.textContent).toContain("Closes a sign-in hole.");
+  expect(container.textContent).toContain("reason");
   expect(container.textContent).not.toContain("hidden");
   expect(() => button(container, "Later")).toThrow();
   expect(button(container, "Reload")).toBeTruthy();
