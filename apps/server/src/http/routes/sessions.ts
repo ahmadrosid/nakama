@@ -341,11 +341,14 @@ export function registerSessionRoutes(
         description: "Single-channel filter. One of the two filters is required.",
         param: { required: true },
       }),
-      channels: z.string().optional().openapi({
-        description:
-          "Comma-separated channels, listed as one merged list. Required unless `channel` is set.",
-        param: { required: true },
-      }),
+      channels: z
+        .string()
+        .optional()
+        .openapi({
+          description:
+            "Comma-separated channels, listed as one merged list. Required unless `channel` is set.",
+          param: { required: true },
+        }),
       cursor: z.string().optional().openapi({
         description: "`nextCursor` from the previous page.",
       }),
