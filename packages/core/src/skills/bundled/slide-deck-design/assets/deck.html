@@ -24,7 +24,8 @@
       --mono: "JetBrains Mono", ui-monospace, monospace;
       color-scheme: light;
     }
-    @media (prefers-color-scheme: dark) {
+    /* Screen only, so print and PDF always use the light tokens above. */
+    @media screen and (prefers-color-scheme: dark) {
       :root {
         --bg: #0a0a0b;
         --slide: #161618;
@@ -234,14 +235,6 @@
       margin: 0;
     }
     @media print {
-      :root {
-        --slide: #ffffff;
-        --text: #171717;
-        --muted: #52525b;
-        --line: #e5e5e5;
-        --primary: #b45309;
-        color-scheme: light;
-      }
       html,
       body {
         height: auto;
@@ -377,6 +370,16 @@
       prev.addEventListener("click", () => show(index - 1));
       next.addEventListener("click", () => show(index + 1));
       addEventListener("keydown", (event) => {
+        // Leave browser shortcuts alone, and let Space press a focused control.
+        if (event.altKey || event.ctrlKey || event.metaKey) {
+          return;
+        }
+        if (
+          event.key === " " &&
+          event.target.closest?.("button, a, input, select, textarea")
+        ) {
+          return;
+        }
         const step = {
           " ": 1,
           ArrowLeft: -1,
