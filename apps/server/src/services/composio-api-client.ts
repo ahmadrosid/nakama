@@ -165,6 +165,76 @@ export function unwrapComposioError(error: Error): Error {
   return error;
 }
 
+const INVALID_CONNECTED_ACCOUNTS_SLUG =
+  "ToolRouterV2_InvalidConnectedAccountIds";
+
+const INVALID_CONNECTED_ACCOUNTS_CODE = 4306;
+
+const ComposioErrorDetailsSchema = z.object({
+  code: z.number().optional(),
+  message: z.string().optional(),
+  slug: z.string().optional(),
+});
+
+const ComposioApiErrorSchema = z.object({
+  details: ComposioErrorDetailsSchema.optional(),
+  error: z.object({ error: ComposioErrorDetailsSchema.optional() }).optional(),
+});
+
+/**
+ * The connected account ids Composio refused when opening a session, or null
+ * when the error is something else. Composio refuses ids it does not hold for
+ * this user, for example after the instance moved to a new Composio project.
+ * When the error names no requested id, every requested id is returned.
+ */
+export function findRejectedConnectedAccountIds(
+  error: Error,
+  requestedIds: string[]
+): string[] | null {
+  const texts: string[] = [];
+  let rejected = false;
+
+  for (
+    let current: Error | null = error;
+    current;
+    current = current.cause instanceof Error ? current.cause : null
+  ) {
+    texts.push(current.message);
+
+    const apiError = ComposioApiErrorSchema.safeParse(current);
+
+    if (!apiError.success) {
+      continue;
+    }
+
+    for (const details of [apiError.data.details, apiError.data.error?.error]) {
+      if (!details) {
+        continue;
+      }
+
+      texts.push(details.message ?? "");
+
+      if (
+        details.slug === INVALID_CONNECTED_ACCOUNTS_SLUG ||
+        details.code === INVALID_CONNECTED_ACCOUNTS_CODE
+      ) {
+        rejected = true;
+      }
+    }
+  }
+
+  const text = texts.join("\n");
+
+  if (!(rejected || text.includes(INVALID_CONNECTED_ACCOUNTS_SLUG))) {
+    return null;
+  }
+
+  const named = new Set(text.match(/\bca_[A-Za-z0-9_-]+/g) ?? []);
+  const mentioned = requestedIds.filter((id) => named.has(id));
+
+  return mentioned.length > 0 ? mentioned : requestedIds;
+}
+
 type ComposioAuthConfigClient = {
   authConfigs: {
     list(query?: { toolkit?: string }): Promise<{

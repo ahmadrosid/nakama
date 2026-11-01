@@ -398,6 +398,22 @@ export async function buildComposioConnectTools(
   ];
 }
 
+type AssignedToolkitRecord = Awaited<
+  ReturnType<ComposioService["getAssignedToolkitRecords"]>
+>[number];
+
+/** Assignments the agent can use now: enabled, connected and with tools. */
+function connectedWithTools(
+  assigned: AssignedToolkitRecord[]
+): AssignedToolkitRecord[] {
+  return assigned.filter(
+    ({ orgToolkit, userConnection }) =>
+      orgToolkit.status === "enabled" &&
+      userConnection?.status === "connected" &&
+      orgToolkit.cachedTools.length > 0
+  );
+}
+
 export async function buildComposioToolDefinitions(
   orgId: string,
   userId: string,
@@ -426,30 +442,45 @@ export async function buildComposioToolDefinitions(
     return [];
   }
 
-  const connectedAssignments = assigned.filter(
-    ({ orgToolkit, userConnection }) =>
-      orgToolkit.status === "enabled" &&
-      userConnection?.status === "connected" &&
-      orgToolkit.cachedTools.length > 0
-  );
-
-  if (connectedAssignments.length === 0) {
-    return [];
-  }
-
-  const session = await composioService.getProfileSessionEndpoint(
-    orgId,
-    userId,
-    profileId
-  );
-
-  if (!session) {
+  if (connectedWithTools(assigned).length === 0) {
     return [];
   }
 
   const connectionKey = composioConnectionKey(orgId, userId, profileId);
 
-  await ensureComposioMcpConnection(mcpClientManager, connectionKey, session);
+  let session: NonNullable<
+    Awaited<ReturnType<ComposioService["getProfileSessionEndpoint"]>>
+  >;
+
+  // Composio is an add-on: when it cannot open a session, the turn runs
+  // without its tools instead of failing.
+  try {
+    const opened = await composioService.getProfileSessionEndpoint(
+      orgId,
+      userId,
+      profileId
+    );
+
+    if (!opened) {
+      return [];
+    }
+
+    session = opened;
+
+    await ensureComposioMcpConnection(mcpClientManager, connectionKey, session);
+  } catch (error) {
+    console.warn(
+      `Composio tools are unavailable for this turn: ${error instanceof Error ? error.message : String(error)}`
+    );
+
+    return [];
+  }
+
+  // Opening the session can mark refused accounts as needing reconnection,
+  // so read the assignments again before offering their actions.
+  const connectedAssignments = connectedWithTools(
+    await composioService.getAssignedToolkitRecords(orgId, userId, profileId)
+  );
 
   const searchableActions = buildSearchableActions(connectedAssignments);
 

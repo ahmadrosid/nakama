@@ -33,6 +33,7 @@ import type { AuthService } from "./auth-service";
 import {
   ComposioApiClient,
   type ComposioSessionMcpEndpoint,
+  findRejectedConnectedAccountIds,
 } from "./composio-api-client";
 
 function deriveKey(secret: string): Buffer {
@@ -62,6 +63,9 @@ interface ComposioOAuthStatePayload {
   toolkitId: string;
   userId: string;
 }
+
+const STALE_CONNECTION_ERROR =
+  "Composio no longer has this account. Connect the app again.";
 
 const MEET_RECORDING_TOOLKITS = new Set(["gmail", "googledrive"]);
 
@@ -1030,6 +1034,19 @@ export class ComposioService {
 
       return toOrgToolkitSummary(updatedOrgToolkit);
     } catch (error) {
+      if (
+        error instanceof Error &&
+        (await this.markRejectedConnections(
+          orgId,
+          actingUserId,
+          [connection],
+          error,
+          connection.connectedAccountId ? [connection.connectedAccountId] : []
+        )) > 0
+      ) {
+        throw new NakamaApiError(STALE_CONNECTION_ERROR, 409);
+      }
+
       const message = error instanceof Error ? error.message : String(error);
 
       const updatedConnection: StoredComposioUserConnectionRecord = {
@@ -1218,16 +1235,87 @@ export class ComposioService {
       return cached.endpoint;
     }
 
-    const endpoint = await apiClient.createProfileSession(
-      composioUserId(actingUserId),
-      enabledToolkits,
-      allowedToolsByToolkit,
-      connectedAccountsByToolkit
-    );
+    let endpoint: ComposioSessionMcpEndpoint;
+
+    try {
+      endpoint = await apiClient.createProfileSession(
+        composioUserId(actingUserId),
+        enabledToolkits,
+        allowedToolsByToolkit,
+        connectedAccountsByToolkit
+      );
+    } catch (error) {
+      const marked =
+        error instanceof Error
+          ? await this.markRejectedConnections(
+              orgId,
+              actingUserId,
+              userConnections,
+              error,
+              Object.values(connectedAccountsByToolkit)
+            )
+          : 0;
+
+      if (marked === 0) {
+        throw error;
+      }
+
+      // The marked connections now read as "error", so the retry leaves them
+      // out and the user's other apps keep working.
+      return this.getProfileSessionEndpoint(orgId, userId, profileId);
+    }
 
     this.profileSessionCache.set(cacheKey, { endpoint, fingerprint });
 
     return endpoint;
+  }
+
+  /**
+   * Marks the connections whose account Composio refused, so the UI asks the
+   * user to connect the app again. Returns how many were marked; 0 when the
+   * error is not a refused account.
+   */
+  private async markRejectedConnections(
+    orgId: string,
+    actingUserId: string,
+    connections: StoredComposioUserConnectionRecord[],
+    error: Error,
+    requestedIds: string[]
+  ): Promise<number> {
+    const rejected = findRejectedConnectedAccountIds(error, requestedIds);
+
+    if (!rejected) {
+      return 0;
+    }
+
+    const stale = connections.filter(
+      (connection) =>
+        connection.status === "connected" &&
+        connection.connectedAccountId !== null &&
+        rejected.includes(connection.connectedAccountId)
+    );
+
+    const now = new Date().toISOString();
+
+    for (const connection of stale) {
+      await this.databaseAdapter.upsertComposioUserConnection({
+        ...connection,
+        lastError: STALE_CONNECTION_ERROR,
+        sessionIdEnc: null,
+        status: "error",
+        updatedAt: now,
+      });
+    }
+
+    if (stale.length > 0) {
+      console.warn(
+        `Composio refused ${stale.length} connected account(s) for org ${orgId}; marked them for reconnection.`
+      );
+      this.invalidateProfileSessionCachesForUser(orgId, actingUserId);
+      this.bumpRevision(orgId);
+    }
+
+    return stale.length;
   }
 
   async formatProfileConnectionsContext(

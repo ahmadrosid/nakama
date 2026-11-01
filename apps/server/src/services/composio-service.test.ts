@@ -450,6 +450,143 @@ describe("ComposioService", () => {
       restore();
     }
   });
+  test("a refused connected account is marked for reconnection and the other apps keep working", async () => {
+    const { db, service, restore } = await createConfiguredService();
+
+    try {
+      const now = "2026-01-01T00:00:00.000Z";
+      await seedOrgWithAdmin(db);
+
+      const profileId = "profile_stale";
+      await db.upsertProfile({
+        createdAt: now,
+        id: profileId,
+        isDefault: false,
+        isSuper: false,
+        model: null,
+        name: "Agent",
+        orgId: ORG_ID,
+        systemPrompt: "",
+        updatedAt: now,
+      });
+
+      const sessionCalls: Array<Record<string, string>> = [];
+      const refused = new Set(["ca_old_gmail"]);
+
+      injectMockComposioClient(service, {
+        async createProfileSession(_userId, _slugs, _actions, accounts = {}) {
+          sessionCalls.push(accounts);
+          const stale = Object.values(accounts).filter((id) => refused.has(id));
+
+          if (stale.length > 0) {
+            const details = {
+              code: 4306,
+              message: `Could not find connected account(s) ${stale.join(", ")} belonging to user "nakama:user:${USER_ID}".`,
+              slug: "ToolRouterV2_InvalidConnectedAccountIds",
+            };
+
+            throw Object.assign(
+              new Error(`400 ${JSON.stringify({ error: details })}`),
+              { details, status: 400 }
+            );
+          }
+
+          return { sessionId: "sess_ok", url: "https://mcp.example.com/ok" };
+        },
+        async listCatalogToolkits() {
+          return ["gmail", "notion"].map((slug) => ({
+            description: slug,
+            logoUrl: null,
+            name: slug,
+            slug,
+          }));
+        },
+      });
+
+      const assignments = [];
+
+      for (const [slug, accountId] of [
+        ["gmail", "ca_old_gmail"],
+        ["notion", "ca_notion"],
+      ] as const) {
+        const toolkit = await service.enableToolkit(ORG_ID, {
+          toolkitSlug: slug,
+        });
+
+        assignments.push({
+          allowedActions: null,
+          profileId,
+          toolkitId: toolkit.id,
+        });
+        await db.upsertComposioUserConnection({
+          connectedAccountId: accountId,
+          createdAt: now,
+          id: `connection_${slug}`,
+          lastError: null,
+          oauthStateHash: null,
+          orgId: ORG_ID,
+          sessionIdEnc: null,
+          status: "connected",
+          toolkitId: toolkit.id,
+          updatedAt: now,
+          userId: USER_ID,
+        });
+      }
+
+      await db.replaceProfileComposioToolkits(profileId, assignments);
+
+      const endpoint = await service.getProfileSessionEndpoint(
+        ORG_ID,
+        USER_ID,
+        profileId
+      );
+
+      expect(endpoint?.sessionId).toBe("sess_ok");
+      expect(sessionCalls).toEqual([
+        { gmail: "ca_old_gmail", notion: "ca_notion" },
+        { notion: "ca_notion" },
+      ]);
+
+      const records = await service.getAssignedToolkitRecords(
+        ORG_ID,
+        USER_ID,
+        profileId
+      );
+
+      const bySlug = new Map(
+        records.map((record) => [
+          record.orgToolkit.toolkitSlug,
+          record.userConnection,
+        ])
+      );
+
+      expect(bySlug.get("gmail")).toMatchObject({
+        lastError: expect.stringContaining("Connect the app again"),
+        status: "error",
+      });
+      expect(bySlug.get("notion")?.status).toBe("connected");
+
+      // With every account refused there is no session, and no error. A new
+      // account id changes the cached session's fingerprint.
+      const notion = await db.getComposioUserConnection(
+        USER_ID,
+        assignments[1]!.toolkitId
+      );
+
+      await db.upsertComposioUserConnection({
+        ...notion!,
+        connectedAccountId: "ca_notion_v2",
+      });
+      refused.add("ca_notion_v2");
+
+      expect(
+        await service.getProfileSessionEndpoint(ORG_ID, USER_ID, profileId)
+      ).toBeNull();
+    } finally {
+      restore();
+    }
+  });
+
   test("shared profiles reject integration assignments and default auto-assignment after revocation", async () => {
     const { db, service, restore } = await createConfiguredService();
 

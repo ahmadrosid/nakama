@@ -63,6 +63,64 @@ describe("composio-tool-bridge", () => {
     );
   });
 
+  test("runs the turn without Composio tools when the session cannot open", async () => {
+    const composioService: Parameters<typeof buildComposioToolDefinitions>[3] =
+      {
+        async getAssignedToolkitRecords() {
+          return [
+            {
+              allowedActions: null,
+              orgToolkit: {
+                cachedTools: [
+                  {
+                    description: "Send an email",
+                    inputSchema: { properties: {}, type: "object" },
+                    name: "Send Email",
+                    slug: "GMAIL_SEND_EMAIL",
+                  },
+                ],
+                createdAt: "2026-01-01T00:00:00.000Z",
+                displayName: "Gmail",
+                id: "ctk_1",
+                lastError: null,
+                orgId: "org_1",
+                status: "enabled",
+                toolkitSlug: "gmail",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+              },
+              userConnection: {
+                connectedAccountId: "ca_1",
+                createdAt: "2026-01-01T00:00:00.000Z",
+                id: "cuc_1",
+                lastError: null,
+                oauthStateHash: null,
+                orgId: "org_1",
+                sessionIdEnc: null,
+                status: "connected",
+                toolkitId: "ctk_1",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+                userId: "usr_1",
+              },
+            },
+          ];
+        },
+        async getProfileSessionEndpoint() {
+          throw new Error("Composio is down");
+        },
+        isAvailable: async () => true,
+      };
+
+    expect(
+      await buildComposioToolDefinitions(
+        "org_1",
+        "usr_1",
+        "profile_1",
+        composioService,
+        new McpClientManager()
+      )
+    ).toEqual([]);
+  });
+
   test("exposes search + invoke meta-tools for connected assignments", async () => {
     const composioService: Parameters<typeof buildComposioToolDefinitions>[3] =
       {
