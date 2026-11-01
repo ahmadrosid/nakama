@@ -520,7 +520,7 @@ export class AgentService {
       JSON.stringify([
         await this.capabilityRevisionForProfile(orgId, profileId),
         await this.pluginCapabilityRevision(orgId),
-        this.composioService?.revision ?? 0,
+        this.composioService?.revisionFor(orgId) ?? "",
       ]),
   });
   readonly turns = new TurnRunner({
@@ -6576,8 +6576,7 @@ export class AgentService {
             await this.composioService.formatProfileConnectionsContext(
               orgId,
               userId,
-              profileId,
-              { channel }
+              profileId
             );
 
           if (composioContext.trim()) {

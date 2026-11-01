@@ -212,7 +212,7 @@ function buildWebConnectTool(
 ): ToolDefinition {
   return {
     description:
-      "Show the user a one-click Connect button for a Composio app (for example gmail, googlecalendar, googledrive, slack, notion, github). Use it when the user asks for their own data in an app you have no tools for. Pass the Composio toolkit slug.",
+      "Show the user a one-click Connect button for a Composio app (for example gmail, googlecalendar, googledrive, slack, notion, github). Use it when the user asks for their own data in an app you have no tools for. Any app can be connected, also one that is not assigned to you: call this tool instead of saying the app is not enabled. Pass the Composio toolkit slug.",
     name: "composio__connect_account",
     parameters: {
       properties: {
