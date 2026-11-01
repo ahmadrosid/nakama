@@ -84,6 +84,7 @@ In Telegram, Discord, WhatsApp, Slack, and Teams, ask the agent for a PDF. The a
 
 - Install Chrome or Chromium on the server, or set `NAKAMA_CHROME_PATH` to the Chrome binary.
 - The default Docker image does not include Chrome. An image built with `INSTALL_MEET_DEPS=true` includes Chromium.
+- If Chrome stops at start because the host blocks its sandbox (for example Ubuntu 24.04), set `NAKAMA_CHROME_NO_SANDBOX=true`. The page is still limited to the artifacts folder and the preview's font and script hosts.
 
 Without Chrome, the agent tells the user that the server admin must set up headless Chrome. Slack and Teams do not send files yet, so there the PDF stays in the artifacts folder.
 

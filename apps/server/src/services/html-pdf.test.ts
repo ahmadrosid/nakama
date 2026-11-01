@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { convertHtmlToPdf, resolveChromeBin } from "./html-pdf";
@@ -42,6 +49,34 @@ test("reports 501 when the configured Chrome does not exist", async () => {
     )
   ).rejects.toMatchObject({ status: 501 });
 });
+
+test.skipIf(process.platform === "win32")(
+  "starts Chrome without its sandbox when NAKAMA_CHROME_NO_SANDBOX is true",
+  async () => {
+    const chrome = path.join(dir, "chrome");
+    const argsFile = path.join(dir, "args");
+    await writeFile(chrome, `#!/bin/sh\necho "$@" > "${argsFile}"\n`);
+    await chmod(chrome, 0o755);
+    const original = process.env.NAKAMA_CHROME_NO_SANDBOX;
+    process.env.NAKAMA_CHROME_NO_SANDBOX = "true";
+
+    try {
+      await expect(
+        convertHtmlToPdf("<p>Deck</p>", "deck.html", artifactsDir, chrome)
+      ).rejects.toMatchObject({ status: 501 });
+    } finally {
+      if (original === undefined) {
+        delete process.env.NAKAMA_CHROME_NO_SANDBOX;
+      } else {
+        process.env.NAKAMA_CHROME_NO_SANDBOX = original;
+      }
+    }
+
+    expect((await readFile(argsFile, "utf8")).split(" ")).toContain(
+      "--no-sandbox"
+    );
+  }
+);
 
 test.skipIf(!hasChrome)(
   "prints each slide of a deck as its own page with print CSS",

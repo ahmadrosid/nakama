@@ -80,6 +80,8 @@ jobs:
     env:
       # A PR that only touches apps/web reports apps/web coverage only.
       WEB_ONLY: ${{ needs.changes.outputs.web_only }}
+      # Ubuntu 24.04 blocks the user namespaces Chrome's sandbox needs (PDF tests).
+      NAKAMA_CHROME_NO_SANDBOX: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0

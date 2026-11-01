@@ -41,12 +41,13 @@ const PDF_CSP = [
   "form-action 'none'",
 ].join("; ");
 
+// Ubuntu's chromium-browser is a snap launcher, so it comes last.
 const CHROME_NAMES = [
-  "chromium",
-  "chromium-browser",
-  "google-chrome",
   "google-chrome-stable",
+  "google-chrome",
+  "chromium",
   "chrome",
+  "chromium-browser",
 ];
 
 const MAC_CHROME =
@@ -224,8 +225,12 @@ function startChrome(chromeBin: string, profileDir: string) {
       "--hide-scrollbars",
       "--remote-debugging-port=0",
       `--user-data-dir=${profileDir}`,
-      // Chrome refuses to start its sandbox as root (for example in a root container).
-      ...(process.getuid?.() === 0 ? ["--no-sandbox"] : []),
+      // Chrome cannot start its sandbox as root, or on hosts that block user
+      // namespaces (Ubuntu 24.04 AppArmor). The CSP and request filter still apply.
+      ...(process.getuid?.() === 0 ||
+      process.env.NAKAMA_CHROME_NO_SANDBOX === "true"
+        ? ["--no-sandbox"]
+        : []),
       "about:blank",
     ],
     { stderr: "pipe", stdin: "ignore", stdout: "ignore" }
@@ -314,7 +319,7 @@ async function readDevToolsEndpoint(
   }
 
   throw new NakamaApiError(
-    `${CHROME_MISSING_MESSAGE} Chrome did not start: ${output.trim().split("\n").at(-1) ?? "no output"}`,
+    `${CHROME_MISSING_MESSAGE} Chrome did not start: ${chromeStartError(output)}`,
     501
   );
 }
@@ -404,4 +409,19 @@ async function connectCdp(
         );
       }),
   };
+}
+
+/** Chrome ends a crash with a stack trace, so the FATAL line holds the cause. */
+function chromeStartError(output: string): string {
+  const lines = output
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return (
+    lines.find((line) => line.includes(":FATAL:")) ??
+    lines.find((line) => line.includes(":ERROR:")) ??
+    lines.at(-1) ??
+    "no output"
+  );
 }
