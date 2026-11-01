@@ -420,6 +420,38 @@ describe("createHonoApp", () => {
     }
   });
 
+  test("list sessions documents its channel filter as required", async () => {
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+
+    const session = await setupFreshInstallSession(
+      app,
+      options.databaseAdapter
+    );
+
+    const ok = await app.fetch(
+      new Request(
+        "http://localhost/v1/sessions?profileId=default&channels=web",
+        { headers: session.headers() }
+      )
+    );
+
+    expect(ok.status).toBe(200);
+
+    // PR #720 made the runtime require a channel; the published contract must
+    // match, so an omitted filter fails with the channel error, not silence.
+    const omitted = await app.fetch(
+      new Request("http://localhost/v1/sessions?profileId=default", {
+        headers: session.headers(),
+      })
+    );
+
+    expect(omitted.status).toBe(400);
+    await expect(omitted.json()).resolves.toMatchObject({
+      error: expect.stringContaining("Invalid channel"),
+    });
+  });
+
   test("removed backend keys and routes reject access, and stale app-user inputs create no sessions", async () => {
     const options = createServerOptions();
     let created = 0;
