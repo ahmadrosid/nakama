@@ -17,24 +17,13 @@ mock.module("@/hooks/use-service-worker-update", () => ({
   }),
 }));
 
-const { ServiceWorkerUpdatePrompt } = await import(
+const { ServiceWorkerUpdateNotice, ServiceWorkerUpdateProvider } = await import(
   "./ServiceWorkerUpdatePrompt"
-);
-
-const previousSessionStorage = Object.getOwnPropertyDescriptor(
-  globalThis,
-  "sessionStorage"
 );
 
 let root: Root | null = null;
 
 beforeEach(() => {
-  Object.defineProperty(globalThis, "sessionStorage", {
-    configurable: true,
-    value: window.sessionStorage,
-    writable: true,
-  });
-  sessionStorage.clear();
   applyUpdate.mockClear();
   note = null;
 });
@@ -43,19 +32,19 @@ afterEach(() => {
   act(() => root?.unmount());
   root = null;
   document.body.innerHTML = "";
-
-  if (previousSessionStorage) {
-    Object.defineProperty(globalThis, "sessionStorage", previousSessionStorage);
-  } else {
-    Reflect.deleteProperty(globalThis, "sessionStorage");
-  }
 });
 
 function render() {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() => root?.render(<ServiceWorkerUpdatePrompt />));
+  act(() =>
+    root?.render(
+      <ServiceWorkerUpdateProvider>
+        <ServiceWorkerUpdateNotice />
+      </ServiceWorkerUpdateProvider>
+    )
+  );
 
   return container;
 }
@@ -78,20 +67,6 @@ test("shows the new version", () => {
   expect(container.textContent).toContain("0.4.68");
 });
 
-test("Later hides the prompt for the rest of the session", () => {
-  const container = render();
-
-  act(() => button(container, "Later").click());
-
-  expect(container.querySelector('[role="status"]')).toBeNull();
-  expect(applyUpdate).not.toHaveBeenCalled();
-
-  act(() => root?.unmount());
-  root = null;
-
-  expect(render().querySelector('[role="status"]')).toBeNull();
-});
-
 test("Reload applies the update", () => {
   const container = render();
 
@@ -100,7 +75,7 @@ test("Reload applies the update", () => {
   expect(applyUpdate).toHaveBeenCalledTimes(1);
 });
 
-test("shows at most three change lines", () => {
+test("What's new shows at most three change lines, on demand", () => {
   note = {
     changes: ["one", "two", "three", "four"].map((text) => ({
       kind: "new",
@@ -109,12 +84,23 @@ test("shows at most three change lines", () => {
     version: "0.4.68",
   };
 
-  const items = [...render().querySelectorAll("li")].map(
+  const container = render();
+  expect(container.querySelectorAll("li")).toHaveLength(0);
+
+  act(() => button(container, "What's new").click());
+
+  const items = [...container.querySelectorAll("li")].map(
     (item) => item.textContent
   );
 
   expect(items).toHaveLength(3);
   expect(items.join(" ")).not.toContain("four");
+});
+
+test("no notes means no What's new", () => {
+  const container = render();
+
+  expect(() => button(container, "What's new")).toThrow();
 });
 
 test("a repeated line shows once", () => {
@@ -123,11 +109,13 @@ test("a repeated line shows once", () => {
     version: "0.4.68",
   };
 
-  expect(render().querySelectorAll("li")).toHaveLength(2);
+  const container = render();
+  act(() => button(container, "What's new").click());
+
+  expect(container.querySelectorAll("li")).toHaveLength(2);
 });
 
-test("a critical build shows its reason and changes, and offers no Later", () => {
-  sessionStorage.setItem("nakama-update-later", "1");
+test("a critical build shows its reason with Reload", () => {
   note = {
     changes: [{ kind: "fixed", text: "listed" }],
     critical: "reason",
@@ -137,7 +125,5 @@ test("a critical build shows its reason and changes, and offers no Later", () =>
   const container = render();
 
   expect(container.textContent).toContain("reason");
-  expect(container.textContent).toContain("listed");
-  expect(() => button(container, "Later")).toThrow();
   expect(button(container, "Reload")).toBeTruthy();
 });

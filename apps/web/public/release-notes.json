@@ -4,15 +4,15 @@
     "changes": [
       {
         "kind": "new",
-        "text": "The update message shows the new version and what changed. Choose Later to update when you are ready."
+        "text": "The update line shows what changed"
       },
       {
         "kind": "new",
-        "text": "Slide decks can use the meetup style, and the agent picks a cover layout that fits."
+        "text": "Meetup style for slide decks"
       },
       {
         "kind": "fixed",
-        "text": "A skill change that the agent suggests after a chat is checked before you approve it, so it cannot break the skill."
+        "text": "Skill suggestions cannot break a skill"
       }
     ]
   }
