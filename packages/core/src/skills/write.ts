@@ -7,6 +7,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
+import { NakamaApiError } from "../api-error";
 import { pathExists } from "../fs";
 import {
   comparablePath,
@@ -450,17 +451,13 @@ export async function writeRawProfileSkillMarkdown(options: {
   };
 }
 
-export async function patchSkillFile(options: {
+/** Reads the skill a patch targets; refuses unless old_string matches exactly once. */
+export async function readSkillForPatch(options: {
   orgId: string;
   profileId: string;
   name: string;
   oldString: string;
-  newString: string;
-}): Promise<{
-  directory: string;
-  name: string;
-  description: string;
-}> {
+}): Promise<{ directory: string; existing: string; skillFilePath: string }> {
   if (!options.oldString) {
     throw new Error("old_string is required for patch.");
   }
@@ -473,25 +470,44 @@ export async function patchSkillFile(options: {
 
   // resolveProfileSkillDirectory already assertValidSkillName + assertNotBundledSkillName
   // and keeps the directory inside the profile skills root; SKILL.md under it cannot escape.
-  const expectedName = options.name.trim().toLowerCase();
   const skillFilePath = path.join(directory, SKILL_FILE_NAME);
 
   if (!(await pathExists(skillFilePath))) {
-    throw new Error(`Skill "${options.name}" not found.`);
+    throw new NakamaApiError(`Skill "${options.name}" not found.`, 404);
   }
 
   const existing = await readFile(skillFilePath, "utf8");
   const occurrences = existing.split(options.oldString).length - 1;
 
   if (occurrences === 0) {
-    throw new Error("old_string not found in SKILL.md.");
+    throw new NakamaApiError("old_string not found in SKILL.md.", 409);
   }
 
   if (occurrences > 1) {
-    throw new Error(
-      "old_string matched multiple times in SKILL.md; make the match unique."
+    throw new NakamaApiError(
+      "old_string matched multiple times in SKILL.md; make the match unique.",
+      409
     );
   }
+
+  return { directory, existing, skillFilePath };
+}
+
+export async function patchSkillFile(options: {
+  orgId: string;
+  profileId: string;
+  name: string;
+  oldString: string;
+  newString: string;
+}): Promise<{
+  directory: string;
+  name: string;
+  description: string;
+}> {
+  const { directory, existing, skillFilePath } =
+    await readSkillForPatch(options);
+
+  const expectedName = options.name.trim().toLowerCase();
 
   const next = existing.replace(options.oldString, options.newString);
   const parsed = parseSkillMarkdown(next, skillFilePath);

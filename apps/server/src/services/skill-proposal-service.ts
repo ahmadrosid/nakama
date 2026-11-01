@@ -12,6 +12,7 @@ import type { SkillProposal } from "@nakama/core/contract";
 import {
   assertNotBundledSkillName,
   assertValidSkillName,
+  readSkillForPatch,
 } from "@nakama/core/skills/write";
 import type {
   DatabaseAdapter,
@@ -463,6 +464,13 @@ export class SkillProposalService {
         proposalId: conflicting.id,
       };
     }
+
+    await readSkillForPatch({
+      name,
+      oldString,
+      orgId: input.orgId,
+      profileId: input.profileId,
+    });
 
     const proposal = await this.insertProposal({
       ...input,

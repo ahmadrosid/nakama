@@ -286,6 +286,78 @@ describe("SkillProposalService", () => {
     expect(result.outcome).toBe("created");
   });
 
+  test("stage patch refuses an old_string that cannot apply", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const profile = await seedOrg(db);
+    const skills = new SkillsService(db);
+    const service = new SkillProposalService(db, skills);
+
+    await skills.createSkill(ORG_ID, {
+      body: "Run the checklist. Run the checklist.",
+      description: "Notes about deploy process.",
+      name: "deploy-notes",
+      profileId: profile.id,
+    });
+
+    for (const oldString of ["Notes about depl…", "Run the checklist."]) {
+      await expect(
+        service.stageProposal({
+          action: "patch",
+          newString: "replacement",
+          oldString,
+          orgId: ORG_ID,
+          profileId: profile.id,
+          skillName: "deploy-notes",
+        })
+      ).rejects.toMatchObject({ name: "NakamaApiError", status: 409 });
+    }
+
+    expect(await db.listSkillProposals(ORG_ID, { status: "pending" })).toEqual(
+      []
+    );
+  });
+
+  test("approving a patch the skill has outgrown returns 409 and stays pending", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const profile = await seedOrg(db);
+    const skills = new SkillsService(db);
+    const service = new SkillProposalService(db, skills);
+
+    const created = await skills.createSkill(ORG_ID, {
+      body: "Run the deploy checklist before shipping.",
+      description: "Notes about deploy process.",
+      name: "deploy-notes",
+      profileId: profile.id,
+    });
+
+    const staged = await service.stageProposal({
+      action: "patch",
+      newString: "release checklist",
+      oldString: "deploy checklist",
+      orgId: ORG_ID,
+      profileId: profile.id,
+      skillName: "deploy-notes",
+    });
+
+    await skills.patchAssignedProfileSkill(
+      ORG_ID,
+      profile.id,
+      "deploy-notes",
+      "deploy checklist",
+      "launch checklist"
+    );
+
+    await expect(
+      service.approveProposal(ORG_ID, staged.proposalId!, "admin_user")
+    ).rejects.toMatchObject({ name: "NakamaApiError", status: 409 });
+    expect(
+      (await db.getSkillProposal(ORG_ID, staged.proposalId!))?.status
+    ).toBe("pending");
+    expect((await skills.getSkill(created.skill.id)).skill.body).toContain(
+      "launch checklist"
+    );
+  });
+
   test("approve patch applies old_string/new_string", async () => {
     const db = createInMemoryDatabaseAdapter();
     const profile = await seedOrg(db);
