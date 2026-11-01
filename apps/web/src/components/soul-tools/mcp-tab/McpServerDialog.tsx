@@ -166,14 +166,15 @@ function initialRegistryHeaderValue(header: {
     return "";
   }
 
-  if (header.isSecret) {
-    const templateIdx = header.value.indexOf("{");
+  // Keep the text before a "{placeholder}" (for example "Bearer ") so the
+  // user pastes only their own value. A secret without a template starts empty.
+  const templateIdx = header.value.indexOf("{");
 
-    // If template like "Bearer {token}", prefill "Bearer " so the user pastes only their secret.
-    return templateIdx === -1 ? "" : header.value.slice(0, templateIdx);
+  if (templateIdx !== -1) {
+    return header.value.slice(0, templateIdx);
   }
 
-  return header.value;
+  return header.isSecret ? "" : header.value;
 }
 
 function McpCreateBody({

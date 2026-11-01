@@ -37,6 +37,11 @@ const sampleServer: McpRegistryServer = {
           value: "fixed-value",
         },
         {
+          isRequired: true,
+          name: "X-Workspace",
+          value: "{workspace_id}",
+        },
+        {
           isRequired: false,
           isSecret: false,
           name: "X-Optional-Header",
@@ -154,6 +159,7 @@ test("searches official registry and displays results with name, description, an
 
   expect(headerKeys).toContain("Authorization");
   expect(headerKeys).toContain("X-Required-Header");
+  expect(headerKeys).toContain("X-Workspace");
   expect(headerKeys).not.toContain("X-Optional-Header");
 
   const headerValueInputs = Array.from(
@@ -166,6 +172,7 @@ test("searches official registry and displays results with name, description, an
 
   expect(headerValues).toContain("Bearer ");
   expect(headerValues).toContain("fixed-value");
+  expect(headerValues.some((value) => value.includes("{"))).toBe(false);
 });
 
 test("when user is not a platform admin, registry search is not executed and alert is hidden", async () => {
