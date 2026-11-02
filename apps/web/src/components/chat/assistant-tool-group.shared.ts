@@ -86,30 +86,36 @@ export function toolGroupElapsedSeconds(
 
 export type ToolStep =
   | { kind: "tool"; tool: ChatListItem }
-  | { kind: "reads"; tools: ChatListItem[] };
+  | { kind: "files"; tools: ChatListItem[] };
 
-/** Two or more `read_file` calls in a row collapse into one step. */
-export function groupReadSteps(tools: ChatListItem[]): ToolStep[] {
+const GROUPED_FILE_TOOLS = new Set(["read_file", "write_file"]);
+
+/** Two or more reads (or writes) in a row collapse into one step. */
+export function groupFileSteps(tools: ChatListItem[]): ToolStep[] {
   const steps: ToolStep[] = [];
 
   for (const tool of tools) {
     const previous = steps.at(-1);
+    const groupable = GROUPED_FILE_TOOLS.has(tool.tool ?? "");
 
-    if (tool.tool !== "read_file") {
-      steps.push({ kind: "tool", tool });
-    } else if (previous?.kind === "reads") {
-      previous.tools.push(tool);
+    if (groupable && previous?.kind === "files") {
+      if (previous.tools[0]?.tool === tool.tool) {
+        previous.tools.push(tool);
+        continue;
+      }
     } else if (
+      groupable &&
       previous?.kind === "tool" &&
-      previous.tool.tool === "read_file"
+      previous.tool.tool === tool.tool
     ) {
       steps[steps.length - 1] = {
-        kind: "reads",
+        kind: "files",
         tools: [previous.tool, tool],
       };
-    } else {
-      steps.push({ kind: "tool", tool });
+      continue;
     }
+
+    steps.push({ kind: "tool", tool });
   }
 
   return steps;

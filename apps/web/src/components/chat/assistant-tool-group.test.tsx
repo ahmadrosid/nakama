@@ -79,15 +79,15 @@ test("a background sub_agent row links its chat and shows when it finished", asy
   }
 });
 
-test("reads in a row collapse into one row that opens to the file names", async () => {
+test("reads or writes in a row collapse into one row that opens to the file names", async () => {
   const container = document.createElement("div");
   const root = createRoot(container);
 
-  const read = (id: string, path: string) => ({
+  const file = (tool: string, id: string, path: string) => ({
     content: "",
     id,
     role: "tool" as const,
-    tool: "read_file",
+    tool,
     toolInput: { path },
     toolResult: { output: "ok" },
     toolStatus: "done" as const,
@@ -103,8 +103,8 @@ test("reads in a row collapse into one row that opens to the file names", async 
                 active: true,
                 kind: "work",
                 tools: [
-                  read("r1", "plugin/ui.jsx"),
-                  read("r2", "plugin/ui.css"),
+                  file("read_file", "r1", "plugin/ui.jsx"),
+                  file("read_file", "r2", "plugin/ui.css"),
                   {
                     content: "",
                     id: "b1",
@@ -114,7 +114,9 @@ test("reads in a row collapse into one row that opens to the file names", async 
                     toolResult: { output: "ok" },
                     toolStatus: "done",
                   },
-                  read("r3", "BUILD.md"),
+                  file("read_file", "r3", "BUILD.md"),
+                  file("write_file", "w1", "plugin/001.sql"),
+                  file("write_file", "w2", "plugin/ui.css"),
                 ],
               }}
             />
@@ -128,6 +130,7 @@ test("reads in a row collapse into one row that opens to the file names", async 
 
     expect(buttons()).toContain("Read 2 files");
     expect(buttons()).toContain("Read BUILD.md");
+    expect(buttons()).toContain("Wrote 2 files");
     expect(buttons()).not.toContain("ui.jsx");
 
     const group = [...container.querySelectorAll("button")].find(

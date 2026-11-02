@@ -48,7 +48,7 @@ import {
 import {
   type AssistantTurnSegment,
   formatLocalCitations,
-  groupReadSteps,
+  groupFileSteps,
   type LocalFileCitation,
   toolGroupElapsedSeconds,
 } from "@/components/chat/assistant-tool-group.shared";
@@ -733,15 +733,15 @@ function ToolStepList({
   modelLabel?: string | null;
   profileId?: string | null;
 }) {
-  const steps = groupReadSteps(tools);
+  const steps = groupFileSteps(tools);
 
   return steps.map((step, index) => {
     const isLast = index === steps.length - 1;
 
-    if (step.kind === "reads") {
+    if (step.kind === "files") {
       return (
         <TimelineStep isLast={isLast} key={step.tools[0]?.id}>
-          <ReadGroupRow tools={step.tools} />
+          <FileGroupRow tools={step.tools} />
         </TimelineStep>
       );
     }
@@ -758,23 +758,36 @@ function ToolStepList({
   });
 }
 
-function ReadGroupRow({ tools }: { tools: ChatListItem[] }) {
+function fileGroupVerb(tool: string | undefined, isRunning: boolean) {
+  if (tool === "write_file") {
+    return isRunning ? "Writing" : "Wrote";
+  }
+
+  return isRunning ? "Reading" : "Read";
+}
+
+function FileGroupRow({ tools }: { tools: ChatListItem[] }) {
   const [open, setOpen] = useState(false);
-  const reading = tools.some((tool) => tool.toolStatus === "running");
+  const tool = tools[0]?.tool;
+
+  const verb = fileGroupVerb(
+    tool,
+    tools.some((item) => item.toolStatus === "running")
+  );
 
   return (
     <div>
       <CollapsibleTrigger
         className="pl-0"
-        label={`${reading ? "Reading" : "Read"} ${tools.length} files`}
+        label={`${verb} ${tools.length} files`}
         onToggle={() => setOpen((current) => !current)}
         open={open}
-        tool="read_file"
+        tool={tool}
       />
       {open ? (
         <div className="mt-2 ml-[7px] flex flex-col gap-2 border-border border-l pl-5">
-          {tools.map((tool) => (
-            <ToolTimelineItem key={tool.id} message={tool} nested />
+          {tools.map((item) => (
+            <ToolTimelineItem key={item.id} message={item} nested />
           ))}
         </div>
       ) : null}
@@ -1350,7 +1363,7 @@ function ToolTimelineDetails({
   );
 }
 
-/** Rows inside a read group show only the file name. */
+/** Rows inside a file group show only the file name. */
 function toolTimelineLabel(message: ChatListItem, nested: boolean): string {
   const fileName = nested
     ? readString(message.toolInput?.path)?.split("/").at(-1)
