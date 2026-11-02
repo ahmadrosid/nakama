@@ -78,3 +78,67 @@ test("a background sub_agent row links its chat and shows when it finished", asy
     await act(async () => root.unmount());
   }
 });
+
+test("reads in a row collapse into one row that opens to the file names", async () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+
+  const read = (id: string, path: string) => ({
+    content: "",
+    id,
+    role: "tool" as const,
+    tool: "read_file",
+    toolInput: { path },
+    toolResult: { output: "ok" },
+    toolStatus: "done" as const,
+  });
+
+  try {
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={new QueryClient()}>
+          <MemoryRouter>
+            <AssistantTurnSegmentView
+              segment={{
+                active: true,
+                kind: "work",
+                tools: [
+                  read("r1", "plugin/ui.jsx"),
+                  read("r2", "plugin/ui.css"),
+                  {
+                    content: "",
+                    id: "b1",
+                    role: "tool",
+                    tool: "bash",
+                    toolInput: { command: "ls" },
+                    toolResult: { output: "ok" },
+                    toolStatus: "done",
+                  },
+                  read("r3", "BUILD.md"),
+                ],
+              }}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>
+      )
+    );
+
+    const buttons = () =>
+      [...container.querySelectorAll("button")].map((b) => b.textContent);
+
+    expect(buttons()).toContain("Read 2 files");
+    expect(buttons()).toContain("Read BUILD.md");
+    expect(buttons()).not.toContain("ui.jsx");
+
+    const group = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent === "Read 2 files"
+    );
+
+    await act(async () => group?.click());
+
+    expect(buttons()).toContain("ui.jsx");
+    expect(buttons()).toContain("ui.css");
+  } finally {
+    act(() => root.unmount());
+  }
+});

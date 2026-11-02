@@ -48,6 +48,7 @@ import {
 import {
   type AssistantTurnSegment,
   formatLocalCitations,
+  groupReadSteps,
   type LocalFileCitation,
   toolGroupElapsedSeconds,
 } from "@/components/chat/assistant-tool-group.shared";
@@ -595,15 +596,11 @@ function OtherWorkGroup({
       }
       toolCount={tools.length}
     >
-      {tools.map((tool, index) => (
-        <TimelineStep isLast={index === tools.length - 1} key={tool.id}>
-          <ToolRow
-            message={tool}
-            modelLabel={modelLabel}
-            profileId={profileId}
-          />
-        </TimelineStep>
-      ))}
+      <ToolStepList
+        modelLabel={modelLabel}
+        profileId={profileId}
+        tools={tools}
+      />
     </ThinkingReasoning>
   );
 }
@@ -714,19 +711,73 @@ function ToolOnlyWorkGroup({
             )}
           >
             <div className={thinkingStyles.tools}>
-              {tools.map((tool, index) => (
-                <TimelineStep isLast={index === tools.length - 1} key={tool.id}>
-                  <ToolRow
-                    message={tool}
-                    modelLabel={modelLabel}
-                    profileId={profileId}
-                  />
-                </TimelineStep>
-              ))}
+              <ToolStepList
+                modelLabel={modelLabel}
+                profileId={profileId}
+                tools={tools}
+              />
             </div>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ToolStepList({
+  tools,
+  modelLabel,
+  profileId,
+}: {
+  tools: ChatListItem[];
+  modelLabel?: string | null;
+  profileId?: string | null;
+}) {
+  const steps = groupReadSteps(tools);
+
+  return steps.map((step, index) => {
+    const isLast = index === steps.length - 1;
+
+    if (step.kind === "reads") {
+      return (
+        <TimelineStep isLast={isLast} key={step.tools[0]?.id}>
+          <ReadGroupRow tools={step.tools} />
+        </TimelineStep>
+      );
+    }
+
+    return (
+      <TimelineStep isLast={isLast} key={step.tool.id}>
+        <ToolRow
+          message={step.tool}
+          modelLabel={modelLabel}
+          profileId={profileId}
+        />
+      </TimelineStep>
+    );
+  });
+}
+
+function ReadGroupRow({ tools }: { tools: ChatListItem[] }) {
+  const [open, setOpen] = useState(false);
+  const reading = tools.some((tool) => tool.toolStatus === "running");
+
+  return (
+    <div>
+      <CollapsibleTrigger
+        className="pl-0"
+        label={`${reading ? "Reading" : "Read"} ${tools.length} files`}
+        onToggle={() => setOpen((current) => !current)}
+        open={open}
+        tool="read_file"
+      />
+      {open ? (
+        <div className="mt-2 ml-[7px] flex flex-col gap-2 border-border border-l pl-5">
+          {tools.map((tool) => (
+            <ToolTimelineItem key={tool.id} message={tool} nested />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1299,7 +1350,22 @@ function ToolTimelineDetails({
   );
 }
 
-function ToolTimelineItem({ message }: { message: ChatListItem }) {
+/** Rows inside a read group show only the file name. */
+function toolTimelineLabel(message: ChatListItem, nested: boolean): string {
+  const fileName = nested
+    ? readString(message.toolInput?.path)?.split("/").at(-1)
+    : undefined;
+
+  return fileName || formatToolActionLabel(message.tool, message.toolInput);
+}
+
+function ToolTimelineItem({
+  message,
+  nested = false,
+}: {
+  message: ChatListItem;
+  nested?: boolean;
+}) {
   const isRunning = message.toolStatus === "running";
 
   const command =
@@ -1339,7 +1405,8 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
           className="pl-0"
           command={command}
           disabled={!hasDetails}
-          label={formatToolActionLabel(message.tool, message.toolInput)}
+          hideIcon={nested}
+          label={toolTimelineLabel(message, nested)}
           labelClassName={
             isError ? "text-red-600 dark:text-red-400" : undefined
           }
@@ -1445,9 +1512,11 @@ function CollapsibleTrigger({
   disabled = false,
   className,
   command,
+  hideIcon = false,
   tool,
 }: {
   command?: string | null;
+  hideIcon?: boolean;
   open: boolean;
   onToggle: () => void;
   label: string;
@@ -1476,18 +1545,20 @@ function CollapsibleTrigger({
       onClick={onToggle}
       type="button"
     >
-      <span
-        aria-hidden="true"
-        className="relative z-10 flex h-5 w-3.5 shrink-0 items-center justify-center bg-background"
-      >
-        <CodingAgentCommandLogo
-          className="size-3.5 text-foreground"
-          command={command ?? ""}
-          fallback={
-            <ToolIcon className="size-3.5 text-muted-foreground opacity-50" />
-          }
-        />
-      </span>
+      {hideIcon ? null : (
+        <span
+          aria-hidden="true"
+          className="relative z-10 flex h-5 w-3.5 shrink-0 items-center justify-center bg-background"
+        >
+          <CodingAgentCommandLogo
+            className="size-3.5 text-foreground"
+            command={command ?? ""}
+            fallback={
+              <ToolIcon className="size-3.5 text-muted-foreground opacity-50" />
+            }
+          />
+        </span>
+      )}
       <span className={cn("min-w-0 truncate", labelClassName)}>{label}</span>
       {disabled ? null : (
         <ArrowDown01Icon
