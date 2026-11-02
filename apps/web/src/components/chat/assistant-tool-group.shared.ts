@@ -88,9 +88,9 @@ export type ToolStep =
   | { kind: "tool"; tool: ChatListItem }
   | { kind: "files"; tools: ChatListItem[] };
 
-const GROUPED_FILE_TOOLS = new Set(["read_file", "write_file"]);
+const GROUPED_FILE_TOOLS = new Set(["edit_file", "read_file", "write_file"]);
 
-/** Two or more reads (or writes) in a row collapse into one step. */
+/** Two or more reads, writes or edits in a row collapse into one step. */
 export function groupFileSteps(tools: ChatListItem[]): ToolStep[] {
   const steps: ToolStep[] = [];
 

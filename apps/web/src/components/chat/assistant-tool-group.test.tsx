@@ -79,7 +79,7 @@ test("a background sub_agent row links its chat and shows when it finished", asy
   }
 });
 
-test("reads or writes in a row collapse into one row that opens to the file names", async () => {
+test("reads, writes or edits in a row collapse into one row that opens to the file names", async () => {
   const container = document.createElement("div");
   const root = createRoot(container);
 
@@ -117,6 +117,8 @@ test("reads or writes in a row collapse into one row that opens to the file name
                   file("read_file", "r3", "BUILD.md"),
                   file("write_file", "w1", "plugin/001.sql"),
                   file("write_file", "w2", "plugin/ui.css"),
+                  file("edit_file", "e1", "plugin/ui.jsx"),
+                  file("edit_file", "e2", "plugin/ui.css"),
                 ],
               }}
             />
@@ -131,6 +133,7 @@ test("reads or writes in a row collapse into one row that opens to the file name
     expect(buttons()).toContain("Read 2 files");
     expect(buttons()).toContain("Read BUILD.md");
     expect(buttons()).toContain("Wrote 2 files");
+    expect(buttons()).toContain("Edited 2 files");
     expect(buttons()).not.toContain("ui.jsx");
 
     const group = [...container.querySelectorAll("button")].find(

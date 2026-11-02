@@ -763,6 +763,10 @@ function fileGroupVerb(tool: string | undefined, isRunning: boolean) {
     return isRunning ? "Writing" : "Wrote";
   }
 
+  if (tool === "edit_file") {
+    return isRunning ? "Editing" : "Edited";
+  }
+
   return isRunning ? "Reading" : "Read";
 }
 
