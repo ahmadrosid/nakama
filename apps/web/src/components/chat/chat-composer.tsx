@@ -1296,6 +1296,14 @@ function shortEffortLabel(effort: string, fullLabel: string): string {
   }
 }
 
+/** The cmdk item value, which search matches against. */
+function modelItemValue(
+  providerLabel: string,
+  model: ProviderModelOption
+): string {
+  return `${providerLabel} ${model.name} ${model.id}`;
+}
+
 function resolveModelPickerState(props: ChatComposerFullProps) {
   const effortOptions = props.thinkingEffortOptions ?? THINKING_EFFORT_OPTIONS;
 
@@ -1399,6 +1407,26 @@ function ChatModelPicker({
   const { effort, effortOptions, hasModels, showProfileModel, triggerLabel } =
     resolveModelPickerState(props);
 
+  // Open on the model in use. Otherwise cmdk highlights the first item, and
+  // screen readers and agents report that item as the selected model.
+  const currentModelItemValue =
+    showProfileModel &&
+    props.profileModelId &&
+    props.currentModelSelection ===
+      encodeModelSelection("__unknown__", props.profileModelId)
+      ? props.profileModelId
+      : props.providerModelGroups.flatMap((group) =>
+          group.models
+            .filter(
+              (model) =>
+                encodeModelSelection(
+                  model.providerId ?? group.providerId,
+                  model.id
+                ) === props.currentModelSelection
+            )
+            .map((model) => modelItemValue(group.providerLabel, model))
+        )[0];
+
   useEffect(() => {
     if (!(modelPickerOpen && modelList)) {
       return;
@@ -1448,7 +1476,10 @@ function ChatModelPicker({
           align="start"
           className="max-w-[min(24rem,92vw)] overflow-hidden p-0"
         >
-          <Command className="rounded-lg bg-transparent p-0">
+          <Command
+            className="rounded-lg bg-transparent p-0"
+            defaultValue={currentModelItemValue}
+          >
             {showModelSearch ? (
               <div className="border-border/60 border-b p-2 [&_[data-slot=command-input-wrapper]]:p-0">
                 <CommandInput
@@ -1494,7 +1525,7 @@ function ChatModelPicker({
                         disabled={busy}
                         key={`${providerId}:${model.id}`}
                         onSelect={() => selectModel(value)}
-                        value={`${group.providerLabel} ${model.name} ${model.id}`}
+                        value={modelItemValue(group.providerLabel, model)}
                       >
                         {model.name}
                       </CommandItem>
