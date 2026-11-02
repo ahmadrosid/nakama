@@ -1100,10 +1100,18 @@ export function registerSessionRoutes(
       );
     }
 
-    const clientOrigin = resolveRequestClientOrigin(
-      c.req.raw,
-      body.clientOrigin
-    );
+    // The origin only builds OAuth and share links inside the turn. One the
+    // server cannot vouch for (an old domain, a stale public URL) is dropped,
+    // so those links use the configured base and the message still goes out.
+    let clientOrigin: string | undefined;
+
+    try {
+      clientOrigin = resolveRequestClientOrigin(c.req.raw, body.clientOrigin);
+    } catch (error) {
+      if (!(error instanceof NakamaApiError)) {
+        throw error;
+      }
+    }
 
     const input = {
       documents: body.documents,
