@@ -1,4 +1,5 @@
 import { Switch } from "@nakama/ui/switch";
+import { Notification01Icon } from "hugeicons-react";
 import { useWebPush, webPushSupported } from "@/hooks/use-web-push";
 
 export function WebPushToggle() {
@@ -15,8 +16,15 @@ export function WebPushToggle() {
 
   return (
     <div className="px-1.5 py-1.5" id="web-push-toggle">
-      <div className="flex items-center justify-between gap-2">
-        <label className="text-foreground text-xs" htmlFor="web-push-switch">
+      <div className="flex items-center gap-2">
+        <Notification01Icon
+          aria-hidden
+          className="size-3.5 shrink-0 text-muted-foreground"
+        />
+        <label
+          className="flex-1 text-foreground text-xs"
+          htmlFor="web-push-switch"
+        >
           Notify me when a reply is ready
         </label>
         <Switch
