@@ -11,6 +11,9 @@ import type {
   SendMessageRequest,
 } from "@nakama/core/contract";
 
+/** `total` is 0 when the size is unknown. */
+export type TransferProgress = (loaded: number, total: number) => void;
+
 export interface NakamaClientOptions {
   authToken?: string;
   baseUrl?: string;

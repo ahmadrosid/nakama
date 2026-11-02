@@ -9,8 +9,8 @@ import {
 } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 import {
-  decodeArchiveRequestData,
   previewNakamaDataImport,
+  readImportRequest,
   restoreNakamaDataImport,
 } from "../../services/data-portability";
 import type { ServerOptions } from "../context";
@@ -40,6 +40,8 @@ export function registerSetupImportRoutes(
     })
     .openapi("SetupRestoreDataImportRequest");
 
+  const archiveBodySchema = z.string().openapi({ format: "binary" });
+
   const previewResponseSchema = z
     .object({})
     .passthrough()
@@ -57,7 +59,10 @@ export function registerSetupImportRoutes(
       path: "/v1/auth/setup/import/preview",
       request: {
         body: {
-          content: { "application/json": { schema: importRequestSchema } },
+          content: {
+            "application/json": { schema: importRequestSchema },
+            "application/zip": { schema: archiveBodySchema },
+          },
           required: true,
         },
       },
@@ -95,9 +100,14 @@ export function registerSetupImportRoutes(
       path: "/v1/auth/setup/import/restore",
       request: {
         body: {
-          content: { "application/json": { schema: restoreRequestSchema } },
+          content: {
+            "application/json": { schema: restoreRequestSchema },
+            "application/zip": { schema: archiveBodySchema },
+          },
           required: true,
         },
+        // Only read for an application/zip body; JSON carries `confirm` itself.
+        query: z.object({ confirm: z.enum(["true"]).optional() }),
       },
       responses: {
         200: {
@@ -131,17 +141,14 @@ export function registerSetupImportRoutes(
       return errorResponse("Authentication not configured", 500);
     }
 
-    assertJsonRequest(c.req.raw);
+    assertImportContentType(c.req.raw);
 
     await assertSetupImportAllowed(databaseAdapter);
 
-    const body = await readJson<PreviewDataImportRequest>(
-      c.req.raw,
-      importRequestSchema
+    // Read outside the catch so an oversized archive keeps its 413.
+    const { archive } = await readImportRequest(c.req.raw, () =>
+      readJson<PreviewDataImportRequest>(c.req.raw, importRequestSchema)
     );
-
-    // Decoded outside the catch so an oversized archive keeps its 413.
-    const archive = decodeArchiveRequestData(body.data);
 
     try {
       const preview = await previewNakamaDataImport(archive);
@@ -157,16 +164,13 @@ export function registerSetupImportRoutes(
       return errorResponse("Authentication not configured", 500);
     }
 
-    assertJsonRequest(c.req.raw);
+    assertImportContentType(c.req.raw);
 
     await assertSetupImportAllowed(databaseAdapter);
 
-    const body = await readJson<RestoreDataImportRequest>(
-      c.req.raw,
-      restoreRequestSchema
+    const { archive, confirm } = await readImportRequest(c.req.raw, () =>
+      readJson<RestoreDataImportRequest>(c.req.raw, restoreRequestSchema)
     );
-
-    const archive = decodeArchiveRequestData(body.data);
 
     let restore;
 
@@ -174,7 +178,7 @@ export function registerSetupImportRoutes(
       restore = await restoreNakamaDataImport(archive, {
         afterFailedReplace: options.onDataRestored,
         beforeReplace: options.onBeforeDataRestore,
-        confirm: body.confirm,
+        confirm,
       });
     } catch (error) {
       return errorResponse(formatServerError(error), 400);
@@ -196,6 +200,16 @@ export function registerSetupImportRoutes(
       requiresRestart,
     });
   });
+}
+
+// These routes run before any login, so a cross-site form must not reach them.
+// application/zip is not a CORS-simple type, so it needs a preflight like JSON.
+function assertImportContentType(request: Request): void {
+  if (request.headers.get("content-type")?.startsWith("application/zip")) {
+    return;
+  }
+
+  assertJsonRequest(request);
 }
 
 async function assertSetupImportAllowed(

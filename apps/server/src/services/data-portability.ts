@@ -989,6 +989,49 @@ export function decodeArchiveRequestData(data: string): Buffer {
   }
 }
 
+/**
+ * Reads an import body as a raw ZIP or as the JSON `{ data, confirm }` form.
+ * Browsers send the raw ZIP because base64-encoding a large file in a tab takes
+ * minutes. A raw body carries `confirm` in the query string.
+ */
+export async function readImportRequest(
+  request: Request,
+  readJsonBody: () => Promise<{ confirm?: boolean; data: string }>
+): Promise<{ archive: Buffer; confirm: boolean }> {
+  const contentType = request.headers
+    .get("content-type")
+    ?.split(";")[0]
+    ?.trim()
+    .toLowerCase();
+
+  if (contentType !== "application/zip") {
+    const body = await readJsonBody();
+
+    return {
+      archive: decodeArchiveRequestData(body.data),
+      confirm: body.confirm === true,
+    };
+  }
+
+  const archive = Buffer.from(await request.arrayBuffer());
+
+  if (archive.length > MAX_IMPORT_ARCHIVE_BYTES) {
+    throw new NakamaApiError(
+      `Import archive must be at most ${megabytes(MAX_IMPORT_ARCHIVE_BYTES)}.`,
+      413
+    );
+  }
+
+  if (archive.length === 0) {
+    throw new NakamaApiError("Import archive data is required.", 400);
+  }
+
+  return {
+    archive,
+    confirm: new URL(request.url).searchParams.get("confirm") === "true",
+  };
+}
+
 function megabytes(bytes: number): string {
   return `${bytes / (1024 * 1024)} MB`;
 }

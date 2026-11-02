@@ -638,6 +638,58 @@ describe("data portability routes", () => {
     ).resolves.toBe("original");
   });
 
+  test("platform admin can preview and restore a raw ZIP body", async () => {
+    const { app, authService, databaseAdapter } = createApp();
+
+    const session = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+
+    await writeFile(join(getUserConfigDir(), "config.ini"), "original");
+
+    const exportResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/data/export", {
+        headers: session.headers(),
+      })
+    );
+
+    const archive = Buffer.from(await exportResponse.arrayBuffer());
+    await writeFile(join(getUserConfigDir(), "config.ini"), "changed");
+
+    const send = (path: string, body: Buffer = archive) =>
+      app.fetch(
+        new Request(`http://localhost:4310/v1/platform/data/import/${path}`, {
+          body,
+          headers: session.headers({
+            "Content-Type": "application/zip",
+            "X-CSRF-Token": session.csrfToken,
+          }),
+          method: "POST",
+        })
+      );
+
+    const preview = await send("preview");
+    expect(preview.status).toBe(200);
+    await expect(preview.json()).resolves.toMatchObject({
+      archiveFileCount: 1,
+    });
+
+    expect((await send("restore")).status).toBe(400);
+    expect(
+      (await send("preview", Buffer.alloc(MAX_IMPORT_ARCHIVE_BYTES + 1))).status
+    ).toBe(413);
+    await expect(
+      readFile(join(getUserConfigDir(), "config.ini"), "utf8")
+    ).resolves.toBe("changed");
+
+    expect((await send("restore?confirm=true")).status).toBe(200);
+    await expect(
+      readFile(join(getUserConfigDir(), "config.ini"), "utf8")
+    ).resolves.toBe("original");
+  });
+
   test("non-platform users cannot export or import data", async () => {
     const { app, authService, databaseAdapter } = createApp();
 

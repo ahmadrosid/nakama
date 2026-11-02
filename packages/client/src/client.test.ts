@@ -978,7 +978,7 @@ test("hasProfileArtifact reads a 404 as deleted and rethrows other failures", as
   expect(methods).toEqual(["HEAD", "HEAD", "HEAD"]);
 });
 
-test("data import helpers upload base64 archive data", async () => {
+test("data import helpers upload bytes as a raw ZIP and strings as JSON", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
 
@@ -1015,16 +1015,96 @@ test("data import helpers upload base64 archive data", async () => {
     client.restoreDataImport(new Uint8Array([4, 5, 6]), { confirm: true })
   ).resolves.toMatchObject({ restoredFileCount: 1 });
 
-  expect(JSON.parse(String(fetchCalls[0]!.init?.body))).toEqual({
-    data: "AQID",
-  });
-  expect(JSON.parse(String(fetchCalls[1]!.init?.body))).toEqual({
+  await client.restoreDataImport("BAUG", { confirm: true });
+
+  expect(new Headers(fetchCalls[0]!.init?.headers).get("Content-Type")).toBe(
+    "application/zip"
+  );
+  expect(fetchCalls[0]!.init?.body).toEqual(new Uint8Array([1, 2, 3]));
+  expect(fetchCalls[1]!.input.toString()).toEndWith(
+    "/v1/platform/data/import/restore?confirm=true"
+  );
+  expect(fetchCalls[1]!.init?.body).toEqual(new Uint8Array([4, 5, 6]));
+  expect(fetchCalls[2]!.input.toString()).toEndWith(
+    "/v1/platform/data/import/restore"
+  );
+  expect(JSON.parse(String(fetchCalls[2]!.init?.body))).toEqual({
     confirm: true,
     data: "BAUG",
   });
   expect(new Headers(fetchCalls[1]!.init?.headers).get("Authorization")).toBe(
     "Bearer local-auth-token"
   );
+});
+
+test("exportData reports download progress against Content-Length", async () => {
+  const client = new NakamaClient({
+    baseUrl: "http://localhost:4310",
+    fetch: async () =>
+      new Response(new Uint8Array(10), {
+        headers: { "Content-Length": "10", "Content-Type": "application/zip" },
+      }),
+  });
+
+  const seen: Array<[number, number]> = [];
+
+  const result = await client.exportData({
+    onProgress: (loaded, total) => seen.push([loaded, total]),
+  });
+
+  expect(result.data.byteLength).toBe(10);
+  expect(seen[0]).toEqual([0, 10]);
+  expect(seen.at(-1)).toEqual([10, 10]);
+});
+
+test("an upload with onProgress goes through XHR and keeps the API error", async () => {
+  const sent: Uint8Array[] = [];
+  const opened: string[] = [];
+
+  class FakeXhr {
+    onerror = () => {};
+    onload = () => {};
+    responseText = JSON.stringify({ error: "Too big." });
+    status = 413;
+    upload = {
+      onprogress: (_event: {
+        lengthComputable: boolean;
+        loaded: number;
+        total: number;
+      }) => {},
+    };
+    withCredentials = false;
+    getResponseHeader = () => "application/json";
+    open = (method: string, url: string) => opened.push(`${method} ${url}`);
+    setRequestHeader = () => {};
+    send = (body: Uint8Array) => {
+      sent.push(body);
+      this.upload.onprogress({ lengthComputable: true, loaded: 3, total: 3 });
+      this.onload();
+    };
+  }
+
+  const original = globalThis.XMLHttpRequest;
+  Object.assign(globalThis, { XMLHttpRequest: FakeXhr });
+
+  try {
+    const seen: Array<[number, number]> = [];
+    const client = new NakamaClient({ baseUrl: "http://localhost:4310" });
+
+    await expect(
+      client.restoreDataImport(new Uint8Array([1, 2, 3]), {
+        confirm: true,
+        onProgress: (loaded, total) => seen.push([loaded, total]),
+      })
+    ).rejects.toMatchObject({ message: "Too big.", status: 413 });
+    expect(opened).toEqual([
+      "POST http://localhost:4310/v1/platform/data/import/restore?confirm=true",
+    ]);
+    expect(sent).toEqual([new Uint8Array([1, 2, 3])]);
+    expect(seen).toEqual([[3, 3]]);
+  } finally {
+    globalThis.XMLHttpRequest = original;
+  }
 });
 
 test("non-browser clients reload the local auth token once after a 401", async () => {

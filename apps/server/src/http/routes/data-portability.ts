@@ -9,8 +9,8 @@ import {
   createNakamaDataExport,
   createNakamaOrgDataExport,
   createNakamaUserDataExport,
-  decodeArchiveRequestData,
   previewNakamaDataImport,
+  readImportRequest,
   restoreNakamaDataImport,
 } from "../../services/data-portability";
 import { runWithPluginExportBarrier } from "../../services/plugin-service";
@@ -45,6 +45,8 @@ export function registerDataPortabilityRoutes(
       data: z.string(),
     })
     .openapi("RestoreDataImportRequest");
+
+  const archiveBodySchema = z.string().openapi({ format: "binary" });
 
   const previewResponseSchema = z
     .object({})
@@ -165,7 +167,10 @@ export function registerDataPortabilityRoutes(
       path: "/v1/platform/data/import/preview",
       request: {
         body: {
-          content: { "application/json": { schema: importRequestSchema } },
+          content: {
+            "application/json": { schema: importRequestSchema },
+            "application/zip": { schema: archiveBodySchema },
+          },
           required: true,
         },
       },
@@ -203,9 +208,14 @@ export function registerDataPortabilityRoutes(
       path: "/v1/platform/data/import/restore",
       request: {
         body: {
-          content: { "application/json": { schema: restoreRequestSchema } },
+          content: {
+            "application/json": { schema: restoreRequestSchema },
+            "application/zip": { schema: archiveBodySchema },
+          },
           required: true,
         },
+        // Only read for an application/zip body; JSON carries `confirm` itself.
+        query: z.object({ confirm: z.enum(["true"]).optional() }),
       },
       responses: {
         200: {
@@ -282,13 +292,10 @@ export function registerDataPortabilityRoutes(
   app.post("/v1/platform/data/import/preview", async (c) => {
     requirePlatformAdminFromContext(c);
 
-    const body = await readJson<PreviewDataImportRequest>(
-      c.req.raw,
-      importRequestSchema
+    // Read outside the catch so an oversized archive keeps its 413.
+    const { archive } = await readImportRequest(c.req.raw, () =>
+      readJson<PreviewDataImportRequest>(c.req.raw, importRequestSchema)
     );
-
-    // Decoded outside the catch so an oversized archive keeps its 413.
-    const archive = decodeArchiveRequestData(body.data);
 
     try {
       const preview = await previewNakamaDataImport(archive);
@@ -302,12 +309,9 @@ export function registerDataPortabilityRoutes(
   app.post("/v1/platform/data/import/restore", async (c) => {
     requirePlatformAdminFromContext(c);
 
-    const body = await readJson<RestoreDataImportRequest>(
-      c.req.raw,
-      restoreRequestSchema
+    const { archive, confirm } = await readImportRequest(c.req.raw, () =>
+      readJson<RestoreDataImportRequest>(c.req.raw, restoreRequestSchema)
     );
-
-    const archive = decodeArchiveRequestData(body.data);
 
     let restore;
 
@@ -325,7 +329,7 @@ export function registerDataPortabilityRoutes(
                   await onBeforeDataRestore();
                 }
               : undefined,
-            confirm: body.confirm,
+            confirm,
           });
 
           // Drop registrations before reloading restored data; restored plugins stay disabled.
