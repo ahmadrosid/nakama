@@ -1,60 +1,15 @@
-import { splitTelegramChunks } from "@nakama/core/channel-message-format";
 import type { AgentTodo } from "@nakama/core/contract";
-
-export function stripMarkdownForTelegram(text: string): string {
-  const protectedUrls = protectBareUrls(text.trim());
-  let result = protectedUrls.text;
-
-  result = result.replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code: string) =>
-    code.trim()
-  );
-  result = result.replace(/`([^`]+)`/g, "$1");
-  result = result.replace(/\*\*([^*]+)\*\*/g, "$1");
-  result = result.replace(/\*([^*]+)\*/g, "$1");
-  result = result.replace(/__([^_]+)__/g, "$1");
-  result = result.replace(/(?<!\w)_([^_\n]+)_(?!\w)/g, "$1");
-  result = result.replace(/~~([^~\n]+)~~/g, "$1");
-  result = result.replace(/\|\|([^|\n]+)\|\|/g, "$1");
-  result = result.replace(/^#{1,6}\s+/gm, "");
-  result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 ($2)");
-
-  return restoreBareUrls(result, protectedUrls.urls).trim();
-}
+import {
+  renderTelegramPlainText,
+  splitTelegramRichChunks,
+} from "@nakama/core/telegram-rich-text";
 
 export function prepareTelegramReply(text: string): string {
   return text.trim();
 }
 
 export function prepareTelegramFallbackReply(text: string): string {
-  return stripMarkdownForTelegram(text);
-}
-
-/** Placeholder bare http(s) URLs so underscore italic stripping cannot mangle path tokens. */
-function protectBareUrls(text: string) {
-  const urls: string[] = [];
-
-  // Stop at whitespace, markdown/HTML delimiters, and common trailing punctuation.
-  const protectedText = text.replace(/https?:\/\/[^\s<>\]"'()]+/g, (url) => {
-    const token = `@@TCURL${urls.length}@@`;
-    urls.push(url);
-
-    return token;
-  });
-
-  return { text: protectedText, urls } satisfies {
-    text: string;
-    urls: string[];
-  };
-}
-
-function restoreBareUrls(text: string, urls: string[]): string {
-  let result = text;
-
-  for (let index = 0; index < urls.length; index++) {
-    result = result.replace(`@@TCURL${index}@@`, () => urls[index]!);
-  }
-
-  return result;
+  return renderTelegramPlainText(text);
 }
 
 export function splitIntoChatBubbles(text: string, maxChars = 400): string[] {
@@ -65,7 +20,7 @@ export function splitIntoChatBubbles(text: string, maxChars = 400): string[] {
   }
 
   if (trimmed.length <= maxChars) {
-    return splitTelegramChunks(trimmed);
+    return splitTelegramRichChunks(trimmed);
   }
 
   const paragraphs = trimmed
@@ -108,7 +63,7 @@ export function splitIntoChatBubbles(text: string, maxChars = 400): string[] {
     merged.push(current);
   }
 
-  return merged.flatMap((bubble) => splitTelegramChunks(bubble));
+  return merged.flatMap((bubble) => splitTelegramRichChunks(bubble));
 }
 
 function splitLongParagraph(paragraph: string, maxChars: number): string[] {

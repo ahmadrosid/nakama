@@ -8,7 +8,6 @@ import {
   stopActiveStream,
 } from "@nakama/core/channel-active-stream";
 import { createChatLock } from "@nakama/core/channel-chat-lock";
-import { splitTelegramChunks } from "@nakama/core/channel-message-format";
 import {
   type ChannelOrgStore,
   findOrgBySelectionInput,
@@ -33,6 +32,7 @@ import {
   hasActiveHandshakeCode,
   looksLikePairingCode,
 } from "@nakama/core/telegram-config";
+import { splitTelegramRichChunks } from "@nakama/core/telegram-rich-text";
 import type { Context } from "grammy";
 import {
   buildTelegramDocumentInput,
@@ -79,7 +79,7 @@ export async function replyAsChat(
     return;
   }
 
-  const bubbles = splitTelegramChunks(prepared);
+  const bubbles = splitTelegramRichChunks(prepared);
   const delayMs = options.delayMs ?? DEFAULT_BUBBLE_DELAY_MS;
 
   for (let index = 0; index < bubbles.length; index++) {
@@ -1062,7 +1062,7 @@ async function replyChunks(
   telegram: TelegramRichMessenger,
   text: string
 ): Promise<void> {
-  for (const chunk of splitTelegramChunks(text)) {
+  for (const chunk of splitTelegramRichChunks(text)) {
     await telegram.send(chunk);
   }
 }

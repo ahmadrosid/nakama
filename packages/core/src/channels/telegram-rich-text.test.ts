@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { renderTelegramRichText } from "./telegram-rich-text";
+import {
+  renderTelegramRichText,
+  splitTelegramRichChunks,
+} from "./telegram-rich-text";
 
 describe("renderTelegramRichText", () => {
   test("does not italicize underscores or double-escape query params in links", () => {
@@ -84,5 +87,78 @@ describe("renderTelegramRichText", () => {
     expect(renderTelegramRichText("```\n| a | b |\n|---|---|\n```")).toBe(
       "<pre><code>| a | b |\n|---|---|</code></pre>"
     );
+  });
+
+  test("keeps overlapping markers as nested tags", () => {
+    expect(renderTelegramRichText("**a _b** c_")).toBe("<b>a _b</b> c_");
+    expect(renderTelegramRichText("***x***")).toBe("<i><b>x</b></i>");
+  });
+
+  test("keeps pipes inside inline code and escaped pipes in one cell", () => {
+    expect(
+      renderTelegramRichText(
+        "| Op | Use |\n|---|---|\n| or | `a || b` |\n| pipe | a \\| b |"
+      )
+    ).toBe(
+      "<b>or</b>\n• Use: <code>a || b</code>\n\n<b>pipe</b>\n• Use: a | b"
+    );
+  });
+
+  test("skips the bold title for an empty first cell", () => {
+    expect(renderTelegramRichText("| | Q1 |\n|---|---|\n| | 10 |")).toBe(
+      "• Q1: 10"
+    );
+  });
+
+  test("keeps the header of a table with no rows", () => {
+    expect(
+      renderTelegramRichText("| Name | Role |\n|---|---|\n(no members yet)")
+    ).toBe("Name · Role\n(no members yet)");
+  });
+
+  test("stops the table at a line that is not a row", () => {
+    expect(
+      renderTelegramRichText("| a | b |\n|---|---|\n| 1 | 2 |\nRun `x | y` now")
+    ).toBe("<b>1</b>\n• b: 2\nRun <code>x | y</code> now");
+  });
+
+  test("formats around bare urls", () => {
+    expect(renderTelegramRichText("See **https://x.dev/docs**")).toBe(
+      "See <b>https://x.dev/docs</b>"
+    );
+  });
+
+  test("does not quote lines that only start with >", () => {
+    expect(renderTelegramRichText(">= 18 required")).toBe("&gt;= 18 required");
+  });
+
+  test("keeps tokens whole when the input holds the placeholder prefix", () => {
+    expect(renderTelegramRichText("@@TCTOKEN_ `a` and `b` @@TCTOKEN_X")).toBe(
+      "@@TCTOKEN_ <code>a</code> and <code>b</code> @@TCTOKEN_X"
+    );
+  });
+});
+
+describe("splitTelegramRichChunks", () => {
+  test("keeps each rendered chunk under the limit", () => {
+    const rows = Array.from(
+      { length: 200 },
+      (_, index) => `| row${index} | a | b | c | d |`
+    );
+
+    const table = [
+      "| Name | Alpha | Beta | Gamma | Delta |",
+      "|---|---|---|---|---|",
+      ...rows,
+    ].join("\n");
+
+    const chunks = splitTelegramRichChunks(table, 1000);
+
+    expect(chunks.length).toBeGreaterThan(1);
+
+    for (const chunk of chunks) {
+      expect(renderTelegramRichText(chunk).length).toBeLessThanOrEqual(1000);
+      expect(chunk).not.toContain("|");
+    }
   });
 });
