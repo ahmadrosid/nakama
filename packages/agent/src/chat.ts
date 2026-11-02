@@ -1384,7 +1384,13 @@ async function generateReply(
         }
       }
 
-      if ((signal?.aborted || interrupted) && (content || thinking)) {
+      // The retry replays history, and providers such as DeepSeek reject an
+      // assistant message with no content. Keep a cut-off reply only with text.
+      const keepPartial = interrupted
+        ? Boolean(content.trim())
+        : Boolean(content || thinking);
+
+      if ((signal?.aborted || interrupted) && keepPartial) {
         finishThinking();
 
         const message: ChatMessage = {
