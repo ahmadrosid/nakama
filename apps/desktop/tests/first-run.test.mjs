@@ -65,6 +65,10 @@ describe("local sign-in", () => {
         url: String(url),
       });
 
+      if (init.method === "DELETE") {
+        return new Response(null, { status: 204 });
+      }
+
       if (String(url).endsWith("/v1/nakama-cloud/sign-in")) {
         return Response.json({
           connectUrl: "https://a.test/desktop/connect?state=s",
@@ -98,13 +102,20 @@ describe("local sign-in", () => {
     });
 
     expect(opened).toEqual(["https://a.test/desktop/connect?state=s"]);
+    // An old account is signed out first, so "signed in" is this one.
     expect(calls[0]).toMatchObject({
+      method: "DELETE",
+      url: "http://127.0.0.1:5000/v1/nakama-cloud",
+    });
+    expect(calls[1]).toMatchObject({
       authorization: "Bearer token-123",
       method: "POST",
       url: "http://127.0.0.1:5000/v1/nakama-cloud/sign-in",
     });
     expect(
-      calls.filter((call) => call.url.endsWith("/v1/nakama-cloud"))
+      calls.filter(
+        (call) => call.method === "GET" && call.url.endsWith("/v1/nakama-cloud")
+      )
     ).toHaveLength(2);
   });
 

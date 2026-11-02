@@ -33,6 +33,7 @@ export interface NakamaCloudPassOptions {
  * in again.
  */
 export class NakamaCloudPasses {
+  private confirmCode: string | null = null;
   private current: { expiresAt: number; pass: string } | null = null;
   private pending: Promise<string> | null = null;
 
@@ -53,6 +54,12 @@ export class NakamaCloudPasses {
     });
 
     return this.pending;
+  }
+
+  /** The one-time code from Connect; the next token request sends it. */
+  confirmWith(code: string): void {
+    this.confirmCode = code;
+    this.current = null;
   }
 
   /** Forget the cached pass, for example after the cloud restarted. */
@@ -77,7 +84,11 @@ export class NakamaCloudPasses {
       response = await (this.options.fetch ?? fetch)(
         `${this.options.baseUrl}${LLM_TOKEN_PATH}`,
         {
-          body: JSON.stringify({ ...unsigned, signature }),
+          body: JSON.stringify(
+            this.confirmCode
+              ? { ...unsigned, confirmCode: this.confirmCode, signature }
+              : { ...unsigned, signature }
+          ),
           headers: { "content-type": "application/json" },
           method: "POST",
         }
@@ -95,6 +106,7 @@ export class NakamaCloudPasses {
     }
 
     this.current = passResponseSchema.parse(await response.json());
+    this.confirmCode = null;
 
     return this.current.pass;
   }

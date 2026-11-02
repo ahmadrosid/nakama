@@ -670,6 +670,8 @@ CREATE TABLE IF NOT EXISTS computers (
   created_at TEXT NOT NULL,
   last_seen_at TEXT,
   revoked_at TEXT,
+  -- Set until the computer proves it got the Connect result on 127.0.0.1.
+  pending_code_hash TEXT,
   FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );

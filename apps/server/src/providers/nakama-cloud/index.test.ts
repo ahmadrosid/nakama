@@ -10,6 +10,7 @@ import {
   computerTokenPayload,
   LLM_TOKEN_PATH,
 } from "../../services/computer-auth";
+import { resolveModel } from "../models";
 import { createNakamaCloudProvider, NakamaCloudPasses } from "./index";
 
 const servers: Array<{ stop: (force?: boolean) => void }> = [];
@@ -226,4 +227,18 @@ test("stopping a turn aborts the stream to the cloud", async () => {
   }
 
   expect(state.chatAborted).toBe(true);
+});
+
+test("a saved cloud model is kept, and no choice picks the team's default", () => {
+  const models = [
+    { id: "openai-main::gpt-4o-mini", name: "GPT-4o mini" },
+    { default: true, id: "anthropic-main::claude", name: "Claude" },
+  ];
+
+  expect(resolveModel("nakama_cloud", "openai-main::gpt-4o-mini", models)).toBe(
+    "openai-main::gpt-4o-mini"
+  );
+  expect(resolveModel("nakama_cloud", undefined, models)).toBe(
+    "anthropic-main::claude"
+  );
 });

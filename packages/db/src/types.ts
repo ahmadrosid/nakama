@@ -781,6 +781,8 @@ export interface StoredComputerRecord {
   lastSeenAt: string | null;
   name: string;
   orgId: string;
+  /** SHA-256 of the one-time confirm code; null once the computer confirmed. */
+  pendingCodeHash: string | null;
   /** Ed25519 public key, base64 (raw 32 bytes). */
   publicKey: string;
   revokedAt: string | null;
@@ -840,6 +842,14 @@ export interface DatabaseAdapter {
     requestId: string,
     teamOrgId: string
   ): Promise<boolean>;
+
+  /**
+   * Inserts a profile only when its id is still free. Resolves to `false`,
+   * leaving the existing row untouched, when the id is already taken, so
+   * allocation and insertion stay atomic for concurrent callers.
+   */
+  /** Clears the pending confirm code once the computer proved it has it. */
+  activateComputer(id: string): Promise<void>;
 
   activateUserMfa(
     id: string,
@@ -966,12 +976,6 @@ export interface DatabaseAdapter {
 
   /** Append-only insert. Adapters must not expose update/delete for this table. */
   createProfileChangeEvent(record: StoredProfileChangeEvent): Promise<void>;
-
-  /**
-   * Inserts a profile only when its id is still free. Resolves to `false`,
-   * leaving the existing row untouched, when the id is already taken, so
-   * allocation and insertion stay atomic for concurrent callers.
-   */
   createProfileIfAbsent(record: StoredProfileRecord): Promise<boolean>;
   createSharedAgentInstance(
     teamOrgId: string,

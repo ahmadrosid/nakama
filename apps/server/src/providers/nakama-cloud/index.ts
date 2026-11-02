@@ -194,10 +194,13 @@ export function createNakamaCloudProvider(
         const event = parseEvent(frame);
 
         if (event?.type === "result") {
+          void reader.cancel();
+
           return event.data;
         }
 
         if (event?.type === "error") {
+          void reader.cancel();
           throw new NakamaApiError(event.data.message, event.data.status);
         }
 

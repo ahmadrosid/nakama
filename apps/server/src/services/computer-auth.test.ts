@@ -29,7 +29,7 @@ async function setup() {
 
   const key = testDeviceKey();
 
-  const computer = await auth.enroll({
+  const { computer, confirmCode } = await auth.enroll({
     installId: "install_1",
     name: "Ada's MacBook",
     orgId,
@@ -38,7 +38,7 @@ async function setup() {
   });
 
   const signedRequest = (
-    overrides: { nonce?: string; timestamp?: number } = {}
+    overrides: { confirmCode?: string; nonce?: string; timestamp?: number } = {}
   ) => key.signRequest(computer.id, { timestamp: time, ...overrides });
 
   const requestPass = (body: ComputerTokenRequest) =>
@@ -47,6 +47,9 @@ async function setup() {
       headers: { "content-type": "application/json" },
       method: "POST",
     });
+
+  // The app sends the code from the Connect result once.
+  expect((await requestPass(signedRequest({ confirmCode }))).status).toBe(200);
 
   return {
     advance: (ms: number) => {
@@ -58,6 +61,7 @@ async function setup() {
     orgId,
     requestPass,
     signedRequest,
+    timestamp: () => time,
     userId,
   };
 }
@@ -154,10 +158,51 @@ describe("computer passes", () => {
     expect(actions).toContain("computer.revoke");
   });
 
+  test("a key from someone else's link is never activated without the Connect code", async () => {
+    const { auth, orgId, requestPass, timestamp, userId } = await setup();
+    const attacker = testDeviceKey();
+
+    const { computer, confirmCode } = await auth.enroll({
+      installId: "install_attacker",
+      name: "Work laptop",
+      orgId,
+      publicKey: attacker.publicKey,
+      userId,
+    });
+
+    expect(
+      (
+        await requestPass(
+          attacker.signRequest(computer.id, { timestamp: timestamp() })
+        )
+      ).status
+    ).toBe(401);
+    expect(
+      (
+        await requestPass(
+          attacker.signRequest(computer.id, {
+            confirmCode: "x".repeat(32),
+            timestamp: timestamp(),
+          })
+        )
+      ).status
+    ).toBe(401);
+    expect(
+      (
+        await requestPass(
+          attacker.signRequest(computer.id, {
+            confirmCode,
+            timestamp: timestamp(),
+          })
+        )
+      ).status
+    ).toBe(200);
+  });
+
   test("signing in again from the same install reuses the computer", async () => {
     const { auth, computer, orgId, userId } = await setup();
 
-    const again = await auth.enroll({
+    const { computer: again } = await auth.enroll({
       installId: "install_1",
       name: "Ada's MacBook",
       orgId,

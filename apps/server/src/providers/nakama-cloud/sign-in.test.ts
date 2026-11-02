@@ -25,6 +25,7 @@ afterEach(() => {
 
 const tokenBodySchema = z.object({
   computerId: z.string(),
+  confirmCode: z.string().optional(),
   nonce: z.string(),
   signature: z.string(),
   timestamp: z.number(),
@@ -33,6 +34,7 @@ const tokenBodySchema = z.object({
 /** A fake cloud that keeps the enrolled key and checks it on token requests. */
 function fakeCloud() {
   const enrolled = new Map<string, string>();
+  const confirmCodes: Array<string | null> = [];
 
   const server = Bun.serve({
     fetch: async (request) => {
@@ -41,6 +43,7 @@ function fakeCloud() {
       if (pathname === LLM_TOKEN_PATH) {
         const body = tokenBodySchema.parse(await request.json());
         const key = enrolled.get(body.computerId);
+        confirmCodes.push(body.confirmCode ?? null);
 
         const publicKey = key
           ? createPublicKey({
@@ -90,7 +93,7 @@ function fakeCloud() {
 
   servers.push(server);
 
-  return { enrolled, url: `http://127.0.0.1:${server.port}` };
+  return { confirmCodes, enrolled, url: `http://127.0.0.1:${server.port}` };
 }
 
 async function setup() {
@@ -126,14 +129,18 @@ test("the browser connects this computer, and Nakama Cloud becomes the default p
   const wrong = new URL(back);
   wrong.searchParams.set("state", "not-the-state");
   wrong.searchParams.set("computerId", "computer_1");
+  wrong.searchParams.set("confirmCode", "code-from-the-cloud-0001");
   expect((await fetch(wrong)).status).toBe(400);
 
   back.searchParams.set("state", link.searchParams.get("state") ?? "");
   back.searchParams.set("computerId", "computer_1");
+  back.searchParams.set("confirmCode", "code-from-the-cloud-0001");
   back.searchParams.set("orgId", "org_acme");
   back.searchParams.set("orgName", "Acme");
   back.searchParams.set("account", "ada@example.com");
   expect((await fetch(back)).status).toBe(200);
+  // The first token request carries the Connect code.
+  expect(cloud.confirmCodes[0]).toBe("code-from-the-cloud-0001");
 
   expect(agent.nakamaCloudStatus()).toEqual({
     account: "ada@example.com",

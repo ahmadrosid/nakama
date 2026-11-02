@@ -47,6 +47,7 @@ export function connectReturnUrl(
   result: {
     account: string;
     computerId: string;
+    confirmCode: string;
     orgId: string;
     orgName: string;
   }
@@ -55,6 +56,7 @@ export function connectReturnUrl(
   const query = new URLSearchParams({
     account: result.account,
     computerId: result.computerId,
+    confirmCode: result.confirmCode,
     orgId: result.orgId,
     orgName: result.orgName,
     state: request.state,
@@ -82,16 +84,19 @@ export function DesktopConnectPage() {
     setIsSubmitting(true);
 
     try {
-      const { computerId } = await client.forOrg(org.id).enrollComputer({
-        installId: request.installId,
-        name: request.name,
-        publicKey: request.publicKey,
-      });
+      const { computerId, confirmCode } = await client
+        .forOrg(org.id)
+        .enrollComputer({
+          installId: request.installId,
+          name: request.name,
+          publicKey: request.publicKey,
+        });
 
       window.location.assign(
         connectReturnUrl(request, {
           account: user?.email ?? "",
           computerId,
+          confirmCode,
           orgId: org.id,
           orgName: org.name,
         })

@@ -19,6 +19,7 @@ const PUBLIC_ROUTES = new Set([
   "/v1/llm/models",
   "/v1/llm/chat",
   "/v1/llm/text",
+  "/v1/llm/computer",
 ]);
 
 export function isPublicRouteRequest(

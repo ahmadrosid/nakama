@@ -85,6 +85,7 @@ test("the return address carries the state and the new computer", () => {
     connectReturnUrl(request, {
       account: "ada@example.com",
       computerId: "computer_1",
+      confirmCode: "code_1",
       orgId: "org_a",
       orgName: "Acme",
     })
@@ -94,6 +95,7 @@ test("the return address carries the state and the new computer", () => {
   expect(Object.fromEntries(url.searchParams)).toEqual({
     account: "ada@example.com",
     computerId: "computer_1",
+    confirmCode: "code_1",
     orgId: "org_a",
     orgName: "Acme",
     state: "state_123",
@@ -104,7 +106,10 @@ test("Connect enrolls the key for the org, and a bad link shows no Connect butto
   const enroll = spyOn(
     NakamaClient.prototype,
     "enrollComputer"
-  ).mockImplementation(async () => ({ computerId: "computer_1" }));
+  ).mockImplementation(async () => ({
+    computerId: "computer_1",
+    confirmCode: "code_1",
+  }));
 
   const assigned: string[] = [];
 

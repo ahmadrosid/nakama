@@ -1,4 +1,5 @@
 import {
+  createHash,
   createHmac,
   createPublicKey,
   randomBytes,
@@ -26,6 +27,8 @@ const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 export const computerTokenRequestSchema = z
   .object({
     computerId: z.string().min(1).max(200),
+    /** Only on the first request after Connect: proves the result came here. */
+    confirmCode: z.string().min(16).max(200).optional(),
     nonce: z.string().min(16).max(200),
     signature: z.string().min(1).max(200),
     timestamp: z.number().int(),
@@ -74,6 +77,10 @@ export function isEd25519PublicKey(value: string): boolean {
   }
 }
 
+function hashCode(code: string): string {
+  return createHash("sha256").update(code).digest("hex");
+}
+
 function toPublicKey(value: string) {
   return createPublicKey({
     format: "der",
@@ -104,8 +111,12 @@ export class ComputerAuthService {
     orgId: string;
     publicKey: string;
     userId: string;
-  }): Promise<StoredComputerRecord> {
+  }): Promise<{ computer: StoredComputerRecord; confirmCode: string }> {
     const at = new Date(this.now()).toISOString();
+
+    // Only the Connect result on 127.0.0.1 carries this code, so a key sent
+    // in someone else's link is never activated.
+    const confirmCode = randomBytes(24).toString("base64url");
 
     const computer = await this.db.enrollComputer({
       createdAt: at,
@@ -114,6 +125,7 @@ export class ComputerAuthService {
       lastSeenAt: null,
       name: input.name,
       orgId: input.orgId,
+      pendingCodeHash: hashCode(confirmCode),
       publicKey: input.publicKey,
       revokedAt: null,
       userId: input.userId,
@@ -121,7 +133,7 @@ export class ComputerAuthService {
 
     await this.audit("computer.enroll", computer, at);
 
-    return computer;
+    return { computer, confirmCode };
   }
 
   list(input: { orgId: string; userId: string }) {
@@ -178,6 +190,21 @@ export class ComputerAuthService {
       return null;
     }
 
+    const pending = access.computer.pendingCodeHash;
+
+    if (
+      pending &&
+      !(
+        request.confirmCode &&
+        timingSafeEqual(
+          Buffer.from(hashCode(request.confirmCode)),
+          Buffer.from(pending)
+        )
+      )
+    ) {
+      return null;
+    }
+
     const fresh = await this.db.consumeComputerNonce(
       `${request.computerId}:${request.nonce}`,
       new Date(request.timestamp + CLOCK_SKEW_MS).toISOString(),
@@ -186,6 +213,10 @@ export class ComputerAuthService {
 
     if (!fresh) {
       return null;
+    }
+
+    if (pending) {
+      await this.db.activateComputer(access.computer.id);
     }
 
     await this.db.setComputerLastSeen(

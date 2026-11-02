@@ -52,6 +52,10 @@ const CALLBACK_PAGE = `<!doctype html><meta charset="utf-8"><title>Nakama</title
 <body style="font:16px system-ui;display:grid;place-items:center;height:90vh">
 <p>Nakama Desktop is connected. You can close this tab.</p></body>`;
 
+const RETRY_PAGE = `<!doctype html><meta charset="utf-8"><title>Nakama</title>
+<body style="font:16px system-ui;display:grid;place-items:center;height:90vh">
+<p>Nakama Desktop could not finish. Reload this page to try again.</p></body>`;
+
 const FAILED_PAGE = `<!doctype html><meta charset="utf-8"><title>Nakama</title>
 <body style="font:16px system-ui;display:grid;place-items:center;height:90vh">
 <p>This sign-in link is not valid. Start again from Nakama Desktop.</p></body>`;
@@ -170,26 +174,43 @@ export class NakamaCloudSignIn {
 
         const params = url.searchParams;
         const computerId = params.get("computerId")?.trim() ?? "";
+        const confirmCode = params.get("confirmCode")?.trim() ?? "";
 
-        if (!(sameText(params.get("state") ?? "", state) && computerId)) {
+        if (
+          !(
+            sameText(params.get("state") ?? "", state) &&
+            computerId &&
+            confirmCode
+          )
+        ) {
           return new Response(FAILED_PAGE, {
             headers: { "content-type": "text/html; charset=utf-8" },
             status: 400,
           });
         }
 
-        this.stop();
+        // The listener stays open on a failure, so a reload of this page retries.
+        try {
+          this.passesFor(cloudUrl, computerId).confirmWith(confirmCode);
 
-        await this.onConnected({
-          account: {
-            account: params.get("account")?.trim() ?? "",
-            computerId,
-            orgId: params.get("orgId")?.trim() ?? "",
-            orgName: params.get("orgName")?.trim() ?? "",
-          },
-          cloudUrl,
-          models: await this.cloudModels(cloudUrl, computerId),
-        });
+          await this.onConnected({
+            account: {
+              account: params.get("account")?.trim() ?? "",
+              computerId,
+              orgId: params.get("orgId")?.trim() ?? "",
+              orgName: params.get("orgName")?.trim() ?? "",
+            },
+            cloudUrl,
+            models: await this.cloudModels(cloudUrl, computerId),
+          });
+        } catch {
+          return new Response(RETRY_PAGE, {
+            headers: { "content-type": "text/html; charset=utf-8" },
+            status: 502,
+          });
+        }
+
+        this.stop();
 
         return new Response(CALLBACK_PAGE, {
           headers: { "content-type": "text/html; charset=utf-8" },
@@ -220,6 +241,24 @@ export class NakamaCloudSignIn {
     connectUrl.searchParams.set("state", state);
 
     return { connectUrl: connectUrl.toString() };
+  }
+
+  /** Sign out: this computer removes itself in the cloud. Best effort. */
+  async revoke(cloudUrl: string, computerId: string): Promise<void> {
+    const passes = this.passesFor(cloudUrl, computerId);
+
+    try {
+      const pass = await passes.get();
+
+      await this.fetchImpl(`${cloudUrl}/v1/llm/computer`, {
+        headers: { authorization: `Bearer ${pass}` },
+        method: "DELETE",
+      });
+    } catch {
+      // Offline or already removed: the local sign-out still happens.
+    }
+
+    this.passes.delete(`${cloudUrl} ${computerId}`);
   }
 
   stop(): void {

@@ -574,6 +574,7 @@ interface ComputerRow {
   last_seen_at: string | null;
   name: string;
   org_id: string;
+  pending_code_hash: string | null;
   public_key: string;
   revoked_at: string | null;
   user_id: string;
@@ -587,6 +588,7 @@ function toComputerRecord(row: ComputerRow): StoredComputerRecord {
     lastSeenAt: row.last_seen_at,
     name: row.name,
     orgId: row.org_id,
+    pendingCodeHash: row.pending_code_hash,
     publicKey: row.public_key,
     revokedAt: row.revoked_at,
     userId: row.user_id,
@@ -594,7 +596,7 @@ function toComputerRecord(row: ComputerRow): StoredComputerRecord {
 }
 
 const COMPUTER_COLUMNS =
-  "id, org_id, user_id, install_id, name, public_key, created_at, last_seen_at, revoked_at";
+  "id, org_id, user_id, install_id, name, public_key, created_at, last_seen_at, revoked_at, pending_code_hash";
 
 interface ArtifactShareRow {
   created_at: string;
@@ -3712,7 +3714,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
   const insertComputerStmt = db.prepare(`
     INSERT INTO computers (${COMPUTER_COLUMNS})
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const getActiveComputerByInstallStmt = db.prepare<
@@ -3725,7 +3727,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   `);
 
   const updateComputerKeyStmt = db.prepare(`
-    UPDATE computers SET public_key = ?, name = ? WHERE id = ?
+    UPDATE computers SET public_key = ?, name = ?, pending_code_hash = ? WHERE id = ?
   `);
 
   const getComputerStmt = db.prepare<ComputerRow, SQLQueryBindings[]>(
@@ -3742,6 +3744,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     UPDATE computers SET revoked_at = ?
     WHERE id = ? AND org_id = ? AND user_id = ? AND revoked_at IS NULL
   `);
+
+  const activateComputerStmt = db.prepare(
+    "UPDATE computers SET pending_code_hash = NULL WHERE id = ?"
+  );
 
   const setComputerLastSeenStmt = db.prepare(
     "UPDATE computers SET last_seen_at = ? WHERE id = ?"
@@ -4547,6 +4553,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         requestId,
       });
     },
+
+    async activateComputer(id) {
+      activateComputerStmt.run(id);
+    },
     async activateUserMfa(id, totpSecretEnc, lastStep, updatedAt) {
       const result = activateUserMfaStmt.run(
         totpSecretEnc,
@@ -5092,11 +5102,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         );
 
         if (existing) {
-          updateComputerKeyStmt.run(record.publicKey, record.name, existing.id);
+          updateComputerKeyStmt.run(
+            record.publicKey,
+            record.name,
+            record.pendingCodeHash,
+            existing.id
+          );
 
           return toComputerRecord({
             ...existing,
             name: record.name,
+            pending_code_hash: record.pendingCodeHash,
             public_key: record.publicKey,
           });
         }
@@ -5110,7 +5126,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           record.publicKey,
           record.createdAt,
           record.lastSeenAt,
-          record.revokedAt
+          record.revokedAt,
+          record.pendingCodeHash
         );
 
         return record;

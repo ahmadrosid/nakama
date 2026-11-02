@@ -883,6 +883,8 @@ export interface EnrollComputerRequest {
 
 export interface EnrollComputerResponse {
   computerId: string;
+  /** One-time code for the computer only; the Connect page sends it to 127.0.0.1. */
+  confirmCode: string;
 }
 
 /** This computer's sign-in to Nakama Cloud (local server). */

@@ -16,7 +16,7 @@ export function testDeviceKey() {
     publicKey: raw.toString("base64"),
     signRequest: (
       computerId: string,
-      options: { nonce?: string; timestamp?: number } = {}
+      options: { confirmCode?: string; nonce?: string; timestamp?: number } = {}
     ): ComputerTokenRequest => {
       const request = {
         computerId,
@@ -30,7 +30,9 @@ export function testDeviceKey() {
         privateKey
       ).toString("base64");
 
-      return { ...request, signature };
+      return options.confirmCode
+        ? { ...request, confirmCode: options.confirmCode, signature }
+        : { ...request, signature };
     },
   };
 }

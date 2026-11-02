@@ -166,6 +166,10 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
 
     const org = await databaseAdapter?.getOrganizationById(caller.orgId);
 
+    if (org?.archivedAt) {
+      return { error: "Sign in again.", status: 401 };
+    }
+
     return org?.desktopModelsEnabled === false
       ? {
           error: "Your team turned off Nakama Desktop for its models.",
@@ -189,6 +193,24 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
     return issued
       ? c.json(issued, 200)
       : c.json({ error: "Sign in again." }, 401);
+  });
+
+  // Sign out on the computer: it removes itself.
+  app.delete("/v1/llm/computer", async (c) => {
+    const pass = passFrom(c.req.header("Authorization"));
+    const caller = pass ? await computerAuth.verifyPass(pass) : null;
+
+    if (!caller) {
+      return c.json({ error: "Sign in again." }, 401);
+    }
+
+    await computerAuth.revoke({
+      id: caller.computer.id,
+      orgId: caller.orgId,
+      userId: caller.userId,
+    });
+
+    return c.body(null, 204);
   });
 
   app.get("/v1/llm/models", async (c) => {
@@ -389,13 +411,13 @@ export function registerComputerRoutes(
       return c.json({ error: "Invalid request." }, 400);
     }
 
-    const computer = await computerAuth.enroll({
+    const { computer, confirmCode } = await computerAuth.enroll({
       ...request.data,
       orgId,
       userId,
     });
 
-    return c.json({ computerId: computer.id }, 201);
+    return c.json({ computerId: computer.id, confirmCode }, 201);
   });
 
   app.get("/v1/computers", async (c) => {
@@ -430,8 +452,18 @@ export function registerComputerRoutes(
   });
 }
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
 const signInRequestSchema = z.object({
-  cloudUrl: z.url(),
+  // HTTPS, or plain HTTP only to this computer: passes and prompts travel here.
+  cloudUrl: z.url().refine((value) => {
+    const url = new URL(value);
+
+    return (
+      url.protocol === "https:" ||
+      (url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname))
+    );
+  }),
   computerName: z.string().trim().max(100).optional(),
 });
 

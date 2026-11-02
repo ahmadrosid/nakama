@@ -107,7 +107,7 @@ async function setup() {
 
   const key = testDeviceKey();
 
-  const computer = await computerAuth.enroll({
+  const { computer, confirmCode } = await computerAuth.enroll({
     installId: "install_1",
     name: "Ada's MacBook",
     orgId,
@@ -116,7 +116,7 @@ async function setup() {
   });
 
   const tokenResponse = await app.request(LLM_TOKEN_PATH, {
-    body: JSON.stringify(key.signRequest(computer.id)),
+    body: JSON.stringify(key.signRequest(computer.id, { confirmCode })),
     headers: { "content-type": "application/json" },
     method: "POST",
   });
@@ -273,4 +273,15 @@ test("when an admin turns Nakama Desktop off, model calls are refused, and they 
 
   await orgService.updateOrganization(orgId, { desktopModelsEnabled: true });
   expect((await models()).status).toBe(200);
+});
+
+test("a computer that signs out removes itself, and its pass stops working", async () => {
+  const { app, pass } = await setup();
+  const headers = { authorization: `Bearer ${pass}` };
+
+  expect(
+    (await app.request("/v1/llm/computer", { headers, method: "DELETE" }))
+      .status
+  ).toBe(204);
+  expect((await app.request("/v1/llm/models", { headers })).status).toBe(401);
 });

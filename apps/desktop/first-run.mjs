@@ -127,6 +127,9 @@ export function createLocalSignIn({ dataDir, fetchImpl = fetch, serverUrl }) {
   };
 
   return async ({ cloudUrl, openExternal, signal, wait = 1000 }) => {
+    // A new choice replaces an old account, so "signed in" below is this one.
+    await call("/v1/nakama-cloud", { method: "DELETE" });
+
     const { connectUrl } = await call("/v1/nakama-cloud/sign-in", {
       body: JSON.stringify({ cloudUrl, computerName: computerName() }),
       method: "POST",

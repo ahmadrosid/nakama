@@ -4078,6 +4078,15 @@ export class AgentService {
       return;
     }
 
+    for (const entry of this.userConfig.providers) {
+      if (entry.type === "nakama_cloud" && entry.baseUrl && entry.nakamaCloud) {
+        await this.nakamaCloud?.revoke(
+          entry.baseUrl,
+          entry.nakamaCloud.computerId
+        );
+      }
+    }
+
     const providers = this.userConfig.providers.filter(
       (entry) => entry.type !== "nakama_cloud"
     );
