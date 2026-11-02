@@ -114,3 +114,109 @@ describe("last org admin", () => {
     expect(await adminCount(db)).toBe(2);
   });
 });
+
+async function usableAdminCount(db: DatabaseAdapter): Promise<number> {
+  const members = await db.listOrgMembers("org_a");
+
+  const admins = await Promise.all(
+    members
+      .filter((member) => member.role === "admin")
+      .map((member) => db.getUserById(member.userId))
+  );
+
+  return admins.filter((user) => user && !user.disabledAt).length;
+}
+
+// disabled_at is install-wide, so the disable statement has to re-check every
+// org the user administers. Each pair below is a race the service check alone
+// lets through; whichever write lands second must be refused.
+describe("disable last usable admin", () => {
+  const cases: {
+    name: string;
+    first: (db: DatabaseAdapter, a: string, b: string) => Promise<boolean>;
+    second: (db: DatabaseAdapter, a: string, b: string) => Promise<boolean>;
+  }[] = [
+    {
+      first: (db, a) => db.disableUserUnlessLastAdmin(a, NOW),
+      name: "disable A then remove B",
+      second: (db, _a, b) => db.deleteOrgMember("org_a", b),
+    },
+    {
+      first: (db, _a, b) => db.deleteOrgMember("org_a", b),
+      name: "remove B then disable A",
+      second: (db, a) => db.disableUserUnlessLastAdmin(a, NOW),
+    },
+    {
+      first: (db, _a, b) => db.updateOrgMemberRole("org_a", b, "member"),
+      name: "demote B then disable A",
+      second: (db, a) => db.disableUserUnlessLastAdmin(a, NOW),
+    },
+    {
+      first: (db, a) => db.disableUserUnlessLastAdmin(a, NOW),
+      name: "disable A then disable B",
+      second: (db, _a, b) => db.disableUserUnlessLastAdmin(b, NOW),
+    },
+  ];
+
+  for (const { first, name, second } of cases) {
+    test(`${name}: the second write is refused`, async () => {
+      const db = createSqliteMemoryAdapter();
+
+      const [a, b, disabled] = await seedOrgWithAdmins(db, [
+        "admin",
+        "admin",
+        "admin",
+      ]);
+
+      await db.disableUser(disabled!, NOW);
+
+      expect(await first(db, a!, b!)).toBe(true);
+      expect(await second(db, a!, b!)).toBe(false);
+      expect(await usableAdminCount(db)).toBe(1);
+    });
+  }
+
+  test("disables a plain member", async () => {
+    const db = createSqliteMemoryAdapter();
+    const [, member] = await seedOrgWithAdmins(db, ["admin", "member"]);
+
+    expect(await db.disableUserUnlessLastAdmin(member!, NOW)).toBe(true);
+    expect((await db.getUserById(member!))?.disabledAt).toBe(NOW);
+  });
+
+  test("an archived org does not block the disable", async () => {
+    const db = createSqliteMemoryAdapter();
+    const [admin] = await seedOrgWithAdmins(db, ["admin"]);
+
+    // The install refuses to archive its only live org.
+    await db.upsertOrganization({
+      createdAt: NOW,
+      id: "org_b",
+      name: "B",
+      slug: "b",
+      updatedAt: NOW,
+    });
+
+    expect(await db.tryMarkOrganizationArchived("org_a", NOW)).toBe(true);
+    expect(await db.disableUserUnlessLastAdmin(admin!, NOW)).toBe(true);
+  });
+
+  test("refuses to disable the last usable platform admin", async () => {
+    const db = createSqliteMemoryAdapter();
+
+    for (const id of ["platform_a", "platform_b"]) {
+      await db.createUser({
+        createdAt: NOW,
+        email: `${id}@example.com`,
+        id,
+        isPlatformAdmin: true,
+        passwordHash: "unused",
+        updatedAt: NOW,
+      });
+    }
+
+    expect(await db.disableUserUnlessLastAdmin("platform_a", NOW)).toBe(true);
+    expect(await db.disableUserUnlessLastAdmin("platform_b", NOW)).toBe(false);
+    expect((await db.getUserById("platform_b"))?.disabledAt).toBeFalsy();
+  });
+});

@@ -1861,8 +1861,19 @@ export class OrgService {
       }
     }
 
+    // The checks above are read-then-write; the statement re-checks both rules
+    // so a concurrent disable, remove or demote cannot leave no usable admin.
     const now = new Date().toISOString();
-    await this.databaseAdapter.disableUser(userId, now);
+
+    const disabled = await this.databaseAdapter.disableUserUnlessLastAdmin(
+      userId,
+      now
+    );
+
+    if (!disabled) {
+      throw new NakamaApiError("Cannot disable the last active admin.", 409);
+    }
+
     await this.databaseAdapter.revokeBrowserSessionsForUser(userId, now);
   }
 

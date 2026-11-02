@@ -2679,6 +2679,33 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE id = ?
   `);
 
+  // disableMember checks the last-admin rules before it writes, so a
+  // concurrent disable, remove or demote can pass the same check. One
+  // statement re-checks both install-wide rules: every live org the user
+  // administers keeps another usable admin, and a platform admin leaves
+  // another usable platform admin. The org filter matches listUserOrganizations.
+  const disableUserUnlessLastAdminStmt = db.prepare(`
+    UPDATE users
+    SET disabled_at = ?, updated_at = ?
+    WHERE id = ?
+      AND NOT EXISTS (
+        SELECT 1 FROM org_members om
+        INNER JOIN organizations o ON o.id = om.org_id
+        WHERE om.user_id = users.id AND om.role = 'admin'
+          AND o.archived_at IS NULL
+          AND NOT EXISTS (SELECT 1 FROM org_team_creation_requests WHERE team_org_id = o.id AND completed_at IS NULL)
+          AND NOT EXISTS (
+            SELECT 1 FROM org_members other
+            JOIN users u ON u.id = other.user_id
+            WHERE other.org_id = om.org_id AND other.role = 'admin'
+              AND other.user_id != users.id AND u.disabled_at IS NULL))
+      AND (is_platform_admin = 0
+        OR EXISTS (
+          SELECT 1 FROM users u
+          WHERE u.is_platform_admin = 1 AND u.id != users.id
+            AND u.disabled_at IS NULL))
+  `);
+
   const enableUserStmt = db.prepare(`
     UPDATE users
     SET disabled_at = NULL, updated_at = ?
@@ -4951,6 +4978,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async disableUser(id, disabledAt) {
       disableUserStmt.run(disabledAt, disabledAt, id);
+    },
+
+    async disableUserUnlessLastAdmin(id, disabledAt) {
+      const result = disableUserUnlessLastAdminStmt.run(
+        disabledAt,
+        disabledAt,
+        id
+      );
+
+      return result.changes > 0;
     },
 
     async enableUser(id) {

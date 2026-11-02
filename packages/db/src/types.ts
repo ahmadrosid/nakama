@@ -1002,6 +1002,11 @@ export interface DatabaseAdapter {
   deleteWorkflow(id: string): Promise<boolean>;
   deleteWorkflowRun(workflowId: string, runId: string): Promise<boolean>;
   disableUser(id: string, disabledAt: string): Promise<void>;
+  /**
+   * Resolves to `false` when the user is the last usable admin of a live org
+   * or the last usable platform admin.
+   */
+  disableUserUnlessLastAdmin(id: string, disabledAt: string): Promise<boolean>;
   enableUser(id: string): Promise<void>;
   eraseUser(input: {
     id: string;
