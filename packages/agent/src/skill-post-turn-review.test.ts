@@ -133,6 +133,28 @@ describe("parseSkillPostTurnReviewResponse", () => {
     ).toEqual({ action: "noop", reason: "patch_old_string_not_shown" });
   });
 
+  test("refuses a patch whose oldString repeats past the cut", () => {
+    expect(
+      parseSkillPostTurnReviewResponse(
+        JSON.stringify({
+          action: "patch",
+          name: "deploy-checklist",
+          newString: "b",
+          oldString: "## Steps",
+        }),
+        {
+          catalog: [
+            {
+              description: "Deploy steps",
+              name: "deploy-checklist",
+              skillMarkdown: `## Steps${"x".repeat(6000)}## Steps`,
+            },
+          ],
+        }
+      )
+    ).toEqual({ action: "noop", reason: "patch_old_string_not_unique" });
+  });
+
   test("rejects delete", () => {
     expect(
       parseSkillPostTurnReviewResponse(

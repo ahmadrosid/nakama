@@ -386,6 +386,25 @@ describe("SkillPostTurnReviewService", () => {
           role: "tool",
           toolCallId: "2",
         },
+        // Skills that are not assigned take no slot from the profile's skills.
+        {
+          content: "",
+          role: "assistant",
+          toolCalls: [
+            {
+              arguments: { name: "global-notes" },
+              id: "3",
+              name: "load_skill",
+            },
+          ],
+        },
+        {
+          content: JSON.stringify({ instructions: "x", name: "global-notes" }),
+          name: "load_skill",
+          role: "tool",
+          toolCallId: "3",
+        },
+        { content: "/skill ghost-notes", role: "user" },
       ];
 
       await service.reviewTurnWithLlm({

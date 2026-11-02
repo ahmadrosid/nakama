@@ -252,6 +252,11 @@ export function parseSkillPostTurnReviewResponse(
       return { action: "noop", reason: "patch_old_string_not_shown" };
     }
 
+    // Staging refuses an oldString that matches more than once, hidden part included.
+    if (target.skillMarkdown.split(oldString).length !== 2) {
+      return { action: "noop", reason: "patch_old_string_not_unique" };
+    }
+
     return { action: "patch", name, newString, oldString };
   }
 

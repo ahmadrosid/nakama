@@ -74,48 +74,10 @@ const LoadSkillResultSchema = z.object({
   name: z.string().optional(),
 });
 
-/** The load_skill result, or null when compaction replaced it with text. */
-function parseLoadSkillResult(
-  content: string
-): z.infer<typeof LoadSkillResultSchema> | null {
-  try {
-    const result = LoadSkillResultSchema.safeParse(JSON.parse(content));
-
-    return result.success ? result.data : null;
-  } catch {
-    return null;
-  }
-}
+const LoadSkillNameSchema = z.string().trim();
 
 /** Most SKILL.md bodies one review prompt carries. */
 const MAX_LOADED_SKILL_BODIES = 3;
-
-/**
- * SKILL.md of a profile-owned skill, read from the same file staging matches
- * oldString against. Undefined for a skill whose source is another directory
- * (global, bundled, or a folder name that differs from the skill name).
- */
-async function readProfileSkillMarkdown(
-  context: { orgId: string; profileId: string },
-  skill: { name: string; sourcePath: string }
-): Promise<string | undefined> {
-  try {
-    const directory = resolveProfileSkillDirectory(
-      context.orgId,
-      context.profileId,
-      skill.name
-    );
-
-    if (
-      comparablePath(directory) !==
-      comparablePath(resolveWithRealpath(skill.sourcePath))
-    ) {
-      return;
-    }
-
-    return await readFile(path.join(directory, SKILL_FILE_NAME), "utf8");
-  } catch {}
-}
 
 export interface PostTurnReviewRunnerContext {
   messages: ChatMessage[];
@@ -260,15 +222,9 @@ export class SkillPostTurnReviewService {
 
     const assigned = await this.db.listSkillsForProfile(context.profileId);
 
-    // A skill counts as loaded when a load_skill call succeeded or the user
-    // named it with `/skill <name>`, in this turn or an earlier one. The Set
-    // keeps the latest load last, so the cap below keeps the most recent ones.
-    const loadedNames = new Set<string>();
-
-    const markLoaded = (name: string) => {
-      loadedNames.delete(name);
-      loadedNames.add(name);
-    };
+    // Skills the session loaded, oldest first: a load_skill call that
+    // succeeded, or a `/skill <name>` message, in this turn or an earlier one.
+    const loads: string[] = [];
 
     // Compaction can replace an old tool result with plain text, so the name
     // the call asked for is the fallback when the result has no name.
@@ -281,13 +237,17 @@ export class SkillPostTurnReviewService {
         );
 
         if (name) {
-          markLoaded(name);
+          loads.push(name);
         }
       } else if (message.role === "assistant") {
         for (const call of message.toolCalls ?? []) {
-          const name = z.string().trim().safeParse(call.arguments.name);
+          if (call.name !== LOAD_SKILL_TOOL_NAME) {
+            continue;
+          }
 
-          if (call.name === LOAD_SKILL_TOOL_NAME && name.success) {
+          const name = LoadSkillNameSchema.safeParse(call.arguments.name);
+
+          if (name.success) {
             requestedNames.set(call.id, name.data);
           }
         }
@@ -295,7 +255,17 @@ export class SkillPostTurnReviewService {
         message.role === "tool" &&
         message.name === LOAD_SKILL_TOOL_NAME
       ) {
-        const result = parseLoadSkillResult(message.content);
+        let result: z.infer<typeof LoadSkillResultSchema> | undefined;
+
+        try {
+          const parsed = LoadSkillResultSchema.safeParse(
+            JSON.parse(message.content)
+          );
+
+          result = parsed.success ? parsed.data : undefined;
+        } catch {
+          // Compaction replaced the result with text.
+        }
 
         // A failure carries only `error`; a success carries the skill's name.
         if (result?.error !== undefined) {
@@ -309,24 +279,61 @@ export class SkillPostTurnReviewService {
             : undefined);
 
         if (name) {
-          markLoaded(name);
+          loads.push(name);
         }
       }
     }
 
-    const recentNames = new Set(
-      [...loadedNames].slice(-MAX_LOADED_SKILL_BODIES)
+    // Newest load first. Only a profile-owned skill can be patched, so only
+    // those take a slot. The body is read from the file staging matches
+    // oldString against, so a skill in another directory (global, bundled, or
+    // a folder name that differs from the skill name) gets none.
+    const assignedByName = new Map(
+      assigned.map((skill) => [skill.name, skill])
     );
 
-    const catalog = await Promise.all(
-      assigned.map(async (skill) => ({
-        description: skill.description,
-        name: skill.name,
-        skillMarkdown: recentNames.has(skill.name)
-          ? await readProfileSkillMarkdown(context, skill)
-          : undefined,
-      }))
-    );
+    const checked = new Set<string>();
+    const bodies = new Map<string, string>();
+
+    for (const name of [...loads].reverse()) {
+      const skill = assignedByName.get(name);
+
+      if (bodies.size >= MAX_LOADED_SKILL_BODIES) {
+        break;
+      }
+
+      if (!skill || checked.has(name)) {
+        continue;
+      }
+
+      checked.add(name);
+
+      try {
+        const directory = resolveProfileSkillDirectory(
+          context.orgId,
+          context.profileId,
+          name
+        );
+
+        if (
+          comparablePath(directory) ===
+          comparablePath(resolveWithRealpath(skill.sourcePath))
+        ) {
+          bodies.set(
+            name,
+            await readFile(path.join(directory, SKILL_FILE_NAME), "utf8")
+          );
+        }
+      } catch {
+        // Not a profile-owned skill, or its SKILL.md is gone.
+      }
+    }
+
+    const catalog = assigned.map((skill) => ({
+      description: skill.description,
+      name: skill.name,
+      skillMarkdown: bodies.get(skill.name),
+    }));
 
     return generateSkillPostTurnReview({
       catalog,
