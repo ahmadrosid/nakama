@@ -389,9 +389,7 @@ export function createHonoApp(options: ServerOptions) {
   registerNotificationWebhookRoutes(app, options);
   registerAcpMcpRoutes(app);
 
-  if (options.computerAuth) {
-    registerLlmRoutes(app, options.computerAuth);
-  }
+  registerLlmRoutes(app, options);
 
   registerComposioOAuthRoutes(app, options);
   registerMcpOAuthRoutes(app, options);

@@ -16,6 +16,9 @@ const PUBLIC_ROUTES = new Set([
   "/v1/composio/oauth/callback",
   // Nakama Desktop: each route checks its own device signature or pass.
   "/v1/llm/token",
+  "/v1/llm/models",
+  "/v1/llm/chat",
+  "/v1/llm/text",
 ]);
 
 export function isPublicRouteRequest(

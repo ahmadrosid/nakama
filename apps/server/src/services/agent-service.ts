@@ -5540,6 +5540,66 @@ export class AgentService {
   }
 
   /**
+   * The provider for one Nakama Desktop model call: this install's provider
+   * for the model, billed to the org and member, with the org's quota hold.
+   * Null when no provider is set up for the model.
+   */
+  async desktopModelHarness(input: {
+    model: string;
+    orgId: string;
+    userId: string;
+  }): Promise<{
+    assertCanStart?: (reservedTokens: number) => Promise<() => Promise<void>>;
+    chatOptions?: ProviderChatOptions;
+    provider: ProviderClient;
+  } | null> {
+    await this.refreshManagedProviderKeys();
+
+    const resolved = resolveProfileProviderSelection({
+      defaultProviderId: this.userConfig?.defaultProviderId,
+      profileModel: input.model,
+      providers: this.userConfig?.providers ?? [],
+    });
+
+    const provider = resolved
+      ? createProviderForInstance(
+          resolved.instance,
+          resolved.model,
+          process.env,
+          {
+            onChatgptTokenRefresh: (instanceId, oauth) =>
+              this.persistChatgptOAuth(instanceId, oauth),
+            onXaiTokenRefresh: (instanceId, oauth) =>
+              this.persistXaiOAuth(instanceId, oauth),
+            resolveInstance: (instanceId) =>
+              findProviderInstance(this.userConfig, instanceId),
+          }
+        )
+      : null;
+
+    if (!(resolved && provider)) {
+      return null;
+    }
+
+    const harness = this.createHarness({
+      modelId: resolved.model,
+      orgId: input.orgId,
+      provider,
+      providerInstance: resolved.instance,
+      thinking: this.resolveWorkspaceThinkingDefaults(),
+      userId: input.userId,
+    });
+
+    return harness.provider
+      ? {
+          assertCanStart: this.llmTurnQuotaCheckerFor(input.orgId),
+          chatOptions: harness.chatOptions,
+          provider: harness.provider,
+        }
+      : null;
+  }
+
+  /**
    * `orgId` is the tenant the calls made through this harness are billed to.
    * Without one the provider is left unwrapped: the ledger has no unattributed
    * bucket, so an org-less harness must not be allowed to add to any org's.

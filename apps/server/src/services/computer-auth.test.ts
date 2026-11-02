@@ -1,15 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { z } from "zod";
 import { LLM_TOKEN_PATH } from "../http/routes/llm";
 import { createMinimalHonoApp } from "../http/test-app-helpers";
 import { seedOrgAdmin } from "../http/test-session-helpers";
+import { testDeviceKey } from "../testing/computer-device";
 import {
   COMPUTER_PASS_TTL_MS,
   ComputerAuthService,
   type ComputerTokenRequest,
-  computerTokenPayload,
   isEd25519PublicKey,
 } from "./computer-auth";
 
@@ -17,15 +16,6 @@ const passResponseSchema = z.object({
   expiresAt: z.number(),
   pass: z.string(),
 });
-
-function deviceKey() {
-  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-
-  // The raw key is the last 32 bytes of the SPKI DER encoding.
-  const raw = publicKey.export({ format: "der", type: "spki" }).subarray(-32);
-
-  return { privateKey, publicKey: raw.toString("base64") };
-}
 
 async function setup() {
   let time = Date.parse("2026-11-03T10:00:00.000Z");
@@ -37,7 +27,7 @@ async function setup() {
     role: "member",
   });
 
-  const key = deviceKey();
+  const key = testDeviceKey();
 
   const computer = await auth.enroll({
     installId: "install_1",
@@ -49,21 +39,7 @@ async function setup() {
 
   const signedRequest = (
     overrides: { nonce?: string; timestamp?: number } = {}
-  ) => {
-    const request = {
-      computerId: computer.id,
-      nonce: overrides.nonce ?? randomUUID(),
-      timestamp: overrides.timestamp ?? time,
-    };
-
-    const signature = sign(
-      null,
-      computerTokenPayload(request, { method: "POST", path: LLM_TOKEN_PATH }),
-      key.privateKey
-    ).toString("base64");
-
-    return { ...request, signature };
-  };
+  ) => key.signRequest(computer.id, { timestamp: time, ...overrides });
 
   const requestPass = (body: ComputerTokenRequest) =>
     app.request(LLM_TOKEN_PATH, {
@@ -185,7 +161,7 @@ describe("computer passes", () => {
       installId: "install_1",
       name: "Ada's MacBook",
       orgId,
-      publicKey: deviceKey().publicKey,
+      publicKey: testDeviceKey().publicKey,
       userId,
     });
 
@@ -193,7 +169,7 @@ describe("computer passes", () => {
   });
 
   test("only a raw 32-byte Ed25519 key is a public key", () => {
-    expect(isEd25519PublicKey(deviceKey().publicKey)).toBe(true);
+    expect(isEd25519PublicKey(testDeviceKey().publicKey)).toBe(true);
     expect(isEd25519PublicKey(Buffer.alloc(31).toString("base64"))).toBe(false);
     expect(isEd25519PublicKey("not base64!")).toBe(false);
   });
