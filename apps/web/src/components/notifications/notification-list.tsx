@@ -62,6 +62,7 @@ function NotificationListItem({
   onNavigate?: () => void;
 }) {
   const { setProfileId } = useActiveChatProfile();
+
   const onSelect = () => {
     if (item.profileId) {
       setProfileId(item.profileId);
