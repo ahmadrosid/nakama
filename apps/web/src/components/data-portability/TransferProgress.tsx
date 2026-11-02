@@ -50,6 +50,11 @@ export function useTransferProgress() {
   return { begin, clear, track, transfer };
 }
 
+// The panel sits at the bottom of a long page, so a new bar can land below the fold.
+function revealBar(element: HTMLDivElement | null): void {
+  element?.scrollIntoView({ block: "nearest" });
+}
+
 export function TransferProgressBar({ label, loaded, total }: TransferState) {
   const percent =
     total > 0 ? Math.min(100, Math.floor((loaded / total) * 100)) : null;
@@ -62,7 +67,7 @@ export function TransferProgressBar({ label, loaded, total }: TransferState) {
         : null;
 
   return (
-    <div className="space-y-1.5" role="status">
+    <div className="space-y-1.5" ref={revealBar} role="status">
       <div className="flex items-baseline justify-between gap-3 text-xs">
         <span className="text-pretty text-foreground">{label}</span>
         {detail ? (
