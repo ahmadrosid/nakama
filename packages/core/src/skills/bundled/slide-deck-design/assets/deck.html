@@ -13,7 +13,7 @@
       --bg: #ffffff;
       --ink: #101214;
       --muted: #586270;
-      --subtle: #8a94a3;
+      --subtle: #6b7480;
       --line: #e2e8f0;
       --wash: #f8fafc;
       /* One accent. Change all four together. */
@@ -22,11 +22,9 @@
       --accent-soft: #fffbeb;
       --accent-line: #fcd34d;
       --sans:
-        "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
-        Roboto, Arial, sans-serif;
-      --mono:
-        "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
-        monospace;
+        ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        Arial, sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       /* Slide width: the largest 16:9 box that fits the window. */
       --w: min(100vw, 177.778dvh);
       color-scheme: light;
@@ -239,54 +237,16 @@
         linear-gradient(135deg, var(--accent-soft), #e6e9f0 55%, #dfe5ee);
     }
 
-    /* ---- Cover ---- */
-    .cover {
-      padding: 0;
-    }
-    .cover-grid {
-      display: grid;
-      grid-template-columns: 0.92fr 1.08fr;
-      height: 100%;
-    }
-    .cover-text {
-      display: flex;
-      flex-direction: column;
-      padding: 5.2cqw 4cqw 4.6cqw 6.4cqw;
-    }
+    /* ---- Cover: the script gives it no footer ---- */
     .cover h1 {
-      margin-top: auto;
-      font-size: 4.8cqw;
-    }
-    .meta {
-      margin-top: auto;
-      font-size: 1.3cqw;
-      color: var(--subtle);
-    }
-    /* Title cover: no panel. Add the visual class for a gradient background. */
-    .cover-title h1 {
       max-width: 72cqw;
       margin-top: auto;
       font-size: 6.4cqw;
       line-height: 1.05;
     }
-    .hero {
-      display: flex;
-      flex-direction: column;
-      gap: 1cqw;
-      align-items: center;
-      justify-content: center;
-      font-family: var(--mono);
-    }
-    .hero b {
-      font-size: 5.2cqw;
-      font-weight: 500;
-    }
-    .hero .on {
-      color: var(--accent-ink);
-    }
-    .hero i {
-      font-size: 2.4cqw;
-      font-style: normal;
+    .meta {
+      margin-top: auto;
+      font-size: 1.3cqw;
       color: var(--subtle);
     }
 
@@ -324,6 +284,19 @@
       line-height: 1.2;
       letter-spacing: -0.03em;
     }
+    blockquote.say {
+      margin-right: 0;
+      margin-bottom: 0;
+      margin-left: 0;
+    }
+    .say cite {
+      display: block;
+      margin-top: 2.4cqw;
+      font: 1.2cqw var(--mono);
+      font-style: normal;
+      color: var(--subtle);
+      letter-spacing: 0.04em;
+    }
 
     /* ---- Phone portrait: layouts stack, text in px ---- */
     @media screen and (max-width: 760px) and (orientation: portrait) {
@@ -341,17 +314,6 @@
         min-height: 100dvh;
         padding: 48px 22px 72px;
       }
-      .cover {
-        padding: 0;
-      }
-      .cover-grid {
-        grid-template-columns: 1fr;
-        min-height: 100dvh;
-      }
-      .cover-text {
-        min-height: 60dvh;
-        padding: 48px 22px 28px;
-      }
       .kicker,
       .source,
       .foot,
@@ -362,12 +324,11 @@
       .row .n {
         font-size: 10px;
       }
-      h1,
-      .cover h1 {
+      h1 {
         margin: 10px 0 28px;
         font-size: 28px;
       }
-      .cover-title h1 {
+      .cover h1 {
         font-size: 34px;
       }
       .body {
@@ -383,6 +344,9 @@
       .say {
         font-size: 26px;
       }
+      .say cite {
+        font-size: 11px;
+      }
       .brand {
         font-size: 18px;
       }
@@ -393,15 +357,6 @@
       .brand > * {
         width: 22px;
         height: 22px;
-      }
-      .hero {
-        min-height: 40dvh;
-      }
-      .hero b {
-        font-size: 36px;
-      }
-      .hero i {
-        font-size: 18px;
       }
       .av {
         width: 28px;
@@ -455,39 +410,16 @@
   </head>
   <body>
     <main aria-label="Deck Title" class="deck">
-      <!-- Cover: keep one of the two below. Title cover: the full slide for the title. -->
-      <section aria-label="Slide 1: Title" class="slide cover-title">
+      <!-- Cover. Add the visual class for a gradient background. The split
+           cover in patterns.html replaces this one. -->
+      <section aria-label="Title" class="slide cover">
         <div class="brand"><i></i>Brand</div>
         <h1>Deck title on one line<br><span>Subtitle or date</span></h1>
         <p class="meta">Event name · Date · Time</p>
         <aside class="notes"><p>What you say while this slide shows.</p></aside>
       </section>
 
-      <!-- Split cover: only when the panel shows a supplied figure or image. -->
-      <section aria-label="Slide 1: Title" class="slide cover">
-        <div class="cover-grid">
-          <div class="cover-text">
-            <div class="brand"><i></i>Brand</div>
-            <h1>Deck title<br>on two lines<br><span>Date or subtitle</span></h1>
-            <p class="meta">Event name · Date · Time</p>
-          </div>
-          <div class="visual hero">
-            <span class="label">Key figure</span>
-            <b>1.2M</b>
-            <i>↓</i>
-            <b class="on">1.5M</b>
-          </div>
-        </div>
-        <aside class="notes">
-          <p>What you say while this slide shows.</p>
-          <p class="q">
-            <b>Q:</b>
-            A question the audience may ask — and the answer.
-          </p>
-        </aside>
-      </section>
-
-      <section aria-label="Slide 2: Plan" class="slide">
+      <section aria-label="Plan" class="slide">
         <p class="kicker">Section · Plan</p>
         <h1>Next steps.<br><span>Four items.</span></h1>
         <div class="fill">
@@ -509,23 +441,30 @@
           </div>
         </div>
         <p class="source">Source: where the facts come from, and the date.</p>
-        <div class="foot">
-          <span class="mark"><i></i>Deck Title</span><span>02</span>
-        </div>
         <aside class="notes">
           <p>Why each item matters, and who owns it.</p>
+          <p class="q">
+            <b>Q:</b>
+            A supplied question, and its supplied answer.
+          </p>
         </aside>
       </section>
 
-      <section aria-label="Slide 3: Statement" class="slide">
+      <section aria-label="Statement" class="slide">
         <p class="kicker">Section · Update</p>
         <p class="say fill">
           One supplied sentence, set large as the slide's main text.
         </p>
-        <div class="foot">
-          <span class="mark"><i></i>Deck Title</span><span>03</span>
-        </div>
         <aside class="notes"><p>The context behind the sentence.</p></aside>
+      </section>
+
+      <!-- Quote: a statement with the speaker's name. -->
+      <section aria-label="Quote" class="slide">
+        <p class="kicker">Section · Feedback</p>
+        <blockquote class="say fill">
+          “A supplied quote, word for word.”
+          <cite>Name, role</cite>
+        </blockquote>
       </section>
     </main>
     <nav aria-label="Slide navigation" class="nav">
@@ -545,6 +484,29 @@
       const panel = document.querySelector(".notes-panel");
       const [prev, next, notes] = document.querySelectorAll(".nav button");
       let index = 0;
+
+      // Label every slide, and give every slide but the cover a footer with
+      // the cover's brand mark, the deck name, and a two-digit number.
+      const deckName = document
+        .querySelector("main")
+        .getAttribute("aria-label");
+      const mark = document.querySelector(".brand > :first-child");
+      for (const [i, slide] of slides.entries()) {
+        const name = slide.getAttribute("aria-label") || "Slide";
+        slide.setAttribute("aria-label", `Slide ${i + 1}: ${name}`);
+        if (slide.classList.contains("cover")) {
+          continue;
+        }
+        const foot = document.createElement("div");
+        foot.className = "foot";
+        const brand = document.createElement("span");
+        brand.className = "mark";
+        brand.append(mark ? mark.cloneNode(true) : "", deckName);
+        const number = document.createElement("span");
+        number.textContent = String(i + 1).padStart(2, "0");
+        foot.append(brand, number);
+        slide.append(foot);
+      }
 
       function show(n) {
         index = Math.max(0, Math.min(slides.length - 1, n || 0));

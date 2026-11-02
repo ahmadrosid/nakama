@@ -4,6 +4,199 @@
   main. Each slide is a sample: replace all of its text and numbers.
 -->
 
+<!-- ==== Split cover: title beside one supplied figure or image ==== -->
+<style>
+.cover-split {
+  padding: 0;
+}
+.cover-grid {
+  display: grid;
+  grid-template-columns: 0.92fr 1.08fr;
+  height: 100%;
+}
+.cover-text {
+  display: flex;
+  flex-direction: column;
+  padding: 5.2cqw 4cqw 4.6cqw 6.4cqw;
+}
+.cover-split h1 {
+  font-size: 4.8cqw;
+}
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: 1cqw;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+}
+.hero b {
+  font-size: 5.2cqw;
+  font-weight: 500;
+}
+.hero .on {
+  color: var(--accent-ink);
+}
+.hero i {
+  font-size: 2.4cqw;
+  font-style: normal;
+  color: var(--subtle);
+}
+.hero img {
+  max-width: 80%;
+  max-height: 80%;
+}
+@media screen and (max-width: 760px) and (orientation: portrait) {
+  .cover-split {
+    padding: 0;
+  }
+  .cover-grid {
+    grid-template-columns: 1fr;
+    min-height: 100dvh;
+  }
+  .cover-text {
+    min-height: 60dvh;
+    padding: 48px 22px 28px;
+  }
+  .cover-split h1 {
+    font-size: 30px;
+  }
+  .hero {
+    min-height: 40dvh;
+  }
+  .hero b {
+    font-size: 36px;
+  }
+  .hero i {
+    font-size: 18px;
+  }
+}
+</style>
+<section aria-label="Title" class="slide cover cover-split">
+  <div class="cover-grid">
+    <div class="cover-text">
+      <div class="brand"><i></i>Brand</div>
+      <h1>Deck title<br>on two lines<br><span>Date or subtitle</span></h1>
+      <p class="meta">Event name · Date · Time</p>
+    </div>
+    <div class="visual hero">
+      <span class="label">Key figure</span>
+      <b>1.2M</b>
+      <i>↓</i>
+      <b class="on">1.5M</b>
+    </div>
+  </div>
+  <aside class="notes"><p>What you say while this slide shows.</p></aside>
+</section>
+
+<!-- ==== Compare: 2 or 3 columns, such as before and after or options ==== -->
+<style>
+.cols {
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  gap: 3.2cqw;
+}
+.col {
+  padding-top: 1.4cqw;
+  border-top: 1px solid var(--line);
+}
+.col.on {
+  border-top: 2px solid var(--accent);
+}
+.col h2 {
+  margin: 0 0 1.2cqw;
+  font-size: 2.4cqw;
+  font-weight: 550;
+  letter-spacing: -0.02em;
+}
+.col.on h2 {
+  color: var(--accent-ink);
+}
+.col p {
+  margin-bottom: 0.8cqw;
+  font-size: 1.6cqw;
+  line-height: 1.45;
+  color: var(--muted);
+}
+@media screen and (max-width: 760px) and (orientation: portrait) {
+  .cols {
+    grid-auto-flow: row;
+    gap: 24px;
+  }
+  .col h2 {
+    font-size: 20px;
+  }
+  .col p {
+    font-size: 15px;
+  }
+}
+</style>
+<section aria-label="Compare" class="slide">
+  <p class="kicker">Section · Change</p>
+  <h1>What changed.<br><span>Before and after.</span></h1>
+  <div class="cols fill">
+    <div class="col">
+      <span class="label">Before</span>
+      <h2>Old way</h2>
+      <p>One supplied point</p>
+      <p>Another supplied point</p>
+    </div>
+    <div class="col on">
+      <span class="label">After</span>
+      <h2>New way</h2>
+      <p>One supplied point</p>
+      <p>Another supplied point</p>
+    </div>
+  </div>
+  <aside class="notes"><p>Why the change matters.</p></aside>
+</section>
+
+<!-- ==== Image + text: one supplied image beside a short text ==== -->
+<style>
+.media {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 4cqw;
+  align-items: end;
+}
+.pic {
+  display: grid;
+  place-items: center;
+  height: 26cqw;
+  padding: 1.6cqw;
+}
+.pic img,
+.pic svg {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 0.5cqw;
+  box-shadow: 0 1.6cqw 3cqw rgb(16 18 20 / 0.18);
+}
+@media screen and (max-width: 760px) and (orientation: portrait) {
+  .media {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .pic {
+    height: 220px;
+  }
+}
+</style>
+<section aria-label="Feature" class="slide">
+  <p class="kicker">Section · Product</p>
+  <h1>One feature.<br><span>What it does.</span></h1>
+  <div class="media fill">
+    <p class="body">Two or three supplied sentences about the image.</p>
+    <div class="pic visual">
+      <svg aria-label="Screenshot" role="img" viewBox="0 0 16 10">
+        <rect fill="#fff" height="10" width="16" />
+      </svg>
+    </div>
+  </div>
+  <aside class="notes"><p>What to point at in the image.</p></aside>
+</section>
+
 <!-- ==== Stats + chart: up to 3 stats beside a bar chart of one series ==== -->
 <style>
 .split {
@@ -93,7 +286,7 @@
   }
 }
 </style>
-<section aria-label="Slide 2: Metric" class="slide">
+<section aria-label="Metric" class="slide">
   <p class="kicker">Section · Metric</p>
   <h1>1.5M users.<br><span>+25% this quarter.</span></h1>
   <div class="split fill">
@@ -125,9 +318,6 @@
     </div>
   </div>
   <p class="source">Source: where the numbers come from, and the date.</p>
-  <div class="foot">
-    <span class="mark"><i></i>Deck Title</span><span>02</span>
-  </div>
   <aside class="notes"><p>Details that do not fit on the slide.</p></aside>
 </section>
 
@@ -142,11 +332,9 @@
   display: flex;
   gap: 1cqw;
   align-items: center;
+  padding-top: 1cqw;
   font-size: 1.1cqw;
   color: var(--muted);
-}
-.person {
-  padding-top: 1cqw;
   border-top: 1px solid var(--line);
 }
 .person b {
@@ -168,7 +356,7 @@
   }
 }
 </style>
-<section aria-label="Slide 3: People" class="slide">
+<section aria-label="People" class="slide">
   <p class="kicker">Section · People</p>
   <h1>Four people.<br><span>One short second line.</span></h1>
   <div class="people fill">
@@ -190,9 +378,6 @@
     </div>
   </div>
   <p class="source">Source: where the list comes from, and the date.</p>
-  <div class="foot">
-    <span class="mark"><i></i>Deck Title</span><span>03</span>
-  </div>
   <aside class="notes">
     <p>Who these people are and why they are here.</p>
   </aside>
@@ -266,7 +451,7 @@
   }
 }
 </style>
-<section aria-label="Slide 4: Leaderboard" class="slide">
+<section aria-label="Leaderboard" class="slide">
   <p class="kicker">Section · Ranking</p>
   <h1>Top four.<br><span>Ranked by count.</span></h1>
   <div class="lb fill">
@@ -294,9 +479,6 @@
   <p class="source">
     Source: what is counted, the period, and what is left out.
   </p>
-  <div class="foot">
-    <span class="mark"><i></i>Deck Title</span><span>04</span>
-  </div>
   <aside class="notes">
     <p>What the count includes and what it misses.</p>
   </aside>
@@ -356,7 +538,7 @@ figcaption b {
   }
 }
 </style>
-<section aria-label="Slide 5: Gallery" class="slide">
+<section aria-label="Gallery" class="slide">
   <p class="kicker">Section · Screens</p>
   <h1>What shipped.<br><span>Three screens.</span></h1>
   <div class="gallery fill">
@@ -393,9 +575,6 @@ figcaption b {
         <div><b>Name Three</b>Short title of the change</div>
       </figcaption>
     </figure>
-  </div>
-  <div class="foot">
-    <span class="mark"><i></i>Deck Title</span><span>05</span>
   </div>
   <aside class="notes"><p>One sentence about each screen, in order.</p></aside>
 </section>
