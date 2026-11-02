@@ -499,12 +499,35 @@ export function assertJsonRequest(request: Request): void {
   }
 }
 
+/**
+ * Bun can leave a body read pending forever when the client hangs up, which
+ * would pin whatever the caller holds, such as the restore lock.
+ */
+function readUntilClientGone<T>(
+  request: Request,
+  read: Promise<T>
+): Promise<T> {
+  const gone = new Promise<never>((_resolve, reject) => {
+    const rejectGone = () => {
+      reject(new NakamaApiError("The client closed the request.", 400));
+    };
+
+    if (request.signal.aborted) {
+      rejectGone();
+    }
+
+    request.signal.addEventListener("abort", rejectGone, { once: true });
+  });
+
+  return Promise.race([read, gone]);
+}
+
 export async function readJson<T>(
   request: Request,
   schema?: ZodType<T>
 ): Promise<T> {
   try {
-    const body = await request.json();
+    const body = await readUntilClientGone(request, request.json());
 
     if (!schema) {
       return body;

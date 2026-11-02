@@ -1100,9 +1100,12 @@ export function registerSessionRoutes(
       );
     }
 
+    // The origin only builds OAuth and share links inside the turn, so an old
+    // domain must not stop the message: those links use the configured base.
     const clientOrigin = resolveRequestClientOrigin(
       c.req.raw,
-      body.clientOrigin
+      body.clientOrigin,
+      { dropUnvouched: true }
     );
 
     const input = {
