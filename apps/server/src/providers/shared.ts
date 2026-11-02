@@ -5,7 +5,7 @@ import type {
   ThinkingEffort,
   ToolCall,
 } from "@nakama/core";
-import { NakamaApiError } from "@nakama/core";
+import { NakamaApiError, ProviderStreamInterruptedError } from "@nakama/core";
 import { z } from "zod";
 
 export type ProviderJsonValue =
@@ -238,7 +238,7 @@ export async function readSseEvents(
   let sawDone = false;
 
   while (true) {
-    const { done, value } = await reader.read();
+    const { done, value } = await readStreamChunk(reader);
 
     if (value) {
       buffer += decoder.decode(value, { stream: true });
@@ -270,6 +270,27 @@ export async function readSseEvents(
   }
 
   return sawDone;
+}
+
+// A socket that drops mid-stream (ECONNRESET) becomes an interruption, so the
+// chat loop retries once. Cancels and deadlines keep their own errors.
+async function readStreamChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>
+): ReturnType<ReadableStreamDefaultReader<Uint8Array>["read"]> {
+  try {
+    return await reader.read();
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.name === "AbortError" || error.name === "TimeoutError")
+    ) {
+      throw error;
+    }
+
+    throw new ProviderStreamInterruptedError(
+      "The model connection closed before the reply finished. Try again."
+    );
+  }
 }
 
 async function emitSseEvent(
