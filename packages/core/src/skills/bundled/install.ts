@@ -21,6 +21,7 @@ const FORCE_REFRESH_BUNDLED_SKILL_NAMES = new Set<string>([
   "slide-deck-design",
   "archive-profile-memory",
   "nakama-guide",
+  "grounded-research",
 ]);
 
 const RENAMED_BUNDLED_SKILL_DIRS = [
