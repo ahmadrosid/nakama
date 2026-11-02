@@ -147,17 +147,15 @@
       line-height: 1.12;
       letter-spacing: -0.035em;
     }
-    h1 span {
-      color: var(--subtle);
-    }
     .body {
       font-size: 1.45cqw;
       line-height: 1.5;
       color: var(--muted);
     }
-    /* Main content sits at the bottom of the slide. */
+    /* Main content sits centered in the space between the title and the
+       footer, so a short slide has no empty band above its content. */
     .fill {
-      margin-top: auto;
+      margin-block: auto;
     }
     .source {
       padding-top: 1.6cqw;
@@ -254,16 +252,14 @@
 
     /* ---- Statement: one sentence, set large ---- */
     .say {
-      max-width: 80cqw;
-      font-size: 4.2cqw;
-      font-weight: 500;
-      line-height: 1.2;
-      letter-spacing: -0.03em;
+      max-width: 88cqw;
+      font-size: 6.2cqw;
+      font-weight: 550;
+      line-height: 1.08;
+      letter-spacing: -0.035em;
     }
     blockquote.say {
-      margin-right: 0;
-      margin-bottom: 0;
-      margin-left: 0;
+      margin-inline: 0;
     }
     .say cite {
       display: block;
@@ -318,7 +314,7 @@
         font-size: 16px;
       }
       .say {
-        font-size: 26px;
+        font-size: 32px;
       }
       .say cite {
         font-size: 11px;
@@ -387,14 +383,14 @@
       <!-- Cover. The split cover in patterns.html replaces this one. -->
       <section aria-label="Title" class="slide cover">
         <div class="brand">Brand</div>
-        <h1>Deck title on one line<br><span>Subtitle or date</span></h1>
-        <p class="meta">Event name · Date · Time</p>
+        <h1>Deck title on one line</h1>
+        <p class="meta">Subtitle · Event · Date</p>
         <aside class="notes"><p>What you say while this slide shows.</p></aside>
       </section>
 
       <section aria-label="Plan" class="slide">
         <p class="kicker">Section · Plan</p>
-        <h1>Next steps.<br><span>Four items.</span></h1>
+        <h1>Next steps for the launch.</h1>
         <div class="fill">
           <div class="row">
             <span class="n">01</span>
