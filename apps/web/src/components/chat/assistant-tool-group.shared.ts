@@ -84,6 +84,43 @@ export function toolGroupElapsedSeconds(
   );
 }
 
+export type ToolStep =
+  | { kind: "tool"; tool: ChatListItem }
+  | { kind: "files"; tools: ChatListItem[] };
+
+const GROUPED_FILE_TOOLS = new Set(["edit_file", "read_file", "write_file"]);
+
+/** Two or more reads, writes or edits in a row collapse into one step. */
+export function groupFileSteps(tools: ChatListItem[]): ToolStep[] {
+  const steps: ToolStep[] = [];
+
+  for (const tool of tools) {
+    const previous = steps.at(-1);
+    const groupable = GROUPED_FILE_TOOLS.has(tool.tool ?? "");
+
+    if (groupable && previous?.kind === "files") {
+      if (previous.tools[0]?.tool === tool.tool) {
+        previous.tools.push(tool);
+        continue;
+      }
+    } else if (
+      groupable &&
+      previous?.kind === "tool" &&
+      previous.tool.tool === tool.tool
+    ) {
+      steps[steps.length - 1] = {
+        kind: "files",
+        tools: [previous.tool, tool],
+      };
+      continue;
+    }
+
+    steps.push({ kind: "tool", tool });
+  }
+
+  return steps;
+}
+
 export type AssistantTurnSegment =
   | {
       groupId?: string;

@@ -15,7 +15,6 @@
   --n-radius: var(--radius);
   --n-radius-sm: calc(var(--radius) - 4px);
   --n-font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
-  --n-content-width: 720px;
   /* Good numbers and gains. Use --destructive for bad ones. */
   --n-positive: oklch(50.8% 0.118 165.612);
 
@@ -23,16 +22,16 @@
     display: flex;
     flex-direction: column;
     gap: var(--n-space-4);
-    max-width: var(--n-content-width);
     color: var(--foreground);
     font-size: var(--n-text-base);
     line-height: 1.5;
     container-type: inline-size;
   }
 
-  /* Pages built around a Table. */
-  .plugin-page-wide {
-    max-width: 960px;
+  /* Pages fill the width the host gives them. A page that is only a short
+     form takes plugin-page-narrow so its fields do not stretch. */
+  .plugin-page-narrow {
+    max-width: 720px;
   }
 
   .plugin-dialog-form {
@@ -60,6 +59,13 @@
 
   .plugin-nowrap {
     white-space: nowrap;
+  }
+
+  /* Long names (titles, URLs) end in "…" so the other columns stay in view. */
+  .plugin-clamp {
+    max-width: 36ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .plugin-secondary {

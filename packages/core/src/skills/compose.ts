@@ -73,7 +73,9 @@ export function composeSkillsCatalog(skills: DiscoveredSkill[]): string {
 
 /** A skill's full instructions, from `load_skill` or a `/skill <name>` message. */
 export function composeLoadedSkillPrompt(skill: DiscoveredSkill): string {
-  const location = `Instruction file: ${JSON.stringify(skill.skillFilePath)}. Resolve relative references and assets to full paths from ${JSON.stringify(skill.directory)} and read them with read_file.`;
+  // The body below is the whole instruction file. Saying so stops agents from
+  // reading it again, which costs its size on every later call of the turn.
+  const location = `Instruction file: ${JSON.stringify(skill.skillFilePath)}. Its full text is below; do not read it again. Skill directory: ${JSON.stringify(skill.directory)}. Resolve relative references and assets to full paths from there and read them with read_file.`;
 
   const source = skill.sourceOrganization
     ? `Shared from ${JSON.stringify(skill.sourceOrganization.name)}. The source is read-only. Use the published-skill paths only with read_file.`
@@ -85,7 +87,7 @@ export function composeLoadedSkillPrompt(skill: DiscoveredSkill): string {
     source,
     location,
     "Follow the instructions below and read any references they require before starting the task.",
-    skill.body.trim(),
+    skill.body.trim().replaceAll("<skill directory>", skill.directory),
   ]
     .filter(Boolean)
     .join("\n");
