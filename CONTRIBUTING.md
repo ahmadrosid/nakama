@@ -99,6 +99,23 @@ issue number too, not just the issue:
 gh pr list --repo ahmadrosid/nakama --search "<issue-number>"
 ```
 
+**Who goes first.** The first claim on an issue holds it, counted from the comment,
+even if the assignment comes later. Say what you plan to change, so the direction is
+agreed before you build. Claimed work gets reviewed first.
+
+- No reply after 2 days on a `stage: now` issue: you may start, and say so on the issue.
+  On `stage: next` or `stage: later`, keep waiting, since the direction is still open.
+- A PR with no claim is not closed, but it waits behind claimed work until the direction
+  is agreed on the issue.
+- If someone claimed first, they are asked whether they have started. If they have not, or
+  give no answer in 3 days, the PR goes ahead and they are offered another issue.
+
+Maintainers and reviewers are not always available. A late reply only means nobody has
+seen it yet, and it does not change your place in the queue.
+
+These steps do not apply to maintainers, or to someone fixing an issue they filed
+themselves. That PR can still be declined if the direction is wrong.
+
 1. Branch from `main` (or fork, then branch). Without write access, fork first:
 
 ```bash
