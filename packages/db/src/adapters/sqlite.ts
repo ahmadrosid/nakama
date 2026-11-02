@@ -2673,12 +2673,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE id = ?
   `);
 
-  const disableUserStmt = db.prepare(`
-    UPDATE users
-    SET disabled_at = ?, updated_at = ?
-    WHERE id = ?
-  `);
-
   // disableMember checks the last-admin rules before it writes, so a
   // concurrent disable, remove or demote can pass the same check. One
   // statement re-checks both install-wide rules: every live org the user
@@ -4974,10 +4968,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const result = deleteWorkflowRunStmt.run(workflowId, runId);
 
       return result.changes > 0;
-    },
-
-    async disableUser(id, disabledAt) {
-      disableUserStmt.run(disabledAt, disabledAt, id);
     },
 
     async disableUserUnlessLastAdmin(id, disabledAt) {
