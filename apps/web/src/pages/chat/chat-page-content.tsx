@@ -10,7 +10,14 @@ import {
 } from "@nakama/ui/dialog";
 import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
-import { lazy, type ReactNode, Suspense, useMemo, useState } from "react";
+import {
+  lazy,
+  type ReactNode,
+  Suspense,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
 import { ArtifactStreamingPanelBridge } from "@/components/chat/artifact-streaming-panel-bridge";
 import { BrowserLiveViewPanelBridge } from "@/components/chat/browser-live-view-panel-bridge";
@@ -155,6 +162,8 @@ export function ChatPageContent({
     sessionId: session?.id ?? null,
   });
 
+  const modelPickerTriggerRef = useRef<HTMLButtonElement>(null);
+
   const readOnlyBanner = readOnlySession ? (
     <p className="mb-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-muted-foreground text-sm">
       View-only {formatSessionChannelLabel(sessionChannel)} conversation. Reply
@@ -181,6 +190,7 @@ export function ChatPageContent({
         draftStorageKey={composerDraftKey}
         error={error}
         headerNotice={skillReviewBanner}
+        modelPickerTriggerRef={modelPickerTriggerRef}
         onBtw={onBtw}
         onConnectProvider={() => setProviderDialogOpen(true)}
         onEditQueuedMessage={editQueuedMessage}
@@ -242,6 +252,7 @@ export function ChatPageContent({
       cognitoSurface={cognitoSurface}
       cognitoToggle={cognitoToggle}
       composer={composer}
+      onSwitchModel={() => modelPickerTriggerRef.current?.click()}
       showSessionBar={!cognitoLocked}
       showUsage={showUsage}
       state={state}
@@ -337,6 +348,7 @@ function ChatConversation({
   cognitoSurface,
   cognitoToggle,
   composer,
+  onSwitchModel,
   showSessionBar,
   showUsage,
   state,
@@ -346,6 +358,7 @@ function ChatConversation({
   cognitoSurface: boolean;
   cognitoToggle: ReactNode;
   composer: ReactNode;
+  onSwitchModel: () => void;
   showSessionBar: boolean;
   showUsage: boolean;
   state: ChatPageState;
@@ -461,6 +474,7 @@ function ChatConversation({
                     { questionnaireAnswers: answers }
                   );
                 }}
+                onSwitchModel={onSwitchModel}
                 profileId={profileId}
                 questionnaire={
                   !busy && queuedMessages.length === 0
