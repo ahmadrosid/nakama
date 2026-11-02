@@ -35,6 +35,7 @@ import type {
   StoredBrowserSessionRecord,
   StoredComposioToolkitRecord,
   StoredComposioUserConnectionRecord,
+  StoredComputerRecord,
   StoredLlmUsageActorStatsRecord,
   StoredLlmUsageDailyStatsRecord,
   StoredLlmUsageModelStatsRecord,
@@ -564,6 +565,35 @@ interface ArtifactOwnerRow {
   user_id: string | null;
   user_name: string | null;
 }
+
+interface ComputerRow {
+  created_at: string;
+  id: string;
+  install_id: string;
+  last_seen_at: string | null;
+  name: string;
+  org_id: string;
+  public_key: string;
+  revoked_at: string | null;
+  user_id: string;
+}
+
+function toComputerRecord(row: ComputerRow): StoredComputerRecord {
+  return {
+    createdAt: row.created_at,
+    id: row.id,
+    installId: row.install_id,
+    lastSeenAt: row.last_seen_at,
+    name: row.name,
+    orgId: row.org_id,
+    publicKey: row.public_key,
+    revokedAt: row.revoked_at,
+    userId: row.user_id,
+  };
+}
+
+const COMPUTER_COLUMNS =
+  "id, org_id, user_id, install_id, name, public_key, created_at, last_seen_at, revoked_at";
 
 interface ArtifactShareRow {
   created_at: string;
@@ -3678,6 +3708,51 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE id = ? AND revoked_at IS NULL
   `);
 
+  const insertComputerStmt = db.prepare(`
+    INSERT INTO computers (${COMPUTER_COLUMNS})
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const getActiveComputerByInstallStmt = db.prepare<
+    ComputerRow,
+    SQLQueryBindings[]
+  >(`
+    SELECT ${COMPUTER_COLUMNS} FROM computers
+    WHERE org_id = ? AND user_id = ? AND install_id = ? AND revoked_at IS NULL
+    LIMIT 1
+  `);
+
+  const updateComputerKeyStmt = db.prepare(`
+    UPDATE computers SET public_key = ?, name = ? WHERE id = ?
+  `);
+
+  const getComputerStmt = db.prepare<ComputerRow, SQLQueryBindings[]>(
+    `SELECT ${COMPUTER_COLUMNS} FROM computers WHERE id = ?`
+  );
+
+  const listComputersForUserStmt = db.prepare<ComputerRow, SQLQueryBindings[]>(`
+    SELECT ${COMPUTER_COLUMNS} FROM computers
+    WHERE org_id = ? AND user_id = ?
+    ORDER BY created_at DESC, id DESC
+  `);
+
+  const revokeComputerStmt = db.prepare(`
+    UPDATE computers SET revoked_at = ?
+    WHERE id = ? AND org_id = ? AND user_id = ? AND revoked_at IS NULL
+  `);
+
+  const setComputerLastSeenStmt = db.prepare(
+    "UPDATE computers SET last_seen_at = ? WHERE id = ?"
+  );
+
+  const deleteExpiredComputerNoncesStmt = db.prepare(
+    "DELETE FROM computer_nonces WHERE expires_at < ?"
+  );
+
+  const insertComputerNonceStmt = db.prepare(
+    "INSERT OR IGNORE INTO computer_nonces (nonce, expires_at) VALUES (?, ?)"
+  );
+
   const getOrgMemberStmt = db.prepare<
     {
       org_id: string;
@@ -4556,6 +4631,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         completedAt
       );
     },
+
+    async consumeComputerNonce(nonce, expiresAt, now) {
+      return db.transaction(() => {
+        deleteExpiredComputerNoncesStmt.run(now);
+
+        return insertComputerNonceStmt.run(nonce, expiresAt).changes > 0;
+      })();
+    },
     async consumeMfaBackupCode(userId, codeHash, usedAt) {
       return consumeMfaBackupCodeStmt.run(usedAt, userId, codeHash).changes > 0;
     },
@@ -4996,6 +5079,40 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       enableUserStmt.run(new Date().toISOString(), id);
     },
 
+    async enrollComputer(record) {
+      return db.transaction(() => {
+        const existing = getActiveComputerByInstallStmt.get(
+          record.orgId,
+          record.userId,
+          record.installId
+        );
+
+        if (existing) {
+          updateComputerKeyStmt.run(record.publicKey, record.name, existing.id);
+
+          return toComputerRecord({
+            ...existing,
+            name: record.name,
+            public_key: record.publicKey,
+          });
+        }
+
+        insertComputerStmt.run(
+          record.id,
+          record.orgId,
+          record.userId,
+          record.installId,
+          record.name,
+          record.publicKey,
+          record.createdAt,
+          record.lastSeenAt,
+          record.revokedAt
+        );
+
+        return record;
+      })();
+    },
+
     async eraseUser(input) {
       return eraseUserTransaction.immediate(input) > 0;
     },
@@ -5102,6 +5219,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const row = getComposioUserConnectionByIdStmt.get(id);
 
       return row ? toComposioUserConnectionRecord(row) : null;
+    },
+
+    async getComputer(id) {
+      const row = getComputerStmt.get(id);
+
+      return row ? toComputerRecord(row) : null;
     },
 
     async getDefaultProfileForOrg(orgId) {
@@ -5698,6 +5821,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         .map((row) => toComposioUserConnectionRecord(row));
     },
 
+    async listComputersForUser(orgId, userId) {
+      return listComputersForUserStmt
+        .all(orgId, userId)
+        .map((row) => toComputerRecord(row));
+    },
+
     async listEphemeralAttachments() {
       return listEphemeralAttachmentsStmt
         .all()
@@ -6175,9 +6304,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return result.changes;
     },
 
+    async revokeComputer({ id, orgId, revokedAt, userId }) {
+      return revokeComputerStmt.run(revokedAt, id, orgId, userId).changes > 0;
+    },
+
     async revokeOrgInvite(orgId, id, revokedAt) {
       return revokeOrgInviteStmt.run(revokedAt, id, orgId).changes > 0;
     },
+    async setComputerLastSeen(id, lastSeenAt) {
+      setComputerLastSeenStmt.run(lastSeenAt, id);
+    },
+
     async setFilePinned(orgId, userId, profileId, path, pinned) {
       if (pinned) {
         db.query(

@@ -771,6 +771,20 @@ export interface StoredArtifactOwnerRecord extends StoredArtifactRecord {
   userName: string | null;
 }
 
+/** A computer that runs Nakama Desktop for one user in one org. */
+export interface StoredComputerRecord {
+  createdAt: string;
+  id: string;
+  installId: string;
+  lastSeenAt: string | null;
+  name: string;
+  orgId: string;
+  /** Ed25519 public key, base64 (raw 32 bytes). */
+  publicKey: string;
+  revokedAt: string | null;
+  userId: string;
+}
+
 export interface StoredArtifactShareRecord {
   createdAt: string;
   createdByUserId: string;
@@ -885,6 +899,15 @@ export interface DatabaseAdapter {
     requestId: string,
     teamOrgId: string,
     completedAt: string
+  ): Promise<boolean>;
+  /**
+   * Records a nonce of a signed computer request. False when it was already
+   * used, so a request cannot be replayed. Also drops expired nonces.
+   */
+  consumeComputerNonce(
+    nonce: string,
+    expiresAt: string,
+    now: string
   ): Promise<boolean>;
   consumeMfaBackupCode(
     userId: string,
@@ -1008,6 +1031,11 @@ export interface DatabaseAdapter {
   disableUserUnlessLastAdmin(id: string, disabledAt: string): Promise<boolean>;
   enableUser(id: string): Promise<void>;
   /**
+   * Saves a computer's key. The active row for the same user, org and install
+   * is reused, so signing in again does not make a second computer.
+   */
+  enrollComputer(record: StoredComputerRecord): Promise<StoredComputerRecord>;
+  /**
    * Resolves to `false`, with nothing written, when the user is missing or is
    * the last usable admin of a live org or the last usable platform admin.
    */
@@ -1069,6 +1097,7 @@ export interface DatabaseAdapter {
   getComposioUserConnectionById(
     id: string
   ): Promise<StoredComposioUserConnectionRecord | null>;
+  getComputer(id: string): Promise<StoredComputerRecord | null>;
   getDefaultProfileForOrg(orgId: string): Promise<StoredProfileRecord | null>;
 
   getLlmUsageStats(orgId: string): Promise<StoredLlmUsageStatsRecord | null>;
@@ -1301,6 +1330,11 @@ export interface DatabaseAdapter {
     orgId: string,
     userId: string
   ): Promise<StoredComposioUserConnectionRecord[]>;
+  /** Newest first, revoked computers included. */
+  listComputersForUser(
+    orgId: string,
+    userId: string
+  ): Promise<StoredComputerRecord[]>;
   listEphemeralAttachments(): Promise<StoredAttachmentRecord[]>;
   listFilePins(
     orgId: string,
@@ -1506,12 +1540,20 @@ export interface DatabaseAdapter {
     sessionId: string | null,
     revokedAt: string
   ): Promise<number>;
+  /** False when the computer is not this user's in this org, or already revoked. */
+  revokeComputer(input: {
+    id: string;
+    orgId: string;
+    revokedAt: string;
+    userId: string;
+  }): Promise<boolean>;
   /** Only a pending invite of this org; the org check is in the statement. */
   revokeOrgInvite(
     orgId: string,
     id: string,
     revokedAt: string
   ): Promise<boolean>;
+  setComputerLastSeen(id: string, lastSeenAt: string): Promise<void>;
   setFilePinned(
     orgId: string,
     userId: string,

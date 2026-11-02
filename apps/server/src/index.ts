@@ -69,6 +69,7 @@ import { AutomationRunner } from "./services/automation-runner";
 import { AutomationService } from "./services/automation-service";
 import { resolveComposioCallbackBaseUrl } from "./services/composio-callback-url";
 import { ComposioService } from "./services/composio-service";
+import { ComputerAuthService } from "./services/computer-auth";
 import { claimLegacyCustomTools } from "./services/custom-tool-handlers";
 import { setToolSecrets } from "./services/custom-tool-shared";
 
@@ -554,6 +555,7 @@ const app = createHonoApp({
   authService,
   automationService,
   composioService,
+  computerAuth: new ComputerAuthService(database.adapter),
   databaseAdapter: database.adapter,
   googleMeetService,
   mcpService,

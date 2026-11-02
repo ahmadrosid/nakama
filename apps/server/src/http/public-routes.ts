@@ -14,6 +14,8 @@ const PUBLIC_ROUTES = new Set([
   "/v1/auth/password-reset/request",
   "/v1/auth/password-reset/complete",
   "/v1/composio/oauth/callback",
+  // Nakama Desktop: each route checks its own device signature or pass.
+  "/v1/llm/token",
 ]);
 
 export function isPublicRouteRequest(

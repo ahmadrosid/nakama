@@ -33,6 +33,7 @@ import { registerDataPortabilityRoutes } from "./routes/data-portability";
 import { registerGoogleMeetRoutes } from "./routes/google-meet";
 import { registerInternalAutomationRoutes } from "./routes/internal-automations";
 import { registerInternalCuratorRoutes } from "./routes/internal-curator";
+import { registerLlmRoutes } from "./routes/llm";
 import { registerMcpOAuthRoutes, registerMcpRoutes } from "./routes/mcp";
 import { registerModelRoutes } from "./routes/models";
 import { registerNotificationDestinationRoutes } from "./routes/notification-destinations";
@@ -387,6 +388,11 @@ export function createHonoApp(options: ServerOptions) {
   registerInternalCuratorRoutes(app, options);
   registerNotificationWebhookRoutes(app, options);
   registerAcpMcpRoutes(app);
+
+  if (options.computerAuth) {
+    registerLlmRoutes(app, options.computerAuth);
+  }
+
   registerComposioOAuthRoutes(app, options);
   registerMcpOAuthRoutes(app, options);
   app.use("*", createOrgContextMiddleware(options));

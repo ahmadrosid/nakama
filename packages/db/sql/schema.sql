@@ -656,6 +656,32 @@ CREATE UNIQUE INDEX IF NOT EXISTS artifact_shares_active_path_unique
   ON artifact_shares (org_id, profile_id, source_path)
   WHERE revoked_at IS NULL;
 
+-- A computer that runs Nakama Desktop for one user in one org. It signs in
+-- with a device key; only the public key is stored here.
+CREATE TABLE IF NOT EXISTS computers (
+  id TEXT PRIMARY KEY NOT NULL,
+  org_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  install_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  public_key TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_seen_at TEXT,
+  revoked_at TEXT,
+  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS computers_active_install_unique
+  ON computers (org_id, user_id, install_id)
+  WHERE revoked_at IS NULL;
+
+-- Nonces of signed computer requests, kept until they are too old to replay.
+CREATE TABLE IF NOT EXISTS computer_nonces (
+  nonce TEXT PRIMARY KEY NOT NULL,
+  expires_at TEXT NOT NULL
+);
+
 -- Security audit ledger. Deliberately has no foreign keys so account or org
 -- erasure cannot remove the historical record.
 CREATE TABLE IF NOT EXISTS audit_events (

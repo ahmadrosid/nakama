@@ -2384,3 +2384,25 @@ test("upgrades drop the removed token optimiser table and column", () => {
     db.close();
   }
 });
+
+test("an existing database gets the computers tables", () => {
+  const db = new Database(":memory:");
+
+  try {
+    migrateDatabase(db);
+    db.exec("DROP TABLE computers; DROP TABLE computer_nonces;");
+
+    migrateDatabase(db);
+
+    const tables = db
+      .prepare<{ name: string }, SQLQueryBindings[]>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('computers', 'computer_nonces') ORDER BY name"
+      )
+      .all()
+      .map((row) => row.name);
+
+    expect(tables).toEqual(["computer_nonces", "computers"]);
+  } finally {
+    db.close();
+  }
+});
