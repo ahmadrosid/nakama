@@ -448,11 +448,12 @@ export async function createNakamaDataExport(
 
               // The export stays incomplete without this file, so fail with
               // the path instead of a raw errno that names nothing actionable.
-              const detail =
-                error instanceof Error ? error.message : String(error);
+              // Only the errno code goes in the message: the platform message
+              // carries the absolute path the server tried to open.
+              const code = getNodeErrorCode(error) ?? "read failed";
 
               throw new NakamaApiError(
-                `Cannot read "${file.relativePath}" (${detail}). Fix the file's owner or permissions, or remove it, then retry the export.`,
+                `Cannot read "${file.relativePath}" (${code}). Fix the file's owner or permissions, or remove it, then retry the export.`,
                 409
               );
             }
