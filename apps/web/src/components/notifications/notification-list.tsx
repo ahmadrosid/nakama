@@ -24,7 +24,7 @@ function CompactNotificationListItem({
 }) {
   return (
     <Link
-      className="flex h-8 min-w-0 items-center gap-2 rounded-md px-1.5 text-sm transition-colors hover:bg-muted/60"
+      className="flex h-8 min-w-0 items-center gap-2 rounded-md px-1.5 text-sm transition-colors hover:bg-accent"
       onClick={onSelect}
       to={item.href}
     >
