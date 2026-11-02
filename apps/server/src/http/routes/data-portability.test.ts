@@ -17,6 +17,7 @@ import {
   NAKAMA_ORG_EXPORT_MANIFEST,
   NAKAMA_USER_EXPORT_MANIFEST,
 } from "../../services/data-portability";
+import { encryptBackup } from "../../services/scheduled-backup";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
@@ -688,6 +689,55 @@ describe("data portability routes", () => {
     await expect(
       readFile(join(getUserConfigDir(), "config.ini"), "utf8")
     ).resolves.toBe("original");
+  });
+
+  test("platform admin can restore an encrypted backup sent as a raw ZIP", async () => {
+    const previousKey = process.env.NAKAMA_SECRETS_KEY;
+    const key = Buffer.alloc(32, 4);
+    process.env.NAKAMA_SECRETS_KEY = key.toString("base64");
+
+    try {
+      const { app, authService, databaseAdapter } = createApp();
+
+      const session = await loginPlatformAdminSession(
+        app,
+        authService,
+        databaseAdapter
+      );
+
+      await writeFile(join(getUserConfigDir(), "config.ini"), "original");
+
+      const encrypted = encryptBackup(
+        (await createNakamaDataExport({ rootDir: getUserConfigDir() })).data,
+        key
+      );
+
+      await writeFile(join(getUserConfigDir(), "config.ini"), "changed");
+
+      const send = (path: string) =>
+        app.fetch(
+          new Request(`http://localhost:4310/v1/platform/data/import/${path}`, {
+            body: encrypted,
+            headers: session.headers({
+              "Content-Type": "application/zip",
+              "X-CSRF-Token": session.csrfToken,
+            }),
+            method: "POST",
+          })
+        );
+
+      expect((await send("preview")).status).toBe(200);
+      expect((await send("restore?confirm=true")).status).toBe(200);
+      await expect(
+        readFile(join(getUserConfigDir(), "config.ini"), "utf8")
+      ).resolves.toBe("original");
+    } finally {
+      if (previousKey === undefined) {
+        delete process.env.NAKAMA_SECRETS_KEY;
+      } else {
+        process.env.NAKAMA_SECRETS_KEY = previousKey;
+      }
+    }
   });
 
   test("non-platform users cannot export or import data", async () => {

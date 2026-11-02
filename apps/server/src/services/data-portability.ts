@@ -970,8 +970,11 @@ export function decodeArchiveRequestData(data: string): Buffer {
     throw new NakamaApiError("Import archive data is required.", 400);
   }
 
-  const archive = Buffer.from(trimmed, "base64");
+  return decryptArchiveIfNeeded(Buffer.from(trimmed, "base64"));
+}
 
+// A scheduled backup is encrypted; the raw and the base64 body forms both need it opened.
+function decryptArchiveIfNeeded(archive: Buffer): Buffer {
   if (!isEncryptedBackup(archive)) {
     return archive;
   }
@@ -1027,7 +1030,7 @@ export async function readImportRequest(
   }
 
   return {
-    archive,
+    archive: decryptArchiveIfNeeded(archive),
     confirm: new URL(request.url).searchParams.get("confirm") === "true",
   };
 }
