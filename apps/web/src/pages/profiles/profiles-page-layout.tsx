@@ -100,11 +100,16 @@ function ProfileForbiddenState() {
       </div>
 
       <div className="flex flex-wrap items-center justify-center gap-2">
-        <Button render={<Link to={PAGE_PATHS.chat} />} type="button">
+        <Button
+          nativeButton={false}
+          render={<Link to={PAGE_PATHS.chat} />}
+          type="button"
+        >
           Back to chat
         </Button>
         {activeOrg ? (
           <Button
+            nativeButton={false}
             render={<Link to={teamDetailPath(activeOrg.id)} />}
             type="button"
             variant="outline"
