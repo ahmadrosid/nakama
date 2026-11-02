@@ -1,0 +1,121 @@
+<style>
+.split {
+  display: grid;
+  grid-template-columns: 22cqw 1fr;
+  gap: 5cqw;
+  align-items: end;
+}
+.stat {
+  padding-top: 1cqw;
+  margin-top: 1.6cqw;
+  border-top: 1px solid var(--line);
+}
+.stat.on {
+  border-top: 2px solid var(--accent);
+}
+.big {
+  display: block;
+  font-size: 3.6cqw;
+  font-weight: 500;
+  letter-spacing: -0.045em;
+}
+.on .big {
+  color: var(--accent-ink);
+}
+.big.none {
+  font-size: 2.2cqw;
+  color: var(--subtle);
+}
+.chart,
+.bar-labels {
+  display: flex;
+  gap: 0.8cqw;
+  align-items: flex-end;
+  height: 21cqw;
+  border-bottom: 1px solid var(--line);
+}
+.bar {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 100%;
+  font-size: 1.2cqw;
+  font-weight: 600;
+  text-align: center;
+}
+.bar i {
+  margin-top: 0.6cqw;
+  background: var(--ink);
+  opacity: 0.85;
+}
+.bar.on i {
+  background: var(--accent);
+  opacity: 1;
+}
+.bar-labels {
+  height: auto;
+  padding-top: 0.8cqw;
+  border: 0;
+}
+.bar-labels span {
+  flex: 1;
+  font: 0.9cqw var(--mono);
+  color: var(--subtle);
+  text-align: center;
+}
+@media screen and (max-width: 760px) and (orientation: portrait) {
+  .split {
+    grid-template-columns: 1fr;
+  }
+  .big {
+    font-size: 32px;
+  }
+  .big.none {
+    font-size: 20px;
+  }
+  .bar {
+    font-size: 13px;
+  }
+  .chart {
+    height: 180px;
+  }
+  .bar-labels span {
+    font-size: 10px;
+  }
+}
+</style>
+<section aria-label="Metric" class="slide">
+  <p class="kicker">Section · Metric</p>
+  <h1>1.5M users, up 25% this quarter.</h1>
+  <div class="split fill">
+    <div>
+      <div class="stat on">
+        <span class="big">+25%</span>
+        <p class="body">users, Q2 to Q3</p>
+      </div>
+      <div class="stat">
+        <span class="big">310K</span>
+        <p class="body">new users in Q3</p>
+      </div>
+      <div class="stat">
+        <span class="big none">Not measured</span>
+        <p class="body">retention</p>
+      </div>
+    </div>
+    <div>
+      <span class="label">Users per quarter</span>
+      <div class="chart">
+        <div class="bar">0.9M<i style="height: 50.4%"></i></div>
+        <div class="bar"><i style="height: 58.8%"></i></div>
+        <div class="bar"><i style="height: 67.2%"></i></div>
+        <div class="bar on">1.5M<i style="height: 84%"></i></div>
+      </div>
+      <div class="bar-labels">
+        <span>Q4</span><span>Q1</span><span>Q2</span><span>Q3</span>
+      </div>
+    </div>
+  </div>
+  <p class="source">Source: where the numbers come from, and the date.</p>
+  <aside class="notes"><p>Details that do not fit on the slide.</p></aside>
+</section>

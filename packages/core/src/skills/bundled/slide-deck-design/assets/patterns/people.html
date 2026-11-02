@@ -1,0 +1,60 @@
+<style>
+.people {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.3cqw 2.4cqw;
+}
+.person {
+  display: flex;
+  gap: 1cqw;
+  align-items: center;
+  padding-top: 1cqw;
+  font-size: 1.1cqw;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+}
+.person b {
+  display: block;
+  font-size: 1.35cqw;
+  font-weight: 600;
+  color: var(--ink);
+}
+@media screen and (max-width: 760px) and (orientation: portrait) {
+  .people {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .person {
+    font-size: 12px;
+  }
+  .person b {
+    font-size: 14px;
+  }
+}
+</style>
+<section aria-label="People" class="slide">
+  <p class="kicker">Section · People</p>
+  <h1>The team behind the launch.</h1>
+  <div class="people fill">
+    <div class="person">
+      <span class="av">AB</span>
+      <div><b>Name One</b>Role or detail</div>
+    </div>
+    <div class="person">
+      <span class="av">CD</span>
+      <div><b>Name Two</b>Role or detail</div>
+    </div>
+    <div class="person">
+      <span class="av">EF</span>
+      <div><b>Name Three</b>Role or detail</div>
+    </div>
+    <div class="person">
+      <span class="av">GH</span>
+      <div><b>Name Four</b>Role or detail</div>
+    </div>
+  </div>
+  <p class="source">Source: where the list comes from, and the date.</p>
+  <aside class="notes">
+    <p>Who these people are and why they are here.</p>
+  </aside>
+</section>
