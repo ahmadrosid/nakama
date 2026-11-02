@@ -970,8 +970,11 @@ export function decodeArchiveRequestData(data: string): Buffer {
     throw new NakamaApiError("Import archive data is required.", 400);
   }
 
-  const archive = Buffer.from(trimmed, "base64");
+  return decryptArchiveIfNeeded(Buffer.from(trimmed, "base64"));
+}
 
+// A scheduled backup is encrypted; the raw and the base64 body forms both need it opened.
+function decryptArchiveIfNeeded(archive: Buffer): Buffer {
   if (!isEncryptedBackup(archive)) {
     return archive;
   }
@@ -987,6 +990,22 @@ export function decodeArchiveRequestData(data: string): Buffer {
       400
     );
   }
+}
+
+/** Checks and opens a raw ZIP body, the form a browser sends. */
+export function decodeArchiveRequestBytes(archive: Buffer): Buffer {
+  if (archive.length > MAX_IMPORT_ARCHIVE_BYTES) {
+    throw new NakamaApiError(
+      `Import archive must be at most ${megabytes(MAX_IMPORT_ARCHIVE_BYTES)}.`,
+      413
+    );
+  }
+
+  if (archive.length === 0) {
+    throw new NakamaApiError("Import archive data is required.", 400);
+  }
+
+  return decryptArchiveIfNeeded(archive);
 }
 
 function megabytes(bytes: number): string {

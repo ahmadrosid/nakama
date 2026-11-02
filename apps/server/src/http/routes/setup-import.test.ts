@@ -83,6 +83,38 @@ describe("setup import routes", () => {
     await expect(readFile(configPath, "utf8")).resolves.toBe("changed");
   });
 
+  test("restores a raw ZIP before setup, and only with confirm in the query", async () => {
+    const { app } = createApp();
+    const configPath = join(getUserConfigDir(), "config.ini");
+    await writeFile(configPath, "original");
+
+    const archive = (
+      await createNakamaDataExport({ rootDir: getUserConfigDir() })
+    ).data;
+
+    await writeFile(configPath, "changed");
+
+    const send = (contentType: string, query: string) =>
+      app.fetch(
+        new Request(
+          `http://localhost:4310/v1/auth/setup/import/restore${query}`,
+          {
+            body: archive,
+            headers: { "Content-Type": contentType },
+            method: "POST",
+          }
+        )
+      );
+
+    // A cross-site form can send text/plain without a preflight.
+    expect((await send("text/plain", "?confirm=true")).status).toBe(415);
+    expect((await send("application/zip", "")).status).toBe(400);
+    await expect(readFile(configPath, "utf8")).resolves.toBe("changed");
+
+    expect((await send("application/zip", "?confirm=true")).status).toBe(200);
+    await expect(readFile(configPath, "utf8")).resolves.toBe("original");
+  });
+
   test("restore blocks traffic and waits for active turns before replacing data", async () => {
     let stopped = false;
 
