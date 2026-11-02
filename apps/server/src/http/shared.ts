@@ -503,7 +503,7 @@ export function assertJsonRequest(request: Request): void {
  * Bun can leave a body read pending forever when the client hangs up, which
  * would pin whatever the caller holds, such as the restore lock.
  */
-export function readUntilClientGone<T>(
+function readUntilClientGone<T>(
   request: Request,
   read: Promise<T>
 ): Promise<T> {
