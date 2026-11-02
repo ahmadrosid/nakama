@@ -155,6 +155,7 @@ import {
   defaultOllamaBaseUrl,
   deleteArtifactFile,
   deleteAttachmentBytes,
+  extractExplicitSkillName,
   extractImageParts,
   findCustomModel,
   findProviderInstance,
@@ -6617,6 +6618,18 @@ export class AgentService {
 
           if (hostContext) {
             parts.push(hostContext);
+          }
+        } else if (this.skillsService) {
+          // Without this the request is dropped silently and the agent answers
+          // as if the skill ran.
+          const requestedSkill = extractExplicitSkillName(
+            context?.userMessage ?? ""
+          );
+
+          if (requestedSkill) {
+            parts.push(
+              `The user asked for the skill "${requestedSkill}", but it is not assigned to this agent, so it is not loaded. Say so first, and tell the user an admin can add it in Agent → Skills → Add skill. Then answer without it.`
+            );
           }
         }
 

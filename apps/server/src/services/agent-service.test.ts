@@ -1,11 +1,17 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import type { ProviderClient, ToolCall } from "@nakama/core";
+import {
+  ensureBundledSkillFiles,
+  type GenerateChatInput,
+  type ProviderClient,
+  type ToolCall,
+} from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
 import { createDefaultProfile } from "./agent-service-test-fixtures";
 import { McpClientManager } from "./mcp-client-manager";
 import { McpService } from "./mcp-service";
+import { SkillsService } from "./skills-service";
 
 const TEST_ORG_ID = "org_test";
 
@@ -208,5 +214,74 @@ describe("AgentService MCP discovery", () => {
         allowed ? { ok: true } : { error: expect.any(String) }
       );
     }
+  });
+});
+
+describe("AgentService /skill requests", () => {
+  setupTestConfigDir("nakama-explicit-skill-");
+
+  async function systemPromptFor(message: string): Promise<string> {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+
+    const skills = new SkillsService(db);
+    await ensureBundledSkillFiles();
+    await skills.syncDiscoveredSkills();
+
+    const manage = (await skills.listSkills()).skills.find(
+      (skill) => skill.name === "manage-skills"
+    );
+
+    await db.assignSkillToProfile("profile_default", manage!.id);
+
+    const agent = new AgentService(null, null, db);
+    agent.setSkillsService(skills);
+
+    let system = "";
+
+    const answer = {
+      assistantMessage: { content: "ok", role: "assistant", toolCalls: [] },
+      content: "ok",
+      toolCalls: [],
+    };
+
+    const record = (input: GenerateChatInput) => {
+      system = input.system ?? "";
+
+      return Promise.resolve(answer);
+    };
+
+    Object.assign(agent, {
+      _providerConfigured: true,
+      createHarnessForProfile: () => ({
+        provider: { generateChat: record, name: "openai", streamChat: record },
+      }),
+    });
+
+    const sessionId = await agent.createSession(
+      TEST_ORG_ID,
+      "web",
+      "profile_default",
+      null
+    );
+
+    const session = await agent.sessions.get(sessionId, TEST_ORG_ID);
+    await session?.send({ message });
+
+    return system;
+  }
+
+  test("loads an assigned skill", async () => {
+    const system = await systemPromptFor("/skill manage-skills list them");
+
+    expect(system).toContain("# Active Skill: manage-skills");
+    expect(system).not.toContain('asked for the skill "manage-skills"');
+  });
+
+  test("tells the agent when the named skill is not assigned", async () => {
+    const system = await systemPromptFor("/skill ghost-notes summarize");
+
+    expect(system).toContain('"ghost-notes"');
+    expect(system).not.toContain("# Active Skill: ghost-notes");
   });
 });
