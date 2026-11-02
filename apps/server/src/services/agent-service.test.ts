@@ -220,7 +220,10 @@ describe("AgentService MCP discovery", () => {
 describe("AgentService /skill requests", () => {
   setupTestConfigDir("nakama-explicit-skill-");
 
-  async function systemPromptFor(message: string): Promise<string> {
+  async function systemPromptFor(
+    message: string,
+    { assignMissingSkill = false } = {}
+  ): Promise<string> {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertProfile(createDefaultProfile());
 
@@ -233,6 +236,20 @@ describe("AgentService /skill requests", () => {
     );
 
     await db.assignSkillToProfile("profile_default", manage!.id);
+
+    if (assignMissingSkill) {
+      // Assigned, but its files are gone, so it cannot load.
+      const record = await db.getSkillByName("manage-skills");
+
+      await db.upsertSkill({
+        ...record!,
+        id: "skill_ghost_notes",
+        name: "ghost-notes",
+        sourcePath: "/missing/ghost-notes",
+      });
+
+      await db.assignSkillToProfile("profile_default", "skill_ghost_notes");
+    }
 
     const agent = new AgentService(null, null, db);
     agent.setSkillsService(skills);
@@ -283,5 +300,21 @@ describe("AgentService /skill requests", () => {
 
     expect(system).toContain('"ghost-notes"');
     expect(system).not.toContain("# Active Skill: ghost-notes");
+  });
+
+  test("ignores 'use skill' in ordinary prose", async () => {
+    const system = await systemPromptFor("how do I use skill based routing?");
+
+    expect(system).not.toContain('"based"');
+  });
+
+  test("does not tell the user to add a skill that is assigned but did not load", async () => {
+    const system = await systemPromptFor("/skill ghost-notes summarize", {
+      assignMissingSkill: true,
+    });
+
+    expect(system).toContain('"ghost-notes"');
+    expect(system).not.toContain("# Active Skill: ghost-notes");
+    expect(system).not.toContain("Add skill");
   });
 });

@@ -6621,14 +6621,29 @@ export class AgentService {
           }
         } else if (this.skillsService) {
           // Without this the request is dropped silently and the agent answers
-          // as if the skill ran.
-          const requestedSkill = extractExplicitSkillName(
-            context?.userMessage ?? ""
-          );
+          // as if the skill ran. Only a message that starts with `/skill` is a
+          // command: "use skill based routing" is prose, not a skill named
+          // "based".
+          const message = context?.userMessage?.trim() ?? "";
+
+          const requestedSkill = /^\/skill\s/i.test(message)
+            ? extractExplicitSkillName(message)
+            : null;
 
           if (requestedSkill) {
+            // An assigned skill can still fail to load (turned off, or its
+            // files are gone), and "add it" is the wrong advice for that.
+            const assigned = (
+              await this.skillsService.listSkillSummariesForProfile(
+                orgId,
+                profileId
+              )
+            ).some((skill) => skill.name === requestedSkill);
+
             parts.push(
-              `The user asked for the skill "${requestedSkill}", but it is not assigned to this agent, so it is not loaded. Say so first, and tell the user an admin can add it in Agent → Skills → Add skill. Then answer without it.`
+              assigned
+                ? `The user asked for the skill "${requestedSkill}". It is assigned to this agent, but it did not load. Say so first, and tell the user an admin can check it in Agent → Skills. Then answer without it.`
+                : `The user asked for the skill "${requestedSkill}", but it is not assigned to this agent, so it is not loaded. Say so first, and tell the user an admin can add it in Agent → Skills → Add skill. Then answer without it.`
             );
           }
         }
