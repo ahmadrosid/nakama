@@ -1,6 +1,17 @@
 "use strict";
 
-const { ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer } = require("electron");
+
+// Only the app's own first launch page gets the choice bridge.
+if (
+  window.location.protocol === "file:" &&
+  window.location.pathname.endsWith("/first-run.html")
+) {
+  contextBridge.exposeInMainWorld("nakamaFirstRun", {
+    cancel: () => ipcRenderer.invoke("nakama:first-run-cancel"),
+    choose: (choice) => ipcRenderer.invoke("nakama:first-run", choice),
+  });
+}
 
 // Observe the existing web preference without exposing native APIs to the page.
 window.addEventListener("DOMContentLoaded", () => {

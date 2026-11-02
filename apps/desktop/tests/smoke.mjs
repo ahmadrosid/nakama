@@ -6,7 +6,15 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { app, Menu, nativeImage, nativeTheme } from "electron";
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  Menu,
+  nativeImage,
+  nativeTheme,
+} from "electron";
+import { runFirstRun } from "../first-run.mjs";
 import {
   configureUpdates,
   createWindow,
@@ -341,6 +349,84 @@ async function run() {
       await local?.stop();
     }
   }
+
+  // The first launch page, with the browser and the local sign-in stubbed.
+  const health = createServer((_request, response) => {
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ apiVersion: 1 }));
+  });
+
+  await new Promise((resolve) => health.listen(0, "127.0.0.1", resolve));
+  const healthUrl = `http://127.0.0.1:${health.address().port}`;
+  const firstRunDir = await mkdtemp(join(tmpdir(), "nakama-first-run-"));
+  const opened = [];
+
+  const firstRun = () =>
+    runFirstRun({
+      BrowserWindow,
+      ipcMain,
+      openExternal: async (url) => {
+        opened.push(url);
+      },
+      preload: join(import.meta.dirname, "../preload.cjs"),
+      signIn: async ({ cloudUrl, openExternal }) => {
+        await openExternal(`${cloudUrl}/desktop/connect`);
+      },
+      userDataDir: firstRunDir,
+    });
+
+  const seenFirstRunWindows = new Set();
+
+  const firstRunWindow = async () => {
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      const found = BrowserWindow.getAllWindows().find(
+        (candidate) =>
+          !(
+            seenFirstRunWindows.has(candidate.id) ||
+            candidate.isDestroyed() ||
+            candidate.webContents.isLoading()
+          ) && candidate.webContents.getURL().endsWith("first-run.html")
+      );
+
+      if (found) {
+        seenFirstRunWindows.add(found.id);
+
+        return found;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+
+    throw new Error("The first launch page did not open.");
+  };
+
+  const cloudRun = firstRun();
+  let page = await firstRunWindow();
+
+  assert.match(
+    await page.webContents.executeJavaScript(
+      "window.nakamaFirstRun.choose({ mode: 'cloud', url: 'http://remote.example' }).then(() => 'saved', (error) => error.message)"
+    ),
+    /HTTPS/
+  );
+  void page.webContents.executeJavaScript(
+    `window.nakamaFirstRun.choose({ mode: 'cloud', url: '${healthUrl}' })`
+  );
+  assert.deepEqual(await cloudRun, { choice: "cloud" });
+  assert.deepEqual(opened, [`${healthUrl}/desktop/connect`]);
+
+  const localRun = firstRun();
+  page = await firstRunWindow();
+  void page.webContents.executeJavaScript(
+    "window.nakamaFirstRun.choose({ mode: 'local' })"
+  );
+  assert.deepEqual(await localRun, { choice: "local" });
+  assert.equal(
+    JSON.parse(await readFile(join(firstRunDir, "desktop.json"), "utf8"))
+      .choice,
+    "local"
+  );
+  health.close();
 
   clearTimeout(timeout);
   console.log(

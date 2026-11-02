@@ -13,11 +13,17 @@ import {
   app,
   BrowserWindow,
   dialog,
+  ipcMain,
   Menu,
   nativeTheme,
   safeStorage,
   shell,
 } from "electron";
+import {
+  createLocalSignIn,
+  readDesktopConfig,
+  runFirstRun,
+} from "./first-run.mjs";
 
 async function loadDesktopSecretsKey() {
   if (
@@ -571,6 +577,7 @@ if (!process.argv.includes("--smoke-test")) {
   let localServer;
   let quitting = false;
   let recovery = null;
+  let started = false;
   app.setName("Nakama");
   app.setPath(
     "userData",
@@ -635,9 +642,27 @@ if (!process.argv.includes("--smoke-test")) {
           }
         });
 
+        const userDataDir = app.getPath("userData");
+
+        // First launch: sign in to Nakama Cloud, or use your own API keys.
+        if (!(await readDesktopConfig(userDataDir))) {
+          await runFirstRun({
+            BrowserWindow,
+            ipcMain,
+            openExternal: (url) => shell.openExternal(url),
+            preload: join(import.meta.dirname, "preload.cjs"),
+            signIn: createLocalSignIn({
+              dataDir,
+              serverUrl: localServer.url,
+            }),
+            userDataDir,
+          });
+        }
+
         return createWindow(`${localServer.url}/chat`);
       })
       .then(async () => {
+        started = true;
         installDesktopMenu(null, recovery);
 
         if (app.isPackaged && !process.windowsStore && !quitting) {
@@ -661,10 +686,19 @@ if (!process.argv.includes("--smoke-test")) {
         }
       })
       .catch((error) => {
-        dialog.showErrorBox("Cannot open Nakama", error.message);
+        // Closing the first launch page is a quit, not an error.
+        if (error.message !== "first-run-closed") {
+          dialog.showErrorBox("Cannot open Nakama", error.message);
+        }
+
         app.quit();
       });
-    app.on("window-all-closed", () => app.quit());
+    app.on("window-all-closed", () => {
+      // The first launch page closes before the app window opens.
+      if (started) {
+        app.quit();
+      }
+    });
     app.on("before-quit", (event) => {
       quitting = true;
 

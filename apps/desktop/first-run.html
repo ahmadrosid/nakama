@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"
+      http-equiv="Content-Security-Policy"
+    >
+    <title>Nakama</title>
+    <style>
+    :root {
+      --bg: #fafafa;
+      --fg: #18181b;
+      --muted: #71717a;
+      --line: #e4e4e7;
+      --accent: #2563eb;
+      --danger: #dc2626;
+      font:
+        14px / 1.5 -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+      color-scheme: light dark;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111113;
+        --fg: #fafafa;
+        --muted: #a1a1aa;
+        --line: #27272a;
+        --accent: #60a5fa;
+        --danger: #f87171;
+      }
+    }
+
+    body {
+      margin: 0;
+      color: var(--fg);
+      background: var(--bg);
+    }
+
+    main {
+      display: grid;
+      gap: 14px;
+      padding: 48px 40px;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: 22px;
+    }
+
+    button {
+      padding: 10px 16px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: 8px;
+    }
+
+    .primary {
+      color: #fff;
+      background: var(--accent);
+      border: 0;
+    }
+
+    .secondary {
+      color: inherit;
+      background: transparent;
+      border: 1px solid var(--line);
+    }
+
+    .link {
+      justify-self: center;
+      padding: 4px;
+      font-weight: 500;
+      color: var(--muted);
+      background: none;
+      border: 0;
+    }
+
+    input {
+      padding: 9px 12px;
+      font: inherit;
+      color: inherit;
+      background: transparent;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+
+    label {
+      font-weight: 600;
+    }
+
+    .row {
+      display: grid;
+      gap: 6px;
+    }
+
+    .error {
+      min-height: 1.5em;
+      margin: 0;
+      color: var(--danger);
+    }
+
+    button:disabled {
+      cursor: default;
+      opacity: 0.6;
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Welcome to Nakama</h1>
+      <div class="row" id="choices">
+        <button class="primary" id="sign-in" type="button">
+          Sign in to Nakama
+        </button>
+        <button class="secondary" id="company" type="button">
+          Use my company's server
+        </button>
+        <form class="row" hidden id="company-form">
+          <label for="url">Server address</label>
+          <input id="url" placeholder="https://nakama.example.com" type="url">
+          <button class="primary" type="submit">Continue</button>
+        </form>
+        <button class="link" id="local" type="button">
+          Use my own API keys instead
+        </button>
+      </div>
+      <div class="row" hidden id="waiting">
+        <p>Finish in your browser</p>
+        <button class="secondary" id="cancel" type="button">Cancel</button>
+      </div>
+      <p aria-live="polite" class="error" id="error"></p>
+    </main>
+    <script>
+    "use strict";
+    const byId = (id) => document.getElementById(id);
+    const choices = byId("choices");
+    const waiting = byId("waiting");
+    const errorText = byId("error");
+
+    function setWaiting(on) {
+      choices.hidden = on;
+      waiting.hidden = !on;
+    }
+
+    async function choose(choice) {
+      errorText.textContent = "";
+      setWaiting(choice.mode === "cloud");
+
+      try {
+        await window.nakamaFirstRun.choose(choice);
+      } catch (error) {
+        // Electron prefixes errors from the main process; show the reason only.
+        const message = String(error?.message ?? error).replace(
+          /^Error invoking remote method '[^']+': (Error: )?/,
+          ""
+        );
+        errorText.textContent =
+          message === "first-run-cancelled" ? "" : message;
+        setWaiting(false);
+      }
+    }
+
+    byId("sign-in").addEventListener("click", () => choose({ mode: "cloud" }));
+    byId("company").addEventListener("click", () => {
+      byId("company-form").hidden = false;
+      byId("url").focus();
+    });
+    byId("company-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      choose({ mode: "cloud", url: byId("url").value });
+    });
+    byId("local").addEventListener("click", () => choose({ mode: "local" }));
+    byId("cancel").addEventListener("click", () =>
+      window.nakamaFirstRun.cancel()
+    );
+    </script>
+  </body>
+</html>

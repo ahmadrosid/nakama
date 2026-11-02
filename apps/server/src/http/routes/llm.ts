@@ -416,7 +416,7 @@ const signInRequestSchema = z.object({
 
 /**
  * This computer's own sign-in to Nakama Cloud, used by the desktop app on its
- * local server. Platform admin only: it changes the install's providers.
+ * local server. Local token or platform admin: it changes the providers.
  */
 export function registerNakamaCloudSignInRoutes(
   app: HonoApp,
@@ -424,14 +424,23 @@ export function registerNakamaCloudSignInRoutes(
 ): void {
   const { agent } = options;
 
+  // The desktop app calls with this computer's local token (a 0600 file).
+  const requireThisComputer = (c: Parameters<typeof getRequestAuth>[0]) => {
+    const auth = getRequestAuth(c);
+
+    if (auth.mode !== "local-token") {
+      requirePlatformAdminFromContext(c);
+    }
+  };
+
   app.get("/v1/nakama-cloud", (c) => {
-    requirePlatformAdminFromContext(c);
+    requireThisComputer(c);
 
     return c.json(agent.nakamaCloudStatus(), 200);
   });
 
   app.post("/v1/nakama-cloud/sign-in", async (c) => {
-    requirePlatformAdminFromContext(c);
+    requireThisComputer(c);
 
     const request = signInRequestSchema.safeParse(
       await readJson(c.req.raw, z.unknown())
@@ -445,7 +454,7 @@ export function registerNakamaCloudSignInRoutes(
   });
 
   app.delete("/v1/nakama-cloud", async (c) => {
-    requirePlatformAdminFromContext(c);
+    requireThisComputer(c);
     await agent.signOutNakamaCloud();
 
     return c.body(null, 204);

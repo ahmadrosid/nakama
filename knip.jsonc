@@ -16,7 +16,7 @@
     "apps/desktop": {
       "entry": ["preload.cjs", "tests/smoke.mjs"],
       // PowerShell 7 is supplied by the Windows build host.
-      "ignoreBinaries": ["pwsh"],
+      "ignoreBinaries": ["pwsh", "scutil"],
       "project": ["*.mjs", "*.cjs", "tests/*.mjs", "scripts/*.mjs"]
     },
     "packages/plugins/data-view": {
