@@ -14,6 +14,7 @@ import type {
   MfaPolicyResponse,
   MfaTotpStartResponse,
   MfaTotpVerifyResponse,
+  NakamaCloudStatus,
   PasskeyAuthenticationOptionsResponse,
   PasskeyCredentialResponse,
   PasskeyRegistrationOptionsResponse,
@@ -256,6 +257,15 @@ export class AuthClient extends ChannelsClient {
       body: JSON.stringify(request),
       method: "POST",
     });
+  }
+
+  /** This computer's sign-in to Nakama Cloud (desktop local server). */
+  async getNakamaCloudStatus(): Promise<NakamaCloudStatus> {
+    return this.request<NakamaCloudStatus>("/v1/nakama-cloud");
+  }
+
+  async signOutNakamaCloud(): Promise<void> {
+    await this.request<undefined>("/v1/nakama-cloud", { method: "DELETE" });
   }
 
   async listComputers(): Promise<ListComputersResponse> {

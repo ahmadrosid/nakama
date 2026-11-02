@@ -19,6 +19,7 @@ import { BrowserRuntimeSettingsCard } from "@/components/settings/BrowserRuntime
 import {
   BrowserSessionsCard,
   ComputersCard,
+  NakamaCloudCard,
 } from "@/components/settings/BrowserSessionsCard";
 import { DataPortabilityPanel } from "@/components/settings/DataPortabilityPanel";
 import { ImageGenerationSettingsCard } from "@/components/settings/ImageGenerationSettingsCard";
@@ -222,6 +223,10 @@ export function SettingsPage() {
 
         <section id="computers">
           <ComputersCard />
+        </section>
+
+        <section id="nakama-cloud">
+          <NakamaCloudCard />
         </section>
 
         {isOrgAdmin ? (

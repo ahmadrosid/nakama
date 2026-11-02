@@ -191,3 +191,59 @@ export function ComputersCard() {
     </Card>
   );
 }
+
+/** On Nakama Desktop: the Nakama Cloud account whose models this computer uses. */
+export function NakamaCloudCard() {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+
+  const statusQuery = useQuery({
+    queryFn: () => client.getNakamaCloudStatus(),
+    queryKey: queryKeys.nakamaCloud,
+    retry: false,
+  });
+
+  const signOut = useMutation({
+    mutationFn: () => client.signOutNakamaCloud(),
+    onError: (mutationError) => setError(formatError(mutationError)),
+    onSuccess: async () => {
+      setError(null);
+      await invalidateQueries(queryClient, queryKeys.nakamaCloud);
+    },
+  });
+
+  const status = statusQuery.data;
+
+  if (!status?.signedIn) {
+    return null;
+  }
+
+  const who = [status.account, status.orgName].filter(Boolean).join(" · ");
+
+  return (
+    <Card className="w-full shadow-none">
+      <CardContent className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <div className="min-w-0 space-y-0.5">
+          <p className="font-medium text-foreground text-sm">
+            Signed in to Nakama Cloud
+          </p>
+          <p className="text-muted-foreground text-xs">{who}</p>
+          {error ? (
+            <p className="text-destructive text-xs" role="status">
+              {error}
+            </p>
+          ) : null}
+        </div>
+        <Button
+          disabled={signOut.isPending}
+          onClick={() => signOut.mutate()}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          Sign out
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
