@@ -14,7 +14,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { NakamaApiError } from "@nakama/core";
 import { createDatabase, createSqliteDatabase } from "@nakama/db";
 import * as fflate from "fflate";
@@ -1082,6 +1082,70 @@ describe("Nakama data portability", () => {
         } finally {
           // Lets afterEach delete the folder.
           await chmod(join(rootDir, folder), 0o700);
+        }
+      });
+    }
+  );
+
+  // chmod does nothing on Windows, and root opens a mode 000 database anyway.
+  describe.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "real unreadable databases and data root",
+    () => {
+      test.each([
+        "orgs/o1/plugins/p/db/data.sqlite",
+        "orgs/o1/meet/meetings.sqlite",
+        "data/sqlite/nakama.sqlite",
+      ])("names %s when the server cannot open it", async (blocked) => {
+        for (const path of [
+          "orgs/o1/plugins/p/db/data.sqlite",
+          "orgs/o1/meet/meetings.sqlite",
+          "data/sqlite/nakama.sqlite",
+        ]) {
+          await mkdir(dirname(join(rootDir, path)), { recursive: true });
+          const db = new Database(join(rootDir, path));
+          db.exec("CREATE TABLE t (x)");
+          db.close(true);
+        }
+
+        await chmod(join(rootDir, blocked), 0o000);
+
+        const refusal = await createNakamaDataExport({
+          databasePath: join(rootDir, "data/sqlite/nakama.sqlite"),
+          rootDir,
+        }).then(
+          () => null,
+          (error: Error & { status?: number }) => error
+        );
+
+        expect(refusal?.status).toBe(409);
+        expect(refusal?.message).toStartWith(
+          `Cannot export a restorable backup: the server cannot read ${blocked}.`
+        );
+        expect(refusal?.message).not.toContain(rootDir);
+      });
+
+      test("names the data folder when the server cannot list the root", async () => {
+        await writeFile(join(rootDir, "notes.txt"), "ok");
+        // Keeps write and search, as a volume can after a change of owner.
+        await chmod(rootDir, 0o300);
+
+        try {
+          const refusal = await createNakamaDataExport({
+            databasePath: null,
+            rootDir,
+          }).then(
+            () => null,
+            (error: Error & { status?: number }) => error
+          );
+
+          expect(refusal?.status).toBe(409);
+          expect(refusal?.message).toStartWith(
+            "Cannot export a restorable backup: the server cannot read the data folder."
+          );
+          expect(refusal?.message).not.toContain(rootDir);
+        } finally {
+          // Lets afterEach delete the folder.
+          await chmod(rootDir, 0o700);
         }
       });
     }
