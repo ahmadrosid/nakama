@@ -1,77 +1,308 @@
+import { splitTelegramChunks } from "./message-format";
+
+const TELEGRAM_MAX_LENGTH = 4096;
+
+type TokenStore = ReturnType<typeof createTokenStore>;
+
+/** Render agent Markdown as the HTML subset Telegram accepts (`parse_mode: "HTML"`). */
 export function renderTelegramRichText(text: string): string {
-  const protectedBlocks = protectFencedCodeBlocks(text.trim());
-  const escapedText = escapeTelegramHtml(protectedBlocks.text);
-  const formattedText = renderInlineTelegramFormatting(escapedText);
+  const tokens = createTokenStore(text);
+  let result = convertMarkdownTables(text.trim());
 
-  return restoreProtectedBlocks(
-    formattedText,
-    protectedBlocks.blocks,
-    protectedBlocks.prefix
-  ).trim();
+  result = result.replace(/```[^\n`]*\n?([\s\S]*?)```/g, (_, code: string) =>
+    tokens.add(
+      `<pre><code>${escapeTelegramHtml(trimFenceNewlines(code))}</code></pre>`
+    )
+  );
+  result = result.replace(/`([^`\n]+)`/g, (_, code: string) =>
+    tokens.add(`<code>${escapeTelegramHtml(code)}</code>`)
+  );
+  result = result.replace(
+    /\[([^\]\n]+)\]\((https?:\/\/[^\s()]+)\)/g,
+    (_, label: string, url: string) =>
+      tokens.add(
+        `<a href="${escapeTelegramAttribute(url)}">${escapeTelegramHtml(label)}</a>`
+      )
+  );
+  result = result.replace(/https?:\/\/[^\s<>\]"'()]+/g, (match) => {
+    // Closing markers belong to the formatting around the URL, not the URL.
+    const url = match.replace(/[*_~|]+$/, "");
+
+    return tokens.add(escapeTelegramHtml(url)) + match.slice(url.length);
+  });
+
+  result = renderBlockquotes(escapeTelegramHtml(result), tokens);
+  result = renderInlineTelegramFormatting(result, tokens);
+
+  return tokens.restore(result).trim();
 }
 
-interface ProtectedTelegramCodeBlocks {
-  blocks: string[];
-  prefix: string;
-  text: string;
-}
+/** Plain-text twin of `renderTelegramRichText`, for when Telegram rejects the HTML. */
+export function renderTelegramPlainText(text: string): string {
+  const html = renderTelegramRichText(text).replace(
+    /<a href="([^"]*)">([\s\S]*?)<\/a>/g,
+    (_, href: string, label: string) => {
+      const plainLabel = stripTags(label);
 
-function protectFencedCodeBlocks(text: string): ProtectedTelegramCodeBlocks {
-  const blocks: string[] = [];
-  let prefix = "@@TCTOKEN";
-
-  while (text.includes(prefix)) {
-    prefix += "_";
-  }
-
-  const protectedText = text.replace(
-    /```[\w]*\n?([\s\S]*?)```/g,
-    (_, code: string) => {
-      const token = `${prefix}${blocks.length}@@`;
-      blocks.push(
-        `<pre><code>${escapeTelegramHtml(trimFenceNewlines(code))}</code></pre>`
-      );
-
-      return token;
+      return plainLabel === href ? href : `${plainLabel} (${href})`;
     }
   );
 
-  return { blocks, prefix, text: protectedText };
+  return decodeTelegramHtml(stripTags(html));
 }
 
-function renderInlineTelegramFormatting(text: string): string {
-  let result = text;
-
-  result = result.replace(/^#{1,6}\s+(.+)$/gm, "<b>$1</b>");
-  result = result.replace(/`([^`]+)`/g, "<code>$1</code>");
-  result = result.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
-  result = result.replace(/__([^_]+)__/g, "<u>$1</u>");
-  result = result.replace(/\*([^*]+)\*/g, "<i>$1</i>");
-  result = result.replace(/\[([^\]]+)\]\((https?:\/\/[^\s()]+)\)/g, renderLink);
-
-  return result;
-}
-
-function renderLink(_: string, label: string, url: string): string {
-  return `<a href="${escapeTelegramAttribute(url)}">${label}</a>`;
-}
-
-function restoreProtectedBlocks(
+/**
+ * Split Markdown into chunks whose rendered HTML fits Telegram's limit.
+ * Tables become bullets first, so a split never cuts a table from its header.
+ */
+export function splitTelegramRichChunks(
   text: string,
-  blocks: string[],
-  prefix: string
-): string {
-  let result = text;
+  maxLength = TELEGRAM_MAX_LENGTH
+): string[] {
+  return splitTelegramChunks(convertMarkdownTables(text), maxLength).flatMap(
+    (chunk) => fitRenderedChunk(chunk, maxLength)
+  );
+}
 
-  for (let index = 0; index < blocks.length; index++) {
-    result = result.replace(`${prefix}${index}@@`, () => blocks[index]!);
+function fitRenderedChunk(chunk: string, maxLength: number): string[] {
+  const renderedLength = renderTelegramRichText(chunk).length;
+
+  if (renderedLength <= maxLength) {
+    return [chunk];
+  }
+
+  const budget = Math.floor((chunk.length * maxLength) / renderedLength);
+  const pieces = splitTelegramChunks(chunk, budget);
+
+  if (
+    pieces.length < 2 ||
+    pieces.some((piece) => piece.length >= chunk.length)
+  ) {
+    return [chunk];
+  }
+
+  return pieces.flatMap((piece) => fitRenderedChunk(piece, maxLength));
+}
+
+const INLINE_RULES: [RegExp, string][] = [
+  [/\*\*(?!\s)([^*\n]+?)\*\*/g, "b"],
+  [/__(?!\s)([^_\n]+?)__/g, "b"],
+  [/~~(?!\s)([^~\n]+?)~~/g, "s"],
+  [/\|\|(?!\s)([^|\n]+?)\|\|/g, "tg-spoiler"],
+  [/\*(?![\s*])([^*\n]+?)(?<!\s)\*/g, "i"],
+  // Word-bounded so snake_case identifiers keep their underscores.
+  [/(?<![\w])_(?![\s_])([^_\n]+?)(?<!\s)_(?![\w])/g, "i"],
+];
+
+/** Each match becomes a token, so a later rule cannot cut through it and tags always nest. */
+function renderInlineTelegramFormatting(
+  text: string,
+  tokens: TokenStore
+): string {
+  let result = text.replace(/^#{1,6}[ \t]+(.+)$/gm, (_, heading: string) =>
+    tokens.add(
+      `<b>${renderInlineTelegramFormatting(heading.replace(/\*\*/g, ""), tokens)}</b>`
+    )
+  );
+
+  for (const [pattern, tag] of INLINE_RULES) {
+    result = result.replace(pattern, (_, inner: string) =>
+      tokens.add(
+        `<${tag}>${renderInlineTelegramFormatting(inner, tokens)}</${tag}>`
+      )
+    );
   }
 
   return result;
+}
+
+/** Group consecutive `> ` lines (already HTML-escaped) into one blockquote. */
+function renderBlockquotes(text: string, tokens: TokenStore): string {
+  return text.replace(/(?:^&gt;(?: .*)?(?:\n|$))+/gm, (block) => {
+    const trailingNewline = block.endsWith("\n") ? "\n" : "";
+
+    const body = block
+      .replace(/\n$/, "")
+      .split("\n")
+      .map((line) => line.replace(/^&gt; ?/, ""))
+      .join("\n");
+
+    return (
+      tokens.add(
+        `<blockquote>${renderInlineTelegramFormatting(body, tokens)}</blockquote>`
+      ) + trailingNewline
+    );
+  });
+}
+
+const TABLE_SEPARATOR_RE = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/;
+
+/** Convert pipe tables outside code fences. Safe to run twice. */
+function convertMarkdownTables(text: string): string {
+  return text
+    .split(/(```[^\n`]*\n?[\s\S]*?```)/)
+    .map((part, index) =>
+      index % 2 === 1 ? part : convertTablesToBullets(part)
+    )
+    .join("");
+}
+
+/** Telegram has no table markup: each row becomes a bold title plus `• Header: value` lines. */
+function convertTablesToBullets(text: string): string {
+  const lines = text.split("\n");
+  const out: string[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const header = lines[index]!;
+    const separator = lines[index + 1];
+    const pipeLed = header.trim().startsWith("|");
+
+    if (
+      !(
+        isTableRow(header, pipeLed) &&
+        separator?.includes("|") &&
+        TABLE_SEPARATOR_RE.test(separator)
+      )
+    ) {
+      out.push(header);
+      index++;
+      continue;
+    }
+
+    const headers = splitTableRow(header);
+    const groups: string[] = [];
+    index += 2;
+
+    while (index < lines.length && isTableRow(lines[index]!, pipeLed)) {
+      groups.push(renderTableRow(headers, splitTableRow(lines[index]!)));
+      index++;
+    }
+
+    const rendered = groups.filter(Boolean);
+
+    out.push(rendered.length > 0 ? rendered.join("\n\n") : headers.join(" · "));
+  }
+
+  return out.join("\n");
+}
+
+function isTableRow(line: string, pipeLed: boolean): boolean {
+  const trimmed = line.trim();
+
+  if (pipeLed) {
+    return trimmed.startsWith("|");
+  }
+
+  return trimmed !== "" && splitTableRow(trimmed).length > 1;
+}
+
+function renderTableRow(headers: string[], cells: string[]): string {
+  const [title = "", ...rest] = cells;
+
+  if (headers.length <= 1) {
+    return title ? `• ${title}` : "";
+  }
+
+  const lines = rest.flatMap((cell, offset) => {
+    if (!cell) {
+      return [];
+    }
+
+    const label = headers[offset + 1];
+
+    return [label ? `• ${label}: ${cell}` : `• ${cell}`];
+  });
+
+  if (!title) {
+    return lines.join("\n");
+  }
+
+  // `**a*b**` cannot render as bold, so keep such titles plain.
+  return [title.includes("*") ? title : `**${title}**`, ...lines].join("\n");
+}
+
+/** Split on `|` outside inline code; `\|` is a literal pipe. */
+function splitTableRow(row: string): string[] {
+  const body = row
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/(?<!\\)\|$/, "");
+
+  const cells: string[] = [];
+  let cell = "";
+  let inCode = false;
+
+  for (let index = 0; index < body.length; index++) {
+    const char = body[index]!;
+
+    if (char === "\\" && body[index + 1] === "|") {
+      cell += "|";
+      index++;
+      continue;
+    }
+
+    if (char === "`") {
+      inCode = !inCode;
+    }
+
+    if (char === "|" && !inCode) {
+      cells.push(cell.trim());
+      cell = "";
+      continue;
+    }
+
+    cell += char;
+  }
+
+  cells.push(cell.trim());
+
+  return cells;
+}
+
+/** Holds finished HTML behind placeholders so later passes cannot change it. */
+function createTokenStore(source: string) {
+  const values: string[] = [];
+  // Grow with a letter: `_` or `*` would let inline rules match across tokens.
+  let prefix = "@@TCTOKEN";
+
+  while (source.includes(prefix)) {
+    prefix += "X";
+  }
+
+  return {
+    add(html: string): string {
+      values.push(html);
+
+      return `${prefix}${values.length - 1}@@`;
+    },
+    restore(text: string): string {
+      const tokenRe = new RegExp(`${prefix}(\\d+)@@`, "g");
+      let result = text;
+
+      // A token can hold other tokens (formatting around inline code).
+      for (
+        let pass = 0;
+        pass <= values.length && result.includes(prefix);
+        pass++
+      ) {
+        result = result.replace(
+          tokenRe,
+          (_, index: string) => values[Number(index)] ?? ""
+        );
+      }
+
+      return result;
+    },
+  };
 }
 
 function trimFenceNewlines(text: string): string {
   return text.replace(/^\n/, "").replace(/\n$/, "");
+}
+
+function stripTags(html: string): string {
+  return html.replace(/<[^>]+>/g, "");
 }
 
 function escapeTelegramHtml(text: string): string {
@@ -82,5 +313,13 @@ function escapeTelegramHtml(text: string): string {
 }
 
 function escapeTelegramAttribute(text: string): string {
-  return text.replace(/"/g, "&quot;");
+  return escapeTelegramHtml(text).replace(/"/g, "&quot;");
+}
+
+function decodeTelegramHtml(text: string): string {
+  return text
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&");
 }
