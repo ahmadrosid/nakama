@@ -122,6 +122,10 @@ export class ComputerAuthService {
     return computer;
   }
 
+  list(input: { orgId: string; userId: string }) {
+    return this.db.listComputersForUser(input.orgId, input.userId);
+  }
+
   async revoke(input: {
     id: string;
     orgId: string;

@@ -16,7 +16,10 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { ComposioSettingsCard } from "@/components/ComposioSettingsCard";
 import { LocalAuthTokenCard } from "@/components/LocalAuthTokenCard";
 import { BrowserRuntimeSettingsCard } from "@/components/settings/BrowserRuntimeSettingsCard";
-import { BrowserSessionsCard } from "@/components/settings/BrowserSessionsCard";
+import {
+  BrowserSessionsCard,
+  ComputersCard,
+} from "@/components/settings/BrowserSessionsCard";
 import { DataPortabilityPanel } from "@/components/settings/DataPortabilityPanel";
 import { ImageGenerationSettingsCard } from "@/components/settings/ImageGenerationSettingsCard";
 import { MfaSettingsCard } from "@/components/settings/MfaSettingsCard";
@@ -215,6 +218,10 @@ export function SettingsPage() {
 
         <section id="sessions">
           <BrowserSessionsCard />
+        </section>
+
+        <section id="computers">
+          <ComputersCard />
         </section>
 
         {isOrgAdmin ? (

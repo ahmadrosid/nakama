@@ -5,7 +5,10 @@ import type {
   ChangePasswordRequest,
   CreateOrganizationRequest,
   CreateOrganizationResponse,
+  EnrollComputerRequest,
+  EnrollComputerResponse,
   ListBrowserSessionsResponse,
+  ListComputersResponse,
   ListUserOrgsResponse,
   MfaBackupCodesResponse,
   MfaPolicyResponse,
@@ -243,6 +246,27 @@ export class AuthClient extends ChannelsClient {
       body: JSON.stringify(request),
       method: "POST",
     });
+  }
+
+  /** Saves this computer's key for the active org (the Connect page). */
+  async enrollComputer(
+    request: EnrollComputerRequest
+  ): Promise<EnrollComputerResponse> {
+    return this.request<EnrollComputerResponse>("/v1/computers", {
+      body: JSON.stringify(request),
+      method: "POST",
+    });
+  }
+
+  async listComputers(): Promise<ListComputersResponse> {
+    return this.request<ListComputersResponse>("/v1/computers");
+  }
+
+  async removeComputer(computerId: string): Promise<void> {
+    await this.request<undefined>(
+      `/v1/computers/${encodeURIComponent(computerId)}`,
+      { method: "DELETE" }
+    );
   }
 
   async listBrowserSessions(): Promise<ListBrowserSessionsResponse> {

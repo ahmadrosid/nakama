@@ -859,6 +859,29 @@ export interface BrowserSessionSummary {
   lastUsedAt: string | null;
 }
 
+/** A computer that runs Nakama Desktop with this account's models. */
+export interface ComputerSummary {
+  createdAt: string;
+  id: string;
+  lastSeenAt: string | null;
+  name: string;
+}
+
+export interface ListComputersResponse {
+  computers: ComputerSummary[];
+}
+
+export interface EnrollComputerRequest {
+  installId: string;
+  name: string;
+  /** Ed25519 public key, base64 of the raw 32 bytes. */
+  publicKey: string;
+}
+
+export interface EnrollComputerResponse {
+  computerId: string;
+}
+
 export interface ListBrowserSessionsResponse {
   sessions: BrowserSessionSummary[];
 }

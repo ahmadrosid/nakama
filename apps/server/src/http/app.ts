@@ -33,7 +33,7 @@ import { registerDataPortabilityRoutes } from "./routes/data-portability";
 import { registerGoogleMeetRoutes } from "./routes/google-meet";
 import { registerInternalAutomationRoutes } from "./routes/internal-automations";
 import { registerInternalCuratorRoutes } from "./routes/internal-curator";
-import { registerLlmRoutes } from "./routes/llm";
+import { registerComputerRoutes, registerLlmRoutes } from "./routes/llm";
 import { registerMcpOAuthRoutes, registerMcpRoutes } from "./routes/mcp";
 import { registerModelRoutes } from "./routes/models";
 import { registerNotificationDestinationRoutes } from "./routes/notification-destinations";
@@ -407,6 +407,7 @@ export function createHonoApp(options: ServerOptions) {
   registerModelRoutes(app, options);
   registerTeamsRoutes(app, options);
   registerUserContextRoutes(app, options);
+  registerComputerRoutes(app, options);
   registerSessionRoutes(app, options);
   registerProfileRoutes(app, options);
   registerProfilePortabilityRoutes(app, options);

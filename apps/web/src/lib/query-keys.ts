@@ -47,6 +47,7 @@ export const queryKeys = {
     settings: ["composio", "settings"] as const,
     toolkits: ["composio", "toolkits"] as const,
   },
+  computers: ["computers"] as const,
   discord: {
     settings: ["discord", "settings"] as const,
   },

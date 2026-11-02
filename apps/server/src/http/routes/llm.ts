@@ -10,9 +10,11 @@ import { estimateChatInputBreakdown } from "../../providers/usage-tracking";
 import {
   type ComputerAccess,
   computerTokenRequestSchema,
+  isEd25519PublicKey,
 } from "../../services/computer-auth";
 import type { ServerOptions } from "../context";
-import { readJson } from "../shared";
+import { requireActiveOrgIdFromContext, requireOrgMember } from "../org-guards";
+import { getRequestAuth, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
 export const LLM_TOKEN_PATH = "/v1/llm/token";
@@ -322,5 +324,84 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
         "content-type": "text/event-stream",
       },
     });
+  });
+}
+
+const enrollRequestSchema = z.object({
+  installId: z.string().min(8).max(200),
+  name: z.string().trim().min(1).max(100),
+  publicKey: z.string().refine(isEd25519PublicKey),
+});
+
+/**
+ * The signed-in person's computers in the active org. The Connect page
+ * enrolls one; Settings lists and removes them.
+ */
+export function registerComputerRoutes(
+  app: HonoApp,
+  options: ServerOptions
+): void {
+  const { computerAuth } = options;
+
+  if (!computerAuth) {
+    return;
+  }
+
+  const caller = (c: Parameters<typeof getRequestAuth>[0]) => {
+    const auth = getRequestAuth(c);
+    requireOrgMember(auth);
+
+    return { orgId: requireActiveOrgIdFromContext(c), userId: auth.user.id };
+  };
+
+  app.post("/v1/computers", async (c) => {
+    const { orgId, userId } = caller(c);
+
+    const request = enrollRequestSchema.safeParse(
+      await readJson(c.req.raw, z.unknown())
+    );
+
+    if (!request.success) {
+      return c.json({ error: "Invalid request." }, 400);
+    }
+
+    const computer = await computerAuth.enroll({
+      ...request.data,
+      orgId,
+      userId,
+    });
+
+    return c.json({ computerId: computer.id }, 201);
+  });
+
+  app.get("/v1/computers", async (c) => {
+    const { orgId, userId } = caller(c);
+    const computers = await computerAuth.list({ orgId, userId });
+
+    return c.json(
+      {
+        computers: computers
+          .filter((computer) => !computer.revokedAt)
+          .map(({ createdAt, id, lastSeenAt, name }) => ({
+            createdAt,
+            id,
+            lastSeenAt,
+            name,
+          })),
+      },
+      200
+    );
+  });
+
+  app.delete("/v1/computers/:id", async (c) => {
+    const { orgId, userId } = caller(c);
+
+    const revoked = await computerAuth.revoke({
+      id: c.req.param("id"),
+      orgId,
+      userId,
+    });
+
+    return revoked ? c.body(null, 204) : c.json({ error: "Not found." }, 404);
   });
 }
