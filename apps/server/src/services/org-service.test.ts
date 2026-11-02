@@ -4531,7 +4531,7 @@ if __name__ == "__main__":
     expect(
       (await db.getSharedAgentInstance("org_team_a", profile.id))?.publicationId
     ).toBe(republished.id);
-    await db.disableUser("user_other", now);
+    expect(await db.disableUserUnlessLastAdmin("user_other", now)).toBe(true);
     await expect(
       orgService.createSharedAgentInstance(
         "org_team_a",
@@ -5759,7 +5759,18 @@ describe("OrgService shared resource publications", () => {
         "user_platform"
       )
     ).toBe(false);
-    await db.disableUser("user_platform", now);
+    // The disable guard keeps the last usable platform admin enabled.
+    await db.createUser({
+      createdAt: now,
+      email: "platform_second@example.com",
+      id: "user_platform_second",
+      isPlatformAdmin: true,
+      passwordHash: "test",
+      updatedAt: now,
+    });
+    expect(await db.disableUserUnlessLastAdmin("user_platform", now)).toBe(
+      true
+    );
     await expect(
       orgService.publishSharedResource("org_parent", request, "user_platform")
     ).rejects.toMatchObject({ status: 403 });

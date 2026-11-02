@@ -84,7 +84,7 @@ describe("last org admin", () => {
       "admin",
     ]);
 
-    await db.disableUser(disabled!, NOW);
+    expect(await db.disableUserUnlessLastAdmin(disabled!, NOW)).toBe(true);
 
     // Two usable admins: the first removal is allowed.
     expect(await db.deleteOrgMember("org_a", first!)).toBe(true);
@@ -104,7 +104,7 @@ describe("last org admin", () => {
       "admin",
     ]);
 
-    await db.disableUser(disabled!, NOW);
+    expect(await db.disableUserUnlessLastAdmin(disabled!, NOW)).toBe(true);
 
     expect(await db.updateOrgMemberRole("org_a", first!, "member")).toBe(true);
 
@@ -168,7 +168,7 @@ describe("disable last usable admin", () => {
         "admin",
       ]);
 
-      await db.disableUser(disabled!, NOW);
+      expect(await db.disableUserUnlessLastAdmin(disabled!, NOW)).toBe(true);
 
       expect(await first(db, a!, b!)).toBe(true);
       expect(await second(db, a!, b!)).toBe(false);
