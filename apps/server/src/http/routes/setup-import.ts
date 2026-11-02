@@ -9,13 +9,23 @@ import {
 } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 import {
-  decodeArchiveRequestData,
   previewNakamaDataImport,
   restoreNakamaDataImport,
 } from "../../services/data-portability";
 import type { ServerOptions } from "../context";
-import { assertJsonRequest, errorResponse, json, readJson } from "../shared";
+import {
+  assertJsonRequest,
+  errorResponse,
+  isArchiveRequest,
+  json,
+  readJson,
+} from "../shared";
 import type { HonoApp } from "../types";
+import {
+  importArchiveBodySchema,
+  importConfirmQuerySchema,
+  readImportRequest,
+} from "./data-portability";
 
 export function registerSetupImportRoutes(
   app: HonoApp,
@@ -57,7 +67,10 @@ export function registerSetupImportRoutes(
       path: "/v1/auth/setup/import/preview",
       request: {
         body: {
-          content: { "application/json": { schema: importRequestSchema } },
+          content: {
+            "application/json": { schema: importRequestSchema },
+            "application/zip": { schema: importArchiveBodySchema },
+          },
           required: true,
         },
       },
@@ -95,9 +108,13 @@ export function registerSetupImportRoutes(
       path: "/v1/auth/setup/import/restore",
       request: {
         body: {
-          content: { "application/json": { schema: restoreRequestSchema } },
+          content: {
+            "application/json": { schema: restoreRequestSchema },
+            "application/zip": { schema: importArchiveBodySchema },
+          },
           required: true,
         },
+        query: importConfirmQuerySchema,
       },
       responses: {
         200: {
@@ -131,17 +148,14 @@ export function registerSetupImportRoutes(
       return errorResponse("Authentication not configured", 500);
     }
 
-    assertJsonRequest(c.req.raw);
+    assertImportContentType(c.req.raw);
 
     await assertSetupImportAllowed(databaseAdapter);
 
-    const body = await readJson<PreviewDataImportRequest>(
-      c.req.raw,
-      importRequestSchema
+    // Read outside the catch so an oversized archive keeps its 413.
+    const { archive } = await readImportRequest(c.req.raw, () =>
+      readJson<PreviewDataImportRequest>(c.req.raw, importRequestSchema)
     );
-
-    // Decoded outside the catch so an oversized archive keeps its 413.
-    const archive = decodeArchiveRequestData(body.data);
 
     try {
       const preview = await previewNakamaDataImport(archive);
@@ -157,16 +171,13 @@ export function registerSetupImportRoutes(
       return errorResponse("Authentication not configured", 500);
     }
 
-    assertJsonRequest(c.req.raw);
+    assertImportContentType(c.req.raw);
 
     await assertSetupImportAllowed(databaseAdapter);
 
-    const body = await readJson<RestoreDataImportRequest>(
-      c.req.raw,
-      restoreRequestSchema
+    const { archive, confirm } = await readImportRequest(c.req.raw, () =>
+      readJson<RestoreDataImportRequest>(c.req.raw, restoreRequestSchema)
     );
-
-    const archive = decodeArchiveRequestData(body.data);
 
     let restore;
 
@@ -174,7 +185,7 @@ export function registerSetupImportRoutes(
       restore = await restoreNakamaDataImport(archive, {
         afterFailedReplace: options.onDataRestored,
         beforeReplace: options.onBeforeDataRestore,
-        confirm: body.confirm,
+        confirm,
       });
     } catch (error) {
       return errorResponse(formatServerError(error), 400);
@@ -196,6 +207,13 @@ export function registerSetupImportRoutes(
       requiresRestart,
     });
   });
+}
+
+// These routes run before any login, so a cross-site form must not reach them.
+function assertImportContentType(request: Request): void {
+  if (!isArchiveRequest(request)) {
+    assertJsonRequest(request);
+  }
 }
 
 async function assertSetupImportAllowed(

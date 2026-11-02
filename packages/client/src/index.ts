@@ -6,6 +6,7 @@ export type {
   RemoteChatSession,
   SendMessageArg,
   StreamHandlers,
+  TransferProgress,
 } from "./types";
 
 import type { ProfileSummary } from "@nakama/core/contract";

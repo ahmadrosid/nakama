@@ -1,4 +1,3 @@
-import { Button } from "@nakama/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@nakama/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { ArrowUp01Icon, Notification01Icon } from "hugeicons-react";
@@ -104,31 +103,24 @@ export function SidebarNotifications({ collapsed }: { collapsed: boolean }) {
           side={collapsed ? "right" : "top"}
           sideOffset={8}
         >
-          <p className="px-1.5 py-1.5 font-medium text-foreground text-sm leading-tight">
-            Needs you
-          </p>
+          <div className="flex h-7 items-center justify-between px-1.5">
+            <p className="font-semibold text-2xs text-muted-foreground uppercase tracking-wide">
+              Needs you
+            </p>
+            <Link
+              className="font-medium text-primary text-xs hover:underline"
+              onClick={() => setOpen(false)}
+              to={PAGE_PATHS.notifications}
+            >
+              View all
+            </Link>
+          </div>
           <div className="max-h-72 overflow-y-auto">
             <NotificationList
               compact
               items={items}
               onNavigate={() => setOpen(false)}
             />
-          </div>
-          <div className="px-1.5 pt-0.5 pb-1">
-            <Button
-              className="h-7 w-full justify-center text-xs"
-              nativeButton={false}
-              render={
-                <Link
-                  onClick={() => setOpen(false)}
-                  to={PAGE_PATHS.notifications}
-                />
-              }
-              size="sm"
-              type="button"
-            >
-              View all
-            </Button>
           </div>
           <div className="mt-1 border-border border-t pt-1">
             <WebPushToggle />

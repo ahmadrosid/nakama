@@ -17,6 +17,7 @@ import {
   NAKAMA_ORG_EXPORT_MANIFEST,
   NAKAMA_USER_EXPORT_MANIFEST,
 } from "../../services/data-portability";
+import { encryptBackup } from "../../services/scheduled-backup";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
@@ -638,6 +639,107 @@ describe("data portability routes", () => {
     ).resolves.toBe("original");
   });
 
+  test("platform admin can preview and restore a raw ZIP body", async () => {
+    const { app, authService, databaseAdapter } = createApp();
+
+    const session = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+
+    await writeFile(join(getUserConfigDir(), "config.ini"), "original");
+
+    const exportResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/data/export", {
+        headers: session.headers(),
+      })
+    );
+
+    const archive = Buffer.from(await exportResponse.arrayBuffer());
+    await writeFile(join(getUserConfigDir(), "config.ini"), "changed");
+
+    const send = (path: string, body: Buffer = archive) =>
+      app.fetch(
+        new Request(`http://localhost:4310/v1/platform/data/import/${path}`, {
+          body,
+          headers: session.headers({
+            "Content-Type": "application/zip",
+            "X-CSRF-Token": session.csrfToken,
+          }),
+          method: "POST",
+        })
+      );
+
+    const preview = await send("preview");
+    expect(preview.status).toBe(200);
+    await expect(preview.json()).resolves.toMatchObject({
+      archiveFileCount: 1,
+    });
+
+    expect((await send("restore")).status).toBe(400);
+    expect(
+      (await send("preview", Buffer.alloc(MAX_IMPORT_ARCHIVE_BYTES + 1))).status
+    ).toBe(413);
+    await expect(
+      readFile(join(getUserConfigDir(), "config.ini"), "utf8")
+    ).resolves.toBe("changed");
+
+    expect((await send("restore?confirm=true")).status).toBe(200);
+    await expect(
+      readFile(join(getUserConfigDir(), "config.ini"), "utf8")
+    ).resolves.toBe("original");
+  });
+
+  test("platform admin can restore an encrypted backup sent as a raw ZIP", async () => {
+    const previousKey = process.env.NAKAMA_SECRETS_KEY;
+    const key = Buffer.alloc(32, 4);
+    process.env.NAKAMA_SECRETS_KEY = key.toString("base64");
+
+    try {
+      const { app, authService, databaseAdapter } = createApp();
+
+      const session = await loginPlatformAdminSession(
+        app,
+        authService,
+        databaseAdapter
+      );
+
+      await writeFile(join(getUserConfigDir(), "config.ini"), "original");
+
+      const encrypted = encryptBackup(
+        (await createNakamaDataExport({ rootDir: getUserConfigDir() })).data,
+        key
+      );
+
+      await writeFile(join(getUserConfigDir(), "config.ini"), "changed");
+
+      const send = (path: string) =>
+        app.fetch(
+          new Request(`http://localhost:4310/v1/platform/data/import/${path}`, {
+            body: encrypted,
+            headers: session.headers({
+              "Content-Type": "application/zip",
+              "X-CSRF-Token": session.csrfToken,
+            }),
+            method: "POST",
+          })
+        );
+
+      expect((await send("preview")).status).toBe(200);
+      expect((await send("restore?confirm=true")).status).toBe(200);
+      await expect(
+        readFile(join(getUserConfigDir(), "config.ini"), "utf8")
+      ).resolves.toBe("original");
+    } finally {
+      if (previousKey === undefined) {
+        delete process.env.NAKAMA_SECRETS_KEY;
+      } else {
+        process.env.NAKAMA_SECRETS_KEY = previousKey;
+      }
+    }
+  });
+
   test("a restore upload cut off mid-body does not lock later restores", async () => {
     const { app, authService, databaseAdapter } = createApp();
 
@@ -676,6 +778,56 @@ describe("data portability routes", () => {
 
       const next = await fetch(`http://127.0.0.1:${server.port}${path}`, {
         body: JSON.stringify({ confirm: false, data: "AQID" }),
+        headers,
+        method: "POST",
+      });
+
+      expect(await next.json()).not.toEqual({
+        error: "A data restore is already in progress.",
+      });
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  test("a raw ZIP restore cut off mid-body does not lock later restores", async () => {
+    const { app, authService, databaseAdapter } = createApp();
+
+    const session = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+
+    const headers = session.headers({
+      "Content-Type": "application/zip",
+      "X-CSRF-Token": session.csrfToken,
+    });
+
+    const server = Bun.serve({ fetch: app.fetch, port: 0 });
+    const path = "/v1/platform/data/import/restore";
+
+    try {
+      const lines = [...new Headers(headers)].map(
+        ([name, value]) => `${name}: ${value}`
+      );
+
+      const socket = await Bun.connect({
+        hostname: "127.0.0.1",
+        port: server.port,
+        socket: { data() {} },
+      });
+
+      // Promises more bytes than it sends, then hangs up like a closed tab.
+      socket.write(
+        `POST ${path} HTTP/1.1\r\nHost: localhost\r\n${lines.join("\r\n")}\r\nContent-Length: 5000000\r\n\r\nPK\x03\x04`
+      );
+      await Bun.sleep(200);
+      socket.terminate();
+      await Bun.sleep(200);
+
+      const next = await fetch(`http://127.0.0.1:${server.port}${path}`, {
+        body: new Uint8Array([1, 2, 3]),
         headers,
         method: "POST",
       });
