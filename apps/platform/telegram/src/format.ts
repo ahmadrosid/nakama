@@ -1,6 +1,5 @@
+import { splitTelegramChunks } from "@nakama/core/channel-message-format";
 import type { AgentTodo } from "@nakama/core/contract";
-
-const TELEGRAM_MAX_MESSAGE_LENGTH = 4096;
 
 export function stripMarkdownForTelegram(text: string): string {
   const protectedUrls = protectBareUrls(text.trim());
@@ -13,7 +12,9 @@ export function stripMarkdownForTelegram(text: string): string {
   result = result.replace(/\*\*([^*]+)\*\*/g, "$1");
   result = result.replace(/\*([^*]+)\*/g, "$1");
   result = result.replace(/__([^_]+)__/g, "$1");
-  result = result.replace(/_([^_]+)_/g, "$1");
+  result = result.replace(/(?<!\w)_([^_\n]+)_(?!\w)/g, "$1");
+  result = result.replace(/~~([^~\n]+)~~/g, "$1");
+  result = result.replace(/\|\|([^|\n]+)\|\|/g, "$1");
   result = result.replace(/^#{1,6}\s+/gm, "");
   result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 ($2)");
 
@@ -26,18 +27,6 @@ export function prepareTelegramReply(text: string): string {
 
 export function prepareTelegramFallbackReply(text: string): string {
   return stripMarkdownForTelegram(text);
-}
-
-export function renderTelegramRichText(text: string): string {
-  const protectedBlocks = protectFencedCodeBlocks(text.trim());
-  const escapedText = escapeTelegramHtml(protectedBlocks.text);
-  const formattedText = renderInlineTelegramFormatting(escapedText);
-
-  return restoreProtectedBlocks(
-    formattedText,
-    protectedBlocks.blocks,
-    protectedBlocks.prefix
-  ).trim();
 }
 
 /** Placeholder bare http(s) URLs so underscore italic stripping cannot mangle path tokens. */
@@ -68,79 +57,6 @@ function restoreBareUrls(text: string, urls: string[]): string {
   return result;
 }
 
-function protectFencedCodeBlocks(text: string) {
-  const blocks: string[] = [];
-  let prefix = "@@TCTOKEN";
-
-  while (text.includes(prefix)) {
-    prefix += "_";
-  }
-
-  const protectedText = text.replace(
-    /```[\w]*\n?([\s\S]*?)```/g,
-    (_, code: string) => {
-      const token = `${prefix}${blocks.length}@@`;
-      blocks.push(
-        `<pre><code>${escapeTelegramHtml(trimFenceNewlines(code))}</code></pre>`
-      );
-
-      return token;
-    }
-  );
-
-  return { blocks, prefix, text: protectedText } satisfies {
-    blocks: string[];
-    prefix: string;
-    text: string;
-  };
-}
-
-function renderInlineTelegramFormatting(text: string): string {
-  let result = text;
-
-  result = result.replace(/^#{1,6}\s+(.+)$/gm, "<b>$1</b>");
-  result = result.replace(/`([^`]+)`/g, "<code>$1</code>");
-  result = result.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
-  result = result.replace(/__([^_]+)__/g, "<u>$1</u>");
-  result = result.replace(/\*([^*]+)\*/g, "<i>$1</i>");
-  result = result.replace(/\[([^\]]+)\]\((https?:\/\/[^\s()]+)\)/g, renderLink);
-
-  return result;
-}
-
-function renderLink(_: string, label: string, url: string): string {
-  return `<a href="${escapeTelegramAttribute(url)}">${label}</a>`;
-}
-
-function restoreProtectedBlocks(
-  text: string,
-  blocks: string[],
-  prefix: string
-): string {
-  let result = text;
-
-  for (let index = 0; index < blocks.length; index++) {
-    result = result.replace(`${prefix}${index}@@`, () => blocks[index]!);
-  }
-
-  return result;
-}
-
-function trimFenceNewlines(text: string): string {
-  return text.replace(/^\n/, "").replace(/\n$/, "");
-}
-
-function escapeTelegramHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function escapeTelegramAttribute(text: string): string {
-  return text.replace(/"/g, "&quot;");
-}
-
 export function splitIntoChatBubbles(text: string, maxChars = 400): string[] {
   const trimmed = prepareTelegramReply(text);
 
@@ -149,7 +65,7 @@ export function splitIntoChatBubbles(text: string, maxChars = 400): string[] {
   }
 
   if (trimmed.length <= maxChars) {
-    return splitTelegramMessage(trimmed);
+    return splitTelegramChunks(trimmed);
   }
 
   const paragraphs = trimmed
@@ -192,7 +108,7 @@ export function splitIntoChatBubbles(text: string, maxChars = 400): string[] {
     merged.push(current);
   }
 
-  return merged.flatMap((bubble) => splitTelegramMessage(bubble));
+  return merged.flatMap((bubble) => splitTelegramChunks(bubble));
 }
 
 function splitLongParagraph(paragraph: string, maxChars: number): string[] {
@@ -207,32 +123,6 @@ function splitLongParagraph(paragraph: string, maxChars: number): string[] {
     }
 
     chunks.push(remaining.slice(0, splitAt).trimEnd());
-    remaining = remaining.slice(splitAt).trimStart();
-  }
-
-  if (remaining.length > 0) {
-    chunks.push(remaining);
-  }
-
-  return chunks;
-}
-
-export function splitTelegramMessage(text: string): string[] {
-  if (text.length <= TELEGRAM_MAX_MESSAGE_LENGTH) {
-    return [text];
-  }
-
-  const chunks: string[] = [];
-  let remaining = text;
-
-  while (remaining.length > TELEGRAM_MAX_MESSAGE_LENGTH) {
-    let splitAt = remaining.lastIndexOf("\n", TELEGRAM_MAX_MESSAGE_LENGTH);
-
-    if (splitAt <= 0) {
-      splitAt = TELEGRAM_MAX_MESSAGE_LENGTH;
-    }
-
-    chunks.push(remaining.slice(0, splitAt));
     remaining = remaining.slice(splitAt).trimStart();
   }
 

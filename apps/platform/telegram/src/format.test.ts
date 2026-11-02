@@ -1,9 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   prepareTelegramReply,
-  renderTelegramRichText,
   splitIntoChatBubbles,
-  splitTelegramMessage,
   stripMarkdownForTelegram,
 } from "./format";
 
@@ -34,41 +32,11 @@ describe("stripMarkdownForTelegram", () => {
   });
 });
 
-describe("renderTelegramRichText", () => {
-  test("does not italicize underscores or double-escape query params in links", () => {
+describe("stripMarkdownForTelegram fallback", () => {
+  test("keeps snake case and strips strike and spoiler markers", () => {
     expect(
-      renderTelegramRichText("[docs](https://example.com/a_b?x=1&y=2)")
-    ).toBe('<a href="https://example.com/a_b?x=1&amp;y=2">docs</a>');
-  });
-
-  test("leaves links with parentheses in the url unrendered", () => {
-    expect(
-      renderTelegramRichText("[docs](https://example.com/path_(draft))")
-    ).toBe("[docs](https://example.com/path_(draft))");
-  });
-
-  test("preserves snake case identifiers with underscores", () => {
-    expect(renderTelegramRichText("Use active_org_id for org context.")).toBe(
-      "Use active_org_id for org context."
-    );
-  });
-
-  test("escapes raw html while preserving fenced code blocks", () => {
-    expect(
-      renderTelegramRichText("Before <tag>\n```js\n  const x = 1 < 2;\n```")
-    ).toBe("Before &lt;tag&gt;\n<pre><code>  const x = 1 &lt; 2;</code></pre>");
-  });
-
-  test("preserves dollar replacement sequences in fenced code blocks", () => {
-    expect(renderTelegramRichText("```text\n$& $` $'\n```")).toBe(
-      "<pre><code>$&amp; $` $'</code></pre>"
-    );
-  });
-
-  test("keeps literal placeholder text beside a code block", () => {
-    expect(renderTelegramRichText("@@TCTOKEN0@@\n```text\ncode\n```")).toBe(
-      "@@TCTOKEN0@@\n<pre><code>code</code></pre>"
-    );
+      stripMarkdownForTelegram("Set active_org_id, ~~old~~ and ||secret||")
+    ).toBe("Set active_org_id, old and secret");
   });
 });
 
@@ -104,15 +72,5 @@ describe("splitIntoChatBubbles", () => {
     for (const bubble of bubbles) {
       expect(bubble.length).toBeLessThanOrEqual(50);
     }
-  });
-});
-
-describe("splitTelegramMessage", () => {
-  test("splits beyond telegram limit", () => {
-    const text = "a".repeat(5000);
-    const chunks = splitTelegramMessage(text);
-
-    expect(chunks.length).toBeGreaterThan(1);
-    expect(chunks.every((chunk) => chunk.length <= 4096)).toBe(true);
   });
 });

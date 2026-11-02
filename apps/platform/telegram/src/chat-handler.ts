@@ -8,6 +8,7 @@ import {
   stopActiveStream,
 } from "@nakama/core/channel-active-stream";
 import { createChatLock } from "@nakama/core/channel-chat-lock";
+import { splitTelegramChunks } from "@nakama/core/channel-message-format";
 import {
   type ChannelOrgStore,
   findOrgBySelectionInput,
@@ -47,11 +48,7 @@ import {
 import type { TelegramAuthStore } from "./auth-store";
 import { maybeSendRequestedTelegramArtifactAttachment } from "./channel-artifact-flow";
 import type { TelegramBridgeConfig } from "./config";
-import {
-  HELP_TEXT,
-  prepareTelegramReply,
-  splitTelegramMessage,
-} from "./format";
+import { HELP_TEXT, prepareTelegramReply } from "./format";
 import {
   explainGroupMessageHandling,
   isTelegramGroupChat,
@@ -82,7 +79,7 @@ export async function replyAsChat(
     return;
   }
 
-  const bubbles = splitTelegramMessage(prepared);
+  const bubbles = splitTelegramChunks(prepared);
   const delayMs = options.delayMs ?? DEFAULT_BUBBLE_DELAY_MS;
 
   for (let index = 0; index < bubbles.length; index++) {
@@ -1065,7 +1062,7 @@ async function replyChunks(
   telegram: TelegramRichMessenger,
   text: string
 ): Promise<void> {
-  for (const chunk of splitTelegramMessage(text)) {
+  for (const chunk of splitTelegramChunks(text)) {
     await telegram.send(chunk);
   }
 }
