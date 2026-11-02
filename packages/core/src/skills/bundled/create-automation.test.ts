@@ -148,6 +148,78 @@ describe("ensureBundledSkillFiles", () => {
     expect(page).not.toMatch(/from\s*"react/);
   });
 
+  test("build-plugin passes a finished draft and lists each problem in a broken one", async () => {
+    await ensureBundledSkillFiles();
+
+    const workspace = await mkdtemp(join(tmpdir(), "nakama-plugin-ws-"));
+
+    const scripts = join(
+      configDir,
+      "agent",
+      "skills",
+      "create-plugin",
+      "scripts"
+    );
+
+    const draft = join(workspace, "plugin-drafts", "task-hub");
+
+    const run = (script: string, ...args: string[]) =>
+      Bun.spawnSync(["bun", join(scripts, script), ...args], {
+        cwd: workspace,
+      });
+
+    expect(
+      run("new-plugin.mjs", "task-hub", "Task Hub", "list_tasks").exitCode
+    ).toBe(0);
+
+    const manifestPath = join(draft, "nakama.plugin.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.description = "List my open tasks.";
+    manifest.actions[0].description = "List open tasks.";
+    await Bun.write(manifestPath, JSON.stringify(manifest, null, 2));
+    await Bun.write(join(draft, "actions", "list_tasks.js"), "");
+
+    const passed = run("build-plugin.mjs", "task-hub");
+
+    expect(passed.exitCode).toBe(0);
+    // The build rewrote the emptied bundle from src/.
+    expect(
+      await readFile(join(draft, "actions", "list_tasks.js"), "utf8")
+    ).toContain("run");
+
+    manifest.actions[0].inputSchema.properties.name.default = "me";
+    await Bun.write(manifestPath, JSON.stringify(manifest, null, 2));
+
+    const pagePath = join(draft, "src", "ui.jsx");
+    const page = await readFile(pagePath, "utf8");
+    await Bun.write(
+      pagePath,
+      page.replace(
+        "<Card>",
+        "<h1>Tasks</h1><Table><TableBody><TableRow><TableCell><Button>Close</Button></TableCell></TableRow></TableBody></Table><Card>"
+      )
+    );
+    await Bun.write(
+      join(draft, "src", "ui.css"),
+      `${await readFile(join(draft, "src", "ui.css"), "utf8")}\n.loose { color: #fff; }\n`
+    );
+
+    const broken = run("build-plugin.mjs", "task-hub");
+
+    const problems = broken.stderr
+      .toString()
+      .split("\n")
+      .filter((line) => line.startsWith("- "));
+
+    expect(broken.exitCode).toBe(1);
+    // Schema keyword, heading, button column, unscoped rule, and hex color.
+    expect(problems).toHaveLength(5);
+
+    await Bun.write(manifestPath, '{\n  "id": "task-hub",,\n}');
+
+    expect(run("build-plugin.mjs", "task-hub").exitCode).toBe(1);
+  });
+
   test("does not overwrite existing skill files", async () => {
     const skillPath = join(
       configDir,

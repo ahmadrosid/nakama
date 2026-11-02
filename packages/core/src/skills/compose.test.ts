@@ -27,6 +27,16 @@ describe("composeLoadedSkillPrompt", () => {
     expect(prompt).toContain(baseSkill.skillFilePath);
     expect(prompt).toContain(baseSkill.directory);
   });
+
+  test("fills <skill directory> in the body with the real directory", () => {
+    const prompt = composeLoadedSkillPrompt({
+      ...baseSkill,
+      body: "Run bun <skill directory>/scripts/build.mjs.",
+    });
+
+    expect(prompt).toContain("Run bun /tmp/weather/scripts/build.mjs.");
+    expect(prompt).not.toContain("<skill directory>");
+  });
 });
 
 describe("composeSkillsCatalog", () => {

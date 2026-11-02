@@ -7,12 +7,11 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildDraft, OFFICIAL_IDS } from "./build-plugin.mjs";
 
 const PLUGIN_ID = /^[a-z][a-z0-9-]{0,63}$/;
 
 const ACTION_KEY = /^[a-z][a-z0-9_-]{0,63}$/;
-
-const OFFICIAL_IDS = new Set(["workflows", "supermemory", "google-meet"]);
 
 const args = process.argv.slice(2);
 
@@ -83,31 +82,39 @@ for (const [entry, source] of sources) {
   await writeFile(output, fill(await readFile(source, "utf8")));
 }
 
-const manifest = JSON.parse(
-  await readFile(path.join(target, "nakama.plugin.json"), "utf8")
-);
+const { failed, problems } = await buildDraft(target);
 
-const builds = [
-  ...manifest.actions.map(({ key }) => ({
-    entry: `${key}.js`,
-    file: `${key}.js`,
-    out: "actions",
-    target: "bun",
-  })),
-  { entry: "ui.jsx", file: "app.js", out: "ui", target: "browser" },
-];
+if (failed) {
+  fail(problems.join("\n"));
+}
 
-for (const item of builds) {
-  const build = await Bun.build({
-    entrypoints: [path.join(target, "src", item.entry)],
-    naming: item.file,
-    outdir: path.join(target, item.out),
-    target: item.target,
-  });
+// Relative paths: the file tools take paths under the profile workspace.
+const draft = path.join("plugin-drafts", id);
 
-  if (!build.success) {
-    fail(build.logs.map(String).join("\n"));
+const edit = [...sources.keys()]
+  .flatMap((entry) => {
+    const file = fill(entry.slice(0, -".tmpl".length));
+
+    const editable =
+      (file.startsWith("src/") || file.endsWith(".json")) &&
+      !(file.endsWith(".d.ts") || file.endsWith(".md"));
+
+    return editable ? [file] : [];
+  })
+  .sort();
+
+console.log(`Created ${draft} and built it.`);
+
+console.log(`Edit: ${edit.map((entry) => `${draft}/${entry}`).join(", ")}`);
+
+if (problems.length) {
+  console.log("Still template text (replace before submit):");
+
+  for (const problem of problems) {
+    console.log(`- ${problem}`);
   }
 }
 
-console.log(`Created ${target}`);
+console.log(
+  `Rebuild and check: bun ${path.join(skillDir, "scripts", "build-plugin.mjs")} ${id}`
+);

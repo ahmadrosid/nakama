@@ -5,182 +5,69 @@ description: Draft or build a custom Nakama plugin with actions, a dashboard pag
 
 Create a local draft for human review. Never install or enable the plugin yourself.
 
-## Ask first (mandatory)
+## Flow
 
-Before you run the template script for a new plugin, call `ask_user_question` once. Then stop and wait for the answers. Do not write files in the same turn.
+Do these steps in order. After the user answers the questions, do steps 2 to 5 in the same turn. Do not stop to report progress.
 
-Ask only what the request does not already answer, in one batch of at most five questions. Give each question two to four choices and set `allowCustomAnswer: true`. Pick from:
+1. **Ask once.** Call `ask_user_question` one time, then stop and wait. Ask only what the request does not answer, at most five questions, two to four choices each, `allowCustomAnswer: true`:
+   - **Actions:** what each action does and its inputs.
+   - **Access:** every member, or admins only.
+   - **Effect:** read only, or saves, sends, or deletes data.
+   - **Page:** what it shows and which buttons it has, or no page.
+   - **Outside services:** which API it calls. Plugins have no secret store, so a key needs an admin-only `save_settings` action with `exposeAsTool: false` that stores it under `dataDir`.
 
-- **Actions:** what each action does and the inputs it needs.
-- **Access:** every member, or admins only (`access`).
-- **Effect:** read only, or saves, sends, or deletes data (`effect`).
-- **Data:** no stored data, files under `dataDir`, or a SQLite table (migrations).
-- **Page:** what the page shows and which buttons it has, or no page.
-- **Agent use:** whether profiles call the action as a tool in chat.
-- **Outside services:** which API it calls. Plugins have no secret store, so a key needs an admin-only `save_settings` action with `exposeAsTool: false` that stores it under `dataDir`.
+   If the request answers all of them, ask one question: show the plan (plugin ID, actions with access and effect, page, data) with the choices "Build it" and "Change something". Do not ask a second round. When an answer leaves a detail open, choose the simple option and say so in the final report. If `ask_user_question` is not available, ask in one plain message.
+2. **Scaffold.** Run from the profile workspace (bash cwd):
 
-If the request answers all of them, ask one question instead: show the plan in the prompt (plugin ID, actions with access and effect, page, data) with the choices "Build it" and "Change something".
+   ```sh
+   bun <skill directory>/scripts/new-plugin.mjs <plugin-id> "<Plugin Name>" <action-key>
+   ```
 
-Build from the answers. Do not add actions, pages, or storage the user did not ask for. If `ask_user_question` is not available, ask the same questions in one plain message and wait. When the user asks to change an existing draft, ask only if the change is unclear.
+   Add `--data` in place of `<action-key>` when the page shows a list of records, stored or fetched (contacts, tickets, issues, orders). It gives the list page: filter, table, and one edit dialog. For records from an outside source, change `list_items` to fetch them and remove the migration if nothing is stored. The script prints the files to edit and the template text that is left. It refuses an existing draft; edit that draft.
+3. **Edit.** Replace the example action, page, descriptions, and input schemas with the real ones. Add nothing the user did not ask for. Use relative paths such as `plugin-drafts/<plugin-id>/src/ui.jsx` in every file tool. The scaffolded files follow the rules below, so change only what the plugin needs; do not re-read files that the script just wrote unless you need their exact text for an edit.
+4. **Build and check.**
 
-## Workspace and build
+   ```sh
+   bun <skill directory>/scripts/build-plugin.mjs <plugin-id>
+   ```
 
-Use the profile workspace from the tool context. Write only beneath `plugin-drafts/<pluginId>/`; use a stable lowercase slug for the plugin ID. Keep `package.json`, `nakama.plugin.json`, `src/`, and built output together. Put build instructions in `src/BUILD.md`. Keep sources after installation.
+   It checks the manifest with the host's rules, bundles every `src/<name>.js` to its manifest entry and `src/ui.jsx` to `ui/app.js`, and lints the page style. It lists every problem at once: fix all of them, then run it again.
+5. **Hand off.** When the build passes, call `submit_plugin_draft` with the draft ID. If it fails, fix the reported problem, build, and call it again. Then report in one or two lines: what the plugin does, that the draft is not installed, and any choice you made for the user. An admin reviews the files, installs, enables, and gives profiles access from the card. Installed plugins have full server and browser privileges.
 
-Start every new plugin from the template. Choose the plugin ID, display name, and first action key, then run this from the profile workspace (bash cwd):
+To change an installed plugin, read `references/change-installed.md` first. For plugin skills, a SQLite database, or workers, read `references/skills-database-workers.md`.
 
-```sh
-bun <skill directory>/scripts/new-plugin.mjs <plugin-id> "<Plugin Name>" <action-key>
-```
+## Limits
 
-The script writes `plugin-drafts/<plugin-id>/` with a manifest, package.json, `src/<action-key>.js`, an example page in `src/ui.jsx` and `src/ui.css`, `src/nakama-plugin.d.ts` (types for `ctx`), `src/BUILD.md`, and the built `actions/<action-key>.js` and `ui/app.js`. It refuses an existing draft; edit that draft instead. Then replace the example action, page, description, and input schema with the real ones, and rebuild.
+- Write only under `plugin-drafts/<plugin-id>/`. Use a stable lowercase slug. Do not use an official plugin ID (workflows, supermemory, data-view, google-meet).
+- If `bun --version` fails, report it. Do not install dependencies or tools. `package.json` must have no `dependencies`, `optionalDependencies`, or `peerDependencies`; bundle libraries into the output.
+- Do not run package scripts, import actions, load the page, run workers or migrations, or call install APIs. A build proves only that the code compiles.
+- If you delegate to a coding agent, ask for local-only drafting: no repository edits, push, PR, publish, or install.
 
-If the plugin stores records and its page shows them (contacts, books, tickets, expenses), use the data template instead:
+## Manifest
 
-```sh
-bun <skill directory>/scripts/new-plugin.mjs <plugin-id> "<Plugin Name>" --data
-```
+`access: "admin"` for admin-only actions; `effect: "write"` for actions that change data; `exposeAsTool: true` lets profiles call the action in chat. Input schemas take only: `type`, `properties`, `required`, `additionalProperties`, `items`, `enum`, `minLength`, `maxLength`, `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `minItems`, `maxItems`. No `description`, `default`, `title`, or `format`: describe inputs in the action description and apply defaults in `run`.
 
-It adds a SQLite migration with an `items` table, `list_items` and `save_item` actions, and the data page described under "Data pages". Rename the table, columns, and actions to the real ones, and keep the page structure.
+## Actions
 
-## Change an installed plugin
+Export `async function run(input, context)`. `context` has `orgId`, `pluginId`, `pluginVersion`, `actionKey`, `actor`, `invocationId`, `dataDir`, and `databasePath`; tool calls also get `profileId`, `sessionId`, and `workspaceRoot`. Write files under `context.dataDir`. For SQLite use `context.databasePath`, parameterized queries, and close the database in `finally`. Never take organization, role, or storage paths from input.
 
-A draft lives only in the workspace of the agent that built it, and another agent may have changed the plugin since. Before changing an installed plugin, find its newest release. Releases sit beside the skills folder, one folder per version:
+Host calls, one at a time: `await context.host({op:"profiles"})`, `{op:"tools",agentId}`, `{op:"execute_tool",agentId,name,input}`, `{op:"summarize",agentId,prompt,bag}`. The host checks profile access. Plugin tools cannot call plugin tools. Summaries have no tools.
 
-```sh
-ls -d "<skill directory>/../../../plugins/<plugin-id>"/*/ | sort -V | tail -1
-```
+## Page
 
-Keep editing your own `plugin-drafts/<plugin-id>/` when its `nakama.plugin.json` version is the same as or newer than the release, ignoring the release's `+dev.<digest>` suffix. If the release is newer, or you have no draft, move any old draft aside (`mv plugin-drafts/<plugin-id> plugin-drafts/<plugin-id>-old`) and start from the release:
+Keep the template's structure: the JSX pragma lines, module-level `let React;`, `React = ctx.React;` in `apply`, `ctx.styles(css)`, one `ctx.slots.register("page", Page)`, and optional `tool:<actionKey>` renderers (they get `action`, `input`, `result`, `status`). Call actions with `await ctx.host.call(actionKey, input)`. Clean up effects.
 
-```sh
-mkdir -p plugin-drafts
-cp -r "<newest release>" plugin-drafts/<plugin-id>
-chmod -R u+w plugin-drafts/<plugin-id>
-```
+`ctx.ui` gives: `Button` (variants `default`, `outline`, `ghost`, `secondary`, `destructive`, `link`; `size="sm"` in rows), `Input`, `Textarea`, `FormField`, `Select` parts, `Switch`, `Checkbox`, `Card` parts, `Dialog` parts, `ConfirmDialog`, `DropdownMenu` parts, `Tooltip`, `Spinner`, `Table` parts, and `CodeBlock`. There is no `toast()`, `cn()`, or icon set. Open `src/nakama-plugin.d.ts` only to look up the props of a component the template does not use.
 
-The release keeps `src/`, `src/BUILD.md`, and the migrations. Its version ends in `+dev.<digest>`: drop that suffix and raise the version in both `nakama.plugin.json` and `package.json`. Keep every existing migration and add new ones after them, because the installed data already ran them. If the release has no `src/`, tell the user the plugin cannot be changed from source here.
+Style rules (`build-plugin.mjs` checks most of them):
 
-Check `bun --version` with bash. If Bun or a needed library is absent, report the prerequisite. Do not install dependencies or coding tools silently. An assigned bash tool is required. A coding-agent CLI is optional. If delegating, explicitly request local-only drafting: no host repository edits, push, PR, npm publishing, installation, or activation.
-
-Use direct commands such as:
-
-```sh
-bun build ./src/greet.js --outfile actions/greet.js --target bun
-bun build ./src/ui.jsx --outfile ui/app.js --target browser
-```
-
-Do not run generated package scripts or lifecycle scripts. Do not import actions, load UI modules, execute workers or migrations, or call installation APIs. Building uses the host shell; it is not sandboxed. Compilation proves only that the build succeeded. Leave execution tests to the human reviewer.
-
-## Minimal package and manifest
-
-`package.json` needs a package name, matching version, and `"type": "module"`. No nonempty `dependencies`, `optionalDependencies`, or `peerDependencies`. Bundle libraries into output. Never depend on runtime `node_modules`. Do not use an official plugin ID: workflows, supermemory, or google-meet.
-
-```json
-{
-  "apiVersion": 1,
-  "id": "greeting",
-  "name": "Greeting",
-  "description": "Greet a person.",
-  "version": "1.0.0",
-  "minNakamaVersion": "0.4.47",
-  "author": "Your team",
-  "license": "MIT",
-  "actions": [{
-    "key": "greet",
-    "description": "Greet a person by name.",
-    "entry": "actions/greet.js",
-    "access": "member",
-    "effect": "read",
-    "exposeAsTool": true,
-    "inputSchema": {
-      "type": "object",
-      "properties": { "name": { "type": "string", "minLength": 1 } },
-      "required": ["name"],
-      "additionalProperties": false
-    }
-  }],
-  "skills": []
-}
-```
-
-Set the minimum host version to one you support. Use `access: "admin"` for admin-only actions and `effect: "write"` for mutations. Input schemas support type, properties, required, additionalProperties, items, enum, string length, numeric bounds, and array length bounds. Do not use remote references. Any other keyword fails with `invalid_manifest: unsupported_schema`, including `description`, `default`, `title`, and `format` on a property. Describe inputs in the action `description` and apply defaults in `run`.
-
-## Actions and host calls
-
-Export `async function run(input, context)`. The host supplies `orgId`, `pluginId`, `pluginVersion`, `actionKey`, `actor`, and `invocationId`. Tool calls also receive `profileId`, `sessionId`, and `workspaceRoot`. Write durable files under `context.dataDir`. Use `context.databasePath` for SQLite, parameterize queries, and close the database in finally. Never accept organization identity, roles, or storage paths from input.
-
-Call `await context.host(request)` sequentially. Supported operations: `{op:"profiles"}`, `{op:"tools",agentId}`, `{op:"execute_tool",agentId,name,input}`, and `{op:"summarize",agentId,prompt,bag}`. The host checks profile access and assignments. It does not permit recursive plugin-tool execution. Summaries have no tools.
-
-## Optional capabilities
-
-UI: declare `ui: {entryModule:"ui/app.js",assetsDir:"ui",pageLabel:"Greeting"}`. Export `inject = ["slots","host","ui","styles"]` and `apply(ctx)`. Use `ctx.React` and `ctx.ui`, never bundled React, React DOM, or internal Nakama imports. Keep the `/** @jsxRuntime classic */` and `/** @jsx React.createElement */` lines, the module-level `let React;`, and `React = ctx.React;` in `apply` from the template. Never shadow it with `const React` inside `apply`: components outside `apply` then crash with `React is not defined`. Register exactly one page with `ctx.slots.register("page", Component)`. Call actions through `ctx.host.call(actionKey,input)`; it resolves to the action result. Keep top-level code free of side effects. Clean up React effects and `ctx.effect` resources. Optional `tool:<actionKey>` renderers show the action result in chat. They receive action, input, result, and status (`running` or `done`); handle older result shapes and do not mutate during rendering.
-
-## Nakama design style for pages
-
-Make the page look like the rest of Nakama. Start from the template page.
-
-- Components: use `ctx.ui` for every control: `Button` (variants `default`, `outline`, `ghost`, `secondary`, `destructive`, `link`; size `sm` in dense rows), `Input`, `Textarea`, `Select` parts, `Switch`, `Checkbox`, `Dialog` parts, `DropdownMenu` parts, `Tooltip`, `Spinner`, and `Table` parts for records. Do not build look-alike buttons, inputs, or tables from plain elements.
-- Read `src/nakama-plugin.d.ts` before you use a component. It lists every `ctx`, `ctx.React`, and `ctx.ui` export with its props. Anything not listed is not available: no `toast()`, no `cn()`, no icons.
-- Grouping: use `Card`, `CardHeader`, `CardTitle`, and `CardContent` for boxes such as stat tiles. The template CSS removes the card shadow; never set `box-shadow` yourself. `CardHeader` and `CardContent` pad 24px, so pass a class with `--n-space-4` padding for small tiles.
-- Styling: Tailwind classes do not work in plugins. Put CSS in `src/ui.css`, import it as text, pass it to `ctx.styles(css)`, and nest every rule under `[data-plugin-id="<plugin-id>"]`.
-- Tokens: the template `src/ui.css` defines the size tokens below. Use them and the host color variables in every rule. Do not write raw colors, sizes outside the scale, or gradients. The host already shows `pageLabel` as the page title and pads the page, so do not add a big title.
-
-| Token | Value | Use |
-|---|---|---|
-| `--n-space-1/2/3/4/6` | 4, 8, 12, 16, 24px | gaps and padding |
-| `--n-text-xs` | 12px | code, badges |
-| `--n-text-sm` | 13px | secondary text, errors |
-| `--n-text-base` | 14px | body |
-| `--n-text-lg` | 18px | section titles (rare) |
-| `--n-weight-medium` / `--n-weight-semibold` | 500 / 600 | labels / titles |
-| `--n-radius` / `--n-radius-sm` | host radius (10px) / 6px | boxes / small chips |
-| `--n-font-mono` | JetBrains Mono | code and IDs |
-| `--n-content-width` | 720px | page max width (up to 960px for tables) |
-
-| Host color | Light | Dark | Use |
-|---|---|---|---|
-| `--background` / `--foreground` | white / near black | #0a0a0b / #fafafa | page and text |
-| `--card` | white | #18181b | raised boxes |
-| `--muted` / `--muted-foreground` | light gray / mid gray | #1f1f23 / #a1a1aa | quiet fills / secondary text |
-| `--border` | light gray | #27272a | 1px lines |
-| `--primary` / `--primary-foreground` | #b45309 / white | #f59e0b / #0a0a0b | main action, links |
-| `--destructive` | red | light red | errors, delete, bad numbers |
-| `--n-positive` | emerald 700 | emerald 300 | good numbers, gains (template `ui.css`) |
-| `--ring` | #b45309 | #f59e0b | focus outline |
-
-Always write `var(--primary)`, never the hex value. The hex values are for reference only; the variables switch with the theme. This table lists every color you may use. Do not search the host or other folders for more tokens.
-- Copy: one clear label per control. No subtitles or helper text unless a mistake would cause harm. Use `aria-label` on inputs without visible labels and on icon-only buttons.
-- Page actions: pass buttons to `renderHeaderActions(...)` to place them in the page header.
-- States: show a `Spinner` while loading, a short empty message, and errors in `--destructive` with `role="alert"`.
-- Conflicts: if the user asks for a page style that breaks these rules, follow the rules. Tell the user in one line which request you did not apply. Do not deliberate about it.
-- Narrow widths: the page also opens in the chat side panel, where the content is about 360px wide. Use `flex-wrap` or `repeat(auto-fit, minmax(100px, 1fr))` grids, not a fixed column count, and no fixed widths; three tiles then fit one row.
-- Tables: use `Table`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, and `TableCell`; `Table` already scrolls sideways. Show at most six columns. Put the column the user cares about most right after the name column. Give the less important columns the `plugin-optional` class so they hide in the narrow side panel. Right-align dates and numbers with `plugin-number`. Keep names and short text on one line: the name cell takes `plugin-strong`, and every company, category, or status cell takes `plugin-nowrap`, also when it has other classes. Long text (notes, email) may wrap.
-- Do not: add a hero block, `h1`/`h2` headings, all-caps letter-spaced labels, taglines, numbered feature lists, pill shapes (`999px` radius), or bordered `div`s that copy `Card`. Nakama pages are plain work tools, not landing pages.
-- A request for a nicer or better page means these rules applied with more care. It does not mean more decoration.
-
-## Data pages
-
-A page that shows stored records follows the data template, in this order from top to bottom:
-
-1. Header actions: the create button (`New <thing>`) through `renderHeaderActions`. No other buttons there unless the user asks.
-2. One filter `Input` that filters rows on the client. No Search button.
-3. The `Table` with the rows. The name cell is a `Button variant="link"` with the `plugin-row-link` class that opens the edit dialog. Add no button columns: a wide table scrolls, and a button at the right edge scrolls out of view. Open details or history from that dialog, not in a side card.
-4. Create, edit, and delete share one `Dialog` with `FormField` labels. Delete is a `destructive` button with the `plugin-footer-start` class in that dialog's footer, shown only for a saved record, and it asks with `ConfirmDialog` first. Never put an always-visible form card next to the table.
-
-Dialogs render outside the page, so plugin CSS does not reach them by default. Give every `DialogContent` the prop `data-plugin-id={ctx.pluginId}`.
-5. Loading shows `Spinner`; no rows shows one short line ("No contacts yet."); no filter matches shows "No matches."
-
-Put due or overdue work (follow-ups, reminders) as a column such as "Next follow-up", not as a separate card. Show overdue values in `--destructive`.
-
-Skills: declare `skills: [{key:"use-greeting",directory:"skills/use-greeting"}]` and include that directory's SKILL.md with name and description.
-
-Database: declare ordered immutable migrations, for example `database: {migrations:[{id:"001",path:"migrations/001.sql"}]}`. Never edit a released migration. First enable and updates execute SQL.
-
-Workers: declare up to eight bundled JS entries, for example `workers:[{key:"indexer",name:"Indexer",entry:"workers/indexer.js"}]`. Workers start on enable. Store data in NAKAMA_PLUGIN_DATA_DIR or NAKAMA_WORKER_DATA_DIR and handle termination with cleanup. Optional useHostLlm supplies an owner-only provider configuration.
-
-## Handoff
-
-After the last successful build, call `submit_plugin_draft` with the draft ID. It shows a card that walks the admin through review, install, enable, and profile access. If it fails, fix the reported problem, rebuild, and call it again.
-
-Then report the build result in one or two lines. State that the draft is uninstalled. A platform admin reviews source and built files before installation. Fresh installations stay disabled. An admin enables them separately and assigns new actions to profiles. Installed plugins have full server/browser privileges.
+- A plain work tool, not a landing page: no headings, hero blocks, taglines, all-caps labels, pills, or shadows. The host shows `pageLabel` as the title and pads the page.
+- One clear label per control. No helper text unless a mistake would cause harm. `aria-label` on inputs without a label and on icon-only buttons.
+- CSS goes in `src/ui.css`, nested under `[data-plugin-id="<plugin-id>"]`. Tailwind does not work. Use only the template tokens (`--n-space-1/2/3/4/6`, `--n-text-xs/sm/base/lg`, `--n-weight-medium/semibold`, `--n-radius`, `--n-radius-sm`, `--n-font-mono`) and host colors: `--background`, `--foreground`, `--card`, `--muted`, `--muted-foreground`, `--border`, `--primary`, `--primary-foreground`, `--destructive`, `--n-positive`, `--ring`.
+- Page buttons go in `renderHeaderActions(...)`.
+- States: `Spinner` while loading, one short empty line, errors in `--destructive` with `role="alert"`.
+- The page also opens in a 360px side panel: wrap with `flex-wrap` or `repeat(auto-fit, minmax(100px, 1fr))`, no fixed widths.
+- Tables: at most six columns, the most useful one after the name. Less useful columns get `plugin-optional`; dates and numbers `plugin-number`; the name cell `plugin-strong`; short text cells `plugin-nowrap`. Show due or overdue work as a column, overdue in `--destructive`.
+- Records: the name cell is a `Button variant="link"` with `plugin-row-link` that opens one `Dialog` for create, edit, and delete. No button columns. Delete is a `destructive` button with `plugin-footer-start`, confirmed with `ConfirmDialog`. The create button (`New <thing>`) goes in the header. One filter `Input`, no Search button. Every `DialogContent` gets `data-plugin-id={ctx.pluginId}`.
+- Tool renderers show a result as text, a short list, or a small table, not raw JSON.
+- If the user asks for a style that breaks these rules, follow the rules and say in one line what you did not apply. "Nicer" means these rules with more care, not more decoration.
