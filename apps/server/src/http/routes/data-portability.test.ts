@@ -638,6 +638,56 @@ describe("data portability routes", () => {
     ).resolves.toBe("original");
   });
 
+  test("a restore upload cut off mid-body does not lock later restores", async () => {
+    const { app, authService, databaseAdapter } = createApp();
+
+    const session = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+
+    const headers = session.headers({
+      "Content-Type": "application/json",
+      "X-CSRF-Token": session.csrfToken,
+    });
+
+    const server = Bun.serve({ fetch: app.fetch, port: 0 });
+    const path = "/v1/platform/data/import/restore";
+
+    try {
+      const lines = [...new Headers(headers)].map(
+        ([name, value]) => `${name}: ${value}`
+      );
+
+      const socket = await Bun.connect({
+        hostname: "127.0.0.1",
+        port: server.port,
+        socket: { data() {} },
+      });
+
+      // Promises more bytes than it sends, then hangs up like a closed tab.
+      socket.write(
+        `POST ${path} HTTP/1.1\r\nHost: localhost\r\n${lines.join("\r\n")}\r\nContent-Length: 5000000\r\n\r\n{"data":"AAAA`
+      );
+      await Bun.sleep(200);
+      socket.terminate();
+      await Bun.sleep(200);
+
+      const next = await fetch(`http://127.0.0.1:${server.port}${path}`, {
+        body: JSON.stringify({ confirm: false, data: "AQID" }),
+        headers,
+        method: "POST",
+      });
+
+      expect(await next.json()).not.toEqual({
+        error: "A data restore is already in progress.",
+      });
+    } finally {
+      server.stop(true);
+    }
+  });
+
   test("non-platform users cannot export or import data", async () => {
     const { app, authService, databaseAdapter } = createApp();
 
