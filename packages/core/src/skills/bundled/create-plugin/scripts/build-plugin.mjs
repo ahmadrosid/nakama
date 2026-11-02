@@ -1,8 +1,8 @@
 // Build a plugin draft and check it before submit_plugin_draft.
 // Usage (from the profile workspace): bun build-plugin.mjs <plugin-id>
-// It checks the manifest with the host's rules, bundles every action, worker,
-// and the page from src/, and lints the page against the Nakama style rules.
-// It prints every problem at once, so one fix round is enough.
+// Checks the manifest, bundles src/ to each entry, and lints the page.
+// It prints every problem at once.
+/* oxlint-disable anti-slop/no-runtime-typeof -- Manifest parse boundary; the installed script cannot import zod. */
 import { readdir, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
@@ -47,17 +47,36 @@ const SCHEMA_TYPES = new Set([
   "string",
 ]);
 
-const SOURCE_EXTENSIONS = [".js", ".jsx", ".ts", ".tsx", ".mjs"];
-
-// Text the templates ship. A draft that still has it was not finished.
-const TEMPLATE_TEXT = [
-  [/^.+ plugin\.$/, "description: replace the template text"],
-  [/^Greet a person by name\.$/, "description: replace the example action"],
-];
+// Example action text the template ships; a draft with it is unfinished.
+const EXAMPLE_ACTION_DESCRIPTION = "Greet a person by name.";
 
 function isText(value) {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This script is the manifest parse boundary; it runs from the installed skill copy and cannot import zod.
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function isObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/** [index, item] pairs of a manifest list; reports a non-array or non-object entry. */
+function entriesOf(value, where, problems = []) {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    problems.push(`${where}: must be an array`);
+
+    return [];
+  }
+
+  return [...value.entries()].filter(([index, item]) => {
+    if (!isObject(item)) {
+      problems.push(`${where}[${index}]: must be an object`);
+    }
+
+    return isObject(item);
+  });
 }
 
 function isRelative(value) {
@@ -68,41 +87,8 @@ function isRelative(value) {
   );
 }
 
-async function exists(file) {
-  return Boolean(await stat(file).catch(() => null));
-}
-
-async function readJson(file, problems) {
-  let text;
-
-  try {
-    text = await readFile(file, "utf8");
-  } catch {
-    problems.push(`${path.basename(file)}: file is missing`);
-
-    return null;
-  }
-
-  try {
-    return JSON.parse(text);
-  } catch (error) {
-    // Bun's JSON errors have no position. Hand edits mostly leave a double or
-    // trailing comma, so point at that line when there is one.
-    const slip = /,(\s*)[,}\]]/.exec(text);
-    const where = slip ? `:${lineOf(text, slip.index)}` : "";
-    const hint = slip ? ": extra comma" : "";
-
-    problems.push(
-      `${path.basename(file)}${where}: invalid JSON (${error.message})${hint}`
-    );
-
-    return null;
-  }
-}
-
 function checkSchema(schema, where, problems) {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This script is the manifest parse boundary; it runs from the installed skill copy and cannot import zod.
-  if (schema === null || typeof schema !== "object" || Array.isArray(schema)) {
+  if (!isObject(schema)) {
     problems.push(`${where}: must be an object`);
 
     return;
@@ -117,13 +103,17 @@ function checkSchema(schema, where, problems) {
     }
 
     if (keyword === "properties") {
-      for (const [name, child] of Object.entries(value ?? {})) {
+      if (!isObject(value)) {
+        problems.push(`${where}.properties: must be an object`);
+        continue;
+      }
+
+      for (const [name, child] of Object.entries(value)) {
         checkSchema(child, `${where}.properties.${name}`, problems);
       }
     } else if (keyword === "items") {
       checkSchema(value, `${where}.items`, problems);
     } else if (keyword === "additionalProperties") {
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This script is the manifest parse boundary; it runs from the installed skill copy and cannot import zod.
       if (typeof value !== "boolean") {
         checkSchema(value, `${where}.additionalProperties`, problems);
       }
@@ -133,22 +123,29 @@ function checkSchema(schema, where, problems) {
       if (!(types.length && types.every((type) => SCHEMA_TYPES.has(type)))) {
         problems.push(`${where}.type: unknown type ${JSON.stringify(value)}`);
       }
-    } else if (keyword === "required" || keyword === "enum") {
-      if (!(Array.isArray(value) && value.length)) {
-        problems.push(`${where}.${keyword}: must be a non-empty array`);
+    } else if (keyword === "required") {
+      // An empty list is valid: every input is optional.
+      const names =
+        Array.isArray(value) && value.every((name) => typeof name === "string");
+
+      if (!names) {
+        problems.push(`${where}.required: must be an array of names`);
       }
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This script is the manifest parse boundary; it runs from the installed skill copy and cannot import zod.
+    } else if (keyword === "enum") {
+      if (!(Array.isArray(value) && value.length)) {
+        problems.push(`${where}.enum: must be a non-empty array`);
+      }
     } else if (typeof value !== "number" || !Number.isFinite(value)) {
       problems.push(`${where}.${keyword}: must be a number`);
     }
   }
 }
 
-function checkKeys(list, where, problems) {
+function checkKeys(entries, where, problems) {
   const seen = new Set();
 
-  for (const [index, item] of list.entries()) {
-    if (!(isText(item?.key) && KEY.test(item.key))) {
+  for (const [index, item] of entries) {
+    if (!(isText(item.key) && KEY.test(item.key))) {
       problems.push(
         `${where}[${index}].key: use lowercase letters, digits, - or _`
       );
@@ -156,12 +153,12 @@ function checkKeys(list, where, problems) {
       problems.push(`${where}[${index}].key: duplicate "${item.key}"`);
     }
 
-    seen.add(item?.key);
+    seen.add(item.key);
   }
 }
 
 /** Every problem the host would reject at submit, in plain words. */
-function checkManifest(manifest, packageJson, draftId) {
+export function checkManifest(manifest, packageJson, draftId) {
   const problems = [];
   const m = manifest;
 
@@ -181,8 +178,8 @@ function checkManifest(manifest, packageJson, draftId) {
     }
   }
 
-  if (isText(m.description) && TEMPLATE_TEXT[0][0].test(m.description)) {
-    problems.push(TEMPLATE_TEXT[0][1]);
+  if (isText(m.description) && m.description === `${m.name} plugin.`) {
+    problems.push("description: replace the template text");
   }
 
   for (const field of ["version", "minNakamaVersion"]) {
@@ -223,21 +220,17 @@ function checkManifest(manifest, packageJson, draftId) {
     }
   }
 
-  const actions = Array.isArray(m.actions) ? m.actions : [];
-
-  if (m.actions !== undefined && !Array.isArray(m.actions)) {
-    problems.push("actions: must be an array");
-  }
+  const actions = entriesOf(m.actions, "actions", problems);
 
   checkKeys(actions, "actions", problems);
 
-  for (const [index, action] of actions.entries()) {
-    const where = `actions[${index}] (${action?.key})`;
+  for (const [index, action] of actions) {
+    const where = `actions[${index}] (${action.key})`;
 
     if (!isText(action.description)) {
       problems.push(`${where}.description: required`);
-    } else if (TEMPLATE_TEXT[1][0].test(action.description)) {
-      problems.push(`${where}.${TEMPLATE_TEXT[1][1]}`);
+    } else if (action.description === EXAMPLE_ACTION_DESCRIPTION) {
+      problems.push(`${where}.description: replace the example action`);
     }
 
     if (!isRelative(action.entry)) {
@@ -256,7 +249,6 @@ function checkManifest(manifest, packageJson, draftId) {
 
     if (
       action.exposeAsTool !== undefined &&
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This script is the manifest parse boundary; it runs from the installed skill copy and cannot import zod.
       typeof action.exposeAsTool !== "boolean"
     ) {
       problems.push(`${where}.exposeAsTool: must be true or false`);
@@ -281,7 +273,7 @@ function checkManifest(manifest, packageJson, draftId) {
     }
   }
 
-  const workers = Array.isArray(m.workers) ? m.workers : [];
+  const workers = entriesOf(m.workers, "workers", problems);
 
   if (workers.length > 8) {
     problems.push("workers: at most 8");
@@ -289,7 +281,7 @@ function checkManifest(manifest, packageJson, draftId) {
 
   checkKeys(workers, "workers", problems);
 
-  for (const [index, worker] of workers.entries()) {
+  for (const [index, worker] of workers) {
     if (!isText(worker.name)) {
       problems.push(`workers[${index}].name: required`);
     }
@@ -299,10 +291,10 @@ function checkManifest(manifest, packageJson, draftId) {
     }
   }
 
-  const skills = Array.isArray(m.skills) ? m.skills : [];
+  const skills = entriesOf(m.skills, "skills", problems);
   checkKeys(skills, "skills", problems);
 
-  for (const [index, skill] of skills.entries()) {
+  for (const [index, skill] of skills) {
     if (!isRelative(skill.directory)) {
       problems.push(`skills[${index}].directory: use a relative path`);
     }
@@ -310,7 +302,11 @@ function checkManifest(manifest, packageJson, draftId) {
 
   const ids = new Set();
 
-  for (const [index, migration] of (m.database?.migrations ?? []).entries()) {
+  for (const [index, migration] of entriesOf(
+    m.database?.migrations,
+    "database.migrations",
+    problems
+  )) {
     if (!(isText(migration.id) && isRelative(migration.path))) {
       problems.push(
         `database.migrations[${index}]: needs id and a relative path`
@@ -325,6 +321,51 @@ function checkManifest(manifest, packageJson, draftId) {
   }
 
   return problems;
+}
+
+const SOURCE_EXTENSIONS = [".js", ".jsx", ".ts", ".tsx", ".mjs"];
+
+// At-rules whose blocks hold style rules; those rules need the plugin scope.
+const GROUP_AT_RULE = /^@(media|container|supports|layer|scope)\b/;
+
+async function exists(file) {
+  return Boolean(await stat(file).catch(() => null));
+}
+
+async function readJson(file, problems) {
+  let text;
+
+  try {
+    text = await readFile(file, "utf8");
+  } catch {
+    problems.push(`${path.basename(file)}: file is missing`);
+
+    return null;
+  }
+
+  try {
+    const value = JSON.parse(text);
+
+    if (!isObject(value)) {
+      problems.push(`${path.basename(file)}: must be a JSON object`);
+
+      return null;
+    }
+
+    return value;
+  } catch (error) {
+    // Bun's JSON errors have no position. Hand edits mostly leave a double or
+    // trailing comma, so point at that line when there is one.
+    const slip = /,(\s*)[,}\]]/.exec(text);
+    const where = slip ? `:${lineOf(text, slip.index)}` : "";
+    const hint = slip ? ": extra comma" : "";
+
+    problems.push(
+      `${path.basename(file)}${where}: invalid JSON (${error.message})${hint}`
+    );
+
+    return null;
+  }
 }
 
 function lineOf(text, index) {
@@ -421,34 +462,42 @@ function lintCss(file, source, pluginId) {
     }
   }
 
-  // Every top-level rule must sit under this plugin's scope.
-  let depth = 0;
+  // Every style rule needs the plugin scope, also inside @media and @container.
+  // Each open block records whether its contents are checked.
+  const scope = `[data-plugin-id="${pluginId}"]`;
+  const open = [];
   let start = 0;
 
   for (let index = 0; index < css.length; index += 1) {
     const char = css[index];
 
     if (char === "{") {
-      if (depth === 0) {
-        const selector = css.slice(start, index).trim();
+      const selector = css.slice(start, index).trim();
+      let done = open.at(-1) ?? false;
 
-        if (
-          !(
-            selector.startsWith("@") ||
-            selector.includes(`[data-plugin-id="${pluginId}"]`)
-          )
-        ) {
-          problems.push(
-            `${file}:${lineOf(css, index)}: nest "${selector}" under [data-plugin-id="${pluginId}"]`
-          );
+      if (!done) {
+        if (GROUP_AT_RULE.test(selector)) {
+          done = false;
+        } else if (selector.startsWith("@")) {
+          // @keyframes, @font-face, and the like hold no style rules.
+          done = true;
+        } else {
+          if (!selector.includes(scope)) {
+            problems.push(
+              `${file}:${lineOf(css, index)}: nest "${selector}" under ${scope}`
+            );
+          }
+
+          done = true;
         }
       }
 
-      depth += 1;
-    } else if (char === "}") {
-      depth -= 1;
+      open.push(done);
       start = index + 1;
-    } else if (char === ";" && depth === 0) {
+    } else if (char === "}") {
+      open.pop();
+      start = index + 1;
+    } else if (char === ";") {
       start = index + 1;
     }
   }
@@ -495,23 +544,42 @@ export async function buildDraft(draft) {
 
   problems.push(...checkManifest(manifest, packageJson, draftId));
 
+  // checkManifest already reported bad lists; here only valid items count.
+  const items = (value) => entriesOf(value, "").map(([, item]) => item);
+  const actions = items(manifest.actions);
+  const workers = items(manifest.workers);
   const base = (entry) => path.basename(String(entry)).replace(/\.m?js$/, "");
 
   const outputs = [
-    ...(manifest.actions ?? []).map((item) => [
+    ...[...actions, ...workers].map((item) => [
       item.entry,
       "bun",
       base(item.entry),
     ]),
-    ...(manifest.workers ?? []).map((item) => [
-      item.entry,
-      "bun",
-      base(item.entry),
-    ]),
-    ...(manifest.ui ? [[manifest.ui.entryModule, "browser", "ui"]] : []),
+    ...(isObject(manifest.ui)
+      ? [[manifest.ui.entryModule, "browser", "ui"]]
+      : []),
   ].filter(([entry]) => isRelative(entry));
 
+  // Each output builds from src/<name>, so two outputs cannot share a name.
+  const sourceOwner = new Map();
+
   for (const [entry, target, name] of outputs) {
+    const owner = sourceOwner.get(name);
+
+    if (owner === entry) {
+      continue;
+    }
+
+    if (owner) {
+      problems.push(
+        `${entry}: builds from src/${name} like ${owner}; give one of them another file name`
+      );
+      continue;
+    }
+
+    sourceOwner.set(name, entry);
+
     const source = await findSource(draft, name);
 
     if (!source) {
@@ -544,8 +612,8 @@ export async function buildDraft(draft) {
   const removed = [];
 
   const entries = new Set(
-    [...(manifest.actions ?? []), ...(manifest.workers ?? [])].flatMap(
-      (item) => (isRelative(item.entry) ? [item.entry] : [])
+    [...actions, ...workers].flatMap((item) =>
+      isRelative(item.entry) ? [item.entry] : []
     )
   );
 
@@ -569,7 +637,7 @@ export async function buildDraft(draft) {
     }
   }
 
-  for (const migration of manifest.database?.migrations ?? []) {
+  for (const migration of items(manifest.database?.migrations)) {
     if (
       isRelative(migration.path) &&
       !(await exists(path.join(draft, migration.path)))
@@ -578,7 +646,7 @@ export async function buildDraft(draft) {
     }
   }
 
-  for (const skill of manifest.skills ?? []) {
+  for (const skill of items(manifest.skills)) {
     if (
       isRelative(skill.directory) &&
       !(await exists(path.join(draft, skill.directory, "SKILL.md")))

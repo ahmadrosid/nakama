@@ -129,7 +129,7 @@ if (charts) {
 }
 
 if (problems.length) {
-  console.log("Still template text (replace before submit):");
+  console.log("Fix before submit:");
 
   for (const problem of problems) {
     console.log(`- ${problem}`);

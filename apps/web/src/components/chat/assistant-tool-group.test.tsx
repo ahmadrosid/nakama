@@ -144,6 +144,31 @@ test("reads, writes or edits in a row collapse into one row that opens to the fi
 
     expect(buttons()).toContain("ui.jsx");
     expect(buttons()).toContain("ui.css");
+
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={new QueryClient()}>
+          <MemoryRouter>
+            <AssistantTurnSegmentView
+              segment={{
+                active: false,
+                kind: "work",
+                tools: [
+                  file("write_file", "w3", "plugin/a.sql"),
+                  {
+                    ...file("write_file", "w4", "plugin/b.sql"),
+                    toolResult: { error: "EACCES" },
+                  },
+                ],
+              }}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>
+      )
+    );
+
+    // A failed write shows in the error color while the group is closed.
+    expect(container.querySelector("button .text-red-600")).not.toBeNull();
   } finally {
     act(() => root.unmount());
   }

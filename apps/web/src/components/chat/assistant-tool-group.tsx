@@ -779,11 +779,15 @@ function FileGroupRow({ tools }: { tools: ChatListItem[] }) {
     tools.some((item) => item.toolStatus === "running")
   );
 
+  // A failed read or write must show while the group is closed.
+  const failed = tools.filter((item) => toolItemFailed(item)).length;
+
   return (
     <div>
       <CollapsibleTrigger
         className="pl-0"
-        label={`${verb} ${tools.length} files`}
+        label={`${verb} ${tools.length} files${failed ? `, ${failed} failed` : ""}`}
+        labelClassName={failed ? "text-red-600 dark:text-red-400" : undefined}
         onToggle={() => setOpen((current) => !current)}
         open={open}
         tool={tool}
@@ -1367,6 +1371,18 @@ function ToolTimelineDetails({
   );
 }
 
+function toolItemFailed(
+  message: ChatListItem,
+  output = message.toolStatus === "done"
+    ? formatToolResult(message.tool, toolItemImages(message).rest)
+    : null
+): boolean {
+  return (
+    message.toolStatus === "done" &&
+    isToolResultError(message.toolResult, output)
+  );
+}
+
 /** Rows inside a file group show only the file name. */
 function toolTimelineLabel(message: ChatListItem, nested: boolean): string {
   const fileName = nested
@@ -1398,9 +1414,7 @@ function ToolTimelineItem({
   const queryValue = message.toolInput?.query;
   const query = readString(queryValue);
 
-  const isError =
-    message.toolStatus === "done" &&
-    isToolResultError(message.toolResult, output);
+  const isError = toolItemFailed(message, output);
 
   const hasDetails = Boolean(
     isRunning || command || query || output || images.length > 0

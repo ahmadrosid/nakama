@@ -105,7 +105,12 @@ export function createCharts(ctx) {
     const [ref, width] = useWidth();
 
     if (!data.length) {
-      return <Empty />;
+      // Keep the measured div mounted, so the chart draws when data arrives.
+      return (
+        <div className="plugin-chart" ref={ref}>
+          <Empty />
+        </div>
+      );
     }
 
     const y = scale(data.map((point) => point.value), false);
@@ -151,7 +156,12 @@ export function createCharts(ctx) {
     const [ref, width] = useWidth();
 
     if (!data.length) {
-      return <Empty />;
+      // Keep the measured div mounted, so the chart draws when data arrives.
+      return (
+        <div className="plugin-chart" ref={ref}>
+          <Empty />
+        </div>
+      );
     }
 
     const y = scale(data.map((bar) => bar.value), true);

@@ -275,6 +275,130 @@ describe("ensureBundledSkillFiles", () => {
     expect(run("build-plugin.mjs", "task-hub").exitCode).toBe(1);
   });
 
+  test("build-plugin reports bad lists, shared sources, and unscoped @media rules without crashing", async () => {
+    await ensureBundledSkillFiles();
+
+    const workspace = await mkdtemp(join(tmpdir(), "nakama-plugin-ws-"));
+
+    const scripts = join(
+      configDir,
+      "agent",
+      "skills",
+      "create-plugin",
+      "scripts"
+    );
+
+    const draft = join(workspace, "plugin-drafts", "task-hub");
+
+    const run = (script: string, ...args: string[]) =>
+      Bun.spawnSync(["bun", join(scripts, script), ...args], {
+        cwd: workspace,
+      });
+
+    expect(
+      run("new-plugin.mjs", "task-hub", "Task Hub", "list_tasks").exitCode
+    ).toBe(0);
+
+    const manifestPath = join(draft, "nakama.plugin.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    // A real description may end in "plugin."; only the template text fails.
+    manifest.description = "Show tasks from the Jira plugin.";
+    manifest.actions[0].description = "List open tasks.";
+    manifest.actions[0].inputSchema.required = [];
+    manifest.skills = [null];
+    manifest.workers = [
+      { entry: "workers/list_tasks.js", key: "sync", name: "Sync" },
+    ];
+    await Bun.write(manifestPath, JSON.stringify(manifest, null, 2));
+
+    await Bun.write(
+      join(draft, "src", "ui.css"),
+      `${await readFile(join(draft, "src", "ui.css"), "utf8")}\n@media (max-width: 600px) { .row { display: none; } }\n`
+    );
+
+    const broken = run("build-plugin.mjs", "task-hub");
+    const stderr = broken.stderr.toString();
+
+    expect(broken.exitCode).toBe(1);
+    expect(stderr).not.toContain("TypeError");
+    // The null skill, the worker sharing src/list_tasks, and the @media rule.
+    expect(
+      stderr.split("\n").filter((line) => line.startsWith("- "))
+    ).toHaveLength(3);
+
+    await Bun.write(manifestPath, "null");
+
+    const empty = run("build-plugin.mjs", "task-hub");
+
+    expect(empty.exitCode).toBe(1);
+  });
+
+  test("build-plugin accepts and rejects the same manifests as the host", async () => {
+    const { validatePluginManifest } = await import("../../plugins");
+
+    const scriptPath = join(
+      import.meta.dir,
+      "create-plugin",
+      "scripts",
+      "build-plugin.mjs"
+    );
+
+    const schemas = [
+      { properties: {}, required: [], type: "object" },
+      {
+        properties: { q: { type: "string" } },
+        required: ["q"],
+        type: "object",
+      },
+      { properties: { q: { default: "", type: "string" } }, type: "object" },
+      { enum: [], type: "string" },
+      { type: "date" },
+    ];
+
+    const manifests = schemas.map((inputSchema) => ({
+      actions: [
+        {
+          access: "member",
+          description: "List tasks.",
+          effect: "read",
+          entry: "actions/list.js",
+          inputSchema,
+          key: "list",
+        },
+      ],
+      apiVersion: 1,
+      author: "Team",
+      description: "Track tasks.",
+      id: "task-hub",
+      license: "MIT",
+      minNakamaVersion: "0.4.47",
+      name: "Task Hub",
+      version: "1.0.0",
+    }));
+
+    // SAFETY: The script exports checkManifest; this test pins its shape.
+    const { checkManifest } = (await import(scriptPath)) as {
+      checkManifest: (
+        manifest: (typeof manifests)[number],
+        packageJson: { type: string; version: string },
+        draftId: string
+      ) => string[];
+    };
+
+    for (const value of manifests) {
+      const host = validatePluginManifest(value).ok;
+
+      const script =
+        checkManifest(value, { type: "module", version: "1.0.0" }, "task-hub")
+          .length === 0;
+
+      expect({ schema: value.actions[0]?.inputSchema, script }).toEqual({
+        schema: value.actions[0]?.inputSchema,
+        script: host,
+      });
+    }
+  });
+
   test("does not overwrite existing skill files", async () => {
     const skillPath = join(
       configDir,
