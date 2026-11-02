@@ -65,6 +65,14 @@ export function createUploadFetch(
   return (input, init) =>
     new Promise<Response>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
+      const signal = init?.signal;
+
+      if (signal?.aborted) {
+        reject(abortedError());
+
+        return;
+      }
+
       xhr.open(init?.method ?? "POST", String(input));
       xhr.withCredentials = init?.credentials === "include";
 
@@ -72,33 +80,77 @@ export function createUploadFetch(
         xhr.setRequestHeader(name, value);
       }
 
-      xhr.upload.onprogress = (event) => {
-        onProgress(event.loaded, event.lengthComputable ? event.total : 0);
+      const abort = () => xhr.abort();
+      signal?.addEventListener("abort", abort, { once: true });
+
+      const fail = (error: Error) => {
+        signal?.removeEventListener("abort", abort);
+        reject(error);
       };
 
-      xhr.onerror = () => {
-        reject(
+      const interrupted = () => {
+        fail(
           new Error(
             "The upload was interrupted. Check the connection and try again."
           )
         );
       };
 
+      xhr.upload.onprogress = (event) => {
+        onProgress(event.loaded, event.lengthComputable ? event.total : 0);
+      };
+
+      xhr.onerror = interrupted;
+      xhr.ontimeout = interrupted;
+
+      xhr.onabort = () => {
+        if (signal?.aborted) {
+          fail(abortedError());
+        } else {
+          interrupted();
+        }
+      };
+
       xhr.onload = () => {
+        signal?.removeEventListener("abort", abort);
         resolve(
-          new Response(xhr.responseText, {
-            headers: {
-              "Content-Type":
-                xhr.getResponseHeader("Content-Type") ?? "application/json",
-            },
-            status: xhr.status,
-          })
+          new Response(
+            NULL_BODY_STATUSES.has(xhr.status) ? null : xhr.responseText,
+            {
+              headers: parseXhrHeaders(xhr.getAllResponseHeaders()),
+              status: xhr.status,
+            }
+          )
         );
       };
-      // SAFETY: the only caller passes a Blob or BufferSource, both valid for XHR.
 
+      // SAFETY: the only caller passes a Blob or BufferSource, both valid for XHR.
       xhr.send(init?.body as XMLHttpRequestBodyInit);
     });
+}
+
+function abortedError(): Error {
+  return new DOMException("The upload was aborted.", "AbortError");
+}
+
+// A Response with one of these statuses must not have a body.
+const NULL_BODY_STATUSES = new Set([101, 204, 205, 304]);
+
+function parseXhrHeaders(raw: string): Headers {
+  const headers = new Headers();
+
+  for (const line of raw.trim().split(/[\r\n]+/)) {
+    const separator = line.indexOf(":");
+
+    if (separator > 0) {
+      headers.append(
+        line.slice(0, separator).trim(),
+        line.slice(separator + 1).trim()
+      );
+    }
+  }
+
+  return headers;
 }
 
 export async function readBodyWithProgress(
@@ -110,7 +162,9 @@ export async function readBodyWithProgress(
   }
 
   const total = Number(response.headers.get("Content-Length") ?? 0);
-  const chunks: Uint8Array[] = [];
+  // With a known size, write into one buffer so the tab holds the archive once.
+  const data = new Uint8Array(total > 0 ? total : 0);
+  const extra: Uint8Array[] = [];
   let loaded = 0;
   onProgress(0, total);
 
@@ -124,20 +178,36 @@ export async function readBodyWithProgress(
       break;
     }
 
-    chunks.push(value);
+    if (extra.length === 0 && loaded + value.byteLength <= data.byteLength) {
+      data.set(value, loaded);
+    } else {
+      // The size is unknown or the header was wrong: keep the rest as chunks.
+      extra.push(value);
+    }
+
     loaded += value.byteLength;
     onProgress(loaded, total);
   }
 
-  const data = new Uint8Array(loaded);
-  let offset = 0;
+  if (extra.length === 0) {
+    return data.byteLength === loaded
+      ? data.buffer
+      : data.slice(0, loaded).buffer;
+  }
 
-  for (const chunk of chunks) {
-    data.set(chunk, offset);
+  const filled =
+    loaded - extra.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+
+  const joined = new Uint8Array(loaded);
+  joined.set(data.subarray(0, filled), 0);
+  let offset = filled;
+
+  for (const chunk of extra) {
+    joined.set(chunk, offset);
     offset += chunk.byteLength;
   }
 
-  return data.buffer;
+  return joined.buffer;
 }
 
 export function readContentDispositionFilename(

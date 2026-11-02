@@ -10,12 +10,22 @@ import {
 import type { DatabaseAdapter } from "@nakama/db";
 import {
   previewNakamaDataImport,
-  readImportRequest,
   restoreNakamaDataImport,
 } from "../../services/data-portability";
 import type { ServerOptions } from "../context";
-import { assertJsonRequest, errorResponse, json, readJson } from "../shared";
+import {
+  assertJsonRequest,
+  errorResponse,
+  isArchiveRequest,
+  json,
+  readJson,
+} from "../shared";
 import type { HonoApp } from "../types";
+import {
+  importArchiveBodySchema,
+  importConfirmQuerySchema,
+  readImportRequest,
+} from "./data-portability";
 
 export function registerSetupImportRoutes(
   app: HonoApp,
@@ -40,8 +50,6 @@ export function registerSetupImportRoutes(
     })
     .openapi("SetupRestoreDataImportRequest");
 
-  const archiveBodySchema = z.string().openapi({ format: "binary" });
-
   const previewResponseSchema = z
     .object({})
     .passthrough()
@@ -61,7 +69,7 @@ export function registerSetupImportRoutes(
         body: {
           content: {
             "application/json": { schema: importRequestSchema },
-            "application/zip": { schema: archiveBodySchema },
+            "application/zip": { schema: importArchiveBodySchema },
           },
           required: true,
         },
@@ -102,12 +110,11 @@ export function registerSetupImportRoutes(
         body: {
           content: {
             "application/json": { schema: restoreRequestSchema },
-            "application/zip": { schema: archiveBodySchema },
+            "application/zip": { schema: importArchiveBodySchema },
           },
           required: true,
         },
-        // Only read for an application/zip body; JSON carries `confirm` itself.
-        query: z.object({ confirm: z.enum(["true"]).optional() }),
+        query: importConfirmQuerySchema,
       },
       responses: {
         200: {
@@ -203,13 +210,10 @@ export function registerSetupImportRoutes(
 }
 
 // These routes run before any login, so a cross-site form must not reach them.
-// application/zip is not a CORS-simple type, so it needs a preflight like JSON.
 function assertImportContentType(request: Request): void {
-  if (request.headers.get("content-type")?.startsWith("application/zip")) {
-    return;
+  if (!isArchiveRequest(request)) {
+    assertJsonRequest(request);
   }
-
-  assertJsonRequest(request);
 }
 
 async function assertSetupImportAllowed(

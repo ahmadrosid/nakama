@@ -992,32 +992,8 @@ function decryptArchiveIfNeeded(archive: Buffer): Buffer {
   }
 }
 
-/**
- * Reads an import body as a raw ZIP or as the JSON `{ data, confirm }` form.
- * Browsers send the raw ZIP because base64-encoding a large file in a tab takes
- * minutes. A raw body carries `confirm` in the query string.
- */
-export async function readImportRequest(
-  request: Request,
-  readJsonBody: () => Promise<{ confirm?: boolean; data: string }>
-): Promise<{ archive: Buffer; confirm: boolean }> {
-  const contentType = request.headers
-    .get("content-type")
-    ?.split(";")[0]
-    ?.trim()
-    .toLowerCase();
-
-  if (contentType !== "application/zip") {
-    const body = await readJsonBody();
-
-    return {
-      archive: decodeArchiveRequestData(body.data),
-      confirm: body.confirm === true,
-    };
-  }
-
-  const archive = Buffer.from(await request.arrayBuffer());
-
+/** Checks and opens a raw ZIP body, the form a browser sends. */
+export function decodeArchiveRequestBytes(archive: Buffer): Buffer {
   if (archive.length > MAX_IMPORT_ARCHIVE_BYTES) {
     throw new NakamaApiError(
       `Import archive must be at most ${megabytes(MAX_IMPORT_ARCHIVE_BYTES)}.`,
@@ -1029,10 +1005,7 @@ export async function readImportRequest(
     throw new NakamaApiError("Import archive data is required.", 400);
   }
 
-  return {
-    archive: decryptArchiveIfNeeded(archive),
-    confirm: new URL(request.url).searchParams.get("confirm") === "true",
-  };
+  return decryptArchiveIfNeeded(archive);
 }
 
 function megabytes(bytes: number): string {

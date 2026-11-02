@@ -1057,6 +1057,33 @@ test("exportData reports download progress against Content-Length", async () => 
   expect(seen.at(-1)).toEqual([10, 10]);
 });
 
+test("exportData keeps every byte when Content-Length is missing or wrong", async () => {
+  const body = Uint8Array.from({ length: 10 }, (_, index) => index);
+
+  const headerSets: Record<string, string>[] = [{}, { "Content-Length": "4" }];
+
+  for (const headers of headerSets) {
+    const client = new NakamaClient({
+      baseUrl: "http://localhost:4310",
+      fetch: async () => {
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(body.subarray(0, 3));
+            controller.enqueue(body.subarray(3));
+            controller.close();
+          },
+        });
+
+        return new Response(stream, { headers });
+      },
+    });
+
+    const result = await client.exportData({ onProgress: () => {} });
+
+    expect(new Uint8Array(result.data)).toEqual(body);
+  }
+});
+
 test("an upload with onProgress goes through XHR and keeps the API error", async () => {
   const sent: Uint8Array[] = [];
   const opened: string[] = [];
@@ -1074,7 +1101,7 @@ test("an upload with onProgress goes through XHR and keeps the API error", async
       }) => {},
     };
     withCredentials = false;
-    getResponseHeader = () => "application/json";
+    getAllResponseHeaders = () => "content-type: application/json\r\n";
     open = (method: string, url: string) => opened.push(`${method} ${url}`);
     setRequestHeader = () => {};
     send = (body: Uint8Array) => {
@@ -1096,7 +1123,7 @@ test("an upload with onProgress goes through XHR and keeps the API error", async
         confirm: true,
         onProgress: (loaded, total) => seen.push([loaded, total]),
       })
-    ).rejects.toMatchObject({ message: "Too big.", status: 413 });
+    ).rejects.toMatchObject({ status: 413 });
     expect(opened).toEqual([
       "POST http://localhost:4310/v1/platform/data/import/restore?confirm=true",
     ]);

@@ -56,7 +56,9 @@ export function DataPortabilityPanel() {
   const exportMutation = useExportData();
   const previewMutation = usePreviewDataImport();
   const restoreMutation = useRestoreDataImport();
-  const { begin, clear, track, transfer } = useTransferProgress();
+  // One per section, so each bar shows only under the action that started it.
+  const download = useTransferProgress();
+  const upload = useTransferProgress();
 
   const isBusy =
     exportMutation.isPending ||
@@ -72,11 +74,11 @@ export function DataPortabilityPanel() {
   async function handleExport() {
     setError(null);
     // The server zips everything before the first byte, so that wait gets a label.
-    begin("Preparing the backup on the server");
+    download.begin("Preparing the backup on the server");
 
     try {
       const result = await exportMutation.mutateAsync(
-        track("Downloading the backup")
+        download.track("Downloading the backup")
       );
 
       downloadArchive(result.filename, result.data);
@@ -84,7 +86,7 @@ export function DataPortabilityPanel() {
     } catch (err) {
       setError(formatError(err));
     } finally {
-      clear();
+      download.clear();
     }
   }
 
@@ -97,19 +99,22 @@ export function DataPortabilityPanel() {
       return;
     }
 
-    begin("Uploading the backup");
+    upload.begin("Uploading the backup");
 
     try {
       setPreview(
         await previewMutation.mutateAsync({
           file,
-          onProgress: track("Uploading the backup", "Checking the backup"),
+          onProgress: upload.track(
+            "Uploading the backup",
+            "Checking the backup"
+          ),
         })
       );
     } catch (err) {
       setError(formatError(err));
     } finally {
-      clear();
+      upload.clear();
     }
   }
 
@@ -119,13 +124,13 @@ export function DataPortabilityPanel() {
     }
 
     setError(null);
-    begin("Uploading the backup");
+    upload.begin("Uploading the backup");
 
     try {
       await restoreMutation.mutateAsync({
         confirm: true,
         file: selectedFile,
-        onProgress: track("Uploading the backup", "Restoring the files"),
+        onProgress: upload.track("Uploading the backup", "Restoring the files"),
       });
       toast("Backup restored.");
       setPreview(null);
@@ -137,7 +142,7 @@ export function DataPortabilityPanel() {
     } catch (err) {
       setError(formatError(err));
     } finally {
-      clear();
+      upload.clear();
     }
   }
 
@@ -156,9 +161,9 @@ export function DataPortabilityPanel() {
           <PendingIcon idle={DownloadIcon} pending={exportMutation.isPending} />
           Download
         </Button>
-        {transfer && exportMutation.isPending ? (
+        {download.transfer ? (
           <div className="basis-full">
-            <TransferProgressBar {...transfer} />
+            <TransferProgressBar {...download.transfer} />
           </div>
         ) : null}
       </section>
@@ -194,9 +199,7 @@ export function DataPortabilityPanel() {
           />
         </div>
 
-        {transfer && !exportMutation.isPending ? (
-          <TransferProgressBar {...transfer} />
-        ) : null}
+        {upload.transfer ? <TransferProgressBar {...upload.transfer} /> : null}
 
         {selectedFile ? (
           <DataImportPreview

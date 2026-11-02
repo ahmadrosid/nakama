@@ -9,15 +9,56 @@ import {
   createNakamaDataExport,
   createNakamaOrgDataExport,
   createNakamaUserDataExport,
+  decodeArchiveRequestBytes,
+  decodeArchiveRequestData,
   previewNakamaDataImport,
-  readImportRequest,
   restoreNakamaDataImport,
 } from "../../services/data-portability";
 import { runWithPluginExportBarrier } from "../../services/plugin-service";
 import type { ServerOptions } from "../context";
 import { requirePlatformAdminFromContext } from "../org-guards";
-import { errorResponse, json, readJson } from "../shared";
+import {
+  errorResponse,
+  isArchiveRequest,
+  json,
+  readJson,
+  readUntilClientGone,
+} from "../shared";
 import type { HonoApp } from "../types";
+
+/** A raw ZIP body, the form browsers send. */
+export const importArchiveBodySchema = z.string().openapi({ format: "binary" });
+
+/** Only read for an application/zip body; JSON carries `confirm` itself. */
+export const importConfirmQuerySchema = z.object({
+  confirm: z.enum(["true"]).optional(),
+});
+
+/**
+ * Reads an import body as a raw ZIP or as the JSON `{ data, confirm }` form.
+ * Browsers send the raw ZIP because base64-encoding a large file in a tab takes
+ * minutes. A raw body carries `confirm` in the query string.
+ */
+export async function readImportRequest(
+  request: Request,
+  readJsonBody: () => Promise<{ confirm?: boolean; data: string }>
+): Promise<{ archive: Buffer; confirm: boolean }> {
+  if (!isArchiveRequest(request)) {
+    const body = await readJsonBody();
+
+    return {
+      archive: decodeArchiveRequestData(body.data),
+      confirm: body.confirm === true,
+    };
+  }
+
+  const bytes = await readUntilClientGone(request, request.arrayBuffer());
+
+  return {
+    archive: decodeArchiveRequestBytes(Buffer.from(bytes)),
+    confirm: new URL(request.url).searchParams.get("confirm") === "true",
+  };
+}
 
 export function registerDataPortabilityRoutes(
   app: HonoApp,
@@ -45,8 +86,6 @@ export function registerDataPortabilityRoutes(
       data: z.string(),
     })
     .openapi("RestoreDataImportRequest");
-
-  const archiveBodySchema = z.string().openapi({ format: "binary" });
 
   const previewResponseSchema = z
     .object({})
@@ -169,7 +208,7 @@ export function registerDataPortabilityRoutes(
         body: {
           content: {
             "application/json": { schema: importRequestSchema },
-            "application/zip": { schema: archiveBodySchema },
+            "application/zip": { schema: importArchiveBodySchema },
           },
           required: true,
         },
@@ -210,12 +249,11 @@ export function registerDataPortabilityRoutes(
         body: {
           content: {
             "application/json": { schema: restoreRequestSchema },
-            "application/zip": { schema: archiveBodySchema },
+            "application/zip": { schema: importArchiveBodySchema },
           },
           required: true,
         },
-        // Only read for an application/zip body; JSON carries `confirm` itself.
-        query: z.object({ confirm: z.enum(["true"]).optional() }),
+        query: importConfirmQuerySchema,
       },
       responses: {
         200: {
