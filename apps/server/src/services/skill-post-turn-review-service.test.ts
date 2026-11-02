@@ -405,10 +405,8 @@ describe("SkillPostTurnReviewService", () => {
             ],
           },
           {
-            content: JSON.stringify({
-              instructions: "x",
-              name: "deploy-notes",
-            }),
+            // Compaction replaced the result, so the call's own name counts.
+            content: "[output truncated by compaction]",
             name: "load_skill",
             role: "tool",
             toolCallId: "1",

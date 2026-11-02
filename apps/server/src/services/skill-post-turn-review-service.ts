@@ -69,7 +69,23 @@ export interface PostTurnReviewEligibility {
 }
 
 // Only a successful load_skill result carries `name`.
-const LoadSkillResultSchema = z.object({ name: z.string() });
+const LoadSkillResultSchema = z.object({
+  error: z.unknown().optional(),
+  name: z.string().optional(),
+});
+
+/** The load_skill result, or null when compaction replaced it with text. */
+function parseLoadSkillResult(
+  content: string
+): z.infer<typeof LoadSkillResultSchema> | null {
+  try {
+    const result = LoadSkillResultSchema.safeParse(JSON.parse(content));
+
+    return result.success ? result.data : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Most SKILL.md bodies one review prompt carries. */
 const MAX_LOADED_SKILL_BODIES = 3;
@@ -254,6 +270,10 @@ export class SkillPostTurnReviewService {
       loadedNames.add(name);
     };
 
+    // Compaction can replace an old tool result with plain text, so the name
+    // the call asked for is the fallback when the result has no name.
+    const requestedNames = new Map<string, string>();
+
     for (const message of context.messages) {
       if (message.role === "user") {
         const name = extractExplicitSkillName(
@@ -263,21 +283,33 @@ export class SkillPostTurnReviewService {
         if (name) {
           markLoaded(name);
         }
+      } else if (message.role === "assistant") {
+        for (const call of message.toolCalls ?? []) {
+          const name = z.string().trim().safeParse(call.arguments.name);
+
+          if (call.name === LOAD_SKILL_TOOL_NAME && name.success) {
+            requestedNames.set(call.id, name.data);
+          }
+        }
       } else if (
         message.role === "tool" &&
         message.name === LOAD_SKILL_TOOL_NAME
       ) {
-        // A success carries the skill's own name; a failure carries only `error`.
-        try {
-          const result = LoadSkillResultSchema.safeParse(
-            JSON.parse(message.content)
-          );
+        const result = parseLoadSkillResult(message.content);
 
-          if (result.success) {
-            markLoaded(result.data.name);
-          }
-        } catch {
-          // Not JSON, so the call returned no skill.
+        // A failure carries only `error`; a success carries the skill's name.
+        if (result?.error !== undefined) {
+          continue;
+        }
+
+        const name =
+          result?.name ??
+          (message.toolCallId
+            ? requestedNames.get(message.toolCallId)
+            : undefined);
+
+        if (name) {
+          markLoaded(name);
         }
       }
     }
