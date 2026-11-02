@@ -1050,7 +1050,6 @@ describe("Nakama data portability", () => {
   });
 
   // chmod does nothing on Windows, and root lists a mode 000 folder anyway.
-  // chmod does nothing on Windows, and root lists a mode 000 folder anyway.
   describe.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
     "real unreadable folders",
     () => {
@@ -1077,10 +1076,8 @@ describe("Nakama data portability", () => {
             (error: Error & { status?: number }) => error
           );
 
-          expect(refusal).toMatchObject({
-            message: expect.stringContaining(folder),
-            status: 409,
-          });
+          expect(refusal?.status).toBe(409);
+          expect(refusal?.message).toContain(folder);
           expect(refusal?.message).not.toContain(rootDir);
         } finally {
           // Lets afterEach delete the folder.
