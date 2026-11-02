@@ -17,6 +17,14 @@ import {
 
 export { NakamaCloudPasses } from "./passes";
 
+export {
+  activeNakamaCloudPasses,
+  NAKAMA_CLOUD_PROVIDER_ID,
+  type NakamaCloudConnection,
+  NakamaCloudSignIn,
+  useNakamaCloudSignIn,
+} from "./sign-in";
+
 const errorBodySchema = z.object({ error: z.string() });
 
 const textResultSchema = z.object({

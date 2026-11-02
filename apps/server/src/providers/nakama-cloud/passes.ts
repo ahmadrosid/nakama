@@ -24,7 +24,7 @@ export interface NakamaCloudPassOptions {
   fetch?: typeof fetch;
   now?: () => number;
   /** Signs bytes with this computer's Ed25519 device key; returns base64. */
-  sign: (payload: Buffer) => string;
+  sign: (payload: Buffer) => Promise<string>;
 }
 
 /**
@@ -67,7 +67,7 @@ export class NakamaCloudPasses {
       timestamp: this.now(),
     };
 
-    const signature = this.options.sign(
+    const signature = await this.options.sign(
       computerTokenPayload(unsigned, { method: "POST", path: LLM_TOKEN_PATH })
     );
 

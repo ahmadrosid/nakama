@@ -70,6 +70,7 @@ import type {
   LoadedAttachmentBytes,
   ModelsResponse,
   MoveProfileRequest,
+  NakamaCloudStatus,
   PatchSkillRequest,
   ProfileResponse,
   ProviderChatOptions,
@@ -286,6 +287,12 @@ import {
   fetchChatgptCodexModels,
   refreshChatgptOAuthToken,
 } from "../providers/chatgpt/oauth";
+import {
+  NAKAMA_CLOUD_PROVIDER_ID,
+  type NakamaCloudConnection,
+  NakamaCloudSignIn,
+  useNakamaCloudSignIn,
+} from "../providers/nakama-cloud";
 import { wrapProviderForNonVision } from "../providers/non-vision-wrap";
 import { wrapProviderWithUsageTracking } from "../providers/usage-tracking";
 import {
@@ -534,6 +541,7 @@ export class AgentService {
       this.scheduleSessionTitleGeneration(sessionId),
     sessions: this.sessions,
   });
+  private readonly nakamaCloud: NakamaCloudSignIn | null;
   private readonly sessionTitleService: SessionTitleService;
   private readonly orgUsageQuotaService: OrgUsageQuotaService;
   private skillPostTurnReviewService: SkillPostTurnReviewService;
@@ -557,6 +565,12 @@ export class AgentService {
     this.memoryBackend = new MemoryBackendService(db);
     this.profileService = new ProfileService(db);
     this.orgUsageQuotaService = new OrgUsageQuotaService(db);
+    this.nakamaCloud = managedSecrets
+      ? new NakamaCloudSignIn(managedSecrets, (connection) =>
+          this.saveNakamaCloudAccount(connection)
+        )
+      : null;
+    useNakamaCloudSignIn(this.nakamaCloud);
     this.sessionTitleService = new SessionTitleService(
       db,
       () => this.userConfig
@@ -4031,6 +4045,98 @@ export class AgentService {
         })
       ),
     };
+  }
+
+  /** Starts sign-in to Nakama Cloud in the browser; returns the Connect address. */
+  async startNakamaCloudSignIn(input: {
+    cloudUrl: string;
+    computerName?: string;
+  }): Promise<{ connectUrl: string }> {
+    if (!this.nakamaCloud) {
+      throw new NakamaApiError("Secrets are not set up on this computer.", 503);
+    }
+
+    return this.nakamaCloud.start(input);
+  }
+
+  nakamaCloudStatus(): NakamaCloudStatus {
+    const instance = this.userConfig?.providers.find(
+      (entry) => entry.type === "nakama_cloud" && entry.nakamaCloud
+    );
+
+    return {
+      account: instance?.nakamaCloud?.account ?? null,
+      cloudUrl: instance?.baseUrl ?? null,
+      orgName: instance?.nakamaCloud?.orgName ?? null,
+      signedIn: Boolean(instance),
+    };
+  }
+
+  /** Removes the Nakama Cloud provider. The device key stays for a new sign-in. */
+  async signOutNakamaCloud(): Promise<void> {
+    if (!this.userConfig) {
+      return;
+    }
+
+    const providers = this.userConfig.providers.filter(
+      (entry) => entry.type !== "nakama_cloud"
+    );
+
+    const config = {
+      ...this.userConfig,
+      defaultProviderId:
+        this.userConfig.defaultProviderId === NAKAMA_CLOUD_PROVIDER_ID
+          ? (providers[0]?.id ?? null)
+          : this.userConfig.defaultProviderId,
+      providers,
+    };
+
+    await saveUserConfig(config);
+    this.userConfig = config;
+    this.refreshProviderConfig();
+  }
+
+  /** The browser sign-in finished: Nakama Cloud becomes the default provider. */
+  private async saveNakamaCloudAccount(
+    connection: NakamaCloudConnection
+  ): Promise<void> {
+    const thinking = await this.resolveThinkingSettings();
+
+    const base = this.userConfig ?? {
+      defaultProviderId: null,
+      providers: [],
+      thinkingEffort: thinking.effort,
+      thinkingEnabled: thinking.enabled,
+    };
+
+    const isFirst = base.providers.length === 0;
+
+    const instance: ProviderInstance = {
+      apiKey: "",
+      baseUrl: connection.cloudUrl,
+      createdAt: new Date().toISOString(),
+      customModels: connection.models,
+      id: NAKAMA_CLOUD_PROVIDER_ID,
+      label: "Nakama Cloud",
+      nakamaCloud: connection.account,
+      type: "nakama_cloud",
+    };
+
+    this.userConfig = {
+      ...base,
+      defaultProviderId: NAKAMA_CLOUD_PROVIDER_ID,
+      providers: [
+        ...base.providers.filter((entry) => entry.id !== instance.id),
+        instance,
+      ],
+    };
+
+    await saveUserConfig(this.userConfig);
+    this.refreshProviderConfig();
+
+    if (isFirst) {
+      await this.ensureSoulScaffolded();
+    }
   }
 
   async createProvider(

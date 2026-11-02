@@ -882,6 +882,14 @@ export interface EnrollComputerResponse {
   computerId: string;
 }
 
+/** This computer's sign-in to Nakama Cloud (local server). */
+export interface NakamaCloudStatus {
+  account: string | null;
+  cloudUrl: string | null;
+  orgName: string | null;
+  signedIn: boolean;
+}
+
 export interface ListBrowserSessionsResponse {
   sessions: BrowserSessionSummary[];
 }

@@ -14,7 +14,11 @@ import {
   LLM_TOKEN_PATH,
 } from "../../services/computer-auth";
 import type { ServerOptions } from "../context";
-import { requireActiveOrgIdFromContext, requireOrgMember } from "../org-guards";
+import {
+  requireActiveOrgIdFromContext,
+  requireOrgMember,
+  requirePlatformAdminFromContext,
+} from "../org-guards";
 import { getRequestAuth, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
@@ -402,5 +406,48 @@ export function registerComputerRoutes(
     });
 
     return revoked ? c.body(null, 204) : c.json({ error: "Not found." }, 404);
+  });
+}
+
+const signInRequestSchema = z.object({
+  cloudUrl: z.url(),
+  computerName: z.string().trim().max(100).optional(),
+});
+
+/**
+ * This computer's own sign-in to Nakama Cloud, used by the desktop app on its
+ * local server. Platform admin only: it changes the install's providers.
+ */
+export function registerNakamaCloudSignInRoutes(
+  app: HonoApp,
+  options: ServerOptions
+): void {
+  const { agent } = options;
+
+  app.get("/v1/nakama-cloud", (c) => {
+    requirePlatformAdminFromContext(c);
+
+    return c.json(agent.nakamaCloudStatus(), 200);
+  });
+
+  app.post("/v1/nakama-cloud/sign-in", async (c) => {
+    requirePlatformAdminFromContext(c);
+
+    const request = signInRequestSchema.safeParse(
+      await readJson(c.req.raw, z.unknown())
+    );
+
+    if (!request.success) {
+      return c.json({ error: "Enter the server address." }, 400);
+    }
+
+    return c.json(await agent.startNakamaCloudSignIn(request.data), 200);
+  });
+
+  app.delete("/v1/nakama-cloud", async (c) => {
+    requirePlatformAdminFromContext(c);
+    await agent.signOutNakamaCloud();
+
+    return c.body(null, 204);
   });
 }

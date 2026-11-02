@@ -33,6 +33,7 @@ import { FIREWORKS_INFERENCE_BASE_URL } from "./fireworks";
 import { createGeminiProvider } from "./gemini";
 import { resolveModel } from "./models";
 import {
+  activeNakamaCloudPasses,
   createNakamaCloudProvider,
   type NakamaCloudPasses,
 } from "./nakama-cloud";
@@ -409,7 +410,9 @@ export function createProviderForInstance(
   }
 
   if (instance.type === "nakama_cloud") {
-    const passes = options?.nakamaCloudPasses?.(instance);
+    const passes =
+      options?.nakamaCloudPasses?.(instance) ??
+      activeNakamaCloudPasses(instance);
 
     return passes && instance.baseUrl
       ? createNakamaCloudProvider({ baseUrl: instance.baseUrl, model, passes })

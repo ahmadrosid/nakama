@@ -134,7 +134,7 @@ function fakeCloud(options: { refuseTokens?: () => boolean; slow?: boolean }) {
   const passes = new NakamaCloudPasses({
     baseUrl: `http://127.0.0.1:${server.port}`,
     computerId: "computer_1",
-    sign: (payload) =>
+    sign: async (payload) =>
       sign(
         null,
         payload,

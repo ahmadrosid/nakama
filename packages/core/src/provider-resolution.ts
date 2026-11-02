@@ -80,7 +80,8 @@ export function parseProviderName(
     normalized === "meta" ||
     normalized === "qwen" ||
     normalized === "qwen_cn" ||
-    normalized === "vercel_ai_gateway"
+    normalized === "vercel_ai_gateway" ||
+    normalized === "nakama_cloud"
   ) {
     return normalized;
   }
