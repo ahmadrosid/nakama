@@ -41,7 +41,7 @@ import {
   useBranchSessionMutation,
   useUpdateSessionMutation,
 } from "@/hooks/use-resource-mutations";
-import { notifyReplyReady } from "@/hooks/use-web-push";
+import { notifyReplyReady, pageHidesNow } from "@/hooks/use-web-push";
 import { acpAgentSettingsKey } from "@/lib/acp-settings";
 import type { FileUIPart } from "@/lib/ai-ui-types";
 import {
@@ -417,9 +417,15 @@ export function useChatPage() {
   }, [profiles]);
 
   const notifyTurnDone = useCallback(
-    (turnProfileId: string, sessionId: string, reply: string) => {
+    (
+      turnProfileId: string,
+      sessionId: string,
+      reply: string,
+      hidesAtStart: number
+    ) => {
       notifyReplyReady({
         body: reply,
+        hidesAtStart,
         onOpen: () => navigate(buildChatPath(turnProfileId, sessionId)),
         tag: `session-${sessionId}`,
         title:
@@ -887,11 +893,13 @@ export function useChatPage() {
                 }
               };
 
+            const hidesAtStart = pageHidesNow();
+
             const { reconnected } = await reconnectActiveSessionStream({
               handlers: buildStreamHandlers(whileAttached(setMessages), {
                 onContextUsage: whileAttached(setContextUsage),
                 onDone: (reply) =>
-                  notifyTurnDone(nextProfileId, sessionId, reply),
+                  notifyTurnDone(nextProfileId, sessionId, reply, hidesAtStart),
                 onQuestionnaireUpdated: whileAttached(setAgentQuestionnaire),
                 onTodosUpdated: whileAttached(setAgentTodos),
               }),
@@ -1418,6 +1426,7 @@ export function useChatPage() {
         const sessionForTurn = activeSession;
         // A cognito chat has no URL to open and promises no trace.
         const announceTurn = !cognitoRef.current;
+        const hidesAtStart = pageHidesNow();
 
         await activeSession.sendStream(
           {
@@ -1430,7 +1439,12 @@ export function useChatPage() {
             // Not while attached only: a detached turn is the one to announce.
             onDone: (reply) => {
               if (announceTurn) {
-                notifyTurnDone(profileId, sessionForTurn.id, reply);
+                notifyTurnDone(
+                  profileId,
+                  sessionForTurn.id,
+                  reply,
+                  hidesAtStart
+                );
               }
             },
             onQuestionnaireUpdated: whileAttached(setAgentQuestionnaire),
