@@ -282,12 +282,20 @@ export class NakamaCloudSignIn {
       return [];
     }
 
-    return modelsSchema.parse(await response.json()).models.map((model) => ({
-      default: model.default,
+    return modelsSchema.parse(await response.json()).models.map((model) => {
       // The cloud resolves "<its provider>::<model>" back to its own provider.
-      id: model.providerId ? `${model.providerId}::${model.id}` : model.id,
-      name: model.name,
-    }));
+      const entry: CustomModelEntry = {
+        id: model.providerId ? `${model.providerId}::${model.id}` : model.id,
+        name: model.name,
+      };
+
+      // Saved config takes JSON values only, so no undefined fields.
+      if (model.default) {
+        entry.default = true;
+      }
+
+      return entry;
+    });
   }
 }
 
