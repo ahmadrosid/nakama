@@ -583,6 +583,8 @@ export interface OrganizationSummary {
   allowedInviteDomains?: string[];
   archivedAt?: string | null;
   createdAt: string;
+  /** Nakama Desktop may use this org's models. */
+  desktopModelsEnabled?: boolean;
   id: string;
   monthlyLlmTokenLimit?: number;
   monthlyLlmTurnLimit?: number;
@@ -673,6 +675,7 @@ export interface OrganizationOverviewResponse {
 
 export interface UpdateOrganizationRequest {
   allowedInviteDomains?: string[];
+  desktopModelsEnabled?: boolean;
   monthlyLlmTokenLimit?: number;
   monthlyLlmTurnLimit?: number;
   monthlyLlmWarningPercent?: number;

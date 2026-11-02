@@ -403,6 +403,8 @@ CREATE TABLE IF NOT EXISTS organizations (
   slug TEXT NOT NULL,
   skills_write_approval INTEGER NOT NULL DEFAULT 0,
   skills_post_turn_review INTEGER NOT NULL DEFAULT 0,
+  -- Nakama Desktop may use this org's models (on by default).
+  desktop_models_enabled INTEGER NOT NULL DEFAULT 1,
   skills_curator_enabled INTEGER NOT NULL DEFAULT 0,
   skills_curator_stale_after_days INTEGER NOT NULL DEFAULT 30,
   skills_curator_archive_after_days INTEGER NOT NULL DEFAULT 90,

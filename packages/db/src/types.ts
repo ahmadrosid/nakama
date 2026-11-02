@@ -586,6 +586,8 @@ export interface StoredOrganizationRecord {
   allowedInviteDomains?: string[];
   archivedAt?: string | null;
   createdAt: string;
+  /** Nakama Desktop may use this org's models. Absent means on. */
+  desktopModelsEnabled?: boolean;
   id: string;
   monthlyLlmTokenLimit?: number;
   monthlyLlmTurnLimit?: number;

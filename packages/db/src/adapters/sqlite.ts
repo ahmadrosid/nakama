@@ -447,6 +447,7 @@ interface OrganizationRow {
   allowed_invite_domains: string;
   archived_at: string | null;
   created_at: string;
+  desktop_models_enabled: number;
   id: string;
   monthly_llm_token_limit: number | null;
   monthly_llm_turn_limit: number | null;
@@ -3201,8 +3202,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   };
 
   const upsertOrganizationStmt = db.prepare(`
-    INSERT INTO organizations (id, parent_org_id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO organizations (id, parent_org_id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, desktop_models_enabled, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       slug = excluded.slug,
@@ -3212,6 +3213,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       monthly_llm_warning_percent = excluded.monthly_llm_warning_percent,
       skills_write_approval = excluded.skills_write_approval,
       skills_post_turn_review = excluded.skills_post_turn_review,
+      desktop_models_enabled = excluded.desktop_models_enabled,
       skills_curator_enabled = excluded.skills_curator_enabled,
       skills_curator_stale_after_days = excluded.skills_curator_stale_after_days,
       skills_curator_archive_after_days = excluded.skills_curator_archive_after_days,
@@ -3253,7 +3255,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     OrganizationRow,
     SQLQueryBindings[]
   >(`
-    SELECT id, parent_org_id, name, slug, EXISTS (SELECT 1 FROM org_team_creation_requests WHERE team_org_id = organizations.id AND completed_at IS NULL) AS setup_pending, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
+    SELECT id, parent_org_id, name, slug, EXISTS (SELECT 1 FROM org_team_creation_requests WHERE team_org_id = organizations.id AND completed_at IS NULL) AS setup_pending, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, desktop_models_enabled, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
     ORDER BY name ASC
   `);
@@ -3277,7 +3279,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     OrganizationRow,
     SQLQueryBindings[]
   >(`
-    SELECT id, parent_org_id, name, slug, EXISTS (SELECT 1 FROM org_team_creation_requests WHERE team_org_id = organizations.id AND completed_at IS NULL) AS setup_pending, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
+    SELECT id, parent_org_id, name, slug, EXISTS (SELECT 1 FROM org_team_creation_requests WHERE team_org_id = organizations.id AND completed_at IS NULL) AS setup_pending, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, desktop_models_enabled, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
     WHERE slug = ?
     LIMIT 1
@@ -3287,7 +3289,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     OrganizationRow,
     SQLQueryBindings[]
   >(`
-    SELECT id, parent_org_id, name, slug, EXISTS (SELECT 1 FROM org_team_creation_requests WHERE team_org_id = organizations.id AND completed_at IS NULL) AS setup_pending, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
+    SELECT id, parent_org_id, name, slug, EXISTS (SELECT 1 FROM org_team_creation_requests WHERE team_org_id = organizations.id AND completed_at IS NULL) AS setup_pending, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, desktop_models_enabled, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
     WHERE id = ?
     LIMIT 1
@@ -3835,6 +3837,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.monthlyLlmWarningPercent ?? 80,
         record.skillsWriteApproval ? 1 : 0,
         record.skillsPostTurnReview ? 1 : 0,
+        record.desktopModelsEnabled === false ? 0 : 1,
         record.skillsCuratorEnabled ? 1 : 0,
         record.skillsCuratorStaleAfterDays ?? 30,
         record.skillsCuratorArchiveAfterDays ?? 90,
@@ -4191,6 +4194,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       o.monthly_llm_warning_percent,
       o.skills_write_approval,
       o.skills_post_turn_review,
+      o.desktop_models_enabled,
       o.skills_curator_enabled,
       o.skills_curator_stale_after_days,
       o.skills_curator_archive_after_days,
@@ -7621,6 +7625,7 @@ function toOrganizationRecord(row: OrganizationRow): StoredOrganizationRecord {
     allowedInviteDomains: JSON.parse(row.allowed_invite_domains) as string[],
     archivedAt: row.archived_at,
     createdAt: row.created_at,
+    desktopModelsEnabled: row.desktop_models_enabled !== 0,
     id: row.id,
     monthlyLlmTokenLimit: row.monthly_llm_token_limit ?? undefined,
     monthlyLlmTurnLimit: row.monthly_llm_turn_limit ?? 0,

@@ -145,18 +145,33 @@ function asError(caught: Error | string): Error {
  * signs a request with its device key to get a pass, then sends the pass.
  */
 export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
-  const { agent, computerAuth } = options;
+  const { agent, computerAuth, databaseAdapter } = options;
 
   if (!computerAuth) {
     return;
   }
 
-  const access = (
+  /** The pass's computer, if it may use the org's models now. */
+  const access = async (
     header: string | undefined
-  ): Promise<ComputerAccess | null> => {
+  ): Promise<
+    { caller: ComputerAccess } | { error: string; status: 401 | 403 }
+  > => {
     const pass = passFrom(header);
+    const caller = pass ? await computerAuth.verifyPass(pass) : null;
 
-    return pass ? computerAuth.verifyPass(pass) : Promise.resolve(null);
+    if (!caller) {
+      return { error: "Sign in again.", status: 401 };
+    }
+
+    const org = await databaseAdapter?.getOrganizationById(caller.orgId);
+
+    return org?.desktopModelsEnabled === false
+      ? {
+          error: "Your team turned off Nakama Desktop for its models.",
+          status: 403,
+        }
+      : { caller };
   };
 
   app.post(LLM_TOKEN_PATH, async (c) => {
@@ -177,8 +192,10 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.get("/v1/llm/models", async (c) => {
-    if (!(await access(c.req.header("Authorization")))) {
-      return c.json({ error: "Sign in again." }, 401);
+    const gate = await access(c.req.header("Authorization"));
+
+    if ("error" in gate) {
+      return c.json({ error: gate.error }, gate.status);
     }
 
     const { models } = await agent.getModels();
@@ -187,11 +204,13 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.post("/v1/llm/text", async (c) => {
-    const caller = await access(c.req.header("Authorization"));
+    const gate = await access(c.req.header("Authorization"));
 
-    if (!caller) {
-      return c.json({ error: "Sign in again." }, 401);
+    if ("error" in gate) {
+      return c.json({ error: gate.error }, gate.status);
     }
+
+    const { caller } = gate;
 
     const request = textRequestSchema.safeParse(
       await readJson(c.req.raw, z.unknown())
@@ -232,11 +251,13 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.post("/v1/llm/chat", async (c) => {
-    const caller = await access(c.req.header("Authorization"));
+    const gate = await access(c.req.header("Authorization"));
 
-    if (!caller) {
-      return c.json({ error: "Sign in again." }, 401);
+    if ("error" in gate) {
+      return c.json({ error: gate.error }, gate.status);
     }
+
+    const { caller } = gate;
 
     const request = chatRequestSchema.safeParse(
       await readJson(c.req.raw, z.unknown())

@@ -2402,6 +2402,15 @@ test("an existing database gets the computers tables", () => {
       .map((row) => row.name);
 
     expect(tables).toEqual(["computer_nonces", "computers"]);
+
+    const orgColumns = db
+      .prepare<{ name: string }, SQLQueryBindings[]>(
+        "PRAGMA table_info(organizations)"
+      )
+      .all()
+      .map((column) => column.name);
+
+    expect(orgColumns).toContain("desktop_models_enabled");
   } finally {
     db.close();
   }

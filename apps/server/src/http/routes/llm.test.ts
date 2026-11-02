@@ -5,11 +5,13 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { z } from "zod";
 import { AgentService } from "../../services/agent-service";
+import { AuthService } from "../../services/auth-service";
 import {
   ComputerAuthService,
   LLM_TOKEN_PATH,
 } from "../../services/computer-auth";
 import { LlmUsageTracker } from "../../services/llm-usage-tracker";
+import { OrgService } from "../../services/org-service";
 import { testDeviceKey } from "../../testing/computer-device";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import { seedOrgAdmin } from "../test-session-helpers";
@@ -243,4 +245,32 @@ test("a pass lists the models", async () => {
 
   expect(response.status).toBe(200);
   expect(body.models.length).toBeGreaterThan(0);
+});
+
+test("when an admin turns Nakama Desktop off, model calls are refused, and they work again when it is on", async () => {
+  const { app, databaseAdapter, orgId, pass } = await setup();
+  const orgService = new OrgService(databaseAdapter, new AuthService());
+
+  const models = () =>
+    app.request("/v1/llm/models", {
+      headers: { authorization: `Bearer ${pass}` },
+    });
+
+  expect((await models()).status).toBe(200);
+
+  await orgService.updateOrganization(orgId, { desktopModelsEnabled: false });
+  expect(
+    (await databaseAdapter.getOrganizationById(orgId))?.desktopModelsEnabled
+  ).toBe(false);
+  expect((await models()).status).toBe(403);
+  expect(
+    (await post(app, "/v1/llm/chat", pass, JSON.stringify(chatBody))).status
+  ).toBe(403);
+
+  // Another org setting keeps the switch as it is.
+  await orgService.updateOrganization(orgId, { skillsPostTurnReview: true });
+  expect((await models()).status).toBe(403);
+
+  await orgService.updateOrganization(orgId, { desktopModelsEnabled: true });
+  expect((await models()).status).toBe(200);
 });

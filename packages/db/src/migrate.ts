@@ -2546,6 +2546,18 @@ CREATE INDEX IF NOT EXISTS artifacts_org_user ON artifacts (org_id, user_id);
 
 /** Nakama Desktop computers; schema.sql makes these only for a new database. */
 function migrateComputersTables(db: Database): void {
+  const orgColumns = db
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(organizations)"
+    )
+    .all();
+
+  if (!orgColumns.some((column) => column.name === "desktop_models_enabled")) {
+    db.exec(
+      "ALTER TABLE organizations ADD COLUMN desktop_models_enabled INTEGER NOT NULL DEFAULT 1;"
+    );
+  }
+
   db.exec(`
 -- A computer that runs Nakama Desktop for one user in one org. It signs in
 -- with a device key; only the public key is stored here.
