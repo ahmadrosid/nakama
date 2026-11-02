@@ -73,6 +73,58 @@ describe("ensureBundledSkillFiles", () => {
     expect(again.exitCode).toBe(1);
   });
 
+  test("the create-plugin charts scaffold adds charts that pass the page checks", async () => {
+    await ensureBundledSkillFiles();
+
+    const workspace = await mkdtemp(join(tmpdir(), "nakama-plugin-ws-"));
+
+    const scripts = join(
+      configDir,
+      "agent",
+      "skills",
+      "create-plugin",
+      "scripts"
+    );
+
+    const draft = join(workspace, "plugin-drafts", "price-board");
+
+    const run = (script: string, ...args: string[]) =>
+      Bun.spawnSync(["bun", join(scripts, script), ...args], {
+        cwd: workspace,
+      });
+
+    expect(
+      run("new-plugin.mjs", "price-board", "Price Board", "--charts").exitCode
+    ).toBe(0);
+
+    const pagePath = join(draft, "src", "ui.jsx");
+    const page = await readFile(pagePath, "utf8");
+
+    await Bun.write(
+      pagePath,
+      page
+        .replace(
+          'import css from "./ui.css" with { type: "text" };',
+          'import css from "./ui.css" with { type: "text" };\nimport { createCharts } from "./charts.jsx";'
+        )
+        .replace(
+          "ctx.styles(css);",
+          'ctx.styles(css);\n  const { LineChart } = createCharts(ctx);\n  const Trend = () => <LineChart data={[]} />;\n  ctx.slots.register("tool:trend", Trend);'
+        )
+    );
+
+    const manifestPath = join(draft, "nakama.plugin.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.description = "Track prices.";
+    manifest.actions[0].description = "Read prices.";
+    await Bun.write(manifestPath, JSON.stringify(manifest, null, 2));
+
+    expect(run("build-plugin.mjs", "price-board").exitCode).toBe(0);
+    expect(await readFile(join(draft, "ui", "app.js"), "utf8")).toContain(
+      'data-plugin-id="price-board"'
+    );
+  });
+
   test("the create-plugin data scaffold builds working list and save actions", async () => {
     await ensureBundledSkillFiles();
 

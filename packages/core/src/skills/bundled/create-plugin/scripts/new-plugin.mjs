@@ -3,6 +3,7 @@
 //        bun new-plugin.mjs <plugin-id> "<Plugin Name>" --data
 // --data lays ../data-template over ../template: a SQLite table, list_items
 // and save_item actions, and a page with a Table and an edit Dialog.
+// --charts adds src/charts.jsx (line, bar, donut) for dashboard pages.
 // Run it from the profile workspace; it writes plugin-drafts/<plugin-id>/.
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -17,7 +18,11 @@ const args = process.argv.slice(2);
 
 const data = args.includes("--data");
 
-const [id, name, action = "greet"] = args.filter((arg) => arg !== "--data");
+const charts = args.includes("--charts");
+
+const [id, name, action = "greet"] = args.filter(
+  (arg) => !arg.startsWith("--")
+);
 
 function fail(message) {
   console.error(message);
@@ -66,7 +71,13 @@ function fill(text) {
 // Template file (relative path) -> source path. Data files replace base files.
 const sources = new Map();
 
-for (const dir of data ? ["template", "data-template"] : ["template"]) {
+const layers = [
+  "template",
+  ...(data ? ["data-template"] : []),
+  ...(charts ? ["charts-template"] : []),
+];
+
+for (const dir of layers) {
   const root = path.join(skillDir, dir);
 
   for (const entry of await readdir(root, { recursive: true })) {
@@ -97,7 +108,11 @@ const edit = [...sources.keys()]
 
     const editable =
       (file.startsWith("src/") || file.endsWith(".json")) &&
-      !(file.endsWith(".d.ts") || file.endsWith(".md"));
+      !(
+        file.endsWith(".d.ts") ||
+        file.endsWith(".md") ||
+        file.startsWith("src/charts.")
+      );
 
     return editable ? [file] : [];
   })
@@ -106,6 +121,12 @@ const edit = [...sources.keys()]
 console.log(`Created ${draft} and built it.`);
 
 console.log(`Edit: ${edit.map((entry) => `${draft}/${entry}`).join(", ")}`);
+
+if (charts) {
+  console.log(
+    'Charts: in src/ui.jsx, import { createCharts } from "./charts.jsx", then in apply: const { LineChart, BarChart, PieChart } = createCharts(ctx). Each takes data=[{ label, value }], plus optional format and label. Do not edit charts.jsx or charts.css.'
+  );
+}
 
 if (problems.length) {
   console.log("Still template text (replace before submit):");
