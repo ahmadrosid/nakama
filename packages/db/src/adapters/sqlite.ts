@@ -2772,6 +2772,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       passwordHash: string;
       updatedAt: string;
     }) => {
+      // Erasing drops admin rows and the platform flag, so it must pass the
+      // same last-admin rule as a disable before anything else is written.
+      if (
+        disableUserUnlessLastAdminStmt.run(
+          input.updatedAt,
+          input.updatedAt,
+          input.id
+        ).changes === 0
+      ) {
+        return 0;
+      }
+
       clearErasedUserSessionsStmt.run(input.id);
       clearErasedUserOrgMemoryProposalsStmt.run(
         input.id,

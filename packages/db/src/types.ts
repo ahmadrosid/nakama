@@ -1007,6 +1007,10 @@ export interface DatabaseAdapter {
    */
   disableUserUnlessLastAdmin(id: string, disabledAt: string): Promise<boolean>;
   enableUser(id: string): Promise<void>;
+  /**
+   * Resolves to `false`, with nothing written, when the user is missing or is
+   * the last usable admin of a live org or the last usable platform admin.
+   */
   eraseUser(input: {
     id: string;
     email: string;

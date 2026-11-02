@@ -220,3 +220,57 @@ describe("disable last usable admin", () => {
     expect((await db.getUserById("platform_b"))?.disabledAt).toBeFalsy();
   });
 });
+
+// Erasing deletes admin rows and clears the platform flag, so it follows the
+// same rule as a disable.
+describe("erase last usable admin", () => {
+  const erase = (db: DatabaseAdapter, id: string) =>
+    db.eraseUser({
+      email: `erased-${id}@deleted.invalid`,
+      id,
+      passwordHash: "unused",
+      updatedAt: NOW,
+    });
+
+  test("refuses to erase the only usable admin and writes nothing", async () => {
+    const db = createSqliteMemoryAdapter();
+    const [admin, disabled] = await seedOrgWithAdmins(db, ["admin", "admin"]);
+
+    expect(await db.disableUserUnlessLastAdmin(disabled!, NOW)).toBe(true);
+    expect(await erase(db, admin!)).toBe(false);
+
+    expect(await usableAdminCount(db)).toBe(1);
+    expect((await db.getUserById(admin!))?.email).toBe(`${admin}@example.com`);
+  });
+
+  test("erases an admin while another usable admin remains", async () => {
+    const db = createSqliteMemoryAdapter();
+    const [first] = await seedOrgWithAdmins(db, ["admin", "admin"]);
+
+    expect(await erase(db, first!)).toBe(true);
+    expect(await adminCount(db)).toBe(1);
+    expect((await db.getUserById(first!))?.disabledAt).toBe(NOW);
+  });
+
+  test("refuses to erase the last usable platform admin", async () => {
+    const db = createSqliteMemoryAdapter();
+
+    for (const id of ["platform_a", "platform_b"]) {
+      await db.createUser({
+        createdAt: NOW,
+        email: `${id}@example.com`,
+        id,
+        isPlatformAdmin: true,
+        passwordHash: "unused",
+        updatedAt: NOW,
+      });
+    }
+
+    expect(await erase(db, "platform_a")).toBe(true);
+    expect(await erase(db, "platform_b")).toBe(false);
+    expect(await db.getUserById("platform_b")).toMatchObject({
+      disabledAt: null,
+      isPlatformAdmin: true,
+    });
+  });
+});
