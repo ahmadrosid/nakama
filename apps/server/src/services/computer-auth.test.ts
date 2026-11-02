@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { z } from "zod";
-import { LLM_TOKEN_PATH } from "../http/routes/llm";
 import { createMinimalHonoApp } from "../http/test-app-helpers";
 import { seedOrgAdmin } from "../http/test-session-helpers";
 import { testDeviceKey } from "../testing/computer-device";
@@ -10,6 +9,7 @@ import {
   ComputerAuthService,
   type ComputerTokenRequest,
   isEd25519PublicKey,
+  LLM_TOKEN_PATH,
 } from "./computer-auth";
 
 const passResponseSchema = z.object({

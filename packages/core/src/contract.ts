@@ -3043,7 +3043,8 @@ export type ProviderName =
   | "meta"
   | "qwen"
   | "qwen_cn"
-  | "vercel_ai_gateway";
+  | "vercel_ai_gateway"
+  | "nakama_cloud";
 
 export interface ChatgptOAuthCredentials {
   accessToken: string;

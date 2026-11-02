@@ -11,13 +11,12 @@ import {
   type ComputerAccess,
   computerTokenRequestSchema,
   isEd25519PublicKey,
+  LLM_TOKEN_PATH,
 } from "../../services/computer-auth";
 import type { ServerOptions } from "../context";
 import { requireActiveOrgIdFromContext, requireOrgMember } from "../org-guards";
 import { getRequestAuth, readJson } from "../shared";
 import type { HonoApp } from "../types";
-
-export const LLM_TOKEN_PATH = "/v1/llm/token";
 
 /** Output room held against the quota for one call, as the chat loop does. */
 const RESERVED_OUTPUT_TOKENS = 32_000;

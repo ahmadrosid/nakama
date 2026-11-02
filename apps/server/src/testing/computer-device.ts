@@ -1,8 +1,8 @@
 import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
-import { LLM_TOKEN_PATH } from "../http/routes/llm";
 import {
   type ComputerTokenRequest,
   computerTokenPayload,
+  LLM_TOKEN_PATH,
 } from "../services/computer-auth";
 
 /** A test computer: an Ed25519 key pair and a signer for token requests. */

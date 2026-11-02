@@ -5,12 +5,14 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { z } from "zod";
 import { AgentService } from "../../services/agent-service";
-import { ComputerAuthService } from "../../services/computer-auth";
+import {
+  ComputerAuthService,
+  LLM_TOKEN_PATH,
+} from "../../services/computer-auth";
 import { LlmUsageTracker } from "../../services/llm-usage-tracker";
 import { testDeviceKey } from "../../testing/computer-device";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import { seedOrgAdmin } from "../test-session-helpers";
-import { LLM_TOKEN_PATH } from "./llm";
 
 const vendorRequests: unknown[] = [];
 

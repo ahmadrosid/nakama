@@ -16,6 +16,8 @@ import { z } from "zod";
  */
 export const COMPUTER_PASS_TTL_MS = 15 * 60 * 1000;
 
+export const LLM_TOKEN_PATH = "/v1/llm/token";
+
 const CLOCK_SKEW_MS = 2 * 60 * 1000;
 
 /** The raw 32-byte Ed25519 public key in a DER (SPKI) wrapper. */
