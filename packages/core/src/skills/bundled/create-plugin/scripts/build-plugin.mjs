@@ -3,7 +3,7 @@
 // It checks the manifest with the host's rules, bundles every action, worker,
 // and the page from src/, and lints the page against the Nakama style rules.
 // It prints every problem at once, so one fix round is enough.
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdir, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 const PLUGIN_ID = /^[a-z][a-z0-9-]*$/;
@@ -490,7 +490,7 @@ export async function buildDraft(draft) {
   );
 
   if (!manifest) {
-    return { built, failed: true, problems };
+    return { built, failed: true, problems, removed: [] };
   }
 
   problems.push(...checkManifest(manifest, packageJson, draftId));
@@ -539,6 +539,36 @@ export async function buildDraft(draft) {
     }
   }
 
+  // A renamed action leaves its old bundle behind, and the reviewer then reads
+  // dead code. Drop bundles in action and worker folders the manifest skips.
+  const removed = [];
+
+  const entries = new Set(
+    [...(manifest.actions ?? []), ...(manifest.workers ?? [])].flatMap(
+      (item) => (isRelative(item.entry) ? [item.entry] : [])
+    )
+  );
+
+  // Never clean the draft root: its .js files are not bundles.
+  const bundleDirs = new Set(
+    [...entries].flatMap((entry) => {
+      const dir = path.dirname(entry);
+
+      return dir === "." ? [] : [dir];
+    })
+  );
+
+  for (const dir of bundleDirs) {
+    for (const file of await readdir(path.join(draft, dir)).catch(() => [])) {
+      const entry = `${dir}/${file}`;
+
+      if (/\.m?js$/.test(file) && !entries.has(entry)) {
+        await rm(path.join(draft, entry), { force: true });
+        removed.push(entry);
+      }
+    }
+  }
+
   for (const migration of manifest.database?.migrations ?? []) {
     if (
       isRelative(migration.path) &&
@@ -570,10 +600,10 @@ export async function buildDraft(draft) {
     }
   }
 
-  return { built, failed, problems };
+  return { built, failed, problems, removed };
 }
 
-function report(id, { built, problems }) {
+function report(id, { built, problems, removed }) {
   if (problems.length) {
     console.error(
       `plugin-drafts/${id}: ${problems.length} problem(s). Fix all of them, then run this again.`
@@ -589,6 +619,10 @@ function report(id, { built, problems }) {
   console.log(
     `Built plugin-drafts/${id}: ${built.join(", ") || "nothing to build"}.`
   );
+
+  if (removed.length) {
+    console.log(`Removed unused bundles: ${removed.join(", ")}.`);
+  }
 
   return true;
 }

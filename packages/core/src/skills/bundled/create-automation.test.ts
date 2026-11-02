@@ -178,14 +178,17 @@ describe("ensureBundledSkillFiles", () => {
     manifest.actions[0].description = "List open tasks.";
     await Bun.write(manifestPath, JSON.stringify(manifest, null, 2));
     await Bun.write(join(draft, "actions", "list_tasks.js"), "");
+    // A bundle left behind by a renamed action.
+    await Bun.write(join(draft, "actions", "old_action.js"), "");
 
     const passed = run("build-plugin.mjs", "task-hub");
 
     expect(passed.exitCode).toBe(0);
-    // The build rewrote the emptied bundle from src/.
+    // The build rewrote the emptied bundle from src/ and dropped the stale one.
     expect(
       await readFile(join(draft, "actions", "list_tasks.js"), "utf8")
     ).toContain("run");
+    expect(await readdir(join(draft, "actions"))).toEqual(["list_tasks.js"]);
 
     manifest.actions[0].inputSchema.properties.name.default = "me";
     await Bun.write(manifestPath, JSON.stringify(manifest, null, 2));
