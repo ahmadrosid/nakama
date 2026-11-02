@@ -3015,6 +3015,7 @@ export type ProviderName =
   | "xai"
   | "groq"
   | "cheaper_inference"
+  | "atmorouter"
   | "together"
   | "xiaomi"
   | "meta"

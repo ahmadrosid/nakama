@@ -5,6 +5,7 @@ const BUILTIN_LABELS: Record<
   string
 > = {
   anthropic: "Anthropic",
+  atmorouter: "AtmoRouter",
   cerebras: "Cerebras",
   chatgpt: "ChatGPT (Plus/Pro)",
   cheaper_inference: "Cheaper Inference",

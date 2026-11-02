@@ -103,6 +103,7 @@ const PROVIDER_SECTION_PREFIX = "provider.";
 
 const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   anthropic: "Anthropic",
+  atmorouter: "AtmoRouter",
   cerebras: "Cerebras",
   chatgpt: "ChatGPT (Plus/Pro)",
   cheaper_inference: "Cheaper Inference",

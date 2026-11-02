@@ -66,6 +66,7 @@ const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
     "text/csv",
     DOCX_MEDIA_TYPE,
   ]),
+  atmorouter: new Set<string>(),
   cerebras: new Set<string>(),
   chatgpt: new Set([
     "application/pdf",
