@@ -79,7 +79,7 @@
       <h1>Deck title<br>on two lines<br><span>Date or subtitle</span></h1>
       <p class="meta">Event name · Date · Time</p>
     </div>
-    <div class="visual hero">
+    <div class="panel hero">
       <span class="label">Key figure</span>
       <b>1.2M</b>
       <i>↓</i>
@@ -170,8 +170,8 @@
 .pic svg {
   max-width: 100%;
   max-height: 100%;
+  border: 1px solid var(--line);
   border-radius: 0.5cqw;
-  box-shadow: 0 1.6cqw 3cqw rgb(16 18 20 / 0.18);
 }
 @media screen and (max-width: 760px) and (orientation: portrait) {
   .media {
@@ -188,7 +188,7 @@
   <h1>One feature.<br><span>What it does.</span></h1>
   <div class="media fill">
     <p class="body">Two or three supplied sentences about the image.</p>
-    <div class="pic visual">
+    <div class="pic panel">
       <svg aria-label="Screenshot" role="img" viewBox="0 0 16 10">
         <rect fill="#fff" height="10" width="16" />
       </svg>
@@ -506,8 +506,8 @@
 .shot svg {
   max-width: 100%;
   max-height: 100%;
+  border: 1px solid var(--line);
   border-radius: 0.5cqw;
-  box-shadow: 0 1.6cqw 3cqw rgb(16 18 20 / 0.18);
 }
 figcaption {
   display: flex;
@@ -543,7 +543,7 @@ figcaption b {
   <h1>What shipped.<br><span>Three screens.</span></h1>
   <div class="gallery fill">
     <figure>
-      <div class="shot visual">
+      <div class="shot panel">
         <svg aria-label="Screenshot" role="img" viewBox="0 0 16 10">
           <rect fill="#fff" height="10" width="16" />
         </svg>
@@ -554,7 +554,7 @@ figcaption b {
       </figcaption>
     </figure>
     <figure>
-      <div class="shot visual">
+      <div class="shot panel">
         <svg aria-label="Screenshot" role="img" viewBox="0 0 16 10">
           <rect fill="#fff" height="10" width="16" />
         </svg>
@@ -565,7 +565,7 @@ figcaption b {
       </figcaption>
     </figure>
     <figure>
-      <div class="shot visual">
+      <div class="shot panel">
         <svg aria-label="Screenshot" role="img" viewBox="0 0 10 16">
           <rect fill="#fff" height="16" width="10" />
         </svg>

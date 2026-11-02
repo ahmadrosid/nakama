@@ -218,23 +218,10 @@
       background: var(--accent-soft);
       border-radius: 50%;
     }
-    /* Soft gradient panel built from the accent. */
-    .visual {
-      position: relative;
-      overflow: hidden;
-      background:
-        radial-gradient(
-          70% 90% at 12% 8%,
-          color-mix(in srgb, var(--accent) 30%, transparent),
-          transparent 60%
-        ),
-        radial-gradient(60% 80% at 88% 18%, #c7d3e6, transparent 65%),
-        radial-gradient(
-          70% 70% at 70% 100%,
-          color-mix(in srgb, var(--accent) 38%, transparent),
-          transparent 60%
-        ),
-        linear-gradient(135deg, var(--accent-soft), #e6e9f0 55%, #dfe5ee);
+    /* Flat panel for a figure or an image. No gradients or glows. */
+    .panel {
+      background: var(--wash);
+      border: 1px solid var(--line);
     }
 
     /* ---- Cover: the script gives it no footer ---- */
@@ -410,8 +397,7 @@
   </head>
   <body>
     <main aria-label="Deck Title" class="deck">
-      <!-- Cover. Add the visual class for a gradient background. The split
-           cover in patterns.html replaces this one. -->
+      <!-- Cover. The split cover in patterns.html replaces this one. -->
       <section aria-label="Title" class="slide cover">
         <div class="brand"><i></i>Brand</div>
         <h1>Deck title on one line<br><span>Subtitle or date</span></h1>

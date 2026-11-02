@@ -21,10 +21,11 @@ For decks, these rules replace the artifact-design rules: use the light theme on
 
 1. Change the accent as one set: `--accent`, `--accent-ink` (darker, for text), `--accent-soft` (near white), `--accent-line` (light, for borders). Use the user's brand color if given; otherwise keep the amber.
 2. Use the accent only for the one thing to look at: the kicker, the key bar, the key stat, the top rows.
-3. Slide frame, in order: a `.kicker` (short mono label, such as `Growth · Q3`), an `h1` with the point, the content with the `fill` class, and a `.source` line when the user gives a source. Statement and quote slides use `.say` in place of the `h1` and content.
-4. The `h1` can have a grey second line, `<br><span>…</span>`, only when the supplied content gives one. Keep each line to two to five words.
-5. The brand goes in `.brand` on the cover. For a logo, replace the `<i>` dot with inline `<svg>` or an `<img>` data URL. The footers copy it.
-6. Give `<title>` a name of two to four words, such as `Q3 Results`.
+3. Use flat colors only. Do not add gradients, glows, blurs, or decorative shadows, also when the user asks for a dark theme. A panel is one solid color with a thin border (`.panel`).
+4. Slide frame, in order: a `.kicker` (short mono label, such as `Growth · Q3`), an `h1` with the point, the content with the `fill` class, and a `.source` line when the user gives a source. Statement and quote slides use `.say` in place of the `h1` and content.
+5. The `h1` can have a grey second line, `<br><span>…</span>`, only when the supplied content gives one. Keep each line to two to five words.
+6. The brand goes in `.brand` on the cover. For a logo, replace the `<i>` dot with inline `<svg>` or an `<img>` data URL. The footers copy it.
+7. Give `<title>` a name of two to four words, such as `Q3 Results`.
 
 ## Patterns
 
@@ -32,7 +33,7 @@ Use the pattern that fits each slide. Remove the samples you do not use.
 
 | Pattern | File | Use for |
 |---|---|---|
-| Cover (`.cover`) | `deck.html` | The title. Add `visual` for a gradient background |
+| Cover (`.cover`) | `deck.html` | The title |
 | Numbered list (`.row`) | `deck.html` | Steps, a plan, or related items, up to 4 rows |
 | Statement (`.say`) | `deck.html` | One sentence, set large |
 | Quote (`blockquote.say`, `cite`) | `deck.html` | A supplied quote with the speaker's name |
