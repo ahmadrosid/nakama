@@ -1672,7 +1672,7 @@ async function snapshotOrgPluginDatabases(
   const snapshots = new Map<string, string>();
   const orgsDir = join(rootDir, "orgs");
 
-  for (const org of await readDirentsIfPresent(orgsDir)) {
+  for (const org of await readDirentsIfPresent(rootDir, orgsDir)) {
     if (!org.isDirectory()) {
       continue;
     }
@@ -1689,14 +1689,14 @@ async function snapshotOrgPluginDatabases(
 
     const pluginsDir = join(orgsDir, org.name, "plugins");
 
-    for (const plugin of await readDirentsIfPresent(pluginsDir)) {
+    for (const plugin of await readDirentsIfPresent(rootDir, pluginsDir)) {
       if (!plugin.isDirectory()) {
         continue;
       }
 
       const dbDir = join(pluginsDir, plugin.name, "db");
 
-      for (const entry of await readDirentsIfPresent(dbDir)) {
+      for (const entry of await readDirentsIfPresent(rootDir, dbDir)) {
         if (!(entry.isFile() && entry.name.endsWith(".sqlite"))) {
           continue;
         }
@@ -1874,12 +1874,19 @@ function unreadablePathError(path: string): NakamaApiError {
   );
 }
 
-async function readDirentsIfPresent(dir: string): Promise<Dirent[]> {
+async function readDirentsIfPresent(
+  rootDir: string,
+  dir: string
+): Promise<Dirent[]> {
   try {
     return await readdir(dir, { withFileTypes: true });
   } catch (error) {
     if (isMissingPathError(error)) {
       return [];
+    }
+
+    if (isPermissionError(error)) {
+      throw unreadablePathError(toZipPath(relative(rootDir, dir)));
     }
 
     throw error;

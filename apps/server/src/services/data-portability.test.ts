@@ -1049,33 +1049,46 @@ describe("Nakama data portability", () => {
     }
   });
 
-  test("names a folder the server cannot list", async () => {
-    const locked = join(rootDir, "orgs/o1");
-    await mkdir(locked, { recursive: true });
-    const realReaddir = fsPromises.readdir;
+  // chmod does nothing on Windows, and root lists a mode 000 folder anyway.
+  // chmod does nothing on Windows, and root lists a mode 000 folder anyway.
+  describe.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "real unreadable folders",
+    () => {
+      test.each([
+        "orgs",
+        "orgs/o1",
+        "orgs/o1/plugins",
+        "orgs/o1/profiles/p1",
+        "backups",
+      ])("names %s when the server cannot list it", async (folder) => {
+        await mkdir(join(rootDir, "orgs/o1/plugins/p/db"), { recursive: true });
+        await mkdir(join(rootDir, "orgs/o1/profiles/p1"), { recursive: true });
+        await mkdir(join(rootDir, "backups"), { recursive: true });
+        await writeFile(join(rootDir, "orgs/o1/profiles/p1/SOUL.md"), "soul");
+        await writeFile(join(rootDir, "backups/notes.txt"), "ok");
+        await chmod(join(rootDir, folder), 0o000);
 
-    const readdirMock = spyOn(fsPromises, "readdir").mockImplementation(
-      // SAFETY: the wrapper forwards its arguments to the real readdir unchanged.
-      (async (...args: Parameters<typeof realReaddir>) => {
-        if (args[0] === locked) {
-          throw Object.assign(new Error("denied"), { code: "EACCES" });
+        try {
+          const refusal = await createNakamaDataExport({
+            databasePath: null,
+            rootDir,
+          }).then(
+            () => null,
+            (error: Error & { status?: number }) => error
+          );
+
+          expect(refusal).toMatchObject({
+            message: expect.stringContaining(folder),
+            status: 409,
+          });
+          expect(refusal?.message).not.toContain(rootDir);
+        } finally {
+          // Lets afterEach delete the folder.
+          await chmod(join(rootDir, folder), 0o700);
         }
-
-        return await realReaddir(...args);
-      }) as typeof realReaddir
-    );
-
-    try {
-      await expect(
-        createNakamaDataExport({ databasePath: null, rootDir })
-      ).rejects.toMatchObject({
-        message: expect.stringContaining("orgs/o1"),
-        status: 409,
       });
-    } finally {
-      readdirMock.mockRestore();
     }
-  });
+  );
 
   // chmod does nothing on Windows, and root reads a mode 000 file anyway.
   test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
