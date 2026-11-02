@@ -176,6 +176,7 @@ interface ChatMessageListProps {
   onEditMessage?: (message: ChatListItem, text: string) => void;
   onRetryMessage?: (message: ChatListItem) => void;
   onSubmitQuestionnaire?: (answers: AgentQuestionAnswer[]) => void;
+  onSwitchModel?: () => void;
   profileId?: string | null;
   questionnaire?: AgentQuestionnaire | null;
   readOnly?: boolean;
@@ -325,6 +326,7 @@ function ChatMessageListSession({
   onBranchMessage,
   onEditMessage,
   onRetryMessage,
+  onSwitchModel,
   onSubmitQuestionnaire,
   questionnaire,
   emptyMessage,
@@ -419,6 +421,7 @@ function ChatMessageListSession({
             }
             onRetryMessage={onRetryMessage}
             onSubmitQuestionnaire={onSubmitQuestionnaire}
+            onSwitchModel={onSwitchModel}
             profileId={profileId}
             questionnaire={
               turnIndex === turns.length - 1 ? questionnaire : null
@@ -454,6 +457,7 @@ function ChatMessageListSession({
       onBranchMessage,
       onEditMessage,
       onRetryMessage,
+      onSwitchModel,
       onSubmitQuestionnaire,
       openCitationPreview,
       profileId,
@@ -543,6 +547,7 @@ function AssistantTurn({
   onBranchMessage,
   onOpenFileCitation,
   onRetryMessage,
+  onSwitchModel,
   onSubmitQuestionnaire,
   questionnaire,
   questionnaireAnswers,
@@ -565,6 +570,7 @@ function AssistantTurn({
   onBranchMessage?: (message: ChatListItem) => void;
   onOpenFileCitation?: (path: string) => void;
   onRetryMessage?: (message: ChatListItem) => void;
+  onSwitchModel?: () => void;
   onSubmitQuestionnaire?: (answers: AgentQuestionAnswer[]) => void;
   questionnaire?: AgentQuestionnaire | null;
   questionnaireAnswers?: AgentQuestionAnswer[];
@@ -607,6 +613,7 @@ function AssistantTurn({
           modelLabel={modelLabel}
           onOpenFileCitation={onOpenFileCitation}
           onRetryMessage={onRetryMessage}
+          onSwitchModel={onSwitchModel}
           profileId={profileId}
           retryDisabled={retryDisabled}
           segment={segment}

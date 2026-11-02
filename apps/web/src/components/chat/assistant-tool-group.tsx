@@ -110,6 +110,7 @@ export function AssistantTurnSegmentView({
   profileId,
   onOpenFileCitation,
   onRetryMessage,
+  onSwitchModel,
   retryDisabled = false,
 }: {
   segment: AssistantTurnSegment;
@@ -118,6 +119,7 @@ export function AssistantTurnSegmentView({
   profileId?: string | null;
   onOpenFileCitation?: (path: string) => void;
   onRetryMessage?: (message: ChatListItem) => void;
+  onSwitchModel?: () => void;
   retryDisabled?: boolean;
 }) {
   if (segment.kind === "work") {
@@ -143,17 +145,106 @@ export function AssistantTurnSegmentView({
         ) : null}
         <AssistantTextContent
           message={segment.message}
+          modelLabel={modelLabel}
           onOpenFileCitation={onOpenFileCitation}
           onRetry={
             segment.message.failed && onRetryMessage
               ? () => onRetryMessage(segment.message)
               : undefined
           }
+          onSwitchModel={onSwitchModel}
           profileId={profileId}
           retryDisabled={retryDisabled}
         />
       </MessageContent>
     </Message>
+  );
+}
+
+function FailedTurnNotice({
+  error,
+  modelLabel,
+  onRetry,
+  onSwitchModel,
+  retryDisabled,
+}: {
+  error: string;
+  modelLabel?: string | null;
+  onRetry?: () => void;
+  onSwitchModel?: () => void;
+  retryDisabled: boolean;
+}) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
+  return (
+    <div className="flex w-full min-w-0 items-start gap-3" role="alert">
+      <span className="mt-px flex size-7 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+        <AlertCircleIcon aria-hidden className="size-4" />
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
+        <div className="flex flex-col gap-1">
+          <p className="font-medium text-sm">
+            The reply stopped before it finished
+          </p>
+          <p className="text-muted-foreground text-sm leading-relaxed">
+            Something went wrong while writing the reply. Retry, or switch to
+            another model.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {onRetry ? (
+            <Button
+              className="h-9 rounded-[10px] bg-foreground px-3.5 text-background hover:bg-foreground/85"
+              disabled={retryDisabled}
+              onClick={onRetry}
+              type="button"
+            >
+              <Rotate02Icon aria-hidden className="size-3.5" />
+              Retry
+            </Button>
+          ) : null}
+          {onSwitchModel ? (
+            <Button
+              className="h-9 rounded-[10px] px-3.5"
+              disabled={retryDisabled}
+              onClick={onSwitchModel}
+              type="button"
+              variant="outline"
+            >
+              Switch model
+            </Button>
+          ) : null}
+          <Button
+            aria-expanded={detailsOpen}
+            className="h-9 rounded-[10px] px-2.5 text-muted-foreground"
+            onClick={() => setDetailsOpen((open) => !open)}
+            type="button"
+            variant="ghost"
+          >
+            Details
+            <ArrowDown01Icon
+              aria-hidden
+              className={cn(
+                "size-3.5 transition-transform",
+                detailsOpen && "rotate-180"
+              )}
+            />
+          </Button>
+        </div>
+        {detailsOpen ? (
+          <dl className="grid grid-cols-[6rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 rounded-xl border border-border bg-muted/40 px-3.5 py-3 text-[13px] leading-normal">
+            <dt className="text-muted-foreground">Error</dt>
+            <dd className="break-words font-mono">{error}</dd>
+            {modelLabel ? (
+              <>
+                <dt className="text-muted-foreground">Model</dt>
+                <dd>{modelLabel}</dd>
+              </>
+            ) : null}
+          </dl>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -172,15 +263,19 @@ function StreamingPlainTail({ text }: { text: string }) {
 
 function AssistantTextContent({
   message,
+  modelLabel,
   profileId,
   onOpenFileCitation,
   onRetry,
+  onSwitchModel,
   retryDisabled = false,
 }: {
   message: ChatListItem;
+  modelLabel?: string | null;
   profileId?: string | null;
   onOpenFileCitation?: (path: string) => void;
   onRetry?: () => void;
+  onSwitchModel?: () => void;
   retryDisabled?: boolean;
 }) {
   const { user } = useAuth();
@@ -216,33 +311,13 @@ function AssistantTextContent({
 
   if (message.failed) {
     return (
-      <div className="flex w-full min-w-0 items-start gap-3" role="alert">
-        <span className="mt-px flex size-7 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
-          <AlertCircleIcon aria-hidden className="size-4" />
-        </span>
-        <div className="flex min-w-0 flex-col gap-3">
-          <div className="flex flex-col gap-1">
-            <p className="font-medium text-sm">
-              The reply stopped before it finished
-            </p>
-            <p className="break-words text-muted-foreground text-sm leading-relaxed">
-              {content || "The model did not respond."}
-            </p>
-          </div>
-          {onRetry ? (
-            <Button
-              className="w-fit"
-              disabled={retryDisabled}
-              onClick={onRetry}
-              size="sm"
-              type="button"
-            >
-              <Rotate02Icon aria-hidden className="size-3.5" />
-              Retry
-            </Button>
-          ) : null}
-        </div>
-      </div>
+      <FailedTurnNotice
+        error={content || "The model did not respond."}
+        modelLabel={modelLabel}
+        onRetry={onRetry}
+        onSwitchModel={onSwitchModel}
+        retryDisabled={retryDisabled}
+      />
     );
   }
 
