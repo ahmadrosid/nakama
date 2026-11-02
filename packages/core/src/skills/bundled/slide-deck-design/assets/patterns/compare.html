@@ -1,0 +1,61 @@
+<style>
+.cols {
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  gap: 3.2cqw;
+}
+.col {
+  padding-top: 1.4cqw;
+  border-top: 1px solid var(--line);
+}
+.col.on {
+  border-top: 2px solid var(--accent);
+}
+.col h2 {
+  margin: 0 0 1.2cqw;
+  font-size: 2.4cqw;
+  font-weight: 550;
+  letter-spacing: -0.02em;
+}
+.col.on h2 {
+  color: var(--accent-ink);
+}
+.col p {
+  margin-bottom: 0.8cqw;
+  font-size: 1.6cqw;
+  line-height: 1.45;
+  color: var(--muted);
+}
+@media screen and (max-width: 760px) and (orientation: portrait) {
+  .cols {
+    grid-auto-flow: row;
+    gap: 24px;
+  }
+  .col h2 {
+    font-size: 20px;
+  }
+  .col p {
+    font-size: 15px;
+  }
+}
+</style>
+<section aria-label="Compare" class="slide">
+  <p class="kicker">Section · Change</p>
+  <h1>Checkout went from 5 steps to 2.</h1>
+  <div class="cols fill">
+    <div class="col">
+      <span class="label">Before</span>
+      <h2>Old way</h2>
+      <p>One supplied point</p>
+      <p>Another supplied point</p>
+    </div>
+    <div class="col on">
+      <span class="label">After</span>
+      <h2>New way</h2>
+      <p>One supplied point</p>
+      <p>Another supplied point</p>
+    </div>
+  </div>
+  <aside class="notes"><p>Why the change matters.</p></aside>
+</section>

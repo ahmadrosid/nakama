@@ -1,0 +1,43 @@
+<style>
+.media {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 4cqw;
+  align-items: end;
+}
+.pic {
+  display: grid;
+  place-items: center;
+  height: 26cqw;
+  padding: 1.6cqw;
+}
+.pic img,
+.pic svg {
+  max-width: 100%;
+  max-height: 100%;
+  border: 1px solid var(--line);
+  border-radius: 0.5cqw;
+}
+@media screen and (max-width: 760px) and (orientation: portrait) {
+  .media {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .pic {
+    height: 220px;
+  }
+}
+</style>
+<section aria-label="Feature" class="slide">
+  <p class="kicker">Section · Product</p>
+  <h1>Budgets split themselves.</h1>
+  <div class="media fill">
+    <p class="body">Two or three supplied sentences about the image.</p>
+    <div class="pic panel">
+      <svg aria-label="Screenshot" role="img" viewBox="0 0 16 10">
+        <rect fill="#fff" height="10" width="16" />
+      </svg>
+    </div>
+  </div>
+  <aside class="notes"><p>What to point at in the image.</p></aside>
+</section>

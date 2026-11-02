@@ -236,10 +236,16 @@ describe("ensureBundledSkillFiles", () => {
     );
 
     const template = await readFile(join(assets, "deck.html"), "utf8");
-    const patterns = await readFile(join(assets, "patterns.html"), "utf8");
+    const patternFiles = await readdir(join(assets, "patterns"));
 
     expect(template).toContain('class="slide"');
-    expect(patterns).toContain('class="slide"');
+    expect(patternFiles.length).toBeGreaterThan(0);
+
+    for (const file of patternFiles) {
+      expect(await readFile(join(assets, "patterns", file), "utf8")).toContain(
+        'class="slide'
+      );
+    }
   });
 
   test("refreshes an installed memory archive skill on startup", async () => {
