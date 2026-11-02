@@ -1918,7 +1918,7 @@ export class OrgService {
     });
 
     if (!erased) {
-      throw new NakamaApiError("Not found", 404);
+      throw new NakamaApiError("Cannot erase the last active admin.", 409);
     }
   }
 
