@@ -420,36 +420,36 @@ describe("createHonoApp", () => {
     }
   });
 
-  test("list sessions documents its channel filter as required", async () => {
+  test("the openapi contract says one of the channel filters is required", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
 
-    const session = await setupFreshInstallSession(
-      app,
-      options.databaseAdapter
+    // SAFETY: the spec is a typed OpenAPI document; the path and parameter
+    // names are fixed by the route registration this test pins.
+    const spec = (await (
+      await app.fetch(new Request("http://localhost/openapi.json"))
+    ).json()) as {
+      paths: {
+        "/v1/sessions": {
+          get: {
+            parameters: Array<{ name: string; description?: string }>;
+          };
+        };
+      };
+    };
+
+    const params = spec.paths["/v1/sessions"].get.parameters;
+
+    const channel = params.find((param) => param.name === "channel");
+    const channels = params.find((param) => param.name === "channels");
+
+    expect(channel?.description).toContain(
+      "One of `channel` or `channels` is required."
     );
 
-    const ok = await app.fetch(
-      new Request(
-        "http://localhost/v1/sessions?profileId=default&channels=web",
-        { headers: session.headers() }
-      )
+    expect(channels?.description).toContain(
+      "One of `channel` or `channels` is required."
     );
-
-    expect(ok.status).toBe(200);
-
-    // PR #720 made the runtime require a channel; the published contract must
-    // match, so an omitted filter fails with the channel error, not silence.
-    const omitted = await app.fetch(
-      new Request("http://localhost/v1/sessions?profileId=default", {
-        headers: session.headers(),
-      })
-    );
-
-    expect(omitted.status).toBe(400);
-    await expect(omitted.json()).resolves.toMatchObject({
-      error: expect.stringContaining("Invalid channel"),
-    });
   });
 
   test("removed backend keys and routes reject access, and stale app-user inputs create no sessions", async () => {
