@@ -6,8 +6,43 @@ import { client, formatError } from "@/lib/client";
 /** Fired after this device's subscription changes, so every switch re-reads it. */
 const WEB_PUSH_CHANGED = "nakama:web-push-changed";
 
-/** Fired when a reply finishes while Nakama is not in front. */
+/** Fired when a reply finishes after the user left Nakama. */
 export const REPLY_READY_AWAY = "nakama:reply-ready-away";
+
+/** Kept per tab, so a reload or a discarded tab still shows the offer. */
+const MISSED_REPLY_KEY = "nakama.webPushPrompt.missedReply";
+
+/** Nakama is on screen and has focus here. */
+function isOnScreen(): boolean {
+  return document.visibilityState === "visible" && document.hasFocus();
+}
+
+/**
+ * Counts each time this page goes hidden. A phone pauses a hidden page, so its
+ * reply can end only after the user is back; the count still shows they left.
+ */
+let pageHides = 0;
+
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      pageHides += 1;
+    }
+  });
+}
+
+/** Read when a turn starts; pass it to `notifyReplyReady` when it ends. */
+export function pageHidesNow(): number {
+  return pageHides;
+}
+
+export function readMissedReply(): boolean {
+  try {
+    return sessionStorage.getItem(MISSED_REPLY_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 let resyncedThisPage = false;
 
@@ -63,22 +98,32 @@ function writeDesktopNotify(on: boolean): void {
 }
 
 /**
- * Desktop only: tells the user a reply is ready while Nakama is not in front.
- * The browser gets the same message by Web Push from the server.
+ * A reply ended. When the user left during the turn, this marks the reply as
+ * missed for the notification offer. The desktop app also shows a local
+ * notification while Nakama is not in front; the browser gets Web Push.
  */
 export function notifyReplyReady(message: {
   body: string;
+  hidesAtStart: number;
   onOpen: () => void;
   tag: string;
   title: string;
 }): void {
-  if (document.visibilityState === "visible" && document.hasFocus()) {
-    return;
+  // Hidden only, not unfocused: a window beside another app is still watched.
+  if (
+    document.visibilityState === "hidden" ||
+    pageHides !== message.hidesAtStart
+  ) {
+    try {
+      sessionStorage.setItem(MISSED_REPLY_KEY, "1");
+    } catch {
+      // Without storage the offer still shows until this page reloads.
+    }
+
+    window.dispatchEvent(new Event(REPLY_READY_AWAY));
   }
 
-  window.dispatchEvent(new Event(REPLY_READY_AWAY));
-
-  if (!(isDesktopApp && webPushSupported && readDesktopNotify())) {
+  if (isOnScreen() || !(isDesktopApp && readDesktopNotify())) {
     return;
   }
 
@@ -329,8 +374,7 @@ export function usePushPresence(): void {
     };
 
     const sync = () => {
-      const visible =
-        document.visibilityState === "visible" && document.hasFocus();
+      const visible = isOnScreen();
 
       if (visible !== lastVisible) {
         report(visible);

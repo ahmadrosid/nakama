@@ -3,6 +3,7 @@ import { Notification01Icon } from "hugeicons-react";
 import { useEffect, useState } from "react";
 import {
   REPLY_READY_AWAY,
+  readMissedReply,
   useWebPush,
   webPushSupported,
 } from "@/hooks/use-web-push";
@@ -24,7 +25,7 @@ function readDismissed(): boolean {
 export function WebPushPrompt() {
   const { busy, enabled, error, setPush } = useWebPush();
   const [dismissed, setDismissed] = useState(readDismissed);
-  const [missedReply, setMissedReply] = useState(false);
+  const [missedReply, setMissedReply] = useState(readMissedReply);
 
   useEffect(() => {
     const onAway = () => setMissedReply(true);
