@@ -10,6 +10,7 @@ import { cn } from "@nakama/ui/utils";
 import { useQuery } from "@tanstack/react-query";
 import {
   AiBrain01Icon,
+  AlertCircleIcon,
   ArrowDown01Icon,
   ArrowRight01Icon,
   Audit02Icon,
@@ -215,29 +216,32 @@ function AssistantTextContent({
 
   if (message.failed) {
     return (
-      <div
-        className="flex w-full min-w-0 flex-col gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5"
-        role="alert"
-      >
-        <div className="flex flex-col gap-1">
-          <span className="font-medium text-destructive text-xs">Failed</span>
-          <p className="text-destructive/90 text-sm leading-relaxed">
-            {content || "The model did not respond."}
-          </p>
+      <div className="flex w-full min-w-0 items-start gap-3" role="alert">
+        <span className="mt-px flex size-7 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+          <AlertCircleIcon aria-hidden className="size-4" />
+        </span>
+        <div className="flex min-w-0 flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <p className="font-medium text-sm">
+              The reply stopped before it finished
+            </p>
+            <p className="break-words text-muted-foreground text-sm leading-relaxed">
+              {content || "The model did not respond."}
+            </p>
+          </div>
+          {onRetry ? (
+            <Button
+              className="w-fit"
+              disabled={retryDisabled}
+              onClick={onRetry}
+              size="sm"
+              type="button"
+            >
+              <Rotate02Icon aria-hidden className="size-3.5" />
+              Retry
+            </Button>
+          ) : null}
         </div>
-        {onRetry ? (
-          <Button
-            className="w-fit border-destructive/30 bg-background text-destructive hover:bg-destructive/10 hover:text-destructive"
-            disabled={retryDisabled}
-            onClick={onRetry}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <Rotate02Icon aria-hidden className="size-3.5" />
-            Retry
-          </Button>
-        ) : null}
       </div>
     );
   }
