@@ -13,10 +13,16 @@ import {
  * `Referer` are all attacker-settable, and it ends up in an OAuth redirect_uri
  * and in share links, so an origin we cannot vouch for is refused rather than
  * echoed back into a generated URL.
+ *
+ * `dropUnvouched` is for a caller that only needs the origin for links: with a
+ * configured public URL to fall back on, an unvouched origin (an old domain)
+ * is dropped instead of refused. A malformed origin, or one with no configured
+ * URL to replace it, is still refused.
  */
 export function resolveRequestClientOrigin(
   request?: Request,
-  explicitOrigin?: string
+  explicitOrigin?: string,
+  options: { dropUnvouched?: boolean } = {}
 ): string | undefined {
   const candidate = readClaimedOrigin(request, explicitOrigin);
 
@@ -29,6 +35,16 @@ export function resolveRequestClientOrigin(
   }
 
   if (!isAllowedClientOrigin(candidate, request)) {
+    const configured = resolveWebPublicUrl();
+
+    if (options.dropUnvouched && configured) {
+      console.warn(
+        `Dropped client origin ${candidate}: not ${configured}. Links use the configured public URL.`
+      );
+
+      return;
+    }
+
     throw new NakamaApiError("Origin is not allowed.", 400);
   }
 
