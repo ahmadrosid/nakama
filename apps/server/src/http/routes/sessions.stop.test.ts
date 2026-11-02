@@ -115,8 +115,15 @@ describe("POST /v1/sessions/:id/messages", () => {
     }
   });
 
-  async function sendFrom(origin: string) {
-    process.env.NAKAMA_WEB_PUBLIC_URL = "https://team.example.com";
+  async function sendFrom(
+    origin: string,
+    publicUrl: string | null = "https://team.example.com"
+  ) {
+    if (publicUrl) {
+      process.env.NAKAMA_WEB_PUBLIC_URL = publicUrl;
+    } else {
+      delete process.env.NAKAMA_WEB_PUBLIC_URL;
+    }
 
     const databaseAdapter = createInMemoryDatabaseAdapter();
     const agent = new AgentService(null, null, databaseAdapter);
@@ -163,14 +170,38 @@ describe("POST /v1/sessions/:id/messages", () => {
   }
 
   test("an origin the server cannot vouch for still runs the turn", async () => {
-    const { body, response, started } = await sendFrom(
-      "https://team.old-domain.example"
+    const warn = spyOn(console, "warn").mockImplementation(() => undefined);
+
+    try {
+      const { body, response, started } = await sendFrom(
+        "https://team.old-domain.example"
+      );
+
+      expect(response.status).toBe(200);
+      expect(body.reply).toBe("hello");
+      expect(started).toHaveLength(1);
+      expect(started[0]?.clientOrigin).toBeUndefined();
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test("an unvouched origin is refused when no public URL can replace it", async () => {
+    const { response, started } = await sendFrom(
+      "https://team.old-domain.example",
+      null
     );
 
-    expect(response.status).toBe(200);
-    expect(body.reply).toBe("hello");
-    expect(started).toHaveLength(1);
-    expect(started[0]?.clientOrigin).toBeUndefined();
+    expect(response.status).toBe(400);
+    expect(started).toHaveLength(0);
+  });
+
+  test("a malformed origin is refused", async () => {
+    const { response, started } = await sendFrom("javascript:alert(1)");
+
+    expect(response.status).toBe(400);
+    expect(started).toHaveLength(0);
   });
 
   test("a vouched origin reaches the turn", async () => {
