@@ -8,6 +8,7 @@ export const DEFAULT_BUNDLED_SKILL_NAMES = [
   "slide-deck-design",
   "composio-integrations",
   "nakama-guide",
+  "grounded-research",
 ] as const;
 
 export const SUPER_NAKAMA_BUNDLED_SKILL_NAMES = [
