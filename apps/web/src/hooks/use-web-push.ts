@@ -6,6 +6,9 @@ import { client, formatError } from "@/lib/client";
 /** Fired after this device's subscription changes, so every switch re-reads it. */
 const WEB_PUSH_CHANGED = "nakama:web-push-changed";
 
+/** Fired when a reply finishes while Nakama is not in front. */
+export const REPLY_READY_AWAY = "nakama:reply-ready-away";
+
 let resyncedThisPage = false;
 
 /** How often an on-screen page tells the server; the server forgets after 75s. */
@@ -69,11 +72,13 @@ export function notifyReplyReady(message: {
   tag: string;
   title: string;
 }): void {
-  if (!(isDesktopApp && webPushSupported && readDesktopNotify())) {
+  if (document.visibilityState === "visible" && document.hasFocus()) {
     return;
   }
 
-  if (document.visibilityState === "visible" && document.hasFocus()) {
+  window.dispatchEvent(new Event(REPLY_READY_AWAY));
+
+  if (!(isDesktopApp && webPushSupported && readDesktopNotify())) {
     return;
   }
 
