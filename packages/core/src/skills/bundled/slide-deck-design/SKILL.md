@@ -20,12 +20,13 @@ For decks, these rules replace the artifact-design rules: use the light theme on
 ## Style
 
 1. Change the accent as one set: `--accent`, `--accent-ink` (darker, for text), `--accent-soft` (near white), `--accent-line` (light, for borders). Use the user's brand color if given; otherwise keep the amber.
-2. Use the accent only for the one thing to look at: the kicker, the key bar, the key stat, the top rows.
+2. Use the accent only for the one thing to look at on a slide: the key bar, the key stat, the top rows. Labels and kickers stay grey.
 3. Use flat colors only. Do not add gradients, glows, blurs, or decorative shadows, also when the user asks for a dark theme. A panel is one solid color with a thin border (`.panel`).
-4. Slide frame, in order: a `.kicker` (short mono label, such as `Growth · Q3`), an `h1` with the point, the content with the `fill` class, and a `.source` line when the user gives a source. Statement and quote slides use `.say` in place of the `h1` and content.
-5. The `h1` can have a grey second line, `<br><span>…</span>`, only when the supplied content gives one. Keep each line to two to five words.
-6. The brand goes in `.brand` on the cover. For a logo, replace the `<i>` dot with inline `<svg>` or an `<img>` data URL. The footers copy it.
-7. Give `<title>` a name of two to four words, such as `Q3 Results`.
+4. Do not decorate. No emoji, no stock "AI" icons (sparkles, rockets, lightning, robots), no pills or badges above a title, and no dots or stripes that mark nothing. Do not set labels in capitals with wide letter spacing.
+5. Slide frame, in order: an optional `.kicker`, an `h1` with the point, the content with the `fill` class, and a `.source` line when the user gives a source. Statement and quote slides use `.say` in place of the `h1` and content. Add a kicker only when it gives a fact the `h1` does not, such as the section in a long deck.
+6. The `h1` can have a grey second line, `<br><span>…</span>`, only when the supplied content gives one. Keep each line to two to five words.
+7. Write the brand name in `.brand` on the cover. For a supplied logo, put it before the name as inline `<svg>` or an `<img>` data URL; the footers copy it. Without a logo, write the name only. Do not add a dot or an icon in place of a logo.
+8. Give `<title>` a name of two to four words, such as `Q3 Results`.
 
 ## Patterns
 
@@ -68,3 +69,13 @@ Use the pattern that fits each slide. Remove the samples you do not use.
 2. For a brand font, embed it with `@font-face` and `src: url(data:font/woff2;base64,...)`, and put its family first in `--sans` or `--mono`. Embed only the weights used.
 3. Do not use `window.print()`, `alert()`, popups, network requests, or browser storage. Users get the PDF from Nakama's artifact controls.
 4. If a browser preview is requested and available, step through every slide once and fix overflow. Do not claim visual checks from reading the source.
+
+## Before you save
+
+Answer yes to each, or fix the deck:
+
+1. Does every name, number, quote, and image come from the user?
+2. Does each slide have at most one accent, on the thing to look at?
+3. Is the deck free of gradients, glows, shadows, emoji, and decorative icons, dots, and badges?
+4. Does every kicker and grey second line add a fact the `h1` does not?
+5. Do the layouts change from slide to slide where the content allows?

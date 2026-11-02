@@ -128,17 +128,16 @@
     }
 
     /* ---- Type and slide frame ---- */
+    /* Plain sentence-case labels: no caps, no wide tracking, no accent. */
     .kicker,
     .label {
-      font: 500 1.1cqw / 1.3 var(--mono);
-      color: var(--accent-ink);
-      text-transform: uppercase;
-      letter-spacing: 0.14em;
+      font: 500 1.2cqw / 1.3 var(--sans);
+      color: var(--muted);
     }
     .label {
       display: block;
       margin-bottom: 1.2cqw;
-      font-size: 1cqw;
+      font-size: 1.05cqw;
       color: var(--subtle);
     }
     h1 {
@@ -175,34 +174,24 @@
       font-size: 0.95cqw;
       color: var(--subtle);
     }
-    /* Brand mark: replace <i> with the user's logo as <svg> or <img>. */
+    /* Brand: the name, with the user's logo (<svg> or <img>) before it when
+       one is supplied. No placeholder mark. */
     .mark,
     .brand {
       display: flex;
       gap: 0.7cqw;
       align-items: center;
     }
-    .mark > *,
-    .brand > * {
-      width: 1.4cqw;
-      height: 1.4cqw;
-      background: currentColor;
-      border-radius: 50%;
-    }
-    .mark > svg,
-    .mark > img,
-    .brand > svg,
-    .brand > img {
+    .mark > * {
       width: auto;
-      background: none;
-      border-radius: 0;
+      height: 1.4cqw;
     }
     .brand {
       font-size: 1.7cqw;
       font-weight: 600;
     }
     .brand > * {
-      width: 2.4cqw;
+      width: auto;
       height: 2.4cqw;
     }
     /* Round avatar: an <img> or a <span> with initials. */
@@ -279,10 +268,10 @@
     .say cite {
       display: block;
       margin-top: 2.4cqw;
-      font: 1.2cqw var(--mono);
+      font: 1.3cqw var(--sans);
       font-style: normal;
-      color: var(--subtle);
-      letter-spacing: 0.04em;
+      color: var(--muted);
+      letter-spacing: 0;
     }
 
     /* ---- Phone portrait: layouts stack, text in px ---- */
@@ -338,11 +327,9 @@
         font-size: 18px;
       }
       .mark > * {
-        width: 12px;
         height: 12px;
       }
       .brand > * {
-        width: 22px;
         height: 22px;
       }
       .av {
@@ -399,7 +386,7 @@
     <main aria-label="Deck Title" class="deck">
       <!-- Cover. The split cover in patterns.html replaces this one. -->
       <section aria-label="Title" class="slide cover">
-        <div class="brand"><i></i>Brand</div>
+        <div class="brand">Brand</div>
         <h1>Deck title on one line<br><span>Subtitle or date</span></h1>
         <p class="meta">Event name · Date · Time</p>
         <aside class="notes"><p>What you say while this slide shows.</p></aside>
