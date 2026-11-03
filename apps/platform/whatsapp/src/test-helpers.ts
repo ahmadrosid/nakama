@@ -44,6 +44,7 @@ export function createMockClient(
     steps?: StreamStep[];
     autoComplete?: boolean;
     profiles?: ProfileSummary[];
+    providerConfigured?: boolean;
     orgs?: UserOrgSummary[];
     messages?: ChatMessage[];
     toolEvents?: Parameters<NonNullable<StreamHandlers["onToolEnd"]>>[0][];
@@ -237,7 +238,10 @@ export function createMockClient(
       provider: null,
       providers: [],
     }),
-    health: async () => ({ ok: true, providerConfigured: false }),
+    health: async () => ({
+      ok: true,
+      providerConfigured: options.providerConfigured ?? false,
+    }),
     listProfiles: async () => {
       calls.listProfiles += 1;
 

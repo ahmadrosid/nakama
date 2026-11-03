@@ -13,6 +13,7 @@ import {
   stopActiveStream,
 } from "@nakama/core/channel-active-stream";
 import { createChatLock } from "@nakama/core/channel-chat-lock";
+import { describeChannelStatus } from "@nakama/core/channel-commands";
 import {
   type ChannelOrgStore,
   findOrgBySelectionInput,
@@ -1422,41 +1423,18 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     messenger: DiscordMessenger,
     chatId: string
   ): Promise<void> {
-    try {
-      const health = await client.health();
-
-      const lines = [
-        `Server: ${health.ok ? "ok" : "degraded"}`,
-        `Provider configured: ${health.providerConfigured ? "yes" : "no"}`,
-      ];
-
-      if (health.providerConfigured) {
-        const models = await client.getModels();
+    const status = await describeChannelStatus(client, {
+      findAgent: async () => {
         const profiles = await listSelectableProfiles();
-        const profileId = await resolveSessionProfileId(chatId);
-        const profile = profiles.find((entry) => entry.id === profileId);
+        const id = await resolveSessionProfileId(chatId);
 
-        const modelLabel = profile?.model?.includes("::")
-          ? profile.model.slice(profile.model.indexOf("::") + 2)
-          : (profile?.model ?? "none");
+        return { agent: profiles.find((entry) => entry.id === id), id };
+      },
+      label: "Profile",
+      sessionId: sessionStore.get(chatId)?.sessionId,
+    });
 
-        lines.push(`Profile: ${profile?.name ?? profileId}`);
-        lines.push(`Provider: ${models.provider ?? "unknown"}`);
-        lines.push(`Model: ${modelLabel}`);
-      } else {
-        lines.push("Chat runs in offline mode without an API key.");
-      }
-
-      const sessionId = sessionStore.get(chatId)?.sessionId;
-
-      if (sessionId) {
-        lines.push(`Session: ${shortSessionId(sessionId)}`);
-      }
-
-      await replyChunks(messenger, lines.join("\n"));
-    } catch (error) {
-      await messenger.send(formatClientError(error));
-    }
+    await replyChunks(messenger, status);
   }
 
   async function resolveSession(chatId: string): Promise<RemoteChatSession> {

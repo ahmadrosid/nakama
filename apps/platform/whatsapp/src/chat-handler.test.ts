@@ -501,6 +501,35 @@ describe("createChatHandler", () => {
     });
   });
 
+  test("/status names the agent and this chat's session", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+      });
+
+      const { handler: handleMessage, sent } = await createTestHandler(
+        homeDir,
+        undefined,
+        { providerConfigured: true }
+      );
+
+      await handleMessage({ jid: PAIRED_JID, text: "/new" });
+      await handleMessage({ jid: PAIRED_JID, text: "/status" });
+
+      expect(sent.at(-1)?.text).toBe(
+        [
+          "Server: ok",
+          "Provider configured: yes",
+          "Agent: Default",
+          "Provider: unknown",
+          "Model: none",
+          "Session: session_",
+        ].join("\n")
+      );
+    });
+  });
+
   test("handles /compact command", async () => {
     await withTempHome(async (homeDir) => {
       await writeWhatsAppConfigIni(homeDir, {

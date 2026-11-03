@@ -62,6 +62,7 @@ export function createMockClient(
       sizeBytes: number;
       updatedAt: string;
     }>;
+    providerConfigured?: boolean;
     onSendStream?: (
       input: SendMessageInput,
       handlers?: StreamHandlers
@@ -154,7 +155,10 @@ export function createMockClient(
         todos: [],
       };
     },
-    health: async () => ({ ok: true, providerConfigured: false }),
+    health: async () => ({
+      ok: true,
+      providerConfigured: options.providerConfigured ?? false,
+    }),
     listProfileArtifacts: async () => {
       calls.listProfileArtifacts += 1;
       const artifacts = options.listedArtifacts ?? [];

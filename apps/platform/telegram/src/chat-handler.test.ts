@@ -334,6 +334,54 @@ describe("createChatHandler group chats", () => {
     });
   });
 
+  test("/status in a group topic names that topic's session", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [42],
+      });
+
+      const { handler: handleMessage } = await createTestHandler(
+        homeDir,
+        undefined,
+        {
+          profiles: [
+            {
+              id: "default",
+              isDefault: true,
+              model: "local::base",
+              name: "Default Bot",
+            },
+          ],
+          providerConfigured: true,
+        }
+      );
+
+      const topic = {
+        chatId: -100_123,
+        chatType: "supergroup" as const,
+        messageThreadId: 10,
+        userId: 42,
+      };
+
+      await handleMessage(createMessageContext({ ...topic, text: "/new" }).ctx);
+
+      const status = createMessageContext({ ...topic, text: "/status" });
+      await handleMessage(status.ctx);
+
+      expect(status.replies.join("\n")).toBe(
+        [
+          "Server: ok",
+          "Provider configured: yes",
+          "Profile: Default Bot",
+          "Provider: unknown",
+          "Model: base",
+          "Session: session_",
+        ].join("\n")
+      );
+    });
+  });
+
   test("/status in a group topic reports that topic profile", async () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {

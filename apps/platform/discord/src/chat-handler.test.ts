@@ -1971,6 +1971,39 @@ describe("createChatHandler guild thread routing", () => {
     });
   });
 
+  test("/status names the profile, model and this chat's session", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleSlashCommand } = await createPairedHandler(homeDir, {
+        profiles: [
+          {
+            id: "default",
+            isDefault: true,
+            model: "local::base",
+            name: "Default Bot",
+          },
+        ],
+        providerConfigured: true,
+      });
+
+      const newCmd = createSlashInteraction({ commandName: "new" });
+      await handleSlashCommand(newCmd.interaction);
+
+      const statusCmd = createSlashInteraction({ commandName: "status" });
+      await handleSlashCommand(statusCmd.interaction);
+
+      expect(statusCmd.replies.join("\n")).toBe(
+        [
+          "Server: ok",
+          "Provider configured: yes",
+          "Profile: Default Bot",
+          "Provider: unknown",
+          "Model: base",
+          "Session: session_",
+        ].join("\n")
+      );
+    });
+  });
+
   test("slash commands in threads still clear and start new sessions", async () => {
     await withTempHome(async (homeDir) => {
       const { handleSlashCommand, sessionStore } =

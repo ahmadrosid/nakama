@@ -1,166 +1,28 @@
 import { describe, expect, test } from "bun:test";
-import { join } from "node:path";
-import type { NakamaClient } from "@nakama/client";
-import { ChannelSessionStore } from "@nakama/core/channel-session-store";
-import {
-  createDefaultTestOrgs,
-  withTempHome,
-} from "@nakama/core/channel-test-helpers";
+import { withTempHome } from "@nakama/core/channel-test-helpers";
 import {
   loadSlackConfigFile,
   regenerateSlackHandshake,
-  type SlackMember,
   saveSlackConfig,
 } from "@nakama/core/slack-config";
 import {
-  createChatHandler,
   normalizeSlackText,
   replyToSlackEvent,
-  type SlackApi,
   wantsSlackEvent,
 } from "./chat-handler";
 import type { SlackMessageEvent } from "./socket";
-
-const BOT = "UBOT0001";
-
-const OWNER = "UOWNER01";
-
-type Posted = { channel: string; text: string; threadTs?: string };
-
-const TEAM = "T0HOME01";
-
-const ORG = "org_test";
-
-const OWNER_AGENT = { orgId: ORG, profileId: "default" };
-
-type StreamHandlers = {
-  onChunk: (delta: string) => void;
-  onToolStart?: () => void;
-};
-
-type FakeStream = (
-  handlers: StreamHandlers,
-  signal: AbortSignal
-) => Promise<string>;
-
-function createHarness(
-  homeDir: string,
-  orgs = createDefaultTestOrgs(),
-  members: Record<string, SlackMember> = {},
-  options: { postDelayMs?: (text: string) => number; stream?: FakeStream } = {}
-) {
-  const posted: Posted[] = [];
-  const turns: string[] = [];
-  const orgRequests: Array<string | null> = [];
-
-  const slack: SlackApi = {
-    addReaction: async () => {},
-    getMember: async (userId) => {
-      const member = members[userId];
-
-      if (!member) {
-        throw new Error("Slack users.info failed: user_not_found");
-      }
-
-      return member;
-    },
-    postMessage: async (channel, text, threadTs) => {
-      await Bun.sleep(options.postDelayMs?.(text) ?? 0);
-      posted.push({ channel, text, threadTs });
-    },
-    removeReaction: async () => {},
-  };
-
-  let sessionCount = 0;
-
-  const createSession = () => {
-    sessionCount += 1;
-    const id = `session_${sessionCount}`;
-
-    return {
-      clear: async () => {},
-      getMessages: async () => [],
-      id,
-      sendStream: async (
-        input: { message: string },
-        handlers: StreamHandlers,
-        streamOptions?: { signal?: AbortSignal }
-      ) => {
-        turns.push(input.message);
-
-        if (options.stream && streamOptions?.signal) {
-          return options.stream(handlers, streamOptions.signal);
-        }
-
-        handlers.onChunk(`reply from ${id}`);
-
-        return `reply from ${id}`;
-      },
-    };
-  };
-
-  // SAFETY: The handler calls only the methods supplied by this mock.
-  const client = {
-    createChatSession: () => createSession(),
-    createSession: async () => createSession(),
-    forOrg: (orgId: string | null) => {
-      orgRequests.push(orgId);
-
-      return client;
-    },
-    health: async () => ({ ok: true, providerConfigured: true }),
-    listProfiles: async () => ({
-      profiles: [{ id: "default", isDefault: true, name: "Default" }],
-    }),
-    listUserOrgs: async () => ({ orgs }),
-    setOrgId: () => {},
-  } as NakamaClient;
-
-  const sessionStore = new ChannelSessionStore(
-    join(
-      homeDir,
-      ".nakama",
-      "orgs",
-      ORG,
-      "channels",
-      "default",
-      "slack",
-      "chat-sessions.json"
-    )
-  );
-
-  const handle = createChatHandler({
-    botTeamId: TEAM,
-    botUserId: BOT,
-    client,
-    owner: OWNER_AGENT,
-    sessionStore,
-    slack,
-  });
-
-  return { handle, orgRequests, posted, sessionStore, turns };
-}
-
-function message(
-  fields: Partial<SlackMessageEvent> & { text: string }
-): SlackMessageEvent {
-  return {
-    channel: "C0CHANNEL",
-    channel_type: "channel",
-    ts: "100.000",
-    type: "message",
-    user: OWNER,
-    ...fields,
-  };
-}
-
-async function saveTokens(allowedUserIds = "") {
-  await saveSlackConfig(OWNER_AGENT, {
-    allowedUserIds,
-    appToken: "xapp-1-test",
-    botToken: "xoxb-test",
-  });
-}
+import {
+  BOT,
+  createHarness,
+  type FakeStream,
+  message,
+  ORG,
+  OWNER,
+  OWNER_AGENT,
+  type Posted,
+  saveTokens,
+  TEAM,
+} from "./test-helpers";
 
 describe("slack chat handler", () => {
   test("pairs a DM sender with the dashboard code, then answers them", async () => {
@@ -391,6 +253,91 @@ test("!new stops a reply that is still streaming instead of waiting behind it", 
       "Stopped.",
       "Started a new conversation.",
     ]);
+  });
+});
+
+test("only the five command words are commands, in any letter case", async () => {
+  await withTempHome("nakama-slack-words-", async (homeDir) => {
+    await saveTokens(OWNER);
+    const { handle, posted, turns } = createHarness(homeDir);
+    const dm = { channel: "D0WORDS", channel_type: "im" };
+
+    await handle(message({ ...dm, text: "!urgent summarise the report" }));
+    await handle(message({ ...dm, text: "!New", ts: "101" }));
+
+    expect(turns).toEqual(["!urgent summarise the report"]);
+    expect(posted.map((entry) => entry.text)).toEqual([
+      "reply from session_1",
+      "Started a new conversation.",
+    ]);
+  });
+});
+
+test("!status names the agent, provider, model and session", async () => {
+  await withTempHome("nakama-slack-status-", async (homeDir) => {
+    await saveTokens(OWNER);
+    const { handle, posted } = createHarness(homeDir);
+    const dm = { channel: "D0STATUS", channel_type: "im" };
+
+    await handle(message({ ...dm, text: "hello" }));
+    await handle(message({ ...dm, text: "!status", ts: "101" }));
+
+    expect(posted.at(-1)?.text).toBe(
+      [
+        "Server: ok",
+        "Provider configured: yes",
+        "Agent: Default",
+        "Provider: openai",
+        "Model: none",
+        "Session: session_",
+      ].join("\n")
+    );
+  });
+});
+
+test("!status answers while a reply is still streaming", async () => {
+  await withTempHome("nakama-slack-status-busy-", async (homeDir) => {
+    await saveTokens(OWNER);
+    let markStarted = () => {};
+
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+
+    const hang: FakeStream = (_handlers, signal) =>
+      new Promise((_resolve, reject) => {
+        markStarted();
+        signal.addEventListener("abort", () => {
+          const error = new Error("aborted");
+          error.name = "AbortError";
+          reject(error);
+        });
+      });
+
+    const { handle, posted } = createHarness(
+      homeDir,
+      undefined,
+      {},
+      { stream: hang }
+    );
+
+    const dm = { channel: "D0BUSY", channel_type: "im" };
+    const running = handle(message({ ...dm, text: "long job" }));
+    await started;
+
+    const status = handle(message({ ...dm, text: "!status", ts: "101" }));
+
+    // Raced instead of awaited, so a status stuck behind the turn fails here.
+    const answeredFirst = await Promise.race([
+      status.then(() => true),
+      Bun.sleep(1000).then(() => false),
+    ]);
+
+    await handle(message({ ...dm, text: "!stop", ts: "102" }));
+    await Promise.all([status, running]);
+
+    expect(answeredFirst).toBe(true);
+    expect(posted[0]?.text).toStartWith("Server: ok");
   });
 });
 

@@ -8,6 +8,13 @@ import {
   stopActiveStream,
 } from "@nakama/core/channel-active-stream";
 import { createChatLock } from "@nakama/core/channel-chat-lock";
+import {
+  type ChannelCommand,
+  channelCommandHelp,
+  describeChannelStatus,
+  parseChannelCommand,
+  runChannelCommand,
+} from "@nakama/core/channel-commands";
 import type { ChannelOwner } from "@nakama/core/channel-config-shared";
 import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import type { TeamsConfigFile } from "@nakama/core/teams-config";
@@ -48,34 +55,9 @@ const SEEN_ACTIVITY_LIMIT = 500;
 const TEAMS_MAX_MESSAGE_CHARS = 6000;
 
 // "!" and not "/": typing "/" in Teams opens its own command menu.
-const HELP_TEXT = [
-  "Chat with me in this chat.",
-  "",
-  "!new: start a fresh conversation",
-  "!clear: clear this conversation's history",
-  "!stop: stop the current reply",
-  "!status: server and model status",
-  "!help: this message",
-].join("\n");
+const COMMAND_PREFIX = "!";
 
-const COMMANDS = ["clear", "help", "new", "status", "stop"] as const;
-
-type TeamsCommand = (typeof COMMANDS)[number];
-
-/**
- * "!New please" is "new". Any other message is null and goes to the agent,
- * "!urgent summarise the report" included.
- */
-function parseCommand(text: string): TeamsCommand | null {
-  if (!text.startsWith("!")) {
-    return null;
-  }
-
-  // Phone keyboards capitalise the first letter of a message.
-  const word = (text.slice(1).split(/\s+/)[0] ?? "").toLowerCase();
-
-  return COMMANDS.find((command) => command === word) ?? null;
-}
+const HELP_TEXT = `Chat with me in this chat.\n\n${channelCommandHelp(COMMAND_PREFIX)}`;
 
 function isPersonalMessage(activity: TeamsActivity): boolean {
   return (
@@ -190,110 +172,64 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
     }
   }
 
-  async function describeStatus(sessionKey: string): Promise<string> {
-    try {
-      const scoped = client.forOrg(owner.orgId);
-      const health = await scoped.health();
+  function describeStatus(sessionKey: string): Promise<string> {
+    const scoped = client.forOrg(owner.orgId);
 
-      const lines = [
-        `Server: ${health.ok ? "ok" : "degraded"}`,
-        `Provider configured: ${health.providerConfigured ? "yes" : "no"}`,
-      ];
+    return describeChannelStatus(scoped, {
+      findAgent: async () => {
+        const { profiles } = await scoped.listProfiles(owner.orgId);
 
-      if (health.providerConfigured) {
-        const [models, { profiles }] = await Promise.all([
-          scoped.getModels(),
-          scoped.listProfiles(owner.orgId),
-        ]);
-
-        const profile = profiles.find((entry) => entry.id === owner.profileId);
-
-        const modelLabel = profile?.model?.includes("::")
-          ? profile.model.slice(profile.model.indexOf("::") + 2)
-          : (profile?.model ?? "none");
-
-        lines.push(`Agent: ${profile?.name ?? owner.profileId}`);
-        lines.push(`Provider: ${models.provider ?? "unknown"}`);
-        lines.push(`Model: ${modelLabel}`);
-      } else {
-        lines.push("Chat runs in offline mode without an API key.");
-      }
-
-      const sessionId = sessionStore.get(sessionKey)?.sessionId;
-
-      if (sessionId) {
-        lines.push(`Session: ${sessionId.slice(0, 8)}`);
-      }
-
-      return lines.join("\n");
-    } catch (error) {
-      return formatClientError(error);
-    }
+        return {
+          agent: profiles.find((entry) => entry.id === owner.profileId),
+          id: owner.profileId,
+        };
+      },
+      label: "Agent",
+      sessionId: sessionStore.get(sessionKey)?.sessionId,
+    });
   }
 
   /** Answers a "!word" message. It never reaches the agent as a turn. */
-  async function handleCommand(
-    command: TeamsCommand,
+  function handleCommand(
+    command: ChannelCommand,
     activity: TeamsActivity,
     sessionKey: string
   ): Promise<void> {
-    const answer = (text: string) => reply(activity.conversationId, text);
+    const scoped = client.forOrg(owner.orgId);
 
-    switch (command) {
-      case "stop": {
-        // Not behind the lock: the turn it stops is holding it. Both are
-        // called, so the running turn and the queued ones all stop.
-        const stoppedWaiting = stopWaitingTurns(sessionKey);
-        const stoppedRunning = stopActiveStream(sessionKey);
-
-        await answer(
-          stoppedWaiting || stoppedRunning ? "Stopping…" : "Nothing to stop."
-        );
-
-        return;
-      }
-
-      case "help": {
-        await answer(HELP_TEXT);
-
-        return;
-      }
-
-      case "status": {
-        await answer(await describeStatus(sessionKey));
-
-        return;
-      }
-
-      case "new":
-      case "clear": {
-        // A turn holds the chat lock until it ends, so stop it before
-        // queueing on the lock; otherwise this waits for the whole turn.
-        stopActiveStream(sessionKey);
-
-        await chatLock.withLock(sessionKey, async () => {
+    return runChannelCommand(command, {
+      clearSession: async () => {
+        await (await resolveSession(scoped, sessionKey)).clear();
+      },
+      helpText: HELP_TEXT,
+      reply: (text) => reply(activity.conversationId, text),
+      runLocked: (work) =>
+        chatLock.withLock(sessionKey, async () => {
           if (!allows(await loadConfig(), activity)) {
             return;
           }
 
           try {
-            const scoped = client.forOrg(owner.orgId);
-
-            if (command === "new") {
-              await createAndBindSession(scoped, sessionKey);
-              await answer("Started a new conversation.");
-            } else {
-              await (await resolveSession(scoped, sessionKey)).clear();
-              await answer("History cleared.");
-            }
+            await work();
           } catch (error) {
-            await answer(formatClientError(error));
+            await reply(activity.conversationId, formatClientError(error));
           }
-        });
+        }),
+      startSession: async () => {
+        await createAndBindSession(scoped, sessionKey);
+      },
+      status: () => describeStatus(sessionKey),
+      // Both are called, so the running turn and the queued ones all stop.
+      stop: () => {
+        const stoppedWaiting = stopWaitingTurns(sessionKey);
+        const stoppedRunning = stopActiveStream(sessionKey);
 
-        return;
-      }
-    }
+        return stoppedWaiting || stoppedRunning;
+      },
+      stopRunning: () => {
+        stopActiveStream(sessionKey);
+      },
+    });
   }
 
   async function runTurn(
@@ -378,7 +314,7 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
 
     const sessionKey = `teams:${activity.conversationId}`;
     const text = activity.text.trim();
-    const command = parseCommand(text);
+    const command = parseChannelCommand(text, COMMAND_PREFIX);
 
     if (command !== null) {
       await handleCommand(command, activity, sessionKey);
