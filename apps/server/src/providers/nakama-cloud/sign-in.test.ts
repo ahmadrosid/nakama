@@ -1,6 +1,6 @@
 import { afterEach, expect, setSystemTime, test } from "bun:test";
 import { createPublicKey, randomBytes, verify } from "node:crypto";
-import { chmod, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { desktopConnectCode } from "@nakama/core/contract";
@@ -360,14 +360,16 @@ test("a sign-in that cannot be saved leaves this computer signed out", async () 
     (await agent.startNakamaCloudSignIn({ cloudUrl: cloud.url })).connectUrl
   );
 
-  // The config file cannot be written.
-  await chmod(configDir, 0o500);
+  // The config file cannot be written: a folder sits at its path. File
+  // permissions would not do on Windows, or for root.
+  const configPath = join(configDir, "config.ini");
+  await mkdir(configPath);
 
   try {
     expect((await fetch(back)).status).toBe(502);
     expect(agent.nakamaCloudStatus().signedIn).toBe(false);
   } finally {
-    await chmod(configDir, 0o700);
+    await rm(configPath, { force: true, recursive: true });
   }
 });
 
