@@ -385,7 +385,10 @@ async function run() {
             seenFirstRunWindows.has(candidate.id) ||
             candidate.isDestroyed() ||
             candidate.webContents.isLoading()
-          ) && candidate.webContents.getURL().endsWith("first-run.html")
+          ) &&
+          new URL(candidate.webContents.getURL()).pathname.endsWith(
+            "first-run.html"
+          )
       );
 
       if (found) {
@@ -400,8 +403,17 @@ async function run() {
     throw new Error("The first launch page did not open.");
   };
 
+  // The Sign in card follows NAKAMA_CLOUD_URL.
+  process.env.NAKAMA_CLOUD_URL = healthUrl;
   const cloudRun = firstRun();
   let page = await firstRunWindow();
+
+  assert.equal(
+    await page.webContents.executeJavaScript(
+      "document.getElementById('cloud-host').textContent"
+    ),
+    new URL(healthUrl).host
+  );
 
   assert.match(
     await page.webContents.executeJavaScript(
@@ -410,9 +422,10 @@ async function run() {
     /HTTPS/
   );
   void page.webContents.executeJavaScript(
-    `window.nakamaFirstRun.choose({ mode: 'cloud', url: '${healthUrl}' })`
+    "window.nakamaFirstRun.choose({ mode: 'cloud' })"
   );
   assert.deepEqual(await cloudRun, { choice: "cloud" });
+  delete process.env.NAKAMA_CLOUD_URL;
   assert.deepEqual(opened, [`${healthUrl}/desktop/connect`]);
 
   const localRun = firstRun();

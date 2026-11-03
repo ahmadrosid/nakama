@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   checkCloudServer,
   createLocalSignIn,
+  defaultCloudUrl,
   normalizeCloudUrl,
   readDesktopConfig,
   writeDesktopConfig,
@@ -21,6 +22,16 @@ describe("server address", () => {
     expect(() => normalizeCloudUrl("http://team.example.com")).toThrow();
     expect(() => normalizeCloudUrl("https://user:pass@example.com")).toThrow();
     expect(() => normalizeCloudUrl("withnakama")).toThrow();
+  });
+
+  test("Sign in uses withnakama.com unless NAKAMA_CLOUD_URL names another server", () => {
+    expect(defaultCloudUrl({})).toBe("https://withnakama.com");
+    expect(
+      defaultCloudUrl({ NAKAMA_CLOUD_URL: "http://localhost:4320/" })
+    ).toBe("http://localhost:4320");
+    expect(() =>
+      defaultCloudUrl({ NAKAMA_CLOUD_URL: "http://staging.example.com" })
+    ).toThrow();
   });
 
   test("a server must answer /health with an apiVersion", async () => {

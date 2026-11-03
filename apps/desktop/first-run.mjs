@@ -11,6 +11,11 @@ const CONFIG_FILE = "desktop.json";
 
 const NAKAMA_CLOUD_URL = "https://withnakama.com";
 
+/** The "Sign in to Nakama" server. NAKAMA_CLOUD_URL points it at a test or staging cloud. */
+export function defaultCloudUrl(env = process.env) {
+  return normalizeCloudUrl(env.NAKAMA_CLOUD_URL || NAKAMA_CLOUD_URL);
+}
+
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 /** How long the app waits for the browser to finish Connect. */
@@ -202,7 +207,10 @@ export function runFirstRun({
         return;
       }
 
-      const cloudUrl = normalizeCloudUrl(choice.url ?? NAKAMA_CLOUD_URL);
+      const cloudUrl = choice.url
+        ? normalizeCloudUrl(choice.url)
+        : defaultCloudUrl();
+
       await checkCloudServer(cloudUrl);
 
       waiting = new AbortController();
@@ -234,6 +242,16 @@ export function runFirstRun({
 
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     window.webContents.on("will-navigate", (event) => event.preventDefault());
-    void window.loadFile(join(import.meta.dirname, "first-run.html"));
+    let cloud = "";
+
+    try {
+      cloud = defaultCloudUrl();
+    } catch {
+      // A bad NAKAMA_CLOUD_URL shows its error when the card is pressed.
+    }
+
+    void window.loadFile(join(import.meta.dirname, "first-run.html"), {
+      query: { cloud },
+    });
   });
 }

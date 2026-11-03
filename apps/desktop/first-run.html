@@ -314,7 +314,7 @@
             </span>
             <span class="card-text">
               <span class="card-title">Sign in to Nakama</span>
-              <span class="card-detail">withnakama.com</span>
+              <span class="card-detail" id="cloud-host">withnakama.com</span>
             </span>
             <svg
               aria-hidden="true"
@@ -430,6 +430,10 @@
     const byId = (id) => document.getElementById(id);
     const screens = ["choices", "company-screen", "waiting"];
     const urlInput = byId("url");
+    // The main process passes the Sign in server, which NAKAMA_CLOUD_URL can change.
+    const cloudUrl =
+      new URLSearchParams(window.location.search).get("cloud") ||
+      "https://withnakama.com";
 
     function show(id) {
       for (const screen of screens) {
@@ -460,7 +464,7 @@
 
       if (choice.mode === "cloud") {
         byId("waiting-host").textContent =
-          `Press Connect on ${hostOf(choice.url ?? "https://withnakama.com")}`;
+          `Press Connect on ${hostOf(choice.url ?? cloudUrl)}`;
         show("waiting");
       }
 
@@ -476,6 +480,8 @@
         setError(errorId, message === "first-run-cancelled" ? "" : message);
       }
     }
+
+    byId("cloud-host").textContent = hostOf(cloudUrl);
 
     byId("sign-in").addEventListener("click", () =>
       choose({ mode: "cloud" }, "choices")
