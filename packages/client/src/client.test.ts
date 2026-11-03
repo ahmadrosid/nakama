@@ -9,6 +9,18 @@ import { NakamaAuthExpiredError, NakamaClient } from "./index";
 const organizationRequests = [
   {
     body: null,
+    call: (client: NakamaClient) =>
+      client.forOrg("team/a?").regenerateTeamsHandshake("agent/a?"),
+    method: "POST",
+    path: "/v1/settings/teams/handshake?profileId=agent%2Fa%3F",
+    response: {
+      configured: true,
+      handshakeCode: "A".repeat(32),
+      pairedUserIds: [],
+    },
+  },
+  {
+    body: null,
     call: (client: NakamaClient) => client.getTool("tool/a?", "team/a?"),
     method: "GET",
     path: "/v1/tools/tool%2Fa%3F",

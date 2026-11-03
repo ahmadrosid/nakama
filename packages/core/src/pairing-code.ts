@@ -14,6 +14,10 @@ export const PAIRING_CODE_TTL_MS = 10 * 60 * 1000;
 
 const PAIRING_CODE_PATTERN = new RegExp(`^[0-9A-F]{${PAIRING_CODE_LENGTH}}$`);
 
+/** A pasted GUID also has 32 hex digits once its dashes are removed. */
+const GUID_PATTERN =
+  /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
+
 export function generatePairingCode(): string {
   return randomBytes(PAIRING_CODE_BYTES).toString("hex").toUpperCase();
 }
@@ -27,7 +31,10 @@ export function normalizePairingCode(input: string): string {
 }
 
 export function looksLikePairingCode(input: string): boolean {
-  return PAIRING_CODE_PATTERN.test(normalizePairingCode(input));
+  return (
+    !GUID_PATTERN.test(input.trim()) &&
+    PAIRING_CODE_PATTERN.test(normalizePairingCode(input))
+  );
 }
 
 export function pairingCodesMatch(
@@ -76,6 +83,9 @@ export function isPairingCodeActive(
 
 const MAX_PAIRING_FAILURES = 5;
 
+/** Per-sender budgets add one entry per sender, so the oldest are dropped. */
+const MAX_TRACKED_BUDGETS = 1000;
+
 const attempts = new Map<string, { fingerprint: string; failures: number }>();
 
 /** Keep the five-guess limit with the active code in each worker process. */
@@ -88,7 +98,16 @@ export function getPairingAttemptBudget(scope: string, code: string) {
   }
 
   const fresh = { failures: 0, fingerprint };
+  attempts.delete(scope);
   attempts.set(scope, fresh);
+
+  if (attempts.size > MAX_TRACKED_BUDGETS) {
+    const oldest = attempts.keys().next().value;
+
+    if (oldest !== undefined) {
+      attempts.delete(oldest);
+    }
+  }
 
   return fresh;
 }

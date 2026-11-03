@@ -1,19 +1,26 @@
 import { join } from "node:path";
 import { z } from "zod";
-import { createChatLock } from "./channel-chat-lock";
+import { NakamaApiError } from "./api-error";
 import {
   assertChannelPath,
   type ChannelOwner,
+  type ChannelPairResult,
   claimChannelIdentity,
+  createPairingCodeSecret,
   getChannelConfigDir,
+  hasActiveHandshakeCode,
+  isBotChannelUserAuthorized,
   releaseChannelClaims,
   resetChannelConversationState,
+  verifyAndPairBotChannelUser,
+  withPairingConfigLock,
 } from "./channel-config-shared";
 import type {
   TeamsSettingsResponse,
   UpdateTeamsSettingsRequest,
 } from "./contract";
 import { parseIni, readTextOrNull, writeTextFile } from "./fs";
+import { pairingFailureMessage } from "./pairing-code";
 
 const guidSchema = z
   .string()
@@ -28,14 +35,18 @@ const configSchema = z.object({
     .min(1)
     .max(8192)
     .regex(/^[^\r\n\0]+$/),
+  handshakeCode: z
+    .string()
+    .regex(/^[0-9A-F]{32}$/)
+    .nullable(),
+  handshakeExpiresAt: z.string().datetime().nullable(),
   inboundPort: z.number().int().min(1).max(65_535).nullable(),
+  pairedUserIds: z.array(guidSchema),
   profileId: z.string(),
   tenantId: guidSchema,
 });
 
 export type TeamsConfigFile = z.infer<typeof configSchema>;
-
-const configLock = createChatLock();
 
 export function getTeamsConfigDir(owner: ChannelOwner): string {
   return getChannelConfigDir("teams", owner);
@@ -63,7 +74,10 @@ export async function loadTeamsConfigFile(
     allowedUserIds: values.allowed_user_ids?.split(",").filter(Boolean) ?? [],
     clientId: values.client_id,
     clientSecret: values.client_secret,
+    handshakeCode: values.handshake_code?.trim() || null,
+    handshakeExpiresAt: values.handshake_expires_at?.trim() || null,
     inboundPort: values.inbound_port ? Number(values.inbound_port) : null,
+    pairedUserIds: values.paired_user_ids?.split(",").filter(Boolean) ?? [],
     profileId: values.profile_id,
     tenantId: values.tenant_id,
   });
@@ -107,7 +121,14 @@ export async function loadTeamsSettingsPublic(
     clientId: config?.clientId ?? null,
     clientSecretConfigured: Boolean(config?.clientSecret),
     configured: config !== null,
+    handshakeCode: hasActiveHandshakeCode(config)
+      ? (config?.handshakeCode ?? null)
+      : null,
+    handshakeExpiresAt: hasActiveHandshakeCode(config)
+      ? (config?.handshakeExpiresAt ?? null)
+      : null,
     messagingEndpoint: messagingEndpoint(owner),
+    pairedUserIds: config?.pairedUserIds ?? [],
     profileId: owner.profileId,
     tenantId: config?.tenantId ?? null,
   };
@@ -168,49 +189,81 @@ async function writeTeamsConfig(
       `profile_id = ${owner.profileId}`,
       `allowed_user_ids = ${config.allowedUserIds.join(",")}`,
       `inbound_port = ${config.inboundPort ?? ""}`,
+      `paired_user_ids = ${config.pairedUserIds.join(",")}`,
+      `handshake_code = ${config.handshakeCode ?? ""}`,
+      `handshake_expires_at = ${config.handshakeExpiresAt ?? ""}`,
       "",
     ].join("\n"),
     { ensureDir: getTeamsConfigDir(owner) }
   );
 }
 
+function mergeTeamsConfig(
+  input: UpdateTeamsSettingsRequest,
+  existing: TeamsConfigFile | null,
+  owner: ChannelOwner
+): TeamsConfigFile {
+  if (input.profileId !== undefined && input.profileId !== owner.profileId) {
+    throw new Error("Invalid Teams connection owner.");
+  }
+
+  return configSchema.parse({
+    allowedUserIds:
+      input.allowedUserIds === undefined
+        ? (existing?.allowedUserIds ?? [])
+        : [
+            ...new Set(
+              input.allowedUserIds
+                .split(",")
+                .map((value) => value.trim().toLowerCase())
+                .filter(Boolean)
+            ),
+          ],
+    clientId: input.clientId?.trim() || existing?.clientId,
+    clientSecret: input.clientSecret?.trim() || existing?.clientSecret,
+    handshakeCode: existing?.handshakeCode ?? null,
+    handshakeExpiresAt: existing?.handshakeExpiresAt ?? null,
+    inboundPort: existing?.inboundPort ?? null,
+    pairedUserIds: existing?.pairedUserIds ?? [],
+    profileId: owner.profileId,
+    tenantId: input.tenantId?.trim() || existing?.tenantId,
+  });
+}
+
 export async function saveTeamsConfig(
   input: UpdateTeamsSettingsRequest,
   owner: ChannelOwner
 ): Promise<TeamsSettingsResponse> {
-  return configLock.withLock(getTeamsConfigPath(owner), async () => {
+  // Microsoft can take 10s to answer, and other writers wait only 5s for the
+  // pairing lock, so the credential check runs before the lock is taken.
+  const saved = await loadTeamsConfigFile(owner);
+  const requested = mergeTeamsConfig(input, saved, owner);
+
+  if (
+    !saved ||
+    requested.clientId !== saved.clientId ||
+    requested.tenantId !== saved.tenantId ||
+    requested.clientSecret !== saved.clientSecret
+  ) {
+    await validateTeamsCredentials(requested);
+  }
+
+  return withPairingConfigLock(getTeamsConfigDir(owner), async () => {
     const existing = await loadTeamsConfigFile(owner);
 
-    if (input.profileId !== undefined && input.profileId !== owner.profileId) {
-      throw new Error("Invalid Teams connection owner.");
-    }
+    const config = mergeTeamsConfig(input, existing, owner);
 
-    const config = configSchema.parse({
-      allowedUserIds:
-        input.allowedUserIds === undefined
-          ? (existing?.allowedUserIds ?? [])
-          : [
-              ...new Set(
-                input.allowedUserIds
-                  .split(",")
-                  .map((value) => value.trim().toLowerCase())
-                  .filter(Boolean)
-              ),
-            ],
-      clientId: input.clientId?.trim() || existing?.clientId,
-      clientSecret: input.clientSecret?.trim() || existing?.clientSecret,
-      inboundPort: existing?.inboundPort ?? null,
-      profileId: owner.profileId,
-      tenantId: input.tenantId?.trim() || existing?.tenantId,
-    });
-
+    // Another save may have changed the connection while Microsoft answered,
+    // and this combination was never checked.
     if (
-      !existing ||
-      config.clientId !== existing.clientId ||
-      config.tenantId !== existing.tenantId ||
-      config.clientSecret !== existing.clientSecret
+      config.clientId !== requested.clientId ||
+      config.tenantId !== requested.tenantId ||
+      config.clientSecret !== requested.clientSecret
     ) {
-      await validateTeamsCredentials(config);
+      throw new NakamaApiError(
+        "Teams settings changed while saving. Try again.",
+        409
+      );
     }
 
     const changed =
@@ -220,6 +273,9 @@ export async function saveTeamsConfig(
 
     if (changed) {
       config.inboundPort = null;
+      config.pairedUserIds = [];
+      config.handshakeCode = null;
+      config.handshakeExpiresAt = null;
     }
 
     const rollbackClaim = await claimChannelIdentity(
@@ -253,7 +309,7 @@ export async function saveTeamsInboundPort(
     throw new Error("Invalid Teams worker port.");
   }
 
-  await configLock.withLock(getTeamsConfigPath(owner), async () => {
+  await withPairingConfigLock(getTeamsConfigDir(owner), async () => {
     const config = await loadTeamsConfigFile(owner);
 
     if (!config) {
@@ -261,5 +317,64 @@ export async function saveTeamsInboundPort(
     }
 
     await writeTeamsConfig({ ...config, inboundPort: port }, owner);
+  });
+}
+
+export function isTeamsUserAuthorized(
+  userId: string,
+  config: Pick<TeamsConfigFile, "pairedUserIds" | "allowedUserIds">
+): boolean {
+  return isBotChannelUserAuthorized(userId.toLowerCase(), config);
+}
+
+export async function regenerateTeamsHandshake(
+  owner: ChannelOwner
+): Promise<TeamsSettingsResponse> {
+  return withPairingConfigLock(getTeamsConfigDir(owner), async () => {
+    const config = await loadTeamsConfigFile(owner);
+
+    if (!config) {
+      throw new NakamaApiError(
+        "Save the Teams connection before generating a pairing code.",
+        400
+      );
+    }
+
+    const { code, expiresAt } = createPairingCodeSecret();
+    await writeTeamsConfig(
+      { ...config, handshakeCode: code, handshakeExpiresAt: expiresAt },
+      owner
+    );
+
+    return loadTeamsSettingsPublic(owner);
+  });
+}
+
+export async function verifyAndPairTeamsUser(
+  handshakeInput: string,
+  userId: string,
+  tenantId: string,
+  owner: ChannelOwner
+): Promise<ChannelPairResult> {
+  const sender = guidSchema.safeParse(userId);
+  const tenant = guidSchema.safeParse(tenantId);
+
+  if (!(sender.success && tenant.success)) {
+    return { message: pairingFailureMessage("Teams"), ok: false };
+  }
+
+  return verifyAndPairBotChannelUser<string, TeamsConfigFile>({
+    budgetPerSender: true,
+    configDir: getTeamsConfigDir(owner),
+    handshakeInput,
+    isAuthorized: isTeamsUserAuthorized,
+    label: "Teams",
+    load: async () => {
+      const config = await loadTeamsConfigFile(owner);
+
+      return config?.tenantId === tenant.data ? config : null;
+    },
+    userId: sender.data,
+    write: (config) => writeTeamsConfig(config, owner),
   });
 }

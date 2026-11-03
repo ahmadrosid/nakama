@@ -1803,7 +1803,10 @@ export interface TeamsSettingsResponse {
   clientId: string | null;
   clientSecretConfigured: boolean;
   configured: boolean;
+  handshakeCode: string | null;
+  handshakeExpiresAt: string | null;
   messagingEndpoint: string | null;
+  pairedUserIds: string[];
   profileId: string;
   tenantId: string | null;
 }
@@ -3057,6 +3060,7 @@ export type ProviderName =
   | "ollama"
   | "openai_compatible"
   | "opencode_go"
+  | "command_code"
   | "cloudflare"
   | "chatgpt"
   | "xai_oauth"
