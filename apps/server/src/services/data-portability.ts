@@ -954,14 +954,17 @@ export async function previewNakamaDataImport(
   };
 }
 
-export function decodeArchiveRequestData(data: string): Buffer {
+// A caller with its own advice for an archive over the cap passes it as tooLargeMessage.
+const ARCHIVE_TOO_LARGE = `Import archive must be at most ${megabytes(MAX_IMPORT_ARCHIVE_BYTES)}.`;
+
+export function decodeArchiveRequestData(
+  data: string,
+  tooLargeMessage = ARCHIVE_TOO_LARGE
+): Buffer {
   // Checked before the trim, so an oversized payload is rejected without
   // being copied and then decoded.
   if (data.length > MAX_IMPORT_ARCHIVE_BASE64_CHARS) {
-    throw new NakamaApiError(
-      `Import archive must be at most ${megabytes(MAX_IMPORT_ARCHIVE_BYTES)}.`,
-      413
-    );
+    throw new NakamaApiError(tooLargeMessage, 413);
   }
 
   const trimmed = data.trim();
@@ -993,12 +996,12 @@ function decryptArchiveIfNeeded(archive: Buffer): Buffer {
 }
 
 /** Checks and opens a raw ZIP body, the form a browser sends. */
-export function decodeArchiveRequestBytes(archive: Buffer): Buffer {
+export function decodeArchiveRequestBytes(
+  archive: Buffer,
+  tooLargeMessage = ARCHIVE_TOO_LARGE
+): Buffer {
   if (archive.length > MAX_IMPORT_ARCHIVE_BYTES) {
-    throw new NakamaApiError(
-      `Import archive must be at most ${megabytes(MAX_IMPORT_ARCHIVE_BYTES)}.`,
-      413
-    );
+    throw new NakamaApiError(tooLargeMessage, 413);
   }
 
   if (archive.length === 0) {

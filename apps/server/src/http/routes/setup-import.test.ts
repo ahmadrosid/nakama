@@ -18,6 +18,7 @@ import {
 } from "../../services/data-portability";
 import { sessionTurnRegistry } from "../../services/session-turn-registry";
 import { setupTestConfigDir } from "../../test-config-dir";
+import { MAX_HTTP_REQUEST_BODY_LIMIT_BYTES } from "../app";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import { loginPlatformAdminSession } from "../test-session-helpers";
 
@@ -488,6 +489,24 @@ describe("setup import routes", () => {
     await expect(readFile(configPath, "utf8")).resolves.toBe("keep");
   });
 
+  test("after the first admin, a setup body over the limit gets the 409, not setup advice", async () => {
+    const { app, authService, databaseAdapter } = createApp();
+    await loginPlatformAdminSession(app, authService, databaseAdapter);
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/setup/import/preview", {
+        body: "{}",
+        headers: {
+          "Content-Length": String(MAX_HTTP_REQUEST_BODY_LIMIT_BYTES + 1),
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(409);
+  });
+
   test("setup preview and restore give their own 413 for an archive over the size limit", async () => {
     const { app } = createApp();
     const configPath = join(getUserConfigDir(), "config.ini");
@@ -519,6 +538,20 @@ describe("setup import routes", () => {
     expect(genericError).not.toBe("");
     expect(setupError).not.toBe(genericError);
     expect((await restore.json()).error).toBe(setupError);
+
+    // The JSON form: base64 over the cap, still under the body limit.
+    const base64 = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/setup/import/preview", {
+        body: JSON.stringify({
+          data: "A".repeat(Math.ceil(MAX_IMPORT_ARCHIVE_BYTES / 3) * 4 + 1),
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+
+    expect(base64.status).toBe(413);
+    expect((await base64.json()).error).toBe(setupError);
     await expect(readFile(configPath, "utf8")).resolves.toBe("keep");
   });
 

@@ -46,6 +46,7 @@ import { registerProfilePortabilityRoutes } from "./routes/profile-portability";
 import { registerProfileRoutes } from "./routes/profiles";
 import { registerSessionRoutes } from "./routes/sessions";
 import {
+  assertSetupImportAllowed,
   registerSetupImportRoutes,
   SETUP_BACKUP_TOO_LARGE,
 } from "./routes/setup-import";
@@ -87,13 +88,15 @@ const LARGE_BODY_ROUTES = new Set([
   // File tools validate decoded bytes; JSON escaping can exceed the normal cap.
   "/v1/tools/tool_write_file/run",
   "/v1/tools/tool_edit_file/run",
+  "/v1/auth/setup/import/preview",
+  "/v1/auth/setup/import/restore",
   "/v1/platform/data/import/preview",
   "/v1/platform/data/import/restore",
   "/v1/profiles/pack/import",
   "/v1/profiles/pack/import/preview",
 ]);
 
-// The same cap, with the setup wizard's own message.
+// The large body routes whose 413 gets the setup wizard's own message.
 const SETUP_IMPORT_ROUTES = new Set([
   "/v1/auth/setup/import/preview",
   "/v1/auth/setup/import/restore",
@@ -312,12 +315,18 @@ export function createHonoApp(options: ServerOptions) {
 
   const importBodyLimit = bodyLimit({
     maxSize: MAX_HTTP_REQUEST_BODY_LIMIT_BYTES,
-    onError: rejectOversizedBody,
-  });
+    onError: async (c) => {
+      if (!SETUP_IMPORT_ROUTES.has(c.req.path)) {
+        return rejectOversizedBody();
+      }
 
-  const setupImportBodyLimit = bodyLimit({
-    maxSize: MAX_HTTP_REQUEST_BODY_LIMIT_BYTES,
-    onError: () => errorResponse(SETUP_BACKUP_TOO_LARGE, 413),
+      // After the first admin, the route's own 409 is the answer, not setup advice.
+      if (options.databaseAdapter) {
+        await assertSetupImportAllowed(options.databaseAdapter);
+      }
+
+      return errorResponse(SETUP_BACKUP_TOO_LARGE, 413);
+    },
   });
 
   // Base64 expands a 20 MiB knowledge document to roughly 27 MiB.
@@ -334,10 +343,6 @@ export function createHonoApp(options: ServerOptions) {
       )
     ) {
       return knowledgeBodyLimit(c, next);
-    }
-
-    if (SETUP_IMPORT_ROUTES.has(c.req.path)) {
-      return setupImportBodyLimit(c, next);
     }
 
     const limit = LARGE_BODY_ROUTES.has(c.req.path)
