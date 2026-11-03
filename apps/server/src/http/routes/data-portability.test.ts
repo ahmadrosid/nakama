@@ -1,4 +1,5 @@
 import { describe, expect, spyOn, test } from "bun:test";
+import * as fsPromises from "node:fs/promises";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -76,6 +77,44 @@ describe("data portability routes", () => {
       expect((await response.json()).error).toEqual(expect.any(String));
     } finally {
       zipMock.mockRestore();
+    }
+  });
+
+  test("platform export returns 409 naming a file the server cannot read", async () => {
+    const { app, authService, databaseAdapter } = createApp();
+
+    const session = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+
+    const blocked = join(getUserConfigDir(), "SOUL.md.bak-0101");
+    await writeFile(blocked, "soul");
+    const realReadFile = fsPromises.readFile;
+
+    const readMock = spyOn(fsPromises, "readFile").mockImplementation(
+      // SAFETY: the wrapper forwards its arguments to the real readFile unchanged.
+      (async (...args: Parameters<typeof realReadFile>) => {
+        if (args[0] === blocked) {
+          throw Object.assign(new Error("denied"), { code: "EACCES" });
+        }
+
+        return await realReadFile(...args);
+      }) as typeof realReadFile
+    );
+
+    try {
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/platform/data/export", {
+          headers: session.headers(),
+        })
+      );
+
+      expect(response.status).toBe(409);
+      expect((await response.json()).error).toContain("SOUL.md.bak-0101");
+    } finally {
+      readMock.mockRestore();
     }
   });
 

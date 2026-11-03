@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
-import type { Dirent } from "node:fs";
+import { constants, type Dirent } from "node:fs";
 import {
+  access,
   chmod,
   cp,
   link,
@@ -411,7 +412,7 @@ export async function createNakamaDataExport(
               });
             } else if (snapshotParent && (await pathExists(databasePath))) {
               const target = join(snapshotParent, relativeDatabasePath);
-              await vacuumPluginDatabaseInto(databasePath, target);
+              await snapshotDatabaseInto(rootDir, databasePath, target);
               snapshots.set(toZipPath(relativeDatabasePath), target);
             }
           }
@@ -433,6 +434,8 @@ export async function createNakamaDataExport(
             try {
               data = await readFile(file.absolutePath);
             } catch (error) {
+              rethrowIfUnreadable(file.relativePath, error);
+
               // Config files are required for a restore, so their loss fails the export.
               if (isConfigFile || !isMissingPathError(error)) {
                 throw error;
@@ -1397,6 +1400,8 @@ async function inventoryConfigRoot(
     try {
       entries = await readdir(currentDir, { withFileTypes: true });
     } catch (error) {
+      rethrowIfUnreadable(toZipPath(relative(rootDir, currentDir)), error);
+
       if (!isMissingPathError(error) || currentDir === rootDir) {
         throw error;
       }
@@ -1683,7 +1688,7 @@ async function snapshotOrgPluginDatabases(
   const snapshots = new Map<string, string>();
   const orgsDir = join(rootDir, "orgs");
 
-  for (const org of await readDirentsIfPresent(orgsDir)) {
+  for (const org of await readDirentsIfPresent(rootDir, orgsDir)) {
     if (!org.isDirectory()) {
       continue;
     }
@@ -1694,20 +1699,20 @@ async function snapshotOrgPluginDatabases(
     if (await pathExists(meetDatabase)) {
       const relativePath = toZipPath(relative(rootDir, meetDatabase));
       const target = join(snapshotParent, relativePath);
-      await vacuumPluginDatabaseInto(meetDatabase, target);
+      await snapshotDatabaseInto(rootDir, meetDatabase, target);
       snapshots.set(relativePath, target);
     }
 
     const pluginsDir = join(orgsDir, org.name, "plugins");
 
-    for (const plugin of await readDirentsIfPresent(pluginsDir)) {
+    for (const plugin of await readDirentsIfPresent(rootDir, pluginsDir)) {
       if (!plugin.isDirectory()) {
         continue;
       }
 
       const dbDir = join(pluginsDir, plugin.name, "db");
 
-      for (const entry of await readDirentsIfPresent(dbDir)) {
+      for (const entry of await readDirentsIfPresent(rootDir, dbDir)) {
         if (!(entry.isFile() && entry.name.endsWith(".sqlite"))) {
           continue;
         }
@@ -1721,7 +1726,7 @@ async function snapshotOrgPluginDatabases(
         }
 
         const target = join(snapshotParent, relativePath);
-        await vacuumPluginDatabaseInto(join(dbDir, entry.name), target);
+        await snapshotDatabaseInto(rootDir, join(dbDir, entry.name), target);
         snapshots.set(relativePath, target);
       }
     }
@@ -1871,13 +1876,61 @@ function isMissingPathError<T>(error: T): boolean {
   return code === "ENOENT" || code === "ENOTDIR";
 }
 
-async function readDirentsIfPresent(dir: string): Promise<Dirent[]> {
+function isPermissionError<T>(error: T): boolean {
+  const code = getNodeErrorCode(error);
+
+  return code === "EACCES" || code === "EPERM";
+}
+
+/**
+ * Keeps failing: a backup that skips what it cannot read looks complete but
+ * is not. An empty path is the data root itself. On Windows, EPERM can also
+ * mean another program holds the file open.
+ */
+function rethrowIfUnreadable<T>(relativePath: string, error: T): void {
+  if (isPermissionError(error)) {
+    throw new NakamaApiError(
+      `Cannot export a restorable backup: the server cannot read ${relativePath || "the data folder"}. Fix its owner or permissions, close the program that uses it, or remove it, then try again.`,
+      409
+    );
+  }
+}
+
+/**
+ * bun:sqlite reports a denied open only as SQLITE_CANTOPEN ("unable to open
+ * database file"), without the OS error, so ask the filesystem why it failed.
+ */
+async function snapshotDatabaseInto(
+  rootDir: string,
+  sourcePath: string,
+  targetPath: string
+): Promise<void> {
+  try {
+    await vacuumPluginDatabaseInto(sourcePath, targetPath);
+  } catch (error) {
+    await access(sourcePath, constants.R_OK).catch((accessError: Error) =>
+      rethrowIfUnreadable(
+        toZipPath(relative(rootDir, sourcePath)),
+        accessError
+      )
+    );
+
+    throw error;
+  }
+}
+
+async function readDirentsIfPresent(
+  rootDir: string,
+  dir: string
+): Promise<Dirent[]> {
   try {
     return await readdir(dir, { withFileTypes: true });
   } catch (error) {
     if (isMissingPathError(error)) {
       return [];
     }
+
+    rethrowIfUnreadable(toZipPath(relative(rootDir, dir)), error);
 
     throw error;
   }
