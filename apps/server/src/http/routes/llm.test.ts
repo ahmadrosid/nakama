@@ -107,13 +107,19 @@ async function setup() {
 
   const key = testDeviceKey();
 
-  const { computer, confirmCode } = await computerAuth.enroll({
+  const enrolled = await computerAuth.enroll({
     installId: "install_1",
     name: "Ada's MacBook",
     orgId,
     publicKey: key.publicKey,
     userId,
   });
+
+  if (!enrolled) {
+    throw new Error("enroll refused");
+  }
+
+  const { computer, confirmCode } = enrolled;
 
   const tokenResponse = await app.request(LLM_TOKEN_PATH, {
     body: JSON.stringify(key.signRequest(computer.id, { confirmCode })),
@@ -196,6 +202,13 @@ test("a computer with a pass streams one model turn, and usage is billed to its 
   expect(actors.find((actor) => actor.userId === userId)).toMatchObject({
     requestCount: 1,
   });
+
+  // The call counts against the org's monthly turn and token limits.
+  await Bun.sleep(0);
+
+  expect(await databaseAdapter.listLlmTurnUsage(orgId)).toMatchObject([
+    { inputTokens: 40, outputTokens: 7, turns: 1 },
+  ]);
 });
 
 test("model routes refuse a missing pass, a bad pass and a cloud attachment reference", async () => {

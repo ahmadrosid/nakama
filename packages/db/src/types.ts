@@ -1038,9 +1038,13 @@ export interface DatabaseAdapter {
   enableUser(id: string): Promise<void>;
   /**
    * Saves a computer's key. The active row for the same user, org and install
-   * is reused, so signing in again does not make a second computer.
+   * is reused, so signing in again does not make a second computer. Null when
+   * that row is confirmed and has a different key: a link cannot replace the
+   * key of a computer that works.
    */
-  enrollComputer(record: StoredComputerRecord): Promise<StoredComputerRecord>;
+  enrollComputer(
+    record: StoredComputerRecord
+  ): Promise<StoredComputerRecord | null>;
   /**
    * Resolves to `false`, with nothing written, when the user is missing or is
    * the last usable admin of a live org or the last usable platform admin.

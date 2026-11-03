@@ -5659,7 +5659,8 @@ export class AgentService {
 
   /**
    * The provider for one Nakama Desktop model call: this install's provider
-   * for the model, billed to the org and member, with the org's quota hold.
+   * for the model, billed to the org and member, with the org's quota hold
+   * and a recorder that counts each call against the org's monthly limits.
    * Null when no provider is set up for the model.
    */
   async desktopModelHarness(input: {
@@ -5670,6 +5671,11 @@ export class AgentService {
     assertCanStart?: (reservedTokens: number) => Promise<() => Promise<void>>;
     chatOptions?: ProviderChatOptions;
     provider: ProviderClient;
+    recordUsage?: (usage: {
+      estimated: boolean;
+      inputTokens: number;
+      outputTokens: number;
+    }) => void;
   } | null> {
     await this.refreshManagedProviderKeys();
 
@@ -5713,6 +5719,7 @@ export class AgentService {
           assertCanStart: this.llmTurnQuotaCheckerFor(input.orgId),
           chatOptions: harness.chatOptions,
           provider: harness.provider,
+          recordUsage: this.turnUsageRecorderFor(input.orgId),
         }
       : null;
   }

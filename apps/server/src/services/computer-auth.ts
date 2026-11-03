@@ -9,6 +9,7 @@ import {
 } from "node:crypto";
 import type { DatabaseAdapter, StoredComputerRecord } from "@nakama/db";
 import { z } from "zod";
+import type { ManagedSecrets } from "./managed-secrets";
 
 /**
  * Nakama Desktop computers. A computer holds an Ed25519 key that never leaves
@@ -20,6 +21,10 @@ export const COMPUTER_PASS_TTL_MS = 15 * 60 * 1000;
 export const LLM_TOKEN_PATH = "/v1/llm/token";
 
 const CLOCK_SKEW_MS = 2 * 60 * 1000;
+
+const PASS_KEY_SCOPE = "global";
+
+const PASS_KEY_SECRET = "computer-pass-key";
 
 /** The raw 32-byte Ed25519 public key in a DER (SPKI) wrapper. */
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
@@ -96,22 +101,66 @@ export interface ComputerAccess {
 }
 
 export class ComputerAuthService {
-  /** Passes are signed with a key that lives only in this process. */
-  private readonly passKey = randomBytes(32);
+  private passKey: Promise<Buffer> | null = null;
 
   constructor(
     private readonly db: DatabaseAdapter,
-    private readonly now: () => number = Date.now
+    private readonly now: () => number = Date.now,
+    private readonly secrets?: ManagedSecrets
   ) {}
 
-  /** Saves the key from the Connect page for the signed-in user and org. */
+  /**
+   * The key that signs passes. It is kept in the secrets store, so a pass
+   * stays valid after a restart and on each process that shares the database.
+   * Without a secrets key it lives only in this process.
+   */
+  private signingKey(): Promise<Buffer> {
+    this.passKey ??= this.loadOrCreatePassKey().catch((error: Error) => {
+      this.passKey = null;
+      throw error;
+    });
+
+    return this.passKey;
+  }
+
+  private async loadOrCreatePassKey(): Promise<Buffer> {
+    const stored = this.secrets
+      ? await this.secrets.resolve(PASS_KEY_SCOPE, PASS_KEY_SECRET)
+      : null;
+
+    if (stored?.value) {
+      return Buffer.from(stored.value, "base64");
+    }
+
+    const key = randomBytes(32);
+
+    if (!this.secrets) {
+      return key;
+    }
+
+    // Saves only when no key is stored yet. It throws without
+    // NAKAMA_SECRETS_KEY, or when another process saved first.
+    await this.secrets
+      .migrate(PASS_KEY_SCOPE, PASS_KEY_SECRET, key.toString("base64"))
+      .catch(() => undefined);
+
+    const saved = await this.secrets.resolve(PASS_KEY_SCOPE, PASS_KEY_SECRET);
+
+    // Nothing stored (no secrets key): a pass is valid only in this process.
+    return saved.value ? Buffer.from(saved.value, "base64") : key;
+  }
+
+  /**
+   * Saves the key from the Connect page for the signed-in user and org. Null
+   * when this install is already connected with another key.
+   */
   async enroll(input: {
     installId: string;
     name: string;
     orgId: string;
     publicKey: string;
     userId: string;
-  }): Promise<{ computer: StoredComputerRecord; confirmCode: string }> {
+  }): Promise<{ computer: StoredComputerRecord; confirmCode: string } | null> {
     const at = new Date(this.now()).toISOString();
 
     // Only the Connect result on 127.0.0.1 carries this code, so a key sent
@@ -130,6 +179,10 @@ export class ComputerAuthService {
       revokedAt: null,
       userId: input.userId,
     });
+
+    if (!computer) {
+      return null;
+    }
 
     await this.audit("computer.enroll", computer, at);
 
@@ -235,7 +288,7 @@ export class ComputerAuthService {
       })
     ).toString("base64url");
 
-    return { expiresAt, pass: `${body}.${this.sign(body)}` };
+    return { expiresAt, pass: `${body}.${await this.sign(body)}` };
   }
 
   /**
@@ -249,7 +302,7 @@ export class ComputerAuthService {
       return null;
     }
 
-    const expected = Buffer.from(this.sign(body));
+    const expected = Buffer.from(await this.sign(body));
     const actual = Buffer.from(signature);
 
     if (
@@ -300,8 +353,10 @@ export class ComputerAuthService {
       : null;
   }
 
-  private sign(body: string): string {
-    return createHmac("sha256", this.passKey).update(body).digest("base64url");
+  private async sign(body: string): Promise<string> {
+    return createHmac("sha256", await this.signingKey())
+      .update(body)
+      .digest("base64url");
   }
 
   private async audit(

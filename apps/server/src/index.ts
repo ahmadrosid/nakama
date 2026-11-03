@@ -555,7 +555,11 @@ const app = createHonoApp({
   authService,
   automationService,
   composioService,
-  computerAuth: new ComputerAuthService(database.adapter),
+  computerAuth: new ComputerAuthService(
+    database.adapter,
+    Date.now,
+    managedSecrets
+  ),
   databaseAdapter: database.adapter,
   googleMeetService,
   mcpService,

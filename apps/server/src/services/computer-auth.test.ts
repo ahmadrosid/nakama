@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { randomBytes } from "node:crypto";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { z } from "zod";
 import { createMinimalHonoApp } from "../http/test-app-helpers";
@@ -11,6 +12,7 @@ import {
   isEd25519PublicKey,
   LLM_TOKEN_PATH,
 } from "./computer-auth";
+import { ManagedSecrets } from "./managed-secrets";
 
 const passResponseSchema = z.object({
   expiresAt: z.number(),
@@ -29,13 +31,19 @@ async function setup() {
 
   const key = testDeviceKey();
 
-  const { computer, confirmCode } = await auth.enroll({
+  const enrolled = await auth.enroll({
     installId: "install_1",
     name: "Ada's MacBook",
     orgId,
     publicKey: key.publicKey,
     userId,
   });
+
+  if (!enrolled) {
+    throw new Error("enroll refused");
+  }
+
+  const { computer, confirmCode } = enrolled;
 
   const signedRequest = (
     overrides: { confirmCode?: string; nonce?: string; timestamp?: number } = {}
@@ -58,6 +66,7 @@ async function setup() {
     auth,
     computer,
     databaseAdapter,
+    key,
     orgId,
     requestPass,
     signedRequest,
@@ -182,13 +191,19 @@ describe("computer passes", () => {
     const { auth, orgId, requestPass, timestamp, userId } = await setup();
     const attacker = testDeviceKey();
 
-    const { computer, confirmCode } = await auth.enroll({
+    const enrolled = await auth.enroll({
       installId: "install_attacker",
       name: "Work laptop",
       orgId,
       publicKey: attacker.publicKey,
       userId,
     });
+
+    if (!enrolled) {
+      throw new Error("enroll refused");
+    }
+
+    const { computer, confirmCode } = enrolled;
 
     expect(
       (
@@ -219,18 +234,91 @@ describe("computer passes", () => {
     ).toBe(200);
   });
 
-  test("signing in again from the same install reuses the computer", async () => {
-    const { auth, computer, orgId, userId } = await setup();
+  test("signing in again from the same install reuses the computer and keeps it working", async () => {
+    const { auth, computer, key, orgId, requestPass, signedRequest, userId } =
+      await setup();
 
-    const { computer: again } = await auth.enroll({
+    const again = await auth.enroll({
       installId: "install_1",
-      name: "Ada's MacBook",
+      name: "Ada's Mac",
       orgId,
-      publicKey: testDeviceKey().publicKey,
+      publicKey: key.publicKey,
       userId,
     });
 
-    expect(again.id).toBe(computer.id);
+    expect(again?.computer).toMatchObject({
+      id: computer.id,
+      name: "Ada's Mac",
+      pendingCodeHash: null,
+    });
+    // No new Connect code is needed: a replayed link cannot lock it out.
+    expect((await requestPass(signedRequest())).status).toBe(200);
+  });
+
+  test("a link with another key cannot replace the key of a working computer", async () => {
+    const { auth, databaseAdapter, computer, key, orgId, userId } =
+      await setup();
+
+    expect(
+      await auth.enroll({
+        installId: "install_1",
+        name: "Ada's MacBook",
+        orgId,
+        publicKey: testDeviceKey().publicKey,
+        userId,
+      })
+    ).toBeNull();
+    expect((await databaseAdapter.getComputer(computer.id))?.publicKey).toBe(
+      key.publicKey
+    );
+  });
+
+  test("an unconfirmed computer takes the key from a new Connect", async () => {
+    const { auth, orgId, userId } = await setup();
+    const first = testDeviceKey();
+    const second = testDeviceKey();
+
+    const pending = await auth.enroll({
+      installId: "install_2",
+      name: "Laptop",
+      orgId,
+      publicKey: first.publicKey,
+      userId,
+    });
+
+    const replaced = await auth.enroll({
+      installId: "install_2",
+      name: "Laptop",
+      orgId,
+      publicKey: second.publicKey,
+      userId,
+    });
+
+    expect(replaced?.computer.id).toBe(pending?.computer.id ?? "");
+    expect(replaced?.computer.publicKey).toBe(second.publicKey);
+  });
+
+  test("the pass key is kept in the secrets store, so a restart keeps passes valid", async () => {
+    const { databaseAdapter, requestPass, signedRequest, timestamp } =
+      await setup();
+
+    const secrets = new ManagedSecrets(
+      databaseAdapter,
+      randomBytes(32).toString("base64")
+    );
+
+    const before = new ComputerAuthService(databaseAdapter, timestamp, secrets);
+    const after = new ComputerAuthService(databaseAdapter, timestamp, secrets);
+
+    const issued = await before.issuePass(signedRequest(), {
+      method: "POST",
+      path: LLM_TOKEN_PATH,
+    });
+
+    expect(issued).not.toBeNull();
+    expect(await after.verifyPass(issued?.pass ?? "")).not.toBeNull();
+    // The test app's service has no secrets store, so it keeps its own key.
+    expect((await requestPass(signedRequest())).status).toBe(200);
   });
 
   test("only a raw 32-byte Ed25519 key is a public key", () => {

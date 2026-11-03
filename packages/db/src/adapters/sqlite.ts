@@ -3730,6 +3730,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     UPDATE computers SET public_key = ?, name = ?, pending_code_hash = ? WHERE id = ?
   `);
 
+  const updateComputerNameStmt = db.prepare(
+    "UPDATE computers SET name = ? WHERE id = ?"
+  );
+
   const getComputerStmt = db.prepare<ComputerRow, SQLQueryBindings[]>(
     `SELECT ${COMPUTER_COLUMNS} FROM computers WHERE id = ?`
   );
@@ -5100,6 +5104,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           record.userId,
           record.installId
         );
+
+        // A confirmed computer keeps its key and stays confirmed.
+        if (existing && !existing.pending_code_hash) {
+          if (existing.public_key !== record.publicKey) {
+            return null;
+          }
+
+          updateComputerNameStmt.run(record.name, existing.id);
+
+          return toComputerRecord({ ...existing, name: record.name });
+        }
 
         if (existing) {
           updateComputerKeyStmt.run(

@@ -260,7 +260,15 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
           RESERVED_OUTPUT_TOKENS
       );
 
-      return c.json(await harness.provider.generateText(input), 200);
+      const result = await harness.provider.generateText(input);
+
+      harness.recordUsage?.({
+        estimated: !result.usage,
+        inputTokens: result.usage?.inputTokens ?? 0,
+        outputTokens: result.usage?.outputTokens ?? 0,
+      });
+
+      return c.json(result, 200);
     } catch (error) {
       const failure = failureOf(
         error instanceof Error ? error : new Error(String(error))
@@ -350,7 +358,15 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
             onToolInputDelta: (data) => send({ data, type: "toolInputDelta" }),
             onToolStart: (data) => send({ data, type: "toolStart" }),
           })
-          .then((data) => send({ data, type: "result" }))
+          .then((data) => {
+            // Count the call like a chat-loop step, so the org's limits hold.
+            harness.recordUsage?.({
+              estimated: Boolean(data.usage?.estimated ?? !data.usage),
+              inputTokens: data.usage?.inputTokens ?? 0,
+              outputTokens: data.usage?.outputTokens ?? 0,
+            });
+            send({ data, type: "result" });
+          })
           .catch((error) =>
             send({ data: failureOf(asError(error)), type: "error" })
           )
@@ -421,13 +437,26 @@ export function registerComputerRoutes(
       );
     }
 
-    const { computer, confirmCode } = await computerAuth.enroll({
+    const enrolled = await computerAuth.enroll({
       ...request.data,
       orgId,
       userId,
     });
 
-    return c.json({ computerId: computer.id, confirmCode }, 201);
+    if (!enrolled) {
+      return c.json(
+        {
+          error:
+            "This computer is already connected. Remove it in Settings, then connect again.",
+        },
+        409
+      );
+    }
+
+    return c.json(
+      { computerId: enrolled.computer.id, confirmCode: enrolled.confirmCode },
+      201
+    );
   });
 
   app.get("/v1/computers", async (c) => {
