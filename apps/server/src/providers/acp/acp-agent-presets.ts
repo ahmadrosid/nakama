@@ -21,6 +21,18 @@ const BUNDLED_AGENTS = [
   },
 ] as const;
 
+/**
+ * Agents the host installs itself. Each one is offered only when its CLI is on
+ * the server's PATH, and runs with the arguments that start its ACP mode.
+ */
+const HOST_AGENTS = [
+  {
+    agent: { args: ["acp"], command: "opencode" },
+    id: "opencode",
+    label: "OpenCode",
+  },
+] as const;
+
 export interface AcpAgentPreset {
   agent: AcpAgentConfig;
   id: string;
@@ -37,13 +49,32 @@ const packageManifestSchema = z.object({
     .optional(),
 });
 
-/** The bundled agents, with each one's entry point resolved on this server. */
-export function listAcpAgentPresets(): AcpAgentPreset[] {
-  return BUNDLED_AGENTS.map(({ id, label, packageName }) => ({
+/**
+ * The bundled agents, with each one's entry point resolved on this server,
+ * then the host agents whose CLI this server can find.
+ */
+export function listAcpAgentPresets(
+  which: (command: string) => string | null = Bun.which
+): AcpAgentPreset[] {
+  const bundled = BUNDLED_AGENTS.map(({ id, label, packageName }) => ({
     agent: resolveBundledAgent(packageName),
     id,
     label,
   }));
+
+  const host = HOST_AGENTS.flatMap(({ agent, id, label }) =>
+    which(agent.command)
+      ? [
+          {
+            agent: { args: [...agent.args], command: agent.command },
+            id,
+            label,
+          },
+        ]
+      : []
+  );
+
+  return [...bundled, ...host];
 }
 
 /**
