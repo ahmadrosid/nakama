@@ -61,6 +61,7 @@ export function formatProviderLabel(
     provider === "ollama" ||
     provider === "openai_compatible" ||
     provider === "opencode_go" ||
+    provider === "command_code" ||
     provider === "chatgpt" ||
     provider === "xai_oauth" ||
     provider === "minimax" ||
@@ -109,6 +110,7 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
     { id: "fireworks", label: "Fireworks" },
     { id: "ollama", label: "Ollama" },
     { id: "opencode_go", label: "OpenCode Go" },
+    { id: "command_code", label: "Command Code" },
     { id: "minimax", label: "MiniMax" },
     { id: "xai", label: "xAI Grok" },
     { id: "groq", label: "Groq" },

@@ -234,7 +234,9 @@ import {
   isChannelOwner,
 } from "@nakama/core/channel-config-shared";
 import {
+  commandCodeModelSupportsVision,
   defaultDiscoveryBaseUrl,
+  isDiscoveryModelProvider,
   NETRA_AGENT_MODEL_ID,
 } from "@nakama/core/discovery-providers";
 import { readTextIfExists } from "@nakama/core/fs";
@@ -3768,11 +3770,7 @@ export class AgentService {
       throw new NakamaApiError("Provider not found.", 404);
     }
 
-    if (
-      instance.type === "ollama" ||
-      instance.type === "openai_compatible" ||
-      instance.type === "netra"
-    ) {
+    if (instance.type === "ollama" || isDiscoveryModelProvider(instance.type)) {
       const hostMode =
         instance.type === "ollama"
           ? (overrides?.hostMode ?? resolveOllamaHostMode(instance))
@@ -3781,12 +3779,12 @@ export class AgentService {
       const apiKey =
         overrides?.apiKey?.trim() ||
         instance.apiKey.trim() ||
-        (instance.type === "ollama" || instance.type === "netra"
-          ? readEnvValue(
+        (instance.type === "openai_compatible"
+          ? ""
+          : readEnvValue(
               process.env,
               apiKeyEnvVarForProvider(instance.type) ?? ""
-            ) || ""
-          : "");
+            ) || "");
 
       if (
         instance.type === "ollama" &&
@@ -3805,9 +3803,7 @@ export class AgentService {
         instance.baseUrl?.trim() ||
         (instance.type === "ollama"
           ? defaultOllamaBaseUrl(hostMode!)
-          : instance.type === "netra"
-            ? defaultDiscoveryBaseUrl("netra")
-            : "");
+          : (defaultDiscoveryBaseUrl(instance.type) ?? ""));
 
       if (!baseUrl) {
         throw new NakamaApiError(
@@ -3816,7 +3812,7 @@ export class AgentService {
         );
       }
 
-      const entries =
+      const fetchedEntries =
         instance.type === "ollama"
           ? await fetchOllamaModels(baseUrl, apiKey)
           : instance.type === "netra"
@@ -3828,6 +3824,18 @@ export class AgentService {
                 name: entry.name,
               }))
             : await fetchRemoteOpenAIModels(baseUrl, apiKey);
+
+      const entries =
+        instance.type === "command_code"
+          ? fetchedEntries.map((entry) =>
+              entry.supportsVision === undefined
+                ? {
+                    ...entry,
+                    supportsVision: commandCodeModelSupportsVision(entry.id),
+                  }
+                : entry
+            )
+          : fetchedEntries;
 
       const remoteInstance = { ...instance, baseUrl, customModels: entries };
       const models = getModelsForProviderInstance(remoteInstance);
