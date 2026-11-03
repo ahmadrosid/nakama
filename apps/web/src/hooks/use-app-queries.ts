@@ -388,11 +388,25 @@ function useTeamsSettingsHooks() {
 }
 
 export function useTeamsSettings() {
-  return useTeamsSettingsHooks().useSettings();
+  return useQuery({
+    ...useTeamsSettingsHooks().queryOptions,
+    refetchInterval: (query) =>
+      query.state.data?.handshakeCode ? 5000 : false,
+  });
 }
 
 export function useSaveTeamsSettings() {
   return useTeamsSettingsHooks().useSave();
+}
+
+export function useRegenerateTeamsHandshake() {
+  const profileId = useChannelProfileId();
+  const { activeOrg } = useAuth();
+  const api = client.forOrg(activeOrg?.id ?? null);
+
+  return useTeamsSettingsHooks().useSetQueryDataMutation(() =>
+    api.regenerateTeamsHandshake(profileId)
+  );
 }
 
 const emailSettings = createSettingsHooks({

@@ -15,9 +15,16 @@ import {
   parseChannelCommand,
   runChannelCommand,
 } from "@nakama/core/channel-commands";
-import type { ChannelOwner } from "@nakama/core/channel-config-shared";
+import {
+  type ChannelOwner,
+  looksLikePairingCode,
+} from "@nakama/core/channel-config-shared";
 import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
-import type { TeamsConfigFile } from "@nakama/core/teams-config";
+import {
+  isTeamsUserAuthorized,
+  type TeamsConfigFile,
+  verifyAndPairTeamsUser,
+} from "@nakama/core/teams-config";
 
 /** The parts of a Teams message activity this slice acts on. */
 export interface TeamsActivity {
@@ -70,8 +77,7 @@ function isPersonalMessage(activity: TeamsActivity): boolean {
 }
 
 /**
- * An empty allowlist denies everyone, which is what an unset one means. Entra
- * ids are GUIDs, which compare without regard to letter case.
+ * Entra ids are GUIDs, which compare without regard to letter case.
  */
 function allows(
   config: TeamsConfigFile | null,
@@ -80,7 +86,7 @@ function allows(
   return (
     config !== null &&
     config.tenantId.toLowerCase() === activity.tenantId.toLowerCase() &&
-    config.allowedUserIds.includes(activity.senderId.toLowerCase())
+    isTeamsUserAuthorized(activity.senderId, config)
   );
 }
 
@@ -308,13 +314,36 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
       }
     }
 
-    if (!allows(await loadConfig(), activity)) {
+    const config = await loadConfig();
+
+    if (
+      !config ||
+      config.tenantId.toLowerCase() !== activity.tenantId.toLowerCase()
+    ) {
       return;
     }
 
     const sessionKey = `teams:${activity.conversationId}`;
     const text = activity.text.trim();
     const command = parseChannelCommand(text, COMMAND_PREFIX);
+
+    if (!allows(config, activity)) {
+      // Only an unauthorized sender's code-shaped message is a pairing attempt.
+      if (looksLikePairingCode(activity.text)) {
+        await chatLock.withLock(sessionKey, async () => {
+          const result = await verifyAndPairTeamsUser(
+            activity.text,
+            activity.senderId,
+            activity.tenantId,
+            owner
+          );
+
+          await send(activity.conversationId, result.message);
+        });
+      }
+
+      return;
+    }
 
     if (command !== null) {
       await handleCommand(command, activity, sessionKey);
