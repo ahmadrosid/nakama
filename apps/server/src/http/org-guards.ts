@@ -30,12 +30,14 @@ export function requireOrgAdminFromContext(
   return auth;
 }
 
-function requireOrgAdminOrPlatformAdmin(auth: RequestAuthContext): void {
-  if (auth.orgRole === "admin" || auth.isPlatformAdmin) {
-    return;
-  }
+export function isOrgAdminOrPlatformAdmin(auth: RequestAuthContext): boolean {
+  return auth.orgRole === "admin" || auth.isPlatformAdmin;
+}
 
-  throw new NakamaApiError("Forbidden", 403);
+function requireOrgAdminOrPlatformAdmin(auth: RequestAuthContext): void {
+  if (!isOrgAdminOrPlatformAdmin(auth)) {
+    throw new NakamaApiError("Forbidden", 403);
+  }
 }
 
 export function requireOrgAdminOrPlatformAdminFromContext(

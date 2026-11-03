@@ -12,7 +12,10 @@ import {
 import { ChannelConfigBusyError } from "@nakama/core/channel-config-shared";
 import { resolveChannelOwner } from "../channel-owner";
 import type { ServerOptions } from "../context";
-import { requireOrgAdminOrPlatformAdminFromContext } from "../org-guards";
+import {
+  isOrgAdminOrPlatformAdmin,
+  requireOrgAdminOrPlatformAdminFromContext,
+} from "../org-guards";
 import { errorResponse, getRequestAuth, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
@@ -43,9 +46,7 @@ export function registerTeamsRoutes(app: HonoApp, options: ServerOptions) {
       await resolveChannelOwner(c, agent)
     );
 
-    const auth = getRequestAuth(c);
-
-    if (auth.orgRole !== "admin" && !auth.isPlatformAdmin) {
+    if (!isOrgAdminOrPlatformAdmin(getRequestAuth(c))) {
       settings.handshakeCode = null;
       settings.handshakeExpiresAt = null;
     }
