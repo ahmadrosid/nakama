@@ -107,6 +107,7 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   chatgpt: "ChatGPT (Plus/Pro)",
   cheaper_inference: "Cheaper Inference",
   cloudflare: "Cloudflare Worker AI",
+  command_code: "Command Code",
   deepseek: "DeepSeek",
   doubao: "Doubao (Volcengine)",
   fireworks: "Fireworks",

@@ -30,6 +30,7 @@ export function netraModelSupportsVision(model: string): boolean {
 export const DISCOVERY_MODEL_PROVIDERS: ReadonlySet<ProviderName> =
   new Set<ProviderName>([
     "openai_compatible",
+    "command_code",
     "netra",
     "minimax",
     "minimax_cn",
@@ -49,6 +50,7 @@ export const DISCOVERY_PROVIDER_BASE_URLS: Readonly<
   Partial<Record<ProviderName, string>>
 > = {
   cheaper_inference: "https://api.cheaperinference.com/v1",
+  command_code: "https://api.commandcode.ai/provider/v1",
   groq: "https://api.groq.com/openai/v1",
   minimax: "https://api.minimax.io/v1",
   minimax_cn: "https://api.minimaxi.com/v1",

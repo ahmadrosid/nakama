@@ -75,6 +75,7 @@ const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
   ]),
   cheaper_inference: new Set<string>(),
   cloudflare: new Set<string>(),
+  command_code: new Set<string>(),
   deepseek: new Set<string>(),
   doubao: new Set<string>(),
   fireworks: new Set<string>(),

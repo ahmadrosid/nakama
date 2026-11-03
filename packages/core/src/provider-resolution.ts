@@ -18,6 +18,7 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "ollama",
   "openai_compatible",
   "opencode_go",
+  "command_code",
   "cloudflare",
   "chatgpt",
   "xai_oauth",
@@ -63,6 +64,7 @@ export function parseProviderName(
     normalized === "ollama" ||
     normalized === "openai_compatible" ||
     normalized === "opencode_go" ||
+    normalized === "command_code" ||
     normalized === "cloudflare" ||
     normalized === "chatgpt" ||
     normalized === "xai_oauth" ||
@@ -120,6 +122,8 @@ export function apiKeyEnvVarForProvider(
       return "OPENAI_COMPATIBLE_API_KEY";
     case "opencode_go":
       return "OPENCODE_GO_API_KEY";
+    case "command_code":
+      return "CMD_API_KEY";
     case "cloudflare":
       return "CLOUDFLARE_API_KEY";
     case "xai_oauth":

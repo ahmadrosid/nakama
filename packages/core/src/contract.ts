@@ -3003,6 +3003,7 @@ export type ProviderName =
   | "ollama"
   | "openai_compatible"
   | "opencode_go"
+  | "command_code"
   | "cloudflare"
   | "chatgpt"
   | "xai_oauth"

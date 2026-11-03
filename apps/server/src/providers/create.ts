@@ -25,6 +25,7 @@ import { createAnthropicProvider } from "./anthropic";
 import { CEREBRAS_CHAT_BASE_URL } from "./cerebras";
 import { createChatgptProvider } from "./chatgpt";
 import { createCloudflareProvider } from "./cloudflare";
+import { createCommandCodeProvider } from "./command-code";
 import {
   compatibleModelSupportsThinking,
   fetchNetraModelLimits,
@@ -257,6 +258,11 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
       });
     case "opencode_go":
       return createOpenCodeGoProvider({
+        apiKey: options.apiKey,
+        model,
+      });
+    case "command_code":
+      return createCommandCodeProvider({
         apiKey: options.apiKey,
         model,
       });

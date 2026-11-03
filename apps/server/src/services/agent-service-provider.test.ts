@@ -91,6 +91,51 @@ test("discovers the supported Netra model without a custom base URL", async () =
   expect(fetchMock).toHaveBeenCalled();
 });
 
+describe("discoverModelsForProvider", () => {
+  setupTestConfigDir("nakama-discovery-provider-");
+
+  test("uses the provider default base URL for discovery providers", async () => {
+    let seenUrl = "";
+
+    using fetchMock = spyOn(globalThis, "fetch").mockImplementation(
+      asTestFetch((input, init?) => {
+        seenUrl = new Request(input, init).url;
+
+        return Promise.resolve(
+          Response.json({
+            data: [
+              {
+                created: 1,
+                id: "claude-sonnet-4-6",
+                name: "Claude Sonnet 4.6",
+                object: "model",
+                owned_by: "command-code",
+              },
+            ],
+            object: "list",
+          })
+        );
+      })
+    );
+
+    const service = new AgentService(
+      null,
+      null,
+      createInMemoryDatabaseAdapter()
+    );
+
+    const created = await service.createProvider({ type: "command_code" });
+
+    const result = await service.discoverModelsForProvider(created.provider.id);
+
+    expect(seenUrl).toBe("https://api.commandcode.ai/provider/v1/models");
+    expect(result.customModels?.map((model) => model.id)).toEqual([
+      "claude-sonnet-4-6",
+    ]);
+    expect(fetchMock).toHaveBeenCalled();
+  });
+});
+
 describe("AgentService usage pricing context", () => {
   setupTestConfigDir("nakama-usage-context-");
 
