@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { join } from "node:path";
 
@@ -86,6 +86,29 @@ export async function writeDesktopConfig(userDataDir, config) {
     `${JSON.stringify(config, null, 2)}\n`,
     { mode: 0o600 }
   );
+}
+
+export async function clearDesktopConfig(userDataDir) {
+  await rm(join(userDataDir, CONFIG_FILE), { force: true });
+}
+
+/**
+ * Calls onSignOut when the chat page signs out of Nakama Cloud, so the app
+ * can ask again instead of moving to another provider without a word.
+ */
+export function watchCloudSignOut(session, serverUrl, onSignOut) {
+  const signOutUrl = `${serverUrl}/v1/nakama-cloud`;
+
+  session.webRequest.onCompleted({ urls: ["*://*/*"] }, (details) => {
+    if (
+      details.method === "DELETE" &&
+      details.url === signOutUrl &&
+      details.statusCode >= 200 &&
+      details.statusCode < 300
+    ) {
+      onSignOut();
+    }
+  });
 }
 
 /** On macOS, hostname() can be an IP address; use the Computer Name. */

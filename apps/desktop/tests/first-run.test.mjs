@@ -4,10 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   checkCloudServer,
+  clearDesktopConfig,
   createLocalSignIn,
   defaultCloudUrl,
   normalizeCloudUrl,
   readDesktopConfig,
+  watchCloudSignOut,
   writeDesktopConfig,
 } from "../first-run.mjs";
 
@@ -60,6 +62,42 @@ test("a saved choice reads back; a broken file means ask again", async () => {
 
   await writeFile(join(dir, "desktop.json"), "{not json");
   expect(await readDesktopConfig(dir)).toBeNull();
+
+  await writeDesktopConfig(dir, { choice: "cloud" });
+  await clearDesktopConfig(dir);
+  expect(await readDesktopConfig(dir)).toBeNull();
+  await clearDesktopConfig(dir);
+});
+
+test("only a successful sign out of Nakama Cloud asks again", () => {
+  let listener = null;
+  let signOuts = 0;
+
+  watchCloudSignOut(
+    {
+      webRequest: {
+        onCompleted: (_filter, callback) => {
+          listener = callback;
+        },
+      },
+    },
+    "http://127.0.0.1:5000",
+    () => {
+      signOuts += 1;
+    }
+  );
+
+  const done = (method, url, statusCode) =>
+    listener({ method, statusCode, url });
+
+  done("GET", "http://127.0.0.1:5000/v1/nakama-cloud", 200);
+  done("DELETE", "http://127.0.0.1:5000/v1/nakama-cloud", 500);
+  done("DELETE", "http://127.0.0.1:5000/v1/nakama-cloud/sign-in", 204);
+  done("DELETE", "https://evil.test/v1/nakama-cloud", 204);
+  expect(signOuts).toBe(0);
+
+  done("DELETE", "http://127.0.0.1:5000/v1/nakama-cloud", 204);
+  expect(signOuts).toBe(1);
 });
 
 describe("local sign-in", () => {

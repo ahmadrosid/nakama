@@ -20,9 +20,11 @@ import {
   shell,
 } from "electron";
 import {
+  clearDesktopConfig,
   createLocalSignIn,
   readDesktopConfig,
   runFirstRun,
+  watchCloudSignOut,
 } from "./first-run.mjs";
 
 async function loadDesktopSecretsKey() {
@@ -644,9 +646,10 @@ if (!process.argv.includes("--smoke-test")) {
 
         const userDataDir = app.getPath("userData");
 
-        // First launch: sign in to Nakama Cloud, or use your own API keys.
-        if (!(await readDesktopConfig(userDataDir))) {
-          await runFirstRun({
+        const chatUrl = `${localServer.url}/chat`;
+
+        const firstRun = () =>
+          runFirstRun({
             BrowserWindow,
             ipcMain,
             openExternal: (url) => shell.openExternal(url),
@@ -657,9 +660,45 @@ if (!process.argv.includes("--smoke-test")) {
             }),
             userDataDir,
           });
+
+        // First launch: sign in to Nakama Cloud, or use your own API keys.
+        if (!(await readDesktopConfig(userDataDir))) {
+          await firstRun();
         }
 
-        return createWindow(`${localServer.url}/chat`);
+        const window = await createWindow(chatUrl);
+        let asking = false;
+
+        const askAgain = async () => {
+          if (asking || window.isDestroyed()) {
+            return;
+          }
+
+          asking = true;
+          window.hide();
+
+          try {
+            await clearDesktopConfig(userDataDir);
+            await firstRun();
+            await window.loadURL(chatUrl);
+            window.show();
+          } catch (error) {
+            if (error.message !== "first-run-closed") {
+              dialog.showErrorBox("Cannot open Nakama", error.message);
+            }
+
+            app.quit();
+          } finally {
+            asking = false;
+          }
+        };
+
+        // After Sign out, ask again on the first launch page.
+        watchCloudSignOut(window.webContents.session, localServer.url, () => {
+          void askAgain();
+        });
+
+        return window;
       })
       .then(async () => {
         started = true;
