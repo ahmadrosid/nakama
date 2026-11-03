@@ -11,10 +11,12 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { NakamaApiError } from "@nakama/core";
 import { decodeArchiveRequestData } from "./data-portability";
 import {
   assertBackupDirOutsideRoot,
   encryptBackup,
+  readBackupError,
   startScheduledBackups,
   writeBackup,
 } from "./scheduled-backup";
@@ -191,5 +193,34 @@ describe("scheduled backups", () => {
     expect(exports).toBe(1);
     expect(await readdir(recent)).toHaveLength(1);
     expect(await readdir(empty)).toHaveLength(1);
+  });
+
+  test("keeps a 409 for Settings until the next good backup", async () => {
+    const dir = await tempDir();
+
+    // With no backup in the dir, the first run starts at once.
+    const run = async (exportZip: () => Promise<Uint8Array>) => {
+      const stop = await startScheduledBackups({ dir, exportZip, key });
+      await Bun.sleep(50);
+      stop();
+    };
+
+    const blocked = new NakamaApiError(
+      "Cannot export a restorable backup: the server cannot read config.ini.",
+      409
+    );
+
+    await run(() => Promise.reject(new Error("disk full")));
+    expect(await readBackupError(dir)).toBeNull();
+
+    await run(() => Promise.reject(blocked));
+    expect(await readBackupError(dir)).toEqual({
+      at: expect.any(String),
+      message: blocked.message,
+    });
+
+    await run(async () => Buffer.from("zip"));
+    expect(await readBackupError(dir)).toBeNull();
+    expect(await readdir(dir)).toHaveLength(1);
   });
 });

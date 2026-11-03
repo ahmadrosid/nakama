@@ -1,12 +1,14 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import * as fsPromises from "node:fs/promises";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   getKnowledgeBaseDir,
   getOrgKnowledgeBaseDir,
   getProfileArtifactsDir,
   getUserConfigDir,
+  NakamaApiError,
   saveAttachmentBytes,
 } from "@nakama/core";
 import * as fflate from "fflate";
@@ -18,7 +20,10 @@ import {
   NAKAMA_ORG_EXPORT_MANIFEST,
   NAKAMA_USER_EXPORT_MANIFEST,
 } from "../../services/data-portability";
-import { encryptBackup } from "../../services/scheduled-backup";
+import {
+  encryptBackup,
+  startScheduledBackups,
+} from "../../services/scheduled-backup";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
@@ -145,6 +150,63 @@ describe("data portability routes", () => {
     expect(Buffer.from(archive["config.ini"]!).toString("utf8")).toBe(
       "provider=openai"
     );
+  });
+
+  test("platform admin reads the last scheduled backup's 409", async () => {
+    const { app, authService, databaseAdapter } = createApp();
+
+    const session = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+
+    const lastError = async () => {
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/platform/data/backup-status", {
+          headers: session.headers(),
+        })
+      );
+
+      expect(response.status).toBe(200);
+
+      return (await response.json()).lastError;
+    };
+
+    const previousDir = process.env.NAKAMA_BACKUP_DIR;
+    const dir = await mkdtemp(join(tmpdir(), "nakama-backup-status-"));
+    const blocked = new NakamaApiError("the server cannot read config.ini", 409);
+
+    try {
+      delete process.env.NAKAMA_BACKUP_DIR;
+      expect(await lastError()).toBeNull();
+
+      process.env.NAKAMA_BACKUP_DIR = dir;
+      expect(await lastError()).toBeNull();
+
+      // An empty backup dir runs the first backup at once.
+      const stop = await startScheduledBackups({
+        dir,
+        exportZip: () => Promise.reject(blocked),
+        key: Buffer.alloc(32, 4),
+      });
+
+      await Bun.sleep(50);
+      stop();
+
+      expect(await lastError()).toEqual({
+        at: expect.any(String),
+        message: blocked.message,
+      });
+    } finally {
+      if (previousDir === undefined) {
+        delete process.env.NAKAMA_BACKUP_DIR;
+      } else {
+        process.env.NAKAMA_BACKUP_DIR = previousDir;
+      }
+
+      await rm(dir, { force: true, recursive: true });
+    }
   });
 
   test("platform admin exports one user's data without secrets or other users", async () => {
@@ -960,7 +1022,14 @@ describe("data portability routes", () => {
       })
     );
 
+    const backupStatusResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/data/backup-status", {
+        headers: orgSession.headers(),
+      })
+    );
+
     expect(exportResponse.status).toBe(403);
+    expect(backupStatusResponse.status).toBe(403);
     expect(userExportResponse.status).toBe(403);
     expect(orgExportResponse.status).toBe(403);
     expect(previewResponse.status).toBe(403);

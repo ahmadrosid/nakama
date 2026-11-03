@@ -2,13 +2,17 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import {
   mkdir,
   readdir,
+  readFile,
   rename,
+  rm,
   stat,
   unlink,
   writeFile,
 } from "node:fs/promises";
 import { isAbsolute, join, relative, sep } from "node:path";
+import { type BackupStatusResponse, NakamaApiError } from "@nakama/core";
 import { comparablePath, resolveWithRealpath } from "@nakama/core/tools/paths";
+import { z } from "zod";
 
 const MAGIC = Buffer.from("NKBK1\n");
 
@@ -17,6 +21,30 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const KEEP = 7;
 
 const NAME = /^nakama-.+\.zip\.enc$/;
+
+// The last 409 of a scheduled backup, for Settings. The next good backup removes it.
+const ERROR_FILE = "scheduled-backup-error.json";
+
+const backupErrorSchema = z.object({ at: z.string(), message: z.string() });
+
+export async function readBackupError(
+  dir: string
+): Promise<BackupStatusResponse["lastError"]> {
+  const parsed = backupErrorSchema.safeParse(
+    await readFile(join(dir, ERROR_FILE), "utf8")
+      .then(JSON.parse)
+      .catch(() => null)
+  );
+
+  return parsed.success ? parsed.data : null;
+}
+
+async function recordBackupError(dir: string, message: string): Promise<void> {
+  const path = join(dir, ERROR_FILE);
+  const record = { at: new Date().toISOString(), message };
+  await writeFile(`${path}.tmp`, JSON.stringify(record), { mode: 0o600 });
+  await rename(`${path}.tmp`, path);
+}
 
 export function isEncryptedBackup(data: Uint8Array): boolean {
   return Buffer.from(data).subarray(0, MAGIC.length).equals(MAGIC);
@@ -110,10 +138,21 @@ export async function startScheduledBackups(options: {
       try {
         const path = await writeBackup(options);
         console.log(`Nakama backup written to ${path}`);
+        await rm(join(options.dir, ERROR_FILE), { force: true });
       } catch (error) {
         console.error(
           `Nakama backup failed: ${error instanceof Error ? error.message : String(error)}`
         );
+
+        if (error instanceof NakamaApiError && error.status === 409) {
+          try {
+            await recordBackupError(options.dir, error.message);
+          } catch (recordError) {
+            console.error(
+              `Nakama cannot record the backup error: ${recordError instanceof Error ? recordError.message : String(recordError)}`
+            );
+          }
+        }
       }
 
       schedule(DAY_MS);

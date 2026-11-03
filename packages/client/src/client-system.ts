@@ -1,5 +1,6 @@
 import type {
   AutomationWorkerSettingsResponse,
+  BackupStatusResponse,
   ChatgptOAuthDeviceCompleteRequest,
   ChatgptOAuthDeviceCompleteResponse,
   ChatgptOAuthDeviceStartResponse,
@@ -125,6 +126,10 @@ export class SystemClient extends NakamaClientCore {
       } satisfies UpdateWebPublicUrlRequest),
       method: "PUT",
     });
+  }
+
+  async getBackupStatus(): Promise<BackupStatusResponse> {
+    return this.request<BackupStatusResponse>("/v1/platform/data/backup-status");
   }
 
   async exportData(options: { onProgress?: TransferProgress } = {}): Promise<{

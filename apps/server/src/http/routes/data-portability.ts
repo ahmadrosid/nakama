@@ -1,5 +1,6 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type {
+  BackupStatusResponse,
   DataImportPreviewResponse,
   PreviewDataImportRequest,
   RestoreDataImportRequest,
@@ -15,6 +16,7 @@ import {
   restoreNakamaDataImport,
 } from "../../services/data-portability";
 import { runWithPluginExportBarrier } from "../../services/plugin-service";
+import { readBackupError } from "../../services/scheduled-backup";
 import type { ServerOptions } from "../context";
 import { requirePlatformAdminFromContext } from "../org-guards";
 import {
@@ -201,6 +203,36 @@ export function registerDataPortabilityRoutes(
 
   app.openAPIRegistry.registerPath(
     createRoute({
+      method: "get",
+      operationId: "getPlatformBackupStatus",
+      path: "/v1/platform/data/backup-status",
+      responses: {
+        200: {
+          content: {
+            "application/json": {
+              schema: z
+                .object({
+                  lastError: z
+                    .object({ at: z.string(), message: z.string() })
+                    .nullable(),
+                })
+                .openapi("BackupStatusResponse"),
+            },
+          },
+          description: "The last scheduled backup's 409, or null",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Get the scheduled backup status",
+      tags: ["Platform"],
+    })
+  );
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
       method: "post",
       operationId: "previewPlatformDataImport",
       path: "/v1/platform/data/import/preview",
@@ -324,6 +356,15 @@ export function registerDataPortabilityRoutes(
         "Content-Disposition": `attachment; filename="${result.filename}"`,
         "Content-Type": "application/zip",
       },
+    });
+  });
+
+  app.get("/v1/platform/data/backup-status", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const dir = process.env.NAKAMA_BACKUP_DIR?.trim();
+
+    return json<BackupStatusResponse>({
+      lastError: dir ? await readBackupError(dir) : null,
     });
   });
 
