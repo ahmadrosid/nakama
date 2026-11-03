@@ -264,6 +264,7 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
     case "command_code":
       return createCommandCodeProvider({
         apiKey: options.apiKey,
+        baseUrl: baseUrlOverride,
         model,
       });
     case "cerebras":

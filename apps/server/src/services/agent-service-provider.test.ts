@@ -111,6 +111,13 @@ describe("discoverModelsForProvider", () => {
                 object: "model",
                 owned_by: "command-code",
               },
+              {
+                created: 1,
+                id: "deepseek/deepseek-v4.1-flash",
+                name: "DeepSeek V4.1 Flash",
+                object: "model",
+                owned_by: "command-code",
+              },
             ],
             object: "list",
           })
@@ -129,8 +136,15 @@ describe("discoverModelsForProvider", () => {
     const result = await service.discoverModelsForProvider(created.provider.id);
 
     expect(seenUrl).toBe("https://api.commandcode.ai/provider/v1/models");
-    expect(result.customModels?.map((model) => model.id)).toEqual([
-      "claude-sonnet-4-6",
+    expect(result.customModels).toEqual([
+      expect.objectContaining({
+        id: "claude-sonnet-4-6",
+        supportsVision: true,
+      }),
+      expect.objectContaining({
+        id: "deepseek/deepseek-v4.1-flash",
+        supportsVision: false,
+      }),
     ]);
     expect(fetchMock).toHaveBeenCalled();
   });

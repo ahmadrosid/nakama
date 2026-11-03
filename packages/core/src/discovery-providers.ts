@@ -20,6 +20,22 @@ export function netraModelSupportsVision(model: string): boolean {
   return NETRA_VISION_MODEL_IDS.has(resolveNetraModelId(model.trim()));
 }
 
+// Command Code's /models response carries no modality field, so infer image
+// input from the model family. Everything else stays text-only.
+export function commandCodeModelSupportsVision(modelId: string): boolean {
+  const id = modelId.trim().toLowerCase();
+
+  return (
+    id.startsWith("claude-") ||
+    id.startsWith("gpt-") ||
+    id.startsWith("google/gemini-") ||
+    id.startsWith("xai/grok-") ||
+    id.includes("vision") ||
+    id.includes("omni") ||
+    id.includes("-vl")
+  );
+}
+
 // Providers whose model lists are discovered live from the platform's
 // /models endpoint and stored as instance custom models, instead of a
 // hardcoded catalog. Adding a discovery-based provider is one entry here

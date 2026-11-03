@@ -234,6 +234,7 @@ import {
   isChannelOwner,
 } from "@nakama/core/channel-config-shared";
 import {
+  commandCodeModelSupportsVision,
   defaultDiscoveryBaseUrl,
   isDiscoveryModelProvider,
   NETRA_AGENT_MODEL_ID,
@@ -3811,7 +3812,7 @@ export class AgentService {
         );
       }
 
-      const entries =
+      const fetchedEntries =
         instance.type === "ollama"
           ? await fetchOllamaModels(baseUrl, apiKey)
           : instance.type === "netra"
@@ -3823,6 +3824,18 @@ export class AgentService {
                 name: entry.name,
               }))
             : await fetchRemoteOpenAIModels(baseUrl, apiKey);
+
+      const entries =
+        instance.type === "command_code"
+          ? fetchedEntries.map((entry) =>
+              entry.supportsVision === undefined
+                ? {
+                    ...entry,
+                    supportsVision: commandCodeModelSupportsVision(entry.id),
+                  }
+                : entry
+            )
+          : fetchedEntries;
 
       const remoteInstance = { ...instance, baseUrl, customModels: entries };
       const models = getModelsForProviderInstance(remoteInstance);

@@ -75,6 +75,8 @@ const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
   ]),
   cheaper_inference: new Set<string>(),
   cloudflare: new Set<string>(),
+  // Command Code accepts text and image parts only; documents go through the
+  // local text parser.
   command_code: new Set<string>(),
   deepseek: new Set<string>(),
   doubao: new Set<string>(),
