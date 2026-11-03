@@ -2960,6 +2960,20 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE user_id = ? AND revoked_at IS NULL
   `);
 
+  // Nakama Desktop computers are sign-ins too: each "sign out everywhere"
+  // (password change or reset, MFA change, admin revoke) ends them as well.
+  const revokeComputersForUserStmt = db.prepare(`
+    UPDATE computers
+    SET revoked_at = ?
+    WHERE user_id = ? AND revoked_at IS NULL
+  `);
+
+  const revokeComputersForOrgMemberStmt = db.prepare(`
+    UPDATE computers
+    SET revoked_at = ?
+    WHERE org_id = ? AND user_id = ? AND revoked_at IS NULL
+  `);
+
   const updateBrowserSessionLastUsedAtStmt = db.prepare(`
     UPDATE browser_sessions
     SET last_used_at = ?
@@ -3005,6 +3019,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       consumePasswordResetTokensForUserStmt.run(consumedAt, token.user_id);
       updateUserPasswordStmt.run(passwordHash, consumedAt, token.user_id);
       revokeBrowserSessionsForUserStmt.run(consumedAt, token.user_id);
+      revokeComputersForUserStmt.run(consumedAt, token.user_id);
 
       return token.user_id;
     }
@@ -5003,9 +5018,21 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async deleteOrgMember(orgId, userId) {
-      const result = deleteOrgMemberStmt.run(orgId, userId, orgId);
+      return db.transaction(() => {
+        const deleted = deleteOrgMemberStmt.run(orgId, userId, orgId).changes;
 
-      return result.changes > 0;
+        // A member who is invited back must connect again: an old computer,
+        // maybe one they no longer own, does not come back to life.
+        if (deleted > 0) {
+          revokeComputersForOrgMemberStmt.run(
+            new Date().toISOString(),
+            orgId,
+            userId
+          );
+        }
+
+        return deleted > 0;
+      })();
     },
 
     async deleteOrgPlugin(orgId, pluginId, expectedRevision) {
@@ -6327,20 +6354,24 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async revokeBrowserSessionsForUser(userId, revokedAt) {
-      const result = revokeBrowserSessionsForUserStmt.run(revokedAt, userId);
+      return db.transaction(() => {
+        revokeComputersForUserStmt.run(revokedAt, userId);
 
-      return result.changes;
+        return revokeBrowserSessionsForUserStmt.run(revokedAt, userId).changes;
+      })();
     },
 
     async revokeBrowserSessionsForUserExcept(userId, sessionId, revokedAt) {
-      const result = revokeBrowserSessionsForUserExceptStmt.run(
-        revokedAt,
-        userId,
-        sessionId,
-        sessionId
-      );
+      return db.transaction(() => {
+        revokeComputersForUserStmt.run(revokedAt, userId);
 
-      return result.changes;
+        return revokeBrowserSessionsForUserExceptStmt.run(
+          revokedAt,
+          userId,
+          sessionId,
+          sessionId
+        ).changes;
+      })();
     },
 
     async revokeComputer({ id, orgId, revokedAt, userId }) {

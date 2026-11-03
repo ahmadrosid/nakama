@@ -128,7 +128,34 @@ describe("computer passes", () => {
     expect((await requestPass(good)).status).toBe(401);
   });
 
-  test("a revoked computer and a removed member lose access, also with a pass they hold", async () => {
+  test("a revoked computer loses access, also with a pass it holds", async () => {
+    const {
+      auth,
+      computer,
+      databaseAdapter,
+      orgId,
+      requestPass,
+      signedRequest,
+      userId,
+    } = await setup();
+
+    const { pass } = passResponseSchema.parse(
+      await (await requestPass(signedRequest())).json()
+    );
+
+    expect(await auth.revoke({ id: computer.id, orgId, userId })).toBe(true);
+    expect(await auth.verifyPass(pass)).toBeNull();
+    expect((await requestPass(signedRequest())).status).toBe(401);
+
+    const actions = (await databaseAdapter.listAuditEvents({ orgId })).map(
+      (event) => event.action
+    );
+
+    expect(actions).toContain("computer.enroll");
+    expect(actions).toContain("computer.revoke");
+  });
+
+  test("a removed member loses their computers, and gets none back when invited again", async () => {
     const {
       auth,
       computer,
@@ -153,18 +180,87 @@ describe("computer passes", () => {
       role: "member",
       userId,
     });
-    expect(await auth.verifyPass(pass)).not.toBeNull();
 
-    expect(await auth.revoke({ id: computer.id, orgId, userId })).toBe(true);
     expect(await auth.verifyPass(pass)).toBeNull();
     expect((await requestPass(signedRequest())).status).toBe(401);
+    expect(
+      (await databaseAdapter.getComputer(computer.id))?.revokedAt
+    ).not.toBeNull();
+  });
 
-    const actions = (await databaseAdapter.listAuditEvents({ orgId })).map(
-      (event) => event.action
-    );
+  test("each sign-out-everywhere step also ends the user's computers", async () => {
+    const {
+      auth,
+      databaseAdapter,
+      key,
+      orgId,
+      requestPass,
+      timestamp,
+      userId,
+    } = await setup();
 
-    expect(actions).toContain("computer.enroll");
-    expect(actions).toContain("computer.revoke");
+    // Password change, admin revoke and MFA setup go through the first two;
+    // a password reset has its own transaction.
+    const signOutEverywhere = [
+      () =>
+        databaseAdapter.revokeBrowserSessionsForUser(
+          userId,
+          new Date().toISOString()
+        ),
+      () =>
+        databaseAdapter.revokeBrowserSessionsForUserExcept(
+          userId,
+          "session_current",
+          new Date().toISOString()
+        ),
+      async () => {
+        await databaseAdapter.createPasswordResetToken({
+          consumedAt: null,
+          createdAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          id: "reset_1",
+          tokenHash: "reset-hash-1",
+          userId,
+        });
+
+        expect(
+          await databaseAdapter.consumePasswordResetToken(
+            "reset-hash-1",
+            "new-password-hash",
+            new Date().toISOString()
+          )
+        ).toBe(userId);
+      },
+    ];
+
+    for (const [index, signOut] of signOutEverywhere.entries()) {
+      const enrolled = await auth.enroll({
+        installId: `install_step_${index}`,
+        name: "Laptop",
+        orgId,
+        publicKey: key.publicKey,
+        userId,
+      });
+
+      if (!enrolled) {
+        throw new Error("enroll refused");
+      }
+
+      const signed = (confirmCode?: string) =>
+        key.signRequest(enrolled.computer.id, {
+          timestamp: timestamp(),
+          ...(confirmCode && { confirmCode }),
+        });
+
+      const { pass } = passResponseSchema.parse(
+        await (await requestPass(signed(enrolled.confirmCode))).json()
+      );
+
+      await signOut();
+
+      expect(await auth.verifyPass(pass)).toBeNull();
+      expect((await requestPass(signed())).status).toBe(401);
+    }
   });
 
   test("a disabled user loses access, also with a pass they hold", async () => {

@@ -198,6 +198,56 @@ describe("user config multi-provider", () => {
     expect(loaded?.providers[1]?.wireApi).toBe("responses");
   });
 
+  test("a line break in a saved value cannot add keys or sections", async () => {
+    configDir = await mkdtemp(join(tmpdir(), "nakama-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    // An org admin in Nakama Cloud chose this org name.
+    const orgName =
+      "Acme\n[provider.anthropic-main]\nbase_url=https://attacker.example";
+
+    await saveUserConfig({
+      defaultProviderId: "anthropic-main",
+      providers: [
+        {
+          apiKey: "",
+          createdAt: "2026-06-07T10:00:00.000Z",
+          id: "anthropic-main",
+          label: "Anthropic",
+          type: "anthropic",
+        },
+        {
+          apiKey: "",
+          baseUrl: "https://withnakama.com",
+          createdAt: "2026-06-07T11:00:00.000Z",
+          id: "nakama-cloud",
+          label: "Nakama Cloud",
+          nakamaCloud: {
+            account: "ada@example.com",
+            computerId: "computer_1",
+            orgId: "org_1",
+            orgName,
+          },
+          type: "nakama_cloud",
+        },
+      ],
+      thinkingEffort: "medium",
+      thinkingEnabled: true,
+      timezone: "UTC",
+    });
+
+    const loaded = await loadUserConfig();
+
+    expect(
+      loaded?.providers.find((provider) => provider.id === "anthropic-main")
+        ?.baseUrl
+    ).toBeUndefined();
+    expect(
+      loaded?.providers.find((provider) => provider.id === "nakama-cloud")
+        ?.nakamaCloud?.orgName
+    ).toBe("Acme [provider.anthropic-main] base_url=https://attacker.example");
+  });
+
   test("round-trips discovered models_json for discovery providers", async () => {
     // The writer persists customModels for every provider type, so the reader
     // must parse them back for discovery providers too — otherwise a fetched

@@ -1053,16 +1053,24 @@ function buildConfigIniLines(
   lines.push("");
 
   for (const [sectionName, values] of Object.entries(sections)) {
-    lines.push(`[${sectionName}]`);
+    lines.push(`[${oneIniLine(sectionName)}]`);
 
     for (const [key, value] of Object.entries(values)) {
-      lines.push(`${key}=${value}`);
+      lines.push(`${oneIniLine(key)}=${oneIniLine(value)}`);
     }
 
     lines.push("");
   }
 
   return lines;
+}
+
+/**
+ * Section values can come from outside, such as an org name from Nakama
+ * Cloud. A line break in one would start a new key or section in the file.
+ */
+function oneIniLine(value: string): string {
+  return value.replace(/[\r\n]+/g, " ");
 }
 
 function readThinkingSettings(
