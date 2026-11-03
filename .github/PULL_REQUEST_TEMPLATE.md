@@ -16,6 +16,9 @@ Only re-add / follow up if <!-- residual risk, or delete this line -->.
 - [ ] <!-- command you ran, with pass count if you have it -->
 - [ ] <!-- one manual check under 2 minutes -->
 
+## UI proof
+<!-- Required when the PR changes the UI: screenshot, or video/GIF for a flow. Delete this section if no UI changed. -->
+
 <!--
 PR body format: .agents/skills/adhd-pr-description/SKILL.md
 Keep this short. The diff already shows the files.
