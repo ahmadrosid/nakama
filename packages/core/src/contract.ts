@@ -895,6 +895,24 @@ export interface NakamaCloudStatus {
   signedIn: boolean;
 }
 
+/**
+ * The code Nakama Desktop and the Connect page both show for one sign-in,
+ * made from its state. A Connect link that this computer did not start
+ * shows a code that the app does not.
+ */
+export async function desktopConnectCode(state: string): Promise<string> {
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(state))
+  );
+
+  const value =
+    (digest[0] ?? 0) * 65_536 + (digest[1] ?? 0) * 256 + (digest[2] ?? 0);
+
+  const digits = String(value % 1_000_000).padStart(6, "0");
+
+  return `${digits.slice(0, 3)} ${digits.slice(3)}`;
+}
+
 export interface ListBrowserSessionsResponse {
   sessions: BrowserSessionSummary[];
 }

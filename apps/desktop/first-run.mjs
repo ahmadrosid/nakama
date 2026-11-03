@@ -208,16 +208,19 @@ export async function ensureDesktopChoice({
 export function createLocalSignIn({ dataDir, fetchImpl = fetch, serverUrl }) {
   const call = localApi({ dataDir, fetchImpl, serverUrl });
 
-  return async ({ cloudUrl, openExternal, signal, wait = 1000 }) => {
+  return async ({ cloudUrl, onCode, openExternal, signal, wait = 1000 }) => {
     // A new choice replaces an old account, so "signed in" below is this one.
     await call("/v1/nakama-cloud", { method: "DELETE" });
 
-    const { connectUrl } = await call("/v1/nakama-cloud/sign-in", {
+    const { code, connectUrl } = await call("/v1/nakama-cloud/sign-in", {
       body: JSON.stringify({ cloudUrl, computerName: computerName() }),
       method: "POST",
     });
 
     try {
+      // The Connect page shows the same code, so a link from someone else
+      // stands out.
+      onCode?.(code);
       await openExternal(connectUrl);
       const deadline = Date.now() + SIGN_IN_WAIT_MS;
 
@@ -299,7 +302,13 @@ export function runFirstRun({
       waiting = new AbortController();
 
       try {
-        await signIn({ cloudUrl, openExternal, signal: waiting.signal });
+        await signIn({
+          cloudUrl,
+          onCode: (code) =>
+            window.webContents.send("nakama:first-run-code", code),
+          openExternal,
+          signal: waiting.signal,
+        });
       } finally {
         waiting = null;
       }

@@ -1,3 +1,5 @@
+import { NakamaApiError } from "@nakama/core/api-error";
+import { desktopConnectCode } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import {
   Select,
@@ -6,8 +8,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@nakama/ui/select";
-import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
 import { client, formatError } from "@/lib/client";
@@ -16,13 +18,23 @@ import { markLogoSrc } from "@/lib/theme";
 
 export function DesktopConnectPage() {
   const [searchParams] = useSearchParams();
-  const { activeOrg, orgs, user } = useAuth();
+  const { activeOrg, logout, orgs, user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { resolvedTheme } = useTheme();
   const request = parseConnectRequest(searchParams);
   const [orgId, setOrgId] = useState(activeOrg?.id ?? orgs[0]?.id ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const org = orgs.find((candidate) => candidate.id === orgId);
+  const [code, setCode] = useState<string | null>(null);
+  const state = request?.state;
+
+  useEffect(() => {
+    if (state) {
+      void desktopConnectCode(state).then(setCode);
+    }
+  }, [state]);
 
   async function connect() {
     if (!(request && org)) {
@@ -51,6 +63,17 @@ export function DesktopConnectPage() {
         })
       );
     } catch (cause) {
+      // Connecting needs a fresh sign-in: sign in again, then come back here.
+      if (cause instanceof NakamaApiError && cause.status === 401) {
+        await logout();
+        navigate("/login", {
+          replace: true,
+          state: { from: `${location.pathname}${location.search}` },
+        });
+
+        return;
+      }
+
       setError(formatError(cause));
     } finally {
       setIsSubmitting(false);
@@ -93,6 +116,20 @@ export function DesktopConnectPage() {
                 </SelectContent>
               </Select>
             ) : null}
+            {code ? (
+              <div className="space-y-1 text-center">
+                <p
+                  aria-label="Connect code"
+                  className="font-mono font-semibold text-2xl tracking-widest"
+                >
+                  {code}
+                </p>
+                {/* Security: a link from someone else shows a code the app does not. */}
+                <p className="text-muted-foreground text-sm">
+                  Connect only if Nakama Desktop shows this code.
+                </p>
+              </div>
+            ) : null}
             {error ? (
               <div
                 className="rounded-md bg-red-50 px-3 py-2 text-red-800 text-sm dark:bg-red-950/30 dark:text-red-200"
@@ -103,7 +140,7 @@ export function DesktopConnectPage() {
             ) : null}
             <Button
               className="w-full"
-              disabled={isSubmitting || !org}
+              disabled={isSubmitting || !(org && code)}
               onClick={() => void connect()}
               type="button"
             >

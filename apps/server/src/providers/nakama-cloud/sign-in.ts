@@ -10,6 +10,7 @@ import {
 } from "node:crypto";
 import { hostname } from "node:os";
 import type { CustomModelEntry, NakamaCloudAccount } from "@nakama/core";
+import { desktopConnectCode } from "@nakama/core/contract";
 import { z } from "zod";
 import type { ManagedSecrets } from "../../services/managed-secrets";
 import { NakamaCloudPasses } from "./passes";
@@ -157,7 +158,7 @@ export class NakamaCloudSignIn {
   async start(input: {
     cloudUrl: string;
     computerName?: string;
-  }): Promise<{ connectUrl: string }> {
+  }): Promise<{ code: string; connectUrl: string }> {
     this.stop();
 
     const key = await this.deviceKey();
@@ -255,7 +256,10 @@ export class NakamaCloudSignIn {
     );
     connectUrl.searchParams.set("state", state);
 
-    return { connectUrl: connectUrl.toString() };
+    return {
+      code: await desktopConnectCode(state),
+      connectUrl: connectUrl.toString(),
+    };
   }
 
   /** Sign out: this computer removes itself in the cloud. Best effort. */

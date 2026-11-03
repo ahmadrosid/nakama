@@ -3,6 +3,7 @@ import { createPublicKey, randomBytes, verify } from "node:crypto";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { desktopConnectCode } from "@nakama/core/contract";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { z } from "zod";
 import { AgentService } from "../../services/agent-service";
@@ -306,4 +307,19 @@ test("a Cancel while the models load removes the just-activated computer in the 
   expect((await fetch(back)).status).toBe(400);
   expect(agent.nakamaCloudStatus().signedIn).toBe(false);
   expect(cloud.removed).toEqual(["Bearer pass-1"]);
+});
+
+test("the app shows the same code the Connect page makes from the link", async () => {
+  const { agent, cloud } = await setup();
+
+  const { code, connectUrl } = await agent.startNakamaCloudSignIn({
+    cloudUrl: cloud.url,
+  });
+
+  expect(code).toBe(
+    await desktopConnectCode(
+      new URL(connectUrl).searchParams.get("state") ?? ""
+    )
+  );
+  expect(code).toMatch(/^\d{3} \d{3}$/);
 });

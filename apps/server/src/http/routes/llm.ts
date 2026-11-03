@@ -1,11 +1,9 @@
 import { z } from "@hono/zod-openapi";
-import {
-  type ChatCompletionResult,
-  type ChatMessage,
-  type GenerateChatInput,
-  NakamaApiError,
-  type ProviderChatOptions,
-  type StreamChatHandlers,
+import type {
+  ChatCompletionResult,
+  ChatMessage,
+  GenerateChatInput,
+  StreamChatHandlers,
 } from "@nakama/core";
 import { estimateChatInputBreakdown } from "../../providers/usage-tracking";
 import {
@@ -22,11 +20,16 @@ import {
 } from "../org-guards";
 import { getRequestAuth, readJson } from "../shared";
 import type { HonoApp } from "../types";
+import {
+  capThinking,
+  failureOf,
+  holdChatMemory,
+  jsonValueSchema,
+  replaySafe,
+} from "./llm-request-safety";
 
 /** Output room held against the quota for one call, as the chat loop does. */
 const RESERVED_OUTPUT_TOKENS = 32_000;
-
-const jsonValueSchema = z.json();
 
 const toolCallSchema = z.object({
   arguments: z.record(z.string(), jsonValueSchema),
@@ -125,71 +128,6 @@ export type LlmStreamEvent =
   | { data: HandlerEvent<"onToolStart">; type: "toolStart" }
   | { data: ChatCompletionResult; type: "result" }
   | { data: { message: string; status: number }; type: "error" };
-
-/**
- * Request errors the desktop can act on, such as a prompt that is too long.
- * Not 401 or 403: those mean "sign in again" to the desktop, and here they
- * would come from this server's own provider key.
- */
-const PASSED_STATUSES = [400, 404, 408, 409, 413, 422] as const;
-
-type PassedStatus = (typeof PASSED_STATUSES)[number];
-
-interface Failure {
-  message: string;
-  status: PassedStatus | 429 | 502;
-}
-
-function isPassedStatus(status: number): status is PassedStatus {
-  return PASSED_STATUSES.some((passed) => passed === status);
-}
-
-function failureOf(error: Error): Failure {
-  if (!(error instanceof NakamaApiError)) {
-    return { message: error.message || "The model call failed.", status: 502 };
-  }
-
-  if (error.status === 429) {
-    return { message: "Your team's monthly limit is reached.", status: 429 };
-  }
-
-  return {
-    message: error.message || "The model call failed.",
-    status: isPassedStatus(error.status) ? error.status : 502,
-  };
-}
-
-const EFFORTS = ["low", "medium", "high"] as const;
-
-type Thinking = NonNullable<ProviderChatOptions["thinking"]>;
-
-/**
- * The desktop may turn thinking off or lower it, never raise it above the
- * workspace setting: thinking costs the org's tokens.
- */
-function capThinking(
-  requested: Thinking | undefined,
-  allowed: Thinking | undefined
-): Thinking | undefined {
-  if (!requested) {
-    return allowed;
-  }
-
-  if (!(requested.enabled && allowed?.enabled)) {
-    return;
-  }
-
-  const wanted = requested.effort ?? allowed.effort;
-
-  const effort =
-    wanted && allowed.effort
-      ? EFFORTS[
-          Math.min(EFFORTS.indexOf(wanted), EFFORTS.indexOf(allowed.effort))
-        ]
-      : allowed.effort;
-
-  return effort ? { effort, enabled: true } : { enabled: true };
-}
 
 function asError(caught: Error | string): Error {
   return caught instanceof Error ? caught : new Error(caught);
@@ -348,112 +286,151 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
 
     const { caller } = gate;
 
-    const request = chatRequestSchema.safeParse(
-      await readJson(c.req.raw, z.unknown())
+    // Before the body is read: the room is held until the stream ends.
+    const freeChatMemory = holdChatMemory(
+      caller.orgId,
+      c.req.header("content-length")
     );
 
-    if (!request.success) {
-      return c.json({ error: "Invalid request." }, 400);
-    }
-
-    const { model, ...body } = request.data;
-    const harness = await agent.desktopModelHarness({ ...caller, model });
-
-    if (!harness) {
+    if (!freeChatMemory) {
       return c.json(
-        { error: "No model is set up for this organization." },
+        { error: "Nakama Cloud is busy. Try again in a moment." },
         503
       );
     }
 
-    const abort = new AbortController();
-    c.req.raw.signal.addEventListener("abort", () => abort.abort(), {
-      once: true,
-    });
-
-    const input: GenerateChatInput = {
-      // SAFETY: chatMessageSchema accepts only the inline shapes of ChatMessage.
-      messages: body.messages as ChatMessage[],
-      providerOptions: {
-        ...harness.chatOptions,
-        thinking: capThinking(
-          body.providerOptions?.thinking,
-          harness.chatOptions?.thinking
-        ),
-      },
-      signal: abort.signal,
-      system: body.system,
-      tools: body.tools,
-    };
-
-    let release: (() => Promise<void>) | undefined;
+    let streaming = false;
 
     try {
-      release = await harness.assertCanStart?.(
-        estimateChatInputBreakdown(input).totalEstimatedInputTokens +
-          RESERVED_OUTPUT_TOKENS
-      );
-    } catch (error) {
-      const failure = failureOf(
-        error instanceof Error ? error : new Error(String(error))
+      const request = chatRequestSchema.safeParse(
+        await readJson(c.req.raw, z.unknown())
       );
 
-      return c.json({ error: failure.message }, failure.status);
-    }
+      if (!request.success) {
+        return c.json({ error: "Invalid request." }, 400);
+      }
 
-    const encoder = new TextEncoder();
+      const { model, ...body } = request.data;
+      const harness = await agent.desktopModelHarness({ ...caller, model });
 
-    // Each provider event goes out as it comes; nothing is kept here.
-    const stream = new ReadableStream<Uint8Array>({
-      cancel: () => abort.abort(),
-      start: (controller) => {
-        const send = (event: LlmStreamEvent) => {
-          if (!abort.signal.aborted) {
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify(event)}\n\n`)
-            );
+      if (!harness) {
+        return c.json(
+          { error: "No model is set up for this organization." },
+          503
+        );
+      }
+
+      const abort = new AbortController();
+      c.req.raw.signal.addEventListener("abort", () => abort.abort(), {
+        once: true,
+      });
+
+      const input: GenerateChatInput = {
+        // SAFETY: chatMessageSchema accepts only the inline shapes of ChatMessage.
+        messages: body.messages.map((message) => {
+          if (message.role !== "assistant" || !message.providerContent) {
+            return message;
           }
-        };
 
-        void harness.provider
-          .streamChat(input, {
-            onChunk: (data) => send({ data, type: "chunk" }),
-            onThinking: (data) => send({ data, type: "thinking" }),
-            onToolEnd: (data) => send({ data, type: "toolEnd" }),
-            onToolInputDelta: (data) => send({ data, type: "toolInputDelta" }),
-            onToolStart: (data) => send({ data, type: "toolStart" }),
-          })
-          .then((data) => {
-            // Count the call like a chat-loop step, so the org's limits hold.
-            harness.recordUsage?.({
-              estimated: Boolean(data.usage?.estimated ?? !data.usage),
-              inputTokens: data.usage?.inputTokens ?? 0,
-              outputTokens: data.usage?.outputTokens ?? 0,
-            });
-            send({ data, type: "result" });
-          })
-          .catch((error) =>
-            send({ data: failureOf(asError(error)), type: "error" })
-          )
-          .finally(async () => {
-            // A failed release must not leave the desktop waiting on the stream.
-            await release?.().catch(() => undefined);
+          const { providerContent, ...rest } = message;
+          const kept = replaySafe(providerContent);
 
+          return kept.length > 0 ? { ...rest, providerContent: kept } : rest;
+        }) as ChatMessage[],
+        providerOptions: {
+          ...harness.chatOptions,
+          thinking: capThinking(
+            body.providerOptions?.thinking,
+            harness.chatOptions?.thinking
+          ),
+        },
+        signal: abort.signal,
+        system: body.system,
+        tools: body.tools,
+      };
+
+      let release: (() => Promise<void>) | undefined;
+
+      try {
+        release = await harness.assertCanStart?.(
+          estimateChatInputBreakdown(input).totalEstimatedInputTokens +
+            RESERVED_OUTPUT_TOKENS
+        );
+      } catch (error) {
+        const failure = failureOf(
+          error instanceof Error ? error : new Error(String(error))
+        );
+
+        return c.json({ error: failure.message }, failure.status);
+      }
+
+      const encoder = new TextEncoder();
+
+      // Each provider event goes out as it comes; nothing is kept here.
+      const stream = new ReadableStream<Uint8Array>({
+        cancel: () => abort.abort(),
+        start: (controller) => {
+          const send = (event: LlmStreamEvent) => {
             if (!abort.signal.aborted) {
-              controller.close();
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify(event)}\n\n`)
+              );
             }
-          });
-      },
-    });
+          };
 
-    return new Response(stream, {
-      headers: {
-        "cache-control": "no-cache",
-        "content-type": "text/event-stream",
-      },
-    });
+          void harness.provider
+            .streamChat(input, {
+              onChunk: (data) => send({ data, type: "chunk" }),
+              onThinking: (data) => send({ data, type: "thinking" }),
+              onToolEnd: (data) => send({ data, type: "toolEnd" }),
+              onToolInputDelta: (data) =>
+                send({ data, type: "toolInputDelta" }),
+              onToolStart: (data) => send({ data, type: "toolStart" }),
+            })
+            .then((data) => {
+              // Count the call like a chat-loop step, so the org's limits hold.
+              harness.recordUsage?.({
+                estimated: Boolean(data.usage?.estimated ?? !data.usage),
+                inputTokens: data.usage?.inputTokens ?? 0,
+                outputTokens: data.usage?.outputTokens ?? 0,
+              });
+              send({ data, type: "result" });
+            })
+            .catch((error) =>
+              send({ data: failureOf(asError(error)), type: "error" })
+            )
+            .finally(async () => {
+              freeChatMemory();
+
+              // A failed release must not leave the desktop waiting on the stream.
+              await release?.().catch(() => undefined);
+
+              if (!abort.signal.aborted) {
+                controller.close();
+              }
+            });
+        },
+      });
+
+      streaming = true;
+
+      return new Response(stream, {
+        headers: {
+          "cache-control": "no-cache",
+          "content-type": "text/event-stream",
+        },
+      });
+    } finally {
+      // Returned before the stream: nothing holds the body any more.
+      if (!streaming) {
+        freeChatMemory();
+      }
+    }
   });
 }
+
+/** How fresh a browser sign-in must be to connect a computer. */
+const RECENT_SIGN_IN_MS = 10 * 60 * 1000;
 
 const enrollRequestSchema = z.object({
   installId: z.string().min(8).max(200),
@@ -484,6 +461,18 @@ export function registerComputerRoutes(
 
   app.post("/v1/computers", async (c) => {
     const { orgId, userId } = caller(c);
+    const { mode, session } = getRequestAuth(c);
+
+    // A computer is a sign-in that lasts. Only a browser sign-in from the
+    // last few minutes may make one, so an old or stolen session cannot.
+    const signedInAt =
+      mode === "browser-session"
+        ? Date.parse(session?.createdAt ?? "")
+        : Number.NaN;
+
+    if (!(Date.now() - signedInAt <= RECENT_SIGN_IN_MS)) {
+      return c.json({ error: "Sign in again to connect this computer." }, 401);
+    }
 
     const request = enrollRequestSchema.safeParse(
       await readJson(c.req.raw, z.unknown())

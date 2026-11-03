@@ -1,8 +1,10 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { NakamaClient } from "@nakama/client";
+import { NakamaApiError } from "@nakama/core/api-error";
+import { desktopConnectCode } from "@nakama/core/contract";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import {
   AuthContext,
   type AuthContextValue,
@@ -27,7 +29,9 @@ const link = new URLSearchParams({
   state: "state_123",
 });
 
-// SAFETY: DesktopConnectPage reads only activeOrg, orgs and user.
+const loggedOut: string[] = [];
+
+// SAFETY: DesktopConnectPage reads only activeOrg, logout, orgs and user.
 const auth = {
   activeOrg: {
     createdAt: "",
@@ -36,6 +40,11 @@ const auth = {
     role: "member",
     slug: "acme",
     updatedAt: "",
+  },
+  logout: () => {
+    loggedOut.push("logout");
+
+    return Promise.resolve();
   },
   orgs: [
     {
@@ -97,6 +106,97 @@ test("the return address carries the state and the new computer", () => {
     orgName: "Acme",
     state: "state_123",
   });
+});
+
+/** Stands in for the login page: shows where it sends the user back to. */
+function LoginPageStub() {
+  const { state } = useLocation();
+
+  return <p data-testid="login">{String(state?.from ?? "")}</p>;
+}
+
+function renderPage(search: string): HTMLElement {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  cleanups.push(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  act(() => {
+    root.render(
+      <ThemeContext.Provider
+        value={{
+          resolvedTheme: "light",
+          setTheme: () => undefined,
+          theme: "light",
+          toggleTheme: () => undefined,
+        }}
+      >
+        <AuthContext.Provider value={auth}>
+          <MemoryRouter initialEntries={[`/desktop/connect?${search}`]}>
+            <Routes>
+              <Route element={<DesktopConnectPage />} path="/desktop/connect" />
+              <Route element={<LoginPageStub />} path="/login" />
+            </Routes>
+          </MemoryRouter>
+        </AuthContext.Provider>
+      </ThemeContext.Provider>
+    );
+  });
+
+  return container;
+}
+
+async function settle(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  });
+}
+
+function connectButton(page: HTMLElement): HTMLButtonElement | undefined {
+  return [...page.querySelectorAll("button")].find(
+    (candidate) => candidate.textContent === "Connect"
+  );
+}
+
+test("the page shows the code Nakama Desktop shows, and Connect waits for it", async () => {
+  const page = renderPage(link.toString());
+
+  await settle();
+
+  expect(page.querySelector('[aria-label="Connect code"]')?.textContent).toBe(
+    await desktopConnectCode("state_123")
+  );
+  expect(connectButton(page)?.disabled).toBe(false);
+});
+
+test("an old sign-in signs out and asks to sign in again", async () => {
+  const enroll = spyOn(
+    NakamaClient.prototype,
+    "enrollComputer"
+  ).mockImplementation(() =>
+    Promise.reject(
+      new NakamaApiError("Sign in again to connect this computer.", 401)
+    )
+  );
+
+  cleanups.push(() => enroll.mockRestore());
+  loggedOut.length = 0;
+
+  const page = renderPage(link.toString());
+
+  await settle();
+  await act(async () => {
+    connectButton(page)?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  expect(loggedOut).toEqual(["logout"]);
+  expect(page.querySelector('[data-testid="login"]')?.textContent).toBe(
+    `/desktop/connect?${link.toString()}`
+  );
 });
 
 test("Connect enrolls the key for the org, and a bad link shows no Connect button", async () => {
@@ -162,9 +262,8 @@ test("Connect enrolls the key for the org, and a bad link shows no Connect butto
 
   const page = render(link.toString());
 
-  const button = [...page.querySelectorAll("button")].find(
-    (candidate) => candidate.textContent === "Connect"
-  );
+  await settle();
+  const button = connectButton(page);
 
   await act(async () => {
     button?.click();

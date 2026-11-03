@@ -154,6 +154,16 @@
       color: var(--muted);
     }
 
+    .code {
+      margin-top: 12px;
+      font:
+        600 22px / 1.2 ui-monospace,
+        SFMono-Regular,
+        Menlo,
+        monospace;
+      letter-spacing: 0.08em;
+    }
+
     .chevron {
       color: var(--muted);
     }
@@ -403,6 +413,7 @@
         <div class="center">
           <h1>Finish in your browser</h1>
           <p class="muted" id="waiting-host"></p>
+          <p class="code" id="waiting-code"></p>
           <div class="status" role="status">
             <svg
               aria-hidden="true"
@@ -463,8 +474,9 @@
       setError(errorId, "");
 
       if (choice.mode === "cloud") {
+        byId("waiting-code").textContent = "";
         byId("waiting-host").textContent =
-          `Press Connect on ${hostOf(choice.url ?? cloudUrl)}`;
+          `Press Connect on ${hostOf(choice.url ?? cloudUrl)} if it shows this code`;
         show("waiting");
       }
 
@@ -482,6 +494,10 @@
     }
 
     byId("cloud-host").textContent = hostOf(cloudUrl);
+
+    window.nakamaFirstRun.onCode((code) => {
+      byId("waiting-code").textContent = code;
+    });
 
     byId("sign-in").addEventListener("click", () =>
       choose({ mode: "cloud" }, "choices")

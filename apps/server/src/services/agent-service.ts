@@ -4057,7 +4057,7 @@ export class AgentService {
   async startNakamaCloudSignIn(input: {
     cloudUrl: string;
     computerName?: string;
-  }): Promise<{ connectUrl: string }> {
+  }): Promise<{ code: string; connectUrl: string }> {
     if (!this.nakamaCloud) {
       throw new NakamaApiError("Secrets are not set up on this computer.", 503);
     }

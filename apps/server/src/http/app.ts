@@ -38,6 +38,7 @@ import {
   registerLlmRoutes,
   registerNakamaCloudSignInRoutes,
 } from "./routes/llm";
+import { DESKTOP_CHAT_BODY_LIMIT_BYTES } from "./routes/llm-request-safety";
 import { registerMcpOAuthRoutes, registerMcpRoutes } from "./routes/mcp";
 import { registerModelRoutes } from "./routes/models";
 import { registerNotificationDestinationRoutes } from "./routes/notification-destinations";
@@ -320,10 +321,9 @@ export function createHonoApp(options: ServerOptions) {
   });
 
   // Nakama Desktop sends the whole chat, with images inline, on each call.
-  // 32 MiB is the largest request the model vendors take. Peak per call is
-  // about 3x the body: the raw text, the parsed copy and the vendor request.
+  // llm.ts also caps how many such bodies are held at once.
   const desktopChatBodyLimit = bodyLimit({
-    maxSize: 32 * 1024 * 1024,
+    maxSize: DESKTOP_CHAT_BODY_LIMIT_BYTES,
     onError: rejectOversizedBody,
   });
 

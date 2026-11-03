@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setSystemTime, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { z } from "zod";
 import { ComputerAuthService } from "../../services/computer-auth";
@@ -172,4 +172,27 @@ test("Connect is refused when the team turned off Nakama Desktop", async () => {
     listSchema.parse(await (await call(adaSession, "/v1/computers")).json())
       .computers
   ).toEqual([]);
+});
+
+test("connecting a computer needs a sign-in from the last few minutes", async () => {
+  const { adaSession, call } = await setup();
+
+  setSystemTime(new Date(Date.now() + 11 * 60 * 1000));
+
+  try {
+    const enrolled = await call(adaSession, "/v1/computers", {
+      body: JSON.stringify({
+        installId: "install_0001",
+        name: "Ada's MacBook",
+        publicKey: testDeviceKey().publicKey,
+      }),
+      method: "POST",
+    });
+
+    expect(enrolled.status).toBe(401);
+    // The session itself still works: only connecting needs a fresh sign-in.
+    expect((await call(adaSession, "/v1/computers")).status).toBe(200);
+  } finally {
+    setSystemTime();
+  }
 });

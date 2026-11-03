@@ -10,6 +10,10 @@ if (
   contextBridge.exposeInMainWorld("nakamaFirstRun", {
     cancel: () => ipcRenderer.invoke("nakama:first-run-cancel"),
     choose: (choice) => ipcRenderer.invoke("nakama:first-run", choice),
+    onCode: (show) =>
+      ipcRenderer.on("nakama:first-run-code", (_event, code) =>
+        show(String(code))
+      ),
   });
 }
 

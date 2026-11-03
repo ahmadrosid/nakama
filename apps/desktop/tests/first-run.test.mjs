@@ -121,6 +121,7 @@ describe("local sign-in", () => {
 
       if (String(url).endsWith("/v1/nakama-cloud/sign-in")) {
         return Response.json({
+          code: "123 456",
           connectUrl: "https://a.test/desktop/connect?state=s",
         });
       }
@@ -142,9 +143,11 @@ describe("local sign-in", () => {
   test("starts sign-in with the local token, opens the browser, and waits until signed in", async () => {
     const { calls, signIn } = await setup();
     const opened = [];
+    const codes = [];
 
     await signIn({
       cloudUrl: "https://a.test",
+      onCode: (code) => codes.push(code),
       openExternal: async (url) => {
         opened.push(url);
       },
@@ -152,6 +155,8 @@ describe("local sign-in", () => {
     });
 
     expect(opened).toEqual(["https://a.test/desktop/connect?state=s"]);
+    // Shown before the browser opens, to compare with the Connect page.
+    expect(codes).toEqual(["123 456"]);
     // An old account is signed out first, so "signed in" is this one.
     expect(calls[0]).toMatchObject({
       method: "DELETE",

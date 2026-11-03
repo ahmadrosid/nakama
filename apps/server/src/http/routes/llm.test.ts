@@ -1,5 +1,9 @@
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
-import type { UserConfig } from "@nakama/core";
+import {
+  NakamaApiError,
+  type ProviderClient,
+  type UserConfig,
+} from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -522,4 +526,159 @@ test("a desktop can lower or turn off thinking, never raise it above the workspa
   // Thinking is off for the workspace: the desktop cannot turn it on.
   harnessWith();
   expect(await chat({ effort: "high", enabled: true })).toBeUndefined();
+});
+
+/** Points the desktop harness at a stand-in provider for one test. */
+function useStandInProvider(
+  agent: Awaited<ReturnType<typeof setup>>["agent"],
+  streamChat: ProviderClient["streamChat"]
+) {
+  agent.desktopModelHarness = () =>
+    Promise.resolve({
+      provider: {
+        generateChat: () => Promise.reject(new Error("unused")),
+        generateText: () => Promise.reject(new Error("unused")),
+        name: "anthropic",
+        streamChat,
+      },
+    });
+}
+
+const okResult = {
+  assistantMessage: { content: "ok", role: "assistant" as const },
+  content: "ok",
+  toolCalls: [],
+};
+
+async function events(response: Response) {
+  return (await response.text())
+    .split("\n\n")
+    .filter((frame) => frame.startsWith("data: "))
+    .map((frame) => eventSchema.parse(JSON.parse(frame.slice(6))));
+}
+
+test("only provider items the cloud makes are replayed; references to stored items and files are dropped", async () => {
+  const { agent, app, pass } = await setup();
+  const seen: unknown[] = [];
+
+  useStandInProvider(agent, (input) => {
+    seen.push(input.messages);
+
+    return Promise.resolve(okResult);
+  });
+
+  const providerContent = [
+    { thinking: "Let me think.", signature: "sig", type: "thinking" },
+    { id: "rs_1", summary: [], type: "reasoning" },
+    { id: "msg_other_member", type: "item_reference" },
+    { source: { file_id: "file_org_secret", type: "file" }, type: "document" },
+    { file_id: "file_org_secret", text: "hi", type: "text" },
+    { fileData: { fileUri: "gs://org-bucket/x" } },
+    { text: "Thinking out loud", thought: true, thoughtSignature: "s" },
+    { details: "x", type: "reasoning.text" },
+  ];
+
+  const response = await post(
+    app,
+    "/v1/llm/chat",
+    pass,
+    JSON.stringify({
+      ...chatBody,
+      messages: [
+        { content: "Hi", role: "user" },
+        { content: "Hello", providerContent, role: "assistant" },
+        { content: "Again", role: "user" },
+      ],
+    })
+  );
+
+  await response.text();
+
+  expect(seen.at(-1)).toMatchObject([
+    { role: "user" },
+    {
+      providerContent: [
+        { type: "thinking" },
+        { type: "reasoning" },
+        { thoughtSignature: "s" },
+        { type: "reasoning.text" },
+      ],
+      role: "assistant",
+    },
+    { role: "user" },
+  ]);
+});
+
+test("a provider error reaches the desktop without keys, internal addresses or hosts", async () => {
+  const { agent, app, pass } = await setup();
+
+  useStandInProvider(agent, () =>
+    Promise.reject(
+      new NakamaApiError(
+        "OpenAI request failed (401): Incorrect API key provided: sk-proj-abcdef123456. Base URL http://models.internal:8000/v1 at 10.0.4.12:8000",
+        400
+      )
+    )
+  );
+
+  const [event] = await events(
+    await post(app, "/v1/llm/chat", pass, JSON.stringify(chatBody))
+  );
+
+  const error = z
+    .object({ message: z.string(), status: z.number() })
+    .parse(event?.data);
+
+  expect(error.status).toBe(400);
+
+  for (const internal of [
+    "sk-proj-abcdef123456",
+    "models.internal",
+    "10.0.4.12",
+  ]) {
+    expect(error.message).not.toContain(internal);
+  }
+
+  useStandInProvider(agent, () =>
+    Promise.reject(new Error("connect ECONNREFUSED 10.0.4.12:8000"))
+  );
+
+  const [network] = await events(
+    await post(app, "/v1/llm/chat", pass, JSON.stringify(chatBody))
+  );
+
+  expect(JSON.stringify(network?.data)).not.toContain("10.0.4.12");
+});
+
+test("an org may hold one big chat at a time; the next waits until the first ends", async () => {
+  const { agent, app, pass } = await setup();
+  let finish: () => void = () => undefined;
+
+  const firstDone = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+
+  useStandInProvider(agent, async () => {
+    await firstDone;
+
+    return okResult;
+  });
+
+  const big = JSON.stringify({
+    ...chatBody,
+    messages: [{ content: "A".repeat(20 * 1024 * 1024), role: "user" }],
+  });
+
+  const first = await post(app, "/v1/llm/chat", pass, big);
+
+  expect(first.status).toBe(200);
+  expect((await post(app, "/v1/llm/chat", pass, big)).status).toBe(503);
+
+  finish();
+  await first.text();
+
+  const again = await post(app, "/v1/llm/chat", pass, big);
+
+  expect(again.status).toBe(200);
+  await again.text();
 });
