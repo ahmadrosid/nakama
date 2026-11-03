@@ -865,6 +865,95 @@ describe("bash tool Nakama state guard", () => {
     expect(await readdir(profileWorkspace)).not.toContain("ran.txt");
   });
 
+  test("refuses glob-obfuscated paths into Nakama state", async () => {
+    await setupConfigDir();
+    const root = configDir.replaceAll("\\", "/");
+    const parent = path.dirname(root).replaceAll("\\", "/");
+    const dirName = path.basename(root);
+    const head = dirName.slice(0, -1);
+    const last = dirName.slice(-1);
+    // Non-secret leaf: the secret-name pattern cannot refuse these on its own,
+    // so only the glob pass can stop them.
+    const leaf = "orgs/org_test/workflow-data.sqlite";
+    const marker = path.join(profileWorkspace, "ran.txt").replaceAll("\\", "/");
+
+    const commands = [
+      // `?`/`*` in the config dir name, e.g. `~/.nak?ma/...` in production
+      `cat ${parent}/${head}*/${leaf}`,
+      `cat ${parent}/${head}?/${leaf}`,
+      // glob inside a variable assignment
+      `d=${parent}/${head}*/; cat $d/${leaf}`,
+      // glob on the orgs component of the state dir
+      "cat $NAKAMA_CONFIG_DIR/or*/x",
+      `ls ${parent}/${head}*/or*`,
+      // bracket expression, the form the first pass skipped
+      `cat ${parent}/${head}[${last}]/${leaf}`,
+      // bracket classes: literal `]` at start, and POSIX character classes
+      `cat ${parent}/${head}[]${last}]/${leaf}`,
+      `cat ${parent}/${head}[[:alnum:]]/${leaf}`,
+      // glob after a variable reference
+      `d=${parent}/${head}; cat $d*/${leaf}`,
+      `d=${parent}/${head}[${last}]; cat $d/${leaf}`,
+      // brace list whose first alternative is the real config dir
+      `cat ${parent}/${head}{${last},q}/${leaf}`,
+      // brace sequences: single-element sequences
+      `cat ${parent}/${head}{${last}..${last}}/${leaf}`,
+      // brace expansion cap: excessive combinations throw refusal rather than stalling
+      "echo {0..9}{0..9}{0..9}{0..9}",
+      // `..` climb that lands back on the state dir
+      `cat ${root}/orgs/org_test/profiles/p1/../../../../${head}*/${leaf}`,
+    ];
+
+    for (const command of commands) {
+      await expect(
+        runBash({ command: `${command}; touch ${marker}` }, context, {
+          backend: "host",
+        })
+      ).rejects.toThrow();
+    }
+
+    expect(await readdir(profileWorkspace)).not.toContain("ran.txt");
+  });
+
+  test("still runs globs that stay inside the profile workspace", async () => {
+    await setupConfigDir();
+    await writeFile(path.join(profileWorkspace, "notes1.txt"), "one\n");
+    await writeFile(path.join(profileWorkspace, "report.md"), "md\n");
+    const workspace = profileWorkspace.replaceAll("\\", "/");
+
+    const matched = await runBash({ command: "cat notes?.txt" }, context, {
+      backend: "host",
+    });
+
+    expect(matched.stdout.trim()).toBe("one");
+
+    const listed = await runBash({ command: `ls ${workspace}/*.md` }, context, {
+      backend: "host",
+    });
+
+    expect(listed.exitCode).toBe(0);
+    expect(listed.stdout).toContain("report.md");
+
+    // A relative multi-level glob resolves against the cwd, so it stays inside
+    // the workspace instead of drawing the OTHER_WORKSPACE refusal.
+    await mkdir(path.join(profileWorkspace, "reports", "q3"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(profileWorkspace, "reports", "q3", "summary.md"),
+      "q3\n"
+    );
+
+    const relative = await runBash(
+      { command: "cat reports/q?/summary.md" },
+      context,
+      { backend: "host" }
+    );
+
+    expect(relative.exitCode).toBe(0);
+    expect(relative.stdout.trim()).toBe("q3");
+  });
+
   test("NAKAMA_TENANT_BASH=0 refuses every channel but the CLI", async () => {
     await setupConfigDir();
     const previousTenantBash = process.env.NAKAMA_TENANT_BASH;
