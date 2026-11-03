@@ -54,6 +54,7 @@ import type {
   StoredProfileChangeEvent,
   StoredProfileComposioToolkitRecord,
   StoredProfileRecord,
+  StoredRegressionCaseRecord,
   StoredSessionMessageRecord,
   StoredSessionRecord,
   StoredSessionSummaryRecord,
@@ -579,6 +580,19 @@ interface ArtifactShareRow {
   source_path: string;
   storage_path: string;
   token_hash: string;
+}
+
+interface RegressionCaseRow {
+  created_at: string;
+  created_by_user_id: string | null;
+  expected_result: string;
+  id: string;
+  input: string;
+  org_id: string;
+  profile_id: string;
+  source_automation_id: string | null;
+  source_id: string;
+  source_type: string;
 }
 
 /**
@@ -3691,6 +3705,31 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE id = ? AND revoked_at IS NULL
   `);
 
+  const createRegressionCaseStmt = db.prepare(`
+    INSERT INTO regression_cases (
+      id, org_id, profile_id, source_type, source_id, source_automation_id,
+      input, expected_result, created_by_user_id, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const getRegressionCaseStmt = db.prepare<
+    RegressionCaseRow,
+    SQLQueryBindings[]
+  >(`
+    SELECT * FROM regression_cases
+    WHERE org_id = ? AND profile_id = ? AND id = ?
+    LIMIT 1
+  `);
+
+  const listRegressionCasesForProfileStmt = db.prepare<
+    RegressionCaseRow,
+    SQLQueryBindings[]
+  >(`
+    SELECT * FROM regression_cases
+    WHERE org_id = ? AND profile_id = ?
+    ORDER BY created_at DESC, id DESC
+  `);
+
   const getOrgMemberStmt = db.prepare<
     {
       org_id: string;
@@ -4781,6 +4820,21 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return result.changes > 0;
     },
 
+    async createRegressionCase(record) {
+      createRegressionCaseStmt.run(
+        record.id,
+        record.orgId,
+        record.profileId,
+        record.sourceType,
+        record.sourceId,
+        record.sourceAutomationId,
+        record.input,
+        record.expectedResult,
+        record.createdByUserId,
+        record.createdAt
+      );
+    },
+
     async createSharedAgentInstance(
       teamOrgId,
       publicationId,
@@ -5312,6 +5366,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const row = getProfileForOrgStmt.get(id, orgId);
 
       return row ? toProfileRecord(row) : null;
+    },
+
+    async getRegressionCase(orgId, profileId, caseId) {
+      const row = getRegressionCaseStmt.get(orgId, profileId, caseId);
+
+      return row ? toRegressionCaseRecord(row) : null;
     },
 
     async getSession(id) {
@@ -5918,6 +5978,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return listProfilesForOrgStmt
         .all(orgId)
         .map((row) => toProfileRecord(row));
+    },
+
+    async listRegressionCasesForProfile(orgId, profileId) {
+      return listRegressionCasesForProfileStmt
+        .all(orgId, profileId)
+        .map((row) => toRegressionCaseRecord(row));
     },
 
     async listSessionSummaries(profileId, channels, options = {}) {
@@ -7746,6 +7812,24 @@ function capSessionUserAgent(userAgent: string | null | undefined) {
   const trimmed = userAgent?.trim();
 
   return trimmed ? trimmed.slice(0, MAX_SESSION_USER_AGENT_LENGTH) : null;
+}
+
+function toRegressionCaseRecord(
+  row: RegressionCaseRow
+): StoredRegressionCaseRecord {
+  return {
+    createdAt: row.created_at,
+    createdByUserId: row.created_by_user_id,
+    expectedResult: row.expected_result,
+    id: row.id,
+    input: row.input,
+    orgId: row.org_id,
+    profileId: row.profile_id,
+    sourceAutomationId: row.source_automation_id,
+    sourceId: row.source_id,
+    // SAFETY: The table CHECK constrains this column to the union values.
+    sourceType: row.source_type as StoredRegressionCaseRecord["sourceType"],
+  };
 }
 
 function toBrowserSessionRecord(
