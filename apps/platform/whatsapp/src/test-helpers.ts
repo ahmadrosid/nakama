@@ -44,6 +44,11 @@ export function createMockClient(
     steps?: StreamStep[];
     autoComplete?: boolean;
     profiles?: ProfileSummary[];
+    /** What listProfiles answers for one org; other calls get `profiles`. */
+    profilesByOrgId?: Record<
+      string,
+      Array<Pick<ProfileSummary, "id" | "model" | "name">>
+    >;
     providerConfigured?: boolean;
     orgs?: UserOrgSummary[];
     messages?: ChatMessage[];
@@ -242,11 +247,18 @@ export function createMockClient(
       ok: true,
       providerConfigured: options.providerConfigured ?? false,
     }),
-    listProfiles: async () => {
+    listProfiles: async (orgId?: string) => {
       calls.listProfiles += 1;
 
+      const scoped = orgId ? options.profilesByOrgId?.[orgId] : undefined;
+
       return parseListProfilesResponse({
-        profiles: options.profiles ?? [createDefaultProfileSummary()],
+        profiles: scoped
+          ? scoped.map((profile) => ({
+              ...createDefaultProfileSummary(),
+              ...profile,
+            }))
+          : (options.profiles ?? [createDefaultProfileSummary()]),
       });
     },
     listUserOrgs: async () => {

@@ -11,6 +11,7 @@ import { createChatLock } from "@nakama/core/channel-chat-lock";
 import {
   type ChannelCommand,
   channelCommandHelp,
+  createWaitingTurns,
   describeChannelStatus,
   parseChannelCommand,
   runChannelCommand,
@@ -62,9 +63,7 @@ const SEEN_ACTIVITY_LIMIT = 500;
 const TEAMS_MAX_MESSAGE_CHARS = 6000;
 
 // "!" and not "/": typing "/" in Teams opens its own command menu.
-const COMMAND_PREFIX = "!";
-
-const HELP_TEXT = `Chat with me in this chat.\n\n${channelCommandHelp(COMMAND_PREFIX)}`;
+const HELP_TEXT = `Chat with me in this chat.\n\n${channelCommandHelp()}`;
 
 function isPersonalMessage(activity: TeamsActivity): boolean {
   return (
@@ -95,30 +94,8 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
   const seenActivities = new Set<string>();
   // Each turn from the moment it queues until the active-stream registry knows
   // it, which is only once it holds the chat lock, so !stop reaches the
-  // waiting ones through this map.
-  const waitingTurns = new Map<string, Set<AbortController>>();
-
-  function stopWaitingTurns(sessionKey: string): boolean {
-    const waiting = waitingTurns.get(sessionKey);
-
-    for (const turn of waiting ?? []) {
-      turn.abort();
-    }
-
-    waitingTurns.delete(sessionKey);
-
-    return (waiting?.size ?? 0) > 0;
-  }
-
-  function leaveWaiting(sessionKey: string, turn: AbortController): void {
-    const waiting = waitingTurns.get(sessionKey);
-
-    waiting?.delete(turn);
-
-    if (waiting?.size === 0) {
-      waitingTurns.delete(sessionKey);
-    }
-  }
+  // waiting ones here.
+  const waitingTurns = createWaitingTurns();
 
   async function resolveSession(
     scoped: NakamaClient,
@@ -215,11 +192,7 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
             return;
           }
 
-          try {
-            await work();
-          } catch (error) {
-            await reply(activity.conversationId, formatClientError(error));
-          }
+          await work();
         }),
       startSession: async () => {
         await createAndBindSession(scoped, sessionKey);
@@ -227,13 +200,10 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
       status: () => describeStatus(sessionKey),
       // Both are called, so the running turn and the queued ones all stop.
       stop: () => {
-        const stoppedWaiting = stopWaitingTurns(sessionKey);
+        const stoppedWaiting = waitingTurns.stop(sessionKey);
         const stoppedRunning = stopActiveStream(sessionKey);
 
         return stoppedWaiting || stoppedRunning;
-      },
-      stopRunning: () => {
-        stopActiveStream(sessionKey);
       },
     });
   }
@@ -325,7 +295,7 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
 
     const sessionKey = `teams:${activity.conversationId}`;
     const text = activity.text.trim();
-    const command = parseChannelCommand(text, COMMAND_PREFIX);
+    const command = parseChannelCommand(text);
 
     if (!allows(config, activity)) {
       // Only an unauthorized sender's code-shaped message is a pairing attempt.
@@ -351,11 +321,7 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
       return;
     }
 
-    const queued = new AbortController();
-    const waiting = waitingTurns.get(sessionKey) ?? new Set<AbortController>();
-
-    waiting.add(queued);
-    waitingTurns.set(sessionKey, waiting);
+    const queued = waitingTurns.join(sessionKey);
 
     try {
       await chatLock.withLock(sessionKey, async () => {
@@ -372,7 +338,7 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
 
         // Left here, not when the turn ends: a !stop that comes while the
         // finished answer is still being posted has nothing to stop.
-        leaveWaiting(sessionKey, queued);
+        waitingTurns.leave(sessionKey, queued);
 
         if (queued.signal.aborted) {
           stopActiveStream(sessionKey);
@@ -382,7 +348,7 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
       });
     } finally {
       // A turn turned away at the lock, or one whose access read failed.
-      leaveWaiting(sessionKey, queued);
+      waitingTurns.leave(sessionKey, queued);
     }
   };
 }

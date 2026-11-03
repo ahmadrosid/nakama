@@ -882,10 +882,9 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   ): Promise<void> {
     const status = await describeChannelStatus(client, {
       findAgent: async () => {
-        const profiles = await listSelectableProfiles();
-        const id = await resolveSessionProfileId(chatId);
+        const agent = await resolveSessionProfile(chatId);
 
-        return { agent: profiles.find((entry) => entry.id === id), id };
+        return { agent, id: agent.id };
       },
       label: "Profile",
       sessionId: sessionStore.get(chatId)?.sessionId,
@@ -967,14 +966,23 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   }
 
   async function resolveSessionProfileId(chatId: string): Promise<string> {
+    return (await resolveSessionProfile(chatId)).id;
+  }
+
+  /** The chat's agent. An owner's connection looks it up in the owner's org. */
+  async function resolveSessionProfile(chatId: string) {
     if (config.owner) {
       const { profiles } = await client.listProfiles(config.owner.orgId);
 
-      if (!profiles.some((profile) => profile.id === config.owner!.profileId)) {
+      const ownerProfile = profiles.find(
+        (profile) => profile.id === config.owner!.profileId
+      );
+
+      if (!ownerProfile) {
         throw new Error("The connection owner is unavailable.");
       }
 
-      return config.owner.profileId;
+      return ownerProfile;
     }
 
     const profiles = await listSelectableProfiles();
@@ -984,11 +992,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       const match = profiles.find((profile) => profile.id === storedProfileId);
 
       if (match) {
-        return match.id;
+        return match;
       }
     }
 
-    return pickProfileForOrg(profiles, config.profileId).id;
+    return pickProfileForOrg(profiles, config.profileId);
   }
 
   async function clearSessionArtifactState(

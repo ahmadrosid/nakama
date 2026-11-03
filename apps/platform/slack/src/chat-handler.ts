@@ -10,6 +10,8 @@ import {
 import { createChatLock } from "@nakama/core/channel-chat-lock";
 import {
   channelCommandHelp,
+  channelCommandWord,
+  createWaitingTurns,
   describeChannelStatus,
   parseChannelCommand,
   runChannelCommand,
@@ -81,9 +83,7 @@ const LINK_IN_DM_REPLY =
 const NO_CODE_PROMPT =
   "This bot is not linked yet. Open Nakama Integrations → Slack, generate a pairing code, then send it here.";
 
-const COMMAND_PREFIX = "!";
-
-const HELP_TEXT = `Chat with me in this DM, or @mention me in a channel. I reply in a thread and follow it after that.\n\n${channelCommandHelp(COMMAND_PREFIX)}`;
+const HELP_TEXT = `Chat with me in this DM, or @mention me in a channel. I reply in a thread and follow it after that.\n\n${channelCommandHelp()}`;
 
 /** Turns Slack's escaped message text back into what the user typed. */
 export function normalizeSlackText(text: string, botUserId: string): string {
@@ -297,6 +297,8 @@ export function wantsSlackEvent(
 }
 
 export function createChatHandler(deps: ChatHandlerDeps) {
+  // Turns waiting for the chat lock, which only !stop can reach.
+  const waitingTurns = createWaitingTurns();
   const { botTeamId, botUserId, owner, sessionStore, slack } = deps;
   const memberCache = new Map<string, { at: number; member: boolean }>();
 
@@ -385,13 +387,15 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       return;
     }
 
-    if (/^!(org|profile)(\s|$)/i.test(text)) {
+    const word = channelCommandWord(text);
+
+    if (word === "org" || word === "profile") {
       await reply(`This connection belongs to agent ${owner.profileId}.`);
 
       return;
     }
 
-    const command = parseChannelCommand(text, COMMAND_PREFIX);
+    const command = parseChannelCommand(text);
 
     if (command !== null) {
       await runChannelCommand(command, {
@@ -410,28 +414,44 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         },
         status: () =>
           describeStatus(deps.client.forOrg(owner.orgId), conversationKey),
-        stop: () => stopActiveStream(conversationKey),
-        stopRunning: () => {
-          stopActiveStream(conversationKey);
+        // Both are called, so the running turn and the queued ones all stop.
+        stop: () => {
+          const stoppedWaiting = waitingTurns.stop(conversationKey);
+          const stoppedRunning = stopActiveStream(conversationKey);
+
+          return stoppedWaiting || stoppedRunning;
         },
       });
 
       return;
     }
 
-    await chatLock.withLock(conversationKey, async () => {
-      // The connection belongs to one agent, so every request is pinned to its
-      // org; each event still gets its own client so turns never share one.
-      const client = deps.client.forOrg(owner.orgId);
-      await runTurn(client, event, conversationKey, text, isDm);
-    });
+    const queued = waitingTurns.join(conversationKey);
+
+    try {
+      await chatLock.withLock(conversationKey, async () => {
+        if (queued.signal.aborted) {
+          await reply("Stopped.");
+
+          return;
+        }
+
+        // The connection belongs to one agent, so every request is pinned to
+        // its org; each event still gets its own client so turns never share one.
+        const client = deps.client.forOrg(owner.orgId);
+        await runTurn(client, event, conversationKey, text, isDm, queued);
+      });
+    } finally {
+      waitingTurns.leave(conversationKey, queued);
+    }
 
     async function runTurn(
       client: NakamaClient,
       inbound: SlackMessageEvent,
       sessionKey: string,
       message: string,
-      direct: boolean
+      direct: boolean,
+      queued: AbortController
     ): Promise<void> {
       if (!message) {
         await reply("Send me a message to get started. Try !help.");
@@ -442,6 +462,15 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       const session = await resolveSession(client, sessionKey);
       await onTurnStart?.();
       const signal = registerActiveStream(sessionKey);
+
+      // From here !stop reaches the turn through the registry. A stop that
+      // came during the session lookup is carried over.
+      waitingTurns.leave(sessionKey, queued);
+
+      if (queued.signal.aborted) {
+        stopActiveStream(sessionKey);
+      }
+
       let pending = "";
       // Early posts run one after another so their messages stay in order.
       let earlyPosts: Promise<void> = Promise.resolve();

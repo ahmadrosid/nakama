@@ -256,6 +256,118 @@ test("!new stops a reply that is still streaming instead of waiting behind it", 
   });
 });
 
+test("!stop also stops a message waiting behind the running reply", async () => {
+  await withTempHome("nakama-slack-stop-queued-", async (homeDir) => {
+    await saveTokens(OWNER);
+    let markStarted = () => {};
+
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+
+    let streams = 0;
+
+    // Only the first turn hangs, so a queued one that still runs ends at once.
+    const hangFirst: FakeStream = (handlers, signal) => {
+      streams += 1;
+
+      if (streams > 1) {
+        handlers.onChunk("queued reply");
+
+        return Promise.resolve("queued reply");
+      }
+
+      return new Promise((_resolve, reject) => {
+        markStarted();
+        signal.addEventListener("abort", () => {
+          const error = new Error("aborted");
+          error.name = "AbortError";
+          reject(error);
+        });
+      });
+    };
+
+    const { handle, posted, turns } = createHarness(
+      homeDir,
+      undefined,
+      {},
+      { stream: hangFirst }
+    );
+
+    const dm = { channel: "D0QUEUED", channel_type: "im" };
+    const running = handle(message({ ...dm, text: "long job" }));
+    const queued = handle(message({ ...dm, text: "queued", ts: "101" }));
+    await started;
+    // The queued message reads the Slack config from disk before it waits.
+    await Bun.sleep(50);
+
+    await handle(message({ ...dm, text: "!stop", ts: "102" }));
+    await Promise.all([running, queued]);
+
+    expect(turns).toEqual(["long job"]);
+    expect(posted.map((entry) => entry.text).sort()).toEqual([
+      "Stopped.",
+      "Stopped.",
+      "Stopping…",
+    ]);
+  });
+});
+
+// The turn holds the lock but has no stop signal yet while it finds its
+// session, so only the queue of waiting turns can reach it there.
+test("!stop while a turn finds its session stops it before the agent answers", async () => {
+  await withTempHome("nakama-slack-stop-lookup-", async (homeDir) => {
+    await saveTokens(OWNER);
+    let markCreating = () => {};
+
+    let finishCreating = () => {};
+
+    const creating = new Promise<void>((resolve) => {
+      markCreating = resolve;
+    });
+
+    const created = new Promise<void>((resolve) => {
+      finishCreating = resolve;
+    });
+
+    const { handle, posted } = createHarness(
+      homeDir,
+      undefined,
+      {},
+      {
+        beforeCreateSession: async () => {
+          markCreating();
+          await created;
+        },
+        stream: (handlers, signal) => {
+          if (signal.aborted) {
+            const error = new Error("aborted");
+            error.name = "AbortError";
+
+            return Promise.reject(error);
+          }
+
+          handlers.onChunk("answer");
+
+          return Promise.resolve("answer");
+        },
+      }
+    );
+
+    const dm = { channel: "D0LOOKUP", channel_type: "im" };
+    const running = handle(message({ ...dm, text: "hello" }));
+    await creating;
+    await handle(message({ ...dm, text: "!stop", ts: "101" }));
+    finishCreating();
+    await running;
+
+    expect(posted.map((entry) => entry.text)).toEqual([
+      "Stopping…",
+      "Stopped.",
+    ]);
+  });
+});
+
 test("only the five command words are commands, in any letter case", async () => {
   await withTempHome("nakama-slack-words-", async (homeDir) => {
     await saveTokens(OWNER);

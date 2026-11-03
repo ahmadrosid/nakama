@@ -32,7 +32,11 @@ export function createHarness(
   homeDir: string,
   orgs = createDefaultTestOrgs(),
   members: Record<string, SlackMember> = {},
-  options: { postDelayMs?: (text: string) => number; stream?: FakeStream } = {}
+  options: {
+    beforeCreateSession?: () => Promise<void>;
+    postDelayMs?: (text: string) => number;
+    stream?: FakeStream;
+  } = {}
 ) {
   const posted: Posted[] = [];
   const turns: string[] = [];
@@ -87,7 +91,11 @@ export function createHarness(
   // SAFETY: The handler calls only the methods supplied by this mock.
   const client = {
     createChatSession: () => createSession(),
-    createSession: async () => createSession(),
+    createSession: async () => {
+      await options.beforeCreateSession?.();
+
+      return createSession();
+    },
     forOrg: (orgId: string | null) => {
       orgRequests.push(orgId);
 

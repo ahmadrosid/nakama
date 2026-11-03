@@ -4,6 +4,8 @@ import {
   type ChannelCommand,
   type ChannelCommandHandlers,
   channelCommandHelp,
+  channelCommandWord,
+  createWaitingTurns,
   describeChannelStatus,
   parseChannelCommand,
   runChannelCommand,
@@ -11,25 +13,30 @@ import {
 import type { ProviderName } from "./contract";
 
 describe("parseChannelCommand", () => {
-  test("reads the first word after the prefix, in any letter case", () => {
-    expect(parseChannelCommand("!help", "!")).toBe("help");
-    expect(parseChannelCommand("!New please", "!")).toBe("new");
-    expect(parseChannelCommand("!STOP", "!")).toBe("stop");
-    expect(parseChannelCommand("!clear\nnow", "!")).toBe("clear");
-    expect(parseChannelCommand("/status", "/")).toBe("status");
+  test("reads the first word after the !, in any letter case", () => {
+    expect(parseChannelCommand("!help")).toBe("help");
+    expect(parseChannelCommand("!New please")).toBe("new");
+    expect(parseChannelCommand("!STOP")).toBe("stop");
+    expect(parseChannelCommand("!clear\nnow")).toBe("clear");
   });
 
   test("anything else is a message for the agent", () => {
-    expect(parseChannelCommand("!urgent summarise the report", "!")).toBeNull();
-    expect(parseChannelCommand("help", "!")).toBeNull();
-    expect(parseChannelCommand("!", "!")).toBeNull();
-    expect(parseChannelCommand("/new", "!")).toBeNull();
-    expect(parseChannelCommand("please !stop", "!")).toBeNull();
+    expect(parseChannelCommand("!urgent summarise the report")).toBeNull();
+    expect(parseChannelCommand("help")).toBeNull();
+    expect(parseChannelCommand("!")).toBeNull();
+    expect(parseChannelCommand("/new")).toBeNull();
+    expect(parseChannelCommand("please !stop")).toBeNull();
   });
 });
 
-test("channelCommandHelp lists the five commands with the channel's prefix", () => {
-  expect(channelCommandHelp("!")).toBe(
+test("channelCommandWord gives a channel its own words with the same rules", () => {
+  expect(channelCommandWord("!Org beta")).toBe("org");
+  expect(channelCommandWord("!")).toBeNull();
+  expect(channelCommandWord("org")).toBeNull();
+});
+
+test("channelCommandHelp lists the five commands", () => {
+  expect(channelCommandHelp()).toBe(
     [
       "!new: start a fresh conversation",
       "!clear: clear this conversation's history",
@@ -65,9 +72,6 @@ function createHandlers(overrides: Partial<ChannelCommandHandlers> = {}) {
 
       return true;
     },
-    stopRunning: () => {
-      events.push("stopRunning");
-    },
     ...overrides,
   };
 
@@ -99,7 +103,7 @@ describe("runChannelCommand", () => {
     const started = createHandlers();
     await runChannelCommand("new", started.handlers);
     expect(started.events).toEqual([
-      "stopRunning",
+      "stop",
       "lock",
       "startSession",
       "reply:Started a new conversation.",
@@ -109,7 +113,7 @@ describe("runChannelCommand", () => {
     const cleared = createHandlers();
     await runChannelCommand("clear", cleared.handlers);
     expect(cleared.events).toEqual([
-      "stopRunning",
+      "stop",
       "lock",
       "clearSession",
       "reply:History cleared.",
@@ -117,15 +121,19 @@ describe("runChannelCommand", () => {
     ]);
   });
 
-  test("a failure inside the lock reaches the channel", async () => {
+  test("a failed new or clear is answered inside the lock", async () => {
     const failure = new Error("server down");
 
     const { events, handlers } = createHandlers({
+      clearSession: () => Promise.reject(failure),
       startSession: () => Promise.reject(failure),
     });
 
-    await expect(runChannelCommand("new", handlers)).rejects.toBe(failure);
-    expect(events).toEqual(["stopRunning", "lock"]);
+    await runChannelCommand("new", handlers);
+    await runChannelCommand("clear", handlers);
+
+    const answered = ["stop", "lock", `reply:${formatClientError(failure)}`];
+    expect(events).toEqual([...answered, "unlock", ...answered, "unlock"]);
   });
 
   test("covers every command", async () => {
@@ -142,6 +150,33 @@ describe("runChannelCommand", () => {
       await runChannelCommand(command, handlers);
       expect(events.some((event) => event.startsWith("reply:"))).toBe(true);
     }
+  });
+});
+
+describe("createWaitingTurns", () => {
+  test("stop aborts every turn waiting on that chat and says so", () => {
+    const waiting = createWaitingTurns();
+    const first = waiting.join("chat-1");
+    const second = waiting.join("chat-1");
+    const other = waiting.join("chat-2");
+
+    expect(waiting.stop("chat-1")).toBe(true);
+    expect([first, second, other].map((turn) => turn.signal.aborted)).toEqual([
+      true,
+      true,
+      false,
+    ]);
+    expect(waiting.stop("chat-1")).toBe(false);
+  });
+
+  test("a turn that left is out of reach", () => {
+    const waiting = createWaitingTurns();
+    const turn = waiting.join("chat-1");
+
+    waiting.leave("chat-1", turn);
+
+    expect(waiting.stop("chat-1")).toBe(false);
+    expect(turn.signal.aborted).toBe(false);
   });
 });
 
@@ -284,7 +319,7 @@ describe("describeChannelStatus", () => {
     expect(looked).toBe(false);
   });
 
-  test("a failed lookup becomes the error message", async () => {
+  test("a server that cannot be reached is the whole answer", async () => {
     const failure = new Error("connection refused");
     const { source } = createSource({ failHealth: failure });
 
@@ -296,15 +331,24 @@ describe("describeChannelStatus", () => {
     expect(status).toBe(formatClientError(failure));
   });
 
-  test("an agent lookup that throws becomes the error message", async () => {
+  // The server lines tell the user where to look for the cause.
+  test("a failed agent lookup keeps the server lines and the session", async () => {
     const failure = new Error("The connection owner is unavailable.");
     const { source } = createSource({ provider: "openai" });
 
     const status = await describeChannelStatus(source, {
       findAgent: () => Promise.reject(failure),
       label: "Agent",
+      sessionId: "abcdefgh-1234",
     });
 
-    expect(status).toBe(formatClientError(failure));
+    expect(status).toBe(
+      [
+        "Server: ok",
+        "Provider configured: yes",
+        formatClientError(failure),
+        "Session: abcdefgh",
+      ].join("\n")
+    );
   });
 });

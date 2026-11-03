@@ -15,32 +15,79 @@ export const CHANNEL_COMMANDS = [
 
 export type ChannelCommand = (typeof CHANNEL_COMMANDS)[number];
 
-/**
- * "!New please" is "new". Any other message is null and goes to the agent,
- * "!urgent summarise the report" included.
- */
-export function parseChannelCommand(
-  text: string,
-  prefix: string
-): ChannelCommand | null {
-  if (!text.startsWith(prefix)) {
+/** The word after "!", in lower case, or null for a message without one. */
+export function channelCommandWord(text: string): string | null {
+  if (!text.startsWith("!")) {
     return null;
   }
 
   // Phone keyboards capitalise the first letter of a message.
-  const word = (text.slice(prefix.length).split(/\s+/)[0] ?? "").toLowerCase();
+  return (text.slice(1).split(/\s+/)[0] ?? "").toLowerCase() || null;
+}
+
+/**
+ * "!New please" is "new". Any other message is null and goes to the agent,
+ * "!urgent summarise the report" included.
+ */
+export function parseChannelCommand(text: string): ChannelCommand | null {
+  const word = channelCommandWord(text);
 
   return CHANNEL_COMMANDS.find((command) => command === word) ?? null;
 }
 
-export function channelCommandHelp(prefix: string): string {
+export function channelCommandHelp(): string {
   return [
-    `${prefix}new: start a fresh conversation`,
-    `${prefix}clear: clear this conversation's history`,
-    `${prefix}stop: stop the current reply`,
-    `${prefix}status: server and model status`,
-    `${prefix}help: this message`,
+    "!new: start a fresh conversation",
+    "!clear: clear this conversation's history",
+    "!stop: stop the current reply",
+    "!status: server and model status",
+    "!help: this message",
   ].join("\n");
+}
+
+/**
+ * Turns that wait for a chat's lock. A stop aborts them here, because the
+ * active-stream registry only knows the turn that holds the lock.
+ */
+export function createWaitingTurns() {
+  const waiting = new Map<string, Set<AbortController>>();
+
+  return {
+    /** Called before the turn queues on the lock. */
+    join(key: string): AbortController {
+      const turn = new AbortController();
+      const turns = waiting.get(key) ?? new Set<AbortController>();
+
+      turns.add(turn);
+      waiting.set(key, turns);
+
+      return turn;
+    },
+
+    /** Called once the turn can be stopped through the registry, or ends. */
+    leave(key: string, turn: AbortController): void {
+      const turns = waiting.get(key);
+
+      turns?.delete(turn);
+
+      if (turns?.size === 0) {
+        waiting.delete(key);
+      }
+    },
+
+    /** Aborts every waiting turn; true when there was one. */
+    stop(key: string): boolean {
+      const turns = waiting.get(key);
+
+      for (const turn of turns ?? []) {
+        turn.abort();
+      }
+
+      waiting.delete(key);
+
+      return (turns?.size ?? 0) > 0;
+    },
+  };
 }
 
 export interface ChannelCommandHandlers {
@@ -51,10 +98,8 @@ export interface ChannelCommandHandlers {
   runLocked(work: () => Promise<void>): Promise<void>;
   startSession(): Promise<void>;
   status(): Promise<string>;
-  /** For stop: true when a turn was stopped. */
+  /** Stops the running turn and the ones waiting; true when there was one. */
   stop(): boolean;
-  /** For new and clear: stops the running turn so they do not wait for it. */
-  stopRunning(): void;
 }
 
 /** Answers a command. It never reaches the agent as a turn. */
@@ -86,15 +131,19 @@ export async function runChannelCommand(
     case "clear": {
       // A turn holds the chat lock until it ends, so stop it before
       // queueing on the lock; otherwise this waits for the whole turn.
-      handlers.stopRunning();
+      handlers.stop();
 
       await handlers.runLocked(async () => {
-        if (command === "new") {
-          await handlers.startSession();
-          await handlers.reply("Started a new conversation.");
-        } else {
-          await handlers.clearSession();
-          await handlers.reply("History cleared.");
+        try {
+          if (command === "new") {
+            await handlers.startSession();
+            await handlers.reply("Started a new conversation.");
+          } else {
+            await handlers.clearSession();
+            await handlers.reply("History cleared.");
+          }
+        } catch (error) {
+          await handlers.reply(formatClientError(error));
         }
       });
 
@@ -119,20 +168,29 @@ export interface ChannelStatusOptions {
   sessionId?: string | null;
 }
 
-/** The status command's answer, or the error that stopped it. */
+/**
+ * The status command's answer. A failed agent or model lookup becomes a line
+ * of its own, so the server lines above it stay.
+ */
 export async function describeChannelStatus(
   source: ChannelStatusSource,
   options: ChannelStatusOptions
 ): Promise<string> {
+  let health: Awaited<ReturnType<ChannelStatusSource["health"]>>;
+
   try {
-    const health = await source.health();
+    health = await source.health();
+  } catch (error) {
+    return formatClientError(error);
+  }
 
-    const lines = [
-      `Server: ${health.ok ? "ok" : "degraded"}`,
-      `Provider configured: ${health.providerConfigured ? "yes" : "no"}`,
-    ];
+  const lines = [
+    `Server: ${health.ok ? "ok" : "degraded"}`,
+    `Provider configured: ${health.providerConfigured ? "yes" : "no"}`,
+  ];
 
-    if (health.providerConfigured) {
+  if (health.providerConfigured) {
+    try {
       const [models, { agent, id }] = await Promise.all([
         source.getModels(),
         options.findAgent(),
@@ -145,16 +203,16 @@ export async function describeChannelStatus(
       lines.push(`${options.label}: ${agent?.name ?? id}`);
       lines.push(`Provider: ${models.provider ?? "unknown"}`);
       lines.push(`Model: ${model}`);
-    } else {
-      lines.push("Chat runs in offline mode without an API key.");
+    } catch (error) {
+      lines.push(formatClientError(error));
     }
-
-    if (options.sessionId) {
-      lines.push(`Session: ${options.sessionId.slice(0, 8)}`);
-    }
-
-    return lines.join("\n");
-  } catch (error) {
-    return formatClientError(error);
+  } else {
+    lines.push("Chat runs in offline mode without an API key.");
   }
+
+  if (options.sessionId) {
+    lines.push(`Session: ${options.sessionId.slice(0, 8)}`);
+  }
+
+  return lines.join("\n");
 }

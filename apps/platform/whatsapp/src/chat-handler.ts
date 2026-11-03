@@ -799,10 +799,9 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   ): Promise<void> {
     const status = await describeChannelStatus(client, {
       findAgent: async () => {
-        const id = await resolveProfileId();
-        const { profiles } = await client.listProfiles();
+        const agent = await resolveProfile();
 
-        return { agent: profiles.find((entry) => entry.id === id), id };
+        return { agent, id: agent.id };
       },
       label: "Agent",
       sessionId: sessionStore.get(conversationKey)?.sessionId,
@@ -812,14 +811,23 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   }
 
   async function resolveProfileId(): Promise<string> {
+    return (await resolveProfile()).id;
+  }
+
+  /** The chat's agent. An owner's connection looks it up in the owner's org. */
+  async function resolveProfile() {
     if (config.owner) {
       const { profiles } = await client.listProfiles(config.owner.orgId);
 
-      if (!profiles.some((profile) => profile.id === config.owner!.profileId)) {
+      const ownerProfile = profiles.find(
+        (profile) => profile.id === config.owner!.profileId
+      );
+
+      if (!ownerProfile) {
         throw new Error("The connection owner is unavailable.");
       }
 
-      return config.owner.profileId;
+      return ownerProfile;
     }
 
     const fileConfig = authStore.getConfig();
@@ -829,7 +837,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     const profiles = await client.listProfiles();
 
-    return pickProfileForOrg(profiles.profiles, preferredProfileId).id;
+    return pickProfileForOrg(profiles.profiles, preferredProfileId);
   }
 
   async function resolveSession(jid: string): Promise<RemoteChatSession> {
