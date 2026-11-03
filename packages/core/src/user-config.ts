@@ -623,7 +623,7 @@ export async function saveUserWebPublicUrl(
   const trimmed = webPublicUrl.trim();
 
   if (!(trimmed && isValidBaseUrl(trimmed))) {
-    throw new Error("webPublicUrl must be a valid http or https URL.");
+    throw new Error("Public web URL must be a valid http or https URL.");
   }
 
   const normalized = normalizeBaseUrl(trimmed);

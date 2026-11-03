@@ -71,6 +71,41 @@ const MEET_RECORDING_TOOLKITS = new Set(["gmail", "googledrive"]);
 
 const MEET_RETURN_PATH = "/google-meet?import=recording";
 
+const COMPOSIO_KEY_REJECTED =
+  "Composio rejected the project API key. Check the key in Composio, then save it again.";
+
+function httpStatusOf(error: Error): number | undefined {
+  if (!("status" in error)) {
+    return undefined;
+  }
+
+  const { status } = error;
+
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- The Composio SDK puts an untyped HTTP status on the cause; there is no schema to parse it with.
+  return typeof status === "number" ? status : undefined;
+}
+
+/**
+ * The SDK wraps every toolkit-list failure as "Failed to fetch toolkits", so
+ * the HTTP status on the cause is the only way to tell a rejected key from a
+ * network problem.
+ */
+function isComposioAuthFailure(error: Error): boolean {
+  let current: Error | undefined = error;
+
+  while (current) {
+    const status = httpStatusOf(current);
+
+    if (status === 401 || status === 403) {
+      return true;
+    }
+
+    current = current.cause instanceof Error ? current.cause : undefined;
+  }
+
+  return false;
+}
+
 /**
  * A path on this site, never another origin: the OAuth callback redirects to
  * it, so `//evil.example` or `/\\evil.example` would be an open redirect.
@@ -529,9 +564,9 @@ export class ComposioService {
       await client.listCatalogToolkits({ limit: 1 });
     } catch (error) {
       throw new NakamaApiError(
-        error instanceof Error
-          ? error.message
-          : "Failed to validate Composio API key.",
+        error instanceof Error && isComposioAuthFailure(error)
+          ? COMPOSIO_KEY_REJECTED
+          : "Could not reach Composio to check the project API key. Check your network and the key in Composio, then save it again.",
         400
       );
     }
@@ -619,9 +654,9 @@ export class ComposioService {
       };
     } catch (error) {
       const catalogError =
-        error instanceof Error
-          ? error.message
-          : "Failed to load Composio toolkit catalog.";
+        error instanceof Error && isComposioAuthFailure(error)
+          ? COMPOSIO_KEY_REJECTED
+          : "Check your network and the project API key in Composio, then try again.";
 
       return {
         catalog: [],
