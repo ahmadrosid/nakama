@@ -10,11 +10,15 @@
     <style>
     :root {
       --bg: #fafafa;
-      --fg: #18181b;
-      --muted: #71717a;
+      --card: #ffffff;
+      --fg: #0a0a0a;
+      --muted: #52525b;
       --line: #e4e4e7;
-      --accent: #2563eb;
-      --danger: #dc2626;
+      --accent: #b45309;
+      --tile: #0a0a0a;
+      --tile-fg: #ffffff;
+      --soft: #f4f4f5;
+      --danger: #b91c1c;
       font:
         14px / 1.5 -apple-system,
         BlinkMacSystemFont,
@@ -25,13 +29,21 @@
 
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg: #111113;
-        --fg: #fafafa;
+        --bg: #0a0a0a;
+        --card: #18181b;
+        --fg: #ffffff;
         --muted: #a1a1aa;
         --line: #27272a;
-        --accent: #60a5fa;
+        --accent: #f59e0b;
+        --tile: #ffffff;
+        --tile-fg: #0a0a0a;
+        --soft: #27272a;
         --danger: #f87171;
       }
+    }
+
+    [hidden] {
+      display: none !important;
     }
 
     body {
@@ -41,67 +53,33 @@
     }
 
     main {
-      display: grid;
-      gap: 14px;
-      padding: 48px 40px;
+      box-sizing: border-box;
+      height: 100vh;
+      padding: 48px 48px 24px;
+    }
+
+    section {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      height: 100%;
     }
 
     h1 {
-      margin: 0 0 12px;
-      font-size: 22px;
+      margin: 0;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    button,
+    input {
+      font: inherit;
+      color: inherit;
     }
 
     button {
-      padding: 10px 16px;
-      font: inherit;
-      font-weight: 600;
       cursor: pointer;
-      border-radius: 8px;
-    }
-
-    .primary {
-      color: #fff;
-      background: var(--accent);
-      border: 0;
-    }
-
-    .secondary {
-      color: inherit;
-      background: transparent;
-      border: 1px solid var(--line);
-    }
-
-    .link {
-      justify-self: center;
-      padding: 4px;
-      font-weight: 500;
-      color: var(--muted);
-      background: none;
-      border: 0;
-    }
-
-    input {
-      padding: 9px 12px;
-      font: inherit;
-      color: inherit;
-      background: transparent;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-    }
-
-    label {
-      font-weight: 600;
-    }
-
-    .row {
-      display: grid;
-      gap: 6px;
-    }
-
-    .error {
-      min-height: 1.5em;
-      margin: 0;
-      color: var(--danger);
     }
 
     button:disabled {
@@ -113,48 +91,378 @@
       outline: 2px solid var(--accent);
       outline-offset: 2px;
     }
+
+    .mark {
+      width: 36px;
+      height: 36px;
+      color: var(--fg);
+    }
+
+    .cards {
+      display: flex;
+      flex-grow: 1;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .card {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      padding: 18px;
+      text-align: left;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+    }
+
+    .card.primary {
+      border: 2px solid var(--accent);
+    }
+
+    .tile {
+      display: flex;
+      flex-shrink: 0;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      color: var(--fg);
+      background: var(--soft);
+      border-radius: 12px;
+    }
+
+    .primary .tile {
+      color: var(--tile-fg);
+      background: var(--tile);
+    }
+
+    .card-text {
+      display: flex;
+      flex-grow: 1;
+      flex-direction: column;
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .card-detail,
+    .muted {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .chevron {
+      color: var(--muted);
+    }
+
+    .link {
+      align-self: center;
+      min-height: 44px;
+      padding: 0 12px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+      background: none;
+      border: 0;
+    }
+
+    .footer {
+      display: flex;
+      justify-content: center;
+      padding-top: 8px;
+      border-top: 1px solid var(--line);
+    }
+
+    .back {
+      align-self: flex-start;
+      margin: -16px 0 0 -12px;
+    }
+
+    form {
+      display: flex;
+      flex-grow: 1;
+      flex-direction: column;
+      gap: 20px;
+      justify-content: center;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    label {
+      font-weight: 600;
+    }
+
+    input {
+      box-sizing: border-box;
+      height: 48px;
+      padding: 0 14px;
+      font-size: 15px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+    }
+
+    input[aria-invalid="true"] {
+      border-color: var(--danger);
+    }
+
+    .solid {
+      height: 48px;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--tile-fg);
+      background: var(--tile);
+      border: 0;
+      border-radius: 10px;
+    }
+
+    .outline {
+      height: 48px;
+      font-size: 15px;
+      font-weight: 500;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+    }
+
+    .error {
+      min-height: 1.5em;
+      margin: 0;
+      font-size: 13px;
+      color: var(--danger);
+    }
+
+    .center {
+      display: flex;
+      flex-grow: 1;
+      flex-direction: column;
+      gap: 16px;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .status {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding: 8px 16px;
+      font-size: 13px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+    }
+
+    .spin {
+      color: var(--accent);
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .spin {
+        animation: none;
+      }
+    }
     </style>
   </head>
   <body>
     <main>
-      <h1>Welcome to Nakama</h1>
-      <div class="row" id="choices">
-        <button class="primary" id="sign-in" type="button">
-          Sign in to Nakama
-        </button>
-        <button class="secondary" id="company" type="button">
-          Use my company's server
-        </button>
-        <form class="row" hidden id="company-form">
-          <label for="url">Server address</label>
-          <input id="url" placeholder="https://nakama.example.com" type="url">
-          <button class="primary" type="submit">Continue</button>
+      <section id="choices">
+        <svg aria-hidden="true" class="mark" fill="none" viewBox="0 0 48 48">
+          <path
+            d="M24 10.58L8.5 37.42L39.5 37.42Z"
+            stroke="currentColor"
+            stroke-linejoin="round"
+            stroke-width="4.2"
+          />
+          <circle cx="24" cy="10.58" fill="currentColor" r="7.5" />
+          <circle cx="8.5" cy="37.42" fill="currentColor" r="7.5" />
+          <circle cx="39.5" cy="37.42" fill="currentColor" r="7.5" />
+        </svg>
+        <h1>Welcome to Nakama</h1>
+        <div class="cards">
+          <button class="card primary" id="sign-in" type="button">
+            <span class="tile">
+              <svg
+                aria-hidden="true"
+                fill="none"
+                height="22"
+                viewBox="0 0 24 24"
+                width="22"
+              >
+                <path
+                  d="M17.5 19a4.5 4.5 0 1 0-1.4-8.8A6 6 0 0 0 4.5 12 3.5 3.5 0 0 0 6 19z"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                />
+              </svg>
+            </span>
+            <span class="card-text">
+              <span class="card-title">Sign in to Nakama</span>
+              <span class="card-detail">withnakama.com</span>
+            </span>
+            <svg
+              aria-hidden="true"
+              class="chevron"
+              fill="none"
+              height="20"
+              viewBox="0 0 24 24"
+              width="20"
+            >
+              <path
+                d="m9 6 6 6-6 6"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+              />
+            </svg>
+          </button>
+          <button class="card" id="company" type="button">
+            <span class="tile">
+              <svg
+                aria-hidden="true"
+                fill="none"
+                height="22"
+                viewBox="0 0 24 24"
+                width="22"
+              >
+                <path
+                  d="M4 21V7l8-4 8 4v14M9 21v-6h6v6M9 10h.01M15 10h.01"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                />
+              </svg>
+            </span>
+            <span class="card-text">
+              <span class="card-title">Use my company's server</span>
+              <span class="card-detail">Your team's own address</span>
+            </span>
+            <svg
+              aria-hidden="true"
+              class="chevron"
+              fill="none"
+              height="20"
+              viewBox="0 0 24 24"
+              width="20"
+            >
+              <path
+                d="m9 6 6 6-6 6"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+              />
+            </svg>
+          </button>
+          <p aria-live="polite" class="error" id="choices-error"></p>
+        </div>
+        <div class="footer">
+          <button class="link" id="local" type="button">
+            Use my own API keys instead
+          </button>
+        </div>
+      </section>
+
+      <section hidden id="company-screen">
+        <button class="link back" id="back" type="button">‹ Back</button>
+        <form id="company-form">
+          <h1>Your company's server</h1>
+          <div class="field">
+            <label for="url">Server address</label>
+            <input
+              aria-describedby="company-error"
+              id="url"
+              placeholder="https://nakama.example.com"
+              type="url"
+            >
+            <p aria-live="polite" class="error" id="company-error"></p>
+          </div>
+          <button class="solid" type="submit">Continue</button>
         </form>
-        <button class="link" id="local" type="button">
-          Use my own API keys instead
-        </button>
-      </div>
-      <div class="row" hidden id="waiting">
-        <p>Finish in your browser</p>
-        <button class="secondary" id="cancel" type="button">Cancel</button>
-      </div>
-      <p aria-live="polite" class="error" id="error"></p>
+      </section>
+
+      <section hidden id="waiting">
+        <div class="center">
+          <h1>Finish in your browser</h1>
+          <p class="muted" id="waiting-host"></p>
+          <div class="status" role="status">
+            <svg
+              aria-hidden="true"
+              class="spin"
+              fill="none"
+              height="16"
+              viewBox="0 0 24 24"
+              width="16"
+            >
+              <path
+                d="M21 12a9 9 0 1 1-9-9"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-width="2.4"
+              />
+            </svg>
+            Waiting for the browser
+          </div>
+        </div>
+        <button class="outline" id="cancel" type="button">Cancel</button>
+      </section>
     </main>
     <script>
     "use strict";
     const byId = (id) => document.getElementById(id);
-    const choices = byId("choices");
-    const waiting = byId("waiting");
-    const errorText = byId("error");
+    const screens = ["choices", "company-screen", "waiting"];
+    const urlInput = byId("url");
 
-    function setWaiting(on) {
-      choices.hidden = on;
-      waiting.hidden = !on;
+    function show(id) {
+      for (const screen of screens) {
+        byId(screen).hidden = screen !== id;
+      }
     }
 
-    async function choose(choice) {
-      errorText.textContent = "";
-      setWaiting(choice.mode === "cloud");
+    function setError(id, message) {
+      byId(id).textContent = message;
+
+      if (id === "company-error") {
+        urlInput.setAttribute("aria-invalid", message ? "true" : "false");
+      }
+    }
+
+    function hostOf(value) {
+      try {
+        return new URL(value).host;
+      } catch {
+        return value;
+      }
+    }
+
+    async function choose(choice, from) {
+      const errorId =
+        from === "company-screen" ? "company-error" : "choices-error";
+      setError(errorId, "");
+
+      if (choice.mode === "cloud") {
+        byId("waiting-host").textContent =
+          `Press Connect on ${hostOf(choice.url ?? "https://withnakama.com")}`;
+        show("waiting");
+      }
 
       try {
         await window.nakamaFirstRun.choose(choice);
@@ -164,22 +472,30 @@
           /^Error invoking remote method '[^']+': (Error: )?/,
           ""
         );
-        errorText.textContent =
-          message === "first-run-cancelled" ? "" : message;
-        setWaiting(false);
+        show(from);
+        setError(errorId, message === "first-run-cancelled" ? "" : message);
       }
     }
 
-    byId("sign-in").addEventListener("click", () => choose({ mode: "cloud" }));
+    byId("sign-in").addEventListener("click", () =>
+      choose({ mode: "cloud" }, "choices")
+    );
     byId("company").addEventListener("click", () => {
-      byId("company-form").hidden = false;
-      byId("url").focus();
+      setError("choices-error", "");
+      show("company-screen");
+      urlInput.focus();
+    });
+    byId("back").addEventListener("click", () => {
+      setError("company-error", "");
+      show("choices");
     });
     byId("company-form").addEventListener("submit", (event) => {
       event.preventDefault();
-      choose({ mode: "cloud", url: byId("url").value });
+      choose({ mode: "cloud", url: urlInput.value }, "company-screen");
     });
-    byId("local").addEventListener("click", () => choose({ mode: "local" }));
+    byId("local").addEventListener("click", () =>
+      choose({ mode: "local" }, "choices")
+    );
     byId("cancel").addEventListener("click", () =>
       window.nakamaFirstRun.cancel()
     );
