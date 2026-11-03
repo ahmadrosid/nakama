@@ -6283,3 +6283,167 @@ describe("OrgService team setup", () => {
     expect(await readFile(parentFile, "utf8")).toBe("Parent data");
   });
 });
+
+describe("OrgService member domain allowlist", () => {
+  async function seedRestrictedTeam() {
+    const { databaseAdapter, orgService } = createOrgService();
+    const request = await seedTeamParent(databaseAdapter);
+
+    await orgService.updateOrganization("org_parent", {
+      allowedInviteDomains: ["example.com"],
+    });
+
+    const { organization } = await orgService.createTeam(
+      "org_parent",
+      request,
+      "user_creator"
+    );
+
+    return { databaseAdapter, orgService, teamId: organization.id };
+  }
+
+  test("a team applies its parent's allowlist to new addresses", async () => {
+    const { databaseAdapter, orgService, teamId } = await seedRestrictedTeam();
+
+    await expect(
+      orgService.addMember({
+        email: "guest@other.com",
+        name: "Guest",
+        orgId: teamId,
+        phone: "",
+        role: "member",
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      orgService.createInvite({
+        email: "guest@other.com",
+        invitedByUserId: "user_creator",
+        orgId: teamId,
+        role: "member",
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    expect(await databaseAdapter.getUserByEmail("guest@other.com")).toBeNull();
+
+    const added = await orgService.addMember({
+      email: "new@example.com",
+      name: "New",
+      orgId: teamId,
+      phone: "",
+      role: "member",
+    });
+
+    expect(added.member.email).toBe("new@example.com");
+  });
+
+  test("a parent member outside the parent's allowlist can join a team", async () => {
+    const { databaseAdapter, orgService, teamId } = await seedRestrictedTeam();
+    const now = new Date().toISOString();
+
+    await databaseAdapter.createUser({
+      createdAt: now,
+      email: "contractor@other.com",
+      id: "user_contractor",
+      passwordHash: "test",
+      updatedAt: now,
+    });
+    await databaseAdapter.upsertOrgMember({
+      createdAt: now,
+      orgId: "org_parent",
+      role: "member",
+      userId: "user_contractor",
+    });
+
+    const added = await orgService.addMember({
+      email: "contractor@other.com",
+      name: "Contractor",
+      orgId: teamId,
+      phone: "",
+      role: "member",
+    });
+
+    expect(added.member.userId).toBe("user_contractor");
+  });
+
+  test("parent members list hides people the team's allowlist refuses", async () => {
+    const { orgService, teamId } = await seedRestrictedTeam();
+
+    expect(
+      (await orgService.listParentMembers(teamId)).members.map(
+        (member) => member.userId
+      )
+    ).toEqual(["user_secondary_member"]);
+
+    await orgService.updateOrganization(teamId, {
+      allowedInviteDomains: ["partner.example"],
+    });
+
+    expect((await orgService.listParentMembers(teamId)).members).toEqual([]);
+  });
+
+  test("a platform admin's invite outside the allowlist can be accepted", async () => {
+    const { databaseAdapter, orgService } = createOrgService();
+    const now = new Date().toISOString();
+
+    await databaseAdapter.createUser({
+      createdAt: now,
+      email: "platform@example.com",
+      id: "user_platform_admin",
+      isPlatformAdmin: true,
+      passwordHash: "test",
+      updatedAt: now,
+    });
+
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-platform-invite",
+    });
+
+    await orgService.updateOrganization(created.organization.id, {
+      allowedInviteDomains: ["acme.com"],
+    });
+
+    const invite = await orgService.createInvite({
+      email: "contractor@other.com",
+      invitedByUserId: "user_platform_admin",
+      orgId: created.organization.id,
+      role: "member",
+    });
+
+    const accepted = await orgService.acceptInvite({
+      password: "secret123",
+      token: invite.token!,
+    });
+
+    expect(accepted.orgId).toBe(created.organization.id);
+    expect(accepted.user.email).toBe("contractor@other.com");
+  });
+
+  test("an allowed domain also allows its subdomains", async () => {
+    const { orgService } = createOrgService();
+
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-subdomains",
+    });
+
+    await orgService.updateOrganization(created.organization.id, {
+      allowedInviteDomains: ["acme.com"],
+    });
+
+    const add = (email: string) =>
+      orgService.addMember({
+        email,
+        name: "Member",
+        orgId: created.organization.id,
+        phone: "",
+        role: "member",
+      });
+
+    expect((await add("jane@eng.acme.com")).member.email).toBe(
+      "jane@eng.acme.com"
+    );
+    await expect(add("jane@notacme.com")).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+});
