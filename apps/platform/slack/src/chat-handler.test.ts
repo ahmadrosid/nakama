@@ -296,10 +296,11 @@ test("!stop also stops a message waiting behind the running reply", async () => 
 
     const dm = { channel: "D0QUEUED", channel_type: "im" };
     const running = handle(message({ ...dm, text: "long job" }));
-    const queued = handle(message({ ...dm, text: "queued", ts: "101" }));
+    // The long job holds the lock before the next message is sent.
     await started;
-    // The queued message reads the Slack config from disk before it waits.
-    await Bun.sleep(50);
+    const queued = handle(message({ ...dm, text: "queued", ts: "101" }));
+    // It reads the Slack config from disk, then joins the waiting turns.
+    await Bun.sleep(100);
 
     await handle(message({ ...dm, text: "!stop", ts: "102" }));
     await Promise.all([running, queued]);
