@@ -1,5 +1,6 @@
 import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
+import { ConfirmDialog } from "@nakama/ui/dialog";
 import { Spinner } from "@nakama/ui/spinner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Copy01Icon, RefreshIcon } from "hugeicons-react";
@@ -22,6 +23,7 @@ export function LocalAuthTokenCard() {
   const [rotatedToken, setRotatedToken] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   async function copyToken(): Promise<void> {
     if (!rotatedToken) {
@@ -32,22 +34,18 @@ export function LocalAuthTokenCard() {
     setHint("Copied to clipboard");
   }
 
-  function handleRotate(): void {
+  async function handleRotate(): Promise<void> {
     setFormError(null);
     setHint(null);
     setRotatedToken(null);
 
-    rotateMutation.mutate(undefined, {
-      onError: (error) => {
-        setFormError(formatError(error));
-      },
-      onSuccess: (response) => {
-        setRotatedToken(response.token);
-        setHint(
-          "New token generated. Copy it now — it will not be shown again."
-        );
-      },
-    });
+    try {
+      const response = await rotateMutation.mutateAsync();
+      setRotatedToken(response.token);
+      setHint("New token generated. Copy it now — it will not be shown again.");
+    } catch (error) {
+      setFormError(formatError(error));
+    }
   }
 
   const statusLine = formError ?? hint;
@@ -79,7 +77,7 @@ export function LocalAuthTokenCard() {
           </div>
           <Button
             disabled={rotateMutation.isPending}
-            onClick={handleRotate}
+            onClick={() => setConfirmOpen(true)}
             size="sm"
             type="button"
             variant="outline"
@@ -118,6 +116,15 @@ export function LocalAuthTokenCard() {
           </div>
         ) : null}
       </CardContent>
+      {confirmOpen ? (
+        <ConfirmDialog
+          confirmLabel="Rotate token"
+          description="The CLI, Telegram, and WhatsApp bridges on this machine stop working until they read the new token from disk. Copy the new token when it appears — it is not shown again."
+          onClose={() => setConfirmOpen(false)}
+          onConfirm={handleRotate}
+          title="Rotate local API token?"
+        />
+      ) : null}
     </Card>
   );
 }
