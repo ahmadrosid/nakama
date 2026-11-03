@@ -131,7 +131,7 @@ async function setup() {
     .object({ pass: z.string() })
     .parse(await tokenResponse.json());
 
-  return { app, databaseAdapter, orgId, pass, usageTracker, userId };
+  return { agent, app, databaseAdapter, orgId, pass, usageTracker, userId };
 }
 
 function post(
@@ -420,4 +420,106 @@ test("a desktop chat with large inline images fits, up to the vendor size", asyn
   expect(
     (await post(app, "/v1/llm/chat", pass, withImage(33 * 1024 * 1024))).status
   ).toBe(413);
+});
+
+test("a desktop text call counts its tokens, not a turn, like a title on the web", async () => {
+  const { app, databaseAdapter, orgId, pass } = await setup();
+
+  vendor.use(
+    http.post("https://api.openai.com/v1/chat/completions", () =>
+      HttpResponse.json({
+        choices: [
+          {
+            finish_reason: "stop",
+            index: 0,
+            message: { content: "Hi", role: "assistant" },
+          },
+        ],
+        usage: { completion_tokens: 3, prompt_tokens: 20, total_tokens: 23 },
+      })
+    )
+  );
+
+  const response = await post(
+    app,
+    "/v1/llm/text",
+    pass,
+    JSON.stringify({
+      format: "text",
+      model: "gpt-4o-mini",
+      prompt: "Name this chat.",
+      system: "You are helpful.",
+    })
+  );
+
+  expect(response.status).toBe(200);
+  await Bun.sleep(0);
+
+  expect(await databaseAdapter.listLlmTurnUsage(orgId)).toMatchObject([
+    { estimatedTurns: 0, inputTokens: 20, outputTokens: 3, turns: 0 },
+  ]);
+});
+
+test("a desktop can lower or turn off thinking, never raise it above the workspace setting", async () => {
+  const { agent, app, pass } = await setup();
+  const seen: unknown[] = [];
+
+  const harnessWith = (thinking?: {
+    effort?: "low" | "medium" | "high";
+    enabled: boolean;
+  }) => {
+    agent.desktopModelHarness = () =>
+      Promise.resolve({
+        chatOptions: thinking ? { thinking } : undefined,
+        provider: {
+          generateChat: () => Promise.reject(new Error("unused")),
+          generateText: () => Promise.reject(new Error("unused")),
+          name: "openai",
+          streamChat: (input) => {
+            seen.push(input.providerOptions?.thinking);
+
+            return Promise.resolve({
+              assistantMessage: { content: "ok", role: "assistant" },
+              content: "ok",
+              toolCalls: [],
+            });
+          },
+        },
+      });
+  };
+
+  const chat = async (thinking?: {
+    effort?: "low" | "medium" | "high";
+    enabled: boolean;
+  }) => {
+    const response = await post(
+      app,
+      "/v1/llm/chat",
+      pass,
+      JSON.stringify({
+        ...chatBody,
+        ...(thinking && { providerOptions: { thinking } }),
+      })
+    );
+
+    await response.text();
+
+    return seen.at(-1);
+  };
+
+  harnessWith({ effort: "medium", enabled: true });
+  expect(await chat({ effort: "high", enabled: true })).toEqual({
+    effort: "medium",
+    enabled: true,
+  });
+  expect(await chat({ effort: "low", enabled: true })).toEqual({
+    effort: "low",
+    enabled: true,
+  });
+  expect(await chat({ enabled: false })).toBeUndefined();
+  expect(await chat()).toEqual({ effort: "medium", enabled: true });
+
+  // Thinking is off for the workspace: the desktop cannot turn it on.
+  harnessWith();
+  expect(await chat({ effort: "high", enabled: true })).toBeUndefined();
 });

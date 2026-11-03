@@ -127,12 +127,9 @@ function computerName() {
   }
 }
 
-/**
- * Signs this computer in through the local server: it returns the Connect
- * page address, the browser opens it, and the app waits for the status.
- */
-export function createLocalSignIn({ dataDir, fetchImpl = fetch, serverUrl }) {
-  const call = async (path, init = {}) => {
+/** Calls the local server with this computer's local token (a 0600 file). */
+function localApi({ dataDir, fetchImpl, serverUrl }) {
+  return async (path, init = {}) => {
     const token = (
       await readFile(join(dataDir, "local-auth-token"), "utf8")
     ).trim();
@@ -153,6 +150,63 @@ export function createLocalSignIn({ dataDir, fetchImpl = fetch, serverUrl }) {
 
     return body;
   };
+}
+
+/**
+ * The choice an install made before the first launch page existed: one with
+ * providers already set up keeps them. Null when there are none, or the
+ * check fails, so the page asks.
+ */
+export async function existingChoice({
+  dataDir,
+  fetchImpl = fetch,
+  serverUrl,
+}) {
+  try {
+    const { providers } = await localApi({ dataDir, fetchImpl, serverUrl })(
+      "/v1/providers"
+    );
+
+    if (!(Array.isArray(providers) && providers.length > 0)) {
+      return null;
+    }
+
+    return {
+      choice: providers.some((provider) => provider.type === "nakama_cloud")
+        ? "cloud"
+        : "local",
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * First launch: sign in to Nakama Cloud, or use your own API keys. An
+ * install from before this page keeps the providers it has.
+ */
+export async function ensureDesktopChoice({
+  dataDir,
+  fetchImpl = fetch,
+  firstRun,
+  serverUrl,
+  userDataDir,
+}) {
+  if (await readDesktopConfig(userDataDir)) {
+    return;
+  }
+
+  const kept = await existingChoice({ dataDir, fetchImpl, serverUrl });
+
+  await (kept ? writeDesktopConfig(userDataDir, kept) : firstRun());
+}
+
+/**
+ * Signs this computer in through the local server: it returns the Connect
+ * page address, the browser opens it, and the app waits for the status.
+ */
+export function createLocalSignIn({ dataDir, fetchImpl = fetch, serverUrl }) {
+  const call = localApi({ dataDir, fetchImpl, serverUrl });
 
   return async ({ cloudUrl, openExternal, signal, wait = 1000 }) => {
     // A new choice replaces an old account, so "signed in" below is this one.

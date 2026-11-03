@@ -659,6 +659,7 @@ export class AgentService {
       estimated: boolean;
       inputTokens: number;
       outputTokens: number;
+      turns?: number;
     }): void => {
       void this.db
         .incrementLlmTurnUsage(scopedOrgId, turn)
@@ -5734,6 +5735,7 @@ export class AgentService {
       estimated: boolean;
       inputTokens: number;
       outputTokens: number;
+      turns?: number;
     }) => void;
   } | null> {
     await this.refreshManagedProviderKeys();

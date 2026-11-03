@@ -4,6 +4,7 @@ import {
   type ChatMessage,
   type GenerateChatInput,
   NakamaApiError,
+  type ProviderChatOptions,
   type StreamChatHandlers,
 } from "@nakama/core";
 import { estimateChatInputBreakdown } from "../../providers/usage-tracking";
@@ -158,6 +159,38 @@ function failureOf(error: Error): Failure {
   };
 }
 
+const EFFORTS = ["low", "medium", "high"] as const;
+
+type Thinking = NonNullable<ProviderChatOptions["thinking"]>;
+
+/**
+ * The desktop may turn thinking off or lower it, never raise it above the
+ * workspace setting: thinking costs the org's tokens.
+ */
+function capThinking(
+  requested: Thinking | undefined,
+  allowed: Thinking | undefined
+): Thinking | undefined {
+  if (!requested) {
+    return allowed;
+  }
+
+  if (!(requested.enabled && allowed?.enabled)) {
+    return;
+  }
+
+  const wanted = requested.effort ?? allowed.effort;
+
+  const effort =
+    wanted && allowed.effort
+      ? EFFORTS[
+          Math.min(EFFORTS.indexOf(wanted), EFFORTS.indexOf(allowed.effort))
+        ]
+      : allowed.effort;
+
+  return effort ? { effort, enabled: true } : { enabled: true };
+}
+
 function asError(caught: Error | string): Error {
   return caught instanceof Error ? caught : new Error(caught);
 }
@@ -285,10 +318,13 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
 
       const result = await harness.provider.generateText(input);
 
+      // Titles and summaries are not chat turns, as on the web, but their
+      // tokens count against the token limit.
       harness.recordUsage?.({
         estimated: !result.usage,
         inputTokens: result.usage?.inputTokens ?? 0,
         outputTokens: result.usage?.outputTokens ?? 0,
+        turns: 0,
       });
 
       return c.json(result, 200);
@@ -338,7 +374,13 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
     const input: GenerateChatInput = {
       // SAFETY: chatMessageSchema accepts only the inline shapes of ChatMessage.
       messages: body.messages as ChatMessage[],
-      providerOptions: body.providerOptions ?? harness.chatOptions,
+      providerOptions: {
+        ...harness.chatOptions,
+        thinking: capThinking(
+          body.providerOptions?.thinking,
+          harness.chatOptions?.thinking
+        ),
+      },
       signal: abort.signal,
       system: body.system,
       tools: body.tools,

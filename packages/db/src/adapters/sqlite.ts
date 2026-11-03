@@ -2228,9 +2228,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     INSERT INTO llm_turn_usage (
       org_id, bucket, arm, turns, input_tokens, output_tokens, estimated_turns, updated_at
     )
-    VALUES (?, ?, ?, 1, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(org_id, bucket, arm) DO UPDATE SET
-      turns = llm_turn_usage.turns + 1,
+      turns = llm_turn_usage.turns + excluded.turns,
       input_tokens = llm_turn_usage.input_tokens + excluded.input_tokens,
       output_tokens = llm_turn_usage.output_tokens + excluded.output_tokens,
       estimated_turns = llm_turn_usage.estimated_turns + excluded.estimated_turns,
@@ -5603,14 +5603,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async incrementLlmTurnUsage(orgId, delta) {
       const updatedAt = new Date().toISOString();
+      const turns = delta.turns ?? 1;
+
       incrementLlmTurnUsageStmt.run(
         orgId,
         updatedAt.slice(0, 10),
         // Legacy arm column, see migrateLlmTurnUsageTable.
         "none",
+        turns,
         delta.inputTokens,
         delta.outputTokens,
-        delta.estimated ? 1 : 0,
+        delta.estimated && turns > 0 ? 1 : 0,
         updatedAt
       );
     },

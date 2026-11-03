@@ -176,8 +176,11 @@ export class NakamaCloudSignIn {
         const computerId = params.get("computerId")?.trim() ?? "";
         const confirmCode = params.get("confirmCode")?.trim() ?? "";
 
+        // A cancelled or replaced sign-in (a request on a kept-open
+        // connection) must not use the code: that would activate the computer.
         if (
           !(
+            this.listener === server &&
             sameText(params.get("state") ?? "", state) &&
             computerId &&
             confirmCode
@@ -194,8 +197,11 @@ export class NakamaCloudSignIn {
           this.passesFor(cloudUrl, computerId).confirmWith(confirmCode);
           const models = await this.cloudModels(cloudUrl, computerId);
 
-          // Cancelled or replaced while the models loaded: do not sign in.
+          // Cancelled or replaced while the models loaded: the computer is
+          // active in the cloud now, so remove it there and do not sign in.
           if (this.listener !== server) {
+            await this.revoke(cloudUrl, computerId);
+
             return new Response(FAILED_PAGE, {
               headers: { "content-type": "text/html; charset=utf-8" },
               status: 400,

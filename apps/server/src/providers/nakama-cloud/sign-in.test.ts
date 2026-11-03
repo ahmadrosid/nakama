@@ -32,9 +32,16 @@ const tokenBodySchema = z.object({
 });
 
 /** A fake cloud that keeps the enrolled key and checks it on token requests. */
-function fakeCloud(options: { modelsStatus?: number } = {}) {
+interface FakeCloudOptions {
+  modelsStatus?: number;
+  /** Runs while the models request is open, for example a Cancel. */
+  onModels?: () => Promise<void>;
+}
+
+function fakeCloud(options: FakeCloudOptions = {}) {
   const enrolled = new Map<string, string>();
   const confirmCodes: Array<string | null> = [];
+  const removed: string[] = [];
 
   const models = [
     {
@@ -82,7 +89,15 @@ function fakeCloud(options: { modelsStatus?: number } = {}) {
           : Response.json({ error: "Sign in again." }, { status: 401 });
       }
 
+      if (pathname === "/v1/llm/computer" && request.method === "DELETE") {
+        removed.push(request.headers.get("authorization") ?? "");
+
+        return new Response(null, { status: 204 });
+      }
+
       if (pathname === "/v1/llm/models") {
+        await options.onModels?.();
+
         if (options.modelsStatus) {
           return Response.json(
             { error: "Your team turned off Nakama Desktop for its models." },
@@ -104,11 +119,12 @@ function fakeCloud(options: { modelsStatus?: number } = {}) {
     confirmCodes,
     enrolled,
     models,
+    removed,
     url: `http://127.0.0.1:${server.port}`,
   };
 }
 
-async function setup(cloudOptions: { modelsStatus?: number } = {}) {
+async function setup(cloudOptions: FakeCloudOptions = {}) {
   process.env.NAKAMA_CONFIG_DIR = await mkdtemp(
     join(tmpdir(), "nakama-cloud-sign-in-")
   );
@@ -275,4 +291,19 @@ test("the team's model list is reloaded from the cloud, at most every few minute
   } finally {
     setSystemTime();
   }
+});
+
+test("a Cancel while the models load removes the just-activated computer in the cloud", async () => {
+  let cancel = () => Promise.resolve();
+  const { agent, cloud } = await setup({ onModels: () => cancel() });
+  cancel = () => agent.signOutNakamaCloud();
+
+  const back = connectResult(
+    cloud,
+    (await agent.startNakamaCloudSignIn({ cloudUrl: cloud.url })).connectUrl
+  );
+
+  expect((await fetch(back)).status).toBe(400);
+  expect(agent.nakamaCloudStatus().signedIn).toBe(false);
+  expect(cloud.removed).toEqual(["Bearer pass-1"]);
 });

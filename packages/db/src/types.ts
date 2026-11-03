@@ -381,6 +381,8 @@ export interface LlmTurnUsageDelta {
   estimated: boolean;
   inputTokens: number;
   outputTokens: number;
+  /** Turns to add; 1 when unset. 0 counts only the tokens of the call. */
+  turns?: number;
 }
 
 export interface StoredLlmTurnUsageRecord {

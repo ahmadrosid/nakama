@@ -7,6 +7,7 @@ import {
   clearDesktopConfig,
   createLocalSignIn,
   defaultCloudUrl,
+  existingChoice,
   normalizeCloudUrl,
   readDesktopConfig,
   watchCloudSignOut,
@@ -184,5 +185,41 @@ describe("local sign-in", () => {
       method: "DELETE",
       url: "http://127.0.0.1:5000/v1/nakama-cloud",
     });
+  });
+});
+
+describe("an install from before the first launch page", () => {
+  async function choiceWith(answer) {
+    const dataDir = await mkdtemp(join(tmpdir(), "nakama-desktop-data-"));
+    await writeFile(join(dataDir, "local-auth-token"), "token-123\n");
+
+    return existingChoice({
+      dataDir,
+      fetchImpl: async () => answer(),
+      serverUrl: "http://127.0.0.1:5000",
+    });
+  }
+
+  test("keeps its own providers, and a new install is asked", async () => {
+    expect(
+      await choiceWith(() =>
+        Response.json({
+          providers: [{ id: "anthropic-main", type: "anthropic" }],
+        })
+      )
+    ).toEqual({ choice: "local" });
+    expect(
+      await choiceWith(() =>
+        Response.json({
+          providers: [{ id: "nakama-cloud", type: "nakama_cloud" }],
+        })
+      )
+    ).toEqual({ choice: "cloud" });
+    expect(await choiceWith(() => Response.json({ providers: [] }))).toBeNull();
+    expect(
+      await choiceWith(() =>
+        Response.json({ error: "No org" }, { status: 400 })
+      )
+    ).toBeNull();
   });
 });

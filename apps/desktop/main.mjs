@@ -22,7 +22,7 @@ import {
 import {
   clearDesktopConfig,
   createLocalSignIn,
-  readDesktopConfig,
+  ensureDesktopChoice,
   runFirstRun,
   watchCloudSignOut,
 } from "./first-run.mjs";
@@ -661,10 +661,12 @@ if (!process.argv.includes("--smoke-test")) {
             userDataDir,
           });
 
-        // First launch: sign in to Nakama Cloud, or use your own API keys.
-        if (!(await readDesktopConfig(userDataDir))) {
-          await firstRun();
-        }
+        await ensureDesktopChoice({
+          dataDir,
+          firstRun,
+          serverUrl: localServer.url,
+          userDataDir,
+        });
 
         const window = await createWindow(chatUrl);
         let asking = false;
