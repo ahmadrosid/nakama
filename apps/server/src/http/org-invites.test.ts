@@ -10,7 +10,7 @@ import {
 setupTestConfigDir("nakama-org-invites-test-");
 
 describe("direct org member provisioning", () => {
-  test("domain settings reach admins and restrict invites without changing direct add", async () => {
+  test("domain settings reach admins and restrict invites, and a platform admin can still add directly", async () => {
     const { app, databaseAdapter } = createMinimalHonoApp();
     const session = await setupFreshInstallSession(app, databaseAdapter);
     const orgId = session.orgId!;
@@ -72,6 +72,84 @@ describe("direct org member provisioning", () => {
     );
 
     expect(directAdd.status).toBe(201);
+  });
+
+  test("the domain allowlist refuses a direct add by an org admin", async () => {
+    const { app, authService, databaseAdapter } = createMinimalHonoApp();
+
+    const platformSession = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+
+    const createResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/orgs", {
+        body: JSON.stringify({
+          admin: { email: "admin@acme.com", name: "Acme Admin", phone: "" },
+          name: "Acme",
+          slug: "acme",
+        }),
+        headers: platformSession.headers({
+          "X-CSRF-Token": platformSession.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
+    const created = (await createResponse.json()) as {
+      organization: { id: string };
+      adminMember: { temporaryPassword: string };
+    };
+
+    const orgId = created.organization.id;
+
+    const adminSession = browserSessionFromResponse(
+      await app.fetch(
+        new Request("http://localhost:4310/v1/auth/login", {
+          body: JSON.stringify({
+            email: "admin@acme.com",
+            password: created.adminMember.temporaryPassword,
+          }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        })
+      ),
+      orgId
+    );
+
+    const update = await app.fetch(
+      new Request(`http://localhost:4310/v1/orgs/${orgId}`, {
+        body: JSON.stringify({ allowedInviteDomains: ["acme.com"] }),
+        headers: adminSession.headers({
+          "X-CSRF-Token": adminSession.csrfToken,
+        }),
+        method: "PATCH",
+      })
+    );
+
+    expect(update.status).toBe(200);
+
+    const add = (email: string) =>
+      app.fetch(
+        new Request(`http://localhost:4310/v1/orgs/${orgId}/members`, {
+          body: JSON.stringify({ email, name: "Guest", role: "member" }),
+          headers: adminSession.headers({
+            "X-CSRF-Token": adminSession.csrfToken,
+          }),
+          method: "POST",
+        })
+      );
+
+    const outside = await add("guest@other.com");
+    expect(outside.status).toBe(400);
+    expect(await outside.json()).toMatchObject({
+      error: "Email domain is not allowed.",
+    });
+    expect(await databaseAdapter.getUserByEmail("guest@other.com")).toBeNull();
+
+    expect((await add("member@acme.com")).status).toBe(201);
   });
 
   test("platform admin can manage an org without becoming a member", async () => {

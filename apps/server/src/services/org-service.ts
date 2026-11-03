@@ -1585,8 +1585,10 @@ export class OrgService {
     email: string;
     phone: string;
     role: OrgRole;
+    /** Platform admins may add an address outside the invite domain allowlist (#2075). */
+    bypassDomainAllowlist?: boolean;
   }): Promise<AddOrgMemberResponse> {
-    await this.requireActiveOrganization(input.orgId);
+    const organization = await this.requireActiveOrganization(input.orgId);
 
     const name = input.name.trim();
     const email = normalizeEmail(input.email);
@@ -1596,6 +1598,10 @@ export class OrgService {
 
     if (!EMAIL_PATTERN.test(email)) {
       throw new NakamaApiError("A valid email address is required.", 400);
+    }
+
+    if (!input.bypassDomainAllowlist) {
+      assertAllowedInviteDomain(email, organization);
     }
 
     if (!ORG_ROLES.includes(input.role)) {
