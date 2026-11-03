@@ -4210,6 +4210,25 @@ export class AgentService {
     this.refreshProviderConfig();
     this.nakamaCloudModelsCheckedAt = Date.now();
 
+    // The provider changed now, in the browser callback, not in a request
+    // the audit log sees, so it is recorded here.
+    await this.db
+      .createAuditEvent({
+        action: "provider.nakama_cloud_connect",
+        actorUserId: null,
+        createdAt: new Date().toISOString(),
+        id: `audit_${randomUUID()}`,
+        metadata: {
+          cloudOrgName: connection.account.orgName,
+          cloudUrl: connection.cloudUrl,
+        },
+        orgId: null,
+        requestId: null,
+        resourceId: NAKAMA_CLOUD_PROVIDER_ID,
+        resourceType: "provider",
+      })
+      .catch(() => undefined);
+
     if (isFirst) {
       await this.ensureSoulScaffolded();
     }

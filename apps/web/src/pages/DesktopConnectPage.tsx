@@ -26,6 +26,7 @@ export function DesktopConnectPage() {
   const [orgId, setOrgId] = useState(activeOrg?.id ?? orgs[0]?.id ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [needsSignIn, setNeedsSignIn] = useState(false);
   const org = orgs.find((candidate) => candidate.id === orgId);
   const [code, setCode] = useState<string | null>(null);
   const state = request?.state;
@@ -63,21 +64,22 @@ export function DesktopConnectPage() {
         })
       );
     } catch (cause) {
-      // Connecting needs a fresh sign-in: sign in again, then come back here.
-      if (cause instanceof NakamaApiError && cause.status === 401) {
-        await logout();
-        navigate("/login", {
-          replace: true,
-          state: { from: `${location.pathname}${location.search}` },
-        });
-
-        return;
-      }
-
+      // Connecting needs a fresh sign-in. Sign out only when the person asks:
+      // a link alone must not end their session.
+      setNeedsSignIn(cause instanceof NakamaApiError && cause.status === 401);
       setError(formatError(cause));
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  /** Signs out, then comes back to this link after the new sign-in. */
+  async function signInAgain() {
+    await logout();
+    navigate("/login", {
+      replace: true,
+      state: { from: `${location.pathname}${location.search}` },
+    });
   }
 
   return (
@@ -138,14 +140,24 @@ export function DesktopConnectPage() {
                 {error}
               </div>
             ) : null}
-            <Button
-              className="w-full"
-              disabled={isSubmitting || !(org && code)}
-              onClick={() => void connect()}
-              type="button"
-            >
-              Connect
-            </Button>
+            {needsSignIn ? (
+              <Button
+                className="w-full"
+                onClick={() => void signInAgain()}
+                type="button"
+              >
+                Sign in again
+              </Button>
+            ) : (
+              <Button
+                className="w-full"
+                disabled={isSubmitting || !(org && code)}
+                onClick={() => void connect()}
+                type="button"
+              >
+                Connect
+              </Button>
+            )}
           </div>
         ) : (
           <div

@@ -172,7 +172,7 @@ test("the page shows the code Nakama Desktop shows, and Connect waits for it", a
   expect(connectButton(page)?.disabled).toBe(false);
 });
 
-test("an old sign-in signs out and asks to sign in again", async () => {
+test("an old sign-in asks to sign in again, and signs out only when the person presses it", async () => {
   const enroll = spyOn(
     NakamaClient.prototype,
     "enrollComputer"
@@ -190,6 +190,19 @@ test("an old sign-in signs out and asks to sign in again", async () => {
   await settle();
   await act(async () => {
     connectButton(page)?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  // A link alone does not end the session.
+  expect(loggedOut).toEqual([]);
+  expect(page.querySelector('[data-testid="login"]')).toBeNull();
+
+  const signInAgain = [...page.querySelectorAll("button")].find(
+    (candidate) => candidate.textContent === "Sign in again"
+  );
+
+  await act(async () => {
+    signInAgain?.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 

@@ -121,11 +121,33 @@ function isPassedStatus(status: number): status is PassedStatus {
  * A provider error can name this server's internal hosts or show part of
  * the org's key. Members see the reason without those.
  */
+/**
+ * What a provider or network error can carry about this server: URLs first
+ * (they hold hosts), then credentials, then addresses and host names.
+ */
+const INTERNAL_DETAILS: readonly RegExp[] = [
+  /\bhttps?:\/\/[^\s"'<>)]+/g,
+  /\bBearer\s+\S+/gi,
+  /\b(?:sk|rk|pk|xai|gsk|AIza)[\w*.…-]{6,}/g,
+  // AWS access key IDs (Bedrock).
+  /\b(?:AKIA|ASIA)[A-Z0-9]{12,}\b/g,
+  // IPv6, bracketed or as a whole token of hex groups. Not "provider::model".
+  /\[[0-9a-f:]+\](?::\d+)?/gi,
+  /(?<![\w:])(?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}(?![\w:])/gi,
+  /\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b/g,
+  // Host names: dotted names ending in a letters-only label, or "host:port".
+  // Model names such as "gpt-4.1" end in digits and stay.
+  /\b(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?\b/gi,
+  /\b[a-z][\w.-]*:\d{2,5}\b/gi,
+  // Long opaque tokens, such as an Azure key.
+  /\b[A-Za-z0-9_-]{32,}\b/g,
+];
+
 function withoutInternals(message: string): string {
-  return message
-    .replace(/\b(?:sk|rk|pk|xai|gsk|AIza)[\w*.…-]{6,}/g, "[hidden]")
-    .replace(/\bhttps?:\/\/[^\s"'<>)]+/g, "[hidden]")
-    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b/g, "[hidden]");
+  return INTERNAL_DETAILS.reduce(
+    (text, pattern) => text.replace(pattern, "[hidden]"),
+    message
+  );
 }
 
 export function failureOf(error: Error): Failure {

@@ -134,7 +134,7 @@ async function setup(cloudOptions: FakeCloudOptions = {}) {
   const secrets = new ManagedSecrets(db, randomBytes(32).toString("base64"));
   const agent = new AgentService(null, null, db, undefined, secrets);
 
-  return { agent, cloud: fakeCloud(cloudOptions) };
+  return { agent, cloud: fakeCloud(cloudOptions), db };
 }
 
 test("the browser connects this computer, and Nakama Cloud becomes the default provider", async () => {
@@ -369,4 +369,24 @@ test("a sign-in that cannot be saved leaves this computer signed out", async () 
   } finally {
     await chmod(configDir, 0o700);
   }
+});
+
+test("a finished sign-in is in the audit log: it changed the default provider", async () => {
+  const { agent, cloud, db } = await setup();
+
+  const back = connectResult(
+    cloud,
+    (await agent.startNakamaCloudSignIn({ cloudUrl: cloud.url })).connectUrl
+  );
+
+  expect((await fetch(back)).status).toBe(200);
+
+  expect(
+    await db.listAuditEvents({ action: "provider.nakama_cloud_connect" })
+  ).toMatchObject([
+    {
+      metadata: { cloudUrl: cloud.url },
+      resourceId: NAKAMA_CLOUD_PROVIDER_ID,
+    },
+  ]);
 });

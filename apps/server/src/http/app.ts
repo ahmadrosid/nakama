@@ -406,8 +406,18 @@ export function createHonoApp(options: ServerOptions) {
   registerAcpMcpRoutes(app);
 
   registerLlmRoutes(app, options);
+
   // This computer's own Cloud sign-in: it runs before setup, when the
-  // desktop has no org yet, so it is not behind the org check.
+  // desktop has no org yet, so it is not behind the org check. It changes
+  // the default provider, so it is audited like other provider changes.
+  if (options.databaseAdapter) {
+    const auditLog = createAuditLogMiddleware(options.databaseAdapter);
+
+    app.use("*", (c, next) =>
+      c.req.path.startsWith("/v1/nakama-cloud") ? auditLog(c, next) : next()
+    );
+  }
+
   registerNakamaCloudSignInRoutes(app, options);
 
   registerComposioOAuthRoutes(app, options);

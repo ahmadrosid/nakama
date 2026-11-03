@@ -156,6 +156,52 @@ test("a provider error reaches the desktop without keys, internal addresses or h
     expect(error.message).not.toContain(internal);
   }
 
+  // Other ways an error names a host or a credential.
+  const leaks = [
+    "getaddrinfo ENOTFOUND models.corp.internal",
+    "connect ECONNREFUSED ::1:8000",
+    "connect ECONNREFUSED [fd00::12]:8000",
+    "connect ECONNREFUSED localhost:8000",
+    "The security token AKIAIOSFODNN7EXAMPLE is invalid",
+    "Authorization: Bearer abc.def.ghi was refused",
+    "Key 0123456789abcdef0123456789abcdef is invalid",
+  ];
+
+  for (const leak of leaks) {
+    useStandInProvider(agent, () =>
+      Promise.reject(new NakamaApiError(`Upstream: ${leak}`, 400))
+    );
+
+    const [reply] = await events(
+      await post(app, "/v1/llm/chat", pass, JSON.stringify(chatBody))
+    );
+
+    for (const secret of [
+      "models.corp.internal",
+      "::1",
+      "fd00::12",
+      "localhost:8000",
+      "AKIAIOSFODNN7EXAMPLE",
+      "abc.def.ghi",
+      "0123456789abcdef0123456789abcdef",
+    ]) {
+      expect(JSON.stringify(reply?.data)).not.toContain(secret);
+    }
+  }
+
+  // An error with a model id and numbers, and nothing internal, passes as is.
+  const plain = "openai-main::gpt-4.1 has a maximum context of 128000 tokens.";
+
+  useStandInProvider(agent, () =>
+    Promise.reject(new NakamaApiError(plain, 400))
+  );
+
+  const [readable] = await events(
+    await post(app, "/v1/llm/chat", pass, JSON.stringify(chatBody))
+  );
+
+  expect(readable?.data).toEqual({ message: plain, status: 400 });
+
   useStandInProvider(agent, () =>
     Promise.reject(new Error("connect ECONNREFUSED 10.0.4.12:8000"))
   );
