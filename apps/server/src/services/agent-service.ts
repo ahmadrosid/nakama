@@ -397,6 +397,7 @@ import {
   applyProviderInstanceUpdate,
   buildProviderInstanceFromCreateRequest,
   countModelsForInstance,
+  decodeStoredModelSelection,
   mergeModelsForConfig,
   modelExistsOnInstance,
   providerPublicationLock,
@@ -461,6 +462,9 @@ type SessionRunSettings = Pick<StoredSessionRecord, "model" | "thinkingEffort">;
 
 /** sub_agent chats one parent may start; the cap proposed on #2036. */
 const MAX_CHILD_SESSIONS = 5;
+
+/** How often the desktop reloads the team's model list from Nakama Cloud. */
+const NAKAMA_CLOUD_MODELS_TTL_MS = 5 * 60 * 1000;
 
 type ChatProfileAccess = Pick<
   CreateSessionOptions,
@@ -542,6 +546,7 @@ export class AgentService {
     sessions: this.sessions,
   });
   private readonly nakamaCloud: NakamaCloudSignIn | null;
+  private nakamaCloudModelsCheckedAt = 0;
   private readonly sessionTitleService: SessionTitleService;
   private readonly orgUsageQuotaService: OrgUsageQuotaService;
   private skillPostTurnReviewService: SkillPostTurnReviewService;
@@ -4072,6 +4077,58 @@ export class AgentService {
     };
   }
 
+  /**
+   * The team's models change in the cloud. Reload them in the background,
+   * at most once in NAKAMA_CLOUD_MODELS_TTL_MS, so the picker shows new
+   * models and drops removed ones. A failed load keeps the saved list.
+   */
+  private refreshNakamaCloudModelsSoon(): void {
+    const instance = this.userConfig?.providers.find(
+      (entry) => entry.type === "nakama_cloud" && entry.nakamaCloud
+    );
+
+    const cloudUrl = instance?.baseUrl;
+    const computerId = instance?.nakamaCloud?.computerId;
+
+    if (
+      !(this.nakamaCloud && cloudUrl && computerId) ||
+      Date.now() - this.nakamaCloudModelsCheckedAt < NAKAMA_CLOUD_MODELS_TTL_MS
+    ) {
+      return;
+    }
+
+    this.nakamaCloudModelsCheckedAt = Date.now();
+
+    void this.nakamaCloud
+      .cloudModels(cloudUrl, computerId)
+      .then(async (models) => {
+        const current = this.userConfig?.providers.find(
+          (entry) => entry.id === instance.id
+        );
+
+        // Signed out meanwhile, or nothing changed.
+        if (
+          !(this.userConfig && current) ||
+          JSON.stringify(current.customModels ?? []) === JSON.stringify(models)
+        ) {
+          return;
+        }
+
+        this.userConfig = {
+          ...this.userConfig,
+          providers: this.userConfig.providers.map((entry) =>
+            entry.id === instance.id
+              ? { ...entry, customModels: models }
+              : entry
+          ),
+        };
+
+        await saveUserConfig(this.userConfig);
+        this.refreshProviderConfig();
+      })
+      .catch(() => undefined);
+  }
+
   /** Removes the Nakama Cloud provider. The device key stays for a new sign-in. */
   async signOutNakamaCloud(): Promise<void> {
     // Also ends an unfinished sign-in, so a late Connect cannot sign in.
@@ -4145,6 +4202,7 @@ export class AgentService {
 
     await saveUserConfig(this.userConfig);
     this.refreshProviderConfig();
+    this.nakamaCloudModelsCheckedAt = Date.now();
 
     if (isFirst) {
       await this.ensureSoulScaffolded();
@@ -4361,6 +4419,7 @@ export class AgentService {
     options: { source?: "catalog" | "remote" } = {}
   ): Promise<ModelsResponse> {
     await this.refreshManagedProviderKeys();
+    this.refreshNakamaCloudModelsSoon();
     const active = getActiveProviderInstance(this.userConfig);
     const currentProviderId = this.userConfig?.defaultProviderId ?? null;
     const configuredProviders = this.userConfig?.providers ?? [];
@@ -5661,7 +5720,7 @@ export class AgentService {
    * The provider for one Nakama Desktop model call: this install's provider
    * for the model, billed to the org and member, with the org's quota hold
    * and a recorder that counts each call against the org's monthly limits.
-   * Null when no provider is set up for the model.
+   * Null when no provider is set up; a 404 when the model is not here.
    */
   async desktopModelHarness(input: {
     model: string;
@@ -5684,6 +5743,26 @@ export class AgentService {
       profileModel: input.model,
       providers: this.userConfig?.providers ?? [],
     });
+
+    // The desktop asks for one model by name. A model this server no longer
+    // has is an error, not the default model shown under the old name.
+    const requested = decodeStoredModelSelection(input.model);
+
+    if (
+      resolved &&
+      !(
+        (!requested || requested.providerId === resolved.instance.id) &&
+        modelExistsOnInstance(
+          resolved.instance,
+          requested?.modelId ?? input.model
+        )
+      )
+    ) {
+      throw new NakamaApiError(
+        "This model is no longer available. Pick another model.",
+        404
+      );
+    }
 
     const provider = resolved
       ? createProviderForInstance(

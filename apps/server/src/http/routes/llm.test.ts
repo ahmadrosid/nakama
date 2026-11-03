@@ -363,3 +363,61 @@ test("the stream still ends when the quota hold cannot be released", async () =>
 
   expect(types.at(-1)).toBe("result");
 });
+
+test("a model this server does not have is refused, not swapped for the default", async () => {
+  const { app, pass } = await setup();
+  const vendorCallsBefore = vendorRequests.length;
+
+  for (const model of [
+    "openai-main::no-such-model",
+    "removed-provider::gpt-4o-mini",
+    "no-such-model",
+  ]) {
+    const response = await post(
+      app,
+      "/v1/llm/chat",
+      pass,
+      JSON.stringify({ ...chatBody, model })
+    );
+
+    expect(response.status).toBe(404);
+  }
+
+  expect(vendorRequests).toHaveLength(vendorCallsBefore);
+});
+
+test("a desktop chat with large inline images fits, up to the vendor size", async () => {
+  const { app, pass } = await setup();
+
+  const withImage = (bytes: number) =>
+    JSON.stringify({
+      ...chatBody,
+      messages: [
+        {
+          content: [
+            { text: "What is in this photo?", type: "text" },
+            {
+              data: "A".repeat(bytes),
+              mediaType: "image/png",
+              type: "image",
+            },
+          ],
+          role: "user",
+        },
+      ],
+    });
+
+  const fits = await post(
+    app,
+    "/v1/llm/chat",
+    pass,
+    withImage(15 * 1024 * 1024)
+  );
+
+  expect(fits.status).toBe(200);
+  await fits.text();
+
+  expect(
+    (await post(app, "/v1/llm/chat", pass, withImage(33 * 1024 * 1024))).status
+  ).toBe(413);
+});

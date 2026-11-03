@@ -277,7 +277,7 @@ export class NakamaCloudSignIn {
   }
 
   /** The team's models, as model entries of the Nakama Cloud provider. */
-  private async cloudModels(
+  async cloudModels(
     cloudUrl: string,
     computerId: string
   ): Promise<CustomModelEntry[]> {

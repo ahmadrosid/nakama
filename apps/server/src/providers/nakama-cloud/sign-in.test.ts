@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, setSystemTime, test } from "bun:test";
 import { createPublicKey, randomBytes, verify } from "node:crypto";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -35,6 +35,15 @@ const tokenBodySchema = z.object({
 function fakeCloud(options: { modelsStatus?: number } = {}) {
   const enrolled = new Map<string, string>();
   const confirmCodes: Array<string | null> = [];
+
+  const models = [
+    {
+      default: true,
+      id: "gpt-4o-mini",
+      name: "GPT-4o mini",
+      providerId: "openai-main",
+    },
+  ];
 
   const server = Bun.serve({
     fetch: async (request) => {
@@ -81,16 +90,7 @@ function fakeCloud(options: { modelsStatus?: number } = {}) {
           );
         }
 
-        return Response.json({
-          models: [
-            {
-              default: true,
-              id: "gpt-4o-mini",
-              name: "GPT-4o mini",
-              providerId: "openai-main",
-            },
-          ],
-        });
+        return Response.json({ models });
       }
 
       return new Response("Not found", { status: 404 });
@@ -100,7 +100,12 @@ function fakeCloud(options: { modelsStatus?: number } = {}) {
 
   servers.push(server);
 
-  return { confirmCodes, enrolled, url: `http://127.0.0.1:${server.port}` };
+  return {
+    confirmCodes,
+    enrolled,
+    models,
+    url: `http://127.0.0.1:${server.port}`,
+  };
 }
 
 async function setup(cloudOptions: { modelsStatus?: number } = {}) {
@@ -228,4 +233,46 @@ test("a Connect after sign out (Cancel on the first launch page) does nothing", 
 
   await expect(fetch(back)).rejects.toThrow();
   expect(agent.nakamaCloudStatus().signedIn).toBe(false);
+});
+
+test("the team's model list is reloaded from the cloud, at most every few minutes", async () => {
+  const { agent, cloud } = await setup();
+
+  const back = connectResult(
+    cloud,
+    (await agent.startNakamaCloudSignIn({ cloudUrl: cloud.url })).connectUrl
+  );
+
+  expect((await fetch(back)).status).toBe(200);
+
+  const savedModels = async () =>
+    (await agent.listProviders()).providers
+      .find((provider) => provider.id === NAKAMA_CLOUD_PROVIDER_ID)
+      ?.customModels?.map((model) => model.id);
+
+  // An admin adds a model in the cloud.
+  cloud.models.push({
+    default: false,
+    id: "claude-sonnet-4-5",
+    name: "Claude Sonnet 4.5",
+    providerId: "anthropic-main",
+  });
+
+  // Just signed in: the list is fresh, so no reload yet.
+  await agent.getModels();
+  await Bun.sleep(50);
+  expect(await savedModels()).toEqual(["openai-main::gpt-4o-mini"]);
+
+  setSystemTime(new Date(Date.now() + 6 * 60 * 1000));
+
+  try {
+    await agent.getModels();
+    await Bun.sleep(50);
+    expect(await savedModels()).toEqual([
+      "openai-main::gpt-4o-mini",
+      "anthropic-main::claude-sonnet-4-5",
+    ]);
+  } finally {
+    setSystemTime();
+  }
 });

@@ -319,6 +319,14 @@ export function createHonoApp(options: ServerOptions) {
     onError: rejectOversizedBody,
   });
 
+  // Nakama Desktop sends the whole chat, with images inline, on each call.
+  // 32 MiB is the largest request the model vendors take. Peak per call is
+  // about 3x the body: the raw text, the parsed copy and the vendor request.
+  const desktopChatBodyLimit = bodyLimit({
+    maxSize: 32 * 1024 * 1024,
+    onError: rejectOversizedBody,
+  });
+
   app.use("*", (c, next) => {
     if (
       c.req.method === "POST" &&
@@ -327,6 +335,10 @@ export function createHonoApp(options: ServerOptions) {
       )
     ) {
       return knowledgeBodyLimit(c, next);
+    }
+
+    if (c.req.method === "POST" && c.req.path === "/v1/llm/chat") {
+      return desktopChatBodyLimit(c, next);
     }
 
     const limit = LARGE_BODY_ROUTES.has(c.req.path)
