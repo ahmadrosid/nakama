@@ -15,6 +15,7 @@ Lean is the line core keeps. Judge every design, review and issue breakdown agai
 ## Rules
 
 **Before code**
+- To work on an issue someone else filed: comment on it to request it, state your plan, and wait for the direction. Do not write the code or open a PR before that. This covers AI agents too. Maintainers, and people fixing an issue they filed themselves, are exempt. See [who goes first](./CONTRIBUTING.md#workflow)
 - Read [CONTRIBUTING.md, "Before you start building"](./CONTRIBUTING.md#before-you-start-building) first. Five questions, and a closed PR here usually failed one of them. You can produce a working change faster than anyone can decide it was the right one, so check the shape before the diff
 - Read the rest of [CONTRIBUTING.md](./CONTRIBUTING.md) before you pick work or open a PR: how to claim an issue, the checks to run, the PR body format, and [what happens to work that goes quiet](./CONTRIBUTING.md#when-work-goes-quiet). An issue assigned to someone else is not yours to build. A PR labelled `stale` is, with `Co-authored-by` for its author
 

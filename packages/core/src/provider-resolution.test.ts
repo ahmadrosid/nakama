@@ -19,6 +19,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName(" GEMINI ")).toBe("gemini");
     expect(parseProviderName("openai_compatible")).toBe("openai_compatible");
     expect(parseProviderName("opencode_go")).toBe("opencode_go");
+    expect(parseProviderName("command_code")).toBe("command_code");
     expect(parseProviderName("deepseek")).toBe("deepseek");
     expect(parseProviderName("netra")).toBe("netra");
     expect(parseProviderName("doubao")).toBe("doubao");
@@ -156,6 +157,7 @@ describe("isDiscoveryModelProvider", () => {
     expect(isDiscoveryModelProvider("groq")).toBe(true);
     expect(isDiscoveryModelProvider("moonshot")).toBe(true);
     expect(isDiscoveryModelProvider("moonshot_cn")).toBe(true);
+    expect(isDiscoveryModelProvider("command_code")).toBe(true);
   });
 
   test("excludes catalog providers", () => {
@@ -194,6 +196,9 @@ describe("defaultDiscoveryBaseUrl", () => {
     );
     expect(defaultDiscoveryBaseUrl("groq")).toBe(
       "https://api.groq.com/openai/v1"
+    );
+    expect(defaultDiscoveryBaseUrl("command_code")).toBe(
+      "https://api.commandcode.ai/provider/v1"
     );
   });
 

@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AgentService } from "../../services/agent-service";
 import { sessionTurnRegistry } from "../../services/session-turn-registry";
@@ -101,5 +101,113 @@ describe("POST /v1/sessions/:id/stop", () => {
     // Only /stop ends a web turn; a locked phone must not.
     expect(started).toBe(true);
     expect(signal?.aborted ?? false).toBe(false);
+  });
+});
+
+describe("POST /v1/sessions/:id/messages", () => {
+  const savedPublicUrl = process.env.NAKAMA_WEB_PUBLIC_URL;
+
+  afterEach(() => {
+    if (savedPublicUrl === undefined) {
+      delete process.env.NAKAMA_WEB_PUBLIC_URL;
+    } else {
+      process.env.NAKAMA_WEB_PUBLIC_URL = savedPublicUrl;
+    }
+  });
+
+  async function sendFrom(
+    origin: string,
+    publicUrl: string | null = "https://team.example.com"
+  ) {
+    if (publicUrl) {
+      process.env.NAKAMA_WEB_PUBLIC_URL = publicUrl;
+    } else {
+      delete process.env.NAKAMA_WEB_PUBLIC_URL;
+    }
+
+    const databaseAdapter = createInMemoryDatabaseAdapter();
+    const agent = new AgentService(null, null, databaseAdapter);
+    const { app } = createMinimalHonoApp({ agent, databaseAdapter });
+
+    const { email, password } = await seedOrgAdmin(databaseAdapter, {
+      orgId: ORG,
+      profileId: "profile_stop",
+      userId: "user_stop",
+    });
+
+    const session = await loginUserSession(app, email, password, ORG);
+
+    const sessionId = await agent.createSession(
+      ORG,
+      "web",
+      "profile_stop",
+      "user_stop"
+    );
+
+    const started: { clientOrigin?: string }[] = [];
+
+    spyOn(agent.turns, "start").mockImplementation(async (_id, _org, input) => {
+      started.push(input);
+
+      return {
+        done: Promise.resolve({ kind: "done", reply: "hello" }),
+        status: "started",
+      };
+    });
+
+    const response = await app.fetch(
+      new Request(`http://localhost:4310/v1/sessions/${sessionId}/messages`, {
+        body: JSON.stringify({ clientOrigin: origin, message: "hi" }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    return { body: await response.json(), response, started };
+  }
+
+  test("an origin the server cannot vouch for still runs the turn", async () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => undefined);
+
+    try {
+      const { body, response, started } = await sendFrom(
+        "https://team.old-domain.example"
+      );
+
+      expect(response.status).toBe(200);
+      expect(body.reply).toBe("hello");
+      expect(started).toHaveLength(1);
+      expect(started[0]?.clientOrigin).toBeUndefined();
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test("an unvouched origin is refused when no public URL can replace it", async () => {
+    const { response, started } = await sendFrom(
+      "https://team.old-domain.example",
+      null
+    );
+
+    expect(response.status).toBe(400);
+    expect(started).toHaveLength(0);
+  });
+
+  test("a malformed origin is refused", async () => {
+    const { response, started } = await sendFrom("javascript:alert(1)");
+
+    expect(response.status).toBe(400);
+    expect(started).toHaveLength(0);
+  });
+
+  test("a vouched origin reaches the turn", async () => {
+    const { response, started } = await sendFrom("https://team.example.com");
+
+    expect(response.status).toBe(200);
+    expect(started[0]?.clientOrigin).toBe("https://team.example.com");
   });
 });

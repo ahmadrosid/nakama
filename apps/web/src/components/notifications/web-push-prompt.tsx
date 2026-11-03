@@ -1,7 +1,12 @@
 import { Button } from "@nakama/ui/button";
 import { Notification01Icon } from "hugeicons-react";
-import { useState } from "react";
-import { useWebPush, webPushSupported } from "@/hooks/use-web-push";
+import { useEffect, useState } from "react";
+import {
+  REPLY_READY_AWAY,
+  readMissedReply,
+  useWebPush,
+  webPushSupported,
+} from "@/hooks/use-web-push";
 
 const DISMISSED_KEY = "nakama.webPushPrompt.dismissed";
 
@@ -13,13 +18,24 @@ function readDismissed(): boolean {
   }
 }
 
-/** One-time offer to turn on reply notifications for this device. */
+/**
+ * One-time offer to turn on reply notifications for this device. It waits
+ * until a reply finishes while the user is away, when the offer is useful.
+ */
 export function WebPushPrompt() {
   const { busy, enabled, error, setPush } = useWebPush();
   const [dismissed, setDismissed] = useState(readDismissed);
+  const [missedReply, setMissedReply] = useState(readMissedReply);
+
+  useEffect(() => {
+    const onAway = () => setMissedReply(true);
+    window.addEventListener(REPLY_READY_AWAY, onAway);
+
+    return () => window.removeEventListener(REPLY_READY_AWAY, onAway);
+  }, []);
 
   if (
-    !webPushSupported ||
+    !(webPushSupported && missedReply) ||
     dismissed ||
     enabled !== false ||
     Notification.permission === "denied"

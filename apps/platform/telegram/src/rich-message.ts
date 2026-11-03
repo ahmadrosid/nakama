@@ -1,5 +1,6 @@
+import { renderTelegramRichText } from "@nakama/core/telegram-rich-text";
 import type { Context } from "grammy";
-import { prepareTelegramFallbackReply, renderTelegramRichText } from "./format";
+import { prepareTelegramFallbackReply } from "./format";
 
 interface TelegramReplyMessage {
   message_id: number;

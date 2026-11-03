@@ -10,6 +10,7 @@ import { cn } from "@nakama/ui/utils";
 import { useQuery } from "@tanstack/react-query";
 import {
   AiBrain01Icon,
+  AlertCircleIcon,
   ArrowDown01Icon,
   ArrowRight01Icon,
   Audit02Icon,
@@ -47,6 +48,7 @@ import {
 import {
   type AssistantTurnSegment,
   formatLocalCitations,
+  groupFileSteps,
   type LocalFileCitation,
   toolGroupElapsedSeconds,
 } from "@/components/chat/assistant-tool-group.shared";
@@ -109,6 +111,7 @@ export function AssistantTurnSegmentView({
   profileId,
   onOpenFileCitation,
   onRetryMessage,
+  onSwitchModel,
   retryDisabled = false,
 }: {
   segment: AssistantTurnSegment;
@@ -117,6 +120,7 @@ export function AssistantTurnSegmentView({
   profileId?: string | null;
   onOpenFileCitation?: (path: string) => void;
   onRetryMessage?: (message: ChatListItem) => void;
+  onSwitchModel?: () => void;
   retryDisabled?: boolean;
 }) {
   if (segment.kind === "work") {
@@ -142,17 +146,106 @@ export function AssistantTurnSegmentView({
         ) : null}
         <AssistantTextContent
           message={segment.message}
+          modelLabel={modelLabel}
           onOpenFileCitation={onOpenFileCitation}
           onRetry={
             segment.message.failed && onRetryMessage
               ? () => onRetryMessage(segment.message)
               : undefined
           }
+          onSwitchModel={onSwitchModel}
           profileId={profileId}
           retryDisabled={retryDisabled}
         />
       </MessageContent>
     </Message>
+  );
+}
+
+function FailedTurnNotice({
+  error,
+  modelLabel,
+  onRetry,
+  onSwitchModel,
+  retryDisabled,
+}: {
+  error: string;
+  modelLabel?: string | null;
+  onRetry?: () => void;
+  onSwitchModel?: () => void;
+  retryDisabled: boolean;
+}) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
+  return (
+    <div className="flex w-full min-w-0 items-start gap-3" role="alert">
+      <span className="mt-px flex size-7 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+        <AlertCircleIcon aria-hidden className="size-4" />
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
+        <div className="flex flex-col gap-1">
+          <p className="font-medium text-sm">
+            The reply stopped before it finished
+          </p>
+          <p className="text-muted-foreground text-sm leading-relaxed">
+            Something went wrong while writing the reply. Retry, or switch to
+            another model.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {onRetry ? (
+            <Button
+              className="h-9 rounded-[10px] bg-foreground px-3.5 text-background hover:bg-foreground/85"
+              disabled={retryDisabled}
+              onClick={onRetry}
+              type="button"
+            >
+              <Rotate02Icon aria-hidden className="size-3.5" />
+              Retry
+            </Button>
+          ) : null}
+          {onSwitchModel ? (
+            <Button
+              className="h-9 rounded-[10px] px-3.5"
+              disabled={retryDisabled}
+              onClick={onSwitchModel}
+              type="button"
+              variant="outline"
+            >
+              Switch model
+            </Button>
+          ) : null}
+          <Button
+            aria-expanded={detailsOpen}
+            className="h-9 rounded-[10px] px-2.5 text-muted-foreground"
+            onClick={() => setDetailsOpen((open) => !open)}
+            type="button"
+            variant="ghost"
+          >
+            Details
+            <ArrowDown01Icon
+              aria-hidden
+              className={cn(
+                "size-3.5 transition-transform",
+                detailsOpen && "rotate-180"
+              )}
+            />
+          </Button>
+        </div>
+        {detailsOpen ? (
+          <dl className="grid grid-cols-[6rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 rounded-xl border border-border bg-muted/40 px-3.5 py-3 text-[13px] leading-normal">
+            <dt className="text-muted-foreground">Error</dt>
+            <dd className="break-words font-mono">{error}</dd>
+            {modelLabel ? (
+              <>
+                <dt className="text-muted-foreground">Model</dt>
+                <dd>{modelLabel}</dd>
+              </>
+            ) : null}
+          </dl>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -171,15 +264,19 @@ function StreamingPlainTail({ text }: { text: string }) {
 
 function AssistantTextContent({
   message,
+  modelLabel,
   profileId,
   onOpenFileCitation,
   onRetry,
+  onSwitchModel,
   retryDisabled = false,
 }: {
   message: ChatListItem;
+  modelLabel?: string | null;
   profileId?: string | null;
   onOpenFileCitation?: (path: string) => void;
   onRetry?: () => void;
+  onSwitchModel?: () => void;
   retryDisabled?: boolean;
 }) {
   const { user } = useAuth();
@@ -215,30 +312,13 @@ function AssistantTextContent({
 
   if (message.failed) {
     return (
-      <div
-        className="flex w-full min-w-0 flex-col gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5"
-        role="alert"
-      >
-        <div className="flex flex-col gap-1">
-          <span className="font-medium text-destructive text-xs">Failed</span>
-          <p className="text-destructive/90 text-sm leading-relaxed">
-            {content || "The model did not respond."}
-          </p>
-        </div>
-        {onRetry ? (
-          <Button
-            className="w-fit border-destructive/30 bg-background text-destructive hover:bg-destructive/10 hover:text-destructive"
-            disabled={retryDisabled}
-            onClick={onRetry}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <Rotate02Icon aria-hidden className="size-3.5" />
-            Retry
-          </Button>
-        ) : null}
-      </div>
+      <FailedTurnNotice
+        error={content || "The model did not respond."}
+        modelLabel={modelLabel}
+        onRetry={onRetry}
+        onSwitchModel={onSwitchModel}
+        retryDisabled={retryDisabled}
+      />
     );
   }
 
@@ -516,15 +596,11 @@ function OtherWorkGroup({
       }
       toolCount={tools.length}
     >
-      {tools.map((tool, index) => (
-        <TimelineStep isLast={index === tools.length - 1} key={tool.id}>
-          <ToolRow
-            message={tool}
-            modelLabel={modelLabel}
-            profileId={profileId}
-          />
-        </TimelineStep>
-      ))}
+      <ToolStepList
+        modelLabel={modelLabel}
+        profileId={profileId}
+        tools={tools}
+      />
     </ThinkingReasoning>
   );
 }
@@ -635,19 +711,94 @@ function ToolOnlyWorkGroup({
             )}
           >
             <div className={thinkingStyles.tools}>
-              {tools.map((tool, index) => (
-                <TimelineStep isLast={index === tools.length - 1} key={tool.id}>
-                  <ToolRow
-                    message={tool}
-                    modelLabel={modelLabel}
-                    profileId={profileId}
-                  />
-                </TimelineStep>
-              ))}
+              <ToolStepList
+                modelLabel={modelLabel}
+                profileId={profileId}
+                tools={tools}
+              />
             </div>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ToolStepList({
+  tools,
+  modelLabel,
+  profileId,
+}: {
+  tools: ChatListItem[];
+  modelLabel?: string | null;
+  profileId?: string | null;
+}) {
+  const steps = groupFileSteps(tools);
+
+  return steps.map((step, index) => {
+    const isLast = index === steps.length - 1;
+
+    if (step.kind === "files") {
+      return (
+        <TimelineStep isLast={isLast} key={step.tools[0]?.id}>
+          <FileGroupRow tools={step.tools} />
+        </TimelineStep>
+      );
+    }
+
+    return (
+      <TimelineStep isLast={isLast} key={step.tool.id}>
+        <ToolRow
+          message={step.tool}
+          modelLabel={modelLabel}
+          profileId={profileId}
+        />
+      </TimelineStep>
+    );
+  });
+}
+
+function fileGroupVerb(tool: string | undefined, isRunning: boolean) {
+  if (tool === "write_file") {
+    return isRunning ? "Writing" : "Wrote";
+  }
+
+  if (tool === "edit_file") {
+    return isRunning ? "Editing" : "Edited";
+  }
+
+  return isRunning ? "Reading" : "Read";
+}
+
+function FileGroupRow({ tools }: { tools: ChatListItem[] }) {
+  const [open, setOpen] = useState(false);
+  const tool = tools[0]?.tool;
+
+  const verb = fileGroupVerb(
+    tool,
+    tools.some((item) => item.toolStatus === "running")
+  );
+
+  // A failed read or write must show while the group is closed.
+  const failed = tools.filter((item) => toolItemFailed(item)).length;
+
+  return (
+    <div>
+      <CollapsibleTrigger
+        className="pl-0"
+        label={`${verb} ${tools.length} files${failed ? `, ${failed} failed` : ""}`}
+        labelClassName={failed ? "text-red-600 dark:text-red-400" : undefined}
+        onToggle={() => setOpen((current) => !current)}
+        open={open}
+        tool={tool}
+      />
+      {open ? (
+        <div className="mt-2 ml-[7px] flex flex-col gap-2 border-border border-l pl-5">
+          {tools.map((item) => (
+            <ToolTimelineItem key={item.id} message={item} nested />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1220,7 +1371,34 @@ function ToolTimelineDetails({
   );
 }
 
-function ToolTimelineItem({ message }: { message: ChatListItem }) {
+function toolItemFailed(
+  message: ChatListItem,
+  output = message.toolStatus === "done"
+    ? formatToolResult(message.tool, toolItemImages(message).rest)
+    : null
+): boolean {
+  return (
+    message.toolStatus === "done" &&
+    isToolResultError(message.toolResult, output)
+  );
+}
+
+/** Rows inside a file group show only the file name. */
+function toolTimelineLabel(message: ChatListItem, nested: boolean): string {
+  const fileName = nested
+    ? readString(message.toolInput?.path)?.split("/").at(-1)
+    : undefined;
+
+  return fileName || formatToolActionLabel(message.tool, message.toolInput);
+}
+
+function ToolTimelineItem({
+  message,
+  nested = false,
+}: {
+  message: ChatListItem;
+  nested?: boolean;
+}) {
   const isRunning = message.toolStatus === "running";
 
   const command =
@@ -1236,9 +1414,7 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
   const queryValue = message.toolInput?.query;
   const query = readString(queryValue);
 
-  const isError =
-    message.toolStatus === "done" &&
-    isToolResultError(message.toolResult, output);
+  const isError = toolItemFailed(message, output);
 
   const hasDetails = Boolean(
     isRunning || command || query || output || images.length > 0
@@ -1260,7 +1436,8 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
           className="pl-0"
           command={command}
           disabled={!hasDetails}
-          label={formatToolActionLabel(message.tool, message.toolInput)}
+          hideIcon={nested}
+          label={toolTimelineLabel(message, nested)}
           labelClassName={
             isError ? "text-red-600 dark:text-red-400" : undefined
           }
@@ -1366,9 +1543,11 @@ function CollapsibleTrigger({
   disabled = false,
   className,
   command,
+  hideIcon = false,
   tool,
 }: {
   command?: string | null;
+  hideIcon?: boolean;
   open: boolean;
   onToggle: () => void;
   label: string;
@@ -1397,18 +1576,20 @@ function CollapsibleTrigger({
       onClick={onToggle}
       type="button"
     >
-      <span
-        aria-hidden="true"
-        className="relative z-10 flex h-5 w-3.5 shrink-0 items-center justify-center bg-background"
-      >
-        <CodingAgentCommandLogo
-          className="size-3.5 text-foreground"
-          command={command ?? ""}
-          fallback={
-            <ToolIcon className="size-3.5 text-muted-foreground opacity-50" />
-          }
-        />
-      </span>
+      {hideIcon ? null : (
+        <span
+          aria-hidden="true"
+          className="relative z-10 flex h-5 w-3.5 shrink-0 items-center justify-center bg-background"
+        >
+          <CodingAgentCommandLogo
+            className="size-3.5 text-foreground"
+            command={command ?? ""}
+            fallback={
+              <ToolIcon className="size-3.5 text-muted-foreground opacity-50" />
+            }
+          />
+        </span>
+      )}
       <span className={cn("min-w-0 truncate", labelClassName)}>{label}</span>
       {disabled ? null : (
         <ArrowDown01Icon

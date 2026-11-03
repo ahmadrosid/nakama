@@ -111,6 +111,50 @@ describe("parseSkillPostTurnReviewResponse", () => {
     ).toEqual({ action: "noop", reason: "patch_skill_not_loaded" });
   });
 
+  test("refuses a patch whose oldString is past the SKILL.md cut", () => {
+    expect(
+      parseSkillPostTurnReviewResponse(
+        JSON.stringify({
+          action: "patch",
+          name: "deploy-checklist",
+          newString: "b",
+          oldString: "hidden-tail-marker",
+        }),
+        {
+          catalog: [
+            {
+              description: "Deploy steps",
+              name: "deploy-checklist",
+              skillMarkdown: `${"x".repeat(6000)}hidden-tail-marker`,
+            },
+          ],
+        }
+      )
+    ).toEqual({ action: "noop", reason: "patch_old_string_not_shown" });
+  });
+
+  test("refuses a patch whose oldString repeats past the cut", () => {
+    expect(
+      parseSkillPostTurnReviewResponse(
+        JSON.stringify({
+          action: "patch",
+          name: "deploy-checklist",
+          newString: "b",
+          oldString: "## Steps",
+        }),
+        {
+          catalog: [
+            {
+              description: "Deploy steps",
+              name: "deploy-checklist",
+              skillMarkdown: `## Steps${"x".repeat(6000)}## Steps`,
+            },
+          ],
+        }
+      )
+    ).toEqual({ action: "noop", reason: "patch_old_string_not_unique" });
+  });
+
   test("rejects delete", () => {
     expect(
       parseSkillPostTurnReviewResponse(
@@ -178,5 +222,20 @@ describe("buildSkillPostTurnReviewPrompt", () => {
     });
 
     expect(prompt).toContain(tail);
+  });
+
+  test("cuts a SKILL.md at the limit", () => {
+    const prompt = buildSkillPostTurnReviewPrompt({
+      catalog: [
+        {
+          description: "Deploy steps",
+          name: "deploy-checklist",
+          skillMarkdown: `${"x".repeat(6000)}hidden-tail-marker`,
+        },
+      ],
+      turnMessages: [{ content: "deploy staging", role: "user" }],
+    });
+
+    expect(prompt).not.toContain("hidden-tail-marker");
   });
 });

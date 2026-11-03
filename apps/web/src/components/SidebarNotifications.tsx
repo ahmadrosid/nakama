@@ -1,4 +1,3 @@
-import { Button } from "@nakama/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@nakama/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { ArrowUp01Icon, Notification01Icon } from "hugeicons-react";
@@ -6,18 +5,13 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { NotificationList } from "@/components/notifications/notification-list";
 import { WebPushToggle } from "@/components/notifications/web-push-toggle";
-import { ProfileAvatar } from "@/components/ProfileAvatar";
-import { useProfilesQuery } from "@/hooks/use-app-queries";
 import { useNotifications } from "@/hooks/use-notifications";
 import { PAGE_PATHS } from "@/lib/navigation";
-
-const MAX_FACES = 3;
 
 /** Dock at the bottom of the sidebar; shows only while something waits. */
 export function SidebarNotifications({ collapsed }: { collapsed: boolean }) {
   const [open, setOpen] = useState(false);
   const { items, totalCount } = useNotifications();
-  const { data: profiles = [] } = useProfilesQuery();
 
   if (totalCount === 0) {
     return null;
@@ -25,16 +19,11 @@ export function SidebarNotifications({ collapsed }: { collapsed: boolean }) {
 
   const countLabel = totalCount > 99 ? "99+" : String(totalCount);
   const label = `${totalCount} need you`;
-  const waitingProfileIds = new Set(items.map((item) => item.profileId));
-
-  const faces = profiles
-    .filter((profile) => waitingProfileIds.has(profile.id))
-    .slice(0, MAX_FACES);
 
   const trigger = collapsed ? (
     <button
       aria-label={label}
-      className="relative flex size-9 items-center justify-center rounded-lg bg-foreground text-background"
+      className="relative flex size-9 items-center justify-center rounded-lg bg-foreground/5 text-foreground transition-colors hover:bg-foreground/10"
       type="button"
     >
       <Notification01Icon aria-hidden className="size-4" />
@@ -48,29 +37,15 @@ export function SidebarNotifications({ collapsed }: { collapsed: boolean }) {
   ) : (
     <button
       aria-label={label}
-      className="flex h-11 w-full items-center gap-2.5 rounded-xl bg-foreground px-2.5 text-background text-sm transition-opacity hover:opacity-90"
+      className="flex h-10 w-full items-center gap-2.5 rounded-lg bg-foreground/5 px-3 text-foreground text-sm transition-colors hover:bg-foreground/10"
       type="button"
     >
-      {faces.length > 0 ? (
-        <span aria-hidden className="flex shrink-0">
-          {faces.map((profile, index) => (
-            <ProfileAvatar
-              className={
-                index === 0
-                  ? "ring-2 ring-foreground"
-                  : "-ml-2 ring-2 ring-foreground"
-              }
-              key={profile.id}
-              profile={profile}
-              size="xs"
-            />
-          ))}
-        </span>
-      ) : (
-        <Notification01Icon aria-hidden className="size-4 shrink-0" />
-      )}
+      <span aria-hidden className="size-2 shrink-0 rounded-full bg-primary" />
       <span className="flex-1 truncate text-left font-medium">{label}</span>
-      <ArrowUp01Icon aria-hidden className="size-4 shrink-0" />
+      <ArrowUp01Icon
+        aria-hidden
+        className="size-4 shrink-0 text-muted-foreground"
+      />
     </button>
   );
 
@@ -104,31 +79,24 @@ export function SidebarNotifications({ collapsed }: { collapsed: boolean }) {
           side={collapsed ? "right" : "top"}
           sideOffset={8}
         >
-          <p className="px-1.5 py-1.5 font-medium text-foreground text-sm leading-tight">
-            Needs you
-          </p>
+          <div className="flex h-7 items-center justify-between px-1.5">
+            <p className="font-semibold text-2xs text-muted-foreground uppercase tracking-wide">
+              Needs you
+            </p>
+            <Link
+              className="font-medium text-primary text-xs hover:underline"
+              onClick={() => setOpen(false)}
+              to={PAGE_PATHS.notifications}
+            >
+              View all
+            </Link>
+          </div>
           <div className="max-h-72 overflow-y-auto">
             <NotificationList
               compact
               items={items}
               onNavigate={() => setOpen(false)}
             />
-          </div>
-          <div className="px-1.5 pt-0.5 pb-1">
-            <Button
-              className="h-7 w-full justify-center text-xs"
-              nativeButton={false}
-              render={
-                <Link
-                  onClick={() => setOpen(false)}
-                  to={PAGE_PATHS.notifications}
-                />
-              }
-              size="sm"
-              type="button"
-            >
-              View all
-            </Button>
           </div>
           <div className="mt-1 border-border border-t pt-1">
             <WebPushToggle />

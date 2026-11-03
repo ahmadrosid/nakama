@@ -9,6 +9,7 @@ import {
   createNakamaDataExport,
   createNakamaOrgDataExport,
   createNakamaUserDataExport,
+  decodeArchiveRequestBytes,
   decodeArchiveRequestData,
   previewNakamaDataImport,
   restoreNakamaDataImport,
@@ -16,8 +17,49 @@ import {
 import { runWithPluginExportBarrier } from "../../services/plugin-service";
 import type { ServerOptions } from "../context";
 import { requirePlatformAdminFromContext } from "../org-guards";
-import { errorResponse, json, readJson } from "../shared";
+import {
+  errorResponse,
+  isArchiveRequest,
+  json,
+  readJson,
+  readUntilClientGone,
+} from "../shared";
 import type { HonoApp } from "../types";
+
+/** A raw ZIP body, the form browsers send. */
+export const importArchiveBodySchema = z.string().openapi({ format: "binary" });
+
+/** Only read for an application/zip body; JSON carries `confirm` itself. */
+export const importConfirmQuerySchema = z.object({
+  confirm: z.enum(["true"]).optional(),
+});
+
+/**
+ * Reads an import body as a raw ZIP or as the JSON `{ data, confirm }` form.
+ * Browsers send the raw ZIP because base64-encoding a large file in a tab takes
+ * minutes. A raw body carries `confirm` in the query string.
+ */
+export async function readImportRequest(
+  request: Request,
+  readJsonBody: () => Promise<{ confirm?: boolean; data: string }>,
+  tooLargeMessage?: string
+): Promise<{ archive: Buffer; confirm: boolean }> {
+  if (!isArchiveRequest(request)) {
+    const body = await readJsonBody();
+
+    return {
+      archive: decodeArchiveRequestData(body.data, tooLargeMessage),
+      confirm: body.confirm === true,
+    };
+  }
+
+  const bytes = await readUntilClientGone(request, request.arrayBuffer());
+
+  return {
+    archive: decodeArchiveRequestBytes(Buffer.from(bytes), tooLargeMessage),
+    confirm: new URL(request.url).searchParams.get("confirm") === "true",
+  };
+}
 
 export function registerDataPortabilityRoutes(
   app: HonoApp,
@@ -165,7 +207,10 @@ export function registerDataPortabilityRoutes(
       path: "/v1/platform/data/import/preview",
       request: {
         body: {
-          content: { "application/json": { schema: importRequestSchema } },
+          content: {
+            "application/json": { schema: importRequestSchema },
+            "application/zip": { schema: importArchiveBodySchema },
+          },
           required: true,
         },
       },
@@ -203,9 +248,13 @@ export function registerDataPortabilityRoutes(
       path: "/v1/platform/data/import/restore",
       request: {
         body: {
-          content: { "application/json": { schema: restoreRequestSchema } },
+          content: {
+            "application/json": { schema: restoreRequestSchema },
+            "application/zip": { schema: importArchiveBodySchema },
+          },
           required: true,
         },
+        query: importConfirmQuerySchema,
       },
       responses: {
         200: {
@@ -282,13 +331,10 @@ export function registerDataPortabilityRoutes(
   app.post("/v1/platform/data/import/preview", async (c) => {
     requirePlatformAdminFromContext(c);
 
-    const body = await readJson<PreviewDataImportRequest>(
-      c.req.raw,
-      importRequestSchema
+    // Read outside the catch so an oversized archive keeps its 413.
+    const { archive } = await readImportRequest(c.req.raw, () =>
+      readJson<PreviewDataImportRequest>(c.req.raw, importRequestSchema)
     );
-
-    // Decoded outside the catch so an oversized archive keeps its 413.
-    const archive = decodeArchiveRequestData(body.data);
 
     try {
       const preview = await previewNakamaDataImport(archive);
@@ -302,12 +348,9 @@ export function registerDataPortabilityRoutes(
   app.post("/v1/platform/data/import/restore", async (c) => {
     requirePlatformAdminFromContext(c);
 
-    const body = await readJson<RestoreDataImportRequest>(
-      c.req.raw,
-      restoreRequestSchema
+    const { archive, confirm } = await readImportRequest(c.req.raw, () =>
+      readJson<RestoreDataImportRequest>(c.req.raw, restoreRequestSchema)
     );
-
-    const archive = decodeArchiveRequestData(body.data);
 
     let restore;
 
@@ -325,7 +368,7 @@ export function registerDataPortabilityRoutes(
                   await onBeforeDataRestore();
                 }
               : undefined,
-            confirm: body.confirm,
+            confirm,
           });
 
           // Drop registrations before reloading restored data; restored plugins stay disabled.

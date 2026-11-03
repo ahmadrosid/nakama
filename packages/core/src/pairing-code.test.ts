@@ -42,6 +42,13 @@ describe("looksLikePairingCode", () => {
     expect(looksLikePairingCode(code.slice(0, -1))).toBe(false);
     expect(looksLikePairingCode(`${code}0`)).toBe(false);
   });
+
+  test("a pasted GUID is not a code", () => {
+    expect(looksLikePairingCode(crypto.randomUUID())).toBe(false);
+    expect(looksLikePairingCode(` ${crypto.randomUUID().toUpperCase()} `)).toBe(
+      false
+    );
+  });
 });
 
 describe("pairingCodesMatch", () => {
@@ -100,6 +107,35 @@ describe("getPairingAttemptBudget", () => {
     const fresh = getPairingAttemptBudget(scope, "B".repeat(32));
     expect(isPairingAttemptBlocked(fresh)).toBe(false);
     expect(fresh).toBe(getPairingAttemptBudget(scope, "B".repeat(32)));
+  });
+
+  test("drops the oldest budgets once many senders are tracked", () => {
+    const code = "C".repeat(32);
+    const first = `scope-${crypto.randomUUID()}`;
+
+    const block = (scope: string) => {
+      const budget = getPairingAttemptBudget(scope, code);
+
+      for (let i = 0; i < 5; i += 1) {
+        recordPairingFailure(budget);
+      }
+    };
+
+    block(first);
+
+    for (let i = 0; i < 1000; i += 1) {
+      getPairingAttemptBudget(`scope-${crypto.randomUUID()}`, code);
+    }
+
+    const recent = `scope-${crypto.randomUUID()}`;
+    block(recent);
+
+    expect(isPairingAttemptBlocked(getPairingAttemptBudget(first, code))).toBe(
+      false
+    );
+    expect(isPairingAttemptBlocked(getPairingAttemptBudget(recent, code))).toBe(
+      true
+    );
   });
 });
 

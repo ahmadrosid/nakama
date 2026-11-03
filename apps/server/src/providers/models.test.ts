@@ -365,6 +365,14 @@ describe("modelSupportsVision", () => {
       modelSupportsVision("opencode-go/kimi-k2.7-code", "opencode_go")
     ).toBe(false);
   });
+
+  test("infers Command Code vision from the model family", () => {
+    expect(modelSupportsVision("claude-sonnet-4-6", "command_code")).toBe(true);
+    expect(modelSupportsVision("gpt-5.4", "command_code")).toBe(true);
+    expect(
+      modelSupportsVision("deepseek/deepseek-v4.1-flash", "command_code")
+    ).toBe(false);
+  });
 });
 
 describe("resolveModelLimits", () => {

@@ -105,15 +105,28 @@ export function buildSkillPostTurnReviewPrompt(input: {
     }
   }
 
-  const loadedLines = input.catalog
-    .filter((skill) => skill.skillMarkdown)
-    .flatMap((skill) => [
+  const loadedLines = input.catalog.flatMap(({ name, skillMarkdown }) => {
+    if (!skillMarkdown) {
+      return [];
+    }
+
+    const lines = [
       "",
-      `### ${skill.name}`,
+      `### ${name}`,
       "",
       // Cut without an ellipsis so the model cannot copy a marker into oldString.
-      skill.skillMarkdown?.slice(0, SKILL_MARKDOWN_MAX) ?? "",
-    ]);
+      skillMarkdown.slice(0, SKILL_MARKDOWN_MAX),
+    ];
+
+    if (skillMarkdown.length > SKILL_MARKDOWN_MAX) {
+      lines.push(
+        "",
+        `(SKILL.md cut at ${SKILL_MARKDOWN_MAX} of ${skillMarkdown.length} characters. Do not patch past the cut. The hidden part can repeat text, so pick a long oldString.)`
+      );
+    }
+
+    return lines;
+  });
 
   return [
     truncate(lines.join("\n"), TURN_SNIPPET_MAX),
@@ -230,6 +243,18 @@ export function parseSkillPostTurnReviewResponse(
     // Without the SKILL.md in the prompt, oldString is a guess and fails on apply.
     if (!target.skillMarkdown) {
       return { action: "noop", reason: "patch_skill_not_loaded" };
+    }
+
+    // The model saw only the part before the cut, so oldString must be there.
+    if (
+      !target.skillMarkdown.slice(0, SKILL_MARKDOWN_MAX).includes(oldString)
+    ) {
+      return { action: "noop", reason: "patch_old_string_not_shown" };
+    }
+
+    // Staging refuses an oldString that matches more than once, hidden part included.
+    if (target.skillMarkdown.split(oldString).length !== 2) {
+      return { action: "noop", reason: "patch_old_string_not_unique" };
     }
 
     return { action: "patch", name, newString, oldString };

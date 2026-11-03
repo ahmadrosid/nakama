@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatMessage, ToolCall } from "@nakama/core";
-import { NakamaApiError } from "@nakama/core";
+import { NakamaApiError, ProviderStreamInterruptedError } from "@nakama/core";
 import {
   buildProviderHttpError,
   extractOpenAITokenUsage,
@@ -54,6 +54,52 @@ describe("provider shared helpers", () => {
       { data: '{"chunk":1}', event: "custom" },
       { data: '{"chunk":2}', event: "message" },
     ]);
+  });
+
+  test("readSseEvents turns a dropped socket into a stream interruption after earlier events", async () => {
+    const events: string[] = [];
+    let sent = false;
+
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent) {
+          const drop = new TypeError(
+            "The socket connection was closed unexpectedly."
+          );
+
+          controller.error(Object.assign(drop, { code: "ECONNRESET" }));
+
+          return;
+        }
+
+        sent = true;
+        controller.enqueue(new TextEncoder().encode('data: {"chunk":1}\n\n'));
+      },
+    });
+
+    const error = await readSseEvents(body, ({ data }) => {
+      events.push(data);
+    }).catch((caught) => caught);
+
+    expect(events).toEqual(['{"chunk":1}']);
+    expect(error).toBeInstanceOf(ProviderStreamInterruptedError);
+    expect(error.status).toBe(502);
+  });
+
+  test("readSseEvents keeps an abort as an abort", async () => {
+    const abort = new DOMException("The operation was aborted.", "AbortError");
+
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.error(abort);
+      },
+    });
+
+    const error = await readSseEvents(body, () => undefined).catch(
+      (caught) => caught
+    );
+
+    expect(error).toBe(abort);
   });
 
   test("parseJsonRecord returns empty objects for invalid JSON", () => {

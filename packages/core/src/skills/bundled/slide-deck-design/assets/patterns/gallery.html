@@ -1,0 +1,93 @@
+<style>
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2.2cqw;
+}
+.gallery figure {
+  display: grid;
+  gap: 1.2cqw;
+  margin: 0;
+}
+.shot {
+  display: grid;
+  place-items: center;
+  height: 28cqw;
+  padding: 1.2cqw;
+}
+.shot img,
+.shot svg {
+  max-width: 100%;
+  max-height: 100%;
+  border: 1px solid var(--line);
+  border-radius: 0.5cqw;
+}
+figcaption {
+  display: flex;
+  gap: 0.9cqw;
+  align-items: center;
+  font-size: 1.1cqw;
+  color: var(--muted);
+}
+figcaption b {
+  display: block;
+  font-size: 1.35cqw;
+  font-weight: 600;
+  color: var(--ink);
+}
+@media screen and (max-width: 760px) and (orientation: portrait) {
+  .gallery {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .shot {
+    height: 220px;
+  }
+  figcaption {
+    font-size: 12px;
+  }
+  figcaption b {
+    font-size: 14px;
+  }
+}
+</style>
+<section aria-label="Gallery" class="slide">
+  <p class="kicker">Section · Screens</p>
+  <h1>Three screens shipped.</h1>
+  <div class="gallery fill">
+    <figure>
+      <div class="shot panel">
+        <svg aria-label="Screenshot" role="img" viewBox="0 0 16 10">
+          <rect fill="#fff" height="10" width="16" />
+        </svg>
+      </div>
+      <figcaption>
+        <span class="av">AB</span>
+        <div><b>Name One</b>Short title of the change</div>
+      </figcaption>
+    </figure>
+    <figure>
+      <div class="shot panel">
+        <svg aria-label="Screenshot" role="img" viewBox="0 0 16 10">
+          <rect fill="#fff" height="10" width="16" />
+        </svg>
+      </div>
+      <figcaption>
+        <span class="av">CD</span>
+        <div><b>Name Two</b>Short title of the change</div>
+      </figcaption>
+    </figure>
+    <figure>
+      <div class="shot panel">
+        <svg aria-label="Screenshot" role="img" viewBox="0 0 10 16">
+          <rect fill="#fff" height="16" width="10" />
+        </svg>
+      </div>
+      <figcaption>
+        <span class="av">EF</span>
+        <div><b>Name Three</b>Short title of the change</div>
+      </figcaption>
+    </figure>
+  </div>
+  <aside class="notes"><p>One sentence about each screen, in order.</p></aside>
+</section>

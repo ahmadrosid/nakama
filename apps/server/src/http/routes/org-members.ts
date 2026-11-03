@@ -604,6 +604,7 @@ export function registerOrgMemberRoutes(
     const body = await readJson(c.req.raw, addOrgMemberSchema);
 
     const member = await orgService.addMember({
+      bypassDomainAllowlist: auth.isPlatformAdmin,
       email: body.email,
       name: body.name,
       orgId,

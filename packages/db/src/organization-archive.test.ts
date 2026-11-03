@@ -923,7 +923,7 @@ describe("atomic team creation records", () => {
     await expect(
       db.beginOrgTeamCreation({ ...input, adminUserId: "missing" })
     ).rejects.toThrow();
-    await db.disableUser("admin", "now");
+    expect(await db.disableUserUnlessLastAdmin("admin", "now")).toBe(true);
     await expect(db.beginOrgTeamCreation(input)).rejects.toThrow();
     await db.enableUser("admin");
 

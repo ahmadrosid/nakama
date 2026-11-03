@@ -488,15 +488,45 @@ export function clearBrowserSessionCookies(headers: Headers): void {
  * forces the preflight, and nothing here answers one.
  */
 export function assertJsonRequest(request: Request): void {
-  const contentType = request.headers
+  if (readMediaType(request) !== "application/json") {
+    throw new NakamaApiError("Content-Type must be application/json.", 415);
+  }
+}
+
+function readMediaType(request: Request): string | undefined {
+  return request.headers
     .get("content-type")
     ?.split(";")[0]
     ?.trim()
     .toLowerCase();
+}
 
-  if (contentType !== "application/json") {
-    throw new NakamaApiError("Content-Type must be application/json.", 415);
-  }
+/** application/zip is not a CORS-simple type, so it needs a preflight like JSON. */
+export function isArchiveRequest(request: Request): boolean {
+  return readMediaType(request) === "application/zip";
+}
+
+/**
+ * Bun can leave a body read pending forever when the client hangs up, which
+ * would pin whatever the caller holds, such as the restore lock.
+ */
+export function readUntilClientGone<T>(
+  request: Request,
+  read: Promise<T>
+): Promise<T> {
+  const gone = new Promise<never>((_resolve, reject) => {
+    const rejectGone = () => {
+      reject(new NakamaApiError("The client closed the request.", 400));
+    };
+
+    if (request.signal.aborted) {
+      rejectGone();
+    }
+
+    request.signal.addEventListener("abort", rejectGone, { once: true });
+  });
+
+  return Promise.race([read, gone]);
 }
 
 export async function readJson<T>(
@@ -504,7 +534,7 @@ export async function readJson<T>(
   schema?: ZodType<T>
 ): Promise<T> {
   try {
-    const body = await request.json();
+    const body = await readUntilClientGone(request, request.json());
 
     if (!schema) {
       return body;

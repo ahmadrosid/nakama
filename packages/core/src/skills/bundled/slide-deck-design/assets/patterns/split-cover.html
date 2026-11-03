@@ -1,0 +1,83 @@
+<style>
+.cover-split {
+  padding: 0;
+}
+.cover-grid {
+  display: grid;
+  grid-template-columns: 0.92fr 1.08fr;
+  height: 100%;
+}
+.cover-text {
+  display: flex;
+  flex-direction: column;
+  padding: 5.2cqw 4cqw 4.6cqw 6.4cqw;
+}
+.cover-split h1 {
+  font-size: 4.8cqw;
+}
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: 1cqw;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+.hero b {
+  font-size: 5.2cqw;
+  font-weight: 500;
+}
+.hero .on {
+  color: var(--accent-ink);
+}
+.hero i {
+  font-size: 2.4cqw;
+  font-style: normal;
+  color: var(--subtle);
+}
+.hero img {
+  max-width: 80%;
+  max-height: 80%;
+}
+@media screen and (max-width: 760px) and (orientation: portrait) {
+  .cover-split {
+    padding: 0;
+  }
+  .cover-grid {
+    grid-template-columns: 1fr;
+    min-height: 100dvh;
+  }
+  .cover-text {
+    min-height: 60dvh;
+    padding: 48px 22px 28px;
+  }
+  .cover-split h1 {
+    font-size: 30px;
+  }
+  .hero {
+    min-height: 40dvh;
+  }
+  .hero b {
+    font-size: 36px;
+  }
+  .hero i {
+    font-size: 18px;
+  }
+}
+</style>
+<section aria-label="Title" class="slide cover cover-split">
+  <div class="cover-grid">
+    <div class="cover-text">
+      <div class="brand">Brand</div>
+      <h1>Deck title<br>on two lines</h1>
+      <p class="meta">Subtitle · Event · Date</p>
+    </div>
+    <div class="panel hero">
+      <span class="label">Key figure</span>
+      <b>1.2M</b>
+      <i>↓</i>
+      <b class="on">1.5M</b>
+    </div>
+  </div>
+  <aside class="notes"><p>What you say while this slide shows.</p></aside>
+</section>

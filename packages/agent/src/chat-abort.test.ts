@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type {
   ChatCompletionResult,
+  ChatMessage,
   GenerateChatInput,
   ProviderClient,
   ToolCall,
@@ -260,6 +261,46 @@ describe("agent chat stream interruption", () => {
         .filter((message) => message.role === "assistant")
         .map((message) => message.content)
     ).toEqual(["Part", " Final"]);
+  });
+
+  test("drops a thinking-only partial reply before the retry", async () => {
+    const histories: ChatMessage[][] = [];
+    let calls = 0;
+
+    const provider: ProviderClient = {
+      generateChat: () => Promise.reject(new Error("stream only")),
+      generateText: () => Promise.resolve({ content: "{}" }),
+      name: "deepseek",
+      streamChat(input, handlers) {
+        calls += 1;
+        histories.push([...input.messages]);
+
+        if (calls === 1) {
+          handlers.onThinking?.("Planning the deck");
+
+          return Promise.reject(new ProviderStreamInterruptedError("broke"));
+        }
+
+        handlers.onChunk("Done");
+
+        return Promise.resolve({
+          assistantMessage: { content: "Done", role: "assistant" },
+          content: "Done",
+          toolCalls: [],
+        });
+      },
+    };
+
+    const session = createAgentChatSession({ provider }, {});
+    const reply = await session.sendStream("go", { onChunk() {} });
+
+    expect(reply.trim()).toBe("Done");
+    expect(calls).toBe(2);
+    expect(
+      histories[1]?.filter(
+        (message) => message.role === "assistant" && !message.content
+      )
+    ).toEqual([]);
   });
 
   test("fails the turn when the stream breaks again", async () => {

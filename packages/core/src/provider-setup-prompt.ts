@@ -62,6 +62,7 @@ const PROVIDER_CHOICES: Array<{ id: UserProviderName; label: string }> = [
   { id: "fireworks", label: "Fireworks" },
   { id: "ollama", label: "Ollama" },
   { id: "opencode_go", label: "OpenCode Go" },
+  { id: "command_code", label: "Command Code" },
   { id: "minimax", label: "MiniMax" },
   { id: "minimax_cn", label: "MiniMax (CN)" },
   { id: "moonshot", label: "Moonshot Kimi" },
@@ -273,6 +274,7 @@ function resolveProviderChoice(input: string): UserProviderName | null {
     normalized === "ollama" ||
     normalized === "openai_compatible" ||
     normalized === "opencode_go" ||
+    normalized === "command_code" ||
     normalized === "minimax" ||
     normalized === "minimax_cn" ||
     normalized === "moonshot" ||

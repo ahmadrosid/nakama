@@ -1,0 +1,268 @@
+/** @jsxRuntime classic */
+/** @jsx h */
+// Line, bar, and donut charts in plain SVG, styled with host tokens.
+// Use them as they are; change only what the page needs:
+//   import { createCharts } from "./charts.jsx";
+//   const { LineChart, BarChart, PieChart } = createCharts(ctx);
+//   <LineChart data={[{ label: "Mon", value: 3 }]} format={(v) => `£${v.toFixed(2)}`} />
+// Each chart measures its own width and draws in pixels, so text keeps one
+// size at every width, also in the 360px side panel.
+import css from "./charts.css" with { type: "text" };
+
+let h;
+
+const PAD = { bottom: 24, left: 48, right: 12, top: 12 };
+
+const SERIES = [
+  "var(--primary)",
+  "var(--n-positive)",
+  "var(--muted-foreground)",
+  "var(--destructive)",
+  "var(--foreground)",
+];
+
+function defaultFormat(value) {
+  return String(Math.round(value * 100) / 100);
+}
+
+// Four even ticks. A flat series gets room above and below, so its line
+// sits in the middle with real values on the axis, not on the floor.
+function scale(values, fromZero) {
+  let min = fromZero ? 0 : Math.min(...values);
+  let max = Math.max(...values, fromZero ? 1 : -Infinity);
+
+  if (min === max) {
+    const room = Math.abs(max) * 0.1 || 1;
+    min -= room;
+    max += room;
+  }
+
+  const ticks = [0, 1, 2, 3].map((step) => min + ((max - min) * step) / 3);
+
+  return { max, min, ticks };
+}
+
+/** @param {import("./nakama-plugin").PluginContext} ctx */
+export function createCharts(ctx) {
+  const { createElement, useEffect, useRef, useState } = ctx.React;
+  h = createElement;
+  ctx.styles(css);
+
+  function useWidth() {
+    const ref = useRef(null);
+    const [width, setWidth] = useState(0);
+
+    useEffect(() => {
+      const node = ref.current;
+
+      if (!node) {
+        return;
+      }
+
+      const observer = new ResizeObserver(([entry]) =>
+        setWidth(Math.floor(entry.contentRect.width))
+      );
+
+      observer.observe(node);
+
+      return () => observer.disconnect();
+    }, []);
+
+    return [ref, width];
+  }
+
+  function Empty() {
+    return <p className="plugin-chart-empty">No data yet.</p>;
+  }
+
+  function Axis({ format, height, width, y }) {
+    return y.ticks.map((tick) => {
+      const top =
+        PAD.top +
+        (1 - (tick - y.min) / (y.max - y.min)) * (height - PAD.top - PAD.bottom);
+
+      return (
+        <g key={tick}>
+          <line className="plugin-chart-grid" x1={PAD.left} x2={width - PAD.right} y1={top} y2={top} />
+          <text dominantBaseline="middle" textAnchor="end" x={PAD.left - 6} y={top}>
+            {format(tick)}
+          </text>
+        </g>
+      );
+    });
+  }
+
+  // Label a few points only, so long labels do not overlap.
+  function xLabelIndexes(count) {
+    if (count <= 6) {
+      return new Set(Array.from({ length: count }, (_, index) => index));
+    }
+
+    return new Set([0, Math.floor((count - 1) / 2), count - 1]);
+  }
+
+  function LineChart({ data, format = defaultFormat, height = 200, label }) {
+    const [ref, width] = useWidth();
+
+    if (!data.length) {
+      // Keep the measured div mounted, so the chart draws when data arrives.
+      return (
+        <div className="plugin-chart" ref={ref}>
+          <Empty />
+        </div>
+      );
+    }
+
+    const y = scale(data.map((point) => point.value), false);
+    const innerWidth = Math.max(width - PAD.left - PAD.right, 1);
+    const innerHeight = height - PAD.top - PAD.bottom;
+    const shown = xLabelIndexes(data.length);
+
+    const points = data.map((point, index) => ({
+      ...point,
+      x: PAD.left + (data.length === 1 ? innerWidth / 2 : (innerWidth * index) / (data.length - 1)),
+      y: PAD.top + (1 - (point.value - y.min) / (y.max - y.min)) * innerHeight,
+    }));
+
+    return (
+      <div className="plugin-chart" ref={ref}>
+        {width > 0 ? (
+          <svg aria-label={label} height={height} role="img" width={width}>
+            <Axis format={format} height={height} width={width} y={y} />
+            <polyline className="plugin-chart-line" points={points.map((p) => `${p.x},${p.y}`).join(" ")} />
+            {points.map((point, index) => (
+              <g key={`${point.label}-${index}`}>
+                <circle className="plugin-chart-dot" cx={point.x} cy={point.y} r={3.5}>
+                  <title>{`${point.label}: ${format(point.value)}`}</title>
+                </circle>
+                {shown.has(index) ? (
+                  <text
+                    textAnchor={index === 0 ? "start" : index === data.length - 1 ? "end" : "middle"}
+                    x={point.x}
+                    y={height - 6}
+                  >
+                    {point.label}
+                  </text>
+                ) : null}
+              </g>
+            ))}
+          </svg>
+        ) : null}
+      </div>
+    );
+  }
+
+  function BarChart({ data, format = defaultFormat, height = 200, label }) {
+    const [ref, width] = useWidth();
+
+    if (!data.length) {
+      // Keep the measured div mounted, so the chart draws when data arrives.
+      return (
+        <div className="plugin-chart" ref={ref}>
+          <Empty />
+        </div>
+      );
+    }
+
+    const y = scale(data.map((bar) => bar.value), true);
+    const innerWidth = Math.max(width - PAD.left - PAD.right, 1);
+    const innerHeight = height - PAD.top - PAD.bottom;
+    const slot = innerWidth / data.length;
+    const barWidth = Math.min(slot * 0.6, 48);
+    const shown = xLabelIndexes(data.length);
+
+    return (
+      <div className="plugin-chart" ref={ref}>
+        {width > 0 ? (
+          <svg aria-label={label} height={height} role="img" width={width}>
+            <Axis format={format} height={height} width={width} y={y} />
+            {data.map((bar, index) => {
+              const barHeight = ((bar.value - y.min) / (y.max - y.min)) * innerHeight;
+              const x = PAD.left + slot * index + (slot - barWidth) / 2;
+
+              return (
+                <g key={`${bar.label}-${index}`}>
+                  <rect
+                    className="plugin-chart-bar"
+                    height={Math.max(barHeight, 0)}
+                    rx={3}
+                    width={barWidth}
+                    x={x}
+                    y={PAD.top + innerHeight - barHeight}
+                  >
+                    <title>{`${bar.label}: ${format(bar.value)}`}</title>
+                  </rect>
+                  {shown.has(index) ? (
+                    <text textAnchor="middle" x={x + barWidth / 2} y={height - 6}>
+                      {bar.label}
+                    </text>
+                  ) : null}
+                </g>
+              );
+            })}
+          </svg>
+        ) : null}
+      </div>
+    );
+  }
+
+  // A donut with a legend beside it; the legend wraps below it when narrow.
+  function PieChart({ data, format = defaultFormat, label, size = 140 }) {
+    const total = data.reduce((sum, slice) => sum + slice.value, 0);
+
+    if (!total) {
+      return <Empty />;
+    }
+
+    const radius = size / 2 - 12;
+    const length = 2 * Math.PI * radius;
+    let offset = 0;
+
+    return (
+      <div className="plugin-pie">
+        <svg aria-label={label} height={size} role="img" width={size}>
+          <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
+            {data.map((slice, index) => {
+              const part = (slice.value / total) * length;
+              const arc = (
+                <circle
+                  cx={size / 2}
+                  cy={size / 2}
+                  fill="none"
+                  key={slice.label}
+                  r={radius}
+                  stroke={SERIES[index % SERIES.length]}
+                  strokeDasharray={`${part} ${length - part}`}
+                  strokeDashoffset={-offset}
+                  strokeWidth={18}
+                >
+                  <title>{`${slice.label}: ${format(slice.value)}`}</title>
+                </circle>
+              );
+
+              offset += part;
+
+              return arc;
+            })}
+          </g>
+          <text className="plugin-pie-total" dominantBaseline="middle" textAnchor="middle" x={size / 2} y={size / 2}>
+            {format(total)}
+          </text>
+        </svg>
+        <ul className="plugin-legend">
+          {data.map((slice, index) => (
+            <li key={slice.label}>
+              <span className="plugin-swatch" style={{ background: SERIES[index % SERIES.length] }} />
+              <span>{slice.label}</span>
+              <span className="plugin-legend-value">
+                {format(slice.value)} · {Math.round((slice.value / total) * 100)}%
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  return { BarChart, LineChart, PieChart };
+}

@@ -1,0 +1,98 @@
+<style>
+.lb {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3cqw;
+}
+.lb-row {
+  display: grid;
+  grid-template-columns: 2.6cqw 3.2cqw 19.5cqw 1fr 4.4cqw;
+  gap: 1cqw;
+  align-items: center;
+  padding: 1.1cqw 0;
+  font-size: 1.35cqw;
+  border-bottom: 1px solid var(--line);
+}
+.lb-row:first-child {
+  border-top: 1px solid var(--line);
+}
+.lb-row > span:first-child {
+  font: 1.1cqw var(--mono);
+  color: var(--subtle);
+}
+.lb-row b {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.lb-row > span:nth-child(4) {
+  height: 0.9cqw;
+  background: var(--wash);
+}
+.lb-row i {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+  opacity: 0.85;
+}
+.lb-row > span:last-child {
+  font-weight: 600;
+  text-align: right;
+}
+.lb-row.on > span:first-child {
+  color: var(--accent-ink);
+}
+.lb-row.on i {
+  background: var(--accent);
+  opacity: 1;
+}
+@media screen and (max-width: 760px) and (orientation: portrait) {
+  .lb {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .lb-row {
+    grid-template-columns: 24px 28px 1fr 60px 40px;
+    gap: 8px;
+    padding: 8px 0;
+    font-size: 14px;
+  }
+  .lb-row > span:first-child {
+    font-size: 10px;
+  }
+  .lb-row > span:nth-child(4) {
+    height: 6px;
+  }
+}
+</style>
+<section aria-label="Leaderboard" class="slide">
+  <p class="kicker">Section · Ranking</p>
+  <h1>Top contributors this month.</h1>
+  <div class="lb fill">
+    <div>
+      <div class="lb-row on">
+        <span>01</span><span class="av">AB</span><b>Name One</b>
+        <span><i style="width: 100%"></i></span><span>120</span>
+      </div>
+      <div class="lb-row on">
+        <span>02</span><span class="av">CD</span><b>A longer name that wraps</b>
+        <span><i style="width: 75%"></i></span><span>90</span>
+      </div>
+    </div>
+    <div>
+      <div class="lb-row on">
+        <span>03</span><span class="av">EF</span><b>Name Three</b>
+        <span><i style="width: 50%"></i></span><span>60</span>
+      </div>
+      <div class="lb-row">
+        <span>04</span><span class="av">GH</span><b>Name Four</b>
+        <span><i style="width: 33.3%"></i></span><span>40</span>
+      </div>
+    </div>
+  </div>
+  <p class="source">
+    Source: what is counted, the period, and what is left out.
+  </p>
+  <aside class="notes">
+    <p>What the count includes and what it misses.</p>
+  </aside>
+</section>

@@ -11,11 +11,14 @@ import {
 import * as dataPortability from "../../services/data-portability";
 import {
   createNakamaDataExport,
+  decodeArchiveRequestBytes,
+  MAX_IMPORT_ARCHIVE_BYTES,
   MAX_IMPORT_ENTRIES,
   previewNakamaDataImport,
 } from "../../services/data-portability";
 import { sessionTurnRegistry } from "../../services/session-turn-registry";
 import { setupTestConfigDir } from "../../test-config-dir";
+import { MAX_HTTP_REQUEST_BODY_LIMIT_BYTES } from "../app";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import { loginPlatformAdminSession } from "../test-session-helpers";
 
@@ -81,6 +84,38 @@ describe("setup import routes", () => {
     expect(previewResponse.status).toBe(415);
     expect(restoreResponse.status).toBe(415);
     await expect(readFile(configPath, "utf8")).resolves.toBe("changed");
+  });
+
+  test("restores a raw ZIP before setup, and only with confirm in the query", async () => {
+    const { app } = createApp();
+    const configPath = join(getUserConfigDir(), "config.ini");
+    await writeFile(configPath, "original");
+
+    const archive = (
+      await createNakamaDataExport({ rootDir: getUserConfigDir() })
+    ).data;
+
+    await writeFile(configPath, "changed");
+
+    const send = (contentType: string, query: string) =>
+      app.fetch(
+        new Request(
+          `http://localhost:4310/v1/auth/setup/import/restore${query}`,
+          {
+            body: archive,
+            headers: { "Content-Type": contentType },
+            method: "POST",
+          }
+        )
+      );
+
+    // A cross-site form can send text/plain without a preflight.
+    expect((await send("text/plain", "?confirm=true")).status).toBe(415);
+    expect((await send("application/zip", "")).status).toBe(400);
+    await expect(readFile(configPath, "utf8")).resolves.toBe("changed");
+
+    expect((await send("application/zip", "?confirm=true")).status).toBe(200);
+    await expect(readFile(configPath, "utf8")).resolves.toBe("original");
   });
 
   test("restore blocks traffic and waits for active turns before replacing data", async () => {
@@ -451,6 +486,72 @@ describe("setup import routes", () => {
     );
 
     expect(restoreResponse.status).toBe(400);
+    await expect(readFile(configPath, "utf8")).resolves.toBe("keep");
+  });
+
+  test("after the first admin, a setup body over the limit gets the 409, not setup advice", async () => {
+    const { app, authService, databaseAdapter } = createApp();
+    await loginPlatformAdminSession(app, authService, databaseAdapter);
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/setup/import/preview", {
+        body: "{}",
+        headers: {
+          "Content-Length": String(MAX_HTTP_REQUEST_BODY_LIMIT_BYTES + 1),
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(409);
+  });
+
+  test("setup preview and restore give their own 413 for an archive over the size limit", async () => {
+    const { app } = createApp();
+    const configPath = join(getUserConfigDir(), "config.ini");
+    await writeFile(configPath, "keep");
+    const archive = Buffer.alloc(MAX_IMPORT_ARCHIVE_BYTES + 1);
+
+    let genericError = "";
+
+    try {
+      decodeArchiveRequestBytes(archive);
+    } catch (error) {
+      genericError = error instanceof Error ? error.message : "";
+    }
+
+    const send = (route: string) =>
+      app.fetch(
+        new Request(`http://localhost:4310/v1/auth/setup/import/${route}`, {
+          body: archive,
+          headers: { "Content-Type": "application/zip" },
+          method: "POST",
+        })
+      );
+
+    const preview = await send("preview");
+    const restore = await send("restore?confirm=true");
+
+    expect([preview.status, restore.status]).toEqual([413, 413]);
+    const setupError = (await preview.json()).error;
+    expect(genericError).not.toBe("");
+    expect(setupError).not.toBe(genericError);
+    expect((await restore.json()).error).toBe(setupError);
+
+    // The JSON form: base64 over the cap, still under the body limit.
+    const base64 = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/setup/import/preview", {
+        body: JSON.stringify({
+          data: "A".repeat(Math.ceil(MAX_IMPORT_ARCHIVE_BYTES / 3) * 4 + 1),
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+
+    expect(base64.status).toBe(413);
+    expect((await base64.json()).error).toBe(setupError);
     await expect(readFile(configPath, "utf8")).resolves.toBe("keep");
   });
 

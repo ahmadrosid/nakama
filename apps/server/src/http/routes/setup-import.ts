@@ -9,13 +9,28 @@ import {
 } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 import {
-  decodeArchiveRequestData,
+  MAX_IMPORT_ARCHIVE_BYTES,
   previewNakamaDataImport,
   restoreNakamaDataImport,
 } from "../../services/data-portability";
 import type { ServerOptions } from "../context";
-import { assertJsonRequest, errorResponse, json, readJson } from "../shared";
+import {
+  assertJsonRequest,
+  errorResponse,
+  isArchiveRequest,
+  json,
+  readJson,
+} from "../shared";
 import type { HonoApp } from "../types";
+import {
+  importArchiveBodySchema,
+  importConfirmQuerySchema,
+  readImportRequest,
+} from "./data-portability";
+
+// The body limit in app.ts and the archive size check. Settings has the same cap
+// (#2257), so the way past it is outside Nakama.
+export const SETUP_BACKUP_TOO_LARGE = `This backup is over the ${MAX_IMPORT_ARCHIVE_BYTES / (1024 * 1024)} MB restore limit, which Settings has too. Restore the data folder from a filesystem or volume backup instead.`;
 
 export function registerSetupImportRoutes(
   app: HonoApp,
@@ -57,7 +72,10 @@ export function registerSetupImportRoutes(
       path: "/v1/auth/setup/import/preview",
       request: {
         body: {
-          content: { "application/json": { schema: importRequestSchema } },
+          content: {
+            "application/json": { schema: importRequestSchema },
+            "application/zip": { schema: importArchiveBodySchema },
+          },
           required: true,
         },
       },
@@ -95,9 +113,13 @@ export function registerSetupImportRoutes(
       path: "/v1/auth/setup/import/restore",
       request: {
         body: {
-          content: { "application/json": { schema: restoreRequestSchema } },
+          content: {
+            "application/json": { schema: restoreRequestSchema },
+            "application/zip": { schema: importArchiveBodySchema },
+          },
           required: true,
         },
+        query: importConfirmQuerySchema,
       },
       responses: {
         200: {
@@ -131,17 +153,16 @@ export function registerSetupImportRoutes(
       return errorResponse("Authentication not configured", 500);
     }
 
-    assertJsonRequest(c.req.raw);
+    assertImportContentType(c.req.raw);
 
     await assertSetupImportAllowed(databaseAdapter);
 
-    const body = await readJson<PreviewDataImportRequest>(
+    // Read outside the catch so an oversized archive keeps its 413.
+    const { archive } = await readImportRequest(
       c.req.raw,
-      importRequestSchema
+      () => readJson<PreviewDataImportRequest>(c.req.raw, importRequestSchema),
+      SETUP_BACKUP_TOO_LARGE
     );
-
-    // Decoded outside the catch so an oversized archive keeps its 413.
-    const archive = decodeArchiveRequestData(body.data);
 
     try {
       const preview = await previewNakamaDataImport(archive);
@@ -157,16 +178,15 @@ export function registerSetupImportRoutes(
       return errorResponse("Authentication not configured", 500);
     }
 
-    assertJsonRequest(c.req.raw);
+    assertImportContentType(c.req.raw);
 
     await assertSetupImportAllowed(databaseAdapter);
 
-    const body = await readJson<RestoreDataImportRequest>(
+    const { archive, confirm } = await readImportRequest(
       c.req.raw,
-      restoreRequestSchema
+      () => readJson<RestoreDataImportRequest>(c.req.raw, restoreRequestSchema),
+      SETUP_BACKUP_TOO_LARGE
     );
-
-    const archive = decodeArchiveRequestData(body.data);
 
     let restore;
 
@@ -174,7 +194,7 @@ export function registerSetupImportRoutes(
       restore = await restoreNakamaDataImport(archive, {
         afterFailedReplace: options.onDataRestored,
         beforeReplace: options.onBeforeDataRestore,
-        confirm: body.confirm,
+        confirm,
       });
     } catch (error) {
       return errorResponse(formatServerError(error), 400);
@@ -198,7 +218,14 @@ export function registerSetupImportRoutes(
   });
 }
 
-async function assertSetupImportAllowed(
+// These routes run before any login, so a cross-site form must not reach them.
+function assertImportContentType(request: Request): void {
+  if (!isArchiveRequest(request)) {
+    assertJsonRequest(request);
+  }
+}
+
+export async function assertSetupImportAllowed(
   databaseAdapter: DatabaseAdapter
 ): Promise<void> {
   const humanUserCount = await databaseAdapter.countHumanUsers();

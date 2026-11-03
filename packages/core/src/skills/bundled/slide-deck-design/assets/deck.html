@@ -5,34 +5,25 @@
     <meta content="width=device-width, initial-scale=1" name="viewport">
     <title>Deck Title</title>
     <style>
-    /* Fonts: system stacks, so the deck works offline. To use a brand font, add an
-       @font-face rule with src: url(data:font/woff2;base64,...) and put its family
-       first in --sans or --mono. Do not link a font file. */
     :root {
       --page: #eceff4;
       --bg: #ffffff;
       --ink: #101214;
       --muted: #586270;
-      --subtle: #8a94a3;
+      --subtle: #6b7480;
       --line: #e2e8f0;
       --wash: #f8fafc;
-      /* One accent. Change all four together. */
       --accent: #b45309;
       --accent-ink: #92400e;
       --accent-soft: #fffbeb;
       --accent-line: #fcd34d;
       --sans:
-        "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
-        Roboto, Arial, sans-serif;
-      --mono:
-        "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
-        monospace;
-      /* Slide width: the largest 16:9 box that fits the window. */
+        ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        Arial, sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       --w: min(100vw, 177.778dvh);
       color-scheme: light;
     }
-
-    /* ---- Frame, nav, and notes: keep as is ---- */
     * {
       box-sizing: border-box;
     }
@@ -53,9 +44,6 @@
       place-items: center;
       height: 100%;
     }
-    /* Children size in cqw, so text scales with the slide. 1cqw is 1% of the
-       slide's content box (inside the padding), so place absolute items with
-       var(--w), not cqw. */
     .slide {
       position: relative;
       display: flex;
@@ -68,7 +56,6 @@
       overflow: hidden;
       background: var(--bg);
     }
-    /* Without script, every slide shows. */
     .js .slide:not(.active),
     .notes,
     .notes-panel {
@@ -128,19 +115,15 @@
       font: 11px var(--mono);
       color: var(--subtle);
     }
-
-    /* ---- Type and slide frame ---- */
     .kicker,
     .label {
-      font: 500 1.1cqw / 1.3 var(--mono);
-      color: var(--accent-ink);
-      text-transform: uppercase;
-      letter-spacing: 0.14em;
+      font: 500 1.2cqw / 1.3 var(--sans);
+      color: var(--muted);
     }
     .label {
       display: block;
       margin-bottom: 1.2cqw;
-      font-size: 1cqw;
+      font-size: 1.05cqw;
       color: var(--subtle);
     }
     h1 {
@@ -150,17 +133,13 @@
       line-height: 1.12;
       letter-spacing: -0.035em;
     }
-    h1 span {
-      color: var(--subtle);
-    }
     .body {
       font-size: 1.45cqw;
       line-height: 1.5;
       color: var(--muted);
     }
-    /* Main content sits at the bottom of the slide. */
     .fill {
-      margin-top: auto;
+      margin-block: auto;
     }
     .source {
       padding-top: 1.6cqw;
@@ -177,37 +156,24 @@
       font-size: 0.95cqw;
       color: var(--subtle);
     }
-    /* Brand mark: replace <i> with the user's logo as <svg> or <img>. */
     .mark,
     .brand {
       display: flex;
       gap: 0.7cqw;
       align-items: center;
     }
-    .mark > *,
-    .brand > * {
-      width: 1.4cqw;
-      height: 1.4cqw;
-      background: currentColor;
-      border-radius: 50%;
-    }
-    .mark > svg,
-    .mark > img,
-    .brand > svg,
-    .brand > img {
+    .mark > * {
       width: auto;
-      background: none;
-      border-radius: 0;
+      height: 1.4cqw;
     }
     .brand {
       font-size: 1.7cqw;
       font-weight: 600;
     }
     .brand > * {
-      width: 2.4cqw;
+      width: auto;
       height: 2.4cqw;
     }
-    /* Round avatar: an <img> or a <span> with initials. */
     .av {
       display: grid;
       flex: none;
@@ -220,77 +186,21 @@
       background: var(--accent-soft);
       border-radius: 50%;
     }
-    /* Soft gradient panel built from the accent. */
-    .visual {
-      position: relative;
-      overflow: hidden;
-      background:
-        radial-gradient(
-          70% 90% at 12% 8%,
-          color-mix(in srgb, var(--accent) 30%, transparent),
-          transparent 60%
-        ),
-        radial-gradient(60% 80% at 88% 18%, #c7d3e6, transparent 65%),
-        radial-gradient(
-          70% 70% at 70% 100%,
-          color-mix(in srgb, var(--accent) 38%, transparent),
-          transparent 60%
-        ),
-        linear-gradient(135deg, var(--accent-soft), #e6e9f0 55%, #dfe5ee);
-    }
-
-    /* ---- Cover ---- */
-    .cover {
-      padding: 0;
-    }
-    .cover-grid {
-      display: grid;
-      grid-template-columns: 0.92fr 1.08fr;
-      height: 100%;
-    }
-    .cover-text {
-      display: flex;
-      flex-direction: column;
-      padding: 5.2cqw 4cqw 4.6cqw 6.4cqw;
+    .panel {
+      background: var(--wash);
+      border: 1px solid var(--line);
     }
     .cover h1 {
+      max-width: 72cqw;
       margin-top: auto;
-      font-size: 4.8cqw;
+      font-size: 6.4cqw;
+      line-height: 1.05;
     }
     .meta {
       margin-top: auto;
       font-size: 1.3cqw;
       color: var(--subtle);
     }
-    /* Title cover: no panel. Add the visual class for a gradient background. */
-    .cover-title h1 {
-      max-width: 72cqw;
-      margin-top: auto;
-      font-size: 6.4cqw;
-      line-height: 1.05;
-    }
-    .hero {
-      display: flex;
-      flex-direction: column;
-      gap: 1cqw;
-      align-items: center;
-      justify-content: center;
-      font-family: var(--mono);
-    }
-    .hero b {
-      font-size: 5.2cqw;
-      font-weight: 500;
-    }
-    .hero .on {
-      color: var(--accent-ink);
-    }
-    .hero i {
-      font-size: 2.4cqw;
-      font-style: normal;
-      color: var(--subtle);
-    }
-
-    /* ---- Numbered list ---- */
     .row {
       display: grid;
       grid-template-columns: 6cqw 1fr;
@@ -315,17 +225,24 @@
       font-weight: 600;
       color: var(--ink);
     }
-
-    /* ---- Statement: one sentence, set large ---- */
     .say {
-      max-width: 80cqw;
-      font-size: 4.2cqw;
-      font-weight: 500;
-      line-height: 1.2;
-      letter-spacing: -0.03em;
+      max-width: 88cqw;
+      font-size: 6.2cqw;
+      font-weight: 550;
+      line-height: 1.08;
+      letter-spacing: -0.035em;
     }
-
-    /* ---- Phone portrait: layouts stack, text in px ---- */
+    blockquote.say {
+      margin-inline: 0;
+    }
+    .say cite {
+      display: block;
+      margin-top: 2.4cqw;
+      font: 1.3cqw var(--sans);
+      font-style: normal;
+      color: var(--muted);
+      letter-spacing: 0;
+    }
     @media screen and (max-width: 760px) and (orientation: portrait) {
       html,
       body {
@@ -341,17 +258,6 @@
         min-height: 100dvh;
         padding: 48px 22px 72px;
       }
-      .cover {
-        padding: 0;
-      }
-      .cover-grid {
-        grid-template-columns: 1fr;
-        min-height: 100dvh;
-      }
-      .cover-text {
-        min-height: 60dvh;
-        padding: 48px 22px 28px;
-      }
       .kicker,
       .source,
       .foot,
@@ -362,12 +268,11 @@
       .row .n {
         font-size: 10px;
       }
-      h1,
-      .cover h1 {
+      h1 {
         margin: 10px 0 28px;
         font-size: 28px;
       }
-      .cover-title h1 {
+      .cover h1 {
         font-size: 34px;
       }
       .body {
@@ -381,27 +286,19 @@
         font-size: 16px;
       }
       .say {
-        font-size: 26px;
+        font-size: 32px;
+      }
+      .say cite {
+        font-size: 11px;
       }
       .brand {
         font-size: 18px;
       }
       .mark > * {
-        width: 12px;
         height: 12px;
       }
       .brand > * {
-        width: 22px;
         height: 22px;
-      }
-      .hero {
-        min-height: 40dvh;
-      }
-      .hero b {
-        font-size: 36px;
-      }
-      .hero i {
-        font-size: 18px;
       }
       .av {
         width: 28px;
@@ -414,8 +311,6 @@
         left: 22px;
       }
     }
-
-    /* ---- Print: one slide per 16:9 page, light tokens, no controls ---- */
     @page {
       size: 16in 9in;
       margin: 0;
@@ -450,82 +345,42 @@
       }
     }
 
-    /* ---- Pattern CSS from patterns.html goes below ---- */
+    /* Pattern CSS goes here */
     </style>
   </head>
   <body>
     <main aria-label="Deck Title" class="deck">
-      <!-- Cover: keep one of the two below. Title cover: the full slide for the title. -->
-      <section aria-label="Slide 1: Title" class="slide cover-title">
-        <div class="brand"><i></i>Brand</div>
-        <h1>Deck title on one line<br><span>Subtitle or date</span></h1>
-        <p class="meta">Event name · Date · Time</p>
-        <aside class="notes"><p>What you say while this slide shows.</p></aside>
+      <section aria-label="Title" class="slide cover">
+        <div class="brand">Brand</div>
+        <h1>Deck title</h1>
+        <p class="meta">Subtitle · Date</p>
       </section>
-
-      <!-- Split cover: only when the panel shows a supplied figure or image. -->
-      <section aria-label="Slide 1: Title" class="slide cover">
-        <div class="cover-grid">
-          <div class="cover-text">
-            <div class="brand"><i></i>Brand</div>
-            <h1>Deck title<br>on two lines<br><span>Date or subtitle</span></h1>
-            <p class="meta">Event name · Date · Time</p>
-          </div>
-          <div class="visual hero">
-            <span class="label">Key figure</span>
-            <b>1.2M</b>
-            <i>↓</i>
-            <b class="on">1.5M</b>
-          </div>
-        </div>
-        <aside class="notes">
-          <p>What you say while this slide shows.</p>
-          <p class="q">
-            <b>Q:</b>
-            A question the audience may ask — and the answer.
-          </p>
-        </aside>
-      </section>
-
-      <section aria-label="Slide 2: Plan" class="slide">
-        <p class="kicker">Section · Plan</p>
-        <h1>Next steps.<br><span>Four items.</span></h1>
+      <section aria-label="Plan" class="slide">
+        <p class="kicker">Section</p>
+        <h1>One short claim.</h1>
         <div class="fill">
           <div class="row">
             <span class="n">01</span>
-            <p><b>First item</b> and a few words of detail</p>
+            <p><b>Item</b> and its detail</p>
           </div>
           <div class="row">
             <span class="n">02</span>
-            <p><b>Second item</b> and a few words of detail</p>
-          </div>
-          <div class="row">
-            <span class="n">03</span>
-            <p><b>Third item</b> and a few words of detail</p>
-          </div>
-          <div class="row">
-            <span class="n">04</span>
-            <p><b>Fourth item</b> and a few words of detail</p>
+            <p><b>Item</b> and its detail</p>
           </div>
         </div>
-        <p class="source">Source: where the facts come from, and the date.</p>
-        <div class="foot">
-          <span class="mark"><i></i>Deck Title</span><span>02</span>
-        </div>
+        <p class="source">Source, date</p>
         <aside class="notes">
-          <p>Why each item matters, and who owns it.</p>
+          <p>Detail that does not fit.</p>
+          <p class="q"><b>Q:</b> Question and answer.</p>
         </aside>
       </section>
-
-      <section aria-label="Slide 3: Statement" class="slide">
-        <p class="kicker">Section · Update</p>
-        <p class="say fill">
-          One supplied sentence, set large as the slide's main text.
-        </p>
-        <div class="foot">
-          <span class="mark"><i></i>Deck Title</span><span>03</span>
-        </div>
-        <aside class="notes"><p>The context behind the sentence.</p></aside>
+      <section aria-label="Statement" class="slide">
+        <p class="say fill">One sentence, set large.</p>
+      </section>
+      <section aria-label="Quote" class="slide">
+        <blockquote class="say fill">
+          “A quote.”<cite>Name, role</cite>
+        </blockquote>
       </section>
     </main>
     <nav aria-label="Slide navigation" class="nav">
@@ -538,43 +393,65 @@
     <script>
     "use strict";
     (() => {
-      // Navigation and notes: keep as is.
       document.documentElement.classList.add("js");
+      const $ = (selector) => document.querySelector(selector);
       const slides = [...document.querySelectorAll(".slide")];
-      const count = document.querySelector(".count");
-      const panel = document.querySelector(".notes-panel");
       const [prev, next, notes] = document.querySelectorAll(".nav button");
+      const deckName = $("main").getAttribute("aria-label");
+      const mark = $(".brand > :first-child");
       let index = 0;
+
+      for (const [i, slide] of slides.entries()) {
+        const name = slide.getAttribute("aria-label") || "Slide";
+        slide.setAttribute("aria-label", `Slide ${i + 1}: ${name}`);
+        if (!slide.classList.contains("cover")) {
+          const foot = document.createElement("div");
+          foot.className = "foot";
+          foot.innerHTML = `<span class="mark"></span><span>${String(i + 1).padStart(2, "0")}</span>`;
+          foot.firstChild.append(mark ? mark.cloneNode(true) : "", deckName);
+          slide.append(foot);
+        }
+      }
 
       function show(n) {
         index = Math.max(0, Math.min(slides.length - 1, n || 0));
         for (const [i, slide] of slides.entries()) {
           slide.classList.toggle("active", i === index);
         }
-        count.textContent = `${index + 1} / ${slides.length}`;
+        $(".count").textContent = `${index + 1} / ${slides.length}`;
         prev.disabled = index === 0;
         next.disabled = index === slides.length - 1;
         const hint = document.createElement("p");
         hint.className = "hint";
         hint.textContent = `SPEAKER NOTES · ${index + 1} · press N to close`;
         const aside = slides[index].querySelector(".notes");
-        panel.replaceChildren(
+        $(".notes-panel").replaceChildren(
           hint,
           ...(aside?.cloneNode(true).childNodes ?? [])
         );
         try {
           history.replaceState(null, "", `#${index + 1}`);
         } catch {
-          // Some previews block URL changes; the deck still works.
+          // A preview may block URL changes.
         }
       }
 
       const toggleNotes = () => document.body.classList.toggle("show-notes");
+      const steps = {
+        " ": 1,
+        ArrowDown: 1,
+        ArrowLeft: -1,
+        ArrowRight: 1,
+        ArrowUp: -1,
+        End: slides.length,
+        Home: -slides.length,
+        PageDown: 1,
+        PageUp: -1,
+      };
       prev.addEventListener("click", () => show(index - 1));
       next.addEventListener("click", () => show(index + 1));
       notes.addEventListener("click", toggleNotes);
       addEventListener("keydown", (event) => {
-        // Leave browser shortcuts, form fields, and Space on a control alone.
         const target = event.target.closest?.bind(event.target);
         if (
           event.altKey ||
@@ -585,17 +462,6 @@
         ) {
           return;
         }
-        const steps = {
-          " ": 1,
-          ArrowDown: 1,
-          ArrowLeft: -1,
-          ArrowRight: 1,
-          ArrowUp: -1,
-          End: slides.length,
-          Home: -slides.length,
-          PageDown: 1,
-          PageUp: -1,
-        };
         if (event.key in steps) {
           event.preventDefault();
           show(index + steps[event.key]);

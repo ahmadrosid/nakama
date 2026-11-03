@@ -16,6 +16,7 @@ import type {
 import { NakamaApiError } from "@nakama/core";
 import {
   buildChatCompletionResult,
+  buildProviderHttpError,
   extractGeminiTokenUsage,
   notifyToolInputDelta,
   parseJsonRecord,
@@ -108,10 +109,11 @@ function emptyResponseError<Value>(finishReason: Value): Error {
 }
 
 function formatGeminiError<ProviderError>(error: ProviderError): Error {
-  if (error instanceof ApiError) {
-    return new Error(
-      `${PROVIDER_LABEL} request failed (${error.status}): ${error.message}`
-    );
+  if (error instanceof ApiError && error.status !== undefined) {
+    // The OpenAI-shaped adapters surface every non-auth HTTP status as one
+    // 502; matching that here keeps the chat loop's one transient retry
+    // provider-agnostic instead of OpenAI-only.
+    return buildProviderHttpError(PROVIDER_LABEL, error.status, error.message);
   }
 
   if (error instanceof Error) {

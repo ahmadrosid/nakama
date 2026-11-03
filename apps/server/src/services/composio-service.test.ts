@@ -1049,10 +1049,34 @@ describe("ComposioService", () => {
       expect(listed.configured).toBe(true);
       expect(listed.composioReachable).toBe(false);
       expect(listed.composioAvailable).toBe(false);
-      expect(listed.catalogError).toBe("Failed to fetch toolkits");
+      expect(listed.catalogError).toBe(
+        "Check your network and the project API key in Composio, then try again."
+      );
       expect(listed.catalog).toEqual([]);
       expect(listed.orgToolkits).toEqual([]);
       expect(listed.userConnections).toEqual([]);
+    } finally {
+      restore();
+    }
+  });
+
+  test("listToolkits names the project API key when Composio rejects it", async () => {
+    const { service, restore } = await createConfiguredService();
+
+    injectMockComposioClient(service, {
+      ...createMockClient(),
+      async listCatalogToolkits() {
+        throw new Error("Failed to fetch toolkits", {
+          cause: Object.assign(new Error("Unauthorized"), { status: 401 }),
+        });
+      },
+    });
+
+    try {
+      const listed = await service.listToolkits(ORG_ID, USER_ID);
+      expect(listed.catalogError).toBe(
+        "Composio rejected the project API key. Check the key in Composio, then save it again."
+      );
     } finally {
       restore();
     }

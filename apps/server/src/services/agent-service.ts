@@ -155,6 +155,7 @@ import {
   defaultOllamaBaseUrl,
   deleteArtifactFile,
   deleteAttachmentBytes,
+  extractExplicitSkillName,
   extractImageParts,
   findCustomModel,
   findProviderInstance,
@@ -233,7 +234,9 @@ import {
   isChannelOwner,
 } from "@nakama/core/channel-config-shared";
 import {
+  commandCodeModelSupportsVision,
   defaultDiscoveryBaseUrl,
+  isDiscoveryModelProvider,
   NETRA_AGENT_MODEL_ID,
 } from "@nakama/core/discovery-providers";
 import { readTextIfExists } from "@nakama/core/fs";
@@ -3767,11 +3770,7 @@ export class AgentService {
       throw new NakamaApiError("Provider not found.", 404);
     }
 
-    if (
-      instance.type === "ollama" ||
-      instance.type === "openai_compatible" ||
-      instance.type === "netra"
-    ) {
+    if (instance.type === "ollama" || isDiscoveryModelProvider(instance.type)) {
       const hostMode =
         instance.type === "ollama"
           ? (overrides?.hostMode ?? resolveOllamaHostMode(instance))
@@ -3780,12 +3779,12 @@ export class AgentService {
       const apiKey =
         overrides?.apiKey?.trim() ||
         instance.apiKey.trim() ||
-        (instance.type === "ollama" || instance.type === "netra"
-          ? readEnvValue(
+        (instance.type === "openai_compatible"
+          ? ""
+          : readEnvValue(
               process.env,
               apiKeyEnvVarForProvider(instance.type) ?? ""
-            ) || ""
-          : "");
+            ) || "");
 
       if (
         instance.type === "ollama" &&
@@ -3804,9 +3803,7 @@ export class AgentService {
         instance.baseUrl?.trim() ||
         (instance.type === "ollama"
           ? defaultOllamaBaseUrl(hostMode!)
-          : instance.type === "netra"
-            ? defaultDiscoveryBaseUrl("netra")
-            : "");
+          : (defaultDiscoveryBaseUrl(instance.type) ?? ""));
 
       if (!baseUrl) {
         throw new NakamaApiError(
@@ -3815,7 +3812,7 @@ export class AgentService {
         );
       }
 
-      const entries =
+      const fetchedEntries =
         instance.type === "ollama"
           ? await fetchOllamaModels(baseUrl, apiKey)
           : instance.type === "netra"
@@ -3827,6 +3824,18 @@ export class AgentService {
                 name: entry.name,
               }))
             : await fetchRemoteOpenAIModels(baseUrl, apiKey);
+
+      const entries =
+        instance.type === "command_code"
+          ? fetchedEntries.map((entry) =>
+              entry.supportsVision === undefined
+                ? {
+                    ...entry,
+                    supportsVision: commandCodeModelSupportsVision(entry.id),
+                  }
+                : entry
+            )
+          : fetchedEntries;
 
       const remoteInstance = { ...instance, baseUrl, customModels: entries };
       const models = getModelsForProviderInstance(remoteInstance);
@@ -6617,6 +6626,33 @@ export class AgentService {
 
           if (hostContext) {
             parts.push(hostContext);
+          }
+        } else if (this.skillsService) {
+          // Without this the request is dropped silently and the agent answers
+          // as if the skill ran. Only a message that starts with `/skill` is a
+          // command: "use skill based routing" is prose, not a skill named
+          // "based".
+          const message = context?.userMessage?.trim() ?? "";
+
+          const requestedSkill = /^\/skill\s/i.test(message)
+            ? extractExplicitSkillName(message)
+            : null;
+
+          if (requestedSkill) {
+            // An assigned skill can still fail to load (turned off, or its
+            // files are gone), and "add it" is the wrong advice for that.
+            const assigned = (
+              await this.skillsService.listSkillSummariesForProfile(
+                orgId,
+                profileId
+              )
+            ).some((skill) => skill.name === requestedSkill);
+
+            parts.push(
+              assigned
+                ? `The user asked for the skill "${requestedSkill}". It is assigned to this agent, but it did not load. Say so first, and tell the user an admin can check it in Agent → Skills. Then answer without it.`
+                : `The user asked for the skill "${requestedSkill}", but it is not assigned to this agent, so it is not loaded. Say so first, and tell the user an admin can add it in Agent → Skills → Add skill. Then answer without it.`
+            );
           }
         }
 

@@ -7,15 +7,19 @@ import {
 import {
   type AgentChannel,
   type ChatMessage,
+  extractExplicitSkillName,
   extractLatestTurnMessages,
+  getUserMessageText,
   LOAD_SKILL_TOOL_NAME,
   parseAgentChannel,
   resolveProfileOrgBooleanOverride,
   SKILL_FILE_NAME,
   type UserConfig,
 } from "@nakama/core";
-import { isPathWithinProfileSkillsDir } from "@nakama/core/skills/write";
+import { resolveProfileSkillDirectory } from "@nakama/core/skills/write";
+import { comparablePath, resolveWithRealpath } from "@nakama/core/tools/paths";
 import type { DatabaseAdapter } from "@nakama/db";
+import { z } from "zod";
 import { createProviderForProfile } from "./provider-instance-helpers";
 
 /**
@@ -63,6 +67,17 @@ export interface PostTurnReviewEligibility {
   toolCallCount: number;
   usedSkillManage: boolean;
 }
+
+// Only a successful load_skill result carries `name`.
+const LoadSkillResultSchema = z.object({
+  error: z.unknown().optional(),
+  name: z.string().optional(),
+});
+
+const LoadSkillNameSchema = z.string().trim();
+
+/** Most SKILL.md bodies one review prompt carries. */
+const MAX_LOADED_SKILL_BODIES = 3;
 
 export interface PostTurnReviewRunnerContext {
   messages: ChatMessage[];
@@ -207,35 +222,118 @@ export class SkillPostTurnReviewService {
 
     const assigned = await this.db.listSkillsForProfile(context.profileId);
 
-    const loadedNames = new Set(
-      context.turnMessages.flatMap((message) =>
-        message.role === "assistant"
-          ? (message.toolCalls ?? [])
-              .filter((call) => call.name === LOAD_SKILL_TOOL_NAME)
-              .map((call) => call.arguments.name)
-          : []
-      )
+    // Skills the session loaded, oldest first: a load_skill call that
+    // succeeded, or a `/skill <name>` message, in this turn or an earlier one.
+    const loads: string[] = [];
+
+    // Compaction can replace an old tool result with plain text, so the name
+    // the call asked for is the fallback when the result has no name.
+    const requestedNames = new Map<string, string>();
+
+    for (const message of context.messages) {
+      if (message.role === "user") {
+        const name = extractExplicitSkillName(
+          getUserMessageText(message.content)
+        );
+
+        if (name) {
+          loads.push(name);
+        }
+      } else if (message.role === "assistant") {
+        for (const call of message.toolCalls ?? []) {
+          if (call.name !== LOAD_SKILL_TOOL_NAME) {
+            continue;
+          }
+
+          const name = LoadSkillNameSchema.safeParse(call.arguments.name);
+
+          if (name.success) {
+            requestedNames.set(call.id, name.data);
+          }
+        }
+      } else if (
+        message.role === "tool" &&
+        message.name === LOAD_SKILL_TOOL_NAME
+      ) {
+        let result: z.infer<typeof LoadSkillResultSchema> | undefined;
+
+        try {
+          const parsed = LoadSkillResultSchema.safeParse(
+            JSON.parse(message.content)
+          );
+
+          result = parsed.success ? parsed.data : undefined;
+        } catch {
+          // Compaction replaced the result with text.
+        }
+
+        // A failure carries only `error`; a success carries the skill's name.
+        if (result?.error !== undefined) {
+          continue;
+        }
+
+        const name =
+          result?.name ??
+          (message.toolCallId
+            ? requestedNames.get(message.toolCallId)
+            : undefined);
+
+        if (name) {
+          loads.push(name);
+        }
+      }
+    }
+
+    // Newest load first. Only a profile-owned skill can be patched, so only
+    // those take a slot. The body is read from the file staging matches
+    // oldString against, so a skill in another directory (global, bundled, or
+    // a folder name that differs from the skill name) gets none.
+    const assignedByName = new Map(
+      assigned.map((skill) => [skill.name, skill])
     );
 
-    const catalog = await Promise.all(
-      assigned.map(async (skill) => ({
-        description: skill.description,
-        name: skill.name,
-        // Only the profile's own skills can be patched, so only they need the body.
-        skillMarkdown:
-          loadedNames.has(skill.name) &&
-          isPathWithinProfileSkillsDir(
-            context.orgId,
-            context.profileId,
-            skill.sourcePath
-          )
-            ? await readFile(
-                path.join(skill.sourcePath, SKILL_FILE_NAME),
-                "utf8"
-              ).catch(() => undefined)
-            : undefined,
-      }))
-    );
+    const checked = new Set<string>();
+    const bodies = new Map<string, string>();
+
+    for (const name of [...loads].reverse()) {
+      const skill = assignedByName.get(name);
+
+      if (bodies.size >= MAX_LOADED_SKILL_BODIES) {
+        break;
+      }
+
+      if (!skill || checked.has(name)) {
+        continue;
+      }
+
+      checked.add(name);
+
+      try {
+        const directory = resolveProfileSkillDirectory(
+          context.orgId,
+          context.profileId,
+          name
+        );
+
+        if (
+          comparablePath(directory) ===
+          comparablePath(resolveWithRealpath(skill.sourcePath))
+        ) {
+          bodies.set(
+            name,
+            await readFile(path.join(directory, SKILL_FILE_NAME), "utf8")
+          );
+        }
+      } catch {
+        // Not a profile-owned skill, or its SKILL.md is gone.
+      }
+    }
+
+    const catalog = assigned.map((skill) => ({
+      description: skill.description,
+      name: skill.name,
+      skillMarkdown: bodies.get(skill.name),
+    }));
 
     return generateSkillPostTurnReview({
       catalog,

@@ -1245,6 +1245,102 @@ describe("OrgService", () => {
     });
   });
 
+  // The service checks are read-then-write, so each pair can pass them
+  // together. The disable statement must refuse whichever write lands second.
+  const racingAdminChanges: [
+    string,
+    (
+      service: OrgService,
+      orgId: string,
+      a: string,
+      b: string
+    ) => Promise<unknown>[],
+  ][] = [
+    [
+      "disable A + remove B",
+      (service, orgId, a, b) => [
+        service.disableMember(orgId, a),
+        service.removeMember(orgId, b),
+      ],
+    ],
+    [
+      "remove B + disable A",
+      (service, orgId, a, b) => [
+        service.removeMember(orgId, b),
+        service.disableMember(orgId, a),
+      ],
+    ],
+    [
+      "demote B + disable A",
+      (service, orgId, a, b) => [
+        service.updateMember(orgId, b, { role: "member" }),
+        service.disableMember(orgId, a),
+      ],
+    ],
+    [
+      "disable A + disable B",
+      (service, orgId, a, b) => [
+        service.disableMember(orgId, a),
+        service.disableMember(orgId, b),
+      ],
+    ],
+  ];
+
+  for (const [name, race] of racingAdminChanges) {
+    test(`${name} in parallel leaves one usable admin`, async () => {
+      const { orgService } = createOrgService();
+
+      const created = await orgService.createOrganization({
+        admin: {
+          email: "admin@acme.com",
+          name: "Acme Admin",
+          phone: "+628123456789",
+        },
+        name: "Acme",
+        slug: "acme-race",
+      });
+
+      const orgId = created.organization.id;
+      const adminA = created.adminMember!.member.userId;
+
+      const added = await orgService.addMember({
+        email: "second@acme.com",
+        name: "Second Admin",
+        orgId,
+        phone: "+628987654321",
+        role: "admin",
+      });
+
+      const adminB = added.member.userId;
+
+      // A disabled admin row must not count as coverage.
+      await orgService.disableMember(orgId, LOCAL_CLIENT_USER_ID!);
+
+      const results = await Promise.allSettled(
+        race(orgService, orgId, adminA, adminB)
+      );
+
+      expect(results.map((result) => result.status).sort()).toEqual([
+        "fulfilled",
+        "rejected",
+      ]);
+
+      expect(
+        results.find((result) => result.status === "rejected")
+      ).toMatchObject({
+        reason: { status: 409 },
+      });
+
+      const { members } = await orgService.listMembers(orgId);
+
+      const usableAdmins = members.filter(
+        (member) => member.role === "admin" && !member.disabledAt
+      );
+
+      expect(usableAdmins).toHaveLength(1);
+    });
+  }
+
   // The member list is where an admin sees who is locked out; without the
   // field the web cannot offer Enable for a disabled account.
   test("the member list shows when an account is disabled, and clears it on enable", async () => {
@@ -4435,7 +4531,7 @@ if __name__ == "__main__":
     expect(
       (await db.getSharedAgentInstance("org_team_a", profile.id))?.publicationId
     ).toBe(republished.id);
-    await db.disableUser("user_other", now);
+    expect(await db.disableUserUnlessLastAdmin("user_other", now)).toBe(true);
     await expect(
       orgService.createSharedAgentInstance(
         "org_team_a",
@@ -5663,7 +5759,18 @@ describe("OrgService shared resource publications", () => {
         "user_platform"
       )
     ).toBe(false);
-    await db.disableUser("user_platform", now);
+    // The disable guard keeps the last usable platform admin enabled.
+    await db.createUser({
+      createdAt: now,
+      email: "platform_second@example.com",
+      id: "user_platform_second",
+      isPlatformAdmin: true,
+      passwordHash: "test",
+      updatedAt: now,
+    });
+    expect(await db.disableUserUnlessLastAdmin("user_platform", now)).toBe(
+      true
+    );
     await expect(
       orgService.publishSharedResource("org_parent", request, "user_platform")
     ).rejects.toMatchObject({ status: 403 });
@@ -6174,5 +6281,169 @@ describe("OrgService team setup", () => {
       orgService.permanentlyDeleteOrganization("org_parent")
     ).rejects.toMatchObject({ status: 409 });
     expect(await readFile(parentFile, "utf8")).toBe("Parent data");
+  });
+});
+
+describe("OrgService member domain allowlist", () => {
+  async function seedRestrictedTeam() {
+    const { databaseAdapter, orgService } = createOrgService();
+    const request = await seedTeamParent(databaseAdapter);
+
+    await orgService.updateOrganization("org_parent", {
+      allowedInviteDomains: ["example.com"],
+    });
+
+    const { organization } = await orgService.createTeam(
+      "org_parent",
+      request,
+      "user_creator"
+    );
+
+    return { databaseAdapter, orgService, teamId: organization.id };
+  }
+
+  test("a team applies its parent's allowlist to new addresses", async () => {
+    const { databaseAdapter, orgService, teamId } = await seedRestrictedTeam();
+
+    await expect(
+      orgService.addMember({
+        email: "guest@other.com",
+        name: "Guest",
+        orgId: teamId,
+        phone: "",
+        role: "member",
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      orgService.createInvite({
+        email: "guest@other.com",
+        invitedByUserId: "user_creator",
+        orgId: teamId,
+        role: "member",
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    expect(await databaseAdapter.getUserByEmail("guest@other.com")).toBeNull();
+
+    const added = await orgService.addMember({
+      email: "new@example.com",
+      name: "New",
+      orgId: teamId,
+      phone: "",
+      role: "member",
+    });
+
+    expect(added.member.email).toBe("new@example.com");
+  });
+
+  test("a parent member outside the parent's allowlist can join a team", async () => {
+    const { databaseAdapter, orgService, teamId } = await seedRestrictedTeam();
+    const now = new Date().toISOString();
+
+    await databaseAdapter.createUser({
+      createdAt: now,
+      email: "contractor@other.com",
+      id: "user_contractor",
+      passwordHash: "test",
+      updatedAt: now,
+    });
+    await databaseAdapter.upsertOrgMember({
+      createdAt: now,
+      orgId: "org_parent",
+      role: "member",
+      userId: "user_contractor",
+    });
+
+    const added = await orgService.addMember({
+      email: "contractor@other.com",
+      name: "Contractor",
+      orgId: teamId,
+      phone: "",
+      role: "member",
+    });
+
+    expect(added.member.userId).toBe("user_contractor");
+  });
+
+  test("parent members list hides people the team's allowlist refuses", async () => {
+    const { orgService, teamId } = await seedRestrictedTeam();
+
+    expect(
+      (await orgService.listParentMembers(teamId)).members.map(
+        (member) => member.userId
+      )
+    ).toEqual(["user_secondary_member"]);
+
+    await orgService.updateOrganization(teamId, {
+      allowedInviteDomains: ["partner.example"],
+    });
+
+    expect((await orgService.listParentMembers(teamId)).members).toEqual([]);
+  });
+
+  test("a platform admin's invite outside the allowlist can be accepted", async () => {
+    const { databaseAdapter, orgService } = createOrgService();
+    const now = new Date().toISOString();
+
+    await databaseAdapter.createUser({
+      createdAt: now,
+      email: "platform@example.com",
+      id: "user_platform_admin",
+      isPlatformAdmin: true,
+      passwordHash: "test",
+      updatedAt: now,
+    });
+
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-platform-invite",
+    });
+
+    await orgService.updateOrganization(created.organization.id, {
+      allowedInviteDomains: ["acme.com"],
+    });
+
+    const invite = await orgService.createInvite({
+      email: "contractor@other.com",
+      invitedByUserId: "user_platform_admin",
+      orgId: created.organization.id,
+      role: "member",
+    });
+
+    const accepted = await orgService.acceptInvite({
+      password: "secret123",
+      token: invite.token!,
+    });
+
+    expect(accepted.orgId).toBe(created.organization.id);
+    expect(accepted.user.email).toBe("contractor@other.com");
+  });
+
+  test("an allowed domain also allows its subdomains", async () => {
+    const { orgService } = createOrgService();
+
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-subdomains",
+    });
+
+    await orgService.updateOrganization(created.organization.id, {
+      allowedInviteDomains: ["acme.com"],
+    });
+
+    const add = (email: string) =>
+      orgService.addMember({
+        email,
+        name: "Member",
+        orgId: created.organization.id,
+        phone: "",
+        role: "member",
+      });
+
+    expect((await add("jane@eng.acme.com")).member.email).toBe(
+      "jane@eng.acme.com"
+    );
+    await expect(add("jane@notacme.com")).rejects.toMatchObject({
+      status: 400,
+    });
   });
 });
