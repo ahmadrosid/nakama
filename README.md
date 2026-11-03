@@ -11,6 +11,10 @@
   <a href="https://discord.gg/wG6FY4cKRx"><img src="https://img.shields.io/badge/Discord-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
+<p align="center">
+  <a href="https://trendshift.io/repositories/109713?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-109713" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/109713" alt="ahmadrosid%2Fnakama | Trendshift" width="250" height="55"/></a>
+</p>
+
 # Nakama
 
 [Documentation](https://ahmadrosid.github.io/nakama/) · [Managed hosting](https://getnakama.cloud/)
