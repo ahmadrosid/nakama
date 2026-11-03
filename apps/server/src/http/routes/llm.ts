@@ -22,10 +22,13 @@ import { getRequestAuth, readJson } from "../shared";
 import type { HonoApp } from "../types";
 import {
   capThinking,
+  DESKTOP_CHAT_MAX_MS,
+  DESKTOP_CHAT_UPLOAD_MS,
   failureOf,
   holdChatMemory,
   jsonValueSchema,
   replaySafe,
+  withinTime,
 } from "./llm-request-safety";
 
 /** Output room held against the quota for one call, as the chat loop does. */
@@ -299,8 +302,9 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
     const { caller } = gate;
 
     // Before the body is read: the room is held until the stream ends.
+    // Per member, so more orgs or computers give no more room.
     const freeChatMemory = holdChatMemory(
-      caller.orgId,
+      caller.userId,
       c.req.header("content-length")
     );
 
@@ -314,9 +318,17 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
     let streaming = false;
 
     try {
-      const request = chatRequestSchema.safeParse(
-        await readJson(c.req.raw, z.unknown())
+      // A body that trickles in would hold its room for as long as it takes.
+      const uploaded = await withinTime(
+        readJson(c.req.raw, z.unknown()).then((value) => ({ value })),
+        DESKTOP_CHAT_UPLOAD_MS
       );
+
+      if (!uploaded) {
+        return c.json({ error: "The request took too long to arrive." }, 408);
+      }
+
+      const request = chatRequestSchema.safeParse(uploaded.value);
 
       if (!request.success) {
         return c.json({ error: "Invalid request." }, 400);
@@ -390,6 +402,40 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
             }
           };
 
+          let ended = false;
+
+          // Once: when the provider settles, or at the deadline.
+          const end = async (closeStream: boolean) => {
+            if (ended) {
+              return;
+            }
+
+            ended = true;
+            clearTimeout(deadline);
+            freeChatMemory();
+
+            // A failed release must not leave the desktop waiting on the stream.
+            await release?.().catch(() => undefined);
+
+            if (closeStream) {
+              controller.close();
+            }
+          };
+
+          // A provider that never settles must not keep this call's memory
+          // and quota hold, or the desktop's stream, forever.
+          const deadline = setTimeout(() => {
+            send({
+              data: {
+                message: "The model took too long. Try again.",
+                status: 504,
+              },
+              type: "error",
+            });
+            void end(!abort.signal.aborted);
+            abort.abort();
+          }, DESKTOP_CHAT_MAX_MS);
+
           void harness.provider
             .streamChat(input, {
               onChunk: (data) => send({ data, type: "chunk" }),
@@ -411,16 +457,7 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
             .catch((error) =>
               send({ data: failureOf(asError(error)), type: "error" })
             )
-            .finally(async () => {
-              freeChatMemory();
-
-              // A failed release must not leave the desktop waiting on the stream.
-              await release?.().catch(() => undefined);
-
-              if (!abort.signal.aborted) {
-                controller.close();
-              }
-            });
+            .finally(() => end(!abort.signal.aborted));
         },
       });
 

@@ -18,19 +18,29 @@ export const DESKTOP_CHAT_BODY_LIMIT_BYTES = 32 * 1024 * 1024;
 /**
  * Body bytes all desktop chats may hold at once. A call holds about 3x its
  * body (raw text, parsed copy, vendor request), so this keeps them near
- * 200 MB, under the 512 MB install ceiling. One org may use half of it.
+ * 200 MB, under the 512 MB install ceiling. One member may use half of it,
+ * across all their orgs and computers.
  */
 const CHAT_MEMORY_BUDGET_BYTES = 2 * DESKTOP_CHAT_BODY_LIMIT_BYTES;
 
-const ORG_CHAT_MEMORY_BYTES = DESKTOP_CHAT_BODY_LIMIT_BYTES;
+const MEMBER_CHAT_MEMORY_BYTES = DESKTOP_CHAT_BODY_LIMIT_BYTES;
+
+/** How long a chat body may take to arrive; a slow upload holds memory. */
+export const DESKTOP_CHAT_UPLOAD_MS = 60 * 1000;
+
+/**
+ * The longest one desktop chat call may run. Past it the call is stopped and
+ * its memory freed, even when the provider does not end it.
+ */
+export const DESKTOP_CHAT_MAX_MS = 15 * 60 * 1000;
 
 let chatBytesHeld = 0;
 
-const orgChatBytesHeld = new Map<string, number>();
+const memberChatBytesHeld = new Map<string, number>();
 
 /** Holds room for one chat body; null when there is none now. */
 export function holdChatMemory(
-  orgId: string,
+  userId: string,
   contentLength: string | undefined
 ): (() => void) | null {
   const declared = Number(contentLength);
@@ -41,17 +51,17 @@ export function holdChatMemory(
       ? Math.min(declared, DESKTOP_CHAT_BODY_LIMIT_BYTES)
       : DESKTOP_CHAT_BODY_LIMIT_BYTES;
 
-  const orgBytes = orgChatBytesHeld.get(orgId) ?? 0;
+  const memberBytes = memberChatBytesHeld.get(userId) ?? 0;
 
   if (
     chatBytesHeld + bytes > CHAT_MEMORY_BUDGET_BYTES ||
-    orgBytes + bytes > ORG_CHAT_MEMORY_BYTES
+    memberBytes + bytes > MEMBER_CHAT_MEMORY_BYTES
   ) {
     return null;
   }
 
   chatBytesHeld += bytes;
-  orgChatBytesHeld.set(orgId, orgBytes + bytes);
+  memberChatBytesHeld.set(userId, memberBytes + bytes);
   let held = true;
 
   return () => {
@@ -61,14 +71,32 @@ export function holdChatMemory(
 
     held = false;
     chatBytesHeld -= bytes;
-    const left = (orgChatBytesHeld.get(orgId) ?? bytes) - bytes;
+    const left = (memberChatBytesHeld.get(userId) ?? bytes) - bytes;
 
     if (left > 0) {
-      orgChatBytesHeld.set(orgId, left);
+      memberChatBytesHeld.set(userId, left);
     } else {
-      orgChatBytesHeld.delete(orgId);
+      memberChatBytesHeld.delete(userId);
     }
   };
+}
+
+/** The promise's value, or null when it does not settle within ms. */
+export async function withinTime<T>(
+  promise: Promise<T>,
+  ms: number
+): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const late = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), ms);
+  });
+
+  try {
+    return await Promise.race([promise, late]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -174,12 +202,45 @@ const GEMINI_PART_KEYS: ReadonlySet<string> = new Set([
   "thoughtSignature",
 ]);
 
-/** Keys that make the vendor read a stored file of the org's account. */
+/**
+ * Keys that make the vendor read a stored file of the org's account, or
+ * fetch a URL on its behalf.
+ */
 const FILE_REFERENCE_KEYS: ReadonlySet<string> = new Set([
   "fileData",
   "fileUri",
   "file_id",
+  "file_url",
+  "image_url",
 ]);
+
+/** The parts of a Responses message the model itself writes. */
+const ASSISTANT_MESSAGE_PART_TYPES: ReadonlySet<string> = new Set([
+  "output_text",
+  "refusal",
+]);
+
+const responsesMessageSchema = z.object({
+  content: z.array(z.object({ type: z.string() }).loose()),
+  role: z.literal("assistant"),
+  type: z.literal("message"),
+});
+
+/**
+ * A Responses message is replayed only as the assistant's own output. A
+ * user, system or developer message, or an input part, would be text the
+ * server never produced, with that role's authority.
+ */
+function isAssistantMessage(item: z.infer<typeof jsonValueSchema>): boolean {
+  const message = responsesMessageSchema.safeParse(item);
+
+  return (
+    message.success &&
+    message.data.content.every((part) =>
+      ASSISTANT_MESSAGE_PART_TYPES.has(part.type)
+    )
+  );
+}
 
 const jsonRecordSchema = z.record(z.string(), jsonValueSchema);
 
@@ -219,6 +280,10 @@ export function replaySafe(
     }
 
     const type = z.string().safeParse(record.data.type);
+
+    if (type.success && type.data === "message") {
+      return isAssistantMessage(record.data);
+    }
 
     if (type.success) {
       return REPLAY_TYPES.has(type.data) || type.data.startsWith("reasoning.");
