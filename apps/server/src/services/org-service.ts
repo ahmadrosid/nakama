@@ -161,6 +161,48 @@ export class OrgService {
     return org;
   }
 
+  private async isPlatformAdmin(userId: string): Promise<boolean> {
+    const user = await this.databaseAdapter.getUserById(userId);
+
+    return Boolean(user?.isPlatformAdmin);
+  }
+
+  /**
+   * A team also applies its parent's allowlist, so a new team cannot let an
+   * outside address in. A user who is already in the parent org skips that part.
+   */
+  private async assertMemberDomainAllowed(
+    email: string,
+    organization: StoredOrganizationRecord,
+    userId?: string
+  ): Promise<void> {
+    if (!isAllowedInviteDomain(email, organization)) {
+      throw new NakamaApiError("Email domain is not allowed.", 400);
+    }
+
+    if (!organization.parentOrgId) {
+      return;
+    }
+
+    if (
+      userId &&
+      (await this.databaseAdapter.getOrgMember(
+        organization.parentOrgId,
+        userId
+      ))
+    ) {
+      return;
+    }
+
+    const parent = await this.databaseAdapter.getOrganizationById(
+      organization.parentOrgId
+    );
+
+    if (parent && !isAllowedInviteDomain(email, parent)) {
+      throw new NakamaApiError("Email domain is not allowed.", 400);
+    }
+  }
+
   private async requireParentAdmin(
     orgId: string,
     userId: string
@@ -1600,8 +1642,14 @@ export class OrgService {
       throw new NakamaApiError("A valid email address is required.", 400);
     }
 
+    const existingUser = await this.databaseAdapter.getUserByEmail(email);
+
     if (!input.bypassDomainAllowlist) {
-      assertAllowedInviteDomain(email, organization);
+      await this.assertMemberDomainAllowed(
+        email,
+        organization,
+        existingUser?.id
+      );
     }
 
     if (!ORG_ROLES.includes(input.role)) {
@@ -1609,7 +1657,6 @@ export class OrgService {
     }
 
     const now = new Date().toISOString();
-    const existingUser = await this.databaseAdapter.getUserByEmail(email);
 
     if (existingUser) {
       const member = await this.databaseAdapter.getOrgMember(
@@ -1740,7 +1787,11 @@ export class OrgService {
 
     return {
       members: parent.members
-        .filter((member) => !taken.has(member.userId))
+        .filter(
+          (member) =>
+            !taken.has(member.userId) &&
+            isAllowedInviteDomain(member.email, team)
+        )
         .map((member) => ({ ...member, phone: null })),
     };
   }
@@ -2011,13 +2062,19 @@ export class OrgService {
       throw new NakamaApiError("A valid email address is required.", 400);
     }
 
-    assertAllowedInviteDomain(email, organization);
+    const existingUser = await this.databaseAdapter.getUserByEmail(email);
+
+    if (!(await this.isPlatformAdmin(input.invitedByUserId))) {
+      await this.assertMemberDomainAllowed(
+        email,
+        organization,
+        existingUser?.id
+      );
+    }
 
     if (!ORG_ROLES.includes(input.role)) {
       throw new NakamaApiError("Invalid org role.", 400);
     }
-
-    const existingUser = await this.databaseAdapter.getUserByEmail(email);
 
     if (existingUser) {
       const member = await this.databaseAdapter.getOrgMember(
@@ -2138,7 +2195,17 @@ export class OrgService {
     assertInviteUsable(invite);
 
     const organization = await this.requireActiveOrganization(invite.orgId);
-    assertAllowedInviteDomain(invite.email, organization);
+    let user = await this.databaseAdapter.getUserByEmail(invite.email);
+
+    // A platform admin's invite may name an address outside the allowlist,
+    // so it must also be accepted (#2075).
+    if (!(await this.isPlatformAdmin(invite.invitedByUserId))) {
+      await this.assertMemberDomainAllowed(
+        invite.email,
+        organization,
+        user?.id
+      );
+    }
 
     const password = request.password?.trim();
 
@@ -2152,7 +2219,6 @@ export class OrgService {
     assertNewPassword(password);
 
     const now = new Date().toISOString();
-    let user = await this.databaseAdapter.getUserByEmail(invite.email);
 
     if (user) {
       const valid = await this.authService.verifyPassword(
@@ -2495,15 +2561,20 @@ function normalizeAllowedInviteDomains<T>(input: T): string[] {
   return [...domains];
 }
 
-function assertAllowedInviteDomain(
+/** An allowed domain also allows its subdomains: acme.com allows eng.acme.com. */
+function isAllowedInviteDomain(
   email: string,
   organization: StoredOrganizationRecord
-): void {
+): boolean {
   const domains = organization.allowedInviteDomains ?? [];
+  const domain = email.split("@")[1]?.toLowerCase() ?? "";
 
-  if (domains.length > 0 && !domains.includes(email.split("@")[1] ?? "")) {
-    throw new NakamaApiError("Email domain is not allowed.", 400);
-  }
+  return (
+    domains.length === 0 ||
+    domains.some(
+      (allowed) => domain === allowed || domain.endsWith(`.${allowed}`)
+    )
+  );
 }
 
 function normalizeOptionalPhone(
