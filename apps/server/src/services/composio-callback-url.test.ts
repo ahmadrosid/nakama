@@ -448,7 +448,9 @@ describe("composio-callback-url", () => {
           "https://attacker.example",
           new Request("https://api.example.com/v1/system/web-public-url")
         )
-      ).rejects.toThrow("webPublicUrl must use this deployment's own origin.");
+      ).rejects.toThrow(
+        "Public web URL must use this deployment's own origin."
+      );
 
       // The env override is how a deployment that serves the web app from
       // another host names it.

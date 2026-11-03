@@ -564,7 +564,7 @@ async function sendMessage(
 
     const reply = hasAttachments
       ? "Attachments require a configured provider. Add a provider in Settings → AI Providers (/settings/providers), or set OPENAI_API_KEY, ANTHROPIC_API_KEY, OPENROUTER_API_KEY, or GEMINI_API_KEY."
-      : "I'm running in offline mode. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, OPENROUTER_API_KEY, or GEMINI_API_KEY to chat with me. You can still use /create to draft automations locally.";
+      : "I'm running in offline mode. Add an AI provider in Settings → AI Providers (/settings/providers) to chat with me. You can still use /create to draft automations locally.";
 
     if (mode === "stream" && options.handlers) {
       options.handlers.onChunk(reply);
