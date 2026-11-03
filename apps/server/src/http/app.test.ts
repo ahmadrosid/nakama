@@ -420,6 +420,38 @@ describe("createHonoApp", () => {
     }
   });
 
+  test("the openapi contract says one of the channel filters is required", async () => {
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+
+    // SAFETY: the spec is a typed OpenAPI document; the path and parameter
+    // names are fixed by the route registration this test pins.
+    const spec = (await (
+      await app.fetch(new Request("http://localhost/openapi.json"))
+    ).json()) as {
+      paths: {
+        "/v1/sessions": {
+          get: {
+            parameters: Array<{ name: string; description?: string }>;
+          };
+        };
+      };
+    };
+
+    const params = spec.paths["/v1/sessions"].get.parameters;
+
+    const channel = params.find((param) => param.name === "channel");
+    const channels = params.find((param) => param.name === "channels");
+
+    expect(channel?.description).toContain(
+      "One of `channel` or `channels` is required."
+    );
+
+    expect(channels?.description).toContain(
+      "One of `channel` or `channels` is required."
+    );
+  });
+
   test("removed backend keys and routes reject access, and stale app-user inputs create no sessions", async () => {
     const options = createServerOptions();
     let created = 0;
