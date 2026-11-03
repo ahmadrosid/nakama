@@ -4115,7 +4115,7 @@ export class AgentService {
           return;
         }
 
-        this.userConfig = {
+        const next = {
           ...this.userConfig,
           providers: this.userConfig.providers.map((entry) =>
             entry.id === instance.id
@@ -4124,7 +4124,9 @@ export class AgentService {
           ),
         };
 
-        await saveUserConfig(this.userConfig);
+        // Saved first: a failed save leaves the config as it was.
+        await saveUserConfig(next);
+        this.userConfig = next;
         this.refreshProviderConfig();
       })
       .catch(() => undefined);
@@ -4192,7 +4194,7 @@ export class AgentService {
       type: "nakama_cloud",
     };
 
-    this.userConfig = {
+    const next = {
       ...base,
       defaultProviderId: NAKAMA_CLOUD_PROVIDER_ID,
       providers: [
@@ -4201,7 +4203,10 @@ export class AgentService {
       ],
     };
 
-    await saveUserConfig(this.userConfig);
+    // Saved first: if the save fails, this computer is not signed in at all,
+    // rather than signed in until the next restart.
+    await saveUserConfig(next);
+    this.userConfig = next;
     this.refreshProviderConfig();
     this.nakamaCloudModelsCheckedAt = Date.now();
 

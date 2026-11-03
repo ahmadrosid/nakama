@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { loadLocalAuthToken } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
@@ -7,6 +8,7 @@ import { createHonoApp } from "./app";
 import {
   buildSetupAuthBody,
   createPlatformAdminUser,
+  seedLocalClientUser,
   withOrgId,
 } from "./test-org-helpers";
 import {
@@ -406,4 +408,36 @@ describe("createHonoApp", () => {
       expect(body.totpEnabled).toBeUndefined();
     });
   });
+});
+
+test("Nakama Desktop starts its Cloud sign-in before it has an org", async () => {
+  const options = createServerOptions();
+
+  options.agent.nakamaCloudStatus = () => ({
+    account: null,
+    cloudUrl: null,
+    orgName: null,
+    signedIn: false,
+  });
+  options.agent.signOutNakamaCloud = async () => undefined;
+
+  // A fresh desktop: the local user exists, no org yet (setup comes later).
+  await seedLocalClientUser(options.databaseAdapter);
+  const app = createHonoApp(options);
+  const headers = { Authorization: `Bearer ${await loadLocalAuthToken()}` };
+
+  const status = await app.fetch(
+    new Request("http://localhost:4310/v1/nakama-cloud", { headers })
+  );
+
+  expect(status.status).toBe(200);
+
+  const signOut = await app.fetch(
+    new Request("http://localhost:4310/v1/nakama-cloud", {
+      headers,
+      method: "DELETE",
+    })
+  );
+
+  expect(signOut.status).toBe(204);
 });

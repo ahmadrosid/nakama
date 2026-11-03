@@ -406,6 +406,9 @@ export function createHonoApp(options: ServerOptions) {
   registerAcpMcpRoutes(app);
 
   registerLlmRoutes(app, options);
+  // This computer's own Cloud sign-in: it runs before setup, when the
+  // desktop has no org yet, so it is not behind the org check.
+  registerNakamaCloudSignInRoutes(app, options);
 
   registerComposioOAuthRoutes(app, options);
   registerMcpOAuthRoutes(app, options);
@@ -424,7 +427,6 @@ export function createHonoApp(options: ServerOptions) {
   registerTeamsRoutes(app, options);
   registerUserContextRoutes(app, options);
   registerComputerRoutes(app, options);
-  registerNakamaCloudSignInRoutes(app, options);
   registerSessionRoutes(app, options);
   registerProfileRoutes(app, options);
   registerProfilePortabilityRoutes(app, options);

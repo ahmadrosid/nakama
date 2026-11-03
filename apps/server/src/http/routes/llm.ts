@@ -214,9 +214,21 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
       return c.json({ error: gate.error }, gate.status);
     }
 
-    const { models } = await agent.getModels();
+    const { currentProviderId, models } = await agent.getModels();
 
-    return c.json({ models }, 200);
+    // Each provider marks its own default model. The team's default is the
+    // one of the default provider; a desktop keeps one default only.
+    return c.json(
+      {
+        models: models.map((model) => ({
+          ...model,
+          default: Boolean(
+            model.default && model.providerId === currentProviderId
+          ),
+        })),
+      },
+      200
+    );
   });
 
   app.post("/v1/llm/text", async (c) => {

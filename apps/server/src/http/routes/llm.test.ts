@@ -682,3 +682,47 @@ test("an org may hold one big chat at a time; the next waits until the first end
   expect(again.status).toBe(200);
   await again.text();
 });
+
+test("the team's model list marks one default: the default provider's model", async () => {
+  const { agent, app, pass } = await setup();
+
+  agent.getModels = () =>
+    Promise.resolve({
+      currentProviderId: "anthropic-main",
+      displayName: null,
+      models: [
+        {
+          default: true,
+          id: "gpt-4o-mini",
+          name: "GPT-4o mini",
+          provider: "openai",
+          providerId: "openai-main",
+        },
+        {
+          default: true,
+          id: "claude-sonnet-4-5",
+          name: "Claude Sonnet 4.5",
+          provider: "anthropic",
+          providerId: "anthropic-main",
+        },
+      ],
+      provider: "anthropic",
+      providers: [],
+    });
+
+  const response = await app.request("/v1/llm/models", {
+    headers: { authorization: `Bearer ${pass}` },
+  });
+
+  const { models } = z
+    .object({
+      models: z.array(
+        z.object({ default: z.boolean(), providerId: z.string() })
+      ),
+    })
+    .parse(await response.json());
+
+  expect(models.filter((model) => model.default)).toEqual([
+    { default: true, providerId: "anthropic-main" },
+  ]);
+});

@@ -219,7 +219,10 @@ export class NakamaCloudSignIn {
             cloudUrl,
             models,
           });
-        } catch {
+        } catch (error) {
+          // The page asks for a reload; the log says why it failed.
+          console.warn("Nakama Cloud sign-in did not finish:", error);
+
           return new Response(RETRY_PAGE, {
             headers: { "content-type": "text/html; charset=utf-8" },
             status: 502,
@@ -302,6 +305,8 @@ export class NakamaCloudSignIn {
       throw new Error(`Nakama Cloud models: HTTP ${response.status}`);
     }
 
+    let hasDefault = false;
+
     return modelsSchema.parse(await response.json()).models.map((model) => {
       // The cloud resolves "<its provider>::<model>" back to its own provider.
       const entry: CustomModelEntry = {
@@ -309,9 +314,11 @@ export class NakamaCloudSignIn {
         name: model.name,
       };
 
-      // Saved config takes JSON values only, so no undefined fields.
-      if (model.default) {
+      // Saved config takes one default and JSON values only (no undefined
+      // fields). An older cloud marks one default per provider.
+      if (model.default && !hasDefault) {
         entry.default = true;
+        hasDefault = true;
       }
 
       return entry;

@@ -1,6 +1,6 @@
 import { afterEach, expect, setSystemTime, test } from "bun:test";
 import { createPublicKey, randomBytes, verify } from "node:crypto";
-import { mkdtemp } from "node:fs/promises";
+import { chmod, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { desktopConnectCode } from "@nakama/core/contract";
@@ -322,4 +322,51 @@ test("the app shows the same code the Connect page makes from the link", async (
     )
   );
   expect(code).toMatch(/^\d{3} \d{3}$/);
+});
+
+test("a cloud that marks a default model per provider still signs in, with one default", async () => {
+  const { agent, cloud } = await setup();
+
+  // An older cloud: each of its providers marks its own default.
+  cloud.models.push({
+    default: true,
+    id: "claude-sonnet-4-5",
+    name: "Claude Sonnet 4.5",
+    providerId: "anthropic-main",
+  });
+
+  const back = connectResult(
+    cloud,
+    (await agent.startNakamaCloudSignIn({ cloudUrl: cloud.url })).connectUrl
+  );
+
+  expect((await fetch(back)).status).toBe(200);
+  expect(agent.nakamaCloudStatus().signedIn).toBe(true);
+
+  const saved = (await agent.listProviders()).providers.find(
+    (provider) => provider.id === NAKAMA_CLOUD_PROVIDER_ID
+  )?.customModels;
+
+  expect(saved?.filter((model) => model.default)).toHaveLength(1);
+  expect(saved).toHaveLength(2);
+});
+
+test("a sign-in that cannot be saved leaves this computer signed out", async () => {
+  const { agent, cloud } = await setup();
+  const configDir = process.env.NAKAMA_CONFIG_DIR ?? "";
+
+  const back = connectResult(
+    cloud,
+    (await agent.startNakamaCloudSignIn({ cloudUrl: cloud.url })).connectUrl
+  );
+
+  // The config file cannot be written.
+  await chmod(configDir, 0o500);
+
+  try {
+    expect((await fetch(back)).status).toBe(502);
+    expect(agent.nakamaCloudStatus().signedIn).toBe(false);
+  } finally {
+    await chmod(configDir, 0o700);
+  }
 });
