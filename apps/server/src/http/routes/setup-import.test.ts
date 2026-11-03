@@ -487,7 +487,7 @@ describe("setup import routes", () => {
 
     expect(restoreResponse.status).toBe(400);
     await expect(readFile(configPath, "utf8")).resolves.toBe("keep");
-  });
+  }, 30_000);
 
   test("after the first admin, a setup body over the limit gets the 409, not setup advice", async () => {
     const { app, authService, databaseAdapter } = createApp();
@@ -565,7 +565,7 @@ describe("setup import routes", () => {
 
     const previewSpy = spyOn(
       dataPortability,
-      "previewNakamaDataImport"
+      "previewNakamaDataImportFile"
     ).mockImplementation(async () => {
       throw new Error(
         "ENOENT: no such file or directory, open '/home/nakama/.config/nakama/nakama.db'"

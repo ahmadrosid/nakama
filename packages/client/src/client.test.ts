@@ -820,7 +820,7 @@ test("non-browser clients send local auth as a bearer token", async () => {
   expect(headers.get("Content-Type")).toBeNull();
 });
 
-test("data export downloads zip bytes with filename metadata", async () => {
+test("data export returns the raw ZIP stream with filename metadata", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
 
@@ -840,7 +840,7 @@ test("data export downloads zip bytes with filename metadata", async () => {
     },
   });
 
-  const result = await client.exportData();
+  const response = await client.exportDataResponse();
 
   expect(fetchCalls[0]!.input.toString()).toBe(
     "http://localhost:4310/v1/platform/data/export"
@@ -848,8 +848,12 @@ test("data export downloads zip bytes with filename metadata", async () => {
   const headers = new Headers(fetchCalls[0]!.init?.headers);
   expect(headers.get("Authorization")).toBe("Bearer local-auth-token");
   expect(headers.get("Content-Type")).toBeNull();
-  expect(result.filename).toBe("nakama-export-test.zip");
-  expect(Array.from(new Uint8Array(result.data))).toEqual([1, 2, 3]);
+  expect(response.headers.get("Content-Disposition")).toBe(
+    'attachment; filename="nakama-export-test.zip"'
+  );
+  expect(Array.from(new Uint8Array(await response.arrayBuffer()))).toEqual([
+    1, 2, 3,
+  ]);
 });
 
 test("user data export scopes the download path to the requested user", async () => {
@@ -1066,53 +1070,6 @@ test("data import helpers upload bytes as a raw ZIP and strings as JSON", async 
   expect(new Headers(fetchCalls[1]!.init?.headers).get("Authorization")).toBe(
     "Bearer local-auth-token"
   );
-});
-
-test("exportData reports download progress against Content-Length", async () => {
-  const client = new NakamaClient({
-    baseUrl: "http://localhost:4310",
-    fetch: async () =>
-      new Response(new Uint8Array(10), {
-        headers: { "Content-Length": "10", "Content-Type": "application/zip" },
-      }),
-  });
-
-  const seen: Array<[number, number]> = [];
-
-  const result = await client.exportData({
-    onProgress: (loaded, total) => seen.push([loaded, total]),
-  });
-
-  expect(result.data.byteLength).toBe(10);
-  expect(seen[0]).toEqual([0, 10]);
-  expect(seen.at(-1)).toEqual([10, 10]);
-});
-
-test("exportData keeps every byte when Content-Length is missing or wrong", async () => {
-  const body = Uint8Array.from({ length: 10 }, (_, index) => index);
-
-  const headerSets: Record<string, string>[] = [{}, { "Content-Length": "4" }];
-
-  for (const headers of headerSets) {
-    const client = new NakamaClient({
-      baseUrl: "http://localhost:4310",
-      fetch: async () => {
-        const stream = new ReadableStream<Uint8Array>({
-          start(controller) {
-            controller.enqueue(body.subarray(0, 3));
-            controller.enqueue(body.subarray(3));
-            controller.close();
-          },
-        });
-
-        return new Response(stream, { headers });
-      },
-    });
-
-    const result = await client.exportData({ onProgress: () => {} });
-
-    expect(new Uint8Array(result.data)).toEqual(body);
-  }
 });
 
 test("an upload with onProgress goes through XHR and keeps the API error", async () => {

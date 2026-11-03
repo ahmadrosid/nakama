@@ -1,6 +1,8 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import type { FileHandle } from "node:fs/promises";
 import {
   mkdir,
+  open,
   readdir,
   readFile,
   rename,
@@ -15,6 +17,8 @@ import { comparablePath, resolveWithRealpath } from "@nakama/core/tools/paths";
 import { z } from "zod";
 
 const MAGIC = Buffer.from("NKBK1\n");
+
+const HEADER_BYTES = MAGIC.length + 12 + 16;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -92,6 +96,161 @@ export function decryptBackup(data: Uint8Array, key: Buffer): Buffer {
   ]);
 }
 
+async function writeAll(
+  handle: FileHandle,
+  data: Uint8Array,
+  position: number
+): Promise<void> {
+  let offset = 0;
+
+  while (offset < data.byteLength) {
+    const { bytesWritten } = await handle.write(
+      data,
+      offset,
+      data.byteLength - offset,
+      position + offset
+    );
+
+    if (bytesWritten === 0) {
+      throw new Error("Could not write the backup.");
+    }
+
+    offset += bytesWritten;
+  }
+}
+
+async function readAll(
+  handle: FileHandle,
+  buffer: Buffer,
+  position: number
+): Promise<number> {
+  let offset = 0;
+
+  while (offset < buffer.byteLength) {
+    const { bytesRead } = await handle.read(
+      buffer,
+      offset,
+      buffer.byteLength - offset,
+      position + offset
+    );
+
+    if (bytesRead === 0) {
+      break;
+    }
+
+    offset += bytesRead;
+  }
+
+  return offset;
+}
+
+/** Encrypts a ZIP file into the same `MAGIC + nonce + tag + body` format. */
+async function encryptBackupFile(
+  sourcePath: string,
+  destPath: string,
+  key: Buffer
+): Promise<void> {
+  const nonce = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, nonce);
+  const source = await open(sourcePath, "r");
+
+  try {
+    const dest = await open(destPath, "w", 0o600);
+
+    try {
+      await writeAll(dest, MAGIC, 0);
+      await writeAll(dest, nonce, MAGIC.length);
+      // Reserve the GCM tag; it is known only after the final block.
+      await writeAll(dest, Buffer.alloc(16), MAGIC.length + 12);
+
+      let position = HEADER_BYTES;
+      const input = source.createReadStream({ highWaterMark: 64 * 1024 });
+
+      for await (const chunk of input) {
+        const encrypted = cipher.update(chunk);
+
+        if (encrypted.length > 0) {
+          await writeAll(dest, encrypted, position);
+          position += encrypted.length;
+        }
+      }
+
+      const final = cipher.final();
+
+      if (final.length > 0) {
+        await writeAll(dest, final, position);
+      }
+
+      await writeAll(dest, cipher.getAuthTag(), MAGIC.length + 12);
+    } finally {
+      await dest.close();
+    }
+  } catch (error) {
+    await rm(destPath, { force: true }).catch(() => undefined);
+    throw error;
+  } finally {
+    await source.close();
+  }
+}
+
+export async function decryptBackupFile(
+  sourcePath: string,
+  destPath: string,
+  key: Buffer
+): Promise<void> {
+  const source = await open(sourcePath, "r");
+
+  try {
+    const header = Buffer.alloc(HEADER_BYTES);
+    const headerBytes = await readAll(source, header, 0);
+
+    if (
+      headerBytes < HEADER_BYTES ||
+      !header.subarray(0, MAGIC.length).equals(MAGIC)
+    ) {
+      throw new Error("Not an encrypted Nakama backup.");
+    }
+
+    const nonce = header.subarray(MAGIC.length, MAGIC.length + 12);
+    const tag = header.subarray(MAGIC.length + 12, HEADER_BYTES);
+    const decipher = createDecipheriv("aes-256-gcm", key, nonce);
+    decipher.setAuthTag(tag);
+
+    const dest = await open(destPath, "w", 0o600);
+
+    try {
+      let position = 0;
+
+      const input = source.createReadStream({
+        highWaterMark: 64 * 1024,
+        start: HEADER_BYTES,
+      });
+
+      for await (const chunk of input) {
+        const decrypted = decipher.update(chunk);
+
+        if (decrypted.length > 0) {
+          await writeAll(dest, decrypted, position);
+          position += decrypted.length;
+        }
+      }
+
+      const final = decipher.final();
+
+      if (final.length > 0) {
+        await writeAll(dest, final, position);
+      }
+    } finally {
+      await dest.close();
+    }
+  } catch (error) {
+    await rm(destPath, { force: true }).catch(() => undefined);
+    throw error;
+  } finally {
+    await source.close();
+  }
+}
+
 /** A backup kept inside the data root would be swept into the next export. */
 export function assertBackupDirOutsideRoot(dir: string, rootDir: string): void {
   const inside = relative(
@@ -113,9 +272,14 @@ async function listBackups(dir: string): Promise<string[]> {
   return (await readdir(dir)).filter((name) => NAME.test(name)).sort();
 }
 
+export interface BackupExportFile {
+  cleanup: () => Promise<void>;
+  path: string;
+}
+
 export async function writeBackup(options: {
   dir: string;
-  exportZip: () => Promise<Uint8Array>;
+  exportFile: () => Promise<BackupExportFile>;
   key: Buffer;
   now?: Date;
 }): Promise<string> {
@@ -125,11 +289,20 @@ export async function writeBackup(options: {
     .replace(/\.\d+Z$/, "Z");
 
   const path = join(options.dir, `nakama-${stamp}.zip.enc`);
-  const data = encryptBackup(await options.exportZip(), options.key);
+  const tempPath = `${path}.tmp`;
+  const exported = await options.exportFile();
 
-  // Renamed into place, so a crash mid-write never leaves a file that looks complete.
-  await writeFile(`${path}.tmp`, data, { mode: 0o600 });
-  await rename(`${path}.tmp`, path);
+  try {
+    await encryptBackupFile(exported.path, tempPath, options.key);
+
+    // Renamed into place, so a crash mid-write never leaves a file that looks complete.
+    await rename(tempPath, path);
+  } catch (error) {
+    await rm(tempPath, { force: true }).catch(() => undefined);
+    throw error;
+  } finally {
+    await exported.cleanup();
+  }
 
   const backups = await listBackups(options.dir);
 
@@ -146,7 +319,7 @@ export async function writeBackup(options: {
  */
 export async function startScheduledBackups(options: {
   dir: string;
-  exportZip: () => Promise<Uint8Array>;
+  exportFile: () => Promise<BackupExportFile>;
   key: Buffer;
 }): Promise<() => void> {
   await mkdir(options.dir, { mode: 0o700, recursive: true });
