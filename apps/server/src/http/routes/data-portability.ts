@@ -41,13 +41,14 @@ export const importConfirmQuerySchema = z.object({
  */
 export async function readImportRequest(
   request: Request,
-  readJsonBody: () => Promise<{ confirm?: boolean; data: string }>
+  readJsonBody: () => Promise<{ confirm?: boolean; data: string }>,
+  tooLargeMessage?: string
 ): Promise<{ archive: Buffer; confirm: boolean }> {
   if (!isArchiveRequest(request)) {
     const body = await readJsonBody();
 
     return {
-      archive: decodeArchiveRequestData(body.data),
+      archive: decodeArchiveRequestData(body.data, tooLargeMessage),
       confirm: body.confirm === true,
     };
   }
@@ -55,7 +56,7 @@ export async function readImportRequest(
   const bytes = await readUntilClientGone(request, request.arrayBuffer());
 
   return {
-    archive: decodeArchiveRequestBytes(Buffer.from(bytes)),
+    archive: decodeArchiveRequestBytes(Buffer.from(bytes), tooLargeMessage),
     confirm: new URL(request.url).searchParams.get("confirm") === "true",
   };
 }

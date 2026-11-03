@@ -9,6 +9,7 @@ import {
 } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 import {
+  MAX_IMPORT_ARCHIVE_BYTES,
   previewNakamaDataImport,
   restoreNakamaDataImport,
 } from "../../services/data-portability";
@@ -26,6 +27,10 @@ import {
   importConfirmQuerySchema,
   readImportRequest,
 } from "./data-portability";
+
+// The body limit in app.ts and the archive size check. Settings has the same cap
+// (#2257), so the way past it is outside Nakama.
+export const SETUP_BACKUP_TOO_LARGE = `This backup is over the ${MAX_IMPORT_ARCHIVE_BYTES / (1024 * 1024)} MB restore limit, which Settings has too. Restore the data folder from a filesystem or volume backup instead.`;
 
 export function registerSetupImportRoutes(
   app: HonoApp,
@@ -153,8 +158,10 @@ export function registerSetupImportRoutes(
     await assertSetupImportAllowed(databaseAdapter);
 
     // Read outside the catch so an oversized archive keeps its 413.
-    const { archive } = await readImportRequest(c.req.raw, () =>
-      readJson<PreviewDataImportRequest>(c.req.raw, importRequestSchema)
+    const { archive } = await readImportRequest(
+      c.req.raw,
+      () => readJson<PreviewDataImportRequest>(c.req.raw, importRequestSchema),
+      SETUP_BACKUP_TOO_LARGE
     );
 
     try {
@@ -175,8 +182,10 @@ export function registerSetupImportRoutes(
 
     await assertSetupImportAllowed(databaseAdapter);
 
-    const { archive, confirm } = await readImportRequest(c.req.raw, () =>
-      readJson<RestoreDataImportRequest>(c.req.raw, restoreRequestSchema)
+    const { archive, confirm } = await readImportRequest(
+      c.req.raw,
+      () => readJson<RestoreDataImportRequest>(c.req.raw, restoreRequestSchema),
+      SETUP_BACKUP_TOO_LARGE
     );
 
     let restore;
@@ -216,7 +225,7 @@ function assertImportContentType(request: Request): void {
   }
 }
 
-async function assertSetupImportAllowed(
+export async function assertSetupImportAllowed(
   databaseAdapter: DatabaseAdapter
 ): Promise<void> {
   const humanUserCount = await databaseAdapter.countHumanUsers();
