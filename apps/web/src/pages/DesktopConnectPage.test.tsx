@@ -8,11 +8,8 @@ import {
   type AuthContextValue,
 } from "@/context/auth-context-shared";
 import { ThemeContext } from "@/context/theme-context-shared";
-import {
-  connectReturnUrl,
-  DesktopConnectPage,
-  parseConnectRequest,
-} from "./DesktopConnectPage";
+import { connectReturnUrl, parseConnectRequest } from "@/lib/desktop-connect";
+import { DesktopConnectPage } from "./DesktopConnectPage";
 
 const cleanups: Array<() => void> = [];
 
