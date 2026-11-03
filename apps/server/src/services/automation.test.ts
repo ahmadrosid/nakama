@@ -1407,6 +1407,80 @@ describe("AutomationRunner", () => {
     }
   });
 
+  test("renders markdown in telegram delivery", async () => {
+    const owner = { orgId: ORG_ID, profileId: PROFILE_ID };
+    const configDir = await mkdtemp(join(tmpdir(), "nakama-automation-tg-"));
+    const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    try {
+      await mkdir(getTelegramConfigDir(owner), { recursive: true });
+      await writeFile(
+        getTelegramConfigPath(owner),
+        "bot_token=test-token\npaired_user_ids=111\n",
+        "utf8"
+      );
+
+      const payloads: Array<{ parse_mode?: string; text: string }> = [];
+
+      const deliveryService = new AutomationDeliveryService(
+        // SAFETY: This test double supplies only the method `deliver` calls.
+        {
+          updateRunDelivery: async () => undefined,
+        } as never,
+        {
+          telegram: createTelegramOutboundAdapter({
+            fetchImpl: asTestFetch(async (_input, init) => {
+              payloads.push(
+                z
+                  .object({
+                    parse_mode: z.string().optional(),
+                    text: z.string(),
+                  })
+                  .parse(JSON.parse(String(init?.body)))
+              );
+
+              return new Response("ok", { status: 200 });
+            }),
+          }),
+        }
+      );
+
+      await deliveryService.deliver(
+        // SAFETY: This test double supplies only the fields `deliver` reads.
+        {
+          delivery: { channel: "telegram" },
+          id: "automation_delivery_format",
+          name: "Digest",
+          orgId: ORG_ID,
+          profileId: PROFILE_ID,
+        } as never,
+        // SAFETY: This test double supplies only the fields `deliver` reads.
+        {
+          completedAt: new Date().toISOString(),
+          id: "run_format",
+          output: "*PORTING*\n\n**Released** with `code`",
+          status: "completed",
+        } as never
+      );
+
+      expect(payloads).toHaveLength(1);
+      expect(payloads[0]?.parse_mode).toBe("HTML");
+      expect(payloads[0]?.text).toContain("<i>PORTING</i>");
+      expect(payloads[0]?.text).toContain("<b>Released</b>");
+      expect(payloads[0]?.text).toContain("<code>code</code>");
+      expect(payloads[0]?.text).not.toContain("*PORTING*");
+    } finally {
+      if (previousConfigDir === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+      }
+
+      await rm(configDir, { force: true, recursive: true });
+    }
+  });
+
   test("records discord delivery status after successful runs", async () => {
     const db = await createTestDb();
 

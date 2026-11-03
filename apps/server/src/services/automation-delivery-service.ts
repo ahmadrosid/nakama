@@ -101,6 +101,7 @@ export class AutomationDeliveryService {
       result = await this.telegram.send({
         chatIds: delivery.chatId ? [delivery.chatId] : undefined,
         orgId: automation.orgId,
+        parseMode: "HTML",
         profileId: automation.profileId,
         text: formatted.text,
       });
