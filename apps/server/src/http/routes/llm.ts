@@ -125,15 +125,37 @@ export type LlmStreamEvent =
   | { data: ChatCompletionResult; type: "result" }
   | { data: { message: string; status: number }; type: "error" };
 
+/**
+ * Request errors the desktop can act on, such as a prompt that is too long.
+ * Not 401 or 403: those mean "sign in again" to the desktop, and here they
+ * would come from this server's own provider key.
+ */
+const PASSED_STATUSES = [400, 404, 408, 409, 413, 422] as const;
+
+type PassedStatus = (typeof PASSED_STATUSES)[number];
+
 interface Failure {
   message: string;
-  status: 429 | 502;
+  status: PassedStatus | 429 | 502;
+}
+
+function isPassedStatus(status: number): status is PassedStatus {
+  return PASSED_STATUSES.some((passed) => passed === status);
 }
 
 function failureOf(error: Error): Failure {
-  return error instanceof NakamaApiError && error.status === 429
-    ? { message: "Your team's monthly limit is reached.", status: 429 }
-    : { message: error.message || "The model call failed.", status: 502 };
+  if (!(error instanceof NakamaApiError)) {
+    return { message: error.message || "The model call failed.", status: 502 };
+  }
+
+  if (error.status === 429) {
+    return { message: "Your team's monthly limit is reached.", status: 429 };
+  }
+
+  return {
+    message: error.message || "The model call failed.",
+    status: isPassedStatus(error.status) ? error.status : 502,
+  };
 }
 
 function asError(caught: Error | string): Error {
@@ -166,11 +188,12 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
 
     const org = await databaseAdapter?.getOrganizationById(caller.orgId);
 
-    if (org?.archivedAt) {
+    // No org found is no access, not a skipped check.
+    if (!org || org.archivedAt) {
       return { error: "Sign in again.", status: 401 };
     }
 
-    return org?.desktopModelsEnabled === false
+    return org.desktopModelsEnabled === false
       ? {
           error: "Your team turned off Nakama Desktop for its models.",
           status: 403,
@@ -276,7 +299,7 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
 
       return c.json({ error: failure.message }, failure.status);
     } finally {
-      await release?.();
+      await release?.().catch(() => undefined);
     }
   });
 
@@ -371,7 +394,8 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
             send({ data: failureOf(asError(error)), type: "error" })
           )
           .finally(async () => {
-            await release?.();
+            // A failed release must not leave the desktop waiting on the stream.
+            await release?.().catch(() => undefined);
 
             if (!abort.signal.aborted) {
               controller.close();

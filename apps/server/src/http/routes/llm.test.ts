@@ -298,3 +298,68 @@ test("a computer that signs out removes itself, and its pass stops working", asy
   ).toBe(204);
   expect((await app.request("/v1/llm/models", { headers })).status).toBe(401);
 });
+
+test("a provider request error keeps its status, and never asks the desktop to sign in again", async () => {
+  const { app, pass } = await setup();
+
+  // The provider layer turns a vendor key error into a 400 request error.
+  vendor.use(
+    http.post("https://api.openai.com/v1/chat/completions", () =>
+      HttpResponse.json(
+        { error: { message: "Incorrect API key.", type: "invalid" } },
+        { status: 401 }
+      )
+    )
+  );
+
+  const response = await post(
+    app,
+    "/v1/llm/text",
+    pass,
+    JSON.stringify({
+      model: "gpt-4o-mini",
+      prompt: "Hi",
+      system: "You are helpful.",
+    })
+  );
+
+  expect(response.status).toBe(400);
+});
+
+test("a pass whose org is not found is refused", async () => {
+  const { app, databaseAdapter, pass } = await setup();
+  databaseAdapter.getOrganizationById = () => Promise.resolve(null);
+
+  expect(
+    (
+      await app.request("/v1/llm/models", {
+        headers: { authorization: `Bearer ${pass}` },
+      })
+    ).status
+  ).toBe(401);
+});
+
+test("the stream still ends when the quota hold cannot be released", async () => {
+  const { app, databaseAdapter, orgId, pass } = await setup();
+  const orgService = new OrgService(databaseAdapter, new AuthService());
+
+  await orgService.updateOrganization(orgId, {
+    monthlyLlmTokenLimit: 1_000_000,
+  });
+  databaseAdapter.releaseMonthlyLlmQuota = () =>
+    Promise.reject(new Error("database is locked"));
+
+  const response = await post(
+    app,
+    "/v1/llm/chat",
+    pass,
+    JSON.stringify(chatBody)
+  );
+
+  const types = (await response.text())
+    .split("\n\n")
+    .filter((frame) => frame.startsWith("data: "))
+    .map((frame) => eventSchema.parse(JSON.parse(frame.slice(6))).type);
+
+  expect(types.at(-1)).toBe("result");
+});
