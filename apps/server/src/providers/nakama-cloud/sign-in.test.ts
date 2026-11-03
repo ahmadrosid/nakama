@@ -32,7 +32,7 @@ const tokenBodySchema = z.object({
 });
 
 /** A fake cloud that keeps the enrolled key and checks it on token requests. */
-function fakeCloud() {
+function fakeCloud(options: { modelsStatus?: number } = {}) {
   const enrolled = new Map<string, string>();
   const confirmCodes: Array<string | null> = [];
 
@@ -74,6 +74,13 @@ function fakeCloud() {
       }
 
       if (pathname === "/v1/llm/models") {
+        if (options.modelsStatus) {
+          return Response.json(
+            { error: "Your team turned off Nakama Desktop for its models." },
+            { status: options.modelsStatus }
+          );
+        }
+
         return Response.json({
           models: [
             {
@@ -96,7 +103,7 @@ function fakeCloud() {
   return { confirmCodes, enrolled, url: `http://127.0.0.1:${server.port}` };
 }
 
-async function setup() {
+async function setup(cloudOptions: { modelsStatus?: number } = {}) {
   process.env.NAKAMA_CONFIG_DIR = await mkdtemp(
     join(tmpdir(), "nakama-cloud-sign-in-")
   );
@@ -105,7 +112,7 @@ async function setup() {
   const secrets = new ManagedSecrets(db, randomBytes(32).toString("base64"));
   const agent = new AgentService(null, null, db, undefined, secrets);
 
-  return { agent, cloud: fakeCloud() };
+  return { agent, cloud: fakeCloud(cloudOptions) };
 }
 
 test("the browser connects this computer, and Nakama Cloud becomes the default provider", async () => {
@@ -178,5 +185,47 @@ test("signing in again keeps the same device key, and sign out removes the provi
   );
 
   await agent.signOutNakamaCloud();
+  expect(agent.nakamaCloudStatus().signedIn).toBe(false);
+});
+
+/** Play the browser: enroll the key and build the Connect result address. */
+function connectResult(
+  cloud: ReturnType<typeof fakeCloud>,
+  connectUrl: string
+): URL {
+  const link = new URL(connectUrl);
+  cloud.enrolled.set("computer_1", link.searchParams.get("key") ?? "");
+
+  const back = new URL(link.searchParams.get("return") ?? "");
+  back.searchParams.set("state", link.searchParams.get("state") ?? "");
+  back.searchParams.set("computerId", "computer_1");
+  back.searchParams.set("confirmCode", "code-from-the-cloud-0001");
+
+  return back;
+}
+
+test("a sign-in that cannot load the team's models does not sign in", async () => {
+  const { agent, cloud } = await setup({ modelsStatus: 403 });
+
+  const back = connectResult(
+    cloud,
+    (await agent.startNakamaCloudSignIn({ cloudUrl: cloud.url })).connectUrl
+  );
+
+  expect((await fetch(back)).status).toBe(502);
+  expect(agent.nakamaCloudStatus().signedIn).toBe(false);
+});
+
+test("a Connect after sign out (Cancel on the first launch page) does nothing", async () => {
+  const { agent, cloud } = await setup();
+
+  const back = connectResult(
+    cloud,
+    (await agent.startNakamaCloudSignIn({ cloudUrl: cloud.url })).connectUrl
+  );
+
+  await agent.signOutNakamaCloud();
+
+  await expect(fetch(back)).rejects.toThrow();
   expect(agent.nakamaCloudStatus().signedIn).toBe(false);
 });

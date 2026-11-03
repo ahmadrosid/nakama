@@ -158,6 +158,26 @@ describe("computer passes", () => {
     expect(actions).toContain("computer.revoke");
   });
 
+  test("a disabled user loses access, also with a pass they hold", async () => {
+    const { auth, databaseAdapter, requestPass, signedRequest, userId } =
+      await setup();
+
+    const { pass } = passResponseSchema.parse(
+      await (await requestPass(signedRequest())).json()
+    );
+
+    await databaseAdapter.disableUserUnlessLastAdmin(
+      userId,
+      new Date().toISOString()
+    );
+
+    expect(await auth.verifyPass(pass)).toBeNull();
+    expect((await requestPass(signedRequest())).status).toBe(401);
+
+    await databaseAdapter.enableUser(userId);
+    expect(await auth.verifyPass(pass)).not.toBeNull();
+  });
+
   test("a key from someone else's link is never activated without the Connect code", async () => {
     const { auth, orgId, requestPass, timestamp, userId } = await setup();
     const attacker = testDeviceKey();

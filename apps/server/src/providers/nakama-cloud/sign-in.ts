@@ -192,6 +192,15 @@ export class NakamaCloudSignIn {
         // The listener stays open on a failure, so a reload of this page retries.
         try {
           this.passesFor(cloudUrl, computerId).confirmWith(confirmCode);
+          const models = await this.cloudModels(cloudUrl, computerId);
+
+          // Cancelled or replaced while the models loaded: do not sign in.
+          if (this.listener !== server) {
+            return new Response(FAILED_PAGE, {
+              headers: { "content-type": "text/html; charset=utf-8" },
+              status: 400,
+            });
+          }
 
           await this.onConnected({
             account: {
@@ -201,7 +210,7 @@ export class NakamaCloudSignIn {
               orgName: params.get("orgName")?.trim() ?? "",
             },
             cloudUrl,
-            models: await this.cloudModels(cloudUrl, computerId),
+            models,
           });
         } catch {
           return new Response(RETRY_PAGE, {
@@ -278,8 +287,9 @@ export class NakamaCloudSignIn {
       headers: { authorization: `Bearer ${pass}` },
     });
 
+    // No models is no sign-in: the callback shows the retry page instead.
     if (!response.ok) {
-      return [];
+      throw new Error(`Nakama Cloud models: HTTP ${response.status}`);
     }
 
     return modelsSchema.parse(await response.json()).models.map((model) => {

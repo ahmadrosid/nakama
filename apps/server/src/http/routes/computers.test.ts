@@ -61,7 +61,7 @@ async function setup() {
       }),
     });
 
-  return { adaSession, bobSession, call };
+  return { adaSession, bobSession, call, databaseAdapter, orgId: ada.orgId };
 }
 
 test("a member enrolls this computer, sees it in the list, and removes it", async () => {
@@ -141,6 +141,35 @@ test("a bad key is refused, and one member cannot remove another member's comput
   ).toBe(404);
   expect(
     listSchema.parse(await (await call(bobSession, "/v1/computers")).json())
+      .computers
+  ).toEqual([]);
+});
+
+test("Connect is refused when the team turned off Nakama Desktop", async () => {
+  const { adaSession, call, databaseAdapter, orgId } = await setup();
+  const org = await databaseAdapter.getOrganizationById(orgId);
+
+  if (!org) {
+    throw new Error("org missing");
+  }
+
+  await databaseAdapter.upsertOrganization({
+    ...org,
+    desktopModelsEnabled: false,
+  });
+
+  const enrolled = await call(adaSession, "/v1/computers", {
+    body: JSON.stringify({
+      installId: "install_0001",
+      name: "Ada's MacBook",
+      publicKey: testDeviceKey().publicKey,
+    }),
+    method: "POST",
+  });
+
+  expect(enrolled.status).toBe(403);
+  expect(
+    listSchema.parse(await (await call(adaSession, "/v1/computers")).json())
       .computers
   ).toEqual([]);
 });

@@ -387,7 +387,7 @@ export function registerComputerRoutes(
   app: HonoApp,
   options: ServerOptions
 ): void {
-  const { computerAuth } = options;
+  const { computerAuth, databaseAdapter } = options;
 
   if (!computerAuth) {
     return;
@@ -409,6 +409,16 @@ export function registerComputerRoutes(
 
     if (!request.success) {
       return c.json({ error: "Invalid request." }, 400);
+    }
+
+    // Say it on the Connect page, not after a sign-in that has no models.
+    const org = await databaseAdapter?.getOrganizationById(orgId);
+
+    if (org?.desktopModelsEnabled === false) {
+      return c.json(
+        { error: "Your team turned off Nakama Desktop for its models." },
+        403
+      );
     }
 
     const { computer, confirmCode } = await computerAuth.enroll({

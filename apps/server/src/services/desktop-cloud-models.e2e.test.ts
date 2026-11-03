@@ -20,6 +20,7 @@ import { z } from "zod";
 import { createMinimalHonoApp } from "../http/test-app-helpers";
 import { loginUserSession, seedOrgAdmin } from "../http/test-session-helpers";
 import { NAKAMA_CLOUD_PROVIDER_ID } from "../providers/nakama-cloud";
+import { testDeviceKey } from "../testing/computer-device";
 import { AgentService } from "./agent-service";
 import { AuthService } from "./auth-service";
 import { ComputerAuthService, LLM_TOKEN_PATH } from "./computer-auth";
@@ -319,7 +320,8 @@ test("sign in from the browser, then the local agent runs bash here with the tea
 });
 
 test("a removed computer must sign in again, and an org that turns desktop off refuses turns", async () => {
-  const { app, chat, member, orgService, session, signIn } = await setup();
+  const { app, chat, cloudUrl, member, orgService, session, signIn } =
+    await setup();
 
   const first = await signIn();
   await first.callback(first.state);
@@ -334,13 +336,30 @@ test("a removed computer must sign in again, and an org that turns desktop off r
   expect(removed.status).toBe(204);
   expect(await chat("Again")).toMatchObject({ kind: "error", status: 401 });
 
-  // 5. Desktop off: sign-in works, turns are refused; on again, turns work.
+  // 5. Desktop off: turns are refused, and Connect is refused on the Connect
+  // page; on again, turns work.
+  const second = await signIn();
+  expect((await second.callback(second.state)).status).toBe(200);
+
   await orgService.updateOrganization(member.orgId, {
     desktopModelsEnabled: false,
   });
-  const second = await signIn();
-  expect((await second.callback(second.state)).status).toBe(200);
   expect(await chat("Again")).toMatchObject({ kind: "error", status: 403 });
+
+  const connect = await app.request(`${cloudUrl}/v1/computers`, {
+    body: JSON.stringify({
+      installId: "install_other_computer",
+      name: "Other",
+      publicKey: testDeviceKey().publicKey,
+    }),
+    headers: session.headers({
+      "Content-Type": "application/json",
+      "X-CSRF-Token": session.csrfToken,
+    }),
+    method: "POST",
+  });
+
+  expect(connect.status).toBe(403);
 
   await orgService.updateOrganization(member.orgId, {
     desktopModelsEnabled: true,

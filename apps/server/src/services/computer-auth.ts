@@ -240,7 +240,7 @@ export class ComputerAuthService {
 
   /**
    * Checks a pass and checks again that the computer is not revoked and the
-   * user is still a member, so a removal acts on the next call.
+   * user is still an enabled member, so a removal acts on the next call.
    */
   async verifyPass(pass: string): Promise<ComputerAccess | null> {
     const [body, signature, extra] = pass.split(".");
@@ -289,9 +289,13 @@ export class ComputerAuthService {
       return null;
     }
 
-    const member = await this.db.getOrgMember(computer.orgId, computer.userId);
+    const [member, user] = await Promise.all([
+      this.db.getOrgMember(computer.orgId, computer.userId),
+      this.db.getUserById(computer.userId),
+    ]);
 
-    return member
+    // Disabling keeps the membership row, so check the user too.
+    return member && user && !user.disabledAt
       ? { computer, orgId: computer.orgId, userId: computer.userId }
       : null;
   }

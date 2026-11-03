@@ -168,8 +168,8 @@ describe("local sign-in", () => {
     ).toHaveLength(2);
   });
 
-  test("Cancel stops the wait", async () => {
-    const { signIn } = await setup();
+  test("Cancel stops the wait and closes the sign-in", async () => {
+    const { calls, signIn } = await setup();
     const controller = new AbortController();
 
     const waiting = signIn({
@@ -180,5 +180,9 @@ describe("local sign-in", () => {
     });
 
     await expect(waiting).rejects.toThrow("first-run-cancelled");
+    expect(calls.at(-1)).toMatchObject({
+      method: "DELETE",
+      url: "http://127.0.0.1:5000/v1/nakama-cloud",
+    });
   });
 });

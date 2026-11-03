@@ -163,22 +163,28 @@ export function createLocalSignIn({ dataDir, fetchImpl = fetch, serverUrl }) {
       method: "POST",
     });
 
-    await openExternal(connectUrl);
-    const deadline = Date.now() + SIGN_IN_WAIT_MS;
+    try {
+      await openExternal(connectUrl);
+      const deadline = Date.now() + SIGN_IN_WAIT_MS;
 
-    while (Date.now() < deadline) {
-      if (signal?.aborted) {
-        throw new Error("first-run-cancelled");
+      while (Date.now() < deadline) {
+        if (signal?.aborted) {
+          throw new Error("first-run-cancelled");
+        }
+
+        if ((await call("/v1/nakama-cloud")).signedIn) {
+          return;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, wait));
       }
 
-      if ((await call("/v1/nakama-cloud")).signedIn) {
-        return;
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, wait));
+      throw new Error("Sign-in took too long. Try again.");
+    } catch (error) {
+      // Close the sign-in, so a Connect in the browser later does nothing.
+      await call("/v1/nakama-cloud", { method: "DELETE" }).catch(() => null);
+      throw error;
     }
-
-    throw new Error("Sign-in took too long. Try again.");
   };
 }
 

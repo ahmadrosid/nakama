@@ -4074,6 +4074,9 @@ export class AgentService {
 
   /** Removes the Nakama Cloud provider. The device key stays for a new sign-in. */
   async signOutNakamaCloud(): Promise<void> {
+    // Also ends an unfinished sign-in, so a late Connect cannot sign in.
+    this.nakamaCloud?.stop();
+
     if (!this.userConfig) {
       return;
     }
