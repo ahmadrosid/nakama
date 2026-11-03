@@ -20,6 +20,8 @@ const IGNORED_PATHS = [
   /\.(snap|svg|map|pdf|png|jpe?g|gif|webp|ico|icns|mp4|mov|woff2?|ttf|otf|zip|gz)$/i,
   /(^|\/)CHANGELOG\.md$/,
   /^packages\/plugins\/[^/]+\/(actions\/[^/]+\.js|ui\/app\.js|workers\/[^/]+\.js)$/,
+  // Vendored upstream source, kept verbatim; not written by hand here.
+  /^apps\/web\/src\/components\/moodstone\/(core\/|svg\.ts$)/,
 ];
 
 const git = (args: string[]) =>

@@ -3,7 +3,9 @@ import { hashToSeeds, oklchToCss } from "hashvatar";
 import { Hashvatar } from "hashvatar/react";
 import { useEffect, useMemo, useState } from "react";
 import {
+  type AgentActivity,
   isPreMoodstone,
+  moodForActivity,
   moodstoneIndexes,
   moodstoneSvg,
   type ProfileAvatarProfile,
@@ -54,6 +56,7 @@ export function ProfileAvatar({
   profile,
   size = "md",
   active = false,
+  activity = "idle",
   className,
   orgId,
   squareMoodstone = false,
@@ -62,6 +65,8 @@ export function ProfileAvatar({
   size?: keyof typeof sizeClasses;
   /** Animate the generated avatar when this profile is selected in chat. */
   active?: boolean;
+  /** What the agent is doing; the animated face follows it when active. */
+  activity?: AgentActivity;
   className?: string;
   orgId?: string;
   /** Draw the generated Moodstone avatar square; images and dithers stay round. */
@@ -90,11 +95,25 @@ export function ProfileAvatar({
       profile.id || profile.name || "?"
     );
 
-    const svg = moodstoneSvg(avatarIndex, colorIndex, active && !reducedMotion);
+    // Reduced motion keeps the state's key pose, only the loop is dropped.
+    const svg = moodstoneSvg(
+      avatarIndex,
+      colorIndex,
+      active && !reducedMotion,
+      moodForActivity(activity)
+    );
 
     // An image document isolates SVG gradient IDs, even for repeated profiles.
     return `data:image/svg+xml,${encodeURIComponent(svg)}`;
-  }, [avatarUrl, failedUrl, profile.id, profile.name, active, reducedMotion]);
+  }, [
+    avatarUrl,
+    failedUrl,
+    profile.id,
+    profile.name,
+    active,
+    activity,
+    reducedMotion,
+  ]);
 
   const showUploaded = avatarUrl !== null && avatarUrl !== failedUrl;
 

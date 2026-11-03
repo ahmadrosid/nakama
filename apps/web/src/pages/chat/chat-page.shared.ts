@@ -1,5 +1,6 @@
 import type { AgentChannel, SetupChecklistItem } from "@nakama/core/contract";
 import { parseUserContext } from "@nakama/core/user-context";
+import type { AgentActivity } from "@/components/moodstone";
 import type { ChatListItem, FailedChatTurn } from "@/lib/chat-history";
 import { createClientId } from "@/lib/client-id";
 
@@ -443,6 +444,51 @@ export function nextSuccessfulTurnAt(
   now = Date.now()
 ): number {
   return previous != null && now <= previous ? previous + 1 : now;
+}
+
+/**
+ * What the agent is doing, in the order the avatar should show it: a failed
+ * turn stays failed until the next send, a running tool outranks the reply it
+ * belongs to, and an unfinished turn with no live token is still thinking.
+ */
+export function deriveAgentActivity(
+  busy: boolean,
+  error: string | null,
+  messages: ChatListItem[],
+  done = false
+): AgentActivity {
+  if (error) {
+    return "error";
+  }
+
+  if (busy) {
+    const turnStart =
+      messages.findLastIndex((message) => message.role === "user") + 1;
+
+    const turn = messages.slice(turnStart);
+
+    if (
+      turn.some(
+        (message) => message.role === "tool" && message.toolStatus === "running"
+      )
+    ) {
+      return "tool";
+    }
+
+    const last = turn.at(-1);
+
+    if (last?.role === "assistant" && last.thinkingStreaming) {
+      return "thinking";
+    }
+
+    if (last?.role === "assistant" && last.streaming) {
+      return "responding";
+    }
+
+    return "thinking";
+  }
+
+  return done ? "done" : "idle";
 }
 
 /**

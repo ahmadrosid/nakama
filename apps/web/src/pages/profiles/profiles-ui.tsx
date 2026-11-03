@@ -16,13 +16,11 @@ import {
 import { type ReactNode, useState } from "react";
 import {
   isMoodstoneAvatar,
+  MOODSTONE_COLORS,
+  MOODSTONE_CUTS,
   moodstoneIndexes,
   moodstoneSvg,
 } from "@/components/moodstone";
-import {
-  moodstoneAvatars,
-  moodstoneColors,
-} from "@/components/moodstone-avatars";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import {
   type ProfileSaveStatus,
@@ -174,7 +172,7 @@ export function EditableProfileAvatar({
         >
           <div
             className="relative mb-1 flex h-33 items-center justify-center rounded-lg transition-colors duration-150 ease-out"
-            style={{ backgroundColor: `${moodstoneColors[colorIndex].lit}4d` }}
+            style={{ backgroundColor: `${MOODSTONE_COLORS[colorIndex].lit}4d` }}
           >
             {previewAvatarIndex === null ? (
               <ProfileAvatar
@@ -215,10 +213,10 @@ export function EditableProfileAvatar({
               className="absolute top-2 right-2 bg-background/85 shadow-xs"
               onClick={() => {
                 setPreviewAvatarIndex(
-                  Math.floor(Math.random() * moodstoneAvatars.length)
+                  Math.floor(Math.random() * MOODSTONE_CUTS.length)
                 );
                 setColorIndex(
-                  Math.floor(Math.random() * moodstoneColors.length)
+                  Math.floor(Math.random() * MOODSTONE_COLORS.length)
                 );
               }}
               size="icon"
@@ -228,16 +226,16 @@ export function EditableProfileAvatar({
             </Button>
           </div>
           <div className="grid grid-cols-7 gap-0.5 px-1.5 pt-0.5 pb-1">
-            {moodstoneAvatars.map((avatar, avatarIndex) => (
+            {MOODSTONE_CUTS.map((cut, avatarIndex) => (
               <button
-                aria-label={`Preview ${avatar.cut} avatar`}
+                aria-label={`Preview ${cut} avatar`}
                 aria-pressed={avatarIndex === previewAvatarIndex}
                 className={cn(
                   "flex h-9 cursor-pointer items-center justify-center rounded-lg transition-colors duration-150 ease-out hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                   avatarIndex === previewAvatarIndex &&
                     "bg-muted ring-[1.5px] ring-foreground ring-inset"
                 )}
-                key={avatar.cut}
+                key={cut}
                 onClick={() => setPreviewAvatarIndex(avatarIndex)}
                 type="button"
               >
@@ -254,7 +252,7 @@ export function EditableProfileAvatar({
             ))}
           </div>
           <div className="grid grid-cols-12 justify-items-center gap-0.5 px-2 pt-1 pb-2">
-            {moodstoneColors.map((color, index) => (
+            {MOODSTONE_COLORS.map((color, index) => (
               <button
                 aria-label={`${color.name} color`}
                 aria-pressed={index === colorIndex}

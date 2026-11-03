@@ -2,6 +2,8 @@
   "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
   "ignore": [
     "tools/oxlint/anti-slop/**",
+    // Vendored MIT code, kept verbatim so it stays comparable with upstream.
+    "apps/web/src/components/moodstone/core/**",
     // Bundled skill scripts run through the agent's bash tool, not imports.
     "packages/core/src/skills/bundled/*/scripts/**",
     // Repo agent skill scripts run from the shell, not imports.

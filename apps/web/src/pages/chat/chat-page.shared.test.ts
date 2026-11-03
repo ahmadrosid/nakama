@@ -7,6 +7,7 @@ import {
 } from "@/lib/chat-history";
 import {
   appendFailedTurnIfNeeded,
+  deriveAgentActivity,
   editedPromptText,
   findFailedRetryPrompt,
   markStreamingTurnFailed,
@@ -217,6 +218,71 @@ describe("nextSuccessfulTurnAt", () => {
 
   test("stays monotonic when wall clock moves backwards", () => {
     expect(nextSuccessfulTurnAt(1000, 999)).toBe(1001);
+  });
+});
+
+describe("deriveAgentActivity", () => {
+  const runningTool = (): ChatListItem => ({
+    content: "",
+    id: "tool-running",
+    role: "tool",
+    toolStatus: "running",
+  });
+
+  test("an error outranks the transcript", () => {
+    expect(
+      deriveAgentActivity(false, "Rate limited", [
+        user("hello"),
+        assistant("", { streaming: true }),
+      ])
+    ).toBe("error");
+  });
+
+  test("a running tool outranks the reply it belongs to", () => {
+    expect(
+      deriveAgentActivity(true, null, [
+        user("hello"),
+        assistant("", { streaming: true }),
+        runningTool(),
+      ])
+    ).toBe("tool");
+  });
+
+  test("reasoning tokens show thinking", () => {
+    expect(
+      deriveAgentActivity(true, null, [
+        user("hello"),
+        assistant("", { streaming: true, thinkingStreaming: true }),
+      ])
+    ).toBe("thinking");
+  });
+
+  test("streamed text shows responding", () => {
+    expect(
+      deriveAgentActivity(true, null, [
+        user("hello"),
+        assistant("Working on it", { streaming: true }),
+      ])
+    ).toBe("responding");
+  });
+
+  test("a turn waiting on the model is still thinking", () => {
+    expect(deriveAgentActivity(true, null, [user("hello")])).toBe("thinking");
+  });
+
+  test("a finished turn is idle", () => {
+    expect(
+      deriveAgentActivity(false, null, [
+        user("hello"),
+        assistant("Done", { streaming: false }),
+      ])
+    ).toBe("idle");
+  });
+
+  test("a successful turn celebrates until the flash ends", () => {
+    expect(deriveAgentActivity(false, null, [user("hello")], true)).toBe(
+      "done"
+    );
   });
 });
 
