@@ -1749,7 +1749,10 @@ export interface TeamsSettingsResponse {
   clientId: string | null;
   clientSecretConfigured: boolean;
   configured: boolean;
+  handshakeCode: string | null;
+  handshakeExpiresAt: string | null;
   messagingEndpoint: string | null;
+  pairedUserIds: string[];
   profileId: string;
   tenantId: string | null;
 }
