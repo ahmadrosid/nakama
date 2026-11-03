@@ -11,6 +11,8 @@ import {
 import * as dataPortability from "../../services/data-portability";
 import {
   createNakamaDataExport,
+  decodeArchiveRequestBytes,
+  MAX_IMPORT_ARCHIVE_BYTES,
   MAX_IMPORT_ENTRIES,
   previewNakamaDataImport,
 } from "../../services/data-portability";
@@ -483,6 +485,40 @@ describe("setup import routes", () => {
     );
 
     expect(restoreResponse.status).toBe(400);
+    await expect(readFile(configPath, "utf8")).resolves.toBe("keep");
+  });
+
+  test("setup preview and restore give their own 413 for an archive over the size limit", async () => {
+    const { app } = createApp();
+    const configPath = join(getUserConfigDir(), "config.ini");
+    await writeFile(configPath, "keep");
+    const archive = Buffer.alloc(MAX_IMPORT_ARCHIVE_BYTES + 1);
+
+    let genericError = "";
+
+    try {
+      decodeArchiveRequestBytes(archive);
+    } catch (error) {
+      genericError = error instanceof Error ? error.message : "";
+    }
+
+    const send = (route: string) =>
+      app.fetch(
+        new Request(`http://localhost:4310/v1/auth/setup/import/${route}`, {
+          body: archive,
+          headers: { "Content-Type": "application/zip" },
+          method: "POST",
+        })
+      );
+
+    const preview = await send("preview");
+    const restore = await send("restore?confirm=true");
+
+    expect([preview.status, restore.status]).toEqual([413, 413]);
+    const setupError = (await preview.json()).error;
+    expect(genericError).not.toBe("");
+    expect(setupError).not.toBe(genericError);
+    expect((await restore.json()).error).toBe(setupError);
     await expect(readFile(configPath, "utf8")).resolves.toBe("keep");
   });
 

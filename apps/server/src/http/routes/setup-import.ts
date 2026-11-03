@@ -27,6 +27,25 @@ import {
   readImportRequest,
 } from "./data-portability";
 
+// Setup keeps its caps, since it runs before anyone logs in, so its 413s (the body
+// limit in app.ts and the archive size check) name the way to restore after setup.
+export const SETUP_BACKUP_TOO_LARGE =
+  "This backup is too large to restore during setup. Finish setup with a temporary admin, then restore it from Settings → Restore from backup.";
+
+async function readSetupImportRequest(
+  ...args: Parameters<typeof readImportRequest>
+): ReturnType<typeof readImportRequest> {
+  try {
+    return await readImportRequest(...args);
+  } catch (error) {
+    if (error instanceof NakamaApiError && error.status === 413) {
+      throw new NakamaApiError(SETUP_BACKUP_TOO_LARGE, 413);
+    }
+
+    throw error;
+  }
+}
+
 export function registerSetupImportRoutes(
   app: HonoApp,
   options: ServerOptions
@@ -153,7 +172,7 @@ export function registerSetupImportRoutes(
     await assertSetupImportAllowed(databaseAdapter);
 
     // Read outside the catch so an oversized archive keeps its 413.
-    const { archive } = await readImportRequest(c.req.raw, () =>
+    const { archive } = await readSetupImportRequest(c.req.raw, () =>
       readJson<PreviewDataImportRequest>(c.req.raw, importRequestSchema)
     );
 
@@ -175,7 +194,7 @@ export function registerSetupImportRoutes(
 
     await assertSetupImportAllowed(databaseAdapter);
 
-    const { archive, confirm } = await readImportRequest(c.req.raw, () =>
+    const { archive, confirm } = await readSetupImportRequest(c.req.raw, () =>
       readJson<RestoreDataImportRequest>(c.req.raw, restoreRequestSchema)
     );
 
