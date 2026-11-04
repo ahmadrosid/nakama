@@ -114,12 +114,14 @@ describe("artifact share routes", () => {
     const { app, databaseAdapter } = createApp();
     const orgId = "org_share_scope";
     const profileId = "profile_share_scope";
+
     const ana = await seedOrgAdmin(databaseAdapter, {
       email: "ana@example.com",
       orgId,
       role: "member",
       userId: "user_ana",
     });
+
     const bo = await seedOrgAdmin(databaseAdapter, {
       email: "bo@example.com",
       orgId,
@@ -151,7 +153,9 @@ describe("artifact share routes", () => {
       ana.password,
       orgId
     );
+
     const boSession = await loginUserSession(app, bo.email, bo.password, orgId);
+
     const publish = (session: TestBrowserSession) =>
       app.fetch(
         publishArtifactShareRequest({
@@ -161,6 +165,7 @@ describe("artifact share routes", () => {
           session,
         })
       );
+
     const revoke = (session: TestBrowserSession, shareId: string) =>
       app.fetch(
         new Request(

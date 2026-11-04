@@ -104,6 +104,7 @@ export function registerArtifactShareRoutes(
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const shareId = decodeURIComponent(c.req.param("shareId"));
+
     const createdByUserId = await artifactCreatorScopeFromContext(
       c,
       options.agent

@@ -628,6 +628,7 @@ describe("profile artifact content auth", () => {
   test("org admin reads every artifact, so channel bots keep sending them", async () => {
     const { app, databaseAdapter, scopeCalls } = createApp();
     const admin = await seedOrgAdmin(databaseAdapter);
+
     const session = await loginUserSession(
       app,
       admin.email,
