@@ -14,7 +14,10 @@ const passResponseSchema = z.object({
   pass: z.string(),
 });
 
-export const SIGN_IN_AGAIN = "Sign in again";
+const clockSkewSchema = z.object({ serverTime: z.number() });
+
+export const SIGN_IN_AGAIN =
+  "Nakama Cloud refused this computer. Sign in again in Settings.";
 
 export const CLOUD_UNREACHABLE = "Can't reach Nakama Cloud";
 
@@ -33,14 +36,18 @@ export interface NakamaCloudPassOptions {
  * in again.
  */
 export class NakamaCloudPasses {
+  /** Cloud time minus this computer's time, learned from a refused request. */
+  private clockOffsetMs = 0;
   private confirmCode: string | null = null;
+  private refusedByCloud = false;
   private current: { expiresAt: number; pass: string } | null = null;
   private pending: Promise<string> | null = null;
 
   constructor(private readonly options: NakamaCloudPassOptions) {}
 
+  /** The cloud's time, as near as this computer knows it. */
   private now(): number {
-    return (this.options.now ?? Date.now)();
+    return (this.options.now ?? Date.now)() + this.clockOffsetMs;
   }
 
   async get(): Promise<string> {
@@ -56,10 +63,24 @@ export class NakamaCloudPasses {
     return this.pending;
   }
 
+  /**
+   * The cloud refused this computer (removed, member gone, password
+   * changed): only a new sign-in helps. Status shows it.
+   */
+  get refused(): boolean {
+    return this.refusedByCloud;
+  }
+
+  refuse(): void {
+    this.refusedByCloud = true;
+    this.current = null;
+  }
+
   /** The one-time code from Connect; the next token request sends it. */
   confirmWith(code: string): void {
     this.confirmCode = code;
     this.current = null;
+    this.refusedByCloud = false;
   }
 
   /** Forget the cached pass, for example after the cloud restarted. */
@@ -67,7 +88,7 @@ export class NakamaCloudPasses {
     this.current = null;
   }
 
-  private async request(): Promise<string> {
+  private async request(retried = false): Promise<string> {
     const unsigned = {
       computerId: this.options.computerId,
       nonce: randomUUID(),
@@ -98,6 +119,19 @@ export class NakamaCloudPasses {
     }
 
     if (response.status === 401) {
+      const skew = clockSkewSchema.safeParse(
+        await response.json().catch(() => null)
+      );
+
+      // This computer's clock is off: take the cloud's time and sign again.
+      if (skew.success && !retried) {
+        this.clockOffsetMs =
+          skew.data.serverTime - (this.options.now ?? Date.now)();
+
+        return this.request(true);
+      }
+
+      this.refuse();
       throw new NakamaApiError(SIGN_IN_AGAIN, 401);
     }
 

@@ -26,13 +26,22 @@ const INSTALL_ID_SECRET = "nakama-cloud-install-id";
 /** A sign-in link that is not used stops working after this long. */
 const SIGN_IN_WINDOW_MS = 10 * 60 * 1000;
 
+/** A limit the cloud sends; a bad value is dropped, not a failed sign-in. */
+const tokenCount = z.number().int().positive().optional().catch(undefined);
+
+const flag = z.boolean().optional().catch(undefined);
+
 const modelsSchema = z.object({
   models: z.array(
     z.object({
+      contextWindow: tokenCount,
       default: z.boolean().optional(),
       id: z.string(),
+      maxOutputTokens: tokenCount,
       name: z.string(),
       providerId: z.string().optional(),
+      supportsThinking: flag,
+      supportsVision: flag,
     })
   ),
 });
@@ -319,6 +328,24 @@ export class NakamaCloudSignIn {
       if (model.default && !hasDefault) {
         entry.default = true;
         hasDefault = true;
+      }
+
+      // The model's limits and abilities, so the desktop compacts and sends
+      // images as the model allows, not by a default.
+      if (model.contextWindow !== undefined) {
+        entry.contextWindow = model.contextWindow;
+      }
+
+      if (model.maxOutputTokens !== undefined) {
+        entry.maxOutputTokens = model.maxOutputTokens;
+      }
+
+      if (model.supportsThinking !== undefined) {
+        entry.supportsThinking = model.supportsThinking;
+      }
+
+      if (model.supportsVision !== undefined) {
+        entry.supportsVision = model.supportsVision;
       }
 
       return entry;

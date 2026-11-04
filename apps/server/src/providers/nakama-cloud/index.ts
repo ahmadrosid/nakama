@@ -137,6 +137,7 @@ export function createNakamaCloudProvider(
       }
 
       if (response.status === 401) {
+        options.passes.refuse();
         throw new NakamaApiError(SIGN_IN_AGAIN, 401);
       }
 

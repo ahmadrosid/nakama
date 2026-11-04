@@ -297,8 +297,9 @@ test("one member gets one share of chat memory, whatever org their computer is i
   await first.text();
 });
 
-test("a body that does not arrive in time gives back its memory", async () => {
+test("a body that does not arrive in time is cancelled, and gives back its memory", async () => {
   const { agent, app, pass } = await setup();
+  let cancelled = false;
 
   useStandInProvider(agent, () => Promise.resolve(okResult));
 
@@ -308,7 +309,12 @@ test("a body that does not arrive in time gives back its memory", async () => {
     // Declares 1 MiB, then sends nothing more.
     // SAFETY: Bun's Request needs duplex for a streamed body; RequestInit does not list it.
     const slow = app.request("/v1/llm/chat", {
-      body: new ReadableStream({ start: () => undefined }),
+      body: new ReadableStream({
+        cancel: () => {
+          cancelled = true;
+        },
+        start: () => undefined,
+      }),
       duplex: "half",
       headers: {
         authorization: `Bearer ${pass}`,
@@ -325,6 +331,8 @@ test("a body that does not arrive in time gives back its memory", async () => {
     jest.advanceTimersByTime(60 * 1000);
 
     expect((await slow).status).toBe(408);
+    // The read stopped: the rest of the body would not fill memory.
+    expect(cancelled).toBe(true);
   } finally {
     jest.useRealTimers();
   }
@@ -452,4 +460,83 @@ test("a Responses message is replayed only as the assistant's own output", async
     .parse(seen.at(-1));
 
   expect(replayed.providerContent).toHaveLength(1);
+});
+
+test("a desktop text call that the model never answers ends at the deadline", async () => {
+  const { agent, app, pass } = await setup();
+
+  agent.desktopModelHarness = () =>
+    Promise.resolve({
+      provider: {
+        generateChat: () => Promise.reject(new Error("unused")),
+        generateText: () => new Promise(() => undefined),
+        name: "openai",
+        streamChat: () => Promise.reject(new Error("unused")),
+      },
+    });
+
+  jest.useFakeTimers();
+
+  try {
+    const hung = post(
+      app,
+      "/v1/llm/text",
+      pass,
+      JSON.stringify({
+        model: "gpt-4o-mini",
+        prompt: "Hi",
+        system: "Be brief.",
+      })
+    );
+
+    for (let tick = 0; tick < 50; tick += 1) {
+      await Promise.resolve();
+    }
+
+    jest.advanceTimersByTime(15 * 60 * 1000);
+
+    expect((await hung).status).toBe(504);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test("a desktop text call shares the member's memory with their chats", async () => {
+  const { agent, app, pass } = await setup();
+  let finish: () => void = () => undefined;
+
+  const firstDone = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+
+  useStandInProvider(agent, async () => {
+    await firstDone;
+
+    return okResult;
+  });
+
+  const big = JSON.stringify({
+    ...chatBody,
+    messages: [{ content: "A".repeat(25 * 1024 * 1024), role: "user" }],
+  });
+
+  const chat = await post(app, "/v1/llm/chat", pass, big);
+
+  expect(chat.status).toBe(200);
+
+  const text = await post(
+    app,
+    "/v1/llm/text",
+    pass,
+    JSON.stringify({
+      model: "gpt-4o-mini",
+      prompt: "A".repeat(9 * 1024 * 1024),
+      system: "Be brief.",
+    })
+  );
+
+  expect(text.status).toBe(503);
+
+  finish();
+  await chat.text();
 });

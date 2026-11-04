@@ -891,6 +891,8 @@ export interface EnrollComputerResponse {
 export interface NakamaCloudStatus {
   account: string | null;
   cloudUrl: string | null;
+  /** Signed in, but the cloud refused this computer since. */
+  needsSignIn: boolean;
   orgName: string | null;
   signedIn: boolean;
 }

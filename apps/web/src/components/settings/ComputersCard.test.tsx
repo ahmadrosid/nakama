@@ -82,6 +82,7 @@ test("shows the Nakama Cloud account only when signed in, and signs out on click
     async () => ({
       account: signedIn ? "ada@example.com" : null,
       cloudUrl: signedIn ? "https://withnakama.com" : null,
+      needsSignIn: false,
       orgName: signedIn ? "Acme" : null,
       signedIn,
     })

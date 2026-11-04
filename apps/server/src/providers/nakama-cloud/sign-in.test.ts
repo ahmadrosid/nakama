@@ -12,7 +12,11 @@ import {
   LLM_TOKEN_PATH,
 } from "../../services/computer-auth";
 import { ManagedSecrets } from "../../services/managed-secrets";
-import { NAKAMA_CLOUD_PROVIDER_ID, useNakamaCloudSignIn } from "./index";
+import {
+  activeNakamaCloudPasses,
+  NAKAMA_CLOUD_PROVIDER_ID,
+  useNakamaCloudSignIn,
+} from "./index";
 
 const servers: Array<{ stop: (force?: boolean) => void }> = [];
 
@@ -44,7 +48,15 @@ function fakeCloud(options: FakeCloudOptions = {}) {
   const confirmCodes: Array<string | null> = [];
   const removed: string[] = [];
 
-  const models = [
+  const models: Array<{
+    contextWindow?: number;
+    default: boolean;
+    id: string;
+    maxOutputTokens?: number;
+    name: string;
+    providerId: string;
+    supportsVision?: boolean;
+  }> = [
     {
       default: true,
       id: "gpt-4o-mini",
@@ -174,6 +186,7 @@ test("the browser connects this computer, and Nakama Cloud becomes the default p
   expect(agent.nakamaCloudStatus()).toEqual({
     account: "ada@example.com",
     cloudUrl: cloud.url,
+    needsSignIn: false,
     orgName: "Acme",
     signedIn: true,
   });
@@ -391,4 +404,68 @@ test("a finished sign-in is in the audit log: it changed the default provider", 
       resourceId: NAKAMA_CLOUD_PROVIDER_ID,
     },
   ]);
+});
+
+test("the desktop keeps each cloud model's limits and abilities", async () => {
+  const { agent, cloud } = await setup();
+
+  cloud.models.push({
+    contextWindow: 32_000,
+    default: false,
+    id: "small-model",
+    maxOutputTokens: 4096,
+    name: "Small model",
+    providerId: "local-main",
+    supportsVision: false,
+  });
+
+  const back = connectResult(
+    cloud,
+    (await agent.startNakamaCloudSignIn({ cloudUrl: cloud.url })).connectUrl
+  );
+
+  expect((await fetch(back)).status).toBe(200);
+
+  const saved = (await agent.listProviders()).providers
+    .find((provider) => provider.id === NAKAMA_CLOUD_PROVIDER_ID)
+    ?.customModels?.find((model) => model.id === "local-main::small-model");
+
+  expect(saved).toMatchObject({
+    contextWindow: 32_000,
+    maxOutputTokens: 4096,
+    supportsVision: false,
+  });
+});
+
+test("when the cloud refuses this computer, status asks for a new sign-in", async () => {
+  const { agent, cloud } = await setup();
+
+  const back = connectResult(
+    cloud,
+    (await agent.startNakamaCloudSignIn({ cloudUrl: cloud.url })).connectUrl
+  );
+
+  expect((await fetch(back)).status).toBe(200);
+  expect(agent.nakamaCloudStatus().needsSignIn).toBe(false);
+
+  // The computer is removed in the cloud.
+  cloud.enrolled.clear();
+
+  const passes = activeNakamaCloudPasses({
+    baseUrl: cloud.url,
+    nakamaCloud: {
+      account: "",
+      computerId: "computer_1",
+      orgId: "",
+      orgName: "",
+    },
+  });
+
+  passes?.invalidate();
+  await expect(passes?.get()).rejects.toThrow();
+
+  expect(agent.nakamaCloudStatus()).toMatchObject({
+    needsSignIn: true,
+    signedIn: true,
+  });
 });

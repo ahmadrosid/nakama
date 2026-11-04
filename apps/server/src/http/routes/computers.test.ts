@@ -1,7 +1,10 @@
 import { expect, setSystemTime, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { z } from "zod";
-import { ComputerAuthService } from "../../services/computer-auth";
+import {
+  ComputerAuthService,
+  LLM_TOKEN_PATH,
+} from "../../services/computer-auth";
 import { testDeviceKey } from "../../testing/computer-device";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import { loginUserSession, seedOrgAdmin } from "../test-session-helpers";
@@ -61,26 +64,49 @@ async function setup() {
       }),
     });
 
-  return { adaSession, bobSession, call, databaseAdapter, orgId: ada.orgId };
+  return {
+    adaSession,
+    app,
+    bobSession,
+    call,
+    databaseAdapter,
+    orgId: ada.orgId,
+  };
 }
 
-test("a member enrolls this computer, sees it in the list, and removes it", async () => {
-  const { adaSession, call } = await setup();
+test("a member enrolls this computer, sees it in the list once it confirms, and removes it", async () => {
+  const { adaSession, app, call } = await setup();
+  const key = testDeviceKey();
 
   const enrolled = await call(adaSession, "/v1/computers", {
     body: JSON.stringify({
       installId: "install_0001",
       name: "Ada's MacBook",
-      publicKey: testDeviceKey().publicKey,
+      publicKey: key.publicKey,
     }),
     method: "POST",
   });
 
   expect(enrolled.status).toBe(201);
 
-  const { computerId } = z
-    .object({ computerId: z.string() })
+  const { computerId, confirmCode } = z
+    .object({ computerId: z.string(), confirmCode: z.string() })
     .parse(await enrolled.json());
+
+  // Not confirmed yet: not a connected computer.
+  expect(
+    listSchema.parse(await (await call(adaSession, "/v1/computers")).json())
+      .computers
+  ).toEqual([]);
+
+  // The desktop confirms with the code from the Connect result.
+  const confirmed = await app.request(LLM_TOKEN_PATH, {
+    body: JSON.stringify(key.signRequest(computerId, { confirmCode })),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+
+  expect(confirmed.status).toBe(200);
 
   const listed = listSchema.parse(
     await (await call(adaSession, "/v1/computers")).json()

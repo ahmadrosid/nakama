@@ -4078,9 +4078,19 @@ export class AgentService {
       (entry) => entry.type === "nakama_cloud" && entry.nakamaCloud
     );
 
+    const cloudUrl = instance?.baseUrl;
+    const computerId = instance?.nakamaCloud?.computerId;
+
     return {
       account: instance?.nakamaCloud?.account ?? null,
-      cloudUrl: instance?.baseUrl ?? null,
+      cloudUrl: cloudUrl ?? null,
+      // The cloud refused this computer: the account is saved, but only a
+      // new sign-in makes it work again.
+      needsSignIn: Boolean(
+        cloudUrl &&
+          computerId &&
+          this.nakamaCloud?.passesFor(cloudUrl, computerId).refused
+      ),
       orgName: instance?.nakamaCloud?.orgName ?? null,
       signedIn: Boolean(instance),
     };

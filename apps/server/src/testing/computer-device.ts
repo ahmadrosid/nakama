@@ -14,6 +14,9 @@ export function testDeviceKey() {
 
   return {
     publicKey: raw.toString("base64"),
+    /** Signs bytes as Nakama Desktop does; base64. */
+    sign: (payload: Buffer): string =>
+      sign(null, payload, privateKey).toString("base64"),
     signRequest: (
       computerId: string,
       options: { confirmCode?: string; nonce?: string; timestamp?: number } = {}

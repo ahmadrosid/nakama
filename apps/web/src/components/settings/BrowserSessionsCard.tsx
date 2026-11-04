@@ -225,7 +225,9 @@ export function NakamaCloudCard() {
       <CardContent className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         <div className="min-w-0 space-y-0.5">
           <p className="font-medium text-foreground text-sm">
-            Signed in to Nakama Cloud
+            {status.needsSignIn
+              ? "Sign in to Nakama Cloud again"
+              : "Signed in to Nakama Cloud"}
           </p>
           <p className="text-muted-foreground text-xs">{who}</p>
           {error ? (
@@ -241,7 +243,8 @@ export function NakamaCloudCard() {
           type="button"
           variant="outline"
         >
-          Sign out
+          {/* Signing out reopens the sign-in page on Nakama Desktop. */}
+          {status.needsSignIn ? "Sign in again" : "Sign out"}
         </Button>
       </CardContent>
     </Card>

@@ -81,6 +81,65 @@ export function holdChatMemory(
   };
 }
 
+/**
+ * Reads a JSON body that must arrive within ms; null when it does not. The
+ * read is cancelled at the deadline, so a late body stops filling memory,
+ * and this returns only once the read has stopped.
+ */
+export async function readJsonWithin<T>(
+  request: Request,
+  schema: z.ZodType<T>,
+  ms: number
+): Promise<T | null> {
+  const reader = request.body?.getReader();
+
+  if (!reader) {
+    throw new NakamaApiError("Invalid request.", 400);
+  }
+
+  const chunks: Uint8Array[] = [];
+  let late = false;
+
+  const timer = setTimeout(() => {
+    late = true;
+    reader.cancel().catch(() => undefined);
+  }, ms);
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+
+      if (done) {
+        break;
+      }
+
+      chunks.push(value);
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (late) {
+    return null;
+  }
+
+  let checked: z.ZodSafeParseResult<T>;
+
+  try {
+    checked = schema.safeParse(
+      JSON.parse(new TextDecoder().decode(Buffer.concat(chunks)))
+    );
+  } catch {
+    throw new NakamaApiError("Invalid request.", 400);
+  }
+
+  if (!checked.success) {
+    throw new NakamaApiError("Invalid request.", 400);
+  }
+
+  return checked.data;
+}
+
 /** The promise's value, or null when it does not settle within ms. */
 export async function withinTime<T>(
   promise: Promise<T>,

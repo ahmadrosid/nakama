@@ -416,6 +416,7 @@ test("Nakama Desktop starts its Cloud sign-in before it has an org", async () =>
   options.agent.nakamaCloudStatus = () => ({
     account: null,
     cloudUrl: null,
+    needsSignIn: false,
     orgName: null,
     signedIn: false,
   });

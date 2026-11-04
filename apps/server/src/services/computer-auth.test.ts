@@ -4,6 +4,7 @@ import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { z } from "zod";
 import { createMinimalHonoApp } from "../http/test-app-helpers";
 import { seedOrgAdmin } from "../http/test-session-helpers";
+import { NakamaCloudPasses } from "../providers/nakama-cloud/passes";
 import { testDeviceKey } from "../testing/computer-device";
 import {
   COMPUTER_PASS_TTL_MS,
@@ -63,6 +64,7 @@ async function setup() {
     advance: (ms: number) => {
       time += ms;
     },
+    app,
     auth,
     computer,
     databaseAdapter,
@@ -411,8 +413,10 @@ describe("computer passes", () => {
       path: LLM_TOKEN_PATH,
     });
 
-    expect(issued).not.toBeNull();
-    expect(await after.verifyPass(issued?.pass ?? "")).not.toBeNull();
+    const pass = issued && "pass" in issued ? issued.pass : "";
+
+    expect(pass).not.toBe("");
+    expect(await after.verifyPass(pass)).not.toBeNull();
     // The test app's service has no secrets store, so it keeps its own key.
     expect((await requestPass(signedRequest())).status).toBe(200);
   });
@@ -422,4 +426,116 @@ describe("computer passes", () => {
     expect(isEd25519PublicKey(Buffer.alloc(31).toString("base64"))).toBe(false);
     expect(isEd25519PublicKey("not base64!")).toBe(false);
   });
+});
+
+/** A real HTTP server on the test app, so the desktop side calls it over fetch. */
+function serve(app: {
+  fetch: (request: Request) => Response | Promise<Response>;
+}) {
+  const server = Bun.serve({ fetch: app.fetch, port: 0 });
+
+  return {
+    stop: () => server.stop(true),
+    url: `http://127.0.0.1:${server.port}`,
+  };
+}
+
+describe("the desktop side of passes", () => {
+  test("a computer whose clock is off takes the cloud's time and still gets a pass", async () => {
+    const { app, auth, computer, key, timestamp } = await setup();
+    const cloud = serve(app);
+
+    try {
+      const passes = new NakamaCloudPasses({
+        baseUrl: cloud.url,
+        computerId: computer.id,
+        // This computer's clock is 5 minutes fast.
+        now: () => timestamp() + 5 * 60 * 1000,
+        sign: (payload) => Promise.resolve(key.sign(payload)),
+      });
+
+      expect(await auth.verifyPass(await passes.get())).not.toBeNull();
+      expect(passes.refused).toBe(false);
+    } finally {
+      cloud.stop();
+    }
+  });
+
+  test("a computer the cloud refused is marked, and a new Connect clears it", async () => {
+    const { app, auth, computer, key, orgId, timestamp, userId } =
+      await setup();
+
+    const cloud = serve(app);
+
+    try {
+      const passes = new NakamaCloudPasses({
+        baseUrl: cloud.url,
+        computerId: computer.id,
+        now: timestamp,
+        sign: (payload) => Promise.resolve(key.sign(payload)),
+      });
+
+      await auth.revoke({ id: computer.id, orgId, userId });
+
+      await expect(passes.get()).rejects.toThrow();
+      expect(passes.refused).toBe(true);
+
+      passes.confirmWith("code-from-a-new-connect");
+      expect(passes.refused).toBe(false);
+    } finally {
+      cloud.stop();
+    }
+  });
+});
+
+test("an unconfirmed computer can no longer be confirmed after the sign-in window", async () => {
+  const { advance, auth, orgId, requestPass, timestamp, userId } =
+    await setup();
+
+  const key = testDeviceKey();
+
+  const enrolled = await auth.enroll({
+    installId: "install_late",
+    name: "Laptop",
+    orgId,
+    publicKey: key.publicKey,
+    userId,
+  });
+
+  if (!enrolled) {
+    throw new Error("enroll refused");
+  }
+
+  advance(11 * 60 * 1000);
+
+  expect(
+    (
+      await requestPass(
+        key.signRequest(enrolled.computer.id, {
+          confirmCode: enrolled.confirmCode,
+          timestamp: timestamp(),
+        })
+      )
+    ).status
+  ).toBe(401);
+
+  // Connecting again from the same install starts a new window.
+  const again = await auth.enroll({
+    installId: "install_late",
+    name: "Laptop",
+    orgId,
+    publicKey: key.publicKey,
+    userId,
+  });
+
+  expect(
+    (
+      await requestPass(
+        key.signRequest(enrolled.computer.id, {
+          confirmCode: again?.confirmCode,
+          timestamp: timestamp(),
+        })
+      )
+    ).status
+  ).toBe(200);
 });

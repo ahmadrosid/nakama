@@ -22,6 +22,12 @@ export const LLM_TOKEN_PATH = "/v1/llm/token";
 
 const CLOCK_SKEW_MS = 2 * 60 * 1000;
 
+/**
+ * How long a Connect result can still be confirmed: the desktop's sign-in
+ * window. A code left in browser history stops working after it.
+ */
+const CONFIRM_WINDOW_MS = 10 * 60 * 1000;
+
 const PASS_KEY_SCOPE = "global";
 
 const PASS_KEY_SECRET = "computer-pass-key";
@@ -213,17 +219,21 @@ export class ComputerAuthService {
   }
 
   /**
-   * Checks a signed token request and returns a pass. Null when the
-   * signature, time or nonce is wrong, or the computer has lost access.
+   * Checks a signed token request and returns a pass. With the server time
+   * when the computer's clock is off, so it can correct it and sign again.
+   * Null when the signature or nonce is wrong, or the computer has lost
+   * access.
    */
   async issuePass(
     request: ComputerTokenRequest,
     route: { method: string; path: string }
-  ): Promise<{ expiresAt: number; pass: string } | null> {
+  ): Promise<
+    { expiresAt: number; pass: string } | { serverTime: number } | null
+  > {
     const now = this.now();
 
     if (Math.abs(now - request.timestamp) > CLOCK_SKEW_MS) {
-      return null;
+      return { serverTime: now };
     }
 
     const access = await this.activeAccess(request.computerId);
@@ -244,6 +254,13 @@ export class ComputerAuthService {
     }
 
     const pending = access.computer.pendingCodeHash;
+
+    if (
+      pending &&
+      now - Date.parse(access.computer.createdAt) > CONFIRM_WINDOW_MS
+    ) {
+      return null;
+    }
 
     if (
       pending &&

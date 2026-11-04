@@ -27,6 +27,7 @@ import {
   failureOf,
   holdChatMemory,
   jsonValueSchema,
+  readJsonWithin,
   replaySafe,
   withinTime,
 } from "./llm-request-safety";
@@ -187,8 +188,13 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
         })
       : null;
 
+    if (issued && "pass" in issued) {
+      return c.json(issued, 200);
+    }
+
+    // The server time lets a computer with a wrong clock sign again.
     return issued
-      ? c.json(issued, 200)
+      ? c.json({ error: "This computer's clock is off.", ...issued }, 401)
       : c.json({ error: "Sign in again." }, 401);
   });
 
@@ -243,20 +249,15 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
 
     const { caller } = gate;
 
-    const request = textRequestSchema.safeParse(
-      await readJson(c.req.raw, z.unknown())
+    // The same memory share, upload time and call time as a chat.
+    const freeMemory = holdChatMemory(
+      caller.userId,
+      c.req.header("content-length")
     );
 
-    if (!request.success) {
-      return c.json({ error: "Invalid request." }, 400);
-    }
-
-    const { model, ...input } = request.data;
-    const harness = await agent.desktopModelHarness({ ...caller, model });
-
-    if (!harness) {
+    if (!freeMemory) {
       return c.json(
-        { error: "No model is set up for this organization." },
+        { error: "Nakama Cloud is busy. Try again in a moment." },
         503
       );
     }
@@ -264,12 +265,41 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
     let release: (() => Promise<void>) | undefined;
 
     try {
+      const request = await readJsonWithin(
+        c.req.raw,
+        textRequestSchema,
+        DESKTOP_CHAT_UPLOAD_MS
+      );
+
+      if (!request) {
+        c.header("Connection", "close");
+
+        return c.json({ error: "The request took too long to arrive." }, 408);
+      }
+
+      const { model, ...input } = request;
+      const harness = await agent.desktopModelHarness({ ...caller, model });
+
+      if (!harness) {
+        return c.json(
+          { error: "No model is set up for this organization." },
+          503
+        );
+      }
+
       release = await harness.assertCanStart?.(
         Math.ceil((input.system.length + input.prompt.length) / 4) +
           RESERVED_OUTPUT_TOKENS
       );
 
-      const result = await harness.provider.generateText(input);
+      const result = await withinTime(
+        harness.provider.generateText(input),
+        DESKTOP_CHAT_MAX_MS
+      );
+
+      if (!result) {
+        return c.json({ error: "The model took too long. Try again." }, 504);
+      }
 
       // Titles and summaries are not chat turns, as on the web, but their
       // tokens count against the token limit.
@@ -288,6 +318,7 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
 
       return c.json({ error: failure.message }, failure.status);
     } finally {
+      freeMemory();
       await release?.().catch(() => undefined);
     }
   });
@@ -318,23 +349,21 @@ export function registerLlmRoutes(app: HonoApp, options: ServerOptions): void {
     let streaming = false;
 
     try {
-      // A body that trickles in would hold its room for as long as it takes.
-      const uploaded = await withinTime(
-        readJson(c.req.raw, z.unknown()).then((value) => ({ value })),
+      // A body that trickles in is cancelled at the deadline, so it stops
+      // filling memory before its room is given back.
+      const request = await readJsonWithin(
+        c.req.raw,
+        chatRequestSchema,
         DESKTOP_CHAT_UPLOAD_MS
       );
 
-      if (!uploaded) {
+      if (!request) {
+        c.header("Connection", "close");
+
         return c.json({ error: "The request took too long to arrive." }, 408);
       }
 
-      const request = chatRequestSchema.safeParse(uploaded.value);
-
-      if (!request.success) {
-        return c.json({ error: "Invalid request." }, 400);
-      }
-
-      const { model, ...body } = request.data;
+      const { model, ...body } = request;
       const harness = await agent.desktopModelHarness({ ...caller, model });
 
       if (!harness) {
@@ -569,8 +598,11 @@ export function registerComputerRoutes(
 
     return c.json(
       {
+        // An unconfirmed computer is not connected; it expires on its own.
         computers: computers
-          .filter((computer) => !computer.revokedAt)
+          .filter(
+            (computer) => !(computer.revokedAt || computer.pendingCodeHash)
+          )
           .map(({ createdAt, id, lastSeenAt, name }) => ({
             createdAt,
             id,

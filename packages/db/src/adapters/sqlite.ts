@@ -3741,8 +3741,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     LIMIT 1
   `);
 
+  // An unconfirmed computer that connects again starts a new confirm window.
   const updateComputerKeyStmt = db.prepare(`
-    UPDATE computers SET public_key = ?, name = ?, pending_code_hash = ? WHERE id = ?
+    UPDATE computers SET public_key = ?, name = ?, pending_code_hash = ?, created_at = ? WHERE id = ?
   `);
 
   const updateComputerNameStmt = db.prepare(
@@ -5148,11 +5149,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
             record.publicKey,
             record.name,
             record.pendingCodeHash,
+            record.createdAt,
             existing.id
           );
 
           return toComputerRecord({
             ...existing,
+            created_at: record.createdAt,
             name: record.name,
             pending_code_hash: record.pendingCodeHash,
             public_key: record.publicKey,
