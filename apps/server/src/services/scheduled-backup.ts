@@ -30,13 +30,34 @@ const backupErrorSchema = z.object({ at: z.string(), message: z.string() });
 export async function readBackupError(
   dir: string
 ): Promise<BackupStatusResponse["lastError"]> {
-  const parsed = backupErrorSchema.safeParse(
-    await readFile(join(dir, ERROR_FILE), "utf8")
-      .then(JSON.parse)
-      .catch(() => null)
-  );
+  let raw: string;
 
-  return parsed.success ? parsed.data : null;
+  try {
+    raw = await readFile(join(dir, ERROR_FILE), "utf8");
+  } catch (error) {
+    // No file means no recorded 409. Any other read error could hide stopped backups, so log it
+    if (getNodeErrorCode(error) !== "ENOENT") {
+      console.error(
+        `Nakama cannot read ${ERROR_FILE}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+
+    return null;
+  }
+
+  try {
+    const parsed = backupErrorSchema.safeParse(JSON.parse(raw));
+
+    if (parsed.success) {
+      return parsed.data;
+    }
+  } catch {
+    // Not JSON, logged below like a record of the wrong shape
+  }
+
+  console.error(`Nakama cannot read ${ERROR_FILE}: not a backup error record`);
+
+  return null;
 }
 
 async function recordBackupError(dir: string, message: string): Promise<void> {
@@ -138,7 +159,15 @@ export async function startScheduledBackups(options: {
       try {
         const path = await writeBackup(options);
         console.log(`Nakama backup written to ${path}`);
-        await rm(join(options.dir, ERROR_FILE), { force: true });
+
+        // Its own catch: the backup is written, a failed cleanup must not report it as failed
+        try {
+          await rm(join(options.dir, ERROR_FILE), { force: true });
+        } catch (clearError) {
+          console.error(
+            `Nakama cannot clear ${ERROR_FILE}: ${clearError instanceof Error ? clearError.message : String(clearError)}`
+          );
+        }
       } catch (error) {
         console.error(
           `Nakama backup failed: ${error instanceof Error ? error.message : String(error)}`
@@ -163,4 +192,18 @@ export async function startScheduledBackups(options: {
   schedule(Math.max(0, last + DAY_MS - Date.now()));
 
   return () => clearTimeout(timer);
+}
+
+function getNodeErrorCode<T>(error: T): string | undefined {
+  if (!(error instanceof Error && "code" in error)) {
+    return;
+  }
+
+  const code = error.code;
+
+  return isString(code) ? code : undefined;
+}
+
+function isString<T>(value: T): value is T & string {
+  return Object.prototype.toString.call(value) === "[object String]";
 }
