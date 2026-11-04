@@ -18,6 +18,8 @@ export interface AcpAgentProcess {
   kill(): void;
 }
 
+const STDERR_TAIL_CHARS = 2000;
+
 // The agent logs in with its own keys (ANTHROPIC_API_KEY, OPENAI_API_KEY), so only
 // Nakama's own secrets are cut, not every key-shaped variable.
 function agentEnv(): NodeJS.ProcessEnv {
@@ -52,6 +54,12 @@ export async function startAcpAgentProcess(
     child.once("error", () => resolve());
   });
 
+  // Keep the end of stderr, so a start failure says why the agent stopped.
+  let stderrTail = "";
+  child.stderr.on("data", (chunk: Buffer) => {
+    stderrTail = (stderrTail + chunk.toString()).slice(-STDERR_TAIL_CHARS);
+  });
+
   // SAFETY: Node's byte stream implements the SDK's DOM stream contract; only reader overload declarations differ.
   const stdout = Readable.toWeb(child.stdout) as ReturnType<
     typeof Readable.toWeb
@@ -72,7 +80,11 @@ export async function startAcpAgentProcess(
     });
   } catch (error) {
     child.kill();
-    throw error;
+    await exited;
+    throw new Error(
+      `${[launch.command, ...launch.args].join(" ")} did not start an ACP agent. ${Bun.stripANSI(stderrTail).trim() || String(error)}`,
+      { cause: error }
+    );
   }
 
   return {

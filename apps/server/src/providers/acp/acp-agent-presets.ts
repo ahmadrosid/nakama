@@ -29,7 +29,7 @@ const HOST_AGENTS = [
   {
     agent: { args: ["acp"], command: "opencode" },
     id: "opencode",
-    label: "OpenCode",
+    label: "OpenCode (host)",
   },
 ] as const;
 
