@@ -271,6 +271,203 @@ const navigationScenarios = [
   "draft",
 ];
 
+const RETRY_MESSAGES: ChatMessage[] = [
+  { content: "first prompt", role: "user" },
+  { content: "first answer", role: "assistant" },
+  { content: "second prompt", role: "user" },
+  { content: "second answer", role: "assistant" },
+];
+
+/**
+ * Renders useChatPage at `initialEntry` with the client calls every chat test
+ * needs. `messagesFor` answers getSessionMessages; `restore` undoes the rest.
+ */
+async function renderChatPage({
+  initialEntry,
+  messagesFor,
+}: {
+  initialEntry: string;
+  messagesFor: (id: string) => {
+    channel: AgentChannel;
+    messages: ChatMessage[];
+  };
+}) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+
+  const previousStorage = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "localStorage"
+  );
+
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: window.localStorage,
+  });
+  const previousProfile = useActiveChatProfileStore.getState();
+  useActiveChatProfileStore.setState({ orgId: null, profileId: "default" });
+
+  const spies = [
+    spyOn(client, "getMe").mockRejectedValue(new Error("Unauthenticated")),
+    spyOn(client, "listUserOrgs").mockResolvedValue({ orgs: [] }),
+    spyOn(client, "listProfiles").mockResolvedValue({ profiles: [] }),
+    spyOn(client, "getThinkingSettings").mockResolvedValue({
+      effort: "medium",
+      enabled: false,
+    }),
+    spyOn(client, "getSessionStatus").mockResolvedValue({ active: false }),
+    spyOn(client, "getSessionMessages").mockImplementation(async (id) => ({
+      ...messagesFor(id),
+      messageMeta: [],
+      model: null,
+      questionnaire: null,
+      todos: [],
+    })),
+  ];
+
+  let page!: ChatPageState;
+  let pathname = "";
+  let navigate!: (to: string) => void;
+
+  function Probe() {
+    page = useChatPage();
+    pathname = useLocation().pathname;
+    navigate = useNavigate();
+
+    return null;
+  }
+
+  const root = createRoot(document.createElement("div"));
+
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <AppContext.Provider
+              value={{
+                configureProvider: async () => {
+                  throw new Error("Unexpected write");
+                },
+                createProvider: async () => {
+                  throw new Error("Unexpected write");
+                },
+                error: null,
+                health: null,
+                loading: false,
+                models: null,
+              }}
+            >
+              <Routes>
+                <Route
+                  element={<Probe />}
+                  path="/chat/:profileId?/:sessionId?"
+                />
+              </Routes>
+            </AppContext.Provider>
+          </AuthProvider>
+        </QueryClientProvider>
+      </MemoryRouter>
+    )
+  );
+
+  return {
+    navigate: (to: string) => act(async () => navigate(to)),
+    get page() {
+      return page;
+    },
+    get pathname() {
+      return pathname;
+    },
+    restore: async () => {
+      await act(async () => root.unmount());
+      queryClient.clear();
+
+      for (const spy of spies) {
+        spy.mockRestore();
+      }
+
+      useActiveChatProfileStore.setState(previousProfile);
+      window.localStorage.clear();
+
+      if (previousStorage) {
+        Object.defineProperty(globalThis, "localStorage", previousStorage);
+      } else {
+        Reflect.deleteProperty(globalThis, "localStorage");
+      }
+    },
+  };
+}
+
+/**
+ * Chat sessions whose sends are recorded, built on a real client so a test can
+ * read the channel each session carries through `createAutomation`.
+ */
+function createRetrySessions() {
+  const sent: string[] = [];
+  const automationBodies: Array<{ channel: AgentChannel; prompt: string }> = [];
+  const spies: ReturnType<typeof spyOn>[] = [];
+
+  const transport = new NakamaClient({
+    baseUrl: "http://retry.test",
+    fetch: async (url, options) => {
+      if (String(url) !== "http://retry.test/v1/automations/draft") {
+        throw new Error(`Unexpected request: ${url}`);
+      }
+
+      automationBodies.push(JSON.parse(String(options?.body)));
+
+      return Response.json({ automation: null });
+    },
+  });
+
+  const makeSession = (id: string, channel: AgentChannel) => {
+    const chat = transport.createChatSession(id, channel);
+    spies.push(
+      spyOn(chat, "sendStream").mockImplementation(async () => {
+        sent.push(id);
+
+        return "retried answer";
+      })
+    );
+
+    return chat;
+  };
+
+  const createSession = spyOn(client, "createSession").mockImplementation(
+    async (channel) => makeSession("fresh", channel)
+  );
+
+  spies.push(
+    spyOn(client, "createChatSession").mockImplementation(makeSession),
+    createSession
+  );
+
+  return {
+    automationBodies,
+    createSession,
+    restore: () => {
+      for (const spy of spies) {
+        spy.mockRestore();
+      }
+    },
+    sent,
+  };
+}
+
+function replyAt(page: ChatPageState, historyIndex: number) {
+  const reply = page.messages.find(
+    (message) => message.historyIndex === historyIndex
+  );
+
+  if (!reply) {
+    throw new Error("Missing reply fixture");
+  }
+
+  return reply;
+}
+
 const retryChannelCases = [
   ["first web reply", "web", 1, "web"],
   ["later web reply", "web", 3, "web"],
@@ -278,209 +475,222 @@ const retryChannelCases = [
   ["later CLI reply", "cli", 3, "cli"],
   ["first task reply", "task", 1, "web"],
   ["later task reply", "task", 3, "task"],
-  ["first read-only reply", "telegram", 1, null],
-  ["later read-only reply", "telegram", 3, null],
+  ["first automation reply", "automation", 1, "web"],
+  ["later automation reply", "automation", 3, "automation"],
+  ["first sub-agent reply", "subagent", 1, "web"],
+  ["later sub-agent reply", "subagent", 3, "subagent"],
 ] as const;
 
 test.each(retryChannelCases)(
   "retry keeps the destination channel: %s",
   async (_name, sourceChannel, historyIndex, expectedChannel) => {
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-
-    const previousStorage = Object.getOwnPropertyDescriptor(
-      globalThis,
-      "localStorage"
-    );
-
-    const previousProfile = useActiveChatProfileStore.getState();
-    const stored = new Map<string, string>();
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: {
-        getItem: (key: string) => stored.get(key) ?? null,
-        removeItem: (key: string) => stored.delete(key),
-        setItem: (key: string, value: string) => stored.set(key, value),
-      },
-    });
-    useActiveChatProfileStore.setState({ orgId: null, profileId: "default" });
     const destinationId = historyIndex === 1 ? "fresh" : "branched";
-    const sent: string[] = [];
+    const sessions = createRetrySessions();
 
-    const automationBodies: Array<{ channel: AgentChannel; prompt: string }> =
-      [];
-
-    const transport = new NakamaClient({
-      baseUrl: "http://retry.test",
-      fetch: async (url, options) => {
-        if (String(url) !== "http://retry.test/v1/automations/draft") {
-          throw new Error(`Unexpected request: ${url}`);
-        }
-
-        automationBodies.push(JSON.parse(String(options?.body)));
-
-        return Response.json({ automation: null });
-      },
-    });
-
-    const streamSpies: ReturnType<typeof spyOn>[] = [];
-
-    const makeSession = (id: string, channel: AgentChannel) => {
-      const chat = transport.createChatSession(id, channel);
-      streamSpies.push(
-        spyOn(chat, "sendStream").mockImplementation(async () => {
-          sent.push(id);
-
-          return "retried answer";
-        })
-      );
-
-      return chat;
-    };
-
-    const messages: ChatMessage[] = [
-      { content: "first prompt", role: "user" },
-      { content: "first answer", role: "assistant" },
-      { content: "second prompt", role: "user" },
-      { content: "second answer", role: "assistant" },
-    ];
-
-    const spies = [
-      spyOn(client, "getMe").mockRejectedValue(new Error("Unauthenticated")),
-      spyOn(client, "listUserOrgs").mockResolvedValue({ orgs: [] }),
-      spyOn(client, "listProfiles").mockResolvedValue({ profiles: [] }),
-      spyOn(client, "getThinkingSettings").mockResolvedValue({
-        effort: "medium",
-        enabled: false,
-      }),
-      spyOn(client, "getSessionStatus").mockResolvedValue({ active: false }),
-      spyOn(client, "getSessionMessages").mockImplementation(async (id) => ({
-        channel:
-          id === "source" ? sourceChannel : (expectedChannel ?? sourceChannel),
-        messageMeta: [],
-        messages,
-        model: null,
-        questionnaire: null,
-        todos: [],
-      })),
-      spyOn(client, "createChatSession").mockImplementation(makeSession),
-    ];
-
-    const createSession = spyOn(client, "createSession").mockImplementation(
-      async (channel) => makeSession("fresh", channel)
-    );
-
+    // Like the server's inheritFrom, a branch keeps its source's channel.
     const branchSession = spyOn(client, "branchSession").mockResolvedValue({
+      channel: sourceChannel,
       sessionId: "branched",
     });
 
-    let page!: ChatPageState;
-    let pathname = "";
-
-    function Probe() {
-      page = useChatPage();
-      pathname = useLocation().pathname;
-
-      return null;
-    }
-
-    const root = createRoot(document.createElement("div"));
+    const chat = await renderChatPage({
+      initialEntry: "/chat/default/source",
+      messagesFor: (id) => ({
+        channel: id === "fresh" ? "web" : sourceChannel,
+        messages: RETRY_MESSAGES,
+      }),
+    });
 
     try {
+      expect(chat.page.sessionChannel).toBe(sourceChannel);
+
       await act(async () =>
-        root.render(
-          <MemoryRouter initialEntries={["/chat/default/source"]}>
-            <QueryClientProvider client={queryClient}>
-              <AuthProvider>
-                <AppContext.Provider
-                  value={{
-                    configureProvider: async () => {
-                      throw new Error("Unexpected write");
-                    },
-                    createProvider: async () => {
-                      throw new Error("Unexpected write");
-                    },
-                    error: null,
-                    health: null,
-                    loading: false,
-                    models: null,
-                  }}
-                >
-                  <Routes>
-                    <Route
-                      element={<Probe />}
-                      path="/chat/:profileId?/:sessionId?"
-                    />
-                  </Routes>
-                </AppContext.Provider>
-              </AuthProvider>
-            </QueryClientProvider>
-          </MemoryRouter>
-        )
-      );
-      expect(page.session?.id).toBe("source");
-      expect(page.sessionChannel).toBe(sourceChannel);
-
-      const reply = page.messages.find(
-        (message) => message.historyIndex === historyIndex
+        chat.page.handleTryAgainMessage(replyAt(chat.page, historyIndex))
       );
 
-      expect(reply).toBeDefined();
-
-      if (!reply) {
-        throw new Error("Missing reply fixture");
-      }
-
-      await act(async () => page.handleTryAgainMessage(reply));
-      expect(page.error).toBeNull();
-
-      if (expectedChannel === null) {
-        expect(page.session?.id).toBe("source");
-        expect(page.sessionChannel).toBe(sourceChannel);
-        expect(page.readOnlySession).toBe(true);
-        expect(sent).toEqual([]);
-        expect(createSession).not.toHaveBeenCalled();
-        expect(branchSession).not.toHaveBeenCalled();
-
-        return;
-      }
-
-      expect(page.session?.id).toBe(destinationId);
-      expect(pathname).toBe(`/chat/default/${destinationId}`);
-      expect(sent).toEqual([destinationId]);
-      expect(createSession).toHaveBeenCalledTimes(historyIndex === 1 ? 1 : 0);
+      expect(chat.page.error).toBeNull();
+      expect(chat.page.session?.id).toBe(destinationId);
+      expect(chat.pathname).toBe(`/chat/default/${destinationId}`);
+      expect(sessions.sent).toEqual([destinationId]);
+      expect(sessions.createSession).toHaveBeenCalledTimes(
+        historyIndex === 1 ? 1 : 0
+      );
       expect(branchSession).toHaveBeenCalledTimes(historyIndex === 3 ? 1 : 0);
-      expect(page.sessionChannel).toBe(expectedChannel);
-      expect(page.readOnlySession).toBe(false);
+      expect(chat.page.sessionChannel).toBe(expectedChannel);
+      expect(chat.page.readOnlySession).toBe(false);
       // The real serializer exposes the session's captured channel.
-      await page.session?.createAutomation("retry follow-up");
-      expect(automationBodies).toEqual([
+      await chat.page.session?.createAutomation("retry follow-up");
+      expect(sessions.automationBodies).toEqual([
         { channel: expectedChannel, prompt: "retry follow-up" },
       ]);
     } finally {
-      await act(async () => root.unmount());
-      queryClient.clear();
-
-      for (const spy of [
-        ...spies,
-        ...streamSpies,
-        createSession,
-        branchSession,
-      ]) {
-        spy.mockRestore();
-      }
-
-      useActiveChatProfileStore.setState(previousProfile);
-
-      if (previousStorage) {
-        Object.defineProperty(globalThis, "localStorage", previousStorage);
-      } else {
-        Reflect.deleteProperty(globalThis, "localStorage");
-      }
+      await chat.restore();
+      sessions.restore();
+      branchSession.mockRestore();
     }
   }
 );
+
+test.each([1, 3])(
+  "retry in a read-only chat does nothing (reply %i)",
+  async (historyIndex) => {
+    const sessions = createRetrySessions();
+
+    const branchSession = spyOn(client, "branchSession").mockResolvedValue({
+      channel: "telegram",
+      sessionId: "branched",
+    });
+
+    const chat = await renderChatPage({
+      initialEntry: "/chat/default/source",
+      messagesFor: () => ({ channel: "telegram", messages: RETRY_MESSAGES }),
+    });
+
+    try {
+      await act(async () =>
+        chat.page.handleTryAgainMessage(replyAt(chat.page, historyIndex))
+      );
+
+      expect(chat.page.error).toBeNull();
+      expect(chat.page.session?.id).toBe("source");
+      expect(chat.page.sessionChannel).toBe("telegram");
+      expect(chat.page.readOnlySession).toBe(true);
+      expect(sessions.sent).toEqual([]);
+      expect(sessions.createSession).not.toHaveBeenCalled();
+      expect(branchSession).not.toHaveBeenCalled();
+    } finally {
+      await chat.restore();
+      sessions.restore();
+      branchSession.mockRestore();
+    }
+  }
+);
+
+// The server's answer wins over what the page last loaded.
+test("a retry branch takes its channel from the server", async () => {
+  const sessions = createRetrySessions();
+
+  const branchSession = spyOn(client, "branchSession").mockResolvedValue({
+    channel: "task",
+    sessionId: "branched",
+  });
+
+  const chat = await renderChatPage({
+    initialEntry: "/chat/default/source",
+    messagesFor: (id) => ({
+      channel: id === "source" ? "cli" : "task",
+      messages: RETRY_MESSAGES,
+    }),
+  });
+
+  try {
+    await act(async () =>
+      chat.page.handleTryAgainMessage(replyAt(chat.page, 3))
+    );
+
+    expect(chat.page.sessionChannel).toBe("task");
+    await chat.page.session?.createAutomation("retry follow-up");
+    expect(sessions.automationBodies).toEqual([
+      { channel: "task", prompt: "retry follow-up" },
+    ]);
+  } finally {
+    await chat.restore();
+    sessions.restore();
+    branchSession.mockRestore();
+  }
+});
+
+const staleRetryCases = [
+  ["a branch", 3, "resolve"],
+  ["a new chat", 1, "resolve"],
+  ["a failed branch", 3, "reject"],
+] as const;
+
+test.each(staleRetryCases)(
+  "a retry that returns after the user opened another chat leaves it alone: %s",
+  async (_name, historyIndex, outcome) => {
+    const sessions = createRetrySessions();
+    const answered = Promise.withResolvers<void>();
+
+    const branchSession = spyOn(client, "branchSession").mockImplementation(
+      async () => {
+        await answered.promise;
+
+        if (outcome === "reject") {
+          throw new Error("branch failed");
+        }
+
+        return { channel: "cli", sessionId: "branched" };
+      }
+    );
+
+    const createSessionAnswer = sessions.createSession.getMockImplementation();
+
+    sessions.createSession.mockImplementation(
+      async (...args: Parameters<typeof client.createSession>) => {
+        await answered.promise;
+
+        return createSessionAnswer!(...args);
+      }
+    );
+
+    const chat = await renderChatPage({
+      initialEntry: "/chat/default/source",
+      messagesFor: (id) => ({
+        channel: id === "other" ? "telegram" : "cli",
+        messages: RETRY_MESSAGES,
+      }),
+    });
+
+    try {
+      let retry!: Promise<void>;
+
+      await act(async () => {
+        retry = chat.page.handleTryAgainMessage(
+          replyAt(chat.page, historyIndex)
+        );
+      });
+      await chat.navigate("/chat/default/other");
+      expect(chat.page.session?.id).toBe("other");
+
+      await act(async () => {
+        answered.resolve();
+        await retry;
+      });
+
+      expect(chat.page.session?.id).toBe("other");
+      expect(chat.page.sessionChannel).toBe("telegram");
+      expect(chat.page.readOnlySession).toBe(true);
+      expect(chat.page.error).toBeNull();
+      expect(chat.pathname).toBe("/chat/default/other");
+      expect(sessions.sent).toEqual([]);
+    } finally {
+      await chat.restore();
+      sessions.restore();
+      branchSession.mockRestore();
+    }
+  }
+);
+
+// A retry branch of a CLI chat stays CLI, and its failed turn is only stored
+// in this browser, so loading the chat has to read it back.
+test("a failed turn stored for a CLI chat is shown when the chat loads", async () => {
+  window.localStorage.setItem(
+    "nakama:failed-chat-turn:source",
+    JSON.stringify({ error: "provider down", text: "third prompt" })
+  );
+
+  const chat = await renderChatPage({
+    initialEntry: "/chat/default/source",
+    messagesFor: () => ({ channel: "cli", messages: RETRY_MESSAGES }),
+  });
+
+  try {
+    expect(chat.page.messages.some((message) => message.failed)).toBe(true);
+  } finally {
+    await chat.restore();
+  }
+});
 
 test.each(navigationScenarios)(
   "session navigation keeps the requested chat: %s",

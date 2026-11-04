@@ -3024,7 +3024,11 @@ export class AgentService {
     );
     await this.db.updateSessionTitle(nextSessionId, branchTitle);
 
-    return { sessionId: nextSessionId };
+    return {
+      // A source the client could load has a valid channel.
+      channel: parseAgentChannel(branchRecord.channel) ?? "web",
+      sessionId: nextSessionId,
+    };
   }
 
   async listSessions(

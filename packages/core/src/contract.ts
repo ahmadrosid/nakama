@@ -1139,6 +1139,8 @@ export interface BranchSessionRequest {
 }
 
 export interface BranchSessionResponse {
+  /** The source session's channel, which the branch keeps. */
+  channel: AgentChannel;
   sessionId: string;
 }
 
