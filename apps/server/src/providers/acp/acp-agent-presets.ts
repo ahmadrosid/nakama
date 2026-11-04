@@ -134,7 +134,9 @@ function findOpencodePackageBinary(platform: NodeJS.Platform): string | null {
   const base = `opencode-${os}-${process.arch}`;
   const require = createRequire(import.meta.url);
 
-  for (const suffix of ["", "-baseline", "-musl", "-baseline-musl"]) {
+  // `-baseline` first: it runs on every x64 CPU. The plain x64 build needs
+  // AVX2 and fails with `Illegal instruction` without it.
+  for (const suffix of ["-baseline", "", "-baseline-musl", "-musl"]) {
     let manifest: string;
 
     try {
