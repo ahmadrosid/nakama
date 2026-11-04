@@ -46,10 +46,15 @@ export function ImageGenerationSettingsCard() {
 
   // Any custom model on an OpenAI-compatible provider may speak the Images
   // API; the server posts the one picked to `<baseUrl>/images/generations`.
+  // A ChatGPT model calls the hosted image tool on the subscription backend.
   const compatibleModelGroups = useMemo(
     () =>
       providerModelGroups.filter((group) =>
-        group.models.some((model) => model.provider === "openai_compatible")
+        group.models.some(
+          (model) =>
+            model.provider === "openai_compatible" ||
+            model.provider === "chatgpt"
+        )
       ),
     [providerModelGroups]
   );

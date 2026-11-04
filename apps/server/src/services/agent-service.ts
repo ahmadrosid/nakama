@@ -1123,6 +1123,13 @@ export class AgentService {
     const result = await generateImageWithOpenAI({
       apiKey: selection.apiKey,
       baseUrl: selection.baseUrl,
+      ...(selection.chatgptOAuth && {
+        chatgpt: {
+          oauth: selection.chatgptOAuth,
+          onTokenRefresh: (oauth) =>
+            this.persistChatgptOAuth(selection.instance.id, oauth),
+        },
+      }),
       model: selection.model,
       prompt,
       size: input.size,
