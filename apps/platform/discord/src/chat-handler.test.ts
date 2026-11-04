@@ -8,6 +8,7 @@ import {
 import { ChannelSessionStore as SessionStore } from "@nakama/core/channel-session-store";
 import type { ChatMessage, SendMessageInput } from "@nakama/core/contract";
 import { loadDiscordConfigFile } from "@nakama/core/discord-config";
+import { MAX_ATTACHMENTS_PER_MESSAGE } from "@nakama/core/message-content";
 import type {
   ButtonInteraction,
   StringSelectMenuInteraction,
@@ -2636,12 +2637,15 @@ describe("createChatHandler inbound images", () => {
         const { handleMessage, calls } = await createPairedHandler(homeDir);
 
         const dm = createDmMessage({
-          attachments: Array.from({ length: 6 }, (_, index) => ({
-            contentType: "image/png",
-            name: `shot-${index}.png`,
-            size: 8,
-            url: `https://cdn.example/shot-${index}.png`,
-          })),
+          attachments: Array.from(
+            { length: MAX_ATTACHMENTS_PER_MESSAGE + 1 },
+            (_, index) => ({
+              contentType: "image/png",
+              name: `shot-${index}.png`,
+              size: 8,
+              url: `https://cdn.example/shot-${index}.png`,
+            })
+          ),
           content: "",
           userId: "424242424242424242",
         });

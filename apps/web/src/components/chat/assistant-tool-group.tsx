@@ -175,7 +175,7 @@ function FailedTurnNotice({
   onSwitchModel?: () => void;
   retryDisabled: boolean;
 }) {
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(true);
 
   return (
     <div className="flex w-full min-w-0 items-start gap-3" role="alert">
