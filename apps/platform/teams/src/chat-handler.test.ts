@@ -72,6 +72,7 @@ describe("teams chat handler", () => {
   for (const patch of [
     { conversationType: "groupChat" },
     { conversationType: "channel" },
+    { conversationType: "channel", mentionsBot: true },
     { tenantId: CONFIG.clientId },
     { senderId: "not-a-guid" },
     { senderId: "" },
@@ -166,6 +167,73 @@ describe("teams chat handler", () => {
     });
   });
 
+  const THREAD_A = "19:general@thread.tacv2;messageid=1001";
+  const THREAD_B = "19:general@thread.tacv2;messageid=2002";
+
+  function mention(patch: Partial<Parameters<typeof activity>[0]> = {}) {
+    return activity({
+      conversationId: THREAD_A,
+      conversationType: "channel",
+      mentionsBot: true,
+      ...patch,
+    });
+  }
+
+  test("a mention in a channel thread gets the reply in that thread", async () => {
+    await withTempHome("nakama-teams-handler-", async (homeDir) => {
+      const { handle, replies, turns } = createHarness(homeDir);
+
+      await handle(mention({ text: " what is nakama" }));
+
+      expect(turns.map((turn) => turn.message)).toEqual(["what is nakama"]);
+      expect(replies).toEqual([
+        { conversationId: THREAD_A, text: "echo: what is nakama" },
+      ]);
+    });
+  });
+
+  test("each channel thread keeps its own session", async () => {
+    await withTempHome("nakama-teams-handler-", async (homeDir) => {
+      const { createdSessions, handle, turns } = createHarness(homeDir);
+
+      await handle(mention({ conversationId: THREAD_A }));
+      await handle(mention({ conversationId: THREAD_B }));
+      await handle(mention({ conversationId: THREAD_A }));
+
+      expect(createdSessions).toEqual(["session_1", "session_2"]);
+      expect(turns.map((turn) => turn.sessionId)).toEqual([
+        "session_1",
+        "session_2",
+        "session_1",
+      ]);
+    });
+  });
+
+  test("a channel mention delivered twice is answered once", async () => {
+    await withTempHome("nakama-teams-handler-", async (homeDir) => {
+      const { handle, replies, turns } = createHarness(homeDir);
+      const duplicate = mention({ text: "only once" });
+
+      await Promise.all([handle(duplicate), handle(duplicate)]);
+
+      expect(turns).toHaveLength(1);
+      expect(replies).toHaveLength(1);
+    });
+  });
+
+  test("an unlinked sender's channel mention gets no reply", async () => {
+    await withTempHome("nakama-teams-handler-", async (homeDir) => {
+      const { handle, replies, turns } = createHarness(homeDir);
+
+      await handle(
+        mention({ senderId: "99999999-9999-4999-8999-999999999999" })
+      );
+
+      expect(turns).toEqual([]);
+      expect(replies).toEqual([]);
+    });
+  });
+
   for (const [name, patch] of [
     ["a bot", { isBot: true }],
     ["another tenant", { tenantId: "44444444-4444-4444-8444-444444444444" }],
@@ -174,6 +242,7 @@ describe("teams chat handler", () => {
       { senderId: "99999999-9999-4999-8999-999999999999" },
     ],
     ["a group conversation", { conversationType: "groupChat" }],
+    ["a channel message without a mention", { conversationType: "channel" }],
     ["an empty message", { text: "   " }],
     ["another Bot Framework channel", { channelId: "webchat" }],
   ] as const) {

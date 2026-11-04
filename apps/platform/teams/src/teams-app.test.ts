@@ -7,6 +7,7 @@ import {
   createTeamsSdkApp,
   startTeamsApp,
   type TeamsAppHandle,
+  toTeamsActivity,
 } from "./teams-app";
 
 const CONFIG = {
@@ -63,6 +64,38 @@ function post(port: number, headers: Record<string, string> = {}) {
     method: "POST",
   });
 }
+
+describe("teams activity mentions", () => {
+  const channelMessage = (mentionedId: string) => ({
+    ...MESSAGE,
+    conversation: {
+      conversationType: "channel",
+      id: "19:general@thread.tacv2;messageid=1001",
+    },
+    entities: [
+      {
+        mentioned: { id: mentionedId, name: "Nakama" },
+        text: "<at>Nakama</at>",
+        type: "mention",
+      },
+    ],
+    text: "<at>Nakama</at> summarise this thread",
+  });
+
+  test("a mention of the bot is flagged and cut from the text", () => {
+    const activity = toTeamsActivity(channelMessage("bot"));
+
+    expect(activity.mentionsBot).toBe(true);
+    expect(activity.text.trim()).toBe("summarise this thread");
+  });
+
+  test("a mention of someone else is not a mention of the bot", () => {
+    const activity = toTeamsActivity(channelMessage("someone-else"));
+
+    expect(activity.mentionsBot).toBe(false);
+    expect(activity.text).toBe("<at>Nakama</at> summarise this thread");
+  });
+});
 
 describe("teams app host", () => {
   test("listens on loopback only", async () => {

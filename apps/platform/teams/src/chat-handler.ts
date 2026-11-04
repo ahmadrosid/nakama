@@ -24,10 +24,15 @@ export interface TeamsActivity {
   /** The Bot Framework channel; only "msteams" is served. */
   channelId: string;
   conversationId: string;
-  /** "personal" is a one-to-one chat; group chats and channels are ignored. */
+  /**
+   * "personal" is a one-to-one chat. In a "channel" the id names one thread
+   * (`...;messageid=<root>`). Group chats are ignored.
+   */
   conversationType: string;
   id: string;
   isBot: boolean;
+  /** The activity at-mentions this bot; a channel message is served only then. */
+  mentionsBot: boolean;
   /** The sender's Entra object id, which the allowlist is written against. */
   senderId: string;
   tenantId: string;
@@ -84,10 +89,16 @@ function parseCommand(text: string): TeamsCommand | null {
   return COMMANDS.find((command) => command === word) ?? null;
 }
 
-function isPersonalMessage(activity: TeamsActivity): boolean {
+function isPersonal(activity: TeamsActivity): boolean {
+  return activity.conversationType === "personal";
+}
+
+/** A personal chat, or a channel thread message that mentions the bot. */
+function isServedMessage(activity: TeamsActivity): boolean {
   return (
     activity.channelId === "msteams" &&
-    activity.conversationType === "personal" &&
+    (isPersonal(activity) ||
+      (activity.conversationType === "channel" && activity.mentionsBot)) &&
     !activity.isBot &&
     activity.text.trim().length > 0 &&
     activity.conversationId.trim().length > 0
@@ -351,13 +362,14 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
   }
 
   return async function handle(activity: TeamsActivity): Promise<void> {
-    if (!isPersonalMessage(activity)) {
+    if (!isServedMessage(activity)) {
       return;
     }
 
     // Checked before the first await so a retry that arrives while the first
     // delivery is still running cannot start a second turn. Ids are unique
-    // within a chat; one without an id cannot be told apart from a retry.
+    // within a chat or thread; one without an id cannot be told apart from a
+    // retry.
     const deliveryKey = activity.id
       ? `${activity.conversationId}:${activity.id}`
       : null;
@@ -392,8 +404,9 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
     const command = parseCommand(text);
 
     if (!allows(config, activity)) {
-      // Only an unauthorized sender's code-shaped message is a pairing attempt.
-      if (looksLikePairingCode(activity.text)) {
+      // Only an unauthorized sender's code-shaped message is a pairing attempt,
+      // and only in a personal chat, so a code is never posted to a channel.
+      if (isPersonal(activity) && looksLikePairingCode(activity.text)) {
         await chatLock.withLock(sessionKey, async () => {
           const result = await verifyAndPairTeamsUser(
             activity.text,

@@ -73,23 +73,43 @@ export function createSafeLogger() {
   return logger;
 }
 
-/** Reads the fields this slice acts on from an SDK message activity. */
-function toTeamsActivity(activity: {
+const mentionSchema = z.object({
+  mentioned: z.object({ id: z.string() }),
+  text: z.string().optional(),
+  type: z.literal("mention"),
+});
+
+interface SdkMessageActivity {
   channelId: string;
   conversation: { conversationType?: string; id: string; tenantId?: string };
+  entities?: readonly unknown[];
   from: { aadObjectId?: string; role?: string };
   id?: string;
+  recipient: { id: string };
   text?: string;
-}): TeamsActivity {
+}
+
+/**
+ * Reads the fields this slice acts on from an SDK message activity. The bot's
+ * own "<at>Name</at>" is cut from the text; other mentions stay.
+ */
+export function toTeamsActivity(activity: SdkMessageActivity): TeamsActivity {
+  const botMention = (activity.entities ?? [])
+    .map((entity) => mentionSchema.safeParse(entity).data)
+    .find((mention) => mention?.mentioned.id === activity.recipient.id);
+
+  const text = activity.text ?? "";
+
   return {
     channelId: activity.channelId,
     conversationId: activity.conversation.id,
     conversationType: activity.conversation.conversationType ?? "",
     id: activity.id ?? "",
     isBot: activity.from.role === "bot",
+    mentionsBot: botMention !== undefined,
     senderId: activity.from.aadObjectId ?? "",
     tenantId: activity.conversation.tenantId ?? "",
-    text: activity.text ?? "",
+    text: botMention?.text ? text.replace(botMention.text, "") : text,
   };
 }
 
