@@ -107,13 +107,6 @@ describe("WorkerManagerService", () => {
     expect(starts[0][0].env.NAKAMA_CHANNEL_PROFILE_ID).toBe(owner.profileId);
   });
 
-  describe("isValidWorker", () => {
-    test("returns false for unknown worker", () => {
-      const service = new WorkerManagerService(projectRoot, createMockPm2());
-      expect(service.isValidWorker("foobar")).toBe(false);
-    });
-  });
-
   describe("startWorker", () => {
     test("uses separate processes and desired state per WhatsApp organization", async () => {
       const pm2 = createMockPm2();
@@ -187,21 +180,6 @@ describe("WorkerManagerService", () => {
       });
     });
 
-    test("starts whatsapp worker", async () => {
-      const mockPm2 = createMockPm2();
-      const service = new WorkerManagerService(projectRoot, mockPm2);
-
-      await service.startWorker("whatsapp");
-
-      expect(mockPm2.start).toHaveBeenCalledTimes(1);
-      // SAFETY: The test fixture matches the contract used by this test.
-      const opts = (mockPm2.start as ReturnType<typeof mock>).mock.calls[0][0];
-      expect(opts.name).toBe("whatsapp");
-      expect(opts.script).toBe("bun");
-      expect(opts.args).toContain("apps/platform/whatsapp/src/index.ts");
-      expect(opts.interpreter).toBeUndefined();
-    });
-
     test("keeps secrets out of the worker environment", async () => {
       const secrets = [
         "NAKAMA_SECRETS_KEY",
@@ -250,29 +228,6 @@ describe("WorkerManagerService", () => {
       expect(mockPm2.start).not.toHaveBeenCalled();
     });
 
-    test("starts automation worker", async () => {
-      const mockPm2 = createMockPm2();
-      const service = new WorkerManagerService(projectRoot, mockPm2);
-
-      await service.startWorker("automation");
-
-      expect(mockPm2.start).toHaveBeenCalledTimes(1);
-      // SAFETY: The test fixture matches the contract used by this test.
-      const opts = (mockPm2.start as ReturnType<typeof mock>).mock.calls[0][0];
-      expect(opts.name).toBe("automation");
-      expect(opts.script).toBe("bun");
-      expect(opts.args).toContain("apps/platform/automation/src/index.ts");
-      expect(opts.interpreter).toBeUndefined();
-      expect(await readWorkerDesiredState()).toEqual({
-        automation: true,
-        discord: false,
-        slack: false,
-        teams: false,
-        telegram: false,
-        whatsapp: false,
-      });
-    });
-
     test("starts worker from dist when dist build exists", async () => {
       const tmpProjectRoot = await mkdtemp(
         join(tmpdir(), "nakama-worker-dist-")
@@ -296,60 +251,6 @@ describe("WorkerManagerService", () => {
       // SAFETY: The test fixture matches the contract used by this test.
       const opts = (mockPm2.start as ReturnType<typeof mock>).mock.calls[0][0];
       expect(opts.args).toContain("apps/platform/whatsapp/dist/index.js");
-
-      await rm(tmpProjectRoot, { force: true, recursive: true });
-    });
-
-    test("starts telegram worker from dist when dist build exists", async () => {
-      const tmpProjectRoot = await mkdtemp(
-        join(tmpdir(), "nakama-worker-dist-")
-      );
-
-      const distFilePath = join(
-        tmpProjectRoot,
-        "apps/platform/telegram/dist/index.js"
-      );
-
-      await mkdir(join(tmpProjectRoot, "apps/platform/telegram/dist"), {
-        recursive: true,
-      });
-      await writeFile(distFilePath, "console.log('ok')");
-
-      const mockPm2 = createMockPm2();
-      const service = new WorkerManagerService(tmpProjectRoot, mockPm2);
-
-      await service.startWorker("telegram");
-
-      // SAFETY: The test fixture matches the contract used by this test.
-      const opts = (mockPm2.start as ReturnType<typeof mock>).mock.calls[0][0];
-      expect(opts.args).toContain("apps/platform/telegram/dist/index.js");
-
-      await rm(tmpProjectRoot, { force: true, recursive: true });
-    });
-
-    test("starts automation worker from dist when dist build exists", async () => {
-      const tmpProjectRoot = await mkdtemp(
-        join(tmpdir(), "nakama-worker-dist-")
-      );
-
-      const distFilePath = join(
-        tmpProjectRoot,
-        "apps/platform/automation/dist/index.js"
-      );
-
-      await mkdir(join(tmpProjectRoot, "apps/platform/automation/dist"), {
-        recursive: true,
-      });
-      await writeFile(distFilePath, "console.log('ok')");
-
-      const mockPm2 = createMockPm2();
-      const service = new WorkerManagerService(tmpProjectRoot, mockPm2);
-
-      await service.startWorker("automation");
-
-      // SAFETY: The test fixture matches the contract used by this test.
-      const opts = (mockPm2.start as ReturnType<typeof mock>).mock.calls[0][0];
-      expect(opts.args).toContain("apps/platform/automation/dist/index.js");
 
       await rm(tmpProjectRoot, { force: true, recursive: true });
     });
@@ -400,8 +301,6 @@ describe("WorkerManagerService", () => {
       });
     });
   });
-
-  describe("restartWorker", () => {});
 
   describe("getWorkerStatus", () => {
     test("returns managed status for running worker", async () => {

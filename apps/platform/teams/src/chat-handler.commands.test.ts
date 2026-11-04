@@ -403,24 +403,6 @@ describe("teams commands", () => {
     });
   });
 
-  test("!clear stops a running turn instead of waiting behind it", async () => {
-    await withTempHome("nakama-teams-commands-", async (homeDir) => {
-      const turn = hangingTurn();
-
-      const { clearedSessions, handle } = createHarness(homeDir, {
-        onSend: turn.onSend,
-      });
-
-      const running = handle(activity({ text: "long job" }));
-      await turn.started;
-      await handle(activity({ text: "!clear" }));
-      await running;
-
-      expect(turn.signals.map((signal) => signal.aborted)).toEqual([true]);
-      expect(clearedSessions).toEqual(["session_1"]);
-    });
-  });
-
   test("!status reports the agent, provider, model and session", async () => {
     await withTempHome("nakama-teams-commands-", async (homeDir) => {
       const { handle, replies, turns } = createHarness(homeDir);

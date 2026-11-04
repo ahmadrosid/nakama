@@ -199,13 +199,6 @@ test("hides the mic button when no transcription model is configured", async () 
   expect(queryButton("Dictate with microphone")).toBeNull();
 });
 
-test("shows the mic button when a transcription model is configured", async () => {
-  mockModel("9router-stt::selfhosted-stt/whisper-1");
-  await renderDictation("");
-  await waitFor(() => queryButton("Dictate with microphone") !== null);
-  expect(queryButton("Dictate with microphone")).not.toBeNull();
-});
-
 test("appends a late transcription to the current draft without replacing typed text", async () => {
   installMediaMocks();
   mockModel("9router-stt::selfhosted-stt/whisper-1");

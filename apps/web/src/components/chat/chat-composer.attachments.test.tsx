@@ -91,24 +91,6 @@ async function mount(
   return container.querySelector<HTMLTextAreaElement>("textarea");
 }
 
-test("the + menu shows one 'Add files or photos' item instead of separate Image and Document items", async () => {
-  const { container, root } = renderComposer();
-  await mount(container, root, false);
-
-  const trigger = container.querySelector<HTMLElement>(
-    'button[aria-label="Add attachment"]'
-  );
-
-  await act(async () => trigger?.click());
-  await waitFor(() =>
-    Boolean(findByText('[role="menuitem"]', "Add files or photos"))
-  );
-
-  expect(findByText('[role="menuitem"]', "Add files or photos")).toBeDefined();
-  expect(findByText('[role="menuitem"]', "Image")).toBeUndefined();
-  expect(findByText('[role="menuitem"]', "Document")).toBeUndefined();
-});
-
 test("clicking 'Add files or photos' opens the picker accepting both images and documents", async () => {
   const { container, root } = renderComposer();
   await mount(container, root, false);

@@ -1,5 +1,4 @@
-import { rename } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { z } from "zod";
 import {
   assertChannelPath,
@@ -22,7 +21,6 @@ import {
 } from "./channel-config-shared";
 import { readEnvValue } from "./config";
 import {
-  ensureDir,
   pathExists,
   readDirectoryOrEmpty,
   readTextOrNull,
@@ -158,32 +156,6 @@ export async function resolveTelegramScopeForOrg(
   }
 
   return (await pathExists(getTelegramConfigPath(orgId))) ? orgId : null;
-}
-
-/**
- * Pre-org installs keep one Telegram config at the config-dir root. On a
- * single-org install it can only belong to that org, so move the directory
- * once and take the chat sessions and pairings with it. Multi-org installs
- * keep the shared bot until an admin saves credentials of their own.
- */
-export async function claimLegacyTelegramConfig(
-  orgId: string
-): Promise<boolean> {
-  const legacyDir = getTelegramConfigDir(null);
-  const targetDir = getTelegramConfigDir(orgId);
-
-  if (!(await pathExists(join(legacyDir, "config.ini")))) {
-    return false;
-  }
-
-  if (await pathExists(targetDir)) {
-    return false;
-  }
-
-  await ensureDir(dirname(targetDir));
-  await rename(legacyDir, targetDir);
-
-  return true;
 }
 
 export function toTelegramSettingsPublic(

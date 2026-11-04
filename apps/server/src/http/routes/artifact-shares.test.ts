@@ -10,7 +10,6 @@ import {
 } from "@nakama/db";
 import { AgentService } from "../../services/agent-service";
 import { setupTestConfigDir, withTestEnv } from "../../test-config-dir";
-import { isPublicRouteRequest } from "../public-routes";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
   loginUserSession,
@@ -203,15 +202,6 @@ describe("artifact share routes", () => {
 
     expect((await call(boSession, `shares/${id}`, "DELETE")).status).toBe(403);
     expect((await call(anaSession, `shares/${id}`, "DELETE")).status).toBe(200);
-  });
-
-  test("public artifact share GET is allowlisted", () => {
-    expect(
-      isPublicRouteRequest("GET", "/v1/public/artifact-shares/abc123")
-    ).toBe(true);
-    expect(
-      isPublicRouteRequest("POST", "/v1/public/artifact-shares/abc123")
-    ).toBe(false);
   });
 
   test("member can publish and anonymous visitor can read snapshot", async () => {

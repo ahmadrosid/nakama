@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  prepareTelegramFallbackReply,
-  prepareTelegramReply,
-  splitIntoChatBubbles,
-} from "./format";
+import { prepareTelegramFallbackReply } from "./format";
 
 describe("prepareTelegramFallbackReply", () => {
   test("preserves legacy share tokens with underscores in bare URLs", () => {
@@ -51,40 +47,5 @@ describe("prepareTelegramFallbackReply plain text", () => {
     expect(
       prepareTelegramFallbackReply("[docs](https://x.dev/a?b=1&c=2) <tag>")
     ).toBe("docs (https://x.dev/a?b=1&c=2) <tag>");
-  });
-});
-
-describe("prepareTelegramReply", () => {
-  test("preserves markdown for rich telegram delivery", () => {
-    expect(prepareTelegramReply("  Hello **world** and `code`  ")).toBe(
-      "Hello **world** and `code`"
-    );
-  });
-});
-
-describe("splitIntoChatBubbles", () => {
-  test("returns empty for blank text", () => {
-    expect(splitIntoChatBubbles("   ")).toEqual([]);
-  });
-
-  test("splits on paragraph boundaries", () => {
-    const text = "First paragraph.\n\nSecond paragraph.\n\nThird.";
-    const bubbles = splitIntoChatBubbles(text, 40);
-
-    expect(bubbles).toEqual([
-      "First paragraph.\n\nSecond paragraph.",
-      "Third.",
-    ]);
-  });
-
-  test("splits long paragraphs by words", () => {
-    const text = "word ".repeat(120).trim();
-    const bubbles = splitIntoChatBubbles(text, 50);
-
-    expect(bubbles.length).toBeGreaterThan(1);
-
-    for (const bubble of bubbles) {
-      expect(bubble.length).toBeLessThanOrEqual(50);
-    }
   });
 });

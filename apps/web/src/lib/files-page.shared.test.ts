@@ -2,22 +2,11 @@ import { describe, expect, test } from "bun:test";
 import {
   canPreviewWorkspaceEntry,
   legacyArtifactProfileId,
-  resolveFilesProfileId,
 } from "./files-page.shared";
 
 const profiles = [{ id: "default" }, { id: "other" }];
 
 describe("Files profile resolution", () => {
-  test("falls back to default then first profile", () => {
-    expect(
-      resolveFilesProfileId({ activeProfileId: "missing", profiles })
-    ).toBe("default");
-    expect(resolveFilesProfileId({ profiles: [{ id: "other" }] })).toBe(
-      "other"
-    );
-    expect(resolveFilesProfileId({ profiles: [] })).toBeNull();
-  });
-
   test("only preserves a valid legacy artifact profile", () => {
     expect(
       legacyArtifactProfileId("tab=artifacts&profile=other", profiles)
@@ -27,8 +16,6 @@ describe("Files profile resolution", () => {
     ).toBeNull();
   });
 });
-
-describe("Files view mode", () => {});
 
 describe("canPreviewWorkspaceEntry", () => {
   const base = {

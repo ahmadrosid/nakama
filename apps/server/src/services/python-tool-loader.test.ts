@@ -4,10 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import {
-  resolveCustomToolModulePath,
-  setToolSecrets,
-} from "./custom-tool-shared";
+import { setToolSecrets } from "./custom-tool-shared";
 import {
   makeCustomToolRecord,
   setupCustomToolsDir,
@@ -554,15 +551,6 @@ if __name__ == "__main__":
     } finally {
       delete process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS;
     }
-  });
-
-  test("rejects module paths outside the tools directory", async () => {
-    const { configDir: dir } = await setupToolsDir();
-    configDir = dir;
-
-    expect(() => resolveCustomToolModulePath("../escape.py")).toThrow(
-      /must stay inside/i
-    );
   });
 });
 

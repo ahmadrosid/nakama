@@ -1,8 +1,5 @@
 import type { AgentTodo } from "@nakama/core/contract";
-import {
-  renderTelegramPlainText,
-  splitTelegramRichChunks,
-} from "@nakama/core/telegram-rich-text";
+import { renderTelegramPlainText } from "@nakama/core/telegram-rich-text";
 
 export function prepareTelegramReply(text: string): string {
   return text.trim();
@@ -10,60 +7,6 @@ export function prepareTelegramReply(text: string): string {
 
 export function prepareTelegramFallbackReply(text: string): string {
   return renderTelegramPlainText(text);
-}
-
-export function splitIntoChatBubbles(text: string, maxChars = 400): string[] {
-  const trimmed = prepareTelegramReply(text);
-
-  if (!trimmed) {
-    return [];
-  }
-
-  if (trimmed.length <= maxChars) {
-    return splitTelegramRichChunks(trimmed);
-  }
-
-  const paragraphs = trimmed
-    .split(/\n\n+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  const merged: string[] = [];
-  let current = "";
-
-  for (const paragraph of paragraphs) {
-    if (paragraph.length > maxChars) {
-      if (current) {
-        merged.push(current);
-        current = "";
-      }
-
-      for (const chunk of splitLongParagraph(paragraph, maxChars)) {
-        merged.push(chunk);
-      }
-
-      continue;
-    }
-
-    const candidate = current ? `${current}\n\n${paragraph}` : paragraph;
-
-    if (candidate.length <= maxChars) {
-      current = candidate;
-      continue;
-    }
-
-    if (current) {
-      merged.push(current);
-    }
-
-    current = paragraph;
-  }
-
-  if (current) {
-    merged.push(current);
-  }
-
-  return merged.flatMap((bubble) => splitTelegramRichChunks(bubble));
 }
 
 function splitLongParagraph(paragraph: string, maxChars: number): string[] {

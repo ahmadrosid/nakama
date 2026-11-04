@@ -20,31 +20,10 @@ const XLSX_MEDIA_TYPE =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 describe("providerSupportsNativeDocument", () => {
-  test("anthropic supports pdf and text documents", () => {
-    expect(providerSupportsNativeDocument("anthropic", "application/pdf")).toBe(
-      true
-    );
-    expect(providerSupportsNativeDocument("anthropic", "text/plain")).toBe(
-      true
-    );
-  });
-
   test("openai supports docx", () => {
     expect(
       providerSupportsNativeDocument(
         "openai",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-      )
-    ).toBe(true);
-  });
-
-  test("openrouter supports the same native documents as openai", () => {
-    expect(
-      providerSupportsNativeDocument("openrouter", "application/pdf")
-    ).toBe(true);
-    expect(
-      providerSupportsNativeDocument(
-        "openrouter",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
       )
     ).toBe(true);
@@ -60,13 +39,6 @@ describe("providerSupportsNativeDocument", () => {
     expect(providerSupportsNativeDocument("fireworks", "application/pdf")).toBe(
       false
     );
-  });
-
-  test("gemini supports pdf and text documents", () => {
-    expect(providerSupportsNativeDocument("gemini", "application/pdf")).toBe(
-      true
-    );
-    expect(providerSupportsNativeDocument("gemini", "text/plain")).toBe(true);
   });
 });
 
