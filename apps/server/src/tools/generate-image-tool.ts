@@ -2,12 +2,14 @@ import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   type ChatgptOAuthCredentials,
+  findProviderInstance,
   getProfileSoulDir,
   inferArtifactMimeType,
   MAX_IMAGE_BYTES,
   NakamaApiError,
   type ProviderInstance,
   pathExists,
+  readChatgptOAuthFromInstance,
   type ToolContext,
   type ToolDefinition,
   type UserConfig,
@@ -206,6 +208,14 @@ export async function runGenerateImageTool(
       baseUrl: selection.baseUrl,
       ...(selection.chatgptOAuth && {
         chatgpt: {
+          getOAuth: () => {
+            const latest = findProviderInstance(
+              deps.getUserConfig(),
+              instanceId
+            );
+
+            return latest ? readChatgptOAuthFromInstance(latest) : null;
+          },
           oauth: selection.chatgptOAuth,
           onTokenRefresh: async (oauth: ChatgptOAuthCredentials) => {
             await deps.onChatgptTokenRefresh?.(instanceId, oauth);

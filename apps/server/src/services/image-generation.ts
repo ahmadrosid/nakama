@@ -1,18 +1,11 @@
 import {
   type ChatgptOAuthCredentials,
-  chatgptOAuthNeedsRefresh,
   findProviderInstance,
-  isChatgptProviderConnected,
   NakamaApiError,
   normalizeBaseUrl,
   type ProviderInstance,
-  readChatgptOAuthFromInstance,
   type UserConfig,
 } from "@nakama/core";
-import {
-  CHATGPT_CODEX_BASE_URL,
-  refreshChatgptOAuthToken,
-} from "../providers/chatgpt/oauth";
 import { isCompatibleModelId } from "../providers/compatible-models";
 import { readApiKeyForInstance } from "../providers/create";
 import {
@@ -21,7 +14,10 @@ import {
   isAllowedImageGenerationSelection,
   modelSupportsImageGeneration,
 } from "../providers/models";
-import { buildProviderHttpError } from "../providers/shared";
+import {
+  generateImageWithChatgpt,
+  resolveChatgptImageGenerationSelection,
+} from "./image-generation-chatgpt";
 import { decodeStoredModelSelection } from "./provider-instance-helpers";
 
 export const IMAGE_MODEL_REQUIRED_MESSAGE =
@@ -81,6 +77,8 @@ export interface GenerateImageInput {
    * `image_generation` tool on the Codex Responses backend.
    */
   chatgpt?: {
+    /** The saved tokens now, which another call may have rotated. */
+    getOAuth?: () => ChatgptOAuthCredentials | null;
     oauth: ChatgptOAuthCredentials;
     onTokenRefresh?: (oauth: ChatgptOAuthCredentials) => Promise<void>;
   };
@@ -297,35 +295,7 @@ function resolveCompatibleImageGenerationSelection(
   };
 }
 
-function resolveChatgptImageGenerationSelection(
-  instance: ProviderInstance,
-  modelId: string,
-  selection: string
-): ResolvedImageGenerationSelection {
-  const oauth = isChatgptProviderConnected(instance)
-    ? readChatgptOAuthFromInstance(instance)
-    : null;
-
-  const model = modelId.trim();
-
-  if (!(oauth && model)) {
-    throw new NakamaApiError(
-      `ChatGPT provider "${instance.label}" is not connected. Reconnect in Settings → AI Providers (/settings/providers).`,
-      400
-    );
-  }
-
-  return {
-    apiKey: oauth.accessToken,
-    baseUrl: CHATGPT_CODEX_BASE_URL,
-    chatgptOAuth: oauth,
-    instance,
-    model,
-    selection,
-  };
-}
-
-function imageGenerationDeadline(signal: AbortSignal | undefined) {
+export function imageGenerationDeadline(signal: AbortSignal | undefined) {
   const deadline = AbortSignal.timeout(IMAGE_GENERATION_TIMEOUT_MS);
 
   return {
@@ -435,185 +405,7 @@ export async function generateImageWithOpenAI(
   return result;
 }
 
-const CHATGPT_SIGN_IN_EXPIRED_MESSAGE =
-  "ChatGPT sign-in expired. Reconnect in Settings → AI Providers (/settings/providers).";
-
-const CHATGPT_IMAGE_INSTRUCTIONS =
-  "Generate the image the user describes. Call the image_generation tool once.";
-
-/**
- * Peak memory: the whole SSE body (~2 MB of base64 for one image) is held
- * before decode, so a call peaks near 2x the image as text.
- */
-async function generateImageWithChatgpt(
-  input: GenerateImageInput,
-  chatgpt: NonNullable<GenerateImageInput["chatgpt"]>,
-  prompt: string
-): Promise<GenerateImageResult> {
-  const model = input.model?.trim();
-
-  if (!model) {
-    throw new NakamaApiError("Image generation model is required.", 400);
-  }
-
-  const size = normalizeImageGenerationSize(input.size);
-
-  const refresh = async (refreshToken: string) => {
-    const next = await refreshChatgptOAuthToken(refreshToken);
-    await chatgpt.onTokenRefresh?.(next);
-
-    return next;
-  };
-
-  let oauth = chatgptOAuthNeedsRefresh(chatgpt.oauth)
-    ? await refresh(chatgpt.oauth.refreshToken)
-    : chatgpt.oauth;
-
-  const { rethrowTimeout, signal } = imageGenerationDeadline(input.signal);
-
-  const requestBody = JSON.stringify({
-    input: [{ content: [{ text: prompt, type: "input_text" }], role: "user" }],
-    instructions: CHATGPT_IMAGE_INSTRUCTIONS,
-    model,
-    store: false,
-    // Codex rejects non-streaming /responses calls.
-    stream: true,
-    tool_choice: { type: "image_generation" },
-    tools: [{ output_format: "png", size, type: "image_generation" }],
-  });
-
-  const postResponses = (credentials: ChatgptOAuthCredentials) =>
-    fetch(`${CHATGPT_CODEX_BASE_URL}/responses`, {
-      body: requestBody,
-      headers: {
-        Accept: "text/event-stream",
-        Authorization: `Bearer ${credentials.accessToken}`,
-        "ChatGPT-Account-ID": credentials.accountId,
-        "Content-Type": "application/json",
-        "OpenAI-Beta": "responses=v1",
-        originator: "nakama",
-      },
-      method: "POST",
-      signal,
-    }).catch(rethrowTimeout);
-
-  let response = await postResponses(oauth);
-
-  // The upstream can reject a token before its stored expiry. Refresh once.
-  if (response.status === 401) {
-    await response.body?.cancel();
-
-    try {
-      oauth = await refresh(oauth.refreshToken);
-    } catch {
-      throw new NakamaApiError(CHATGPT_SIGN_IN_EXPIRED_MESSAGE, 400);
-    }
-
-    response = await postResponses(oauth);
-  }
-
-  if (!response.ok) {
-    const body = await response.text().catch(rethrowTimeout);
-    throw buildProviderHttpError(
-      "ChatGPT image generation",
-      response.status,
-      body
-    );
-  }
-
-  const image = parseChatgptImageStream(
-    await response.text().catch(rethrowTimeout)
-  );
-
-  if (!image.b64) {
-    throw new NakamaApiError("Image generation returned no image data.", 502);
-  }
-
-  const result: GenerateImageResult = {
-    data: decodeImageBase64(image.b64),
-    mediaType: imageMediaType(image.outputFormat),
-    model,
-    // The hosted tool treats size as a hint; report what came back.
-    size: image.size ?? size,
-    usage: resolveImageGenerationTokens(prompt, size, image.usage),
-  };
-
-  if (image.revisedPrompt) {
-    result.revisedPrompt = image.revisedPrompt;
-  }
-
-  return result;
-}
-
-interface ChatgptImageStreamResult {
-  b64?: string;
-  outputFormat?: string;
-  revisedPrompt?: string;
-  size?: string;
-  usage?: { input_tokens?: number; output_tokens?: number };
-}
-
-function parseChatgptImageStream(text: string): ChatgptImageStreamResult {
-  const result: ChatgptImageStreamResult = {};
-
-  for (const line of text.split("\n")) {
-    if (!line.startsWith("data: ")) {
-      continue;
-    }
-
-    let event: Map<string, unknown> | undefined;
-
-    try {
-      event = readRecord(JSON.parse(line.slice("data: ".length)));
-    } catch {
-      continue;
-    }
-
-    const type = readString(event?.get("type"));
-
-    if (type === "error" || type === "response.failed") {
-      const response = readRecord(event?.get("response"));
-      const error = readRecord(event?.get("error") ?? response?.get("error"));
-
-      const message =
-        readString(error?.get("message")) ?? readString(event?.get("message"));
-
-      throw new NakamaApiError(
-        `Image generation failed: ${message ?? "the provider returned an error."}`,
-        502
-      );
-    }
-
-    if (type === "response.output_item.done") {
-      const item = readRecord(event?.get("item"));
-
-      if (readString(item?.get("type")) === "image_generation_call") {
-        result.b64 = readString(item?.get("result"))?.trim() || undefined;
-        result.outputFormat = readString(item?.get("output_format"));
-        result.revisedPrompt =
-          readString(item?.get("revised_prompt"))?.trim() || undefined;
-        result.size = readString(item?.get("size"));
-      }
-    }
-
-    if (type === "response.completed") {
-      const response = readRecord(event?.get("response"));
-      const toolUsage = readRecord(response?.get("tool_usage"));
-      const imageUsage = readRecord(toolUsage?.get("image_gen"));
-
-      if (imageUsage) {
-        result.usage = {
-          input_tokens: readNumber(imageUsage.get("input_tokens")),
-          output_tokens: readNumber(imageUsage.get("output_tokens")),
-        };
-      }
-    }
-  }
-
-  return result;
-}
-
-function decodeImageBase64(b64: string): Uint8Array {
+export function decodeImageBase64(b64: string): Uint8Array {
   let bytes: Uint8Array;
 
   try {
@@ -635,7 +427,7 @@ function decodeImageBase64(b64: string): Uint8Array {
   return bytes;
 }
 
-function imageMediaType(outputFormat: string | undefined): string {
+export function imageMediaType(outputFormat: string | undefined): string {
   if (outputFormat === "jpeg") {
     return "image/jpeg";
   }
@@ -669,7 +461,7 @@ function parseOpenAIImageResponse<T>(input: T): OpenAIImageResponse {
   };
 }
 
-function readRecord<T>(value: T): Map<string, unknown> | undefined {
+export function readRecord<T>(value: T): Map<string, unknown> | undefined {
   if (!(value instanceof Object)) {
     return;
   }
@@ -677,14 +469,14 @@ function readRecord<T>(value: T): Map<string, unknown> | undefined {
   return new Map(Object.entries(value));
 }
 
-function readString<T>(value: T): string | undefined {
+export function readString<T>(value: T): string | undefined {
   // SAFETY: The object tag check confirms the value uses the string representation.
   return Object.prototype.toString.call(value) === "[object String]"
     ? (value as T & string)
     : undefined;
 }
 
-function readNumber<T>(value: T): number | undefined {
+export function readNumber<T>(value: T): number | undefined {
   // SAFETY: The tag and finite checks confirm the value is a valid number.
   return Object.prototype.toString.call(value) === "[object Number]" &&
     Number.isFinite(value)

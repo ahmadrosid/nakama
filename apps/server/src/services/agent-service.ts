@@ -1125,6 +1125,14 @@ export class AgentService {
       baseUrl: selection.baseUrl,
       ...(selection.chatgptOAuth && {
         chatgpt: {
+          getOAuth: () => {
+            const latest = findProviderInstance(
+              this.userConfig,
+              selection.instance.id
+            );
+
+            return latest ? readChatgptOAuthFromInstance(latest) : null;
+          },
           oauth: selection.chatgptOAuth,
           onTokenRefresh: (oauth) =>
             this.persistChatgptOAuth(selection.instance.id, oauth),

@@ -32,6 +32,16 @@ const chatgptConfig = (overrides?: Partial<UserConfig>): UserConfig => ({
   ...overrides,
 });
 
+function tokenWithAccount(): string {
+  const claims = Buffer.from(
+    JSON.stringify({
+      "https://api.openai.com/auth": { chatgpt_account_id: "acct-1" },
+    })
+  ).toString("base64url");
+
+  return `h.${claims}.s`;
+}
+
 function sseBody(events: unknown[]): string {
   return events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("");
 }
@@ -329,6 +339,147 @@ describe("generateImageWithOpenAI on a ChatGPT subscription", () => {
           prompt: "a cat",
         })
       ).rejects.toThrow(NakamaApiError);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("asks to reconnect when the refresh before the call fails", async () => {
+    const originalFetch = globalThis.fetch;
+    // SAFETY: The test fixture matches the contract used by this test.
+    globalThis.fetch = (async (_input: RequestInfo | URL) =>
+      new Response('{"error":"invalid_grant"}', {
+        status: 400,
+      })) as typeof fetch;
+
+    try {
+      await expect(
+        generateImageWithOpenAI({
+          apiKey: chatgptOAuth.accessToken,
+          chatgpt: {
+            oauth: {
+              ...chatgptOAuth,
+              expiresAt: "2000-01-01T00:00:00.000Z",
+              refreshToken: "dead-before-call",
+            },
+          },
+          model: "gpt-6-sol",
+          prompt: "a cat",
+        })
+      ).rejects.toMatchObject({ status: 400 });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("keeps a failed token save apart from an expired sign-in", async () => {
+    const originalFetch = globalThis.fetch;
+    // SAFETY: The test fixture matches the contract used by this test.
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).includes("/oauth/token")) {
+        return Response.json({
+          access_token: tokenWithAccount(),
+          expires_in: 3600,
+          refresh_token: "saved-fails-refresh",
+        });
+      }
+
+      return new Response("", { status: 401 });
+    }) as typeof fetch;
+
+    const saveError = new Error("disk full");
+
+    try {
+      await expect(
+        generateImageWithOpenAI({
+          apiKey: chatgptOAuth.accessToken,
+          chatgpt: {
+            oauth: { ...chatgptOAuth, refreshToken: "save-fails" },
+            onTokenRefresh: () => Promise.reject(saveError),
+          },
+          model: "gpt-6-sol",
+          prompt: "a cat",
+        })
+      ).rejects.toBe(saveError);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("uses tokens another call rotated instead of redeeming a spent one", async () => {
+    let refreshRequests = 0;
+    const usedTokens: string[] = [];
+    const originalFetch = globalThis.fetch;
+    // SAFETY: The test fixture matches the contract used by this test.
+    globalThis.fetch = (async (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ) => {
+      if (String(input).includes("/oauth/token")) {
+        refreshRequests++;
+
+        return new Response(null, { status: 400 });
+      }
+
+      const token = new Headers(init?.headers).get("Authorization") ?? "";
+      usedTokens.push(token);
+
+      return token === "Bearer chatgpt-access"
+        ? new Response("", { status: 401 })
+        : new Response(sseBody(chatgptImageEvents), { status: 200 });
+    }) as typeof fetch;
+
+    try {
+      const result = await generateImageWithOpenAI({
+        apiKey: chatgptOAuth.accessToken,
+        chatgpt: {
+          getOAuth: () => ({
+            ...chatgptOAuth,
+            accessToken: "rotated-access",
+            refreshToken: "rotated-refresh",
+          }),
+          oauth: chatgptOAuth,
+        },
+        model: "gpt-6-sol",
+        prompt: "a cat",
+      });
+
+      expect(Buffer.from(result.data).toString()).toBe("png-bytes");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(refreshRequests).toBe(0);
+    expect(usedTokens).toEqual([
+      "Bearer chatgpt-access",
+      "Bearer rotated-access",
+    ]);
+  });
+
+  test("stops waiting on a stalled token refresh when the turn stops", async () => {
+    const originalFetch = globalThis.fetch;
+    // SAFETY: The test fixture matches the contract used by this test.
+    globalThis.fetch = ((_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Promise<Response>(() => undefined)) as typeof fetch;
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 20);
+
+    try {
+      await expect(
+        generateImageWithOpenAI({
+          apiKey: chatgptOAuth.accessToken,
+          chatgpt: {
+            oauth: {
+              ...chatgptOAuth,
+              expiresAt: "2000-01-01T00:00:00.000Z",
+              refreshToken: "stalled-refresh",
+            },
+          },
+          model: "gpt-6-sol",
+          prompt: "a cat",
+          signal: controller.signal,
+        })
+      ).rejects.toThrow();
     } finally {
       globalThis.fetch = originalFetch;
     }
