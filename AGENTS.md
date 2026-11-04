@@ -90,6 +90,7 @@ Read the map before you change that area:
 |---|---|
 | System prompt, soul, tools, tool execution, workspace paths | [`packages/core/AGENTS.md`](./packages/core/AGENTS.md) |
 | Server routes, middleware, multi-tenancy, org context | [`apps/server/AGENTS.md`](./apps/server/AGENTS.md) |
+| CLI terminal UI | [`apps/cli/AGENTS.md`](./apps/cli/AGENTS.md) |
 | User docs (`docs/website`) | [`docs/website/AGENTS.md`](./docs/website/AGENTS.md) |
 
 Don't use compound engineering skills!
