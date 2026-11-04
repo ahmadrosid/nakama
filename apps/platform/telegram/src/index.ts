@@ -186,6 +186,7 @@ async function startIdentity(
     orgStore,
     sessionStore,
   });
+
   const runner = runTelegramBot(bot);
 
   console.log(`Bot @${bot.botInfo.username} is listening for ${label}.`);

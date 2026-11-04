@@ -49,19 +49,23 @@ describe("runTelegramBot", () => {
   test("starts later updates while an earlier message is still running", async () => {
     const pending = <T>() => {
       let resolve!: (value: T | PromiseLike<T>) => void;
+
       const promise = new Promise<T>((done) => {
         resolve = done;
       });
 
       return { promise, resolve };
     };
+
     const longTurn = pending<void>();
     const laterUpdatesStarted = pending<void>();
     const seen: string[] = [];
+
     const updates = [
       [message(1, 1, "long job")],
       [message(2, 1, "/stop"), message(3, 2, "hello from chat 2")],
     ];
+
     const fetch = async (url: string | URL) => {
       const result = String(url).endsWith("/getUpdates")
         ? (updates.shift() ?? [])
@@ -73,6 +77,7 @@ describe("runTelegramBot", () => {
 
       return new Response(JSON.stringify({ ok: true, result }));
     };
+
     const bot = new Bot(TOKEN, {
       botInfo: BOT_INFO,
       client: { fetch },
@@ -98,6 +103,7 @@ describe("runTelegramBot", () => {
         const timer = setTimeout(() => resolve(false), 1500);
         void laterUpdatesStarted.promise.then(() => clearTimeout(timer));
       });
+
       const started = await Promise.race([
         laterUpdatesStarted.promise.then(() => true),
         timeout,

@@ -49,13 +49,16 @@ export async function createBot(
   return bot;
 }
 
-export function runTelegramBot(bot: Bot): {
+export interface TelegramBotRunner {
   running: Promise<void>;
   stop: () => Promise<void>;
-} {
+}
+
+export function runTelegramBot(bot: Bot): TelegramBotRunner {
   const runner = run(bot, {
     sink: { concurrency: MAX_CONCURRENT_UPDATES },
   });
+
   const running = runner.task();
 
   if (!running) {
