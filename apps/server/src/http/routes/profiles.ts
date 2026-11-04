@@ -37,6 +37,7 @@ import { listAcpAgentPresets } from "../../providers/acp/acp-agent-presets";
 import { ArtifactShareService } from "../../services/artifact-share-service";
 import type { ServerOptions } from "../context";
 import {
+  artifactCreatorScopeFromContext,
   requireActiveOrgIdFromContext,
   requireOrgAdmin,
   requireOrgAdminOrPlatformAdminFromContext,
@@ -87,39 +88,8 @@ export function registerProfileRoutes(
     return requireProfileManage(c);
   };
 
-  /**
-   * Null for an owner or admin, who sees every artifact. Any other org member
-   * gets their own user id back and sees only the artifacts they made (#1816).
-   */
-  const artifactCreatorScope = async (
-    c: Context<AppEnv>
-  ): Promise<string | null> => {
-    try {
-      await requireProfileManage(c);
-
-      return null;
-    } catch (error) {
-      if (!(error instanceof NakamaApiError && error.status === 403)) {
-        throw error;
-      }
-
-      const auth = requireOrgMemberFromContext(c);
-
-      // Same answer as the manage guard for a missing agent: no probing ids.
-      const found = await agent
-        .getProfile(
-          requireActiveOrgIdFromContext(c),
-          decodeURIComponent(c.req.param("profileId") ?? "")
-        )
-        .catch(() => null);
-
-      if (!found) {
-        throw error;
-      }
-
-      return auth.user.id;
-    }
-  };
+  const artifactCreatorScope = (c: Context<AppEnv>) =>
+    artifactCreatorScopeFromContext(c, agent);
 
   const artifactShares =
     options.databaseAdapter && options.authService
@@ -1666,6 +1636,7 @@ export function registerProfileRoutes(
   });
 
   app.get("/v1/profiles/:profileId/artifacts/content", async (c) => {
+    const createdByUserId = await artifactCreatorScope(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const artifactPath = c.req.query("path");
@@ -1684,7 +1655,8 @@ export function registerProfileRoutes(
       {
         headOnly: c.req.method === "HEAD" || undefined,
         render,
-      }
+      },
+      createdByUserId ?? undefined
     );
 
     const downloadName = artifactPath.split("/").pop() ?? "artifact";
@@ -1699,7 +1671,7 @@ export function registerProfileRoutes(
   });
 
   app.put("/v1/profiles/:profileId/artifacts/content", async (c) => {
-    requireOrgMemberFromContext(c);
+    const createdByUserId = await artifactCreatorScope(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const artifactPath = c.req.query("path");
@@ -1717,7 +1689,8 @@ export function registerProfileRoutes(
       orgId,
       profileId,
       artifactPath,
-      body.content
+      body.content,
+      createdByUserId ?? undefined
     );
 
     await artifactShares?.refreshArtifactShareSnapshot({
