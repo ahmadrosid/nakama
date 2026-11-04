@@ -7,6 +7,10 @@ import { defineConfig } from "vite";
 const root = fileURLToPath(new URL(".", import.meta.url));
 
 const serverUrl = process.env.NAKAMA_SERVER_URL ?? "http://127.0.0.1:4310";
+const publicWebUrl = process.env.NAKAMA_WEB_PUBLIC_URL?.trim();
+const allowedHosts = publicWebUrl
+  ? [new URL(publicWebUrl).hostname]
+  : undefined;
 
 export default defineConfig({
   // `scripts/build-sw.ts` reads the manifest to build the service worker's
@@ -51,6 +55,7 @@ export default defineConfig({
     },
   },
   server: {
+    allowedHosts,
     port: 3003,
     proxy: {
       "/artifact-frame": serverUrl,
