@@ -1,6 +1,6 @@
 {
   "name": "nakama",
-  "version": "0.4.69",
+  "version": "0.4.70",
   "private": true,
   "type": "module",
   "workspaces": [
