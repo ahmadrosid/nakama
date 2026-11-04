@@ -101,37 +101,17 @@ export interface AcpAgentLaunchCommand {
   shell: boolean;
 }
 
-export interface AcpAgentHost {
-  arch: string;
-  env: NodeJS.ProcessEnv;
-  homeDir: string;
-  platform: NodeJS.Platform;
-  /** Absolute path of a package's `package.json`, or null when it is not installed. */
-  resolvePackage: (packageName: string) => string | null;
-  which: (command: string, options: { PATH: string }) => string | null;
+/** Only for tests: the server's own values are the default. */
+export interface AcpAgentLaunchOptions {
+  env?: NodeJS.ProcessEnv;
+  platform?: NodeJS.Platform;
 }
-
-function resolveInstalledPackage(packageName: string): string | null {
-  try {
-    return createRequire(import.meta.url).resolve(
-      `${packageName}/package.json`
-    );
-  } catch {
-    return null;
-  }
-}
-
-const SERVER_HOST: AcpAgentHost = {
-  arch: process.arch,
-  env: process.env,
-  homeDir: homedir(),
-  platform: process.platform,
-  resolvePackage: resolveInstalledPackage,
-  which: (command, options) => Bun.which(command, options),
-};
 
 /** Windows env names ignore case (`Path`); Linux and macOS names do not. */
-function readEnv(host: AcpAgentHost, name: string): string | undefined {
+function readEnv(
+  host: Required<AcpAgentLaunchOptions>,
+  name: string
+): string | undefined {
   if (host.platform !== "win32") {
     return host.env[name];
   }
@@ -148,18 +128,25 @@ function readEnv(host: AcpAgentHost, name: string): string | undefined {
  * Its own bin is a stub until postinstall runs, and Nakama installs with
  * `--ignore-scripts`, so the platform package is the reliable path.
  */
-function findOpencodePackageBinary(host: AcpAgentHost): string | null {
-  const os = host.platform === "win32" ? "windows" : host.platform;
-  const binary = host.platform === "win32" ? "opencode.exe" : "opencode";
-  const base = `opencode-${os}-${host.arch}`;
+function findOpencodePackageBinary(platform: NodeJS.Platform): string | null {
+  const os = platform === "win32" ? "windows" : platform;
+  const binary = platform === "win32" ? "opencode.exe" : "opencode";
+  const base = `opencode-${os}-${process.arch}`;
+  const require = createRequire(import.meta.url);
 
   for (const suffix of ["", "-baseline", "-musl", "-baseline-musl"]) {
-    const manifest = host.resolvePackage(`${base}${suffix}`);
+    let manifest: string;
 
-    const path = manifest ? join(dirname(manifest), "bin", binary) : null;
+    try {
+      manifest = require.resolve(`${base}${suffix}/package.json`);
+    } catch {
+      continue;
+    }
+
+    const path = join(dirname(manifest), "bin", binary);
 
     // A half-installed package has no binary. Fall through to PATH then.
-    if (path && existsSync(path)) {
+    if (existsSync(path)) {
       return path;
     }
   }
@@ -172,15 +159,20 @@ function findOpencodePackageBinary(host: AcpAgentHost): string | null {
  * server with a minimal GUI PATH, and Docker keeps `bun add -g` binaries in
  * BUN_INSTALL_BIN.
  */
-function opencodeSearchPath(host: AcpAgentHost): string {
+function agentSearchPath(host: Required<AcpAgentLaunchOptions>): string {
   const sep = host.platform === "win32" ? ";" : ":";
+
+  const home =
+    readEnv(host, host.platform === "win32" ? "USERPROFILE" : "HOME") ??
+    homedir();
+
   const appData = readEnv(host, "APPDATA");
 
   const extras = [
     readEnv(host, "BUN_INSTALL_BIN"),
-    join(host.homeDir, ".bun", "bin"),
-    join(host.homeDir, ".opencode", "bin"),
-    // npm's global bin on Windows, where `npm i -g` puts `opencode.cmd`.
+    join(home, ".bun", "bin"),
+    join(home, ".opencode", "bin"),
+    // npm's global bin on Windows, where `npm i -g` puts `.cmd` shims.
     ...(host.platform === "win32"
       ? [appData ? join(appData, "npm") : undefined]
       : ["/opt/homebrew/bin", "/usr/local/bin"]),
@@ -191,33 +183,45 @@ function opencodeSearchPath(host: AcpAgentHost): string {
     .join(sep);
 }
 
-function findOpencode(host: AcpAgentHost): string | null {
-  return (
-    readEnv(host, "OPENCODE_PATH") ||
-    findOpencodePackageBinary(host) ||
-    host.which("opencode", { PATH: opencodeSearchPath(host) })
-  );
+function isBareCommand(command: string): boolean {
+  return !/[\\/]/.test(command);
 }
 
 /**
  * Turns a profile's saved agent into the command to spawn. Bundled agents
- * already carry absolute paths. OpenCode is found here, at start time, so the
- * preset stays the same whether or not OpenCode is installed yet.
+ * already carry absolute paths. A bare command (`opencode`, `gemini`) is found
+ * here, at start time, so the preset stays the same whether or not the agent
+ * is installed yet.
  */
 export function resolveAcpAgentLaunch(
   agent: AcpAgentConfig,
-  host: AcpAgentHost = SERVER_HOST
+  options: AcpAgentLaunchOptions = {}
 ): AcpAgentLaunchCommand {
-  if (agent.command !== OPENCODE_AGENT.agent.command) {
-    return { args: agent.args, command: agent.command, shell: false };
-  }
+  const host: Required<AcpAgentLaunchOptions> = {
+    env: options.env ?? process.env,
+    platform: options.platform ?? process.platform,
+  };
 
-  const found = findOpencode(host);
+  const isOpencode = agent.command === OPENCODE_AGENT.agent.command;
+
+  const found =
+    (isOpencode
+      ? readEnv(host, "OPENCODE_PATH") ||
+        findOpencodePackageBinary(host.platform)
+      : null) ||
+    (isBareCommand(agent.command)
+      ? Bun.which(agent.command, { PATH: agentSearchPath(host) })
+      : agent.command);
 
   if (!found) {
-    throw new Error(
-      "OpenCode is not installed on the Nakama server. Install opencode-ai (OpenCode 0.15.10 or later), or set OPENCODE_PATH to the opencode binary."
-    );
+    if (isOpencode) {
+      throw new Error(
+        "OpenCode is not installed on the Nakama server. Install opencode-ai (OpenCode 0.15.10 or later), or set OPENCODE_PATH to the opencode binary."
+      );
+    }
+
+    // Spawn fails with ENOENT, and the start error names the command.
+    return { args: agent.args, command: agent.command, shell: false };
   }
 
   if (host.platform === "win32" && /\.(?:cmd|bat)$/i.test(found)) {

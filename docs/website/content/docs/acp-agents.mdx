@@ -51,6 +51,8 @@ OpenCode needs version 0.15.10 or later, the first release with `opencode acp`. 
 2. The OpenCode binary in the server's `node_modules`.
 3. The server `PATH`, plus `~/.bun/bin`, `~/.opencode/bin`, `/opt/homebrew/bin`, and `/usr/local/bin`. On Windows, Nakama also checks the npm global folder.
 
+Nakama uses the same search folders (step 3) for every agent that you save as a command name only, such as `gemini`.
+
 If Nakama cannot find OpenCode, the chat shows an error. Install OpenCode with `npm i -g opencode-ai` or `bun add -g opencode-ai`, or set `OPENCODE_PATH`. Follow the selected agent's instructions for authentication and model access.
 
 An ACP agent uses the profile's workspace as its working directory. Nakama gives it access only to tools assigned to that profile. Review those tools before you enable an ACP agent for a profile.

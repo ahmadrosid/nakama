@@ -1,37 +1,28 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  type AcpAgentHost,
   listAcpAgentPresets,
   resolveAcpAgentLaunch,
 } from "./acp-agent-presets";
 
 const OPENCODE = { args: ["acp"], command: "opencode" };
 
-/** A platform package folder on disk; returns the path of its package.json. */
-function opencodePackage(binary: string | null): string {
-  const dir = mkdtempSync(join(tmpdir(), "opencode-pkg-"));
+/** A folder with one executable in it, like a bin folder on PATH. */
+function binFolder(name: string): string {
+  const dir = mkdtempSync(join(tmpdir(), "acp-bin-"));
+  const file = join(dir, name);
 
-  if (binary) {
-    mkdirSync(join(dir, "bin"));
-    writeFileSync(join(dir, "bin", binary), "");
-  }
+  writeFileSync(file, "#!/bin/sh\n");
+  chmodSync(file, 0o755);
 
-  return join(dir, "package.json");
+  return dir;
 }
 
-function host(overrides: Partial<AcpAgentHost> = {}): AcpAgentHost {
-  return {
-    arch: "x64",
-    env: { PATH: "/usr/bin" },
-    homeDir: "/home/user",
-    platform: "linux",
-    resolvePackage: () => null,
-    which: () => null,
-    ...overrides,
-  };
+/** An env with no install folders of the test machine in it. */
+function cleanEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  return { HOME: mkdtempSync(join(tmpdir(), "acp-home-")), PATH: "", ...extra };
 }
 
 describe("ACP agent presets", () => {
@@ -57,24 +48,22 @@ describe("ACP agent presets", () => {
 });
 
 describe("ACP agent launch", () => {
-  test("runs a bundled agent as saved", () => {
+  test("runs an agent with a full path as saved", () => {
     const agent = { args: ["/app/entry.js"], command: "/usr/bin/bun" };
 
-    expect(resolveAcpAgentLaunch(agent, host())).toEqual({
+    expect(resolveAcpAgentLaunch(agent, { env: cleanEnv() })).toEqual({
       ...agent,
       shell: false,
     });
   });
 
   test("OPENCODE_PATH wins over every other location", () => {
-    const launch = resolveAcpAgentLaunch(
-      OPENCODE,
-      host({
-        env: { OPENCODE_PATH: "/custom/opencode", PATH: "/usr/bin" },
-        resolvePackage: () => "/nm/opencode-linux-x64/package.json",
-        which: () => "/usr/bin/opencode",
-      })
-    );
+    const launch = resolveAcpAgentLaunch(OPENCODE, {
+      env: cleanEnv({
+        BUN_INSTALL_BIN: binFolder("opencode"),
+        OPENCODE_PATH: "/custom/opencode",
+      }),
+    });
 
     expect(launch).toEqual({
       args: ["acp"],
@@ -83,111 +72,61 @@ describe("ACP agent launch", () => {
     });
   });
 
-  test("uses the platform package binary before PATH", () => {
-    const resolved: string[] = [];
-    const manifest = opencodePackage("opencode");
+  test.skipIf(process.platform === "win32")(
+    "finds OpenCode in BUN_INSTALL_BIN when PATH misses it",
+    () => {
+      const bin = binFolder("opencode");
 
-    const launch = resolveAcpAgentLaunch(
-      OPENCODE,
-      host({
-        arch: "arm64",
-        platform: "darwin",
-        resolvePackage: (name) => {
-          resolved.push(name);
+      const launch = resolveAcpAgentLaunch(OPENCODE, {
+        env: cleanEnv({ BUN_INSTALL_BIN: bin }),
+        platform: "linux",
+      });
 
-          return name === "opencode-darwin-arm64" ? manifest : null;
-        },
-        which: () => "/usr/bin/opencode",
-      })
-    );
+      expect(launch).toEqual({
+        args: ["acp"],
+        command: join(bin, "opencode"),
+        shell: false,
+      });
+    }
+  );
 
-    expect(resolved[0]).toBe("opencode-darwin-arm64");
-    expect(launch.command).toBe(join(manifest, "..", "bin", "opencode"));
-  });
+  test.skipIf(process.platform === "win32")(
+    "finds any bare-command agent in the extra install folders",
+    () => {
+      const bin = binFolder("gemini");
+      const agent = { args: ["--experimental-acp"], command: "gemini" };
 
-  test("skips a half-installed platform package and falls back to PATH", () => {
-    const launch = resolveAcpAgentLaunch(
-      OPENCODE,
-      host({
-        resolvePackage: () => opencodePackage(null),
-        which: () => "/usr/bin/opencode",
-      })
-    );
+      const launch = resolveAcpAgentLaunch(agent, {
+        env: cleanEnv({ BUN_INSTALL_BIN: bin }),
+        platform: "linux",
+      });
 
-    expect(launch.command).toBe("/usr/bin/opencode");
-  });
+      expect(launch.command).toBe(join(bin, "gemini"));
+      expect(launch.args).toEqual(["--experimental-acp"]);
+    }
+  );
 
-  test("on Linux, reads PATH by exact name only", () => {
-    let searched = "";
-    resolveAcpAgentLaunch(
-      OPENCODE,
-      host({
-        env: { Path: "/wrong" },
-        which: (_command, options) => {
-          searched = options.PATH;
+  test.skipIf(process.platform === "win32")(
+    "on Linux, reads PATH by exact name only",
+    () => {
+      const bin = binFolder("nakama-test-agent");
 
-          return "/usr/bin/opencode";
-        },
-      })
-    );
+      const launch = resolveAcpAgentLaunch(
+        { args: [], command: "nakama-test-agent" },
+        { env: cleanEnv({ Path: bin }), platform: "linux" }
+      );
 
-    expect(searched.split(":")).not.toContain("/wrong");
-  });
+      expect(launch.command).toBe("nakama-test-agent");
+    }
+  );
 
-  test("searches PATH plus BUN_INSTALL_BIN and the usual install folders", () => {
-    let searched = "";
-
-    const launch = resolveAcpAgentLaunch(
-      OPENCODE,
-      host({
-        env: { BUN_INSTALL_BIN: "/nakama/data/.bun/bin", PATH: "/usr/bin" },
-        which: (_command, options) => {
-          searched = options.PATH;
-
-          return "/nakama/data/.bun/bin/opencode";
-        },
-      })
-    );
-
-    expect(searched.split(":")).toEqual(
-      expect.arrayContaining([
-        "/usr/bin",
-        "/nakama/data/.bun/bin",
-        join("/home/user", ".opencode", "bin"),
-        "/opt/homebrew/bin",
-      ])
-    );
-    expect(launch.command).toBe("/nakama/data/.bun/bin/opencode");
-  });
-
-  test("on Windows, finds the windows package binary as an .exe and runs it directly", () => {
-    const manifest = opencodePackage("opencode.exe");
-
-    const launch = resolveAcpAgentLaunch(
-      OPENCODE,
-      host({
-        platform: "win32",
-        resolvePackage: (name) =>
-          name === "opencode-windows-x64" ? manifest : null,
-      })
-    );
-
-    expect(launch.shell).toBe(false);
-    expect(launch.command.endsWith("opencode.exe")).toBe(true);
-    expect(launch.args).toEqual(["acp"]);
-  });
-
-  test("on Windows, runs an npm .cmd shim through the shell with a quoted path", () => {
+  test("on Windows, runs a .cmd shim through the shell with a quoted path", () => {
     const shim = "C:\\Users\\Jo Doe\\AppData\\Roaming\\npm\\opencode.cmd";
 
-    const launch = resolveAcpAgentLaunch(
-      OPENCODE,
-      host({
-        env: { Path: "C:\\Windows" },
-        platform: "win32",
-        which: () => shim,
-      })
-    );
+    const launch = resolveAcpAgentLaunch(OPENCODE, {
+      env: { OPENCODE_PATH: shim },
+      platform: "win32",
+    });
 
     expect(launch).toEqual({
       args: [],
@@ -196,30 +135,23 @@ describe("ACP agent launch", () => {
     });
   });
 
-  test("on Windows, reads Path in any case and adds the npm global folder", () => {
-    let searched = "";
-    resolveAcpAgentLaunch(
-      OPENCODE,
-      host({
-        env: {
-          APPDATA: "C:\\Users\\jo\\AppData\\Roaming",
-          Path: "C:\\Windows",
-        },
-        platform: "win32",
-        which: (_command, options) => {
-          searched = options.PATH;
+  test("on Windows, runs an .exe directly", () => {
+    const exe = "C:\\tools\\opencode.exe";
 
-          return "C:\\bin\\opencode.exe";
-        },
-      })
-    );
+    const launch = resolveAcpAgentLaunch(OPENCODE, {
+      env: { OPENCODE_PATH: exe },
+      platform: "win32",
+    });
 
-    const entries = searched.split(";");
-    expect(entries[0]).toBe("C:\\Windows");
-    expect(entries).toContain(join("C:\\Users\\jo\\AppData\\Roaming", "npm"));
+    expect(launch).toEqual({ args: ["acp"], command: exe, shell: false });
   });
 
-  test("fails to start when OpenCode is nowhere on the server", () => {
-    expect(() => resolveAcpAgentLaunch(OPENCODE, host())).toThrow();
-  });
+  test.skipIf(process.platform === "win32")(
+    "fails to start when OpenCode is nowhere on the server",
+    () => {
+      expect(() =>
+        resolveAcpAgentLaunch(OPENCODE, { env: cleanEnv(), platform: "linux" })
+      ).toThrow();
+    }
+  );
 });
