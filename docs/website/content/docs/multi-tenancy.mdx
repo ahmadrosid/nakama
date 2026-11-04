@@ -128,6 +128,14 @@ When you install Nakama for the first time:
 3. That admin can invite more people
 4. More organizations can be created later if needed
 
+## Limit who can join
+
+An org admin can list email domains under **Who can join** in the members settings. Once the list has a domain, it applies to every new member: invites and direct adds both refuse an address outside it. A domain also allows its subdomains, so `acme.com` allows `jane@eng.acme.com`. With an empty list, any address is allowed.
+
+A team uses its own list and its parent organization's list. A new address must pass both. A person who is already in the parent organization can join the team when the team's own list allows them.
+
+A platform admin who is also an admin of the org can still add or invite an address outside the list, for example a contractor. An org admin who needs that asks a platform admin, or adds the domain first.
+
 ## Common examples
 
 Use separate organizations when you want clear separation between:

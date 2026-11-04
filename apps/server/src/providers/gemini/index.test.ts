@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { NakamaApiError } from "@nakama/core";
 import type { ProviderJsonRecord, ProviderJsonValue } from "../shared";
 import { asTestFetch } from "../test-helpers";
 import { createGeminiProvider } from "./index";
@@ -454,5 +455,66 @@ describe("createGeminiProvider", () => {
       expect(chunks).toEqual(["Hi"]);
       expect(thinking).toEqual(["Plan"]);
     });
+  });
+});
+
+describe("Gemini HTTP failures", () => {
+  const input = {
+    messages: [{ content: "hi", role: "user" as const }],
+    system: "",
+  };
+
+  function statusFetch(status: number, body: string) {
+    let calls = 0;
+
+    const fetchMock = async (_url: RequestInfo | URL, _init?: RequestInit) => {
+      calls += 1;
+
+      return new Response(body, {
+        headers: { "content-type": "text/plain" },
+        status,
+      });
+    };
+
+    return { calls: () => calls, fetchMock: asTestFetch(fetchMock) };
+  }
+
+  test("surfaces a 503 as the shared 502 the chat loop retries", async () => {
+    const provider = createGeminiProvider({ apiKey: "k", model: "m" });
+    const { fetchMock, calls } = statusFetch(503, "upstream exploded");
+
+    await withMockFetch(fetchMock, async () => {
+      const error = await provider.generateChat(input).then(
+        () => {
+          throw new Error("expected the provider call to reject");
+        },
+        (caught: Error) => caught
+      );
+
+      expect(error).toBeInstanceOf(NakamaApiError);
+      expect(error).toMatchObject({ status: 502 });
+      expect(error.message).toContain("(503)");
+    });
+
+    expect(calls()).toBe(1);
+  });
+
+  test("keeps a rejected api key at client status", async () => {
+    const provider = createGeminiProvider({ apiKey: "k", model: "m" });
+    const { fetchMock, calls } = statusFetch(401, "invalid api key");
+
+    await withMockFetch(fetchMock, async () => {
+      const error = await provider.generateChat(input).then(
+        () => {
+          throw new Error("expected the provider call to reject");
+        },
+        (caught: Error) => caught
+      );
+
+      expect(error).toBeInstanceOf(NakamaApiError);
+      expect(error).toMatchObject({ status: 400 });
+    });
+
+    expect(calls()).toBe(1);
   });
 });

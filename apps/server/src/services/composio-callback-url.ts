@@ -244,14 +244,14 @@ export async function persistWebPublicUrl(
 
   if (!(trimmed && isValidBaseUrl(trimmed))) {
     throw new NakamaApiError(
-      "webPublicUrl must be a valid http or https URL.",
+      "Public web URL must be a valid http or https URL.",
       400
     );
   }
 
   if (!isDeploymentOrigin(trimmed, request)) {
     throw new NakamaApiError(
-      "webPublicUrl must use this deployment's own origin. Set NAKAMA_WEB_PUBLIC_URL to serve the web app from another host.",
+      "Public web URL must use this deployment's own origin. Set NAKAMA_WEB_PUBLIC_URL to serve the web app from another host.",
       400
     );
   }

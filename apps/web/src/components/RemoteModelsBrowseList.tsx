@@ -36,7 +36,7 @@ export function RemoteModelsBrowseList({
   apiKey = "",
   provider,
   hostMode,
-  browseLabel = "endpoint",
+  browseLabel = "this endpoint",
   multiSelect,
   onAddMany,
 }: RemoteModelsBrowseListProps) {
@@ -115,7 +115,7 @@ export function RemoteModelsBrowseList({
   return (
     <CatalogModelsBrowseList<RemoteModelRow>
       className={className}
-      emptyMessage={`No models found on this ${browseLabel}.`}
+      emptyMessage={`No models found on ${browseLabel}.`}
       idleMessage="Enter a base URL before browsing models."
       multiSelect={multiSelect}
       onAddMany={onAddMany}
@@ -132,7 +132,7 @@ export function RemoteModelsBrowseList({
       status={({ filteredCount }) =>
         canFetch
           ? `${filteredCount} model${filteredCount === 1 ? "" : "s"} from ${browseLabel}`
-          : `Browse models from your ${browseLabel}`
+          : `Browse models from ${browseLabel}`
       }
     />
   );
