@@ -249,6 +249,7 @@ describe("WorkerManagerService", () => {
         pm_uptime: "1762225200000",
         status: "online",
       };
+
       const previous = new Map(
         [...Object.keys(identity), "cwd"].map((key) => [key, process.env[key]])
       );
@@ -261,8 +262,10 @@ describe("WorkerManagerService", () => {
 
         await pm2Service.startWorker("telegram");
 
+        // SAFETY: startWorker completes the mock's single start call.
         const pm2Options = (pm2Mock.start as ReturnType<typeof mock>).mock
           .calls[0][0];
+
         const pm2App = prepareAppConf({ cwd: projectRoot }, { ...pm2Options });
 
         expect(
@@ -278,8 +281,10 @@ describe("WorkerManagerService", () => {
 
         await localService.startWorker("telegram");
 
+        // SAFETY: startWorker completes the mock's single start call.
         const localOptions = (localMock.start as ReturnType<typeof mock>).mock
           .calls[0][0];
+
         const localApp = prepareAppConf(
           { cwd: projectRoot },
           { ...localOptions }

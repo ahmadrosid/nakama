@@ -146,6 +146,7 @@ function pm2StartOptions(): Pick<
       : Object.keys(process.env).filter(
           (key) => key.startsWith("pm_") || PM2_PROCESS_ENV_KEYS.has(key)
         );
+
   const options: Pick<
     WorkerStartOptions,
     "filter_env" | "shutdown_with_message"
