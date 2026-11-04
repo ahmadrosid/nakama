@@ -8,6 +8,7 @@ test("allows only the hostname from the public web URL", async () => {
 
   try {
     process.env.NAKAMA_WEB_PUBLIC_URL = "https://nakama.example.com:3003/app";
+
     const configured = await resolveConfig(
       { configFile, logLevel: "silent" },
       "serve"
@@ -16,6 +17,7 @@ test("allows only the hostname from the public web URL", async () => {
     expect(configured.server.allowedHosts).toEqual(["nakama.example.com"]);
 
     delete process.env.NAKAMA_WEB_PUBLIC_URL;
+
     const unset = await resolveConfig(
       { configFile, logLevel: "silent" },
       "serve"
