@@ -25,5 +25,5 @@
       ]
     }
   },
-  "include": ["src", "scripts/test-setup.ts"]
+  "include": ["src", "scripts/test-setup.ts", "vite.config.test.ts"]
 }

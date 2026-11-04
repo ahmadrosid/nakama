@@ -8,11 +8,24 @@ const root = fileURLToPath(new URL(".", import.meta.url));
 
 const serverUrl = process.env.NAKAMA_SERVER_URL ?? "http://127.0.0.1:4310";
 
-const publicWebUrl = process.env.NAKAMA_WEB_PUBLIC_URL?.trim();
+const publicWebUrl =
+  process.env.NAKAMA_WEB_PUBLIC_URL?.trim() ||
+  process.env.NAKAMA_PUBLIC_URL?.trim();
 
-const allowedHosts = publicWebUrl
-  ? [new URL(publicWebUrl).hostname]
-  : undefined;
+let allowedHosts: string[] | undefined;
+if (publicWebUrl) {
+  try {
+    const url = new URL(publicWebUrl);
+    if (!(url.hostname && ["http:", "https:"].includes(url.protocol))) {
+      throw new TypeError("Invalid public web URL");
+    }
+    allowedHosts = [url.hostname];
+  } catch {
+    console.warn(
+      "Public web URL must be an absolute HTTP(S) URL; Vite will use its default allowed hosts."
+    );
+  }
+}
 
 export default defineConfig({
   // `scripts/build-sw.ts` reads the manifest to build the service worker's

@@ -1,34 +1,69 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { resolveConfig } from "vite";
 
 const configFile = `${import.meta.dir}/vite.config.ts`;
 
-test("allows only the hostname from the public web URL", async () => {
-  const previous = process.env.NAKAMA_WEB_PUBLIC_URL;
+test("allows the configured public web host and keeps safe defaults", async () => {
+  const previousWebUrl = process.env.NAKAMA_WEB_PUBLIC_URL;
+  const previousPublicUrl = process.env.NAKAMA_PUBLIC_URL;
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
 
   try {
-    process.env.NAKAMA_WEB_PUBLIC_URL = "https://nakama.example.com:3003/app";
+    const cases = [
+      {
+        allowedHosts: ["nakama.example.com"],
+        publicUrl: "https://fallback.example.com",
+        webUrl: "https://nakama.example.com:3003/app",
+      },
+      {
+        allowedHosts: ["fallback.example.com"],
+        publicUrl: "https://fallback.example.com",
+        webUrl: undefined,
+      },
+      {
+        allowedHosts: [],
+        publicUrl: undefined,
+        webUrl: "nakama.example.com",
+      },
+      {
+        allowedHosts: [],
+        publicUrl: undefined,
+        webUrl: "file:///",
+      },
+      { allowedHosts: [], publicUrl: undefined, webUrl: undefined },
+    ];
 
-    const configured = await resolveConfig(
-      { configFile, logLevel: "silent" },
-      "serve"
-    );
+    for (const { webUrl, publicUrl, allowedHosts } of cases) {
+      if (webUrl === undefined) {
+        delete process.env.NAKAMA_WEB_PUBLIC_URL;
+      } else {
+        process.env.NAKAMA_WEB_PUBLIC_URL = webUrl;
+      }
+      if (publicUrl === undefined) {
+        delete process.env.NAKAMA_PUBLIC_URL;
+      } else {
+        process.env.NAKAMA_PUBLIC_URL = publicUrl;
+      }
 
-    expect(configured.server.allowedHosts).toEqual(["nakama.example.com"]);
+      const config = await resolveConfig(
+        { configFile, logLevel: "silent" },
+        "serve"
+      );
+      expect(config.server.allowedHosts).toEqual(allowedHosts);
+    }
 
-    delete process.env.NAKAMA_WEB_PUBLIC_URL;
-
-    const unset = await resolveConfig(
-      { configFile, logLevel: "silent" },
-      "serve"
-    );
-
-    expect(unset.server.allowedHosts).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(2);
   } finally {
-    if (previous === undefined) {
+    warn.mockRestore();
+    if (previousWebUrl === undefined) {
       delete process.env.NAKAMA_WEB_PUBLIC_URL;
     } else {
-      process.env.NAKAMA_WEB_PUBLIC_URL = previous;
+      process.env.NAKAMA_WEB_PUBLIC_URL = previousWebUrl;
+    }
+    if (previousPublicUrl === undefined) {
+      delete process.env.NAKAMA_PUBLIC_URL;
+    } else {
+      process.env.NAKAMA_PUBLIC_URL = previousPublicUrl;
     }
   }
 });
