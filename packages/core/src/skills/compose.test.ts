@@ -27,6 +27,16 @@ describe("composeLoadedSkillPrompt", () => {
     expect(prompt).toContain(baseSkill.skillFilePath);
     expect(prompt).toContain(baseSkill.directory);
   });
+
+  test("fills <skill directory> in the body with the real directory", () => {
+    const prompt = composeLoadedSkillPrompt({
+      ...baseSkill,
+      body: "Run bun <skill directory>/scripts/build.mjs.",
+    });
+
+    expect(prompt).toContain("Run bun /tmp/weather/scripts/build.mjs.");
+    expect(prompt).not.toContain("<skill directory>");
+  });
 });
 
 describe("composeSkillsCatalog", () => {
@@ -65,34 +75,5 @@ describe("composeAgentBrowserCapabilityPrompt", () => {
     expect(local).not.toBe("");
     expect(cloud.length).toBeGreaterThan(local.length);
     expect(cloud.startsWith(local)).toBe(true);
-  });
-});
-
-describe("skills that ship code nothing can run", () => {
-  const stranded: DiscoveredSkill = {
-    ...baseSkill,
-    hasTool: false,
-    name: "order-pricing",
-    scriptIssues: [
-      { path: "scripts/pricing.py", reason: "not runnable: name it tool.py" },
-    ],
-    toolPath: null,
-  };
-
-  test("more than one is counted, not listed", () => {
-    const line = composeSkillsCatalog([
-      {
-        ...stranded,
-        scriptIssues: [
-          ...stranded.scriptIssues,
-          {
-            path: "scripts/report.py",
-            reason: "not runnable: name it tool.py",
-          },
-        ],
-      },
-    ]);
-
-    expect(line).toContain("ships 2 scripts that cannot run here");
   });
 });

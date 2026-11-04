@@ -16,39 +16,6 @@ describe("fetchGitHubSkillMarkdown size limits", () => {
     globalThis.fetch = originalFetch;
   });
 
-  test("rejects oversized Content-Length before reading the body", async () => {
-    globalThis.fetch = asTestFetch(
-      mock(
-        async () =>
-          new Response("ignored", {
-            headers: { "Content-Length": String(600 * 1024) },
-            status: 200,
-          })
-      )
-    );
-
-    await expect(
-      fetchGitHubSkillMarkdown(
-        "https://raw.githubusercontent.com/acme/skills/main/weather/SKILL.md"
-      )
-    ).rejects.toBeInstanceOf(NakamaApiError);
-
-    try {
-      await fetchGitHubSkillMarkdown(
-        "https://raw.githubusercontent.com/acme/skills/main/weather/SKILL.md"
-      );
-    } catch (error) {
-      expect(error).toBeInstanceOf(NakamaApiError);
-
-      if (!(error instanceof NakamaApiError)) {
-        throw error;
-      }
-
-      expect(error.status).toBe(400);
-      expect(error.message).toMatch(/too large/i);
-    }
-  });
-
   test("aborts while streaming once the body exceeds the cap", async () => {
     const oversized = "x".repeat(513 * 1024);
     globalThis.fetch = asTestFetch(

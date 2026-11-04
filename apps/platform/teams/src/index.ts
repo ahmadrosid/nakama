@@ -5,7 +5,10 @@ import {
   installErrorTrackingSink,
   log,
 } from "@nakama/core";
-import { channelOwnerFromEnv } from "@nakama/core/channel-config-shared";
+import {
+  ChannelConfigBusyError,
+  channelOwnerFromEnv,
+} from "@nakama/core/channel-config-shared";
 import { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import {
   ensureServerRunning,
@@ -122,7 +125,19 @@ try {
 
   app = await startTeamsApp({ config, onActivity: handle });
 
-  await saveTeamsInboundPort(app.port, owner);
+  // A lock left by a crashed worker stays fresh for 15s, but a writer waits
+  // only 5s, so keep trying until it goes stale.
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      await saveTeamsInboundPort(app.port, owner);
+      break;
+    } catch (error) {
+      if (!(error instanceof ChannelConfigBusyError) || attempt >= 4) {
+        throw error;
+      }
+    }
+  }
+
   await heartbeat.write(true);
   heartbeatTimer = setInterval(() => {
     void heartbeat.write(true);

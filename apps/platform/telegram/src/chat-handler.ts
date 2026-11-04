@@ -32,6 +32,7 @@ import {
   hasActiveHandshakeCode,
   looksLikePairingCode,
 } from "@nakama/core/telegram-config";
+import { splitTelegramRichChunks } from "@nakama/core/telegram-rich-text";
 import type { Context } from "grammy";
 import {
   buildTelegramDocumentInput,
@@ -47,11 +48,7 @@ import {
 import type { TelegramAuthStore } from "./auth-store";
 import { maybeSendRequestedTelegramArtifactAttachment } from "./channel-artifact-flow";
 import type { TelegramBridgeConfig } from "./config";
-import {
-  HELP_TEXT,
-  prepareTelegramReply,
-  splitTelegramMessage,
-} from "./format";
+import { HELP_TEXT, prepareTelegramReply } from "./format";
 import {
   explainGroupMessageHandling,
   isTelegramGroupChat,
@@ -82,7 +79,7 @@ export async function replyAsChat(
     return;
   }
 
-  const bubbles = splitTelegramMessage(prepared);
+  const bubbles = splitTelegramRichChunks(prepared);
   const delayMs = options.delayMs ?? DEFAULT_BUBBLE_DELAY_MS;
 
   for (let index = 0; index < bubbles.length; index++) {
@@ -1065,7 +1062,7 @@ async function replyChunks(
   telegram: TelegramRichMessenger,
   text: string
 ): Promise<void> {
-  for (const chunk of splitTelegramMessage(text)) {
+  for (const chunk of splitTelegramRichChunks(text)) {
     await telegram.send(chunk);
   }
 }
@@ -1081,7 +1078,7 @@ function isStopCommand(text: string): boolean {
   return parseTelegramCommand(text) === "/stop";
 }
 
-export async function withChatLock(
+async function withChatLock(
   chatId: string,
   fn: () => Promise<void>
 ): Promise<void> {
@@ -1091,12 +1088,4 @@ export async function withChatLock(
 /** @internal Test helper — clears the in-process chat lock map. */
 export function resetChatLocksForTests(): void {
   chatLock.resetForTests();
-}
-
-/** @internal Test helper — seed a predecessor promise (rejection-safety tests). */
-export function seedChatLockForTests(
-  chatId: string,
-  promise: Promise<void>
-): void {
-  chatLock.seedForTests(chatId, promise);
 }

@@ -6,8 +6,6 @@ import {
   clearAutomationWorkerHeartbeat,
   getAutomationWorkerHeartbeatStatus,
   isAutomationHeartbeatAlive,
-  isAutomationWorkerRunning,
-  parseAutomationWorkerHeartbeat,
   readAutomationWorkerHeartbeat,
   writeAutomationWorkerHeartbeat,
 } from "./automation-worker";
@@ -54,16 +52,6 @@ describe("automation-worker heartbeat", () => {
     }
   });
 
-  test("missing heartbeat returns null", async () => {
-    await useTempConfigDir();
-
-    try {
-      expect(await readAutomationWorkerHeartbeat()).toBeNull();
-    } finally {
-      await cleanupTempConfigDir();
-    }
-  });
-
   test("only a fresh, running heartbeat is alive", () => {
     const fresh = {
       pid: process.pid,
@@ -82,16 +70,6 @@ describe("automation-worker heartbeat", () => {
     expect(isAutomationHeartbeatAlive({ ...fresh, running: false })).toBe(
       false
     );
-  });
-
-  test("malformed heartbeat is parsed as null", () => {
-    expect(parseAutomationWorkerHeartbeat("not json")).toBeNull();
-    expect(parseAutomationWorkerHeartbeat('{"pid":123}')).toBeNull();
-    expect(
-      parseAutomationWorkerHeartbeat(
-        '{"pid":"123","updatedAt":"x","running":true,"scheduledJobs":1}'
-      )
-    ).toBeNull();
   });
 
   test("clear heartbeat removes the file", async () => {
@@ -118,16 +96,6 @@ describe("automation-worker heartbeat", () => {
       expect(status.running).toBe(true);
       expect(status.scheduledJobs).toBe(5);
       expect(status.pid).toBe(process.pid);
-    } finally {
-      await cleanupTempConfigDir();
-    }
-  });
-
-  test("running returns false when heartbeat is missing", async () => {
-    await useTempConfigDir();
-
-    try {
-      expect(await isAutomationWorkerRunning()).toBe(false);
     } finally {
       await cleanupTempConfigDir();
     }

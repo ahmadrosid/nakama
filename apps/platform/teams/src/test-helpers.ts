@@ -7,17 +7,20 @@ import { createTeamsChatHandler, type TeamsActivity } from "./chat-handler";
 
 const ORG = "org_test";
 
-const OWNER = { orgId: ORG, profileId: "default" };
+export const OWNER = { orgId: ORG, profileId: "default" };
 
-const TENANT = "33333333-3333-4333-8333-333333333333";
+export const TENANT = "33333333-3333-4333-8333-333333333333";
 
-const ALLOWED = "11111111-1111-4111-8111-111111111111";
+export const ALLOWED = "11111111-1111-4111-8111-111111111111";
 
 export const CONFIG: TeamsConfigFile = {
   allowedUserIds: [ALLOWED],
   clientId: "22222222-2222-4222-8222-222222222222",
   clientSecret: "secret",
+  handshakeCode: null,
+  handshakeExpiresAt: null,
   inboundPort: 4321,
+  pairedUserIds: [],
   profileId: "default",
   tenantId: TENANT,
 };

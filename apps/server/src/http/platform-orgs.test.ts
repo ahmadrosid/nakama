@@ -1049,6 +1049,58 @@ describe("platform org routes", () => {
     ).toHaveLength(1);
   });
 
+  test("platform admin cannot erase the only admin of an organization", async () => {
+    const { app, authService, databaseAdapter } = createPlatformApp();
+
+    const platformSession = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+
+    const now = new Date().toISOString();
+    const orgId = "org_sole_admin";
+    await databaseAdapter.upsertOrganization({
+      createdAt: now,
+      id: orgId,
+      name: "Sole Admin",
+      slug: "sole-admin",
+      updatedAt: now,
+    });
+    const userId = "user_sole_admin";
+    await databaseAdapter.createUser({
+      createdAt: now,
+      email: "sole-admin@example.com",
+      id: userId,
+      passwordHash: "unused",
+      updatedAt: now,
+    });
+    await databaseAdapter.upsertOrgMember({
+      createdAt: now,
+      orgId,
+      role: "admin",
+      userId,
+    });
+
+    const response = await app.fetch(
+      new Request(`http://localhost:4310/v1/platform/users/${userId}`, {
+        headers: platformSession.headers({
+          "X-CSRF-Token": platformSession.csrfToken,
+        }),
+        method: "DELETE",
+      })
+    );
+
+    expect(response.status).toBe(409);
+    expect(await databaseAdapter.getOrgMember(orgId, userId)).toMatchObject({
+      role: "admin",
+    });
+    expect(await databaseAdapter.getUserById(userId)).toMatchObject({
+      disabledAt: null,
+      email: "sole-admin@example.com",
+    });
+  });
+
   test("platform admin cannot erase their current account", async () => {
     const { app, authService, databaseAdapter } = createPlatformApp();
 

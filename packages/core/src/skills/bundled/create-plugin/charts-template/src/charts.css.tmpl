@@ -1,0 +1,87 @@
+/* Chart styles. Text uses one size at every width; colors are host tokens. */
+[data-plugin-id="__PLUGIN_ID__"] {
+  .plugin-chart {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .plugin-chart svg,
+  .plugin-pie svg {
+    display: block;
+    overflow: visible;
+  }
+
+  .plugin-chart text,
+  .plugin-pie text {
+    fill: var(--muted-foreground);
+    font-size: var(--n-text-xs);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .plugin-chart-grid {
+    stroke: var(--border);
+  }
+
+  .plugin-chart-line {
+    fill: none;
+    stroke: var(--primary);
+    stroke-width: 2;
+    stroke-linejoin: round;
+  }
+
+  .plugin-chart-dot {
+    fill: var(--card);
+    stroke: var(--primary);
+    stroke-width: 2;
+  }
+
+  .plugin-chart-bar {
+    fill: var(--primary);
+  }
+
+  .plugin-chart-empty {
+    margin: 0;
+    color: var(--muted-foreground);
+    font-size: var(--n-text-sm);
+  }
+
+  .plugin-pie {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--n-space-4);
+  }
+
+  .plugin-pie .plugin-pie-total {
+    fill: var(--foreground);
+    font-size: var(--n-text-base);
+    font-weight: var(--n-weight-semibold);
+  }
+
+  .plugin-legend {
+    display: flex;
+    flex-direction: column;
+    gap: var(--n-space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--n-text-sm);
+  }
+
+  .plugin-legend li {
+    display: flex;
+    align-items: center;
+    gap: var(--n-space-2);
+  }
+
+  .plugin-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+  }
+
+  .plugin-legend-value {
+    color: var(--muted-foreground);
+    font-variant-numeric: tabular-nums;
+  }
+}

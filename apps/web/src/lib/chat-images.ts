@@ -8,6 +8,7 @@ import {
   parseImageDescriptionText,
 } from "@nakama/core/image-content";
 import {
+  MAX_ATTACHMENTS_PER_MESSAGE,
   normalizeDocumentMediaType,
   parseDataUrl,
   parseDocumentDataUrl,
@@ -26,7 +27,8 @@ const DOCUMENT_ACCEPT =
 
 export const ALL_ATTACHMENT_ACCEPT = `${IMAGE_ACCEPT},${DOCUMENT_ACCEPT}`;
 
-export const MAX_FOLDER_FILES = 20;
+// The server takes no more than this per message, so the composer stops here.
+export const MAX_FOLDER_FILES = MAX_ATTACHMENTS_PER_MESSAGE;
 
 export const MAX_FOLDER_BYTES = 20 * 1024 * 1024;
 

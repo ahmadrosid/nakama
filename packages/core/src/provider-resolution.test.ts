@@ -5,7 +5,6 @@ import { join } from "node:path";
 import {
   apiKeyEnvVarForProvider,
   defaultDiscoveryBaseUrl,
-  isDiscoveryModelProvider,
   parseProviderName,
   resolveProvider,
   USER_PROVIDER_NAMES,
@@ -19,6 +18,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName(" GEMINI ")).toBe("gemini");
     expect(parseProviderName("openai_compatible")).toBe("openai_compatible");
     expect(parseProviderName("opencode_go")).toBe("opencode_go");
+    expect(parseProviderName("command_code")).toBe("command_code");
     expect(parseProviderName("deepseek")).toBe("deepseek");
     expect(parseProviderName("netra")).toBe("netra");
     expect(parseProviderName("doubao")).toBe("doubao");
@@ -144,34 +144,6 @@ describe("resolveProvider deepseek", () => {
   });
 });
 
-describe("isDiscoveryModelProvider", () => {
-  test("includes providers whose models are discovered from /models", () => {
-    expect(isDiscoveryModelProvider("openai_compatible")).toBe(true);
-    expect(isDiscoveryModelProvider("netra")).toBe(true);
-    expect(isDiscoveryModelProvider("minimax")).toBe(true);
-    expect(isDiscoveryModelProvider("minimax_cn")).toBe(true);
-    expect(isDiscoveryModelProvider("zhipu")).toBe(true);
-    expect(isDiscoveryModelProvider("zhipu_cn")).toBe(true);
-    expect(isDiscoveryModelProvider("xai")).toBe(true);
-    expect(isDiscoveryModelProvider("groq")).toBe(true);
-    expect(isDiscoveryModelProvider("moonshot")).toBe(true);
-    expect(isDiscoveryModelProvider("moonshot_cn")).toBe(true);
-  });
-
-  test("excludes catalog providers", () => {
-    expect(isDiscoveryModelProvider("deepseek")).toBe(false);
-    expect(isDiscoveryModelProvider("doubao")).toBe(false);
-    expect(isDiscoveryModelProvider("together")).toBe(false);
-    expect(isDiscoveryModelProvider("vercel_ai_gateway")).toBe(false);
-    expect(isDiscoveryModelProvider("mistral")).toBe(false);
-    expect(isDiscoveryModelProvider("qwen")).toBe(false);
-    expect(isDiscoveryModelProvider("qwen_cn")).toBe(false);
-    expect(isDiscoveryModelProvider("openai")).toBe(false);
-    expect(isDiscoveryModelProvider("opencode_go")).toBe(false);
-    expect(isDiscoveryModelProvider("xiaomi")).toBe(false);
-  });
-});
-
 describe("defaultDiscoveryBaseUrl", () => {
   test("routes each region-split family to its platform URL", () => {
     expect(defaultDiscoveryBaseUrl("minimax")).toBe(
@@ -194,6 +166,9 @@ describe("defaultDiscoveryBaseUrl", () => {
     );
     expect(defaultDiscoveryBaseUrl("groq")).toBe(
       "https://api.groq.com/openai/v1"
+    );
+    expect(defaultDiscoveryBaseUrl("command_code")).toBe(
+      "https://api.commandcode.ai/provider/v1"
     );
   });
 

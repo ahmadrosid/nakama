@@ -227,6 +227,15 @@ export class ChannelsClient extends AutomationsClient {
     );
   }
 
+  async regenerateTeamsHandshake(
+    profileId?: string
+  ): Promise<TeamsSettingsResponse> {
+    return this.request<TeamsSettingsResponse>(
+      `/v1/settings/teams/handshake?profileId=${encodeURIComponent(profileId ?? "")}`,
+      { method: "POST" }
+    );
+  }
+
   async regenerateSlackHandshake(
     profileId?: string
   ): Promise<SlackSettingsResponse> {

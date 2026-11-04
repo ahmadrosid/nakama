@@ -7,6 +7,7 @@ import {
   validateCustomModels,
 } from "@nakama/core";
 import {
+  commandCodeModelSupportsVision,
   NETRA_AGENT_MODEL_ID,
   netraModelSupportsVision,
   resolveNetraModelId,
@@ -334,6 +335,10 @@ export function modelSupportsVision(
 
   if (custom?.supportsVision !== undefined) {
     return custom.supportsVision;
+  }
+
+  if (provider === "command_code") {
+    return commandCodeModelSupportsVision(modelId);
   }
 
   if (

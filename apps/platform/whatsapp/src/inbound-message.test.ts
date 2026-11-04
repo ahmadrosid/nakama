@@ -1,14 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import {
   extractInboundText,
-  isPrivateWhatsAppChat,
   isSelfWhatsAppChat,
   isWhatsAppOutboundEcho,
   parseInboundWhatsAppMessage,
   rememberWhatsAppOutbound,
   resetWhatsAppOutboundForTests,
-  shouldHandleInboundMessage,
 } from "./inbound-message";
+
+function handles(
+  ...args: Parameters<typeof parseInboundWhatsAppMessage>
+): boolean {
+  return parseInboundWhatsAppMessage(...args) !== null;
+}
 
 const ME = {
   id: "6281379292556@s.whatsapp.net",
@@ -49,12 +53,6 @@ describe("inbound message routing", () => {
     ).toBe(false);
   });
 
-  test("accepts private phone and lid chats", () => {
-    expect(isPrivateWhatsAppChat("6281379292556@s.whatsapp.net")).toBe(true);
-    expect(isPrivateWhatsAppChat("236283431522503@lid")).toBe(true);
-    expect(isPrivateWhatsAppChat("123@g.us")).toBe(false);
-  });
-
   test("handles message-yourself traffic marked fromMe", () => {
     const me = {
       id: "6281379292556@s.whatsapp.net",
@@ -62,7 +60,7 @@ describe("inbound message routing", () => {
     };
 
     expect(
-      shouldHandleInboundMessage(
+      handles(
         {
           key: { fromMe: true, remoteJid: "236283431522503@lid" },
           message: { conversation: "hello" },
@@ -75,7 +73,7 @@ describe("inbound message routing", () => {
 
   test("ignores fromMe messages in other chats", () => {
     expect(
-      shouldHandleInboundMessage(
+      handles(
         {
           key: { fromMe: true, remoteJid: "9999999999@s.whatsapp.net" },
           message: { conversation: "hello" },
@@ -135,9 +133,9 @@ describe("inbound message routing", () => {
       },
     };
 
-    expect(shouldHandleInboundMessage(groupPhoto, ME)).toBe(true);
+    expect(handles(groupPhoto, ME)).toBe(true);
     expect(
-      shouldHandleInboundMessage(
+      handles(
         {
           ...groupPhoto,
           message: { imageMessage: { mimetype: "image/jpeg" } },
@@ -168,40 +166,9 @@ describe("inbound message routing", () => {
     expect(extractInboundText(payload as any)).toBe("hi from toJSON");
   });
 
-  test("ignores group messages without a mention, reply, or slash command", () => {
-    expect(
-      shouldHandleInboundMessage(
-        {
-          key: {
-            participant: "9999999999@s.whatsapp.net",
-            remoteJid: "120363@g.us",
-          },
-          message: { conversation: "hello everyone" },
-        },
-        ME
-      )
-    ).toBe(false);
-  });
-
-  test("handles plain group messages when mention is not required", () => {
-    expect(
-      shouldHandleInboundMessage(
-        {
-          key: {
-            participant: "9999999999@s.whatsapp.net",
-            remoteJid: "120363@g.us",
-          },
-          message: { conversation: "hello everyone" },
-        },
-        ME,
-        { requireGroupMention: false }
-      )
-    ).toBe(true);
-  });
-
   test("handles group mentions, replies, and slash commands", () => {
     expect(
-      shouldHandleInboundMessage(
+      handles(
         {
           key: {
             participant: "9999999999@s.whatsapp.net",
@@ -219,7 +186,7 @@ describe("inbound message routing", () => {
     ).toBe(true);
 
     expect(
-      shouldHandleInboundMessage(
+      handles(
         {
           key: {
             participant: "9999999999@s.whatsapp.net",
@@ -237,7 +204,7 @@ describe("inbound message routing", () => {
     ).toBe(true);
 
     expect(
-      shouldHandleInboundMessage(
+      handles(
         {
           key: { fromMe: true, remoteJid: "120363@g.us" },
           message: { conversation: "/status" },

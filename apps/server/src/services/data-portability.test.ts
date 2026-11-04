@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import * as fsPromises from "node:fs/promises";
 import {
+  chmod,
   link,
   lstat,
   mkdir,
@@ -13,7 +14,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { NakamaApiError } from "@nakama/core";
 import { createDatabase, createSqliteDatabase } from "@nakama/db";
 import * as fflate from "fflate";
@@ -33,6 +34,7 @@ import {
 } from "./data-portability";
 import { MeetingStore } from "./google-meet/store";
 import { ManagedSecrets } from "./managed-secrets";
+import { writeBackup } from "./scheduled-backup";
 
 let rootDir = "";
 
@@ -1017,6 +1019,167 @@ describe("Nakama data portability", () => {
     }
   });
 
+  test.each(["notes.txt", "config.ini"])(
+    "names %s when the server cannot read it",
+    async (name) => {
+      await writeFile(join(rootDir, name), "ok");
+      const realReadFile = fsPromises.readFile;
+
+      const readMock = spyOn(fsPromises, "readFile").mockImplementation(
+        // SAFETY: the wrapper forwards its arguments to the real readFile unchanged.
+        (async (...args: Parameters<typeof realReadFile>) => {
+          if (args[0] === join(rootDir, name)) {
+            throw Object.assign(new Error("denied"), { code: "EPERM" });
+          }
+
+          return await realReadFile(...args);
+        }) as typeof realReadFile
+      );
+
+      try {
+        await expect(
+          createNakamaDataExport({ databasePath: null, rootDir })
+        ).rejects.toMatchObject({
+          message: expect.stringContaining(name),
+          status: 409,
+        });
+      } finally {
+        readMock.mockRestore();
+      }
+    }
+  );
+
+  // chmod does nothing on Windows, and root lists a mode 000 folder anyway.
+  describe.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "real unreadable folders",
+    () => {
+      test.each([
+        "orgs",
+        "orgs/o1",
+        "orgs/o1/plugins",
+        "orgs/o1/profiles/p1",
+        "backups",
+      ])("names %s when the server cannot list it", async (folder) => {
+        await mkdir(join(rootDir, "orgs/o1/plugins/p/db"), { recursive: true });
+        await mkdir(join(rootDir, "orgs/o1/profiles/p1"), { recursive: true });
+        await mkdir(join(rootDir, "backups"), { recursive: true });
+        await writeFile(join(rootDir, "orgs/o1/profiles/p1/SOUL.md"), "soul");
+        await writeFile(join(rootDir, "backups/notes.txt"), "ok");
+        await chmod(join(rootDir, folder), 0o000);
+
+        try {
+          const refusal = await createNakamaDataExport({
+            databasePath: null,
+            rootDir,
+          }).then(
+            () => null,
+            (error: Error & { status?: number }) => error
+          );
+
+          expect(refusal?.status).toBe(409);
+          expect(refusal?.message).toContain(folder);
+          expect(refusal?.message).not.toContain(rootDir);
+        } finally {
+          // Lets afterEach delete the folder.
+          await chmod(join(rootDir, folder), 0o700);
+        }
+      });
+    }
+  );
+
+  // chmod does nothing on Windows, and root opens a mode 000 database anyway.
+  describe.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "real unreadable databases and data root",
+    () => {
+      test.each([
+        "orgs/o1/plugins/p/db/data.sqlite",
+        "orgs/o1/meet/meetings.sqlite",
+        "data/sqlite/nakama.sqlite",
+      ])("names %s when the server cannot open it", async (blocked) => {
+        for (const path of [
+          "orgs/o1/plugins/p/db/data.sqlite",
+          "orgs/o1/meet/meetings.sqlite",
+          "data/sqlite/nakama.sqlite",
+        ]) {
+          await mkdir(dirname(join(rootDir, path)), { recursive: true });
+          const db = new Database(join(rootDir, path));
+          db.exec("CREATE TABLE t (x)");
+          db.close(true);
+        }
+
+        await chmod(join(rootDir, blocked), 0o000);
+
+        const refusal = await createNakamaDataExport({
+          databasePath: join(rootDir, "data/sqlite/nakama.sqlite"),
+          rootDir,
+        }).then(
+          () => null,
+          (error: Error & { status?: number }) => error
+        );
+
+        expect(refusal?.status).toBe(409);
+        expect(refusal?.message).toStartWith(
+          `Cannot export a restorable backup: the server cannot read ${blocked}.`
+        );
+        expect(refusal?.message).not.toContain(rootDir);
+      });
+
+      test("names the data folder when the server cannot list the root", async () => {
+        await writeFile(join(rootDir, "notes.txt"), "ok");
+        // Keeps write and search, as a volume can after a change of owner.
+        await chmod(rootDir, 0o300);
+
+        try {
+          const refusal = await createNakamaDataExport({
+            databasePath: null,
+            rootDir,
+          }).then(
+            () => null,
+            (error: Error & { status?: number }) => error
+          );
+
+          expect(refusal?.status).toBe(409);
+          expect(refusal?.message).toStartWith(
+            "Cannot export a restorable backup: the server cannot read the data folder."
+          );
+          expect(refusal?.message).not.toContain(rootDir);
+        } finally {
+          // Lets afterEach delete the folder.
+          await chmod(rootDir, 0o700);
+        }
+      });
+    }
+  );
+
+  // chmod does nothing on Windows, and root reads a mode 000 file anyway.
+  test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "a real unreadable file fails manual and scheduled backups by name",
+    async () => {
+      const relativePath = "orgs/o1/profiles/p1/SOUL.md.bak-0101";
+      await mkdir(join(rootDir, "orgs/o1/profiles/p1"), { recursive: true });
+      await writeFile(join(rootDir, relativePath), "soul");
+      await chmod(join(rootDir, relativePath), 0o000);
+
+      const refusal = {
+        message: expect.stringContaining(relativePath),
+        status: 409,
+      };
+
+      const exportZip = async () =>
+        (await createNakamaDataExport({ databasePath: null, rootDir })).data;
+
+      await expect(exportZip()).rejects.toMatchObject(refusal);
+      await expect(
+        writeBackup({
+          dir: join(rootDir, "backups"),
+          exportZip,
+          key: Buffer.alloc(32),
+        })
+      ).rejects.toMatchObject(refusal);
+      expect(await readdir(rootDir)).toEqual(["orgs"]);
+    }
+  );
+
   test("fails the export on read errors other than a deleted path", async () => {
     await writeFile(join(rootDir, "notes.txt"), "ok");
     const realReadFile = fsPromises.readFile;
@@ -1025,7 +1188,7 @@ describe("Nakama data portability", () => {
       // SAFETY: the wrapper forwards its arguments to the real readFile unchanged.
       (async (...args: Parameters<typeof realReadFile>) => {
         if (args[0] === join(rootDir, "notes.txt")) {
-          throw Object.assign(new Error("denied"), { code: "EACCES" });
+          throw Object.assign(new Error("failed"), { code: "EIO" });
         }
 
         return await realReadFile(...args);
@@ -1035,7 +1198,7 @@ describe("Nakama data portability", () => {
     try {
       await expect(
         createNakamaDataExport({ databasePath: null, rootDir })
-      ).rejects.toMatchObject({ code: "EACCES" });
+      ).rejects.toMatchObject({ code: "EIO" });
     } finally {
       readMock.mockRestore();
     }

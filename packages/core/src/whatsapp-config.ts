@@ -804,35 +804,6 @@ export async function syncWhatsAppOwnerPairing(
   await writeWhatsAppConfigFile(next, orgId);
 }
 
-export function resolveWhatsAppConfigFromSources(options: {
-  env?: Record<string, string | undefined>;
-  file?: WhatsAppConfigFile | null;
-}): WhatsAppConfigFile | null {
-  const env = options.env ?? process.env;
-  const file = options.file ?? null;
-
-  if (!(file || env.WHATSAPP_PHONE_NUMBER?.trim())) {
-    return null;
-  }
-
-  return {
-    allowedPhones: file?.allowedPhones ?? [],
-    allowUnpairedGroupMembers: file?.allowUnpairedGroupMembers ?? false,
-    pairedJid: file?.pairedJid ?? null,
-    pairedLid: file?.pairedLid ?? null,
-    pairingCode: file?.pairingCode ?? null,
-    pairingCodeExpiresAt: file?.pairingCodeExpiresAt ?? null,
-    phoneNumber:
-      env.WHATSAPP_PHONE_NUMBER?.trim() || file?.phoneNumber?.trim() || "",
-    profileId:
-      env.NAKAMA_WHATSAPP_PROFILE_ID?.trim() ||
-      file?.profileId?.trim() ||
-      DEFAULT_WHATSAPP_PROFILE_ID,
-    requireGroupMention:
-      file?.requireGroupMention ?? DEFAULT_WHATSAPP_REQUIRE_GROUP_MENTION,
-  };
-}
-
 function parseIniBoolean(
   value: string | undefined,
   fallback: boolean

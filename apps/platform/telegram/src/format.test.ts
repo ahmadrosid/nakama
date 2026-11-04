@@ -1,13 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import {
-  prepareTelegramReply,
-  renderTelegramRichText,
-  splitIntoChatBubbles,
-  splitTelegramMessage,
-  stripMarkdownForTelegram,
-} from "./format";
+import { prepareTelegramFallbackReply } from "./format";
 
-describe("stripMarkdownForTelegram", () => {
+describe("prepareTelegramFallbackReply", () => {
   test("preserves legacy share tokens with underscores in bare URLs", () => {
     const shareUrl =
       "http://127.0.0.1:4310/s/tc_share_a7e24436b9bd4ec8bd60edba6d403c74f0b19596f27b440db85d7f171299bbdc";
@@ -16,103 +10,42 @@ describe("stripMarkdownForTelegram", () => {
       `context-engineering-slides.html: ${shareUrl}\n` +
       "Set Web Public URL in Nakama settings for absolute share links.";
 
-    expect(stripMarkdownForTelegram(footer)).toBe(footer);
-    expect(stripMarkdownForTelegram(footer)).toContain("tc_share_");
-    expect(stripMarkdownForTelegram(footer)).not.toContain("/s/tcshare");
+    expect(prepareTelegramFallbackReply(footer)).toBe(footer);
+    expect(prepareTelegramFallbackReply(footer)).toContain("tc_share_");
+    expect(prepareTelegramFallbackReply(footer)).not.toContain("/s/tcshare");
   });
 
   test("preserves dollar replacement sequences in bare URLs", () => {
     const url = "https://example.com/$&/path";
 
-    expect(stripMarkdownForTelegram(url)).toBe(url);
+    expect(prepareTelegramFallbackReply(url)).toBe(url);
   });
 
   test("still strips italic markers outside URLs", () => {
     expect(
-      stripMarkdownForTelegram("see _share_ then https://example.com/a_b")
+      prepareTelegramFallbackReply("see _share_ then https://example.com/a_b")
     ).toBe("see share then https://example.com/a_b");
   });
 });
 
-describe("renderTelegramRichText", () => {
-  test("does not italicize underscores or double-escape query params in links", () => {
+describe("prepareTelegramFallbackReply plain text", () => {
+  test("keeps snake case and strips strike and spoiler markers", () => {
     expect(
-      renderTelegramRichText("[docs](https://example.com/a_b?x=1&y=2)")
-    ).toBe('<a href="https://example.com/a_b?x=1&amp;y=2">docs</a>');
+      prepareTelegramFallbackReply("Set active_org_id, ~~old~~ and ||secret||")
+    ).toBe("Set active_org_id, old and secret");
   });
 
-  test("leaves links with parentheses in the url unrendered", () => {
+  test("converts tables and keeps empty cells intact", () => {
     expect(
-      renderTelegramRichText("[docs](https://example.com/path_(draft))")
-    ).toBe("[docs](https://example.com/path_(draft))");
+      prepareTelegramFallbackReply(
+        "| Name | A | B |\n|---|---|---|\n| x || y |"
+      )
+    ).toBe("x\n• B: y");
   });
 
-  test("preserves snake case identifiers with underscores", () => {
-    expect(renderTelegramRichText("Use active_org_id for org context.")).toBe(
-      "Use active_org_id for org context."
-    );
-  });
-
-  test("escapes raw html while preserving fenced code blocks", () => {
+  test("shows link urls and unescapes html", () => {
     expect(
-      renderTelegramRichText("Before <tag>\n```js\n  const x = 1 < 2;\n```")
-    ).toBe("Before &lt;tag&gt;\n<pre><code>  const x = 1 &lt; 2;</code></pre>");
-  });
-
-  test("preserves dollar replacement sequences in fenced code blocks", () => {
-    expect(renderTelegramRichText("```text\n$& $` $'\n```")).toBe(
-      "<pre><code>$&amp; $` $'</code></pre>"
-    );
-  });
-
-  test("keeps literal placeholder text beside a code block", () => {
-    expect(renderTelegramRichText("@@TCTOKEN0@@\n```text\ncode\n```")).toBe(
-      "@@TCTOKEN0@@\n<pre><code>code</code></pre>"
-    );
-  });
-});
-
-describe("prepareTelegramReply", () => {
-  test("preserves markdown for rich telegram delivery", () => {
-    expect(prepareTelegramReply("  Hello **world** and `code`  ")).toBe(
-      "Hello **world** and `code`"
-    );
-  });
-});
-
-describe("splitIntoChatBubbles", () => {
-  test("returns empty for blank text", () => {
-    expect(splitIntoChatBubbles("   ")).toEqual([]);
-  });
-
-  test("splits on paragraph boundaries", () => {
-    const text = "First paragraph.\n\nSecond paragraph.\n\nThird.";
-    const bubbles = splitIntoChatBubbles(text, 40);
-
-    expect(bubbles).toEqual([
-      "First paragraph.\n\nSecond paragraph.",
-      "Third.",
-    ]);
-  });
-
-  test("splits long paragraphs by words", () => {
-    const text = "word ".repeat(120).trim();
-    const bubbles = splitIntoChatBubbles(text, 50);
-
-    expect(bubbles.length).toBeGreaterThan(1);
-
-    for (const bubble of bubbles) {
-      expect(bubble.length).toBeLessThanOrEqual(50);
-    }
-  });
-});
-
-describe("splitTelegramMessage", () => {
-  test("splits beyond telegram limit", () => {
-    const text = "a".repeat(5000);
-    const chunks = splitTelegramMessage(text);
-
-    expect(chunks.length).toBeGreaterThan(1);
-    expect(chunks.every((chunk) => chunk.length <= 4096)).toBe(true);
+      prepareTelegramFallbackReply("[docs](https://x.dev/a?b=1&c=2) <tag>")
+    ).toBe("docs (https://x.dev/a?b=1&c=2) <tag>");
   });
 });

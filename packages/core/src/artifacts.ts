@@ -267,6 +267,32 @@ async function locateArtifact(
   return null;
 }
 
+/**
+ * The name an artifact record stores for the file a path reaches, or null when
+ * it is outside artifacts/. The dashboard sends absolute paths, so compare this,
+ * not the raw path.
+ */
+export async function resolveArtifactName(input: {
+  orgId: string;
+  profileId: string;
+  filename: string;
+}): Promise<string | null> {
+  const resolvedDir = await realpath(
+    getProfileArtifactsDir(input.orgId, input.profileId)
+  ).catch(() => null);
+
+  if (!resolvedDir) {
+    return null;
+  }
+
+  const guarded = await guardFilePath(input.filename, null, undefined, {
+    allowedDirs: [resolvedDir],
+    cwd: resolvedDir,
+  }).catch(() => null);
+
+  return guarded ? artifactRelativeName(resolvedDir, guarded.resolved) : null;
+}
+
 export async function readArtifactFile(input: {
   orgId: string;
   profileId: string;

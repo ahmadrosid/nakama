@@ -4,10 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NakamaApiError } from "./api-error";
 import { validateAutomationDelivery } from "./automation-delivery";
-import {
-  canApproveAutomationDeliveryDestination,
-  isTelegramDeliveryChatAuthorized,
-} from "./automation-delivery-destination";
+import { canApproveAutomationDeliveryDestination } from "./automation-delivery-destination";
 import { asTestFetch } from "./channel-test-helpers";
 import type { JsonValue } from "./contract";
 import { getDiscordConfigDir, getDiscordConfigPath } from "./discord-config";
@@ -356,13 +353,5 @@ describe("cross-destination authorization for automation delivery", () => {
     expect(
       canApproveAutomationDeliveryDestination({ isPlatformAdmin: true })
     ).toBe(true);
-  });
-
-  test("telegram chat authorization follows paired and allowlisted ids only", () => {
-    const config = { allowedUserIds: [222], pairedUserIds: [111] };
-
-    expect(isTelegramDeliveryChatAuthorized(111, config)).toBe(true);
-    expect(isTelegramDeliveryChatAuthorized(222, config)).toBe(true);
-    expect(isTelegramDeliveryChatAuthorized(999, config)).toBe(false);
   });
 });

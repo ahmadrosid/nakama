@@ -2673,12 +2673,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE id = ?
   `);
 
-  const disableUserStmt = db.prepare(`
-    UPDATE users
-    SET disabled_at = ?, updated_at = ?
-    WHERE id = ?
-  `);
-
   // disableMember checks the last-admin rules before it writes, so a
   // concurrent disable, remove or demote can pass the same check. One
   // statement re-checks both install-wide rules: every live org the user
@@ -2778,6 +2772,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       passwordHash: string;
       updatedAt: string;
     }) => {
+      // Erasing drops admin rows and the platform flag, so it must pass the
+      // same last-admin rule as a disable before anything else is written.
+      if (
+        disableUserUnlessLastAdminStmt.run(
+          input.updatedAt,
+          input.updatedAt,
+          input.id
+        ).changes === 0
+      ) {
+        return 0;
+      }
+
       clearErasedUserSessionsStmt.run(input.id);
       clearErasedUserOrgMemoryProposalsStmt.run(
         input.id,
@@ -3600,6 +3606,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     FROM artifacts a
     LEFT JOIN users u ON u.id = a.user_id
     WHERE a.org_id = ? AND a.profile_id = ?
+  `);
+
+  const getArtifactRecordStmt = db.prepare<
+    ArtifactOwnerRow,
+    SQLQueryBindings[]
+  >(`
+    SELECT
+      org_id, profile_id, filename, session_id, user_id, channel, created_at,
+      NULL AS user_name
+    FROM artifacts
+    WHERE org_id = ? AND profile_id = ? AND filename = ?
   `);
 
   const deleteArtifactRecordStmt = db.prepare(`
@@ -4976,10 +4993,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return result.changes > 0;
     },
 
-    async disableUser(id, disabledAt) {
-      disableUserStmt.run(disabledAt, disabledAt, id);
-    },
-
     async disableUserUnlessLastAdmin(id, disabledAt) {
       const result = disableUserUnlessLastAdminStmt.run(
         disabledAt,
@@ -5030,6 +5043,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const row = getActiveAutomationRunStmt.get(automationId);
 
       return row ? toAutomationRunRecord(row) : null;
+    },
+
+    async getArtifactRecord(orgId, profileId, filename) {
+      const row = getArtifactRecordStmt.get(orgId, profileId, filename);
+
+      return row ? toArtifactOwnerRecord(row) : null;
     },
 
     async getArtifactShareById(orgId, profileId, shareId) {

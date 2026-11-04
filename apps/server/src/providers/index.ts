@@ -8,6 +8,8 @@ export * from "./cloudflare";
 
 export { fetchCloudflareWorkersAiModels } from "./cloudflare/catalog";
 
+export * from "./command-code";
+
 export * from "./compatible-models";
 
 export * from "./create";

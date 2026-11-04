@@ -316,6 +316,39 @@ function reachesNakamaConfigDir(
     }
   }
 
+  // Globs never match the literal prefixes above: the shell expands
+  // `~/.nak?ma/config.ini`, a glob inside a variable assignment, a bracket
+  // expression, or a brace list only at command time. Substitute the
+  // assignments this command makes, expand brace alternatives, resolve the
+  // word against the cwd (which folds `..`), then compare segment by segment
+  // against the scope root. A word pinned inside an exempt workspace keeps
+  // its trailing globs, so ordinary workspace globs still run.
+  const scopeSegments = pathSegments(path.join(configDir, subdir));
+  const assignments = collectShellAssignments(command);
+
+  for (const rawWord of command.split(SHELL_WORD_DELIMITER)) {
+    const word = rawWord.replace(/^\w+=/, "");
+    const substituted = substituteShellVars(word, assignments, configDir);
+
+    if (!hasGlobChars(substituted)) {
+      continue;
+    }
+
+    for (const alternative of expandBraces(substituted)) {
+      const resolved = path.resolve(cwd, alternative);
+
+      // A brace list can expand to a plain path (`~/.nak{ma,x}/...`), so those
+      // alternatives go through the literal containment check instead.
+      if (hasGlobChars(alternative)) {
+        if (globWordReachesScope(resolved, scopeSegments, exemptDirs)) {
+          return true;
+        }
+      } else if (reachesState(resolved)) {
+        return true;
+      }
+    }
+  }
+
   return command
     .split(SHELL_WORD_DELIMITER)
     .some(
@@ -329,6 +362,417 @@ function isInsideDir(target: string, dir: string): boolean {
   return (
     relative === "" || !(relative.startsWith("..") || path.isAbsolute(relative))
   );
+}
+
+/** Fold separators (and case on Windows) so glob words compare against real paths. */
+function globComparable(value: string): string {
+  const slashes = value.replaceAll("\\", "/");
+
+  return process.platform === "win32" ? slashes.toLowerCase() : slashes;
+}
+
+function pathSegments(value: string): string[] {
+  return globComparable(value)
+    .split("/")
+    .filter((segment) => segment !== "" && segment !== ".");
+}
+
+/** Every shell glob family this gate can resolve: `*`, `?`, `[...]` and `{a,b}`. */
+function hasGlobChars(word: string): boolean {
+  return /[*?[{]/.test(word);
+}
+
+function segmentMatches(word: string, actual: string): boolean {
+  return hasGlobChars(word)
+    ? globWordToRegExp(word).test(actual)
+    : word === actual;
+}
+
+/**
+ * A shell word as a matcher for one concrete segment. `*` and `?` stay inside
+ * the segment, `[...]` becomes a character class, and `{a,b}` becomes an
+ * alternation, so a pattern that can name the scope root also matches it.
+ */
+function globWordToRegExp(word: string): RegExp {
+  const source = translateGlob(word);
+
+  return new RegExp(`^${source}$`);
+}
+
+const POSIX_CLASSES = {
+  "[:alnum:]": "a-zA-Z0-9",
+  "[:alpha:]": "a-zA-Z",
+  "[:blank:]": " \\t",
+  "[:digit:]": "0-9",
+  "[:lower:]": "a-z",
+  "[:space:]": "\\s",
+  "[:upper:]": "A-Z",
+  "[:word:]": "a-zA-Z0-9_",
+  "[:xdigit:]": "0-9a-fA-F",
+} satisfies Record<string, string>;
+
+function findClosingBracket(word: string, openIndex: number): number {
+  let index = openIndex + 1;
+
+  if (word[index] === "!" || word[index] === "^") {
+    index += 1;
+  }
+
+  if (word[index] === "]") {
+    index += 1;
+  }
+
+  while (index < word.length) {
+    if (word[index] === "[" && word[index + 1] === ":") {
+      const classEnd = word.indexOf(":]", index + 2);
+
+      if (classEnd !== -1) {
+        index = classEnd + 2;
+        continue;
+      }
+    }
+
+    if (word[index] === "]") {
+      return index;
+    }
+
+    index += 1;
+  }
+
+  return -1;
+}
+
+function translateGlob(word: string): string {
+  let source = "";
+
+  for (let index = 0; index < word.length; index += 1) {
+    const ch = word[index] ?? "";
+
+    if (ch === "?") {
+      source += "[^/]";
+      continue;
+    }
+
+    if (ch === "*") {
+      source += "[^/]*";
+      continue;
+    }
+
+    if (ch === "[") {
+      const close = findClosingBracket(word, index);
+
+      if (close !== -1) {
+        source += translateBracket(word.slice(index + 1, close));
+        index = close;
+        continue;
+      }
+    }
+
+    if (ch === "{") {
+      const close = word.indexOf("}", index + 1);
+
+      if (close !== -1) {
+        const alternatives = word
+          .slice(index + 1, close)
+          .split(",")
+          .map((part) => translateGlob(part));
+
+        source += `(?:${alternatives.join("|")})`;
+        index = close;
+        continue;
+      }
+    }
+
+    source += escapeRegExpChar(ch);
+  }
+
+  return source;
+}
+
+/** `[abc]`, `[a-z]`, `[]8]`, `[[:alnum:]]` and `[!abc]` as a character class. */
+function translateBracket(body: string): string {
+  if (body === "") {
+    return "\\[\\]";
+  }
+
+  const negated = body.startsWith("!") || body.startsWith("^");
+  let content = negated ? body.slice(1) : body;
+
+  content = content.replace(
+    /\[:[a-z]+:\]/g,
+    (match) => POSIX_CLASSES[match] ?? ""
+  );
+
+  const escaped = content
+    .replaceAll("\\", "\\\\")
+    .replaceAll("]", `${String.fromCharCode(92)}]`);
+
+  return negated ? `[^/${escaped}]` : `[${escaped}]`;
+}
+
+function escapeRegExpChar(ch: string): string {
+  return ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** `NAME=value` assignments this command makes, in order. */
+function collectShellAssignments(command: string): Map<string, string> {
+  const assignments = new Map<string, string>();
+
+  for (const word of command.split(SHELL_WORD_DELIMITER)) {
+    const match = /^([A-Za-z_]\w*)=(.*)$/.exec(word);
+
+    if (match?.[1] !== undefined) {
+      assignments.set(match[1], match[2] ?? "");
+    }
+  }
+
+  return assignments;
+}
+
+/**
+ * Expand the variable references a later word may hide the config dir behind.
+ * A name assigned earlier in the same command wins; the shorthands this gate
+ * already knows stay expanded. Unknown names stay literal, which keeps the
+ * comparison conservative.
+ */
+function substituteShellVars(
+  word: string,
+  assignments: Map<string, string>,
+  configDir: string
+): string {
+  const withVars = word.replace(
+    /\$\{?([A-Za-z_]\w*)\}?/g,
+    (whole, name: string) => {
+      const assigned = assignments.get(name);
+
+      if (assigned !== undefined) {
+        return assigned;
+      }
+
+      if (name === "HOME") {
+        return homedir();
+      }
+
+      if (name === "NAKAMA_CONFIG_DIR") {
+        return configDir;
+      }
+
+      return whole;
+    }
+  );
+
+  return expandHomePrefix(withVars, configDir);
+}
+
+/** Expand the leading home and config-dir shorthands a glob word may hide behind. */
+function expandHomePrefix(word: string, configDir: string): string {
+  if (word === "~" || word.startsWith("~/")) {
+    return `${homedir()}${word.slice(1)}`;
+  }
+
+  if (word === "$HOME" || word.startsWith("$HOME/")) {
+    return `${homedir()}${word.slice("$HOME".length)}`;
+  }
+
+  if (word.startsWith("$NAKAMA_CONFIG_DIR")) {
+    return `${configDir}${word.slice("$NAKAMA_CONFIG_DIR".length)}`;
+  }
+
+  return word;
+}
+
+const MAX_BRACE_ALTERNATIVES = 1000;
+
+function expandNumericSequence(
+  startStr: string,
+  endStr: string,
+  stepStr?: string
+): string[] {
+  const start = Number.parseInt(startStr, 10);
+  const end = Number.parseInt(endStr, 10);
+  let step = stepStr === undefined ? 1 : Math.abs(Number.parseInt(stepStr, 10));
+
+  if (step === 0) {
+    step = 1;
+  }
+
+  const isZeroPadded =
+    (startStr.length > 1 && startStr.startsWith("0")) ||
+    (endStr.length > 1 && endStr.startsWith("0"));
+
+  const width = Math.max(startStr.length, endStr.length);
+  const count = Math.floor(Math.abs(end - start) / step) + 1;
+
+  if (count > MAX_BRACE_ALTERNATIVES) {
+    throw new Error(NAKAMA_STATE_REFUSAL);
+  }
+
+  const result: string[] = [];
+  const dir = start <= end ? 1 : -1;
+  const actualStep = step * dir;
+
+  for (let val = start; dir > 0 ? val <= end : val >= end; val += actualStep) {
+    let str = String(val);
+
+    if (isZeroPadded && str.length < width && val >= 0) {
+      str = str.padStart(width, "0");
+    }
+
+    result.push(str);
+  }
+
+  return result;
+}
+
+function expandCharSequence(
+  startChar: string,
+  endChar: string,
+  stepStr?: string
+): string[] {
+  const start = startChar.charCodeAt(0);
+  const end = endChar.charCodeAt(0);
+  let step = stepStr === undefined ? 1 : Math.abs(Number.parseInt(stepStr, 10));
+
+  if (step === 0) {
+    step = 1;
+  }
+
+  const count = Math.floor(Math.abs(end - start) / step) + 1;
+
+  if (count > MAX_BRACE_ALTERNATIVES) {
+    throw new Error(NAKAMA_STATE_REFUSAL);
+  }
+
+  const result: string[] = [];
+  const dir = start <= end ? 1 : -1;
+  const actualStep = step * dir;
+
+  for (let val = start; dir > 0 ? val <= end : val >= end; val += actualStep) {
+    result.push(String.fromCharCode(val));
+  }
+
+  return result;
+}
+
+function expandBraceInner(inner: string): string[] | null {
+  const numMatch = /^([+-]?\d+)\.\.([+-]?\d+)(?:\.\.([+-]?\d+))?$/.exec(inner);
+
+  if (numMatch?.[1] && numMatch[2]) {
+    return expandNumericSequence(numMatch[1], numMatch[2], numMatch[3]);
+  }
+
+  const charMatch = /^([a-zA-Z])\.\.([a-zA-Z])(?:\.\.([+-]?\d+))?$/.exec(inner);
+
+  if (charMatch?.[1] && charMatch[2]) {
+    return expandCharSequence(charMatch[1], charMatch[2], charMatch[3]);
+  }
+
+  if (inner.includes(",")) {
+    return inner.split(",");
+  }
+
+  return null;
+}
+
+/**
+ * Expand brace lists and sequences (`~/.nak{ma,x}/...`, `{8..8}`, `{a..z}`).
+ * Capped at 1,000 alternatives to prevent denial-of-service stalls.
+ */
+function expandBraces(word: string): string[] {
+  let current = [word];
+
+  for (let depth = 0; depth < 8; depth += 1) {
+    let hasMore = false;
+    const next: string[] = [];
+
+    for (const item of current) {
+      const open = item.indexOf("{");
+
+      if (open === -1) {
+        next.push(item);
+        continue;
+      }
+
+      const close = item.indexOf("}", open + 1);
+
+      if (close === -1) {
+        next.push(item);
+        continue;
+      }
+
+      const inner = item.slice(open + 1, close);
+      const alternatives = expandBraceInner(inner);
+
+      if (!alternatives) {
+        next.push(item);
+        continue;
+      }
+
+      hasMore = true;
+      const prefix = item.slice(0, open);
+      const suffix = item.slice(close + 1);
+
+      for (const alt of alternatives) {
+        next.push(`${prefix}${alt}${suffix}`);
+
+        if (next.length > MAX_BRACE_ALTERNATIVES) {
+          throw new Error(NAKAMA_STATE_REFUSAL);
+        }
+      }
+    }
+
+    current = next;
+
+    if (!hasMore) {
+      break;
+    }
+  }
+
+  return current;
+}
+
+/**
+ * True when the glob word can name the scope root or anything under it. A word
+ * whose leading segments equal an exempt workspace path is pinned there, so
+ * its trailing globs can only name workspace files.
+ */
+function globWordReachesScope(
+  word: string,
+  scopeSegments: string[],
+  exemptDirs: string[]
+): boolean {
+  const words = pathSegments(word);
+
+  if (words.length < scopeSegments.length) {
+    // A strict ancestor (or an unrelated path): the literal pass owns those.
+    return false;
+  }
+
+  for (let index = 0; index < scopeSegments.length; index += 1) {
+    if (!segmentMatches(words[index] ?? "", scopeSegments[index] ?? "")) {
+      return false;
+    }
+  }
+
+  for (const dir of exemptDirs) {
+    const exemptSegments = pathSegments(dir);
+
+    if (exemptSegments.length === 0 || words.length < exemptSegments.length) {
+      continue;
+    }
+
+    let pinned = true;
+
+    for (let index = 0; pinned && index < exemptSegments.length; index += 1) {
+      pinned = words[index] === exemptSegments[index];
+    }
+
+    if (pinned) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 export function resolveHostBash(

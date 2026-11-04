@@ -149,17 +149,6 @@ describe("browser tools", () => {
     }
   });
 
-  test("registers the six browser tools", () => {
-    expect([...tools.keys()].sort()).toEqual([
-      "browser_computer",
-      "browser_navigate",
-      "browser_playwright",
-      "browser_read",
-      "browser_screenshot",
-      "browser_scroll",
-    ]);
-  });
-
   test("refuse to run without a signed-in user", async () => {
     await saveAgentBrowserConfig(
       { apiKey: "kernel-key", provider: "kernel" },

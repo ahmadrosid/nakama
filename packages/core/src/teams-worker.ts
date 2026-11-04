@@ -57,7 +57,9 @@ export async function getTeamsWorkerStatus(
     connected:
       running && heartbeat?.connected === true && Boolean(config?.inboundPort),
     ok: config === null || running,
-    paired: Boolean(config?.allowedUserIds.length),
+    paired: Boolean(
+      config?.allowedUserIds.length || config?.pairedUserIds.length
+    ),
     running,
   };
 }

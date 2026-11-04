@@ -1,6 +1,9 @@
 import { loadTelegramConfigFile } from "../telegram-config";
 import { splitTelegramChunks } from "./message-format";
-import { renderTelegramRichText } from "./telegram-rich-text";
+import {
+  renderTelegramRichText,
+  splitTelegramRichChunks,
+} from "./telegram-rich-text";
 import type { ChannelSendResult, TelegramOutboundAdapter } from "./types";
 
 interface TelegramMessagePayload {
@@ -46,7 +49,10 @@ export function createTelegramOutboundAdapter(
           return { error: "No Telegram chat is paired.", ok: false };
         }
 
-        const chunks = splitTelegramChunks(input.text);
+        const chunks =
+          input.parseMode === "HTML"
+            ? splitTelegramRichChunks(input.text)
+            : splitTelegramChunks(input.text);
 
         if (chunks.length === 0) {
           return { error: "Message text is empty.", ok: false };

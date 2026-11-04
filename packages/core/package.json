@@ -16,6 +16,8 @@
     "./worker-heartbeat": "./src/worker-heartbeat.ts",
     "./channel-active-stream": "./src/channel-active-stream.ts",
     "./channel-org": "./src/channel-org.ts",
+    "./channel-message-format": "./src/channels/message-format.ts",
+    "./telegram-rich-text": "./src/channels/telegram-rich-text.ts",
     "./channel-test-helpers": "./src/channel-test-helpers.ts",
     "./channel-session-store": "./src/channel-session-store.ts",
     "./channel-chat-lock": "./src/channel-chat-lock.ts",

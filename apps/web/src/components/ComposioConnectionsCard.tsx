@@ -416,12 +416,11 @@ function ComposioCatalogErrorState({
           Could not load Composio toolkits
         </p>
         <p className="text-destructive">{catalogError}</p>
-        {isOrgAdmin ? (
+        {isOrgAdmin ? null : (
           <p className="text-muted-foreground">
-            Check the project API key in Composio, then save it again in
-            Settings.
+            Ask a platform admin to check the project API key.
           </p>
-        ) : null}
+        )}
       </div>
     </IntegrationCardShell>
   );
