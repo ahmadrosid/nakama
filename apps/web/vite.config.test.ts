@@ -39,6 +39,7 @@ test("allows the configured public web host and keeps safe defaults", async () =
       } else {
         process.env.NAKAMA_WEB_PUBLIC_URL = webUrl;
       }
+
       if (publicUrl === undefined) {
         delete process.env.NAKAMA_PUBLIC_URL;
       } else {
@@ -49,17 +50,20 @@ test("allows the configured public web host and keeps safe defaults", async () =
         { configFile, logLevel: "silent" },
         "serve"
       );
+
       expect(config.server.allowedHosts).toEqual(allowedHosts);
     }
 
     expect(warn).toHaveBeenCalledTimes(2);
   } finally {
     warn.mockRestore();
+
     if (previousWebUrl === undefined) {
       delete process.env.NAKAMA_WEB_PUBLIC_URL;
     } else {
       process.env.NAKAMA_WEB_PUBLIC_URL = previousWebUrl;
     }
+
     if (previousPublicUrl === undefined) {
       delete process.env.NAKAMA_PUBLIC_URL;
     } else {

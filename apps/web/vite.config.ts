@@ -13,12 +13,15 @@ const publicWebUrl =
   process.env.NAKAMA_PUBLIC_URL?.trim();
 
 let allowedHosts: string[] | undefined;
+
 if (publicWebUrl) {
   try {
     const url = new URL(publicWebUrl);
+
     if (!(url.hostname && ["http:", "https:"].includes(url.protocol))) {
       throw new TypeError("Invalid public web URL");
     }
+
     allowedHosts = [url.hostname];
   } catch {
     console.warn(
