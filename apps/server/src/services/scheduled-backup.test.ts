@@ -238,6 +238,7 @@ describe("scheduled backups", () => {
         exportZip: async () => Buffer.from("zip"),
         key,
       });
+
       await Bun.sleep(50);
       stop();
 
