@@ -5641,9 +5641,15 @@ export class AgentService {
     options: {
       headOnly?: boolean;
       render?: "markdown";
-    } = {}
+    } = {},
+    createdByUserId?: string
   ) {
-    await this.requireProfile(orgId, profileId);
+    await this.requireArtifactCreator(
+      orgId,
+      profileId,
+      filename,
+      createdByUserId
+    );
 
     return readArtifactFile({
       filename,
@@ -5658,9 +5664,15 @@ export class AgentService {
     orgId: string,
     profileId: string,
     filename: string,
-    content: string
+    content: string,
+    createdByUserId?: string
   ): Promise<UpdateArtifactResponse> {
-    await this.requireProfile(orgId, profileId);
+    await this.requireArtifactCreator(
+      orgId,
+      profileId,
+      filename,
+      createdByUserId
+    );
 
     return writeArtifactFile({ content, filename, orgId, profileId });
   }
@@ -5671,6 +5683,27 @@ export class AgentService {
     filename: string,
     createdByUserId?: string
   ): Promise<DeleteArtifactResponse> {
+    await this.requireArtifactCreator(
+      orgId,
+      profileId,
+      filename,
+      createdByUserId
+    );
+
+    const deleted = await deleteArtifactFile({ filename, orgId, profileId });
+
+    await this.db.deleteArtifactRecord(orgId, profileId, deleted.filename);
+
+    return deleted;
+  }
+
+  /** With a `createdByUserId`, 403 unless that user saved this artifact. */
+  async requireArtifactCreator(
+    orgId: string,
+    profileId: string,
+    filename: string,
+    createdByUserId?: string
+  ): Promise<void> {
     await this.requireProfile(orgId, profileId);
 
     // Exact match on the stored name, so no path trick reaches another file.
@@ -5683,12 +5716,6 @@ export class AgentService {
     ) {
       throw new NakamaApiError("Forbidden", 403);
     }
-
-    const deleted = await deleteArtifactFile({ filename, orgId, profileId });
-
-    await this.db.deleteArtifactRecord(orgId, profileId, deleted.filename);
-
-    return deleted;
   }
 
   async getUserContext(
