@@ -140,6 +140,8 @@ export interface RegressionCaseResponse {
 
 export interface ListRegressionCasesResponse {
   cases: RegressionCase[];
+  /** Pass as `offset` for the next page; null when the page is the last one. */
+  nextOffset: number | null;
 }
 
 export const AGENT_CHANNELS = [

@@ -2790,7 +2790,7 @@ export class AgentService {
     orgId: string,
     access: ChatProfileAccess,
     options: { localClient?: boolean } = {}
-  ): Promise<void> {
+  ): Promise<StoredSessionRecord | null> {
     const record = await this.getSessionRecordForOrg(sessionId, orgId);
 
     // A missing session is left to the route, which still answers 404.
@@ -2809,6 +2809,34 @@ export class AgentService {
         );
       }
     }
+
+    return record;
+  }
+
+  /** Throws 403 when the caller cannot use the profile in chat. */
+  async assertProfileChatAccess(
+    orgId: string,
+    profileId: string,
+    access: ChatProfileAccess
+  ): Promise<void> {
+    this.assertChatProfileAccess(
+      await this.requireProfile(orgId, profileId),
+      access
+    );
+  }
+
+  /**
+   * Whether saving this session as a case would move a private chat out of its
+   * owner's hands. Shared messaging history stays team-visible.
+   */
+  async sessionHistoryPrivacy(
+    record: StoredSessionRecord
+  ): Promise<{ isPrivate: boolean; ownerUserId: string | null }> {
+    if (isSharedHistory(record) || (await this.isChildOfSharedChat(record))) {
+      return { isPrivate: false, ownerUserId: null };
+    }
+
+    return { isPrivate: true, ownerUserId: record.userId ?? null };
   }
 
   async readChatAttachment(

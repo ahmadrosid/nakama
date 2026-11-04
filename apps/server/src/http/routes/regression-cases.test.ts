@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { DatabaseAdapter } from "@nakama/db";
+import type { DatabaseAdapter, StoredRegressionCaseRecord } from "@nakama/db";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AgentService } from "../../services/agent-service";
 import { AuthService } from "../../services/auth-service";
+import { sessionTurnRegistry } from "../../services/session-turn-registry";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
   loginPlatformAdminSession,
@@ -21,21 +22,27 @@ function createApp() {
   });
 }
 
+type SeedSessionInput = {
+  channel?: string;
+  id: string;
+  profileId: string;
+  userId: string;
+  userMessages: Array<
+    | string
+    | Array<{ data?: string; mediaType?: string; text?: string; type: string }>
+  >;
+};
+
 async function seedSession(
   databaseAdapter: DatabaseAdapter,
-  input: {
-    id: string;
-    profileId: string;
-    userId: string;
-    userMessage: string;
-  }
+  input: SeedSessionInput
 ): Promise<void> {
   const now = new Date().toISOString();
 
   await databaseAdapter.upsertSession({
     agentQuestionnaire: null,
     agentTodos: [],
-    channel: "web",
+    channel: input.channel ?? "web",
     createdAt: now,
     id: input.id,
     model: null,
@@ -44,22 +51,21 @@ async function seedSession(
     userId: input.userId,
   });
 
-  await databaseAdapter.appendMessagesForSession(input.id, [
-    {
-      createdAt: now,
-      id: `${input.id}_msg_1`,
-      payload: { content: input.userMessage, role: "user" },
-      seq: 0,
-      sessionId: input.id,
-    },
-    {
-      createdAt: now,
-      id: `${input.id}_msg_2`,
-      payload: { content: "The deploy failed.", role: "assistant" },
-      seq: 1,
-      sessionId: input.id,
-    },
+  const payloads = input.userMessages.flatMap((content, index) => [
+    { content, role: "user" },
+    { content: `Reply ${index}`, role: "assistant" },
   ]);
+
+  await databaseAdapter.appendMessagesForSession(
+    input.id,
+    payloads.map((payload, index) => ({
+      createdAt: now,
+      id: `${input.id}_msg_${index}`,
+      payload,
+      seq: index,
+      sessionId: input.id,
+    }))
+  );
 }
 
 async function seedAutomation(
@@ -103,6 +109,25 @@ async function seedAutomation(
   });
 }
 
+function caseRecord(
+  overrides: Partial<StoredRegressionCaseRecord> = {}
+): StoredRegressionCaseRecord {
+  return {
+    createdAt: "2026-11-03T09:00:00.000Z",
+    createdByUserId: "user_admin",
+    expectedResult: "Health check failed.",
+    id: "regcase_1",
+    input: "Why did the deploy fail?",
+    orgId: "org_test",
+    privateToUserId: null,
+    profileId: "agent_1",
+    sourceAutomationId: null,
+    sourceId: "session_1",
+    sourceType: "session",
+    ...overrides,
+  };
+}
+
 describe("regression case routes", () => {
   test("saves a finished chat session and lists it with the source link", async () => {
     const { app, databaseAdapter } = createApp();
@@ -115,8 +140,14 @@ describe("regression case routes", () => {
     await seedSession(databaseAdapter, {
       id: "session_1",
       profileId: profileId!,
-      userMessage: "Why did the deploy fail?",
       userId,
+      userMessages: [
+        "First question",
+        [
+          { data: "base64", mediaType: "audio/wav", type: "audio" },
+          { text: "Why did the deploy fail?", type: "text" },
+        ],
+      ],
     });
 
     const session = await loginUserSession(app, email, password, orgId);
@@ -167,6 +198,7 @@ describe("regression case routes", () => {
     const listedBody = await listed.json();
     expect(listedBody.cases).toHaveLength(1);
     expect(listedBody.cases[0].source.path).toBe("/chat/agent_1/session_1");
+    expect(listedBody.nextOffset).toBeNull();
 
     const fetched = await app.fetch(
       new Request(
@@ -255,6 +287,335 @@ describe("regression case routes", () => {
     expect(running.status).toBe(409);
   });
 
+  test("a chat with a running turn cannot be saved", async () => {
+    const { app, databaseAdapter } = createApp();
+
+    const { email, password, orgId, userId } = await seedOrgAdmin(
+      databaseAdapter,
+      { profileId: "agent_1" }
+    );
+
+    await seedSession(databaseAdapter, {
+      id: "session_live",
+      profileId: "agent_1",
+      userId,
+      userMessages: ["Why did the deploy fail?"],
+    });
+
+    const session = await loginUserSession(app, email, password, orgId);
+
+    const headers = session.headers({
+      "Content-Type": "application/json",
+      "X-CSRF-Token": session.csrfToken,
+    });
+
+    sessionTurnRegistry.beginTurn("session_live");
+
+    try {
+      const response = await app.fetch(
+        new Request(
+          "http://localhost:4310/v1/profiles/agent_1/regression-cases",
+          {
+            body: JSON.stringify({
+              expectedResult: "Health check failed.",
+              sourceId: "session_live",
+              sourceType: "session",
+            }),
+            headers,
+            method: "POST",
+          }
+        )
+      );
+
+      expect(response.status).toBe(409);
+    } finally {
+      sessionTurnRegistry.cancelTurn("session_live");
+    }
+  });
+
+  test("another member cannot read input copied from a private chat", async () => {
+    const { app, databaseAdapter } = createApp();
+    const admin = await seedOrgAdmin(databaseAdapter, { profileId: "agent_1" });
+
+    const member = await seedOrgAdmin(databaseAdapter, {
+      email: "member@example.com",
+      orgId: admin.orgId,
+      role: "member",
+      userId: "user_member",
+    });
+
+    await seedSession(databaseAdapter, {
+      id: "session_private",
+      profileId: "agent_1",
+      userId: admin.userId,
+      userMessages: ["Why did the deploy fail?"],
+    });
+
+    const adminSession = await loginUserSession(
+      app,
+      admin.email,
+      admin.password,
+      admin.orgId
+    );
+
+    const created = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/profiles/agent_1/regression-cases",
+        {
+          body: JSON.stringify({
+            expectedResult: "Health check failed.",
+            sourceId: "session_private",
+            sourceType: "session",
+          }),
+          headers: adminSession.headers({
+            "Content-Type": "application/json",
+            "X-CSRF-Token": adminSession.csrfToken,
+          }),
+          method: "POST",
+        }
+      )
+    );
+
+    expect(created.status).toBe(201);
+    const caseId = (await created.json()).case.id;
+
+    const memberSession = await loginUserSession(
+      app,
+      member.email,
+      member.password,
+      member.orgId
+    );
+
+    const memberHeaders = memberSession.headers();
+
+    const memberList = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/profiles/agent_1/regression-cases",
+        { headers: memberHeaders }
+      )
+    );
+
+    expect(memberList.status).toBe(200);
+    expect((await memberList.json()).cases).toEqual([]);
+
+    const memberCase = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/profiles/agent_1/regression-cases/${caseId}`,
+        { headers: memberHeaders }
+      )
+    );
+
+    expect(memberCase.status).toBe(404);
+
+    const ownerList = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/profiles/agent_1/regression-cases",
+        { headers: adminSession.headers() }
+      )
+    );
+
+    expect((await ownerList.json()).cases).toHaveLength(1);
+  });
+
+  test("a case saved from a shared channel chat is visible to the org", async () => {
+    const { app, databaseAdapter } = createApp();
+    const admin = await seedOrgAdmin(databaseAdapter, { profileId: "agent_1" });
+
+    const member = await seedOrgAdmin(databaseAdapter, {
+      email: "member@example.com",
+      orgId: admin.orgId,
+      role: "member",
+      userId: "user_member",
+    });
+
+    await seedSession(databaseAdapter, {
+      channel: "telegram",
+      id: "session_shared",
+      profileId: "agent_1",
+      userId: admin.userId,
+      userMessages: ["Why did the deploy fail?"],
+    });
+
+    const adminSession = await loginUserSession(
+      app,
+      admin.email,
+      admin.password,
+      admin.orgId
+    );
+
+    const created = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/profiles/agent_1/regression-cases",
+        {
+          body: JSON.stringify({
+            expectedResult: "Health check failed.",
+            sourceId: "session_shared",
+            sourceType: "session",
+          }),
+          headers: adminSession.headers({
+            "Content-Type": "application/json",
+            "X-CSRF-Token": adminSession.csrfToken,
+          }),
+          method: "POST",
+        }
+      )
+    );
+
+    expect(created.status).toBe(201);
+
+    const memberSession = await loginUserSession(
+      app,
+      member.email,
+      member.password,
+      member.orgId
+    );
+
+    const memberList = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/profiles/agent_1/regression-cases",
+        { headers: memberSession.headers() }
+      )
+    );
+
+    expect(memberList.status).toBe(200);
+    expect((await memberList.json()).cases).toHaveLength(1);
+  });
+
+  test("a member cannot read or write cases for a super agent profile", async () => {
+    const { app, databaseAdapter } = createApp();
+    const admin = await seedOrgAdmin(databaseAdapter, { profileId: "agent_1" });
+
+    const member = await seedOrgAdmin(databaseAdapter, {
+      email: "member@example.com",
+      orgId: admin.orgId,
+      role: "member",
+      userId: "user_member",
+    });
+
+    const now = new Date().toISOString();
+
+    await databaseAdapter.upsertProfile({
+      createdAt: now,
+      id: "agent_super",
+      isSuper: true,
+      model: null,
+      name: "Super",
+      orgId: admin.orgId,
+      systemPrompt: "You are Super.",
+      updatedAt: now,
+    });
+
+    const memberSession = await loginUserSession(
+      app,
+      member.email,
+      member.password,
+      member.orgId
+    );
+
+    const memberHeaders = memberSession.headers({
+      "Content-Type": "application/json",
+      "X-CSRF-Token": memberSession.csrfToken,
+    });
+
+    const list = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/profiles/agent_super/regression-cases",
+        { headers: memberHeaders }
+      )
+    );
+
+    expect(list.status).toBe(403);
+
+    const save = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/profiles/agent_super/regression-cases",
+        {
+          body: JSON.stringify({
+            automationId: "missing",
+            expectedResult: "Anything.",
+            sourceId: "run_missing",
+            sourceType: "automation_run",
+          }),
+          headers: memberHeaders,
+          method: "POST",
+        }
+      )
+    );
+
+    expect(save.status).toBe(403);
+
+    const adminSession = await loginUserSession(
+      app,
+      admin.email,
+      admin.password,
+      admin.orgId
+    );
+
+    const adminList = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/profiles/agent_super/regression-cases",
+        { headers: adminSession.headers() }
+      )
+    );
+
+    expect(adminList.status).toBe(200);
+  });
+
+  test("lists cases with limit and offset", async () => {
+    const { app, databaseAdapter } = createApp();
+
+    const { email, password, orgId } = await seedOrgAdmin(databaseAdapter, {
+      profileId: "agent_1",
+    });
+
+    for (const index of [1, 2, 3]) {
+      await databaseAdapter.createRegressionCase(
+        caseRecord({
+          createdAt: `2026-11-0${index}T09:00:00.000Z`,
+          id: `regcase_${index}`,
+        })
+      );
+    }
+
+    const session = await loginUserSession(app, email, password, orgId);
+    const headers = session.headers();
+
+    const first = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/profiles/agent_1/regression-cases?limit=2",
+        { headers }
+      )
+    );
+
+    const firstBody = await first.json();
+
+    expect(first.status).toBe(200);
+    expect(firstBody.cases).toHaveLength(2);
+    expect(firstBody.nextOffset).toBe(2);
+
+    const second = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/profiles/agent_1/regression-cases?limit=2&offset=2",
+        { headers }
+      )
+    );
+
+    const secondBody = await second.json();
+
+    expect(second.status).toBe(200);
+    expect(secondBody.cases).toHaveLength(1);
+    expect(secondBody.nextOffset).toBeNull();
+
+    const invalid = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/profiles/agent_1/regression-cases?limit=0",
+        { headers }
+      )
+    );
+
+    expect(invalid.status).toBe(400);
+  });
+
   test("another org gets a 404 for the case and its run", async () => {
     const { app, databaseAdapter } = createApp();
 
@@ -275,8 +636,8 @@ describe("regression case routes", () => {
     await seedSession(databaseAdapter, {
       id: "session_a",
       profileId: "agent_a",
-      userMessage: "Why did the deploy fail?",
       userId: "user_a",
+      userMessages: ["Why did the deploy fail?"],
     });
 
     const sessionA = await loginUserSession(
@@ -365,8 +726,8 @@ describe("regression case routes", () => {
     await seedSession(databaseAdapter, {
       id: "session_1",
       profileId: "agent_1",
-      userMessage: "Why did the deploy fail?",
       userId: "user_admin",
+      userMessages: ["Why did the deploy fail?"],
     });
 
     const session = await loginPlatformAdminSession(

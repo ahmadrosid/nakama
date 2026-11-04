@@ -2614,13 +2614,18 @@ CREATE TABLE IF NOT EXISTS regression_cases (
   input TEXT NOT NULL,
   expected_result TEXT NOT NULL,
   created_by_user_id TEXT,
+  private_to_user_id TEXT,
   created_at TEXT NOT NULL,
   FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
   FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE,
-  FOREIGN KEY (created_by_user_id) REFERENCES users (id) ON DELETE SET NULL
+  FOREIGN KEY (created_by_user_id) REFERENCES users (id) ON DELETE SET NULL,
+  FOREIGN KEY (private_to_user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS regression_cases_profile_created
   ON regression_cases (org_id, profile_id, created_at DESC);
   `);
+
+  // The table first shipped without this column.
+  addNullableTextColumnIfMissing(db, "regression_cases", "private_to_user_id");
 }

@@ -1,42 +1,116 @@
-import { z } from "@hono/zod-openapi";
-import { createId, getUserMessageText, NakamaApiError } from "@nakama/core";
+import { createRoute, z } from "@hono/zod-openapi";
+import { createId, getUserMessageText } from "@nakama/core";
 import type {
   ListRegressionCasesResponse,
   RegressionCase,
   RegressionCaseResponse,
 } from "@nakama/core/contract";
-import type {
-  StoredRegressionCaseRecord,
-  StoredSessionMessageRecord,
-} from "@nakama/db";
+import type { StoredRegressionCaseRecord } from "@nakama/db";
 import { DatabaseAutomationStore } from "@nakama/db";
+import { sessionTurnRegistry } from "../../services/session-turn-registry";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
   requireOrgMemberFromContext,
 } from "../org-guards";
-import { errorResponse, json, readJson } from "../shared";
+import {
+  errorResponse,
+  json,
+  type RequestAuthContext,
+  readJson,
+} from "../shared";
 import type { HonoApp } from "../types";
 
 const MAX_EXPECTED_RESULT_LENGTH = 20_000;
 
-const createRegressionCaseSchema = z.discriminatedUnion("sourceType", [
-  z
-    .object({
-      expectedResult: z.string().trim().min(1).max(MAX_EXPECTED_RESULT_LENGTH),
-      sourceId: z.string().trim().min(1),
-      sourceType: z.literal("session"),
-    })
-    .strict(),
-  z
-    .object({
-      automationId: z.string().trim().min(1),
-      expectedResult: z.string().trim().min(1).max(MAX_EXPECTED_RESULT_LENGTH),
-      sourceId: z.string().trim().min(1),
-      sourceType: z.literal("automation_run"),
-    })
-    .strict(),
-]);
+const MAX_CASE_PAGE_SIZE = 100;
+
+const DEFAULT_CASE_PAGE_SIZE = 50;
+
+const errorSchema = z.object({ error: z.string() }).openapi("ApiErrorResponse");
+
+const profileIdParam = z.object({
+  profileId: z.string().openapi({ param: { in: "path", name: "profileId" } }),
+});
+
+const caseIdParam = z.object({
+  caseId: z.string().openapi({ param: { in: "path", name: "caseId" } }),
+  profileId: z.string().openapi({ param: { in: "path", name: "profileId" } }),
+});
+
+const listRegressionCasesQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(MAX_CASE_PAGE_SIZE).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+
+const createRegressionCaseSchema = z
+  .discriminatedUnion("sourceType", [
+    z
+      .object({
+        expectedResult: z
+          .string()
+          .trim()
+          .min(1)
+          .max(MAX_EXPECTED_RESULT_LENGTH),
+        sourceId: z.string().trim().min(1),
+        sourceType: z.literal("session"),
+      })
+      .strict(),
+    z
+      .object({
+        automationId: z.string().trim().min(1),
+        expectedResult: z
+          .string()
+          .trim()
+          .min(1)
+          .max(MAX_EXPECTED_RESULT_LENGTH),
+        sourceId: z.string().trim().min(1),
+        sourceType: z.literal("automation_run"),
+      })
+      .strict(),
+  ])
+  .openapi("CreateRegressionCaseRequest");
+
+const regressionCaseSchema = z
+  .object({
+    createdAt: z.string(),
+    createdByUserId: z.string().nullable(),
+    expectedResult: z.string(),
+    id: z.string(),
+    input: z.string(),
+    profileId: z.string(),
+    source: z.object({
+      automationId: z.string().nullable(),
+      id: z.string(),
+      path: z.string(),
+      type: z.enum(["session", "automation_run"]),
+    }),
+  })
+  .openapi("RegressionCase");
+
+const regressionCaseResponseSchema = z
+  .object({ case: regressionCaseSchema })
+  .openapi("RegressionCaseResponse");
+
+const listRegressionCasesResponseSchema = z
+  .object({
+    cases: z.array(regressionCaseSchema),
+    nextOffset: z.number().nullable(),
+  })
+  .openapi("ListRegressionCasesResponse");
+
+/**
+ * Stored rows use the `ChatMessage` shape. Only the role and the parts'
+ * `type`/`text` are read, so a part type added later still parses.
+ */
+const storedMessagePartSchema = z
+  .object({ text: z.string().optional(), type: z.string() })
+  .passthrough();
+
+const storedUserMessageSchema = z.object({
+  content: z.union([z.string(), z.array(storedMessagePartSchema)]),
+  role: z.literal("user"),
+});
 
 /**
  * Automation runs have no per-run page yet, so their link opens the page that
@@ -67,53 +141,45 @@ function toRegressionCase(record: StoredRegressionCaseRecord): RegressionCase {
   };
 }
 
-const messageContentPartSchema = z.discriminatedUnion("type", [
-  z.object({ text: z.string(), type: z.literal("text") }),
-  z.object({
-    data: z.string(),
-    description: z.string().optional(),
-    mediaType: z.string(),
-    type: z.literal("image"),
-  }),
-  z.object({
-    data: z.string(),
-    filename: z.string(),
-    mediaType: z.string(),
-    type: z.literal("document"),
-  }),
-  z.object({
-    attachmentId: z.string(),
-    mediaType: z.string(),
-    size: z.number(),
-    type: z.literal("image_ref"),
-  }),
-  z.object({
-    attachmentId: z.string(),
-    filename: z.string(),
-    mediaType: z.string(),
-    size: z.number(),
-    type: z.literal("document_ref"),
-  }),
-]);
+/** Copied input from a private chat stays with that chat's owner. */
+function canRead(
+  record: StoredRegressionCaseRecord,
+  auth: RequestAuthContext
+): boolean {
+  return (
+    record.privateToUserId === null ||
+    auth.isPlatformAdmin ||
+    record.privateToUserId === auth.user.id
+  );
+}
 
-/** Session rows store a `ChatMessage`; only the user turn becomes the input. */
-const storedUserMessageSchema = z.object({
-  content: z.union([z.string(), z.array(messageContentPartSchema)]),
-  role: z.literal("user"),
-});
-
-function lastUserMessageText(
-  messages: StoredSessionMessageRecord[]
-): string | null {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = storedUserMessageSchema.safeParse(messages[index]?.payload);
-
-    if (message.success) {
-      return getUserMessageText(message.data.content).trim();
-    }
+function parseLimit(raw: string | undefined): number | null {
+  if (raw === undefined || raw === "") {
+    return DEFAULT_CASE_PAGE_SIZE;
   }
 
-  return null;
+  const value = Number(raw);
+
+  return Number.isInteger(value) && value >= 1 && value <= MAX_CASE_PAGE_SIZE
+    ? value
+    : null;
+}
+
+function parseOffset(raw: string | undefined): number | null {
+  if (raw === undefined || raw === "") {
+    return 0;
+  }
+
+  const value = Number(raw);
+
+  return Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+type StoredUserMessage = z.infer<typeof storedUserMessageSchema>;
+
+/** The last user turn is the input; earlier turns are not a fallback. */
+function storedUserMessageText(message: StoredUserMessage): string {
+  return getUserMessageText(message.content).trim();
 }
 
 export function registerRegressionCaseRoutes(
@@ -128,11 +194,107 @@ export function registerRegressionCaseRoutes(
 
   const automationStore = new DatabaseAutomationStore(databaseAdapter);
 
-  const requireProfile = async (
-    orgId: string,
-    profileId: string
-  ): Promise<boolean> =>
-    (await databaseAdapter.getProfileForOrg(profileId, orgId)) !== null;
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "createRegressionCase",
+      path: "/v1/profiles/{profileId}/regression-cases",
+      request: {
+        body: {
+          content: {
+            "application/json": { schema: createRegressionCaseSchema },
+          },
+          required: true,
+        },
+        params: profileIdParam,
+      },
+      responses: {
+        201: {
+          content: {
+            "application/json": { schema: regressionCaseResponseSchema },
+          },
+          description: "Regression case created",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        409: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Save a finished run as a regression case",
+      tags: ["Regression cases"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "listRegressionCases",
+      path: "/v1/profiles/{profileId}/regression-cases",
+      request: {
+        params: profileIdParam,
+        query: listRegressionCasesQuerySchema,
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: listRegressionCasesResponseSchema },
+          },
+          description: "Regression cases for the profile",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "List a profile's regression cases",
+      tags: ["Regression cases"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "getRegressionCase",
+      path: "/v1/profiles/{profileId}/regression-cases/{caseId}",
+      request: { params: caseIdParam },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: regressionCaseResponseSchema },
+          },
+          description: "Regression case",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Get a regression case",
+      tags: ["Regression cases"],
+    })
+  );
 
   app.post("/v1/profiles/:profileId/regression-cases", async (c) => {
     const auth = requireOrgMemberFromContext(c);
@@ -140,45 +302,51 @@ export function registerRegressionCaseRoutes(
     const profileId = decodeURIComponent(c.req.param("profileId") ?? "");
     const body = await readJson(c.req.raw, createRegressionCaseSchema);
 
-    if (!(await requireProfile(orgId, profileId))) {
-      return errorResponse("Profile not found", 404);
-    }
-
     let input: string;
+    let privateToUserId: string | null = null;
     let sourceAutomationId: string | null = null;
 
     if (body.sourceType === "session") {
-      try {
-        await options.agent.assertSessionProfileAccess(
-          body.sourceId,
-          orgId,
-          auth
-        );
-      } catch (error) {
-        // Another org or a private session answers the same 404.
-        if (error instanceof NakamaApiError && error.status === 404) {
-          return errorResponse("Source run not found", 404);
-        }
-
-        throw error;
-      }
-
-      const session = await databaseAdapter.getSession(body.sourceId);
+      const session = await options.agent.assertSessionProfileAccess(
+        body.sourceId,
+        orgId,
+        auth
+      );
 
       if (!session || session.profileId !== profileId) {
         return errorResponse("Source run not found", 404);
       }
 
-      const text = lastUserMessageText(
-        await databaseAdapter.listMessagesForSession(body.sourceId)
-      );
-
-      if (!text) {
-        return errorResponse("Source session has no user message.", 400);
+      if (sessionTurnRegistry.isActive(body.sourceId)) {
+        return errorResponse("Source chat is still running.", 409);
       }
 
+      const message = await databaseAdapter.getLastUserMessageForSession(
+        body.sourceId
+      );
+
+      const parsed = message
+        ? storedUserMessageSchema.safeParse(message.payload)
+        : null;
+
+      const text = parsed?.success ? storedUserMessageText(parsed.data) : null;
+
+      if (!text) {
+        return errorResponse(
+          "Source session has no readable user message.",
+          400
+        );
+      }
+
+      const privacy = await options.agent.sessionHistoryPrivacy(session);
+
       input = text;
+      privateToUserId = privacy.isPrivate
+        ? (privacy.ownerUserId ?? auth.user.id)
+        : null;
     } else {
+      await options.agent.assertProfileChatAccess(orgId, profileId, auth);
+
       const automation = await automationStore.get(body.automationId);
 
       if (
@@ -218,6 +386,7 @@ export function registerRegressionCaseRoutes(
       id: createId("regcase"),
       input,
       orgId,
+      privateToUserId,
       profileId,
       sourceAutomationId,
       sourceId: body.sourceId,
@@ -233,33 +402,47 @@ export function registerRegressionCaseRoutes(
   });
 
   app.get("/v1/profiles/:profileId/regression-cases", async (c) => {
-    requireOrgMemberFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId") ?? "");
 
-    if (!(await requireProfile(orgId, profileId))) {
-      return errorResponse("Profile not found", 404);
+    await options.agent.assertProfileChatAccess(orgId, profileId, auth);
+
+    const limit = parseLimit(c.req.query("limit"));
+    const offset = parseOffset(c.req.query("offset"));
+
+    if (limit === null) {
+      return errorResponse(
+        `limit must be an integer from 1 to ${MAX_CASE_PAGE_SIZE}.`,
+        400
+      );
     }
 
-    const cases = await databaseAdapter.listRegressionCasesForProfile(
+    if (offset === null) {
+      return errorResponse("offset must be a non-negative integer.", 400);
+    }
+
+    const records = await databaseAdapter.listRegressionCasesForProfile(
       orgId,
-      profileId
+      profileId,
+      { limit, offset }
     );
 
     return json<ListRegressionCasesResponse>({
-      cases: cases.map(toRegressionCase),
+      cases: records
+        .filter((record) => canRead(record, auth))
+        .map(toRegressionCase),
+      nextOffset: records.length === limit ? offset + records.length : null,
     });
   });
 
   app.get("/v1/profiles/:profileId/regression-cases/:caseId", async (c) => {
-    requireOrgMemberFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId") ?? "");
     const caseId = decodeURIComponent(c.req.param("caseId") ?? "");
 
-    if (!(await requireProfile(orgId, profileId))) {
-      return errorResponse("Profile not found", 404);
-    }
+    await options.agent.assertProfileChatAccess(orgId, profileId, auth);
 
     const record = await databaseAdapter.getRegressionCase(
       orgId,
@@ -267,7 +450,7 @@ export function registerRegressionCaseRoutes(
       caseId
     );
 
-    if (!record) {
+    if (!(record && canRead(record, auth))) {
       return errorResponse("Regression case not found", 404);
     }
 

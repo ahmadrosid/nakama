@@ -137,6 +137,11 @@ export interface StoredRegressionCaseRecord {
   id: string;
   input: string;
   orgId: string;
+  /**
+   * Set when the source chat was private. Only this user and platform admins
+   * may read the copied input.
+   */
+  privateToUserId: string | null;
   profileId: string;
   /** Set only for `automation_run` sources, which need it to reach the run. */
   sourceAutomationId: string | null;
@@ -1095,6 +1100,9 @@ export interface DatabaseAdapter {
     id: string
   ): Promise<StoredComposioUserConnectionRecord | null>;
   getDefaultProfileForOrg(orgId: string): Promise<StoredProfileRecord | null>;
+  getLastUserMessageForSession(
+    sessionId: string
+  ): Promise<StoredSessionMessageRecord | null>;
 
   getLlmUsageStats(orgId: string): Promise<StoredLlmUsageStatsRecord | null>;
   getManagedSecret(
@@ -1399,7 +1407,8 @@ export interface DatabaseAdapter {
   /** Newest first. Org-scoped: another org's profile returns nothing. */
   listRegressionCasesForProfile(
     orgId: string,
-    profileId: string
+    profileId: string,
+    options?: { limit?: number; offset?: number }
   ): Promise<StoredRegressionCaseRecord[]>;
   /**
    * Newest first, pinned ahead. `after` is the last row of the previous page;
