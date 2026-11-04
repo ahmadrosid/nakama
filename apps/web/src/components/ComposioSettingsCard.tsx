@@ -7,9 +7,8 @@ import {
   InputGroupInput,
 } from "@nakama/ui/input-group";
 import { Spinner } from "@nakama/ui/spinner";
-import { cn } from "@nakama/ui/utils";
-import { Link01Icon, ViewIcon, ViewOffIcon } from "hugeicons-react";
-import { useEffect, useState } from "react";
+import { LockIcon, ViewIcon, ViewOffIcon } from "hugeicons-react";
+import { useState } from "react";
 import { IntegrationCardShell } from "@/components/integration-settings.shared";
 import {
   useComposioSettings,
@@ -17,133 +16,85 @@ import {
 } from "@/hooks/use-composio";
 import { client, formatError } from "@/lib/client";
 
-function ComposioStatusBadge({
-  configured,
-  composioReachable,
-}: {
-  configured: boolean;
-  composioReachable: boolean;
-}) {
-  if (!configured) {
-    return (
-      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-0.5 font-medium text-muted-foreground text-xs">
-        <span
-          aria-hidden
-          className="size-1.5 rounded-full bg-muted-foreground/60"
-        />
-        Not configured
-      </span>
-    );
-  }
+const COMPOSIO_KEY_INPUT_ID = "composio-api-key";
 
-  if (composioReachable) {
-    return (
-      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 font-medium text-emerald-800 text-xs dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-200">
-        <span aria-hidden className="size-1.5 rounded-full bg-emerald-500" />
-        Connected
-      </span>
-    );
-  }
+const COMPOSIO_REPLACE_ID = "composio-replace-key";
+
+const COMPOSIO_DASHBOARD_URL = "https://dashboard.composio.dev";
+
+type ComposioStatus = "connected" | "missing" | "unreachable";
+
+const STATUS_BADGES: Record<
+  ComposioStatus,
+  { className: string; dot: string; label: string }
+> = {
+  connected: {
+    className:
+      "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-200",
+    dot: "bg-emerald-500",
+    label: "Connected",
+  },
+  missing: {
+    className: "border-border bg-background text-muted-foreground",
+    dot: "bg-muted-foreground/60",
+    label: "Not set up",
+  },
+  unreachable: {
+    className:
+      "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200",
+    dot: "bg-amber-500",
+    label: "Can't connect",
+  },
+};
+
+function ComposioStatusBadge({ status }: { status: ComposioStatus }) {
+  const badge = STATUS_BADGES[status];
 
   return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 font-medium text-amber-900 text-xs dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200">
-      <span aria-hidden className="size-1.5 rounded-full bg-amber-500" />
-      Key saved
+    <span
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-medium text-xs ${badge.className}`}
+    >
+      <span aria-hidden className={`size-1.5 rounded-full ${badge.dot}`} />
+      {badge.label}
     </span>
   );
 }
-
-function ComposioSettingsSkeleton({
-  embedded = false,
-}: {
-  embedded?: boolean;
-}) {
-  const sectionPadding = embedded ? "pb-1.5" : "px-4 py-3";
-  const footerPadding = embedded ? "pt-1.5" : "px-4 pb-3";
-
-  return (
-    <IntegrationCardShell
-      busyLabel="Loading Composio settings"
-      embedded={embedded}
-    >
-      {embedded ? null : (
-        <>
-          <div className="flex items-center justify-between gap-4 px-4 py-3">
-            <div className="skeleton-shimmer h-4 w-24 rounded" />
-            <div className="skeleton-shimmer h-6 w-28 shrink-0 rounded-full" />
-          </div>
-
-          <div className="border-border border-t" />
-        </>
-      )}
-
-      <div className={cn("space-y-2", sectionPadding, embedded && "pt-0")}>
-        <div className="space-y-2">
-          <div className="skeleton-shimmer h-4 w-28 rounded" />
-          <div className="skeleton-shimmer h-4 w-full rounded" />
-          <div className="skeleton-shimmer h-4 w-4/5 rounded" />
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="skeleton-shimmer h-9 min-w-0 flex-1 rounded-md" />
-          <div className="skeleton-shimmer h-8 w-16 shrink-0 rounded-md" />
-        </div>
-      </div>
-
-      <div className={cn(footerPadding)}>
-        <div className="skeleton-shimmer h-4 w-72 max-w-full rounded" />
-      </div>
-    </IntegrationCardShell>
-  );
-}
-
-function composioSettingsError(
-  formError: string | null,
-  loadError: Error | null
-): string | null {
-  if (formError) {
-    return formError;
-  }
-
-  if (loadError) {
-    return formatError(loadError);
-  }
-
-  return null;
-}
-
-const COMPOSIO_KEY_INPUT_ID = "composio-api-key";
 
 function useComposioSettingsForm() {
   const {
     data: settings,
     isLoading,
+    isFetching,
     error: loadError,
     refetch,
   } = useComposioSettings();
 
   const saveMutation = useSaveComposioSettings();
   const [apiKey, setApiKey] = useState("");
-  const [showApiKey, setShowApiKey] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!settings) {
+  function focusReplace() {
+    // Runs after React swaps the editor back to the key row.
+    window.requestAnimationFrame(() =>
+      document.getElementById(COMPOSIO_REPLACE_ID)?.focus()
+    );
+  }
+
+  async function save() {
+    const trimmed = apiKey.trim();
+
+    if (!trimmed) {
       return;
     }
 
-    setApiKey("");
-  }, [settings]);
-
-  async function handleSave() {
     setFormError(null);
 
     try {
-      const trimmedApiKey = apiKey.trim();
-      const request = trimmedApiKey ? { apiKey: trimmedApiKey } : {};
-      await saveMutation.mutateAsync(request);
+      await saveMutation.mutateAsync({ apiKey: trimmed });
       setApiKey("");
-      // Save unmounts once the field is empty; keep keyboard focus in the row.
-      document.getElementById(COMPOSIO_KEY_INPUT_ID)?.focus();
+      setEditing(false);
+      focusReplace();
     } catch (error) {
       setFormError(formatError(error));
     }
@@ -162,304 +113,263 @@ function useComposioSettingsForm() {
 
   return {
     apiKey,
-    formError,
-    handleSave,
+    cancel: () => {
+      setApiKey("");
+      setFormError(null);
+      setEditing(false);
+      focusReplace();
+    },
+    editing,
+    error: formError ?? (loadError ? formatError(loadError) : null),
+    isFetching,
     isLoading,
-    loadError,
     manageKey,
+    replace: () => {
+      setFormError(null);
+      setEditing(true);
+    },
+    retry: () => void refetch(),
+    save,
     savePending: saveMutation.isPending,
-    setApiKey,
-    setFormError,
-    setShowApiKey,
+    setApiKey: (value: string) => {
+      setApiKey(value);
+      setFormError(null);
+    },
     settings,
-    showApiKey,
   };
 }
 
-function ComposioSettingsIntro({
-  composioReachable,
-  configured,
-  embedded,
+type ComposioForm = ReturnType<typeof useComposioSettingsForm>;
+
+function ComposioKeyEditor({
+  canCancel,
+  form,
 }: {
-  composioReachable: boolean;
-  configured: boolean;
-  embedded: boolean;
+  canCancel: boolean;
+  form: ComposioForm;
 }) {
-  if (embedded) {
-    return null;
-  }
+  const [showKey, setShowKey] = useState(false);
+  const canSave = form.apiKey.trim().length > 0;
 
   return (
-    <>
-      <div className="flex items-center justify-between gap-4 px-4 py-3">
-        <h3 className="font-medium text-foreground text-sm">Composio</h3>
-        <ComposioStatusBadge
-          composioReachable={composioReachable}
-          configured={configured}
-        />
-      </div>
-
-      <div className="border-border border-t" />
-    </>
-  );
-}
-
-function ComposioApiKeySection({
-  apiKey,
-  composioReachable,
-  configured,
-  embedded,
-  errorMessage,
-  source,
-  onApiKeyChange,
-  onSave,
-  onToggleShowApiKey,
-  savePending,
-  showApiKey,
-}: {
-  apiKey: string;
-  composioReachable: boolean;
-  configured: boolean;
-  embedded: boolean;
-  errorMessage: string | null;
-  source?: "environment" | "settings" | "missing";
-  onApiKeyChange: (value: string) => void;
-  onSave: () => void;
-  onToggleShowApiKey: () => void;
-  savePending: boolean;
-  showApiKey: boolean;
-}) {
-  const sectionPadding = embedded ? "pb-1.5" : "px-4 py-3";
-
-  return (
-    <div className={cn("space-y-2", sectionPadding, embedded && "pt-0")}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 space-y-0.5">
-          <p className="font-medium text-foreground text-sm">Project API key</p>
-          <p className="text-muted-foreground text-xs [text-wrap:pretty]">
-            Not the MCP consumer key.
-          </p>
-        </div>
-        {embedded ? (
-          <ComposioStatusBadge
-            composioReachable={composioReachable}
-            configured={configured}
+    <div className="space-y-2 px-4 py-3">
+      <label
+        className="block font-medium text-foreground text-sm"
+        htmlFor={COMPOSIO_KEY_INPUT_ID}
+      >
+        {canCancel ? "New project API key" : "Project API key"}
+      </label>
+      <form
+        className="flex flex-wrap items-center gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void form.save();
+        }}
+      >
+        <InputGroup className="h-9 min-w-[12rem] flex-1">
+          <InputGroupInput
+            autoComplete="off"
+            // Focus only when the user asked to replace, never on page load.
+            autoFocus={canCancel}
+            id={COMPOSIO_KEY_INPUT_ID}
+            onChange={(event) => form.setApiKey(event.target.value)}
+            placeholder="Paste a project API key"
+            readOnly={form.savePending}
+            type={showKey ? "text" : "password"}
+            value={form.apiKey}
           />
-        ) : null}
-      </div>
-
-      <ComposioApiKeyInput
-        apiKey={apiKey}
-        configured={configured}
-        onApiKeyChange={onApiKeyChange}
-        onSave={onSave}
-        onToggleShowApiKey={onToggleShowApiKey}
-        savePending={savePending}
-        showApiKey={showApiKey}
-        source={source}
-      />
-
-      {configured && !composioReachable ? (
-        <p className="text-amber-800 text-sm dark:text-amber-200" role="status">
-          The saved key could not reach Composio. Check that it is a project API
-          key from Settings → Project Settings → API Keys.
-        </p>
-      ) : null}
-
-      {errorMessage ? (
-        <p className="text-destructive text-sm" role="alert">
-          {errorMessage}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-function ComposioApiKeyInput({
-  apiKey,
-  configured,
-  onApiKeyChange,
-  onSave,
-  onToggleShowApiKey,
-  savePending,
-  showApiKey,
-  source,
-}: {
-  apiKey: string;
-  configured: boolean;
-  onApiKeyChange: (value: string) => void;
-  onSave: () => void;
-  onToggleShowApiKey: () => void;
-  savePending: boolean;
-  showApiKey: boolean;
-  source?: "environment" | "settings" | "missing";
-}) {
-  const canSave = source !== "environment" && apiKey.trim().length > 0;
-
-  return (
-    <div className="flex items-center gap-2">
-      <InputGroup className="h-9 min-w-0 flex-1">
-        <InputGroupInput
-          aria-label="Project API key"
-          autoComplete="off"
-          disabled={savePending || source === "environment"}
-          id={COMPOSIO_KEY_INPUT_ID}
-          onChange={(event) => onApiKeyChange(event.target.value)}
-          placeholder={
-            source === "environment"
-              ? "Managed by environment"
-              : configured
-                ? "Saved"
-                : "Paste API key"
-          }
-          type={showApiKey ? "text" : "password"}
-          value={apiKey}
-        />
-        {source === "environment" ? null : (
           <InputGroupAddon align="inline-end">
             <InputGroupButton
-              aria-label={showApiKey ? "Hide API key" : "Show API key"}
+              aria-label={showKey ? "Hide key" : "Show key"}
               className="relative before:absolute before:-inset-2 before:content-['']"
-              onClick={onToggleShowApiKey}
+              onClick={() => setShowKey((current) => !current)}
               size="icon-xs"
               type="button"
             >
-              {showApiKey ? (
+              {showKey ? (
                 <ViewOffIcon className="size-4" />
               ) : (
                 <ViewIcon className="size-4" />
               )}
             </InputGroupButton>
           </InputGroupAddon>
-        )}
-      </InputGroup>
-      {canSave || savePending ? (
+        </InputGroup>
+        {canCancel ? (
+          <Button
+            onClick={form.cancel}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Cancel
+          </Button>
+        ) : null}
+        <Button aria-disabled={!canSave || undefined} size="sm" type="submit">
+          {form.savePending ? <Spinner className="size-4" /> : "Save key"}
+        </Button>
+      </form>
+      <p className="text-muted-foreground text-xs">
+        Use the project key, not the MCP consumer key.
+        {canCancel ? " The current key keeps working until you save." : ""}{" "}
+        <a
+          className="font-medium text-primary underline-offset-2 hover:underline"
+          href={COMPOSIO_DASHBOARD_URL}
+          rel="noreferrer"
+          target="_blank"
+        >
+          Get a key
+        </a>
+      </p>
+      {form.settings?.source === "missing" && form.settings.savedAvailable ? (
         <Button
-          className="shrink-0"
-          disabled={savePending}
-          onClick={onSave}
+          onClick={() => void form.manageKey("use-stored")}
           size="sm"
           type="button"
+          variant="outline"
         >
-          {savePending ? <Spinner className="size-4" /> : "Save"}
+          Use saved key
         </Button>
       ) : null}
     </div>
   );
 }
 
-function ComposioSavedKeyAction({
-  action,
-  onAction,
+function ComposioKeyRow({
+  form,
+  reachable,
 }: {
-  action: "clear" | "use-stored";
-  onAction: (action: "clear" | "use-stored") => Promise<void>;
+  form: ComposioForm;
+  reachable: boolean;
 }) {
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   return (
-    <>
-      <Button
-        onClick={() =>
-          action === "clear" ? setConfirmOpen(true) : void onAction(action)
-        }
-        size="sm"
-        type="button"
-        variant="outline"
-      >
-        {action === "clear" ? "Clear saved key" : "Use saved key"}
-      </Button>
-      {confirmOpen ? (
+    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <div className="min-w-0 flex-[1_1_20rem] space-y-0.5">
+        <p className="font-medium text-foreground text-sm">Project API key</p>
+        {reachable ? (
+          <p className="text-muted-foreground text-xs">Saved in settings</p>
+        ) : (
+          <p className="text-amber-800 text-xs dark:text-amber-200">
+            Composio rejected the saved key. Check that it is a project key, not
+            the MCP consumer key.
+          </p>
+        )}
+      </div>
+      <div className="flex gap-2">
+        {reachable ? null : (
+          <Button
+            aria-disabled={form.isFetching || undefined}
+            onClick={() => !form.isFetching && form.retry()}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {form.isFetching ? <Spinner className="size-4" /> : "Try again"}
+          </Button>
+        )}
+        <Button
+          id={COMPOSIO_REPLACE_ID}
+          onClick={form.replace}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          Replace
+        </Button>
+        <Button
+          onClick={() => setConfirmRemove(true)}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          Remove
+        </Button>
+      </div>
+      {confirmRemove ? (
         <ConfirmDialog
-          confirmLabel="Clear key"
+          confirmLabel="Remove key"
           description="Composio tools stop working in every organization until a new key is saved."
-          onClose={() => setConfirmOpen(false)}
-          onConfirm={() => onAction("clear")}
-          title="Clear the Composio key?"
+          onClose={() => setConfirmRemove(false)}
+          onConfirm={() => form.manageKey("clear")}
+          title="Remove the Composio key?"
         />
       ) : null}
-    </>
+    </div>
   );
 }
 
-function ComposioSettingsFormBody({
-  embedded,
-  form,
-}: {
-  embedded: boolean;
-  form: ReturnType<typeof useComposioSettingsForm>;
-}) {
-  const configured = form.settings?.configured === true;
-  const composioReachable = form.settings?.composioReachable === true;
-  const footerPadding = embedded ? "pt-1.5" : "px-4 pb-3";
+function ComposioEnvironmentRow() {
+  return (
+    <div className="flex items-center justify-between gap-3 px-4 py-3">
+      <div className="min-w-0 space-y-0.5">
+        <p className="font-medium text-foreground text-sm">Project API key</p>
+        <p className="text-muted-foreground text-xs">
+          Set on the server with{" "}
+          <code className="font-mono">COMPOSIO_API_KEY</code>. Change it there.
+        </p>
+      </div>
+      <LockIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+    </div>
+  );
+}
+
+function ComposioKeyBody({ form }: { form: ComposioForm }) {
+  const settings = form.settings;
+
+  if (settings?.source === "environment") {
+    return <ComposioEnvironmentRow />;
+  }
+
+  if (settings?.configured && !form.editing) {
+    return (
+      <ComposioKeyRow form={form} reachable={settings.composioReachable} />
+    );
+  }
 
   return (
-    <IntegrationCardShell embedded={embedded}>
-      <ComposioSettingsIntro
-        composioReachable={composioReachable}
-        configured={configured}
-        embedded={embedded}
-      />
-
-      <ComposioApiKeySection
-        apiKey={form.apiKey}
-        composioReachable={composioReachable}
-        configured={configured}
-        embedded={embedded}
-        errorMessage={composioSettingsError(form.formError, form.loadError)}
-        onApiKeyChange={(value) => {
-          form.setApiKey(value);
-          form.setFormError(null);
-        }}
-        onSave={() => void form.handleSave()}
-        onToggleShowApiKey={() => form.setShowApiKey((current) => !current)}
-        savePending={form.savePending}
-        showApiKey={form.showApiKey}
-        source={form.settings?.source}
-      />
-
-      {form.settings?.source === "settings" ||
-      (form.settings?.source === "missing" && form.settings.savedAvailable) ? (
-        <div className={cn(embedded ? "pb-2" : "px-4 pb-3")}>
-          <ComposioSavedKeyAction
-            action={
-              form.settings.source === "settings" ? "clear" : "use-stored"
-            }
-            onAction={form.manageKey}
-          />
-        </div>
-      ) : null}
-
-      <div className={cn(footerPadding)}>
-        <a
-          className="inline-flex items-center gap-2 text-muted-foreground text-xs transition-colors hover:text-foreground"
-          href="https://dashboard.composio.dev"
-          rel="noreferrer"
-          target="_blank"
-        >
-          <Link01Icon aria-hidden className="size-3.5 shrink-0" />
-          <span>
-            Get a project API key:{" "}
-            <span className={cn("font-medium text-primary")}>
-              Settings → Project Settings → API Keys
-            </span>
-          </span>
-        </a>
-      </div>
-    </IntegrationCardShell>
+    <ComposioKeyEditor canCancel={settings?.configured === true} form={form} />
   );
 }
 
-export function ComposioSettingsCard({
-  embedded = false,
-}: {
-  embedded?: boolean;
-}) {
+function composioStatus(form: ComposioForm): ComposioStatus {
+  if (!form.settings?.configured) {
+    return "missing";
+  }
+
+  return form.settings.composioReachable ? "connected" : "unreachable";
+}
+
+export function ComposioSettingsCard() {
   const form = useComposioSettingsForm();
 
   if (form.isLoading) {
-    return <ComposioSettingsSkeleton embedded={embedded} />;
+    return (
+      <IntegrationCardShell busyLabel="Loading Composio settings">
+        <div className="flex items-center justify-between gap-4 border-border border-b px-4 py-3">
+          <div className="skeleton-shimmer h-4 w-24 rounded" />
+          <div className="skeleton-shimmer h-6 w-24 shrink-0 rounded-full" />
+        </div>
+        <div className="flex items-center justify-between gap-4 px-4 py-3">
+          <div className="skeleton-shimmer h-9 w-48 rounded" />
+          <div className="skeleton-shimmer h-8 w-40 shrink-0 rounded-md" />
+        </div>
+      </IntegrationCardShell>
+    );
   }
 
-  return <ComposioSettingsFormBody embedded={embedded} form={form} />;
+  return (
+    <IntegrationCardShell>
+      <div className="flex items-center justify-between gap-4 border-border border-b px-4 py-3">
+        <p className="font-medium text-foreground text-sm">Composio</p>
+        <ComposioStatusBadge status={composioStatus(form)} />
+      </div>
+      <ComposioKeyBody form={form} />
+      {form.error ? (
+        <p className="px-4 pb-3 text-destructive text-xs" role="alert">
+          {form.error}
+        </p>
+      ) : null}
+    </IntegrationCardShell>
+  );
 }
