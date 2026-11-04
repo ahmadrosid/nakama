@@ -17,7 +17,7 @@ import { resolveWebPublicUrl } from "@nakama/core/runtime";
 import { getTelegramConfigDir } from "@nakama/core/telegram-config";
 import { createTelegramWorkerHeartbeat } from "@nakama/core/telegram-worker";
 import { TelegramAuthStore } from "./auth-store";
-import { createBot } from "./bot";
+import { createBot, runTelegramBot } from "./bot";
 import { loadTelegramIdentities, type TelegramBridgeConfig } from "./config";
 
 installErrorHandlers("worker:telegram");
@@ -26,7 +26,7 @@ void installErrorTrackingSink();
 
 type StartedIdentity = {
   clearHeartbeat: () => Promise<void>;
-  stop: () => void;
+  stop: () => Promise<void>;
   writeHeartbeat: () => Promise<void>;
 };
 
@@ -186,13 +186,16 @@ async function startIdentity(
     orgStore,
     sessionStore,
   });
+  const runner = runTelegramBot(bot);
+
+  console.log(`Bot @${bot.botInfo.username} is listening for ${label}.`);
 
   const writeHeartbeat = () =>
     heartbeat.write({ pid: process.pid, updatedAt: new Date().toISOString() });
 
   started.push({
     clearHeartbeat: heartbeat.clear,
-    stop: () => bot.stop(),
+    stop: runner.stop,
     writeHeartbeat,
   });
 
@@ -204,11 +207,7 @@ async function startIdentity(
   );
 
   return {
-    running: bot.start({
-      onStart: (info) => {
-        console.log(`Bot @${info.username} is listening for ${label}.`);
-      },
-    }),
+    running: runner.running,
   };
 }
 
@@ -219,10 +218,9 @@ async function stopAll(): Promise<void> {
   }
 
   await Promise.all(
-    started.map((identity) => {
-      identity.stop();
-
-      return identity.clearHeartbeat();
+    started.map(async (identity) => {
+      await identity.stop();
+      await identity.clearHeartbeat();
     })
   );
 }
