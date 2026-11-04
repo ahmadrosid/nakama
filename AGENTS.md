@@ -35,6 +35,17 @@ Lean is the line core keeps. Judge every design, review and issue breakdown agai
 - PRs: ready for review by default; drafts only on explicit user request. Overrides skills.
 - Browser checks only when explicitly requested (`agent-browser`); otherwise tests, type checks, builds. Do not add Playwright.
 
+## Review checklist
+
+Past reviews found these most often. Check them before you open a PR.
+
+1. **Fail closed, trust nothing.** Missing org/user/row denies access. Verify client and webhook values against the source of truth. Revoke new credentials on password change and member removal.
+2. **Bound it.** Each new route, stream, listener or cache has a size cap, a deadline and cleanup on cancel/timeout.
+3. **Keep errors.** No catch-all status, no silent `.catch`, no silent fallback, no raw provider errors to members.
+4. **Existing installs.** Old config, stale saved lists, cached redirects and revoked state still work.
+5. **Reuse first.** Search the repo and SDK for a helper. When you port upstream logic, port every branch.
+6. **Tests fail without the change.** Go through the real entry point, not a mock default.
+
 ## Dev
 
 - Bun 1.4+: `bun install`, `bun run`, `bun test`
