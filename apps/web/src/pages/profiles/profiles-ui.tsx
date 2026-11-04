@@ -13,7 +13,7 @@ import {
   Upload04Icon,
   UserGroup02Icon,
 } from "hugeicons-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import {
   isMoodstoneAvatar,
   MOODSTONE_COLORS,
@@ -22,6 +22,7 @@ import {
   moodstoneSvg,
 } from "@/components/moodstone";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
+import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import {
   type ProfileSaveStatus,
   profilesTagline,
@@ -137,6 +138,29 @@ export function EditableProfileAvatar({
     null
   );
 
+  const reducedMotion = useReducedMotion();
+
+  const cutPreviews = useMemo(
+    () =>
+      MOODSTONE_CUTS.map(
+        (_, cutIndex) =>
+          `data:image/svg+xml,${encodeURIComponent(
+            moodstoneSvg(cutIndex, colorIndex)
+          )}`
+      ),
+    [colorIndex]
+  );
+
+  const previewSrc = useMemo(
+    () =>
+      previewAvatarIndex === null
+        ? null
+        : `data:image/svg+xml,${encodeURIComponent(
+            moodstoneSvg(previewAvatarIndex, colorIndex, !reducedMotion)
+          )}`,
+    [previewAvatarIndex, colorIndex, reducedMotion]
+  );
+
   return (
     <>
       <Popover
@@ -174,7 +198,7 @@ export function EditableProfileAvatar({
             className="relative mb-1 flex h-33 items-center justify-center rounded-lg transition-colors duration-150 ease-out"
             style={{ backgroundColor: `${MOODSTONE_COLORS[colorIndex].lit}4d` }}
           >
-            {previewAvatarIndex === null ? (
+            {previewSrc === null ? (
               <ProfileAvatar
                 active
                 className="size-20 rounded-none outline-none"
@@ -186,18 +210,11 @@ export function EditableProfileAvatar({
                 alt="Avatar preview"
                 className="size-20"
                 height={80}
-                src={`data:image/svg+xml,${encodeURIComponent(
-                  moodstoneSvg(
-                    previewAvatarIndex,
-                    colorIndex,
-                    !window.matchMedia("(prefers-reduced-motion: reduce)")
-                      .matches
-                  )
-                )}`}
+                src={previewSrc}
                 width={80}
               />
             )}
-            {previewAvatarIndex === null ? null : (
+            {previewSrc === null ? null : (
               <Button
                 aria-label="Undo"
                 className="absolute top-2 left-2 bg-background/85 shadow-xs"
@@ -243,9 +260,7 @@ export function EditableProfileAvatar({
                   alt=""
                   className="size-7"
                   height={28}
-                  src={`data:image/svg+xml,${encodeURIComponent(
-                    moodstoneSvg(avatarIndex, colorIndex)
-                  )}`}
+                  src={cutPreviews[avatarIndex]}
                   width={28}
                 />
               </button>

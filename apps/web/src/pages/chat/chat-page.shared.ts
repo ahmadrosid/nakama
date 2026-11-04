@@ -447,48 +447,49 @@ export function nextSuccessfulTurnAt(
 }
 
 /**
- * What the agent is doing, in the order the avatar should show it: a failed
- * turn stays failed until the next send, a running tool outranks the reply it
- * belongs to, and an unfinished turn with no live token is still thinking.
+ * What the agent is doing, in the order the avatar should show it: a running
+ * tool outranks the reply it belongs to, a failed turn stays failed until the
+ * next send, and an unfinished turn with no live token is still thinking.
+ * Only the current turn counts; a page-level error is not a turn failure.
  */
 export function deriveAgentActivity(
   busy: boolean,
-  error: string | null,
   messages: ChatListItem[],
   done = false
 ): AgentActivity {
-  if (error) {
-    return "error";
+  let failed = false;
+  let last: ChatListItem | undefined;
+  let runningTool = false;
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+
+    if (message.role === "user") {
+      break;
+    }
+
+    last ??= message;
+    failed ||= message.failed === true;
+    runningTool ||= message.role === "tool" && message.toolStatus === "running";
   }
 
-  if (busy) {
-    const turnStart =
-      messages.findLastIndex((message) => message.role === "user") + 1;
+  if (!busy) {
+    return failed ? "error" : done ? "done" : "idle";
+  }
 
-    const turn = messages.slice(turnStart);
+  if (runningTool) {
+    return "tool";
+  }
 
-    if (
-      turn.some(
-        (message) => message.role === "tool" && message.toolStatus === "running"
-      )
-    ) {
-      return "tool";
-    }
-
-    const last = turn.at(-1);
-
-    if (last?.role === "assistant" && last.thinkingStreaming) {
-      return "thinking";
-    }
-
-    if (last?.role === "assistant" && last.streaming) {
-      return "responding";
-    }
-
+  if (last?.role === "assistant" && last.thinkingStreaming) {
     return "thinking";
   }
 
-  return done ? "done" : "idle";
+  if (last?.role === "assistant" && last.streaming) {
+    return "responding";
+  }
+
+  return "thinking";
 }
 
 /**

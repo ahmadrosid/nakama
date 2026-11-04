@@ -71,24 +71,41 @@ const DONE_ACTIVITY_MS = 2400;
 
 function useAgentActivity(
   busy: boolean,
-  error: string | null,
   messages: ChatListItem[],
-  lastSuccessfulTurnAt: number | null
+  lastSuccessfulTurnAt: number | null,
+  sessionId: string
 ): AgentActivity {
   const [celebrating, setCelebrating] = useState(false);
+  const seen = useRef({ sessionId, turnAt: lastSuccessfulTurnAt });
 
   useEffect(() => {
-    if (lastSuccessfulTurnAt === null) {
+    // The timestamp survives a session change: opening another chat must not
+    // replay the flash of the one that just finished.
+    if (seen.current.sessionId !== sessionId) {
+      seen.current = { sessionId, turnAt: lastSuccessfulTurnAt };
+      setCelebrating(false);
+
       return;
     }
 
+    if (
+      lastSuccessfulTurnAt === null ||
+      seen.current.turnAt === lastSuccessfulTurnAt
+    ) {
+      return;
+    }
+
+    seen.current.turnAt = lastSuccessfulTurnAt;
     setCelebrating(true);
     const timer = setTimeout(() => setCelebrating(false), DONE_ACTIVITY_MS);
 
     return () => clearTimeout(timer);
-  }, [lastSuccessfulTurnAt]);
+  }, [lastSuccessfulTurnAt, sessionId]);
 
-  return deriveAgentActivity(busy, error, messages, celebrating);
+  return useMemo(
+    () => deriveAgentActivity(busy, messages, celebrating),
+    [busy, messages, celebrating]
+  );
 }
 
 export function ChatPageContent({
@@ -404,7 +421,6 @@ function ChatConversation({
     cognito,
     contextUsage,
     currentModelSelection,
-    error,
     handleBranchMessage,
     handleEditMessage,
     handleTryAgainMessage,
@@ -423,9 +439,9 @@ function ChatConversation({
 
   const agentActivity = useAgentActivity(
     busy,
-    error,
     messages,
-    lastSuccessfulTurnAt
+    lastSuccessfulTurnAt,
+    session?.id ?? "new"
   );
 
   // Cognito chats are not kept, so neither is their open panel.

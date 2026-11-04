@@ -2,6 +2,7 @@ import { cn } from "@nakama/ui/utils";
 import { hashToSeeds, oklchToCss } from "hashvatar";
 import { Hashvatar } from "hashvatar/react";
 import { useEffect, useMemo, useState } from "react";
+import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import {
   type AgentActivity,
   isPreMoodstone,
@@ -32,6 +33,9 @@ const sizePixels = {
   xs: 20,
   xxs: 18,
 } as const;
+
+/** Skip the flicker between short tool calls; one loop restart per visible state. */
+const ACTIVITY_DEBOUNCE_MS = 160;
 
 /** Two OKLCH tones derived from the profile hash — same hash ⇒ same palette. */
 function tonesFromHash(hash: string): [string, string] {
@@ -74,17 +78,21 @@ export function ProfileAvatar({
 }) {
   const avatarUrl = resolveAvatarSrc(profile, orgId);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  // Start still on the server and before the motion preference is known.
-  const [reducedMotion, setReducedMotion] = useState(true);
+  const reducedMotion = useReducedMotion();
+  const [visibleActivity, setVisibleActivity] = useState(activity);
 
   useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReducedMotion(media.matches);
-    update();
-    media.addEventListener("change", update);
+    if (visibleActivity === activity) {
+      return;
+    }
 
-    return () => media.removeEventListener("change", update);
-  }, []);
+    const timer = setTimeout(
+      () => setVisibleActivity(activity),
+      ACTIVITY_DEBOUNCE_MS
+    );
+
+    return () => clearTimeout(timer);
+  }, [activity, visibleActivity]);
 
   const src = useMemo(() => {
     if (avatarUrl && avatarUrl !== failedUrl) {
@@ -100,7 +108,7 @@ export function ProfileAvatar({
       avatarIndex,
       colorIndex,
       active && !reducedMotion,
-      moodForActivity(activity)
+      moodForActivity(visibleActivity)
     );
 
     // An image document isolates SVG gradient IDs, even for repeated profiles.
@@ -111,7 +119,7 @@ export function ProfileAvatar({
     profile.id,
     profile.name,
     active,
-    activity,
+    visibleActivity,
     reducedMotion,
   ]);
 
@@ -131,7 +139,7 @@ export function ProfileAvatar({
 
     return (
       <Hashvatar
-        animated={active}
+        animated={active && !reducedMotion && visibleActivity !== "idle"}
         className={surfaceClass}
         hash={hash}
         mode="dither"

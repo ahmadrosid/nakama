@@ -132,23 +132,57 @@ function withNotice(svg: string): string {
   return svg.slice(0, openTagEnd) + MOODSTONE_NOTICE + svg.slice(openTagEnd);
 }
 
+/** Small LRU: activity changes reuse a loop instead of rebuilding it. */
+const SVG_CACHE_LIMIT = 24;
+
+const svgCache = new Map<string, string>();
+
+function cachedSvg(key: string, build: () => string): string {
+  const cached = svgCache.get(key);
+
+  if (cached !== undefined) {
+    svgCache.delete(key);
+    svgCache.set(key, cached);
+
+    return cached;
+  }
+
+  const svg = build();
+
+  svgCache.set(key, svg);
+
+  if (svgCache.size > SVG_CACHE_LIMIT) {
+    const oldest = svgCache.keys().next().value;
+
+    if (oldest !== undefined) {
+      svgCache.delete(oldest);
+    }
+  }
+
+  return svg;
+}
+
 export function moodstoneSvg(
   avatarIndex: number,
   colorIndex: number,
   animated = false,
   mood: Mood = "idle"
 ): string {
-  const spec = resolveSpec({
-    color: PALETTE[PALETTE_KEYS[colorIndex]],
-    cut: MOODSTONE_CUTS[avatarIndex],
-    eyeColor: EYE_WHITE,
-    mood,
-    seed: DEFAULT_SEED,
-  });
+  const key = `${avatarIndex}:${colorIndex}:${animated ? "animated" : "still"}:${mood}`;
 
-  return withNotice(
-    animated
-      ? renderAnimatedAvatarSvg(spec, { fps: 24, size: 64 })
-      : renderAvatarSvg(spec, stillFrame(spec), { size: 64 })
-  );
+  return cachedSvg(key, () => {
+    const spec = resolveSpec({
+      color: PALETTE[PALETTE_KEYS[colorIndex]],
+      cut: MOODSTONE_CUTS[avatarIndex],
+      eyeColor: EYE_WHITE,
+      mood,
+      seed: DEFAULT_SEED,
+    });
+
+    return withNotice(
+      animated
+        ? renderAnimatedAvatarSvg(spec, { fps: 24, size: 64 })
+        : renderAvatarSvg(spec, stillFrame(spec), { size: 64 })
+    );
+  });
 }

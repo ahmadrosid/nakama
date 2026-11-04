@@ -229,18 +229,44 @@ describe("deriveAgentActivity", () => {
     toolStatus: "running",
   });
 
-  test("an error outranks the transcript", () => {
+  test("a failed turn shows error", () => {
     expect(
-      deriveAgentActivity(false, "Rate limited", [
+      deriveAgentActivity(false, [
         user("hello"),
-        assistant("", { streaming: true }),
+        assistant("Rate limited", { failed: true }),
       ])
     ).toBe("error");
   });
 
+  test("a failure stays visible when a later tool message ended the turn", () => {
+    expect(
+      deriveAgentActivity(false, [
+        user("hello"),
+        assistant("", { failed: true, streaming: false }),
+        {
+          content: "stopped",
+          id: "tool-done",
+          role: "tool",
+          toolStatus: "done",
+        },
+      ])
+    ).toBe("error");
+  });
+
+  test("an older failed turn does not mark the current turn", () => {
+    expect(
+      deriveAgentActivity(false, [
+        user("first"),
+        assistant("Failed", { failed: true }),
+        user("second"),
+        assistant("Done", { streaming: false }),
+      ])
+    ).toBe("idle");
+  });
+
   test("a running tool outranks the reply it belongs to", () => {
     expect(
-      deriveAgentActivity(true, null, [
+      deriveAgentActivity(true, [
         user("hello"),
         assistant("", { streaming: true }),
         runningTool(),
@@ -250,7 +276,7 @@ describe("deriveAgentActivity", () => {
 
   test("reasoning tokens show thinking", () => {
     expect(
-      deriveAgentActivity(true, null, [
+      deriveAgentActivity(true, [
         user("hello"),
         assistant("", { streaming: true, thinkingStreaming: true }),
       ])
@@ -259,7 +285,7 @@ describe("deriveAgentActivity", () => {
 
   test("streamed text shows responding", () => {
     expect(
-      deriveAgentActivity(true, null, [
+      deriveAgentActivity(true, [
         user("hello"),
         assistant("Working on it", { streaming: true }),
       ])
@@ -267,12 +293,12 @@ describe("deriveAgentActivity", () => {
   });
 
   test("a turn waiting on the model is still thinking", () => {
-    expect(deriveAgentActivity(true, null, [user("hello")])).toBe("thinking");
+    expect(deriveAgentActivity(true, [user("hello")])).toBe("thinking");
   });
 
   test("a finished turn is idle", () => {
     expect(
-      deriveAgentActivity(false, null, [
+      deriveAgentActivity(false, [
         user("hello"),
         assistant("Done", { streaming: false }),
       ])
@@ -280,9 +306,7 @@ describe("deriveAgentActivity", () => {
   });
 
   test("a successful turn celebrates until the flash ends", () => {
-    expect(deriveAgentActivity(false, null, [user("hello")], true)).toBe(
-      "done"
-    );
+    expect(deriveAgentActivity(false, [user("hello")], true)).toBe("done");
   });
 });
 

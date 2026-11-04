@@ -39,7 +39,7 @@ describe("moodstoneSvg", () => {
     const svg = moodstoneSvg(0, 0, true, "thinking");
 
     expect(svg).toContain("<animate");
-    expect(svg).toContain("MIT License");
+    expect(svg).toMatch(/^<svg[^>]*><!--[\s\S]*?-->/);
     expect(svg).not.toContain("MOODSTONE_");
   });
 
