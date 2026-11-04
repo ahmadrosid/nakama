@@ -327,7 +327,7 @@ describe("member artifact scope (#1816)", () => {
     expect(ana.artifacts).toHaveLength(2);
   });
 
-  test("a member cannot delete an artifact someone else made", async () => {
+  test("a member cannot read, edit or delete an artifact someone else made", async () => {
     await runSaveArtifactTool(
       { content: "x", path: "artifacts/ana.md" },
       context,
@@ -337,8 +337,30 @@ describe("member artifact scope (#1816)", () => {
     const agent = new AgentService(null, null, db);
 
     await expect(
+      agent.readProfileArtifact("org_a", "profile_a", "ana.md", {}, "user_bo")
+    ).rejects.toThrow("Forbidden");
+    await expect(
+      agent.writeProfileArtifact(
+        "org_a",
+        "profile_a",
+        "ana.md",
+        "bo",
+        "user_bo"
+      )
+    ).rejects.toThrow("Forbidden");
+    await expect(
       agent.deleteProfileArtifact("org_a", "profile_a", "ana.md", "user_bo")
     ).rejects.toThrow("Forbidden");
+
+    const read = await agent.readProfileArtifact(
+      "org_a",
+      "profile_a",
+      "ana.md",
+      {},
+      "user_ana"
+    );
+
+    expect(new TextDecoder().decode(read.bytes)).toBe("x");
 
     await agent.deleteProfileArtifact(
       "org_a",
