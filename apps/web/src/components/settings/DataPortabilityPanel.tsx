@@ -54,7 +54,8 @@ export function DataPortabilityPanel() {
   );
 
   const [error, setError] = useState<string | null>(null);
-  const lastBackupError = useBackupStatusQuery().data?.lastError;
+  const backupStatus = useBackupStatusQuery();
+  const lastBackupError = backupStatus.data?.lastError;
   const exportMutation = useExportData();
   const previewMutation = usePreviewDataImport();
   const restoreMutation = useRestoreDataImport();
@@ -156,6 +157,9 @@ export function DataPortabilityPanel() {
           {new Date(lastBackupError.at).toLocaleString()}:{" "}
           {lastBackupError.message}
         </PanelError>
+      ) : null}
+      {backupStatus.isError ? (
+        <PanelError>Cannot check the last scheduled backup.</PanelError>
       ) : null}
       <section className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         <p className="text-balance font-medium text-foreground text-sm">

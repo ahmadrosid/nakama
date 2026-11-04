@@ -9,6 +9,7 @@ export function useBackupStatusQuery() {
   return useQuery({
     queryFn: () => client.getBackupStatus(),
     queryKey: queryKeys.backupStatus,
+    staleTime: Number.POSITIVE_INFINITY,
   });
 }
 

@@ -14,10 +14,16 @@ afterEach(() => {
   }
 });
 
-async function renderPanel(status: BackupStatusResponse): Promise<string> {
-  const backupStatus = spyOn(client, "getBackupStatus").mockResolvedValue(
-    status
-  );
+async function renderPanel(
+  status: BackupStatusResponse | Error
+): Promise<string> {
+  const backupStatus = spyOn(client, "getBackupStatus");
+
+  if (status instanceof Error) {
+    backupStatus.mockRejectedValue(status);
+  } else {
+    backupStatus.mockResolvedValue(status);
+  }
 
   const container = document.createElement("div");
   document.body.append(container);
@@ -30,7 +36,11 @@ async function renderPanel(status: BackupStatusResponse): Promise<string> {
 
   await act(async () => {
     root.render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
         <DataPortabilityPanel />
       </QueryClientProvider>
     );
@@ -60,4 +70,16 @@ test("shows no backup error when the last scheduled backup was good", async () =
   const text = await renderPanel({ lastError: null });
 
   expect(text).not.toContain(message);
+});
+
+test("does not look like a good backup when the status cannot be read", async () => {
+  const good = await renderPanel({ lastError: null });
+
+  for (const cleanup of cleanups.splice(0)) {
+    cleanup();
+  }
+
+  const failed = await renderPanel(new Error("network down"));
+
+  expect(failed).not.toBe(good);
 });
