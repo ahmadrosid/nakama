@@ -1034,6 +1034,11 @@ export interface DatabaseAdapter {
   getActiveAutomationRun(
     automationId: string
   ): Promise<StoredAutomationRunRecord | null>;
+  getArtifactRecord(
+    orgId: string,
+    profileId: string,
+    filename: string
+  ): Promise<StoredArtifactRecord | null>;
   getArtifactShareById(
     orgId: string,
     profileId: string,

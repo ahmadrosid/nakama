@@ -652,7 +652,23 @@ describe("profile artifact content auth", () => {
     );
 
     expect(list.status).toBe(200);
-    expect(scopeCalls).toEqual([undefined, undefined]);
+
+    // Org admins reach every member's artifact, so delete is not scoped either.
+    const deleteResponse = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/profiles/profile_1/artifacts?path=report.md",
+        {
+          headers: session.headers(
+            { "X-CSRF-Token": session.csrfToken },
+            admin.orgId
+          ),
+          method: "DELETE",
+        }
+      )
+    );
+
+    expect(deleteResponse.status).toBe(200);
+    expect(scopeCalls).toEqual([undefined, undefined, undefined]);
   });
 
   test("platform admin can still list every artifact", async () => {

@@ -3608,6 +3608,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE a.org_id = ? AND a.profile_id = ?
   `);
 
+  const getArtifactRecordStmt = db.prepare<
+    ArtifactOwnerRow,
+    SQLQueryBindings[]
+  >(`
+    SELECT
+      org_id, profile_id, filename, session_id, user_id, channel, created_at,
+      NULL AS user_name
+    FROM artifacts
+    WHERE org_id = ? AND profile_id = ? AND filename = ?
+  `);
+
   const deleteArtifactRecordStmt = db.prepare(`
     DELETE FROM artifacts WHERE org_id = ? AND profile_id = ? AND filename = ?
   `);
@@ -5032,6 +5043,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const row = getActiveAutomationRunStmt.get(automationId);
 
       return row ? toAutomationRunRecord(row) : null;
+    },
+
+    async getArtifactRecord(orgId, profileId, filename) {
+      const row = getArtifactRecordStmt.get(orgId, profileId, filename);
+
+      return row ? toArtifactOwnerRecord(row) : null;
     },
 
     async getArtifactShareById(orgId, profileId, shareId) {
