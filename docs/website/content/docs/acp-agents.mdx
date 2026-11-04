@@ -1,9 +1,9 @@
 ---
 title: "ACP chat agents"
-description: "Run Claude or Codex as the chat agent for a Nakama profile with the Agent Client Protocol."
+description: "Run Claude, Codex, or OpenCode as the chat agent for a Nakama profile with the Agent Client Protocol."
 ---
 
-Nakama can run a Claude or Codex agent as the chat agent for a profile. The agent runs on the Nakama server and uses the Agent Client Protocol (ACP) to send replies and tool updates to Nakama.
+Nakama can run a Claude, Codex, or OpenCode agent as the chat agent for a profile. The agent runs on the Nakama server and uses the Agent Client Protocol (ACP) to send replies and tool updates to Nakama.
 
 ## Why use an ACP agent
 
@@ -17,7 +17,7 @@ Only platform admins can create agents and change an agent's chat agent.
 
 1. In the left rail, click **+** to open **Create agent**.
 2. Type a **Name**.
-3. Click **Change**. In **Agent**, select **Claude** or **Codex**. **Agent id** is optional.
+3. Click **Change**. In **Agent**, select **Claude**, **Codex**, or **OpenCode**. **Agent id** is optional.
 4. Optional: choose an **Avatar**, and select the **Tools** the agent can use. The ACP agent gets these tools over MCP.
 5. Click **Create agent**.
 
@@ -33,7 +33,7 @@ Only platform admins can create agents and change an agent's chat agent.
 
 1. Click **Agent** in the sidebar and select the agent in the left rail.
 2. Open the agent menu under the agent's name.
-3. Select **Claude** or **Codex**. The change saves at once.
+3. Select **Claude**, **Codex**, or **OpenCode**. The change saves at once.
 
 ![The Agent menu open with Nakama, Claude, and Codex](/screenshots/acp-chat-agent-menu.png)
 
@@ -43,7 +43,17 @@ In chat, the composer shows the model and reasoning choices that the selected AC
 
 The ACP agent runs as a child process on the machine that runs Nakama. The server image includes the Claude and Codex ACP packages. The agent may still need its own provider credentials or sign-in on that machine before it can answer.
 
-Keep the server able to start child processes. In Docker deployments, configure credentials for the container, not only for the host. The default Docker image does not include the Claude and Codex binaries. See [Docker](/docker#claude-and-codex-agents). Follow the selected agent's instructions for authentication and model access.
+Keep the server able to start child processes. In Docker deployments, configure credentials for the container, not only for the host. The default Docker image does not include the Claude, Codex, and OpenCode binaries. See [Docker](/docker#claude-codex-and-opencode-agents).
+
+OpenCode needs version 0.15.10 or later, the first release with `opencode acp`. Nakama looks for it in this order:
+
+1. The `OPENCODE_PATH` environment variable.
+2. The OpenCode binary in the server's `node_modules`.
+3. The server `PATH`, plus `~/.bun/bin`, `~/.opencode/bin`, `/opt/homebrew/bin`, and `/usr/local/bin`. On Windows, Nakama also checks the npm global folder.
+
+Nakama uses the same search folders (step 3) for every agent that you save as a command name only, such as `gemini`.
+
+If Nakama cannot find OpenCode, the chat shows an error. Install OpenCode with `npm i -g opencode-ai` or `bun add -g opencode-ai`, or set `OPENCODE_PATH`. Follow the selected agent's instructions for authentication and model access.
 
 An ACP agent uses the profile's workspace as its working directory. Nakama gives it access only to tools assigned to that profile. Review those tools before you enable an ACP agent for a profile.
 

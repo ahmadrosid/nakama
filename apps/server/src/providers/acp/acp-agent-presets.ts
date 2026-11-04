@@ -1,5 +1,6 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { AcpAgentConfig } from "@nakama/core";
 import { z } from "zod";
@@ -21,6 +22,17 @@ const BUNDLED_AGENTS = [
   },
 ] as const;
 
+/**
+ * OpenCode has no separate ACP adapter: its own CLI speaks ACP. The profile
+ * keeps the bare command, and `resolveAcpAgentLaunch` finds the binary when
+ * the agent starts.
+ */
+const OPENCODE_AGENT = {
+  agent: { args: ["acp"], command: "opencode" },
+  id: "opencode",
+  label: "OpenCode",
+} as const;
+
 export interface AcpAgentPreset {
   agent: AcpAgentConfig;
   id: string;
@@ -37,13 +49,25 @@ const packageManifestSchema = z.object({
     .optional(),
 });
 
-/** The bundled agents, with each one's entry point resolved on this server. */
+/** The agents a profile can pick, with bundled entry points resolved on this server. */
 export function listAcpAgentPresets(): AcpAgentPreset[] {
-  return BUNDLED_AGENTS.map(({ id, label, packageName }) => ({
+  const bundled = BUNDLED_AGENTS.map(({ id, label, packageName }) => ({
     agent: resolveBundledAgent(packageName),
     id,
     label,
   }));
+
+  return [
+    ...bundled,
+    {
+      agent: {
+        args: [...OPENCODE_AGENT.agent.args],
+        command: OPENCODE_AGENT.agent.command,
+      },
+      id: OPENCODE_AGENT.id,
+      label: OPENCODE_AGENT.label,
+    },
+  ];
 }
 
 /**
@@ -68,4 +92,146 @@ function resolveBundledAgent(packageName: string): AcpAgentConfig {
     args: [join(dirname(manifestPath), entry)],
     command: process.execPath,
   };
+}
+
+export interface AcpAgentLaunchCommand {
+  args: string[];
+  command: string;
+  /** Windows `.cmd` / `.bat` shims only run through a shell. */
+  shell: boolean;
+}
+
+/** Only for tests: the server's own values are the default. */
+export interface AcpAgentLaunchOptions {
+  env?: NodeJS.ProcessEnv;
+  platform?: NodeJS.Platform;
+}
+
+/** Windows env names ignore case (`Path`); Linux and macOS names do not. */
+function readEnv(
+  host: Required<AcpAgentLaunchOptions>,
+  name: string
+): string | undefined {
+  if (host.platform !== "win32") {
+    return host.env[name];
+  }
+
+  const key = Object.keys(host.env).find(
+    (entry) => entry.toUpperCase() === name.toUpperCase()
+  );
+
+  return key ? host.env[key] : undefined;
+}
+
+/**
+ * The platform binary that `opencode-ai` installs as an optional dependency.
+ * Its own bin is a stub until postinstall runs, and Nakama installs with
+ * `--ignore-scripts`, so the platform package is the reliable path.
+ */
+function findOpencodePackageBinary(platform: NodeJS.Platform): string | null {
+  const os = platform === "win32" ? "windows" : platform;
+  const binary = platform === "win32" ? "opencode.exe" : "opencode";
+  const base = `opencode-${os}-${process.arch}`;
+  const require = createRequire(import.meta.url);
+
+  for (const suffix of ["", "-baseline", "-musl", "-baseline-musl"]) {
+    let manifest: string;
+
+    try {
+      manifest = require.resolve(`${base}${suffix}/package.json`);
+    } catch {
+      continue;
+    }
+
+    const path = join(dirname(manifest), "bin", binary);
+
+    // A half-installed package has no binary. Fall through to PATH then.
+    if (existsSync(path)) {
+      return path;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * The server PATH misses common install folders: the desktop app starts the
+ * server with a minimal GUI PATH, and Docker keeps `bun add -g` binaries in
+ * BUN_INSTALL_BIN.
+ */
+function agentSearchPath(host: Required<AcpAgentLaunchOptions>): string {
+  const sep = host.platform === "win32" ? ";" : ":";
+
+  const home =
+    readEnv(host, host.platform === "win32" ? "USERPROFILE" : "HOME") ??
+    homedir();
+
+  const appData = readEnv(host, "APPDATA");
+
+  const extras = [
+    readEnv(host, "BUN_INSTALL_BIN"),
+    join(home, ".bun", "bin"),
+    join(home, ".opencode", "bin"),
+    // npm's global bin on Windows, where `npm i -g` puts `.cmd` shims.
+    ...(host.platform === "win32"
+      ? [appData ? join(appData, "npm") : undefined]
+      : ["/opt/homebrew/bin", "/usr/local/bin"]),
+  ];
+
+  return [readEnv(host, "PATH"), ...extras]
+    .filter((entry): entry is string => Boolean(entry))
+    .join(sep);
+}
+
+function isBareCommand(command: string): boolean {
+  return !/[\\/]/.test(command);
+}
+
+/**
+ * Turns a profile's saved agent into the command to spawn. Bundled agents
+ * already carry absolute paths. A bare command (`opencode`, `gemini`) is found
+ * here, at start time, so the preset stays the same whether or not the agent
+ * is installed yet.
+ */
+export function resolveAcpAgentLaunch(
+  agent: AcpAgentConfig,
+  options: AcpAgentLaunchOptions = {}
+): AcpAgentLaunchCommand {
+  const host: Required<AcpAgentLaunchOptions> = {
+    env: options.env ?? process.env,
+    platform: options.platform ?? process.platform,
+  };
+
+  const isOpencode = agent.command === OPENCODE_AGENT.agent.command;
+
+  const found =
+    (isOpencode
+      ? readEnv(host, "OPENCODE_PATH") ||
+        findOpencodePackageBinary(host.platform)
+      : null) ||
+    (isBareCommand(agent.command)
+      ? Bun.which(agent.command, { PATH: agentSearchPath(host) })
+      : agent.command);
+
+  if (!found) {
+    if (isOpencode) {
+      throw new Error(
+        "OpenCode is not installed on the Nakama server. Install opencode-ai (OpenCode 0.15.10 or later), or set OPENCODE_PATH to the opencode binary."
+      );
+    }
+
+    // Spawn fails with ENOENT, and the start error names the command.
+    return { args: agent.args, command: agent.command, shell: false };
+  }
+
+  if (host.platform === "win32" && /\.(?:cmd|bat)$/i.test(found)) {
+    // Same as codex-acp with CODEX_PATH: one quoted command line for cmd.exe.
+    return {
+      args: [],
+      command: [`"${found}"`, ...agent.args].join(" "),
+      shell: true,
+    };
+  }
+
+  return { args: agent.args, command: found, shell: false };
 }
