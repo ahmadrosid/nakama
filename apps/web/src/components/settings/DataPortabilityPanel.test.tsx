@@ -16,7 +16,7 @@ afterEach(() => {
 
 async function renderPanel(
   status: BackupStatusResponse | Error
-): Promise<string> {
+): Promise<HTMLElement> {
   const backupStatus = spyOn(client, "getBackupStatus");
 
   if (status instanceof Error) {
@@ -52,34 +52,33 @@ async function renderPanel(
 
   expect(backupStatus).toHaveBeenCalledTimes(1);
 
-  return container.textContent ?? "";
+  return container;
+}
+
+function alerts(container: HTMLElement): number {
+  return container.querySelectorAll('[role="alert"]').length;
 }
 
 const message =
   "Cannot export a restorable backup: the server cannot read config.ini.";
 
 test("shows the last scheduled backup's 409 with its path", async () => {
-  const text = await renderPanel({
+  const panel = await renderPanel({
     lastError: { at: "2026-11-03T02:00:00.000Z", message },
   });
 
-  expect(text).toContain(message);
+  expect(alerts(panel)).toBe(1);
+  expect(panel.textContent).toContain(message);
 });
 
 test("shows no backup error when the last scheduled backup was good", async () => {
-  const text = await renderPanel({ lastError: null });
+  const panel = await renderPanel({ lastError: null });
 
-  expect(text).not.toContain(message);
+  expect(alerts(panel)).toBe(0);
 });
 
-test("does not look like a good backup when the status cannot be read", async () => {
-  const good = await renderPanel({ lastError: null });
+test("shows an alert when the backup status cannot be read", async () => {
+  const panel = await renderPanel(new Error("network down"));
 
-  for (const cleanup of cleanups.splice(0)) {
-    cleanup();
-  }
-
-  const failed = await renderPanel(new Error("network down"));
-
-  expect(failed).not.toBe(good);
+  expect(alerts(panel)).toBe(1);
 });

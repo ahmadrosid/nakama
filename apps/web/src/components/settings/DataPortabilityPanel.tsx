@@ -236,6 +236,7 @@ function PanelError({ children }: { children: ReactNode }) {
   return (
     <div className="px-4 py-3">
       <div
+        role="alert"
         className={cn(
           "flex items-start gap-2 rounded-md border px-3 py-2 text-sm",
           "border-destructive/30 bg-destructive/10 text-destructive"
