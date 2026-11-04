@@ -57,8 +57,8 @@ function ComposioSettingsSkeleton({
 }: {
   embedded?: boolean;
 }) {
-  const sectionPadding = embedded ? "pb-1.5" : "p-5";
-  const footerPadding = embedded ? "pt-1.5" : "px-5 py-3";
+  const sectionPadding = embedded ? "pb-1.5" : "px-4 py-3";
+  const footerPadding = embedded ? "pt-1.5" : "px-4 pb-3";
 
   return (
     <IntegrationCardShell
@@ -67,12 +67,8 @@ function ComposioSettingsSkeleton({
     >
       {embedded ? null : (
         <>
-          <div className="flex items-start justify-between gap-4 p-5 pb-4">
-            <div className="min-w-0 flex-1 space-y-2">
-              <div className="skeleton-shimmer h-5 w-24 rounded" />
-              <div className="skeleton-shimmer h-4 w-full max-w-md rounded" />
-              <div className="skeleton-shimmer h-4 w-full max-w-sm rounded" />
-            </div>
+          <div className="flex items-center justify-between gap-4 px-4 py-3">
+            <div className="skeleton-shimmer h-4 w-24 rounded" />
             <div className="skeleton-shimmer h-6 w-28 shrink-0 rounded-full" />
           </div>
 
@@ -190,16 +186,8 @@ function ComposioSettingsIntro({
 
   return (
     <>
-      <div className="flex items-start justify-between gap-4 p-5 pb-4">
-        <div className="min-w-0 space-y-1">
-          <h2 className="font-semibold text-base text-foreground leading-tight [text-wrap:balance]">
-            Composio
-          </h2>
-          <p className="text-muted-foreground text-sm leading-snug [text-wrap:pretty]">
-            Enable toolkits, connect SaaS accounts with OAuth, and sync tools
-            for profile assignment.
-          </p>
-        </div>
+      <div className="flex items-center justify-between gap-4 px-4 py-3">
+        <h3 className="font-medium text-foreground text-sm">Composio</h3>
         <ComposioStatusBadge
           composioReachable={composioReachable}
           configured={configured}
@@ -236,15 +224,15 @@ function ComposioApiKeySection({
   savePending: boolean;
   showApiKey: boolean;
 }) {
-  const sectionPadding = embedded ? "pb-1.5" : "p-5";
+  const sectionPadding = embedded ? "pb-1.5" : "px-4 py-3";
 
   return (
     <div className={cn("space-y-2", sectionPadding, embedded && "pt-0")}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
+        <div className="min-w-0 space-y-0.5">
           <p className="font-medium text-foreground text-sm">Project API key</p>
-          <p className="text-muted-foreground text-sm [text-wrap:pretty]">
-            Paste a Composio project API key, not the MCP consumer key.
+          <p className="text-muted-foreground text-xs [text-wrap:pretty]">
+            Not the MCP consumer key.
           </p>
         </div>
         {embedded ? (
@@ -338,15 +326,17 @@ function ComposioApiKeyInput({
           </InputGroupAddon>
         )}
       </InputGroup>
-      <Button
-        className="min-w-[4.5rem] shrink-0"
-        disabled={!canSave || savePending}
-        onClick={onSave}
-        size="lg"
-        type="button"
-      >
-        {savePending ? <Spinner className="size-4" /> : "Save"}
-      </Button>
+      {canSave || savePending ? (
+        <Button
+          className="shrink-0"
+          disabled={savePending}
+          onClick={onSave}
+          size="sm"
+          type="button"
+        >
+          {savePending ? <Spinner className="size-4" /> : "Save"}
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -360,7 +350,7 @@ function ComposioSettingsFormBody({
 }) {
   const configured = form.settings?.configured === true;
   const composioReachable = form.settings?.composioReachable === true;
-  const footerPadding = embedded ? "pt-1.5" : "px-5 py-3";
+  const footerPadding = embedded ? "pt-1.5" : "px-4 pb-3";
 
   return (
     <IntegrationCardShell embedded={embedded}>
@@ -389,7 +379,7 @@ function ComposioSettingsFormBody({
 
       {form.settings?.source === "settings" ||
       (form.settings?.source === "missing" && form.settings.savedAvailable) ? (
-        <div className={cn(embedded ? "pb-2" : "px-5 pb-3")}>
+        <div className={cn(embedded ? "pb-2" : "px-4 pb-3")}>
           <Button
             onClick={() =>
               void form.manageKey(
@@ -409,7 +399,7 @@ function ComposioSettingsFormBody({
 
       <div className={cn(footerPadding)}>
         <a
-          className="inline-flex items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground"
+          className="inline-flex items-center gap-2 text-muted-foreground text-xs transition-colors hover:text-foreground"
           href="https://dashboard.composio.dev"
           rel="noreferrer"
           target="_blank"

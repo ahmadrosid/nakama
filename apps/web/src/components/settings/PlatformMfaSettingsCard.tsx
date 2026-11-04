@@ -76,6 +76,12 @@ export function PlatformMfaSettingsCard() {
     .join(", ");
 
   const allRolesSelected = draftRoles.length === roles.length;
+  const savedRoles = new Set(policy?.enforcedRoles ?? []);
+
+  const rolesChanged =
+    policy !== null &&
+    (draftRoles.length !== savedRoles.size ||
+      draftRoles.some((role) => !savedRoles.has(role)));
 
   function toggleRole(role: OrgRole) {
     setDraftRoles((current) => {
@@ -92,18 +98,9 @@ export function PlatformMfaSettingsCard() {
   return (
     <Card className="w-full shadow-none">
       <CardContent className="divide-y divide-border p-0">
-        <div className="px-4 py-3">
-          <p className="font-medium text-foreground text-sm">
-            Platform Multi-Factor Authentication
-          </p>
-          <p className="text-muted-foreground text-xs">
-            Configure multi-factor authentication for every organization and
-            user on this Nakama instance.
-          </p>
-        </div>
         <div className="flex items-center justify-between gap-4 px-4 py-3">
-          <span className="font-medium text-sm">
-            Enable multi-factor authentication
+          <span className="font-medium text-foreground text-sm">
+            Multi-factor authentication
           </span>
           <Switch
             aria-label="Enable platform multi-factor authentication"
@@ -118,8 +115,8 @@ export function PlatformMfaSettingsCard() {
           />
         </div>
         <div className="flex items-center justify-between gap-4 px-4 py-3">
-          <span className="font-medium text-sm">
-            Enforce multi-factor authentication
+          <span className="font-medium text-foreground text-sm">
+            Require for sign-in
           </span>
           <Switch
             aria-label="Enforce platform multi-factor authentication"
@@ -128,25 +125,22 @@ export function PlatformMfaSettingsCard() {
             onCheckedChange={(required) => void update({ required })}
           />
         </div>
-        <div className="flex items-center justify-between gap-4 px-4 py-3">
-          <div>
-            <p className="font-medium text-sm">
-              Enforce multi-factor authentication for
-            </p>
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <div className="min-w-0 space-y-0.5">
+            <p className="font-medium text-foreground text-sm">Required for</p>
             <p className="text-muted-foreground text-xs">
-              Choose which organization roles must use an authenticator.
-              Platform admins always need MFA once enforcement is on.
+              Platform admins always need it.
             </p>
           </div>
           <div className="flex items-center gap-2">
             <DropdownMenu>
               <DropdownMenuTrigger
-                className="flex h-9 w-64 items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 text-left text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex h-9 w-44 items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 text-left text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={busy || policy === null}
               >
                 {allRolesSelected ? "All roles" : selectedRoleLabels}
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-64">
+              <DropdownMenuContent className="w-44">
                 {roles.map(({ label, value }) => {
                   const selected = selectedRoles.has(value);
 
@@ -164,13 +158,16 @@ export function PlatformMfaSettingsCard() {
                 })}
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button
-              disabled={busy || policy === null}
-              onClick={() => void update({ enforcedRoles: draftRoles })}
-              type="button"
-            >
-              Save
-            </Button>
+            {rolesChanged ? (
+              <Button
+                disabled={busy}
+                onClick={() => void update({ enforcedRoles: draftRoles })}
+                size="sm"
+                type="button"
+              >
+                Save
+              </Button>
+            ) : null}
           </div>
         </div>
         {error ? (

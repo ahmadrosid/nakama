@@ -11,7 +11,7 @@ import {
 } from "@nakama/ui/dialog";
 import { Spinner } from "@nakama/ui/spinner";
 import { Switch } from "@nakama/ui/switch";
-import { useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ComposioSettingsCard } from "@/components/ComposioSettingsCard";
 import { LocalAuthTokenCard } from "@/components/LocalAuthTokenCard";
@@ -58,34 +58,8 @@ export function SettingsPage() {
     () => new URLSearchParams(location.search).get("mfa") === "required"
   );
 
-  const [formError, setFormError] = useState<string | null>(null);
-  const [timezone, setTimezone] = useState(() => getBrowserTimezone());
-  const [timezoneHint, setTimezoneHint] = useState<string | null>(null);
-  const { data: savedTimezone } = useUserTimezone();
-  const saveTimezoneMutation = useSaveUserTimezone();
   const chatUsage = useChatUsageVisible();
   const version = health?.version?.trim();
-
-  useEffect(() => {
-    if (savedTimezone) {
-      setTimezone(savedTimezone);
-    }
-  }, [savedTimezone]);
-
-  const handleSaveTimezone = useCallback(() => {
-    setFormError(null);
-    setTimezoneHint(null);
-
-    saveTimezoneMutation.mutate(timezone.trim(), {
-      onError: (err) => {
-        setFormError(formatError(err));
-      },
-      onSuccess: (saved) => {
-        setTimezone(saved);
-        setTimezoneHint(`Saved · ${saved}`);
-      },
-    });
-  }, [saveTimezoneMutation, timezone]);
 
   return (
     <>
@@ -121,126 +95,194 @@ export function SettingsPage() {
           </DialogContent>
         ) : null}
       </Dialog>
-      <div className="mx-auto max-w-3xl space-y-8">
-        <Card className="w-full shadow-none">
-          <CardContent className="divide-y divide-border p-0">
-            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-              <p className="font-medium text-foreground text-sm">Appearance</p>
-              <ThemeToggle />
-            </div>
-
-            <UserContextSettings />
-
-            <div
-              className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-              id="chat-usage-setting"
-            >
-              <p className="font-medium text-foreground text-sm">
-                Token usage in chat
-              </p>
-              <Switch
-                aria-label="Token usage in chat"
-                checked={chatUsage.visible}
-                onCheckedChange={chatUsage.toggle}
-              />
-            </div>
-
-            {version ? (
-              <VersionSettingsRow
-                updateCheckEnabled={health?.updateCheckEnabled === true}
-                version={version}
-              />
-            ) : null}
-
-            {isPlatformAdmin ? (
+      <div className="mx-auto max-w-3xl space-y-10">
+        <SettingsSection title="General">
+          <Card className="w-full shadow-none">
+            <CardContent className="divide-y divide-border p-0">
               <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                <div className="min-w-0 space-y-0.5">
-                  <p className="font-medium text-foreground text-sm">
-                    Timezone
-                  </p>
-                  {timezoneHint ? (
-                    <p
-                      className="text-emerald-700 text-xs dark:text-emerald-300"
-                      role="status"
-                    >
-                      {timezoneHint}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="flex items-center gap-2">
-                  <TimezoneSelect
-                    className="w-44 min-w-0 sm:w-52"
-                    disabled={saveTimezoneMutation.isPending}
-                    emptyLabel="Select timezone"
-                    id="timezone"
-                    onValueChange={(nextTimezone) => {
-                      if (nextTimezone) {
-                        setTimezone(nextTimezone);
-                        setTimezoneHint(null);
-                      }
-                    }}
-                    value={timezone}
-                  />
-                  <Button
-                    disabled={
-                      saveTimezoneMutation.isPending || !timezone.trim()
-                    }
-                    onClick={handleSaveTimezone}
-                    size="sm"
-                    type="button"
-                  >
-                    {saveTimezoneMutation.isPending ? (
-                      <>
-                        <Spinner className="mr-2" />
-                        Saving…
-                      </>
-                    ) : (
-                      "Save"
-                    )}
-                  </Button>
-                </div>
+                <p className="font-medium text-foreground text-sm">
+                  Appearance
+                </p>
+                <ThemeToggle />
               </div>
-            ) : null}
 
-            {/* Install-wide: the callback/share base for every organization. */}
-            {isPlatformAdmin ? <WebPublicUrlSettingsRow /> : null}
-          </CardContent>
-        </Card>
+              <UserContextSettings />
 
-        {formError ? (
-          <p className="text-destructive text-sm" role="alert">
-            {formError}
-          </p>
-        ) : null}
+              <div
+                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                id="chat-usage-setting"
+              >
+                <p className="font-medium text-foreground text-sm">
+                  Token usage in chat
+                </p>
+                <Switch
+                  aria-label="Token usage in chat"
+                  checked={chatUsage.visible}
+                  onCheckedChange={chatUsage.toggle}
+                />
+              </div>
 
-        <section id="sessions">
-          <BrowserSessionsCard />
-        </section>
-
-        {isOrgAdmin ? (
-          <section id="local-token">
-            <LocalAuthTokenCard />
-          </section>
-        ) : null}
-
-        <MfaSettingsCard />
-        {!isDemo && isPlatformAdmin ? <PlatformMfaSettingsCard /> : null}
-
-        {isPlatformAdmin ? (
-          <section id="composio">
-            <ComposioSettingsCard />
-          </section>
-        ) : null}
-
-        {isPlatformAdmin ? (
-          <Card className="w-full overflow-hidden shadow-none">
-            <CardContent className="p-0">
-              <DataPortabilityPanel />
+              {isPlatformAdmin ? <TimezoneSettingsRow /> : null}
             </CardContent>
           </Card>
+        </SettingsSection>
+
+        <SettingsSection title="Security">
+          <section id="sessions">
+            <BrowserSessionsCard />
+          </section>
+
+          <MfaSettingsCard />
+
+          {isOrgAdmin ? (
+            <section id="local-token">
+              <LocalAuthTokenCard />
+            </section>
+          ) : null}
+        </SettingsSection>
+
+        {version || isPlatformAdmin ? (
+          <InstanceSettings
+            isDemo={isDemo}
+            isPlatformAdmin={isPlatformAdmin}
+            updateCheckEnabled={health?.updateCheckEnabled === true}
+            version={version}
+          />
         ) : null}
       </div>
     </>
+  );
+}
+
+function TimezoneSettingsRow() {
+  const [timezone, setTimezone] = useState(() => getBrowserTimezone());
+  const [hint, setHint] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const { data: savedTimezone } = useUserTimezone();
+  const saveTimezoneMutation = useSaveUserTimezone();
+
+  useEffect(() => {
+    if (savedTimezone) {
+      setTimezone(savedTimezone);
+    }
+  }, [savedTimezone]);
+
+  const handleChange = useCallback(
+    (nextTimezone: string) => {
+      setError(null);
+      setHint(null);
+      setTimezone(nextTimezone);
+
+      saveTimezoneMutation.mutate(nextTimezone, {
+        onError: (err) => setError(formatError(err)),
+        onSuccess: (saved) => {
+          setTimezone(saved);
+          setHint("Saved");
+        },
+      });
+    },
+    [saveTimezoneMutation]
+  );
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <div className="min-w-0 space-y-0.5">
+        <p className="font-medium text-foreground text-sm">Timezone</p>
+        {error ? (
+          <p className="text-destructive text-xs" role="alert">
+            {error}
+          </p>
+        ) : null}
+        {hint ? (
+          <p
+            className="text-emerald-700 text-xs dark:text-emerald-300"
+            role="status"
+          >
+            {hint}
+          </p>
+        ) : null}
+      </div>
+      <div className="flex items-center gap-2">
+        {saveTimezoneMutation.isPending ? (
+          <Spinner className="size-4 text-muted-foreground" />
+        ) : null}
+        <TimezoneSelect
+          className="w-44 min-w-0 sm:w-52"
+          disabled={saveTimezoneMutation.isPending}
+          emptyLabel="Select timezone"
+          id="timezone"
+          onValueChange={(nextTimezone) => {
+            if (nextTimezone && nextTimezone !== timezone) {
+              handleChange(nextTimezone);
+            }
+          }}
+          value={timezone}
+        />
+      </div>
+    </div>
+  );
+}
+
+function InstanceSettings({
+  isDemo,
+  isPlatformAdmin,
+  updateCheckEnabled,
+  version,
+}: {
+  isDemo: boolean;
+  isPlatformAdmin: boolean;
+  updateCheckEnabled: boolean;
+  version: string | undefined;
+}) {
+  return (
+    <SettingsSection title="Instance">
+      <Card className="w-full shadow-none">
+        <CardContent className="divide-y divide-border p-0">
+          {version ? (
+            <VersionSettingsRow
+              updateCheckEnabled={updateCheckEnabled}
+              version={version}
+            />
+          ) : null}
+
+          {/* Install-wide: the callback/share base for every organization. */}
+          {isPlatformAdmin ? <WebPublicUrlSettingsRow /> : null}
+        </CardContent>
+      </Card>
+
+      {!isDemo && isPlatformAdmin ? <PlatformMfaSettingsCard /> : null}
+
+      {isPlatformAdmin ? (
+        <section id="composio">
+          <ComposioSettingsCard />
+        </section>
+      ) : null}
+
+      {isPlatformAdmin ? (
+        <Card className="w-full overflow-hidden shadow-none">
+          <CardContent className="p-0">
+            <DataPortabilityPanel />
+          </CardContent>
+        </Card>
+      ) : null}
+    </SettingsSection>
+  );
+}
+
+function SettingsSection({
+  children,
+  title,
+}: {
+  children: ReactNode;
+  title: string;
+}) {
+  return (
+    <section aria-label={title} className="space-y-3">
+      <h2 className="px-1 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+        {title}
+      </h2>
+      <div className="space-y-4">{children}</div>
+    </section>
   );
 }
 
