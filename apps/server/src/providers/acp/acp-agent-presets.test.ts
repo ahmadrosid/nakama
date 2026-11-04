@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   listAcpAgentPresets,
-  opencodePackageSuffixes,
   resolveAcpAgentLaunch,
 } from "./acp-agent-presets";
 
@@ -155,19 +154,4 @@ describe("ACP agent launch", () => {
       ).toThrow();
     }
   );
-});
-
-describe("OpenCode platform package order", () => {
-  test("without AVX2, tries the baseline build before the AVX2 build", () => {
-    const order = opencodePackageSuffixes(false);
-
-    expect(order.indexOf("-baseline")).toBeLessThan(order.indexOf(""));
-    expect(order.indexOf("-baseline-musl")).toBeLessThan(
-      order.indexOf("-musl")
-    );
-  });
-
-  test("with AVX2, tries the AVX2 build first", () => {
-    expect(opencodePackageSuffixes(true)[0]).toBe("");
-  });
 });

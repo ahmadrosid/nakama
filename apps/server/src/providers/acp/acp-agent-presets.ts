@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
@@ -135,9 +134,9 @@ function findOpencodePackageBinary(platform: NodeJS.Platform): string | null {
   const base = `opencode-${os}-${process.arch}`;
   const require = createRequire(import.meta.url);
 
-  const avx2 = process.arch !== "x64" || cpuHasAvx2(platform);
-
-  for (const suffix of opencodePackageSuffixes(avx2)) {
+  // `-baseline` first: it runs on every x64 CPU. The plain x64 build needs
+  // AVX2 and fails with `Illegal instruction` without it.
+  for (const suffix of ["-baseline", "", "-baseline-musl", "-musl"]) {
     let manifest: string;
 
     try {
@@ -155,43 +154,6 @@ function findOpencodePackageBinary(platform: NodeJS.Platform): string | null {
   }
 
   return null;
-}
-
-/**
- * The plain x64 build needs AVX2 and fails with `Illegal instruction` without
- * it. `-baseline` runs on every x64 CPU, so it goes first when AVX2 is missing.
- */
-export function opencodePackageSuffixes(avx2: boolean): string[] {
-  return avx2
-    ? ["", "-baseline", "-musl", "-baseline-musl"]
-    : ["-baseline", "", "-baseline-musl", "-musl"];
-}
-
-/**
- * Same check as the `opencode-ai` postinstall. No check on Windows, so
- * Windows uses the baseline build.
- */
-function cpuHasAvx2(platform: NodeJS.Platform): boolean {
-  if (platform === "linux") {
-    try {
-      return /(?:^|\s)avx2(?:\s|$)/i.test(
-        readFileSync("/proc/cpuinfo", "utf8")
-      );
-    } catch {
-      return false;
-    }
-  }
-
-  if (platform === "darwin") {
-    const result = spawnSync("sysctl", ["-n", "hw.optional.avx2_0"], {
-      encoding: "utf8",
-      timeout: 1500,
-    });
-
-    return result.status === 0 && result.stdout.trim() === "1";
-  }
-
-  return false;
 }
 
 /**
