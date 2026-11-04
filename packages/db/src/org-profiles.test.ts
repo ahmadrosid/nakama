@@ -7,6 +7,7 @@ import {
 import { createInMemoryDatabaseAdapter } from "./index";
 import {
   ensureBundledSkillsAssigned,
+  ensureGenerateImageToolDefinition,
   ensureOrgSuperNakamaProfiles,
   seedOrgDefaultProfile,
   seedOrgSuperNakamaProfile,
@@ -469,5 +470,49 @@ describe("profile ACP agent", () => {
 
     const saved = await db.getProfileForOrg("profile_plain", "org_a");
     expect(saved?.acpAgent).toBeNull();
+  });
+});
+
+describe("generate_image on by default", () => {
+  const toolIdsOf = async (
+    db: ReturnType<typeof createInMemoryDatabaseAdapter>,
+    profileId: string
+  ) => (await db.listToolsForProfile(profileId)).map((tool) => tool.id);
+
+  test("a new default profile gets generate_image", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await ensureGenerateImageToolDefinition(db);
+    const profile = await seedOrgDefaultProfile(db, "org_a");
+
+    expect(await toolIdsOf(db, profile.id)).toContain(GENERATE_IMAGE_TOOL_ID);
+  });
+
+  test("existing profiles get it once, and a later removal stays", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const profile = await seedOrgDefaultProfile(db, "org_a");
+    const now = new Date().toISOString();
+
+    // The tool row as installs had it before the default.
+    await db.upsertTool({
+      createdAt: now,
+      description:
+        "Generate an image from a text prompt using the workspace image model (OpenAI gpt-image-2). Saves under artifacts/ with a metadata sidecar.",
+      handlerConfig: {},
+      handlerType: "generate_image",
+      id: GENERATE_IMAGE_TOOL_ID,
+      name: "generate_image",
+      updatedAt: now,
+    });
+
+    await ensureGenerateImageToolDefinition(db);
+    expect(await toolIdsOf(db, profile.id)).toContain(GENERATE_IMAGE_TOOL_ID);
+
+    await db.unassignToolFromProfile(profile.id, GENERATE_IMAGE_TOOL_ID);
+    await ensureGenerateImageToolDefinition(db);
+    await seedOrgDefaultProfile(db, "org_a");
+
+    expect(await toolIdsOf(db, profile.id)).not.toContain(
+      GENERATE_IMAGE_TOOL_ID
+    );
   });
 });

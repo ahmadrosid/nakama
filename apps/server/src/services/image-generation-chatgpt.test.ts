@@ -78,6 +78,34 @@ describe("resolveImageGenerationSelection on a ChatGPT subscription", () => {
     expect(selection?.chatgptOAuth).toEqual(chatgptOAuth);
   });
 
+  test("uses a connected ChatGPT provider when no image model is saved", () => {
+    const selection = resolveImageGenerationSelection(chatgptConfig());
+
+    expect(selection?.instance.id).toBe("p-chatgpt");
+    expect(selection?.chatgptOAuth).toEqual(chatgptOAuth);
+    expect(selection?.selection).toBe(`p-chatgpt::${selection?.model}`);
+  });
+
+  test("turns image generation off when the saved model is off", () => {
+    expect(
+      resolveImageGenerationSelection(chatgptConfig({ imageModel: "off" }))
+    ).toBeNull();
+  });
+
+  test("has no default without a connected ChatGPT provider", () => {
+    const config = chatgptConfig();
+
+    expect(
+      resolveImageGenerationSelection({
+        ...config,
+        providers: config.providers.map((provider) => ({
+          ...provider,
+          chatgptRefreshToken: "",
+        })),
+      })
+    ).toBeNull();
+  });
+
   test("rejects a ChatGPT provider that is not connected", () => {
     const config = chatgptConfig({ imageModel: "p-chatgpt::gpt-6-sol" });
     expect(() =>

@@ -61,7 +61,7 @@ function generateImageTool(
 }
 
 describe("generate_image tool seed and resolver (U3)", () => {
-  test("seedDatabase includes generate_image and Super Nakama is not auto-assigned", async () => {
+  test("seedDatabase includes generate_image and a new Super Nakama gets it", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertOrganization({
       createdAt: new Date().toISOString(),
@@ -80,7 +80,7 @@ describe("generate_image tool seed and resolver (U3)", () => {
       (tool) => tool.id
     );
 
-    expect(assignedIds).not.toContain(GENERATE_IMAGE_TOOL_ID);
+    expect(assignedIds).toContain(GENERATE_IMAGE_TOOL_ID);
   });
 
   test("unassigned profile session does not expose generate_image", async () => {

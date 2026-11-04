@@ -23,6 +23,9 @@ import {
 
 const CLEAR_IMAGE_GENERATION_MODEL_VALUE = "__image_generation_unset__";
 
+/** Saved model that turns image generation off (server: IMAGE_GENERATION_OFF). */
+const IMAGE_GENERATION_OFF_VALUE = "off";
+
 export function ImageGenerationSettingsCard() {
   const [formError, setFormError] = useState<string | null>(null);
   const [selection, setSelection] = useState<string>("");
@@ -43,6 +46,17 @@ export function ImageGenerationSettingsCard() {
       ),
     [providerModelGroups]
   );
+
+  // With nothing saved, the server makes images with a connected ChatGPT.
+  const chatgptAvailable = useMemo(
+    () =>
+      providerModelGroups.some((group) =>
+        group.models.some((model) => model.provider === "chatgpt")
+      ),
+    [providerModelGroups]
+  );
+
+  const unsetLabel = chatgptAvailable ? "ChatGPT (default)" : "Not configured";
 
   // Any custom model on an OpenAI-compatible provider may speak the Images
   // API; the server posts the one picked to `<baseUrl>/images/generations`.
@@ -80,6 +94,11 @@ export function ImageGenerationSettingsCard() {
   );
 
   const providerAvailable = imageModelGroups.length > 0;
+
+  const selectionLabel = (model: string) =>
+    model === IMAGE_GENERATION_OFF_VALUE
+      ? "Off"
+      : profileModelLabel(model, imageModelGroups);
 
   const selectionValue = selection || CLEAR_IMAGE_GENERATION_MODEL_VALUE;
 
@@ -143,8 +162,8 @@ export function ImageGenerationSettingsCard() {
               setSelection(saved.model ?? "");
               setSavedHint(
                 saved.model
-                  ? `Saved · ${profileModelLabel(saved.model, imageModelGroups)}`
-                  : "Cleared"
+                  ? `Saved · ${selectionLabel(saved.model)}`
+                  : `Saved · ${unsetLabel}`
               );
             },
           });
@@ -157,9 +176,9 @@ export function ImageGenerationSettingsCard() {
         >
           <SelectValue placeholder="Select image generation model">
             {selection
-              ? profileModelLabel(selection, imageModelGroups)
+              ? selectionLabel(selection)
               : providerAvailable
-                ? "Not configured"
+                ? unsetLabel
                 : "No image provider"}
           </SelectValue>
         </SelectTrigger>
@@ -168,8 +187,11 @@ export function ImageGenerationSettingsCard() {
           className="w-max min-w-72 max-w-[min(24rem,92vw)]"
         >
           <SelectItem value={CLEAR_IMAGE_GENERATION_MODEL_VALUE}>
-            Not configured
+            {unsetLabel}
           </SelectItem>
+          {chatgptAvailable ? (
+            <SelectItem value={IMAGE_GENERATION_OFF_VALUE}>Off</SelectItem>
+          ) : null}
           {openaiAvailable ? (
             <SelectItem value={IMAGE_GENERATION_SELECTION}>
               OpenAI: {IMAGE_GENERATION_MODEL_OPTIONS[0].name}

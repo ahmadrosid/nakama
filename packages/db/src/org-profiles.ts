@@ -38,6 +38,12 @@ export async function ensureProfileDefaultBuiltinTools(
   if (await db.getTool(SAVE_ARTIFACT_TOOL_ID)) {
     await db.assignToolToProfile(profileId, SAVE_ARTIFACT_TOOL_ID);
   }
+
+  // Only on a new profile: this runs on every boot, and an admin who removed
+  // the tool must not get it back.
+  if (!existingProfile && (await db.getTool(GENERATE_IMAGE_TOOL_ID))) {
+    await db.assignToolToProfile(profileId, GENERATE_IMAGE_TOOL_ID);
+  }
 }
 
 export async function ensureProfileDefaultBundledSkills(
@@ -197,16 +203,29 @@ export async function ensureBashToolDefinition(
   });
 }
 
+/** The tool description from before generate_image was on by default. */
+const OFF_BY_DEFAULT_GENERATE_IMAGE_DESCRIPTION =
+  "Generate an image from a text prompt using the workspace image model (OpenAI gpt-image-2). Saves under artifacts/ with a metadata sidecar.";
+
 export async function ensureGenerateImageToolDefinition(
   db: DatabaseAdapter
 ): Promise<void> {
   const now = new Date().toISOString();
   const existing = await db.getTool(GENERATE_IMAGE_TOOL_ID);
 
+  // Image generation is on by default. Agents made before that get the tool
+  // once: only a row that still has the old description triggers it, so a
+  // later removal is not undone.
+  if (existing?.description === OFF_BY_DEFAULT_GENERATE_IMAGE_DESCRIPTION) {
+    for (const profile of await db.listProfiles()) {
+      await db.assignToolToProfile(profile.id, GENERATE_IMAGE_TOOL_ID);
+    }
+  }
+
   await db.upsertTool({
     createdAt: existing?.createdAt ?? now,
     description:
-      "Generate an image from a text prompt using the workspace image model (OpenAI gpt-image-2). Saves under artifacts/ with a metadata sidecar.",
+      "Generate an image from a text prompt using the workspace image model. Saves under artifacts/ with a metadata sidecar.",
     handlerConfig: {},
     handlerType: "generate_image",
     id: GENERATE_IMAGE_TOOL_ID,

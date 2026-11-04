@@ -17,11 +17,15 @@ import {
 import {
   generateImageWithChatgpt,
   resolveChatgptImageGenerationSelection,
+  resolveDefaultChatgptImageGenerationSelection,
 } from "./image-generation-chatgpt";
 import { decodeStoredModelSelection } from "./provider-instance-helpers";
 
 export const IMAGE_MODEL_REQUIRED_MESSAGE =
   "Configure an image generation model in Settings → AI Providers (/settings/providers#image-generation) before generating images.";
+
+/** Stored image model that turns image generation off. */
+const IMAGE_GENERATION_OFF = "off";
 
 export const IMAGE_GENERATION_SIZES = [
   "1024x1024",
@@ -162,8 +166,13 @@ export function resolveImageGenerationSelection(
 ): ResolvedImageGenerationSelection | null {
   const imageModel = userConfig?.imageModel?.trim();
 
-  if (!imageModel) {
+  if (imageModel === IMAGE_GENERATION_OFF) {
     return null;
+  }
+
+  // Unset means "use the ChatGPT subscription when one is connected".
+  if (!imageModel) {
+    return resolveDefaultChatgptImageGenerationSelection(userConfig);
   }
 
   if (!isAllowedImageGenerationSelection(imageModel)) {

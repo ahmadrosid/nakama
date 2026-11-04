@@ -105,7 +105,7 @@ export function createGenerateImageTool(
 ): ToolDefinition {
   return {
     description:
-      "Generate an image from a text prompt using the workspace image model (OpenAI gpt-image-2). Saves a PNG under artifacts/ with a metadata sidecar and session attachment when available. A platform admin sets the model in Settings → AI Providers (/settings/providers#image-generation) — do not pass a model name.",
+      "Generate an image from a text prompt using the workspace image model. Saves a PNG under artifacts/ with a metadata sidecar and session attachment when available. A platform admin sets the model in Settings → AI Providers (/settings/providers#image-generation) — do not pass a model name.",
     name: GENERATE_IMAGE_TOOL_NAME,
     parallelSafe: false,
     parameters: {

@@ -5,11 +5,13 @@ import {
   NakamaApiError,
   type ProviderInstance,
   readChatgptOAuthFromInstance,
+  type UserConfig,
 } from "@nakama/core";
 import {
   CHATGPT_CODEX_BASE_URL,
   refreshChatgptOAuthToken,
 } from "../providers/chatgpt/oauth";
+import { getDefaultModel } from "../providers/models";
 import { buildProviderHttpError } from "../providers/shared";
 import {
   decodeImageBase64,
@@ -51,6 +53,36 @@ export function resolveChatgptImageGenerationSelection(
     model,
     selection,
   };
+}
+
+/**
+ * No image model saved: a connected ChatGPT subscription makes images, so a
+ * ChatGPT user does not need an admin to pick a model first. The default
+ * provider wins when it is a ChatGPT one.
+ */
+export function resolveDefaultChatgptImageGenerationSelection(
+  userConfig: UserConfig | null | undefined
+): ResolvedImageGenerationSelection | null {
+  const connected = (userConfig?.providers ?? []).filter(
+    isChatgptProviderConnected
+  );
+
+  const instance =
+    connected.find(
+      (provider) => provider.id === userConfig?.defaultProviderId
+    ) ?? connected[0];
+
+  if (!instance) {
+    return null;
+  }
+
+  const model = getDefaultModel("chatgpt", instance.customModels);
+
+  return resolveChatgptImageGenerationSelection(
+    instance,
+    model,
+    `${instance.id}::${model}`
+  );
 }
 
 const CHATGPT_IMAGE_INSTRUCTIONS =
