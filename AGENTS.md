@@ -15,9 +15,8 @@ Lean is the line core keeps. Judge every design, review and issue breakdown agai
 ## Rules
 
 **Before code**
-- To work on an issue someone else filed: comment on it to request it, state your plan, and wait for the direction. Do not write the code or open a PR before that. This covers AI agents too. Maintainers, and people fixing an issue they filed themselves, are exempt. See [who goes first](./CONTRIBUTING.md#workflow)
-- Read [CONTRIBUTING.md, "Before you start building"](./CONTRIBUTING.md#before-you-start-building) first. Five questions, and a closed PR here usually failed one of them. You can produce a working change faster than anyone can decide it was the right one, so check the shape before the diff
-- Read the rest of [CONTRIBUTING.md](./CONTRIBUTING.md) before you pick work or open a PR: how to claim an issue, the checks to run, the PR body format, and [what happens to work that goes quiet](./CONTRIBUTING.md#when-work-goes-quiet). An issue assigned to someone else is not yours to build. A PR labelled `stale` is, with `Co-authored-by` for its author
+- Read [CONTRIBUTING.md](./CONTRIBUTING.md) first, mostly ["Before you start building"](./CONTRIBUTING.md#before-you-start-building). Check the shape before the diff
+- An issue someone else filed: comment to request it, state your plan, and wait for direction before code or a PR. This covers AI agents. Maintainers and issue authors are exempt. An issue assigned to someone else is not yours. A PR labelled `stale` is, with `Co-authored-by` for its author
 
 **Code**
 - Prefer edit over extract; no new package/file unless an existing module cannot hold the change. CI fails a new workspace unless the PR carries the `new-package` label
@@ -35,20 +34,23 @@ Lean is the line core keeps. Judge every design, review and issue breakdown agai
 - PRs: ready for review by default; drafts only on explicit user request. Overrides skills.
 - Browser checks only when explicitly requested (`agent-browser`); otherwise tests, type checks, builds. Do not add Playwright.
 
+## Review checklist
+
+Past reviews found these most often. Check them before you open a PR.
+
+1. **Fail closed, trust nothing.** Missing org/user/row denies access. Verify client and webhook values against the source of truth. Revoke new credentials on password change and member removal.
+2. **Bound it.** Each new route, stream, listener or cache has a size cap, a deadline and cleanup on cancel/timeout.
+3. **Keep errors.** No catch-all status, no silent `.catch`, no silent fallback, no raw provider errors to members.
+4. **Existing installs.** Old config, stale saved lists, cached redirects and revoked state still work.
+5. **Reuse first.** Search the repo and SDK for a helper. When you port upstream logic, port every branch.
+6. **Tests fail without the change.** Go through the real entry point, not a mock default.
+
 ## Dev
 
 - Bun 1.4+: `bun install`, `bun run`, `bun test`
 - Servers: `bun run dev:server` | `dev:web` | `cli`
+- Live LLM tests: `*.llm.test.ts` with MSW cassettes — see [CONTRIBUTING.md](./CONTRIBUTING.md#llm-cassette-tests-msw)
 - Format / lint: `bun x ultracite fix` | `check` | `doctor`; unused exports: `bun run knip` (CI fails on findings)
-
-## LLM cassette tests (MSW)
-
-For live provider tests: record one real HTTP call, commit the cassette, replay offline thereafter. Helper: `apps/server/src/testing/llm-msw-cassette.ts` (`withMswCassette`). Cassettes live in `apps/server/src/testing/cassettes/`. Name live tests `*.llm.test.ts`.
-
-```bash
-bun test path/to/foo.llm.test.ts                 # replay (default when cassette exists)
-LLM_VCR_MODE=record bun test path/to/foo.llm.test.ts  # re-record (needs provider API key)
-```
 
 ## GitHub
 
@@ -64,121 +66,13 @@ Screenshots: `gh pr edit <number> --attach <image-path>` uploads and embeds it i
 
 ## Browser automation
 
-Prefer role and text locators. Add `data-testid` only when labels collide.
-
-Operator Docker / `dev:web` on `4310` stays valid for humans. For PR motion video, use `.agents/skills/browser-video-proof/SKILL.md`.
-
-## Documentation (`docs/website`)
-
-User-facing docs: `docs/website/content/docs/` (MDX). Audience = org admins, operators, chat users — not contributors.
-
-When writing docs: **Why** → **Value** → **How** (UI paths, roles, screenshots). Prefer **System → Organization** over route paths. Keep schema, services, file paths, and HTTP API tables out of product docs (put them here or in code). Screenshots: `docs/website/public/screenshots/`; capture scripts: `docs/website/scripts/capture-*.sh`.
+Prefer role and text locators. Add `data-testid` only when labels collide. For PR motion video, use `.agents/skills/browser-video-proof/SKILL.md`.
 
 ## Docker
 
-One container: API + web + platform workers. Data at `/nakama/data` (`NAKAMA_CONFIG_DIR`). Dashboard: http://localhost:4310
+One container: API + web + platform workers. Data at `/nakama/data` (`NAKAMA_CONFIG_DIR`), dashboard on `4310`. Run and build steps: [README](./README.md). Build from source: `./scripts/docker-build-run.sh`; fresh start: `./scripts/docker-destroy.sh` first.
 
-```bash
-# Prebuilt
-docker pull ghcr.io/ahmadrosid/nakama:latest
-docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahmadrosid/nakama:latest
-
-# Build from source and run (uses buildx; default linux/amd64 -t nakama)
-./scripts/docker-build-run.sh
-
-# Fresh start (removes container, volume, image)
-./scripts/docker-destroy.sh
-./scripts/docker-build-run.sh
-```
-
-Runtime dependencies are baked into the image from committed lockfiles, not resolved
-at build time. To change them, edit the manifest, regenerate the lockfile for both
-image architectures, and commit both files:
-
-```bash
-cd .docker/runtime-deps   # or .docker/meet-deps for the optional Meet build
-bun install --lockfile-only --os=linux --cpu='*'
-```
-
-## Multi-tenancy
-
-Orgs isolate profiles, sessions, automations, tools, MCP, skills, usage (`org_id` — see `packages/db/sql/schema.sql`, `migrateTenantOrgScope`).
-
-**Org context:** every authed call except `/v1/auth/*` and `/v1/platform/*` needs `X-Org-Id` (`@nakama/client`) or the active org stored on the browser session (`active_org_id`, set by `POST /v1/auth/active-org`). Middleware: `org-middleware.ts`; guards: `org-guards.ts`.
-
-| Change | Where |
-|---|---|
-| Org CRUD / invites / members | `apps/server/src/services/org-service.ts` |
-| Platform org routes | `apps/server/src/http/routes/platform-orgs.ts` |
-| Member routes | `…/routes/org-members.ts` |
-| Auth / active-org | `…/routes/auth.ts` |
-| DB types / SQLite | `packages/db/src/{types.ts,adapters/sqlite.ts}` |
-| Contracts | `packages/core/src/contract.ts` |
-| Client `X-Org-Id` | `packages/client/src/client.ts` |
-| Web auth / switcher | `apps/web/src/context/auth-context.tsx`, `OrgSwitcher.tsx` |
-
-## System prompt
-
-Merged in `agent-service` `resolveProfileSystemPrompt` → `generateReply` (`provider.generateChat` / `streamChat`):
-
-| Change | File | Fn |
-|---|---|---|
-| Chat structure (USER.md, tools, timezone, channels) | `packages/agent/src/chat-prompt.ts` | `buildChatSystemPrompt` |
-| Soul content | `packages/core/src/soul/compose.ts` | `composeSoulSystemPrompt` |
-| Skills catalog / loaded skill / agent-browser | `packages/core/src/skills/compose.ts` (`load_skill` tool: `apps/server/src/tools/skill-manage-tool.ts`) | `composeSkillsCatalog`, `composeLoadedSkillPrompt`, `composeAgentBrowserCapabilityPrompt` |
-| Per-turn context (date, etc.) | `packages/agent/src/chat.ts` | `generateReply` |
-
-## Soul (`packages/core/src/soul/`)
-
-Profile workspace / soul dir: `~/.nakama/orgs/{orgId}/profiles/{profileId}/` (`getProfileSoulDir`). Override root: `NAKAMA_CONFIG_DIR`. Load: `loadSoulStack()`; inject: `composeSoulSystemPrompt()`.
-
-## Tools (`packages/core/src/tools/`)
-
-| Tool / skill | Notes |
-|---|---|
-| `update-profile-memory` / `archive-profile-memory` | MEMORY.md ↔ memory-archive/ |
-| `save_artifact` / `artifact-design` | Persist under `artifacts/`; skill holds design rules |
-| `knowledge_base_search` / `web_search` / `email` | KB, web, mailbox |
-| `search_files` / `ripgrep` | File/content search |
-| `bash` | Profile workspace shell — assign per profile; Super Nakama by default |
-| `sub_agent` | Opt-in same-profile delegate (not repo coding) |
-| `coding-agent` | Repo coding via Codex / Claude Code / OpenCode / pi / Cursor Agent (`agent`) through `bash` — use instead of `sub_agent` for coding |
-| `agent-browser` | Opt-in browser CLI; needs host install — `docs/website/agent-browser.md` |
-| `create-profile` | Super Nakama only, confirm-first — `apps/server/src/tools/super-nakama-tools.ts` |
-| `skill_manage` | Web/cli skill CRUD + auto-assign — `apps/server/src/tools/skill-manage-tool.ts` (approval, curator, post-turn review live there) |
-| Composio | Org toolkits + per-user OAuth — `docs/website/composio.md` |
-
-**Channel artifacts (Telegram/Discord/WhatsApp):** `packages/core/src/channel-artifacts.ts`, `channel-artifact-delivery.ts`; handlers in `apps/platform/{telegram,discord,whatsapp}/src/channel-artifact-flow.ts`.
-
-## Tool execution & workspace
-
-Path bugs (tool resolves under repo instead of `~/.nakama`) → start here.
-
-| Path | Purpose |
-|---|---|
-| `~/.nakama/orgs/{orgId}/profiles/{profileId}/` | Profile workspace / soul — `getProfileSoulDir()` |
-| `~/.nakama/orgs/{orgId}/tools/*.js`, `*.py` | Custom JS / Python tools — `getCustomToolsDir(orgId)` (`~/.nakama/tools/` only when there is no org) |
-
-Always build context with `buildToolExecutionContext()` (`packages/core/src/tools/context.ts`) so `workspaceRoot` = soul dir. Custom JS: `context.workspaceRoot`, **not** `process.cwd()`. Custom Python: `NAKAMA_WORKSPACE_ROOT` env.
-
-| | Built-in | Custom JS | Custom Python |
-|---|---|---|---|
-| Code | `packages/core/src/tools/`, `apps/server/src/tools/` | `~/.nakama/orgs/{orgId}/tools/*.js` | `~/.nakama/orgs/{orgId}/tools/*.py` |
-| Workspace | `getProfileSoulDir` inside handler | `context.workspaceRoot` | `NAKAMA_WORKSPACE_ROOT` env |
-| Loader | builtins map | `javascript-tool-loader.ts` | `python-tool-loader.ts` |
-
-| Flow | Entry |
-|---|---|
-| Chat | `agent-service` → `buildChatSession()` → `buildToolExecutionContext(...)` |
-| Tool loop | `packages/agent/src/tool-loop.ts` → `executeToolCall()`; parallel batching in `packages/agent/src/chat.ts` when every call is `parallelSafe` |
-| Playground | `POST /v1/tools/:toolId/run` → `runToolPlayground()` |
-| Param suggest | `POST /v1/tools/:toolId/params/suggest` |
-
-**Parallel tool calls:** `parallelSafe: true` on read/search/fetch builtins (`read_file`, `search_files`, `knowledge_base_search`, `web_search`, `web_fetch`). Mutating / shell stay sequential; `sub_agent` is the exception and runs in parallel. Custom JS opts in via `handlerConfig.parallelSafe`; Python always sequential. Mixed turn → whole turn sequential.
-
-**Debug:** (1) path under `~/.nakama/orgs/{orgId}/tools/`, (2) `buildToolExecutionContext` + real `profileId`, (3) monorepo-root paths ⇒ missing `workspaceRoot`, (4) test files in the assigned profile workspace. Super Nakama rules: `SUPER_NAKAMA_SYSTEM_PROMPT` in `packages/db/src/constants.ts`.
-
-**Playground UI:** `/system/playground/:toolId` — `ToolPlaygroundPage.tsx`, `ToolPlaygroundPanel.tsx`; admin-only via `canUseToolPlayground()`.
+Runtime deps come from committed lockfiles. To change them, edit the manifest in `.docker/runtime-deps` (or `.docker/meet-deps`), run `bun install --lockfile-only --os=linux --cpu='*'`, and commit both files.
 
 ## Packages & server
 
@@ -188,6 +82,15 @@ Always build context with `buildToolExecutionContext()` (`packages/core/src/tool
 - `packages/db` — DB
 - `packages/client` — API client
 
-Server: Hono in `apps/server/src/http/app.ts`. Middleware: auth → org → routes (`routes/*`). OpenAPI: `openapi.ts` (`/openapi.json`). Routes that need an org admin or member call `requireOrgAdmin` / `requireOrgMember` (`http/org-guards.ts`).
+## Code maps
+
+Read the map before you change that area:
+
+| Area | Map |
+|---|---|
+| System prompt, soul, tools, tool execution, workspace paths | [`packages/core/AGENTS.md`](./packages/core/AGENTS.md) |
+| Server routes, middleware, multi-tenancy, org context | [`apps/server/AGENTS.md`](./apps/server/AGENTS.md) |
+| CLI terminal UI | [`apps/cli/AGENTS.md`](./apps/cli/AGENTS.md) |
+| User docs (`docs/website`) | [`docs/website/AGENTS.md`](./docs/website/AGENTS.md) |
 
 Don't use compound engineering skills!
