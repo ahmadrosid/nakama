@@ -9,6 +9,8 @@ export interface AcpAgentLaunch {
   cwd: string;
   /** Extra variables for the agent process. Merged over the server environment. */
   env?: NodeJS.ProcessEnv;
+  /** Run through the system shell, for Windows `.cmd` / `.bat` shims. */
+  shell?: boolean;
 }
 
 export interface AcpAgentProcess {
@@ -45,7 +47,9 @@ export async function startAcpAgentProcess(
     {
       cwd: launch.cwd,
       env: { ...agentEnv(), ...launch.env },
+      shell: launch.shell ?? false,
       stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
     }
   );
 

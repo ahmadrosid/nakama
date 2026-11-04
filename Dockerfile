@@ -41,16 +41,17 @@ COPY --from=web-builder /app/apps/platform/teams/dist /app/apps/platform/teams/d
 FROM oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 AS runtime-deps
 WORKDIR /runtime-deps
 
-# The Codex and Claude Code binaries are about 670 MB, half the image. The
-# default image drops them; the -full tag keeps them. Without them, the ACP
-# agents use CODEX_PATH / CLAUDE_CODE_EXECUTABLE.
+# The Codex, Claude Code and OpenCode binaries are about 900 MB, over half the
+# image. The default image drops them; the -full tag keeps them. Without them,
+# the ACP agents use CODEX_PATH / CLAUDE_CODE_EXECUTABLE / OPENCODE_PATH.
 ARG INSTALL_CODING_AGENTS=false
 COPY .docker/runtime-deps/package.json .docker/runtime-deps/bun.lock ./
 RUN bun install --frozen-lockfile --production --ignore-scripts \
-  # The runtime is Debian (glibc); the SDK never picks its musl binary here.
-  && rm -rf node_modules/@anthropic-ai/claude-agent-sdk-linux-*-musl \
+  # The runtime is Debian (glibc); the SDKs never pick their musl binaries here.
+  # Nakama runs OpenCode's AVX2 build first, so its baseline copy is unused.
+  && rm -rf node_modules/@anthropic-ai/claude-agent-sdk-linux-*-musl node_modules/opencode-linux-*-musl node_modules/opencode-linux-*-baseline \
   && if [ "$INSTALL_CODING_AGENTS" != "true" ]; then \
-       rm -rf node_modules/@anthropic-ai/claude-agent-sdk-linux-* node_modules/@openai/codex-linux-*; \
+       rm -rf node_modules/@anthropic-ai/claude-agent-sdk-linux-* node_modules/@openai/codex-linux-* node_modules/opencode-linux-*; \
      fi
 
 # Keep FFmpeg's video libraries out of the runtime image. These pinned static
