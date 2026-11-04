@@ -307,11 +307,13 @@ export function registerRegressionCaseRoutes(
     let sourceAutomationId: string | null = null;
 
     if (body.sourceType === "session") {
-      const session = await options.agent.assertSessionProfileAccess(
+      await options.agent.assertSessionProfileAccess(
         body.sourceId,
         orgId,
         auth
       );
+
+      const session = await databaseAdapter.getSession(body.sourceId);
 
       if (!session || session.profileId !== profileId) {
         return errorResponse("Source run not found", 404);

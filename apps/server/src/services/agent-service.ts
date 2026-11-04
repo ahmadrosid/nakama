@@ -2790,7 +2790,7 @@ export class AgentService {
     orgId: string,
     access: ChatProfileAccess,
     options: { localClient?: boolean } = {}
-  ): Promise<StoredSessionRecord | null> {
+  ): Promise<void> {
     const record = await this.getSessionRecordForOrg(sessionId, orgId);
 
     // A missing session is left to the route, which still answers 404.
@@ -2809,8 +2809,6 @@ export class AgentService {
         );
       }
     }
-
-    return record;
   }
 
   /** Throws 403 when the caller cannot use the profile in chat. */
