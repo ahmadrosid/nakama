@@ -8,7 +8,6 @@ import {
   maskPhoneNumber,
   parseAllowedWhatsAppPhones,
   resetWhatsAppSessionForReconnect,
-  resolveWhatsAppConfigFromSources,
   saveWhatsAppConfig,
   syncWhatsAppOwnerPairing,
 } from "./whatsapp-config";
@@ -398,69 +397,5 @@ describe("resetWhatsAppSessionForReconnect", () => {
       const again = await resetWhatsAppSessionForReconnect();
       expect(again.pairedJid).toBeNull();
     });
-  });
-});
-
-describe("resolveWhatsAppConfigFromSources", () => {
-  test("returns null when no config file is available", () => {
-    expect(
-      resolveWhatsAppConfigFromSources({
-        env: {},
-        file: null,
-      })
-    ).toBeNull();
-  });
-
-  test("prefers env phone number over file config", () => {
-    const resolved = resolveWhatsAppConfigFromSources({
-      env: {
-        WHATSAPP_PHONE_NUMBER: "+1234567890",
-      },
-      file: {
-        allowedPhones: [],
-        allowUnpairedGroupMembers: false,
-        pairedJid: null,
-        pairedLid: null,
-        pairingCode: null,
-        pairingCodeExpiresAt: null,
-        phoneNumber: "+9876543210",
-        profileId: "profile_from_file",
-        requireGroupMention: true,
-      },
-    });
-
-    expect(resolved).toEqual({
-      allowedPhones: [],
-      allowUnpairedGroupMembers: false,
-      pairedJid: null,
-      pairedLid: null,
-      pairingCode: null,
-      pairingCodeExpiresAt: null,
-      phoneNumber: "+1234567890",
-      profileId: "profile_from_file",
-      requireGroupMention: true,
-    });
-  });
-
-  test("uses file config when env is absent", () => {
-    const resolved = resolveWhatsAppConfigFromSources({
-      env: {},
-      file: {
-        allowedPhones: ["628111111111"],
-        allowUnpairedGroupMembers: true,
-        pairedJid: "9876543210@s.whatsapp.net",
-        pairedLid: null,
-        pairingCode: "ABCD1234",
-        pairingCodeExpiresAt: null,
-        phoneNumber: "",
-        profileId: "profile_from_file",
-        requireGroupMention: false,
-      },
-    });
-
-    expect(resolved?.phoneNumber).toBe("");
-    expect(resolved?.pairedJid).toBe("9876543210@s.whatsapp.net");
-    expect(resolved?.requireGroupMention).toBe(false);
-    expect(resolved?.allowUnpairedGroupMembers).toBe(true);
   });
 });

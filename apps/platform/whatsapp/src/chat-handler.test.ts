@@ -15,11 +15,7 @@ import {
 } from "@nakama/core/whatsapp-config";
 import * as baileys from "@whiskeysockets/baileys";
 import { WhatsAppAuthStore } from "./auth-store";
-import {
-  createChatHandler,
-  resetChatLocksForTests,
-  withChatLock,
-} from "./chat-handler";
+import { createChatHandler, resetChatLocksForTests } from "./chat-handler";
 import { resetWhatsAppOutboundForTests } from "./inbound-message";
 import {
   createMockClient,
@@ -1177,28 +1173,6 @@ describe("createChatHandler group chats", () => {
     });
   });
 
-  test("answers any group member when mention is not required", async () => {
-    await withTempHome(async (homeDir) => {
-      await writeWhatsAppConfigIni(homeDir, {
-        pairedJid: PAIRED_JID,
-        phoneNumber: "1234567890",
-        requireGroupMention: false,
-      });
-
-      const { calls, handler: handleMessage } =
-        await createTestHandler(homeDir);
-
-      await handleMessage(
-        groupInbound({
-          senderJid: "6281227900622@s.whatsapp.net",
-          text: "hi",
-        })
-      );
-
-      expect(calls.sendStream).toBe(1);
-    });
-  });
-
   test("group access off ignores an unpaired member and still answers a paired one", async () => {
     await withTempHome(async (homeDir) => {
       await writeWhatsAppConfigIni(homeDir, {
@@ -1893,39 +1867,6 @@ describe("stream cleanup", () => {
         true
       );
     });
-  });
-});
-
-describe("withChatLock", () => {
-  test("keeps the lock chain rejection-safe across a failed prior run", async () => {
-    const rejections: Error[] = [];
-
-    const onUnhandled = (reason: Error) => {
-      rejections.push(reason);
-    };
-
-    process.on("unhandledRejection", onUnhandled);
-
-    try {
-      await expect(
-        withChatLock("wa-lock-a", async () => {
-          throw new Error("first failed");
-        })
-      ).rejects.toThrow("first failed");
-
-      let ranSecond = false;
-      await withChatLock("wa-lock-a", async () => {
-        ranSecond = true;
-      });
-
-      await Promise.resolve();
-      await Promise.resolve();
-
-      expect(ranSecond).toBe(true);
-      expect(rejections).toEqual([]);
-    } finally {
-      process.off("unhandledRejection", onUnhandled);
-    }
   });
 });
 

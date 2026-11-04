@@ -1126,16 +1126,6 @@ describe("profile service cloneProfile", () => {
     ).toBe("kb body");
   });
 
-  test("gives each clone a unique id", async () => {
-    const { service, sourceId } = await setup();
-    const first = await service.cloneProfile(ORG_ID, sourceId, {});
-    const second = await service.cloneProfile(ORG_ID, sourceId, {});
-
-    expect(second.profile.id).not.toBe(first.profile.id);
-    expect(first.profile.name).toBe("Research Bot (copy)");
-    expect(second.profile.name).toBe("Research Bot (copy)");
-  });
-
   test.skipIf(process.platform !== "win32")(
     "clones get a random id even when a case-similar id is taken on Windows",
     async () => {

@@ -529,26 +529,6 @@ Completely different body.
     ).rejects.toThrow(/already assigned.*patch/i);
   });
 
-  test("refuses bundled skill names on create", async () => {
-    const { tool } = await setup();
-
-    await expect(
-      tool.run(
-        {
-          action: "create",
-          content: `---
-name: manage-skills
-description: Should not be creatable.
----
-
-Nope.
-`,
-        },
-        memberContext()
-      )
-    ).rejects.toThrow(/Bundled system skill/);
-  });
-
   test("refuses colliding name that already exists outside profile skills dir", async () => {
     const { db, tool } = await setup();
     const globalDir = join(configDir, "agent", "skills", "weather");

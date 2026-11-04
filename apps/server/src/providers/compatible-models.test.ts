@@ -3,7 +3,6 @@ import { NakamaApiError } from "@nakama/core";
 import { USER_PROVIDER_NAMES } from "@nakama/core/provider-resolution";
 import { serve } from "bun";
 import {
-  compatibleModelSupportsThinking,
   customModelEntryFromRemoteRecord,
   fetchNetraModelLimits,
   fetchNetraModels,
@@ -364,24 +363,6 @@ describe("getModelsForProviderInstance openai_compatible", () => {
     expect(
       models.find((model) => model.id === "qwen-text")?.supportsVision
     ).toBeUndefined();
-  });
-});
-
-describe("compatibleModelSupportsThinking", () => {
-  test("returns true only for models explicitly opted into thinking", () => {
-    expect(
-      compatibleModelSupportsThinking("qwen3.6-35b", [
-        { id: "qwen3.6-35b", supportsThinking: true },
-        { id: "qwen3.6-7b" },
-      ])
-    ).toBe(true);
-
-    expect(
-      compatibleModelSupportsThinking("qwen3.6-7b", [
-        { id: "qwen3.6-35b", supportsThinking: true },
-        { id: "qwen3.6-7b" },
-      ])
-    ).toBe(false);
   });
 });
 

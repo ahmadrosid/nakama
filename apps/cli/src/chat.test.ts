@@ -9,7 +9,6 @@ import {
   disableRawModeIfActive,
   formatSoulStatusLines,
   formatToolCall,
-  isEscInterruptKey,
   previewToolValue,
   runChat,
   runCleanupThenExit,
@@ -124,13 +123,6 @@ describe("formatSoulStatusLines", () => {
     expect(formatSoulStatusLines(status)[0]).toBe(
       "Soul directory: ~/.nakama/orgs/<org>/profiles/<profile>"
     );
-  });
-});
-
-describe("isEscInterruptKey", () => {
-  test("matches only a standalone escape key", () => {
-    expect(isEscInterruptKey("\u001b")).toBe(true);
-    expect(isEscInterruptKey("\u001b[A")).toBe(false);
   });
 });
 

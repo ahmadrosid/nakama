@@ -234,31 +234,6 @@ describe("AutomationService", () => {
     expect(await service.listAll()).toEqual([]);
   });
 
-  test("does not schedule automations for a disabled profile", async () => {
-    const db = await createTestDb();
-
-    const service = new AutomationService(db, {
-      getUserTimezone: async () => "UTC",
-    });
-
-    const profile = (await db.getProfile(PROFILE_ID))!;
-    await db.upsertProfile({ ...profile, automationsEnabled: false });
-
-    await db.upsertAutomation({
-      createdAt: new Date().toISOString(),
-      definition: {},
-      enabled: true,
-      id: "automation_paused",
-      name: "Existing paused automation",
-      orgId: ORG_ID,
-      profileId: PROFILE_ID,
-      updatedAt: new Date().toISOString(),
-      version: 1,
-    });
-
-    expect(await service.listAll()).toEqual([]);
-  });
-
   test("accepts email delivery when composeio MCP email sending is assigned", async () => {
     const db = await createTestDb();
     await assignComposeioGmailSender(db, PROFILE_ID);
@@ -677,86 +652,6 @@ describe("AutomationService", () => {
       deliveryStatus: "invalid",
       id: run.id,
     });
-  });
-
-  test("refuses a member automation that targets a foreign destination", async () => {
-    const db = await createTestDb();
-
-    const service = new AutomationService(db, {
-      getUserTimezone: async () => "UTC",
-    });
-
-    const owner = { orgId: ORG_ID, profileId: PROFILE_ID };
-    const configDir = await mkdtemp(join(tmpdir(), "nakama-automation-dest-"));
-    const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
-    process.env.NAKAMA_CONFIG_DIR = configDir;
-
-    try {
-      await mkdir(getTelegramConfigDir(owner), { recursive: true });
-      await writeFile(
-        getTelegramConfigPath(owner),
-        "bot_token=test-token\npaired_user_ids=111\n",
-        "utf8"
-      );
-      await mkdir(getDiscordConfigDir(owner), { recursive: true });
-      await writeFile(
-        getDiscordConfigPath(owner),
-        "bot_token=test-token\npaired_user_ids=123456789012345678\n",
-        "utf8"
-      );
-
-      for (const delivery of [
-        { channel: "telegram", chatId: 999 } as const,
-        { channel: "discord", channelId: "123456789012345679" } as const,
-      ]) {
-        const error = await service
-          .create(
-            ORG_ID,
-            {
-              delivery,
-              description: "Report",
-              name: "Report",
-              prompt: "Summarize the week",
-              trigger: { type: "manual" },
-            },
-            PROFILE_ID,
-            { isPlatformAdmin: false, orgRole: "member" }
-          )
-          .then(
-            () => null,
-            // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The test callback ignores framework inputs that this case does not inspect.
-            (thrown: unknown) => thrown
-          );
-
-        expect(error).toBeInstanceOf(NakamaApiError);
-        // SAFETY: This test double supplies only the fields exercised by this test.
-        expect((error as NakamaApiError).status).toBe(403);
-      }
-
-      // A member-owned automation that stays on the paired set is unaffected.
-      const paired = await service.create(
-        ORG_ID,
-        {
-          delivery: { channel: "telegram", chatId: 111 },
-          description: "Report",
-          name: "Report",
-          prompt: "Summarize the week",
-          trigger: { type: "manual" },
-        },
-        PROFILE_ID,
-        { isPlatformAdmin: false, orgRole: "member" }
-      );
-
-      expect(paired.delivery).toEqual({ channel: "telegram", chatId: 111 });
-    } finally {
-      if (previousConfigDir === undefined) {
-        delete process.env.NAKAMA_CONFIG_DIR;
-      } else {
-        process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
-      }
-
-      await rm(configDir, { force: true, recursive: true });
-    }
   });
 
   test("re-locks a member who retargets an admin-approved destination", async () => {

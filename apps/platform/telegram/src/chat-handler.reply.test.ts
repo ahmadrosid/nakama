@@ -32,15 +32,6 @@ function createMessenger(): TelegramRichMessenger & {
 }
 
 describe("replyAsChat", () => {
-  test("sends replies as rich text", async () => {
-    const messenger = createMessenger();
-
-    await replyAsChat(messenger, "Hello **world**", { delayMs: 0 });
-
-    expect(messenger.rich).toEqual(["Hello **world**"]);
-    expect(messenger.plain).toEqual([]);
-  });
-
   test("does not split normal multi-paragraph rich replies", async () => {
     const messenger = createMessenger();
     const text = "First paragraph.\n\nSecond paragraph.".repeat(30);

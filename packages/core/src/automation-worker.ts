@@ -46,13 +46,9 @@ const store = createWorkerHeartbeatStore<AutomationWorkerHeartbeat>({
   },
 });
 
-export const parseAutomationWorkerHeartbeat = store.parse;
-
 export const readAutomationWorkerHeartbeat = store.read;
 
 export const clearAutomationWorkerHeartbeat = store.clear;
-
-export const isAutomationWorkerRunning = store.isRunning;
 
 export const isAutomationHeartbeatAlive = store.isAlive;
 
