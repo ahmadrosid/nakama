@@ -13,7 +13,7 @@ import {
   toOpenAIResponsesDocumentBlock,
 } from "./document-content";
 
-export const MAX_ATTACHMENTS_PER_MESSAGE = 5;
+export const MAX_ATTACHMENTS_PER_MESSAGE = 10;
 
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
