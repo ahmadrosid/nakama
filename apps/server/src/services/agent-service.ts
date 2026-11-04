@@ -360,7 +360,7 @@ import {
 import type { EphemeralSession } from "./ephemeral-session-store";
 import {
   generateImageWithOpenAI,
-  IMAGE_MODEL_REQUIRED_MESSAGE,
+  imageGenerationUnavailableMessage,
   resolveImageGenerationSelection,
 } from "./image-generation";
 import {
@@ -1117,7 +1117,10 @@ export class AgentService {
     const selection = resolveImageGenerationSelection(this.userConfig);
 
     if (!selection) {
-      throw new NakamaApiError(IMAGE_MODEL_REQUIRED_MESSAGE, 400);
+      throw new NakamaApiError(
+        imageGenerationUnavailableMessage(this.userConfig),
+        400
+      );
     }
 
     const result = await generateImageWithOpenAI({

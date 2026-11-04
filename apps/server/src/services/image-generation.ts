@@ -21,11 +21,23 @@ import {
 } from "./image-generation-chatgpt";
 import { decodeStoredModelSelection } from "./provider-instance-helpers";
 
-export const IMAGE_MODEL_REQUIRED_MESSAGE =
+const IMAGE_MODEL_REQUIRED_MESSAGE =
   "Configure an image generation model in Settings → AI Providers (/settings/providers#image-generation) before generating images.";
 
 /** Stored image model that turns image generation off. */
 const IMAGE_GENERATION_OFF = "off";
+
+const IMAGE_GENERATION_OFF_MESSAGE =
+  "Image generation is turned off. A platform admin can turn it on in Settings → AI Providers (/settings/providers#image-generation).";
+
+/** Why no image model resolved: turned off, or none set up. */
+export function imageGenerationUnavailableMessage(
+  userConfig: UserConfig | null | undefined
+): string {
+  return userConfig?.imageModel?.trim() === IMAGE_GENERATION_OFF
+    ? IMAGE_GENERATION_OFF_MESSAGE
+    : IMAGE_MODEL_REQUIRED_MESSAGE;
+}
 
 export const IMAGE_GENERATION_SIZES = [
   "1024x1024",

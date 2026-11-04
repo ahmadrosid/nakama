@@ -20,7 +20,7 @@ import { createAttachmentSaver } from "../services/attachment-service";
 import {
   generateImageWithOpenAI,
   IMAGE_GENERATION_SIZES,
-  IMAGE_MODEL_REQUIRED_MESSAGE,
+  imageGenerationUnavailableMessage,
   normalizeImageGenerationSize,
   resolveImageGenerationSelection,
 } from "../services/image-generation";
@@ -195,7 +195,7 @@ export async function runGenerateImageTool(
   }
 
   if (!selection) {
-    return { error: IMAGE_MODEL_REQUIRED_MESSAGE };
+    return { error: imageGenerationUnavailableMessage(deps.getUserConfig()) };
   }
 
   const generate = deps.generateImage ?? generateImageWithOpenAI;

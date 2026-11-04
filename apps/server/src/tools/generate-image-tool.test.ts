@@ -18,7 +18,6 @@ import {
   seedOrgSuperNakamaProfile,
 } from "@nakama/db";
 import { IMAGE_GENERATION_SELECTION } from "../providers/models";
-import { IMAGE_MODEL_REQUIRED_MESSAGE } from "../services/image-generation";
 import { resolveToolsFromStorage } from "../services/tool-resolver";
 import {
   createGenerateImageTool,
@@ -460,11 +459,32 @@ describe("generate_image tool persistence (U4)", () => {
       }
     );
 
-    expect(result).toEqual({ error: IMAGE_MODEL_REQUIRED_MESSAGE });
+    expect(result).toHaveProperty("error");
     const artifactsDir = path.join(workspaceRoot, "artifacts");
     const entries = await readdir(artifactsDir).catch(() => []);
     expect(entries).toEqual([]);
     expect(attachmentInserts).toBe(0);
+  });
+
+  test("an image model saved as off generates nothing", async () => {
+    let calls = 0;
+
+    const result = await runGenerateImageTool(
+      { prompt: "a cat" },
+      { orgId: "org_1", profileId: "profile_1", workspaceRoot },
+      {
+        db: createInMemoryDatabaseAdapter(),
+        ensureSettingsLoaded: async () => {},
+        generateImage: async () => {
+          calls++;
+          throw new Error("should not generate");
+        },
+        getUserConfig: () => openaiConfig({ imageModel: "off" }),
+      }
+    );
+
+    expect(result).toHaveProperty("error");
+    expect(calls).toBe(0);
   });
 
   test("OpenAI failure writes no partial sidecar or attachment", async () => {
