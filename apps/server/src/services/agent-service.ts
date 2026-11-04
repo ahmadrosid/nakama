@@ -4092,6 +4092,10 @@ export class AgentService {
           this.nakamaCloud?.passesFor(cloudUrl, computerId).refused
       ),
       orgName: instance?.nakamaCloud?.orgName ?? null,
+      otherProviders:
+        this.userConfig?.providers.filter(
+          (entry) => entry.type !== "nakama_cloud"
+        ).length ?? 0,
       signedIn: Boolean(instance),
     };
   }

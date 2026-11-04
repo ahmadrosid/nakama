@@ -894,6 +894,8 @@ export interface NakamaCloudStatus {
   /** Signed in, but the cloud refused this computer since. */
   needsSignIn: boolean;
   orgName: string | null;
+  /** Providers this computer has besides Nakama Cloud (its own keys). */
+  otherProviders: number;
   signedIn: boolean;
 }
 

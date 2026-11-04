@@ -188,6 +188,7 @@ test("the browser connects this computer, and Nakama Cloud becomes the default p
     cloudUrl: cloud.url,
     needsSignIn: false,
     orgName: "Acme",
+    otherProviders: 0,
     signedIn: true,
   });
 
@@ -467,5 +468,38 @@ test("when the cloud refuses this computer, status asks for a new sign-in", asyn
   expect(agent.nakamaCloudStatus()).toMatchObject({
     needsSignIn: true,
     signedIn: true,
+  });
+});
+
+test("status counts this computer's own providers besides Nakama Cloud", async () => {
+  process.env.NAKAMA_CONFIG_DIR = await mkdtemp(
+    join(tmpdir(), "nakama-cloud-sign-in-")
+  );
+
+  const db = createInMemoryDatabaseAdapter();
+  const secrets = new ManagedSecrets(db, randomBytes(32).toString("base64"));
+
+  const agent = new AgentService(
+    {
+      defaultProviderId: "anthropic-main",
+      providers: [
+        {
+          apiKey: "",
+          createdAt: new Date().toISOString(),
+          id: "anthropic-main",
+          label: "Anthropic",
+          type: "anthropic",
+        },
+      ],
+    },
+    null,
+    db,
+    undefined,
+    secrets
+  );
+
+  expect(agent.nakamaCloudStatus()).toMatchObject({
+    otherProviders: 1,
+    signedIn: false,
   });
 });

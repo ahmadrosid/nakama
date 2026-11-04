@@ -194,37 +194,57 @@ describe("local sign-in", () => {
 });
 
 describe("an install from before the first launch page", () => {
-  async function choiceWith(answer) {
+  async function choiceWith(status) {
     const dataDir = await mkdtemp(join(tmpdir(), "nakama-desktop-data-"));
     await writeFile(join(dataDir, "local-auth-token"), "token-123\n");
+    const paths = [];
 
-    return existingChoice({
+    const choice = await existingChoice({
       dataDir,
-      fetchImpl: async () => answer(),
+      fetchImpl: async (url) => {
+        paths.push(new URL(url).pathname);
+
+        return status;
+      },
       serverUrl: "http://127.0.0.1:5000",
     });
+
+    return { choice, paths };
   }
 
+  const status = (fields) =>
+    Response.json({
+      account: null,
+      cloudUrl: null,
+      needsSignIn: false,
+      orgName: null,
+      otherProviders: 0,
+      signedIn: false,
+      ...fields,
+    });
+
   test("keeps its own providers, and a new install is asked", async () => {
+    expect((await choiceWith(status({ otherProviders: 2 }))).choice).toEqual({
+      choice: "local",
+    });
+    expect((await choiceWith(status({ signedIn: true }))).choice).toEqual({
+      choice: "cloud",
+    });
+    expect((await choiceWith(status({}))).choice).toBeNull();
     expect(
-      await choiceWith(() =>
-        Response.json({
-          providers: [{ id: "anthropic-main", type: "anthropic" }],
-        })
-      )
-    ).toEqual({ choice: "local" });
-    expect(
-      await choiceWith(() =>
-        Response.json({
-          providers: [{ id: "nakama-cloud", type: "nakama_cloud" }],
-        })
-      )
-    ).toEqual({ choice: "cloud" });
-    expect(await choiceWith(() => Response.json({ providers: [] }))).toBeNull();
-    expect(
-      await choiceWith(() =>
-        Response.json({ error: "No org" }, { status: 400 })
-      )
+      (
+        await choiceWith(
+          Response.json({ error: "Authentication required" }, { status: 401 })
+        )
+      ).choice
     ).toBeNull();
+  });
+
+  test("asks the Cloud status, which needs no org", async () => {
+    // With two or more orgs, an org route such as /v1/providers refuses the
+    // local token, so an upgraded install would see the first launch page.
+    expect((await choiceWith(status({ otherProviders: 1 }))).paths).toEqual([
+      "/v1/nakama-cloud",
+    ]);
   });
 });

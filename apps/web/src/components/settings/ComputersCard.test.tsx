@@ -84,6 +84,7 @@ test("shows the Nakama Cloud account only when signed in, and signs out on click
       cloudUrl: signedIn ? "https://withnakama.com" : null,
       needsSignIn: false,
       orgName: signedIn ? "Acme" : null,
+      otherProviders: 0,
       signedIn,
     })
   );

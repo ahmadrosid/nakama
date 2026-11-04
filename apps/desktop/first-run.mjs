@@ -155,7 +155,8 @@ function localApi({ dataDir, fetchImpl, serverUrl }) {
 /**
  * The choice an install made before the first launch page existed: one with
  * providers already set up keeps them. Null when there are none, or the
- * check fails, so the page asks.
+ * check fails, so the page asks. It reads the Cloud status, which needs no
+ * org: with two or more orgs, an org route refuses the local token.
  */
 export async function existingChoice({
   dataDir,
@@ -163,19 +164,15 @@ export async function existingChoice({
   serverUrl,
 }) {
   try {
-    const { providers } = await localApi({ dataDir, fetchImpl, serverUrl })(
-      "/v1/providers"
+    const status = await localApi({ dataDir, fetchImpl, serverUrl })(
+      "/v1/nakama-cloud"
     );
 
-    if (!(Array.isArray(providers) && providers.length > 0)) {
-      return null;
+    if (status?.signedIn) {
+      return { choice: "cloud" };
     }
 
-    return {
-      choice: providers.some((provider) => provider.type === "nakama_cloud")
-        ? "cloud"
-        : "local",
-    };
+    return status?.otherProviders > 0 ? { choice: "local" } : null;
   } catch {
     return null;
   }
