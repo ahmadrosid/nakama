@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   type AcpAgentHost,
@@ -8,6 +9,18 @@ import {
 } from "./acp-agent-presets";
 
 const OPENCODE = { args: ["acp"], command: "opencode" };
+
+/** A platform package folder on disk; returns the path of its package.json. */
+function opencodePackage(binary: string | null): string {
+  const dir = mkdtempSync(join(tmpdir(), "opencode-pkg-"));
+
+  if (binary) {
+    mkdirSync(join(dir, "bin"));
+    writeFileSync(join(dir, "bin", binary), "");
+  }
+
+  return join(dir, "package.json");
+}
 
 function host(overrides: Partial<AcpAgentHost> = {}): AcpAgentHost {
   return {
@@ -72,6 +85,7 @@ describe("ACP agent launch", () => {
 
   test("uses the platform package binary before PATH", () => {
     const resolved: string[] = [];
+    const manifest = opencodePackage("opencode");
 
     const launch = resolveAcpAgentLaunch(
       OPENCODE,
@@ -81,18 +95,43 @@ describe("ACP agent launch", () => {
         resolvePackage: (name) => {
           resolved.push(name);
 
-          return name === "opencode-darwin-arm64"
-            ? "/nm/opencode-darwin-arm64/package.json"
-            : null;
+          return name === "opencode-darwin-arm64" ? manifest : null;
         },
         which: () => "/usr/bin/opencode",
       })
     );
 
     expect(resolved[0]).toBe("opencode-darwin-arm64");
-    expect(launch.command).toBe(
-      join("/nm/opencode-darwin-arm64", "bin", "opencode")
+    expect(launch.command).toBe(join(manifest, "..", "bin", "opencode"));
+  });
+
+  test("skips a half-installed platform package and falls back to PATH", () => {
+    const launch = resolveAcpAgentLaunch(
+      OPENCODE,
+      host({
+        resolvePackage: () => opencodePackage(null),
+        which: () => "/usr/bin/opencode",
+      })
     );
+
+    expect(launch.command).toBe("/usr/bin/opencode");
+  });
+
+  test("on Linux, reads PATH by exact name only", () => {
+    let searched = "";
+    resolveAcpAgentLaunch(
+      OPENCODE,
+      host({
+        env: { Path: "/wrong" },
+        which: (_command, options) => {
+          searched = options.PATH;
+
+          return "/usr/bin/opencode";
+        },
+      })
+    );
+
+    expect(searched.split(":")).not.toContain("/wrong");
   });
 
   test("searches PATH plus BUN_INSTALL_BIN and the usual install folders", () => {
@@ -122,14 +161,14 @@ describe("ACP agent launch", () => {
   });
 
   test("on Windows, finds the windows package binary as an .exe and runs it directly", () => {
+    const manifest = opencodePackage("opencode.exe");
+
     const launch = resolveAcpAgentLaunch(
       OPENCODE,
       host({
         platform: "win32",
         resolvePackage: (name) =>
-          name === "opencode-windows-x64"
-            ? "C:\\nm\\opencode-windows-x64\\package.json"
-            : null,
+          name === "opencode-windows-x64" ? manifest : null,
       })
     );
 

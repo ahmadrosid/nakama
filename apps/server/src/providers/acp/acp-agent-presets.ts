@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -130,12 +130,17 @@ const SERVER_HOST: AcpAgentHost = {
   which: (command, options) => Bun.which(command, options),
 };
 
-function readEnv(env: NodeJS.ProcessEnv, name: string): string | undefined {
-  const key = Object.keys(env).find(
+/** Windows env names ignore case (`Path`); Linux and macOS names do not. */
+function readEnv(host: AcpAgentHost, name: string): string | undefined {
+  if (host.platform !== "win32") {
+    return host.env[name];
+  }
+
+  const key = Object.keys(host.env).find(
     (entry) => entry.toUpperCase() === name.toUpperCase()
   );
 
-  return key ? env[key] : undefined;
+  return key ? host.env[key] : undefined;
 }
 
 /**
@@ -151,8 +156,11 @@ function findOpencodePackageBinary(host: AcpAgentHost): string | null {
   for (const suffix of ["", "-baseline", "-musl", "-baseline-musl"]) {
     const manifest = host.resolvePackage(`${base}${suffix}`);
 
-    if (manifest) {
-      return join(dirname(manifest), "bin", binary);
+    const path = manifest ? join(dirname(manifest), "bin", binary) : null;
+
+    // A half-installed package has no binary. Fall through to PATH then.
+    if (path && existsSync(path)) {
+      return path;
     }
   }
 
@@ -166,10 +174,10 @@ function findOpencodePackageBinary(host: AcpAgentHost): string | null {
  */
 function opencodeSearchPath(host: AcpAgentHost): string {
   const sep = host.platform === "win32" ? ";" : ":";
-  const appData = readEnv(host.env, "APPDATA");
+  const appData = readEnv(host, "APPDATA");
 
   const extras = [
-    readEnv(host.env, "BUN_INSTALL_BIN"),
+    readEnv(host, "BUN_INSTALL_BIN"),
     join(host.homeDir, ".bun", "bin"),
     join(host.homeDir, ".opencode", "bin"),
     // npm's global bin on Windows, where `npm i -g` puts `opencode.cmd`.
@@ -178,14 +186,14 @@ function opencodeSearchPath(host: AcpAgentHost): string {
       : ["/opt/homebrew/bin", "/usr/local/bin"]),
   ];
 
-  return [readEnv(host.env, "PATH"), ...extras]
+  return [readEnv(host, "PATH"), ...extras]
     .filter((entry): entry is string => Boolean(entry))
     .join(sep);
 }
 
 function findOpencode(host: AcpAgentHost): string | null {
   return (
-    readEnv(host.env, "OPENCODE_PATH") ||
+    readEnv(host, "OPENCODE_PATH") ||
     findOpencodePackageBinary(host) ||
     host.which("opencode", { PATH: opencodeSearchPath(host) })
   );

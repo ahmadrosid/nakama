@@ -27,4 +27,25 @@ describe("ACP agent start", () => {
       message: expect.not.stringContaining("\u001b"),
     });
   });
+
+  test("an agent that fails initialize and ignores SIGTERM still fails the start", async () => {
+    const agent = [
+      "process.on('SIGTERM', () => {});",
+      `console.error('${STDERR_MARKER}');`,
+      "process.stdin.on('data', (data) => {",
+      "  const { id } = JSON.parse(String(data).split('\\n')[0]);",
+      "  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32000, message: 'no' } }) + '\\n');",
+      "});",
+      "setInterval(() => {}, 1000);",
+    ].join("\n");
+
+    const start = startAcpAgentProcess(
+      { args: ["-e", agent], command: process.execPath, cwd: tmpdir() },
+      acp.client()
+    );
+
+    await expect(start).rejects.toMatchObject({
+      message: expect.stringContaining(STDERR_MARKER),
+    });
+  }, 10_000);
 });

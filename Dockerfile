@@ -48,8 +48,9 @@ ARG INSTALL_CODING_AGENTS=false
 COPY .docker/runtime-deps/package.json .docker/runtime-deps/bun.lock ./
 RUN bun install --frozen-lockfile --production --ignore-scripts \
   # The runtime is Debian (glibc); the SDKs never pick their musl binaries here.
-  # Nakama runs OpenCode's AVX2 build first, so its baseline copy is unused.
-  && rm -rf node_modules/@anthropic-ai/claude-agent-sdk-linux-*-musl node_modules/opencode-linux-*-musl node_modules/opencode-linux-*-baseline \
+  # Keep OpenCode's x64 baseline build, not the AVX2 one: it also runs on CPUs
+  # without AVX2 (older Xeons, QEMU, emulated x64 on Apple Silicon).
+  && rm -rf node_modules/@anthropic-ai/claude-agent-sdk-linux-*-musl node_modules/opencode-linux-*-musl node_modules/opencode-linux-x64 \
   && if [ "$INSTALL_CODING_AGENTS" != "true" ]; then \
        rm -rf node_modules/@anthropic-ai/claude-agent-sdk-linux-* node_modules/@openai/codex-linux-* node_modules/opencode-linux-*; \
      fi
