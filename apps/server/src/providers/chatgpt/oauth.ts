@@ -386,7 +386,34 @@ export async function fetchChatgptCodexModels(
   return models;
 }
 
-export async function refreshChatgptOAuthToken(
+/**
+ * A refresh token works once. Calls that race on the same token share one
+ * redeem, so a second redeem cannot invalidate the new token chain.
+ */
+const pendingChatgptRefreshes = new Map<
+  string,
+  Promise<ChatgptOAuthCredentials>
+>();
+
+export function refreshChatgptOAuthToken(
+  refreshToken: string
+): Promise<ChatgptOAuthCredentials> {
+  const pending = pendingChatgptRefreshes.get(refreshToken);
+
+  if (pending) {
+    return pending;
+  }
+
+  const refresh = redeemChatgptRefreshToken(refreshToken).finally(() => {
+    pendingChatgptRefreshes.delete(refreshToken);
+  });
+
+  pendingChatgptRefreshes.set(refreshToken, refresh);
+
+  return refresh;
+}
+
+async function redeemChatgptRefreshToken(
   refreshToken: string
 ): Promise<ChatgptOAuthCredentials> {
   const response = await fetch(CHATGPT_OAUTH_TOKEN_URL, {

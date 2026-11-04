@@ -182,6 +182,108 @@ describe("generateImageWithOpenAI on a ChatGPT subscription", () => {
     expect(usedToken.startsWith("Bearer h.")).toBe(true);
   });
 
+  test("refreshes and retries once when a live token is rejected", async () => {
+    const saved: string[] = [];
+    const usedTokens: string[] = [];
+    const originalFetch = globalThis.fetch;
+    // SAFETY: The test fixture matches the contract used by this test.
+    globalThis.fetch = (async (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ) => {
+      if (String(input).includes("/oauth/token")) {
+        const claims = Buffer.from(
+          JSON.stringify({
+            "https://api.openai.com/auth": { chatgpt_account_id: "acct-1" },
+          })
+        ).toString("base64url");
+
+        return Response.json({
+          access_token: `h.${claims}.s`,
+          expires_in: 3600,
+          refresh_token: "rotated-refresh",
+        });
+      }
+
+      const token = new Headers(init?.headers).get("Authorization") ?? "";
+      usedTokens.push(token);
+
+      if (token === "Bearer chatgpt-access") {
+        return new Response("", { status: 401 });
+      }
+
+      return new Response(sseBody(chatgptImageEvents), { status: 200 });
+    }) as typeof fetch;
+
+    try {
+      const result = await generateImageWithOpenAI({
+        apiKey: chatgptOAuth.accessToken,
+        chatgpt: {
+          oauth: { ...chatgptOAuth, refreshToken: "retry-refresh" },
+          onTokenRefresh: async (oauth) => {
+            saved.push(oauth.refreshToken);
+          },
+        },
+        model: "gpt-6-sol",
+        prompt: "a cat",
+      });
+
+      expect(Buffer.from(result.data).toString()).toBe("png-bytes");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(saved).toEqual(["rotated-refresh"]);
+    expect(usedTokens).toHaveLength(2);
+    expect(usedTokens[1]?.startsWith("Bearer h.")).toBe(true);
+  });
+
+  test("asks to reconnect when the refresh after a 401 fails", async () => {
+    const originalFetch = globalThis.fetch;
+    // SAFETY: The test fixture matches the contract used by this test.
+    globalThis.fetch = (async (input: RequestInfo | URL) =>
+      String(input).includes("/oauth/token")
+        ? new Response(null, { status: 400 })
+        : new Response("", { status: 401 })) as typeof fetch;
+
+    try {
+      await expect(
+        generateImageWithOpenAI({
+          apiKey: chatgptOAuth.accessToken,
+          chatgpt: {
+            oauth: { ...chatgptOAuth, refreshToken: "dead-refresh" },
+          },
+          model: "gpt-6-sol",
+          prompt: "a cat",
+        })
+      ).rejects.toMatchObject({ status: 400 });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("reports an upstream 403 as a client error", async () => {
+    const originalFetch = globalThis.fetch;
+    // SAFETY: The test fixture matches the contract used by this test.
+    globalThis.fetch = (async () =>
+      new Response("<!doctype html><html></html>", {
+        status: 403,
+      })) as typeof fetch;
+
+    try {
+      await expect(
+        generateImageWithOpenAI({
+          apiKey: chatgptOAuth.accessToken,
+          chatgpt: { oauth: chatgptOAuth },
+          model: "gpt-6-sol",
+          prompt: "a cat",
+        })
+      ).rejects.toMatchObject({ status: 400 });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   test("fails when the stream reports an error", async () => {
     const originalFetch = globalThis.fetch;
     // SAFETY: The test fixture matches the contract used by this test.

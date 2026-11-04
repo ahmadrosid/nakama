@@ -21,6 +21,7 @@ import {
   isAllowedImageGenerationSelection,
   modelSupportsImageGeneration,
 } from "../providers/models";
+import { buildProviderHttpError } from "../providers/shared";
 import { decodeStoredModelSelection } from "./provider-instance-helpers";
 
 export const IMAGE_MODEL_REQUIRED_MESSAGE =
@@ -434,6 +435,9 @@ export async function generateImageWithOpenAI(
   return result;
 }
 
+const CHATGPT_SIGN_IN_EXPIRED_MESSAGE =
+  "ChatGPT sign-in expired. Reconnect in Settings → AI Providers (/settings/providers).";
+
 const CHATGPT_IMAGE_INSTRUCTIONS =
   "Generate the image the user describes. Call the image_generation tool once.";
 
@@ -453,45 +457,67 @@ async function generateImageWithChatgpt(
   }
 
   const size = normalizeImageGenerationSize(input.size);
-  let oauth = chatgpt.oauth;
 
-  if (chatgptOAuthNeedsRefresh(oauth)) {
-    oauth = await refreshChatgptOAuthToken(oauth.refreshToken);
-    await chatgpt.onTokenRefresh?.(oauth);
-  }
+  const refresh = async (refreshToken: string) => {
+    const next = await refreshChatgptOAuthToken(refreshToken);
+    await chatgpt.onTokenRefresh?.(next);
+
+    return next;
+  };
+
+  let oauth = chatgptOAuthNeedsRefresh(chatgpt.oauth)
+    ? await refresh(chatgpt.oauth.refreshToken)
+    : chatgpt.oauth;
 
   const { rethrowTimeout, signal } = imageGenerationDeadline(input.signal);
 
-  const response = await fetch(`${CHATGPT_CODEX_BASE_URL}/responses`, {
-    body: JSON.stringify({
-      input: [
-        { content: [{ text: prompt, type: "input_text" }], role: "user" },
-      ],
-      instructions: CHATGPT_IMAGE_INSTRUCTIONS,
-      model,
-      store: false,
-      // Codex rejects non-streaming /responses calls.
-      stream: true,
-      tool_choice: { type: "image_generation" },
-      tools: [{ output_format: "png", size, type: "image_generation" }],
-    }),
-    headers: {
-      Accept: "text/event-stream",
-      Authorization: `Bearer ${oauth.accessToken}`,
-      "ChatGPT-Account-ID": oauth.accountId,
-      "Content-Type": "application/json",
-      "OpenAI-Beta": "responses=v1",
-      originator: "nakama",
-    },
-    method: "POST",
-    signal,
-  }).catch(rethrowTimeout);
+  const requestBody = JSON.stringify({
+    input: [{ content: [{ text: prompt, type: "input_text" }], role: "user" }],
+    instructions: CHATGPT_IMAGE_INSTRUCTIONS,
+    model,
+    store: false,
+    // Codex rejects non-streaming /responses calls.
+    stream: true,
+    tool_choice: { type: "image_generation" },
+    tools: [{ output_format: "png", size, type: "image_generation" }],
+  });
+
+  const postResponses = (credentials: ChatgptOAuthCredentials) =>
+    fetch(`${CHATGPT_CODEX_BASE_URL}/responses`, {
+      body: requestBody,
+      headers: {
+        Accept: "text/event-stream",
+        Authorization: `Bearer ${credentials.accessToken}`,
+        "ChatGPT-Account-ID": credentials.accountId,
+        "Content-Type": "application/json",
+        "OpenAI-Beta": "responses=v1",
+        originator: "nakama",
+      },
+      method: "POST",
+      signal,
+    }).catch(rethrowTimeout);
+
+  let response = await postResponses(oauth);
+
+  // The upstream can reject a token before its stored expiry. Refresh once.
+  if (response.status === 401) {
+    await response.body?.cancel();
+
+    try {
+      oauth = await refresh(oauth.refreshToken);
+    } catch {
+      throw new NakamaApiError(CHATGPT_SIGN_IN_EXPIRED_MESSAGE, 400);
+    }
+
+    response = await postResponses(oauth);
+  }
 
   if (!response.ok) {
     const body = await response.text().catch(rethrowTimeout);
-    throw new NakamaApiError(
-      `Image generation failed (${response.status}): ${body}`,
-      502
+    throw buildProviderHttpError(
+      "ChatGPT image generation",
+      response.status,
+      body
     );
   }
 

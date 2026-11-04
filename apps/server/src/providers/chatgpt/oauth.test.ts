@@ -6,6 +6,7 @@ import {
   fetchChatgptCodexModels,
   parseChatgptCodexModelsPayload,
   readChatgptAccountIdFromAccessToken,
+  refreshChatgptOAuthToken,
 } from "./oauth";
 
 function buildJwt(payload: ProviderJsonRecord): string {
@@ -241,5 +242,40 @@ describe("completeChatgptDeviceAuth", () => {
     expect(result.accountId).toBe("acct_456");
     expect(result.refreshToken).toBe("refresh-token");
     expect(result.accessToken).toBe(token);
+  });
+});
+
+describe("refreshChatgptOAuthToken", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  test("redeems a refresh token once when calls race", async () => {
+    let refreshRequests = 0;
+    // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
+    globalThis.fetch = (async () => {
+      refreshRequests++;
+
+      return Response.json({
+        access_token: buildJwt({
+          [CHATGPT_JWT_CLAIM_PATH]: { chatgpt_account_id: "acct_1" },
+        }),
+        expires_in: 3600,
+        refresh_token: `replacement-${refreshRequests}`,
+      });
+    }) as typeof fetch;
+
+    const [first, second] = await Promise.all([
+      refreshChatgptOAuthToken("shared"),
+      refreshChatgptOAuthToken("shared"),
+    ]);
+
+    expect(refreshRequests).toBe(1);
+    expect(second).toEqual(first);
+
+    await refreshChatgptOAuthToken("shared");
+    expect(refreshRequests).toBe(2);
   });
 });
