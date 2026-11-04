@@ -64,7 +64,6 @@ export function LocalAuthTokenCard() {
             ) : null}
           </div>
           <Button
-            className="text-destructive hover:text-destructive"
             disabled={rotateMutation.isPending}
             onClick={() => setConfirmOpen(true)}
             size="sm"

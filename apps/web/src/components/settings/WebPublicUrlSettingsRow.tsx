@@ -100,6 +100,8 @@ export function WebPublicUrlSettingsRow() {
       onSuccess: (saved) => {
         setValue(saved.webPublicUrl ?? trimmed);
         setSavedHint("Saved");
+        // Save unmounts now that nothing changed; keep focus in the row.
+        document.getElementById("web-public-url")?.focus();
       },
     });
   };
@@ -115,6 +117,8 @@ export function WebPublicUrlSettingsRow() {
     setSavedHint(null);
     setFormError(null);
     saveMutation.reset();
+    // This button hides once the field matches; keep focus in the row.
+    document.getElementById("web-public-url")?.focus();
   };
 
   if (isLoading) {
@@ -159,7 +163,6 @@ export function WebPublicUrlSettingsRow() {
           aria-describedby={formError ? "web-public-url-error" : undefined}
           aria-invalid={formError ? true : undefined}
           className="min-w-[12rem] flex-1"
-          disabled={saveMutation.isPending}
           id="web-public-url"
           onChange={(event) => {
             setValue(event.target.value);
@@ -174,6 +177,7 @@ export function WebPublicUrlSettingsRow() {
             }
           }}
           placeholder="https://nakama.example.com"
+          readOnly={saveMutation.isPending}
           value={value}
         />
         <WebPublicUrlActions

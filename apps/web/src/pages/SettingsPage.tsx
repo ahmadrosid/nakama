@@ -121,8 +121,6 @@ export function SettingsPage() {
                   onCheckedChange={chatUsage.toggle}
                 />
               </div>
-
-              {isPlatformAdmin ? <TimezoneSettingsRow /> : null}
             </CardContent>
           </Card>
         </SettingsSection>
@@ -133,17 +131,12 @@ export function SettingsPage() {
           </section>
 
           <MfaSettingsCard />
-
-          {isOrgAdmin ? (
-            <section id="local-token">
-              <LocalAuthTokenCard />
-            </section>
-          ) : null}
         </SettingsSection>
 
-        {version || isPlatformAdmin ? (
+        {version || isPlatformAdmin || isOrgAdmin ? (
           <InstanceSettings
             isDemo={isDemo}
+            isOrgAdmin={isOrgAdmin}
             isPlatformAdmin={isPlatformAdmin}
             updateCheckEnabled={health?.updateCheckEnabled === true}
             version={version}
@@ -167,6 +160,16 @@ function TimezoneSettingsRow() {
     }
   }, [savedTimezone]);
 
+  useEffect(() => {
+    if (!hint) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setHint(null), 2500);
+
+    return () => window.clearTimeout(timeout);
+  }, [hint]);
+
   const handleChange = useCallback(
     (nextTimezone: string) => {
       setError(null);
@@ -174,18 +177,25 @@ function TimezoneSettingsRow() {
       setTimezone(nextTimezone);
 
       saveTimezoneMutation.mutate(nextTimezone, {
-        onError: (err) => setError(formatError(err)),
+        onError: (err) => {
+          // Show the value that is still saved, so picking again retries.
+          setTimezone(savedTimezone ?? getBrowserTimezone());
+          setError(formatError(err));
+        },
         onSuccess: (saved) => {
           setTimezone(saved);
           setHint("Saved");
         },
       });
     },
-    [saveTimezoneMutation]
+    [saveTimezoneMutation, savedTimezone]
   );
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+    <div
+      aria-busy={saveTimezoneMutation.isPending || undefined}
+      className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+    >
       <div className="min-w-0 space-y-0.5">
         <p className="font-medium text-foreground text-sm">Timezone</p>
         {error ? (
@@ -208,11 +218,14 @@ function TimezoneSettingsRow() {
         ) : null}
         <TimezoneSelect
           className="w-44 min-w-0 sm:w-52"
-          disabled={saveTimezoneMutation.isPending}
           emptyLabel="Select timezone"
           id="timezone"
           onValueChange={(nextTimezone) => {
-            if (nextTimezone && nextTimezone !== timezone) {
+            if (
+              nextTimezone &&
+              nextTimezone !== timezone &&
+              !saveTimezoneMutation.isPending
+            ) {
               handleChange(nextTimezone);
             }
           }}
@@ -225,11 +238,13 @@ function TimezoneSettingsRow() {
 
 function InstanceSettings({
   isDemo,
+  isOrgAdmin,
   isPlatformAdmin,
   updateCheckEnabled,
   version,
 }: {
   isDemo: boolean;
+  isOrgAdmin: boolean;
   isPlatformAdmin: boolean;
   updateCheckEnabled: boolean;
   version: string | undefined;
@@ -245,12 +260,20 @@ function InstanceSettings({
             />
           ) : null}
 
+          {isPlatformAdmin ? <TimezoneSettingsRow /> : null}
+
           {/* Install-wide: the callback/share base for every organization. */}
           {isPlatformAdmin ? <WebPublicUrlSettingsRow /> : null}
         </CardContent>
       </Card>
 
       {!isDemo && isPlatformAdmin ? <PlatformMfaSettingsCard /> : null}
+
+      {isOrgAdmin ? (
+        <section id="local-token">
+          <LocalAuthTokenCard />
+        </section>
+      ) : null}
 
       {isPlatformAdmin ? (
         <section id="composio">
@@ -276,9 +299,14 @@ function SettingsSection({
   children: ReactNode;
   title: string;
 }) {
+  const headingId = `settings-section-${title.toLowerCase()}`;
+
   return (
-    <section aria-label={title} className="space-y-3">
-      <h2 className="px-1 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+    <section aria-labelledby={headingId} className="space-y-3">
+      <h2
+        className="px-4 font-medium text-muted-foreground text-xs uppercase tracking-wide"
+        id={headingId}
+      >
         {title}
       </h2>
       <div className="space-y-4">{children}</div>

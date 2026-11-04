@@ -1,4 +1,5 @@
 import { Button } from "@nakama/ui/button";
+import { ConfirmDialog } from "@nakama/ui/dialog";
 import {
   InputGroup,
   InputGroupAddon,
@@ -110,6 +111,8 @@ function composioSettingsError(
   return null;
 }
 
+const COMPOSIO_KEY_INPUT_ID = "composio-api-key";
+
 function useComposioSettingsForm() {
   const {
     data: settings,
@@ -139,6 +142,8 @@ function useComposioSettingsForm() {
       const request = trimmedApiKey ? { apiKey: trimmedApiKey } : {};
       await saveMutation.mutateAsync(request);
       setApiKey("");
+      // Save unmounts once the field is empty; keep keyboard focus in the row.
+      document.getElementById(COMPOSIO_KEY_INPUT_ID)?.focus();
     } catch (error) {
       setFormError(formatError(error));
     }
@@ -295,8 +300,10 @@ function ComposioApiKeyInput({
     <div className="flex items-center gap-2">
       <InputGroup className="h-9 min-w-0 flex-1">
         <InputGroupInput
+          aria-label="Project API key"
           autoComplete="off"
           disabled={savePending || source === "environment"}
+          id={COMPOSIO_KEY_INPUT_ID}
           onChange={(event) => onApiKeyChange(event.target.value)}
           placeholder={
             source === "environment"
@@ -341,6 +348,40 @@ function ComposioApiKeyInput({
   );
 }
 
+function ComposioSavedKeyAction({
+  action,
+  onAction,
+}: {
+  action: "clear" | "use-stored";
+  onAction: (action: "clear" | "use-stored") => Promise<void>;
+}) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  return (
+    <>
+      <Button
+        onClick={() =>
+          action === "clear" ? setConfirmOpen(true) : void onAction(action)
+        }
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        {action === "clear" ? "Clear saved key" : "Use saved key"}
+      </Button>
+      {confirmOpen ? (
+        <ConfirmDialog
+          confirmLabel="Clear key"
+          description="Composio tools stop working in every organization until a new key is saved."
+          onClose={() => setConfirmOpen(false)}
+          onConfirm={() => onAction("clear")}
+          title="Clear the Composio key?"
+        />
+      ) : null}
+    </>
+  );
+}
+
 function ComposioSettingsFormBody({
   embedded,
   form,
@@ -380,20 +421,12 @@ function ComposioSettingsFormBody({
       {form.settings?.source === "settings" ||
       (form.settings?.source === "missing" && form.settings.savedAvailable) ? (
         <div className={cn(embedded ? "pb-2" : "px-4 pb-3")}>
-          <Button
-            onClick={() =>
-              void form.manageKey(
-                form.settings?.source === "settings" ? "clear" : "use-stored"
-              )
+          <ComposioSavedKeyAction
+            action={
+              form.settings.source === "settings" ? "clear" : "use-stored"
             }
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {form.settings.source === "settings"
-              ? "Clear saved key"
-              : "Use saved key"}
-          </Button>
+            onAction={form.manageKey}
+          />
         </div>
       ) : null}
 

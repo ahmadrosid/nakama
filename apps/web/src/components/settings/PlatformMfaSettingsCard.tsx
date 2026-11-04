@@ -1,14 +1,14 @@
 import type { MfaPolicyResponse, OrgRole } from "@nakama/core/contract";
-import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
+import { ConfirmDialog } from "@nakama/ui/dialog";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@nakama/ui/dropdown-menu";
 import { Switch } from "@nakama/ui/switch";
-import { toast } from "@nakama/ui/toast";
+import { ArrowDown01Icon } from "hugeicons-react";
 import { useEffect, useState } from "react";
 import { client, formatError } from "@/lib/client";
 
@@ -17,51 +17,118 @@ const roles: Array<{ label: string; value: OrgRole }> = [
   { label: "Members", value: "member" },
 ];
 
+type PendingConfirm = "disable" | "require" | null;
+
+type PolicyUpdate = {
+  enabled?: boolean;
+  enforcedRoles?: OrgRole[];
+  required?: boolean;
+};
+
+/** Changes that lock people out or drop protection for every user ask first. */
+const CONFIRMS = {
+  disable: {
+    confirmLabel: "Turn off",
+    description:
+      "No user on this instance will be asked for a second factor when they sign in.",
+    title: "Turn off MFA for all users?",
+  },
+  require: {
+    confirmLabel: "Require",
+    description:
+      "Users in the selected roles must set up an authenticator before they can use Nakama.",
+    title: "Require MFA to sign in?",
+  },
+} as const;
+
+function RolesPicker({
+  disabled,
+  enforcedRoles,
+  onChange,
+}: {
+  disabled: boolean;
+  enforcedRoles: OrgRole[];
+  onChange: (next: OrgRole[]) => void;
+}) {
+  const selected = new Set(enforcedRoles);
+
+  const label =
+    enforcedRoles.length === roles.length
+      ? "All roles"
+      : roles
+          .flatMap((role) => (selected.has(role.value) ? [role.label] : []))
+          .join(", ");
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={`Required for: ${label}`}
+        className="flex h-9 w-44 items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 text-left text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={disabled}
+      >
+        <span className="truncate">{label}</span>
+        <ArrowDown01Icon
+          aria-hidden
+          className="size-4 shrink-0 text-muted-foreground"
+        />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-44">
+        {roles.map(({ label: roleLabel, value }) => (
+          <DropdownMenuCheckboxItem
+            checked={selected.has(value)}
+            closeOnClick={false}
+            // At least one role stays selected.
+            disabled={selected.has(value) && selected.size === 1}
+            key={value}
+            onCheckedChange={(checked) =>
+              onChange(
+                checked
+                  ? [...enforcedRoles, value]
+                  : enforcedRoles.filter((role) => role !== value)
+              )
+            }
+          >
+            {roleLabel}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function PlatformMfaSettingsCard() {
   const [policy, setPolicy] = useState<MfaPolicyResponse | null>(null);
-  const [draftRoles, setDraftRoles] = useState<OrgRole[]>([]);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [savedHint, setSavedHint] = useState<string | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null);
 
   useEffect(() => {
     client
       .getMfaPolicy()
-      .then((nextPolicy) => {
-        setPolicy(nextPolicy);
-        setDraftRoles(nextPolicy.enforcedRoles);
-      })
+      .then(setPolicy)
       .catch((err) => setError(formatError(err)))
       .finally(() => setBusy(false));
   }, []);
 
-  async function update(input: {
-    enabled?: boolean;
-    enforcedRoles?: OrgRole[];
-    required?: boolean;
-  }) {
+  useEffect(() => {
+    if (!savedHint) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setSavedHint(null), 2500);
+
+    return () => window.clearTimeout(timeout);
+  }, [savedHint]);
+
+  async function update(input: PolicyUpdate) {
     setBusy(true);
     setError(null);
+    setSavedHint(null);
 
     try {
-      const nextPolicy = await client.updateMfaPolicy(input);
-      setPolicy(nextPolicy);
-      setDraftRoles(nextPolicy.enforcedRoles);
-
-      if (input.enabled !== undefined) {
-        toast(
-          input.enabled
-            ? "Multi-factor authentication enabled."
-            : "Multi-factor authentication disabled."
-        );
-      } else if (input.required === undefined) {
-        toast("MFA enforcement roles saved.");
-      } else {
-        toast(
-          input.required
-            ? "Multi-factor authentication enforcement enabled."
-            : "Multi-factor authentication enforcement disabled."
-        );
-      }
+      setPolicy(await client.updateMfaPolicy(input));
+      setSavedHint("Saved");
     } catch (err) {
       setError(formatError(err));
     } finally {
@@ -69,113 +136,105 @@ export function PlatformMfaSettingsCard() {
     }
   }
 
-  const selectedRoles = new Set(draftRoles);
-
-  const selectedRoleLabels = roles
-    .flatMap(({ label, value }) => (selectedRoles.has(value) ? [label] : []))
-    .join(", ");
-
-  const allRolesSelected = draftRoles.length === roles.length;
-  const savedRoles = new Set(policy?.enforcedRoles ?? []);
-
-  const rolesChanged =
-    policy !== null &&
-    (draftRoles.length !== savedRoles.size ||
-      draftRoles.some((role) => !savedRoles.has(role)));
-
-  function toggleRole(role: OrgRole) {
-    setDraftRoles((current) => {
-      if (current.includes(role)) {
-        return current.length === 1
-          ? current
-          : current.filter((value) => value !== role);
-      }
-
-      return [...current, role];
-    });
-  }
+  // Controls stay enabled while a save runs, so keyboard focus is not lost;
+  // a second change waits for the first.
+  const ready = policy !== null && !busy;
 
   return (
-    <Card className="w-full shadow-none">
+    <Card aria-busy={busy || undefined} className="w-full shadow-none">
       <CardContent className="divide-y divide-border p-0">
         <div className="flex items-center justify-between gap-4 px-4 py-3">
-          <span className="font-medium text-foreground text-sm">
-            Multi-factor authentication
-          </span>
+          <div className="min-w-0 space-y-0.5">
+            <p className="font-medium text-foreground text-sm">
+              MFA for all users
+            </p>
+            {savedHint ? (
+              <p
+                className="text-emerald-700 text-xs dark:text-emerald-300"
+                role="status"
+              >
+                {savedHint}
+              </p>
+            ) : null}
+          </div>
           <Switch
-            aria-label="Enable platform multi-factor authentication"
+            aria-label="MFA for all users"
             checked={policy?.enabled === true}
-            disabled={busy || policy === null}
-            onCheckedChange={(enabled) =>
-              void update({
-                enabled,
-                required: enabled ? policy?.required : false,
-              })
-            }
+            disabled={policy === null}
+            onCheckedChange={(enabled) => {
+              if (!ready) {
+                return;
+              }
+
+              if (enabled) {
+                void update({ enabled, required: policy?.required });
+              } else {
+                setPendingConfirm("disable");
+              }
+            }}
           />
         </div>
         <div className="flex items-center justify-between gap-4 px-4 py-3">
-          <span className="font-medium text-foreground text-sm">
+          <p className="font-medium text-foreground text-sm">
             Require for sign-in
-          </span>
+          </p>
           <Switch
-            aria-label="Enforce platform multi-factor authentication"
+            aria-label="Require for sign-in"
             checked={policy?.required === true}
-            disabled={busy || policy === null || policy.enabled !== true}
-            onCheckedChange={(required) => void update({ required })}
+            disabled={policy?.enabled !== true}
+            onCheckedChange={(required) => {
+              if (!ready) {
+                return;
+              }
+
+              if (required) {
+                setPendingConfirm("require");
+              } else {
+                void update({ required });
+              }
+            }}
           />
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <div className="min-w-0 space-y-0.5">
-            <p className="font-medium text-foreground text-sm">Required for</p>
-            <p className="text-muted-foreground text-xs">
-              Platform admins always need it.
-            </p>
+        {policy?.required ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+            <div className="min-w-0 space-y-0.5">
+              <p className="font-medium text-foreground text-sm">
+                Required for
+              </p>
+              <p className="text-muted-foreground text-xs">
+                Platform admins always need it.
+              </p>
+            </div>
+            <RolesPicker
+              disabled={policy === null}
+              enforcedRoles={policy.enforcedRoles}
+              onChange={(enforcedRoles) => {
+                if (ready) {
+                  void update({ enforcedRoles });
+                }
+              }}
+            />
           </div>
-          <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                className="flex h-9 w-44 items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 text-left text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={busy || policy === null}
-              >
-                {allRolesSelected ? "All roles" : selectedRoleLabels}
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-44">
-                {roles.map(({ label, value }) => {
-                  const selected = selectedRoles.has(value);
-
-                  return (
-                    <DropdownMenuItem
-                      key={value}
-                      onClick={() => toggleRole(value)}
-                    >
-                      <span className="w-4 text-center text-primary">
-                        {selected ? "✓" : ""}
-                      </span>
-                      {label}
-                    </DropdownMenuItem>
-                  );
-                })}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {rolesChanged ? (
-              <Button
-                disabled={busy}
-                onClick={() => void update({ enforcedRoles: draftRoles })}
-                size="sm"
-                type="button"
-              >
-                Save
-              </Button>
-            ) : null}
-          </div>
-        </div>
+        ) : null}
         {error ? (
           <p className="px-4 py-3 text-destructive text-sm" role="alert">
             {error}
           </p>
         ) : null}
       </CardContent>
+      {pendingConfirm ? (
+        <ConfirmDialog
+          {...CONFIRMS[pendingConfirm]}
+          onClose={() => setPendingConfirm(null)}
+          onConfirm={() =>
+            update(
+              pendingConfirm === "disable"
+                ? { enabled: false, required: false }
+                : { required: true }
+            )
+          }
+        />
+      ) : null}
     </Card>
   );
 }
