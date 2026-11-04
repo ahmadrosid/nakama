@@ -199,6 +199,7 @@ describe("browser session governance", () => {
         headers: session.headers({ "User-Agent": "Firefox/131.0" }),
       })
     );
+
     // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await listed.json()) as ListBrowserSessionsResponse;
     const current = body.sessions.find((entry) => entry.current);
