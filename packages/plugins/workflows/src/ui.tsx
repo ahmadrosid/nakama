@@ -938,6 +938,11 @@ export function apply(ctx: Context) {
   }: {
     kind:
       | "add"
+      | "check"
+      | "chevronDown"
+      | "chevronRight"
+      | "chevronUp"
+      | "retry"
       | "play"
       | "delete"
       | "more"
@@ -954,6 +959,10 @@ export function apply(ctx: Context) {
   }) {
     const paths = {
       add: "M12 5v14M5 12h14",
+      check: "m5 12 5 5 9-10",
+      chevronDown: "m6 9 6 6 6-6",
+      chevronRight: "m9 6 6 6-6 6",
+      chevronUp: "m6 15 6-6 6 6",
       close: "m6 6 12 12M6 18 18 6",
       collapse: "M20 10h-6V4M14 10l7-7M4 14h6v6M10 14l-7 7",
       delete: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7",
@@ -962,6 +971,7 @@ export function apply(ctx: Context) {
       json: "M8 4c-2 0-2 2-2 4s-2 4-2 4 2 2 2 4 0 4 2 4M16 4c2 0 2 2 2 4s2 4 2 4-2 2-2 4 0 4-2 4",
       more: "M5 12h.01M12 12h.01M19 12h.01",
       play: "m8 5 11 7-11 7V5Z",
+      retry: "M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5",
       rows: "M3 4h18v16H3V4ZM3 9h18M3 14h18",
       schema: "M4 6h16M4 12h10M4 18h6",
       table: "M3 4h18v16H3V4ZM3 9h18M9 9v11",
@@ -1898,27 +1908,49 @@ export function apply(ctx: Context) {
             </nav>
             {error && <WorkflowError message={error} />}
             {failedRun && (
-              <div className="workflow-error workflow-last-run">
-                <Icon kind="warning" />
+              <div
+                className="workflow-error workflow-last-run"
+                data-fix={Boolean(failedHelp?.fix)}
+              >
+                <span className="workflow-last-run-icon">
+                  <Icon kind="warning" />
+                </span>
                 <p>
-                  <strong>
-                    Last run failed · {runStarted(failedRun.startedAt)}
-                  </strong>
                   <span>
-                    {failedHelp?.text ??
-                      (stoppedAt ? `Stopped at ${stoppedAt}` : "Stopped")}
+                    <strong>Last run failed</strong>
+                    <span className="workflow-empty">
+                      {` · ${runStarted(failedRun.startedAt)}`}
+                      {stoppedAt && ` · stopped at ${stoppedAt}`}
+                    </span>
                   </span>
+                  <span>{failedHelp?.text ?? "Stopped"}</span>
                 </p>
-                {failedHelp?.fix && (
-                  <a href={failedHelp.fix.href}>{failedHelp.fix.label}</a>
+                {failedHelp?.fix ? (
+                  <Button render={<a href={failedHelp.fix.href} />} size="sm">
+                    {failedHelp.fix.label}
+                  </Button>
+                ) : (
+                  <Button
+                    className="workflow-view-run"
+                    onClick={() => {
+                      setSelection("");
+                      setView("runs");
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    View run
+                  </Button>
                 )}
                 <Button
                   disabled={!canRun}
                   onClick={() => runWorkflow(failedRun.input)}
                   size="sm"
                   type="button"
-                  variant="secondary"
+                  variant="outline"
                 >
+                  <Icon kind="retry" />
                   Run again
                 </Button>
                 <Button
@@ -1927,7 +1959,7 @@ export function apply(ctx: Context) {
                     dismissedRuns.add(failedRun.id);
                     redraw();
                   }}
-                  size="icon-sm"
+                  size="icon"
                   type="button"
                   variant="ghost"
                 >
@@ -2626,14 +2658,16 @@ export function apply(ctx: Context) {
       : stepIds;
 
     const reached = ids.filter((id) => timeline.has(id)).length;
+    const notReached = ids.filter((id) => !timeline.has(id));
     const detailId = `run-detail-${run.id}`;
 
     return (
       <>
         <tr data-status={run.status}>
           <td>
-            <span className="workflow-run-result">
-              <span className="workflow-run-mark" data-status={run.status} />
+            <span className="workflow-run-badge" data-status={run.status}>
+              {run.status === "failed" && <Icon kind="close" />}
+              {run.status === "completed" && <Icon kind="check" />}
               {run.status === "failed"
                 ? "Failed"
                 : run.status === "running"
@@ -2643,13 +2677,24 @@ export function apply(ctx: Context) {
           </td>
           <th scope="row">{started}</th>
           <td>
-            {reached} of {ids.length}
-            {run.status === "failed" && (
-              <span className="workflow-empty">
-                {" "}
-                · {stoppedAt ? `stopped at ${stoppedAt}` : "stopped"}
+            <span className="workflow-run-steps-cell">
+              <span aria-hidden="true" className="workflow-run-bars">
+                {ids.map((id) => (
+                  <span
+                    data-status={timeline.get(id)?.status ?? "pending"}
+                    key={id}
+                  />
+                ))}
               </span>
-            )}
+              <span>
+                {reached} of {ids.length}
+              </span>
+              {run.status === "failed" && (
+                <span className="workflow-empty">
+                  {stoppedAt ? `Stopped at ${stoppedAt}` : "Stopped"}
+                </span>
+              )}
+            </span>
           </td>
           <td className="workflow-run-took">
             {run.completedAt &&
@@ -2663,11 +2708,11 @@ export function apply(ctx: Context) {
               aria-expanded={expanded}
               aria-label={`${expanded ? "Hide" : "Open"} run from ${started}`}
               onClick={onToggle}
-              size="sm"
+              size="icon"
               type="button"
               variant="ghost"
             >
-              {expanded ? "Hide" : "Open"}
+              <Icon kind={expanded ? "chevronUp" : "chevronDown"} />
             </Button>
           </td>
         </tr>
@@ -2677,9 +2722,15 @@ export function apply(ctx: Context) {
               <div className="workflow-run-detail" id={detailId}>
                 <div className="workflow-run-actions">
                   {help ? (
-                    <p data-error data-missing-tool={help.missingTool}>
-                      {help.text}
-                    </p>
+                    <>
+                      <Icon kind="warning" />
+                      <p data-error data-missing-tool={help.missingTool}>
+                        <strong>
+                          {stoppedAt ? `${stoppedAt} failed` : "Run failed"}
+                        </strong>
+                        <span>{help.text}</span>
+                      </p>
+                    </>
                   ) : (
                     <p className="workflow-empty">
                       {formatRunTime(run.startedAt)}
@@ -2695,40 +2746,47 @@ export function apply(ctx: Context) {
                     onClick={() => onRunAgain(run.input)}
                     size="sm"
                     type="button"
-                    variant="secondary"
+                    variant="outline"
                   >
+                    <Icon kind="retry" />
                     Run again
                   </Button>
                 </div>
-                <details className="workflow-run-receipts">
-                  <summary>Step details</summary>
-                  <ol className="workflow-run-steps">
-                    {receipts.map((receipt) => {
-                      const duration = timeline.get(receipt.stepId)?.duration;
+                <ol className="workflow-run-steps">
+                  {receipts.map((receipt) => {
+                    const duration = timeline.get(receipt.stepId)?.duration;
 
-                      return (
-                        <li data-status={receipt.status} key={receipt.id}>
-                          <details>
-                            <summary>
-                              <span
-                                className="workflow-run-mark"
-                                data-status={receipt.status}
-                              />
-                              <span>{titleCase(receipt.stepId)}</span>
-                              <span className="workflow-empty">
-                                {stepStatusLabels.get(receipt.status) ??
-                                  receipt.status}
-                                {duration != null &&
-                                  ` · ${formatDuration(duration)}`}
-                              </span>
-                            </summary>
-                            <StepReceipt receipt={receipt} showError={false} />
-                          </details>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                </details>
+                    return (
+                      <li data-status={receipt.status} key={receipt.id}>
+                        <details>
+                          <summary>
+                            <span
+                              className="workflow-run-mark"
+                              data-status={receipt.status}
+                            />
+                            <span>{titleCase(receipt.stepId)}</span>
+                            <span className="workflow-empty">
+                              {stepStatusLabels.get(receipt.status) ??
+                                receipt.status}
+                              {duration != null &&
+                                ` · ${formatDuration(duration)}`}
+                            </span>
+                            <Icon kind="chevronRight" />
+                          </summary>
+                          <StepReceipt receipt={receipt} showError={false} />
+                        </details>
+                      </li>
+                    );
+                  })}
+                  {run.status !== "running" &&
+                    notReached.map((id) => (
+                      <li data-status="pending" key={id}>
+                        <span className="workflow-run-mark" />
+                        <span>{titleCase(id)}</span>
+                        <span>Not reached</span>
+                      </li>
+                    ))}
+                </ol>
                 {run.status === "completed" && run.output && (
                   <section className="workflow-history-result">
                     <h4>Result</h4>

@@ -571,19 +571,47 @@ var style_default = `[data-plugin-id="workflows"] {
   .workflow-run-mark[data-status="running"] {
     background: #3b82f6;
   }
+  .workflow-last-run {
+    gap: 8px 12px;
+    padding: 10px 8px 10px 14px;
+    border-radius: 12px;
+  }
+  .workflow-last-run-icon {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    background: color-mix(in srgb, currentColor 12%, transparent);
+    border-radius: 50%;
+  }
   .workflow-last-run p {
     display: flex;
+    flex: 1 1 280px;
     flex-direction: column;
-    gap: 2px;
   }
-  .workflow-last-run p > span {
+  .workflow-last-run p > span:last-child {
     color: var(--foreground);
+  }
+  .workflow-last-run strong {
+    font-weight: 600;
+  }
+  .workflow-last-run[data-fix="true"] {
+    color: color-mix(in srgb, #d97706 75%, var(--foreground));
+    background: color-mix(in srgb, #d97706 7%, var(--background));
+    border-color: color-mix(in srgb, #d97706 30%, transparent);
+  }
+  .workflow-error a[data-slot="button"] {
+    color: var(--primary-foreground);
+    text-decoration: none;
   }
   .workflow-runs-box {
     width: 100%;
-    max-width: 880px;
+    max-width: 960px;
     margin-inline: auto;
     overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 12px;
   }
   .workflow-runs {
     width: 100%;
@@ -591,22 +619,32 @@ var style_default = `[data-plugin-id="workflows"] {
     border-collapse: collapse;
   }
   .workflow-runs th {
-    padding: 8px 12px;
+    padding: 10px 16px;
     font-size: 12px;
     font-weight: 500;
     color: var(--muted-foreground);
     text-align: left;
     white-space: nowrap;
+    background: color-mix(in srgb, var(--muted) 40%, var(--background));
     border-bottom: 1px solid var(--border);
+  }
+  .workflow-runs th:nth-child(4),
+  .workflow-runs .workflow-run-took {
+    text-align: right;
   }
   .workflow-runs td,
   .workflow-runs th[scope="row"] {
-    padding: 8px 12px;
+    padding: 10px 16px;
     font-size: 14px;
     font-weight: 400;
     color: inherit;
     white-space: nowrap;
+    background: none;
     border-bottom: 1px solid var(--border);
+  }
+  .workflow-runs tbody tr:last-child > td,
+  .workflow-runs tbody tr:last-child > th[scope="row"] {
+    border-bottom: 0;
   }
   /* "stopped at <step>" wraps so the Open button stays in view. */
   .workflow-runs tr[data-status] td:nth-child(3) {
@@ -619,17 +657,78 @@ var style_default = `[data-plugin-id="workflows"] {
   .workflow-runs tr[data-status="failed"] {
     background: color-mix(in srgb, var(--destructive) 4%, var(--background));
   }
+  .workflow-runs tr[data-status]:hover {
+    background: color-mix(in srgb, var(--muted) 50%, var(--background));
+  }
+  .workflow-runs tr[data-status="failed"]:hover {
+    background: color-mix(in srgb, var(--destructive) 7%, var(--background));
+  }
   .workflow-runs .workflow-run-detail-row td {
+    padding: 0 12px 12px;
     white-space: normal;
   }
-  .workflow-run-result {
-    display: inline-flex;
-    gap: 8px;
-    align-items: center;
-    font-weight: 500;
+  .workflow-runs tr[data-status="failed"] + .workflow-run-detail-row {
+    background: color-mix(in srgb, var(--destructive) 4%, var(--background));
   }
-  [data-status="failed"] .workflow-run-result {
+  .workflow-run-badge {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    height: 24px;
+    padding: 0 10px 0 8px;
+    font-size: 13px;
+    font-weight: 500;
+    background: var(--muted);
+    border-radius: 999px;
+  }
+  .workflow-run-badge > svg {
+    width: 12px;
+    height: 12px;
+    stroke-width: 2.5;
+  }
+  .workflow-run-badge[data-status="completed"] {
+    color: color-mix(in srgb, #16a34a 70%, var(--foreground));
+    background: color-mix(in srgb, #16a34a 12%, var(--background));
+  }
+  .workflow-run-badge[data-status="failed"] {
     color: var(--destructive);
+    background: color-mix(in srgb, var(--destructive) 12%, var(--background));
+  }
+  .workflow-run-badge[data-status="running"] {
+    color: color-mix(in srgb, #3b82f6 70%, var(--foreground));
+    background: color-mix(in srgb, #3b82f6 12%, var(--background));
+  }
+  .workflow-run-steps-cell {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 10px;
+    align-items: center;
+  }
+  .workflow-run-steps-cell > .workflow-empty {
+    font-size: 13px;
+  }
+  .workflow-run-bars {
+    display: inline-flex;
+    gap: 3px;
+  }
+  .workflow-run-bars > span {
+    width: 16px;
+    height: 6px;
+    background: color-mix(
+      in srgb,
+      var(--muted-foreground) 25%,
+      var(--background)
+    );
+    border-radius: 3px;
+  }
+  .workflow-run-bars > [data-status="completed"] {
+    background: #15803d;
+  }
+  .workflow-run-bars > [data-status="failed"] {
+    background: var(--destructive);
+  }
+  .workflow-run-bars > [data-status="running"] {
+    background: #3b82f6;
   }
   .workflow-run-took {
     font-size: 13px;
@@ -639,12 +738,20 @@ var style_default = `[data-plugin-id="workflows"] {
   .workflow-run-detail {
     display: grid;
     gap: 12px;
-    padding: 4px 0 8px;
+    padding: 14px 16px;
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: 10px;
   }
   .workflow-run-actions {
     display: flex;
     gap: 12px;
-    align-items: center;
+    align-items: flex-start;
+  }
+  .workflow-run-actions > svg {
+    flex-shrink: 0;
+    margin-top: 3px;
+    color: var(--destructive);
   }
   .workflow-run-actions p {
     flex: 1;
@@ -653,36 +760,77 @@ var style_default = `[data-plugin-id="workflows"] {
     overflow-wrap: anywhere;
   }
   .workflow-run-actions p[data-error] {
+    display: flex;
+    flex-direction: column;
+  }
+  .workflow-run-actions p[data-error] > strong {
+    font-weight: 500;
     color: var(--destructive);
   }
-  .workflow-run-actions p[data-missing-tool="true"] {
-    color: var(--muted-foreground);
+  .workflow-run-actions p[data-missing-tool="true"] > strong {
+    color: var(--foreground);
   }
   .workflow-run-actions [data-slot="button"] {
     flex-shrink: 0;
-    border-radius: 999px;
-  }
-  .workflow-run-receipts > summary {
-    width: fit-content;
-    font-size: 12px;
-    color: var(--muted-foreground);
-    cursor: pointer;
-  }
-  .workflow-run-receipts[open] > summary {
-    margin-bottom: 8px;
   }
   .workflow-run-steps {
     padding: 0;
     margin: 0;
     list-style: none;
+    border-top: 1px solid var(--muted);
   }
-  .workflow-run-steps summary {
+  .workflow-run-steps > li {
+    border-bottom: 1px solid var(--muted);
+  }
+  .workflow-run-steps > li:last-child {
+    border-bottom: 0;
+  }
+  .workflow-run-steps summary,
+  .workflow-run-steps > li[data-status="pending"] {
     display: flex;
     gap: 10px;
     align-items: center;
-    padding: 6px 0;
+    min-height: 44px;
     cursor: pointer;
     list-style: none;
+  }
+  .workflow-run-steps summary > span:nth-child(2),
+  .workflow-run-steps > li[data-status="pending"] > span:nth-child(2) {
+    flex: 1;
+    min-width: 0;
+  }
+  .workflow-run-steps summary > .workflow-empty {
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .workflow-run-steps summary > svg {
+    color: var(--muted-foreground);
+    transition: rotate 0.15s;
+  }
+  .workflow-run-steps details[open] > summary > svg {
+    rotate: 90deg;
+  }
+  .workflow-run-steps > li[data-status="failed"] summary > span:nth-child(2) {
+    font-weight: 500;
+  }
+  .workflow-run-steps > li[data-status="failed"] summary > .workflow-empty {
+    color: var(--destructive);
+  }
+  .workflow-last-run > button[data-slot="button"] {
+    color: var(--foreground);
+  }
+  .workflow-last-run > button.workflow-view-run {
+    color: var(--primary);
+  }
+  .workflow-run-steps > li[data-status="pending"] {
+    font-size: 14px;
+    color: var(--muted-foreground);
+    cursor: default;
+  }
+  .workflow-run-steps > li[data-status="pending"] > .workflow-run-mark {
+    box-sizing: border-box;
+    background: none;
+    border: 1.5px solid var(--muted-foreground);
   }
   .workflow-run-steps summary::-webkit-details-marker {
     display: none;
@@ -1819,6 +1967,10 @@ function apply(ctx) {
   }) {
     const paths = {
       add: "M12 5v14M5 12h14",
+      check: "m5 12 5 5 9-10",
+      chevronDown: "m6 9 6 6 6-6",
+      chevronRight: "m9 6 6 6-6 6",
+      chevronUp: "m6 15 6-6 6 6",
       close: "m6 6 12 12M6 18 18 6",
       collapse: "M20 10h-6V4M14 10l7-7M4 14h6v6M10 14l-7 7",
       delete: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7",
@@ -1827,6 +1979,7 @@ function apply(ctx) {
       json: "M8 4c-2 0-2 2-2 4s-2 4-2 4 2 2 2 4 0 4 2 4M16 4c2 0 2 2 2 4s2 4 2 4-2 2-2 4 0 4-2 4",
       more: "M5 12h.01M12 12h.01M19 12h.01",
       play: "m8 5 11 7-11 7V5Z",
+      retry: "M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5",
       rows: "M3 4h18v16H3V4ZM3 9h18M3 14h18",
       schema: "M4 6h16M4 12h10M4 18h6",
       table: "M3 4h18v16H3V4ZM3 9h18M9 9v11",
@@ -2425,24 +2578,43 @@ function apply(ctx) {
     }, needsLook)))), error && /* @__PURE__ */ React.createElement(WorkflowError, {
       message: error
     }), failedRun && /* @__PURE__ */ React.createElement("div", {
-      className: "workflow-error workflow-last-run"
+      className: "workflow-error workflow-last-run",
+      "data-fix": Boolean(failedHelp?.fix)
+    }, /* @__PURE__ */ React.createElement("span", {
+      className: "workflow-last-run-icon"
     }, /* @__PURE__ */ React.createElement(Icon, {
       kind: "warning"
-    }), /* @__PURE__ */ React.createElement("p", null, /* @__PURE__ */ React.createElement("strong", null, "Last run failed · ", runStarted(failedRun.startedAt)), /* @__PURE__ */ React.createElement("span", null, failedHelp?.text ?? (stoppedAt ? `Stopped at ${stoppedAt}` : "Stopped"))), failedHelp?.fix && /* @__PURE__ */ React.createElement("a", {
-      href: failedHelp.fix.href
-    }, failedHelp.fix.label), /* @__PURE__ */ React.createElement(Button, {
+    })), /* @__PURE__ */ React.createElement("p", null, /* @__PURE__ */ React.createElement("span", null, /* @__PURE__ */ React.createElement("strong", null, "Last run failed"), /* @__PURE__ */ React.createElement("span", {
+      className: "workflow-empty"
+    }, ` · ${runStarted(failedRun.startedAt)}`, stoppedAt && ` · stopped at ${stoppedAt}`)), /* @__PURE__ */ React.createElement("span", null, failedHelp?.text ?? "Stopped")), failedHelp?.fix ? /* @__PURE__ */ React.createElement(Button, {
+      render: /* @__PURE__ */ React.createElement("a", {
+        href: failedHelp.fix.href
+      }),
+      size: "sm"
+    }, failedHelp.fix.label) : /* @__PURE__ */ React.createElement(Button, {
+      className: "workflow-view-run",
+      onClick: () => {
+        setSelection("");
+        setView("runs");
+      },
+      size: "sm",
+      type: "button",
+      variant: "ghost"
+    }, "View run"), /* @__PURE__ */ React.createElement(Button, {
       disabled: !canRun,
       onClick: () => runWorkflow(failedRun.input),
       size: "sm",
       type: "button",
-      variant: "secondary"
-    }, "Run again"), /* @__PURE__ */ React.createElement(Button, {
+      variant: "outline"
+    }, /* @__PURE__ */ React.createElement(Icon, {
+      kind: "retry"
+    }), "Run again"), /* @__PURE__ */ React.createElement(Button, {
       "aria-label": "Dismiss",
       onClick: () => {
         dismissedRuns.add(failedRun.id);
         redraw();
       },
-      size: "icon-sm",
+      size: "icon",
       type: "button",
       variant: "ghost"
     }, /* @__PURE__ */ React.createElement(Icon, {
@@ -2845,29 +3017,42 @@ function apply(ctx) {
     const recordedIds = receipts.map((step) => step.stepId);
     const ids = recordedIds.some((id) => !stepIds.includes(id)) ? recordedIds : stepIds;
     const reached = ids.filter((id) => timeline.has(id)).length;
+    const notReached = ids.filter((id) => !timeline.has(id));
     const detailId = `run-detail-${run.id}`;
     return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("tr", {
       "data-status": run.status
     }, /* @__PURE__ */ React.createElement("td", null, /* @__PURE__ */ React.createElement("span", {
-      className: "workflow-run-result"
-    }, /* @__PURE__ */ React.createElement("span", {
-      className: "workflow-run-mark",
+      className: "workflow-run-badge",
       "data-status": run.status
+    }, run.status === "failed" && /* @__PURE__ */ React.createElement(Icon, {
+      kind: "close"
+    }), run.status === "completed" && /* @__PURE__ */ React.createElement(Icon, {
+      kind: "check"
     }), run.status === "failed" ? "Failed" : run.status === "running" ? "Running…" : stepStatusLabels.get(run.status) ?? run.status)), /* @__PURE__ */ React.createElement("th", {
       scope: "row"
-    }, started), /* @__PURE__ */ React.createElement("td", null, reached, " of ", ids.length, run.status === "failed" && /* @__PURE__ */ React.createElement("span", {
+    }, started), /* @__PURE__ */ React.createElement("td", null, /* @__PURE__ */ React.createElement("span", {
+      className: "workflow-run-steps-cell"
+    }, /* @__PURE__ */ React.createElement("span", {
+      "aria-hidden": "true",
+      className: "workflow-run-bars"
+    }, ids.map((id) => /* @__PURE__ */ React.createElement("span", {
+      "data-status": timeline.get(id)?.status ?? "pending",
+      key: id
+    }))), /* @__PURE__ */ React.createElement("span", null, reached, " of ", ids.length), run.status === "failed" && /* @__PURE__ */ React.createElement("span", {
       className: "workflow-empty"
-    }, " ", "· ", stoppedAt ? `stopped at ${stoppedAt}` : "stopped")), /* @__PURE__ */ React.createElement("td", {
+    }, stoppedAt ? `Stopped at ${stoppedAt}` : "Stopped"))), /* @__PURE__ */ React.createElement("td", {
       className: "workflow-run-took"
     }, run.completedAt && formatDuration(Date.parse(run.completedAt) - Date.parse(run.startedAt))), /* @__PURE__ */ React.createElement("td", null, /* @__PURE__ */ React.createElement(Button, {
       "aria-controls": expanded ? detailId : undefined,
       "aria-expanded": expanded,
       "aria-label": `${expanded ? "Hide" : "Open"} run from ${started}`,
       onClick: onToggle,
-      size: "sm",
+      size: "icon",
       type: "button",
       variant: "ghost"
-    }, expanded ? "Hide" : "Open"))), expanded && /* @__PURE__ */ React.createElement("tr", {
+    }, /* @__PURE__ */ React.createElement(Icon, {
+      kind: expanded ? "chevronUp" : "chevronDown"
+    })))), expanded && /* @__PURE__ */ React.createElement("tr", {
       className: "workflow-run-detail-row"
     }, /* @__PURE__ */ React.createElement("td", {
       colSpan: 5
@@ -2876,10 +3061,12 @@ function apply(ctx) {
       id: detailId
     }, /* @__PURE__ */ React.createElement("div", {
       className: "workflow-run-actions"
-    }, help ? /* @__PURE__ */ React.createElement("p", {
+    }, help ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(Icon, {
+      kind: "warning"
+    }), /* @__PURE__ */ React.createElement("p", {
       "data-error": true,
       "data-missing-tool": help.missingTool
-    }, help.text) : /* @__PURE__ */ React.createElement("p", {
+    }, /* @__PURE__ */ React.createElement("strong", null, stoppedAt ? `${stoppedAt} failed` : "Run failed"), /* @__PURE__ */ React.createElement("span", null, help.text))) : /* @__PURE__ */ React.createElement("p", {
       className: "workflow-empty"
     }, formatRunTime(run.startedAt)), help?.fix && /* @__PURE__ */ React.createElement(Button, {
       render: /* @__PURE__ */ React.createElement("a", {
@@ -2891,10 +3078,10 @@ function apply(ctx) {
       onClick: () => onRunAgain(run.input),
       size: "sm",
       type: "button",
-      variant: "secondary"
-    }, "Run again")), /* @__PURE__ */ React.createElement("details", {
-      className: "workflow-run-receipts"
-    }, /* @__PURE__ */ React.createElement("summary", null, "Step details"), /* @__PURE__ */ React.createElement("ol", {
+      variant: "outline"
+    }, /* @__PURE__ */ React.createElement(Icon, {
+      kind: "retry"
+    }), "Run again")), /* @__PURE__ */ React.createElement("ol", {
       className: "workflow-run-steps"
     }, receipts.map((receipt) => {
       const duration = timeline.get(receipt.stepId)?.duration;
@@ -2906,11 +3093,18 @@ function apply(ctx) {
         "data-status": receipt.status
       }), /* @__PURE__ */ React.createElement("span", null, titleCase(receipt.stepId)), /* @__PURE__ */ React.createElement("span", {
         className: "workflow-empty"
-      }, stepStatusLabels.get(receipt.status) ?? receipt.status, duration != null && ` · ${formatDuration(duration)}`)), /* @__PURE__ */ React.createElement(StepReceipt, {
+      }, stepStatusLabels.get(receipt.status) ?? receipt.status, duration != null && ` · ${formatDuration(duration)}`), /* @__PURE__ */ React.createElement(Icon, {
+        kind: "chevronRight"
+      })), /* @__PURE__ */ React.createElement(StepReceipt, {
         receipt,
         showError: false
       })));
-    }))), run.status === "completed" && run.output && /* @__PURE__ */ React.createElement("section", {
+    }), run.status !== "running" && notReached.map((id) => /* @__PURE__ */ React.createElement("li", {
+      "data-status": "pending",
+      key: id
+    }, /* @__PURE__ */ React.createElement("span", {
+      className: "workflow-run-mark"
+    }), /* @__PURE__ */ React.createElement("span", null, titleCase(id)), /* @__PURE__ */ React.createElement("span", null, "Not reached")))), run.status === "completed" && run.output && /* @__PURE__ */ React.createElement("section", {
       className: "workflow-history-result"
     }, /* @__PURE__ */ React.createElement("h4", null, "Result"), /* @__PURE__ */ React.createElement("p", null, run.output))))));
   }
