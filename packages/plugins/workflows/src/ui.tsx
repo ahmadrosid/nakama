@@ -469,7 +469,12 @@ function errorHelp(
     };
   }
 
-  const check = failed?.kind === "assert" ? checkFailure(failed) : "";
+  const check =
+    failed?.kind === "assert"
+      ? checkFailure(failed)
+      : failed?.kind === "compare"
+        ? compareFailure(failed)
+        : "";
 
   return {
     missingTool: Boolean(missingTool),
@@ -493,6 +498,48 @@ function checkFailure(step: WorkflowRunStepRecord) {
   return `${path} should be ${JSON.stringify(input.expected)}, but it was ${
     actual === undefined || actual === null ? "missing" : JSON.stringify(actual)
   }.`;
+}
+
+/** A value as short readable text: strings in quotes, long values cut. */
+function shortValue(value: WorkflowValue | undefined) {
+  const text =
+    value === undefined || value === null ? "nothing" : JSON.stringify(value);
+
+  return text.length > 80 ? `${text.slice(0, 80)}…` : text;
+}
+
+/** '"Stripe <…>" does not contain "github.com".' from a failed compare step. */
+function compareFailure(step: WorkflowRunStepRecord) {
+  const input = parseWorkflowValue(step.input);
+  const output = parseWorkflowValue(step.output);
+
+  if (!isWorkflowRecord(input)) {
+    return "";
+  }
+
+  const left = shortValue(input.left);
+  const right = shortValue(input.right);
+  const diff = isWorkflowRecord(output) ? output.diff : undefined;
+
+  const reason = isWorkflowRecord(diff)
+    ? readWorkflowString(diff.reason)
+    : null;
+
+  const op = readWorkflowString(input.op);
+
+  if (reason === "non-numeric") {
+    return `${left} and ${right} must both be numbers to compare.`;
+  }
+
+  if (op === "contains") {
+    return `${left} does not contain ${right}.`;
+  }
+
+  if (op === "near") {
+    return `${left} is not close enough to ${right}.`;
+  }
+
+  return op === "eq" ? `${left} should equal ${right}.` : "";
 }
 
 /** The step a failed run stopped at. */
