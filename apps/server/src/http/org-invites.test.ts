@@ -10,7 +10,7 @@ import {
 setupTestConfigDir("nakama-org-invites-test-");
 
 describe("direct org member provisioning", () => {
-  test("domain settings reach admins and restrict invites, and a platform admin can still add directly", async () => {
+  test("domain settings reach admins, and a platform admin can still invite and add directly", async () => {
     const { app, databaseAdapter } = createMinimalHonoApp();
     const session = await setupFreshInstallSession(app, databaseAdapter);
     const orgId = session.orgId!;
@@ -57,7 +57,7 @@ describe("direct org member provisioning", () => {
       })
     );
 
-    expect(invite.status).toBe(400);
+    expect(invite.status).toBe(201);
 
     const directAdd = await app.fetch(
       new Request(`http://localhost:4310/v1/orgs/${orgId}/members`, {
@@ -148,6 +148,18 @@ describe("direct org member provisioning", () => {
       error: "Email domain is not allowed.",
     });
     expect(await databaseAdapter.getUserByEmail("guest@other.com")).toBeNull();
+
+    const invite = await app.fetch(
+      new Request(`http://localhost:4310/v1/orgs/${orgId}/invites`, {
+        body: JSON.stringify({ email: "guest@other.com", role: "member" }),
+        headers: adminSession.headers({
+          "X-CSRF-Token": adminSession.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    expect(invite.status).toBe(400);
 
     expect((await add("member@acme.com")).status).toBe(201);
   });

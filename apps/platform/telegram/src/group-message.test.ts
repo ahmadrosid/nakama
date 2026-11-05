@@ -1,9 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Context } from "grammy";
 import {
-  isTelegramGroupChat,
   resolveBotInfo,
-  resolveChannelOrgKey,
   resolveConversationKey,
   shouldHandleGroupMessage,
   stripBotMention,
@@ -42,16 +40,6 @@ function groupContext(
 }
 
 describe("group-message helpers", () => {
-  test("isTelegramGroupChat detects group and supergroup", () => {
-    expect(isTelegramGroupChat(groupContext({ chatType: "group" }))).toBe(true);
-    expect(isTelegramGroupChat(groupContext({ chatType: "supergroup" }))).toBe(
-      true
-    );
-    expect(isTelegramGroupChat(groupContext({ chatType: "private" }))).toBe(
-      false
-    );
-  });
-
   test("shouldHandleGroupMessage accepts mention, reply, and slash commands", () => {
     expect(
       shouldHandleGroupMessage(
@@ -133,11 +121,6 @@ describe("group-message helpers", () => {
     const ctx = fixture as Context;
 
     expect(shouldHandleGroupMessage(ctx, botInfo)).toBe(true);
-  });
-
-  test("resolveChannelOrgKey scopes org store by group or user", () => {
-    expect(resolveChannelOrgKey("-100123", 42, true)).toBe("g:-100123");
-    expect(resolveChannelOrgKey("42", 42, false)).toBe("u:42");
   });
 
   test("resolveConversationKey preserves private and group keys without topics", () => {

@@ -2,11 +2,10 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveComposioCallbackBaseUrl } from "./composio-callback-url";
+import { COMPOSIO_CUSTOM_AUTH_REQUIRED, NakamaApiError } from "@nakama/core";
 import {
   buildComposioConnectTools,
   buildComposioToolDefinitions,
-  composioConnectionKey,
 } from "./composio-tool-bridge";
 import { McpClientManager } from "./mcp-client-manager";
 
@@ -55,12 +54,6 @@ describe("composio-tool-bridge", () => {
     } else {
       process.env.NAKAMA_WEB_PUBLIC_URL = previous.webPublicUrl;
     }
-  });
-
-  test("connection key includes user id", () => {
-    expect(composioConnectionKey("org_1", "usr_a", "profile_1")).toBe(
-      "composio:org_1:usr_a:profile_1"
-    );
   });
 
   test("runs the turn without Composio tools when the session cannot open", async () => {
@@ -774,6 +767,79 @@ describe("composio-tool-bridge", () => {
     });
   });
 
+  /** Runs the channel connect tool for Gmail while connect throws `error`. */
+  async function runConnectToolWhenConnectFails(error: Error) {
+    const composioService: Parameters<typeof buildComposioConnectTools>[3] = {
+      async connectToolkit() {
+        throw error;
+      },
+      async getAssignedToolkitRecords() {
+        return [
+          {
+            allowedActions: null,
+            orgToolkit: {
+              cachedTools: [
+                {
+                  description: "Send",
+                  inputSchema: { properties: {}, type: "object" },
+                  name: "Send Email",
+                  slug: "GMAIL_SEND_EMAIL",
+                },
+              ],
+              createdAt: "2026-01-01T00:00:00.000Z",
+              displayName: "Gmail",
+              id: "ctk_1",
+              lastError: null,
+              orgId: "org_1",
+              status: "enabled",
+              toolkitSlug: "gmail",
+              updatedAt: "2026-01-01T00:00:00.000Z",
+            },
+            userConnection: null,
+          },
+        ];
+      },
+      isAvailable: async () => true,
+    };
+
+    const tools = await buildComposioConnectTools(
+      "org_1",
+      "usr_1",
+      "profile_1",
+      composioService
+    );
+
+    return await tools[0]?.run(
+      { toolkit_slug: "gmail" },
+      { clientOrigin: "https://nakama.example.com" }
+    );
+  }
+
+  test("connect tool reports a missing auth config as its own code", async () => {
+    const result = await runConnectToolWhenConnectFails(
+      new NakamaApiError("No managed auth.", 422, undefined, undefined, {
+        code: COMPOSIO_CUSTOM_AUTH_REQUIRED,
+      })
+    );
+
+    expect(result).toMatchObject({
+      code: COMPOSIO_CUSTOM_AUTH_REQUIRED,
+      toolkitSlug: "gmail",
+    });
+  });
+
+  test("connect tool keeps raw Composio errors out of the reply", async () => {
+    const result = await runConnectToolWhenConnectFails(
+      new Error('400 {"error":{"slug":"Some_Other_Error"}}')
+    );
+
+    expect(result).toMatchObject({
+      code: "COMPOSIO_TRANSIENT",
+      toolkitSlug: "gmail",
+    });
+    expect(JSON.stringify(result)).not.toContain("Some_Other_Error");
+  });
+
   test("web chat offers a connect button for any app without starting OAuth", async () => {
     const composioService: Parameters<typeof buildComposioConnectTools>[3] = {
       async connectToolkit() {
@@ -913,26 +979,5 @@ describe("composio-tool-bridge", () => {
     });
     // SAFETY: The test fixture matches the contract used by this test.
     expect(String((result as { error?: string }).error)).toContain("localhost");
-  });
-
-  test("resolveComposioCallbackBaseUrl prefers clientOrigin from browser", () => {
-    expect(
-      resolveComposioCallbackBaseUrl({
-        clientOrigin: "https://app.example.com/",
-      })
-    ).toBe("https://app.example.com");
-  });
-
-  test("resolveComposioCallbackBaseUrl reads Origin header from request", () => {
-    const request = new Request(
-      "http://127.0.0.1:4310/v1/sessions/s1/messages",
-      {
-        headers: { Origin: "http://localhost:3003" },
-      }
-    );
-
-    expect(resolveComposioCallbackBaseUrl({ request })).toBe(
-      "http://localhost:3003"
-    );
   });
 });

@@ -37,6 +37,7 @@ export {
   isPairingCodeActive,
   looksLikePairingCode,
   PAIRING_CODE_TTL_MS,
+  pairingCodesMatch,
 } from "./pairing-code";
 
 export type ChannelPlatform =

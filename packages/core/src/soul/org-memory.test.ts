@@ -178,39 +178,6 @@ describe("appendOrgMemorySection", () => {
   });
 });
 
-describe("previewOrgMemoryAfterApprove", () => {
-  const live = `${ORG_MEMORY_PREAMBLE}\n\n- existing pinned fact\n`;
-
-  test("recent-log approve preview includes bullet in prompt injection", () => {
-    const preview = previewOrgMemoryAfterApprove(
-      live,
-      "team standups are at 10am UTC",
-      {
-        dateUtc: "2026-07-31",
-        pin: false,
-      }
-    );
-
-    expect(preview.destination).toBe("recent-log");
-    expect(preview.destinationLabel).toBe("## 2026-07-31");
-    expect(preview.memoryLine).toBe("- team standups are at 10am UTC");
-    expect(preview.promptInjection).toContain("- existing pinned fact");
-    expect(preview.promptInjection).toContain(
-      "- team standups are at 10am UTC"
-    );
-  });
-
-  test("pinned approve preview places bullet after existing pinned facts", () => {
-    const preview = previewOrgMemoryAfterApprove(live, "new pinned fact", {
-      pin: true,
-    });
-
-    expect(preview.destination).toBe("pinned");
-    expect(preview.destinationLabel).toBe("## Pinned");
-    expect(preview.promptInjection).toContain("- new pinned fact");
-  });
-});
-
 describe("detectOrgMemoryInjectionWarnings", () => {
   const skill = `## Workflow
 

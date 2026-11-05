@@ -157,6 +157,7 @@ export function DataPortabilityPanel() {
           onClick={handleExport}
           size="sm"
           type="button"
+          variant="outline"
         >
           <PendingIcon idle={DownloadIcon} pending={exportMutation.isPending} />
           Download
@@ -178,7 +179,7 @@ export function DataPortabilityPanel() {
             onClick={() => inputRef.current?.click()}
             size="sm"
             type="button"
-            variant={selectedFile ? "outline" : "default"}
+            variant="outline"
           >
             <PendingIcon
               idle={UploadIcon}

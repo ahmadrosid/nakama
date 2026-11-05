@@ -8,6 +8,7 @@ import {
 import { ChannelSessionStore as SessionStore } from "@nakama/core/channel-session-store";
 import type { ChatMessage, SendMessageInput } from "@nakama/core/contract";
 import { loadDiscordConfigFile } from "@nakama/core/discord-config";
+import { MAX_ATTACHMENTS_PER_MESSAGE } from "@nakama/core/message-content";
 import type {
   ButtonInteraction,
   StringSelectMenuInteraction,
@@ -775,168 +776,6 @@ describe("createChatHandler artifact delivery", () => {
           reply.includes("https://app.example/s/tok_test")
         )
       ).toBe(true);
-    });
-  });
-
-  test("auto-uploads a PDF artifact after a paired save_artifact turn", async () => {
-    await withTempHome(async (homeDir) => {
-      const pdfMeta = JSON.stringify({
-        mimeType: "application/pdf",
-        savedAt: "2026-07-13T10:00:00.000Z",
-        sizeBytes: 270_000,
-      });
-
-      const pdfMessages: ChatMessage[] = [
-        { content: "save pitch deck", role: "user" },
-        {
-          content: "",
-          role: "assistant",
-          toolCalls: [
-            {
-              arguments: {
-                content: "%PDF-1.4",
-                path: "artifacts/nakama-pitch-deck.pdf",
-              },
-              id: "tool_1",
-              name: "write_file",
-            },
-            {
-              arguments: {
-                content: pdfMeta,
-                path: "artifacts/nakama-pitch-deck.pdf.nakama-meta.json",
-              },
-              id: "tool_2",
-              name: "write_file",
-            },
-          ],
-        },
-        {
-          content: JSON.stringify({
-            bytesWritten: 270_000,
-            path: "/home/.nakama/orgs/org/profiles/default/artifacts/nakama-pitch-deck.pdf",
-          }),
-          name: "write_file",
-          role: "tool",
-          toolCallId: "tool_1",
-        },
-        {
-          content: JSON.stringify({
-            bytesWritten: pdfMeta.length,
-            path: "/home/.nakama/orgs/org/profiles/default/artifacts/nakama-pitch-deck.pdf.nakama-meta.json",
-          }),
-          name: "write_file",
-          role: "tool",
-          toolCallId: "tool_2",
-        },
-        { content: "Saved the pitch deck.", role: "assistant" },
-      ];
-
-      const { handleMessage, calls, sessionStore } = await createPairedHandler(
-        homeDir,
-        {
-          artifactContentBytes: new TextEncoder().encode("%PDF-1.4"),
-          messages: pdfMessages,
-        }
-      );
-
-      sessionStore.set("dm_channel_1", {
-        profileId: "default",
-        sessionId: "session_test",
-        updatedAt: new Date().toISOString(),
-      });
-      await sessionStore.save();
-
-      const dm = createDmMessage({
-        content: "thanks",
-        userId: "424242424242424242",
-      });
-
-      await handleMessage(dm.message);
-
-      expect(calls.publishProfileArtifactShare).toBe(1);
-      expect(calls.readProfileArtifactContent).toBe(1);
-      expect(dm.fileSendCalls).toBe(1);
-    });
-  });
-
-  test("auto-uploads a CSV artifact after a paired save_artifact turn", async () => {
-    await withTempHome(async (homeDir) => {
-      const csvMeta = JSON.stringify({
-        mimeType: "text/csv",
-        savedAt: "2026-07-13T10:00:00.000Z",
-        sizeBytes: 24,
-      });
-
-      const csvMessages: ChatMessage[] = [
-        { content: "export csv", role: "user" },
-        {
-          content: "",
-          role: "assistant",
-          toolCalls: [
-            {
-              arguments: {
-                content: "a,b\n1,2\n",
-                path: "artifacts/export.csv",
-              },
-              id: "tool_1",
-              name: "write_file",
-            },
-            {
-              arguments: {
-                content: csvMeta,
-                path: "artifacts/export.csv.nakama-meta.json",
-              },
-              id: "tool_2",
-              name: "write_file",
-            },
-          ],
-        },
-        {
-          content: JSON.stringify({
-            bytesWritten: 8,
-            path: "/home/.nakama/orgs/org/profiles/default/artifacts/export.csv",
-          }),
-          name: "write_file",
-          role: "tool",
-          toolCallId: "tool_1",
-        },
-        {
-          content: JSON.stringify({
-            bytesWritten: csvMeta.length,
-            path: "/home/.nakama/orgs/org/profiles/default/artifacts/export.csv.nakama-meta.json",
-          }),
-          name: "write_file",
-          role: "tool",
-          toolCallId: "tool_2",
-        },
-        { content: "Saved the CSV.", role: "assistant" },
-      ];
-
-      const { handleMessage, calls, sessionStore } = await createPairedHandler(
-        homeDir,
-        {
-          artifactContentBytes: new TextEncoder().encode("a,b\n1,2\n"),
-          messages: csvMessages,
-        }
-      );
-
-      sessionStore.set("dm_channel_1", {
-        profileId: "default",
-        sessionId: "session_test",
-        updatedAt: new Date().toISOString(),
-      });
-      await sessionStore.save();
-
-      const dm = createDmMessage({
-        content: "thanks",
-        userId: "424242424242424242",
-      });
-
-      await handleMessage(dm.message);
-
-      expect(calls.publishProfileArtifactShare).toBe(1);
-      expect(calls.readProfileArtifactContent).toBe(1);
-      expect(dm.fileSendCalls).toBe(1);
     });
   });
 
@@ -2444,40 +2283,6 @@ describe("createChatHandler guild thread routing", () => {
     });
   });
 
-  test("wedged chat lock recovers so follow-ups are not silenced forever", async () => {
-    chatLockOptions.waitMs = 40;
-
-    let releaseHang!: () => void;
-
-    const hang = new Promise<void>((resolve) => {
-      releaseHang = resolve;
-    });
-
-    const order: string[] = [];
-
-    const first = withChatLock("g:channel:t:thread_wedge", async () => {
-      order.push("first-start");
-      await hang;
-      order.push("first-end");
-    });
-
-    await Bun.sleep(5);
-    const secondStarted = Date.now();
-
-    const second = withChatLock("g:channel:t:thread_wedge", async () => {
-      order.push("second");
-    });
-
-    await second;
-    const waitedMs = Date.now() - secondStarted;
-    expect(waitedMs).toBeGreaterThanOrEqual(35);
-    expect(order).toEqual(["first-start", "second"]);
-
-    releaseHang();
-    await first;
-    expect(order).toEqual(["first-start", "second", "first-end"]);
-  });
-
   test("withChatLock removes map entries after the critical section", async () => {
     expect(getChatLockCountForTests()).toBe(0);
 
@@ -2693,12 +2498,15 @@ describe("createChatHandler inbound images", () => {
         const { handleMessage, calls } = await createPairedHandler(homeDir);
 
         const dm = createDmMessage({
-          attachments: Array.from({ length: 6 }, (_, index) => ({
-            contentType: "image/png",
-            name: `shot-${index}.png`,
-            size: 8,
-            url: `https://cdn.example/shot-${index}.png`,
-          })),
+          attachments: Array.from(
+            { length: MAX_ATTACHMENTS_PER_MESSAGE + 1 },
+            (_, index) => ({
+              contentType: "image/png",
+              name: `shot-${index}.png`,
+              size: 8,
+              url: `https://cdn.example/shot-${index}.png`,
+            })
+          ),
           content: "",
           userId: "424242424242424242",
         });

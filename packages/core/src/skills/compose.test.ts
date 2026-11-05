@@ -77,32 +77,3 @@ describe("composeAgentBrowserCapabilityPrompt", () => {
     expect(cloud.startsWith(local)).toBe(true);
   });
 });
-
-describe("skills that ship code nothing can run", () => {
-  const stranded: DiscoveredSkill = {
-    ...baseSkill,
-    hasTool: false,
-    name: "order-pricing",
-    scriptIssues: [
-      { path: "scripts/pricing.py", reason: "not runnable: name it tool.py" },
-    ],
-    toolPath: null,
-  };
-
-  test("more than one is counted, not listed", () => {
-    const line = composeSkillsCatalog([
-      {
-        ...stranded,
-        scriptIssues: [
-          ...stranded.scriptIssues,
-          {
-            path: "scripts/report.py",
-            reason: "not runnable: name it tool.py",
-          },
-        ],
-      },
-    ]);
-
-    expect(line).toContain("ships 2 scripts that cannot run here");
-  });
-});

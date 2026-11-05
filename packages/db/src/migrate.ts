@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { orgIdFromSkillSourcePath } from "@nakama/core";
+import { GENERATE_IMAGE_TOOL_ID } from "@nakama/core/tools/protected";
 
 const BOOTSTRAP_SCHEMA_VERSION = 1;
 
@@ -93,6 +94,43 @@ export function migrateDatabase(db: Database): void {
   );
   atomic(migrateProfileSharedWithTeamColumn);
   atomic(migrateSessionOwners);
+  atomic(migrateGenerateImageDefaultOn);
+}
+
+/**
+ * generate_image is on by default. Agents made before that get the tool once.
+ * The done marker has its own table: older builds never touch it, so a
+ * downgrade and upgrade cannot give the tool back where an admin removed it.
+ * A fresh database has no agents yet, so it only records the marker.
+ */
+function migrateGenerateImageDefaultOn(db: Database): void {
+  const migrationId = "generate_image_default_on";
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS applied_data_migrations (
+      id TEXT PRIMARY KEY NOT NULL,
+      applied_at TEXT NOT NULL
+    )
+  `);
+
+  const applied = db
+    .prepare<{ id: string }, SQLQueryBindings[]>(
+      "SELECT id FROM applied_data_migrations WHERE id = ?"
+    )
+    .get(migrationId);
+
+  if (applied) {
+    return;
+  }
+
+  db.prepare(
+    `INSERT OR IGNORE INTO profile_tools (profile_id, tool_id)
+    SELECT profiles.id, tools.id FROM profiles JOIN tools ON tools.id = ?`
+  ).run(GENERATE_IMAGE_TOOL_ID);
+
+  db.prepare(
+    "INSERT INTO applied_data_migrations (id, applied_at) VALUES (?, ?)"
+  ).run(migrationId, new Date().toISOString());
 }
 
 /**
@@ -1576,6 +1614,7 @@ function migrateBrowserSessionsTable(db: Database): void {
       revoked_at TEXT,
       last_used_at TEXT,
       active_org_id TEXT,
+      user_agent TEXT,
       FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
     );
     CREATE UNIQUE INDEX IF NOT EXISTS browser_sessions_token_hash_unique
@@ -1592,6 +1631,10 @@ function migrateBrowserSessionsTable(db: Database): void {
 
   if (!columnNames.has("active_org_id")) {
     db.exec("ALTER TABLE browser_sessions ADD COLUMN active_org_id TEXT;");
+  }
+
+  if (!columnNames.has("user_agent")) {
+    db.exec("ALTER TABLE browser_sessions ADD COLUMN user_agent TEXT;");
   }
 }
 

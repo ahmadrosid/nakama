@@ -253,6 +253,19 @@ export async function saveTeamsConfig(
 
     const config = mergeTeamsConfig(input, existing, owner);
 
+    // Another save may have changed the connection while Microsoft answered,
+    // and this combination was never checked.
+    if (
+      config.clientId !== requested.clientId ||
+      config.tenantId !== requested.tenantId ||
+      config.clientSecret !== requested.clientSecret
+    ) {
+      throw new NakamaApiError(
+        "Teams settings changed while saving. Try again.",
+        409
+      );
+    }
+
     const changed =
       existing &&
       (existing.clientId !== config.clientId ||

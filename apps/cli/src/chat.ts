@@ -1597,7 +1597,7 @@ export async function runCleanupThenExit(
   }
 }
 
-export function isEscInterruptKey(key: string): boolean {
+function isEscInterruptKey(key: string): boolean {
   return key === "\u001b";
 }
 

@@ -181,6 +181,32 @@ describe("browser session governance", () => {
     void first;
   });
 
+  test("a session keeps the first User-Agent it is seen with", async () => {
+    const { app, databaseAdapter } = await createApp();
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+    const firstAgent = `Mozilla/5.0 (Macintosh) Chrome/130.0 ${"x".repeat(600)}`;
+
+    const seen = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/sessions", {
+        headers: session.headers({ "User-Agent": firstAgent }),
+      })
+    );
+
+    expect(seen.status).toBe(200);
+
+    const listed = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/sessions", {
+        headers: session.headers({ "User-Agent": "Firefox/131.0" }),
+      })
+    );
+
+    // SAFETY: This test controls the fixture shape at this boundary.
+    const body = (await listed.json()) as ListBrowserSessionsResponse;
+    const current = body.sessions.find((entry) => entry.current);
+
+    expect(current?.userAgent).toBe(firstAgent.slice(0, 512));
+  });
+
   test("a user revokes another of their sessions and its cookie stops working", async () => {
     const { app, databaseAdapter } = await createApp();
     await setupFreshInstallSession(app, databaseAdapter);

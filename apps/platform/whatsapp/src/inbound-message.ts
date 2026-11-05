@@ -162,17 +162,6 @@ function extractQuotedText(
   return quotedText || null;
 }
 
-export function shouldHandleInboundMessage(
-  msg: {
-    key: WhatsAppInboundKey;
-    message?: proto.IMessage | null;
-  },
-  me: WhatsAppAccount | undefined,
-  options?: { requireGroupMention?: boolean }
-): boolean {
-  return parseInboundWhatsAppMessage(msg, me, options) !== null;
-}
-
 export function parseInboundWhatsAppMessage(
   msg: {
     key: WhatsAppInboundKey;

@@ -9,6 +9,7 @@ import {
   createOrgAdminSession,
   loginPlatformAdminSession,
   loginUserSession,
+  seedOrgAdmin,
   setupFreshInstallSession,
   type TestBrowserSession,
 } from "../test-session-helpers";
@@ -303,9 +304,11 @@ function createApp() {
       options: {
         headOnly?: boolean;
         render?: "markdown";
-      } = {}
+      } = {},
+      createdByUserId?: string
     ) => {
       readCalls.push(options);
+      scopeCalls.push(createdByUserId);
 
       if (filename === "missing.md") {
         throw new NakamaApiError(`Artifact not found: ${filename}`, 404);
@@ -320,9 +323,11 @@ function createApp() {
       _orgId: string,
       profileId: string,
       filename: string,
-      content: string
+      content: string,
+      createdByUserId?: string
     ) => {
       writeCalls.push({ content, filename });
+      scopeCalls.push(createdByUserId);
 
       return {
         filename,
@@ -504,7 +509,7 @@ describe("profile artifact content auth", () => {
     expect(readCalls.at(-1)?.render).toBeUndefined();
   });
 
-  test("org member lists and deletes only their own artifacts", async () => {
+  test("org member reads, edits, lists and deletes only their own artifacts", async () => {
     const { app, authService, databaseAdapter, scopeCalls } = createApp();
 
     const { orgId, adminSession } = await createOrgAdminSession(
@@ -574,7 +579,32 @@ describe("profile artifact content auth", () => {
     );
 
     expect(deleteResponse.status).toBe(200);
-    expect(scopeCalls).toEqual([memberId, memberId]);
+
+    const contentUrl =
+      "http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=report.md";
+
+    const readResponse = await app.fetch(
+      new Request(contentUrl, { headers: memberSession.headers({}, orgId) })
+    );
+
+    expect(readResponse.status).toBe(200);
+
+    const writeResponse = await app.fetch(
+      new Request(contentUrl, {
+        body: JSON.stringify({ content: "# Edited\n" }),
+        headers: memberSession.headers(
+          {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": memberSession.csrfToken,
+          },
+          orgId
+        ),
+        method: "PUT",
+      })
+    );
+
+    expect(writeResponse.status).toBe(200);
+    expect(scopeCalls).toEqual([memberId, memberId, memberId, memberId]);
 
     const unknownAgent = await app.fetch(
       new Request("http://localhost:4310/v1/profiles/profile_2/artifacts", {
@@ -593,6 +623,52 @@ describe("profile artifact content auth", () => {
 
       expect(workspaceResponse.status).toBe(403);
     }
+  });
+
+  test("org admin reads every artifact, so channel bots keep sending them", async () => {
+    const { app, databaseAdapter, scopeCalls } = createApp();
+    const admin = await seedOrgAdmin(databaseAdapter);
+
+    const session = await loginUserSession(
+      app,
+      admin.email,
+      admin.password,
+      admin.orgId
+    );
+
+    const response = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=report.md",
+        { headers: session.headers({}, admin.orgId) }
+      )
+    );
+
+    expect(response.status).toBe(200);
+
+    const list = await app.fetch(
+      new Request("http://localhost:4310/v1/profiles/profile_1/artifacts", {
+        headers: session.headers({}, admin.orgId),
+      })
+    );
+
+    expect(list.status).toBe(200);
+
+    // Org admins reach every member's artifact, so delete is not scoped either.
+    const deleteResponse = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/profiles/profile_1/artifacts?path=report.md",
+        {
+          headers: session.headers(
+            { "X-CSRF-Token": session.csrfToken },
+            admin.orgId
+          ),
+          method: "DELETE",
+        }
+      )
+    );
+
+    expect(deleteResponse.status).toBe(200);
+    expect(scopeCalls).toEqual([undefined, undefined, undefined]);
   });
 
   test("platform admin can still list every artifact", async () => {

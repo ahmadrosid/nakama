@@ -208,6 +208,7 @@ import {
   removeTelegramAccessRequest,
   replaceImagePartsWithDescriptions,
   requireToolOrgMember,
+  resolveArtifactName,
   resolveCloudflareAccountInput,
   resolveDiscordApplicationId,
   resolveOllamaHostMode,
@@ -363,9 +364,10 @@ import {
 import type { EphemeralSession } from "./ephemeral-session-store";
 import {
   generateImageWithOpenAI,
-  IMAGE_MODEL_REQUIRED_MESSAGE,
+  imageGenerationUnavailableMessage,
   resolveImageGenerationSelection,
 } from "./image-generation";
+import { chatgptImageInput } from "./image-generation-chatgpt";
 import {
   describeImagesWithVisionModel,
   resolvePrimaryModelVisionSupport,
@@ -1120,12 +1122,20 @@ export class AgentService {
     const selection = resolveImageGenerationSelection(this.userConfig);
 
     if (!selection) {
-      throw new NakamaApiError(IMAGE_MODEL_REQUIRED_MESSAGE, 400);
+      throw new NakamaApiError(
+        imageGenerationUnavailableMessage(this.userConfig),
+        400
+      );
     }
 
     const result = await generateImageWithOpenAI({
       apiKey: selection.apiKey,
       baseUrl: selection.baseUrl,
+      ...chatgptImageInput(
+        selection,
+        () => this.userConfig,
+        (instanceId, oauth) => this.persistChatgptOAuth(instanceId, oauth)
+      ),
       model: selection.model,
       prompt,
       size: input.size,
@@ -5439,9 +5449,15 @@ export class AgentService {
     options: {
       headOnly?: boolean;
       render?: "markdown";
-    } = {}
+    } = {},
+    createdByUserId?: string
   ) {
-    await this.requireProfile(orgId, profileId);
+    await this.requireArtifactCreator(
+      orgId,
+      profileId,
+      filename,
+      createdByUserId
+    );
 
     return readArtifactFile({
       filename,
@@ -5456,9 +5472,15 @@ export class AgentService {
     orgId: string,
     profileId: string,
     filename: string,
-    content: string
+    content: string,
+    createdByUserId?: string
   ): Promise<UpdateArtifactResponse> {
-    await this.requireProfile(orgId, profileId);
+    await this.requireArtifactCreator(
+      orgId,
+      profileId,
+      filename,
+      createdByUserId
+    );
 
     return writeArtifactFile({ content, filename, orgId, profileId });
   }
@@ -5469,24 +5491,43 @@ export class AgentService {
     filename: string,
     createdByUserId?: string
   ): Promise<DeleteArtifactResponse> {
-    await this.requireProfile(orgId, profileId);
-
-    // Exact match on the stored name, so no path trick reaches another file.
-    if (
-      createdByUserId &&
-      !(await this.db.listArtifactRecords(orgId, profileId)).some(
-        (record) =>
-          record.filename === filename && record.userId === createdByUserId
-      )
-    ) {
-      throw new NakamaApiError("Forbidden", 403);
-    }
+    await this.requireArtifactCreator(
+      orgId,
+      profileId,
+      filename,
+      createdByUserId
+    );
 
     const deleted = await deleteArtifactFile({ filename, orgId, profileId });
 
     await this.db.deleteArtifactRecord(orgId, profileId, deleted.filename);
 
     return deleted;
+  }
+
+  /** With a `createdByUserId`, 403 unless that user saved this artifact. */
+  async requireArtifactCreator(
+    orgId: string,
+    profileId: string,
+    filename: string,
+    createdByUserId?: string
+  ): Promise<void> {
+    await this.requireProfile(orgId, profileId);
+
+    if (!createdByUserId) {
+      return;
+    }
+
+    // Check the file the path reaches, in the form the record stores.
+    const name = await resolveArtifactName({ filename, orgId, profileId });
+
+    const record = name
+      ? await this.db.getArtifactRecord(orgId, profileId, name)
+      : null;
+
+    if (record?.userId !== createdByUserId) {
+      throw new NakamaApiError("Forbidden", 403);
+    }
   }
 
   async getUserContext(

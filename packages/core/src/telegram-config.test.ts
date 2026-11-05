@@ -4,7 +4,6 @@ import { mkdir, readFile, symlink, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { withTempHome } from "./channel-test-helpers";
 import {
-  claimLegacyTelegramConfig,
   getTelegramConfigDir,
   isTelegramUserAuthorized,
   listTelegramAccessRequests,
@@ -142,17 +141,6 @@ describe("per-org telegram config", () => {
       await expect(
         saveTelegramConfig("org_b", { botToken: "111:AAA" })
       ).rejects.toThrow("already in use by another organization");
-    });
-  });
-
-  test("claims the install-wide config for a sole org, once", async () => {
-    await withTempHomedir("nakama-telegram-claim-", async () => {
-      await saveTelegramConfig(null, { botToken: "111:AAA" });
-
-      expect(await claimLegacyTelegramConfig("org_a")).toBe(true);
-      expect((await loadTelegramConfigFile("org_a"))?.botToken).toBe("111:AAA");
-      expect(await loadTelegramConfigFile(null)).toBeNull();
-      expect(await claimLegacyTelegramConfig("org_a")).toBe(false);
     });
   });
 

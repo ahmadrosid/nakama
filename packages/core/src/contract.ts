@@ -857,6 +857,8 @@ export interface BrowserSessionSummary {
   expiresAt: string;
   id: string;
   lastUsedAt: string | null;
+  /** Raw User-Agent the session signed in with; null for sessions not seen since it was recorded. */
+  userAgent: string | null;
 }
 
 export interface ListBrowserSessionsResponse {
@@ -2055,6 +2057,8 @@ export interface ProfileRef {
 }
 
 export interface ApiErrorResponse {
+  /** Stable machine-readable reason, e.g. `COMPOSIO_CUSTOM_AUTH_REQUIRED`. */
+  code?: string;
   error: string;
   profiles?: ProfileRef[];
   totpEnabled?: boolean;
@@ -3391,6 +3395,7 @@ export type ComposioUserConnectionStatus =
   | "error";
 
 export type ComposioToolErrorCode =
+  | "COMPOSIO_CUSTOM_AUTH_REQUIRED"
   | "COMPOSIO_NOT_CONNECTED"
   | "COMPOSIO_TRANSIENT"
   | "COMPOSIO_POLICY";
@@ -3472,6 +3477,9 @@ export interface ComposioConnectRequest {
 export interface ComposioConnectResponse {
   redirectUrl: string;
 }
+
+/** Composio has no managed OAuth app for the toolkit, for example Google Forms. */
+export const COMPOSIO_CUSTOM_AUTH_REQUIRED = "COMPOSIO_CUSTOM_AUTH_REQUIRED";
 
 export interface ProfileComposioToolkitAssignment {
   allowedActions: string[] | null;

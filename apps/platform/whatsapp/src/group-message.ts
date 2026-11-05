@@ -1,4 +1,4 @@
-import { areJidsSameUser, isJidGroup } from "@whiskeysockets/baileys";
+import { areJidsSameUser } from "@whiskeysockets/baileys";
 
 export interface WhatsAppAccount {
   id: string;
@@ -15,10 +15,6 @@ export interface GroupMessageHandlingDecision {
     | "no-text"
     | "no-trigger";
   shouldHandle: boolean;
-}
-
-export function isWhatsAppGroupChat(jid: string): boolean {
-  return Boolean(isJidGroup(jid));
 }
 
 export function resolveChannelOrgKey(jid: string, isGroup: boolean): string {

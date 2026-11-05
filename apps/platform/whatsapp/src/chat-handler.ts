@@ -1136,17 +1136,9 @@ export function resetChatLocksForTests(): void {
   chatLock.resetForTests();
 }
 
-export async function withChatLock(
+async function withChatLock(
   jid: string,
   fn: () => Promise<void>
 ): Promise<void> {
   return chatLock.withLock(jid, fn);
-}
-
-/** @internal Test helper — seed a predecessor promise (rejection-safety tests). */
-export function seedChatLockForTests(
-  jid: string,
-  promise: Promise<void>
-): void {
-  chatLock.seedForTests(jid, promise);
 }

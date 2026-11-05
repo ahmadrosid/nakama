@@ -294,6 +294,30 @@ test("a secret rotation preserves links but a bot or tenant change clears them",
   });
 });
 
+test("a save is refused when another save changed the connection meanwhile", async () => {
+  await withTempHome("teams-config-", async () => {
+    await saveTeamsConfig(input, owner);
+    const path = getTeamsConfigPath(owner);
+    globalThis.fetch = asTestFetch(async () => {
+      // Another save lands while Microsoft checks this one.
+      const raw = await readFile(path, "utf8");
+      await writeFile(
+        path,
+        raw.replace(/^client_secret\s*=.*$/m, "client_secret = other-secret")
+      );
+
+      return Response.json({ access_token: "fixture", token_type: "Bearer" });
+    });
+    await expect(
+      saveTeamsConfig({ tenantId: userId }, owner)
+    ).rejects.toMatchObject({ status: 409 });
+    expect(await loadTeamsConfigFile(owner)).toMatchObject({
+      clientSecret: "other-secret",
+      tenantId,
+    });
+  });
+});
+
 test("generation requires a saved connection", async () => {
   await withTempHome("teams-config-", async () => {
     await expect(regenerateTeamsHandshake(owner)).rejects.toThrow();

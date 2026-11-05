@@ -8,6 +8,7 @@ import type {
   ProviderClient,
   StreamChatHandlers,
 } from "@nakama/core";
+import { resolveAcpAgentLaunch } from "./acp-agent-presets";
 import {
   type AcpAgentProcess,
   startAcpAgentProcess,
@@ -287,8 +288,7 @@ async function getOrStartProcess(
 
   const process = await startAcpAgentProcess(
     {
-      args: options.agent.args,
-      command: options.agent.command,
+      ...resolveAcpAgentLaunch(options.agent),
       cwd: options.cwd,
     },
     acp

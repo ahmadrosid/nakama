@@ -148,6 +148,8 @@ Put `Fixes #123` in the body so the issue closes on merge. CI checks that a PR r
 
 Show the evidence: numbers for a behavior change, a before and after screenshot for anything visual, a short GIF for a flow with several steps. Capture the "before" first, since it is gone once the fix lands.
 
+**A PR that changes the UI must include visual proof.** This applies to any change in `apps/web`, the desktop app, or anything else a user sees. Attach a screenshot for a static change, or a short video or GIF for a flow, a hover, or an animation. Show the changed screen in the real app, not only in a test. A UI PR without proof waits until the author adds it. To upload an image to the PR body, run `gh pr edit <number> --attach <image-path>`.
+
 6. CI must pass before merge, and green CI is not the same as reviewed. Reviews here arrive as plain comments rather than a formal approval, so read the thread instead of the badge. Answer every point, including the ones you disagree with, and push follow-up commits to the same branch rather than force-pushing, so the comments stay attached to the diff.
 
 Do not rewrite `AGENTS.md`, `README.md`, or `ARCHITECTURE.md` unless the change is specifically about those files.

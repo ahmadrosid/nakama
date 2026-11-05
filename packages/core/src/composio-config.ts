@@ -24,10 +24,6 @@ export function getComposioConfigPath(): string {
   return join(getComposioConfigDir(), "config.ini");
 }
 
-export function composioOrgUserId(orgId: string): string {
-  return `nakama:org:${orgId}`;
-}
-
 export function composioUserId(userId: string): string {
   return `nakama:user:${userId}`;
 }

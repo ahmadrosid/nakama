@@ -1,7 +1,9 @@
-import type {
-  ListComposioToolkitsResponse,
-  UpdateComposioSettingsRequest,
-  UpdateProfileComposioToolkitsRequest,
+import { NakamaApiError } from "@nakama/core/api-error";
+import {
+  COMPOSIO_CUSTOM_AUTH_REQUIRED,
+  type ListComposioToolkitsResponse,
+  type UpdateComposioSettingsRequest,
+  type UpdateProfileComposioToolkitsRequest,
 } from "@nakama/core/contract";
 import { toast } from "@nakama/ui/toast";
 import {
@@ -127,6 +129,14 @@ export function useConnectComposioToolkit() {
       window.location.href = response.redirectUrl;
     },
   });
+}
+
+/** Composio has no managed OAuth app for this toolkit (for example Google Forms). */
+export function needsComposioCustomAuth(error: Error) {
+  return (
+    error instanceof NakamaApiError &&
+    error.code === COMPOSIO_CUSTOM_AUTH_REQUIRED
+  );
 }
 
 /**

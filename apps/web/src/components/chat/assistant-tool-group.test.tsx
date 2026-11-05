@@ -3,6 +3,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
+import {
+  AuthContext,
+  type AuthContextValue,
+} from "@/context/auth-context-shared";
 import { client } from "@/lib/client";
 import { AssistantTurnSegmentView } from "./assistant-tool-group";
 
@@ -169,6 +173,47 @@ test("reads, writes or edits in a row collapse into one row that opens to the fi
 
     // A failed write shows in the error color while the group is closed.
     expect(container.querySelector("button .text-red-600")).not.toBeNull();
+  } finally {
+    act(() => root.unmount());
+  }
+});
+
+test("a failed reply shows its error without opening Details", async () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+
+  // SAFETY: the failed-reply card reads only `user` from auth.
+  const auth = { user: {} } as AuthContextValue;
+
+  try {
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={new QueryClient()}>
+          <AuthContext.Provider value={auth}>
+            <MemoryRouter>
+              <AssistantTurnSegmentView
+                modelLabel="deepseek/deepseek-v4.1-flash"
+                profileId="p1"
+                segment={{
+                  kind: "text",
+                  message: {
+                    content: "At most 5 images per message.",
+                    failed: true,
+                    id: "failed",
+                    role: "assistant",
+                  },
+                }}
+              />
+            </MemoryRouter>
+          </AuthContext.Provider>
+        </QueryClientProvider>
+      )
+    );
+
+    const details = container.querySelector("button[aria-expanded]");
+
+    expect(details?.getAttribute("aria-expanded")).toBe("true");
+    expect(container.querySelector("dl")).not.toBeNull();
   } finally {
     act(() => root.unmount());
   }

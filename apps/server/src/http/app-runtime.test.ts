@@ -189,6 +189,37 @@ describe("createHonoApp", () => {
     expect(importLimitResponse.status).toBe(413);
   });
 
+  test("a setup import over the body limit gets setup's own 413, a profile pack keeps the generic one", async () => {
+    const app = createHonoApp(createServerOptions());
+
+    const send = (path: string) =>
+      app.fetch(
+        new Request(`http://localhost:4310${path}`, {
+          body: "{}",
+          headers: {
+            "Content-Length": String(MAX_HTTP_REQUEST_BODY_LIMIT_BYTES + 1),
+            "Content-Type": "application/json",
+          },
+          method: "POST",
+        })
+      );
+
+    const generic = await send("/v1/profiles/pack/import");
+    const login = await send("/v1/auth/login");
+    const preview = await send("/v1/auth/setup/import/preview");
+    const restore = await send("/v1/auth/setup/import/restore");
+
+    expect(
+      [generic, login, preview, restore].map((response) => response.status)
+    ).toEqual([413, 413, 413, 413]);
+
+    const genericError = (await generic.json()).error;
+    expect((await login.json()).error).toBe(genericError);
+    const setupError = (await preview.json()).error;
+    expect(setupError).not.toBe(genericError);
+    expect((await restore.json()).error).toBe(setupError);
+  });
+
   test("knowledge uploads allow a base64-encoded 20 MiB document through the body limit", async () => {
     const app = createHonoApp(createServerOptions());
 

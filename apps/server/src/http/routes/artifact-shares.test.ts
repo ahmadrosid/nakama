@@ -2,16 +2,18 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as core from "@nakama/core";
-import { getProfileArtifactsDir, writeArtifactFile } from "@nakama/core";
+import { getProfileArtifactsDir } from "@nakama/core";
 import { MAX_HTML_ARTIFACT_BYTES } from "@nakama/core/artifact-mime";
 import {
   createInMemoryDatabaseAdapter,
   type DatabaseAdapter,
 } from "@nakama/db";
+import { AgentService } from "../../services/agent-service";
 import { setupTestConfigDir, withTestEnv } from "../../test-config-dir";
-import { isPublicRouteRequest } from "../public-routes";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
+  loginUserSession,
+  seedOrgAdmin,
   setupFreshInstallSession,
   type TestBrowserSession,
 } from "../test-session-helpers";
@@ -20,19 +22,7 @@ setupTestConfigDir("nakama-artifact-shares-test-");
 
 function createApp(databaseAdapter = createInMemoryDatabaseAdapter()) {
   return createMinimalHonoApp({
-    agent: {
-      readProfileArtifact: (
-        orgId: string,
-        profileId: string,
-        filename: string
-      ) => core.readArtifactFile({ orgId, profileId, filename }),
-      writeProfileArtifact: (
-        orgId: string,
-        profileId: string,
-        filename: string,
-        content: string
-      ) => writeArtifactFile({ content, filename, orgId, profileId }),
-    },
+    agent: new AgentService(null, null, databaseAdapter),
     databaseAdapter,
   });
 }
@@ -119,13 +109,99 @@ function publishArtifactShareRequest(params: {
 }
 
 describe("artifact share routes", () => {
-  test("public artifact share GET is allowlisted", () => {
+  test("a member cannot publish or revoke a share of someone else's artifact", async () => {
+    const { app, databaseAdapter } = createApp();
+    const orgId = "org_share_scope";
+    const profileId = "profile_share_scope";
+
+    const ana = await seedOrgAdmin(databaseAdapter, {
+      email: "ana@example.com",
+      orgId,
+      role: "member",
+      userId: "user_ana",
+    });
+
+    const bo = await seedOrgAdmin(databaseAdapter, {
+      email: "bo@example.com",
+      orgId,
+      role: "member",
+      userId: "user_bo",
+    });
+
+    await seedProfileArtifact({
+      content: "# Ana's report",
+      databaseAdapter,
+      filename: "ana.md",
+      name: "Share Scope",
+      orgId,
+      profileId,
+    });
+    await databaseAdapter.upsertArtifactRecord({
+      channel: null,
+      createdAt: new Date().toISOString(),
+      filename: "ana.md",
+      orgId,
+      profileId,
+      sessionId: null,
+      userId: ana.userId,
+    });
+
+    const anaSession = await loginUserSession(
+      app,
+      ana.email,
+      ana.password,
+      orgId
+    );
+
+    const boSession = await loginUserSession(app, bo.email, bo.password, orgId);
+
+    // The dashboard sends the absolute path listArtifacts returns.
+    const absolutePath = join(
+      getProfileArtifactsDir(orgId, profileId),
+      "ana.md"
+    );
+
+    const publish = (session: TestBrowserSession) =>
+      app.fetch(
+        publishArtifactShareRequest({
+          body: { path: absolutePath },
+          orgId,
+          profileId,
+          session,
+        })
+      );
+
+    const call = (session: TestBrowserSession, route: string, method = "GET") =>
+      app.fetch(
+        new Request(
+          `http://localhost:4310/v1/profiles/${profileId}/artifacts/${route}?path=${encodeURIComponent(absolutePath)}`,
+          {
+            headers: session.headers(
+              { "X-CSRF-Token": session.csrfToken },
+              orgId
+            ),
+            method,
+          }
+        )
+      );
+
+    expect((await publish(boSession)).status).toBe(403);
+    expect((await call(boSession, "content")).status).toBe(403);
+    expect((await call(anaSession, "content")).status).toBe(200);
+
+    const published = await publish(anaSession);
+    expect(published.status).toBe(201);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
+    const { id } = (await published.json()) as { id: string };
+
+    expect((await call(boSession, "shares/status")).status).toBe(403);
     expect(
-      isPublicRouteRequest("GET", "/v1/public/artifact-shares/abc123")
-    ).toBe(true);
-    expect(
-      isPublicRouteRequest("POST", "/v1/public/artifact-shares/abc123")
-    ).toBe(false);
+      await (await call(anaSession, "shares/status")).json()
+    ).toMatchObject({ id });
+
+    expect((await call(boSession, `shares/${id}`, "DELETE")).status).toBe(403);
+    expect((await call(anaSession, `shares/${id}`, "DELETE")).status).toBe(200);
   });
 
   test("member can publish and anonymous visitor can read snapshot", async () => {
