@@ -1,4 +1,6 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
+import { NakamaApiError } from "@nakama/core/api-error";
+import { COMPOSIO_CUSTOM_AUTH_REQUIRED } from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -20,8 +22,13 @@ afterEach(async () => {
   }
 });
 
-const NO_MANAGED_AUTH =
-  '404 {"error":{"message":"Default auth config not found for toolkit \\"googleforms\\".","code":306,"slug":"Auth_Config_DefaultAuthConfigNotFound","status":404}}';
+const NO_MANAGED_AUTH = new NakamaApiError(
+  "Composio has no managed auth for Google Forms.",
+  422,
+  "/v1/composio/toolkits/googleforms/connect",
+  undefined,
+  { code: COMPOSIO_CUSTOM_AUTH_REQUIRED }
+);
 
 function authFor(role: "admin" | "member") {
   // SAFETY: the connect card reads only activeOrg and user from the auth context.
@@ -76,9 +83,7 @@ async function clickConnect(role: "admin" | "member") {
       ],
       userConnections: [],
     }),
-    spyOn(client, "connectComposioToolkit").mockRejectedValue(
-      new Error(NO_MANAGED_AUTH)
-    ),
+    spyOn(client, "connectComposioToolkit").mockRejectedValue(NO_MANAGED_AUTH),
     spyOn(window, "open").mockReturnValue(null),
   ];
 
@@ -87,12 +92,12 @@ async function clickConnect(role: "admin" | "member") {
   const root = createRoot(container);
 
   cleanups.push(async () => {
+    await act(async () => root.unmount());
+    container.remove();
+
     for (const spy of spies) {
       spy.mockRestore();
     }
-
-    await act(async () => root.unmount());
-    container.remove();
   });
 
   await act(async () => {
@@ -152,10 +157,10 @@ async function clickConnect(role: "admin" | "member") {
   return container;
 }
 
-test("an admin sees custom auth steps, not the raw Composio 404", async () => {
+test("an admin sees custom auth steps", async () => {
   const container = await clickConnect("admin");
 
-  expect(container.textContent).not.toContain("Auth_Config_");
+  expect(container.querySelector('[role="status"] ol')).not.toBeNull();
   expect(
     [...container.querySelectorAll("a")].some((link) =>
       link.href.includes("custom-auth-configs")
@@ -163,14 +168,16 @@ test("an admin sees custom auth steps, not the raw Composio 404", async () => {
   ).toBe(true);
 });
 
-test("a member does not see the raw Composio 404 or the setup guide", async () => {
+test("a member gets guidance but not the admin setup steps", async () => {
   const container = await clickConnect("member");
+  const status = container.querySelector('[role="status"]');
 
-  expect(container.textContent).not.toContain("Auth_Config_");
+  expect(status?.querySelector("ol")).toBeNull();
   expect(
     [...container.querySelectorAll("a")].some((link) =>
       link.href.includes("custom-auth-configs")
     )
   ).toBe(false);
-  expect(container.querySelector('[role="status"]')).not.toBeNull();
+  expect(status?.textContent).not.toBe(NO_MANAGED_AUTH.message);
+  expect(status?.textContent?.trim()).not.toBe("");
 });

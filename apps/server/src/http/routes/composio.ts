@@ -203,11 +203,22 @@ export function registerComposioRoutes(
       );
     } catch (error) {
       if (error instanceof NakamaApiError) {
-        return errorResponse(error.message, error.status);
+        return errorResponse(error.message, error.status, {
+          code: error.code,
+        });
       }
 
+      const message = error instanceof Error ? error.message : String(error);
+
+      if (auth.orgRole === "admin") {
+        return errorResponse(message, 400);
+      }
+
+      // Raw Composio errors are for admins only.
+      console.error("[composio] connect failed", { error: message });
+
       return errorResponse(
-        error instanceof Error ? error.message : String(error),
+        "Composio could not start sign-in. Ask an org admin to check the Composio setup.",
         400
       );
     }

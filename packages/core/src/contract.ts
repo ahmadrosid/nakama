@@ -2055,6 +2055,8 @@ export interface ProfileRef {
 }
 
 export interface ApiErrorResponse {
+  /** Stable machine-readable reason, e.g. `COMPOSIO_CUSTOM_AUTH_REQUIRED`. */
+  code?: string;
   error: string;
   profiles?: ProfileRef[];
   totpEnabled?: boolean;
@@ -3472,6 +3474,9 @@ export interface ComposioConnectRequest {
 export interface ComposioConnectResponse {
   redirectUrl: string;
 }
+
+/** Composio has no managed OAuth app for the toolkit, for example Google Forms. */
+export const COMPOSIO_CUSTOM_AUTH_REQUIRED = "COMPOSIO_CUSTOM_AUTH_REQUIRED";
 
 export interface ProfileComposioToolkitAssignment {
   allowedActions: string[] | null;

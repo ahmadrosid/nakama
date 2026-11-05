@@ -1,7 +1,9 @@
-import type {
-  ListComposioToolkitsResponse,
-  UpdateComposioSettingsRequest,
-  UpdateProfileComposioToolkitsRequest,
+import { NakamaApiError } from "@nakama/core/api-error";
+import {
+  COMPOSIO_CUSTOM_AUTH_REQUIRED,
+  type ListComposioToolkitsResponse,
+  type UpdateComposioSettingsRequest,
+  type UpdateProfileComposioToolkitsRequest,
 } from "@nakama/core/contract";
 import { toast } from "@nakama/ui/toast";
 import {
@@ -129,6 +131,14 @@ export function useConnectComposioToolkit() {
   });
 }
 
+/** Composio has no managed OAuth app for this toolkit (for example Google Forms). */
+export function needsComposioCustomAuth(error: Error) {
+  return (
+    error instanceof NakamaApiError &&
+    error.code === COMPOSIO_CUSTOM_AUTH_REQUIRED
+  );
+}
+
 /**
  * One click from the Connect an app dialog. An admin turns the toolkit on; it
  * is added to `profileId`, which the caller passes only when the user manages
@@ -136,11 +146,6 @@ export function useConnectComposioToolkit() {
  * Composio returns them to `returnTo`. Resolves to the sign-in URL, or null
  * when the account was already linked.
  */
-/** Composio has no managed OAuth app for this toolkit (for example Google Forms). */
-export function needsComposioCustomAuth(message: string | null | undefined) {
-  return message?.includes("Auth_Config_DefaultAuthConfigNotFound") ?? false;
-}
-
 export async function connectComposioApp(input: {
   isOrgAdmin: boolean;
   /** The agent to add the toolkit to. Pass it only when the user manages it. */

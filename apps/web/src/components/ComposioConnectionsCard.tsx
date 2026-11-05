@@ -16,6 +16,7 @@ import { useQueries } from "@tanstack/react-query";
 import { Search01Icon } from "hugeicons-react";
 import { type ReactNode, useDeferredValue, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { ComposioCustomAuthSteps } from "@/components/ComposioToolkitLogo";
 import {
   type ComposioToolkitListProps,
   ComposioToolkitRowList,
@@ -427,29 +428,6 @@ function ComposioCatalogErrorState({
   );
 }
 
-export function ComposioCustomAuthSteps({ name }: { name: string }) {
-  return (
-    <>
-      <ol className="list-decimal space-y-2 pl-5 text-sm">
-        <li>Open the Composio project for this API key.</li>
-        <li>
-          Create a custom auth config for {name}. Enter the credentials that
-          Composio requests.
-        </li>
-        <li>Return here and try Connect again.</li>
-      </ol>
-      <a
-        className="text-sm underline underline-offset-3"
-        href="https://next.docs.composio.dev/docs/auth-configuration/custom-auth-configs"
-        rel="noreferrer"
-        target="_blank"
-      >
-        View setup guide
-      </a>
-    </>
-  );
-}
-
 function ComposioConnectionsReady({
   bordered,
   embedded,
@@ -462,11 +440,12 @@ function ComposioConnectionsReady({
   const [disconnectTarget, setDisconnectTarget] = useState<string | null>(null);
 
   const [connectError, setConnectError] = useState<{
+    customAuth: boolean;
     slug: string;
     message: string;
   } | null>(null);
 
-  const needsCustomAuthConfig = needsComposioCustomAuth(connectError?.message);
+  const needsCustomAuthConfig = connectError?.customAuth === true;
 
   const data = state.toolkitsQuery.data;
 
@@ -516,7 +495,11 @@ function ComposioConnectionsReady({
         onConnect={(slug) =>
           state.connectMutation.mutate(slug, {
             onError: (error) =>
-              setConnectError({ message: formatError(error), slug }),
+              setConnectError({
+                customAuth: needsComposioCustomAuth(error),
+                message: formatError(error),
+                slug,
+              }),
           })
         }
         onDisable={(slug) => state.disableMutation.mutate(slug)}
@@ -558,7 +541,14 @@ function ComposioConnectionsReady({
               <DialogDescription>
                 Composio has no managed credentials for {toolkitName}.
               </DialogDescription>
-              <ComposioCustomAuthSteps name={toolkitName ?? ""} />
+              {state.isOrgAdmin ? (
+                <ComposioCustomAuthSteps name={toolkitName ?? ""} />
+              ) : (
+                <p className="text-sm">
+                  Ask an org admin to add a custom auth config for {toolkitName}{" "}
+                  in Composio.
+                </p>
+              )}
             </>
           ) : (
             <DialogDescription>{connectError?.message}</DialogDescription>

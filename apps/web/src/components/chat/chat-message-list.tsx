@@ -40,8 +40,10 @@ import {
   ConversationStickinessProvider,
 } from "@/components/ai-elements/conversation";
 import { Message, MessageContent } from "@/components/ai-elements/message";
-import { ComposioCustomAuthSteps } from "@/components/ComposioConnectionsCard";
-import { ComposioToolkitLogo } from "@/components/ComposioToolkitLogo";
+import {
+  ComposioCustomAuthSteps,
+  ComposioToolkitLogo,
+} from "@/components/ComposioToolkitLogo";
 import {
   AgentQuestionnaireAnswers,
   AgentQuestionnairePanel,
@@ -954,7 +956,11 @@ function ComposioConnectCard({
 
   const { data: profile } = useProfileQuery(profileId);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  const [error, setError] = useState<{
+    customAuth: boolean;
+    message: string;
+  } | null>(null);
 
   const canManage = canManageAgent(profile, user, isOrgAdmin);
 
@@ -1017,7 +1023,12 @@ function ComposioConnectCard({
       );
     } catch (connectError) {
       tab?.close();
-      setError(formatError(connectError));
+      setError({
+        customAuth:
+          connectError instanceof Error &&
+          needsComposioCustomAuth(connectError),
+        message: formatError(connectError),
+      });
     } finally {
       setPending(false);
     }
@@ -1062,6 +1073,7 @@ function ComposioConnectCard({
   );
 }
 
+/** Kept apart from the card so the card stays under the complexity limit. */
 function ComposioConnectCardStatus({
   blockedReason,
   error,
@@ -1069,12 +1081,12 @@ function ComposioConnectCardStatus({
   name,
 }: {
   blockedReason: string | null;
-  error: string | null;
+  error: { customAuth: boolean; message: string } | null;
   isOrgAdmin: boolean;
   name: string;
 }) {
   // Composio has no shared OAuth app for this toolkit. Only an admin can fix it.
-  if (needsComposioCustomAuth(error)) {
+  if (error?.customAuth) {
     return isOrgAdmin ? (
       <div className="flex flex-col gap-2" role="status">
         <p className="text-sm">{name} needs a custom auth config</p>
@@ -1089,7 +1101,7 @@ function ComposioConnectCardStatus({
 
   return (
     <p className="text-muted-foreground text-xs" role="status">
-      {error ?? blockedReason}
+      {error?.message ?? blockedReason}
     </p>
   );
 }
