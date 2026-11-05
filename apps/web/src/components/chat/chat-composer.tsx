@@ -1321,9 +1321,28 @@ function resolveModelPickerState(props: ChatComposerFullProps) {
       )
     : null;
 
-  const modelLabel = props.currentModelSelection
+  const baseModelLabel = props.currentModelSelection
     ? (props.renderModelLabel(props.currentModelSelection) ?? "Model")
     : "Model";
+
+  // Two providers can serve a model with the same name; say which one runs.
+  const selectedGroup = props.providerModelGroups.find((group) =>
+    group.models.some(
+      (model) =>
+        encodeModelSelection(model.providerId ?? group.providerId, model.id) ===
+        props.currentModelSelection
+    )
+  );
+
+  const sharedName =
+    props.providerModelGroups.filter((group) =>
+      group.models.some((model) => model.name === baseModelLabel)
+    ).length > 1;
+
+  const modelLabel =
+    selectedGroup && sharedName
+      ? `${baseModelLabel} (${selectedGroup.providerLabel})`
+      : baseModelLabel;
 
   return {
     effort,

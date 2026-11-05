@@ -255,6 +255,7 @@ import {
 import { z } from "zod";
 import {
   AVAILABLE_MODELS,
+  apiKeyCheckRequest,
   catalogCustomModelsToCatalog,
   createProviderForInstance,
   createProviderFromActiveConfig,
@@ -477,6 +478,40 @@ const SHARED_HISTORY_CHANNELS: readonly AgentChannel[] = [
 
 function isSharedHistory(record: StoredSessionRecord): boolean {
   return SHARED_HISTORY_CHANNELS.some((channel) => channel === record.channel);
+}
+
+const API_KEY_CHECK_TIMEOUT_MS = 8000;
+
+// Stops a key the provider refuses before it is saved. Only 401/403 blocks:
+// a slow or unreachable provider must not stop an admin from saving a key.
+async function rejectRefusedApiKey(instance: ProviderInstance): Promise<void> {
+  const check = apiKeyCheckRequest(instance);
+
+  if (!check) {
+    return;
+  }
+
+  let response: Response;
+
+  try {
+    response = await fetch(check.url, {
+      headers: check.headers,
+      signal: AbortSignal.timeout(API_KEY_CHECK_TIMEOUT_MS),
+    });
+  } catch (error) {
+    console.warn(`Could not check the ${instance.label} API key:`, error);
+
+    return;
+  }
+
+  await response.body?.cancel();
+
+  if (response.status === 401 || response.status === 403) {
+    throw new NakamaApiError(
+      `${instance.label} rejected this API key. Check the key and try again.`,
+      400
+    );
+  }
 }
 
 export class AgentService {
@@ -4577,6 +4612,8 @@ export class AgentService {
         system: "Reply with OK.",
       });
     }
+
+    await rejectRefusedApiKey(updated);
 
     await this.managedSecrets.save(
       "global",

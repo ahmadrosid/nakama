@@ -6,6 +6,7 @@ import type {
   ProviderModelOption,
   WireApi,
 } from "@nakama/core/contract";
+import { isDiscoveryModelProvider } from "@nakama/core/discovery-providers";
 import {
   OLLAMA_CLOUD_DEFAULT_BASE_URL,
   OLLAMA_LOCAL_DEFAULT_BASE_URL,
@@ -271,6 +272,18 @@ export function validateApiKeyForProvider(
   return null;
 }
 
+const LOCAL_HOST_PATTERN =
+  /^(localhost|127\.\d+\.\d+\.\d+|\[::1\]|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|.+\.local)$/i;
+
+/** A hosted endpoint almost always needs a key; a local one often does not. */
+export function isLocalBaseUrl(baseUrl: string): boolean {
+  try {
+    return LOCAL_HOST_PATTERN.test(new URL(baseUrl.trim()).hostname);
+  } catch {
+    return true;
+  }
+}
+
 export function validateDisplayNameInput(displayName: string): string | null {
   const trimmed = displayName.trim();
 
@@ -301,6 +314,27 @@ export function validateBaseUrlInput(baseUrl: string): string | null {
   return null;
 }
 
+function findDuplicateModelIds(models: Array<{ id: string }>): Set<string> {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+
+  for (const model of models) {
+    const id = model.id.trim();
+
+    if (!id) {
+      continue;
+    }
+
+    if (seen.has(id)) {
+      duplicates.add(id);
+    }
+
+    seen.add(id);
+  }
+
+  return duplicates;
+}
+
 export function validateCustomModelsInput(
   models: Array<{
     id: string;
@@ -312,6 +346,12 @@ export function validateCustomModelsInput(
 
   if (valid.length === 0) {
     return "Add at least one model.";
+  }
+
+  const duplicateId = findDuplicateModelIds(valid).values().next().value;
+
+  if (duplicateId) {
+    return `Model ID "${duplicateId}" is in the list more than once. Remove one.`;
   }
 
   for (const row of valid) {
@@ -926,6 +966,7 @@ export function resolveModelVisionSupport(
   }
 
   if (
+    (model.provider !== "acp" && isDiscoveryModelProvider(model.provider)) ||
     model.provider === "openai_compatible" ||
     model.provider === "opencode_go" ||
     model.provider === "deepseek" ||

@@ -9,14 +9,16 @@ import {
 
 interface BrowsableModelFieldsProps<T> {
   browseLabel: string;
+  /** False until the endpoint can answer (for example, no valid base URL yet). */
+  canBrowse?: boolean;
   customModels: ModelListRow[];
   density?: "default" | "compact";
   disabled?: boolean;
   fieldId: string;
-  footerHint?: ReactNode;
   modelsError?: string | null;
   onCustomModelsChange: (models: ModelListRow[]) => void;
   renderBrowse: (context: {
+    addedIds: ReadonlySet<string>;
     multiSelect: boolean;
     onAddMany: (rows: T[]) => void;
     onSelect: (row: T) => void;
@@ -34,8 +36,8 @@ export function BrowsableModelFields<T>({
   disabled,
   density = "default",
   modelsError,
-  footerHint,
   browseLabel,
+  canBrowse = true,
   showPricing = true,
   showThinking = false,
   showVision = false,
@@ -45,7 +47,15 @@ export function BrowsableModelFields<T>({
   renderBrowse,
 }: BrowsableModelFieldsProps<T>) {
   const [isBrowsing, setIsBrowsing] = useState(false);
-  const showBrowse = isBrowsing || customModels.length === 0;
+  const showBrowse = canBrowse && (isBrowsing || customModels.length === 0);
+
+  const addedIds = new Set(
+    customModels.flatMap((model) => {
+      const id = model.id.trim();
+
+      return id ? [id] : [];
+    })
+  );
 
   const handleBrowseSelect = (row: T) => {
     const nextModel = toModelRow(row);
@@ -88,8 +98,6 @@ export function BrowsableModelFields<T>({
           <p className="text-destructive text-sm" role="alert">
             {modelsError}
           </p>
-        ) : footerHint ? (
-          <p className="text-muted-foreground text-xs">{footerHint}</p>
         ) : undefined
       }
       id={fieldId}
@@ -98,6 +106,7 @@ export function BrowsableModelFields<T>({
       {showBrowse ? (
         <div className="space-y-2">
           {renderBrowse({
+            addedIds,
             multiSelect: true,
             onAddMany: handleAddMany,
             onSelect: handleBrowseSelect,
@@ -131,6 +140,7 @@ export function BrowsableModelFields<T>({
         </div>
       ) : (
         <ModelListEditor
+          browseDisabled={!canBrowse}
           browseLabel={browseLabel}
           disabled={disabled}
           models={customModels}

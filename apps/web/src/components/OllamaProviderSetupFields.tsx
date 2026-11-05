@@ -54,7 +54,11 @@ export function OllamaProviderSetupFields({
           value={hostMode}
         >
           <SelectTrigger className="w-full" id={hostModeId}>
-            <SelectValue />
+            <SelectValue>
+              {hostMode === "cloud"
+                ? "Ollama Cloud"
+                : "Local (localhost:11434)"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="local">Local (localhost:11434)</SelectItem>
@@ -70,13 +74,7 @@ export function OllamaProviderSetupFields({
             <p className="text-destructive text-sm" role="alert">
               {baseUrlError}
             </p>
-          ) : (
-            <p className="text-muted-foreground text-xs">
-              OpenAI-compatible endpoint. Local defaults to{" "}
-              <span className="font-mono">{OLLAMA_LOCAL_DEFAULT_BASE_URL}</span>
-              .
-            </p>
-          )
+          ) : null
         }
         id={baseUrlId}
         label="Base URL"

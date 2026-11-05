@@ -199,41 +199,58 @@ const BADGE_TONES: Record<BrowseModelBadgeTone, string> = {
   emerald: "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30",
 };
 
+function BrowseRowCheckMark({ checked }: { checked: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border border-input font-bold text-2xs",
+        checked && "border-emerald-500 bg-emerald-500 text-white"
+      )}
+    >
+      {checked ? "✓" : null}
+    </span>
+  );
+}
+
 export function BrowseModelRowButton({
   row,
   onSelect,
+  added = false,
   selectable = false,
   selected = false,
   style,
 }: {
   row: BrowseModelRowDisplay;
   onSelect: () => void;
+  added?: boolean;
   selectable?: boolean;
   selected?: boolean;
   style: CSSProperties;
 }) {
+  const checked = selected || added;
+
   return (
     <button
-      aria-pressed={selectable ? selected : undefined}
-      className="absolute top-0 left-0 flex w-full cursor-pointer items-start gap-2.5 border-border border-b px-3 py-2 text-left transition-colors hover:bg-muted"
+      aria-pressed={selectable ? checked : undefined}
+      className={cn(
+        "absolute top-0 left-0 flex w-full items-start gap-2.5 border-border border-b px-3 py-2 text-left transition-colors",
+        added ? "cursor-default opacity-60" : "cursor-pointer hover:bg-muted"
+      )}
+      disabled={added}
       onClick={onSelect}
       style={style}
       type="button"
     >
-      {selectable ? (
-        <span
-          aria-hidden="true"
-          className={cn(
-            "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border border-input font-bold text-2xs",
-            selected && "border-emerald-500 bg-emerald-500 text-white"
-          )}
-        >
-          {selected ? "✓" : null}
-        </span>
-      ) : null}
+      {selectable ? <BrowseRowCheckMark checked={checked} /> : null}
       <div className="min-w-0 flex-1">
         <div className="truncate font-medium text-foreground text-sm leading-tight">
           {row.name}
+          {added ? (
+            <span className="ml-2 font-normal text-muted-foreground text-xs">
+              Added
+            </span>
+          ) : null}
         </div>
         <div className="mt-0.5 truncate font-mono text-2xs text-muted-foreground">
           {row.id}

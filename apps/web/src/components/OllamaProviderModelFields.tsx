@@ -34,16 +34,11 @@ export function OllamaProviderModelFields({
       density={density}
       disabled={disabled}
       fieldId="ollama-models"
-      footerHint={
-        <>
-          Add models by ID or browse live models from your Ollama host (for
-          example <span className="font-mono">llama3.2</span>).
-        </>
-      }
       modelsError={modelsError}
       onCustomModelsChange={onCustomModelsChange}
-      renderBrowse={({ multiSelect, onAddMany, onSelect }) => (
+      renderBrowse={({ addedIds, multiSelect, onAddMany, onSelect }) => (
         <RemoteModelsBrowseList
+          addedIds={addedIds}
           apiKey={apiKey}
           baseUrl={baseUrl}
           browseLabel="Ollama"

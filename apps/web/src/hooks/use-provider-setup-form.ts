@@ -196,6 +196,8 @@ export function useProviderSetupForm(
 
   useEffect(() => {
     if (filteredModels.length === 0) {
+      setSelectedModel("");
+
       return;
     }
 
@@ -251,6 +253,16 @@ export function useProviderSetupForm(
       }
 
       setSelectedProvider(provider);
+      setSelectedModel("");
+      setFormError(null);
+      setApiKeyError(null);
+      setApiKeyTouched(false);
+      setDisplayNameError(null);
+      setBaseUrlError(null);
+      setModelsError(null);
+      // A name or key typed for one provider must not carry to the next one.
+      setDisplayName("");
+      setApiKey("");
 
       if (provider === "ollama") {
         setOllamaHostMode("local");
@@ -280,9 +292,6 @@ export function useProviderSetupForm(
         provider !== "netra"
       ) {
         setBaseUrl("");
-        setDisplayNameError(null);
-        setBaseUrlError(null);
-        setModelsError(null);
       }
 
       if (provider === "openai_compatible") {
@@ -342,12 +351,22 @@ export function useProviderSetupForm(
       handleProviderSelect(provider);
 
       if (provider === "openrouter") {
-        selectOpenRouterModel(modelId, row.modelName, browsedContext);
+        selectOpenRouterModel(modelId, row.modelName, {
+          supportsThinking: row.reasoning,
+          supportsVision: row.vision,
+          ...browsedContext,
+        });
       } else if (provider === "openai_compatible") {
         setDisplayName(row.providerName);
         setBaseUrl(row.apiUrl.replace(/\/$/, ""));
         setCustomModels([
-          { id: modelId, name: row.modelName, ...browsedContext },
+          {
+            id: modelId,
+            name: row.modelName,
+            supportsThinking: row.reasoning,
+            supportsVision: row.vision,
+            ...browsedContext,
+          },
         ]);
         setSelectedModel(modelId);
       } else if (provider === "opencode_go") {
@@ -428,6 +447,30 @@ export function useProviderSetupForm(
     },
     [apiKey, apiKeyTouched]
   );
+
+  const handleDisplayNameChange = useCallback((value: string) => {
+    setDisplayName(value);
+    setDisplayNameError(null);
+    setFormError(null);
+  }, []);
+
+  const handleBaseUrlChange = useCallback((value: string) => {
+    setBaseUrl(value);
+    setBaseUrlError(null);
+    setFormError(null);
+  }, []);
+
+  const handleBaseUrlBlur = useCallback(() => {
+    if (baseUrl.trim()) {
+      setBaseUrlError(validateBaseUrlInput(baseUrl));
+    }
+  }, [baseUrl]);
+
+  const handleCustomModelsChange = useCallback((rows: ModelListRow[]) => {
+    setCustomModels(rows);
+    setModelsError(null);
+    setFormError(null);
+  }, []);
 
   const handleOpenRouterModelsChange = useCallback((rows: ModelListRow[]) => {
     setOpenRouterModels(rows);
@@ -625,7 +668,14 @@ export function useProviderSetupForm(
         setCustomModels([]);
         onSuccess?.(result);
       } catch (err) {
-        setFormError(formatError(err));
+        const message = formatError(err);
+
+        if (trimmedKey && /API key/i.test(message)) {
+          setApiKeyError(message);
+        } else {
+          setFormError(message);
+        }
+
         document.getElementById("api-key")?.focus();
       } finally {
         setBusy(false);
@@ -672,7 +722,11 @@ export function useProviderSetupForm(
     formError,
     handleApiKeyBlur,
     handleApiKeyChange,
+    handleBaseUrlBlur,
+    handleBaseUrlChange,
     handleBrowseSelect,
+    handleCustomModelsChange,
+    handleDisplayNameChange,
     handleOllamaHostModeChange,
     handleOpenRouterModelsChange,
     handleProviderSelect,
@@ -687,10 +741,7 @@ export function useProviderSetupForm(
     openRouterRouting,
     selectedModel,
     selectedProvider,
-    setBaseUrl,
     setChatgptOAuth,
-    setCustomModels,
-    setDisplayName,
     setOpenRouterRouting,
     setSelectedModel,
     setShowApiKey,

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { CatalogModelsBrowseList } from "@/components/CatalogModelsBrowseList";
 import { client } from "@/lib/client";
+import { validateBaseUrlInput } from "@/lib/models";
 import { queryKeys } from "@/lib/query-keys";
 
 export interface RemoteModelRow {
@@ -16,6 +17,7 @@ type RemoteBrowseSelectHandler = (row: RemoteModelRow) => void;
 const EMPTY_ROWS: RemoteModelRow[] = [];
 
 interface RemoteModelsBrowseListProps {
+  addedIds?: ReadonlySet<string>;
   apiKey?: string;
   baseUrl?: string;
   browseLabel?: string;
@@ -29,6 +31,7 @@ interface RemoteModelsBrowseListProps {
 }
 
 export function RemoteModelsBrowseList({
+  addedIds,
   onSelect,
   className,
   providerId,
@@ -53,7 +56,12 @@ export function RemoteModelsBrowseList({
   }, [apiKey]);
 
   const trimmedBaseUrl = baseUrl?.trim() ?? "";
-  const canFetch = Boolean(providerId?.trim() || trimmedBaseUrl);
+
+  const canFetch = Boolean(
+    providerId?.trim() ||
+      provider === "netra" ||
+      (trimmedBaseUrl && validateBaseUrlInput(trimmedBaseUrl) === null)
+  );
 
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     enabled: canFetch,
@@ -112,8 +120,17 @@ export function RemoteModelsBrowseList({
     staleTime: 1000 * 30,
   });
 
+  // An endpoint that refuses an empty key needs a key, not a different one.
+  const browseError =
+    error &&
+    !(providerId?.trim() || apiKey.trim()) &&
+    /rejected this API key/i.test(error.message)
+      ? new Error("This endpoint needs an API key. Enter it above.")
+      : error;
+
   return (
     <CatalogModelsBrowseList<RemoteModelRow>
+      addedIds={addedIds}
       className={className}
       emptyMessage={`No models found on ${browseLabel}.`}
       idleMessage="Enter a base URL before browsing models."
@@ -122,7 +139,7 @@ export function RemoteModelsBrowseList({
       onSelect={onSelect}
       query={{
         canFetch,
-        error,
+        error: browseError,
         isFetching,
         isLoading,
         onRefresh: () => void refetch(),

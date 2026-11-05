@@ -21,6 +21,7 @@ interface CatalogModelsBrowseQuery {
 export interface CatalogModelsBrowseListProps<
   T extends { id: string; name: string },
 > {
+  addedIds?: ReadonlySet<string>;
   className?: string;
   emptyMessage?: string;
   filterRows?: (rows: T[], search: string, hideDeprecated: boolean) => T[];
@@ -185,7 +186,9 @@ function CatalogBrowseFooter({
         size="sm"
         type="button"
       >
-        Add {selectedCount} models
+        {selectedCount === 0
+          ? "Select models to add"
+          : `Add ${selectedCount} model${selectedCount === 1 ? "" : "s"}`}
       </Button>
     </div>
   );
@@ -194,6 +197,7 @@ function CatalogBrowseFooter({
 export function CatalogModelsBrowseList<
   T extends { id: string; name: string },
 >({
+  addedIds,
   rows,
   onSelect,
   className,
@@ -296,7 +300,9 @@ export function CatalogModelsBrowseList<
   return (
     <ModelBrowseShell
       className={className}
-      emptyMessage={resolvedEmptyMessage}
+      emptyMessage={
+        canFetch ? resolvedEmptyMessage : (idleMessage ?? resolvedEmptyMessage)
+      }
       error={canFetch ? error : null}
       footer={
         multiSelect ? (
@@ -333,6 +339,7 @@ export function CatalogModelsBrowseList<
         getKey={(row) => row.id}
         renderRow={(row, style) => (
           <BrowseModelRowButton
+            added={addedIds?.has(row.id) ?? false}
             onSelect={() => handleRowSelect(row)}
             row={toDisplayRow(row)}
             selectable={multiSelect}

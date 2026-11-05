@@ -37,7 +37,7 @@ import type { ModelsDevRow } from "@/hooks/use-models-dev";
 import { useProviderSetupForm } from "@/hooks/use-provider-setup-form";
 import {
   apiKeyPlaceholder,
-  PROVIDER_OPTIONS,
+  isLocalBaseUrl,
   type SelectedProvider,
 } from "@/lib/models";
 
@@ -95,9 +95,6 @@ export function ProviderSetupForm({
           <h3 className="font-medium text-foreground text-sm">
             Connect a provider
           </h3>
-          <p className="mt-1 text-muted-foreground text-xs">
-            Choose a provider, paste your API key, and pick a default model.
-          </p>
         </div>
       ) : null}
 
@@ -124,6 +121,7 @@ export function ProviderSetupForm({
         <ModelsBrowseList
           className="h-72 rounded-md border border-border"
           configuredTypes={form.configuredTypes}
+          initialCostFilter="free"
           onSelect={handleBrowseSelect}
           openCodeZenConfigured={form.openCodeZenConfigured}
         />
@@ -150,6 +148,10 @@ function ProviderSetupApiKeyField({
   density: "default" | "compact";
   form: ReturnType<typeof useProviderSetupForm>;
 }) {
+  const hostedCustomEndpoint =
+    form.selectedProvider === "openai_compatible" &&
+    !isLocalBaseUrl(form.baseUrl);
+
   return (
     <FormField
       density={density}
@@ -162,22 +164,18 @@ function ProviderSetupApiKeyField({
           >
             {form.apiKeyError}
           </p>
-        ) : (
-          <p className="text-muted-foreground text-xs" id="api-key-hint">
-            Paste the API key from your{" "}
-            {PROVIDER_OPTIONS.find(
-              (option) => option.id === form.selectedProvider
-            )?.label ?? "provider"}{" "}
-            dashboard.
-          </p>
-        )
+        ) : null
       }
       id="api-key"
-      label={apiKeyOptional ? "API key (optional)" : "API key"}
+      label={
+        apiKeyOptional && !hostedCustomEndpoint
+          ? "API key (optional)"
+          : "API key"
+      }
     >
       <InputGroup>
         <InputGroupInput
-          aria-describedby={form.apiKeyError ? "api-key-error" : "api-key-hint"}
+          aria-describedby={form.apiKeyError ? "api-key-error" : undefined}
           aria-invalid={form.apiKeyError != null}
           autoComplete="off"
           className="!rounded-l-md pl-3"
@@ -185,7 +183,11 @@ function ProviderSetupApiKeyField({
           id="api-key"
           onBlur={form.handleApiKeyBlur}
           onChange={(event) => form.handleApiKeyChange(event.target.value)}
-          placeholder={apiKeyPlaceholder(form.selectedProvider)}
+          placeholder={
+            hostedCustomEndpoint
+              ? "sk-…"
+              : apiKeyPlaceholder(form.selectedProvider)
+          }
           type={form.showApiKey ? "text" : "password"}
           value={form.apiKey}
         />
@@ -232,7 +234,7 @@ function CloudflareAccountIdField({
         autoComplete="off"
         disabled={form.busy}
         id="cloudflare-account-id"
-        onChange={(event) => form.setBaseUrl(event.target.value)}
+        onChange={(event) => form.handleBaseUrlChange(event.target.value)}
         value={form.baseUrl}
       />
     </FormField>
@@ -282,7 +284,7 @@ function OllamaSetupFields({
         density={density}
         disabled={form.busy}
         hostMode={form.ollamaHostMode}
-        onBaseUrlChange={form.setBaseUrl}
+        onBaseUrlChange={form.handleBaseUrlChange}
         onHostModeChange={form.handleOllamaHostModeChange}
       />
       {canConnect ? (
@@ -294,7 +296,7 @@ function OllamaSetupFields({
           disabled={form.busy}
           hostMode={form.ollamaHostMode}
           modelsError={form.modelsError}
-          onCustomModelsChange={form.setCustomModels}
+          onCustomModelsChange={form.handleCustomModelsChange}
         />
       ) : null}
     </>
@@ -391,9 +393,9 @@ function ProviderSetupExtraFields({
         displayName="Netra Runtime"
         hideIdentity
         modelsError={form.modelsError}
-        onBaseUrlChange={form.setBaseUrl}
-        onCustomModelsChange={form.setCustomModels}
-        onDisplayNameChange={form.setDisplayName}
+        onBaseUrlChange={form.handleBaseUrlChange}
+        onCustomModelsChange={form.handleCustomModelsChange}
+        onDisplayNameChange={form.handleDisplayNameChange}
         remoteProvider="netra"
         showModelsEditor={canConnect}
       />
@@ -425,9 +427,10 @@ function ProviderSetupExtraFields({
         displayName={form.displayName}
         displayNameError={form.displayNameError}
         modelsError={form.modelsError}
-        onBaseUrlChange={form.setBaseUrl}
-        onCustomModelsChange={form.setCustomModels}
-        onDisplayNameChange={form.setDisplayName}
+        onBaseUrlBlur={form.handleBaseUrlBlur}
+        onBaseUrlChange={form.handleBaseUrlChange}
+        onCustomModelsChange={form.handleCustomModelsChange}
+        onDisplayNameChange={form.handleDisplayNameChange}
         onWireApiChange={form.setWireApi}
         showModelsEditor={canConnect}
         wireApi={form.wireApi}
@@ -467,7 +470,9 @@ function ProviderSetupExtraFields({
 
   if (
     !showModelPicker ||
-    (form.selectedProvider === "chatgpt" && !canConnect)
+    ((form.selectedProvider === "chatgpt" ||
+      form.selectedProvider === "xai_oauth") &&
+      !canConnect)
   ) {
     return null;
   }

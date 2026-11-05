@@ -43,7 +43,10 @@ const groups = [
   },
 ];
 
-async function openPicker(currentModelSelection: string) {
+async function openPicker(
+  currentModelSelection: string,
+  providerModelGroups: typeof groups = groups
+) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -69,7 +72,7 @@ async function openPicker(currentModelSelection: string) {
                 onSubmit={() => undefined}
                 profileId="agent-a"
                 providerConfigured
-                providerModelGroups={groups}
+                providerModelGroups={providerModelGroups}
                 renderModelLabel={() => "Second"}
               />
             </PromptInputProvider>
@@ -84,6 +87,8 @@ async function openPicker(currentModelSelection: string) {
   );
 
   await act(async () => trigger?.click());
+
+  return trigger;
 }
 
 test("the model picker opens with the model in use selected", async () => {
@@ -94,4 +99,24 @@ test("the model picker opens with the model in use selected", async () => {
   ].map((item) => item.textContent?.trim());
 
   expect(selected).toEqual(["Second"]);
+});
+
+test("the chip names the provider when two providers share a model name", async () => {
+  const shared = [
+    ...groups,
+    {
+      models: [
+        { id: "model-second", name: "Second", provider: "openai" as const },
+      ],
+      providerId: "provider-b",
+      providerLabel: "Provider B",
+    },
+  ];
+
+  const trigger = await openPicker(
+    encodeModelSelection("provider-b", "model-second"),
+    shared
+  );
+
+  expect(trigger?.textContent).toContain("Provider B");
 });

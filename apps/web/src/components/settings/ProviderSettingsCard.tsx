@@ -8,7 +8,6 @@ import {
 } from "@nakama/ui/dialog";
 import { toast } from "@nakama/ui/toast";
 import { Add01Icon, Alert02Icon } from "hugeicons-react";
-import { useState } from "react";
 import { ProviderSetupForm } from "@/components/ProviderSetupForm";
 import {
   useDeleteProviderMutation,
@@ -20,12 +19,16 @@ import { client, formatError } from "@/lib/client";
 import { ProviderInstanceCard } from "./provider-instance-card";
 
 interface ProviderSettingsCardProps {
+  addOpen: boolean;
   formError: string | null;
+  onAddOpenChange: (open: boolean) => void;
   onFormError: (error: string | null) => void;
 }
 
 export function ProviderSettingsCard({
+  addOpen,
   formError,
+  onAddOpenChange: setAddOpen,
   onFormError,
 }: ProviderSettingsCardProps) {
   const {
@@ -45,7 +48,6 @@ export function ProviderSettingsCard({
 
   const updateProviderMutation = useUpdateProviderMutation();
   const deleteProviderMutation = useDeleteProviderMutation();
-  const [addOpen, setAddOpen] = useState(false);
 
   const providers = providersResponse?.providers ?? [];
   const catalog = catalogResponse?.models ?? [];
@@ -67,7 +69,7 @@ export function ProviderSettingsCard({
         <CardHeader className="border-border border-b px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             <CardTitle className="min-w-0 font-medium text-sm leading-snug tracking-normal">
-              AI Providers
+              Connected providers
             </CardTitle>
             {isConfigured ? (
               <Button
@@ -84,55 +86,38 @@ export function ProviderSettingsCard({
         </CardHeader>
         <CardContent className="p-0">
           {isConfigured ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[36rem] text-left text-sm">
-                <thead className="border-border border-b bg-muted/30 text-muted-foreground text-xs">
-                  <tr>
-                    <th className="px-3 py-2 font-medium">Provider</th>
-                    <th className="px-3 py-2 font-medium">Endpoint</th>
-                    <th className="px-3 py-2 font-medium">Models</th>
-                    <th className="px-3 py-2 font-medium">
-                      <span className="sr-only">Actions</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {providers.map((instance) => (
-                    <ProviderInstanceCard
-                      catalog={catalog}
-                      instance={instance}
-                      isSole={
-                        providers.length === 1 ||
-                        providersResponse?.defaultProviderId === instance.id
-                      }
-                      key={instance.id}
-                      onDelete={async (providerId) => {
-                        await deleteProviderMutation.mutateAsync(providerId);
-                        toast("Provider removed.");
-                        onFormError(null);
-                      }}
-                      onError={onFormError}
-                      onManage={async (providerId, action) => {
-                        await client.manageProviderSecret(providerId, action);
-                        await Promise.all([
-                          refetchProviders(),
-                          refetchModels(),
-                        ]);
-                        onFormError(null);
-                      }}
-                      onUpdate={async (providerId, request) => {
-                        await updateProviderMutation.mutateAsync({
-                          providerId,
-                          request,
-                        });
-                        toast("Provider updated.");
-                        onFormError(null);
-                      }}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ul className="divide-y divide-border">
+              {providers.map((instance) => (
+                <ProviderInstanceCard
+                  catalog={catalog}
+                  instance={instance}
+                  isSole={
+                    providers.length === 1 ||
+                    providersResponse?.defaultProviderId === instance.id
+                  }
+                  key={instance.id}
+                  onDelete={async (providerId) => {
+                    await deleteProviderMutation.mutateAsync(providerId);
+                    toast("Provider removed.");
+                    onFormError(null);
+                  }}
+                  onError={onFormError}
+                  onManage={async (providerId, action) => {
+                    await client.manageProviderSecret(providerId, action);
+                    await Promise.all([refetchProviders(), refetchModels()]);
+                    onFormError(null);
+                  }}
+                  onUpdate={async (providerId, request) => {
+                    await updateProviderMutation.mutateAsync({
+                      providerId,
+                      request,
+                    });
+                    toast("Provider updated.");
+                    onFormError(null);
+                  }}
+                />
+              ))}
+            </ul>
           ) : (
             <>
               <div className="flex items-start gap-3 border-border border-b px-4 py-3">

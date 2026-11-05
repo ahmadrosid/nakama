@@ -119,11 +119,7 @@ export function OpenRouterProviderModelFields({
           </Select>
         </FormField>
         <p className="text-muted-foreground text-xs">
-          Applies only to this provider’s dedicated OpenRouter model requests.
-          Request settings cannot loosen account or guardrail ZDR enforcement.
-          These policies do not cover plugins, web tools, application logs, or
-          external coding agents. Stricter routing can fail when no eligible
-          endpoint supports the request.
+          Stricter routing can fail when no endpoint supports the request.
         </p>
       </fieldset>
       <BrowsableModelFields

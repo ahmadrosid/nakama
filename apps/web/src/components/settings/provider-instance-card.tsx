@@ -4,16 +4,7 @@ import type {
   UpdateProviderRequest,
 } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
-import {
-  Delete02Icon,
-  Edit03Icon,
-  Key01Icon,
-  ListViewIcon,
-} from "hugeicons-react";
-import type { ReactNode } from "react";
 import { CatalogProviderModelFields } from "@/components/CatalogProviderModelFields";
-import { CustomProviderFields } from "@/components/CustomProviderFields";
 import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
 import { ShortlistBrowseProviderModelFields } from "@/components/ShortlistBrowseProviderModelFields";
@@ -36,37 +27,25 @@ function ProviderActionButton({
   disabled,
   destructive,
   onClick,
-  children,
 }: {
   label: string;
   disabled?: boolean;
   destructive?: boolean;
   onClick: () => void;
-  children: ReactNode;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            aria-label={label}
-            className={
-              destructive
-                ? "text-muted-foreground hover:text-destructive"
-                : "text-muted-foreground"
-            }
-            disabled={disabled}
-            onClick={onClick}
-            size="icon-sm"
-            type="button"
-            variant="ghost"
-          >
-            {children}
-          </Button>
-        }
-      />
-      <TooltipContent side="top">{label}</TooltipContent>
-    </Tooltip>
+    <Button
+      className={
+        destructive ? "text-destructive hover:text-destructive" : undefined
+      }
+      disabled={disabled}
+      onClick={onClick}
+      size="sm"
+      type="button"
+      variant="ghost"
+    >
+      {label}
+    </Button>
   );
 }
 
@@ -117,7 +96,7 @@ function providerKeyActionLabel(
   return hasApiKey ? "Update key" : "Add key";
 }
 
-function ProviderInstanceTableRow({
+function ProviderInstanceRow({
   instance,
   card,
   canManage,
@@ -128,74 +107,56 @@ function ProviderInstanceTableRow({
 }) {
   const endpoint = instance.baseUrl?.trim() || null;
 
+  const connected =
+    instance.hasApiKey || instance.secretSource === "environment";
+
+  // Compatible providers edit name, URL and models in one dialog.
+  const opensEdit = card.isCompatibleLike;
+
   return (
-    <tr>
-      <td className="px-3 py-2.5 align-middle">
+    <li className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3">
+      <div className="min-w-0 flex-[1_1_14rem]">
         <p className="truncate font-medium text-foreground text-sm">
           {instance.label}
         </p>
-        {instance.hasApiKey ||
-        instance.secretSource === "environment" ? null : (
-          <p className="text-destructive text-xs">Not connected</p>
-        )}
-      </td>
-      <td className="px-3 py-2.5 align-middle">
-        {endpoint ? (
-          <p
-            className="max-w-[18rem] truncate font-mono text-2xs text-foreground/80"
-            title={endpoint}
-          >
-            {endpoint}
-          </p>
-        ) : (
-          <span className="text-muted-foreground text-xs">—</span>
-        )}
-      </td>
-      <td className="whitespace-nowrap px-3 py-2.5 align-middle">
-        <span className="text-muted-foreground text-sm">
-          {providerModelCountLabel(instance.modelCount)}
-        </span>
-      </td>
-      <td className="px-3 py-2.5 align-middle">
-        <div className="flex items-center justify-end gap-0.5">
-          {card.isCompatibleLike ? (
-            <ProviderActionButton label="Edit" onClick={card.openEdit}>
-              <Edit03Icon className="size-3.5" />
-            </ProviderActionButton>
+        <p className="flex min-w-0 flex-wrap gap-x-2 text-muted-foreground text-xs">
+          <span>{providerModelCountLabel(instance.modelCount)}</span>
+          {endpoint ? (
+            <span className="min-w-0 truncate font-mono" title={endpoint}>
+              {endpoint}
+            </span>
           ) : null}
-          {canManage ? (
-            <ProviderActionButton
-              label={
-                card.isOpenRouter
-                  ? "Manage models and routing"
-                  : "Manage models"
-              }
-              onClick={card.openManage}
-            >
-              <ListViewIcon className="size-3.5" />
-            </ProviderActionButton>
-          ) : null}
+          {connected ? null : (
+            <span className="text-destructive">Not connected</span>
+          )}
+        </p>
+      </div>
+      <div className="-ml-2 flex flex-wrap items-center gap-0.5 sm:ml-0">
+        {opensEdit ? (
           <ProviderActionButton
-            label={
-              instance.secretSource === "environment"
-                ? `Managed by ${instance.secretEnvName}`
-                : providerKeyActionLabel(card, instance.hasApiKey)
-            }
-            onClick={() => card.setReplaceKeyOpen(true)}
-          >
-            <Key01Icon className="size-3.5" />
-          </ProviderActionButton>
-          <ProviderActionButton
-            destructive
-            disabled={card.busy}
-            label="Remove"
-            onClick={() => card.setDeleteOpen(true)}
-          >
-            <Delete02Icon className="size-3.5" />
-          </ProviderActionButton>
-        </div>
-      </td>
-    </tr>
+            label={card.providerType === "netra" ? "Models" : "Edit"}
+            onClick={card.openEdit}
+          />
+        ) : canManage ? (
+          <ProviderActionButton label="Models" onClick={card.openManage} />
+        ) : null}
+        <ProviderActionButton
+          disabled={instance.secretSource === "environment"}
+          label={
+            instance.secretSource === "environment"
+              ? `Key from ${instance.secretEnvName}`
+              : providerKeyActionLabel(card, instance.hasApiKey)
+          }
+          onClick={() => card.setReplaceKeyOpen(true)}
+        />
+        <ProviderActionButton
+          destructive
+          disabled={card.busy}
+          label="Remove"
+          onClick={() => card.setDeleteOpen(true)}
+        />
+      </div>
+    </li>
   );
 }
 
@@ -208,28 +169,6 @@ function ProviderManageModelsFields({
 }) {
   return (
     <>
-      {card.isCompatibleLike ? (
-        <CustomProviderFields
-          apiKey=""
-          baseUrl={instance.baseUrl ?? ""}
-          baseUrlError={null}
-          browseLabel={card.isOllama ? "Ollama" : undefined}
-          browseSource="remote"
-          customModels={card.manageModels}
-          disabled={card.busy}
-          displayName={instance.label}
-          displayNameError={null}
-          hideIdentity={card.providerType === "netra"}
-          hostMode={instance.hostMode ?? undefined}
-          identityReadOnly
-          modelsError={null}
-          onBaseUrlChange={() => {}}
-          onCustomModelsChange={card.handleManageModelsChange}
-          onDisplayNameChange={() => {}}
-          providerInstanceId={instance.id}
-          remoteProvider={compatibleRemoteProvider(card)}
-        />
-      ) : null}
       {card.isOpenRouter ? (
         <OpenRouterProviderModelFields
           customModels={card.manageModels}
@@ -270,6 +209,65 @@ function ProviderManageModelsFields({
   );
 }
 
+function ProviderKeyDialog({
+  card,
+  instance,
+}: {
+  card: ReturnType<typeof useProviderInstanceCard>;
+  instance: ProviderInstanceSummary;
+}) {
+  return card.isChatgpt ? (
+    <ProviderReconnectDialog
+      busy={card.busy}
+      dialogError={card.dialogError}
+      instance={instance}
+      onConnected={(chatgptOAuth) => void card.reconnect({ chatgptOAuth })}
+      onOpenChange={card.setReplaceKeyOpen}
+      open={card.replaceKeyOpen}
+      signIn={CHATGPT_SIGN_IN}
+    />
+  ) : card.isXaiOAuth ? (
+    <ProviderReconnectDialog
+      busy={card.busy}
+      dialogError={card.dialogError}
+      instance={instance}
+      onConnected={(xaiOAuth) => void card.reconnect({ xaiOAuth })}
+      onOpenChange={card.setReplaceKeyOpen}
+      open={card.replaceKeyOpen}
+      signIn={XAI_SIGN_IN}
+    />
+  ) : (
+    <ProviderReplaceKeyDialog
+      apiKey={card.apiKey}
+      busy={card.busy}
+      dialogError={card.dialogError}
+      instance={instance}
+      onApiKeyChange={card.setApiKey}
+      onManage={(action) => void card.handleManageKey(action)}
+      onOpenChange={card.setReplaceKeyOpen}
+      onSave={() => void card.handleReplaceKey()}
+      onToggleShowApiKey={() => card.setShowApiKey((current) => !current)}
+      open={card.replaceKeyOpen}
+      providerType={card.providerType}
+      showApiKey={card.showApiKey}
+    />
+  );
+}
+
+function editDialogTitle(
+  card: ReturnType<typeof useProviderInstanceCard>,
+  label: string
+): string {
+  return card.providerType === "netra" ? `${label} models` : `Edit ${label}`;
+}
+
+function manageDialogTitle(
+  card: ReturnType<typeof useProviderInstanceCard>,
+  label: string
+): string {
+  return card.isOpenRouter ? `${label} models and routing` : `${label} models`;
+}
+
 function ProviderInstanceCardDialogs({
   card,
   instance,
@@ -292,42 +290,7 @@ function ProviderInstanceCardDialogs({
         open={card.deleteOpen}
       />
 
-      {card.isChatgpt ? (
-        <ProviderReconnectDialog
-          busy={card.busy}
-          dialogError={card.dialogError}
-          instance={instance}
-          onConnected={(chatgptOAuth) => void card.reconnect({ chatgptOAuth })}
-          onOpenChange={card.setReplaceKeyOpen}
-          open={card.replaceKeyOpen}
-          signIn={CHATGPT_SIGN_IN}
-        />
-      ) : card.isXaiOAuth ? (
-        <ProviderReconnectDialog
-          busy={card.busy}
-          dialogError={card.dialogError}
-          instance={instance}
-          onConnected={(xaiOAuth) => void card.reconnect({ xaiOAuth })}
-          onOpenChange={card.setReplaceKeyOpen}
-          open={card.replaceKeyOpen}
-          signIn={XAI_SIGN_IN}
-        />
-      ) : (
-        <ProviderReplaceKeyDialog
-          apiKey={card.apiKey}
-          busy={card.busy}
-          dialogError={card.dialogError}
-          instance={instance}
-          onApiKeyChange={card.setApiKey}
-          onManage={(action) => void card.handleManageKey(action)}
-          onOpenChange={card.setReplaceKeyOpen}
-          onSave={() => void card.handleReplaceKey()}
-          onToggleShowApiKey={() => card.setShowApiKey((current) => !current)}
-          open={card.replaceKeyOpen}
-          providerType={card.providerType}
-          showApiKey={card.showApiKey}
-        />
-      )}
+      <ProviderKeyDialog card={card} instance={instance} />
 
       {card.isCompatibleLike ? (
         <ProviderCompatibleEditDialog
@@ -352,20 +315,19 @@ function ProviderInstanceCardDialogs({
           open={card.editOpen}
           providerInstanceId={instance.id}
           remoteProvider={compatibleRemoteProvider(card)}
+          title={editDialogTitle(card, instance.label)}
           wireApi={card.editWireApi}
         />
       ) : null}
 
-      {canManage ? (
+      {canManage && !card.isCompatibleLike ? (
         <ProviderManageModelsDialog
           busy={card.busy}
           dialogError={card.isCompatibleLike ? card.dialogError : null}
           onOpenChange={card.setManageOpen}
           onSave={() => void card.saveManageModels()}
           open={card.manageOpen}
-          title={
-            card.isOpenRouter ? "Manage models and routing" : "Manage models"
-          }
+          title={manageDialogTitle(card, instance.label)}
         >
           <ProviderManageModelsFields card={card} instance={instance} />
         </ProviderManageModelsDialog>
@@ -410,7 +372,7 @@ export function ProviderInstanceCard({
 
   return (
     <>
-      <ProviderInstanceTableRow
+      <ProviderInstanceRow
         canManage={canManage}
         card={card}
         instance={instance}

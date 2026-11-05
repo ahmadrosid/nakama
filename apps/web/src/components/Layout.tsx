@@ -54,6 +54,13 @@ export function Layout() {
   return (
     <TooltipProvider delay={0}>
       <div className="flex h-svh flex-col overflow-hidden bg-background">
+        <button
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:shadow"
+          onClick={() => document.getElementById("main-content")?.focus()}
+          type="button"
+        >
+          Skip to content
+        </button>
         <DesktopTitleBar />
         <div className="flex min-h-0 flex-1 overflow-hidden pl-[env(safe-area-inset-left)]">
           {/* The rail and sidebar cost a fixed 296px, so on a phone they live
@@ -77,7 +84,11 @@ export function Layout() {
               page={shell.page}
             />
             <AppShellError error={shell.error} />
-            <main className={appShellMainClassName(shell.page, shell.pathname)}>
+            <main
+              className={`${appShellMainClassName(shell.page, shell.pathname)} outline-none`}
+              id="main-content"
+              tabIndex={-1}
+            >
               <RouteBoundary resetKey={shell.pathname}>
                 {switchingOrg ? null : <Outlet />}
               </RouteBoundary>

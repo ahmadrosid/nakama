@@ -88,4 +88,16 @@ describe("fetchOllamaModels", () => {
 
     expect(seen).toEqual(["Bearer secret-key"]);
   });
+
+  test("reports an unreachable Ollama host as a 502, not a server crash", async () => {
+    using _fetchMock = spyOn(globalThis, "fetch").mockImplementation(
+      asTestFetch(async () => {
+        throw new TypeError("Unable to connect.");
+      })
+    );
+
+    await expect(
+      fetchOllamaModels("http://localhost:11434/v1")
+    ).rejects.toMatchObject({ status: 502 });
+  });
 });

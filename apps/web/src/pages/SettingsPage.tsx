@@ -313,6 +313,7 @@ function SettingsSection({
 
 export function LlmProvidersPage() {
   const [formError, setFormError] = useState<string | null>(null);
+  const [addProviderOpen, setAddProviderOpen] = useState(false);
   const { hash } = useLocation();
 
   useEffect(() => {
@@ -323,14 +324,21 @@ export function LlmProvidersPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
-      <ProviderSettingsCard formError={formError} onFormError={setFormError} />
+      <ProviderSettingsCard
+        addOpen={addProviderOpen}
+        formError={formError}
+        onAddOpenChange={setAddProviderOpen}
+        onFormError={setFormError}
+      />
       <Card className="w-full shadow-none">
         <CardContent className="divide-y divide-border p-0">
           <div id="image-parsing">
             <VisionSettingsCard />
           </div>
           <div id="transcription">
-            <TranscriptionSettingsCard />
+            <TranscriptionSettingsCard
+              onAddProvider={() => setAddProviderOpen(true)}
+            />
           </div>
           <div id="image-generation">
             <ImageGenerationSettingsCard />

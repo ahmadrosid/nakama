@@ -28,6 +28,7 @@ type BrowseSelectHandler = (
 interface ModelsBrowseListProps {
   className?: string;
   configuredTypes?: ReadonlySet<string>;
+  initialCostFilter?: ModelCostFilter;
   onSelect: BrowseSelectHandler;
   /** When true, hide OpenCode Zen catalog rows (already connected as a custom provider). */
   openCodeZenConfigured?: boolean;
@@ -45,13 +46,17 @@ export function ModelsBrowseList({
   className,
   provider,
   configuredTypes,
+  initialCostFilter = "all",
   openCodeZenConfigured = false,
 }: ModelsBrowseListProps) {
   const configured = configuredTypes ?? EMPTY_CONFIGURED_TYPES;
   const { data: rows = [], isLoading, error } = useModelsDev();
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
-  const [costFilter, setCostFilter] = useState<ModelCostFilter>("all");
+
+  const [costFilter, setCostFilter] =
+    useState<ModelCostFilter>(initialCostFilter);
+
   const [hideDeprecated, setHideDeprecated] = useState(true);
 
   const sortedRows = useMemo(() => rows.toSorted(compareModelRows), [rows]);

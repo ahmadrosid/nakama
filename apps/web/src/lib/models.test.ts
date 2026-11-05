@@ -9,6 +9,7 @@ import {
   filterVisionCapableProviderGroups,
   firstAvailableProviderOption,
   hasOpenCodeZenProvider,
+  isLocalBaseUrl,
   isOpenCodeZenBaseUrl,
   profileModelSelectionValue,
   resolveModelThinkingSupport,
@@ -213,6 +214,8 @@ describe("resolveModelVisionSupport", () => {
       "openrouter",
       "mistral",
       "ollama",
+      "netra",
+      "groq",
     ];
 
     for (const provider of USER_PROVIDER_NAMES) {
@@ -412,6 +415,13 @@ describe("validateCustomModelsInput", () => {
       "Add at least one model."
     );
   });
+
+  test("rejects the same model ID twice", () => {
+    expect(
+      validateCustomModelsInput([{ id: "m" }, { id: " m " }])
+    ).not.toBeNull();
+    expect(validateCustomModelsInput([{ id: "m" }, { id: "n" }])).toBeNull();
+  });
 });
 
 describe("appendOpenRouterModelRow", () => {
@@ -450,5 +460,13 @@ describe("appendOpenRouterModelRow", () => {
       { contextWindow: 32_000, default: false, id: "a/one", name: "One" },
       { default: true, id: "a/two", name: "a/two" },
     ]);
+  });
+});
+
+describe("isLocalBaseUrl", () => {
+  test("treats loopback and private hosts as local", () => {
+    expect(isLocalBaseUrl("http://localhost:11434/v1")).toBe(true);
+    expect(isLocalBaseUrl("http://192.168.1.4:8000/v1")).toBe(true);
+    expect(isLocalBaseUrl("https://apihub.agnes-ai.com/v1")).toBe(false);
   });
 });

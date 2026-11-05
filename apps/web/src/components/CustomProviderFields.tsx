@@ -12,6 +12,7 @@ import { BrowsableModelFields } from "@/components/BrowsableModelFields";
 import type { ModelListRow } from "@/components/ModelListEditor";
 import { ModelsBrowseList } from "@/components/ModelsBrowseList";
 import { RemoteModelsBrowseList } from "@/components/RemoteModelsBrowseList";
+import { validateBaseUrlInput } from "@/lib/models";
 
 interface CustomProviderFieldsProps {
   apiKey: string;
@@ -32,6 +33,7 @@ interface CustomProviderFieldsProps {
   hostMode?: "local" | "cloud";
   identityReadOnly?: boolean;
   modelsError?: string | null;
+  onBaseUrlBlur?: () => void;
   onBaseUrlChange: (value: string) => void;
   onCustomModelsChange: (models: ModelListRow[]) => void;
   onDisplayNameChange: (value: string) => void;
@@ -41,6 +43,93 @@ interface CustomProviderFieldsProps {
   remoteProvider?: "ollama" | "openai_compatible" | "netra";
   showModelsEditor?: boolean;
   wireApi?: WireApi;
+}
+
+function defaultBrowseLabel(
+  remoteProvider: CustomProviderFieldsProps["remoteProvider"]
+): string {
+  if (remoteProvider === "ollama") {
+    return "Ollama";
+  }
+
+  return remoteProvider === "netra" ? "Netra" : "endpoint";
+}
+
+function sentenceBrowseLabel(label: string): string {
+  return label === "endpoint" ? "this endpoint" : label;
+}
+
+function FieldError({ message }: { message?: string | null }) {
+  return message ? (
+    <p className="text-destructive text-sm" role="alert">
+      {message}
+    </p>
+  ) : null;
+}
+
+function CustomProviderIdentityFields({
+  baseUrl,
+  baseUrlError,
+  density,
+  disabled,
+  displayName,
+  displayNameError,
+  onBaseUrlBlur,
+  onBaseUrlChange,
+  onDisplayNameChange,
+  readOnly,
+}: {
+  baseUrl: string;
+  baseUrlError?: string | null;
+  density: "default" | "compact";
+  disabled?: boolean;
+  displayName: string;
+  displayNameError?: string | null;
+  onBaseUrlBlur?: () => void;
+  onBaseUrlChange: (value: string) => void;
+  onDisplayNameChange: (value: string) => void;
+  readOnly: boolean;
+}) {
+  return (
+    <>
+      <FormField
+        density={density}
+        footer={<FieldError message={displayNameError} />}
+        id="provider-display-name"
+        label="Provider name"
+      >
+        <InputGroup>
+          <InputGroupInput
+            aria-invalid={displayNameError != null}
+            disabled={disabled}
+            id="provider-display-name"
+            onChange={(event) => onDisplayNameChange(event.target.value)}
+            readOnly={readOnly}
+            value={displayName}
+          />
+        </InputGroup>
+      </FormField>
+      <FormField
+        density={density}
+        footer={<FieldError message={baseUrlError} />}
+        id="provider-base-url"
+        label="Base URL"
+      >
+        <InputGroup>
+          <InputGroupInput
+            aria-invalid={baseUrlError != null}
+            disabled={disabled}
+            id="provider-base-url"
+            inputMode="url"
+            onBlur={onBaseUrlBlur}
+            onChange={(event) => onBaseUrlChange(event.target.value)}
+            readOnly={readOnly}
+            value={baseUrl}
+          />
+        </InputGroup>
+      </FormField>
+    </>
+  );
 }
 
 export function CustomProviderFields({
@@ -63,69 +152,34 @@ export function CustomProviderFields({
   browseLabel,
   wireApi = "chat",
   onDisplayNameChange,
+  onBaseUrlBlur,
   onBaseUrlChange,
   onCustomModelsChange,
   onWireApiChange,
 }: CustomProviderFieldsProps) {
-  const identityDisabled = disabled || identityReadOnly;
+  const resolvedBrowseLabel = browseLabel ?? defaultBrowseLabel(remoteProvider);
 
-  const resolvedBrowseLabel =
-    browseLabel ?? (remoteProvider === "ollama" ? "Ollama" : "this endpoint");
+  const canBrowse =
+    browseSource !== "remote" ||
+    remoteProvider === "netra" ||
+    Boolean(providerInstanceId) ||
+    validateBaseUrlInput(baseUrl) === null;
 
   return (
     <div className="space-y-4">
       {hideIdentity ? null : (
-        <FormField
+        <CustomProviderIdentityFields
+          baseUrl={baseUrl}
+          baseUrlError={baseUrlError}
           density={density}
-          footer={
-            displayNameError ? (
-              <p className="text-destructive text-sm" role="alert">
-                {displayNameError}
-              </p>
-            ) : null
-          }
-          id="provider-display-name"
-          label="Provider name"
-        >
-          <InputGroup>
-            <InputGroupInput
-              aria-invalid={displayNameError != null}
-              disabled={identityDisabled}
-              id="provider-display-name"
-              onChange={(event) => onDisplayNameChange(event.target.value)}
-              placeholder="Ollama"
-              readOnly={identityReadOnly}
-              value={displayName}
-            />
-          </InputGroup>
-        </FormField>
-      )}
-
-      {hideIdentity ? null : (
-        <FormField
-          density={density}
-          footer={
-            baseUrlError ? (
-              <p className="text-destructive text-sm" role="alert">
-                {baseUrlError}
-              </p>
-            ) : null
-          }
-          id="provider-base-url"
-          label="Base URL"
-        >
-          <InputGroup>
-            <InputGroupInput
-              aria-invalid={baseUrlError != null}
-              disabled={identityDisabled}
-              id="provider-base-url"
-              onChange={(event) => onBaseUrlChange(event.target.value)}
-              placeholder="http://localhost:11434/v1"
-              readOnly={identityReadOnly}
-              value={baseUrl}
-            />
-          </InputGroup>
-        </FormField>
+          disabled={disabled || identityReadOnly}
+          displayName={displayName}
+          displayNameError={displayNameError}
+          onBaseUrlBlur={onBaseUrlBlur}
+          onBaseUrlChange={onBaseUrlChange}
+          onDisplayNameChange={onDisplayNameChange}
+          readOnly={identityReadOnly}
+        />
       )}
 
       {onWireApiChange ? (
@@ -157,11 +211,11 @@ export function CustomProviderFields({
               ? `Browse ${resolvedBrowseLabel}`
               : "Browse models.dev"
           }
+          canBrowse={canBrowse}
           customModels={customModels}
           density={density}
           disabled={disabled}
           fieldId="provider-models"
-          footerHint="Rates are USD per million tokens. Leave them blank if unknown."
           modelsError={modelsError}
           onCustomModelsChange={(models) =>
             onCustomModelsChange(
@@ -173,12 +227,13 @@ export function CustomProviderFields({
                 : models
             )
           }
-          renderBrowse={({ multiSelect, onAddMany, onSelect }) =>
+          renderBrowse={({ addedIds, multiSelect, onAddMany, onSelect }) =>
             browseSource === "remote" ? (
               <RemoteModelsBrowseList
+                addedIds={addedIds}
                 apiKey={apiKey}
                 baseUrl={baseUrl}
-                browseLabel={resolvedBrowseLabel}
+                browseLabel={sentenceBrowseLabel(resolvedBrowseLabel)}
                 className="h-72 rounded-md border border-border"
                 hostMode={hostMode}
                 multiSelect={multiSelect}

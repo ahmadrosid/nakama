@@ -42,7 +42,6 @@ export function ShortlistBrowseProviderModelFields({
       density={density}
       disabled={disabled}
       fieldId={`${provider}-provider-models`}
-      footerHint={copy.footerHint}
       modelsError={modelsError}
       onCustomModelsChange={onCustomModelsChange}
       renderBrowse={({ multiSelect, onAddMany, onSelect }) =>

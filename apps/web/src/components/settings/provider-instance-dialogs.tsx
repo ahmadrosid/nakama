@@ -62,10 +62,15 @@ export function ProviderReplaceKeyDialog({
             {instance.label}
           </DialogTitle>
         </DialogHeader>
+        <label className="font-medium text-sm" htmlFor="replace-api-key">
+          {instance.hasApiKey ? "New API key" : "API key"}
+        </label>
         <InputGroup>
           <InputGroupInput
+            aria-invalid={dialogError != null}
             autoComplete="off"
             disabled={busy || instance.secretSource === "environment"}
+            id="replace-api-key"
             onChange={(event) => onApiKeyChange(event.target.value)}
             placeholder={apiKeyPlaceholder(providerType)}
             type={showApiKey ? "text" : "password"}
@@ -95,10 +100,11 @@ export function ProviderReplaceKeyDialog({
         <DialogFooter>
           {instance.secretSource === "settings" ? (
             <Button
+              className="text-destructive hover:text-destructive sm:mr-auto"
               disabled={busy}
               onClick={() => onManage?.("clear")}
               type="button"
-              variant="outline"
+              variant="ghost"
             >
               Clear saved key
             </Button>
@@ -237,7 +243,6 @@ function ProviderModelsDialogShell({
   busy,
   dialogError,
   title,
-  description,
   onOpenChange,
   onSave,
   children,
@@ -246,7 +251,6 @@ function ProviderModelsDialogShell({
   busy: boolean;
   dialogError: string | null;
   title: string;
-  description?: string;
   onOpenChange: (open: boolean) => void;
   onSave: () => void;
   children: ReactNode;
@@ -256,9 +260,6 @@ function ProviderModelsDialogShell({
       <DialogContent className="w-[min(96vw,56rem)] grid-cols-1 sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          {description ? (
-            <DialogDescription>{description}</DialogDescription>
-          ) : null}
         </DialogHeader>
         {children}
         {dialogError ? (
@@ -304,6 +305,7 @@ export function ProviderCompatibleEditDialog({
   onCustomModelsChange,
   onWireApiChange,
   onSave,
+  title,
   wireApi,
 }: {
   open: boolean;
@@ -325,6 +327,7 @@ export function ProviderCompatibleEditDialog({
   onCustomModelsChange: (rows: ModelListRow[]) => void;
   onWireApiChange?: (value: WireApi) => void;
   onSave: () => void;
+  title: string;
   wireApi?: WireApi;
 }) {
   return (
@@ -334,7 +337,7 @@ export function ProviderCompatibleEditDialog({
       onOpenChange={onOpenChange}
       onSave={onSave}
       open={open}
-      title="Edit provider"
+      title={title}
     >
       <CustomProviderFields
         apiKey={apiKey}
@@ -423,7 +426,7 @@ export function ProviderManageModelsDialog({
   onOpenChange,
   onSave,
   children,
-  title = "Manage models",
+  title,
 }: {
   open: boolean;
   busy: boolean;
@@ -431,12 +434,11 @@ export function ProviderManageModelsDialog({
   onOpenChange: (open: boolean) => void;
   onSave: () => void;
   children: ReactNode;
-  title?: string;
+  title: string;
 }) {
   return (
     <ProviderModelsDialogShell
       busy={busy}
-      description="Edit the shortlist available in chat for this provider."
       dialogError={dialogError}
       onOpenChange={onOpenChange}
       onSave={onSave}

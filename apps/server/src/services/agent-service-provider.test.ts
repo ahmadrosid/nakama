@@ -36,6 +36,79 @@ function privateServiceAccess<T>(service: AgentService): T {
   return Object.create(service) as T;
 }
 
+describe("API key check on save", () => {
+  const LONG_KEY = `sk-${"a".repeat(40)}`;
+
+  async function withDeepSeekProvider(
+    respond: () => Promise<Response>,
+    run: (service: AgentService, providerId: string) => Promise<void>
+  ) {
+    const configDir = await mkdtemp(path.join(tmpdir(), "nakama-key-check-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    using _fetchMock = spyOn(globalThis, "fetch").mockImplementation(
+      asTestFetch(respond)
+    );
+
+    try {
+      const db = createInMemoryDatabaseAdapter();
+
+      const service = new AgentService(
+        null,
+        null,
+        db,
+        undefined,
+        new ManagedSecrets(db, Buffer.alloc(32, 1).toString("base64"))
+      );
+
+      const created = await service.createProvider({ type: "deepseek" });
+      await run(service, created.provider.id);
+    } finally {
+      delete process.env.NAKAMA_CONFIG_DIR;
+      await rm(configDir, { force: true, recursive: true });
+    }
+  }
+
+  test("does not save a key the provider refuses", async () => {
+    await withDeepSeekProvider(
+      async () => new Response("bad key", { status: 401 }),
+      async (service, providerId) => {
+        await expect(
+          service.setProviderSecret(providerId, LONG_KEY)
+        ).rejects.toMatchObject({ status: 400 });
+
+        const listed = await service.listProviders();
+        expect(
+          listed.providers.find((provider) => provider.id === providerId)
+            ?.hasApiKey
+        ).toBe(false);
+      }
+    );
+  });
+
+  test("saves a key the provider accepts", async () => {
+    await withDeepSeekProvider(
+      async () => Response.json({ data: [{ id: "deepseek-chat" }] }),
+      async (service, providerId) => {
+        const result = await service.setProviderSecret(providerId, LONG_KEY);
+        expect(result.provider.hasApiKey).toBe(true);
+      }
+    );
+  });
+
+  test("saves the key when the provider cannot be reached", async () => {
+    await withDeepSeekProvider(
+      async () => {
+        throw new TypeError("Unable to connect.");
+      },
+      async (service, providerId) => {
+        const result = await service.setProviderSecret(providerId, LONG_KEY);
+        expect(result.provider.hasApiKey).toBe(true);
+      }
+    );
+  });
+});
+
 test("rejects a Netra provider when the model endpoint rejects its API key", async () => {
   const configDir = await mkdtemp(path.join(tmpdir(), "nakama-netra-secret-"));
   process.env.NAKAMA_CONFIG_DIR = configDir;

@@ -54,19 +54,32 @@ export function ProviderSelect({
     );
   }, [value]);
 
-  const sortedOptions = useMemo(() => {
-    const available: typeof PROVIDER_OPTIONS = [];
+  const optionGroups = useMemo(() => {
+    const groups = PROVIDER_OPTION_GROUPS.map((group) => {
+      const options: typeof PROVIDER_OPTIONS = [];
+
+      return { heading: group.heading, options };
+    });
+
     const alreadyAdded: typeof PROVIDER_OPTIONS = [];
 
     for (const option of PROVIDER_OPTIONS) {
       if (isProviderTypeAlreadyConfigured(option.id, configured)) {
         alreadyAdded.push(option);
-      } else {
-        available.push(option);
+
+        continue;
       }
+
+      const index = PROVIDER_OPTION_GROUPS.findIndex(
+        (group) => group.ids?.has(option.id) ?? true
+      );
+
+      groups[index]!.options.push(option);
     }
 
-    return [...available, ...alreadyAdded];
+    groups.push({ heading: "Already added", options: alreadyAdded });
+
+    return groups.filter((group) => group.options.length > 0);
   }, [configured]);
 
   return (
@@ -118,40 +131,39 @@ export function ProviderSelect({
               </CommandItem>
             </CommandGroup>
             <CommandSeparator />
-            <CommandGroup className="p-1">
-              {sortedOptions.map((option) => {
-                const alreadyConfigured = isProviderTypeAlreadyConfigured(
-                  option.id,
-                  configured
-                );
+            {optionGroups.map((group) => (
+              <CommandGroup
+                className="p-1"
+                heading={group.heading}
+                key={group.heading}
+              >
+                {group.options.map((option) => {
+                  const alreadyConfigured = isProviderTypeAlreadyConfigured(
+                    option.id,
+                    configured
+                  );
 
-                return (
-                  <CommandItem
-                    data-checked={value === option.id ? true : undefined}
-                    disabled={alreadyConfigured}
-                    key={option.id}
-                    onSelect={() => {
-                      if (alreadyConfigured) {
-                        return;
-                      }
+                  return (
+                    <CommandItem
+                      data-checked={value === option.id ? true : undefined}
+                      disabled={alreadyConfigured}
+                      key={option.id}
+                      onSelect={() => {
+                        if (alreadyConfigured) {
+                          return;
+                        }
 
-                      onValueChange(option.id);
-                      setOpen(false);
-                    }}
-                    value={`${option.label} ${option.id}`}
-                  >
-                    <span className="min-w-0 flex-1 truncate">
+                        onValueChange(option.id);
+                        setOpen(false);
+                      }}
+                      value={`${option.label} ${option.id}`}
+                    >
                       {option.label}
-                    </span>
-                    {alreadyConfigured ? (
-                      <span className="text-muted-foreground text-xs">
-                        Already added
-                      </span>
-                    ) : null}
-                  </CommandItem>
-                );
-              })}
-            </CommandGroup>
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            ))}
           </CommandList>
         </Command>
       </PopoverContent>
@@ -160,3 +172,19 @@ export function ProviderSelect({
 }
 
 const EMPTY_CONFIGURED_TYPES: ReadonlySet<string> = new Set();
+
+// The last group has no ids: it takes every provider the others do not list.
+const PROVIDER_OPTION_GROUPS: Array<{
+  heading: string;
+  ids?: ReadonlySet<SelectedProvider>;
+}> = [
+  {
+    heading: "Sign in with your plan",
+    ids: new Set<SelectedProvider>(["chatgpt", "xai_oauth"]),
+  },
+  {
+    heading: "Local or custom",
+    ids: new Set<SelectedProvider>(["ollama", "openai_compatible"]),
+  },
+  { heading: "API key" },
+];

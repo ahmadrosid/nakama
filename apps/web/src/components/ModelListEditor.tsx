@@ -3,13 +3,14 @@ import { Button } from "@nakama/ui/button";
 import { InputGroup, InputGroupInput } from "@nakama/ui/input-group";
 import { Switch } from "@nakama/ui/switch";
 import { Add01Icon, Delete02Icon } from "hugeicons-react";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { modelListRowVisionEnabled } from "@/components/model-list-editor.shared";
 import { createClientId, syncRowKeys } from "@/lib/client-id";
 
 export interface ModelListRow extends CustomModelEntry {}
 
 interface ModelListEditorProps {
+  browseDisabled?: boolean;
   browseLabel?: string;
   disabled?: boolean;
   models: ModelListRow[];
@@ -21,8 +22,18 @@ interface ModelListEditorProps {
   visionDefaultOn?: boolean;
 }
 
+const PRICE_FIELDS = [
+  { field: "inputPerMillionUsd", label: "Input $/1M tokens" },
+  { field: "cachedInputPerMillionUsd", label: "Cached input $/1M tokens" },
+  { field: "outputPerMillionUsd", label: "Output $/1M tokens" },
+] as const;
+
 function emptyRow(): ModelListRow {
   return { id: "", name: "" };
+}
+
+function parseOptionalNumber(value: string): number | undefined {
+  return value === "" ? undefined : Number(value);
 }
 
 export function ModelListEditor({
@@ -33,10 +44,16 @@ export function ModelListEditor({
   showVision = false,
   visionDefaultOn = false,
   onBrowse,
+  browseDisabled = false,
   browseLabel = "Browse models.dev",
   onChange,
 }: ModelListEditorProps) {
   const rowKeysRef = useRef<string[]>([]);
+
+  const [openDetails, setOpenDetails] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
+
   // Keep React keys available on the first paint (avoids undefined keys + useEffect).
   syncRowKeys(rowKeysRef.current, models.length);
 
@@ -53,149 +70,108 @@ export function ModelListEditor({
     onChange(models.filter((_, rowIndex) => rowIndex !== index));
   };
 
+  const toggleDetails = (rowKey: string) => {
+    setOpenDetails((current) => {
+      const next = new Set(current);
+
+      if (next.has(rowKey)) {
+        next.delete(rowKey);
+      } else {
+        next.add(rowKey);
+      }
+
+      return next;
+    });
+  };
+
+  const seenIds = new Set<string>();
+
   return (
     <div className="min-w-0 space-y-2">
       {models.length > 0 ? (
-        <div className="max-w-full overflow-x-auto rounded-lg border border-border">
-          <table
-            className={`w-full text-left text-xs ${showThinking || showVision ? "min-w-[58rem]" : "min-w-[46rem]"}`}
-          >
-            <thead className="border-border border-b bg-muted/30 text-muted-foreground">
-              <tr>
-                <th className="px-2 py-2 font-medium">Model ID</th>
-                <th className="px-2 py-2 font-medium">Display name</th>
-                {showThinking ? (
-                  <th className="px-2 py-2 font-medium">Reasoning</th>
-                ) : null}
-                {showVision ? (
-                  <th className="px-2 py-2 font-medium">Vision</th>
-                ) : null}
-                {showPricing ? (
-                  <>
-                    <th className="px-2 py-2 font-medium">$/1M in</th>
-                    <th className="px-2 py-2 font-medium">$/1M cached</th>
-                    <th className="px-2 py-2 font-medium">$/1M out</th>
-                  </>
-                ) : null}
-                <th className="px-2 py-2 font-medium">Context</th>
-                <th aria-label="Actions" className="w-10 px-2 py-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {models.map((row, index) => (
-                <tr
-                  className="border-border/60 border-b last:border-0"
-                  key={rowKeysRef.current[index]}
-                >
-                  <td className="px-2 py-1.5">
-                    <InputGroup>
-                      <InputGroupInput
-                        disabled={disabled}
-                        onChange={(event) =>
-                          updateRow(index, { id: event.target.value })
-                        }
-                        placeholder="llama3.2"
-                        value={row.id}
-                      />
-                    </InputGroup>
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <InputGroup>
-                      <InputGroupInput
-                        disabled={disabled}
-                        onChange={(event) =>
-                          updateRow(index, { name: event.target.value })
-                        }
-                        placeholder="Optional label"
-                        value={row.name ?? ""}
-                      />
-                    </InputGroup>
-                  </td>
-                  {showThinking ? (
-                    <td className="px-2 py-1.5">
-                      <Switch
-                        aria-label={`Reasoning for ${row.id.trim() || "model"}`}
-                        checked={row.supportsThinking === true}
-                        disabled={disabled}
-                        onCheckedChange={(checked) =>
-                          updateRow(index, { supportsThinking: checked })
-                        }
-                        size="sm"
-                      />
-                    </td>
-                  ) : null}
-                  {showVision ? (
-                    <td className="px-2 py-1.5">
-                      <Switch
-                        aria-label={`Vision for ${row.id.trim() || "model"}`}
-                        checked={modelListRowVisionEnabled(
-                          row,
-                          visionDefaultOn
-                        )}
-                        disabled={disabled}
-                        onCheckedChange={(checked) =>
-                          updateRow(index, { supportsVision: checked })
-                        }
-                        size="sm"
-                      />
-                    </td>
-                  ) : null}
-                  {showPricing
-                    ? (
-                        [
-                          "inputPerMillionUsd",
-                          "cachedInputPerMillionUsd",
-                          "outputPerMillionUsd",
-                        ] as const
-                      ).map((field) => (
-                        <td className="px-2 py-1.5" key={field}>
-                          <InputGroup>
-                            <InputGroupInput
-                              aria-label={
-                                field === "cachedInputPerMillionUsd"
-                                  ? `Cached input rate for ${row.id.trim() || "model"}`
-                                  : undefined
-                              }
-                              disabled={disabled}
-                              min={0}
-                              onChange={(event) => {
-                                const value = event.target.value;
-                                updateRow(index, {
-                                  [field]:
-                                    value === "" ? undefined : Number(value),
-                                });
-                              }}
-                              placeholder="—"
-                              step="any"
-                              type="number"
-                              value={row[field] ?? ""}
-                            />
-                          </InputGroup>
-                        </td>
-                      ))
-                    : null}
-                  <td className="px-2 py-1.5">
-                    <InputGroup>
-                      <InputGroupInput
-                        disabled={disabled}
-                        min={1}
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          updateRow(index, {
-                            contextWindow:
-                              value === "" ? undefined : Number(value),
-                          });
-                        }}
-                        placeholder="auto"
-                        step={1}
-                        type="number"
-                        value={row.contextWindow ?? ""}
-                      />
-                    </InputGroup>
-                  </td>
-                  <td className="px-2 py-1.5 text-right">
+        <ul className="divide-y divide-border rounded-lg border border-border">
+          {models.map((row, index) => {
+            const rowKey = rowKeysRef.current[index]!;
+            const id = row.id.trim();
+            const duplicate = id !== "" && seenIds.has(id);
+            seenIds.add(id);
+            const label = id || "new model";
+            const detailsOpen = openDetails.has(rowKey);
+            const detailsId = `model-details-${rowKey}`;
+
+            return (
+              <li className="space-y-2 p-2" key={rowKey}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <InputGroup className="min-w-0 flex-[2_1_14rem]">
+                    <InputGroupInput
+                      aria-invalid={duplicate}
+                      aria-label="Model ID"
+                      className="font-mono text-xs"
+                      disabled={disabled}
+                      onChange={(event) =>
+                        updateRow(index, { id: event.target.value })
+                      }
+                      placeholder="Model ID"
+                      title={row.id}
+                      value={row.id}
+                    />
+                  </InputGroup>
+                  <InputGroup className="min-w-0 flex-[1_1_10rem]">
+                    <InputGroupInput
+                      aria-label={`Display name for ${label}`}
+                      disabled={disabled}
+                      onChange={(event) =>
+                        updateRow(index, { name: event.target.value })
+                      }
+                      placeholder="Display name"
+                      value={row.name ?? ""}
+                    />
+                  </InputGroup>
+                  <div className="flex items-center gap-3">
+                    {showThinking ? (
+                      <span className="flex items-center gap-1.5 text-xs">
+                        <Switch
+                          aria-label={`Reasoning for ${label}`}
+                          checked={row.supportsThinking === true}
+                          disabled={disabled}
+                          onCheckedChange={(checked) =>
+                            updateRow(index, { supportsThinking: checked })
+                          }
+                          size="sm"
+                        />
+                        Reasoning
+                      </span>
+                    ) : null}
+                    {showVision ? (
+                      <span className="flex items-center gap-1.5 text-xs">
+                        <Switch
+                          aria-label={`Vision for ${label}`}
+                          checked={modelListRowVisionEnabled(
+                            row,
+                            visionDefaultOn
+                          )}
+                          disabled={disabled}
+                          onCheckedChange={(checked) =>
+                            updateRow(index, { supportsVision: checked })
+                          }
+                          size="sm"
+                        />
+                        Vision
+                      </span>
+                    ) : null}
                     <Button
-                      aria-label="Remove model"
+                      aria-controls={detailsId}
+                      aria-expanded={detailsOpen}
+                      disabled={disabled}
+                      onClick={() => toggleDetails(rowKey)}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      Details
+                    </Button>
+                    <Button
+                      aria-label={`Remove ${label}`}
                       disabled={disabled}
                       onClick={() => removeRow(index)}
                       size="icon-sm"
@@ -204,19 +180,72 @@ export function ModelListEditor({
                     >
                       <Delete02Icon className="size-4" />
                     </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
-
-      {models.length > 0 ? (
-        <p className="text-muted-foreground text-xs">
-          Context is the total token window the model accepts. Leave it on auto
-          to use the built-in catalog value, or 128k when the model is unknown.
-        </p>
+                  </div>
+                </div>
+                {duplicate ? (
+                  <p className="text-destructive text-xs" role="alert">
+                    This model ID is already in the list.
+                  </p>
+                ) : null}
+                {detailsOpen ? (
+                  <div
+                    className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4"
+                    id={detailsId}
+                  >
+                    {showPricing
+                      ? PRICE_FIELDS.map(({ field, label: fieldLabel }) => (
+                          <label className="space-y-1 text-xs" key={field}>
+                            <span className="text-muted-foreground">
+                              {fieldLabel}
+                            </span>
+                            <InputGroup>
+                              <InputGroupInput
+                                disabled={disabled}
+                                min={0}
+                                onChange={(event) =>
+                                  updateRow(index, {
+                                    [field]: parseOptionalNumber(
+                                      event.target.value
+                                    ),
+                                  })
+                                }
+                                placeholder="Unknown"
+                                step="any"
+                                type="number"
+                                value={row[field] ?? ""}
+                              />
+                            </InputGroup>
+                          </label>
+                        ))
+                      : null}
+                    <label className="space-y-1 text-xs">
+                      <span className="text-muted-foreground">
+                        Context window (tokens)
+                      </span>
+                      <InputGroup>
+                        <InputGroupInput
+                          disabled={disabled}
+                          min={1}
+                          onChange={(event) =>
+                            updateRow(index, {
+                              contextWindow: parseOptionalNumber(
+                                event.target.value
+                              ),
+                            })
+                          }
+                          placeholder="Auto"
+                          step={1}
+                          type="number"
+                          value={row.contextWindow ?? ""}
+                        />
+                      </InputGroup>
+                    </label>
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
       ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -236,7 +265,7 @@ export function ModelListEditor({
 
         {onBrowse ? (
           <Button
-            disabled={disabled}
+            disabled={disabled || browseDisabled}
             onClick={onBrowse}
             size="sm"
             type="button"
