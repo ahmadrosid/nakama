@@ -9,7 +9,11 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { hostname } from "node:os";
-import type { CustomModelEntry, NakamaCloudAccount } from "@nakama/core";
+import {
+  type CustomModelEntry,
+  log,
+  type NakamaCloudAccount,
+} from "@nakama/core";
 import { desktopConnectCode } from "@nakama/core/contract";
 import { z } from "zod";
 import type { ManagedSecrets } from "../../services/managed-secrets";
@@ -57,6 +61,15 @@ interface DeviceKey {
   privateKey: KeyObject;
   publicKey: string;
 }
+
+/**
+ * The callback pages close their connection: after the listener stops, a
+ * kept-alive socket would still reach the handler.
+ */
+const PAGE_HEADERS = {
+  connection: "close",
+  "content-type": "text/html; charset=utf-8",
+};
 
 const CALLBACK_PAGE = `<!doctype html><meta charset="utf-8"><title>Nakama</title>
 <body style="font:16px system-ui;display:grid;place-items:center;height:90vh">
@@ -197,7 +210,7 @@ export class NakamaCloudSignIn {
           )
         ) {
           return new Response(FAILED_PAGE, {
-            headers: { "content-type": "text/html; charset=utf-8" },
+            headers: PAGE_HEADERS,
             status: 400,
           });
         }
@@ -213,7 +226,7 @@ export class NakamaCloudSignIn {
             await this.revoke(cloudUrl, computerId);
 
             return new Response(FAILED_PAGE, {
-              headers: { "content-type": "text/html; charset=utf-8" },
+              headers: PAGE_HEADERS,
               status: 400,
             });
           }
@@ -230,10 +243,14 @@ export class NakamaCloudSignIn {
           });
         } catch (error) {
           // The page asks for a reload; the log says why it failed.
-          console.warn("Nakama Cloud sign-in did not finish:", error);
+          log("warn", "nakama_cloud.sign_in_failed", {
+            cloudUrl,
+            computerId,
+            error: error instanceof Error ? error.message : String(error),
+          });
 
           return new Response(RETRY_PAGE, {
-            headers: { "content-type": "text/html; charset=utf-8" },
+            headers: PAGE_HEADERS,
             status: 502,
           });
         }
@@ -241,7 +258,7 @@ export class NakamaCloudSignIn {
         this.stop();
 
         return new Response(CALLBACK_PAGE, {
-          headers: { "content-type": "text/html; charset=utf-8" },
+          headers: PAGE_HEADERS,
         });
       },
       hostname: "127.0.0.1",

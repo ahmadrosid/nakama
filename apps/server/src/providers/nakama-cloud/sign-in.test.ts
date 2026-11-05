@@ -179,7 +179,13 @@ test("the browser connects this computer, and Nakama Cloud becomes the default p
   back.searchParams.set("orgId", "org_acme");
   back.searchParams.set("orgName", "Acme");
   back.searchParams.set("account", "ada@example.com");
-  expect((await fetch(back)).status).toBe(200);
+
+  const connected = await fetch(back);
+
+  expect(connected.status).toBe(200);
+  // The socket closes too: a later request cannot reuse it to reach the
+  // stopped listener.
+  expect(connected.headers.get("connection")).toBe("close");
   // The first token request carries the Connect code.
   expect(cloud.confirmCodes[0]).toBe("code-from-the-cloud-0001");
 

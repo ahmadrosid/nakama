@@ -45,14 +45,118 @@ export interface NakamaCloudProviderOptions {
   passes: NakamaCloudPasses;
 }
 
-/** One SSE frame from the cloud. The cloud is trusted to send its own events. */
+const UNREADABLE_REPLY = "Nakama Cloud sent a reply this app cannot read.";
+
+const jsonValueSchema = z.json();
+
+const toolCallSchema = z.object({
+  arguments: z.record(z.string(), jsonValueSchema),
+  id: z.string(),
+  name: z.string(),
+});
+
+const usageSchema = z.object({
+  cachedInputTokens: z.number().optional(),
+  costUsd: z.number().optional(),
+  estimated: z.boolean().optional(),
+  inputTokens: z.number(),
+  modelId: z.string().optional(),
+  outputTokens: z.number(),
+  totalTokens: z.number(),
+});
+
+// Loose: fields a newer cloud adds are kept, not dropped.
+const resultSchema = z
+  .object({
+    assistantMessage: z
+      .object({
+        content: z.string(),
+        providerContent: z.array(jsonValueSchema).optional(),
+        role: z.literal("assistant"),
+        summary: z.boolean().optional(),
+        thinking: z.string().optional(),
+        thinkingDurationMs: z.number().optional(),
+        toolCalls: z.array(toolCallSchema).optional(),
+        usage: usageSchema.optional(),
+      })
+      .loose(),
+    completedToolCalls: z
+      .array(
+        z.object({
+          call: toolCallSchema,
+          // JSON has no undefined: a tool that returned nothing sends no key.
+          result: jsonValueSchema.default(null),
+          textBefore: z.string().optional(),
+        })
+      )
+      .optional(),
+    content: z.string(),
+    toolCalls: z.array(toolCallSchema),
+    truncated: z.boolean().optional(),
+    usage: usageSchema.optional(),
+  })
+  .loose();
+
+const toolEvent = { tool: z.string(), toolCallId: z.string() };
+
+/** The frames /v1/llm/chat writes (LlmStreamEvent in routes/llm.ts). */
+const streamEventSchema = z.discriminatedUnion("type", [
+  z.object({ data: z.string(), type: z.literal("chunk") }),
+  z.object({ data: z.string(), type: z.literal("thinking") }),
+  z.object({
+    data: z.object({
+      ...toolEvent,
+      input: z.record(z.string(), jsonValueSchema),
+    }),
+    type: z.literal("toolStart"),
+  }),
+  z.object({
+    data: z.object({
+      ...toolEvent,
+      accumulatedArguments: z.string().optional(),
+      delta: z.string(),
+    }),
+    type: z.literal("toolInputDelta"),
+  }),
+  z.object({
+    data: z.object({
+      ...toolEvent,
+      images: z
+        .array(z.object({ data: z.string(), mediaType: z.string() }))
+        .optional(),
+      result: jsonValueSchema.default(null),
+    }),
+    type: z.literal("toolEnd"),
+  }),
+  z.object({ data: resultSchema, type: z.literal("result") }),
+  z.object({
+    data: z.object({ message: z.string(), status: z.number() }),
+    type: z.literal("error"),
+  }),
+]);
+
+/**
+ * One SSE frame from the cloud. The cloud is a server the user typed in, so
+ * a frame that is not one of its events ends the call, not trusted as one.
+ */
 function parseEvent(frame: string): LlmStreamEvent | null {
   if (!frame.startsWith("data: ")) {
     return null;
   }
 
-  // SAFETY: /v1/llm/chat writes only LlmStreamEvent frames (routes/llm.ts).
-  return JSON.parse(frame.slice(6)) as LlmStreamEvent;
+  let parsed: z.ZodSafeParseResult<z.infer<typeof streamEventSchema>>;
+
+  try {
+    parsed = streamEventSchema.safeParse(JSON.parse(frame.slice(6)));
+  } catch {
+    throw new NakamaApiError(UNREADABLE_REPLY, 502);
+  }
+
+  if (!parsed.success) {
+    throw new NakamaApiError(UNREADABLE_REPLY, 502);
+  }
+
+  return parsed.data;
 }
 
 function replay(event: LlmStreamEvent, handlers: StreamChatHandlers): void {

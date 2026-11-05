@@ -29,7 +29,12 @@ const tokenBodySchema = z.object({
 });
 
 /** A fake cloud: checks the signature, hands out passes, streams a turn. */
-function fakeCloud(options: { refuseTokens?: () => boolean; slow?: boolean }) {
+function fakeCloud(options: {
+  /** Ends the stream with a result frame that is not a ChatCompletionResult. */
+  badResult?: boolean;
+  refuseTokens?: () => boolean;
+  slow?: boolean;
+}) {
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
 
   const state = {
@@ -99,6 +104,10 @@ function fakeCloud(options: { refuseTokens?: () => boolean; slow?: boolean }) {
         },
       ];
 
+      const sent = options.badResult
+        ? [frames[0], { data: { content: 5 }, type: "result" }]
+        : frames;
+
       const encoder = new TextEncoder();
 
       return new Response(
@@ -108,14 +117,14 @@ function fakeCloud(options: { refuseTokens?: () => boolean; slow?: boolean }) {
           },
           start: (controller) => {
             controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify(frames[0])}\n\n`)
+              encoder.encode(`data: ${JSON.stringify(sent[0])}\n\n`)
             );
 
             if (options.slow) {
               return;
             }
 
-            for (const frame of frames.slice(1)) {
+            for (const frame of sent.slice(1)) {
               controller.enqueue(
                 encoder.encode(`data: ${JSON.stringify(frame)}\n\n`)
               );
@@ -241,4 +250,13 @@ test("a saved cloud model is kept, and no choice picks the team's default", () =
   expect(resolveModel("nakama_cloud", undefined, models)).toBe(
     "anthropic-main::claude"
   );
+});
+
+test("a reply frame the app cannot read ends the turn with an error", async () => {
+  const { provider } = fakeCloud({ badResult: true });
+
+  // A server the user typed in sent a result that is not one: not trusted.
+  await expect(
+    provider.streamChat(input, { onChunk: () => undefined })
+  ).rejects.toMatchObject({ status: 502 });
 });
