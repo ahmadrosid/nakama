@@ -28,6 +28,7 @@ import type {
   ChatContextUsage,
   ChatgptOAuthCredentials,
   ChatMessage,
+  CheckProviderResponse,
   CloneProfileRequest,
   CompactionResponse,
   ComposioSettingsResponse,
@@ -484,11 +485,13 @@ const API_KEY_CHECK_TIMEOUT_MS = 8000;
 
 // Stops a key the provider refuses before it is saved. Only 401/403 blocks:
 // a slow or unreachable provider must not stop an admin from saving a key.
-async function rejectRefusedApiKey(instance: ProviderInstance): Promise<void> {
-  const check = apiKeyCheckRequest(instance);
+async function checkApiKey(
+  instance: ProviderInstance
+): Promise<CheckProviderResponse["status"]> {
+  const check = instance.apiKey ? apiKeyCheckRequest(instance) : null;
 
   if (!check) {
-    return;
+    return "unchecked";
   }
 
   let response: Response;
@@ -501,12 +504,17 @@ async function rejectRefusedApiKey(instance: ProviderInstance): Promise<void> {
   } catch (error) {
     console.warn(`Could not check the ${instance.label} API key:`, error);
 
-    return;
+    return "unreachable";
   }
 
   await response.body?.cancel();
 
-  if (response.status === 401 || response.status === 403) {
+  return response.status === 401 || response.status === 403 ? "rejected" : "ok";
+}
+
+// Only a key the provider refuses stops a save; an outage does not.
+async function rejectRefusedApiKey(instance: ProviderInstance): Promise<void> {
+  if ((await checkApiKey(instance)) === "rejected") {
     throw new NakamaApiError(
       `${instance.label} rejected this API key. Check the key and try again.`,
       400
@@ -4053,6 +4061,18 @@ export class AgentService {
       provider: "openai",
       providers: [],
     };
+  }
+
+  /** Asks the provider if the saved key still works. */
+  async checkProvider(providerId: string): Promise<CheckProviderResponse> {
+    await this.refreshManagedProviderKeys();
+    const instance = findProviderInstance(this.userConfig, providerId);
+
+    if (!instance) {
+      throw new NakamaApiError("Provider not found.", 404);
+    }
+
+    return { status: await checkApiKey(instance) };
   }
 
   async listProviders(): Promise<ListProvidersResponse> {

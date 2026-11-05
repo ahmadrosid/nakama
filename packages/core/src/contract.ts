@@ -2163,6 +2163,11 @@ export interface UpdateProviderResponse {
   provider: ProviderInstanceSummary;
 }
 
+/** What a live check of the saved key found. */
+export interface CheckProviderResponse {
+  status: "ok" | "rejected" | "unreachable" | "unchecked";
+}
+
 export interface DeleteProviderResponse {
   defaultProviderId: string | null;
 }

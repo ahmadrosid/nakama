@@ -1,6 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import {
   type AgentBrowserStatusResponse,
+  type CheckProviderResponse,
   type ComposioSettingsResponse,
   type ConfigureProviderResponse,
   type CreateProviderResponse,
@@ -639,6 +640,35 @@ export function registerModelRoutes(
         },
       },
       summary: "Update a provider instance",
+      tags: ["Models"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "checkProvider",
+      path: "/v1/providers/{providerId}/check",
+      request: { params: providerIdParam },
+      responses: {
+        200: {
+          content: {
+            "application/json": {
+              schema: z
+                .object({
+                  status: z.enum([
+                    "ok",
+                    "rejected",
+                    "unreachable",
+                    "unchecked",
+                  ]),
+                })
+                .openapi("CheckProviderResponse"),
+            },
+          },
+          description: "What a live check of the saved key found",
+        },
+      },
+      summary: "Check a provider's saved key",
       tags: ["Models"],
     })
   );
@@ -1869,6 +1899,22 @@ export function registerModelRoutes(
       const message = error instanceof Error ? error.message : String(error);
 
       return errorResponse(message, 400);
+    }
+  });
+
+  app.post("/v1/providers/:providerId/check", async (c) => {
+    requirePlatformAdminFromContext(c);
+
+    try {
+      return json<CheckProviderResponse>(
+        await agent.checkProvider(decodeURIComponent(c.req.param("providerId")))
+      );
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      throw error;
     }
   });
 

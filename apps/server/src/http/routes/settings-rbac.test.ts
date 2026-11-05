@@ -196,6 +196,7 @@ const INSTALL_WRITES: { body?: unknown; method: string; path: string }[] = [
     path: "/v1/providers/provider_1",
   },
   { method: "DELETE", path: "/v1/providers/provider_1" },
+  { method: "POST", path: "/v1/providers/provider_1/check" },
   {
     body: { apiKey: "sk-test", provider: "openai" },
     method: "PUT",

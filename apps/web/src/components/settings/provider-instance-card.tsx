@@ -4,6 +4,7 @@ import type {
   UpdateProviderRequest,
 } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
+import { useQuery } from "@tanstack/react-query";
 import { CatalogProviderModelFields } from "@/components/CatalogProviderModelFields";
 import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
@@ -27,11 +28,13 @@ import {
   useTranscriptionSettings,
   useVisionSettings,
 } from "@/hooks/use-app-queries";
+import { client } from "@/lib/client";
 import {
   decodeModelSelection,
   groupModelsByProvider,
   profileModelSelectionValue,
 } from "@/lib/models";
+import { queryKeys } from "@/lib/query-keys";
 
 function ProviderActionButton({
   label,
@@ -123,6 +126,15 @@ function ProviderInstanceRow({
   const connected =
     instance.hasApiKey || instance.secretSource === "environment";
 
+  // A live check, so a key the provider stopped taking shows here and not
+  // first in a chat. Once per provider every 10 minutes.
+  const { data: check } = useQuery({
+    enabled: connected,
+    queryFn: () => client.checkProvider(instance.id),
+    queryKey: queryKeys.providerCheck(instance.id),
+    staleTime: 10 * 60_000,
+  });
+
   // Compatible providers edit name, URL and models in one dialog.
   const opensEdit = card.isCompatibleLike;
 
@@ -147,6 +159,12 @@ function ProviderInstanceRow({
           {connected ? null : (
             <span className="text-destructive">Not connected</span>
           )}
+          {check?.status === "rejected" ? (
+            <span className="text-destructive">Key rejected</span>
+          ) : null}
+          {check?.status === "unreachable" ? (
+            <span>Cannot reach {instance.label}</span>
+          ) : null}
         </p>
       </div>
       <div className="-ml-2 flex flex-wrap items-center gap-0.5 sm:ml-0">

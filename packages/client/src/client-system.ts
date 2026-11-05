@@ -3,6 +3,7 @@ import type {
   ChatgptOAuthDeviceCompleteRequest,
   ChatgptOAuthDeviceCompleteResponse,
   ChatgptOAuthDeviceStartResponse,
+  CheckProviderResponse,
   CodingHarnessSettingsResponse,
   ConfigureProviderRequest,
   ConfigureProviderResponse,
@@ -444,6 +445,13 @@ export class SystemClient extends NakamaClientCore {
     return this.request<UpdateProviderResponse>(
       `/v1/providers/${encodeURIComponent(providerId)}/secret${action === "use-stored" ? "/use-stored" : ""}`,
       { method: action === "clear" ? "DELETE" : "POST" }
+    );
+  }
+
+  async checkProvider(providerId: string): Promise<CheckProviderResponse> {
+    return this.request<CheckProviderResponse>(
+      `/v1/providers/${encodeURIComponent(providerId)}/check`,
+      { method: "POST" }
     );
   }
 

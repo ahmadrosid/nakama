@@ -106,6 +106,8 @@ export const queryKeys = {
     detail: (profileId: string) => ["profiles", profileId] as const,
     history: (profileId: string) => ["profiles", profileId, "history"] as const,
   },
+  providerCheck: (providerId: string) =>
+    ["providers", providerId, "check"] as const,
   providerModelDiscovery: (providerId: string) =>
     ["providers", providerId, "modelDiscovery"] as const,
   providers: ["providers"] as const,

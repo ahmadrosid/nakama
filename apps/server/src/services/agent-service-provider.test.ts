@@ -86,6 +86,46 @@ describe("API key check on save", () => {
     );
   });
 
+  test("a check reports a saved key the provider now refuses", async () => {
+    let calls = 0;
+
+    await withDeepSeekProvider(
+      async () => {
+        calls += 1;
+
+        // The save check passes; the later check is refused.
+        return calls === 1
+          ? Response.json({ data: [] })
+          : new Response("revoked", { status: 401 });
+      },
+      async (service, providerId) => {
+        await service.setProviderSecret(providerId, LONG_KEY);
+
+        expect(await service.checkProvider(providerId)).toEqual({
+          status: "rejected",
+        });
+      }
+    );
+  });
+
+  test("a check without a saved key does not call the provider", async () => {
+    let calls = 0;
+
+    await withDeepSeekProvider(
+      async () => {
+        calls += 1;
+
+        return Response.json({ data: [] });
+      },
+      async (service, providerId) => {
+        expect(await service.checkProvider(providerId)).toEqual({
+          status: "unchecked",
+        });
+        expect(calls).toBe(0);
+      }
+    );
+  });
+
   test("saves a key the provider accepts", async () => {
     await withDeepSeekProvider(
       async () => Response.json({ data: [{ id: "deepseek-chat" }] }),
