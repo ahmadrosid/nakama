@@ -228,7 +228,7 @@ function PluginIdentity({
             </span>
           ) : null}
           {updateVersion ? (
-            <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 font-normal text-[10px] text-primary">
+            <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 font-medium text-2xs text-amber-800 dark:text-primary">
               Update {updateVersion}
             </span>
           ) : null}

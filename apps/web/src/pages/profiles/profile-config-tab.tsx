@@ -84,7 +84,7 @@ function ProfilePromptPanel({
         <section className="space-y-3" id="profile-prompt">
           <div className="flex items-center justify-between gap-3">
             {showFiles ? (
-              <h2 className="font-medium text-foreground/80 text-sm">
+              <h2 className="font-medium text-muted-foreground text-sm">
                 Agent prompt
               </h2>
             ) : null}
@@ -141,7 +141,7 @@ function ProfileSectionTab({
     <Tabs.Tab className={sectionTabClass} value={value}>
       {label}
       {hint ? (
-        <span className="ml-1.5 hidden text-muted-foreground/70 text-xs tabular-nums sm:inline">
+        <span className="ml-1.5 hidden text-muted-foreground text-xs tabular-nums sm:inline">
           {hint}
         </span>
       ) : null}

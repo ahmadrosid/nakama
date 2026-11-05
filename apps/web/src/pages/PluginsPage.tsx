@@ -247,7 +247,7 @@ export function PluginsPage() {
         />
       ) : (
         groups.map((group) => (
-          <section className="space-y-2.5" key={group.title ?? "all"}>
+          <section className="space-y-3" key={group.title ?? "all"}>
             {group.title ? (
               <h2 className="type-section-title font-medium text-muted-foreground">
                 {group.title}

@@ -113,7 +113,7 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
     <div className={cn("min-w-0 space-y-8", embedded && "p-4 sm:p-5")}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="font-normal text-sm">All tools</h2>
+          <h2 className="font-semibold text-sm">All tools</h2>
           <p className="type-body mt-1 text-pretty text-xs tabular-nums">
             {tools.length === 0
               ? "No tools registered yet"

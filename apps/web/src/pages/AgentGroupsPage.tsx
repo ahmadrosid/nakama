@@ -105,7 +105,7 @@ function ExampleAvatar({
 
 /** Wide screens: example messages float as cards around the heading. */
 const FLOATING_CARD =
-  "absolute w-64 rounded-2xl border bg-background px-4 py-3.5 text-sm shadow-md";
+  "absolute w-64 rounded-xl border bg-background px-4 py-3.5 text-sm shadow-md";
 
 function FloatingExample() {
   return (
@@ -118,7 +118,7 @@ function FloatingExample() {
         className={`${FLOATING_CARD} top-14 right-8 flex rotate-[2.5deg] gap-2.5`}
       >
         <ExampleAvatar
-          className="size-7 bg-primary/15 text-primary text-xs"
+          className="size-7 bg-primary/15 text-amber-800 text-xs dark:text-primary"
           letter="R"
         />
         <p>
@@ -200,7 +200,7 @@ function ChatExample() {
       <ExampleAgentMessage
         avatar={
           <ExampleAvatar
-            className="size-7 bg-primary/15 text-primary text-xs"
+            className="size-7 bg-primary/15 text-amber-800 text-xs dark:text-primary"
             letter="R"
           />
         }
