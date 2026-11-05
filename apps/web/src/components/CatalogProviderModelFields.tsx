@@ -228,10 +228,12 @@ export function CatalogProviderModelFields({
         </div>
       ) : (
         <ModelListEditor
-          browseLabel={`Browse ${providerLabel}`}
+          browse={{
+            label: `Browse ${providerLabel}`,
+            onClick: () => setIsBrowsing(true),
+          }}
           disabled={disabled}
           models={customModels}
-          onBrowse={() => setIsBrowsing(true)}
           onChange={onCustomModelsChange}
           showPricing
           showVision

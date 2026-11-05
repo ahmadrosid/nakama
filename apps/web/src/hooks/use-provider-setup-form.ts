@@ -177,11 +177,7 @@ export function useProviderSetupForm(
   );
 
   useEffect(() => {
-    // No models for this provider: drop the last provider's pick, so save
-    // lets the server choose this provider's default.
     if (filteredModels.length === 0) {
-      setSelectedModel("");
-
       return;
     }
 
@@ -237,6 +233,8 @@ export function useProviderSetupForm(
       }
 
       setSelectedProvider(provider);
+      // The last provider's model never fits the new one.
+      setSelectedModel("");
 
       if (provider === "ollama") {
         setOllamaHostMode("local");

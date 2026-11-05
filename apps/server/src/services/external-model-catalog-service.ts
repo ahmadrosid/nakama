@@ -23,7 +23,7 @@ const cache = new Map<ExternalModelCatalogId, CacheEntry>();
 export function isExternalModelCatalogId(
   value: string
 ): value is ExternalModelCatalogId {
-  return value in CATALOG_URLS;
+  return Object.hasOwn(CATALOG_URLS, value);
 }
 
 export async function getExternalModelCatalog(

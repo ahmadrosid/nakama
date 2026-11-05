@@ -9,6 +9,9 @@ import {
   type AuthContextValue,
 } from "@/context/auth-context-shared";
 import { useProviderSetupForm } from "@/hooks/use-provider-setup-form";
+import { PROVIDER_OPTIONS } from "@/lib/models";
+import { queryKeys } from "@/lib/query-keys";
+import { ProviderSelect } from "./ProviderSelect";
 import { ProviderSetupForm } from "./ProviderSetupForm";
 
 let container: HTMLDivElement;
@@ -72,7 +75,7 @@ test("switching to a provider with no models does not save the last provider's m
     },
   });
 
-  queryClient.setQueryData(["models"], {
+  queryClient.setQueryData(queryKeys.models, {
     catalog: [
       {
         default: true,
@@ -82,7 +85,7 @@ test("switching to a provider with no models does not save the last provider's m
       },
     ],
   });
-  queryClient.setQueryData(["providers"], { providers: [] });
+  queryClient.setQueryData(queryKeys.providers, { providers: [] });
 
   const requests: CreateProviderRequest[] = [];
   let form: ReturnType<typeof useProviderSetupForm> | undefined;
@@ -136,4 +139,22 @@ test("switching to a provider with no models does not save the last provider's m
   expect(requests).toHaveLength(1);
   expect(requests[0]).toMatchObject({ type: "minimax" });
   expect(requests[0]).not.toHaveProperty("model");
+
+  queryClient.clear();
+});
+
+test("the provider picker lists only providers", async () => {
+  await act(async () =>
+    root.render(
+      <ProviderSelect onValueChange={() => undefined} value="openai" />
+    )
+  );
+
+  const trigger = container.querySelector("button");
+
+  await act(async () => trigger?.click());
+
+  expect(document.body.querySelectorAll("[cmdk-item]")).toHaveLength(
+    PROVIDER_OPTIONS.length
+  );
 });

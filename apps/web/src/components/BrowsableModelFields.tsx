@@ -131,10 +131,9 @@ export function BrowsableModelFields<T>({
         </div>
       ) : (
         <ModelListEditor
-          browseLabel={browseLabel}
+          browse={{ label: browseLabel, onClick: () => setIsBrowsing(true) }}
           disabled={disabled}
           models={customModels}
-          onBrowse={() => setIsBrowsing(true)}
           onChange={onCustomModelsChange}
           showPricing={showPricing}
           showThinking={showThinking}

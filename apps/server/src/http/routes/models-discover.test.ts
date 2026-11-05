@@ -59,3 +59,30 @@ test("discover hands provider and hostMode to the service", async () => {
     },
   ]);
 });
+
+test("model catalogs answer 410 for the removed models.dev id and 400 for built-ins", async () => {
+  const databaseAdapter = createInMemoryDatabaseAdapter();
+  const { app, authService } = createMinimalHonoApp({ databaseAdapter });
+
+  await seedOrgAdmin(databaseAdapter, { authService });
+
+  const session = await loginUserSession(
+    app,
+    "admin@example.com",
+    "password123",
+    "org_test"
+  );
+
+  const statusFor = async (catalogId: string) =>
+    (
+      await app.fetch(
+        new Request(`http://localhost:4310/v1/model-catalogs/${catalogId}`, {
+          headers: session.headers(),
+        })
+      )
+    ).status;
+
+  expect(await statusFor("models-dev")).toBe(410);
+  expect(await statusFor("constructor")).toBe(400);
+  expect(await statusFor("toString")).toBe(400);
+});
