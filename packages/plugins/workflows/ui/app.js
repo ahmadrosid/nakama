@@ -186,20 +186,94 @@ var style_default = `[data-plugin-id="workflows"] {
     gap: 8px;
     align-items: center;
   }
+  .workflow-canvas {
+    background-color: color-mix(in srgb, var(--muted) 35%, var(--background));
+    background-image: radial-gradient(
+      color-mix(in srgb, var(--muted-foreground) 30%, transparent) 1px,
+      transparent 1px
+    );
+    background-size: 16px 16px;
+  }
+  .workflow-canvas .workflow-steps {
+    max-width: 480px;
+    margin-inline: auto;
+  }
   .workflow-step-card {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+  }
+  .workflow-step-row {
     display: flex;
     gap: 8px;
     align-items: center;
     padding-right: 12px;
-    border: 1px solid var(--border);
-    border-radius: 16px;
+  }
+  .workflow-step-card[data-failed="true"] {
+    border-color: color-mix(in srgb, var(--destructive) 45%, transparent);
+  }
+  .workflow-step-card[data-not-reached="true"] .workflow-step-name,
+  .workflow-step-card[data-not-reached="true"] .workflow-step-icon {
+    color: var(--muted-foreground);
+  }
+  .workflow-step-icon {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    color: var(--muted-foreground);
+  }
+  .workflow-step-icon > svg {
+    width: 20px;
+    height: 20px;
+  }
+  .workflow-step-mark {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    color: var(--muted-foreground);
+    background: var(--muted);
+    border-radius: 50%;
+  }
+  .workflow-step-mark > svg {
+    width: 12px;
+    height: 12px;
+    stroke-width: 3;
+  }
+  .workflow-step-mark[data-status="completed"] {
+    color: #15803d;
+    background: color-mix(in srgb, #16a34a 14%, var(--background));
+  }
+  .workflow-step-mark[data-status="failed"] {
+    color: var(--destructive);
+    background: color-mix(in srgb, var(--destructive) 14%, var(--background));
+  }
+  .workflow-step-failure {
+    display: grid;
+    gap: 12px;
+    padding: 12px 16px 16px 52px;
+    background: color-mix(in srgb, var(--destructive) 5%, var(--background));
+    border-top: 1px solid
+      color-mix(in srgb, var(--destructive) 20%, transparent);
+  }
+  .workflow-step-failure p {
+    margin: 0;
+    font-size: 13px;
+    overflow-wrap: anywhere;
   }
   .workflow-step-card[data-selected="true"] {
     border-color: var(--ring);
   }
   .workflow-step-open {
     flex: 1;
-    gap: 12px;
+    gap: 16px;
     justify-content: flex-start;
     min-width: 0;
     height: auto;
@@ -208,12 +282,35 @@ var style_default = `[data-plugin-id="workflows"] {
     text-align: left;
     overflow-wrap: anywhere;
     white-space: normal;
-    border-radius: 16px;
+    border-radius: 20px;
   }
   .workflow-connector {
-    display: block;
-    margin-inline: auto;
-    color: var(--muted-foreground);
+    --line: color-mix(in srgb, var(--muted-foreground) 40%, transparent);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .workflow-connector[data-passed="true"] {
+    --line: #15803d;
+  }
+  .workflow-connector > span:nth-child(odd) {
+    width: 8px;
+    height: 8px;
+    margin-block: -4px;
+    background: var(--line);
+    border-radius: 50%;
+  }
+  .workflow-connector > span:nth-child(2) {
+    width: 0;
+    height: 20px;
+    border-left: 2px dashed var(--line);
+  }
+  .workflow-connector[data-passed="true"] > span:nth-child(2) {
+    border-left-style: solid;
+  }
+  .workflow-add-step {
+    border-style: dashed;
+    border-radius: 999px;
   }
   .workflow-add-actions {
     justify-content: center;
@@ -525,42 +622,6 @@ var style_default = `[data-plugin-id="workflows"] {
   }
   .workflow-step-name {
     font-weight: 500;
-  }
-  .workflow-step-last {
-    display: flex;
-    flex-shrink: 0;
-    flex-direction: column;
-    gap: 6px;
-    align-items: flex-end;
-    width: 112px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--muted-foreground);
-  }
-  .workflow-step-last[data-status="completed"] {
-    color: #15803d;
-  }
-  .workflow-step-last[data-status="failed"] {
-    color: var(--destructive);
-  }
-  .workflow-bar {
-    position: relative;
-    width: 100%;
-    height: 6px;
-    background: var(--muted);
-    border-radius: 3px;
-  }
-  .workflow-bar > span {
-    position: absolute;
-    inset-block: 0;
-    background: color-mix(in srgb, var(--muted-foreground) 60%, transparent);
-    border-radius: 3px;
-  }
-  [data-status="completed"] > .workflow-bar > span {
-    background: #15803d;
-  }
-  [data-status="failed"] .workflow-bar > span {
-    background: var(--destructive);
   }
   .workflow-run-mark {
     flex-shrink: 0;
@@ -953,9 +1014,6 @@ var style_default = `[data-plugin-id="workflows"] {
     .workflow-run-actions p {
       flex-basis: 100%;
     }
-    .workflow-step-last {
-      display: none;
-    }
   }
 }
 
@@ -986,19 +1044,22 @@ var style_default = `[data-plugin-id="workflows"] {
     field-sizing: content;
   }
   .workflow-step-card {
-    border-radius: 14px;
+    border-radius: 20px;
   }
   .workflow-step-card[data-selected="true"] {
     border-color: var(--primary);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 15%, transparent);
   }
   .workflow-step-open {
-    gap: 14px;
-    padding: 12px 14px;
-    border-radius: 14px;
+    gap: 16px;
+    padding: 16px;
+    border-radius: 20px;
   }
   .workflow-step-name {
-    font-size: 15px;
+    font-size: 16px;
+  }
+  .workflow-step-kind {
+    font-size: 13px;
   }
   .workflow-app-badge {
     display: grid;
@@ -1546,6 +1607,18 @@ function toolParts(name) {
     app: titleCase(app.replace(/^plugin[_-]+/, ""))
   };
 }
+var kindIcons = new Map([
+  ["assert", "shield"],
+  ["compare", "compare"],
+  ["summarize", "bot"],
+  ["template", "pencil"]
+]);
+function stepIcon(kind, fields) {
+  if (kind === "tool") {
+    return fields.tool === "sqlite" ? "database" : "plug";
+  }
+  return kindIcons.get(kind) ?? "plug";
+}
 function stepApp(kind, fields) {
   if (kind !== "tool") {
     return kindLabels.get(kind) ?? titleCase(kind);
@@ -2033,21 +2106,27 @@ function apply(ctx) {
   }) {
     const paths = {
       add: "M12 5v14M5 12h14",
+      bot: "M8 8h8a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3v-5a3 3 0 0 1 3-3ZM12 4v4M9.5 13.5h.01M14.5 13.5h.01",
       check: "m5 12 5 5 9-10",
       chevronDown: "m6 9 6 6 6-6",
       chevronRight: "m9 6 6 6-6 6",
       chevronUp: "m6 15 6-6 6 6",
       close: "m6 6 12 12M6 18 18 6",
       collapse: "M20 10h-6V4M14 10l7-7M4 14h6v6M10 14l-7 7",
+      compare: "M12 4v16M8 20h8M5 8h14M7 8l-3 6h6L7 8ZM17 8l-3 6h6l-3-6Z",
+      database: "M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3ZM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3",
       delete: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7",
       download: "M12 4v11M7 10l5 5 5-5M5 20h14",
       expand: "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
       json: "M8 4c-2 0-2 2-2 4s-2 4-2 4 2 2 2 4 0 4 2 4M16 4c2 0 2 2 2 4s2 4 2 4-2 2-2 4 0 4-2 4",
       more: "M5 12h.01M12 12h.01M19 12h.01",
+      pencil: "M4 20h4L19 9l-4-4L4 16v4ZM13 7l4 4",
       play: "m8 5 11 7-11 7V5Z",
+      plug: "M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0V7ZM12 16v5",
       retry: "M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5",
       rows: "M3 4h18v16H3V4ZM3 9h18M3 14h18",
       schema: "M4 6h16M4 12h10M4 18h6",
+      shield: "M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6l-7-3ZM9 12l2 2 4-4",
       table: "M3 4h18v16H3V4ZM3 9h18M9 9v11",
       warning: "M12 3 2 21h20L12 3ZM12 9v5M12 17h.01",
       workflow: "M4 3h6v6H4V3ZM14 15h6v6h-6v-6ZM7 9v9h7M10 6h7v9"
@@ -2503,9 +2582,9 @@ function apply(ctx) {
     const lastRun = runs[0];
     const canRun = Boolean(workflow) && !dirty && enabled && !busy;
     const agent = profiles.find((profile) => profile.id === agentId);
-    const failedRun = view !== "runs" && lastRun?.status === "failed" && !dismissedRuns.has(lastRun.id) ? lastRun : undefined;
-    const bannerStep = failedRun && failedStep(failedRun);
-    const failedHelp = failedRun?.error ? errorHelp(failedRun.error, agent, bannerStep) : undefined;
+    const lastFailed = lastRun?.status === "failed" && !dismissedRuns.has(lastRun.id) ? lastRun : undefined;
+    const bannerStep = lastFailed && failedStep(lastFailed);
+    const failedHelp = lastFailed?.error ? errorHelp(lastFailed.error, agent, bannerStep) : undefined;
     const stoppedAt = bannerStep ? titleCase(bannerStep.stepId) : "";
     const runBlocked = workflow ? dirty ? "Save your changes to run again." : enabled ? "" : "Turn the workflow on to run again." : "Save the workflow to run it.";
     const editStep = (stepId) => {
@@ -2560,17 +2639,22 @@ function apply(ctx) {
     const allSteps = [
       ...steps.map((step) => ({
         app: stepApp(step.kind, step.fields),
+        icon: stepIcon(step.kind, step.fields),
         id: step.id,
         key: step.key,
         kind: step.kind
       })),
       {
         app: agent?.name ?? "Bot",
+        icon: "bot",
         id: summaryStep?.id ?? "summary",
         key: "summary",
         kind: "summarize"
       }
     ];
+    const failureInCard = view === "workflow" && Boolean(bannerStep && allSteps.some((entry) => entry.id === bannerStep.stepId));
+    const failedRun = view !== "runs" && !failureInCard ? lastFailed : undefined;
+    const lastStopped = lastRun?.status === "failed";
     return /* @__PURE__ */ React.createElement("section", {
       className: "workflow-editor"
     }, /* @__PURE__ */ React.createElement("form", {
@@ -2728,7 +2812,7 @@ function apply(ctx) {
       onRun: () => runWorkflow(),
       writers: tableWriters
     })), /* @__PURE__ */ React.createElement("div", {
-      className: "workflow-scroll",
+      className: "workflow-scroll workflow-canvas",
       hidden: view !== "workflow"
     }, /* @__PURE__ */ React.createElement("div", {
       className: "workflow-content"
@@ -2743,36 +2827,45 @@ function apply(ctx) {
       className: "workflow-steps"
     }, allSteps.map((step, index) => {
       const timing = lastTimeline.get(step.id);
+      const next = allSteps[index + 1];
+      const notReached = lastStopped && !timing;
+      const failedHere = failureInCard && bannerStep?.stepId === step.id;
+      const status = timing ? `${stepStatusLabels.get(timing.status) ?? timing.status}${timing.duration === null ? "" : ` · ${formatDuration(timing.duration)}`}` : "";
       return /* @__PURE__ */ React.createElement("li", {
         key: step.key
       }, /* @__PURE__ */ React.createElement("div", {
         className: "workflow-step-card",
+        "data-failed": failedHere,
+        "data-not-reached": notReached,
         "data-selected": selection === step.key
+      }, /* @__PURE__ */ React.createElement("div", {
+        className: "workflow-step-row"
       }, /* @__PURE__ */ React.createElement(Button, {
         className: "workflow-step-open",
         onClick: () => setSelection(step.key),
         type: "button",
         variant: "ghost"
-      }, /* @__PURE__ */ React.createElement(AppBadge, {
-        app: step.app
-      }), /* @__PURE__ */ React.createElement("span", {
+      }, /* @__PURE__ */ React.createElement("span", {
+        className: "workflow-step-icon"
+      }, /* @__PURE__ */ React.createElement(Icon, {
+        kind: step.icon
+      })), /* @__PURE__ */ React.createElement("span", {
         className: "workflow-step-text"
       }, /* @__PURE__ */ React.createElement("span", {
-        className: "workflow-step-kind"
-      }, step.key === "summary" ? "Summary" : `Step ${index + 1}`, " ", "· ", step.app), /* @__PURE__ */ React.createElement("span", {
         className: "workflow-step-name"
-      }, title(step.id) || "Untitled step")), timing && /* @__PURE__ */ React.createElement("span", {
-        className: "workflow-step-last",
-        "data-status": timing.status
-      }, /* @__PURE__ */ React.createElement("span", null, timing.status === "completed" && "✓ ", stepStatusLabels.get(timing.status) ?? timing.status, timing.duration !== null && ` · ${formatDuration(timing.duration)}`), /* @__PURE__ */ React.createElement("span", {
-        "aria-hidden": "true",
-        className: "workflow-bar"
-      }, /* @__PURE__ */ React.createElement("span", {
-        style: {
-          left: `${timing.left}%`,
-          width: `${timing.width}%`
-        }
-      })))), /* @__PURE__ */ React.createElement(DropdownMenu, null, /* @__PURE__ */ React.createElement(DropdownMenuTrigger, {
+      }, title(step.id) || "Untitled step"), /* @__PURE__ */ React.createElement("span", {
+        className: "workflow-step-kind"
+      }, step.app, notReached && " · not reached")), timing && /* @__PURE__ */ React.createElement("span", {
+        "aria-label": status,
+        className: "workflow-step-mark",
+        "data-status": timing.status,
+        role: "img",
+        title: status
+      }, timing.status === "completed" && /* @__PURE__ */ React.createElement(Icon, {
+        kind: "check"
+      }), timing.status === "failed" && /* @__PURE__ */ React.createElement(Icon, {
+        kind: "close"
+      }))), /* @__PURE__ */ React.createElement(DropdownMenu, null, /* @__PURE__ */ React.createElement(DropdownMenuTrigger, {
         disabled: busy,
         render: /* @__PURE__ */ React.createElement(Button, {
           "aria-label": `Options for ${title(step.id)}`,
@@ -2795,23 +2888,37 @@ function apply(ctx) {
       }, "Move later"), /* @__PURE__ */ React.createElement(DropdownMenuItem, {
         onClick: () => setSteps((current) => current.filter((entry) => entry.key !== step.key)),
         variant: "destructive"
-      }, "Delete step"))))), index < steps.length && /* @__PURE__ */ React.createElement("svg", {
+      }, "Delete step"))))), failedHere && lastFailed && /* @__PURE__ */ React.createElement("div", {
+        className: "workflow-step-failure"
+      }, /* @__PURE__ */ React.createElement("p", null, failedHelp?.text ?? "Stopped"), /* @__PURE__ */ React.createElement("div", {
+        className: "workflow-run-buttons"
+      }, failedHelp?.fix ? /* @__PURE__ */ React.createElement(Button, {
+        render: /* @__PURE__ */ React.createElement("a", {
+          href: failedHelp.fix.href
+        }),
+        size: "sm"
+      }, failedHelp.fix.label) : /* @__PURE__ */ React.createElement(Button, {
+        onClick: () => setSelection(step.key),
+        size: "sm",
+        type: "button"
+      }, "Edit step"), /* @__PURE__ */ React.createElement(Button, {
+        disabled: !canRun,
+        onClick: () => runWorkflow(lastFailed.input),
+        size: "sm",
+        title: runBlocked || undefined,
+        type: "button",
+        variant: "outline"
+      }, /* @__PURE__ */ React.createElement(Icon, {
+        kind: "retry"
+      }), "Run again")))), next && /* @__PURE__ */ React.createElement("span", {
         "aria-hidden": "true",
         className: "workflow-connector",
-        fill: "none",
-        height: "32",
-        stroke: "currentColor",
-        strokeLinecap: "round",
-        strokeLinejoin: "round",
-        strokeWidth: 1.5,
-        viewBox: "0 0 16 32",
-        width: "16"
-      }, /* @__PURE__ */ React.createElement("path", {
-        d: "M8 4v22M3 21l5 5 5-5"
-      })));
+        "data-passed": timing?.status === "completed" && lastTimeline.has(next.id)
+      }, /* @__PURE__ */ React.createElement("span", null), /* @__PURE__ */ React.createElement("span", null), /* @__PURE__ */ React.createElement("span", null)));
     })), /* @__PURE__ */ React.createElement("div", {
       className: "workflow-add-actions"
     }, /* @__PURE__ */ React.createElement(Button, {
+      className: "workflow-add-step",
       onClick: () => setSelection("pick"),
       type: "button",
       variant: "outline"

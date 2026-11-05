@@ -198,6 +198,24 @@ function toolParts(name: string) {
   };
 }
 
+/** Line icon for a step card, by what the step does. */
+type StepIcon = "bot" | "compare" | "database" | "pencil" | "plug" | "shield";
+
+const kindIcons = new Map<string, StepIcon>([
+  ["assert", "shield"],
+  ["compare", "compare"],
+  ["summarize", "bot"],
+  ["template", "pencil"],
+]);
+
+function stepIcon(kind: string, fields: Record<string, string>): StepIcon {
+  if (kind === "tool") {
+    return fields.tool === "sqlite" ? "database" : "plug";
+  }
+
+  return kindIcons.get(kind) ?? "plug";
+}
+
 function stepApp(kind: string, fields: Record<string, string>) {
   if (kind !== "tool") {
     return kindLabels.get(kind) ?? titleCase(kind);
@@ -996,6 +1014,12 @@ export function apply(ctx: Context) {
   }: {
     kind:
       | "add"
+      | "bot"
+      | "compare"
+      | "database"
+      | "pencil"
+      | "plug"
+      | "shield"
       | "check"
       | "chevronDown"
       | "chevronRight"
@@ -1017,21 +1041,28 @@ export function apply(ctx: Context) {
   }) {
     const paths = {
       add: "M12 5v14M5 12h14",
+      bot: "M8 8h8a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3v-5a3 3 0 0 1 3-3ZM12 4v4M9.5 13.5h.01M14.5 13.5h.01",
       check: "m5 12 5 5 9-10",
       chevronDown: "m6 9 6 6 6-6",
       chevronRight: "m9 6 6 6-6 6",
       chevronUp: "m6 15 6-6 6 6",
       close: "m6 6 12 12M6 18 18 6",
       collapse: "M20 10h-6V4M14 10l7-7M4 14h6v6M10 14l-7 7",
+      compare: "M12 4v16M8 20h8M5 8h14M7 8l-3 6h6L7 8ZM17 8l-3 6h6l-3-6Z",
+      database:
+        "M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3ZM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3",
       delete: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7",
       download: "M12 4v11M7 10l5 5 5-5M5 20h14",
       expand: "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
       json: "M8 4c-2 0-2 2-2 4s-2 4-2 4 2 2 2 4 0 4 2 4M16 4c2 0 2 2 2 4s2 4 2 4-2 2-2 4 0 4-2 4",
       more: "M5 12h.01M12 12h.01M19 12h.01",
+      pencil: "M4 20h4L19 9l-4-4L4 16v4ZM13 7l4 4",
       play: "m8 5 11 7-11 7V5Z",
+      plug: "M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0V7ZM12 16v5",
       retry: "M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5",
       rows: "M3 4h18v16H3V4ZM3 9h18M3 14h18",
       schema: "M4 6h16M4 12h10M4 18h6",
+      shield: "M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6l-7-3ZM9 12l2 2 4-4",
       table: "M3 4h18v16H3V4ZM3 9h18M9 9v11",
       warning: "M12 3 2 21h20L12 3ZM12 9v5M12 17h.01",
       workflow: "M4 3h6v6H4V3ZM14 15h6v6h-6v-6ZM7 9v9h7M10 6h7v9",
@@ -1768,18 +1799,15 @@ export function apply(ctx: Context) {
     const canRun = Boolean(workflow) && !dirty && enabled && !busy;
     const agent = profiles.find((profile) => profile.id === agentId);
 
-    // History opens the newest failed run itself, so the banner skips it.
-    const failedRun =
-      view !== "runs" &&
-      lastRun?.status === "failed" &&
-      !dismissedRuns.has(lastRun.id)
+    const lastFailed =
+      lastRun?.status === "failed" && !dismissedRuns.has(lastRun.id)
         ? lastRun
         : undefined;
 
-    const bannerStep = failedRun && failedStep(failedRun);
+    const bannerStep = lastFailed && failedStep(lastFailed);
 
-    const failedHelp = failedRun?.error
-      ? errorHelp(failedRun.error, agent, bannerStep)
+    const failedHelp = lastFailed?.error
+      ? errorHelp(lastFailed.error, agent, bannerStep)
       : undefined;
 
     const stoppedAt = bannerStep ? titleCase(bannerStep.stepId) : "";
@@ -1876,17 +1904,32 @@ export function apply(ctx: Context) {
     const allSteps = [
       ...steps.map((step) => ({
         app: stepApp(step.kind, step.fields),
+        icon: stepIcon(step.kind, step.fields),
         id: step.id,
         key: step.key,
         kind: step.kind,
       })),
       {
         app: agent?.name ?? "Bot",
+        icon: "bot" as const,
         id: summaryStep?.id ?? "summary",
         key: "summary",
         kind: "summarize",
       },
     ];
+
+    // Steps shows the failure inside the failed card, and History opens the
+    // run itself, so the banner is only for a step that is no longer here.
+    const failureInCard =
+      view === "workflow" &&
+      Boolean(
+        bannerStep && allSteps.some((entry) => entry.id === bannerStep.stepId)
+      );
+
+    const failedRun =
+      view !== "runs" && !failureInCard ? lastFailed : undefined;
+
+    const lastStopped = lastRun?.status === "failed";
 
     return (
       <section className="workflow-editor">
@@ -2095,7 +2138,10 @@ export function apply(ctx: Context) {
                 />
               </section>
             )}
-            <div className="workflow-scroll" hidden={view !== "workflow"}>
+            <div
+              className="workflow-scroll workflow-canvas"
+              hidden={view !== "workflow"}
+            >
               <div className="workflow-content">
                 <Textarea
                   aria-label="Workflow description"
@@ -2108,123 +2154,163 @@ export function apply(ctx: Context) {
                 <ol className="workflow-steps">
                   {allSteps.map((step, index) => {
                     const timing = lastTimeline.get(step.id);
+                    const next = allSteps[index + 1];
+                    const notReached = lastStopped && !timing;
+
+                    const failedHere =
+                      failureInCard && bannerStep?.stepId === step.id;
+
+                    const status = timing
+                      ? `${stepStatusLabels.get(timing.status) ?? timing.status}${
+                          timing.duration === null
+                            ? ""
+                            : ` · ${formatDuration(timing.duration)}`
+                        }`
+                      : "";
 
                     return (
                       <li key={step.key}>
                         <div
                           className="workflow-step-card"
+                          data-failed={failedHere}
+                          data-not-reached={notReached}
                           data-selected={selection === step.key}
                         >
-                          <Button
-                            className="workflow-step-open"
-                            onClick={() => setSelection(step.key)}
-                            type="button"
-                            variant="ghost"
-                          >
-                            <AppBadge app={step.app} />
-                            <span className="workflow-step-text">
-                              <span className="workflow-step-kind">
-                                {step.key === "summary"
-                                  ? "Summary"
-                                  : `Step ${index + 1}`}{" "}
-                                · {step.app}
-                              </span>
-                              <span className="workflow-step-name">
-                                {title(step.id) || "Untitled step"}
-                              </span>
-                            </span>
-                            {timing && (
-                              <span
-                                className="workflow-step-last"
-                                data-status={timing.status}
-                              >
-                                <span>
-                                  {timing.status === "completed" && "✓ "}
-                                  {stepStatusLabels.get(timing.status) ??
-                                    timing.status}
-                                  {timing.duration !== null &&
-                                    ` · ${formatDuration(timing.duration)}`}
-                                </span>
-                                <span
-                                  aria-hidden="true"
-                                  className="workflow-bar"
-                                >
-                                  <span
-                                    style={{
-                                      left: `${timing.left}%`,
-                                      width: `${timing.width}%`,
-                                    }}
-                                  />
-                                </span>
-                              </span>
-                            )}
-                          </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger
-                              disabled={busy}
-                              render={
-                                <Button
-                                  aria-label={`Options for ${title(step.id)}`}
-                                  size="icon-sm"
-                                  type="button"
-                                  variant="ghost"
-                                />
-                              }
+                          <div className="workflow-step-row">
+                            <Button
+                              className="workflow-step-open"
+                              onClick={() => setSelection(step.key)}
+                              type="button"
+                              variant="ghost"
                             >
-                              <Icon kind="more" />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() => setSelection(step.key)}
-                              >
-                                Configure
-                              </DropdownMenuItem>
-                              {step.key !== "summary" && (
-                                <>
-                                  <DropdownMenuItem
-                                    disabled={index === 0}
-                                    onClick={() => moveStep(step.key, -1)}
-                                  >
-                                    Move earlier
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    disabled={index === steps.length - 1}
-                                    onClick={() => moveStep(step.key, 1)}
-                                  >
-                                    Move later
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() =>
-                                      setSteps((current) =>
-                                        current.filter(
-                                          (entry) => entry.key !== step.key
-                                        )
-                                      )
-                                    }
-                                    variant="destructive"
-                                  >
-                                    Delete step
-                                  </DropdownMenuItem>
-                                </>
+                              <span className="workflow-step-icon">
+                                <Icon kind={step.icon} />
+                              </span>
+                              <span className="workflow-step-text">
+                                <span className="workflow-step-name">
+                                  {title(step.id) || "Untitled step"}
+                                </span>
+                                <span className="workflow-step-kind">
+                                  {step.app}
+                                  {notReached && " · not reached"}
+                                </span>
+                              </span>
+                              {timing && (
+                                <span
+                                  aria-label={status}
+                                  className="workflow-step-mark"
+                                  data-status={timing.status}
+                                  role="img"
+                                  title={status}
+                                >
+                                  {timing.status === "completed" && (
+                                    <Icon kind="check" />
+                                  )}
+                                  {timing.status === "failed" && (
+                                    <Icon kind="close" />
+                                  )}
+                                </span>
                               )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                disabled={busy}
+                                render={
+                                  <Button
+                                    aria-label={`Options for ${title(step.id)}`}
+                                    size="icon-sm"
+                                    type="button"
+                                    variant="ghost"
+                                  />
+                                }
+                              >
+                                <Icon kind="more" />
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => setSelection(step.key)}
+                                >
+                                  Configure
+                                </DropdownMenuItem>
+                                {step.key !== "summary" && (
+                                  <>
+                                    <DropdownMenuItem
+                                      disabled={index === 0}
+                                      onClick={() => moveStep(step.key, -1)}
+                                    >
+                                      Move earlier
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      disabled={index === steps.length - 1}
+                                      onClick={() => moveStep(step.key, 1)}
+                                    >
+                                      Move later
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() =>
+                                        setSteps((current) =>
+                                          current.filter(
+                                            (entry) => entry.key !== step.key
+                                          )
+                                        )
+                                      }
+                                      variant="destructive"
+                                    >
+                                      Delete step
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                          {failedHere && lastFailed && (
+                            <div className="workflow-step-failure">
+                              <p>{failedHelp?.text ?? "Stopped"}</p>
+                              <div className="workflow-run-buttons">
+                                {failedHelp?.fix ? (
+                                  <Button
+                                    render={<a href={failedHelp.fix.href} />}
+                                    size="sm"
+                                  >
+                                    {failedHelp.fix.label}
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    onClick={() => setSelection(step.key)}
+                                    size="sm"
+                                    type="button"
+                                  >
+                                    Edit step
+                                  </Button>
+                                )}
+                                <Button
+                                  disabled={!canRun}
+                                  onClick={() => runWorkflow(lastFailed.input)}
+                                  size="sm"
+                                  title={runBlocked || undefined}
+                                  type="button"
+                                  variant="outline"
+                                >
+                                  <Icon kind="retry" />
+                                  Run again
+                                </Button>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        {index < steps.length && (
-                          <svg
+                        {next && (
+                          <span
                             aria-hidden="true"
                             className="workflow-connector"
-                            fill="none"
-                            height="32"
-                            stroke="currentColor"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={1.5}
-                            viewBox="0 0 16 32"
-                            width="16"
+                            data-passed={
+                              timing?.status === "completed" &&
+                              lastTimeline.has(next.id)
+                            }
                           >
-                            <path d="M8 4v22M3 21l5 5 5-5" />
-                          </svg>
+                            <span />
+                            <span />
+                            <span />
+                          </span>
                         )}
                       </li>
                     );
@@ -2232,6 +2318,7 @@ export function apply(ctx: Context) {
                 </ol>
                 <div className="workflow-add-actions">
                   <Button
+                    className="workflow-add-step"
                     onClick={() => setSelection("pick")}
                     type="button"
                     variant="outline"
