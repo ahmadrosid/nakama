@@ -26,6 +26,7 @@ function createApp() {
       getProfile: async (_orgId: string, profileId: string) => ({
         profile: { id: profileId, isSuper: false },
       }),
+      getProfileAccess: async () => ({ isSuper: false, ownerUserId: null }),
     },
     databaseAdapter,
     workerManager: {

@@ -440,6 +440,11 @@ function createApp() {
           ),
         getProfile: (orgId: string, profileId: string) =>
           profileService.getProfile(orgId, profileId),
+        getProfileAccess: (orgId: string, profileId: string) =>
+          new AgentService(null, null, databaseAdapter).getProfileAccess(
+            orgId,
+            profileId
+          ),
         importKnowledgeBaseZip: (
           orgId: string,
           profileId: string,

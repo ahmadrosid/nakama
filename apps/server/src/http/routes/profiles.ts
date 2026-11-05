@@ -2150,10 +2150,18 @@ export function registerProfileRoutes(
 
     if (!auth.isPlatformAdmin) {
       // Owners edit their own agent, except settings that run code on the host.
-      const isOwner = await requireProfileManage(c).then(
-        () => true,
-        () => false
-      );
+      // Only a 403 means "not the owner". A failed lookup stays an error.
+      let isOwner = true;
+
+      try {
+        await requireProfileManage(c);
+      } catch (error) {
+        if (!(error instanceof NakamaApiError && error.status === 403)) {
+          throw error;
+        }
+
+        isOwner = false;
+      }
 
       if (isOwner) {
         // Host-run agents are an admin control.

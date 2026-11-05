@@ -311,6 +311,10 @@ function createApp(systemStatus?: SystemStatusStub) {
       getProfile: async (_orgId: string, profileId: string) => ({
         profile: { id: "default", isSuper: profileId === "super_nakama" },
       }),
+      getProfileAccess: async (_orgId: string, profileId: string) => ({
+        isSuper: profileId === "super_nakama",
+        ownerUserId: null,
+      }),
       listProfiles: async () => ({ profiles: [{ id: "default" }] }),
       listProviders: async () => ({
         defaultProviderId: "provider_1",
@@ -984,6 +988,20 @@ describe("profile detail and history reads follow the chat list visibility", () 
     const response = await callRoute(app, member, {
       method: "GET",
       path: "/v1/profiles/shared_agent",
+    });
+
+    expect(response.status).toBe(500);
+  });
+
+  test("a failed profile lookup on an owner route is not reported as Forbidden", async () => {
+    const { app, agent, member } = await seedProfilesFixture();
+
+    agent.getProfileAccess = () => Promise.reject(new Error("database down"));
+
+    const response = await callRoute(app, member, {
+      body: { name: "Renamed" },
+      method: "PUT",
+      path: "/v1/profiles/member_agent",
     });
 
     expect(response.status).toBe(500);

@@ -187,6 +187,14 @@ export function useProfilesPage() {
   const { data: composioToolkitsData } = useComposioToolkits();
   const [selectedId, setSelectedIdState] = useState<string | null>(null);
   const profileInitializedRef = useRef(false);
+
+  // A deep link to an agent the list hides stays selected, so the detail
+  // request answers 403 and the page shows why. Only for the list it came with.
+  const hiddenDeepLinkRef = useRef<{
+    profileId: string;
+    profiles: unknown;
+  } | null>(null);
+
   const selectedIdRef = useRef(selectedId);
 
   useEffect(() => {
@@ -655,6 +663,16 @@ export function useProfilesPage() {
     if (!profileInitializedRef.current) {
       profileInitializedRef.current = true;
 
+      if (
+        urlProfileId &&
+        !profiles.some((profile) => profile.id === urlProfileId)
+      ) {
+        hiddenDeepLinkRef.current = { profileId: urlProfileId, profiles };
+        setSelectedId(urlProfileId);
+
+        return;
+      }
+
       const initialProfileId = resolveProfilesPageProfileId({
         liveChatProfileId,
         profiles,
@@ -679,6 +697,16 @@ export function useProfilesPage() {
     }
 
     const current = selectedIdRef.current;
+    const hiddenDeepLink = hiddenDeepLinkRef.current;
+
+    if (
+      hiddenDeepLink?.profileId === current &&
+      hiddenDeepLink.profiles === profiles
+    ) {
+      return;
+    }
+
+    hiddenDeepLinkRef.current = null;
 
     if (current && !profiles.some((profile) => profile.id === current)) {
       setSelectedId(profiles[0]!.id);

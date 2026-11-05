@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { AgentService } from "../../services/agent-service";
 import { ProfileService } from "../../services/profile-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
@@ -15,26 +16,15 @@ const BASE = "http://localhost:4310";
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const profileService = new ProfileService(databaseAdapter);
+  const agentService = new AgentService(null, null, databaseAdapter);
 
   return {
     ...createMinimalHonoApp({
       agent: {
         getProfile: (orgId: string, profileId: string) =>
           profileService.getProfile(orgId, profileId),
-        getProfileAccess: async (orgId: string, profileId: string) => {
-          const profile = await databaseAdapter.getProfileForOrg(
-            profileId,
-            orgId
-          );
-
-          return profile
-            ? {
-                isSuper: profile.isSuper,
-                ownerUserId: profile.ownerUserId ?? null,
-                sharedWithTeam: profile.sharedWithTeam !== false,
-              }
-            : null;
-        },
+        getProfileAccess: (orgId: string, profileId: string) =>
+          agentService.getProfileAccess(orgId, profileId),
         listProfileChangeHistory: (
           orgId: string,
           profileId: string,
