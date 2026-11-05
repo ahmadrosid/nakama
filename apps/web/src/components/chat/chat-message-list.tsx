@@ -914,6 +914,7 @@ function describeComposioApp(
   // A member on a shared agent cannot read it (403); they cannot manage it.
   const agentForbidden =
     agent.error instanceof NakamaApiError && agent.error.status === 403;
+
   const ready = Boolean(toolkits && (agent.loaded || agentForbidden));
 
   let notice: string | null = ready ? blockedReason : null;
