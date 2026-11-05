@@ -155,7 +155,10 @@ export function TranscriptionSettingsCard({
           aria-label="Audio transcription model"
           className="h-9 w-full"
         >
-          <SelectValue placeholder="Select transcription model">
+          <SelectValue
+            className="truncate"
+            placeholder="Select transcription model"
+          >
             {selection
               ? profileModelLabel(selection, transcriptionModelGroups, {
                   withProvider: true,

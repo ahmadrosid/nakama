@@ -35,7 +35,10 @@ async function fetchOllamaTagsModels(
   let response: Response;
 
   try {
-    response = await fetch(tagsUrl, { headers });
+    response = await fetch(tagsUrl, {
+      headers,
+      signal: AbortSignal.timeout(10_000),
+    });
   } catch {
     throw new NakamaApiError(
       `Cannot reach Ollama at ${new URL(tagsUrl).host}. Start Ollama, then refresh.`,

@@ -1,6 +1,7 @@
 import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
+import { ArrowRight01Icon } from "hugeicons-react";
 import {
   useDeferredValue,
   useLayoutEffect,
@@ -112,10 +113,12 @@ export function ModelsBrowseList({
           placeholder="Search provider or model..."
           value={search}
         />
-        <ModelCostFilterSelect
-          onValueChange={setCostFilter}
-          value={costFilter}
-        />
+        {initialCostFilter === "free" ? null : (
+          <ModelCostFilterSelect
+            onValueChange={setCostFilter}
+            value={costFilter}
+          />
+        )}
         <label className="flex h-8 cursor-pointer items-center gap-2 text-foreground text-sm">
           <input
             checked={hideDeprecated}
@@ -129,7 +132,7 @@ export function ModelsBrowseList({
 
       <div className="border-border border-b px-3 py-1.5 text-muted-foreground text-xs">
         {costFilter === "free"
-          ? `${filtered.length} free models`
+          ? `${filtered.length} models`
           : `${filtered.length} models · ${freeCount} free`}
       </div>
 
@@ -365,6 +368,12 @@ function ModelRowButton({
         </div>
       </div>
       <ModelRowBadges row={row} />
+      {selectable ? (
+        <ArrowRight01Icon
+          aria-hidden
+          className="mt-3 size-4 shrink-0 text-muted-foreground"
+        />
+      ) : null}
     </button>
   );
 }

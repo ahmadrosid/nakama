@@ -226,6 +226,7 @@ export function CatalogProviderModelFields({
         <ModelListEditor
           browseLabel="Browse models"
           disabled={disabled}
+          lockSavedIds
           models={customModels}
           onBrowse={() => setIsBrowsing(true)}
           onChange={onCustomModelsChange}

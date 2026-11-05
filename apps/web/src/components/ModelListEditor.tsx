@@ -13,6 +13,8 @@ interface ModelListEditorProps {
   browseDisabled?: boolean;
   browseLabel?: string;
   disabled?: boolean;
+  /** Saved IDs from a provider catalog are fixed; only new rows take an ID. */
+  lockSavedIds?: boolean;
   models: ModelListRow[];
   onBrowse?: () => void;
   onChange: (models: ModelListRow[]) => void;
@@ -46,9 +48,15 @@ export function ModelListEditor({
   onBrowse,
   browseDisabled = false,
   browseLabel = "Browse models.dev",
+  lockSavedIds = false,
   onChange,
 }: ModelListEditorProps) {
   const rowKeysRef = useRef<string[]>([]);
+
+  // IDs saved before this edit; a row typed now stays editable.
+  const [savedIds] = useState<ReadonlySet<string>>(
+    () => new Set(models.map((model) => model.id.trim()))
+  );
 
   const [openDetails, setOpenDetails] = useState<ReadonlySet<string>>(
     () => new Set()
@@ -99,34 +107,48 @@ export function ModelListEditor({
             const detailsOpen = openDetails.has(rowKey);
             const detailsId = `model-details-${rowKey}`;
 
+            const idLocked = lockSavedIds && id !== "" && savedIds.has(id);
+
             return (
               <li className="space-y-2 p-2" key={rowKey}>
                 <div className="flex flex-wrap items-center gap-2">
-                  <InputGroup className="min-w-0 basis-full">
-                    <InputGroupInput
-                      aria-invalid={duplicate}
-                      aria-label={`Model ID ${index + 1}`}
-                      className="font-mono text-xs"
-                      disabled={disabled}
-                      onChange={(event) =>
-                        updateRow(index, { id: event.target.value })
-                      }
-                      placeholder="Model ID"
-                      title={row.id}
-                      value={row.id}
-                    />
-                  </InputGroup>
-                  <InputGroup className="min-w-0 flex-[1_1_12rem]">
-                    <InputGroupInput
-                      aria-label={`Display name for ${label}`}
-                      disabled={disabled}
-                      onChange={(event) =>
-                        updateRow(index, { name: event.target.value })
-                      }
-                      placeholder="Display name"
-                      value={row.name ?? ""}
-                    />
-                  </InputGroup>
+                  {idLocked ? null : (
+                    <InputGroup className="min-w-0 basis-full">
+                      <InputGroupInput
+                        aria-invalid={duplicate}
+                        aria-label={`Model ID ${index + 1}`}
+                        className="font-mono text-xs"
+                        disabled={disabled}
+                        onChange={(event) =>
+                          updateRow(index, { id: event.target.value })
+                        }
+                        placeholder="Model ID"
+                        title={row.id}
+                        value={row.id}
+                      />
+                    </InputGroup>
+                  )}
+                  <div className="min-w-0 flex-[1_1_12rem] space-y-0.5">
+                    <InputGroup>
+                      <InputGroupInput
+                        aria-label={`Display name for ${label}`}
+                        disabled={disabled}
+                        onChange={(event) =>
+                          updateRow(index, { name: event.target.value })
+                        }
+                        placeholder="Display name"
+                        value={row.name ?? ""}
+                      />
+                    </InputGroup>
+                    {idLocked ? (
+                      <p
+                        className="truncate px-1 font-mono text-2xs text-muted-foreground"
+                        title={row.id}
+                      >
+                        {row.id}
+                      </p>
+                    ) : null}
+                  </div>
                   <div className="flex items-center gap-3">
                     {showThinking ? (
                       <span className="flex items-center gap-1.5 text-xs">

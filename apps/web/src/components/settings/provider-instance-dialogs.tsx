@@ -155,7 +155,13 @@ export function ProviderReplaceKeyDialog({
           <ClearKeyConfirm
             busy={busy}
             label={instance.label}
-            onBack={() => setConfirmingClear(false)}
+            onBack={() => {
+              setConfirmingClear(false);
+              // Back on the form, where the user left off.
+              requestAnimationFrame(() =>
+                document.getElementById("replace-api-key")?.focus()
+              );
+            }}
             onConfirm={() => onManage?.("clear")}
           />
         ) : (
@@ -218,9 +224,7 @@ function ReplaceKeyForm({
         </DialogTitle>
       </DialogHeader>
       <label className="font-medium text-sm" htmlFor="replace-api-key">
-        {instance.hasApiKey
-          ? "New API key (replaces the saved key)"
-          : "API key"}
+        {instance.hasApiKey ? "New API key" : "API key"}
       </label>
       <InputGroup>
         <InputGroupInput
@@ -413,7 +417,7 @@ function ProviderModelsDialogShell({
             {dialogError}
           </p>
         ) : null}
-        <DialogFooter className="sticky bottom-0 z-10 bg-muted">
+        <DialogFooter className="sticky -bottom-4 z-10 bg-muted">
           <Button
             disabled={busy}
             onClick={() => onOpenChange(false)}

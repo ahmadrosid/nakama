@@ -561,7 +561,7 @@ function ProviderSetupActions({
   }
 
   return (
-    <DialogFooter className="sticky bottom-0 z-10 bg-muted">
+    <DialogFooter className="sticky -bottom-4 z-10 bg-muted">
       <Button
         disabled={busy}
         onClick={onCancel}
