@@ -171,4 +171,18 @@ describe("ensureProviderConfigured", () => {
       "netra-test-key"
     );
   });
+
+  test("starts Netra with a model set by hand in NETRA_MODEL", async () => {
+    snapshotEnv();
+    configDir = await mkdtemp(join(tmpdir(), "nakama-setup-netra-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+    process.env.NETRA_API_KEY = "netra-test-key";
+    process.env.NETRA_MODEL = "qwen/qwen3-coder";
+
+    const { provider } = await ensureProviderConfigured();
+    expect(provider?.name).toBe("netra");
+    expect((await loadUserConfig())?.providers[0]?.customModels).toEqual([
+      { default: true, id: "qwen/qwen3-coder" },
+    ]);
+  });
 });
