@@ -367,6 +367,7 @@ import {
   imageGenerationUnavailableMessage,
   resolveImageGenerationSelection,
 } from "./image-generation";
+import { chatgptImageInput } from "./image-generation-chatgpt";
 import {
   describeImagesWithVisionModel,
   resolvePrimaryModelVisionSupport,
@@ -1130,21 +1131,11 @@ export class AgentService {
     const result = await generateImageWithOpenAI({
       apiKey: selection.apiKey,
       baseUrl: selection.baseUrl,
-      ...(selection.chatgptOAuth && {
-        chatgpt: {
-          getOAuth: () => {
-            const latest = findProviderInstance(
-              this.userConfig,
-              selection.instance.id
-            );
-
-            return latest ? readChatgptOAuthFromInstance(latest) : null;
-          },
-          oauth: selection.chatgptOAuth,
-          onTokenRefresh: (oauth) =>
-            this.persistChatgptOAuth(selection.instance.id, oauth),
-        },
-      }),
+      ...chatgptImageInput(
+        selection,
+        () => this.userConfig,
+        (instanceId, oauth) => this.persistChatgptOAuth(instanceId, oauth)
+      ),
       model: selection.model,
       prompt,
       size: input.size,

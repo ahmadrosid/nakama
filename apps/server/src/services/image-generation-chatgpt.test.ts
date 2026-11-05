@@ -303,7 +303,7 @@ describe("generateImageWithOpenAI on a ChatGPT subscription", () => {
   test("reports an upstream 403 as a client error", async () => {
     const originalFetch = globalThis.fetch;
     // SAFETY: The test fixture matches the contract used by this test.
-    globalThis.fetch = (async () =>
+    globalThis.fetch = (async (_input: RequestInfo | URL) =>
       new Response("<!doctype html><html></html>", {
         status: 403,
       })) as typeof fetch;

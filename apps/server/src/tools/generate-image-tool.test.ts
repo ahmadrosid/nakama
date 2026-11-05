@@ -56,6 +56,7 @@ function generateImageTool(
     db,
     ensureSettingsLoaded: async () => {},
     getUserConfig: () => null,
+    onChatgptTokenRefresh: async () => undefined,
   });
 }
 
@@ -193,6 +194,7 @@ describe("generate_image tool persistence (U4)", () => {
         },
         getUserConfig: () =>
           openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
+        onChatgptTokenRefresh: async () => undefined,
       }
     );
 
@@ -233,6 +235,7 @@ describe("generate_image tool persistence (U4)", () => {
             },
           ],
         }),
+        onChatgptTokenRefresh: async () => undefined,
       }
     );
 
@@ -258,6 +261,7 @@ describe("generate_image tool persistence (U4)", () => {
         }),
         getUserConfig: () =>
           openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
+        onChatgptTokenRefresh: async () => undefined,
         recordUsage: (_model, _input, _output, providerInstance) => {
           pricedOn = providerInstance.id;
         },
@@ -302,6 +306,7 @@ describe("generate_image tool persistence (U4)", () => {
         }),
         getUserConfig: () =>
           openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
+        onChatgptTokenRefresh: async () => undefined,
         recordUsage: (model, input, output, _instance, attribution) => {
           usage.push({ input, model, output, ...attribution });
         },
@@ -372,6 +377,7 @@ describe("generate_image tool persistence (U4)", () => {
         }),
         getUserConfig: () =>
           openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
+        onChatgptTokenRefresh: async () => undefined,
       }
     );
 
@@ -416,6 +422,7 @@ describe("generate_image tool persistence (U4)", () => {
         }),
         getUserConfig: () =>
           openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
+        onChatgptTokenRefresh: async () => undefined,
       }
     );
 
@@ -456,6 +463,7 @@ describe("generate_image tool persistence (U4)", () => {
           throw new Error("should not call OpenAI");
         },
         getUserConfig: () => openaiConfig({ imageModel: null }),
+        onChatgptTokenRefresh: async () => undefined,
       }
     );
 
@@ -480,6 +488,7 @@ describe("generate_image tool persistence (U4)", () => {
           throw new Error("should not generate");
         },
         getUserConfig: () => openaiConfig({ imageModel: "off" }),
+        onChatgptTokenRefresh: async () => undefined,
       }
     );
 
@@ -515,6 +524,7 @@ describe("generate_image tool persistence (U4)", () => {
         },
         getUserConfig: () =>
           openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
+        onChatgptTokenRefresh: async () => undefined,
       }
     );
 

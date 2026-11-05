@@ -2,14 +2,12 @@ import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   type ChatgptOAuthCredentials,
-  findProviderInstance,
   getProfileSoulDir,
   inferArtifactMimeType,
   MAX_IMAGE_BYTES,
   NakamaApiError,
   type ProviderInstance,
   pathExists,
-  readChatgptOAuthFromInstance,
   type ToolContext,
   type ToolDefinition,
   type UserConfig,
@@ -24,6 +22,7 @@ import {
   normalizeImageGenerationSize,
   resolveImageGenerationSelection,
 } from "../services/image-generation";
+import { chatgptImageInput } from "../services/image-generation-chatgpt";
 
 export const GENERATE_IMAGE_TOOL_NAME = "generate_image";
 
@@ -87,7 +86,8 @@ export interface GenerateImageToolDeps {
   /** Test seam — defaults to live OpenAI Images call. */
   generateImage?: typeof generateImageWithOpenAI;
   getUserConfig: () => UserConfig | null | undefined;
-  onChatgptTokenRefresh?: (
+  /** Saves rotated ChatGPT tokens; a refresh token works only once. */
+  onChatgptTokenRefresh: (
     instanceId: string,
     oauth: ChatgptOAuthCredentials
   ) => Promise<void>;
@@ -199,29 +199,17 @@ export async function runGenerateImageTool(
   }
 
   const generate = deps.generateImage ?? generateImageWithOpenAI;
-  const instanceId = selection.instance.id;
   let result;
 
   try {
     result = await generate({
       apiKey: selection.apiKey,
       baseUrl: selection.baseUrl,
-      ...(selection.chatgptOAuth && {
-        chatgpt: {
-          getOAuth: () => {
-            const latest = findProviderInstance(
-              deps.getUserConfig(),
-              instanceId
-            );
-
-            return latest ? readChatgptOAuthFromInstance(latest) : null;
-          },
-          oauth: selection.chatgptOAuth,
-          onTokenRefresh: async (oauth: ChatgptOAuthCredentials) => {
-            await deps.onChatgptTokenRefresh?.(instanceId, oauth);
-          },
-        },
-      }),
+      ...chatgptImageInput(
+        selection,
+        deps.getUserConfig,
+        deps.onChatgptTokenRefresh
+      ),
       model: selection.model,
       prompt,
       signal: context.signal,

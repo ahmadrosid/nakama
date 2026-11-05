@@ -10,7 +10,13 @@
  * If the cassette is missing and no API key is available, the test is skipped.
  */
 import { expect, test } from "bun:test";
-import { loadUserConfig, readChatgptOAuthFromInstance } from "@nakama/core";
+import {
+  applyChatgptOAuthToInstance,
+  type ChatgptOAuthCredentials,
+  loadUserConfig,
+  readChatgptOAuthFromInstance,
+  saveUserConfig,
+} from "@nakama/core";
 import { z } from "zod";
 import { readApiKeyForInstance } from "../providers/create";
 import {
@@ -128,12 +134,27 @@ test("generates a png through the ChatGPT image tool under cassette replay", asy
     return;
   }
 
+  // Recording uses the real sign-in. A refresh token works once, so a
+  // rotated one must be saved or the local ChatGPT provider stops working.
+  const saveRecordedOAuth = async (next: ChatgptOAuthCredentials) => {
+    if (config && instance) {
+      await saveUserConfig({
+        ...config,
+        providers: config.providers.map((provider) =>
+          provider.id === instance.id
+            ? applyChatgptOAuthToInstance(provider, next)
+            : provider
+        ),
+      });
+    }
+  };
+
   const result = await withMswCassette(
     chatgptCassetteName,
     () =>
       generateImageWithOpenAI({
         apiKey: oauth.accessToken,
-        chatgpt: { oauth },
+        chatgpt: { oauth, onTokenRefresh: saveRecordedOAuth },
         model: "gpt-6-sol",
         prompt: "A tiny red circle on white background, minimal",
         size: "1024x1024",

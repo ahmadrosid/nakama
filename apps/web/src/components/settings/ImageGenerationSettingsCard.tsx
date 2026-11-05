@@ -47,14 +47,22 @@ export function ImageGenerationSettingsCard() {
     [providerModelGroups]
   );
 
-  // With nothing saved, the server makes images with a connected ChatGPT.
-  const chatgptAvailable = useMemo(
+  // The catalog lists ChatGPT models even when no ChatGPT is signed in, so
+  // only providers the server reports as connected count.
+  const connectedChatgptIds = useMemo(
     () =>
-      providerModelGroups.some((group) =>
-        group.models.some((model) => model.provider === "chatgpt")
+      new Set(
+        (modelsResponse?.providers ?? [])
+          .filter(
+            (provider) => provider.type === "chatgpt" && provider.hasApiKey
+          )
+          .map((provider) => provider.id)
       ),
-    [providerModelGroups]
+    [modelsResponse?.providers]
   );
+
+  // With nothing saved, the server makes images with a connected ChatGPT.
+  const chatgptAvailable = connectedChatgptIds.size > 0;
 
   const unsetLabel = chatgptAvailable ? "ChatGPT (default)" : "Not configured";
 
@@ -67,10 +75,11 @@ export function ImageGenerationSettingsCard() {
         group.models.some(
           (model) =>
             model.provider === "openai_compatible" ||
-            model.provider === "chatgpt"
+            (model.provider === "chatgpt" &&
+              connectedChatgptIds.has(group.providerId))
         )
       ),
-    [providerModelGroups]
+    [providerModelGroups, connectedChatgptIds]
   );
 
   const imageModelGroups = useMemo(

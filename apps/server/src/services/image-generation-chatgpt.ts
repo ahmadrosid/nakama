@@ -1,6 +1,7 @@
 import {
   type ChatgptOAuthCredentials,
   chatgptOAuthNeedsRefresh,
+  findProviderInstance,
   isChatgptProviderConnected,
   NakamaApiError,
   type ProviderInstance,
@@ -12,7 +13,7 @@ import {
   refreshChatgptOAuthToken,
 } from "../providers/chatgpt/oauth";
 import { getDefaultModel } from "../providers/models";
-import { buildProviderHttpError } from "../providers/shared";
+import { buildProviderHttpError, readSseEvents } from "../providers/shared";
 import {
   decodeImageBase64,
   type GenerateImageInput,
@@ -38,9 +39,16 @@ export function resolveChatgptImageGenerationSelection(
 
   const model = modelId.trim();
 
-  if (!(oauth && model)) {
+  if (!oauth) {
     throw new NakamaApiError(
       `ChatGPT provider "${instance.label}" is not connected. Reconnect in Settings → AI Providers (/settings/providers).`,
+      400
+    );
+  }
+
+  if (!model) {
+    throw new NakamaApiError(
+      "Configured image generation model is invalid. Update it in Settings → AI Providers (/settings/providers#image-generation).",
       400
     );
   }
@@ -63,8 +71,11 @@ export function resolveChatgptImageGenerationSelection(
 export function resolveDefaultChatgptImageGenerationSelection(
   userConfig: UserConfig | null | undefined
 ): ResolvedImageGenerationSelection | null {
+  // Only an instance whose tokens can be read can make the call.
   const connected = (userConfig?.providers ?? []).filter(
-    isChatgptProviderConnected
+    (provider) =>
+      isChatgptProviderConnected(provider) &&
+      readChatgptOAuthFromInstance(provider) !== null
   );
 
   const instance =
@@ -85,12 +96,46 @@ export function resolveDefaultChatgptImageGenerationSelection(
   );
 }
 
+/**
+ * The `chatgpt` input for a ChatGPT selection: it reads the saved tokens at
+ * call time, since another call may have rotated them, and saves new ones.
+ */
+export function chatgptImageInput(
+  selection: ResolvedImageGenerationSelection,
+  getUserConfig: () => UserConfig | null | undefined,
+  saveOAuth: (
+    instanceId: string,
+    oauth: ChatgptOAuthCredentials
+  ) => Promise<void>
+): Pick<GenerateImageInput, "chatgpt"> {
+  const oauth = selection.chatgptOAuth;
+
+  if (!oauth) {
+    return {};
+  }
+
+  const instanceId = selection.instance.id;
+
+  return {
+    chatgpt: {
+      getOAuth: () => {
+        const latest = findProviderInstance(getUserConfig(), instanceId);
+
+        return latest ? readChatgptOAuthFromInstance(latest) : null;
+      },
+      oauth,
+      onTokenRefresh: (next) => saveOAuth(instanceId, next),
+    },
+  };
+}
+
 const CHATGPT_IMAGE_INSTRUCTIONS =
   "Generate the image the user describes. Call the image_generation tool once.";
 
 /**
- * Peak memory: the whole SSE body (~2 MB of base64 for one image) is held
- * before decode, so a call peaks near 2x the image as text.
+ * Peak memory: the stream is read event by event, but the image event holds
+ * the whole base64 image (~2 MB). That text, its parsed copy and the decoded
+ * bytes are alive together, so a call peaks near 3x the image as text.
  */
 export async function generateImageWithChatgpt(
   input: GenerateImageInput,
@@ -207,9 +252,24 @@ export async function generateImageWithChatgpt(
     );
   }
 
-  const image = parseChatgptImageStream(
-    await response.text().catch(rethrowTimeout)
-  );
+  if (!response.body) {
+    throw new NakamaApiError("Image generation returned no image data.", 502);
+  }
+
+  const image: ChatgptImageStreamResult = {};
+
+  // Read to the end, then throw: a throw inside the callback would leave
+  // the stream open.
+  await readSseEvents(response.body, ({ data }) => {
+    readChatgptImageEvent(data, image);
+  }).catch(rethrowTimeout);
+
+  if (image.error !== undefined) {
+    throw new NakamaApiError(
+      `Image generation failed: ${image.error || "the provider returned an error."}`,
+      502
+    );
+  }
 
   if (!image.b64) {
     throw new NakamaApiError("Image generation returned no image data.", 502);
@@ -233,68 +293,63 @@ export async function generateImageWithChatgpt(
 
 interface ChatgptImageStreamResult {
   b64?: string;
+  /** Set by an error event; empty when the event had no message. */
+  error?: string;
   outputFormat?: string;
   revisedPrompt?: string;
   size?: string;
   usage?: { input_tokens?: number; output_tokens?: number };
 }
 
-function parseChatgptImageStream(text: string): ChatgptImageStreamResult {
-  const result: ChatgptImageStreamResult = {};
+/** Reads one SSE event into `result`, including a provider error event. */
+function readChatgptImageEvent(
+  data: string,
+  result: ChatgptImageStreamResult
+): void {
+  let event: Map<string, unknown> | undefined;
 
-  for (const line of text.split("\n")) {
-    if (!line.startsWith("data: ")) {
-      continue;
-    }
+  try {
+    event = readRecord(JSON.parse(data));
+  } catch {
+    return;
+  }
 
-    let event: Map<string, unknown> | undefined;
+  const type = readString(event?.get("type"));
 
-    try {
-      event = readRecord(JSON.parse(line.slice("data: ".length)));
-    } catch {
-      continue;
-    }
+  if (type === "error" || type === "response.failed") {
+    const response = readRecord(event?.get("response"));
+    const error = readRecord(event?.get("error") ?? response?.get("error"));
 
-    const type = readString(event?.get("type"));
+    result.error =
+      readString(error?.get("message")) ??
+      readString(event?.get("message")) ??
+      "";
 
-    if (type === "error" || type === "response.failed") {
-      const response = readRecord(event?.get("response"));
-      const error = readRecord(event?.get("error") ?? response?.get("error"));
+    return;
+  }
 
-      const message =
-        readString(error?.get("message")) ?? readString(event?.get("message"));
+  if (type === "response.output_item.done") {
+    const item = readRecord(event?.get("item"));
 
-      throw new NakamaApiError(
-        `Image generation failed: ${message ?? "the provider returned an error."}`,
-        502
-      );
-    }
-
-    if (type === "response.output_item.done") {
-      const item = readRecord(event?.get("item"));
-
-      if (readString(item?.get("type")) === "image_generation_call") {
-        result.b64 = readString(item?.get("result"))?.trim() || undefined;
-        result.outputFormat = readString(item?.get("output_format"));
-        result.revisedPrompt =
-          readString(item?.get("revised_prompt"))?.trim() || undefined;
-        result.size = readString(item?.get("size"));
-      }
-    }
-
-    if (type === "response.completed") {
-      const response = readRecord(event?.get("response"));
-      const toolUsage = readRecord(response?.get("tool_usage"));
-      const imageUsage = readRecord(toolUsage?.get("image_gen"));
-
-      if (imageUsage) {
-        result.usage = {
-          input_tokens: readNumber(imageUsage.get("input_tokens")),
-          output_tokens: readNumber(imageUsage.get("output_tokens")),
-        };
-      }
+    if (readString(item?.get("type")) === "image_generation_call") {
+      result.b64 = readString(item?.get("result"))?.trim() || undefined;
+      result.outputFormat = readString(item?.get("output_format"));
+      result.revisedPrompt =
+        readString(item?.get("revised_prompt"))?.trim() || undefined;
+      result.size = readString(item?.get("size"));
     }
   }
 
-  return result;
+  if (type === "response.completed") {
+    const response = readRecord(event?.get("response"));
+    const toolUsage = readRecord(response?.get("tool_usage"));
+    const imageUsage = readRecord(toolUsage?.get("image_gen"));
+
+    if (imageUsage) {
+      result.usage = {
+        input_tokens: readNumber(imageUsage.get("input_tokens")),
+        output_tokens: readNumber(imageUsage.get("output_tokens")),
+      };
+    }
+  }
 }

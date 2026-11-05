@@ -255,7 +255,7 @@ describe("refreshChatgptOAuthToken", () => {
   test("redeems a refresh token once when calls race", async () => {
     let refreshRequests = 0;
     // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
-    globalThis.fetch = (async () => {
+    globalThis.fetch = (async (_input: RequestInfo | URL) => {
       refreshRequests++;
 
       return Response.json({
