@@ -1566,6 +1566,7 @@ var checkFieldHints = new Map([
   ["expected", 'The value it must equal, like true, 3 or "done"']
 ]);
 var stepFields = {
+  agent: ["prompt", "fields"],
   assert: ["path", "expected", "onFail"],
   compare: ["left", "op", "right", "tolerance", "onFail"],
   template: ["template"],
@@ -1601,11 +1602,12 @@ function serializeSteps(steps) {
     kind,
     ...Object.fromEntries((stepFields[kind] ?? []).filter((key) => (key !== "tolerance" || fields[key]) && (key !== "onFail" || fields[key] === "skip")).map((key) => [
       key,
-      key === "input" ? JSON.parse(fields[key] || "{}") : ["left", "right", "expected", "tolerance"].includes(key) ? parseValue(fields[key] ?? "") : fields[key] ?? ""
+      key === "input" || key === "fields" ? JSON.parse(fields[key] || "{}") : ["left", "right", "expected", "tolerance"].includes(key) ? parseValue(fields[key] ?? "") : fields[key] ?? ""
     ]))
   }));
 }
 var kindLabels = new Map([
+  ["agent", "Let the bot decide"],
   ["assert", "Check a rule"],
   ["compare", "Compare"],
   ["summarize", "Ask the bot"],
@@ -1613,6 +1615,9 @@ var kindLabels = new Map([
   ["tool", "Use an app"]
 ]);
 var newStepFields = new Map([
+  ["agent", { fields: `{
+  "decision": "act | ignore"
+}`, prompt: "" }],
   ["assert", { expected: "", path: "" }],
   ["compare", { left: "", op: "eq", right: "" }],
   ["database", { input: '{"sql":"","params":[]}', tool: "sqlite" }],
@@ -1740,7 +1745,12 @@ var builtInActions = [
     label: "Write a message"
   },
   { hint: "Stop if a value is wrong", kind: "assert", label: "Check a rule" },
-  { hint: "Compare two values", kind: "compare", label: "Compare" }
+  { hint: "Compare two values", kind: "compare", label: "Compare" },
+  {
+    hint: "Get named answers for later steps",
+    kind: "agent",
+    label: "Let the bot decide"
+  }
 ];
 function formatDuration(ms) {
   if (ms < 1000) {
@@ -2264,7 +2274,7 @@ function apply(ctx) {
       const receipt = receipts.find((item) => item.stepId === step.id);
       const stepStatus = receipt?.status ?? "pending";
       const definition = workflow?.steps.find((item) => item.id === step.id);
-      const detail = definition?.kind === "tool" ? definition.tool : definition?.kind === "summarize" ? definition.prompt : definition?.kind === "template" ? definition.template : step.kind;
+      const detail = definition?.kind === "tool" ? definition.tool : definition?.kind === "summarize" || definition?.kind === "agent" ? definition.prompt : definition?.kind === "template" ? definition.template : step.kind;
       const output = receipt?.output === undefined ? undefined : parseWorkflowValue(receipt.output);
       const content = isWorkflowRecord(output) ? readWorkflowString(output.content) : null;
       const meta = receipt?.error ?? (content === null ? stepStatus === "completed" ? step.kind === "summarize" ? "Written" : "Done" : stepStatusLabels.get(stepStatus) ?? stepStatus : `${content.trim().split(/\s+/).filter(Boolean).length} words`);
@@ -2668,7 +2678,11 @@ function apply(ctx) {
       ...steps.slice(0, Math.max(selectedIndex, 0)).map((step, index) => {
         const receipt = lastRun?.steps?.find((entry) => entry.stepId === step.id);
         const output = receipt?.output == null ? undefined : parseWorkflowValue(receipt.output);
-        const fieldsOut = isWorkflowRecord(output) ? readableEntries(output) : [];
+        const declared = step.kind === "agent" ? parseInputRecord(step.fields.fields ?? "") : null;
+        const fieldsOut = isWorkflowRecord(output) ? readableEntries(output) : Object.keys(declared ?? {}).map((key) => [
+          key,
+          ""
+        ]);
         return {
           label: `Step ${index + 1} · ${titleCase(step.id)}`,
           options: [
@@ -3103,7 +3117,7 @@ function apply(ctx) {
       value: selectedStep.fields[field] ?? "eq"
     }) : /* @__PURE__ */ React.createElement("label", {
       key: field
-    }, field === "input" ? "Details" : title(field), /* @__PURE__ */ React.createElement(Textarea, {
+    }, field === "input" ? "Details" : field === "fields" ? "Answer fields" : title(field), /* @__PURE__ */ React.createElement(Textarea, {
       "aria-describedby": checkFieldHints.has(field) ? `check-hint-${field}` : undefined,
       disabled: busy,
       onChange: (event) => updateStep(selectedStep.key, {
@@ -3112,7 +3126,12 @@ function apply(ctx) {
           [field]: event.target.value
         }
       }),
-      rows: field === "input" || field === "template" ? 8 : 2,
+      rows: [
+        "input",
+        "template",
+        "prompt",
+        "fields"
+      ].includes(field) ? 8 : 2,
       value: selectedStep.fields[field] ?? ""
     }), checkFieldHints.has(field) && /* @__PURE__ */ React.createElement("span", {
       className: "workflow-field-hint",

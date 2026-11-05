@@ -7,6 +7,7 @@ import {
   buildReceiptBag,
   executeAssert,
   executeCompare,
+  parseAgentReply,
   parseWorkflowRecord,
   parseWorkflowValue,
   resolveTemplateString,
@@ -29,6 +30,13 @@ type DataStepResult = {
   error?: string;
   input: WorkflowValue;
   output: WorkflowValue;
+};
+
+type StepContext = {
+  orgId: string;
+  profileId: string;
+  runId: string;
+  workflowId: string;
 };
 
 export interface WorkflowHost {
@@ -149,6 +157,7 @@ export class WorkflowRunner {
 
       try {
         const result = await this.executeDataStep(step, bag(), {
+          orgId,
           profileId: workflow.profileId,
           runId,
           workflowId: workflow.id,
@@ -232,11 +241,7 @@ export class WorkflowRunner {
   async executeDataStep(
     step: WorkflowStep,
     bag: WorkflowBag,
-    context: {
-      profileId: string;
-      runId: string;
-      workflowId: string;
-    }
+    context: StepContext
   ): Promise<DataStepResult> {
     if (step.kind === "tool") {
       const input = parseWorkflowRecord(
@@ -300,6 +305,36 @@ export class WorkflowRunner {
       }
 
       return { input, output: result };
+    }
+
+    if (step.kind === "agent") {
+      const prompt = [
+        resolveTemplateString(step.prompt, bag),
+        "",
+        "Reply with only one JSON object and no other text. Use exactly these keys:",
+        ...Object.entries(step.fields).map(
+          ([key, note]) => `- ${key}: ${note}`
+        ),
+      ].join("\n");
+
+      const reply = await this.agentService.runWorkflowSummarize(
+        context.orgId,
+        context.profileId,
+        prompt,
+        bag
+      );
+
+      const input = { fields: step.fields, prompt };
+
+      try {
+        return { input, output: parseAgentReply(reply, step.fields, step.id) };
+      } catch (error) {
+        return {
+          error: error instanceof Error ? error.message : String(error),
+          input,
+          output: reply,
+        };
+      }
     }
 
     if (step.kind === "template") {

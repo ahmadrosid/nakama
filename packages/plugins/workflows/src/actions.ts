@@ -179,7 +179,9 @@ export async function run(
         const step = steps[index];
 
         if (!step || step.kind === "summarize") {
-          throw new Error("Choose a tool, compare, assert, or template step.");
+          throw new Error(
+            "Choose a tool, compare, assert, template, or agent step."
+          );
         }
 
         // Only this step's tool must be available now; earlier steps may use a
@@ -220,6 +222,7 @@ export async function run(
             outputs
           ),
           {
+            orgId: context.orgId,
             profileId: agentId,
             runId: `test_${crypto.randomUUID()}`,
             workflowId: existing?.id ?? "draft",

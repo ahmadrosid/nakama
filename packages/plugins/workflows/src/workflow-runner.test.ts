@@ -338,10 +338,152 @@ test("trying one step resolves earlier results and records no run", async () => 
       tool: "echo_tool",
     },
     { input: {}, steps: { fetch: { text: "hello" } } },
-    { profileId: "profile_test", runId: "test_1", workflowId: "workflow_test" }
+    {
+      orgId: "org_1",
+      profileId: "profile_test",
+      runId: "test_1",
+      workflowId: "workflow_test",
+    }
   );
 
   expect(result).toEqual({ input: { text: "hello" }, output: { ok: true } });
   expect(calls).toEqual([{ text: "hello" }]);
   expect(runsCreated).toBe(0);
+});
+
+describe("agent step triage", () => {
+  const triage = {
+    ...createBaseWorkflow(),
+    steps: [
+      {
+        id: "github",
+        kind: "compare",
+        left: "{{input.from}}",
+        onFail: "skip",
+        op: "contains",
+        right: "github.com",
+      },
+      {
+        fields: {
+          decision: "act | ignore",
+          type: "security | mention | other",
+        },
+        id: "classify",
+        kind: "agent",
+        prompt: "Classify: {{input.subject}}",
+      },
+      {
+        id: "should_act",
+        kind: "compare",
+        left: "{{steps.classify.decision}}",
+        onFail: "skip",
+        op: "eq",
+        right: "act",
+      },
+      {
+        id: "label",
+        input: { label: "{{steps.classify.type}}" },
+        kind: "tool",
+        tool: "label_email",
+      },
+      { id: "summary", kind: "summarize", prompt: "Say what was done." },
+    ],
+  } satisfies StoredWorkflow;
+
+  function setup(reply: string) {
+    const service = createWorkflowServiceStub(triage);
+    const statuses: Record<string, string> = {};
+    const prompts: string[] = [];
+    const toolCalls: WorkflowRecord[] = [];
+    let summaryBag: WorkflowBag | null = null;
+
+    service.updateRunStep = async (_runId, id, update) => {
+      statuses[id] = update.status;
+    };
+
+    const runner = new WorkflowRunner(service, {
+      executeTool: async (_profile, _name, input) => {
+        toolCalls.push(input);
+
+        return { labeled: true };
+      },
+      runWorkflowSummarize: async (_org, _profile, prompt, bag) => {
+        prompts.push(prompt);
+
+        if (prompt === "Say what was done.") {
+          summaryBag = bag;
+
+          return "Summary";
+        }
+
+        return reply;
+      },
+    });
+
+    return {
+      prompts,
+      runner,
+      statuses,
+      summaryBag: () => summaryBag,
+      toolCalls,
+    };
+  }
+
+  test("classifies mid-run and acts on the decision", async () => {
+    const t = setup('```json\n{"type":"security","decision":"act"}\n```');
+
+    const result = await t.runner.run(triage.id, {
+      from: "notifications@github.com",
+      subject: "Security advisory",
+    });
+
+    expect(result).toMatchObject({ output: "Summary", status: "completed" });
+    expect(t.prompts[0]).toContain("Classify: Security advisory");
+    expect(t.toolCalls).toEqual([{ label: "security" }]);
+    expect(t.summaryBag()?.steps.classify).toEqual({
+      decision: "act",
+      type: "security",
+    });
+  });
+
+  test("ignore ends the run as skipped before the action", async () => {
+    const t = setup('{"type":"other","decision":"ignore"}');
+
+    const result = await t.runner.run(triage.id, {
+      from: "notifications@github.com",
+      subject: "Thread update",
+    });
+
+    expect(result.status).toBe("skipped");
+    expect(result.error).toBeUndefined();
+    expect(t.toolCalls).toEqual([]);
+    expect(t.summaryBag()).toBeNull();
+    expect(t.statuses.step_record_2).toBe("skipped");
+  });
+
+  test("a sender outside github.com skips the agent", async () => {
+    const t = setup('{"type":"security","decision":"act"}');
+
+    const result = await t.runner.run(triage.id, {
+      from: "friend@example.com",
+      subject: "Hi",
+    });
+
+    expect(result.status).toBe("skipped");
+    expect(t.prompts).toEqual([]);
+    expect(t.toolCalls).toEqual([]);
+  });
+
+  test("a reply without the declared fields fails the run before the action", async () => {
+    const t = setup("I think you should act.");
+
+    const result = await t.runner.run(triage.id, {
+      from: "notifications@github.com",
+      subject: "Security advisory",
+    });
+
+    expect(result.error).toBeDefined();
+    expect(t.toolCalls).toEqual([]);
+    expect(t.statuses.step_record_1).toBe("failed");
+  });
 });

@@ -1422,6 +1422,7 @@ export type WorkflowStepKind =
   | "compare"
   | "assert"
   | "template"
+  | "agent"
   | "summarize";
 
 export type WorkflowCompareOp = "eq" | "near" | "contains";
@@ -1460,6 +1461,14 @@ export interface WorkflowTemplateStep {
   template: string;
 }
 
+export interface WorkflowAgentStep {
+  /** Output keys, each with a short note on what the agent puts there. */
+  fields: Record<string, string>;
+  id: string;
+  kind: "agent";
+  prompt: string;
+}
+
 export interface WorkflowSummarizeStep {
   id: string;
   kind: "summarize";
@@ -1471,6 +1480,7 @@ export type WorkflowStep =
   | WorkflowCompareStep
   | WorkflowAssertStep
   | WorkflowTemplateStep
+  | WorkflowAgentStep
   | WorkflowSummarizeStep;
 
 export interface WorkflowDefinition {
