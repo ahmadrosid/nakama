@@ -45,9 +45,6 @@ import { createOpenCodeGoProvider } from "./opencode-go";
 import { createOpenRouterProvider } from "./openrouter";
 import { createXaiProvider } from "./xai-oauth";
 
-// Live tool call and result continuation are recorded in index.llm.test.ts.
-const NETRA_V41_TOOL_TURN_VERIFIED = true;
-
 // Used when Netra's /v1/models cannot be read or reports no output limit, as
 // opencode does for models without a known limit.
 export const NETRA_MAX_OUTPUT_TOKENS = 32_000;
@@ -151,10 +148,6 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         providerName: "deepseek",
       });
     case "netra":
-      if (model !== NETRA_AGENT_MODEL_ID || !NETRA_V41_TOOL_TURN_VERIFIED) {
-        throw new Error("This Netra model needs a verified tool-turn test.");
-      }
-
       // Start the one lookup now, so it is usually done by the first request.
       if (
         !findCustomModel(options.instance?.customModels, model)?.maxOutputTokens
@@ -175,7 +168,13 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
           (await fetchNetraModelLimits(options.apiKey, model))
             .maxOutputTokens ??
           NETRA_MAX_OUTPUT_TOKENS,
-        supportsThinking: true,
+        // V4.1 Flash always thinks; a model added by hand uses its saved flag.
+        supportsThinking:
+          model === NETRA_AGENT_MODEL_ID ||
+          compatibleModelSupportsThinking(
+            model,
+            options.instance?.customModels
+          ),
       });
     case "doubao":
       return createOpenAIProvider({

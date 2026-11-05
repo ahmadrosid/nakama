@@ -702,3 +702,220 @@ describe("the install-wide provider inventory read is scoped by role", () => {
     });
   });
 });
+
+describe("profile detail and history reads follow the chat list visibility", () => {
+  const PROFILES_ORG_ID = "org_profile_read";
+
+  async function seedProfilesFixture() {
+    const db = createInMemoryDatabaseAdapter();
+
+    const { app, authService } = createMinimalHonoApp({
+      agent: new AgentService(null, null, db),
+      databaseAdapter: db,
+    });
+
+    await seedOrgAdmin(db, {
+      authService,
+      email: "owner@profile.test",
+      orgId: PROFILES_ORG_ID,
+      password: PASSWORD,
+      userId: "user_owner",
+    });
+
+    const now = new Date().toISOString();
+
+    for (const [userId, email] of [
+      ["user_member", "member@profile.test"],
+      ["user_other", "other@profile.test"],
+    ] as const) {
+      await db.createUser({
+        createdAt: now,
+        email,
+        id: userId,
+        passwordHash: await authService.hashPassword(PASSWORD),
+        updatedAt: now,
+      });
+      await db.upsertOrgMember({
+        createdAt: now,
+        orgId: PROFILES_ORG_ID,
+        role: "member",
+        userId,
+      });
+    }
+
+    const base = {
+      createdAt: now,
+      model: "openrouter/auto",
+      orgId: PROFILES_ORG_ID,
+      systemPrompt: "You are helpful.",
+      updatedAt: now,
+    };
+
+    await db.upsertProfile({
+      ...base,
+      id: "shared_agent",
+      isSuper: false,
+      name: "Shared Agent",
+      ownerUserId: "user_other",
+      sharedWithTeam: true,
+    });
+    await db.upsertProfile({
+      ...base,
+      id: "default_bot",
+      isDefault: true,
+      isSuper: false,
+      name: "Default Bot",
+    });
+    await db.upsertProfile({
+      ...base,
+      id: "private_agent",
+      isSuper: false,
+      name: "Private Agent",
+      ownerUserId: "user_other",
+      sharedWithTeam: false,
+    });
+    await db.upsertProfile({
+      ...base,
+      id: "super_bot",
+      isSuper: true,
+      name: "Super Bot",
+    });
+    await db.upsertProfile({
+      ...base,
+      id: "member_agent",
+      isSuper: false,
+      name: "Member Agent",
+      ownerUserId: "user_member",
+      sharedWithTeam: false,
+    });
+
+    const member = await loginUserSession(
+      app,
+      "member@profile.test",
+      PASSWORD,
+      PROFILES_ORG_ID
+    );
+
+    return { app, member };
+  }
+
+  test("a member reads the detail of a shared agent", async () => {
+    const { app, member } = await seedProfilesFixture();
+
+    const response = await callRoute(app, member, {
+      method: "GET",
+      path: "/v1/profiles/shared_agent",
+    });
+
+    expect(response.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
+    const body = (await response.json()) as { profile: { id: string } };
+
+    expect(body.profile.id).toBe("shared_agent");
+  });
+
+  test("a member reads the detail of the org default agent", async () => {
+    const { app, member } = await seedProfilesFixture();
+
+    const response = await callRoute(app, member, {
+      method: "GET",
+      path: "/v1/profiles/default_bot",
+    });
+
+    expect(response.status).toBe(200);
+  });
+
+  test("a member reads the detail of their own agent", async () => {
+    const { app, member } = await seedProfilesFixture();
+
+    const response = await callRoute(app, member, {
+      method: "GET",
+      path: "/v1/profiles/member_agent",
+    });
+
+    expect(response.status).toBe(200);
+  });
+
+  test("a member cannot read another member's private agent", async () => {
+    const { app, member } = await seedProfilesFixture();
+
+    const response = await callRoute(app, member, {
+      method: "GET",
+      path: "/v1/profiles/private_agent",
+    });
+
+    expect(response.status).toBe(403);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
+    const body = (await response.json()) as { error: string };
+
+    expect(body.error).toBe("Forbidden");
+  });
+
+  test("a member cannot read Super Nakama's detail", async () => {
+    const { app, member } = await seedProfilesFixture();
+
+    const response = await callRoute(app, member, {
+      method: "GET",
+      path: "/v1/profiles/super_bot",
+    });
+
+    expect(response.status).toBe(403);
+  });
+
+  test("a member cannot probe an unknown profile id", async () => {
+    const { app, member } = await seedProfilesFixture();
+
+    const response = await callRoute(app, member, {
+      method: "GET",
+      path: "/v1/profiles/does_not_exist",
+    });
+
+    expect(response.status).toBe(403);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
+    const body = (await response.json()) as { error: string };
+
+    expect(body.error).toBe("Forbidden");
+  });
+
+  test("a member reads the change history of a shared agent", async () => {
+    const { app, member } = await seedProfilesFixture();
+
+    const response = await callRoute(app, member, {
+      method: "GET",
+      path: "/v1/profiles/shared_agent/history",
+    });
+
+    expect(response.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
+    const body = (await response.json()) as { events: unknown[] };
+
+    expect(body.events).toEqual([]);
+  });
+
+  test("a member cannot read the change history of another member's private agent", async () => {
+    const { app, member } = await seedProfilesFixture();
+
+    const response = await callRoute(app, member, {
+      method: "GET",
+      path: "/v1/profiles/private_agent/history",
+    });
+
+    expect(response.status).toBe(403);
+  });
+
+  test("a member cannot change sharing on someone else's agent", async () => {
+    const { app, member } = await seedProfilesFixture();
+
+    const response = await callRoute(app, member, {
+      body: { sharedWithTeam: true },
+      method: "PUT",
+      path: "/v1/profiles/private_agent",
+    });
+
+    expect(response.status).toBe(403);
+  });
+});

@@ -222,7 +222,9 @@ export function getDefaultModel(
   customModels?: CustomModelEntry[]
 ): string {
   if (provider === "netra") {
-    return NETRA_AGENT_MODEL_ID;
+    return customModels?.length
+      ? resolveNetraModelId(resolveCompatibleDefaultModel(customModels))
+      : NETRA_AGENT_MODEL_ID;
   }
 
   if (isDiscoveryModelProvider(provider) || provider === "xai_oauth") {
@@ -327,10 +329,10 @@ export function modelSupportsVision(
   provider: ProviderName,
   customModels?: CustomModelEntry[]
 ): boolean | undefined {
-  // Netra serves a fixed set of models, so its own catalog wins over saved
-  // entries, which may carry a stale flag or none.
-  if (provider === "netra") {
-    return netraModelSupportsVision(modelId);
+  // For the models Netra's own catalog knows, it wins over saved entries,
+  // which may carry a stale flag or none.
+  if (provider === "netra" && netraModelSupportsVision(modelId)) {
+    return true;
   }
 
   const custom = findCustomModel(customModels, modelId);

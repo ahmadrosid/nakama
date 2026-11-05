@@ -5,7 +5,6 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  CommandSeparator,
 } from "@nakama/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@nakama/ui/popover";
 import { cn } from "@nakama/ui/utils";
@@ -17,21 +16,14 @@ import {
   type SelectedProvider,
 } from "@/lib/models";
 
-type ProviderSelectValue = SelectedProvider | "__browse__";
-
 interface ProviderSelectProps {
   className?: string;
   configuredTypes?: ReadonlySet<string>;
   disabled?: boolean;
   id?: string;
-  onValueChange: (value: ProviderSelectValue) => void;
-  value: ProviderSelectValue;
+  onValueChange: (value: SelectedProvider) => void;
+  value: SelectedProvider;
 }
-
-const BROWSE_OPTION = {
-  id: "__browse__" as const,
-  label: "Browse free models…",
-};
 
 export function ProviderSelect({
   id,
@@ -44,15 +36,11 @@ export function ProviderSelect({
   const [open, setOpen] = useState(false);
   const configured = configuredTypes ?? EMPTY_CONFIGURED_TYPES;
 
-  const selectedLabel = useMemo(() => {
-    if (value === "__browse__") {
-      return BROWSE_OPTION.label;
-    }
-
-    return (
-      PROVIDER_OPTIONS.find((option) => option.id === value)?.label ?? value
-    );
-  }, [value]);
+  const selectedLabel = useMemo(
+    () =>
+      PROVIDER_OPTIONS.find((option) => option.id === value)?.label ?? value,
+    [value]
+  );
 
   const sortedOptions = useMemo(() => {
     const available: typeof PROVIDER_OPTIONS = [];
@@ -105,19 +93,6 @@ export function ProviderSelect({
           </div>
           <CommandList className="max-h-72 p-1">
             <CommandEmpty>No provider found.</CommandEmpty>
-            <CommandGroup className="p-1">
-              <CommandItem
-                data-checked={value === BROWSE_OPTION.id ? true : undefined}
-                onSelect={() => {
-                  onValueChange(BROWSE_OPTION.id);
-                  setOpen(false);
-                }}
-                value={`${BROWSE_OPTION.label} models.dev browse catalog free`}
-              >
-                {BROWSE_OPTION.label}
-              </CommandItem>
-            </CommandGroup>
-            <CommandSeparator />
             <CommandGroup className="p-1">
               {sortedOptions.map((option) => {
                 const alreadyConfigured = isProviderTypeAlreadyConfigured(

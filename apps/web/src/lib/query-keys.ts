@@ -72,7 +72,6 @@ export const queryKeys = {
     registry: (query: string) => ["mcp", "registry", query] as const,
   },
   models: ["models"] as const,
-  modelsDev: ["modelsDev"] as const,
   nakamaCloud: ["nakamaCloud"] as const,
   nakamaUpgrade: ["system", "upgrade"] as const,
   nakamaVersion: ["system", "version"] as const,

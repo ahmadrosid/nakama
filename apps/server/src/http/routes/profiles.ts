@@ -41,6 +41,7 @@ import {
   requireActiveOrgIdFromContext,
   requireOrgAdmin,
   requireOrgAdminOrPlatformAdminFromContext,
+  requireOrgMember,
   requireOrgMemberFromContext,
   requirePlatformAdminFromContext,
   requireProfileManageFromContext,
@@ -85,7 +86,56 @@ export function registerProfileRoutes(
       return auth;
     }
 
-    return requireProfileManage(c);
+    try {
+      return await requireProfileManage(c);
+    } catch (error) {
+      if (!(error instanceof NakamaApiError && error.status === 403)) {
+        throw error;
+      }
+
+      // The manage guard's 403 also covers a non-member; re-check membership
+      // so only a member who is not the owner reaches the visibility check.
+      requireOrgMember(auth);
+
+      // A member can read an agent the org can use (shared or the org
+      // default) — the list they picked it from already filtered those. Re-run
+      // that filter on this one profile: unknown ids and other members'
+      // private agents both answer the same Forbidden, so members cannot
+      // probe which ids exist. Only a not-found profile is treated as
+      // absent; backend errors propagate so outages are not reported as
+      // permission failures.
+      let result: Awaited<ReturnType<typeof agent.getProfile>> | null = null;
+
+      try {
+        result = await agent.getProfile(
+          requireActiveOrgIdFromContext(c),
+          decodeURIComponent(c.req.param("profileId") ?? "")
+        );
+      } catch (profileError) {
+        if (
+          profileError instanceof NakamaApiError &&
+          profileError.status === 404
+        ) {
+          result = null;
+        } else {
+          throw profileError;
+        }
+      }
+
+      const visible = result
+        ? filterProfilesForChatAccess([result.profile], {
+            isPlatformAdmin: auth.isPlatformAdmin,
+            orgRole: auth.orgRole,
+            userId: auth.user.id,
+          })
+        : [];
+
+      if (visible.length === 0) {
+        throw new NakamaApiError("Forbidden", 403);
+      }
+
+      return auth;
+    }
   };
 
   const artifactCreatorScope = (c: Context<AppEnv>) =>

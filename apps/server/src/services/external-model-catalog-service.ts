@@ -6,7 +6,6 @@ type CatalogPayload = z.infer<typeof catalogPayloadSchema>;
 
 const CATALOG_URLS = {
   cerebras: "https://api.cerebras.ai/public/v1/models",
-  "models-dev": "https://models.dev/api.json",
   openrouter: "https://openrouter.ai/api/v1/models?output_modalities=text",
 } as const;
 
@@ -24,7 +23,7 @@ const cache = new Map<ExternalModelCatalogId, CacheEntry>();
 export function isExternalModelCatalogId(
   value: string
 ): value is ExternalModelCatalogId {
-  return value in CATALOG_URLS;
+  return Object.hasOwn(CATALOG_URLS, value);
 }
 
 export async function getExternalModelCatalog(

@@ -239,7 +239,6 @@ import {
   commandCodeModelSupportsVision,
   defaultDiscoveryBaseUrl,
   isDiscoveryModelProvider,
-  NETRA_AGENT_MODEL_ID,
 } from "@nakama/core/discovery-providers";
 import { readTextIfExists } from "@nakama/core/fs";
 import { canAccessSuperNakamaProfile } from "@nakama/core/profiles";
@@ -4743,18 +4742,16 @@ export class AgentService {
     const model = resolveInitialModel(updated, undefined);
 
     if (updated.type === "netra") {
-      if (model !== NETRA_AGENT_MODEL_ID) {
-        throw new NakamaApiError(
-          "This Netra model needs a verified tool-turn test.",
-          400
-        );
-      }
-
-      let discovered: Awaited<ReturnType<typeof fetchNetraModels>> | null =
-        null;
+      // The full list, so a model added by hand is checked too.
+      let discovered: Awaited<
+        ReturnType<typeof fetchRemoteOpenAIModels>
+      > | null = null;
 
       try {
-        discovered = await fetchNetraModels(updated.apiKey);
+        discovered = await fetchRemoteOpenAIModels(
+          defaultDiscoveryBaseUrl("netra")!,
+          updated.apiKey
+        );
       } catch (error) {
         if (error instanceof NakamaApiError && error.status === 400) {
           throw error;
