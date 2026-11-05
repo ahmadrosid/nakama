@@ -48,11 +48,10 @@ function isDemoLoginHost(
 export function SettingsPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, activeOrg } = useAuth();
+  const { user } = useAuth();
   const { health } = useAppContext();
   const isDemo = isDemoLoginHost();
   const isPlatformAdmin = user?.isPlatformAdmin === true;
-  const isOrgAdmin = activeOrg?.role === "admin";
 
   const [mfaRequiredNotice, setMfaRequiredNotice] = useState(
     () => new URLSearchParams(location.search).get("mfa") === "required"
@@ -133,10 +132,9 @@ export function SettingsPage() {
           <MfaSettingsCard />
         </SettingsSection>
 
-        {version || isPlatformAdmin || isOrgAdmin ? (
+        {version || isPlatformAdmin ? (
           <InstanceSettings
             isDemo={isDemo}
-            isOrgAdmin={isOrgAdmin}
             isPlatformAdmin={isPlatformAdmin}
             updateCheckEnabled={health?.updateCheckEnabled === true}
             version={version}
@@ -147,7 +145,7 @@ export function SettingsPage() {
   );
 }
 
-function TimezoneSettingsRow() {
+export function TimezoneSettingsRow() {
   const [timezone, setTimezone] = useState(() => getBrowserTimezone());
   const [hint, setHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -238,13 +236,11 @@ function TimezoneSettingsRow() {
 
 function InstanceSettings({
   isDemo,
-  isOrgAdmin,
   isPlatformAdmin,
   updateCheckEnabled,
   version,
 }: {
   isDemo: boolean;
-  isOrgAdmin: boolean;
   isPlatformAdmin: boolean;
   updateCheckEnabled: boolean;
   version: string | undefined;
@@ -269,7 +265,8 @@ function InstanceSettings({
 
       {!isDemo && isPlatformAdmin ? <PlatformMfaSettingsCard /> : null}
 
-      {isOrgAdmin ? (
+      {/* The rotate route needs a platform admin. */}
+      {isPlatformAdmin ? (
         <section id="local-token">
           <LocalAuthTokenCard />
         </section>
