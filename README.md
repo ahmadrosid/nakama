@@ -80,7 +80,7 @@ bun run dev:server
 
 ### Run with PM2
 
-For a bare host, you need [Bun](https://bun.sh) and [Node.js](https://nodejs.org) 18 or later. PM2 runs on Node.
+For a bare host, you need [Bun](https://bun.sh) and [Node.js](https://nodejs.org) 22.12 or later. PM2 and the web build run on Node.
 
 1. Install PM2, build Nakama, and copy the example config:
 
