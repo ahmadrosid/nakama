@@ -356,6 +356,11 @@ var style_default = `[data-plugin-id="workflows"] {
     gap: 12px;
     min-width: 0;
   }
+  .workflow-field-hint {
+    margin-top: -8px;
+    font-size: 12px;
+    color: var(--muted-foreground);
+  }
   .workflow-step-fields [data-slot="select-trigger"] {
     width: 100%;
   }
@@ -1488,6 +1493,10 @@ function parseWorkflowValue(value) {
 
 // src/ui.tsx
 var inject = ["slots", "host", "styles", "ui"];
+var checkFieldHints = new Map([
+  ["path", "Where to look, like input.ok or steps.fetch_data.count"],
+  ["expected", 'The value it must equal, like true, 3 or "done"']
+]);
 var stepFields = {
   assert: ["path", "expected"],
   compare: ["left", "op", "right", "tolerance"],
@@ -2923,6 +2932,7 @@ function apply(ctx) {
     }) : /* @__PURE__ */ React.createElement("label", {
       key: field
     }, field === "input" ? "Details" : title(field), /* @__PURE__ */ React.createElement(Textarea, {
+      "aria-describedby": checkFieldHints.has(field) ? `check-hint-${field}` : undefined,
       disabled: busy,
       onChange: (event) => updateStep(selectedStep.key, {
         fields: {
@@ -2932,7 +2942,10 @@ function apply(ctx) {
       }),
       rows: field === "input" || field === "template" ? 8 : 2,
       value: selectedStep.fields[field] ?? ""
-    })))), selection === "summary" && /* @__PURE__ */ React.createElement("label", null, "What should the bot write?", /* @__PURE__ */ React.createElement(Textarea, {
+    }), checkFieldHints.has(field) && /* @__PURE__ */ React.createElement("span", {
+      className: "workflow-field-hint",
+      id: `check-hint-${field}`
+    }, checkFieldHints.get(field))))), selection === "summary" && /* @__PURE__ */ React.createElement("label", null, "What should the bot write?", /* @__PURE__ */ React.createElement(Textarea, {
       disabled: busy,
       onChange: (event) => setSummary(event.target.value),
       rows: 8,

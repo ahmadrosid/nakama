@@ -355,6 +355,11 @@
     gap: 12px;
     min-width: 0;
   }
+  .workflow-field-hint {
+    margin-top: -8px;
+    font-size: 12px;
+    color: var(--muted-foreground);
+  }
   .workflow-step-fields [data-slot="select-trigger"] {
     width: 100%;
   }

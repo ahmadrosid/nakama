@@ -97,6 +97,12 @@ type Context = {
 
 export const inject = ["slots", "host", "styles", "ui"];
 
+/** A wrong path or value makes a check fail, so these two fields say what they take. */
+const checkFieldHints = new Map([
+  ["path", "Where to look, like input.ok or steps.fetch_data.count"],
+  ["expected", 'The value it must equal, like true, 3 or "done"'],
+]);
+
 const stepFields = {
   assert: ["path", "expected"],
   compare: ["left", "op", "right", "tolerance"],
@@ -2395,6 +2401,11 @@ export function apply(ctx: Context) {
                               <label key={field}>
                                 {field === "input" ? "Details" : title(field)}
                                 <Textarea
+                                  aria-describedby={
+                                    checkFieldHints.has(field)
+                                      ? `check-hint-${field}`
+                                      : undefined
+                                  }
                                   disabled={busy}
                                   onChange={(event) =>
                                     updateStep(selectedStep.key, {
@@ -2411,6 +2422,14 @@ export function apply(ctx: Context) {
                                   }
                                   value={selectedStep.fields[field] ?? ""}
                                 />
+                                {checkFieldHints.has(field) && (
+                                  <span
+                                    className="workflow-field-hint"
+                                    id={`check-hint-${field}`}
+                                  >
+                                    {checkFieldHints.get(field)}
+                                  </span>
+                                )}
                               </label>
                             )
                           )}
