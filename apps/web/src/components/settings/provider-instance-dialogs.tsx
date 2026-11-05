@@ -16,7 +16,7 @@ import {
 } from "@nakama/ui/input-group";
 import { Spinner } from "@nakama/ui/spinner";
 import { LinkSquare02Icon, ViewIcon, ViewOffIcon } from "hugeicons-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   DeviceSignInCode,
   useDeviceSignIn,
@@ -37,6 +37,16 @@ function SavedKeyActions({
 }) {
   // Clearing a key stops chat for this provider, so it takes two clicks.
   const [confirmClear, setConfirmClear] = useState(false);
+
+  useEffect(() => {
+    if (!confirmClear) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setConfirmClear(false), 5000);
+
+    return () => window.clearTimeout(timeout);
+  }, [confirmClear]);
 
   if (instance.secretSource === "settings") {
     return (
@@ -158,9 +168,7 @@ export function ProviderReplaceKeyDialog({
             Cancel
           </Button>
           <Button
-            disabled={
-              busy || instance.secretSource === "environment" || !apiKey.trim()
-            }
+            disabled={busy || instance.secretSource === "environment"}
             onClick={onSave}
             type="button"
           >
@@ -284,11 +292,19 @@ function ProviderModelsDialogShell({
   onSave: () => void;
   children: ReactNode;
 }) {
+  // Open on the title, not inside a model ID a stray key press would change.
+  const titleRef = useRef<HTMLHeadingElement>(null);
+
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="w-[min(96vw,56rem)] grid-cols-1 sm:max-w-4xl">
+      <DialogContent
+        className="w-[min(96vw,56rem)] grid-cols-1 sm:max-w-4xl"
+        initialFocus={titleRef}
+      >
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle className="outline-none" ref={titleRef} tabIndex={-1}>
+            {title}
+          </DialogTitle>
         </DialogHeader>
         {children}
         {dialogError ? (

@@ -135,3 +135,17 @@ test("a provider change drops the last provider's model and errors", async () =>
   expect(form().modelsError).toBeNull();
   expect(form().formError).toBeNull();
 });
+
+test("submit stays on and says what is missing", async () => {
+  await renderForm();
+
+  const submit = container.querySelector<HTMLButtonElement>(
+    'button[type="submit"]'
+  );
+
+  expect(submit?.disabled).toBe(false);
+
+  const form = await renderSetupHook();
+  await act(async () => form().handleSubmit(submitEvent));
+  expect(form().apiKeyError).not.toBeNull();
+});

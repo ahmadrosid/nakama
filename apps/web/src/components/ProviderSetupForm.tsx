@@ -3,6 +3,7 @@ import type { CreateProviderResponse } from "@nakama/core/contract";
 import { defaultDiscoveryBaseUrl } from "@nakama/core/discovery-providers";
 import { ollamaRequiresApiKey } from "@nakama/core/ollama-provider-config";
 import { Button } from "@nakama/ui/button";
+import { DialogFooter } from "@nakama/ui/dialog";
 import { FormField } from "@nakama/ui/form-field";
 import { Input } from "@nakama/ui/input";
 import {
@@ -43,9 +44,11 @@ import {
 
 interface ProviderSetupFormProps {
   density?: "default" | "compact";
+  /** Setup leaves this off and keeps the provider's default; Settings shows it. */
+  /** Inside a dialog: a Cancel button beside the submit, as other dialogs have. */
+  onCancel?: () => void;
   onSuccess?: (result: CreateProviderResponse) => void;
   showHeading?: boolean;
-  /** Setup leaves this off and keeps the provider's default; Settings shows it. */
   showModelPicker?: boolean;
   submitLabel?: string;
 }
@@ -55,10 +58,12 @@ export function ProviderSetupForm({
   showHeading = true,
   showModelPicker = true,
   density = "default",
+  onCancel,
   onSuccess,
 }: ProviderSetupFormProps) {
   const form = useProviderSetupForm({ onSuccess });
   const [isBrowsing, setIsBrowsing] = useState(false);
+  const [pickedFromCatalog, setPickedFromCatalog] = useState(false);
   const ollamaKeyRequired = ollamaRequiresApiKey(form.ollamaHostMode);
 
   const apiKeyOptional =
@@ -83,6 +88,7 @@ export function ProviderSetupForm({
   ) {
     form.handleBrowseSelect(provider, modelId, row);
     setIsBrowsing(false);
+    setPickedFromCatalog(true);
   }
 
   return (
@@ -111,11 +117,24 @@ export function ProviderSetupForm({
             }
 
             setIsBrowsing(false);
+            setPickedFromCatalog(false);
             form.handleProviderSelect(nextValue);
           }}
           value={isBrowsing ? "__browse__" : form.selectedProvider}
         />
       </FormField>
+
+      {pickedFromCatalog && !isBrowsing ? (
+        <Button
+          className="-mt-2 self-start px-0"
+          onClick={() => setIsBrowsing(true)}
+          size="sm"
+          type="button"
+          variant="link"
+        >
+          Pick another free model
+        </Button>
+      ) : null}
 
       {isBrowsing ? (
         <ModelsBrowseList
@@ -131,6 +150,7 @@ export function ProviderSetupForm({
           canConnect={canConnect}
           density={density}
           form={form}
+          onCancel={onCancel}
           showModelPicker={showModelPicker}
           submitLabel={submitLabel}
         />
@@ -435,6 +455,7 @@ function ProviderSetupExtraFields({
         modelsError={form.modelsError}
         onBaseUrlBlur={form.handleBaseUrlBlur}
         onBaseUrlChange={form.handleBaseUrlChange}
+        onBaseUrlRequired={form.handleBaseUrlRequired}
         onCustomModelsChange={form.handleCustomModelsChange}
         onDisplayNameChange={form.handleDisplayNameChange}
         onWireApiChange={form.setWireApi}
@@ -487,11 +508,54 @@ function ProviderSetupExtraFields({
   return <DefaultModelSelectField density={density} form={form} />;
 }
 
+// Submit stays on: a press with something missing says what, in place.
+function ProviderSetupActions({
+  busy,
+  onCancel,
+  submitLabel,
+}: {
+  busy: boolean;
+  onCancel?: () => void;
+  submitLabel: string;
+}) {
+  const submit = (
+    <Button disabled={busy} type="submit">
+      {busy ? (
+        <>
+          <Spinner className="mr-2" />
+          Saving…
+        </>
+      ) : (
+        submitLabel
+      )}
+    </Button>
+  );
+
+  if (!onCancel) {
+    return <div className="flex flex-wrap gap-2 pt-1">{submit}</div>;
+  }
+
+  return (
+    <DialogFooter>
+      <Button
+        disabled={busy}
+        onClick={onCancel}
+        type="button"
+        variant="outline"
+      >
+        Cancel
+      </Button>
+      {submit}
+    </DialogFooter>
+  );
+}
+
 function ProviderSetupDetails({
   apiKeyOptional,
   canConnect,
   density,
   form,
+  onCancel,
   showModelPicker,
   submitLabel,
 }: {
@@ -499,6 +563,7 @@ function ProviderSetupDetails({
   canConnect: boolean;
   density: "default" | "compact";
   form: ReturnType<typeof useProviderSetupForm>;
+  onCancel?: () => void;
   showModelPicker: boolean;
   submitLabel: string;
 }) {
@@ -548,18 +613,11 @@ function ProviderSetupDetails({
           {form.formError}
         </p>
       ) : null}
-      <div className="flex flex-wrap gap-2 pt-1">
-        <Button disabled={form.busy || !canConnect} type="submit">
-          {form.busy ? (
-            <>
-              <Spinner className="mr-2" />
-              Saving…
-            </>
-          ) : (
-            submitLabel
-          )}
-        </Button>
-      </div>
+      <ProviderSetupActions
+        busy={form.busy}
+        onCancel={onCancel}
+        submitLabel={submitLabel}
+      />
     </>
   );
 }

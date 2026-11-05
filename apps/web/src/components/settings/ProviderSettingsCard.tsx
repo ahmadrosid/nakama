@@ -159,6 +159,7 @@ export function ProviderSettingsCard({
             <DialogTitle>Add provider</DialogTitle>
           </DialogHeader>
           <ProviderSetupForm
+            onCancel={() => setAddOpen(false)}
             onSuccess={() => {
               setAddOpen(false);
               toast("Provider added.");

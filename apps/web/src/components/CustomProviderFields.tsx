@@ -38,6 +38,8 @@ interface CustomProviderFieldsProps {
   modelsError?: string | null;
   onBaseUrlBlur?: () => void;
   onBaseUrlChange: (value: string) => void;
+  /** Browse pressed with no usable base URL. */
+  onBaseUrlRequired?: () => void;
   onCustomModelsChange: (models: ModelListRow[]) => void;
   onDisplayNameChange: (value: string) => void;
   /** Omitted for endpoints that are known to speak chat/completions, like Ollama. */
@@ -157,6 +159,7 @@ export function CustomProviderFields({
   keyField,
   onDisplayNameChange,
   onBaseUrlBlur,
+  onBaseUrlRequired,
   onBaseUrlChange,
   onCustomModelsChange,
   onWireApiChange,
@@ -219,6 +222,7 @@ export function CustomProviderFields({
           disabled={disabled}
           fieldId="provider-models"
           modelsError={modelsError}
+          onBrowseBlocked={onBaseUrlRequired}
           onCustomModelsChange={(models) =>
             onCustomModelsChange(
               remoteProvider === "netra"

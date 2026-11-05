@@ -16,6 +16,8 @@ interface BrowsableModelFieldsProps<T> {
   disabled?: boolean;
   fieldId: string;
   modelsError?: string | null;
+  /** Browse pressed before it can work: show what is missing. */
+  onBrowseBlocked?: () => void;
   onCustomModelsChange: (models: ModelListRow[]) => void;
   renderBrowse: (context: {
     addedIds: ReadonlySet<string>;
@@ -38,6 +40,7 @@ export function BrowsableModelFields<T>({
   modelsError,
   browseLabel,
   canBrowse = true,
+  onBrowseBlocked,
   showPricing = true,
   showThinking = false,
   showVision = false,
@@ -140,11 +143,13 @@ export function BrowsableModelFields<T>({
         </div>
       ) : (
         <ModelListEditor
-          browseDisabled={!canBrowse}
+          browseDisabled={!(canBrowse || onBrowseBlocked)}
           browseLabel={browseLabel}
           disabled={disabled}
           models={customModels}
-          onBrowse={() => setIsBrowsing(true)}
+          onBrowse={() =>
+            canBrowse ? setIsBrowsing(true) : onBrowseBlocked?.()
+          }
           onChange={onCustomModelsChange}
           showPricing={showPricing}
           showThinking={showThinking}

@@ -30,6 +30,23 @@ interface RemoteModelsBrowseListProps {
   providerId?: string;
 }
 
+function browseStatus(
+  canFetch: boolean,
+  error: Error | null,
+  count: number,
+  label: string
+): string {
+  if (!canFetch) {
+    return `Browse models from ${label}`;
+  }
+
+  if (error) {
+    return "Could not load models";
+  }
+
+  return `${count} model${count === 1 ? "" : "s"} from ${label}`;
+}
+
 export function RemoteModelsBrowseList({
   addedIds,
   onSelect,
@@ -147,9 +164,7 @@ export function RemoteModelsBrowseList({
       }}
       rows={data ?? EMPTY_ROWS}
       status={({ filteredCount }) =>
-        canFetch
-          ? `${filteredCount} model${filteredCount === 1 ? "" : "s"} from ${browseLabel}`
-          : `Browse models from ${browseLabel}`
+        browseStatus(canFetch, browseError, filteredCount, browseLabel)
       }
     />
   );

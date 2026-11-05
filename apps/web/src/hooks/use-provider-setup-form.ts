@@ -466,6 +466,11 @@ export function useProviderSetupForm(
     }
   }, [baseUrl]);
 
+  const handleBaseUrlRequired = useCallback(() => {
+    setBaseUrlError(validateBaseUrlInput(baseUrl));
+    document.getElementById("provider-base-url")?.focus();
+  }, [baseUrl]);
+
   const handleCustomModelsChange = useCallback((rows: ModelListRow[]) => {
     setCustomModels(rows);
     setModelsError(null);
@@ -724,6 +729,7 @@ export function useProviderSetupForm(
     handleApiKeyChange,
     handleBaseUrlBlur,
     handleBaseUrlChange,
+    handleBaseUrlRequired,
     handleBrowseSelect,
     handleCustomModelsChange,
     handleDisplayNameChange,
