@@ -207,7 +207,7 @@ function appShellMainClassName(page: PageId, pathname: string): string {
   return cn(
     "min-h-0 flex-1",
     flush
-      ? "flex flex-col overflow-hidden"
+      ? "flex flex-col overflow-hidden sm:[scrollbar-gutter:stable]"
       : "overflow-y-auto overflow-x-hidden sm:[scrollbar-gutter:stable]",
     flush || skillDetail ? null : "p-4 sm:p-6"
   );

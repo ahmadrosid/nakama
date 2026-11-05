@@ -148,7 +148,7 @@ export function RecentChatContextMenu({
 
 function RecentChatActions(props: RecentChatMenuProps) {
   return (
-    <div className="flex shrink-0 items-center px-1.5">
+    <div className="absolute inset-y-0 right-0 flex items-center px-1">
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
@@ -238,11 +238,11 @@ export function RecentChatRow({
     >
       <RecentChatContextMenu
         {...menu}
-        className="sidebar-chat-row group/row flex min-w-0 flex-1 items-center rounded-md"
+        className="sidebar-chat-row group/row relative flex min-w-0 flex-1 items-center rounded-md"
       >
         <Link
           aria-current={location.pathname === href ? "page" : undefined}
-          className="sidebar-nav-link min-w-0 flex-1 px-2 py-1.5"
+          className="sidebar-nav-link min-w-0 flex-1 px-2 py-1.5 group-focus-within/row:pr-9 group-hover/row:pr-9 [@media(hover:none)]:pr-9"
           data-active={location.pathname === href || undefined}
           draggable={false}
           title={session.active ? `${title} (still responding)` : title}

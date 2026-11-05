@@ -107,7 +107,7 @@ export function SkillsLearningOrgCard() {
             <button
               aria-checked={current === preset.id}
               className={cn(
-                "flex flex-col items-start rounded-lg border px-3 py-3 text-left transition-colors disabled:opacity-60",
+                "flex flex-col items-start rounded-md border px-3 py-3 text-left transition-colors disabled:opacity-60",
                 current === preset.id
                   ? "border-foreground bg-muted"
                   : "border-border hover:bg-muted/50"

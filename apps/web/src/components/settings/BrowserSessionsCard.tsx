@@ -92,7 +92,6 @@ export function BrowserSessionsCard() {
                 aria-label={`Sign out ${describeDevice(session.userAgent)}, ${describeSession(session)}`}
                 disabled={revoke.isPending}
                 onClick={() => revoke.mutate(session.id)}
-                size="sm"
                 type="button"
                 variant="outline"
               >

@@ -229,7 +229,7 @@ function GroupsEmptyState({ onCreate }: { onCreate: () => void }) {
     <div className="@container my-6" id="agent-groups-empty">
       <div className="relative flex @4xl:min-h-[40rem] flex-col items-center @4xl:justify-center gap-8 overflow-hidden px-4 @4xl:py-0 py-10">
         <section className="relative z-10 flex max-w-lg flex-col items-center gap-5 text-center">
-          <h2 className="text-balance font-bold text-2xl tracking-tight">
+          <h2 className="text-balance font-semibold text-2xl tracking-tight">
             Your agents, working as a team
           </h2>
           <p className="text-balance text-base text-muted-foreground">

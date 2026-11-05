@@ -223,7 +223,6 @@ export function VersionSettingsRow({
               onClick={() => {
                 void query.refetch();
               }}
-              size="sm"
               type="button"
               variant="outline"
             >

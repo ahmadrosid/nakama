@@ -239,7 +239,6 @@ export function UserContextSettings() {
         {isLoading || loadError ? null : (
           <Button
             onClick={() => setEditorOpen(true)}
-            size="sm"
             type="button"
             variant="outline"
           >

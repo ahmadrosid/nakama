@@ -230,7 +230,7 @@ export function ChatPageContent({
       <div className="flex min-h-0 flex-1 flex-col">
         {cognitoSurface ? null : (
           <div className="flex h-12 shrink-0 items-center border-border border-b bg-background px-4 max-sm:hidden">
-            <h1 className="truncate px-2.5 font-semibold text-[15px] tracking-tight">
+            <h1 className="truncate px-2 font-semibold text-[15px] tracking-tight">
               New chat
             </h1>
           </div>

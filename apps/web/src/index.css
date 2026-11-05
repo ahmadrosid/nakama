@@ -893,7 +893,7 @@
   }
 
   .scope-badge-custom {
-    @apply border border-border bg-background text-foreground;
+    @apply bg-muted text-foreground;
   }
 
   .chat-markdown {
