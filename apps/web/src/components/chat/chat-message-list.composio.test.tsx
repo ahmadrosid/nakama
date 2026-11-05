@@ -191,6 +191,7 @@ async function renderSharedAgentCard(onAgent: boolean) {
   const getProfile = spyOn(client, "getProfile").mockRejectedValue(
     new NakamaApiError("Forbidden", 403, "/v1/profiles/p-shared")
   );
+
   restoreLater([mockToolkits(), getProfile]);
 
   const card = await renderCard({
