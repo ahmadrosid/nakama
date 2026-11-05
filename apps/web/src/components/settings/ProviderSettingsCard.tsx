@@ -8,13 +8,18 @@ import {
 } from "@nakama/ui/dialog";
 import { toast } from "@nakama/ui/toast";
 import { Add01Icon, Alert02Icon } from "hugeicons-react";
-import { ProviderSetupForm } from "@/components/ProviderSetupForm";
+import { useState } from "react";
+import {
+  ProviderSetupForm,
+  ProviderSetupFormBody,
+} from "@/components/ProviderSetupForm";
 import {
   useDeleteProviderMutation,
   useModelsQuery,
   useProvidersQuery,
   useUpdateProviderMutation,
 } from "@/hooks/use-app-queries";
+import { useProviderSetupForm } from "@/hooks/use-provider-setup-form";
 import { client, formatError } from "@/lib/client";
 import { ProviderInstanceCard } from "./provider-instance-card";
 
@@ -31,6 +36,9 @@ export function ProviderSettingsCard({
   onAddOpenChange: setAddOpen,
   onFormError,
 }: ProviderSettingsCardProps) {
+  // A new key after each close gives the next Add a fresh form.
+  const [addFormKey, setAddFormKey] = useState(0);
+
   const {
     data: providersResponse,
     isLoading: providersLoading,
@@ -153,24 +161,16 @@ export function ProviderSettingsCard({
         </p>
       ) : null}
 
-      {/* A click outside must not throw away a typed key or picked models. */}
-      <Dialog disablePointerDismissal onOpenChange={setAddOpen} open={addOpen}>
-        <DialogContent className="w-[min(96vw,56rem)] scroll-pb-24 grid-cols-[minmax(0,1fr)] sm:max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Add provider</DialogTitle>
-          </DialogHeader>
-          <ProviderSetupForm
-            onCancel={() => setAddOpen(false)}
-            onSuccess={() => {
-              setAddOpen(false);
-              toast("Provider added.");
-              onFormError(null);
-            }}
-            showHeading={false}
-            submitLabel="Add provider"
-          />
-        </DialogContent>
-      </Dialog>
+      <AddProviderDialog
+        key={addFormKey}
+        onAdded={() => {
+          toast("Provider added.");
+          onFormError(null);
+        }}
+        onClosed={() => setAddFormKey((key) => key + 1)}
+        onOpenChange={setAddOpen}
+        open={addOpen}
+      />
     </>
   );
 }
@@ -186,5 +186,77 @@ function ProviderSettingsSkeleton() {
         <div className="h-10 max-w-sm rounded-lg bg-muted" />
       </CardContent>
     </Card>
+  );
+}
+
+function AddProviderDialog({
+  open,
+  onOpenChange,
+  onAdded,
+  onClosed,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onAdded: () => void;
+  onClosed: () => void;
+}) {
+  const form = useProviderSetupForm({
+    onSuccess: () => {
+      onOpenChange(false);
+      onAdded();
+    },
+  });
+
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+
+  // Escape and Cancel ask first when the user typed something.
+  const requestClose = () => {
+    if (form.dirty) {
+      setConfirmingDiscard(true);
+
+      return;
+    }
+
+    onOpenChange(false);
+  };
+
+  return (
+    // A click outside never closes it.
+    <Dialog
+      disablePointerDismissal
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) {
+          onOpenChange(true);
+        } else {
+          requestClose();
+        }
+      }}
+      onOpenChangeComplete={(nextOpen) => {
+        if (!nextOpen) {
+          onClosed();
+        }
+      }}
+      open={open}
+    >
+      <DialogContent className="w-[min(96vw,56rem)] scroll-pb-24 grid-cols-[minmax(0,1fr)] sm:max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>Add provider</DialogTitle>
+        </DialogHeader>
+        <ProviderSetupFormBody
+          discardPrompt={
+            confirmingDiscard
+              ? {
+                  onDiscard: () => onOpenChange(false),
+                  onKeep: () => setConfirmingDiscard(false),
+                }
+              : null
+          }
+          form={form}
+          onCancel={requestClose}
+          showHeading={false}
+          submitLabel="Add provider"
+        />
+      </DialogContent>
+    </Dialog>
   );
 }

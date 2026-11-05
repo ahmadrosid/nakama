@@ -133,7 +133,7 @@ function ProviderInstanceRow({
           <span className="truncate">{instance.label}</span>
           {isDefault ? (
             <span className="shrink-0 rounded-md border border-border px-1.5 font-normal text-muted-foreground text-xs">
-              Default
+              Default provider
             </span>
           ) : null}
         </p>

@@ -599,6 +599,14 @@ export function useProviderSetupForm(
     ]
   );
 
+  // A typed key, name or picked model is work the user would lose.
+  const dirty =
+    apiKey.trim() !== "" ||
+    displayName.trim() !== "" ||
+    customModels.length > 0 ||
+    openRouterModels.length > 0 ||
+    shortlistModels.length > 0;
+
   return {
     apiKey,
     apiKeyError,
@@ -609,6 +617,7 @@ export function useProviderSetupForm(
     chatgptOAuth,
     configuredTypes,
     customModels,
+    dirty,
     displayName,
     displayNameError,
     filteredModels,

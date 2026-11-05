@@ -32,30 +32,51 @@ import { OllamaProviderSetupFields } from "@/components/OllamaProviderSetupField
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
 import { ProviderSelect } from "@/components/ProviderSelect";
 import { ShortlistBrowseProviderModelFields } from "@/components/ShortlistBrowseProviderModelFields";
+import { DiscardChangesConfirm } from "@/components/settings/provider-instance-dialogs";
 import { isShortlistBrowseProvider } from "@/components/shortlist-browse-providers.shared";
 import { useProviderSetupForm } from "@/hooks/use-provider-setup-form";
 import { apiKeyPlaceholder, isLocalBaseUrl } from "@/lib/models";
 
+interface DiscardPrompt {
+  onDiscard: () => void;
+  onKeep: () => void;
+}
+
 interface ProviderSetupFormProps {
   density?: "default" | "compact";
+  /** Set while the dialog asks to drop the typed values. */
+  discardPrompt?: DiscardPrompt | null;
   /** Setup leaves this off and keeps the provider's default; Settings shows it. */
   /** Inside a dialog: a Cancel button beside the submit, as other dialogs have. */
   onCancel?: () => void;
-  onSuccess?: (result: CreateProviderResponse) => void;
   showHeading?: boolean;
   showModelPicker?: boolean;
   submitLabel?: string;
 }
 
 export function ProviderSetupForm({
+  onSuccess,
+  ...props
+}: ProviderSetupFormProps & {
+  onSuccess?: (result: CreateProviderResponse) => void;
+}) {
+  const form = useProviderSetupForm({ onSuccess });
+
+  return <ProviderSetupFormBody form={form} {...props} />;
+}
+
+/** The form for a caller that owns its state, such as a dialog that asks before it drops typed work. */
+export function ProviderSetupFormBody({
+  form,
   submitLabel = "Save & continue",
   showHeading = true,
   showModelPicker = true,
   density = "default",
   onCancel,
-  onSuccess,
-}: ProviderSetupFormProps) {
-  const form = useProviderSetupForm({ onSuccess });
+  discardPrompt = null,
+}: ProviderSetupFormProps & {
+  form: ReturnType<typeof useProviderSetupForm>;
+}) {
   const ollamaKeyRequired = ollamaRequiresApiKey(form.ollamaHostMode);
 
   const apiKeyOptional =
@@ -100,6 +121,7 @@ export function ProviderSetupForm({
         apiKeyOptional={apiKeyOptional}
         canConnect={canConnect}
         density={density}
+        discardPrompt={discardPrompt}
         form={form}
         onCancel={onCancel}
         showModelPicker={showModelPicker}
@@ -451,11 +473,13 @@ function ProviderSetupExtraFields({
 // Submit stays on: a press with something missing says what, in place.
 function ProviderSetupActions({
   busy,
+  discardPrompt,
   onCancel,
   primary,
   submitLabel,
 }: {
   busy: boolean;
+  discardPrompt: DiscardPrompt | null;
   onCancel?: () => void;
   /** False while another step (a sign-in) must come first: no submit yet. */
   primary: boolean;
@@ -478,6 +502,17 @@ function ProviderSetupActions({
     return <div className="flex flex-wrap gap-2 pt-1">{submit}</div>;
   }
 
+  if (discardPrompt) {
+    return (
+      <DialogFooter className="sticky -bottom-4 z-10 bg-muted">
+        <DiscardChangesConfirm
+          onDiscard={discardPrompt.onDiscard}
+          onKeep={discardPrompt.onKeep}
+        />
+      </DialogFooter>
+    );
+  }
+
   return (
     <DialogFooter className="sticky -bottom-4 z-10 bg-muted">
       <Button
@@ -497,6 +532,7 @@ function ProviderSetupDetails({
   apiKeyOptional,
   canConnect,
   density,
+  discardPrompt,
   form,
   onCancel,
   showModelPicker,
@@ -505,6 +541,7 @@ function ProviderSetupDetails({
   apiKeyOptional: boolean;
   canConnect: boolean;
   density: "default" | "compact";
+  discardPrompt: DiscardPrompt | null;
   form: ReturnType<typeof useProviderSetupForm>;
   onCancel?: () => void;
   showModelPicker: boolean;
@@ -558,6 +595,7 @@ function ProviderSetupDetails({
       ) : null}
       <ProviderSetupActions
         busy={form.busy}
+        discardPrompt={discardPrompt}
         onCancel={onCancel}
         primary={
           canConnect ||

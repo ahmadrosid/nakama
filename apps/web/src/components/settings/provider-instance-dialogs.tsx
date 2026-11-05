@@ -393,7 +393,7 @@ export function ProviderReconnectDialog<T>({
   );
 }
 
-function DiscardChangesConfirm({
+export function DiscardChangesConfirm({
   onDiscard,
   onKeep,
 }: {

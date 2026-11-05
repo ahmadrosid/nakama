@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import type { CreateProviderRequest } from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act } from "react";
+import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { AppContext } from "@/context/app-context-shared";
 import {
@@ -27,7 +27,10 @@ afterEach(async () => {
   await act(async () => root.unmount());
 });
 
-async function renderForm(showModelPicker?: boolean) {
+async function renderForm(
+  showModelPicker?: boolean,
+  extra: Partial<ComponentProps<typeof ProviderSetupForm>> = {}
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -49,7 +52,7 @@ async function renderForm(showModelPicker?: boolean) {
               } as never
             }
           >
-            <ProviderSetupForm showModelPicker={showModelPicker} />
+            <ProviderSetupForm showModelPicker={showModelPicker} {...extra} />
           </AppContext.Provider>
         </AuthContext.Provider>
       </QueryClientProvider>
@@ -243,4 +246,33 @@ test("submit stays on and says what is missing", async () => {
   const form = await renderSetupHook();
   await act(async () => form().handleSubmit(submitEvent));
   expect(form().apiKeyError).not.toBeNull();
+});
+
+test("typed work marks the form dirty", async () => {
+  const form = await renderSetupHook();
+  expect(form().dirty).toBe(false);
+
+  await act(async () => form().handleApiKeyChange("sk-test"));
+  expect(form().dirty).toBe(true);
+});
+
+test("the discard step replaces the footer buttons", async () => {
+  let discarded = false;
+
+  await renderForm(false, {
+    discardPrompt: {
+      onDiscard: () => {
+        discarded = true;
+      },
+      onKeep: () => undefined,
+    },
+    onCancel: () => undefined,
+  });
+
+  const discard = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Discard"
+  );
+
+  await act(async () => discard?.click());
+  expect(discarded).toBe(true);
 });
