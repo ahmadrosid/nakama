@@ -256,7 +256,7 @@ function PluginStatusLine({
 
   if (plugin?.lifecycleState === "enabled") {
     status = "On";
-  } else if (plugin?.installed) {
+  } else if (plugin?.installed && plugin.lifecycleState !== "retained") {
     status = "Off";
   }
 
@@ -306,7 +306,10 @@ function PluginRowControls({
 >) {
   const actions = plugin ? pluginRowActions(plugin) : null;
   const canOpen = plugin?.lifecycleState === "enabled" && plugin.ui !== null;
-  const canInstall = !plugin?.installed && (official || Boolean(plugin));
+
+  const canInstall =
+    (!plugin?.installed || plugin.lifecycleState === "retained") &&
+    (official || Boolean(plugin));
 
   return (
     <div className="flex shrink-0 items-center gap-1">
@@ -397,7 +400,13 @@ function pluginMenuActions({
   const all = [
     ["disable", "Turn off", actions?.disable],
     ["update", "Update", actions?.update || Boolean(updateVersion)],
-    ["reinstall", "Reinstall", official && plugin?.installed],
+    [
+      "reinstall",
+      "Reinstall",
+      official &&
+        (plugin?.lifecycleState === "enabled" ||
+          plugin?.lifecycleState === "disabled"),
+    ],
     ["uninstall", "Remove", actions?.uninstall],
     ["purge", "Delete saved data", actions?.purge],
     [
