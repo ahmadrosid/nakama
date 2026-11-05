@@ -170,6 +170,11 @@ function syncProfileEditFieldsFromDetail({
   return detailId;
 }
 
+/** Same agents in the list, even when a refetch returns a new array. */
+function profileListKey(profiles: ReadonlyArray<{ id: string }>): string {
+  return profiles.map((profile) => profile.id).join("\n");
+}
+
 export function useProfilesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { profileId: liveChatProfileId } = useActiveChatProfile();
@@ -191,8 +196,8 @@ export function useProfilesPage() {
   // A deep link to an agent the list hides stays selected, so the detail
   // request answers 403 and the page shows why. Only for the list it came with.
   const hiddenDeepLinkRef = useRef<{
+    listKey: string;
     profileId: string;
-    profiles: unknown;
   } | null>(null);
 
   const selectedIdRef = useRef(selectedId);
@@ -667,7 +672,10 @@ export function useProfilesPage() {
         urlProfileId &&
         !profiles.some((profile) => profile.id === urlProfileId)
       ) {
-        hiddenDeepLinkRef.current = { profileId: urlProfileId, profiles };
+        hiddenDeepLinkRef.current = {
+          listKey: profileListKey(profiles),
+          profileId: urlProfileId,
+        };
         setSelectedId(urlProfileId);
 
         return;
@@ -700,8 +708,9 @@ export function useProfilesPage() {
     const hiddenDeepLink = hiddenDeepLinkRef.current;
 
     if (
-      hiddenDeepLink?.profileId === current &&
-      hiddenDeepLink.profiles === profiles
+      // The selection can lag one run behind the URL, so fall back to it.
+      hiddenDeepLink?.profileId === (current ?? urlProfileId) &&
+      hiddenDeepLink.listKey === profileListKey(profiles)
     ) {
       return;
     }
