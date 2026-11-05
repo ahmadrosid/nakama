@@ -30,6 +30,8 @@ data/logs/*
 !.agents/skills/verify-bs/**
 !.agents/skills/record-demo/
 !.agents/skills/record-demo/**
+!.agents/skills/release/
+!.agents/skills/release/**
 apps/data/*
 .cursor/
 docs/plans/*

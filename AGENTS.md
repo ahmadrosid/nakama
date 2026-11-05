@@ -62,7 +62,7 @@ Use `gh` for issues, PRs, checks, reviews, releases, and any GitHub URL. Always 
 
 Screenshots: `gh pr edit <number> --attach <image-path>` uploads and embeds it in the PR description.
 
-**Releases:** Bump root `package.json` to the next patch after the latest GitHub release, check, commit, push, tag `vX.Y.Z`, and publish with generated notes.
+**Releases:** follow [`.agents/skills/release/SKILL.md`](.agents/skills/release/SKILL.md): bump root `package.json` to the next patch, tag `vX.Y.Z`, publish notes with a "What's new" section, then roll out to production only on request.
 
 ## Browser automation
 
