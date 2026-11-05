@@ -29,6 +29,14 @@ describe("resolveProfileSwitch", () => {
     });
   });
 
+  test("on Profiles, a blocked deep link is left for the picked agent", () => {
+    expect(pick("/profiles", "?profile=hidden", "beta")).toEqual({
+      kind: "navigate",
+      replace: true,
+      to: "/profiles?profile=beta",
+    });
+  });
+
   test("the active agent picked outside chat still opens its chat", () => {
     expect(pick("/settings", "", "beta")).toEqual({
       kind: "navigate",

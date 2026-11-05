@@ -87,10 +87,10 @@ export function profileResponseFor(
 }
 
 interface ProfileOwnerLookup {
-  getProfile(
+  getProfileAccess(
     orgId: string,
     profileId: string
-  ): Promise<{ profile: { isSuper: boolean; ownerUserId?: string | null } }>;
+  ): Promise<{ isSuper: boolean; ownerUserId: string | null } | null>;
 }
 
 /**
@@ -114,18 +114,13 @@ export async function requireProfileManageFromContext(
   requireOrgMember(auth);
 
   // A missing agent answers 403 too, so members cannot probe which ids exist.
-  const found = await agent
-    .getProfile(
-      requireActiveOrgIdFromContext(c),
-      options.profileId ?? decodeURIComponent(c.req.param("profileId") ?? "")
-    )
-    .catch(() => null);
+  // A failed lookup is not a missing agent: it throws, so it is not a 403.
+  const found = await agent.getProfileAccess(
+    requireActiveOrgIdFromContext(c),
+    options.profileId ?? decodeURIComponent(c.req.param("profileId") ?? "")
+  );
 
-  if (
-    !found ||
-    found.profile.isSuper ||
-    found.profile.ownerUserId !== auth.user.id
-  ) {
+  if (!found || found.isSuper || found.ownerUserId !== auth.user.id) {
     throw new NakamaApiError("Forbidden", 403);
   }
 
@@ -150,18 +145,16 @@ export async function artifactCreatorScopeFromContext(
   requireOrgMember(auth);
 
   // Same answer as the manage guard for a missing agent: no probing ids.
-  const found = await agent
-    .getProfile(
-      requireActiveOrgIdFromContext(c),
-      decodeURIComponent(c.req.param("profileId") ?? "")
-    )
-    .catch(() => null);
+  const found = await agent.getProfileAccess(
+    requireActiveOrgIdFromContext(c),
+    decodeURIComponent(c.req.param("profileId") ?? "")
+  );
 
   if (!found) {
     throw new NakamaApiError("Forbidden", 403);
   }
 
-  return !found.profile.isSuper && found.profile.ownerUserId === auth.user.id
+  return !found.isSuper && found.ownerUserId === auth.user.id
     ? null
     : auth.user.id;
 }
