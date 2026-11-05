@@ -23,6 +23,7 @@ import {
 import { omitUnavailableToolDetails } from "../../services/tool-resolver";
 import type { ServerOptions } from "../context";
 import {
+  profileResponseFor,
   requireActiveOrgIdFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
   requirePlatformAdminFromContext,
@@ -725,11 +726,14 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
     }
 
     return json<ProfileResponse>(
-      await agent.assignTool(
-        orgId,
-        decodeURIComponent(c.req.param("profileId")),
-        body,
-        { actorUserId: auth.user.id, source: "dashboard" }
+      profileResponseFor(
+        c,
+        await agent.assignTool(
+          orgId,
+          decodeURIComponent(c.req.param("profileId")),
+          body,
+          { actorUserId: auth.user.id, source: "dashboard" }
+        )
       )
     );
   });
@@ -742,11 +746,14 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
     const orgId = requireActiveOrgIdFromContext(c);
 
     return json<ProfileResponse>(
-      await agent.unassignTool(
-        orgId,
-        decodeURIComponent(c.req.param("profileId")),
-        decodeURIComponent(c.req.param("toolId")),
-        { actorUserId: auth.user.id, source: "dashboard" }
+      profileResponseFor(
+        c,
+        await agent.unassignTool(
+          orgId,
+          decodeURIComponent(c.req.param("profileId")),
+          decodeURIComponent(c.req.param("toolId")),
+          { actorUserId: auth.user.id, source: "dashboard" }
+        )
       )
     );
   });

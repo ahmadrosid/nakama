@@ -7,29 +7,41 @@ export function canAccessSuperNakamaProfile(options: {
   return options.isPlatformAdmin === true || options.orgRole === "admin";
 }
 
-export function filterProfilesForChatAccess(
-  profiles: ProfileSummary[],
-  options: {
-    orgRole?: OrgRole | null;
-    isPlatformAdmin?: boolean;
-    excludeSuperNakama?: boolean;
-    userId?: string;
-  } = {}
-): ProfileSummary[] {
-  const visible = options.isPlatformAdmin
-    ? profiles
-    : profiles.filter(
-        (profile) =>
-          profile.sharedWithTeam !== false ||
-          (options.userId !== undefined &&
-            profile.ownerUserId === options.userId)
-      );
+interface ChatAccessOptions {
+  excludeSuperNakama?: boolean;
+  isPlatformAdmin?: boolean;
+  orgRole?: OrgRole | null;
+  userId?: string;
+}
 
-  if (options.excludeSuperNakama || !canAccessSuperNakamaProfile(options)) {
-    return visible.filter((profile) => !profile.isSuper);
+/** True when the chat list shows this profile to the caller. */
+export function canChatWithProfile(
+  profile: {
+    isSuper: boolean;
+    ownerUserId?: string | null;
+    sharedWithTeam?: boolean;
+  },
+  options: ChatAccessOptions = {}
+): boolean {
+  if (
+    profile.isSuper &&
+    (options.excludeSuperNakama || !canAccessSuperNakamaProfile(options))
+  ) {
+    return false;
   }
 
-  return visible;
+  return (
+    options.isPlatformAdmin === true ||
+    profile.sharedWithTeam !== false ||
+    (options.userId !== undefined && profile.ownerUserId === options.userId)
+  );
+}
+
+export function filterProfilesForChatAccess(
+  profiles: ProfileSummary[],
+  options: ChatAccessOptions = {}
+): ProfileSummary[] {
+  return profiles.filter((profile) => canChatWithProfile(profile, options));
 }
 
 export function slugifyProfileName(name: string): string {
