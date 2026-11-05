@@ -63,7 +63,9 @@ export function ProviderReplaceKeyDialog({
           </DialogTitle>
         </DialogHeader>
         <label className="font-medium text-sm" htmlFor="replace-api-key">
-          {instance.hasApiKey ? "New API key" : "API key"}
+          {instance.hasApiKey
+            ? "New API key (replaces the saved key)"
+            : "API key"}
         </label>
         <InputGroup>
           <InputGroupInput
