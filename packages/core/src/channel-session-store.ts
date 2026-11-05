@@ -88,14 +88,21 @@ export class ChannelSessionStore {
    * updatedAt, and drops the rest. The caller saves.
    */
   dropOldest(prefix: string, keep: number): void {
-    const oldestFirst = Object.entries(this.map)
-      .filter(([chatId]) => chatId.startsWith(prefix))
-      .sort(([, a], [, b]) => a.updatedAt.localeCompare(b.updatedAt));
+    const matching = Object.entries(this.map).filter(([chatId]) =>
+      chatId.startsWith(prefix)
+    );
 
-    for (const [chatId] of oldestFirst.slice(
-      0,
-      Math.max(0, oldestFirst.length - keep)
-    )) {
+    if (matching.length <= keep) {
+      return;
+    }
+
+    // ISO timestamps sort as plain strings; localeCompare would collate them.
+    matching.sort(
+      ([, a], [, b]) =>
+        Number(a.updatedAt > b.updatedAt) - Number(a.updatedAt < b.updatedAt)
+    );
+
+    for (const [chatId] of matching.slice(0, matching.length - keep)) {
       this.delete(chatId);
     }
   }
