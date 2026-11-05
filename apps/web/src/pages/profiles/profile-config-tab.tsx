@@ -59,7 +59,7 @@ import { ProfileSkillsSection } from "@/pages/profiles/profile-skills-section";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
 
 const sectionTabClass =
-  "whitespace-nowrap rounded-full px-2 py-1.5 text-center font-medium text-muted-foreground text-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm sm:px-3";
+  "whitespace-nowrap rounded-lg px-2 py-1.5 text-center font-medium text-muted-foreground text-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm sm:px-3";
 
 function ProfilePromptPanel({
   state,
@@ -255,7 +255,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
       >
         <Tabs.List
           aria-label="Agent sections"
-          className="mx-auto grid w-full max-w-full auto-cols-fr grid-flow-col gap-1 overflow-x-auto rounded-full bg-muted p-1 sm:w-fit"
+          className="mx-auto grid w-full max-w-full auto-cols-fr grid-flow-col gap-1 overflow-x-auto rounded-xl bg-muted p-1 sm:w-fit"
         >
           {sections.map((item) => (
             <ProfileSectionTab key={item.value} {...item} />
@@ -551,7 +551,7 @@ function ProfileFooterActions({
 
         return (
           <button
-            className={`flex h-11 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 font-medium text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 ${destructive || fullRow.has(action) ? "col-span-2" : ""} ${destructive ? "bg-destructive/10 text-destructive hover:bg-destructive/15" : "bg-muted text-foreground/80 hover:bg-muted/70 hover:text-foreground"}`}
+            className={`flex h-10 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 font-medium text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 ${destructive || fullRow.has(action) ? "col-span-2" : ""} ${destructive ? "border border-destructive/20 text-destructive hover:bg-destructive/10" : "border border-border text-foreground/80 hover:bg-muted hover:text-foreground"}`}
             disabled={disabled}
             key={label}
             onClick={onClick}

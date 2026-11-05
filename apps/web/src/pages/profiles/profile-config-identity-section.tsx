@@ -183,12 +183,12 @@ export function ProfileSystemPromptCard({ state }: { state: IdentityState }) {
   }
 
   return (
-    <div className="w-full rounded-2xl bg-muted/60 px-5 pt-4 pb-5">
+    <div className="w-full rounded-xl bg-muted/60 px-5 pt-4 pb-5">
       <ExpandableTextarea
         containerClassName="gap-3"
         dialogDescription="Instructions sent to the model at the start of each chat."
         disabled={busy || !canManageProfile}
-        editButtonClassName="h-8 rounded-full bg-background px-3 font-medium text-foreground/80 shadow-xs after:hidden hover:bg-background hover:text-foreground"
+        editButtonClassName="h-8 rounded-lg bg-background px-3 font-medium text-foreground/80 shadow-xs after:hidden hover:bg-background hover:text-foreground"
         htmlFor="profile-prompt"
         label="System prompt"
         labelClassName="font-medium text-foreground/80 text-sm"

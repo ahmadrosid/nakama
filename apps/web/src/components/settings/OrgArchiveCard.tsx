@@ -43,8 +43,8 @@ export function OrgArchiveCard() {
 
   return (
     <Card className="gap-0 py-0 shadow-none">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-5">
-        <h2 className="font-medium text-sm">Delete organization</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
+        <h2 className="font-semibold text-sm">Delete organization</h2>
         <Button
           onClick={() => {
             setFormError(null);

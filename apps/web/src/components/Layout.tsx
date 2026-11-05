@@ -273,7 +273,7 @@ function AppShellHeader({
         </Button>
       )}
       {hideTitle ? null : (
-        <h1 className="min-w-0 truncate font-normal text-base text-foreground tracking-tight">
+        <h1 className="min-w-0 truncate font-semibold text-[15px] text-foreground tracking-tight">
           {label}
         </h1>
       )}

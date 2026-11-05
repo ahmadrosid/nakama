@@ -440,7 +440,9 @@ export function ChatSessionBar({
                 />
               }
             >
-              <h1 className="truncate font-medium text-sm">{title}</h1>
+              <h1 className="truncate font-semibold text-[15px] tracking-tight">
+                {title}
+              </h1>
               <ArrowDown01Icon
                 aria-hidden="true"
                 className="size-3.5 text-muted-foreground"

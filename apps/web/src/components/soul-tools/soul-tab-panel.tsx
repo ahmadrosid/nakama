@@ -64,7 +64,7 @@ export function SoulTabPanel({
       <ul
         className={
           embedded
-            ? "grid gap-2.5 sm:grid-cols-2 [&>li]:overflow-hidden [&>li]:rounded-2xl [&>li]:bg-muted/60"
+            ? "grid gap-2.5 sm:grid-cols-2 [&>li]:overflow-hidden [&>li]:rounded-xl [&>li]:bg-muted/60"
             : "divide-y divide-border overflow-hidden rounded-xl border border-border bg-card"
         }
       >

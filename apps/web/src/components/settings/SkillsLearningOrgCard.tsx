@@ -94,7 +94,7 @@ export function SkillsLearningOrgCard() {
     <div className="flex flex-col gap-4">
       <Card className="w-full overflow-hidden shadow-none">
         <div className="border-border border-b px-4 py-3">
-          <p className="font-medium text-foreground text-sm">
+          <p className="font-semibold text-foreground text-sm">
             How bots learn skills
           </p>
         </div>
@@ -107,7 +107,7 @@ export function SkillsLearningOrgCard() {
             <button
               aria-checked={current === preset.id}
               className={cn(
-                "rounded-lg border px-3 py-3 text-left transition-colors disabled:opacity-60",
+                "flex flex-col items-start rounded-lg border px-3 py-3 text-left transition-colors disabled:opacity-60",
                 current === preset.id
                   ? "border-foreground bg-muted"
                   : "border-border hover:bg-muted/50"

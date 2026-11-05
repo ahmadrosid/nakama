@@ -364,7 +364,6 @@ function PluginInstallButton({
   return (
     <Button
       aria-label={canInstall ? `Add ${name}` : undefined}
-      className={canInstall && !detail ? "rounded-full" : undefined}
       disabled={busy}
       onClick={(event) =>
         onAction(canInstall ? "install" : "enable", event.currentTarget)

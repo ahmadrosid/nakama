@@ -66,8 +66,8 @@ export function ProviderSettingsCard({
       <Card className="w-full shadow-none">
         <CardHeader className="border-border border-b px-4 py-3">
           <div className="flex items-center justify-between gap-3">
-            <CardTitle className="min-w-0 font-medium text-sm leading-snug tracking-normal">
-              AI Providers
+            <CardTitle className="min-w-0 font-semibold text-sm leading-snug tracking-normal">
+              Providers
             </CardTitle>
             {isConfigured ? (
               <Button
