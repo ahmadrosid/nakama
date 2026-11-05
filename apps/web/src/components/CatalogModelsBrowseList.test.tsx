@@ -72,13 +72,13 @@ test("a second click on an added model takes it out of the form", async () => {
 });
 
 test("a click does not drop a model the user made default", async () => {
-  let models: ModelListRow[] = [{ default: true, id: "a/one" }];
+  let models: ModelListRow[] = [];
   let addMany: ((rows: Array<{ id: string }>) => void) | undefined;
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
 
-  await act(async () =>
+  const render = () =>
     root!.render(
       <BrowsableModelFields<{ id: string }>
         browseLabel="Browse models"
@@ -94,9 +94,17 @@ test("a click does not drop a model the user made default", async () => {
         }}
         toModelRow={(row) => ({ id: row.id })}
       />
-    )
-  );
+    );
 
+  await act(async () => render());
   await act(async () => addMany?.([{ id: "a/one" }]));
-  expect(models.map((model) => model.id)).toEqual(["a/one"]);
+
+  // The user marks it as the default model.
+  models = [{ default: true, id: "a/one" }];
+  await act(async () => render());
+  await act(async () => addMany?.([{ id: "a/one" }]));
+
+  expect(models).toEqual([{ default: true, id: "a/one" }]);
+  // The field says why the click kept it.
+  expect(container.querySelector('[role="status"]')).not.toBeNull();
 });

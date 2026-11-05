@@ -290,6 +290,7 @@ export function ModelListEditor({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Button
+          data-models-add=""
           disabled={disabled}
           onClick={() => {
             rowKeysRef.current.push(createClientId());

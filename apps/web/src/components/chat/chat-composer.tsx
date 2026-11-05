@@ -2,6 +2,7 @@ import { hasActiveAgentTodos } from "@nakama/core/agent-todo";
 import type {
   AgentTodo,
   ChatUsage,
+  CheckProviderResponse,
   ProviderModelOption,
   SkillSummary,
 } from "@nakama/core/contract";
@@ -31,6 +32,7 @@ import { Spinner } from "@nakama/ui/spinner";
 import { toast } from "@nakama/ui/toast";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
+import { useQuery } from "@tanstack/react-query";
 import {
   Add01Icon,
   Alert02Icon,
@@ -135,6 +137,7 @@ import {
   isPastedTextDocument,
   LONG_PASTE_WORD_THRESHOLD,
 } from "@/lib/pasted-text";
+import { queryKeys } from "@/lib/query-keys";
 import { THINKING_EFFORT_OPTIONS } from "@/lib/thinking-settings";
 import { PluginView } from "@/pages/PluginPage";
 import { composerActions } from "./chat-composer.shared";
@@ -1304,6 +1307,40 @@ function modelItemValue(
   return `${providerLabel} ${model.name} ${model.id}`;
 }
 
+// Reads the settings page's last key check, if any; it never starts one.
+function ProviderPickerHeading({
+  label,
+  providerId,
+}: {
+  label: string;
+  providerId: string;
+}) {
+  const { data: check } = useQuery<CheckProviderResponse>({
+    enabled: false,
+    queryKey: queryKeys.providerCheck(providerId),
+  });
+
+  const warning =
+    check?.status === "rejected"
+      ? "Key rejected"
+      : check?.status === "needs-key"
+        ? "Needs a key"
+        : check?.status === "unreachable"
+          ? "Cannot reach"
+          : null;
+
+  return (
+    <span className="flex items-center gap-2">
+      {label}
+      {warning ? (
+        <span className="font-normal text-amber-700 dark:text-amber-300">
+          {warning}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function resolveModelPickerState(props: ChatComposerFullProps) {
   const effortOptions = props.thinkingEffortOptions ?? THINKING_EFFORT_OPTIONS;
 
@@ -1531,7 +1568,12 @@ function ChatModelPicker({
               ) : null}
               {props.providerModelGroups.map((group) => (
                 <CommandGroup
-                  heading={group.providerLabel}
+                  heading={
+                    <ProviderPickerHeading
+                      label={group.providerLabel}
+                      providerId={group.providerId}
+                    />
+                  }
                   key={group.providerId}
                 >
                   {group.models.map((model) => {

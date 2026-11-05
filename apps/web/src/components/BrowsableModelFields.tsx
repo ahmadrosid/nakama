@@ -51,6 +51,7 @@ export function BrowsableModelFields<T>({
   renderBrowse,
 }: BrowsableModelFieldsProps<T>) {
   const [isBrowsing, setIsBrowsing] = useState(false);
+  const [keptModel, setKeptModel] = useState<string | null>(null);
   const showBrowse = canBrowse && (isBrowsing || customModels.length === 0);
 
   const addedIds = new Set(
@@ -77,6 +78,7 @@ export function BrowsableModelFields<T>({
   const handleAddMany = (rows: T[]) => {
     // A click on a row that is already in the form takes it out again.
     const [single] = rows;
+    setKeptModel(null);
 
     if (rows.length === 1 && single) {
       const id = toModelRow(single).id;
@@ -90,6 +92,7 @@ export function BrowsableModelFields<T>({
           existing.default === true ||
           modelEdited(existing, toModelRow(single))
         ) {
+          setKeptModel(existing.name || existing.id);
           setIsBrowsing(false);
 
           return;
@@ -132,6 +135,10 @@ export function BrowsableModelFields<T>({
           <p className="text-destructive text-sm" role="alert">
             {modelsError}
           </p>
+        ) : keptModel && !showBrowse ? (
+          <p className="text-muted-foreground text-sm" role="status">
+            Kept {keptModel}: you changed it. Remove it with its bin icon.
+          </p>
         ) : undefined
       }
       id={fieldId}
@@ -148,6 +155,7 @@ export function BrowsableModelFields<T>({
           })}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Button
+              data-models-add=""
               disabled={disabled}
               onClick={() => {
                 onCustomModelsChange([...customModels, { id: "", name: "" }]);
