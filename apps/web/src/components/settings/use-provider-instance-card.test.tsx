@@ -170,7 +170,7 @@ describe("provider model management", () => {
           .click()
       );
       expect(
-        container.querySelectorAll('input[aria-label="Model ID"]')
+        container.querySelectorAll('input[aria-label^="Model ID"]')
       ).toHaveLength(0);
       await act(async () => card.saveCompatible());
       expect(updates).toEqual([]);

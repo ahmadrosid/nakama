@@ -351,7 +351,7 @@ export function validateCustomModelsInput(
   const duplicateId = findDuplicateModelIds(valid).values().next().value;
 
   if (duplicateId) {
-    return `Remove the second "${duplicateId}" before you save.`;
+    return `Model ID "${duplicateId}" is in the list two times. Remove one.`;
   }
 
   for (const row of valid) {

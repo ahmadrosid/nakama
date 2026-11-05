@@ -180,15 +180,8 @@ function CatalogBrowseFooter({
 }) {
   return (
     <div className="sticky bottom-0 flex shrink-0 justify-end border-border border-t bg-background px-3 py-2">
-      <Button
-        disabled={selectedCount === 0}
-        onClick={onAddMany}
-        size="sm"
-        type="button"
-      >
-        {selectedCount === 0
-          ? "Select models to add"
-          : `Add ${selectedCount} model${selectedCount === 1 ? "" : "s"}`}
+      <Button onClick={onAddMany} size="sm" type="button">
+        Add {selectedCount} model{selectedCount === 1 ? "" : "s"}
       </Button>
     </div>
   );
@@ -305,7 +298,7 @@ export function CatalogModelsBrowseList<
       }
       error={canFetch ? error : null}
       footer={
-        multiSelect ? (
+        multiSelect && selectedRowIds.size > 0 ? (
           <CatalogBrowseFooter
             onAddMany={handleAddMany}
             selectedCount={selectedRowIds.size}

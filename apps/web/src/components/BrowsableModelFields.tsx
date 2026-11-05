@@ -123,7 +123,7 @@ export function BrowsableModelFields<T>({
               variant="outline"
             >
               <Add01Icon className="mr-1 size-4" />
-              Add model
+              Type a model ID
             </Button>
             {customModels.length > 0 ? (
               <Button
@@ -133,7 +133,7 @@ export function BrowsableModelFields<T>({
                 type="button"
                 variant="outline"
               >
-                Back
+                Back to list
               </Button>
             ) : null}
           </div>

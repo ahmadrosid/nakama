@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@nakama/ui/select";
+import type { ReactNode } from "react";
 import { BrowsableModelFields } from "@/components/BrowsableModelFields";
 import type { ModelListRow } from "@/components/ModelListEditor";
 import { ModelsBrowseList } from "@/components/ModelsBrowseList";
@@ -32,6 +33,8 @@ interface CustomProviderFieldsProps {
   hideIdentity?: boolean;
   hostMode?: "local" | "cloud";
   identityReadOnly?: boolean;
+  /** The API key field, placed after the endpoint it unlocks. */
+  keyField?: ReactNode;
   modelsError?: string | null;
   onBaseUrlBlur?: () => void;
   onBaseUrlChange: (value: string) => void;
@@ -151,6 +154,7 @@ export function CustomProviderFields({
   hostMode,
   browseLabel,
   wireApi = "chat",
+  keyField,
   onDisplayNameChange,
   onBaseUrlBlur,
   onBaseUrlChange,
@@ -182,8 +186,10 @@ export function CustomProviderFields({
         />
       )}
 
+      {keyField}
+
       {onWireApiChange ? (
-        <FormField density={density} id="provider-wire-api" label="API">
+        <FormField density={density} id="provider-wire-api" label="API format">
           <Select
             disabled={disabled}
             onValueChange={(value) =>
@@ -206,11 +212,7 @@ export function CustomProviderFields({
 
       {showModelsEditor ? (
         <BrowsableModelFields
-          browseLabel={
-            browseSource === "remote"
-              ? `Browse ${resolvedBrowseLabel}`
-              : "Browse models.dev"
-          }
+          browseLabel="Browse models"
           canBrowse={canBrowse}
           customModels={customModels}
           density={density}

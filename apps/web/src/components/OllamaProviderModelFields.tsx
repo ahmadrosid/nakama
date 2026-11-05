@@ -29,7 +29,7 @@ export function OllamaProviderModelFields({
 }: OllamaProviderModelFieldsProps) {
   return (
     <BrowsableModelFields
-      browseLabel="Browse Ollama"
+      browseLabel="Browse models"
       customModels={customModels}
       density={density}
       disabled={disabled}

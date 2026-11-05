@@ -224,7 +224,7 @@ export function CatalogProviderModelFields({
         </div>
       ) : (
         <ModelListEditor
-          browseLabel={`Browse ${providerLabel}`}
+          browseLabel="Browse models"
           disabled={disabled}
           models={customModels}
           onBrowse={() => setIsBrowsing(true)}

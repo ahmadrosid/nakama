@@ -16,7 +16,7 @@ import {
 } from "@nakama/ui/input-group";
 import { Spinner } from "@nakama/ui/spinner";
 import { LinkSquare02Icon, ViewIcon, ViewOffIcon } from "hugeicons-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import {
   DeviceSignInCode,
   useDeviceSignIn,
@@ -25,6 +25,50 @@ import { CustomProviderFields } from "@/components/CustomProviderFields";
 import type { ModelListRow } from "@/components/ModelListEditor";
 import type { DeviceSignIn } from "@/components/subscription-sign-in.shared";
 import { apiKeyPlaceholder, type SelectedProvider } from "@/lib/models";
+
+function SavedKeyActions({
+  busy,
+  instance,
+  onManage,
+}: {
+  busy: boolean;
+  instance: ProviderInstanceSummary;
+  onManage?: (action: "clear" | "use-stored") => void;
+}) {
+  // Clearing a key stops chat for this provider, so it takes two clicks.
+  const [confirmClear, setConfirmClear] = useState(false);
+
+  if (instance.secretSource === "settings") {
+    return (
+      <Button
+        className="text-destructive hover:text-destructive sm:mr-auto"
+        disabled={busy}
+        onClick={() =>
+          confirmClear ? onManage?.("clear") : setConfirmClear(true)
+        }
+        type="button"
+        variant={confirmClear ? "destructive" : "ghost"}
+      >
+        {confirmClear ? "Click again to clear" : "Clear saved key"}
+      </Button>
+    );
+  }
+
+  if (instance.secretSource === "missing" && instance.savedSecretAvailable) {
+    return (
+      <Button
+        disabled={busy}
+        onClick={() => onManage?.("use-stored")}
+        type="button"
+        variant="outline"
+      >
+        Use saved key
+      </Button>
+    );
+  }
+
+  return null;
+}
 
 export function ProviderReplaceKeyDialog({
   open,
@@ -100,28 +144,11 @@ export function ProviderReplaceKeyDialog({
           </p>
         ) : null}
         <DialogFooter>
-          {instance.secretSource === "settings" ? (
-            <Button
-              className="text-destructive hover:text-destructive sm:mr-auto"
-              disabled={busy}
-              onClick={() => onManage?.("clear")}
-              type="button"
-              variant="ghost"
-            >
-              Clear saved key
-            </Button>
-          ) : null}
-          {instance.secretSource === "missing" &&
-          instance.savedSecretAvailable ? (
-            <Button
-              disabled={busy}
-              onClick={() => onManage?.("use-stored")}
-              type="button"
-              variant="outline"
-            >
-              Use saved key
-            </Button>
-          ) : null}
+          <SavedKeyActions
+            busy={busy}
+            instance={instance}
+            onManage={onManage}
+          />
           <Button
             disabled={busy}
             onClick={() => onOpenChange(false)}

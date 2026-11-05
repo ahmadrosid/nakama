@@ -20,7 +20,7 @@ import {
 } from "@nakama/ui/select";
 import { Spinner } from "@nakama/ui/spinner";
 import { ViewIcon, ViewOffIcon } from "hugeicons-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import {
   ChatgptSignInPanel,
   XaiSignInPanel,
@@ -271,10 +271,12 @@ function OllamaSetupFields({
   canConnect,
   density,
   form,
+  keyField,
 }: {
   canConnect: boolean;
   density: "default" | "compact";
   form: ReturnType<typeof useProviderSetupForm>;
+  keyField: ReactNode;
 }) {
   return (
     <>
@@ -287,6 +289,7 @@ function OllamaSetupFields({
         onBaseUrlChange={form.handleBaseUrlChange}
         onHostModeChange={form.handleOllamaHostModeChange}
       />
+      {keyField}
       {canConnect ? (
         <OllamaProviderModelFields
           apiKey={form.apiKey}
@@ -375,11 +378,13 @@ function ProviderSetupExtraFields({
   canConnect,
   density,
   form,
+  keyField,
   showModelPicker,
 }: {
   canConnect: boolean;
   density: "default" | "compact";
   form: ReturnType<typeof useProviderSetupForm>;
+  keyField: ReactNode;
   showModelPicker: boolean;
 }) {
   if (form.selectedProvider === "netra") {
@@ -426,6 +431,7 @@ function ProviderSetupExtraFields({
         disabled={form.busy}
         displayName={form.displayName}
         displayNameError={form.displayNameError}
+        keyField={keyField}
         modelsError={form.modelsError}
         onBaseUrlBlur={form.handleBaseUrlBlur}
         onBaseUrlChange={form.handleBaseUrlChange}
@@ -454,6 +460,7 @@ function ProviderSetupExtraFields({
         canConnect={canConnect}
         density={density}
         form={form}
+        keyField={keyField}
       />
     );
   }
@@ -495,6 +502,19 @@ function ProviderSetupDetails({
   showModelPicker: boolean;
   submitLabel: string;
 }) {
+  // An endpoint comes before the key that unlocks it.
+  const keyAfterEndpoint =
+    form.selectedProvider === "openai_compatible" ||
+    form.selectedProvider === "ollama";
+
+  const keyField = (
+    <ProviderSetupApiKeyField
+      apiKeyOptional={apiKeyOptional}
+      density={density}
+      form={form}
+    />
+  );
+
   return (
     <>
       {form.selectedProvider === "xai_oauth" ? (
@@ -513,17 +533,14 @@ function ProviderSetupDetails({
           onModelsChange={form.handleSubscriptionModelsChange}
           onOAuthChange={form.setChatgptOAuth}
         />
-      ) : (
-        <ProviderSetupApiKeyField
-          apiKeyOptional={apiKeyOptional}
-          density={density}
-          form={form}
-        />
+      ) : keyAfterEndpoint ? null : (
+        keyField
       )}
       <ProviderSetupExtraFields
         canConnect={canConnect}
         density={density}
         form={form}
+        keyField={keyAfterEndpoint ? keyField : null}
         showModelPicker={showModelPicker}
       />
       {form.formError ? (

@@ -132,13 +132,11 @@ function ProviderInstanceRow({
         </p>
       </div>
       <div className="-ml-2 flex flex-wrap items-center gap-0.5 sm:ml-0">
-        {opensEdit ? (
+        {opensEdit || canManage ? (
           <ProviderActionButton
-            label={card.providerType === "netra" ? "Models" : "Edit"}
-            onClick={card.openEdit}
+            label="Manage"
+            onClick={opensEdit ? card.openEdit : card.openManage}
           />
-        ) : canManage ? (
-          <ProviderActionButton label="Models" onClick={card.openManage} />
         ) : null}
         <ProviderActionButton
           disabled={instance.secretSource === "environment"}
@@ -254,20 +252,6 @@ function ProviderKeyDialog({
   );
 }
 
-function editDialogTitle(
-  card: ReturnType<typeof useProviderInstanceCard>,
-  label: string
-): string {
-  return card.providerType === "netra" ? `${label} models` : `Edit ${label}`;
-}
-
-function manageDialogTitle(
-  card: ReturnType<typeof useProviderInstanceCard>,
-  label: string
-): string {
-  return card.isOpenRouter ? `${label} models and routing` : `${label} models`;
-}
-
 function ProviderInstanceCardDialogs({
   card,
   instance,
@@ -315,7 +299,7 @@ function ProviderInstanceCardDialogs({
           open={card.editOpen}
           providerInstanceId={instance.id}
           remoteProvider={compatibleRemoteProvider(card)}
-          title={editDialogTitle(card, instance.label)}
+          title={`Manage ${instance.label}`}
           wireApi={card.editWireApi}
         />
       ) : null}
@@ -327,7 +311,7 @@ function ProviderInstanceCardDialogs({
           onOpenChange={card.setManageOpen}
           onSave={() => void card.saveManageModels()}
           open={card.manageOpen}
-          title={manageDialogTitle(card, instance.label)}
+          title={`Manage ${instance.label}`}
         >
           <ProviderManageModelsFields card={card} instance={instance} />
         </ProviderManageModelsDialog>

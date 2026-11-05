@@ -123,7 +123,7 @@ export function OpenRouterProviderModelFields({
         </p>
       </fieldset>
       <BrowsableModelFields
-        browseLabel="Browse OpenRouter"
+        browseLabel="Browse models"
         customModels={customModels}
         density={density}
         disabled={disabled}

@@ -105,7 +105,7 @@ export function ModelListEditor({
                   <InputGroup className="min-w-0 flex-[2_1_14rem]">
                     <InputGroupInput
                       aria-invalid={duplicate}
-                      aria-label="Model ID"
+                      aria-label={`Model ID ${index + 1}`}
                       className="font-mono text-xs"
                       disabled={disabled}
                       onChange={(event) =>
@@ -182,11 +182,6 @@ export function ModelListEditor({
                     </Button>
                   </div>
                 </div>
-                {duplicate ? (
-                  <p className="text-destructive text-xs" role="alert">
-                    This model ID is already in the list.
-                  </p>
-                ) : null}
                 {detailsOpen ? (
                   <div
                     className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4"

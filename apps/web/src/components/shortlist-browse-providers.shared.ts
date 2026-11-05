@@ -9,7 +9,7 @@ export const SHORTLIST_BROWSE_COPY: Record<
   ShortlistBrowseProvider,
   { browseLabel: string }
 > = {
-  cerebras: { browseLabel: "Browse Cerebras" },
-  cloudflare: { browseLabel: "Browse Cloudflare" },
-  fireworks: { browseLabel: "Browse Fireworks" },
+  cerebras: { browseLabel: "Browse models" },
+  cloudflare: { browseLabel: "Browse models" },
+  fireworks: { browseLabel: "Browse models" },
 };
