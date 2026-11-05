@@ -26,6 +26,7 @@ import { IntegrationCardShell } from "@/components/integration-settings.shared";
 import { useAuth } from "@/context/use-auth";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
+  needsComposioCustomAuth,
   profileComposioToolkitsQueryOptions,
   useComposioSettings,
   useComposioToolkits,
@@ -424,11 +425,6 @@ function ComposioCatalogErrorState({
       </div>
     </IntegrationCardShell>
   );
-}
-
-/** Composio has no managed OAuth app for this toolkit (for example Google Forms). */
-export function needsComposioCustomAuth(message: string | null | undefined) {
-  return message?.includes("Auth_Config_DefaultAuthConfigNotFound") ?? false;
 }
 
 export function ComposioCustomAuthSteps({ name }: { name: string }) {

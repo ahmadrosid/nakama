@@ -136,6 +136,11 @@ export function useConnectComposioToolkit() {
  * Composio returns them to `returnTo`. Resolves to the sign-in URL, or null
  * when the account was already linked.
  */
+/** Composio has no managed OAuth app for this toolkit (for example Google Forms). */
+export function needsComposioCustomAuth(message: string | null | undefined) {
+  return message?.includes("Auth_Config_DefaultAuthConfigNotFound") ?? false;
+}
+
 export async function connectComposioApp(input: {
   isOrgAdmin: boolean;
   /** The agent to add the toolkit to. Pass it only when the user manages it. */

@@ -40,10 +40,7 @@ import {
   ConversationStickinessProvider,
 } from "@/components/ai-elements/conversation";
 import { Message, MessageContent } from "@/components/ai-elements/message";
-import {
-  ComposioCustomAuthSteps,
-  needsComposioCustomAuth,
-} from "@/components/ComposioConnectionsCard";
+import { ComposioCustomAuthSteps } from "@/components/ComposioConnectionsCard";
 import { ComposioToolkitLogo } from "@/components/ComposioToolkitLogo";
 import {
   AgentQuestionnaireAnswers,
@@ -69,6 +66,7 @@ import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-pa
 import { useProfileQuery } from "@/hooks/use-app-queries";
 import {
   connectComposioApp,
+  needsComposioCustomAuth,
   profileComposioToolkitsQueryOptions,
   useComposioToolkits,
 } from "@/hooks/use-composio";
