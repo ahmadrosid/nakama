@@ -575,7 +575,7 @@
     flex-direction: column;
     gap: 2px;
   }
-  .workflow-last-run span {
+  .workflow-last-run p > span {
     color: var(--foreground);
   }
   .workflow-runs-box {
@@ -598,10 +598,19 @@
     white-space: nowrap;
     border-bottom: 1px solid var(--border);
   }
-  .workflow-runs td {
+  .workflow-runs td,
+  .workflow-runs th[scope="row"] {
     padding: 8px 12px;
+    font-size: 14px;
+    font-weight: 400;
+    color: inherit;
     white-space: nowrap;
     border-bottom: 1px solid var(--border);
+  }
+  /* "stopped at <step>" wraps so the Open button stays in view. */
+  .workflow-runs tr[data-status] td:nth-child(3) {
+    min-width: 120px;
+    white-space: normal;
   }
   .workflow-runs tr[data-status] td:last-child {
     text-align: right;
@@ -622,7 +631,6 @@
     color: var(--destructive);
   }
   .workflow-run-took {
-    flex-shrink: 0;
     font-size: 13px;
     font-variant-numeric: tabular-nums;
     color: var(--muted-foreground);
@@ -643,7 +651,7 @@
     margin: 0;
     overflow-wrap: anywhere;
   }
-  .workflow-run-actions p[role="alert"] {
+  .workflow-run-actions p[data-error] {
     color: var(--destructive);
   }
   .workflow-run-actions p[data-missing-tool="true"] {

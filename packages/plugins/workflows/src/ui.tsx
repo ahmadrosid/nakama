@@ -362,11 +362,15 @@ function formatDuration(ms: number) {
 }
 
 function formatRunTime(iso: string) {
-  return new Date(iso).toLocaleString(undefined, {
+  const date = new Date(iso);
+
+  return date.toLocaleString(undefined, {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
     month: "short",
+    year:
+      date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
   });
 }
 
@@ -399,11 +403,52 @@ function dayGroup(iso: string) {
     return "Today";
   }
 
-  if (day === new Date(Date.now() - 86_400_000).toDateString()) {
+  // Step back one calendar day, not 24 hours, so DST days stay right.
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (day === yesterday.toDateString()) {
     return "Yesterday";
   }
 
   return "Earlier";
+}
+
+/** Plain text for an error, plus a link that fixes it when there is one. */
+function errorHelp(error: string, agent?: Profile) {
+  const missingTool = /^Unknown tool: (.+)$/i.exec(error)?.[1];
+
+  if (missingTool && agent) {
+    const parts = toolParts(missingTool);
+
+    return {
+      fix: {
+        href: `/profiles?profile=${encodeURIComponent(agent.id)}&section=tools`,
+        label: "Turn on tool",
+      },
+      missingTool: true,
+      text: `${agent.name} does not have the ${parts.app || parts.action} tool.`,
+    };
+  }
+
+  const server = /^MCP server "([^"]+)" is not connected\.$/.exec(error)?.[1];
+
+  if (server) {
+    return {
+      fix: { href: "/system?tab=mcp", label: "Open MCP settings" },
+      missingTool: false,
+      text: `${server} isn’t connected.`,
+    };
+  }
+
+  return { missingTool: Boolean(missingTool), text: readableError(error) };
+}
+
+/** Name of the step a failed run stopped at, or "" when no step failed. */
+function failedStepName(run: WorkflowRunRecord) {
+  const failed = run.steps?.find((step) => step.status === "failed");
+
+  return failed ? titleCase(failed.stepId) : "";
 }
 
 /** "Today, 5:09 PM", "Yesterday, 6:02 PM", else the date and time. */
@@ -943,20 +988,17 @@ export function apply(ctx: Context) {
 
   ctx.styles(css);
 
+  /** Failed runs the user closed the banner for. Survives editor remounts. */
+  const dismissedRuns = new Set<string>();
+
   function WorkflowError({ message }: { message: string }) {
-    const connectionError = /^MCP server "([^"]+)" is not connected\.$/.exec(
-      message
-    );
+    const help = errorHelp(message);
 
     return (
       <div className="workflow-error" role="alert">
         <Icon kind="warning" />
-        <p>
-          {connectionError ? `${connectionError[1]} isn’t connected.` : message}
-        </p>
-        {connectionError ? (
-          <a href="/system?tab=mcp">Open MCP settings</a>
-        ) : null}
+        <p>{help.text}</p>
+        {help.fix ? <a href={help.fix.href}>{help.fix.label}</a> : null}
       </div>
     );
   }
@@ -1364,7 +1406,7 @@ export function apply(ctx: Context) {
     const [busy, setBusy] = React.useState(false);
     const [error, setError] = React.useState("");
     const [runs, setRuns] = React.useState<WorkflowRunRecord[]>([]);
-    const [dismissedRun, setDismissedRun] = React.useState("");
+    const [, redraw] = React.useReducer((count: number) => count + 1, 0);
     const [confirmDelete, setConfirmDelete] = React.useState(false);
     const [view, setView] = React.useState("workflow");
     const [selection, setSelection] = React.useState("");
@@ -1643,20 +1685,41 @@ export function apply(ctx: Context) {
           setRuns(history);
         }
 
-        if (result.error) {
+        // The last-run banner shows a failed run. Throw only when the run
+        // is missing from history, so the error is never lost.
+        if (
+          result.error &&
+          !history.some((entry) => entry.id === result.run?.id)
+        ) {
           throw new Error(result.error);
         }
       });
 
     const title = titleCase;
     const lastRun = runs[0];
+    const canRun = Boolean(workflow) && !dirty && enabled && !busy;
+    const agent = profiles.find((profile) => profile.id === agentId);
+
+    // History opens the newest failed run itself, so the banner skips it.
+    const failedRun =
+      view !== "runs" &&
+      lastRun?.status === "failed" &&
+      !dismissedRuns.has(lastRun.id)
+        ? lastRun
+        : undefined;
+
+    const failedHelp = failedRun?.error
+      ? errorHelp(failedRun.error, agent)
+      : undefined;
+
+    const stoppedAt = failedRun ? failedStepName(failedRun) : "";
 
     const showPicker =
       selection === "pick" || (picking && Boolean(selectedStep));
 
     const drawerApp = selectedStep
       ? stepApp(selectedStep.kind, selectedStep.fields)
-      : (profiles.find((profile) => profile.id === agentId)?.name ?? "Bot");
+      : (agent?.name ?? "Bot");
 
     const valueSources: ValueSource[] = [
       {
@@ -1719,7 +1782,7 @@ export function apply(ctx: Context) {
         kind: step.kind,
       })),
       {
-        app: profiles.find((profile) => profile.id === agentId)?.name ?? "Bot",
+        app: agent?.name ?? "Bot",
         id: summaryStep?.id ?? "summary",
         key: "summary",
         kind: "summarize",
@@ -1795,7 +1858,7 @@ export function apply(ctx: Context) {
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <Button
-                  disabled={busy || !workflow || dirty || !enabled}
+                  disabled={!canRun}
                   onClick={() => runWorkflow()}
                   size="sm"
                   type="button"
@@ -1833,32 +1896,52 @@ export function apply(ctx: Context) {
                 </Button>
               ))}
             </nav>
-            {error ? (
-              <WorkflowError message={error} />
-            ) : (
-              lastRun?.status === "failed" &&
-              dismissedRun !== lastRun.id && (
-                <LastRunAlert
-                  canRun={Boolean(workflow) && !dirty && enabled && !busy}
-                  onDismiss={() => setDismissedRun(lastRun.id)}
-                  onRunAgain={() => runWorkflow(lastRun.input)}
-                  run={lastRun}
-                  stepNames={Object.fromEntries(
-                    allSteps.map((step) => [step.id, title(step.id)])
-                  )}
-                />
-              )
+            {error && <WorkflowError message={error} />}
+            {failedRun && (
+              <div className="workflow-error workflow-last-run">
+                <Icon kind="warning" />
+                <p>
+                  <strong>
+                    Last run failed · {runStarted(failedRun.startedAt)}
+                  </strong>
+                  <span>
+                    {failedHelp?.text ??
+                      (stoppedAt ? `Stopped at ${stoppedAt}` : "Stopped")}
+                  </span>
+                </p>
+                {failedHelp?.fix && (
+                  <a href={failedHelp.fix.href}>{failedHelp.fix.label}</a>
+                )}
+                <Button
+                  disabled={!canRun}
+                  onClick={() => runWorkflow(failedRun.input)}
+                  size="sm"
+                  type="button"
+                  variant="secondary"
+                >
+                  Run again
+                </Button>
+                <Button
+                  aria-label="Dismiss"
+                  onClick={() => {
+                    dismissedRuns.add(failedRun.id);
+                    redraw();
+                  }}
+                  size="icon-sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <Icon kind="close" />
+                </Button>
+              </div>
             )}
             {view === "runs" && (
               <RunHistory
-                agent={profiles.find((profile) => profile.id === agentId)}
-                canRun={Boolean(workflow) && !dirty && enabled && !busy}
+                agent={agent}
+                canRun={canRun}
                 onRunAgain={(input) => runWorkflow(input)}
                 runs={runs}
                 stepIds={allSteps.map((step) => step.id)}
-                stepNames={Object.fromEntries(
-                  allSteps.map((step) => [step.id, title(step.id)])
-                )}
               />
             )}
             {view === "data" && (
@@ -1867,7 +1950,7 @@ export function apply(ctx: Context) {
                 className="workflow-data-page"
               >
                 <DatabasePanel
-                  canRun={Boolean(workflow) && !dirty && enabled && !busy}
+                  canRun={canRun}
                   onRun={() => runWorkflow()}
                   writers={tableWriters}
                 />
@@ -2215,7 +2298,7 @@ export function apply(ctx: Context) {
                   )}
                   {panelTab === "database" && (
                     <DatabasePanel
-                      canRun={Boolean(workflow) && !dirty && enabled && !busy}
+                      canRun={canRun}
                       onRun={() => runWorkflow()}
                       writers={tableWriters}
                     />
@@ -2450,66 +2533,16 @@ export function apply(ctx: Context) {
     );
   }
 
-  function LastRunAlert({
-    run,
-    stepNames,
-    canRun,
-    onRunAgain,
-    onDismiss,
-  }: {
-    run: WorkflowRunRecord;
-    stepNames: Record<string, string>;
-    canRun: boolean;
-    onRunAgain(): void;
-    onDismiss(): void;
-  }) {
-    const failed = run.steps?.find((step) => step.status === "failed");
-
-    const stoppedAt = failed
-      ? `Stopped at ${stepNames[failed.stepId] ?? titleCase(failed.stepId)}`
-      : "Stopped";
-
-    return (
-      <div className="workflow-error workflow-last-run" role="alert">
-        <Icon kind="warning" />
-        <p>
-          <strong>Last run failed · {runStarted(run.startedAt)}</strong>
-          <span>{run.error ? readableError(run.error) : stoppedAt}</span>
-        </p>
-        <Button
-          disabled={!canRun}
-          onClick={onRunAgain}
-          size="sm"
-          type="button"
-          variant="secondary"
-        >
-          Run again
-        </Button>
-        <Button
-          aria-label="Dismiss"
-          onClick={onDismiss}
-          size="icon-sm"
-          type="button"
-          variant="ghost"
-        >
-          <Icon kind="close" />
-        </Button>
-      </div>
-    );
-  }
-
   function RunHistory({
     runs,
     agent,
     stepIds,
-    stepNames,
     canRun,
     onRunAgain,
   }: {
     runs: WorkflowRunRecord[];
     agent?: Profile;
     stepIds: string[];
-    stepNames: Record<string, string>;
     canRun: boolean;
     onRunAgain(input: WorkflowRecord | null): void;
   }) {
@@ -2529,8 +2562,6 @@ export function apply(ctx: Context) {
           ? null
           : runs[0].id
         : openId;
-
-    const name = (stepId: string) => stepNames[stepId] ?? titleCase(stepId);
 
     return (
       <section aria-label="History" className="workflow-scroll">
@@ -2552,7 +2583,6 @@ export function apply(ctx: Context) {
                   canRun={canRun}
                   expanded={run.id === open}
                   key={run.id}
-                  name={name}
                   onRunAgain={onRunAgain}
                   onToggle={() => setOpenId(run.id === open ? null : run.id)}
                   run={run}
@@ -2570,7 +2600,6 @@ export function apply(ctx: Context) {
     run,
     agent,
     stepIds,
-    name,
     expanded,
     canRun,
     onToggle,
@@ -2579,7 +2608,6 @@ export function apply(ctx: Context) {
     run: WorkflowRunRecord;
     agent?: Profile;
     stepIds: string[];
-    name(stepId: string): string;
     expanded: boolean;
     canRun: boolean;
     onToggle(): void;
@@ -2587,12 +2615,9 @@ export function apply(ctx: Context) {
   }) {
     const receipts = run.steps ?? [];
     const timeline = runTimeline(run);
-    const failed = receipts.find((step) => step.status === "failed");
-    const missingTool = /^Unknown tool: (.+)$/i.exec(run.error ?? "")?.[1];
-
-    const missingName = missingTool
-      ? toolParts(missingTool).app || toolParts(missingTool).action
-      : "";
+    const stoppedAt = failedStepName(run);
+    const help = run.error ? errorHelp(run.error, agent) : undefined;
+    const started = runStarted(run.startedAt);
 
     const recordedIds = receipts.map((step) => step.stepId);
 
@@ -2616,13 +2641,13 @@ export function apply(ctx: Context) {
                   : (stepStatusLabels.get(run.status) ?? run.status)}
             </span>
           </td>
-          <td>{runStarted(run.startedAt)}</td>
+          <th scope="row">{started}</th>
           <td>
             {reached} of {ids.length}
             {run.status === "failed" && (
               <span className="workflow-empty">
                 {" "}
-                · {failed ? `stopped at ${name(failed.stepId)}` : "stopped"}
+                · {stoppedAt ? `stopped at ${stoppedAt}` : "stopped"}
               </span>
             )}
           </td>
@@ -2636,6 +2661,7 @@ export function apply(ctx: Context) {
             <Button
               aria-controls={expanded ? detailId : undefined}
               aria-expanded={expanded}
+              aria-label={`${expanded ? "Hide" : "Open"} run from ${started}`}
               onClick={onToggle}
               size="sm"
               type="button"
@@ -2650,27 +2676,18 @@ export function apply(ctx: Context) {
             <td colSpan={5}>
               <div className="workflow-run-detail" id={detailId}>
                 <div className="workflow-run-actions">
-                  {run.error ? (
-                    <p data-missing-tool={Boolean(missingTool)} role="alert">
-                      {missingTool && agent
-                        ? `${agent.name} does not have the ${missingName} tool.`
-                        : readableError(run.error)}
+                  {help ? (
+                    <p data-error data-missing-tool={help.missingTool}>
+                      {help.text}
                     </p>
                   ) : (
                     <p className="workflow-empty">
                       {formatRunTime(run.startedAt)}
                     </p>
                   )}
-                  {missingTool && agent && (
-                    <Button
-                      render={
-                        <a
-                          href={`/profiles?profile=${encodeURIComponent(agent.id)}&section=tools`}
-                        />
-                      }
-                      size="sm"
-                    >
-                      Turn on tool
+                  {help?.fix && (
+                    <Button render={<a href={help.fix.href} />} size="sm">
+                      {help.fix.label}
                     </Button>
                   )}
                   <Button
@@ -2697,7 +2714,7 @@ export function apply(ctx: Context) {
                                 className="workflow-run-mark"
                                 data-status={receipt.status}
                               />
-                              <span>{name(receipt.stepId)}</span>
+                              <span>{titleCase(receipt.stepId)}</span>
                               <span className="workflow-empty">
                                 {stepStatusLabels.get(receipt.status) ??
                                   receipt.status}
